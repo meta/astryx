@@ -98,7 +98,14 @@ describe('the measured check: answers that fooled the step check', () => {
     'a kept group keeps every member as it shows now',
     async () => {
       const r = await answer('make everything rounder; never round the inputs');
-      expect(r.commands.some(c => /--on inputs/.test(c))).toBe(true);
+      // The group, or each member that shows a value of its own.
+      expect(
+        r.commands.some(c =>
+          /(border-radius|--radius-[a-z]+) \S+ --on (inputs|text-input)/.test(
+            c,
+          ),
+        ),
+      ).toBe(true);
     },
     T,
   );
@@ -115,7 +122,7 @@ describe('words for except', () => {
     async q => {
       expect(
         (await answer(q)).commands.some(c =>
-          /^set q border-radius \S+ --on card$/.test(c),
+          /^set q (border-radius|--radius-[a-z]+) \S+ --on card$/.test(c),
         ),
       ).toBe(true);
     },

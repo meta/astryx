@@ -40,6 +40,7 @@ const preloaded = {
 };
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
 const STEP = 'Wait for room under the CI ceiling';
+const {WIDE_STEP, legWidth} = preloaded.count;
 const CEILING = Number(/const CI_CEILING = (\d+);/.exec(counter)[1]);
 const needsOf = job => [job.needs ?? []].flat();
 const stepOf = job => job.steps.find(step => step.name === STEP);
@@ -90,7 +91,12 @@ describe('where runs wait', () => {
       "${{ needs.room.outputs.attempt == github.run_attempt && 'rest' || 'whole' }}",
     );
     expect(needsOf(admission)).toEqual(['room']);
-    expect(room.permissions).toEqual({actions: 'read', contents: 'read'});
+    // Room reads the pull request's head (superseded-runs.test.mjs).
+    expect(room.permissions).toEqual({
+      actions: 'read',
+      contents: 'read',
+      'pull-requests': 'read',
+    });
     // The rest of the wait carries on from where room left off.
     for (const key of ['fits', 'started', 'looks', 'next'])
       expect(wait.with[key]).toBe(`\${{ needs.room.outputs.${key} }}`);
@@ -305,14 +311,18 @@ describe('where runs wait', () => {
     expect(admission.steps.filter(step => step !== wait)).toEqual([
       expect.objectContaining({name: 'Stop when CI is full'}),
       expect.objectContaining({uses: 'actions/checkout@v7'}),
+      expect.objectContaining({name: WIDE_STEP}),
       expect.objectContaining({
         name: 'Stop when CI is full at the longest wait',
       }),
     ]);
-    // Room's only other steps: its checkout, and its stop when it found no
-    // room (above).
+    // Room's only other steps: its checkout, its head check and stop for a
+    // superseded head (superseded-runs.test.mjs), and its stop when it found
+    // no room (above).
     expect(ci.jobs.room.steps.filter(step => step.name !== STEP)).toEqual([
       expect.objectContaining({uses: 'actions/checkout@v7'}),
+      expect.objectContaining({name: "Check the pull request's head"}),
+      expect.objectContaining({name: 'Stop for a superseded head'}),
       expect.objectContaining({name: 'Stop when CI is full'}),
     ]);
   });
@@ -515,7 +525,37 @@ describe('peaks', () => {
     );
   });
 
-  it('gives a pull request a peak that covers every job it starts at once', () => {
+  it('gives a pull request a peak that covers every job it starts at once, its widening legs at the width admission picks', () => {
+    // A widening matrix runs `tight` legs at once when the run fits only at
+    // `peak`, and `full` legs when it also fits with each matrix's extra legs
+    // (`leg-widths`). Its `max-parallel` reads admission's choice, so the
+    // legs it starts are the legs admission counted.
+    const value = stepOf(ci.jobs.admission).with['leg-widths'];
+    expect(stepOf(ci.jobs.room).with['leg-widths']).toBe(value);
+    // A dispatch runs neither matrix, so it widens nothing.
+    const [, dispatch, pull] =
+      /^\$\{\{ github\.event_name == 'workflow_dispatch' && '(.*?)' \|\| '(.*)' \}\}$/.exec(
+        value,
+      );
+    expect(dispatch).toBe('{}');
+    const widths = JSON.parse(pull);
+    expect(Object.keys(widths).sort()).toEqual(['swizzle-proof', 'test-node']);
+    for (const [id, width] of Object.entries(widths)) {
+      expect(ci.jobs[id].strategy['max-parallel'], id).toBe(
+        `\${{ fromJSON(needs.admission.outputs.widths)['${id}'] }}`,
+      );
+      expect(needsOf(ci.jobs[id]), id).toContain('admission');
+      expect(legs(ci.jobs[id], 'pull_request'), id).toBe(width.full);
+      expect(width.tight, id).toBeGreaterThanOrEqual(1);
+      expect(width.tight, id).toBeLessThan(width.full);
+    }
+    expect(ci.jobs.admission.outputs.widths).toBe(
+      '${{ steps.rest.outputs.widths }}',
+    );
+    expect(stepOf(ci.jobs.admission).with.wide).toBe(
+      '${{ needs.room.outputs.wide }}',
+    );
+    expect(ci.jobs.room.outputs.wide).toBe('${{ steps.room.outputs.wide }}');
     // The jobs that need only the waits (and heavy-ci, the deferral decision
     // that runs only for an agent push; spec:AST-030 FR20) start together the
     // moment admission ends; the Storybook build may still be running then.
@@ -524,6 +564,7 @@ describe('peaks', () => {
       name =>
         !waits.includes(name) &&
         name !== 'ci-full' &&
+        !(name in widths) &&
         needsOf(ci.jobs[name]).every(need => waits.includes(need)),
     );
     const onPullRequest = first.filter(name => {
@@ -532,14 +573,35 @@ describe('peaks', () => {
         condition,
       );
     });
-    const started = onPullRequest
+    const others = onPullRequest
       .map(name => legs(ci.jobs[name], 'pull_request'))
       .reduce((sum, count) => sum + count, 0);
+    // The widening matrices start with the first jobs: test-node needs only
+    // the waits, and swizzle-proof one slim scope job.
+    const startedAt = mode =>
+      Object.values(widths).reduce((sum, width) => sum + width[mode], others);
+    const widen = Object.values(widths).reduce(
+      (sum, width) => sum + width.full - width.tight,
+      0,
+    );
     const peak = Number(
       /\|\| (\d+) \}\}$/.exec(stepOf(ci.jobs.admission).with.peak)[1],
     );
-    expect(peak).toBeGreaterThanOrEqual(started);
-    expect(estimateOf('ci.yml')).toContain(`: ${peak}),`);
+    expect(peak).toBeGreaterThanOrEqual(startedAt('tight'));
+    // At full width admission reserves `peak + widen`: exactly the legs the
+    // matrices add, never fewer.
+    expect(startedAt('full') - startedAt('tight')).toBe(widen);
+    expect(peak + widen).toBeGreaterThanOrEqual(startedAt('full'));
+    // Another run counts a just-admitted pull-request run at the width its
+    // admission picked, read from the step it runs only at full width, and at
+    // full width while that is unknown.
+    expect(estimateOf('ci.yml')).toContain(
+      `legWidth(jobs) === 'tight' ? ${peak} : ${peak + widen}),`,
+    );
+    const marker = ci.jobs.admission.steps.find(
+      step => step.name === WIDE_STEP,
+    );
+    expect(marker.if).toBe("steps.rest.outputs.wide == 'true'");
   });
 
   it('adds the jobs each opt-in label brings to a pull request', () => {
@@ -572,7 +634,7 @@ describe('the shared count', () => {
       const checkout = job.steps.find(step =>
         String(step.uses ?? '').startsWith('actions/checkout'),
       );
-      expect(checkout.with['sparse-checkout']).toBe(
+      expect(checkout.with['sparse-checkout'].split('\n')).toContain(
         '.github/actions/ci-admission',
       );
     }
@@ -656,6 +718,8 @@ describe('ci admission', () => {
     started = '',
     looked = '',
     next = '',
+    legWidths = '{}',
+    wide = '',
   } = {}) {
     vi.useFakeTimers({now: NOW});
     vi.spyOn(Math, 'random').mockReturnValue(random);
@@ -731,6 +795,8 @@ describe('ci admission', () => {
       STARTED: started,
       LOOKS: looked,
       NEXT: next,
+      LEG_WIDTHS: legWidths,
+      WIDE: wide,
     });
     // The script loads the shared count with `import()`, which a function
     // built here cannot call; the test passes it in.
@@ -1801,6 +1867,153 @@ describe('ci admission', () => {
     expect(low.warning[0]).toContain('API calls left');
     const failed = await admit({error: new Error('API rate limit exceeded')});
     expect(failed.warning[0]).toContain('could not be checked');
+  });
+
+  describe('leg widths', () => {
+    // Two matrices, with 3 and 6 more legs at full width: 9 in all.
+    const legWidths =
+      '{"test-node": {"tight": 2, "full": 5}, "swizzle-proof": {"tight": 2, "full": 8}}';
+    // Five pull-request runs at 12 live jobs plus small workflows' 18: 78
+    // other jobs. A run of 12 fits at tight width (90), not at full (99).
+    it('runs the legs at full width when the look has room for every extra leg', async () => {
+      const wide = await admit({active: prs(4), peak: 12, legWidths});
+      // 66 + 12 + 9 = 87 <= 90.
+      expect(wide.outputs).toMatchObject({fits: 'true', wide: 'true'});
+      expect(wide.info.at(-2)).toContain('Legs run at full width: + 9 <= 90.');
+    });
+
+    it('runs them at tight width when the look has room only for the peak', async () => {
+      const tight = await admit({active: prs(5), peak: 12, legWidths});
+      expect(tight.outputs).toMatchObject({fits: 'true', wide: 'false'});
+    });
+
+    it('takes full width exactly at the ceiling, and tight one job past it', async () => {
+      // 66 other jobs + 15 + 9 = 90; with a peak of 16, 91.
+      const at = await admit({active: prs(4), peak: 15, legWidths});
+      expect(at.outputs.wide).toBe('true');
+      const past = await admit({active: prs(4), peak: 16, legWidths});
+      expect(past.outputs).toMatchObject({fits: 'true', wide: 'false'});
+    });
+
+    it('carries the room look into the rest, which makes no look of its own', async () => {
+      const room = await admit({
+        active: prs(4),
+        peak: 12,
+        legWidths,
+        phase: 'room',
+      });
+      expect(room.outputs).toMatchObject({fits: 'true', wide: 'true'});
+      for (const wide of ['true', 'false']) {
+        const rest = await admit({
+          active: prs(6),
+          peak: 12,
+          legWidths,
+          phase: 'rest',
+          fits: 'true',
+          wide,
+          started: String(NOW),
+          looked: '1',
+        });
+        expect(rest).toMatchObject({looks: 0, calls: 0});
+        expect(rest.outputs.wide).toBe(wide);
+      }
+    });
+
+    it('runs them at tight width on every start without room for them', async () => {
+      // Room did not measure the run, the API failed, or the budget is low.
+      const unmeasured = await admit({
+        active: prs(1),
+        peak: 12,
+        legWidths,
+        phase: 'rest',
+        fits: '',
+        wide: 'true',
+        started: String(NOW),
+      });
+      expect(unmeasured.outputs.wide).toBe('false');
+      const failed = await admit({
+        peak: 12,
+        legWidths,
+        error: new Error('rate limited'),
+      });
+      expect(failed.outputs.wide).toBe('false');
+      const low = await admit({
+        active: prs(1),
+        peak: 12,
+        legWidths,
+        budget: 10,
+      });
+      expect(low.outputs.wide).toBe('false');
+      // A pull request that started at its longest wait without room.
+      const atLimit = await admit({
+        active: prs(6),
+        peak: 12,
+        legWidths,
+        maxWait: 12,
+        maxLooks: 2,
+      });
+      expect(atLimit.outputs).toMatchObject({fits: 'true', wide: 'false'});
+    });
+
+    it('counts another just-admitted run at the width its admission picked', async () => {
+      // A run admitted 30 s ago with 2 jobs so far, and its full-width step
+      // skipped (tight), run (full) or not reached yet (undecided).
+      const justAdmitted = marker => {
+        const run = admittedRun(60, 2, {admittedMinutesAgo: 0.5});
+        if (marker != null)
+          run.jobs.push({
+            status: 'completed',
+            steps: [{name: WIDE_STEP, status: 'completed', conclusion: marker}],
+          });
+        return run;
+      };
+      // 18 small + 21 + 51 = 90 fits; at 30, 99 does not.
+      const fitsBeside = async marker =>
+        (await admit({active: [justAdmitted(marker)], peak: 51})).looks === 1;
+      expect(await fitsBeside('skipped')).toBe(true);
+      expect(await fitsBeside('success')).toBe(false);
+      expect(await fitsBeside(undefined)).toBe(false);
+      expect(legWidth(justAdmitted('skipped').jobs)).toBe('tight');
+      expect(legWidth(justAdmitted('success').jobs)).toBe('full');
+      expect(legWidth(justAdmitted().jobs)).toBe(null);
+    });
+
+    it('leaves a run with no widening matrix as before', async () => {
+      // A dispatch passes no widening matrix: it takes no full width, so its
+      // admission skips the full-width step.
+      const plain = await admit({active: prs(5), peak: 12});
+      expect(plain.outputs).toMatchObject({fits: 'true', wide: 'false'});
+      expect(plain.info.at(-2)).not.toContain('Legs run');
+    });
+
+    /** Runs the action's widths step for a `wide` the wait set. */
+    const widthsFor = wide => {
+      const step = action.runs.steps.find(item => item.id === 'widths');
+      expect(step.if).toBe('always()');
+      const out = path.join(
+        fs.mkdtempSync(path.join(os.tmpdir(), 'widths-')),
+        'out',
+      );
+      fs.writeFileSync(out, '');
+      const result = spawnSync('bash', ['-c', step.run], {
+        env: {
+          ...process.env,
+          LEG_WIDTHS: legWidths,
+          WIDE: wide,
+          GITHUB_OUTPUT: out,
+        },
+        encoding: 'utf8',
+      });
+      expect(result.status, result.stderr).toBe(0);
+      return JSON.parse(/^widths=(.*)$/m.exec(fs.readFileSync(out, 'utf8'))[1]);
+    };
+
+    it('gives each matrix its full width when wide, and its tight width on any other end', () => {
+      expect(widthsFor('true')).toEqual({'test-node': 5, 'swizzle-proof': 8});
+      // A wait that ended early or threw set `wide` to 'false' or nothing.
+      for (const wide of ['false', ''])
+        expect(widthsFor(wide)).toEqual({'test-node': 2, 'swizzle-proof': 2});
+    });
   });
 
   it('refuses a peak that is not a positive integer', async () => {
