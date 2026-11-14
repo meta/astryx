@@ -23,10 +23,8 @@
  * A sub-menu drills in on a phone through the view stack useMenuDrillIn
  * keeps; the root shows the drilled view in place of its rows.
  *
- * Initial focus follows input modality: keyboard opens focus the first enabled
- * item (or the last one for ArrowUp); pointer opens preserve a row already
- * reached by the pointer and otherwise focus the first enabled item. Pointer
- * focus does not paint a keyboard focus ring.
+ * An open focuses the first enabled row, or the last after ArrowUp. A row the
+ * pointer reached first keeps focus. After pointer input the row shows no ring.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/DropdownMenu/DropdownMenu.doc.mjs
@@ -1154,8 +1152,7 @@ function DropdownMenuPopover({
     // a picker's list clamps instead.
     wrap: true,
     hasPaging: true,
-    // Pointer opens preserve a row already reached by the pointer; otherwise
-    // the open effect focuses the first enabled row.
+    // After pointer input, a focused row shows no keyboard ring.
     focusFollowsLastInput: true,
     onEscape: closeMenu,
   });
@@ -1490,7 +1487,7 @@ function DropdownMenuPopover({
         return;
       }
       openModalityRef.current = event.detail === 0 ? 'keyboard' : 'pointer';
-      // The shared modality tracker controls the resulting focus indication.
+      // A click with detail 0 comes from the keyboard or assistive technology.
       if (isControlled) {
         if (controlledIsOpen) {
           onClick?.();
