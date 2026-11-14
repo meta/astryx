@@ -145,6 +145,12 @@ Consumer migration instructions belong in consumer docs and release notes.
   `MonthPane`, one month's grid, and `monthGridKeyTarget` and
   `useMonthGridFocus`, its keys and its focus, with their types. Both calendars
   render this one grid (PR2, AR8).
+- `DateInput/useOwnScrollGesture.ts`, which keeps a finger that lands on a
+  sheet wheel, the month scroller or the month pager off the sheet's pull. It
+  builds on none of the shared touch modules
+  (`architecture:react-component-runtime` INV19). The sheet's pull is a native
+  touch listener outside the gesture host, so only `stopPropagation` on the
+  element keeps it off.
 - The disabled-reason Tooltip composition: DateInput renders the reason Tooltip
   and links it from its focusable controls (`family:input-fields`
   representative matrix, "Member with `disabledMessage`").
