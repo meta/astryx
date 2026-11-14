@@ -1592,8 +1592,9 @@ describe('render(): ordinary files named like configuration', () => {
     const result = /** @type {any} */ (await render('names/page.tsx', {cwd: dir}));
     expect(result.data.files.sort()).toEqual(['config.ts', 'data/chart-config.json', 'data/config.json', 'lib/arc.ts', 'page.tsx']);
     expect(result.data.warnings.filter((/** @type {any} */ w) => w.code === 'not-embedded')).toEqual([]);
+    // Format 1 readers refuse these names, so the file says format 2.
     const back = /** @type {any} */ (await render('names/page.html', {cwd: dir, reverse: true, out: 'names-back/page.tsx'}));
-    expect(back.data.exact).toBe(true);
+    expect(back.data).toMatchObject({exact: true, format: 2});
     for (const name of ['config.ts', 'lib/arc.ts', 'data/chart-config.json', 'data/config.json']) {
       expect(fs.readFileSync(path.join(dir, 'names-back', name))).toEqual(fs.readFileSync(path.join(dir, 'names', name)));
     }
