@@ -760,7 +760,7 @@ importers:
   packages/charts:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.14
+        specifier: 0.7.17
         version: link:../core
       '@stylexjs/stylex':
         specifier: '>=0.10.0'
@@ -823,6 +823,9 @@ importers:
       '@babel/types':
         specifier: 7.29.8
         version: 7.29.8
+      '@csstools/css-syntax-patches-for-csstree':
+        specifier: 1.1.6
+        version: 1.1.6(css-tree@3.2.1)
       '@stylexjs/babel-plugin':
         specifier: 'catalog:'
         version: 0.19.1
@@ -832,6 +835,12 @@ importers:
       commander:
         specifier: ^12.1.0
         version: 12.1.0
+      css-tree:
+        specifier: 3.2.1
+        version: 3.2.1
+      globals:
+        specifier: 17.14.0
+        version: 17.14.0
       ignore:
         specifier: ^7.0.14
         version: 7.0.14
@@ -952,7 +961,7 @@ importers:
   packages/lab:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.14
+        specifier: 0.7.17
         version: link:../core
       '@stylexjs/stylex':
         specifier: '>=0.10.0'
@@ -1025,7 +1034,7 @@ importers:
   packages/richtext:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.14
+        specifier: 0.7.17
         version: link:../core
       '@stylexjs/stylex':
         specifier: '>=0.10.0'
@@ -1104,7 +1113,7 @@ importers:
   packages/themes/butter:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.14
+        specifier: 0.7.17
         version: link:../../core
       lucide-react:
         specifier: ^1.66.0
@@ -1114,13 +1123,13 @@ importers:
         version: 19.3.1
     devDependencies:
       '@astryxdesign/cli':
-        specifier: 0.7.14
+        specifier: 0.7.17
         version: link:../../cli
 
   packages/themes/chocolate:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.14
+        specifier: 0.7.17
         version: link:../../core
       lucide-react:
         specifier: ^1.66.0
@@ -1130,13 +1139,13 @@ importers:
         version: 19.3.1
     devDependencies:
       '@astryxdesign/cli':
-        specifier: 0.7.14
+        specifier: 0.7.17
         version: link:../../cli
 
   packages/themes/gothic:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.14
+        specifier: 0.7.17
         version: link:../../core
       lucide-react:
         specifier: ^1.66.0
@@ -1146,13 +1155,13 @@ importers:
         version: 19.3.1
     devDependencies:
       '@astryxdesign/cli':
-        specifier: 0.7.14
+        specifier: 0.7.17
         version: link:../../cli
 
   packages/themes/matcha:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.14
+        specifier: 0.7.17
         version: link:../../core
       lucide-react:
         specifier: ^1.66.0
@@ -1162,13 +1171,13 @@ importers:
         version: 19.3.1
     devDependencies:
       '@astryxdesign/cli':
-        specifier: 0.7.14
+        specifier: 0.7.17
         version: link:../../cli
 
   packages/themes/neutral:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.14
+        specifier: 0.7.17
         version: link:../../core
       lucide-react:
         specifier: ^1.66.0
@@ -1178,20 +1187,20 @@ importers:
         version: 19.3.1
     devDependencies:
       '@astryxdesign/cli':
-        specifier: 0.7.14
+        specifier: 0.7.17
         version: link:../../cli
 
   packages/themes/probe:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.14
+        specifier: 0.7.17
         version: link:../../core
       react:
         specifier: '>=19'
         version: 19.3.1
     devDependencies:
       '@astryxdesign/cli':
-        specifier: 0.7.14
+        specifier: 0.7.17
         version: link:../../cli
       tsup:
         specifier: ^8.3.0
@@ -1200,7 +1209,7 @@ importers:
   packages/themes/stone:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.14
+        specifier: 0.7.17
         version: link:../../core
       lucide-react:
         specifier: ^1.66.0
@@ -1210,13 +1219,13 @@ importers:
         version: 19.3.1
     devDependencies:
       '@astryxdesign/cli':
-        specifier: 0.7.14
+        specifier: 0.7.17
         version: link:../../cli
 
   packages/themes/y2k:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.14
+        specifier: 0.7.17
         version: link:../../core
       lucide-react:
         specifier: ^1.66.0
@@ -1226,7 +1235,7 @@ importers:
         version: 19.3.1
     devDependencies:
       '@astryxdesign/cli':
-        specifier: 0.7.14
+        specifier: 0.7.17
         version: link:../../cli
 
   packages/vega:
@@ -1949,11 +1958,11 @@ packages:
     peerDependencies:
       react: '>= 16 || ^19.0.0-rc'
 
-  '@hono/node-server@2.1.0':
-    resolution: {integrity: sha512-XovyyCCnBzW+zKu+z/zq8hwNs4KOR5rEMAOxo2f40Q5xoOI37IMm6MIg2COOUtUApo0i6850MTBKH2u4QLGIqg==}
+  '@hono/node-server@2.1.6':
+    resolution: {integrity: sha512-p/KH9MnfNcsm3sR6x4lNgm5j+QN4Et8srKredl9DZfXiyZ1UQ3aQ2YVpFLbqktYN5JI+DB+VZFKM2PqE5hLKjQ==}
     engines: {node: '>=20'}
     peerDependencies:
-      hono: ^4
+      hono: ^4 || ^5.0.0-0
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -5096,6 +5105,10 @@ packages:
     resolution: {integrity: sha512-nFR0zLpU2YCaRxwoCJvL6UvCH2JFyFVIvwTLsIf21AuHlMskA1hhTdk+LlYJtOlYt9v6dvszD2BGRqBL+iQK9Q==}
     deprecated: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
 
+  globals@17.14.0:
+    resolution: {integrity: sha512-UtdkTVyAJePQv0J2M9Xe4L0ruNSDV314XiIJsADI2Zf40bcdAonE/D/OhAU8AT99oij9mhLByb+NvA3QWZYgCg==}
+    engines: {node: '>=18'}
+
   globby@11.1.0:
     resolution: {integrity: sha512-jhIXaOzy1sb8IyocaruWSn1TjmnBVs8Ayhcy83rmxNJ8q2uWKCAj3CnJY+KpGSXCueAPc0i05kVvVKtP1t9S3g==}
     engines: {node: '>=10'}
@@ -5129,8 +5142,8 @@ packages:
   hermes-parser@0.25.1:
     resolution: {integrity: sha512-6pEjquH3rqaI6cYAXYPcz9MS4rY6R4ngRgrgfDshRptUZIc3lw0MCIJIGDj9++mfySOuPTHB4nrSW99BCvOPIA==}
 
-  hono@4.13.1:
-    resolution: {integrity: sha512-kdJoFVv2xmayw6cY09H7AbMJMt8Jn5jdlEdXsP7AGBdF2DIptVlKlOLKXP41yPip4/a3yQPv9gVcJYI8YY04dw==}
+  hono@4.13.16:
+    resolution: {integrity: sha512-AOLOEhvrV+iH92xXCnFr/5+3KjPKcI3xP63XJtX5spAnkznPdHijlIsUTpi7/9EhWqrTCekw5c5zh1K+YsVw7A==}
     engines: {node: '>=16.9.0'}
 
   html-encoding-sniffer@6.0.0:
@@ -8085,9 +8098,9 @@ snapshots:
     dependencies:
       react: 19.3.1
 
-  '@hono/node-server@2.1.0(hono@4.13.1)':
+  '@hono/node-server@2.1.6(hono@4.13.16)':
     dependencies:
-      hono: 4.13.1
+      hono: 4.13.16
 
   '@humanfs/core@0.19.2':
     dependencies:
@@ -8521,7 +8534,7 @@ snapshots:
 
   '@modelcontextprotocol/sdk@1.32.2(zod@3.25.76)':
     dependencies:
-      '@hono/node-server': 2.1.0(hono@4.13.1)
+      '@hono/node-server': 2.1.6(hono@4.13.16)
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
       content-type: 1.0.5
@@ -8531,7 +8544,7 @@ snapshots:
       eventsource-parser: 3.1.0
       express: 5.2.1
       express-rate-limit: 8.5.2(express@5.2.1)
-      hono: 4.13.1
+      hono: 4.13.16
       jose: 6.2.3
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
@@ -8543,7 +8556,7 @@ snapshots:
 
   '@modelcontextprotocol/sdk@1.32.2(zod@4.6.7)':
     dependencies:
-      '@hono/node-server': 2.1.0(hono@4.13.1)
+      '@hono/node-server': 2.1.6(hono@4.13.16)
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
       content-type: 1.0.5
@@ -8553,7 +8566,7 @@ snapshots:
       eventsource-parser: 3.1.0
       express: 5.2.1
       express-rate-limit: 8.5.2(express@5.2.1)
-      hono: 4.13.1
+      hono: 4.13.16
       jose: 6.2.3
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
@@ -11109,6 +11122,8 @@ snapshots:
       once: 1.4.0
       path-is-absolute: 1.0.1
 
+  globals@17.14.0: {}
+
   globby@11.1.0:
     dependencies:
       array-union: 2.1.0
@@ -11149,7 +11164,7 @@ snapshots:
     dependencies:
       hermes-estree: 0.25.1
 
-  hono@4.13.1: {}
+  hono@4.13.16: {}
 
   html-encoding-sniffer@6.0.0:
     dependencies:

@@ -17,6 +17,17 @@
         "mentions": []
       },
       {
+        "domain": "hook",
+        "name": "createSwipe",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/Swipe",
+        "command": "astryx hook createSwipe",
+        "mentions": []
+      },
+      {
         "domain": "doc",
         "name": "global/uninstall",
         "package": "@astryxdesign/cli",
@@ -50,18 +61,6 @@
         "title": "<text>",
         "command": "astryx docs global/uninstall reset",
         "parent": "astryx docs global/uninstall --index",
-        "mentions": []
-      },
-      {
-        "domain": "doc",
-        "name": "cli/api/functions/theme-build",
-        "package": "@astryxdesign/cli",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "title": "<text>",
-        "command": "astryx docs cli/api/functions/theme-build",
-        "parent": "astryx docs cli/api/functions",
         "mentions": []
       },
       {

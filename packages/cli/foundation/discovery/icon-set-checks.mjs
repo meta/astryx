@@ -14,11 +14,13 @@
  *            default naming a variant the set does not declare);
  *            `icon_builtin_definition_missing`; `icon_module_not_public`;
  *            `icon_not_component`; `icon_export_missing` (an export, the
- *            generated module, or the adapter its module does not have, read
- *            statically with re-exports followed); `icon_module_invalid`;
- *            `icon_generated_types_mismatch`; `icon_theme_map_mismatch` (a
- *            theme map whose keys or values disagree with the built-in
- *            entries of `map`);
+ *            generated module, the adapter, or a look's theme map its module
+ *            does not have, read statically with re-exports followed);
+ *            `icon_module_invalid`; `icon_generated_types_mismatch`;
+ *            `icon_theme_map_mismatch` (a theme map, or the theme map of a
+ *            look an icon draws, whose keys or values disagree with the
+ *            built-in entries of `map`, or a look's theme map the generated
+ *            module lacks);
  *   warnings `icon_export_name` (an export not named `<Name>Icon`);
  *            `icon_definition_unused` and `icon_definition_shadowed` (a
  *            definition the set declares that `map` leaves out, or that has
@@ -54,12 +56,14 @@ import {inspectPackageExport} from './package-exports.mjs';
 import {
   THEME_MAP_NAME,
   entryWiringNote,
+  generatedOrigins,
   generatedTypesPath,
   otherNamesOf,
   generatedTypesText,
   readGeneratedStatements,
   generatedTypesMatch,
 } from './icon-set-writer.mjs';
+import {variantThemeMaps} from './icon-set-theme-maps.mjs';
 import {
   exportValueKind,
   aliasedOrigin,
@@ -75,6 +79,7 @@ import {
   issueError,
   issueWarning,
 } from '../integrations/validate-contributions.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 /** @typedef {import('../integrations/issue').AstryxIntegrationIssue} Issue */
 /** @typedef {import('./icon-set-discovery.mjs').DiscoveredIconSet} DiscoveredIconSet */
@@ -889,6 +894,8 @@ function checkExports(set, packageDir, packageName, unchecked) {
   }
   /** @type {Map<string, {file: string, name: string} | null>} */
   const iconOrigins = new Map();
+  /** @type {Map<string, Map<string, {file: string, name: string} | null>>} each icon's variant origins, by variant */
+  const variantOrigins = new Map();
   for (const icon of set.data.icons) {
     const module = icon.module ?? set.data.module;
     if (wiring && module === set.data.module) continue;
@@ -896,14 +903,20 @@ function checkExports(set, packageDir, packageName, unchecked) {
       icon.id,
       originOf(module, icon.export, `icon "${icon.id}"`, {icon: icon.id}),
     );
+    /** @type {Map<string, {file: string, name: string} | null>} */
+    const looks = new Map();
     for (const variant of icon.variants ?? []) {
-      originOf(
-        variant.module ?? module,
-        variant.export,
-        `a variant of icon "${icon.id}"`,
-        {icon: icon.id},
+      looks.set(
+        variant.variant,
+        originOf(
+          variant.module ?? module,
+          variant.export,
+          `a variant of icon "${icon.id}"`,
+          {icon: icon.id},
+        ),
       );
     }
+    variantOrigins.set(icon.id, looks);
   }
 
   /** @type {Map<string, {id: string, origin: {file: string, name: string} | null}>} */
@@ -934,65 +947,169 @@ function checkExports(set, packageDir, packageName, unchecked) {
   );
   const file = fileOf(set.data.module);
   if (!mapOrigin || !file) return issues;
-  const bindings = staticExportBindings(file, themeMap);
-  // A theme map built at runtime cannot be read, so it is not checked.
-  if (!bindings) {
-    unchecked.push({
-      entry: themeMap,
-      reason: `Theme map "${themeMap}" is not one object literal the static reader can read, so none of its entries were checked. Export it as \`export const ${themeMap} = {...}\` to have it checked.`,
-    });
+
+  /**
+   * Hold one theme map to the built-in entries of `map`: the same keys, each
+   * drawing the artwork `expected` names for it.
+   * @param {string} name the theme map's export
+   * @param {(name: string, filler: {id: string, origin: {file: string, name: string} | null}) => {origin: {file: string, name: string} | null, what: string, fix: string}} expected
+   *   for each entry, the origin it must draw, what that is, and the fix
+   */
+  const compareThemeMap = (name, expected) => {
+    const bindings = staticExportBindings(file, name);
+    // A theme map built at runtime cannot be read, so it is not checked.
+    if (!bindings) {
+      unchecked.push({
+        entry: name,
+        reason: `Theme map "${name}" is not one object literal the static reader can read, so none of its entries were checked. Export it as \`export const ${name} = {...}\` to have it checked.`,
+      });
+      return;
+    }
+    for (const key of bindings.keys()) {
+      if (!fillers.has(key)) {
+        issues.push(
+          issueError(
+            ICON_THEME_MAP_MISMATCH,
+            `${label}: theme map "${name}" has "${key}", which "map" does not map. Remove it, or add "${key}" to "map" with the id of the icon that draws it.`,
+          ),
+        );
+      }
+    }
+    for (const [definition, filler] of fillers) {
+      if (!bindings.has(definition)) {
+        issues.push(
+          issueError(
+            ICON_THEME_MAP_MISMATCH,
+            `${label}: theme map "${name}" has no "${definition}", which "map" maps to icon "${filler.id}". Add it.`,
+          ),
+        );
+        continue;
+      }
+      const value = bindings.get(definition);
+      if (!value) {
+        unchecked.push({
+          entry: definition,
+          reason: `Theme map "${name}" has an entry for "${definition}" the static reader cannot read. Write it as the icon's binding (${definition}: TrashIcon), an element (<TrashIcon />), or createElement(TrashIcon) to have it checked.`,
+        });
+        continue;
+      }
+      const want = expected(definition, filler);
+      if (!want.origin) continue;
+      // Compare the bindings each finally names: \`const XIcon = X\` is X. A
+      // mismatch is reported only when both are followed to their declarations.
+      const mapped = aliasedOrigin(value);
+      const drawn = aliasedOrigin(want.origin);
+      if (!mapped || !drawn) {
+        unchecked.push({
+          entry: definition,
+          reason: `Theme map "${name}" maps "${definition}" through an alias the static reader cannot follow to its declaration, so it was not compared with ${want.what}. ${want.fix}, or alias a binding declared in this package.`,
+        });
+        continue;
+      }
+      if (mapped.file !== drawn.file || mapped.name !== drawn.name) {
+        issues.push(
+          issueError(
+            ICON_THEME_MAP_MISMATCH,
+            `${label}: theme map "${name}" maps "${definition}" to other artwork than ${want.what}, which "map" names for it. ${want.fix}.`,
+          ),
+        );
+      }
+    }
+  };
+
+  compareThemeMap(themeMap, (_, filler) => ({
+    origin: filler.origin,
+    what: `icon "${filler.id}"`,
+    fix: "Point it at the icon's export",
+  }));
+
+  // A look an icon draws has its own theme map in the generated module
+  // (`themeIconsFilled`), keyed like `themeIcons`: each entry draws the
+  // icon's export for that variant, or its own export when it has none.
+  const lookMaps = variantThemeMaps(set.data);
+  if (lookMaps.length === 0) return issues;
+  const generated = /** @type {string} */ (set.data.generated);
+  const generatedFile = path.join(packageDir, generated);
+  if (!fs.existsSync(generatedFile)) return issues;
+  /** @type {string[]} */
+  let statements;
+  try {
+    statements = readGeneratedStatements(
+      fs.readFileSync(generatedFile, 'utf-8'),
+      generated,
+    );
+  } catch {
     return issues;
   }
-  for (const key of bindings.keys()) {
-    if (!fillers.has(key)) {
+  const sources = generatedOrigins(packageDir, generated);
+  const byId = new Map(set.data.icons.map(icon => [icon.id, icon]));
+  for (const {variant, name} of lookMaps) {
+    if (!statements.some(line => line.startsWith(`export const ${name} = `))) {
       issues.push(
         issueError(
           ICON_THEME_MAP_MISMATCH,
-          `${label}: theme map "${themeMap}" has "${key}", which "map" does not map. Remove it, or add "${key}" to "map" with the id of the icon that draws it.`,
-        ),
-      );
-    }
-  }
-  for (const [name, filler] of fillers) {
-    if (!bindings.has(name)) {
-      issues.push(
-        issueError(
-          ICON_THEME_MAP_MISMATCH,
-          `${label}: theme map "${themeMap}" has no "${name}", which "map" maps to icon "${filler.id}". Add it.`,
+          `${label}: its generated module ${generated} has no theme map "${name}", which draws the built-in icons in the ${variant} look an icon draws. Rewrite the module: \`${lookRewriteCommand(set, variant, sources)}\`.`,
         ),
       );
       continue;
     }
-    const value = bindings.get(name);
-    if (!value) {
+    const found = exportOriginVerdict(file, name);
+    if (found?.verdict === 'unknown') {
       unchecked.push({
         entry: name,
-        reason: `Theme map "${themeMap}" has an entry for "${name}" the static reader cannot read. Write it as the icon's binding (${name}: TrashIcon), an element (<TrashIcon />), or createElement(TrashIcon) to have it checked.`,
+        reason: `Theme map "${name}" is in ${generated}, but this check could not prove "${set.data.module}" exports it: ${found.reason}`,
       });
       continue;
     }
-    if (!filler.origin) continue;
-    // Compare the bindings each finally names: \`const XIcon = X\` is X. A
-    // mismatch is reported only when both are followed to their declarations.
-    const mapped = aliasedOrigin(value);
-    const drawn = aliasedOrigin(filler.origin);
-    if (!mapped || !drawn) {
-      unchecked.push({
-        entry: name,
-        reason: `Theme map "${themeMap}" maps "${name}" through an alias the static reader cannot follow to its declaration, so it was not compared with icon "${filler.id}". Point it at the icon's export, or alias a binding declared in this package.`,
-      });
-      continue;
-    }
-    if (mapped.file !== drawn.file || mapped.name !== drawn.name) {
+    if (found?.verdict !== 'exports') {
       issues.push(
         issueError(
-          ICON_THEME_MAP_MISMATCH,
-          `${label}: theme map "${themeMap}" maps "${name}" to other artwork than icon "${filler.id}", which "map" names for it. Point it at the icon's export.`,
+          ICON_EXPORT_MISSING,
+          `${label}: theme map "${name}" is in ${generated}, but "${set.data.module}" does not export it. Export it from the package's entry, as it exports "${themeMap}".`,
         ),
       );
+      continue;
     }
+    compareThemeMap(name, (_, filler) => {
+      const icon = byId.get(filler.id);
+      const own = icon?.variants?.find(each => each.variant === variant);
+      return own
+        ? {
+            origin: variantOrigins.get(filler.id)?.get(variant) ?? null,
+            what: `the ${variant} variant of icon "${filler.id}"`,
+            fix: `Point it at ${own.export}, the icon's ${variant} export`,
+          }
+        : {
+            origin: filler.origin,
+            what: `icon "${filler.id}", which has no ${variant} variant`,
+            fix: "Point it at the icon's export",
+          };
+    });
   }
   return issues;
+}
+
+/**
+ * The command that rewrites a set's generated module with its theme map for
+ * one look: `add --variant <variant> --all` from the module most of that
+ * look's exports come from, which writes the module again.
+ * @param {DiscoveredIconSet} set
+ * @param {string} variant
+ * @param {Map<string, {module: string, source: string, adapt: boolean}>} origins
+ *   where each export of the generated module comes from
+ */
+function lookRewriteCommand(set, variant, origins) {
+  /** @type {Map<string, number>} */
+  const counts = new Map();
+  for (const icon of set.data.icons) {
+    const own = icon.variants?.find(each => each.variant === variant);
+    const from = own ? origins.get(own.export)?.module : undefined;
+    if (from) counts.set(from, (counts.get(from) ?? 0) + 1);
+  }
+  const module = [...counts].sort(
+    (a, b) => b[1] - a[1] || compareText(a[0], b[0]),
+  )[0]?.[0];
+  return `astryx experimental icon add --variant ${shellArg(variant)} --from ${module ? shellArg(module) : '<module>'} --all --set ${shellArg(set.name)}`;
 }
 
 /** The lowest search score a find hint needs: a whole word or a word start. */

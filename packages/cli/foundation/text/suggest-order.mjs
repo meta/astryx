@@ -18,6 +18,7 @@
  */
 
 import {levenshteinDistance} from './levenshtein.mjs';
+import {compareText} from './compare-text.mjs';
 
 /**
  * The score of a near name (nearNameSlips), less a little per slip: above any
@@ -204,6 +205,19 @@ function orderByWords(typedName, items, namesOf, options) {
   if (top === 0) return scored.map(s => s.item);
   const need = Math.min(top, 2);
   return scored.filter((_, i) => tiers[i] >= need).map(s => s.item);
+}
+
+/**
+ * Whether a name carries a typed word longer than one character: the words
+ * the `closest` cut of {@link orderByAffinity} counts. When no candidate
+ * carries one, that cut leaves every candidate in.
+ * @param {string} typedName
+ * @param {string} name
+ * @returns {boolean}
+ */
+export function carriesTypedWord(typedName, name) {
+  const words = nameWords(typedName).filter(w => w.length > 1);
+  return affinityOf(words, name) >= 10;
 }
 
 /**
@@ -468,7 +482,7 @@ export function rankComponentSuggestions(
         a.keywordAt - b.keywordAt ||
         a.distance - b.distance ||
         b.lead - a.lead ||
-        a.name.localeCompare(b.name),
+        compareText(a.name, b.name),
     )
     .map(({name, score, reason}) => ({name, score, reason}));
 }

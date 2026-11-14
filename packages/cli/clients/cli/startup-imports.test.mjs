@@ -7,7 +7,7 @@
  * project and integration modules. The project, integration and contribution
  * modules use them. A component lookup loads no code-rewrite package, which
  * only patching an integration manifest uses. A module hook in the child
- * records every module that the run resolves.
+ * records every module that the run loads (resolving a package loads none).
  */
 
 import {spawnSync} from 'node:child_process';
@@ -16,6 +16,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {moduleRecorder} from '../../test-utils/module-recorder.mjs';
 
 const BIN = fileURLToPath(new URL('./bin/astryx.mjs', import.meta.url));
 const CLI_ROOT = fileURLToPath(new URL('../../', import.meta.url));
@@ -74,30 +75,13 @@ function packageOf(url) {
 
 /**
  * Run the bin with `args` in an empty folder, with its own home folder, and
- * return the packages of the modules it resolved and the paths of the CLI's
+ * return the packages of the modules it loaded and the paths of the CLI's
  * own modules under the CLI root.
  * @param {string[]} args
  * @returns {{status: number | null, packages: Set<string>, cliModules: Set<string>}}
  */
 function modulesLoadedBy(args) {
-  const log = path.join(dir, 'resolved.txt');
-  fs.rmSync(log, {force: true});
-  const hook = path.join(dir, 'record-resolved.mjs');
-  fs.writeFileSync(
-    hook,
-    [
-      "import {appendFileSync} from 'node:fs';",
-      "import {registerHooks} from 'node:module';",
-      'registerHooks({',
-      '  resolve(specifier, context, nextResolve) {',
-      '    const result = nextResolve(specifier, context);',
-      `    appendFileSync(${JSON.stringify(log)}, result.url + '\\n');`,
-      '    return result;',
-      '  },',
-      '});',
-      '',
-    ].join('\n'),
-  );
+  const {preload, loads: log} = moduleRecorder(dir);
   const app = path.join(dir, 'app');
   const home = path.join(dir, 'home');
   fs.mkdirSync(app, {recursive: true});
@@ -119,7 +103,7 @@ function modulesLoadedBy(args) {
   });
   const result = spawnSync(
     process.execPath,
-    ['--import', pathToFileURL(hook).href, BIN, ...args],
+    ['--import', pathToFileURL(preload).href, BIN, ...args],
     {cwd: app, env, encoding: 'utf8'},
   );
   const packages = new Set();
@@ -142,6 +126,9 @@ describe('a run of the bin that prints the version', () => {
     const {status, packages, cliModules} = modulesLoadedBy(['--version']);
     expect(status).toBe(0);
     expect(packages.has('commander')).toBe(true);
+    expect(fs.readFileSync(path.join(dir, 'loaded.txt'), 'utf8')).toContain(
+      '/node_modules/commander/lib/command.js',
+    );
     expect(cliModules.has('clients/cli/bin/astryx.mjs')).toBe(true);
   });
 

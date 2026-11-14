@@ -171,6 +171,25 @@ source, packages}`. `source` has `name`, `generatedAt`, and `complete`. Each
   covers. Official packages come first in both lists. An official entry reads
   like any other package, with no section of its own, and names its source
   `Astryx`.
+- **FR12 — A package can name its logo, and the check says what a catalog
+  needs.** An integration manifest MAY set `logo: {light, dark?}`, paths
+  relative to the package root to images the package ships, so catalogs that
+  list the package can show its logo. Each image is a PNG, JPEG, WebP, or an
+  SVG drawn only with shapes, at most 512 KB, whose file extension names its
+  format. The CLI MUST accept `logo` as a
+  known key and refuse a `logo` that is not an object with a string `light`.
+  `integration check` adds two package-level notes. `package_without_logo`
+  names a logo that is not set, not such an image, or not packed; when the
+  manifest sets no `logo`, the check reads package.json `marketplace.logo`
+  the same way, and a logo npm cannot be asked about is listed in
+  `exampleAssets` with the file that names it. `package_without_example`
+  names a package whose components need an example, after the exemptions of
+  the component example notes, when no block template is a showcase
+  (`isShowcase: true` with `exampleFor`, or `alsoShowcaseFor`). A package of
+  themes, docs or codemods alone needs no example, and a package of icon sets
+  alone draws neither note. Both notes are information only and fail no
+  check, with or without `--strict` or `--next`; they are separate from the
+  component example notes, which are `next` notes.
 
 ### Platform support
 
@@ -223,6 +242,7 @@ source, packages}`. `source` has `name`, `generatedAt`, and `complete`. Each
 | FR9      | existing discover JSON tests                                   | each response type with and without a source                                                                                                                                                                                                                                                                  | an existing field changes type or meaning                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | FR10     | manifest parser and validate tests                             | no field; a URL; a value that is not a URL                                                                                                                                                                                                                                                                    | the key raises an unknown-key warning, or a valid URL is refused                                                                                                                                                                                                                                                                                                                                                                                                            |
 | FR11     | official list generator, drift test, adapter and command tests | stable and canary CLI; Core older and newer than the CLI; Core declared exactly, as a range, and as a path; canary Core; no Core; private package; package that adds nothing; theme folder that does not match its file; empty folder; subfolder; another source lists an official package or its integration | a private or empty package is listed, an unreadable theme package is skipped, the committed list drifts from the repository, latest is older than a release the CLI knows, the project's Core version cannot be looked up, a declared range is not pinned or not quoted, a canary-only package shows on a stable CLI or beside a released Core, an official entry replaces a source's entry for the same integration, or a version it does not list fails with another code |
+| FR12     | manifest parser, package listing and integration check tests   | no logo; a packed light logo; light and dark; a bare path; a missing or non-image file; a logo the manifest names and one only package.json names; components with and without a showcase; a themes-only, docs-only and icon-set-only package                                                                 | the key raises an unknown-key warning, a bare path is accepted, a missing logo or example draws no note, an exempt package draws one, either note fails a check under any flag, or package.json wins over the manifest                                                                                                                                                                                                                                                      |
 
 ## Decision log
 

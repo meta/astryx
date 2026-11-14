@@ -201,6 +201,13 @@ export default defineConfig({
           name: 'node',
           globals: true,
           environment: 'node',
+          // A visual gate that a test runs builds no theme into the checkout
+          // the other tests read at the same time; it names the themes that
+          // are not built instead (.github/scripts/visual-gate/lib/sources.mjs).
+          env: {ASTRYX_VISUAL_GATE_READ_ONLY: '1'},
+          // A fixture project resolves packages only from its own folders, never
+          // through the NODE_PATH pnpm's bin shim gives the worker.
+          setupFiles: ['./vitest.setup.node.mjs'],
           // Prebuilt and plain-data modules load as Node loads them for the
           // CLI, not through Vite's transform, which would otherwise inline
           // every file: Core's built bundle (the workspace link resolves it
@@ -260,6 +267,11 @@ export default defineConfig({
             'packages/charts/**',
             'packages/richtext/**',
             'packages/vega/**',
+            // CI runs the swizzle proof's slices in legs of their own
+            // (ci.yml swizzle-proof), so its Node legs leave them out.
+            ...(process.env.VITEST_SWIZZLE_PROOF_OWN_JOB === '1'
+              ? ['packages/cli/test/swizzle-proof/swizzle-proof.*.test.mjs']
+              : []),
           ],
         },
       },

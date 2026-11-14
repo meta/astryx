@@ -7,7 +7,8 @@
  *   buttons in the cells where they start and inside their week rows; a chip
  *   without content is static text; one view-owned popover opens on click and
  *   Enter, switches between chips in one gesture, takes an event handed over
- *   from a busy day's list, returns focus to the chip or the "+N more", and
+ *   from a busy day's list, shows the day's list again when that "+N more"
+ *   is pressed, returns focus to the chip or the "+N more", and
  *   closes when its chip leaves, with focus on the chip's start cell
  * @position Browser binding for `component:Schedule` FR19–FR20 and AR8. jsdom
  *   cannot show a native popover, return focus through it, or lay out chips.
@@ -233,6 +234,12 @@ test('a row in a busy day\u2019s list hands its event to the same popover, and E
     .poll(async () => (await readDialog(page)).details)
     .toBe('incident-review');
   const handedOver = await readDialog(page);
+  await expect(more).toHaveAttribute('aria-expanded', 'true');
+  // "+N more" pressed while its handed event is open shows the day's list
+  // again in the same gesture.
+  await more.click();
+  await expect.poll(async () => (await readDialog(page)).label).toBe(WEDNESDAY);
+  expect((await readDialog(page)).openCount).toBe(1);
   await expect(more).toHaveAttribute('aria-expanded', 'true');
   await page.keyboard.press('Escape');
   await expect.poll(async () => (await readDialog(page)).openCount).toBe(0);

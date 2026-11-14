@@ -353,7 +353,8 @@ jobs:
 
             // Bot PRs: no gate, no community label. Set the check to success so
             // a required "review-required" doesn't block them, drop any stray
-            // gate/community labels, and stop.
+            // gate/community labels, and stop. A pull request the review app
+            // opens instead waits for a trainer pass (spec:AST-030 FR15).
             if (authorIsBot) {
               core.info(`@${author} is a bot — exempt from review gates.`);
               const current = pr.labels.map((l) => l.name);
@@ -367,6 +368,25 @@ jobs:
                     core.warning(`Could not remove ${name}: ${e.message}`);
                   }
                 }
+              }
+              if (reviewDecision.needsTrainerPass({author, reviewApp: process.env.REVIEW_APP})) {
+                let passed = false;
+                try {
+                  const reviews = await github.paginate(github.rest.pulls.listReviews, {
+                    owner, repo, pull_number: pr.number, per_page: 100,
+                  });
+                  passed = reviewDecision.trainerPassed({reviews, headSha: pr.head.sha, engOwners});
+                } catch (e) {
+                  core.warning(`Could not read exact-head reviews; the trainer pass stays pending: ${e.message}`);
+                }
+                core.info(`@${author} is the review app — trainer pass ${passed ? 'given' : 'pending'}.`);
+                await publishReviewGate(
+                  !passed,
+                  passed
+                    ? reviewDecision.OWNER_CLEARED_TEXT
+                    : reviewDecision.TRAINER_WAITING_TEXT,
+                );
+                return;
               }
               await publishReviewGate(false, 'Automated (bot) PR — exempt from code review.');
               return;

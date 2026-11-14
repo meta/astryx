@@ -293,6 +293,11 @@
         ],
         "options": [
           {
+            "flag": "--list",
+            "description": "<text>",
+            "type": "boolean"
+          },
+          {
             "flag": "--index",
             "description": "<text>",
             "type": "boolean"
@@ -317,6 +322,7 @@
           "<text>"
         ],
         "examples": [
+          "<text>",
           "<text>",
           "<text>",
           "<text>",
@@ -1129,6 +1135,7 @@
         "options": [],
         "json": false,
         "examples": [
+          "<text>",
           "<text>",
           "<text>",
           "<text>",

@@ -46,9 +46,9 @@ describe('focus-owner wrapper ring', () => {
       // On the wrapper, while its marked control shows keyboard focus.
       expect(rule).toMatch(/:has\(> \[data-astryx-focus-owner\]:focus-visible/);
       // Or while a marked cell's marked control shows it.
-      if (rule.includes('focus-owner-group')) {
+      if (/data-astryx-focus-owner=["']?group/.test(rule)) {
         expect(rule).toMatch(
-          /> \[data-astryx-focus-owner-group\] > \[data-astryx-focus-owner\]:focus-visible/,
+          /> \[data-astryx-focus-owner=["']?group["']?\] > \[data-astryx-focus-owner\]:focus-visible/,
         );
       }
       // Never every descendant.

@@ -23,6 +23,7 @@ import {JSON_SUPPORTED} from '../index.mjs';
 import {program} from '../program.mjs';
 import {buildManifest} from './manifest.mjs';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+import {compareText} from '../../../foundation/text/compare-text.mjs';
 
 /**
  * Every temporary folder these tests make lives here, removed once they
@@ -66,6 +67,9 @@ const CLI_LAYER_TYPES = {
   manifest: ['manifest'],
   'theme build': ['theme.build.batch'],
   'theme add': ['theme.list'],
+  'experimental theme': ['help'],
+  'experimental theme editor': ['help'],
+  'experimental theme preview': ['help'],
 };
 
 const manifest = buildManifest(program, {jsonSupported: JSON_SUPPORTED, version: '0.0.0-test'});
@@ -220,7 +224,7 @@ describe('manifest: drift guards', () => {
       if (!entry.subcommands) continue;
       const names = entry.subcommands.map((s) => s.name);
       expect(names, `subcommands of "${entry.name}" are not sorted`).toEqual(
-        [...names].sort((a, b) => a.localeCompare(b)),
+        [...names].sort(compareText),
       );
     }
   });

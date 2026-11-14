@@ -7,10 +7,13 @@
  * @input Uses React, @lexical/react (composer context), @lexical/rich-text,
  *   @lexical/selection, @lexical/list, @lexical/utils, and the lexical core
  *   command constants, plus Astryx Toolbar / IconButton / Selector /
- *   ToggleButton / Divider / Dialog / TextInput / Button / Layout primitives.
+ *   ToggleButton / Divider / Layout primitives, and the link popover in
+ *   ToolbarLinkPopover.
  * @output Exports RichTextEditorToolbar (a compact formatting toolbar with a
- *   RichText-owned 4px control gutter and horizontally scrollable action row)
- *   and RichTextEditorToolbarProps.
+ *   RichText-owned 4px control gutter, a horizontally scrollable action row,
+ *   and a link popover anchored to its Link button) and
+ *   RichTextEditorToolbarProps, plus format and glyph helpers RichText shares
+ *   internally.
  * @position @astryxdesign/richtext. Drop into RichTextEditor's `toolbar` slot to
  *   add a flush top formatting toolbar. Themed via Astryx Toolbar, Selector,
  *   IconButton, and ToggleButton, so it inherits the active theme. Base props
@@ -42,7 +45,6 @@ import {
   useEffect,
   useRef,
   useState,
-  type FormEvent,
   type ReactNode,
   type Ref,
 } from 'react';
@@ -63,23 +65,14 @@ import {
   INSERT_UNORDERED_LIST_COMMAND,
 } from '@lexical/list';
 import {$getNearestNodeOfType, mergeRegister} from '@lexical/utils';
-import {TOGGLE_LINK_COMMAND, $isLinkNode, $createLinkNode} from '@lexical/link';
+import {$isLinkNode} from '@lexical/link';
 import type {BaseProps} from '@astryxdesign/core';
 import {Toolbar} from '@astryxdesign/core/Toolbar';
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {Selector, type SelectorOptionType} from '@astryxdesign/core/Selector';
 import {ToggleButton} from '@astryxdesign/core/ToggleButton';
 import {Divider} from '@astryxdesign/core/Divider';
-import {Dialog, DialogHeader} from '@astryxdesign/core/Dialog';
-import {TextInput} from '@astryxdesign/core/TextInput';
-import {Button} from '@astryxdesign/core/Button';
-import {Stack} from '@astryxdesign/core/Stack';
-import {
-  HStack,
-  Layout,
-  LayoutContent,
-  LayoutFooter,
-} from '@astryxdesign/core/Layout';
+import {HStack} from '@astryxdesign/core/Layout';
 import {getExtendedIcon} from '@astryxdesign/core/Icon';
 import {useThemeName} from '@astryxdesign/core/theme';
 import {isRenderable, rtlStyles} from '@astryxdesign/core/utils';
@@ -88,7 +81,7 @@ import {
   spacingVars,
   typeScaleVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
-import {useTranslator} from '@astryxdesign/core/i18n';
+import {useTranslator, type TranslatorFn} from '@astryxdesign/core/i18n';
 import {
   FORMAT_TEXT_COMMAND,
   UNDO_COMMAND,
@@ -99,35 +92,33 @@ import {
   KEY_DOWN_COMMAND,
   COMMAND_PRIORITY_CRITICAL,
   COMMAND_PRIORITY_NORMAL,
-  IS_APPLE,
-  isExactShortcutMatch,
   $getSelection,
   $isNodeSelection,
-  $isRangeSelection,
-  $setSelection,
-  $createParagraphNode,
-  $createTextNode,
+  type LexicalEditor,
+  type NodeSelection,
   type RangeSelection,
+  $isRangeSelection,
+  $createParagraphNode,
 } from 'lexical';
-import {sanitizeUrl} from './linkUtils';
+import {
+  ToolbarLinkPopover,
+  isInsertLink,
+  useToolbarLink,
+} from './internal/ToolbarLinkPopover';
 import {$selectedExtensionNodesOnly} from './markdownExtensionNode';
 
 /** Block types exposed by the toolbar's format selector. */
 type BlockType =
   'paragraph' | 'h1' | 'h2' | 'h3' | 'quote' | 'bullet' | 'number';
 
-/**
- * The platform-primary modifier for shortcuts: Cmd on Apple, Ctrl elsewhere.
- * Mirrors the Lexical playground's `CONTROL_OR_META`
- * (packages/lexical-playground/src/plugins/ShortcutsPlugin/shortcuts.ts).
- */
-const CONTROL_OR_META = {ctrlKey: !IS_APPLE, metaKey: IS_APPLE};
-
-interface LinkContext {
-  selectedText: string;
-  url: string;
-  isLink: boolean;
-}
+// The link popover's anchor: a box around the Link button that takes no
+// space of its own.
+const linkAnchorStyles = stylex.create({
+  wrapper: {
+    display: 'inline-flex',
+    flexShrink: 0,
+  },
+});
 
 // A vertical Divider's default 100% height needs a definite parent height.
 // Toolbar slots are sized by their controls instead, so let flexbox stretch
@@ -181,16 +172,6 @@ const toolbarScrollStyles = stylex.create({
 });
 
 /**
- * Whether `event` is the insert-link shortcut (Cmd/Ctrl+K). Uses Lexical's
- * `isExactShortcutMatch`, which — unlike a loose `metaKey || ctrlKey` check —
- * requires exactly the primary modifier and rejects the combo when other
- * modifiers (Shift/Alt) are also held. Matches the playground's `isInsertLink`.
- */
-function isInsertLink(event: KeyboardEvent): boolean {
-  return isExactShortcutMatch(event, 'k', CONTROL_OR_META);
-}
-
-/**
  * Stable icon-registry keys for the toolbar's controls. A theme overrides any
  * of these by key: `defineTheme({icons: {'richtext:bold': <MyIcon />}})`.
  * Keys are namespaced (`richtext:*`) to avoid collisions with the core
@@ -214,7 +195,8 @@ export const RICHTEXT_ICON_KEYS = {
   redo: 'richtext:redo',
 } as const;
 
-const INLINE_FORMAT_ACTIONS = [
+/** The inline formats, in the order a toolbar offers them. */
+export const INLINE_FORMAT_ACTIONS = [
   {format: 'bold', icon: 'bold'},
   {format: 'italic', icon: 'italic'},
   {format: 'underline', icon: 'underline'},
@@ -222,7 +204,52 @@ const INLINE_FORMAT_ACTIONS = [
   {format: 'code', icon: 'code'},
 ] as const;
 
-type InlineFormat = (typeof INLINE_FORMAT_ACTIONS)[number]['format'];
+export type InlineFormat = (typeof INLINE_FORMAT_ACTIONS)[number]['format'];
+
+/** The inline formats' button labels. */
+export function inlineFormatLabels(
+  t: TranslatorFn,
+): Record<InlineFormat, string> {
+  // Literal keys, so the catalog gate can verify every one.
+  return {
+    bold: t('@astryx.richTextEditor.toolbar.bold'),
+    italic: t('@astryx.richTextEditor.toolbar.italic'),
+    underline: t('@astryx.richTextEditor.toolbar.underline'),
+    strikethrough: t('@astryx.richTextEditor.toolbar.strikethrough'),
+    code: t('@astryx.richTextEditor.toolbar.inlineCode'),
+  };
+}
+
+/**
+ * The inline formats a range or node selection carries, which their buttons
+ * show pressed. A selection of Markdown plugin nodes alone (a range around
+ * them, or a node selection from a click) shows their formats. Any other
+ * node selection, such as a rule, has none.
+ */
+export function $inlineFormatsOf(
+  selection: RangeSelection | NodeSelection,
+): Set<InlineFormat> {
+  const formats = new Set<InlineFormat>();
+  const nodesOnly = $selectedExtensionNodesOnly(selection);
+  for (const {format} of INLINE_FORMAT_ACTIONS) {
+    if (
+      nodesOnly != null
+        ? nodesOnly.every(node => node.hasFormat(format))
+        : $isRangeSelection(selection) && selection.hasFormat(format)
+    ) {
+      formats.add(format);
+    }
+  }
+  return formats;
+}
+
+/** Toggles an inline format over the editor's selection. */
+export function formatSelection(
+  editor: LexicalEditor,
+  format: InlineFormat,
+): void {
+  editor.dispatchCommand(FORMAT_TEXT_COMMAND, format);
+}
 
 /**
  * Bundled 16px inline default icons — no external icon dependency. These are
@@ -426,7 +453,7 @@ function TextGlyph({label}: {label: string}) {
   );
 }
 
-type ToolbarIconName = keyof typeof RICHTEXT_ICON_KEYS;
+export type ToolbarIconName = keyof typeof RICHTEXT_ICON_KEYS;
 
 /**
  * Resolve a toolbar glyph for the active theme: the theme's icon for the
@@ -442,6 +469,12 @@ function resolveIcon(
     defaultToolbarIcons[name],
     themeName,
   );
+}
+
+/** The glyph resolver for the active theme, as the toolbars draw glyphs. */
+export function useToolbarIcon(): (name: ToolbarIconName) => ReactNode {
+  const themeName = useThemeName();
+  return (name: ToolbarIconName) => resolveIcon(name, themeName);
 }
 
 /** A glyph that points along the reading direction, mirrored under RTL. */
@@ -481,11 +514,14 @@ export interface RichTextEditorToolbarProps extends BaseProps<HTMLDivElement> {
    */
   size?: 'sm' | 'md' | 'lg';
   /**
-   * Whether to show the insert/edit-link button. By default, pressing it opens
-   * an Astryx Dialog. The form can add, update, or remove a link without
-   * losing the editor selection. With a collapsed selection, Insert link
-   * inserts the entered URL as link text at the caret; with a non-empty
-   * selection it links the selected text.
+   * Whether to show the insert/edit-link button. By default, pressing it (or
+   * Cmd/Ctrl+K in the editor) opens an Astryx Popover anchored to the button:
+   * one URL field, applied with Enter, with Remove when the selection is in a
+   * link. The popover is not modal. Escape or Cancel closes it and returns
+   * focus and the selection to the editor; a URL that cannot be linked shows
+   * an error under the field, which keeps focus. With a collapsed selection,
+   * applying inserts the entered URL as link text at the caret; with a
+   * non-empty selection it links the selected text.
    *
    * Requires `LinkNode` to be registered (it is, by default) — no extra setup.
    * The entered URL is sanitized (see `sanitizeUrl`) so only
@@ -497,7 +533,7 @@ export interface RichTextEditorToolbarProps extends BaseProps<HTMLDivElement> {
    * Called to obtain a URL when the link button is pressed on a non-link
    * selection. Return the URL string to link, or `null`/`''` to cancel.
    * Receives the currently selected text as a hint. When omitted, the built-in
-   * Astryx Dialog is used. This synchronous override is retained
+   * link popover is used. This synchronous override is retained
    * for consumers that already provide their own URL UI.
    */
   promptForUrl?: (selectedText: string) => string | null | undefined;
@@ -551,8 +587,7 @@ export function RichTextEditorToolbar({
   ...rest
 }: RichTextEditorToolbarProps) {
   const [editor] = useLexicalComposerContext();
-  const themeName = useThemeName();
-  const icon = (name: ToolbarIconName) => resolveIcon(name, themeName);
+  const icon = useToolbarIcon();
   const t = useTranslator();
   const label = labelFromProps ?? t('@astryx.richTextEditor.toolbar.label');
   // Literal keys, so the catalog gate can verify every one.
@@ -561,56 +596,30 @@ export function RichTextEditorToolbar({
     h2: t('@astryx.richTextEditor.toolbar.heading2'),
     h3: t('@astryx.richTextEditor.toolbar.heading3'),
   };
-  const inlineFormatLabels: Record<InlineFormat, string> = {
-    bold: t('@astryx.richTextEditor.toolbar.bold'),
-    italic: t('@astryx.richTextEditor.toolbar.italic'),
-    underline: t('@astryx.richTextEditor.toolbar.underline'),
-    strikethrough: t('@astryx.richTextEditor.toolbar.strikethrough'),
-    code: t('@astryx.richTextEditor.toolbar.inlineCode'),
-  };
-  const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set());
+  const formatLabels = inlineFormatLabels(t);
+  const [activeFormats, setActiveFormats] = useState<Set<InlineFormat>>(
+    () => new Set(),
+  );
   const [blockType, setBlockType] = useState<BlockType>('paragraph');
   const [isLink, setIsLink] = useState(false);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
   const [isEditable, setIsEditable] = useState(() => editor.isEditable());
-  const savedSelectionRef = useRef<RangeSelection | null>(null);
-  const lastLinkContextRef = useRef<LinkContext>({
-    selectedText: '',
-    url: '',
-    isLink: false,
+  const linkButtonRef = useRef<HTMLButtonElement>(null);
+  const linkAnchorRef = useRef<HTMLSpanElement>(null);
+  const link = useToolbarLink(editor, {
+    buttonRef: linkButtonRef,
+    hasNewTabLinks,
+    promptForUrl,
   });
-  const [isLinkDialogOpen, setIsLinkDialogOpen] = useState(false);
-  const [isEditingLink, setIsEditingLink] = useState(false);
-  const [linkUrl, setLinkUrl] = useState('');
-  const [linkError, setLinkError] = useState('');
+  const {toggle: toggleLink} = link;
 
   const $syncToolbar = useCallback(() => {
     const selection = $getSelection();
     if (!$isRangeSelection(selection) && !$isNodeSelection(selection)) {
       return;
     }
-    const formats = new Set<string>();
-    // A selection of Markdown plugin nodes alone — a range around them, or
-    // a node selection from a click — shows their formats. Any other node
-    // selection, such as a rule, has none.
-    const nodesOnly = $selectedExtensionNodesOnly(selection);
-    for (const fmt of [
-      'bold',
-      'italic',
-      'underline',
-      'strikethrough',
-      'code',
-    ] as const) {
-      if (
-        nodesOnly != null
-          ? nodesOnly.every(node => node.hasFormat(fmt))
-          : $isRangeSelection(selection) && selection.hasFormat(fmt)
-      ) {
-        formats.add(fmt);
-      }
-    }
-    setActiveFormats(formats);
+    setActiveFormats($inlineFormatsOf(selection));
     if (!$isRangeSelection(selection)) {
       return;
     }
@@ -619,20 +628,7 @@ export function RichTextEditorToolbar({
     // sits inside a LinkNode (or its immediate parent is one):
     // `$isLinkNode(parent) || $isLinkNode(node)`.
     const node = selection.anchor.getNode();
-    const parent = node.getParent();
-    const linkNode = $isLinkNode(node)
-      ? node
-      : $isLinkNode(parent)
-        ? parent
-        : null;
-    const selectionIsLink = linkNode != null;
-    setIsLink(selectionIsLink);
-    savedSelectionRef.current = selection.clone();
-    lastLinkContextRef.current = {
-      selectedText: selection.getTextContent(),
-      url: linkNode?.getURL() ?? '',
-      isLink: selectionIsLink,
-    };
+    setIsLink($isLinkNode(node) || $isLinkNode(node.getParent()));
     const anchorNode = selection.anchor.getNode();
     const element =
       anchorNode.getKey() === 'root'
@@ -652,148 +648,6 @@ export function RichTextEditorToolbar({
       setBlockType('paragraph');
     }
   }, []);
-
-  const readLinkContext = useCallback((): LinkContext => {
-    let context = lastLinkContextRef.current;
-    editor.getEditorState().read(() => {
-      const selection = $getSelection();
-      if (!$isRangeSelection(selection)) {
-        return;
-      }
-      const node = selection.anchor.getNode();
-      const parent = node.getParent();
-      const linkNode = $isLinkNode(node)
-        ? node
-        : $isLinkNode(parent)
-          ? parent
-          : null;
-      savedSelectionRef.current = selection.clone();
-      context = {
-        selectedText: selection.getTextContent(),
-        url: linkNode?.getURL() ?? '',
-        isLink: linkNode != null,
-      };
-      lastLinkContextRef.current = context;
-    });
-    return context;
-  }, [editor]);
-
-  const restoreLinkSelection = useCallback(() => {
-    const savedSelection = savedSelectionRef.current;
-    if (!savedSelection) {
-      return;
-    }
-    editor.update(() => {
-      $setSelection(savedSelection.clone());
-    });
-  }, [editor]);
-
-  const applyLinkValue = useCallback(
-    (entered: string): boolean => {
-      const trimmed = entered.trim();
-      const url = sanitizeUrl(trimmed);
-      if (url === 'about:blank') {
-        return false;
-      }
-
-      const linkAttributes = hasNewTabLinks
-        ? {target: '_blank', rel: 'noopener noreferrer'}
-        : {};
-      const savedSelection = savedSelectionRef.current;
-      // One update restores the selection, decides, and applies. Inside a
-      // command listener (Cmd/Ctrl+K) Lexical queues an update, so a flag set
-      // in one update cannot steer code that runs after it.
-      editor.update(() => {
-        if (savedSelection) {
-          $setSelection(savedSelection.clone());
-        }
-        const selection = $getSelection();
-        if ($isRangeSelection(selection) && selection.isCollapsed()) {
-          const node = selection.anchor.getNode();
-          const isInLink = $isLinkNode(node) || $isLinkNode(node.getParent());
-          // At a caret outside a link there is no text to link, so the URL
-          // becomes the link's text. The toggle command would link the whole
-          // text node around the caret instead.
-          if (!isInLink) {
-            const linkNode = $createLinkNode(url, linkAttributes);
-            linkNode.append($createTextNode(trimmed));
-            selection.insertNodes([linkNode]);
-            return;
-          }
-        }
-        editor.dispatchCommand(TOGGLE_LINK_COMMAND, {url, ...linkAttributes});
-      });
-      return true;
-    },
-    [editor, hasNewTabLinks],
-  );
-
-  const toggleLink = useCallback(() => {
-    if (!editor.isEditable()) {
-      return;
-    }
-
-    const context = readLinkContext();
-    if (promptForUrl) {
-      // Preserve the existing synchronous extension point for consumers that
-      // already provide their own URL UI.
-      if (context.isLink) {
-        restoreLinkSelection();
-        editor.dispatchCommand(TOGGLE_LINK_COMMAND, null);
-        return;
-      }
-      const entered = promptForUrl(context.selectedText);
-      if (entered != null && entered.trim() !== '') {
-        applyLinkValue(entered);
-      }
-      return;
-    }
-
-    setLinkUrl(
-      context.url ||
-        (context.selectedText.startsWith('http')
-          ? context.selectedText
-          : 'https://'),
-    );
-    setIsEditingLink(context.isLink);
-    setLinkError('');
-    setIsLinkDialogOpen(true);
-  }, [
-    applyLinkValue,
-    editor,
-    promptForUrl,
-    readLinkContext,
-    restoreLinkSelection,
-  ]);
-
-  const handleLinkDialogOpenChange = useCallback((open: boolean) => {
-    setIsLinkDialogOpen(open);
-    setLinkError('');
-  }, []);
-
-  const closeLinkDialogToEditor = useCallback(() => {
-    setIsLinkDialogOpen(false);
-    setLinkError('');
-    requestAnimationFrame(() => editor.focus());
-  }, [editor]);
-
-  const handleLinkSubmit = useCallback(
-    (event: FormEvent<HTMLElement>) => {
-      event.preventDefault();
-      if (!applyLinkValue(linkUrl)) {
-        setLinkError(t('@astryx.richTextEditor.link.invalidUrl'));
-        return;
-      }
-      closeLinkDialogToEditor();
-    },
-    [applyLinkValue, closeLinkDialogToEditor, linkUrl, t],
-  );
-
-  const removeLink = useCallback(() => {
-    restoreLinkSelection();
-    editor.dispatchCommand(TOGGLE_LINK_COMMAND, null);
-    closeLinkDialogToEditor();
-  }, [closeLinkDialogToEditor, editor, restoreLinkSelection]);
 
   useEffect(() => {
     return mergeRegister(
@@ -849,16 +703,6 @@ export function RichTextEditorToolbar({
         : () => {},
     );
   }, [editor, $syncToolbar, hasLink, toggleLink]);
-
-  const toggleInlineFormat = (format: InlineFormat) => {
-    // FORMAT_TEXT_COMMAND payload is a TextFormatType; the values we pass are
-    // all valid members.
-    editor.dispatchCommand(
-      FORMAT_TEXT_COMMAND,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      format as any,
-    );
-  };
 
   const setBlock = (next: BlockType) => {
     // Selector choices are idempotent: choosing the active block format keeps
@@ -975,29 +819,36 @@ export function RichTextEditorToolbar({
             {INLINE_FORMAT_ACTIONS.map(action => (
               <ToggleButton
                 key={action.format}
-                label={inlineFormatLabels[action.format]}
+                label={formatLabels[action.format]}
                 icon={icon(action.icon)}
                 size={size}
                 isIconOnly
                 isPressed={activeFormats.has(action.format)}
                 isDisabled={!isEditable}
-                onPressedChange={() => toggleInlineFormat(action.format)}
+                onPressedChange={() => formatSelection(editor, action.format)}
               />
             ))}
             {hasLink && (
-              <ToggleButton
+              // The popover anchors to this wrapper, which a press never
+              // scales, and finds the button inside it for its handlers.
+              <span
                 key="link"
-                label={t('@astryx.richTextEditor.toolbar.link')}
-                icon={icon('link')}
-                size={size}
-                isIconOnly
-                isPressed={isLink || isLinkDialogOpen}
-                isDisabled={!isEditable}
-                aria-haspopup="dialog"
-                aria-expanded={isLinkDialogOpen}
-                onMouseDown={event => event.preventDefault()}
-                onPressedChange={toggleLink}
-              />
+                ref={linkAnchorRef}
+                {...stylex.props(linkAnchorStyles.wrapper)}>
+                <ToggleButton
+                  ref={linkButtonRef}
+                  label={t('@astryx.richTextEditor.toolbar.link')}
+                  icon={icon('link')}
+                  size={size}
+                  isIconOnly
+                  isPressed={isLink || link.isOpen}
+                  isDisabled={!isEditable}
+                  onMouseDown={event => event.preventDefault()}
+                  // The link popover owns a press on the button, and with it
+                  // the button's popup state; `promptForUrl` replaces both.
+                  onPressedChange={promptForUrl ? toggleLink : undefined}
+                />
+              </span>
             )}
             {isRenderable(endContent) && (
               <>
@@ -1008,75 +859,10 @@ export function RichTextEditorToolbar({
           </HStack>
         }
       />
-      {hasLink && (
-        <Dialog
-          isOpen={isLinkDialogOpen}
-          onOpenChange={handleLinkDialogOpenChange}
-          purpose="form"
-          width={400}>
-          <Stack as="form" onSubmit={handleLinkSubmit}>
-            <Layout
-              height="auto"
-              header={
-                <DialogHeader
-                  title={
-                    isEditingLink
-                      ? t('@astryx.richTextEditor.link.editTitle')
-                      : t('@astryx.richTextEditor.link.insertTitle')
-                  }
-                  onOpenChange={handleLinkDialogOpenChange}
-                />
-              }
-              content={
-                <LayoutContent>
-                  <TextInput
-                    label={t('@astryx.richTextEditor.link.url')}
-                    value={linkUrl}
-                    width="100%"
-                    hasAutoFocus
-                    status={
-                      linkError
-                        ? {type: 'error', message: linkError}
-                        : undefined
-                    }
-                    statusVariant="detached"
-                    onChange={value => {
-                      setLinkUrl(value);
-                      setLinkError('');
-                    }}
-                  />
-                </LayoutContent>
-              }
-              footer={
-                <LayoutFooter>
-                  <HStack gap={2} hAlign="end">
-                    {isEditingLink && (
-                      <Button
-                        label={t('@astryx.richTextEditor.link.remove')}
-                        variant="destructive"
-                        onClick={removeLink}
-                      />
-                    )}
-                    <Button
-                      label={t('@astryx.richTextEditor.link.cancel')}
-                      variant="secondary"
-                      onClick={() => handleLinkDialogOpenChange(false)}
-                    />
-                    <Button
-                      label={
-                        isEditingLink
-                          ? t('@astryx.richTextEditor.link.update')
-                          : t('@astryx.richTextEditor.link.add')
-                      }
-                      variant="primary"
-                      type="submit"
-                    />
-                  </HStack>
-                </LayoutFooter>
-              }
-            />
-          </Stack>
-        </Dialog>
+      {/* A sibling of the toolbar, not inside it: the toolbar is one roving
+          tab stop, which would leave the form's controls out of Tab. */}
+      {hasLink && promptForUrl == null && (
+        <ToolbarLinkPopover link={link} anchorRef={linkAnchorRef} size={size} />
       )}
     </>
   );

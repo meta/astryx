@@ -32,6 +32,7 @@ import {
   UserGroupIcon,
   FolderIcon,
   BellIcon,
+  BugAntIcon,
   QuestionMarkCircleIcon,
   UserCircleIcon,
   Bars3Icon,
@@ -98,9 +99,11 @@ function MockContent({paragraphs = 3}: {paragraphs?: number}) {
 function AppTopNav({
   endContent,
   heading = 'Acme App',
+  headingHref,
 }: {
   endContent?: React.ReactNode;
   heading?: string;
+  headingHref?: string;
 }) {
   return (
     <TopNav
@@ -108,6 +111,7 @@ function AppTopNav({
       heading={
         <TopNavHeading
           heading={heading}
+          headingHref={headingHref}
           logo={<NavIcon icon={<CubeIcon style={{width: 16, height: 16}} />} />}
         />
       }
@@ -326,9 +330,37 @@ export const TopNavWithSideNav: Story = {
   ),
 };
 
+/** The end controls of a product header: report a bug, notifications, profile. */
+function ProductHeaderControls() {
+  return (
+    <>
+      <Button
+        label="Report a bug"
+        variant="ghost"
+        icon={<BugAntIcon style={{width: 16, height: 16}} />}
+        isIconOnly
+      />
+      <Button
+        label="Notifications"
+        variant="ghost"
+        icon={<BellIcon style={{width: 16, height: 16}} />}
+        isIconOnly
+      />
+      <Button
+        label="Profile"
+        variant="ghost"
+        icon={<UserCircleIcon style={{width: 16, height: 16}} />}
+        isIconOnly
+      />
+    </>
+  );
+}
+
 /**
- * A long app name on a phone. The heading truncates with an ellipsis so the
- * end content and the menu toggle stay inside the bar.
+ * A long app name on a phone, in a product header: a linked heading with a
+ * logo, three end controls, and the menu toggle. The heading truncates to one
+ * line with an ellipsis, so the end controls and the menu toggle keep their
+ * size and stay inside the bar.
  */
 export const LongHeadingOnMobile: Story = {
   globals: {viewport: {value: 'mobile1', isRotated: false}},
@@ -338,22 +370,31 @@ export const LongHeadingOnMobile: Story = {
       topNav={
         <AppTopNav
           heading="Northwind Internal Usage Analytics"
-          endContent={
-            <>
-              <Button
-                label="Notifications"
-                variant="ghost"
-                icon={<BellIcon style={{width: 16, height: 16}} />}
-                isIconOnly
-              />
-              <Button
-                label="Profile"
-                variant="ghost"
-                icon={<UserCircleIcon style={{width: 16, height: 16}} />}
-                isIconOnly
-              />
-            </>
-          }
+          headingHref="#/"
+          endContent={<ProductHeaderControls />}
+        />
+      }
+      sideNav={<SideNavWithoutHeader />}>
+      <MockContent />
+    </AppShell>
+  ),
+};
+
+/**
+ * A long app name passed to TopNav as plain text, without TopNavHeading, on a
+ * phone. The compact bar keeps it on one line and ends it in an ellipsis, so
+ * the bar does not grow taller.
+ */
+export const LongTextHeadingOnMobile: Story = {
+  globals: {viewport: {value: 'mobile1', isRotated: false}},
+  render: () => (
+    <AppShell
+      contentPadding={6}
+      topNav={
+        <TopNav
+          label="Main navigation"
+          heading="Northwind Internal Usage Analytics"
+          endContent={<ProductHeaderControls />}
         />
       }
       sideNav={<SideNavWithoutHeader />}>

@@ -17,19 +17,22 @@ export const MENU_ITEM_ROLES: ReadonlySet<string> = new Set([
   'menuitemcheckbox',
 ]);
 
+// Each selector below is a call marked pure. A bundler then drops the ones an
+// import does not use, so a caller of one function here loads no selector.
+
 /** The rows a press can act on: enabled rows only. */
-export const MENU_ITEM_SELECTOR: string = [...MENU_ITEM_ROLES]
-  .map(role => `[role="${role}"]:not([aria-disabled="true"])`)
-  .join(',');
+export const MENU_ITEM_SELECTOR: string = /* @__PURE__ */ (() =>
+  [...MENU_ITEM_ROLES]
+    .map(role => `[role="${role}"]:not([aria-disabled="true"])`)
+    .join(','))();
 
 /**
  * Every row, disabled rows included. The arrow keys, Home, End and type-ahead
  * visit a disabled row, so a keyboard user finds it and its reason; the row
  * stays inert.
  */
-export const MENU_ROW_SELECTOR: string = [...MENU_ITEM_ROLES]
-  .map(role => `[role="${role}"]`)
-  .join(',');
+export const MENU_ROW_SELECTOR: string = /* @__PURE__ */ (() =>
+  [...MENU_ITEM_ROLES].map(role => `[role="${role}"]`).join(','))();
 
 /**
  * Boundary selector for a single menu level. A menu and its submenu flyouts

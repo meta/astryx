@@ -28,6 +28,7 @@ import {
   findIntegrationComponentSource,
   discoverOwnedComponents,
 } from './component-discovery.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 // packages/cli/foundation/discovery/ -> up 4 = repo root (has packages/core).
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
@@ -57,7 +58,7 @@ describe('discoverComponents (real core)', () => {
       expect(members.length).toBeGreaterThan(0);
       expect([...members].sort()).toEqual(members);
     }
-    expect([...keys].sort((a, b) => a.localeCompare(b))).toEqual(keys);
+    expect([...keys].sort((a, b) => compareText(a, b))).toEqual(keys);
     expect(keys).toContain('Button');
     expect(comps.Button).toContain('Button');
     expect(comps.Button).toContain('IconButton');
@@ -419,7 +420,7 @@ describe('integration component discovery (ownership-aware)', () => {
   }
 
   it('records owner package, issuesUrl, group, and source presence; drops hidden', () => {
-    const recs = discoverIntegrationComponents(buildIntegration()).sort((a, b) => a.name.localeCompare(b.name));
+    const recs = discoverIntegrationComponents(buildIntegration()).sort((a, b) => compareText(a.name, b.name));
     expect(recs.map(r => r.name)).toEqual(['MetaAppShell', 'MetaDiff']);
     const shell = recs.find(r => r.name === 'MetaAppShell');
     expect(shell.package).toBe('@acme/astryx-meta');
