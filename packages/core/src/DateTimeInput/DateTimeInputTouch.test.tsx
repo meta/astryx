@@ -320,6 +320,35 @@ describe('DateTimeInput touch surface', () => {
     expect(dateField()).not.toHaveValue('March 15, 2026, 2:30 PM');
   });
 
+  it('opens on the month of a value set after mount while closed', () => {
+    withMonthLayout(() => {
+      const {rerender} = render(
+        <DateTimeInput
+          label="Meeting"
+          presentation="bottom-sheet"
+          onChange={() => {}}
+        />,
+      );
+      rerender(
+        <DateTimeInput
+          label="Meeting"
+          presentation="bottom-sheet"
+          value={'2026-06-14T09:30' as ISODateTimeString}
+          onChange={() => {}}
+        />,
+      );
+      openDateSheet();
+    });
+    expect(
+      document.querySelector('[data-panel="date"] button[aria-expanded]'),
+    ).toHaveTextContent('June 2026');
+    expect(
+      document
+        .querySelector('[role="gridcell"][aria-selected="true"] [data-date]')
+        ?.getAttribute('data-date'),
+    ).toBe('2026-06-14');
+  });
+
   it('uses a custom timePlaceholder on the touch time segment', () => {
     render(
       <DateTimeInput

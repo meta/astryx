@@ -645,6 +645,16 @@ export function TouchDateTimeField({
       ? null
       : clampIndex(anchoredMonthIndex, minMonthIndex, maxMonthIndex),
   );
+  // A value that arrives or changes while the sheet is closed moves the
+  // opening month to it. An open sheet is never moved under the user.
+  const [anchoredDate, setAnchoredDate] = useState(valueParts.date);
+  if (!isSheetOpen && valueParts.date !== anchoredDate) {
+    setAnchoredDate(valueParts.date);
+    if (selectedDate != null) {
+      setAnchoredMonthIndex(monthModel.indexOf(selectedDate));
+      setMonthIndex(null);
+    }
+  }
   // min/max can narrow underneath the mounted sheet. Keep the visible month in
   // range during render, so no commit shows an out-of-range month; the month
   // scroller is keyed on the range and remounts at the clamped month.
