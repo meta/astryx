@@ -57,6 +57,7 @@ import {
   touchDriver,
   touchStoryboard,
   traceRendering,
+  trackControl,
   trackMarker,
   type TouchDriver,
   waitForRest,
@@ -1076,33 +1077,51 @@ test('a release settles on the compositor: the row keeps moving through a 1 s ma
   // opens toward the inline start.
   await markElement(row.getByText(/Archive · Delete/), {inset: 4});
   await startBusyControl(page);
+  // A second control half a leg ahead reads the frames near the first one's
+  // turns. So every frame has a time of its own, and the proof predicts.
+  await startBusyControl(page, {ahead: true});
   const cast = await startScreencast(page);
-  await driver.play(
-    flick(start, {velocity: {x: -1000, y: 0}, durationMs: 80, hz: 120}),
-  );
-  // Then the page blocks itself once an animation on the row has run 40 ms:
-  // the settle the lift started. The drag's tracking curve is one animation
-  // the moves retarget, so a block armed before the lift fires in the drag.
-  const busy = await blockMainThread(page, 1000, {
+  // A held release past the middle of the open width settles from rest, on
+  // the same curve every run. A flick's settle starts at the release
+  // velocity, which the touch timing varies. Its fastest approaches come
+  // within the settle bound too soon to judge at the cast's frame rate.
+  // The settle must be running (and composited) before the block: an
+  // animation cannot start while the main thread is held. Armed before the
+  // drag, the page waits for the settle itself, since the drag animates
+  // nothing on the row. It blocks once the settle has run 16 ms, however busy
+  // the machine.
+  const blocking = blockMainThread(page, 1000, {
     during: row,
-    minProgressMs: 40,
+    minProgressMs: 16,
   });
+  await driver.play(heldDrag(start, -Math.round(openWidth * 0.6)));
+  const busy = await blocking;
   await waitForRest(row);
   const frames = await cast.stop();
   const tracked = await trackMarker(page, frames);
   const control = await trackMarker(page, frames, {rgb: CONTROL_RGB});
+  const ahead = await trackControl(page, frames, {ahead: true});
   // It is judged against what the compositor presented in the same window.
   // The row moved on every frame the control moved, until it was within two of
-  // the cast's steps of its end. A slower tail moves under one step a frame. A
-  // settle drawn only from the main thread freezes there.
+  // the cast's steps of its end. The marker rides the row, whose settle the
+  // page replays. A frame across which that curve moves under one cast step
+  // is too little to judge. A settle drawn only from the main thread freezes.
   const proof = busyWindowProof(tracked, busy, {
     axis: 'x',
     settledWithinSteps: 2,
     control,
+    ahead,
   });
   test
     .info()
     .annotations.push({type: 'busy window', description: proof.summary});
+  // Whether the replay predicted the row's moves, or why the cast-step rule
+  // judged them instead.
+  test.info().annotations.push({
+    type: 'busy prediction',
+    description:
+      proof.notes.find(note => note.startsWith('no prediction')) ?? 'predicted',
+  });
   expect(busy.spanMs).toBeGreaterThanOrEqual(1000);
   expect(proof.verdict.failures, proof.summary).toEqual([]);
   expect(await xOf(row)).toBeCloseTo(-openWidth, 0);

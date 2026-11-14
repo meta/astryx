@@ -724,10 +724,14 @@ export interface BlockedWindow extends BusyWindow {
    * or the marker chip's when the element holds one. For a fade or a
    * pseudo-element, `progress` holds one numeric channel scaled from 0 to 1.
    * `check` is the replayed box and the element's own at the loop's end, once
-   * the replay is aligned to it. `unpredictable` says why neither could be
-   * read, and fails the proof. `notPredicted` says why the cast-step rule
-   * judges each frame instead. Either the caught element carries no harness
-   * marker, or the run left the element before its replay.
+   * the replay is aligned to it. `rides` says the marker is on a descendant of
+   * the element, and no element between them runs a geometry animation of its
+   * own. The replay then gives the element's travel, which the marker shares.
+   * It keeps no `check`, so the proof places it from the cast. `unpredictable`
+   * says why neither could be read, and fails the proof. `notPredicted` says
+   * why the cast-step rule judges each frame instead. The caught element may
+   * carry or hold no harness marker, or more than one. The marker may move
+   * inside it, or the run may leave the element before its replay.
    */
   readonly animation?: {
     readonly from: number;
@@ -740,6 +744,7 @@ export interface BlockedWindow extends BusyWindow {
       readonly predicted: readonly [number, number, number, number];
       readonly actual: readonly [number, number, number, number];
     };
+    readonly rides?: boolean;
     readonly progress?: ReadonlyArray<readonly [number, number]>;
     readonly unpredictable?: string;
     readonly notPredicted?: string;
@@ -822,7 +827,11 @@ const CALL_SLACK_MS = 5;
  * by `busyWindowProof` when the tracked value had settled before the judged
  * part of the window began. Thrown too when a held curve that keeps no end
  * value ends so soon in the block that too few frames are left
- * (`curveEndMs`). Thrown by `blockMainThread` too when its wait finds no run,
+ * (`curveEndMs`). Thrown too when the tracked value comes within its settle
+ * bound so soon that the control moved on too few frames.
+ * `controlFramesWithoutSettle` says how many frames judging on would have
+ * held.
+ * Thrown by `blockMainThread` too when its wait finds no run,
  * but the action's run ended before the wait (`startedBeforeWaitMs`,
  * `endedBeforeWaitMs`). The page received the action first. Always a red,
  * with the numbers; never a pass. Start the
@@ -1145,11 +1154,43 @@ export async function blockMainThread(
             isGeometry(caught)
           ) {
             // Only the element that carries the harness marker predicts the
-            // tracked box.
-            if (!target.hasAttribute('data-harness-marker')) {
+            // tracked box, or one that holds it. The marker then rides the
+            // element when no element between them runs a geometry animation.
+            const markers = target.hasAttribute('data-harness-marker')
+              ? [target]
+              : [...target.querySelectorAll('[data-harness-marker]')];
+            if (markers.length === 0) {
               return {
                 notPredicted: 'the tracked marker is not on the caught element',
               };
+            }
+            if (markers.length > 1) {
+              return {
+                notPredicted:
+                  'the caught element holds more than one harness marker',
+              };
+            }
+            const rides = markers[0] !== target;
+            for (
+              let inside: Element | null = markers[0];
+              rides && inside != null && inside !== target;
+              inside = inside.parentElement
+            ) {
+              if (
+                inside
+                  .getAnimations()
+                  .some(
+                    a =>
+                      isGeometry(a) &&
+                      a.playState !== 'finished' &&
+                      a.playState !== 'idle',
+                  )
+              ) {
+                return {
+                  notPredicted:
+                    'the tracked marker moves inside the caught element',
+                };
+              }
             }
             for (
               let up = target.parentElement;
@@ -1291,7 +1332,12 @@ export async function blockMainThread(
               replay.cancel();
             }
             clone.remove();
-            return {geometry: samples, check};
+            // A rider's replay gives the element's travel. WebKit reads the
+            // element's box at the loop's end before its animation's current
+            // time, so the proof places the replay from the cast instead.
+            return rides
+              ? {geometry: samples, rides: true}
+              : {geometry: samples, check};
           }
           // One numeric channel: the one that changes the most, for its size.
           const keyframes = keyframesOf(caught);
@@ -1793,9 +1839,29 @@ function predictionOf(
   );
   const geometry = animation.geometry;
   if (geometry != null && geometry.length > 1) {
-    const value = sampled(
+    const replayed = sampled(
       geometry.map(sample => [sample[0], sample[1 + column]]),
     );
+    // A rider's replay gives the travel only. It is placed from the cast,
+    // outside the judged part. That is where the marker settles when the
+    // replay reaches the curve's end, else the last frame before the judged
+    // part.
+    let offset = 0;
+    if (animation.rides === true) {
+      const end =
+        settledAt ?? shown.filter(f => f.t >= animation.to).at(-1)?.value;
+      const before = shown.filter(f => f.t < judged.from).at(-1);
+      if (geometry[geometry.length - 1][0] >= animation.to && end != null) {
+        offset = end - replayed(animation.to);
+      } else if (before != null) {
+        offset = before.value - replayed(before.t);
+      } else {
+        return {
+          fallback: `no frame outside the judged part places the replay of the element the marker rides`,
+        };
+      }
+    }
+    const value = (t: number) => replayed(t) + offset;
     const check = animation.check;
     if (
       check != null &&
@@ -1927,7 +1993,10 @@ function motionStepPx(values: readonly number[]): number {
  * block started late for the motion. Without a control, the part's span
  * counts. That throws `BusyWindowTooLateError`, as a motion that settled
  * before the block does. A stall before the curve's end is still judged, and
- * fails.
+ * fails. A settle bound can end judging so soon that the control moved on
+ * fewer than `minJudgedFrames` frames. That throws it too, when judging on
+ * would have held enough. True starvation, a control that moved on too few
+ * frames up to the block's end, still throws `FrameStarvationError`.
  *
  * A just-started animation can reach the screen after the block began (its
  * hand-off to the compositor lags under load: 50–100 ms in WebKit). The
@@ -2046,15 +2115,19 @@ function motionStepPx(values: readonly number[]): number {
  * the caller's (`predicted`), or the animation `blockMainThread` caught,
  * replayed once the loop ended (`window.animation`). A replay predicts in
  * Chromium when the proof passes the `ahead` control. A geometry replay also
- * needs the harness marker on the caught element. A move of one cast step or
- * more always changes the cast's reading, whatever the pixel phase. So such a
- * frame must show a new position, with no run excused. A predicted move under
- * one step may show none: that frame is too little to judge. It is listed in
+ * needs the harness marker on the caught element, or on a descendant when no
+ * element between runs a geometry animation (`rides`). A rider's replay keeps
+ * no end check and is placed from the cast, so it predicts in WebKit too. A
+ * move of one cast step or more always changes the cast's reading, whatever
+ * the pixel phase. So such a frame must show a new position, with no run
+ * excused. A frame interval counts as a miss only when the animation's own
+ * curve moves at least one capture step across it. A predicted move under one
+ * step may show none: that frame is too little to judge. It is listed in
  * `unjudged` and in the summary, and counts neither as moved nor as missed.
  * When too few judged frames remain, the proof throws `FrameStarvationError`
  * naming them. Where a replay predicts, one it cannot read throws
  * `BusyPredictionError`. Every other window falls back by name to the cast-step
- * rule above, exactly as without a replay.
+ * rule above, exactly as without a replay. The notes name the fallback.
  *
  * With `judgeEveryFrame`, a frame the cast could not show the component's
  * step on is too little to judge (the frames `belowStep` counts). When the
@@ -2150,11 +2223,13 @@ function readBusyWindow(
     return readBusyWindow(tracked, plain, {...options, ahead, controlStarts});
   };
   // WebKit reads the element's box at the loop's end before its animation's
-  // current time, so the replay cannot be aligned to it there.
+  // current time, so the replay cannot be aligned to it there. A rider's
+  // replay is placed from the cast instead, so it predicts in WebKit too.
   if (
     animation != null &&
     predicted == null &&
     predicts &&
+    animation.rides !== true &&
     tracked.some(frame => frame.engine === 'webkit')
   ) {
     return fallBack(
@@ -2378,6 +2453,9 @@ function judgeBusyWindow(
     settledWithinSteps == null || castStepPx == null
       ? settledWithin
       : settledWithinSteps * castStepPx;
+  // Where judging would end without the settle bound, when the bound ends it
+  // sooner: the guard below reads it.
+  let endWithoutSettle: number | null = null;
   if (settledWithinPx != null) {
     const valued = tracked.flatMap(f =>
       f.box == null ? [] : [{t: f.t, value: f.box[axis]}],
@@ -2391,6 +2469,14 @@ function judgeBusyWindow(
         Math.abs(f.value - final) <= settledWithinPx,
     );
     if (arrived != null) {
+      // Without the bound, judging ends at the block's end, or at a held
+      // curve's end when the element keeps no end value.
+      const heldEnd = (window as Partial<BlockedWindow>).animation;
+      const unbounded =
+        heldEnd?.holds === false ? Math.min(end, heldEnd.to) : end;
+      if (arrived.t < unbounded) {
+        endWithoutSettle = unbounded;
+      }
       end = Math.min(end, arrived.t);
     }
     // A sparse screencast can deliver the block's first frame after the
@@ -3019,6 +3105,36 @@ function judgeBusyWindow(
         : controlChangesUpTo(control, endWithoutCurve).length;
     if (framesLeft < minJudgedFrames && framesWithoutCurve >= minJudgedFrames) {
       throw curveTooLate(framesLeft);
+    }
+  }
+  // The same holds for a settle bound. A motion that comes within it so soon
+  // after the block began leaves too few frames. That is only because the
+  // block started late for it, when judging on would have held enough.
+  if (endWithoutSettle != null && control != null && controlRead != null) {
+    const framesLeft = controlRead.moved + named.length;
+    const framesWithoutSettle = controlChangesUpTo(
+      control,
+      endWithoutSettle,
+    ).length;
+    if (
+      framesLeft < minJudgedFrames &&
+      framesWithoutSettle >= minJudgedFrames
+    ) {
+      const presented = tracked.filter(
+        f => f.t >= window.from && f.t <= window.to,
+      ).length;
+      const settledAtMs = end - window.from;
+      const judgedFromMs = judged.from - window.from;
+      throw new BusyWindowTooLateError(
+        `busyWindowProof: the tracked ${axis} came within ${settledWithinPx} px of where it ends ${settledAtMs.toFixed(0)} ms after the block began, so the part judged from ${judgedFromMs.toFixed(0)} ms held ${framesLeft} of the control's frames, under the ${minJudgedFrames} it needs, where judging on to ${(endWithoutSettle - window.from).toFixed(0)} ms would have held ${framesWithoutSettle} (${presented} frames presented in the block): the block started late for the motion. Start the block earlier.`,
+        {
+          settledAtMs,
+          judgedFromMs,
+          controlFrames: framesLeft,
+          controlFramesWithoutSettle: framesWithoutSettle,
+          presented,
+        },
+      );
     }
   }
   const failures: string[] = [];

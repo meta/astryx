@@ -536,3 +536,206 @@ describe('busyWindowProof with a predicted move', () => {
     expect(proof.control?.belowStep).toBeGreaterThan(0);
   });
 });
+
+/**
+ * UIKit's swipe settle, critically damped at 10 rad/s: `from` px from `rest`
+ * at `start`, moving at `velocity` px/s.
+ */
+function settle(
+  start: number,
+  rest: number,
+  from: number,
+  velocity: number,
+): (t: number) => number {
+  return t => {
+    const s = Math.max(0, t - start) / 1000;
+    return rest + (from + (velocity + 10 * from) * s) * Math.exp(-10 * s);
+  };
+}
+
+/**
+ * WebKit frames of a marker on a row's content, in 2 px steps, by block time.
+ * Both controls read each frame on the phase they ran at in the cast:
+ * `controlStart` is where the first control's leg begins.
+ */
+function riderFrames(
+  rows: ReadonlyArray<readonly [number, number]>,
+  controlStart: number,
+) {
+  const read = (start: number, top: number) =>
+    rows.map(([t]): TrackedFrame => {
+      const phase = ((((FROM + t - start) % 800) + 800) % 800) / 400;
+      const x = Math.round(240 * (phase < 1 ? phase : 2 - phase));
+      return {
+        t: FROM + t,
+        box: {x, y: top, width: 12, height: 12},
+        pixels: 144,
+        engine: 'webkit',
+      };
+    });
+  return {
+    tracked: rows.map(([t, x]): TrackedFrame => ({
+      t: FROM + t,
+      box: {x, y: 0, width: 100, height: 20},
+      pixels: 1,
+      step: {x: 2, y: 2},
+      engine: 'webkit',
+    })),
+    options: {
+      axis: 'x' as const,
+      settledWithinSteps: 2,
+      control: read(controlStart, 0),
+      ahead: read(controlStart - 200, 16),
+      controlStarts: [controlStart, controlStart - 200] as const,
+    },
+  };
+}
+
+/** The window, with a replay of the row the marker rides. */
+function riderWindow(
+  at: (t: number) => number,
+  start: number,
+  curveMs: number,
+): BlockedWindow {
+  const geometry: Array<[number, number, number, number, number]> = [];
+  for (let t = FROM - 250; t <= FROM + 1250; t += 2) {
+    geometry.push([t, at(t), 0, 100, 20]);
+  }
+  return {
+    from: FROM,
+    to: FROM + 1000,
+    spanMs: 1000,
+    animation: {
+      from: start,
+      to: start + curveMs,
+      holds: true,
+      geometry,
+      rides: true,
+    },
+  };
+}
+
+// A held release recorded in WebKit, with the marker on the row's text. It
+// starts at rest, 56 px from where it settles, 38 ms before the block. The
+// cast ran at 75 fps in its tail, where the row moves under one 2 px step a
+// frame. So it shows each position for 2 or 3 frames. Frames at 925 to
+// 1005 ms show WebKit's stale committed position once the curve has ended
+// inside the block.
+const HELD_RELEASE: ReadonlyArray<readonly [number, number]> = [
+  [-54.9, 94],
+  [-40.8, 94],
+  [-23.2, 94],
+  [-13.3, 94],
+  [3.8, 94],
+  [13.7, 92],
+  [40.3, 86],
+  [68.7, 80],
+  [95.3, 76],
+  [122, 70],
+  [148.7, 66],
+  [175.3, 62],
+  [202, 58],
+  [228.7, 54],
+  [255.3, 52],
+  [282, 48],
+  [296.8, 48],
+  [308.6, 48],
+  [323.4, 46],
+  [335.1, 46],
+  [353.6, 44],
+  [365.4, 44],
+  [380.2, 44],
+  [392, 44],
+  [406.8, 42],
+  [418.7, 42],
+  [445.3, 42],
+  [472, 40],
+  [498.7, 40],
+  [525.3, 40],
+  [552, 40],
+  [578.7, 40],
+  [605.3, 40],
+  [633.7, 40],
+  [660.3, 38],
+  [687, 38],
+  [700.8, 38],
+  [713.6, 38],
+  [727.3, 38],
+  [740.1, 38],
+  [750.5, 38],
+  [763.2, 38],
+  [777.1, 38],
+  [790.2, 38],
+  [804.2, 38],
+  [817, 38],
+  [843.7, 38],
+  [870.3, 38],
+  [898.7, 38],
+  [925.3, 92],
+  [952, 92],
+  [978.7, 92],
+  [1005.3, 92],
+  [1032, 38],
+  [1060.3, 38],
+  [1087, 38],
+];
+/**
+ * Where the first control's leg began in that cast. Its turn at the top fell
+ * 48 ms before the block.
+ */
+const HELD_RELEASE_CONTROL = FROM - 448;
+
+describe('busyWindowProof with a replay of the element the marker rides', () => {
+  const heldRelease = settle(FROM - 38, 38, 56, 0);
+
+  it('predicts in WebKit and names each recorded tail frame the curve moves under one capture step, so the 75 fps tail passes', () => {
+    const {tracked, options} = riderFrames(HELD_RELEASE, HELD_RELEASE_CONTROL);
+    const proof = busyWindowProof(
+      tracked,
+      riderWindow(heldRelease, FROM - 38, 935.9),
+      options,
+    );
+    expect(proof.notes.join(' ')).not.toMatch(/no prediction/);
+    expect(proof.verdict.failures, proof.summary).toEqual([]);
+    const tail = proof.unjudged.filter(u => u.why === 'step' && u.atMs > 280);
+    expect(tail.length).toBeGreaterThan(2);
+    expect(tail.every(u => u.movePx < 2)).toBe(true);
+  });
+
+  it('fails a hold across which the curve moves a full capture step, with the replay in WebKit', () => {
+    const at = curve(() => 3);
+    const webkit = (frame: TrackedFrame): TrackedFrame => ({
+      ...frame,
+      engine: 'webkit',
+    });
+    const held = frames(at, (t, y) =>
+      Math.abs(t - (FROM + 400)) < 1 ? at(t - FRAME) : y,
+    ).map(webkit);
+    const replay = window(at);
+    const rider: BlockedWindow = {
+      ...replay,
+      animation: {...replay.animation!, rides: true},
+    };
+    const proof = busyWindowProof(held, rider, {
+      ...options,
+      control: control.map(webkit),
+      ahead: ahead.map(webkit),
+    });
+    expect(proof.notes.join(' ')).not.toMatch(/no prediction/);
+    expect(proof.verdict.failures.join(' ')).toMatch(/moved on \d+ of the \d+/);
+  });
+
+  it('falls back by name for a replay that moves another way than the cast', () => {
+    const {tracked, options} = riderFrames(HELD_RELEASE, HELD_RELEASE_CONTROL);
+    // A replay of another element: it travels twice as far.
+    const wrong = (t: number) => 38 + 2 * (heldRelease(t) - 38);
+    const proof = busyWindowProof(
+      tracked,
+      riderWindow(wrong, FROM - 38, 935.9),
+      options,
+    );
+    expect(proof.notes.join(' ')).toMatch(
+      /no prediction: over the judged part the replay moved/,
+    );
+  });
+});
