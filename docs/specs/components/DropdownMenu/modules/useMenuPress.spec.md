@@ -154,6 +154,10 @@ Consumer migration instructions belong in consumer docs and release notes.
 | `data-astryx-menu-press` | present or absent                                                                                             | the root carries this model; a host controller of its own stands aside                                                                                                                                                    | present on every mounted root | `module:DropdownMenu/useMenuPress` | stable    |
 | activation click         | `click` with `detail: 0`, the release's button and modifiers                                                  | how the model acts on a row, marked for the synchronous extent by `isMenuPressActivation()`; `detail === 0` alone therefore no longer means "keyboard" on a menu row                                                      | —                             | `module:DropdownMenu/useMenuPress` | stable    |
 
+`useMenuPressInternal` (not exported from any entry) also reports the accepted
+press's pointer type, which DropdownMenu reads to choose its grow; the public
+hook does not expose it.
+
 ## Behavioral contract
 
 | ID   | Invariant                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Basis                                                                                                                                                                           | Verification state             |

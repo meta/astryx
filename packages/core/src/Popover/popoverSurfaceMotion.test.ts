@@ -280,7 +280,7 @@ describe('createPopoverSurfaceMotion', () => {
 
   const create = (
     reducedMotion = false,
-    {scheduled = true, entrance = false} = {},
+    {scheduled = true, entrance = false, coarse = true} = {},
   ) => {
     const host = document.createElement('section');
     document.body.appendChild(host);
@@ -301,7 +301,7 @@ describe('createPopoverSurfaceMotion', () => {
     host.appendChild(element);
     // The touch presentation runs under a coarse pointer, where Reduce
     // Motion cross-fades.
-    stubMedia(reducedMotion, true);
+    stubMedia(reducedMotion, coarse);
     // The surface, where the pointer presentation's CSS entrance runs.
     const surface = entrance
       ? element.querySelector<HTMLElement>('[role="dialog"]')
@@ -902,6 +902,15 @@ describe('createPopoverSurfaceMotion', () => {
       reset.motion.reset();
       expect(isInHeldLayer(reset.element)).toBe(false);
       expect(shieldOf(reset.element)).toBeNull();
+    });
+
+    it('holds nothing under a fine primary pointer, as for a finger on a touchscreen laptop', () => {
+      const {element, motion} = create(false, {coarse: false});
+      motion.enter(() => GEOMETRY);
+      frame();
+      expect(live('scale', element)).not.toHaveLength(0);
+      expect(isInHeldLayer(element)).toBe(false);
+      expect(shieldOf(element)).toBeNull();
     });
 
     it('holds under Reduce Motion too, for the length of the cross-fade', async () => {

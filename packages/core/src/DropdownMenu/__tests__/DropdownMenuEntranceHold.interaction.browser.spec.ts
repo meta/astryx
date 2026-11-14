@@ -122,6 +122,16 @@ async function lengthenEntrance(page: Page) {
   });
 }
 
+/**
+ * Makes a finger's grow last 2 s, so a tap lands inside it. The grow reads
+ * the theme's entrance duration on the surface, the layer's child.
+ */
+async function lengthenGrow(page: Page) {
+  await page.addStyleTag({
+    content: '[popover] > * { --duration-medium-min: 2000ms !important; }',
+  });
+}
+
 /** How many entrance animations run on the menu's layer or its surface now. */
 const runningEntrances = async (layer: Locator) =>
   layer.evaluate(
@@ -131,16 +141,34 @@ const runningEntrances = async (layer: Locator) =>
         .filter(animation => animation.playState === 'running').length,
   );
 
-/** Ends the layer's entrance at once, as if its time had run out. */
-async function finishEntrance(page: Page, layer: Locator) {
-  await layer.evaluate(element => {
-    for (const node of [element, element.firstElementChild]) {
-      for (const animation of node?.getAnimations() ?? []) {
-        animation.finish();
-      }
+/**
+ * Waits, a frame at a time, until the menu's entrance runs. A finger's grow
+ * starts a frame after the open.
+ */
+async function untilEntering(page: Page, layer: Locator) {
+  for (let frame = 0; frame < 120; frame++) {
+    if ((await runningEntrances(layer)) > 0) {
+      return;
     }
-  });
-  await frames(page, 2);
+    await frames(page, 1);
+  }
+  throw new Error('no entrance ran on the menu');
+}
+
+/**
+ * Waits, a frame at a time, until no entrance runs on the menu for two
+ * frames. A finger's grow keeps its last value a while after its curve. Its
+ * hold ends as the grow lets that value go, not when it looks still.
+ */
+async function untilEntered(page: Page, layer: Locator) {
+  let stillFrames = 0;
+  for (let frame = 0; frame < 600 && stillFrames < 2; frame++) {
+    await frames(page, 1);
+    stillFrames = (await runningEntrances(layer)) === 0 ? stillFrames + 1 : 0;
+  }
+  if (stillFrames < 2) {
+    throw new Error('the menu is still entering');
+  }
 }
 
 test('a tap that lands while the menu enters is ignored: it finishes, stays open and keeps focus; once it is in, a tap outside dismisses it (spec:AST-094 FR35)', async ({
@@ -149,6 +177,7 @@ test('a tap that lands while the menu enters is ignored: it finishes, stays open
   await openStory(page, storybook(), 'core-dropdownmenu--default');
   await installClickLog(page);
   await lengthenEntrance(page);
+  await lengthenGrow(page);
   const driver = await touchDriver(page);
   const trigger = page.getByRole('button', {name: 'Actions'});
   const box = await boxOf(trigger);
@@ -160,7 +189,7 @@ test('a tap that lands while the menu enters is ignored: it finishes, stays open
   const layer = menuLayer(page);
   // The menu is on screen and still entering.
   await expect(page.getByRole('menuitem', {name: 'Edit'})).toBeVisible();
-  expect(await runningEntrances(layer)).toBeGreaterThan(0);
+  await untilEntering(page, layer);
   await frames(page, 2);
   const focused = await activeDescription(page);
   const viewport = page.viewportSize() ?? {width: 402, height: 714};
@@ -178,8 +207,9 @@ test('a tap that lands while the menu enters is ignored: it finishes, stays open
   ).toEqual([]);
   expect(await activeDescription(page)).toBe(focused);
 
-  // Once it is in, a tap outside is the browser's light dismiss again.
-  await finishEntrance(page, layer);
+  // Once it is in, a tap outside is the browser's light dismiss again. The
+  // grow's hold ends with its curve, not when a script finishes it early.
+  await untilEntered(page, layer);
   await driver.tap(outside);
   await expect(trigger).toHaveAttribute('aria-expanded', 'false');
 });

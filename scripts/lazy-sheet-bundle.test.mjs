@@ -8,7 +8,9 @@
  *   keyboard code on demand. The sheet's keyboard ride (the animator and
  *   `rideKeyboard`) stays in the chunks the import loads only when the sheet
  *   opens. This holds though the layer runtime's keyboard cap imports the
- *   keyboard module statically.
+ *   keyboard module statically. DropdownMenu's touch grow plays on the
+ *   animator, so its import loads the animator at once; `rideKeyboard` still
+ *   waits for the sheet.
  * @position Node test over source, so it needs no build
  */
 
@@ -110,20 +112,22 @@ function rideIn(bytes) {
 
 describe('a menu with an on-demand bottom sheet', () => {
   it.each([
-    ['DropdownMenu', 'packages/core/src/DropdownMenu/index.ts'],
-    ['ContextMenu', 'packages/core/src/ContextMenu/index.ts'],
-    ['Selector', 'packages/core/src/Selector/index.ts'],
-    ['MultiSelector', 'packages/core/src/MultiSelector/index.ts'],
+    ['DropdownMenu', 'packages/core/src/DropdownMenu/index.ts', true],
+    ['ContextMenu', 'packages/core/src/ContextMenu/index.ts', false],
+    ['Selector', 'packages/core/src/Selector/index.ts', false],
+    ['MultiSelector', 'packages/core/src/MultiSelector/index.ts', false],
   ])(
     "%s loads the sheet's keyboard ride only with the sheet",
-    (name, entry) => {
+    (name, entry, growsOnTheAnimator) => {
       const {eager, onDemand} = importOf(entry, name);
+      const animator = 'packages/core/src/motion/animator.ts';
       // The sheet still rides the keyboard, on demand.
-      expect(rideIn(onDemand)).toEqual([
-        'packages/core/src/keyboard/rideKeyboard.ts',
-        'packages/core/src/motion/animator.ts',
-      ]);
-      expect(rideIn(eager)).toEqual([]);
+      expect(rideIn(onDemand)).toEqual(
+        growsOnTheAnimator
+          ? ['packages/core/src/keyboard/rideKeyboard.ts']
+          : ['packages/core/src/keyboard/rideKeyboard.ts', animator],
+      );
+      expect(rideIn(eager)).toEqual(growsOnTheAnimator ? [animator] : []);
     },
   );
 });

@@ -17,6 +17,7 @@ import {
   beforeAll,
   beforeEach,
   afterEach,
+  onTestFinished,
 } from 'vitest';
 import {readFileSync} from 'node:fs';
 import {render, screen, fireEvent, waitFor, act} from '@testing-library/react';
@@ -39,10 +40,14 @@ import {spacingVars} from '../theme/tokens.stylex';
 import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
 import {MENU_PRESS_LONG_PRESS_MS} from '../hooks/useMenuPress';
 import {MENU_PRESS_SETTLE_MS} from '../hooks/menuPressGesture';
-import {isInHeldLayer} from '../Layer/inputHold';
+import {holdInput, isInHeldLayer} from '../Layer/inputHold';
 import {runPopoverOperation} from '../Layer/popoverOperations';
 import {TOUCH_QUERY} from '../utils/touchPresentation';
 import {UIKIT_GESTURES} from '../motion/uikit/gestures';
+
+// Spied, so a case about the press model alone can stub the presentation's
+// input hold: jsdom never ends a presentation.
+vi.mock('../Layer/inputHold', {spy: true});
 
 // Mock showPopover and hidePopover methods since they're not implemented in jsdom
 beforeEach(() => {
@@ -3516,6 +3521,10 @@ describe('DropdownMenu press model', () => {
 
   it('under a coarse pointer a finger opens the menu as it presses the trigger (no scroll view), and a slide picks', () => {
     stubCoarsePointer();
+    // The press model alone: jsdom never ends the grow, so its input hold
+    // would hold this gesture to its end.
+    vi.mocked(holdInput).mockImplementation(() => () => {});
+    onTestFinished(() => vi.mocked(holdInput).mockRestore());
     vi.useFakeTimers();
     try {
       const onPick = vi.fn();
@@ -3952,6 +3961,10 @@ describe('DropdownMenu press model', () => {
 
     it('coarse primary pointer: a finger opens the menu once, as it presses, and it closes once at a pick (module AR5)', () => {
       stubCoarsePointer();
+      // The press model alone: jsdom never ends the grow, so its input hold
+      // would hold this gesture to its end.
+      vi.mocked(holdInput).mockImplementation(() => () => {});
+      onTestFinished(() => vi.mocked(holdInput).mockRestore());
       const {trigger, onOpenChange, onPick} = renderCountingMenu();
       fireEvent.pointerDown(trigger, {...touch, clientX: 0, clientY: 0});
       fireEvent.pointerUp(trigger, {...touch, clientX: 0, clientY: 0});

@@ -128,8 +128,10 @@ test.describe('DropdownMenu trigger focus ring follows the last input (Chromium)
     const trigger = await center(page, TRIGGER);
     await touchAt(cdp, 'touchStart', trigger);
     const menu = page.getByRole('menu');
-    // The long-press delay opens the menu with the finger still down.
+    // The press opens the menu with the finger still down. The menu grows out
+    // of the trigger, so read the row once the entrance rests.
     await expect(menu).toBeVisible();
+    await waitForRest(page.locator('[popover]:has([role="menu"])').first());
     const row = await center(page, 'menuitem', 'Duplicate');
     const steps = 8;
     for (let i = 1; i <= steps; i++) {
