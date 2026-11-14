@@ -97,6 +97,8 @@ own ranking and output, and template owners own what each template is.
   shell.
 - **FR7 — The builder can overrule.** Beside every start, build MUST offer the
   next best page templates, at most two, each with its scaffold command.
+  Templates that rank the same keep one fixed order on every host, so the same
+  request gets the same start and alternatives on any machine.
 - **FR8 — The kit fills the template.** Build MUST list the blocks that fill
   the start before the components, and name the always-on frame and
   foundation components. The order of the listed blocks follows

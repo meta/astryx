@@ -73,6 +73,7 @@ import {
 } from '../../foundation/env/package-manager.mjs';
 import {sha256} from '../../foundation/render/source-block.mjs';
 import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
 
 const E = ERROR_CODES;
 
@@ -1277,7 +1278,7 @@ function nextAppsUnder(cwd) {
     }
   };
   walk(cwd, 1);
-  return out.sort((a, b) => a.root.localeCompare(b.root));
+  return out.sort((a, b) => compareText(a.root, b.root));
 }
 
 /**
@@ -1653,7 +1654,7 @@ function starterPackageJson(text, dependencies) {
   const pkg = JSON.parse(pinned);
   pkg.dependencies = Object.fromEntries(
     Object.entries({...pkg.dependencies, ...dependencies}).sort(([a], [b]) =>
-      a.localeCompare(b),
+      compareText(a, b),
     ),
   );
   return `${JSON.stringify(pkg, null, 2)}\n`;

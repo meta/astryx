@@ -34,6 +34,7 @@ import {
   loadIntegrationsSafely,
   withOwnership,
 } from '../_adapter.mjs';
+import {compareText} from '../../../foundation/text/compare-text.mjs';
 
 /**
  * @typedef {import('../component.type.mjs').ComponentListResponse} ComponentListResponse
@@ -472,7 +473,7 @@ async function componentListNow(coreDir, {cwd, category, detail, zh, dense, lang
       });
     }
     for (const [key, members] of byGroup) {
-      members.sort((a, b) => a.name.localeCompare(b.name));
+      members.sort((a, b) => compareText(a.name, b.name));
       listData[key] = members;
     }
   }

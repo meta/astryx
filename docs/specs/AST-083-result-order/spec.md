@@ -75,6 +75,8 @@ owns response fields and compatibility.
 - **FR5 — the order is local, deterministic, and static.** The order inside a
   run comes from plain code and fixed values shipped with the CLI. No model
   runtime runs, no network is used, and the same inputs give the same order.
+  Tied names order the same way on every host: the host's language setting
+  never changes the order of a result or a list.
 - **FR6 — the order changes only when measured.** A change to the order
   inside runs, whether new weights, a new searcher, or a new rule, ships only
   when measured against the held-out, fresh, synthetic, and cold-start

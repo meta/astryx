@@ -14,6 +14,7 @@
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
 export {
   answeringMatches,
   iconRecord,
@@ -115,7 +116,7 @@ export function oneNamedSet(sets, withdrawn, selector) {
 export function closest(wanted, candidates, reason, max = 5) {
   return [...new Set(candidates)]
     .map(name => ({name, distance: levenshteinDistance(wanted, name)}))
-    .sort((a, b) => a.distance - b.distance || a.name.localeCompare(b.name))
+    .sort((a, b) => a.distance - b.distance || compareText(a.name, b.name))
     .slice(0, max)
     .map(({name}) => ({name, reason}));
 }

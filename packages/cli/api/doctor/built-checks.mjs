@@ -31,6 +31,7 @@ import {
 } from './_adapter.mjs';
 import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
 import {babelParse as parseModule} from '../../foundation/runtime/lazy-dependencies.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
 
 /** Source files, read for imports and JSX. */
 const SOURCE_EXT = new Set(['.tsx', '.jsx', '.ts', '.js', '.mjs', '.cjs']);
@@ -691,7 +692,7 @@ export function scanBuilt(target, packages, {fileLimit} = {}) {
     }
   }
   scan.packages = [...imported].sort();
-  scan.findings.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
+  scan.findings.sort((a, b) => compareText(a.file, b.file) || a.line - b.line);
   return scan;
 }
 

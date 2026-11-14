@@ -89,6 +89,7 @@ import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
 import {cliPeerVersionProblem} from '../../foundation/integrations/cli-peer-version.mjs';
 import {publicImportIssues} from '../../foundation/integrations/public-imports.mjs';
 import {runChoice} from '../../foundation/release/run-context.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
 
 /** The running CLI is outside the package's `@astryxdesign/cli` peer range. */
 const CLI_PEER_VERSION = 'cli_peer_version';
@@ -254,7 +255,7 @@ async function findUnreachableContributionIssues(
     try {
       entries = fs
         .readdirSync(dir, {withFileTypes: true})
-        .sort((a, b) => a.name.localeCompare(b.name));
+        .sort((a, b) => compareText(a.name, b.name));
     } catch (err) {
       // One folder the user running astryx cannot read must not end the whole
       // validation: name it and keep checking the rest of the package.
