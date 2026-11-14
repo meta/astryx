@@ -12,7 +12,7 @@
 
 import {describe, expect, it} from 'vitest';
 
-import {proofScope} from './proof.mjs';
+import {proofScope} from './scope.mjs';
 
 const component = ['packages/core/src/Button/Button.tsx'];
 

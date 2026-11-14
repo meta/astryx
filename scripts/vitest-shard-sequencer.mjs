@@ -161,7 +161,7 @@ const SWIZZLE_PROOF = /(^|\/)swizzle-proof\.\d+\.test\.mjs$/;
 
 /**
  * The swizzle-proof slices among `files` that prove nothing in this run: every
- * slice reads the same scope first (packages/cli/test/swizzle-proof/proof.mjs
+ * slice reads the same scope first (packages/cli/test/swizzle-proof/scope.mjs
  * runScope), and in the scope `none` it runs no target. Their recorded time is
  * the time they take when a change reaches them, so without this the legs that
  * hold them would finish early while the other legs carry the rest.
@@ -172,7 +172,7 @@ export async function idleSwizzleSlices(files) {
   const slices = files.filter(file => SWIZZLE_PROOF.test(file));
   if (slices.length === 0) return new Set();
   const {runScope} = await import(
-    pathToFileURL(path.join(ROOT, 'packages/cli/test/swizzle-proof/proof.mjs'))
+    pathToFileURL(path.join(ROOT, 'packages/cli/test/swizzle-proof/scope.mjs'))
       .href
   );
   const {scope} = runScope({all: process.env.SWIZZLE_PROOF_ALL === '1'});
