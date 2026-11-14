@@ -34,14 +34,15 @@ import {
   loadTheme,
   nearest,
   refuse,
+  themeSourceParseError,
   themeSourceProblem,
 } from './_settings.mjs';
-import {ASPECTS, checkSetting} from './_check.mjs';
+import {ASPECTS, settableStates} from './_check.mjs';
 import {MODAL} from './_compiler.mjs';
 import {PALETTE_DIALS, mappingRows, paletteFiles} from './_palette.mjs';
 import {requireProject, context} from './_context.mjs';
 import {checked, exampleStep, howTheme, render} from './_how-commands.mjs';
-import {draftAnswer, valueAsked} from './_how-question.mjs';
+import {draftAnswer, partLexicon, valueAsked} from './_how-question.mjs';
 import {
   getCliInvocation,
   quoteCommandArgument,
@@ -249,7 +250,9 @@ async function answer(subject, options, cwd) {
     }
     // A theme whose source no longer extends its settings takes no setting:
     // an answer would suggest commands that cannot run.
-    const broken = themeSourceProblem(cwd, options.theme);
+    const broken =
+      themeSourceParseError(cwd, options.theme) ??
+      (await themeSourceProblem(cwd, options.theme));
     if (broken)
       refuse(
         E.ERR_THEME_INVALID,
@@ -462,9 +465,31 @@ async function answer(subject, options, cwd) {
   // "What does --color-accent do", "what's the variable for card padding":
   // "--focus-outline-width: 3px": a token typed with a value is set exactly,
   // or refused with the nearest names; never another token.
+  // "cards: --color-border red", "--color-border red on inputs": the token
+  // on that part.
+  const scopeLead = /^\s*([a-z][a-z -]*?)\s*:\s*(?=--)/i.exec(t)?.[1];
+  const scopeTail =
+    /\s+(?:on|for)\s+(?:the |my |all )?([a-z][a-z -]*?)\s*$/i.exec(t)?.[1];
+  const scopeWord = scopeLead ?? scopeTail;
+  const scopeOn = scopeWord
+    ? (() => {
+        const w = ` ${scopeWord.trim().toLowerCase()} `;
+        return (
+          partLexicon(ctx).parts.find(([re]) => re.test(w))?.[1].on ?? null
+        );
+      })()
+    : null;
   const typedToken =
     /^\s*(--[a-z][a-z0-9-]*)\s*(?::|\s+to\s+|\s+)\s*([^;]+?)\s*;?\s*(?:\bin (light|dark) mode\b.*)?$/i.exec(
-      t.replace(/^\s*(?:change|set|make|token)\s+/i, ' '),
+      t
+        .replace(/^\s*(?:change|set|make|token)\s+/i, ' ')
+        .replace(/^\s*[a-z][a-z -]*?\s*:\s*(?=--)/i, ' ')
+        .replace(
+          scopeOn && scopeTail
+            ? /\s+(?:on|for)\s+(?:the |my |all )?[a-z][a-z -]*?\s*$/i
+            : /$^/,
+          '',
+        ),
     );
   if (
     typedToken &&
@@ -503,6 +528,7 @@ async function answer(subject, options, cwd) {
           verb: 'set',
           thing: token,
           value,
+          ...(scopeOn ? {on: scopeOn} : {}),
           ...(mode && env.data.mode === 'both' ? {mode} : {}),
         },
       ],
@@ -612,10 +638,13 @@ async function answer(subject, options, cwd) {
     ...unknown,
     ...(empty
       ? {
-          hint: results.length
-            ? `No command does all of "${t}" on ${env.slug}; the lines above say why.`
-            : `No match for "${t}". Name the part (header, nav links, card, button, banner, input...) and what to change (text color, background, gradient, corners, border, shadow, spacing, bold), in English.`,
+          hint: `${
+            results.length
+              ? `No command does all of "${t}" on ${env.slug}; the lines above say why.`
+              : `No match for "${t}". Name the part (header, nav links, card, button, banner, input...) and what to change (text color, background, gradient, corners, border, shadow, spacing, bold), in English.`
+          } See ${HOW} --help for the asks it understands.`,
           run: [
+            `${HOW} --help`,
             `${HOW} --list parts`,
             `${HOW} "rounder buttons"`,
             `${HOW} colors`,
@@ -781,25 +810,7 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
     ctx.project.target.get(key)
   );
   const group = familyOf(key);
-  // Only the states set takes on this part (it refuses one that never
-  // applies there).
-  // Only the states set takes on this part: a state is dropped when the
-  // same change without it passes and with it is refused.
-  const takes = (/** @type {string | undefined} */ st) => {
-    try {
-      checkSetting(ctx, env.slug, env.data, 'opacity', '1', {
-        on: key,
-        ...(st ? {state: st} : {}),
-      });
-      return true;
-    } catch {
-      return false;
-    }
-  };
-  const plainOk = takes(undefined);
-  const states = [...new Set([...target.states, ...COMMON_STATES])].filter(
-    st => !plainOk || takes(st),
-  );
+  const states = settableStates(ctx, env.slug, env.data, key);
   const reads = Object.fromEntries(
     Object.keys(GROUPS).map(g => [
       g,

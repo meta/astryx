@@ -8,6 +8,7 @@
 // (the XLE/XLO language) can use it without this file's dynamic node:fs/path
 // imports landing in the webpack graph. Re-exported for existing consumers.
 import {levenshteinDistance} from './levenshtein.mjs';
+import {compareText} from './compare-text.mjs';
 export {levenshteinDistance} from './levenshtein.mjs';
 
 /**
@@ -248,7 +249,7 @@ export async function searchComponents(needle, coreDir, components) {
         ? {...r, keywordAt: /** @type {number} */ (keywordAt.get(r.name))}
         : r,
     )
-    .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+    .sort((a, b) => b.score - a.score || compareText(a.name, b.name));
 
   return results;
 }

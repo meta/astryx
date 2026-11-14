@@ -12,8 +12,11 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {render} from './render.mjs';
-import {readSourceBlock, recordedText, renderedMarkupOf, sha256, SOURCE_TYPE} from '../../foundation/render/source-block.mjs';
-import {textEdits} from '../../foundation/render/markup-edits.mjs';
+import {RENDER_FORMAT, readSourceBlock, recordedText, renderedMarkupOf, sha256, SOURCE_TYPE} from '../../foundation/render/source-block.mjs';
+
+/** A render format newer than this CLI reads. */
+const NEWER = RENDER_FORMAT + 1;
+import {clip, locate, textEdits} from '../../foundation/render/markup-edits.mjs';
 import {cliVersion} from '../../foundation/integrations/cli-peer-version.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
@@ -187,6 +190,65 @@ describe('render --reverse says what changed after the render', () => {
     expect(read('edited-back/sections/Kpi.tsx')).toBe(KPI);
   });
 
+  it('names where an edited text sits when it wraps across lines in the source, and finds a long one by its whole text', async () => {
+    // Longer than a change shows, so it is found by its whole text.
+    const long = Array.from({length: 60}, (_, i) => `word${i}`).join(' ');
+    put(
+      'wrapped/page.tsx',
+      `import {Text} from '@astryxdesign/core/Text';\n\nexport default function Page() {\n  return (\n    <main>\n      <Text>\n        Figures are in thousands and include every region\n        that reported before the close.\n      </Text>\n      <p>\n        ${long.split(' ').slice(0, 30).join(' ')}\n        ${long.split(' ').slice(30).join(' ')}\n      </p>\n    </main>\n  );\n}\n`,
+    );
+    await render('wrapped/page.tsx', {cwd: dir});
+    const html = read('wrapped/page.html');
+    put('wrapped/edited.html', html.replace('before the close.', 'before the deadline.').replace('word1 ', 'second '));
+    const back = /** @type {any} */ (await render('wrapped/edited.html', {cwd: dir, reverse: true, out: 'wrapped-back/page.tsx'}));
+    expect(back.data.edits).toEqual([
+      {
+        was: 'Figures are in thousands and include every region that reported before the close.',
+        now: 'Figures are in thousands and include every region that reported before the deadline.',
+        file: 'wrapped-back/page.tsx',
+        line: 7,
+      },
+      {was: clip(long), now: clip(long.replace('word1 ', 'second ')), file: 'wrapped-back/page.tsx', line: 11},
+    ]);
+  });
+
+  it('names where an edited run of several thousand words sits', async () => {
+    const words = Array.from({length: 6000}, (_, i) => `w${i}`);
+    const lines = Array.from({length: 60}, (_, i) => `        ${words.slice(i * 100, i * 100 + 100).join(' ')}`).join('\n');
+    put('many-words/page.tsx', `export default function Page() {\n  return (\n    <p>\n${lines}\n    </p>\n  );\n}\n`);
+    await render('many-words/page.tsx', {cwd: dir});
+    put('many-words/edited.html', read('many-words/page.html').replace(' w5999<', ' last<'));
+    const back = /** @type {any} */ (await render('many-words/edited.html', {cwd: dir, reverse: true, out: 'many-words-back/page.tsx'}));
+    expect(back.data.edits).toEqual([
+      {was: clip(words.join(' ')), now: clip([...words.slice(0, -1), 'last'].join(' ')), file: 'many-words-back/page.tsx', line: 4},
+    ]);
+  });
+
+  it('reads a copy whose line ends changed on the way as not edited, as a browser reads it', async () => {
+    for (const [name, ends] of [['crlf', '\r\n'], ['cr', '\r']]) {
+      put(`line-ends-${name}.html`, html.replace(/\n/g, ends));
+      const result = /** @type {any} */ (await render(`line-ends-${name}.html`, {cwd: dir, reverse: true, out: `line-ends-${name}-back/report.tsx`}));
+      expect(result.data).toMatchObject({exact: true, edited: false, stylesEdited: false});
+    }
+    // An edit in such a copy is still one.
+    put('line-ends-edited.html', editBody(html.replace(/\n/g, '\r\n'), body => body.replace('Q3 report', 'Q4 report')));
+    const edited = /** @type {any} */ (await render('line-ends-edited.html', {cwd: dir, reverse: true, out: 'line-ends-edited-back/report.tsx'}));
+    expect(edited.data.edits).toEqual([{was: 'Q3 report', now: 'Q4 report', file: 'line-ends-edited-back/report.tsx', line: 7}]);
+    // A title given with a CR in it (from a CR LF file) reads the same.
+    await render('src/report.tsx', {cwd: dir, out: 'cr-title.html', title: 'Quarterly\r'});
+    const titled = /** @type {any} */ (await render('cr-title.html', {cwd: dir, reverse: true, out: 'cr-title-back/report.tsx'}));
+    expect(titled.data).toMatchObject({exact: true, edited: false});
+  });
+
+  it('names the JSON file that holds an edited run of text', async () => {
+    put('json-edit/data.json', '{"regions": ["North", "South"]}\n');
+    put('json-edit/page.tsx', "import data from './data.json';\nexport default function Page() {\n  return <ul>{data.regions.map(r => <li key={r}>{r}</li>)}</ul>;\n}\n");
+    await render('json-edit/page.tsx', {cwd: dir, out: 'json-edit.html'});
+    put('json-edit-edited.html', editBody(read('json-edit.html'), body => body.replace('>North<', '>North America<')));
+    const result = /** @type {any} */ (await render('json-edit-edited.html', {cwd: dir, reverse: true, out: 'json-edit-back/page.tsx'}));
+    expect(result.data.edits).toEqual([{was: 'North', now: 'North America', file: 'json-edit-back/data.json', line: 1}]);
+  });
+
   it('reports text added and removed after the render, and an edit with no text change', async () => {
     put('added.html', editBody(html, body => body.replace('</main>', '<p>Footnote</p></main>').replace('Revenue grew in every region.', '')));
     const added = /** @type {any} */ (await render('added.html', {cwd: dir, reverse: true, out: 'added-back/report.tsx'}));
@@ -248,18 +310,18 @@ describe('render --reverse says what changed after the render', () => {
   it('refuses a newer render format, naming the CLI that wrote it, and writes nothing', async () => {
     const future = html.replace(
       /<script type="application\/x-astryx-source">[\s\S]*?<\/script>/,
-      () => `<script type="${SOURCE_TYPE}">${JSON.stringify({version: 2, cli: '9.1.0', entry: 'report.tsx', parts: []})}</script>`,
+      () => `<script type="${SOURCE_TYPE}">${JSON.stringify({version: NEWER, cli: '9.1.0', entry: 'report.tsx', parts: []})}</script>`,
     );
     put('future.html', future);
     const error = await errorOf(() => render('future.html', {cwd: dir, reverse: true}));
     expect(error?.code).toBe('ERR_RENDER_NEWER_FORMAT');
-    expect(error?.message).toContain('render format 2, written by @astryxdesign/cli 9.1.0');
+    expect(error?.message).toContain(`render format ${NEWER}, written by @astryxdesign/cli 9.1.0`);
     expect(error?.suggestions?.[0]?.name).toBe('npx @astryxdesign/cli@9.1.0 experimental render --reverse future.html');
     expect(fs.existsSync(path.join(dir, 'future-restored'))).toBe(false);
   });
 
   it('refuses a received file whose CLI version is not a semantic version, so no printed command carries it', async () => {
-    for (const [name, version] of [['crafted-new', 2], ['crafted-one', 1]]) {
+    for (const [name, version] of [['crafted-new', NEWER], ['crafted-one', 1]]) {
       const crafted = html.replace(
         /<script type="application\/x-astryx-source">[\s\S]*?<\/script>/,
         () => `<script type="${SOURCE_TYPE}">${JSON.stringify({version, cli: '9.1.0 && touch pwned', entry: 'report.tsx', files: []})}</script>`,
@@ -272,7 +334,7 @@ describe('render --reverse says what changed after the render', () => {
       expect(fs.existsSync(path.join(dir, `${name}-restored`))).toBe(false);
     }
     // A newer format with no CLI version suggests the latest CLI.
-    put('unnamed.html', html.replace(/<script type="application\/x-astryx-source">[\s\S]*?<\/script>/, () => `<script type="${SOURCE_TYPE}">${JSON.stringify({version: 2, entry: 'report.tsx'})}</script>`));
+    put('unnamed.html', html.replace(/<script type="application\/x-astryx-source">[\s\S]*?<\/script>/, () => `<script type="${SOURCE_TYPE}">${JSON.stringify({version: NEWER, entry: 'report.tsx'})}</script>`));
     const unnamed = await errorOf(() => render('unnamed.html', {cwd: dir, reverse: true}));
     expect(unnamed?.code).toBe('ERR_RENDER_NEWER_FORMAT');
     expect(unnamed?.suggestions?.[0]?.name).toBe('npx @astryxdesign/cli@latest experimental render --reverse unnamed.html');
@@ -386,9 +448,49 @@ export default function Page() {
     expect(back.data.files).toEqual(expect.arrayContaining(['reach-back/types.ts', 'reach-back/rows.js']));
     expect(back.data).toMatchObject({exact: false, missing: ['../sheets/site.scss']});
   });
+  it('says render format 2 only for a file that carries a module kind earlier CLIs refuse', async () => {
+    put('formats/lib/one.cjs', "exports.one = 'from a cjs module';\n");
+    put('formats/page.tsx', "import {one} from './lib/one.cjs';\nexport default function Page() {\n  return <p>{one}</p>;\n}\n");
+    await render('formats/page.tsx', {cwd: dir, out: 'formats.html'});
+    const two = read('formats.html');
+    expect(readSourceBlock(two)).toMatchObject({found: true, source: {version: 2}});
+    expect(two).toContain('render format 2.');
+    // The page reads in this CLI as any other.
+    const back = /** @type {any} */ (await render('formats.html', {cwd: dir, reverse: true, out: 'formats-back/page.tsx'}));
+    expect(back.data).toMatchObject({exact: true, format: 2});
+    // A file without such a module stays format 1, which every earlier CLI opens.
+    const one = read('report.html');
+    expect(readSourceBlock(one)).toMatchObject({found: true, source: {version: 1}});
+    expect(one).toContain('render format 1.');
+  });
+
+  it('carries the .mts, .cts and .cjs modules a page imports, and gives them back', async () => {
+    put('kinds/lib/a.mts', "export const a = 'from mts';\n");
+    put('kinds/lib/b.cjs', "exports.b = 'from cjs';\n");
+    put('kinds/lib/c.cts', "export const c = 'from cts';\n");
+    put('kinds/lib/d.cjs', "exports.d = 'from cjs without its extension';\n");
+    put('kinds/lib/e.mts', "export const e = 'from mts without its extension';\n");
+    put(
+      'kinds/page.tsx',
+      "import {a} from './lib/a.mts';\nimport {b} from './lib/b.cjs';\nimport {c} from './lib/c.cts';\nimport {d} from './lib/d';\nimport {e} from './lib/e';\nexport default function Page() {\n  return <p>{a} {b} {c} {d} {e}</p>;\n}\n",
+    );
+    const result = /** @type {any} */ (await render('kinds/page.tsx', {cwd: dir}));
+    expect(result.data.files).toEqual(expect.arrayContaining(['page.tsx', 'lib/a.mts', 'lib/b.cjs', 'lib/c.cts', 'lib/d.cjs', 'lib/e.mts']));
+    expect(read('kinds/page.html')).toContain('from mts from cjs from cts from cjs without its extension from mts without its extension');
+    const back = /** @type {any} */ (await render('kinds/page.html', {cwd: dir, reverse: true, out: 'kinds-back/page.tsx'}));
+    expect(back.data.exact).toBe(true);
+    for (const name of ['lib/a.mts', 'lib/b.cjs', 'lib/c.cts', 'lib/d.cjs', 'lib/e.mts']) expect(read(`kinds-back/${name}`)).toBe(read(`kinds/${name}`));
+  });
 });
 
 describe('text edits', () => {
+  it('finds a run of text in the source across any white space, and only when it appears once', () => {
+    const source = '<Text>\n  Every region\n  reported.\n</Text>\n';
+    expect(locate('Every region reported.', [{file: 'page.tsx', text: source}])).toEqual({file: 'page.tsx', line: 2});
+    expect(locate('a (b) c.d?', [{file: 'page.tsx', text: '<p>a (b)\n c.d?</p>'}])).toEqual({file: 'page.tsx', line: 1});
+    expect(locate('Every region', [{file: 'a.tsx', text: 'Every region'}, {file: 'b.tsx', text: 'Every\n region'}])).toBeNull();
+  });
+
   it('pairs replaced runs, keeps the order, and caps the list', () => {
     expect(textEdits(['a', 'b', 'c'], ['a', 'B', 'c'])).toEqual({edits: [{was: 'b', now: 'B'}], more: 0});
     expect(textEdits(['a', 'b'], ['a', 'b', 'c'])).toEqual({edits: [{was: null, now: 'c'}], more: 0});

@@ -25,8 +25,15 @@ import {AstryxError} from '../error.mjs';
 import {logger} from '../logger.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
-import {oneColorMode, themeBuildForReport} from '../theme/build/build.mjs';
 import {
+  loadThemeExport,
+  oneColorMode,
+  themeBuildForReport,
+} from '../theme/build/build.mjs';
+import {namedFontFamilies} from '../theme/build/font-warning.mjs';
+import {declarationValues} from '../../foundation/fonts/font-stylesheet.mjs';
+import {
+  MODE_WORDS,
   AUTO_SPREAD,
   CORNERS,
   DIALS,
@@ -46,7 +53,7 @@ import {
   WRAPPED_PARTS,
   CARD_LIKE,
 } from './_tables.mjs';
-import {cleanDialValue} from './_normal.mjs';
+import {cleanDialValue, typoLimit, typoNear} from './_normal.mjs';
 import {
   alphaOf,
   colorProblem,
@@ -82,8 +89,10 @@ import {
   baseModule,
   baseResolved,
   baseThemeFile,
+  installLine,
 } from './_project.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
 
 // The palette reads the tokens the own source sets through this module.
 setOwnTokenReader((cwd, slug) => ownSourceTokenValues(cwd, slug));
@@ -121,9 +130,9 @@ const LIFT_GROUND_TOKENS = new Set(LIFT_PARTS.map(([, , g]) => g));
 /** @typedef {import('./_parts.mjs').PaintSide} PaintSide */
 /** @typedef {import('./_parts.mjs').TextPair} TextPair */
 
-/** What a theme name may be, in words. */
-export const NAME_RULE =
-  'lowercase letters, digits and dashes, starting with a letter, 64 characters at most, and not a name Windows reserves (con, prn, aux, nul, com1-com9, lpt1-lpt9)';
+import {NAME_RULE} from './_name-rule.mjs';
+
+export {NAME_RULE};
 
 /** A theme name: lowercase letters, digits and dashes, starting with a letter, 64 characters at most. @param {string} s */
 export const slugOk = s =>
@@ -306,34 +315,17 @@ export function editorWrote(cwd, slug, file) {
 }
 
 /**
- * Adopt a picture an older editor took (before it recorded or stamped its
- * pictures) into the record: only while the theme has no record at all, the
- * name is one the editor writes, and the picture is the editor's 1280-pixel
- * wide window. Returns whether it was adopted.
+ * Whether the pictures record names this file and it is unchanged since the
+ * editor wrote it. Only such a file is ever deleted: a stamp alone is not
+ * enough, since a byte copy of a picture (preview-before.png) carries the
+ * same stamp and is the person's.
  * @param {string} cwd
  * @param {string} slug
  * @param {string} file
  */
-export function adoptOlderPicture(cwd, slug, file) {
-  if (fs.existsSync(themeFiles(cwd, slug).pictures)) return false;
-  if (!/^(sheet|preview)(-[a-z-]+)?\.png$/.test(path.basename(file)))
-    return false;
-  /** @type {Buffer} */
-  let bytes;
-  try {
-    bytes = fs.readFileSync(file);
-  } catch {
-    return false;
-  }
-  // The width in the PNG header: the editor takes a 1280-pixel window.
-  if (
-    bytes.length < 24 ||
-    bytes.toString('latin1', 12, 16) !== 'IHDR' ||
-    bytes.readUInt32BE(16) !== 1280
-  )
-    return false;
-  recordWritten(cwd, slug, [file]);
-  return true;
+export function editorRecorded(cwd, slug, file) {
+  const was = readWrittenRecord(cwd, slug)[path.basename(file)];
+  return Boolean(was) && was === contentHash(file);
 }
 
 /**
@@ -486,7 +478,7 @@ export function editedThemes(cwd, order = 'name') {
   };
   return names
     .map(d => ({d, t: when(d)}))
-    .sort((a, b) => b.t - a.t || a.d.localeCompare(b.d))
+    .sort((a, b) => b.t - a.t || compareText(a.d, b.d))
     .map(x => x.d);
 }
 
@@ -501,22 +493,55 @@ export const shown = (cwd, f) =>
  * @param {number} [n]
  */
 export function nearest(x, list, n = 3) {
-  const limit = Math.max(2, Math.floor(x.length / 3));
-  // Nearest by edit distance first (brand-drak is brand-dark, not brand); a
-  // name one holds inside the other is near too, after the close ones.
+  // A phrase that negates a word (not round, no caps, unbold,
+  // rounded-none) never has that word as its nearest: it asks the opposite.
+  // A typo of a listed keyword that itself starts with no- or not-
+  // (`not-alowed` for not-allowed, `no-repat` for no-repeat) is no
+  // negation: it is read as a typo.
+  if (
+    negates(x) &&
+    ![...list].some(c => /^(no|not)-/.test(c) && typoNear(x, c))
+  )
+    return [];
+  // A long input (a pasted stylesheet or blob) holds many names inside
+  // it: it is near nothing.
+  if (x.length > 64) return [];
+  // Within the editor's one typo limit (typoLimit: none under four
+  // letters, so only the name itself in other letters is near those),
+  // nearest by edit distance first (brand-drak is brand-dark, not brand); a
+  // name one holds inside the other is near too, after the close ones, for
+  // a word long enough to be a typo.
+  const limit = typoLimit(x);
+  const typed = x.toLowerCase();
   return [...list]
     .filter(c => c.length > 2)
     .map(c => {
-      const d = levenshteinDistance(x, c);
+      const name = c.toLowerCase();
+      const d = levenshteinDistance(typed, name, limit, {swaps: true});
       return /** @type {[string, number]} */ ([
         c,
-        d <= limit ? d : c.includes(x) || x.includes(c) ? limit + 0.5 : d,
+        d <= limit
+          ? d
+          : limit > 0 && (name.includes(typed) || typed.includes(name))
+            ? limit + 0.5
+            : d,
       ]);
     })
     .filter(([, s]) => s <= limit + 0.5)
     .sort((a, b) => a[1] - b[1])
     .slice(0, n)
     .map(([c]) => c);
+}
+
+/**
+ * Whether typed words negate what they name (`not round`, `no caps`,
+ * `anything but blue`, `unbold`, `non-bold`, `rounded-none`).
+ * @param {string} x
+ */
+export function negates(x) {
+  return /(^|[\s-])(not|no|non|without|never|less)([\s-]|$)|anything but|^un(round|bold|rais|outlin|cap)|-none$/i.test(
+    String(x).trim(),
+  );
 }
 
 /**
@@ -881,7 +906,18 @@ export function loadTheme(
             ...(fs.existsSync(themeFiles(cwd, `my-${slug}`).settings)
               ? [`${P} show my-${slug}`]
               : []),
-            `${P} new ${usableNewName(cwd, `my-${slug}`)}${LIKE.includes(slug) ? ` --like ${slug}` : ''}`,
+            ...(LIKE.includes(slug)
+              ? [
+                  ...onBuiltIn(
+                    cwd,
+                    slug,
+                    `${P} new ${usableNewName(cwd, `my-${slug}`)} --like ${slug}`,
+                  ),
+                  ...(baseInstalled(cwd, slug)
+                    ? []
+                    : [`${P} new ${usableNewName(cwd, `my-${slug}`)}`]),
+                ]
+              : [`${P} new ${usableNewName(cwd, `my-${slug}`)}`]),
           ],
         },
       );
@@ -936,18 +972,13 @@ export function loadTheme(
         run: [{name: `${P} new ${slug}`, reason: 'do this instead'}],
       };
   /** @type {any} */
-  let data;
-  try {
-    data = JSON.parse(
-      fs.readFileSync(f.settings, 'utf8').replace(/^\uFEFF/, ''),
-    );
-  } catch {
+  const data = settingsJson(fs.readFileSync(f.settings, 'utf8'));
+  if (data === undefined)
     throw new AstryxError(
       `themes/${slug}/${slug}.settings.json is not valid JSON. Fix it by hand${recover.text}.`,
       recover.run,
       ERROR_CODES.ERR_THEME_INVALID,
     );
-  }
   // Valid JSON of the wrong shape ([], {}, settings: null) is damage like
   // invalid JSON: `new` makes the theme again, keeping the file aside.
   if (!settingsShapeOk(data))
@@ -959,7 +990,36 @@ export function loadTheme(
       ],
       ERROR_CODES.ERR_THEME_INVALID,
     );
+  readEntryWords(data);
+  // `like: "none"`, the word for no base, is no base.
+  if (data.like === 'none') delete data.like;
+  // The folder names the theme: a name missing or changed by hand in the
+  // file is the folder's, and the next save writes it back.
+  data.name = slug;
   const problem = settingsProblem(data, skip);
+  // An entry whose mode or source means nothing: `undo` with its name
+  // removes that entry only; a step back loses the last change.
+  const damaged = problem ? damagedEntry(data, problem) : null;
+  if (damaged)
+    throw new AstryxError(
+      `themes/${slug}/${slug}.settings.json: ${problem}. Remove that setting with ${P} undo ${slug} ${undoArgs(damagedUndo(damaged))}; nothing else needs to change${steps ? `, or step back to the settings before the last change with ${P} undo ${slug} (the last change is then lost)` : ''}. Nothing was changed.`,
+      [
+        {
+          name: `${P} undo ${slug} ${undoArgs(damagedUndo(damaged))}`,
+          reason: 'do this instead: removes only that setting',
+        },
+        ...(steps
+          ? [
+              {
+                name: `${P} undo ${slug}`,
+                reason:
+                  'or step back to the settings before the last change (the last change is then lost)',
+              },
+            ]
+          : []),
+      ],
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
   // A value made under looser rules is not damage: the command that
   // changes or removes that setting still works, with the other bad ones
   // left out of the build, so each listed fix runs on its own.
@@ -1052,7 +1112,7 @@ export function loadTheme(
         ...(example && !['mode', 'base'].includes(bad.thing)
           ? [
               {
-                name: `${P} set ${slug} ${undoArgs(bad).replace(bad.thing, `${bad.thing} ${quoteCommandArgument(example)}`)}`,
+                name: `${P} set ${slug} ${setArgs(bad, example)}`,
                 reason: meant
                   ? 'or set the value it holds, cleaned'
                   : 'or give it a value it takes',
@@ -1099,7 +1159,7 @@ export function loadTheme(
         ...(meant
           ? [
               {
-                name: `${P} set ${slug} ${undoArgs(alsoBad).replace(alsoBad.thing, `${alsoBad.thing} ${quoteCommandArgument(meant)}`)}`,
+                name: `${P} set ${slug} ${setArgs(alsoBad, meant)}`,
                 reason: 'do this instead: set the value it holds, cleaned',
               },
             ]
@@ -1132,7 +1192,7 @@ export function loadTheme(
                 )
                 .slice(0, 2)
                 .map(v => ({
-                  name: `${P} set ${slug} ${undoArgs(twice.setting).replace(twice.setting.thing, `${twice.setting.thing} ${quoteCommandArgument(String(v))}`)}`,
+                  name: `${P} set ${slug} ${setArgs(twice.setting, String(v))}`,
                   reason: `keep ${v}`,
                 })),
               {
@@ -1145,6 +1205,21 @@ export function loadTheme(
       ERROR_CODES.ERR_THEME_INVALID,
     );
   return data;
+}
+
+/**
+ * A command that builds on a built-in theme, as it runs here: after the
+ * line that installs that theme's package when the project does not have
+ * it, so the first line offered always works.
+ * @param {string} cwd
+ * @param {string} base a built-in theme
+ * @param {string} line the command on that base
+ * @returns {string[]}
+ */
+export function onBuiltIn(cwd, base, line) {
+  return baseInstalled(cwd, base)
+    ? [line]
+    : [installLine(cwd, [`@astryxdesign/theme-${base}`]), line];
 }
 
 /**
@@ -1208,21 +1283,163 @@ export function settingsProblem(
     // a setting with no name is damage.
     if (!s || typeof s.thing !== 'string' || !('value' in s))
       return 'a setting has no thing or value';
+    if (removes(skip) && skips(s, skip) && entryDamage(s)) continue;
     if (!['dial', 'token', 'property'].includes(s.source))
-      return `${s.thing} has no source (dial, token or property)`;
+      return s.source == null || s.source === ''
+        ? `${s.thing} has no source (dial, token or property)`
+        : `${s.thing} has source ${JSON.stringify(s.source)}, not dial, token or property`;
     if (s.mode != null && s.mode !== 'light' && s.mode !== 'dark')
-      return `${s.thing} has mode "${s.mode}"`;
+      return `${s.thing} has mode ${JSON.stringify(s.mode)}, not light or dark`;
+    if (s.only != null && s.only !== true)
+      return `${s.thing} has only ${JSON.stringify(s.only)}, not true or false`;
+    // A bad value comes first: an entry under the wrong headings half is
+    // that, not a second entry of the half it names.
+    if (!skips(s, skip)) {
+      const problem = valueProblem(s);
+      if (problem) return problem;
+    }
     const key = keyOf(s);
     // The command that changes or removes a setting listed twice keeps one
     // value, or none, so it fixes the list.
     if (keys.has(key) && !skips(s, skip))
       return `${describe({...s, value: '?'}).replace(' = ?', '')} is listed twice (${JSON.stringify(keys.get(key).value)}, ${JSON.stringify(s.value)})`;
     keys.set(key, s);
-    if (skips(s, skip)) continue;
-    const problem = valueProblem(s);
-    if (problem) return problem;
   }
   return null;
+}
+
+/**
+ * Read each entry's mode and source as the editor writes them: a mode in
+ * other letters or words (`Dark`, `night`, `day`) as light or dark, a
+ * source in other letters (`Dial`) as written, and a missing source from
+ * the thing (a dial name is a dial, a `--` name a token, anything with a
+ * part a property). Each change is kept as a note for the next command,
+ * which saves the entry that way. A value that means nothing is left for
+ * the check to name.
+ * @param {any} data
+ */
+function readEntryWords(data) {
+  /** @type {string[]} */
+  const notes = [];
+  for (const s of Array.isArray(data?.settings) ? data.settings : []) {
+    if (!s || typeof s !== 'object' || typeof s.thing !== 'string') continue;
+    if (typeof s.mode === 'string' && s.mode !== 'light' && s.mode !== 'dark') {
+      const read = MODE_WORDS[s.mode.trim().toLowerCase()];
+      if (read) {
+        notes.push(
+          `${s.thing} was saved with mode ${JSON.stringify(s.mode)}, read as ${read}`,
+        );
+        s.mode = read;
+      }
+    }
+    // `only` is true or absent; `"true"` and `"false"` written as text are
+    // read as what they say, since the build reads any other value as true.
+    if (typeof s.only === 'string' && /^\s*(true|false)\s*$/i.test(s.only)) {
+      const read = s.only.trim().toLowerCase() === 'true';
+      notes.push(
+        `${s.thing} was saved with only ${JSON.stringify(s.only)}, read as ${read}`,
+      );
+      if (read) s.only = true;
+      else delete s.only;
+    } else if (s.only === false) delete s.only;
+    if (!['dial', 'token', 'property'].includes(s.source)) {
+      const typed = typeof s.source === 'string' ? s.source.trim() : '';
+      const read = typed
+        ? ['dial', 'token', 'property'].find(x => x === typed.toLowerCase())
+        : s.source == null || s.source === ''
+          ? DIALS[s.thing]
+            ? 'dial'
+            : s.thing.startsWith('--')
+              ? 'token'
+              : s.on
+                ? 'property'
+                : undefined
+          : undefined;
+      if (read) {
+        notes.push(
+          typed
+            ? `${s.thing} was saved with source ${JSON.stringify(s.source)}, read as ${read}`
+            : `${s.thing} was saved with no source, read as ${read}`,
+        );
+        s.source = read;
+      }
+    }
+  }
+  ENTRY_NOTES.set(data, notes);
+}
+
+/** @type {WeakMap<object, string[]>} */
+const ENTRY_NOTES = new WeakMap();
+
+/**
+ * What loading read differently from the file in the theme's entries (a
+ * mode or source in other letters, a missing source): one note each.
+ * @param {object} data the theme as {@link loadTheme} returned it
+ * @returns {string[]}
+ */
+export function entryNotes(data) {
+  return ENTRY_NOTES.get(data) ?? [];
+}
+
+/**
+ * Which part of an entry means nothing after reading: its source, mode or
+ * `only`, or null.
+ * @param {any} s
+ * @returns {'mode' | 'source' | 'only' | null}
+ */
+export function entryDamage(s) {
+  if (!s || typeof s.thing !== 'string') return null;
+  if (!['dial', 'token', 'property'].includes(s.source)) return 'source';
+  if (s.mode != null && s.mode !== 'light' && s.mode !== 'dark') return 'mode';
+  if (s.only != null && s.only !== true) return 'only';
+  return null;
+}
+
+/**
+ * The entry as an undo names it: without the mode or `only` that means
+ * nothing (an undo without them removes that entry).
+ * @param {any} s
+ */
+function damagedUndo(s) {
+  const damage = entryDamage(s);
+  return {
+    ...s,
+    mode: damage === 'mode' ? undefined : s.mode,
+    only: damage === 'only' ? undefined : s.only,
+  };
+}
+
+/**
+ * The entry a settings problem names when that problem is its mode or
+ * `only`, or null.
+ * @param {any} data
+ * @param {string} problem
+ */
+function damagedEntry(data, problem) {
+  return (
+    (Array.isArray(data?.settings) ? data.settings : []).find(
+      (/** @type {any} */ s) =>
+        (entryDamage(s) === 'source' &&
+          typeof s.source === 'string' &&
+          s.source !== '' &&
+          problem.startsWith(`${s.thing} has source `)) ||
+        (entryDamage(s) === 'mode' &&
+          problem.startsWith(`${s.thing} has mode `)) ||
+        (entryDamage(s) === 'only' &&
+          problem.startsWith(`${s.thing} has only `)),
+    ) ?? null
+  );
+}
+
+/**
+ * Whether the command removes the setting it names (an undo): only that
+ * takes an entry whose mode or source means nothing.
+ * @param {string | Partial<Setting> | undefined} skip
+ */
+function removes(skip) {
+  return Boolean(
+    skip && typeof skip === 'object' && /** @type {any} */ (skip).removing,
+  );
 }
 
 /**
@@ -1239,7 +1456,8 @@ function skips(s, skip) {
     (s.on ?? '') === (skip.on ?? '') &&
     (s.when ?? '') === (skip.when ?? '') &&
     (s.state ?? '') === (skip.state ?? '') &&
-    (s.mode ?? '') === (skip.mode ?? '')
+    ((s.mode ?? '') === (skip.mode ?? '') ||
+      (removes(skip) && !skip.mode && entryDamage(s) === 'mode'))
   );
 }
 
@@ -1267,12 +1485,37 @@ export function undoArgs(x) {
     // when it is listed twice (a bare `undo headings` then reads the weight
     // half).
     ...(x.thing === 'headings' && x.axis === 'tracking' ? ['tracking'] : []),
+    ...scopeFlags(x),
+  ].join(' ');
+}
+
+/**
+ * The words of a `set` that gives a setting's scope a value: set reads a
+ * headings half from its word, so no half is named.
+ * @param {import('./_settings.mjs').Setting} x
+ * @param {string} value
+ */
+export function setArgs(x, value) {
+  return [
+    quoteCommandArgument(String(x.thing)),
+    quoteCommandArgument(value),
+    ...scopeFlags(x),
+  ].join(' ');
+}
+
+/**
+ * The flags that name a setting's scope, as set and undo take them.
+ * @param {import('./_settings.mjs').Setting} x
+ * @returns {string[]}
+ */
+function scopeFlags(x) {
+  return [
     ...(x.on ? [`--on ${quoteCommandArgument(String(x.on))}`] : []),
     ...(x.when ? [`--when ${quoteCommandArgument(String(x.when))}`] : []),
     ...(x.state ? [`--state ${quoteCommandArgument(String(x.state))}`] : []),
     ...(x.mode ? [`--mode ${quoteCommandArgument(String(x.mode))}`] : []),
     ...(x.only ? ['--only'] : []),
-  ].join(' ');
+  ];
 }
 
 /**
@@ -1338,6 +1581,17 @@ export function valueProblem(s) {
       const seed = colorProblem(s.value);
       if (seed) return `${bad} ${seed.message}`;
     }
+    // `axis` names the half of headings a value sets; no other dial has
+    // one, and each half takes only its own words.
+    if (s.axis != null && s.thing !== 'headings')
+      return `${s.thing} has an axis (${JSON.stringify(s.axis)}), which only headings takes`;
+    if (s.thing === 'headings') {
+      if (s.axis != null && s.axis !== 'weight' && s.axis !== 'tracking')
+        return `headings has axis ${JSON.stringify(s.axis)}, not weight or tracking`;
+      const half = s.axis === 'tracking' ? HEADING_TRACKING : HEADING_WEIGHTS;
+      if (!Object.hasOwn(half, s.value))
+        return `${bad} is not a ${s.axis ?? 'weight'} headings takes (${Object.keys(half).join('|')})`;
+    }
     const words = d.values.split('|').filter(w => !w.startsWith('<'));
     const ok =
       s.thing === 'corners'
@@ -1364,7 +1618,10 @@ export function valueProblem(s) {
  * One entry of the top-level `tokens` map in a theme's own source, as
  * written: its token (null for a computed key no read of the file can
  * resolve), the key as typed, the line that sets it, and its value's shape.
- * @typedef {{token: string | null, key: string, line: number | null, kind: 'text' | 'number' | 'pair' | 'other', value?: string | number, halves?: Array<string | number | undefined>}} OwnTokenEntry
+ * A `duplicate` entry names a second `tokens` key (with every line); a
+ * `typography` entry is one typography field (its dotted key and value);
+ * an `unresolved` entry says the map holds something only a build reads.
+ * @typedef {{token: string | null, key: string, line: number | null, kind: 'text' | 'number' | 'pair' | 'object' | 'other' | 'duplicate' | 'typography' | 'unresolved', value?: any, halves?: Array<string | number | undefined>, lines?: Array<number | null>, file?: string, overridden?: boolean, expression?: boolean, notToken?: boolean}} OwnTokenEntry
  */
 
 /**
@@ -1495,15 +1752,174 @@ function ownPageTokens(
   if (!chosen) return out;
   const def = unwrap(chosen.call.arguments[0]);
   if (def?.type !== 'ObjectExpression') return out;
-  const tokensProp = def.properties.find(
+  // JavaScript keeps the last of two `tokens` keys: that one is read, and
+  // both are named.
+  const tokensProps = def.properties.filter(
     (/** @type {any} */ p) =>
       p.type === 'ObjectProperty' && !p.computed && keyOf(p.key) === 'tokens',
   );
+  if (detail && tokensProps.length > 1)
+    detail.push({
+      token: null,
+      key: 'tokens',
+      kind: 'duplicate',
+      line: tokensProps[0].loc?.start?.line ?? null,
+      lines: tokensProps.map((/** @type {any} */ p) => p.loc?.start?.line),
+    });
+  // The typography fields, as written, for their own checks.
+  const typo = def.properties.find(
+    (/** @type {any} */ p) =>
+      p.type === 'ObjectProperty' &&
+      !p.computed &&
+      keyOf(p.key) === 'typography',
+  );
+  if (detail && typo) {
+    /** @param {any} node @param {string[]} at */
+    const walk = (node, at) => {
+      const obj = unwrap(node);
+      if (obj?.type !== 'ObjectExpression') return;
+      for (const p of obj.properties) {
+        if (p.type !== 'ObjectProperty' || p.computed) continue;
+        const k = keyOf(p.key);
+        if (!k) continue;
+        const v = unwrap(p.value);
+        if (v?.type === 'ObjectExpression') walk(v, [...at, k]);
+        else
+          detail.push({
+            token: null,
+            key: [...at, k].join('.'),
+            kind: 'typography',
+            line: p.loc?.start?.line ?? null,
+            expression:
+              textOf(v) == null &&
+              v?.type !== 'NumericLiteral' &&
+              !(
+                v?.type === 'UnaryExpression' &&
+                v.argument?.type === 'NumericLiteral'
+              ),
+            value:
+              textOf(v) ??
+              (v?.type === 'NumericLiteral'
+                ? v.value
+                : v?.type === 'UnaryExpression' &&
+                    v.operator === '-' &&
+                    v.argument?.type === 'NumericLiteral'
+                  ? -v.argument.value
+                  : undefined),
+          });
+      }
+    };
+    walk(typo.value, []);
+  }
+  const tokensProp = tokensProps[tokensProps.length - 1];
   if (!tokensProp) return out;
   let unresolved = false;
-  /** @param {any} node @param {number} depth */
-  const collect = (node, depth) => {
-    const obj = unwrap(node);
+  const dir = path.dirname(themeFiles(cwd, slug).ts);
+  /**
+   * The object a name imported from a file beside the theme gives (`import
+   * {mine} from './mine'`, a default import of a .json file), read from
+   * that file, with its own code and path; null for any other name.
+   * @param {string} name
+   * @returns {{obj: any, code: string, file: string, unwrap: (n: any) => any} | null}
+   */
+  const imported = name => {
+    for (const st of ast.program.body) {
+      if (st.type !== 'ImportDeclaration') continue;
+      const spec = st.specifiers.find(
+        (/** @type {any} */ x) => x.local?.name === name,
+      );
+      const from = String(st.source?.value ?? '');
+      if (!spec || !from.startsWith('.')) continue;
+      const base = path.resolve(dir, from);
+      const file = [
+        '',
+        '.ts',
+        '.mts',
+        '.tsx',
+        '.js',
+        '.mjs',
+        '.json',
+        '/index.ts',
+      ]
+        .map(x => base + x)
+        .find(f => {
+          try {
+            return fs.statSync(f).isFile();
+          } catch {
+            return false;
+          }
+        });
+      if (!file) return null;
+      try {
+        const text = fs.readFileSync(file, 'utf8');
+        const json = file.endsWith('.json');
+        const source = json ? `export default ${text}` : text;
+        const other = /** @type {any} */ (
+          parseModule(source, {sourceType: 'module', plugins: ['typescript']})
+        );
+        /** @type {Map<string, any>} */
+        const local = new Map();
+        /** @type {any} */
+        let found = null;
+        const want =
+          spec.type === 'ImportDefaultSpecifier'
+            ? 'default'
+            : (spec.imported?.name ?? spec.imported?.value);
+        for (const top of other.program.body) {
+          const d =
+            top.type === 'ExportNamedDeclaration' ? top.declaration : top;
+          for (const v of d?.declarations ?? [])
+            if (v.id?.type === 'Identifier') {
+              local.set(v.id.name, v.init);
+              if (top.type === 'ExportNamedDeclaration' && v.id.name === want)
+                found = v.init;
+            }
+          if (top.type === 'ExportDefaultDeclaration' && want === 'default')
+            found = top.declaration;
+        }
+        /** @param {any} n @param {number} [k] @returns {any} */
+        const unwrapIn = (n, k = 0) => {
+          if (!n || k > 20) return null;
+          if (
+            [
+              'TSAsExpression',
+              'TSSatisfiesExpression',
+              'TSNonNullExpression',
+              'ParenthesizedExpression',
+            ].includes(n.type)
+          )
+            return unwrapIn(n.expression, k + 1);
+          if (n.type === 'Identifier' && local.has(n.name))
+            return unwrapIn(local.get(n.name), k + 1);
+          return n;
+        };
+        return found
+          ? {obj: unwrapIn(found), code: source, file, unwrap: unwrapIn}
+          : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  };
+  /**
+   * @param {any} node
+   * @param {number} depth
+   * @param {{code: string, file: string | null, unwrap: (n: any) => any}} [at]
+   *   the file the node is in (null for the theme file)
+   */
+  const collect = (node, depth, at = {code, file: null, unwrap}) => {
+    const obj = at.unwrap(node);
+    // A name imported from a file beside the theme: read in that file, so
+    // its values and lines are its own; the build still judges the result.
+    if (obj?.type === 'Identifier' && at.file == null) {
+      const from = imported(obj.name);
+      if (from) {
+        unresolved = true;
+        collect(from.obj, depth + 1, from);
+        return;
+      }
+    }
     if (obj?.type !== 'ObjectExpression' || depth > 20) {
       unresolved = true;
       return;
@@ -1511,28 +1927,49 @@ function ownPageTokens(
     // Spreads and keys merge in order: a later one wins. A computed key
     // that is text (`['--radius-page']`) is read like a literal one.
     for (const p of obj.properties) {
-      if (p.type === 'SpreadElement') collect(p.argument, depth + 1);
+      if (p.type === 'SpreadElement') collect(p.argument, depth + 1, at);
       else if (p.type === 'ObjectProperty') {
-        const k = p.computed ? textOf(unwrap(p.key)) : keyOf(p.key);
-        if (k?.startsWith('--')) out.set(k, textOf(unwrap(p.value)));
+        const k = p.computed ? textOf(at.unwrap(p.key)) : keyOf(p.key);
+        if (k?.startsWith('--')) out.set(k, builtText(at.unwrap(p.value)));
         else if (p.computed) unresolved = true;
-        if (detail && (k?.startsWith('--') || p.computed))
+        if (detail && (k || p.computed))
           detail.push({
             token: k?.startsWith('--') ? k : null,
-            key: code.slice(p.key.start, p.key.end),
+            key: at.code.slice(p.key.start, p.key.end),
             line: p.loc?.start?.line ?? null,
-            ...valueShape(unwrap(p.value)),
+            ...(at.file ? {file: at.file} : {}),
+            // A key that is no token name (`color`): the build writes it
+            // as a declaration on the theme's root.
+            ...(k && !k.startsWith('--') ? {notToken: true} : {}),
+            ...valueShape(at.unwrap(p.value), at.unwrap),
           });
       } else unresolved = true;
     }
   };
   /**
+   * A token's value as the build writes it, when the file gives it as
+   * text: a [light, dark] pair of two texts is its light-dark(); else
+   * null.
+   * @param {any} node
+   * @returns {string | null}
+   */
+  const builtText = node => {
+    const halves =
+      node?.type === 'ArrayExpression' && node.elements.length === 2
+        ? node.elements.map((/** @type {any} */ e) => textOf(unwrap(e)))
+        : null;
+    return halves && halves.every((/** @type {any} */ h) => h != null)
+      ? `light-dark(${halves.join(', ')})`
+      : textOf(node);
+  };
+  /**
    * What a token's value is, as written: text, a number, a [light, dark]
    * pair (each half's text, a number, or undefined), or something else.
    * @param {any} node
+   * @param {(n: any) => any} [unwrapIn] how the node's file reads a name
    * @returns {Pick<OwnTokenEntry, 'kind' | 'value' | 'halves'>}
    */
-  const valueShape = node => {
+  const valueShape = (node, unwrapIn = unwrap) => {
     const t = textOf(node);
     if (t != null) return {kind: 'text', value: t};
     if (node?.type === 'NumericLiteral')
@@ -1541,18 +1978,48 @@ function ownPageTokens(
       return {
         kind: 'pair',
         halves: node.elements.map((/** @type {any} */ e) => {
-          const h = unwrap(e);
+          const h = unwrapIn(e);
           return (
             textOf(h) ?? (h?.type === 'NumericLiteral' ? h.value : undefined)
           );
         }),
       };
+    if (node?.type === 'ObjectExpression')
+      return {
+        kind: 'object',
+        value: Object.fromEntries(
+          node.properties
+            .filter((/** @type {any} */ p) => p.type === 'ObjectProperty')
+            .map((/** @type {any} */ p) => [
+              keyOf(p.key) ?? '?',
+              textOf(unwrap(p.value)) ?? null,
+            ]),
+        ),
+      };
     return {kind: 'other'};
   };
   collect(tokensProp.value, 0);
+  // Only the last entry for a token is what the build writes: an earlier
+  // one a later key or spread overrides is marked, never judged.
+  if (detail) {
+    /** @type {Map<string, number>} */
+    const last = new Map();
+    detail.forEach((e, i) => {
+      if (e.token) last.set(e.token, i);
+    });
+    detail.forEach((e, i) => {
+      if (e.token && last.get(e.token) !== i) e.overridden = true;
+    });
+  }
   // A value no read of the file can resolve (a call, an import) is read
   // from the build (ownTokens), and checked again after the next one.
-  void unresolved;
+  if (detail && unresolved)
+    detail.push({
+      token: null,
+      key: 'tokens',
+      kind: 'unresolved',
+      line: tokensProp.loc?.start?.line ?? null,
+    });
   return out;
 }
 
@@ -1926,7 +2393,7 @@ function ownTokens(cwd, slug) {
  * @param {string} slug
  * @returns {Map<string, string | null> | null}
  */
-function builtOwnTokens(cwd, slug) {
+function builtOwnTokens(cwd, slug, js = /** @type {string | null} */ (null)) {
   const f = themeFiles(cwd, slug);
   /** @type {string} */
   let module;
@@ -1938,7 +2405,10 @@ function builtOwnTokens(cwd, slug) {
   const built = /\/\/ Built with \S+\.theme\.ts ([0-9a-f]{16})\./.exec(
     module,
   )?.[1];
-  if (!built || !fs.existsSync(f.js) || built !== themeSourceHash(cwd, slug))
+  if (
+    !js &&
+    (!built || !fs.existsSync(f.js) || built !== themeSourceHash(cwd, slug))
+  )
     return null;
   // What the settings module gives each top-level token: a text value as
   // it is, a [light, dark] pair as a pair.
@@ -1993,7 +2463,7 @@ function builtOwnTokens(cwd, slug) {
   const named = namedInOwnSource(cwd, slug);
   /** @type {Map<string, string | null>} */
   const out = new Map();
-  for (const [k, v] of builtTopTokens(cwd, slug)) {
+  for (const [k, v] of js ? topTokensOf(js) : builtTopTokens(cwd, slug)) {
     const given = settings.get(k);
     const own =
       given === undefined
@@ -2093,8 +2563,9 @@ export const keyOf = s =>
   [
     s.thing,
     // A headings value saved with no axis is its weight half, as the build
-    // reads it, so a set or undo of the weight replaces it.
-    s.thing === 'headings' ? (s.axis ?? 'weight') : (s.axis ?? ''),
+    // reads it, so a set or undo of the weight replaces it. Only headings
+    // has halves: an axis on any other setting names nothing.
+    s.thing === 'headings' ? (s.axis ?? 'weight') : '',
     s.on ?? '',
     s.when ?? '',
     s.state ?? '',
@@ -2150,6 +2621,18 @@ export function lengthPx(v) {
 /** @param {string} v */
 export const cornerPx = v =>
   CORNERS.find(([n]) => n === v)?.[1] ?? parseFloat(v);
+/**
+ * The base theme's body text size in px, read back from its built base
+ * size (14 when it writes none).
+ * @param {{light: Record<string, string>}} base
+ */
+export function baseTextPx(base) {
+  const v = base?.light?.['--font-size-base'];
+  return /^[\d.]+rem$/.test(v ?? '')
+    ? Math.round(Number.parseFloat(String(v)) * 16)
+    : 14;
+}
+
 /** @param {string} v */
 export const textPx = v => TEXT_SIZE.find(([n]) => n === v)?.[1] ?? Number(v);
 
@@ -2648,7 +3131,7 @@ export function compileTheme(ctx, data, base) {
     rem(base.light['--font-size-base']),
     rem(base.light['--font-size-2xl']),
   ];
-  const baseSize = b0 ? Math.round(b0 * 16) : 14;
+  const baseSize = baseTextPx(base);
   const baseRatio =
     b0 && b3 ? Math.round((b3 / b0) ** (1 / 3) * 100) / 100 : 1.2;
   /** @type {any} */
@@ -3495,6 +3978,53 @@ export function compileTheme(ctx, data, base) {
     const k = kebab(p);
     return k === 'background' ? 'background-color' : k;
   };
+  /** One-mode colors in a variant or a state, written after every other setting. @type {Array<() => void>} */
+  const scopedQueue = [];
+  let drainingScoped = false;
+  /**
+   * A part's rule for a scope as the theme has it, without making one.
+   * @param {Setting} s @param {string} target
+   * @returns {Record<string, any> | undefined}
+   */
+  const peekBlock = (s, target) => {
+    const t = theme.components[target];
+    if (!t) return undefined;
+    const rule = t[s.when ?? 'base'];
+    if (!s.state) return rule;
+    const tg = ctx.project.target.get(target);
+    if (tg?.states.includes(s.state))
+      return s.when == null ? t[s.state] : t[`${s.when}+${s.state}`];
+    return rule?.[stateKey(s.state, wrapsOneControl(ctx, target))];
+  };
+  /**
+   * The theme's own value of a property in one mode for the scope around a
+   * setting's scope: the variant's resting rule for a state, then the
+   * part's plain rule, then, for a token, the whole theme's value; null
+   * when the theme gives none, so the base theme's and Core's values apply.
+   * @param {Setting} s @param {string} target @param {string} prop
+   * @param {'light' | 'dark'} side
+   * @returns {string | null}
+   */
+  const enclosingValue = (s, target, prop, side) => {
+    const family = /^background(-color)?$/.test(kebab(prop))
+      ? ['backgroundColor', 'background']
+      : [prop];
+    /** @type {Setting[]} */
+    const scopes = [];
+    if (s.state) scopes.push({...s, state: undefined, mode: undefined});
+    if (s.when || s.state)
+      scopes.push({...s, when: undefined, state: undefined, mode: undefined});
+    for (const sc of scopes) {
+      const rule = peekBlock(sc, target);
+      for (const k of family) {
+        const x = rule?.[k];
+        if (typeof x === 'string' && !/gradient\(|url\(/i.test(x))
+          return halfOf(x, side === 'light' ? 1 : 2);
+      }
+    }
+    if (prop.startsWith('--')) return tok[prop]?.[side] ?? null;
+    return null;
+  };
   /** @param {Setting} s @param {string} target @param {string} prop @param {string} v */
   const putComp = (s, target, prop, v) => {
     const b = block(s, target);
@@ -3521,7 +4051,14 @@ export function compileTheme(ctx, data, base) {
         }
         modeLayers.set(b, rec);
       }
-      rec[s.mode] = maskLayers(v, s.mode);
+      // The background shorthand's last layer may carry the color under
+      // the images: that color is this mode's background color, and the
+      // rest are the images.
+      const {images, color} =
+        kebab(prop) === 'background'
+          ? backgroundColorLayer(v)
+          : {images: v, color: null};
+      rec[s.mode] = images ? maskLayers(images, s.mode) : [];
       const parts = [...rec.light, ...rec.dark].map(layerParts);
       for (const k of [
         'backgroundImage',
@@ -3536,6 +4073,8 @@ export function compileTheme(ctx, data, base) {
         b.backgroundSize = parts.map(x => x.size || 'auto').join(', ');
         b.backgroundRepeat = parts.map(x => x.repeat || 'repeat').join(', ');
       }
+      if (!parts.length) delete b.backgroundImage;
+      if (color) putComp(s, target, 'backgroundColor', color);
       return;
     }
     // A color set in a one-mode theme fills its mode's half only (as a
@@ -3544,6 +4083,15 @@ export function compileTheme(ctx, data, base) {
     const mode =
       s.mode ??
       (modeOnly && parseColor(String(v).trim()) ? modeOnly : undefined);
+    // A color for one mode on a part rule also gives the other mode a
+    // value in that rule, which outranks the rules the base theme and Core
+    // give the part in context there (a selected or current item, a status
+    // border): the result says so.
+    if (mode && !prop.startsWith('--')) {
+      const note = `a ${mode}-only color on ${target} gives the other mode ${target}'s own value, so in that mode it overrides what Core or the base theme gives ${target} in context (a selected or current item, a status border)`;
+      if (!(ctx.compileNotes ?? []).includes(note))
+        (ctx.compileNotes ??= []).push(note);
+    }
     if (mode && !s.when && variantsReading(ctx, target, prop, s.state).length) {
       // A color for one mode on a part whose variants each have their own:
       // each variant's rule (in the state, for a state setting) gets the
@@ -3566,8 +4114,11 @@ export function compileTheme(ctx, data, base) {
       // The part's own background being an image (a gradient) covers any
       // color under it: the color is written, and the result says it does
       // not show.
+      // A color given beside its own image in one background (`linear-
+      // gradient(…), ivory`) is that image's bottom layer, never covered by
+      // it.
       const plainImage =
-        css === 'background-color'
+        css === 'background-color' && !ownImageLayer(s)
           ? ['background', 'backgroundImage']
               .map(k => b[k])
               .find(y => typeof y === 'string' && /gradient\(|url\(/i.test(y))
@@ -3654,6 +4205,13 @@ export function compileTheme(ctx, data, base) {
       }
       return;
     }
+    // A color for one mode in a variant or a state is written once every
+    // other setting is in, so its other half is the theme's own value for
+    // the scope around it as the theme finally has it (below).
+    if (mode && (s.when || s.state) && !drainingScoped) {
+      scopedQueue.push(() => putComp(s, target, prop, v));
+      return;
+    }
     if (mode && colorFamily(prop) === 'background-color') {
       // The background shorthand and its color are one property: the one
       // the rule holds (as a color) gives the other half and is replaced, so
@@ -3672,6 +4230,7 @@ export function compileTheme(ctx, data, base) {
     if (
       mode &&
       colorFamily(prop) === 'background-color' &&
+      !ownImageLayer(s) &&
       ['background', 'backgroundImage'].some(
         k => typeof b[k] === 'string' && /gradient\(|url\(/i.test(b[k]),
       )
@@ -3694,6 +4253,7 @@ export function compileTheme(ctx, data, base) {
         : null;
       const other =
         prev ??
+        enclosingValue(s, target, prop, otherSide) ??
         tokenOther ??
         baseComponent(base, ctx, target, prop, s) ??
         partDefault(ctx, target, prop, s.when, s.state) ??
@@ -3789,12 +4349,12 @@ export function compileTheme(ctx, data, base) {
   );
   // Dials first, then exact tokens and part properties: an exact setting
   // always wins over a dial, whatever the order they were made in.
-  // A font for one role (body, heading, code) comes after the whole-theme
-  // font, so the role keeps its own font whatever the order.
-  const roleFont = (/** @type {Setting} */ x) => x.thing === 'font' && !!x.on;
+  // A dial on a part (a font for one role, corners on cards) comes after
+  // the whole-theme dials, so the part keeps its own whatever the order.
+  const onPart = (/** @type {Setting} */ x) => !!x.on;
   const ordered = [
-    ...data.settings.filter(x => x.source === 'dial' && !roleFont(x)),
-    ...data.settings.filter(x => x.source === 'dial' && roleFont(x)),
+    ...data.settings.filter(x => x.source === 'dial' && !onPart(x)),
+    ...data.settings.filter(x => x.source === 'dial' && onPart(x)),
     ...data.settings.filter(x => x.source !== 'dial'),
   ];
   // The shell regions a setting gives a background of their own keep it
@@ -3824,7 +4384,7 @@ export function compileTheme(ctx, data, base) {
         /** @param {string} token */
         const derived = token => `${radiusAt(base, s.value, token)}px`;
         if (parts.length)
-          for (const t of parts) {
+          for (const t of parts.flatMap(p => cornerParts(ctx, p))) {
             // A rung on a part gives what the whole-theme rung gives the
             // radius token the part reads; an exact size is as given.
             putComp(
@@ -3834,17 +4394,35 @@ export function compileTheme(ctx, data, base) {
               rung || pill ? derived(radiusTokenOf(ctx, t, s.when)) : `${px}px`,
             );
           }
-        else
-          for (const token of [
-            '--radius-element',
-            '--radius-inner',
-            '--radius-container',
-            '--radius-page',
-          ])
+        else {
+          for (const token of DIAL_RADII)
             // The radii the build already shows for this corners value (a
             // build by an earlier editor, or a step back) are kept, as the
             // colors are: they change only when corners or the base does.
             putTok(token, ctx.keepRadii?.[token] ?? derived(token));
+          // A part rule of the base theme that gives a radius other than the
+          // dial token the part reads (a length, or a token the dial never
+          // moves, such as --radius-full) would keep it over the dial: the
+          // rule is given that dial token, so the part follows the dial. A
+          // part Core rounds with a token the dial never moves (a badge's
+          // --radius-full) keeps its base radius.
+          for (const [t, when, radius] of baseRadii(
+            /** @type {{components?: Record<string, any>}} */ (base),
+          )) {
+            const token = radiusTokenOf(ctx, t, when);
+            if (
+              ctx.project.target.has(t) &&
+              DIAL_RADII.includes(token) &&
+              radius !== `var(${token})`
+            )
+              putComp(
+                {...s, mode: undefined, when},
+                t,
+                'borderRadius',
+                `var(${token})`,
+              );
+          }
+        }
       } else if (PALETTE_DIALS.includes(s.thing) || s.thing === 'vibrancy') {
         // The palette mapping above sets these tokens.
       } else if (s.thing === 'font') {
@@ -4132,6 +4710,13 @@ export function compileTheme(ctx, data, base) {
               putComp(scope, t, tok, s.value);
           continue;
         }
+        // A part whose text is drawn by elements inside it that read a text
+        // color token themselves (a top nav heading's title) takes the color
+        // in those tokens too, on the part alone, so that text shows it.
+        if (kebab(s.thing) === 'color')
+          for (const tok of innerTextTokens(ctx.C, t))
+            if (!new RegExp(`var\\(\\s*${tok}\\s*[,)]`).test(String(s.value)))
+              putComp(s, t, tok, s.value);
         // A padding on a part whose box reads Core's padding variables is
         // resolved with the rest of that part's padding, below.
         if (padVars(t) && /^padding(-|$)/.test(kebab(s.thing))) {
@@ -4243,6 +4828,8 @@ export function compileTheme(ctx, data, base) {
       }
     }
   }
+  drainingScoped = true;
+  for (const write of scopedQueue) write();
   emitPadding();
   for (const r of fixedToViewport) {
     delete r.backgroundAttachment;
@@ -4422,6 +5009,62 @@ export function maskLayers(value, mode) {
       );
       return `${fn[1]}(${args.join(', ')})${layer.slice(end + 1)}`;
     });
+}
+
+/**
+ * The part rules of a base theme that give a border radius: each as its
+ * part, the rule's --when (undefined for the plain rule) and the radius.
+ * @param {{components?: Record<string, any>}} base
+ * @returns {Array<[string, string | undefined, string]>}
+ */
+function baseRadii(base) {
+  /** @type {Array<[string, string | undefined, string]>} */
+  const out = [];
+  for (const [t, rules] of Object.entries(base.components ?? {}))
+    for (const [key, rule] of Object.entries(
+      /** @type {Record<string, any>} */ (rules ?? {}),
+    )) {
+      if (key !== 'base' && !/^[\w-]+:[\w-]+$/.test(key)) continue;
+      const r = rule?.borderRadius;
+      if (typeof r === 'string')
+        out.push([t, key === 'base' ? undefined : key, r.trim()]);
+    }
+  return out;
+}
+
+/**
+ * Whether a setting's own value is a background with an image layer, so any
+ * color it writes is that background's bottom layer.
+ * @param {Setting} s
+ */
+function ownImageLayer(s) {
+  return (
+    kebab(s.thing) === 'background' && /gradient\(|url\(/i.test(String(s.value))
+  );
+}
+
+/**
+ * A background shorthand split into its image layers and the color its
+ * last layer may carry (the color under every image): a color word beside
+ * the last image, or a last layer that is a color alone.
+ * @param {string} value
+ * @returns {{images: string, color: string | null}}
+ */
+export function backgroundColorLayer(value) {
+  const layers = splitTop(value, ',')
+    .map(x => x.trim())
+    .filter(Boolean);
+  const last = layers.at(-1) ?? '';
+  const words = splitTop(last, ' ').map(x => x.trim());
+  const at = words.findIndex(
+    w => !/gradient\(|url\(/i.test(w) && isColorValue(w),
+  );
+  if (at < 0) return {images: value, color: null};
+  const rest = words.filter((_, i) => i !== at).join(' ');
+  return {
+    images: [...layers.slice(0, -1), ...(rest ? [rest] : [])].join(', '),
+    color: words[at],
+  };
 }
 
 /**
@@ -5048,30 +5691,173 @@ function themeModuleSource(slug) {
 export const themeSource = slug => themeModuleSource(slug);
 
 /**
- * Why `<slug>.theme.ts` cannot carry the settings, or null: it must import
- * `./<slug>.settings`, extend `<camel>Settings` and keep the name, or no
- * setting takes effect.
+ * Why a theme's source cannot carry its settings, or null when it carries
+ * them. The theme is the export a build of the source reads, loaded as the
+ * build loads it: it must be named for the theme, and its definition must
+ * extend the settings imported from ./<slug>.settings. Null for a source
+ * that does not parse: its parse error is its own finding.
  * @param {string} cwd
  * @param {string} slug
- * @returns {string | null}
+ * @returns {Promise<string | null>}
  */
-export function themeSourceProblem(cwd, slug) {
+export async function themeSourceProblem(cwd, slug) {
   const f = themeFiles(cwd, slug);
-  if (!fs.existsSync(f.ts)) return null;
-  const code = fs
-    .readFileSync(f.ts, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/\/\/.*$/gm, '');
+  /** @type {string} */
+  let code;
+  try {
+    code = fs.readFileSync(f.ts, 'utf8');
+  } catch {
+    return null;
+  }
+  /** @type {any} */
+  let ast;
+  try {
+    ast = parseModule(code, {sourceType: 'module', plugins: ['typescript']});
+  } catch {
+    // Its parse error is its own finding (refuseThemeParse, the build).
+    return null;
+  }
   const settings = `${camel(slug)}Settings`;
-  if (
-    !new RegExp(`from\\s+['"]\\./${slug}\\.settings(\\.[jt]s)?['"]`).test(code)
-  )
+  const fromSettings = new RegExp(`^\\./${slug}\\.settings(\\.[jt]s)?$`);
+  /** @type {string | null} */
+  let settingsBinding = null;
+  for (const node of ast.program.body)
+    if (
+      node.type === 'ImportDeclaration' &&
+      fromSettings.test(node.source.value)
+    )
+      for (const spec of node.specifiers)
+        if (
+          spec.type === 'ImportSpecifier' &&
+          (spec.imported.name ?? spec.imported.value) === settings
+        )
+          settingsBinding = spec.local.name;
+  if (!settingsBinding)
     return `${slug}.theme.ts does not import ./${slug}.settings`;
-  if (!new RegExp(`extends\\s*:\\s*${settings}\\b`).test(code))
-    return `${slug}.theme.ts no longer extends ${settings}`;
-  if (!new RegExp(`name\\s*:\\s*(['"\`])${slug}\\1`).test(code))
+  /** @param {any} definition */
+  const extendsSettings = definition =>
+    unwrapConst(
+      ast,
+      definition?.properties.find(
+        (/** @type {any} */ p) =>
+          p.type === 'ObjectProperty' &&
+          (p.key.name ?? p.key.value) === 'extends',
+      )?.value,
+    )?.name === settingsBinding;
+  /** @type {{theme: any, exportName: string}} */
+  let loaded;
+  try {
+    loaded = await loadThemeExport(f.ts, {cwd});
+  } catch {
+    // A module that does not load names no export. When none of its
+    // exported definitions extends the settings, that is why (defineTheme
+    // refuses a missing parent); else the build names its own failure.
+    return exportedDefinitions(ast).some(extendsSettings)
+      ? null
+      : `${slug}.theme.ts no longer extends ${settings}`;
+  }
+  if (loaded.theme?.name !== slug)
     return `${slug}.theme.ts no longer names the theme '${slug}'`;
+  if (!extendsSettings(exportedDefinition(ast, loaded.exportName)))
+    return `${slug}.theme.ts no longer extends ${settings}`;
   return null;
+}
+
+/**
+ * A module's top-level const bindings, by name.
+ * @param {any} ast
+ * @returns {Map<string, any>}
+ */
+function topConsts(ast) {
+  /** @type {Map<string, any>} */
+  const out = new Map();
+  for (const node of ast.program.body) {
+    const decl =
+      node.type === 'ExportNamedDeclaration' ? node.declaration : node;
+    if (decl?.type === 'VariableDeclaration')
+      for (const d of decl.declarations)
+        if (d.id.type === 'Identifier') out.set(d.id.name, d.init);
+  }
+  return out;
+}
+
+/**
+ * An expression with TypeScript wrappers and parentheses taken off, and a
+ * name read through to the top-level const it names. An imported name stays
+ * the identifier.
+ * @param {any} ast
+ * @param {any} node
+ * @returns {any}
+ */
+function unwrapConst(ast, node) {
+  const consts = topConsts(ast);
+  for (let depth = 0; node && depth < 20; depth++) {
+    if (
+      [
+        'TSAsExpression',
+        'TSSatisfiesExpression',
+        'TSNonNullExpression',
+        'TSTypeAssertion',
+        'ParenthesizedExpression',
+      ].includes(node.type)
+    )
+      node = node.expression;
+    else if (node.type === 'Identifier' && consts.get(node.name))
+      node = consts.get(node.name);
+    else return node;
+  }
+  return node;
+}
+
+/**
+ * The theme definitions of every export of a module.
+ * @param {any} ast
+ * @returns {any[]} ObjectExpressions
+ */
+function exportedDefinitions(ast) {
+  /** @type {string[]} */
+  const names = [];
+  for (const node of ast.program.body) {
+    if (node.type === 'ExportDefaultDeclaration') names.push('default');
+    if (node.type !== 'ExportNamedDeclaration' || node.source) continue;
+    if (node.declaration?.type === 'VariableDeclaration')
+      for (const d of node.declaration.declarations)
+        if (d.id.type === 'Identifier') names.push(d.id.name);
+    for (const spec of node.specifiers ?? [])
+      names.push(spec.exported.name ?? spec.exported.value);
+  }
+  return names.map(n => exportedDefinition(ast, n)).filter(Boolean);
+}
+
+/**
+ * The object a module export defines its theme with: the argument of the
+ * `defineTheme(...)` call, or the object itself, that the export names.
+ * @param {any} ast
+ * @param {string} exportName
+ * @returns {any} an ObjectExpression, or null
+ */
+function exportedDefinition(ast, exportName) {
+  /** @type {any} */
+  let value = null;
+  for (const node of ast.program.body) {
+    if (node.type === 'ExportDefaultDeclaration' && exportName === 'default')
+      value = node.declaration;
+    if (node.type !== 'ExportNamedDeclaration') continue;
+    if (node.declaration?.type === 'VariableDeclaration')
+      for (const d of node.declaration.declarations)
+        if (d.id.type === 'Identifier' && d.id.name === exportName)
+          value = d.init;
+    for (const spec of node.specifiers ?? [])
+      if (
+        !node.source &&
+        (spec.exported.name ?? spec.exported.value) === exportName
+      )
+        value = spec.local;
+  }
+  value = unwrapConst(ast, value);
+  if (value?.type === 'CallExpression')
+    value = unwrapConst(ast, value.arguments[0]);
+  return value?.type === 'ObjectExpression' ? value : null;
 }
 
 /**
@@ -5126,97 +5912,153 @@ export function refuseThemeParse(cwd, slug) {
  * @param {string} cwd
  * @param {string} slug
  */
-export function refuseThemeSource(cwd, slug) {
+export async function refuseThemeSource(cwd, slug) {
   refuseThemeParse(cwd, slug);
-  const why = themeSourceProblem(cwd, slug);
-  if (why)
-    throw new AstryxError(
-      `${why}, so settings cannot take effect. Put back the import of ${camel(slug)}Settings from './${slug}.settings', extends: ${camel(slug)}Settings and name: '${slug}' in themes/${slug}/${slug}.theme.ts (your own changes stay below them). Nothing was changed.`,
-      [{name: `${P} show ${slug}`, reason: 'see the theme as it is'}],
-      ERROR_CODES.ERR_THEME_INVALID,
-    );
+  const refusal = await themeSourceRefusal(cwd, slug);
+  if (refusal) throw refusal;
 }
 
 /**
- * Refuse a [light, dark] pair the theme's own source gives a token that is
- * not a color (a font family, a size, a weight): the build would write
- * `light-dark()`, which browsers take only for colors. The editor refuses
- * `--mode` on those tokens for the same reason.
- * @param {Ctx} ctx
+ * The refusal for a theme source that cannot carry the settings (it no
+ * longer imports or extends them, or names another theme), naming the
+ * lines that put it back; null when it carries them. Every command that
+ * builds the theme refuses with it.
  * @param {string} cwd
  * @param {string} slug
+ * @returns {Promise<AstryxError | null>}
  */
-function refuseOwnPairs(ctx, cwd, slug) {
-  const f = themeFiles(cwd, slug);
-  /** @type {string[]} */
-  const bad = [];
+export async function themeSourceRefusal(cwd, slug) {
+  const why = await themeSourceProblem(cwd, slug);
+  return why
+    ? new AstryxError(
+        `${why}, so settings cannot take effect. Put back the import of ${camel(slug)}Settings from './${slug}.settings', extends: ${camel(slug)}Settings and name: '${slug}' in themes/${slug}/${slug}.theme.ts (your own changes stay below them). Nothing was changed.`,
+        [{name: `${P} show ${slug}`, reason: 'see the theme as it is'}],
+        ERROR_CODES.ERR_THEME_INVALID,
+      )
+    : null;
+}
+
+/**
+ * What a build made now writes for a theme: its own page-wide tokens (see
+ * builtOwnTokens), every top-level token, and the typography it was given
+ * (evaluated: an import or an expression is its value). Null when it does
+ * not build in the project's cache folder.
+ * @param {Ctx} ctx
+ * @param {string} slug
+ * @param {string | null} like the base theme, whose built tokens are `base`
+ * @returns {Promise<{own: Map<string, string | null>, tops: Map<string, string | null>, base: Map<string, string | null>, shapes: Map<string, BuiltShape>, typography: any} | null>}
+ */
+export async function evaluatedTheme(ctx, slug, like) {
+  const baseFile = like ? baseModule(ctx.project.cwd, like) : null;
+  return cacheBuild(ctx, slug, js => {
+    const read = builtModule(js);
+    return {
+      own: builtOwnTokens(ctx.project.cwd, slug, js) ?? new Map(),
+      tops: topTokensOf(js),
+      base: baseFile ? topTokensOf(baseFile) : new Map(),
+      shapes: read.shapes,
+      typography: read.axes?.typography ?? null,
+    };
+  });
+}
+
+/**
+ * What a built module writes for a top-level token: text, a number, an
+ * object, a pair (each half), or something else.
+ * @typedef {{kind: 'text' | 'number' | 'object' | 'pair' | 'other', value?: any, halves?: unknown[]}} BuiltShape
+ */
+
+/**
+ * What a built theme module holds: the shape of each top-level token, and
+ * its `__axes` (the typography and motion it was given, evaluated).
+ * @param {string} js
+ * @returns {{shapes: Map<string, BuiltShape>, axes: any}}
+ */
+function builtModule(js) {
+  /** @type {Map<string, BuiltShape>} */
+  const shapes = new Map();
   try {
     const ast = /** @type {any} */ (
-      parseModule(fs.readFileSync(f.ts, 'utf8'), {
+      parseModule(fs.readFileSync(js, 'utf8'), {
         sourceType: 'module',
         plugins: ['typescript'],
       })
     );
-    /** @param {any} node */
-    const visit = node => {
+    /** @param {any} n @returns {any} */
+    const plain = n =>
+      n?.type === 'StringLiteral' || n?.type === 'NumericLiteral'
+        ? n.value
+        : n?.type === 'UnaryExpression' && n.operator === '-'
+          ? -plain(n.argument)
+          : n?.type === 'NullLiteral'
+            ? null
+            : n?.type === 'ObjectExpression'
+              ? Object.fromEntries(
+                  n.properties.map((/** @type {any} */ p) => [
+                    p.key?.value ?? p.key?.name,
+                    plain(p.value),
+                  ]),
+                )
+              : n?.type === 'ArrayExpression'
+                ? n.elements.map(plain)
+                : undefined;
+    /** @type {any} */
+    let axes = null;
+    /** @type {any} */
+    let tokens = null;
+    /** @param {any} node @param {number} depth */
+    const visit = (node, depth) => {
       if (!node || typeof node !== 'object') return;
-      if (
-        node.type === 'ObjectProperty' &&
-        typeof (node.key?.value ?? node.key?.name) === 'string' &&
-        String(node.key?.value ?? node.key?.name).startsWith('--') &&
-        node.value?.type === 'ArrayExpression' &&
-        node.value.elements.length === 2 &&
-        // A pair holding a value that is not text is named by the value
-        // checks, with the fix for that value.
-        node.value.elements.every(
-          (/** @type {any} */ e) =>
-            e?.type === 'StringLiteral' || e?.type === 'TemplateLiteral',
+      if (node.type === 'ObjectProperty') {
+        const k = node.key?.name ?? node.key?.value;
+        if (k === '__axes' && !axes) axes = plain(node.value);
+        // The theme's own top-level tokens: the first `tokens` object.
+        if (
+          k === 'tokens' &&
+          !tokens &&
+          node.value?.type === 'ObjectExpression'
         )
-      ) {
-        const k = String(node.key.value ?? node.key.name);
-        const type = ctx.C.typeOf(k);
-        // A size given as a bare number is named by the value check, with
-        // the unit it needs.
-        const unitless =
-          type === 'size' &&
-          node.value.elements.some(
-            (/** @type {any} */ e) =>
-              e?.type === 'StringLiteral' && /^\d*\.?\d+$/.test(e.value.trim()),
-          );
-        if (type !== 'color' && !unitless) bad.push(k);
+          tokens = node.value;
       }
       for (const v of Object.values(node))
-        if (Array.isArray(v)) v.forEach(visit);
-        else if (v && typeof v === 'object' && v.type) visit(v);
+        if (Array.isArray(v)) v.forEach(c => visit(c, depth + 1));
+        else if (v && typeof v === 'object' && v.type) visit(v, depth + 1);
     };
-    visit(ast.program);
+    visit(ast.program, 0);
+    for (const p of tokens?.properties ?? []) {
+      const k = p.key?.value ?? p.key?.name;
+      if (typeof k !== 'string') continue;
+      const v = p.value;
+      shapes.set(
+        k,
+        v?.type === 'StringLiteral'
+          ? {kind: 'text', value: v.value}
+          : v?.type === 'NumericLiteral'
+            ? {kind: 'number', value: v.value}
+            : v?.type === 'ObjectExpression'
+              ? {kind: 'object', value: plain(v)}
+              : v?.type === 'ArrayExpression'
+                ? {kind: 'pair', halves: plain(v)}
+                : {kind: 'other'},
+      );
+    }
+    return {shapes, axes};
   } catch {
-    return;
+    return {shapes, axes: null};
   }
-  if (bad.length)
-    throw new AstryxError(
-      ownPairMessage(slug, [...new Set(bad)]),
-      [
-        {
-          name: `grep -n -- ${quoteCommandArgument(bad[0])} ${quoteCommandArgument(`themes/${slug}/${slug}.theme.ts`)}`,
-          reason: 'see the line',
-        },
-      ],
-      ERROR_CODES.ERR_THEME_INVALID,
-    );
 }
 
 /**
- * The tokens that are not colors the theme as it builds now gives a
- * [light, dark] pair (light-dark()), however its file writes them (a
- * constant, `as const`, `satisfies`, a spread from an imported module):
- * read from a build made into the project's cache folder, never beside the
- * theme. Empty when it does not build there (the build names that itself).
+ * Build the theme into the project's cache folder and read the built
+ * module with `read` before the folder is removed; null when it does not
+ * build there.
+ * @template T
  * @param {Ctx} ctx
  * @param {string} slug
- * @returns {Promise<string[]>}
+ * @param {(js: string) => T} read
+ * @returns {Promise<T | null>}
  */
-export async function builtPairs(ctx, slug) {
+async function cacheBuild(ctx, slug, read) {
   const {cwd} = ctx.project;
   const f = themeFiles(cwd, slug);
   // The build writes only inside the project: the cache folder when it is
@@ -5237,15 +6079,10 @@ export async function builtPairs(ctx, slug) {
     const js = fs
       .readdirSync(dir)
       .find(n => n.endsWith('.js') && !n.endsWith('.d.js'));
-    if (!js) return [];
-    return [...topTokensOf(path.join(dir, js))]
-      .filter(
-        ([k, v]) =>
-          /^light-dark\(/.test(String(v ?? '')) && ctx.C.typeOf(k) !== 'color',
-      )
-      .map(([k]) => k);
+    if (!js) return null;
+    return read(path.join(dir, js));
   } catch {
-    return [];
+    return null;
   } finally {
     logger.setSilent(silent);
     fs.rmSync(dir, {recursive: true, force: true});
@@ -5259,6 +6096,21 @@ export async function builtPairs(ctx, slug) {
  */
 export function ownPairMessage(slug, names) {
   return `themes/${slug}/${slug}.theme.ts gives ${names.join(', ')} a [light, dark] pair, but only colors differ by mode: the build would write light-dark(), which browsers take only for colors. Give ${names.length > 1 ? 'each' : 'it'} one value in ${slug}.theme.ts. Nothing was changed.`;
+}
+
+/**
+ * The check of a theme's own token values, run before every build, set by
+ * the editor (which owns the checks a value meets): null until it is set.
+ * @type {((ctx: Ctx, slug: string, data: ThemeData) => Promise<void>) | null}
+ */
+let ownTokenCheck = null;
+
+/**
+ * Set the check of a theme's own token values run before every build.
+ * @param {((ctx: Ctx, slug: string, data: ThemeData) => Promise<void>) | null} fn
+ */
+export function setOwnTokenCheck(fn) {
+  ownTokenCheck = fn;
 }
 
 /**
@@ -5304,8 +6156,10 @@ export function holdAfterBuild(ctx) {
 export async function buildTheme(ctx, slug, data) {
   const {cwd} = ctx.project;
   const f = themeFiles(cwd, slug);
-  refuseThemeSource(cwd, slug);
-  refuseOwnPairs(ctx, cwd, slug);
+  await refuseThemeSource(cwd, slug);
+  // The theme's own token values, judged as a build of the source writes
+  // them, before anything is written.
+  await ownTokenCheck?.(ctx, slug, data);
   if (data.like) baseThemeFile(ctx.project, data.like);
   const base = await baseResolved(ctx.project, data.like);
   fs.mkdirSync(f.dir, {recursive: true});
@@ -5370,7 +6224,7 @@ export async function buildTheme(ctx, slug, data) {
           .filter(
             n =>
               /^(sheet|preview)(-[a-z-]+)?\.png$/.test(n) &&
-              editorWrote(cwd, slug, path.join(f.dir, n)),
+              editorRecorded(cwd, slug, path.join(f.dir, n)),
           )
       : [];
     for (const file of [
@@ -5499,7 +6353,7 @@ export function buildColorModes(cwd, slug) {
   try {
     return oneColorMode(
       modesOf(
-        JSON.parse(fs.readFileSync(themeFiles(cwd, slug).settings, 'utf8')),
+        settingsJson(fs.readFileSync(themeFiles(cwd, slug).settings, 'utf8')),
       ),
     );
   } catch {
@@ -5956,13 +6810,121 @@ export async function contrastProblems(ctx, data, res) {
  * @returns {ThemeData | null}
  */
 function parseSettings(text) {
-  if (text == null) return null;
+  const data = settingsJson(text);
+  return entriesReadable(data) ? data : null;
+}
+
+/**
+ * A settings file's or an undo step's text as JSON, a byte-order mark
+ * aside; undefined when there is no text or it does not parse. Every reader
+ * of settings text reads it here.
+ * @param {string | null | undefined} text
+ * @returns {any}
+ */
+export function settingsJson(text) {
+  if (text == null) return undefined;
   try {
-    const data = JSON.parse(text);
-    return settingsShapeOk(data) ? data : null;
+    return JSON.parse(text.replace(/^\uFEFF/, ''));
   } catch {
-    return null;
+    return undefined;
   }
+}
+
+/**
+ * Whether settings data has its shape and every entry is an object with a
+ * thing name: what a reader may go through entry by entry. Any other entry
+ * (null, a number, text) is damage the file check names.
+ * @param {any} data
+ */
+export function entriesReadable(data) {
+  return (
+    settingsShapeOk(data) &&
+    data.settings.every(
+      (/** @type {any} */ s) =>
+        s != null &&
+        typeof s === 'object' &&
+        !Array.isArray(s) &&
+        typeof s.thing === 'string',
+    )
+  );
+}
+
+/**
+ * Read a damaged mode or base the way a change reads it, in place: one
+ * written in other letters or as a package name (`Dark-Only`,
+ * `@astryxdesign/theme-neutral`) is the value meant; any other goes back to
+ * its default. `like: "none"` is no base. The field a command sets itself
+ * is left to that command.
+ * @param {any} data
+ * @param {string} cwd
+ * @param {string} [fixing] `mode` or `base` when the command sets it
+ * @returns {string[]} a note for each field read differently from the file
+ */
+export function readFields(data, cwd, fixing) {
+  /** @type {string[]} */
+  const notes = [];
+  const meant = fieldsMeant(data);
+  if (
+    fixing !== 'mode' &&
+    !['both', 'light-only', 'dark-only'].includes(data.mode)
+  ) {
+    if (['both', 'light-only', 'dark-only'].includes(meant.mode)) {
+      notes.push(
+        `mode was written "${data.mode}", so it is saved as ${meant.mode}`,
+      );
+      data.mode = meant.mode;
+    } else {
+      data.mode = 'both';
+      notes.push('mode was missing or damaged, so it is both again');
+    }
+  }
+  if (data.like === 'none') delete data.like;
+  if (fixing !== 'base' && data.like != null && !LIKE.includes(data.like)) {
+    if (LIKE.includes(meant.like) && baseInstalled(cwd, meant.like)) {
+      notes.push(
+        `base was written "${data.like}", so it is saved as ${meant.like}`,
+      );
+      data.like = meant.like;
+    } else {
+      delete data.like;
+      notes.push('base was not a built-in theme, so it is none again');
+    }
+  }
+  return notes;
+}
+
+/**
+ * The text an undo step keeps for the settings before a change: the file
+ * as the change read it (entry words and fields read as meant), so the
+ * step back restores what the change started from and passes undo's check.
+ * Text that reads as written is kept byte for byte.
+ * @param {string} text
+ * @param {string} cwd
+ * @param {Record<string, string> | null} radii the whole-theme radii it was built with
+ */
+function stepText(text, cwd, radii) {
+  const data = settingsJson(text);
+  if (!entriesReadable(data)) return text;
+  const asWritten = JSON.stringify(data);
+  readAsMeant(data, cwd);
+  return JSON.stringify(data) !== asWritten
+    ? `${JSON.stringify(radii ? {...data, built: {radii}} : data, null, 2)}\n`
+    : withBuilt(text, radii);
+}
+
+/**
+ * Read settings data as a change reads it, in place: entry modes and
+ * sources in other words, and a damaged mode or base (see
+ * {@link readFields}). The settings file and every undo step are read
+ * through here.
+ * @param {any} data
+ * @param {string} cwd
+ * @param {string} [fixing] `mode` or `base` when the command sets it
+ * @returns {string[]} a note for each thing read differently from the text
+ */
+export function readAsMeant(data, cwd, fixing) {
+  readEntryWords(data);
+  return [...entryNotes(data), ...readFields(data, cwd, fixing)];
 }
 
 /**
@@ -5972,13 +6934,10 @@ function parseSettings(text) {
  */
 export function settingsEntriesOk(data) {
   return (
-    settingsShapeOk(data) &&
+    entriesReadable(data) &&
     data.settings.every(
       (/** @type {any} */ s) =>
-        s &&
-        typeof s.thing === 'string' &&
-        'value' in s &&
-        ['dial', 'token', 'property'].includes(s.source),
+        'value' in s && ['dial', 'token', 'property'].includes(s.source),
     )
   );
 }
@@ -5995,6 +6954,23 @@ export function settingsShapeOk(data) {
     !Array.isArray(data) &&
     Array.isArray(data.settings)
   );
+}
+
+/**
+ * The settings as the file keeps them: a setting's `note` is what the
+ * command that made it says in its result, not part of the setting.
+ * @param {ThemeData} data
+ * @returns {ThemeData}
+ */
+function savedForm(data) {
+  return {
+    ...data,
+    settings: data.settings.map(s => {
+      const entry = {...s};
+      delete entry.note;
+      return entry;
+    }),
+  };
 }
 
 /**
@@ -6051,6 +7027,34 @@ export function focusStateOf(ctx, part) {
   for (const st of ['focus-within', 'focus-visible', 'focus'])
     if (conds.includes(`:${st}`)) return st;
   return null;
+}
+
+/** The radius tokens the corners dial moves. */
+export const DIAL_RADII = [
+  '--radius-element',
+  '--radius-inner',
+  '--radius-container',
+  '--radius-page',
+];
+
+/**
+ * The parts that draw a part's corners: the part itself, or, when Core gives
+ * it no radius of its own, the parts inside it that it has (a date-time
+ * input's date and time boxes).
+ * @param {Ctx} ctx
+ * @param {string} part
+ * @returns {string[]}
+ */
+export function cornerParts(ctx, part) {
+  const rec = ctx.C.MAP[part];
+  if (!rec || rec.own?.['border-radius']) return [part];
+  const inner = (rec.contains ?? []).filter(
+    (/** @type {string} */ t) =>
+      ctx.C.MAP[t]?.own?.['border-radius'] &&
+      t.startsWith(`${part}-`) &&
+      ctx.project.target.has(t),
+  );
+  return inner.length ? inner : [part];
 }
 
 /**
@@ -6113,6 +7117,47 @@ export function stateKey(state, wrapsControl = false) {
   return wrapsControl
     ? ':is(:disabled,[aria-disabled="true"],:has(:is(input,button,select,textarea):is(:disabled,[aria-disabled="true"])))'
     : ':is(:disabled,[aria-disabled="true"])';
+}
+
+/**
+ * The text color tokens Core's elements inside a part read for their own
+ * color (a top nav heading's title span reads --color-text-primary itself),
+ * so a color set on the part never reaches that text. Only the main and
+ * supporting text colors count: the disabled, placeholder and accent ones
+ * mark a state or a role, not the part's text. With `deep`, the parts inside
+ * it count too (a top nav's heading and items).
+ * @param {{MAP: Record<string, any>}} C
+ * @param {string} part
+ * @param {boolean} [deep]
+ * @returns {string[]}
+ */
+export function innerTextTokens(C, part, deep = false) {
+  const TEXT_ROLES = ['--color-text-primary', '--color-text-secondary'];
+  /** @type {Set<string>} */
+  const out = new Set();
+  /** @param {Record<string, string[]> | undefined} reads */
+  const add = reads => {
+    for (const [tok, props] of Object.entries(reads ?? {}))
+      if (TEXT_ROLES.includes(tok) && props.includes('color')) out.add(tok);
+  };
+  const rec = C.MAP[part];
+  add(rec?.inside);
+  if (deep)
+    for (const inner of rec?.contains ?? []) {
+      const r = C.MAP[inner];
+      add(r?.inside);
+      // A part's own color counts where it reads the token always, not
+      // only in a variant or a state.
+      for (const [tok, conds] of Object.entries(r?.own?.color?.tokens ?? {}))
+        if (
+          TEXT_ROLES.includes(tok) &&
+          /** @type {string[]} */ (conds).some(
+            w => !w.trim() || w.trim() === 'always',
+          )
+        )
+          out.add(tok);
+    }
+  return [...out].sort();
 }
 
 /**
@@ -6183,13 +7228,9 @@ export function radiiIn(source) {
  */
 function withBuilt(text, radii) {
   if (!radii) return text;
-  try {
-    const data = JSON.parse(text.replace(/^\uFEFF/, ''));
-    if (!settingsShapeOk(data)) return text;
-    return `${JSON.stringify({...data, built: {radii}}, null, 2)}\n`;
-  } catch {
-    return text;
-  }
+  const data = settingsJson(text);
+  if (!settingsShapeOk(data)) return text;
+  return `${JSON.stringify({...data, built: {radii}}, null, 2)}\n`;
 }
 
 /**
@@ -6471,12 +7512,15 @@ export function refuseLinks(cwd, slug) {
  * @param {ThemeData} data
  */
 export function settingsStamp(data) {
+  // The settings as the file keeps them, so the stamp of a build matches
+  // the file it was built from.
+  const saved = savedForm(data);
   const hash = createHash('sha256')
     .update(
       JSON.stringify({
-        like: data.like ?? null,
-        mode: data.mode,
-        settings: data.settings,
+        like: saved.like ?? null,
+        mode: saved.mode,
+        settings: saved.settings,
       }),
     )
     .digest('hex')
@@ -6713,10 +7757,7 @@ export function readHistory(file) {
   if (!Array.isArray(h)) return {steps: [], dropped: 1};
   const ok = (/** @type {unknown} */ x) => {
     try {
-      return (
-        typeof x === 'string' &&
-        Array.isArray(JSON.parse(x.replace(/^\uFEFF/, '')).settings)
-      );
+      return typeof x === 'string' && settingsShapeOk(settingsJson(x));
     } catch {
       return false;
     }
@@ -6751,7 +7792,7 @@ export async function commitTheme(
   const {cwd} = ctx.project;
   const f = themeFiles(cwd, slug);
   refuseLinks(cwd, slug);
-  refuseThemeSource(cwd, slug);
+  await refuseThemeSource(cwd, slug);
   const snapBefore = fs.existsSync(f.settings)
     ? fs.readFileSync(f.settings, 'utf8')
     : null;
@@ -6772,8 +7813,8 @@ export async function commitTheme(
   // no undo step.
   const same = (/** @type {ThemeData | null} */ a) =>
     a != null &&
-    JSON.stringify({...a, lifted: undefined}) ===
-      JSON.stringify({...data, lifted: undefined});
+    JSON.stringify({...savedForm(a), lifted: undefined}) ===
+      JSON.stringify({...savedForm(data), lifted: undefined});
   // A no-op change still mends a build that does not match the settings
   // (an undo stopped part way): it is built again, with no new step.
   const noop = history && same(parseSettings(snapBefore));
@@ -6908,7 +7949,7 @@ export async function commitTheme(
     // for an undo, a top step equal to the settings, which undo skips),
     // never a step that undoes nothing or a lost step.
     await track(f.dir, wrote, () => {
-      writeWhole(f.settings, `${JSON.stringify(data, null, 2)}\n`);
+      writeWhole(f.settings, `${JSON.stringify(savedForm(data), null, 2)}\n`);
       if (historyAfter)
         writeWhole(
           f.history,
@@ -6918,7 +7959,9 @@ export async function commitTheme(
         writeWhole(
           f.history,
           JSON.stringify(
-            [...past, withBuilt(snapBefore, radiiNow)].slice(-HISTORY_STEPS),
+            [...past, stepText(snapBefore, cwd, radiiNow)].slice(
+              -HISTORY_STEPS,
+            ),
           ),
         );
     });
@@ -7083,9 +8126,54 @@ export async function commitTheme(
   };
 }
 
-/** @param {Ctx} ctx @param {ThemeData} data */
+/**
+ * The @fontsource package named for a font family (`Open Sans` is
+ * `@fontsource/open-sans`).
+ * @param {string} family
+ * @returns {string}
+ */
+export function fontsourcePackageOf(family) {
+  return `@fontsource/${String(family)
+    .replace(/["']/g, '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')}`;
+}
+
+/**
+ * The font families the theme's last build names (its
+ * `--font-family-*` declarations), by lowercase name; null before the
+ * theme has been built.
+ * @param {Ctx} ctx
+ * @param {string} slug
+ * @returns {Map<string, string> | null}
+ */
+export function builtFontFamilies(ctx, slug) {
+  /** @type {string} */
+  let css;
+  try {
+    css = fs.readFileSync(themeFiles(ctx.project.cwd, slug).css, 'utf8');
+  } catch {
+    return null;
+  }
+  /** @type {Map<string, string>} */
+  const out = new Map();
+  for (const value of declarationValues(css, /^--font-family-/))
+    for (const family of namedFontFamilies(value))
+      if (!out.has(family.toLowerCase())) out.set(family.toLowerCase(), family);
+  return out;
+}
+
+/**
+ * The font packages that load the families the theme builds: a font
+ * setting's package while the build still uses its family, and the
+ * installed @fontsource package of a family the theme's own source sets.
+ * Font notes, the previews and the app copy all load fonts from this list.
+ * @param {Ctx} ctx
+ * @param {ThemeData} data
+ */
 export function fontPackages(ctx, data) {
-  /** @type {Array<{pkg: string, family: string, installed: boolean, of: Setting}>} */
+  /** @type {Array<{pkg: string, family: string, installed: boolean, of: Setting | null}>} */
   const out = [];
   /** @param {string} pkg */
   const isInstalled = pkg => {
@@ -7096,16 +8184,25 @@ export function fontPackages(ctx, data) {
       return false;
     }
   };
+  const built = builtFontFamilies(ctx, data.name);
   for (const s of data.settings) {
     if (s.thing !== 'font') continue;
     const {pkg: known, family} = fontOf(s.value);
     const name = family.replace(/["']/g, '');
+    // A family the theme's own source replaced everywhere it was set is
+    // not in the build: nothing loads it.
+    if (built && !built.has(name.toLowerCase())) continue;
     // An installed @fontsource package of the family always loads it, even
     // for a family some systems ship.
-    const own = `@fontsource/${name.toLowerCase().replace(/\s+/g, '-')}`;
+    const own = fontsourcePackageOf(name);
     const pkg = known ?? (isInstalled(own) ? own : null);
     if (!pkg || out.some(x => x.pkg === pkg)) continue;
     out.push({pkg, family: name, installed: isInstalled(pkg), of: s});
+  }
+  for (const family of built?.values() ?? []) {
+    const pkg = fontsourcePackageOf(family);
+    if (out.some(x => x.pkg === pkg) || !isInstalled(pkg)) continue;
+    out.push({pkg, family, installed: true, of: null});
   }
   return out;
 }
