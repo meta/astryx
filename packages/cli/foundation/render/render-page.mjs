@@ -27,13 +27,13 @@ import {assetDataUri, isAssetBytes, isAssetPath, MAX_ASSET_BYTES, RenderAssetErr
 import {classesIn, cutCss, layerOrderOf} from './css-cut.mjs';
 import {asParsed, formatFor, sha256, sourceBlock} from './source-block.mjs';
 import {embeddedPathProblem} from './embedded-files.mjs';
-import {assetRefsOf} from './embedded-imports.mjs';
+import {aliasOnly, assetRefsOf} from './embedded-imports.mjs';
 import {isServedPackage, resolveServed} from './served-packages.mjs';
 import {CHART_CSS} from './charts.mjs';
 import {HOST_EXIT} from './host-exit.mjs';
 import {endNote, headerNote} from './file-header.mjs';
 import {textRuns} from './markup-edits.mjs';
-import {findNodeModulesPackage} from '../fs/paths.mjs';
+import {findNodeModulesPackage, isInside} from '../fs/paths.mjs';
 
 /** How long one page may take to render before it is stopped. */
 export const RENDER_TIMEOUT_MS = 60_000;
@@ -124,8 +124,7 @@ function headOf(file) {
 function carryScopeOf(dir, cwd) {
   const project = projectOf(dir);
   if (project) return project;
-  const fromCwd = cwd ? path.relative(cwd, dir) : '..';
-  return fromCwd.startsWith('..') || path.isAbsolute(fromCwd) ? dir : /** @type {string} */ (cwd);
+  return cwd && (dir === cwd || isInside(dir, cwd)) ? cwd : dir;
 }
 
 /** @param {string} s */
@@ -857,8 +856,7 @@ export async function renderPage(entry, options = {}) {
   // (`<img src="./logo.png">`, `url(./bg.png)`) are carried too, so the page
   // comes back with them; a package's own files are not.
   for (const sheet of carriedCss) {
-    const rel = path.relative(scope, sheet);
-    if (rel.startsWith('..') || path.isAbsolute(rel) || rel.split(path.sep).includes('node_modules')) continue;
+    if (!isInside(sheet, scope) || path.relative(scope, sheet).split(path.sep).includes('node_modules')) continue;
     if (!files.includes(sheet)) files.push(sheet);
   }
   /** Assets named in a warning already, so each is named once. @type {Set<string>} */
@@ -871,8 +869,7 @@ export async function renderPage(entry, options = {}) {
    * @param {string} how how the page uses it, for the warning
    */
   const carryAsset = (asset, how) => {
-    const rel = path.relative(scope, asset);
-    if (rel.startsWith('..') || path.isAbsolute(rel) || rel.split(path.sep).includes('node_modules')) return;
+    if (!isInside(asset, scope) || path.relative(scope, asset).split(path.sep).includes('node_modules')) return;
     if (files.includes(asset) || notCarried.has(asset)) return;
     /** @param {string} why */
     const leaveOut = why => {
@@ -882,12 +879,20 @@ export async function renderPage(entry, options = {}) {
         message: `${path.relative(dir, asset).split(path.sep).join('/')} is ${how} but not carried in the file: ${why}, so --reverse cannot give it back.`,
       });
     };
-    // The same limit as a file the page shows, which a render inlines.
-    if (fs.statSync(asset).size > MAX_ASSET_BYTES) {
-      leaveOut(`it is larger than ${MAX_ASSET_BYTES / 1048576} MB, the most a rendered page carries of one file`);
+    /** @type {Buffer} */
+    let head;
+    try {
+      // The same limit as a file the page shows, which a render inlines.
+      if (fs.statSync(asset).size > MAX_ASSET_BYTES) {
+        leaveOut(`it is larger than ${MAX_ASSET_BYTES / 1048576} MB, the most a rendered page carries of one file`);
+        return;
+      }
+      head = headOf(asset);
+    } catch (e) {
+      leaveOut(`it cannot be read (${/** @type {NodeJS.ErrnoException} */ (e).code ?? 'an error from the file system'})`);
       return;
     }
-    if (!isAssetBytes(headOf(asset))) {
+    if (!isAssetBytes(head)) {
       leaveOut('its bytes are not a known image, font or media format');
       return;
     }
@@ -900,7 +905,7 @@ export async function renderPage(entry, options = {}) {
   // carried files (a name that climbs out of it is not the page's file).
   let named = dir;
   for (const f of files) {
-    while (path.relative(named, f).startsWith('..')) named = path.dirname(named);
+    while (!isInside(f, named)) named = path.dirname(named);
   }
   const carriedText = files.filter(
     f => /\.(?:[cm]?[jt]sx?|css)$/i.test(f) && (f === entry || !embeddedPathProblem(path.relative(named, f).split(path.sep).join('/'))),
@@ -914,17 +919,23 @@ export async function renderPage(entry, options = {}) {
     }
     for (const ref of assetRefsOf(text, file)) {
       const asset = path.resolve(path.dirname(file), ref);
-      if (path.relative(named, asset).startsWith('..')) continue;
+      if (!isInside(asset, named)) continue;
       if (isFileAt(asset)) {
         carryAsset(asset, `named in ${path.relative(dir, file).split(path.sep).join('/')}`);
       }
     }
   }
   // Paths are kept relative to the folder that holds every file: the page's
-  // folder, or an ancestor when the page imports from above it.
+  // folder, or an ancestor when the page imports from above it, but never one
+  // from which the page's own path holds a name a reverse refuses (a
+  // dot-folder): a file above that stays out of the file, and is named.
   let base = dir;
   for (const f of files) {
-    while (path.relative(base, f).startsWith('..')) base = path.dirname(base);
+    while (!isInside(f, base)) {
+      const up = path.dirname(base);
+      if (up === base || embeddedPathProblem(path.relative(up, entry).split(path.sep).join('/'), {page: true})) break;
+      base = up;
+    }
   }
   // Page first, so the reader knows which file is the page. Only files a
   // rendered page may carry are embedded (see embedded-files.mjs).
@@ -966,7 +977,7 @@ export async function renderPage(entry, options = {}) {
       cli: options.version ?? null,
       format: formatFor(embedded),
       file,
-      page: path.relative(root, entry).split(path.sep).join('/'),
+      page: projectOf(dir) ? path.relative(root, entry).split(path.sep).join('/') : embedded[0].path,
       restored: `${file.replace(/\.[^.]+$/, '')}-restored/${embedded[0].path}`,
       files: embedded.map(f => f.path),
       packages,
@@ -975,11 +986,21 @@ export async function renderPage(entry, options = {}) {
         .map(([name, version]) => `${name}@${version}`),
       ...(options.title === undefined ? {} : {title: options.title}),
     };
+    // The file each alias import named, for the files the page carries, so a
+    // reverse where no alias names it still finds the file.
+    const carried = new Map(embedded.map(f => [path.resolve(base, f.path), f.path]));
+    /** @type {Record<string, string>} */
+    const aliases = {};
+    for (const {spec, file: named} of /** @type {{spec: string, file: string}[]} */ (message.aliasImports ?? []).sort((a, b) => (a.spec < b.spec ? -1 : a.spec > b.spec ? 1 : 0))) {
+      const rel = carried.get(path.resolve(named));
+      if (rel && aliasOnly(spec)) aliases[spec] = rel;
+    }
     const record = {
       ...(facts.cli ? {cli: facts.cli} : {}),
       page: facts.page,
       ...(options.title === undefined ? {} : {title: options.title}),
       packages,
+      ...(Object.keys(aliases).length > 0 ? {aliases} : {}),
       markup: {
         sha256: sha256(asParsed(markup)),
         style: sha256(asParsed(style)),

@@ -192,9 +192,10 @@ describe('each copy follows its own build', () => {
     await themeEditNew('c4b', {cwd});
     await themeEditSet('c4a', 'corners', 'pill', {cwd});
     fs.writeFileSync(path.join(cwd, 'src/themes/c4a/c4a.css'), '/* old */\n');
-    fs.writeFileSync(
+    // A source that still carries its settings but fails to build.
+    fs.appendFileSync(
       path.join(cwd, 'themes/c4b/c4b.theme.ts'),
-      'not a theme(\n',
+      '\nconst broken = (;\n',
     );
     const r = compile('themes/c4a/c4a.theme.ts', 'themes/c4b/c4b.theme.ts');
     expect(r.status).not.toBe(0);

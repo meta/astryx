@@ -194,8 +194,9 @@ const QUESTIONS = [
     {
       parts: ['app-shell-header'],
       aspects: ['text'],
-      top: /^set q color '#ffffff' --on app-shell-header$/,
-      adds: /app-shell-header\.base\.color=#ffffff/,
+      // The title and items inside read the text tokens themselves.
+      top: /^set q --color-text-primary '#ffffff' --on app-shell-header/,
+      adds: /app-shell-header\.base\.--color-text-primary=#ffffff/,
     },
   ],
   [
@@ -499,8 +500,10 @@ const QUESTIONS = [
   [
     'rounder corners but not on inputs',
     {
-      top: /^set q corners more && set q border-radius \S+ --on inputs$/,
-      adds: /text-input\.base\.borderRadius=/,
+      // Each member that shows a radius of its own keeps the corner token
+      // it reads; a member that takes its corners from a part inside it
+      // gets no invented one.
+      top: /^set q corners more( && set q --radius-[a-z]+ \S+ --on [a-z-]+ --only)+$/,
     },
   ],
   [
@@ -664,7 +667,7 @@ const QUESTIONS = [
   [
     'make the header dark with white text and a bottom border',
     {
-      top: /background '#1f2937' --on app-shell-header && set q color '#ffffff'/,
+      top: /background '#1f2937' --on app-shell-header && set q --color-text-primary '#ffffff'/,
       adds: /borderBottom=/,
     },
   ],
@@ -1895,7 +1898,8 @@ const QUESTIONS_F = [
   ['buttons are not rounded enough', {top: /^set q corners more --on button$/}],
   [
     'nothing should be rounded except avatars',
-    {top: /^set q corners square && set q border-radius 9999px --on avatar$/},
+    // The avatar keeps the corner token it reads, so its own corners stay.
+    {top: /^set q corners square && set q --radius-full 9999px --on avatar$/},
   ],
   [
     'the shadows are too strong',
@@ -4302,7 +4306,9 @@ describe('how lookups', () => {
     const {data} = await themeEditHow('make it look like Apple', {cwd});
     expect(data.results).toEqual([]);
     expect(data.hint).toMatch(/No match/);
-    expect(data.run[0]).toContain('--list parts');
+    // The help that lists the asks it understands comes first.
+    expect(data.run[0]).toMatch(/ how --help$/);
+    expect(data.run[1]).toContain('--list parts');
   });
 });
 

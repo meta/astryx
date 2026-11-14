@@ -67,14 +67,14 @@ describe('hunt54 (B): a token on a group', () => {
     });
     const note = String(/** @type {any} */ (r.data).setting.note);
     expect(note).toMatch(/read --focus-outline-width and take this change/);
-    expect(note).toMatch(/text-input reads /);
+    expect(note).toMatch(/text-area reads /);
   }, 120_000);
 
   it('a part that never reads it is refused for no effect', async () => {
     const err = await refusal(() =>
       themeEditSet('w', '--focus-outline-width', '2px', {
         cwd,
-        on: 'text-input',
+        on: 'text-area',
         only: true,
       }),
     );

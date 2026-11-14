@@ -162,7 +162,7 @@ function collapsedOf(module) {
  * across lines (JSX joins them with one space), so the run is found in each
  * module's text collapsed the same way.
  * @param {string} text a whole run of text
- * @param {{file: string, text: string}[]} files the restored modules
+ * @param {{file: string, text: string}[]} files the restored modules and JSON files
  * @returns {{file: string, line: number} | null}
  */
 export function locate(text, files) {

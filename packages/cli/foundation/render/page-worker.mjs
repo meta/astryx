@@ -994,6 +994,8 @@ try {
   // such as a built theme), so they never pass the transform that records
   // local files. Follow the imports of every local module instead, so the
   // file carries each module the page reaches, as --reverse expects.
+  /** Every path-alias import a local module makes, with the file it names. @type {{spec: string, file: string}[]} */
+  const aliasImports = [];
   for (let i = 0; i < localFiles.length; i++) {
     const file = localFiles[i];
     if (!/\.[cm]?[jt]sx?$/.test(file)) continue;
@@ -1005,6 +1007,8 @@ try {
     }
     for (const spec of importSpecifiers(source, file)) {
       const target = importedFile(spec, file);
+      const raw = spec.split('?')[0];
+      if (target && !raw.startsWith('.')) aliasImports.push({spec: raw, file: target});
       // Modules and JSON only: the transform already carries the stylesheets
       // and images a module imports, and a Sass file is never carried.
       if (target && /\.([cm]?[jt]sx?|json)$/i.test(target) && isLocal(target) && !localFiles.includes(target)) {
@@ -1025,6 +1029,7 @@ try {
     chartsAlone,
     assets: [...assetsInlined],
     files: localFiles,
+    aliasImports,
     texts,
     fnTexts,
     logs,

@@ -466,6 +466,23 @@ describe('pickStart on parts and edits (spec:AST-048/FR3)', () => {
     );
   });
 
+  it("starts from the family's template for the frame that holds the page", async () => {
+    expect(await start('notification settings in a modal')).toBe(
+      'settings-dialog',
+    );
+    expect(await start('a toggle in a modal on the settings page')).toBe(
+      'settings',
+    );
+    const pages = [
+      page('widget', 'Widget - Basic', 'A plain widget page.'),
+      page('widget-dialog', 'Widget - Dialog', 'A widget page in a dialog.'),
+    ];
+    const lead = (/** @type {string} */ idea) =>
+      pickStart(rankPages(idea, pages))?.name;
+    expect(lead('a widget in a dialog')).toBe('widget-dialog');
+    expect(lead('a widget with a toggle in a dialog')).toBe('widget');
+  });
+
   it('counts a frame only when it holds the page the idea names', async () => {
     const [catalog] = await shipped;
     /** @param {string} idea */
@@ -519,5 +536,33 @@ describe('rankPages is a total order', () => {
     expect(
       rankPages('board of cards', [...catalog].reverse()).map(r => r.name),
     ).toEqual(order);
+  });
+});
+
+describe('an exact tie the idea settles by name', () => {
+  // Both ids carry "steps" and "flow", so the ranker ties them; only the
+  // vertical one composes the progress rail the idea mentions.
+  const catalog = [
+    {
+      ...page('steps-flow', 'Steps - Flow', 'one step at a time'),
+      displayName: 'Steps Flow',
+    },
+    {
+      ...page(
+        'steps-flow-vertical',
+        'Steps - Flow Vertical',
+        'one step at a time',
+      ),
+      displayName: 'Vertical Flow',
+      components: ['ProgressRail'],
+    },
+  ];
+  const idea = 'steps flow page with a progress rail';
+
+  it('goes to the template the idea names by its whole name', () => {
+    const ranked = rankPages(idea, catalog);
+    expect(ranked[0].score).toBe(ranked[1].score);
+    expect(ranked[0].name).toBe('steps-flow');
+    expect(rankPages(idea, [...catalog].reverse())[0].name).toBe('steps-flow');
   });
 });

@@ -63,7 +63,6 @@ import * as path from 'node:path';
 import {createRequire, isBuiltin} from 'node:module';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {babelParse as parse} from '../../../foundation/runtime/lazy-dependencies.mjs';
-import {createJiti} from 'jiti';
 import {jitiCacheOptions} from '../../../foundation/fs/jiti-cache.mjs';
 import {
   formatCliCommand,
@@ -93,7 +92,10 @@ import {applyWrites} from '../../integration/add-helpers.mjs';
 import {logger} from '../../logger.mjs';
 import {loadComponentDoc} from '../../../foundation/discovery/component-loader.mjs';
 import {THEME_SOURCE_EXTENSIONS} from '../../../foundation/discovery/theme-module-extensions.mjs';
-import {withEmptyStylesheets} from '../../../foundation/fs/module-loader.mjs';
+import {
+  createJiti,
+  withEmptyStylesheets,
+} from '../../../foundation/fs/module-loader.mjs';
 import {
   collectThemingTargets,
   targetsByKey,
@@ -823,7 +825,7 @@ function confineOutputs(writes, root, remedy) {
 }
 
 /** @param {string} dest absolute output path @param {string} root @returns {boolean} whether a build at `root` refuses to write `dest` */
-function refusedOutput(dest, root) {
+export function refusedOutput(dest, root) {
   try {
     confineOutput(dest, root, '');
     return false;
@@ -1239,6 +1241,45 @@ export function setEditorFolderListener(listener) {
  * and `familyKey` names its key (a family run never takes --out).
  * @typedef {{glob?: boolean, family?: boolean, familyKey?: string}} SuggestionShape
  */
+
+/**
+ * The refusal a build gives the file it is given before it reads it, or
+ * null: a file that is not there, and a folder. The build throws it, and a
+ * suggested build is checked by it before it is offered.
+ * @param {string} file as typed, from cwd
+ * @param {BuildMode} options
+ * @param {string} cwd
+ * @returns {AstryxError | null}
+ */
+export function buildInputProblem(file, options, cwd) {
+  const filePath = path.resolve(cwd, file);
+  if (!fs.existsSync(filePath))
+    return new AstryxError(
+      `File not found: ${filePath}`,
+      themeSourceGuesses(file, cwd).map(guess => ({
+        name: buildSuggestion(guess, options, cwd),
+        reason: 'a theme source that exists',
+      })),
+      ERROR_CODES.ERR_FILE_NOT_FOUND,
+    );
+  if (fs.statSync(filePath).isDirectory())
+    return new AstryxError(
+      `${path.relative(cwd, filePath) || '.'} is a folder. Pass the theme file inside it.`,
+      themeFilesIn(filePath).map(name => ({
+        name: buildSuggestion(
+          path
+            .relative(cwd, path.join(filePath, name))
+            .split(path.sep)
+            .join('/'),
+          options,
+          cwd,
+        ),
+        reason: 'a theme source in that folder',
+      })),
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
+  return null;
+}
 
 /**
  * The `theme build` command for `source` with the caller's mode flags, so a
@@ -2912,6 +2953,38 @@ async function extractThemeDefinition(filePath, interception, /** @type {any} */
 }
 
 /**
+ * The Core interception a standalone build loads a theme module with: none
+ * when the selected Core generates adaptations itself and the theme's folder
+ * resolves a Core of its own; else imports of Core are handed the selected
+ * Core.
+ * @param {string} filePath
+ */
+function standaloneInterception(filePath) {
+  return _generateAdaptationCSS && themeFolderResolvesCore(filePath)
+    ? undefined
+    : interceptCore(_coreThemeModule, _coreRootModule);
+}
+
+/**
+ * Load a theme module as a standalone build of it loads it (the Core the
+ * build selects, the same loader and interception) and name the export the
+ * build reads. Callers that must agree with the build on which theme a
+ * module defines read it here, never from the module's text.
+ * @param {string} file
+ * @param {{cwd?: string}} [ctx]
+ * @returns {Promise<{theme: any, exportName: string}>}
+ */
+export async function loadThemeExport(file, {cwd = process.cwd()} = {}) {
+  const filePath = path.resolve(cwd, file);
+  await selectCore(cwd, {projectOnly: false});
+  const {theme, exportName} = await extractThemeDefinition(
+    filePath,
+    standaloneInterception(filePath),
+  );
+  return {theme, exportName: exportName ?? 'default'};
+}
+
+/**
  * A one-mode `colorModes` value (`['light']` or `['dark']`), or null for
  * anything else: a theme with both modes needs no export.
  * @param {unknown} value
@@ -3849,21 +3922,32 @@ async function themeBuildInternal(
   report = {},
   handOff = {},
 ) {
+  // A blank --out names no file: the build would write files named by the
+  // spaces alone.
+  if (
+    typeof options.out === 'string' &&
+    options.out !== '' &&
+    !options.out.trim()
+  )
+    throw new AstryxError(
+      '--out is blank; name a file or folder, or leave out --out to write beside the source.',
+      [
+        {
+          name: buildSuggestion(file, {...options, out: undefined}, cwd),
+          reason: 'do this instead',
+        },
+      ],
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
   // A backslash in --out separates folders on every platform, as it does in
   // the other theme paths (a Windows path copied into a POSIX shell).
   if (typeof options.out === 'string' && options.out.includes('\\'))
     options = {...options, out: options.out.replace(/\\/g, '/')};
   const filePath = path.resolve(cwd, file);
 
-  if (!fs.existsSync(filePath)) {
-    throw new AstryxError(
-      `File not found: ${filePath}`,
-      themeSourceGuesses(file, cwd).map(guess => ({
-        name: buildSuggestion(guess, options, cwd),
-        reason: 'a theme source that exists',
-      })),
-      ERROR_CODES.ERR_FILE_NOT_FOUND,
-    );
+  {
+    const problem = buildInputProblem(file, options, cwd);
+    if (problem) throw problem;
   }
 
   // A theme the theme editor made is built from its settings by the editor;
@@ -3880,24 +3964,6 @@ async function themeBuildInternal(
       (editorFolderListener ?? (w => logger.warn(w)))(
         `Warning: ${path.relative(cwd, filePath)} is a theme the theme editor made (${slug}.settings.json is beside it). This build reads ${slug}.settings.ts as last written; to build it from its settings, run ${formatCliCommand(`experimental theme editor show ${shellWord(slug)}`, cwd)}.`,
       );
-  }
-
-  if (fs.statSync(filePath).isDirectory()) {
-    throw new AstryxError(
-      `${path.relative(cwd, filePath) || '.'} is a folder. Pass the theme file inside it.`,
-      themeFilesIn(filePath).map(name => ({
-        name: buildSuggestion(
-          path
-            .relative(cwd, path.join(filePath, name))
-            .split(path.sep)
-            .join('/'),
-          options,
-          cwd,
-        ),
-        reason: 'a theme source in that folder',
-      })),
-      ERROR_CODES.ERR_INVALID_ARGUMENT,
-    );
   }
 
   assertThemeSourceFile(filePath, cwd, options);
@@ -3924,10 +3990,7 @@ async function themeBuildInternal(
   // shared loader so exact authored parent identity stays CLI-private instead
   // of becoming a public DefinedTheme field.
   const interception =
-    handOff.familyInterception ??
-    (_generateAdaptationCSS && themeFolderResolvesCore(filePath)
-      ? undefined
-      : interceptCore(_coreThemeModule, _coreRootModule));
+    handOff.familyInterception ?? standaloneInterception(filePath);
 
   // Extract theme definition
   let themeDef;
