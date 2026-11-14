@@ -178,6 +178,25 @@ const apiImportRules = (/** @type {string[]} */ allowed = []) => [
   },
 ];
 
+// `localeCompare` and `Intl.Collator` without a fixed locale read the host's
+// locale, so the same names sort differently on different machines and the
+// CLI answers differently. CLI code sorts machine text with compareText, or
+// names a fixed locale.
+const HOST_LOCALE_ORDER = [
+  {
+    selector:
+      "CallExpression[callee.property.name='localeCompare']:not([arguments.1.type='Literal'])",
+    message:
+      'Sort machine text with compareText (foundation/text/compare-text.mjs), or pass a fixed locale: localeCompare without one follows the host locale, so the order changes between machines.',
+  },
+  {
+    selector:
+      ":matches(NewExpression, CallExpression)[callee.property.name='Collator']:not([arguments.0.type='Literal'])",
+    message:
+      'Give Intl.Collator a fixed locale, or sort machine text with compareText (foundation/text/compare-text.mjs): without one it follows the host locale.',
+  },
+];
+
 export default defineConfig(
   js.configs.recommended,
   tseslintRecommended,
@@ -826,6 +845,11 @@ export default defineConfig(
       ],
     },
   },
+  {
+    files: ['packages/cli/**/*.mjs'],
+    ignores: ['**/*.test.mjs'],
+    rules: {'no-restricted-syntax': ['error', ...HOST_LOCALE_ORDER]},
+  },
   // A command's --help and its manifest entry are generated from its colocated
   // CommandDoc via defineCommand. Registering straight onto Commander bypasses
   // the doc, so the docs silently stop describing the real CLI.
@@ -840,6 +864,7 @@ export default defineConfig(
           message:
             'Register commands with defineCommand(parent, doc, {fn, action}) so --help and the manifest come from the colocated CommandDoc. See CONTRIBUTING > Working on the astryx CLI.',
         },
+        ...HOST_LOCALE_ORDER,
       ],
     },
   },
@@ -859,6 +884,7 @@ export default defineConfig(
           message:
             'Register commands with defineCommand(parent, doc, {fn, action}) so --help and the manifest come from the colocated CommandDoc. See CONTRIBUTING > Working on the astryx CLI.',
         },
+        ...HOST_LOCALE_ORDER,
         {
           selector: "CallExpression[callee.property.name='padEnd']",
           message:
@@ -900,6 +926,7 @@ export default defineConfig(
           message:
             'Register commands with defineCommand(parent, doc, {fn, action}) so --help and the manifest come from the colocated CommandDoc. See CONTRIBUTING > Working on the astryx CLI.',
         },
+        ...HOST_LOCALE_ORDER,
       ],
     },
   },

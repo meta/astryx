@@ -19,7 +19,11 @@
  * existing table"), unless the idea asks for a new page ("a new dashboard like
  * the existing dashboard", "clone the existing dashboard as a new page"). A
  * bare "existing" phrase that names a page ("existing reports dashboard with a
- * date filter") reads as the builder's own page.
+ * date filter") reads as the builder's own page. An idea that opens with "add"
+ * and says where the piece goes ("add a filter row above the table") puts it
+ * into a page the builder already has, so it is a change too, unless the piece
+ * is a page ("add a dashboard to the app") or it asks for a new page ("add a
+ * new dashboard").
  */
 
 import {stem} from '../../search/search.mjs';
@@ -27,6 +31,7 @@ import {
   HEAD_END,
   CONTAINER_PHRASE,
   PHRASE_END,
+  PLACE_PHRASE,
   terms,
   containersOf,
   familyWordsOf,
@@ -52,6 +57,12 @@ const PAGE_PIECES = 3;
 const EXISTING = /\bexisting\b/i;
 
 /**
+ * The word that opens an idea adding a piece to a page the builder already
+ * has (spec:AST-048/FR3, FR9), when the idea says where the piece goes.
+ */
+const ADDS = /^\s*add\b/i;
+
+/**
  * The word that marks an idea asking for a new page ("a new dashboard", "as a
  * new page"), which is never a change to one the builder has.
  */
@@ -71,6 +82,7 @@ export function ideaKind(query, pages, components) {
   const text = String(query);
   const familyWords = familyWordsOf(pages);
   if (changesExistingPage(text, familyWords, components)) return 'edit';
+  if (addsToPage(text, familyWords, pages, components)) return 'edit';
   // The head's last word, page words included: "calendar" is the noun of "a
   // calendar", "page" the noun of "a calendar page". An overlay frame names
   // where the thing lives, not the thing: "drafts" is the noun of "drafts in
@@ -88,6 +100,76 @@ export function ideaKind(query, pages, components) {
   return components.some(c => componentTerms(c).includes(noun))
     ? 'part'
     : 'page';
+}
+
+/**
+ * Whether an idea adds a piece to a page the builder already has: it opens
+ * with "add", says where the piece goes with a place phrase that names
+ * something build knows (a page family word, a page template by its whole
+ * name, or a component by the head word of its name:
+ * "above the table", "to the settings page"; not "to my project"), the
+ * piece's head names no page ("add a dashboard with a chart to my project"
+ * is a new page), and it asks for no new page.
+ * @param {string} text
+ * @param {Map<string, string>} familyWords
+ * @param {PageTemplate[]} pages
+ * @param {ComponentWords[]} components
+ * @returns {boolean}
+ */
+function addsToPage(text, familyWords, pages, components) {
+  if (!ADDS.test(text)) return false;
+  const place = text.match(PLACE_PHRASE);
+  if (!place || place.index === undefined) return false;
+  const piece = text.slice(0, place.index).split(HEAD_END)[0] ?? '';
+  const target =
+    text.slice(place.index + place[0].length).split(HEAD_END)[0] ?? '';
+  const named = new Set(terms(target));
+  const known = new Set([
+    ...familyWords.keys(),
+    ...components.map(c => nameTerms(c).at(-1) ?? ''),
+  ]);
+  const namesTemplate = pages.some(page => {
+    const name = templateTerms(page);
+    return name.length > 0 && name.every(t => named.has(t));
+  });
+  return (
+    ([...named].some(t => known.has(t)) || namesTemplate) &&
+    !namesPage(piece, familyWords, pages) &&
+    !asksNewPage(text.toLowerCase().split(PHRASE_END), familyWords)
+  );
+}
+
+/**
+ * Whether a phrase names a page: it ends on a page family word ("add a
+ * dashboard"), on a word search drops, such as "page" ("add a settings
+ * page"), or on a page template's own name ("add a kanban board").
+ * @param {string} phrase
+ * @param {Map<string, string>} familyWords
+ * @param {PageTemplate[]} pages
+ * @returns {boolean}
+ */
+function namesPage(phrase, familyWords, pages) {
+  const words = phrase.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+  const last = words[words.length - 1] ?? '';
+  if (familyWords.has(stem(last)) || terms(last).length === 0) return true;
+  const named = new Set(terms(phrase));
+  return pages.some(page => {
+    const name = templateTerms(page);
+    return (
+      name.length > 0 &&
+      name.includes(stem(last)) &&
+      name.every(t => named.has(t))
+    );
+  });
+}
+
+/**
+ * The terms of a page template's own name: "kanban-board" is kanban, board.
+ * @param {PageTemplate} page
+ * @returns {string[]}
+ */
+function templateTerms(page) {
+  return terms(page.name.replace(/-/g, ' '));
 }
 
 /**

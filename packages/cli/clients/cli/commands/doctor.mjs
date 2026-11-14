@@ -22,14 +22,7 @@ import {
   validateIntegration,
 } from '../../../api/integration/validate-integration.mjs';
 import {jsonOut} from '../../../foundation/response/json.mjs';
-import {
-  emit,
-  list,
-  section,
-  record,
-  records,
-  text,
-} from '../formatters/index.mjs';
+import {emit, list, section, records, text} from '../formatters/index.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {doc as doctorCommand} from './doctor.doc.mjs';
 import {doc as doctorIntegrationGroup} from './doctor-integration.doc.mjs';
@@ -58,6 +51,15 @@ const STATUS = {
   info: '[info]',
 };
 
+/** A doctor check's fields in text order: the status column, then the rest. */
+const CHECK_FIELDS = /** @type {const} */ ([
+  'status',
+  'id',
+  'label',
+  'message',
+  'fix',
+]);
+
 /** @param {string} status */
 function statusToken(status) {
   return STATUS[/** @type {keyof typeof STATUS} */ (status)] ?? status;
@@ -80,15 +82,21 @@ function printHuman(report) {
         ? 'No failures — but review the [warn] warnings above when you can.'
         : 'All checks passed. Your Astryx setup looks healthy.';
 
-  // Field names are the JSON keys, so text and --json map one to one.
+  // One check per line, status first so the counted value stays a column.
+  // The legend names each field by its JSON key, so text and --json map one
+  // to one.
+  const summaryFields = /** @type {const} */ (['pass', 'warn', 'fail', 'info']);
   emit(
-    section('astryx doctor — diagnosing your setup'),
+    section('astryx doctor', `Each check: ${CHECK_FIELDS.join(', ')}`),
     records(report.checks, {
-      fields: ['id', 'status', 'label', 'message', 'fix'],
-      format: {status: statusToken},
+      fields: [...CHECK_FIELDS],
+      layout: 'inline',
+      format: {status: statusToken, fix: fix => `fix: ${fix}`},
     }),
-    section('summary'),
-    record(report.summary, {fields: ['pass', 'warn', 'fail', 'info']}),
+    section(
+      'summary',
+      summaryFields.map(key => `${key}: ${report.summary[key]}`).join(', '),
+    ),
     text(closing),
   );
 }
@@ -305,6 +313,16 @@ function printIntegrationValidation(data, seen) {
           ),
           records(data.publicImports.unchecked, {
             fields: ['file', 'specifier', 'reason'],
+          }),
+        ]
+      : []),
+    ...(data.exampleCode && data.exampleCode.unchecked.length > 0
+      ? [
+          text(
+            `[info] Examples not checked: ${data.exampleCode.unchecked.length}:`,
+          ),
+          records(data.exampleCode.unchecked, {
+            fields: ['file', 'example', 'reason'],
           }),
         ]
       : []),
