@@ -38,11 +38,14 @@ import {STATUS_NAMES, deriveStatusRoleTokens} from './statusRoleDerivation';
 import {cssVar, classPrefix, dataAttrNamespace} from '../naming';
 import {
   analyzeDeclarationValue,
+  substituteVarReferences,
   canonicalizeDeclarationName,
   checkDeclarationName,
   checkDeclarationValue,
 } from './declarationBoundary';
 import {readerTextSizeEntries} from './dynamicType';
+import {colorDefaults, shadowDefaults} from './tokens.stylex';
+import {domainTokenDefaults} from './domainTokens/domainTokenDefaults';
 import {splitTopLevelWhitespace} from './tokenReferences';
 import {PRESS_BELIEVED_SELECTOR} from '../privateAttributes/press';
 
@@ -1700,6 +1703,137 @@ function resolvedAdaptationRules(
   );
 }
 
+/** Core token defaults whose values can depend on the color scheme. */
+const SCHEME_CAPABLE_DEFAULTS: Record<string, string> = {
+  ...colorDefaults,
+  ...shadowDefaults,
+  ...domainTokenDefaults,
+};
+
+/**
+ * Root tokens that a media surface re-declares, so that they resolve under the
+ * surface's own color scheme.
+ *
+ * A bundler that lowers `light-dark()` for older browsers writes each value as
+ * `var()` switches. A custom property resolves its `var()` references on the
+ * element that declares it. So the theme root fixes such a token in the page's
+ * scheme, and a surface that does not re-declare it inherits that value. A
+ * token depends on the scheme when its value holds `light-dark()` or refers to
+ * a token that does.
+ */
+function schemeDependentEntries(
+  values: Record<string, string>,
+  candidates: Iterable<string>,
+  exclude: ReadonlySet<string>,
+): [string, string][] {
+  const known = new Map<string, boolean>();
+  const dependsOnScheme = (name: string, visiting: Set<string>): boolean => {
+    const cached = known.get(name);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const value = values[name];
+    if (typeof value !== 'string' || visiting.has(name)) {
+      return false;
+    }
+    visiting.add(name);
+    const result =
+      value.includes('light-dark(') ||
+      analyzeDeclarationValue(value).references.some(reference =>
+        dependsOnScheme(reference, visiting),
+      );
+    visiting.delete(name);
+    known.set(name, result);
+    return result;
+  };
+  const entries: [string, string][] = [];
+  for (const name of candidates) {
+    if (!exclude.has(name) && dependsOnScheme(name, new Set())) {
+      entries.push([name, values[name]]);
+    }
+  }
+  return entries;
+}
+
+/**
+ * The value a re-declared root token takes on a media surface, or `null` when
+ * the surface must not re-declare it. A reference to a token the surface
+ * declares itself is replaced with the theme's value of that token. Without
+ * lowering, the root resolves the reference and the surface inherits the
+ * result, so the surface's own value never applies; the replacement keeps that
+ * result. When the theme does not declare the referenced token, its value
+ * comes from an ancestor this theme cannot see, so the token is not
+ * re-declared. A reference in a cycle stays as it is.
+ */
+function withRootValuesForSurfaceTokens(
+  value: string,
+  surfaceNames: ReadonlySet<string>,
+  declaredValues: Record<string, string>,
+  resolving: ReadonlySet<string> = new Set(),
+): string | null {
+  let isUnknown = false;
+  const result = substituteVarReferences(value, reference => {
+    if (!surfaceNames.has(reference) || resolving.has(reference)) {
+      return null;
+    }
+    const declared = declaredValues[reference];
+    const replaced =
+      typeof declared !== 'string' ||
+      analyzeDeclarationValue(declared).important
+        ? null
+        : withRootValuesForSurfaceTokens(
+            declared,
+            surfaceNames,
+            declaredValues,
+            new Set([...resolving, reference]),
+          );
+    if (replaced === null) {
+      isUnknown = true;
+    }
+    return replaced;
+  });
+  return isUnknown ? null : result;
+}
+
+/** Each entry's surface value; an entry the surface must not re-declare is dropped. */
+function surfaceValues(
+  entries: [string, string][],
+  surfaceNames: ReadonlySet<string>,
+  declaredValues: Record<string, string>,
+): [string, string][] {
+  return entries.flatMap(([name, value]): [string, string][] => {
+    const surfaceValue = withRootValuesForSurfaceTokens(
+      value,
+      surfaceNames,
+      declaredValues,
+    );
+    return surfaceValue === null ? [] : [[name, surfaceValue]];
+  });
+}
+
+/**
+ * Drops re-declarations that would close a `var()` cycle with the surface's
+ * own declarations. A custom property in a cycle is invalid, so such a token
+ * keeps its inherited value instead.
+ */
+function withoutDeclarationCycles(
+  replayed: [string, string][],
+  own: [string, string][],
+): [string, string][] {
+  let kept = replayed;
+  for (;;) {
+    const declared = Object.fromEntries([...kept, ...own]);
+    const next = kept.filter(
+      ([name, value]) =>
+        !tokenValuesWouldHaveCycleWithValue(declared, name, value),
+    );
+    if (next.length === kept.length) {
+      return kept;
+    }
+    kept = next;
+  }
+}
+
 /**
  * Generate CSS for on-media token and component overrides.
  *
@@ -1721,6 +1855,16 @@ export function generateOnMediaCSS(
     'dark' | 'light',
     [string, string][]
   >();
+  // The values the theme root declares. Core defaults stay in Core's own
+  // stylesheet. They only show whether a root value depends on the scheme.
+  const rootValues: Record<string, string> = {
+    ...theme.tokens,
+    ...Object.fromEntries(rootAliases),
+    ...theme.localTokens,
+  };
+  const schemeValues = {...SCHEME_CAPABLE_DEFAULTS, ...rootValues};
+  const surfaceOwnNames = new Map<'dark' | 'light', Set<string>>();
+  const surfaceReplays = new Map<'dark' | 'light', [string, string][]>();
 
   for (const surface of ['dark', 'light'] as const) {
     const onMedia = surface === 'dark' ? theme.__onDark : theme.__onLight;
@@ -1739,10 +1883,25 @@ export function generateOnMediaCSS(
       rootAliases,
     );
     mediaStatusRoleDefaults.set(surface, statusRoleDefaults);
-    const tokenEntries = [
+    const ownNames = new Set([
+      ...Object.keys(onMedia.tokens),
+      ...statusRoleDefaults.map(([role]) => role),
+    ]);
+    surfaceOwnNames.set(surface, ownNames);
+    const ownEntries = [
       ...Object.entries(onMedia.tokens),
       ...statusRoleDefaults,
     ];
+    const replayedEntries = withoutDeclarationCycles(
+      surfaceValues(
+        schemeDependentEntries(schemeValues, Object.keys(rootValues), ownNames),
+        ownNames,
+        rootValues,
+      ),
+      ownEntries,
+    );
+    surfaceReplays.set(surface, replayedEntries);
+    const tokenEntries = [...replayedEntries, ...ownEntries];
     if (tokenEntries.length > 0) {
       // The surface re-declares font sizes the way a theme's root does, so they
       // keep following the reader's text size there (see dynamicType.ts).
@@ -1777,11 +1936,15 @@ export function generateOnMediaCSS(
   }
 
   const adaptationMediaRoleBlocks: string[] = [];
+  const adaptationAliases = adaptationStatusRoleDefaults(context);
   for (const [index, rule] of rules.entries()) {
     const authoredRoles = authoredStatusRoleEntries(rule.tokens);
-    if (authoredRoles.length === 0) {
-      continue;
-    }
+    // The values this rule writes on the theme root under its query.
+    const ruleValues: Record<string, string> = {
+      ...rule.tokens,
+      ...Object.fromEntries(adaptationAliases[index] ?? []),
+      ...rule.localTokens,
+    };
     const roleParts: string[] = [];
     for (const surface of ['dark', 'light'] as const) {
       const onMedia = surface === 'dark' ? theme.__onDark : theme.__onLight;
@@ -1794,6 +1957,64 @@ export function generateOnMediaCSS(
       const restorationEntries: [string, string][] = authoredRoles
         .filter(([role]) => generatedRoles.has(role))
         .map(([role, value]) => [role, mediaRoleRestorationValue(role, value)]);
+      const ownSurfaceEntries = [
+        ...Object.entries(onMedia.tokens),
+        ...(mediaStatusRoleDefaults.get(surface) ?? []),
+        ...restorationEntries,
+      ];
+      const excluded = new Set([
+        ...(surfaceOwnNames.get(surface) ?? []),
+        ...restorationEntries.map(([role]) => role),
+      ]);
+      // Under this query the theme root declares the rule's values over the
+      // base values. The surface takes every value the root resolves under the
+      // query: a token that becomes scheme-dependent, and a base replay whose
+      // value changes, for example because the rule sets a token it refers
+      // to. A base replay that must no longer be re-declared inherits.
+      const ruleDeclared = {...rootValues, ...ruleValues};
+      const baseReplayValues = new Map(surfaceReplays.get(surface) ?? []);
+      const candidateNames = new Set([
+        ...schemeDependentEntries(
+          {...SCHEME_CAPABLE_DEFAULTS, ...ruleDeclared},
+          Object.keys(ruleDeclared),
+          excluded,
+        ).map(([name]) => name),
+        ...baseReplayValues.keys(),
+      ]);
+      const ruleReplays = [...candidateNames].flatMap(
+        (name): [string, string][] => {
+          if (excluded.has(name)) {
+            return [];
+          }
+          const ruleValue =
+            withRootValuesForSurfaceTokens(
+              ruleDeclared[name],
+              excluded,
+              ruleDeclared,
+            ) ?? (baseReplayValues.has(name) ? 'inherit' : null);
+          return ruleValue === null || baseReplayValues.get(name) === ruleValue
+            ? []
+            : [[name, ruleValue]];
+        },
+      );
+      const restatedNames = new Set(ruleReplays.map(([name]) => name));
+      // Under this query the surface also holds the base replays this rule
+      // does not restate.
+      const baseReplays = (surfaceReplays.get(surface) ?? []).filter(
+        ([name]) => !restatedNames.has(name),
+      );
+      const schemeEntries = withoutDeclarationCycles(ruleReplays, [
+        ...baseReplays,
+        ...ownSurfaceEntries,
+      ]);
+      if (schemeEntries.length > 0) {
+        const declarations = joinDeclarations(
+          schemeEntries,
+          `adaptations[${index}].on${surface}.tokens.`,
+          sink,
+        );
+        roleParts.push(`  ${mediaSelector(surface)} {\n${declarations}\n  }`);
+      }
       if (restorationEntries.length === 0) {
         continue;
       }

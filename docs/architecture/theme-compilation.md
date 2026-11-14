@@ -12,6 +12,7 @@ owners: [cixzhang, imdreamrunner]
 applies_to:
   [
     packages/core/src/theme/generateThemeRules.ts,
+    packages/core/src/theme/declarationBoundary.ts,
     packages/core/src/theme/themeAdaptations.ts,
     packages/core/src/theme/derivedVarRegistry.ts,
     packages/core/src/theme/Theme.tsx,
@@ -25,6 +26,8 @@ verified_by:
     packages/core/src/theme/defineTheme.test.ts,
     packages/core/src/theme/themeAdaptations.test.ts,
     packages/core/src/theme/onMediaTokens.test.ts,
+    packages/cli/api/theme/build/build.media-lowered-scheme.test.mjs,
+    packages/core/src/theme/declarationBoundary.test.ts,
     packages/core/src/theme/Theme.test.tsx,
     packages/core/src/theme/derivedVarRegistry.test.ts,
     packages/cli/clients/cli/commands/build-theme.adaptations.test.mjs,
@@ -157,7 +160,18 @@ Platform-specific details stay inside that compiler.
 - **INV12 — Adaptation order is observable.** Root declarations emit first,
   adaptation blocks remain separate in authored order, and media-surface overrides
   emit last. Duplicate conditions and later root-restoring writes are preserved
-  exactly; runtime and static output use the same blocks.
+  exactly; runtime and static output use the same blocks. A media surface
+  re-declares every scheme-dependent value the theme root declares, under the
+  base rules and under each adaptation's query, so it resolves under the
+  surface's color scheme even when a consumer's bundler lowers `light-dark()`.
+  In a re-declared value, a reference to a token the surface declares itself
+  takes the theme's value of that token, so CSS that keeps `light-dark()`
+  resolves as before. When the theme does not declare that token, the surface
+  does not re-declare the referring token. A token the surface re-declares does
+  not take a value set for it on an element between the theme root and the
+  surface. `substituteVarReferences` in `declarationBoundary.ts` writes those
+  values with the declaration scanner, so a comment or a string never counts as
+  a reference.
 
 - **INV13 — A declaration stays inside its boundary.** The web compiler rejects
   only an authored property name or value that would escape or invalidate its CSS
@@ -344,6 +358,7 @@ tiers.
 | INV9, INV10      | Platform compiler tests when another compiler ships                                                                                                                                                                                                                                                                                                                                       | CSS details enter shared authoring, or shared theme intent silently disappears                                                                                                                                                                                                                    |
 | INV11            | `defineTheme.test.ts` and `build.test.mjs` local-token fixtures                                                                                                                                                                                                                                                                                                                           | Runtime/static output rewrites a local name, disagrees, or leaves partial output after failure                                                                                                                                                                                                    |
 | INV12            | `themeAdaptations.test.ts` and CLI adaptation build fixtures                                                                                                                                                                                                                                                                                                                              | Rule blocks merge/reorder/drop, surfaces lose precedence, or runtime/static CSS diverges                                                                                                                                                                                                          |
+| INV12            | `build.media-lowered-scheme.test.mjs` (every published theme built and lowered by lightningcss) and the `onMediaTokens.test.ts` scheme-dependent replay cases                                                                                                                                                                                                                             | A token inside a light or dark media surface keeps the page's scheme after `light-dark()` lowering, a re-declared value differs from the root's, or a reference to a surface token takes the surface's value                                                                                      |
 | INV13, INV14     | Declaration scanner, generator, Theme mounting, CLI receipt tests, and the existing theme-family Chromium guard                                                                                                                                                                                                                                                                           | One unsafe declaration corrupts neighbors, valid CSS changes, legacy token generation crashes, or reporting changes CSS                                                                                                                                                                           |
 | Built themes     | Theme and CLI build tests                                                                                                                                                                                                                                                                                                                                                                 | Runtime recompiles a built theme, or built output omits canonical rules                                                                                                                                                                                                                           |
 | INV15            | CLI build fixtures with function entries, slot functions, a variant list, and an inherited entry under a replaced list, compared with runtime resolution                                                                                                                                                                                                                                  | Built and runtime icons differ, a function is dropped silently, or tooling enumerates a variant an entry cannot receive                                                                                                                                                                           |

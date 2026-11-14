@@ -12,6 +12,7 @@ import {describe, it, expect} from 'vitest';
 import {
   checkDeclarationName,
   checkDeclarationValue,
+  substituteVarReferences,
 } from './declarationBoundary';
 
 describe('checkDeclarationValue keeps valid CSS inside one declaration', () => {
@@ -122,5 +123,38 @@ describe('checkDeclarationName', () => {
     'background{',
   ])('rejects %j', name => {
     expect(checkDeclarationName(name)).not.toBeNull();
+  });
+});
+
+describe('substituteVarReferences', () => {
+  const values: Record<string, string> = {
+    '--a': 'light-dark(#111111, #eeeeee)',
+    '--b': '2px',
+  };
+  const replace = (reference: string) => values[reference] ?? null;
+
+  it('replaces a whole var() call, with its fallback', () => {
+    expect(substituteVarReferences('var(--a, red)', replace)).toBe(
+      'light-dark(#111111, #eeeeee)',
+    );
+    expect(substituteVarReferences('0 0 var( --b ) var(--a)', replace)).toBe(
+      '0 0 2px light-dark(#111111, #eeeeee)',
+    );
+  });
+
+  it('replaces a call inside the fallback of a call it keeps', () => {
+    expect(substituteVarReferences('var(--c, var(--b))', replace)).toBe(
+      'var(--c, 2px)',
+    );
+  });
+
+  it('ignores var() text inside comments and strings', () => {
+    const value = '/* var(--a) */ "var(--a)" var(--c)';
+    expect(substituteVarReferences(value, replace)).toBe(value);
+  });
+
+  it('returns the value unchanged when it replaces nothing', () => {
+    expect(substituteVarReferences('var(--c)', replace)).toBe('var(--c)');
+    expect(substituteVarReferences('red', replace)).toBe('red');
   });
 });

@@ -385,6 +385,161 @@ describe('generateOnMediaCSS', () => {
   });
 });
 
+/** Declarations of each top-level media block, by surface. */
+function mediaDeclarations(css: string, surface: 'dark' | 'light') {
+  const declared: Record<string, string> = {};
+  const unscoped = css.split(/\n@media /)[0];
+  for (const match of unscoped.matchAll(
+    new RegExp(`\\[data-astryx-media="${surface}"\\] \\{([^}]*)\\}`, 'g'),
+  )) {
+    for (const line of match[1].split(';')) {
+      const colon = line.indexOf(':');
+      if (colon > 0) {
+        declared[line.slice(0, colon).trim()] = line.slice(colon + 1).trim();
+      }
+    }
+  }
+  return declared;
+}
+
+describe('generateOnMediaCSS scheme-dependent replays', () => {
+  const theme = defineTheme({
+    name: 'media-scheme-replay',
+    tokens: {
+      '--color-text-secondary': ['#555555', '#aaaaaa'],
+      '--color-border': 'var(--color-text-secondary)',
+      '--color-on-dark': '#ffffff',
+      '--spacing-4': '16px',
+    },
+  });
+  const css = generateOnMediaCSS(theme);
+
+  it('re-declares each scheme-dependent root token with its root value', () => {
+    for (const surface of ['dark', 'light'] as const) {
+      const declared = mediaDeclarations(css, surface);
+      expect(declared['--color-text-secondary']).toBe(
+        theme.tokens['--color-text-secondary'],
+      );
+      expect(declared['--color-border']).toBe('var(--color-text-secondary)');
+    }
+  });
+
+  it('does not re-declare a token whose value ignores the scheme', () => {
+    const declared = mediaDeclarations(css, 'dark');
+    expect(declared).not.toHaveProperty('--spacing-4');
+    expect(declared).not.toHaveProperty('--color-on-dark');
+  });
+
+  it('keeps the surface tokens over the root values', () => {
+    expect(mediaDeclarations(css, 'dark')['--color-accent']).toBe(
+      'var(--color-on-dark)',
+    );
+    expect(mediaDeclarations(css, 'light')['--color-text-primary']).toBe(
+      'var(--color-on-light)',
+    );
+  });
+
+  it("keeps the root's value for a reference to a token the surface declares", () => {
+    const referring = defineTheme({
+      name: 'media-scheme-replay-reference',
+      tokens: {
+        '--color-accent': ['#111111', '#eeeeee'],
+        '--color-border-emphasized': 'var(--color-accent)',
+      },
+    });
+    const declared = mediaDeclarations(generateOnMediaCSS(referring), 'dark');
+    // The dark surface declares its own accent. Without lowering, the root
+    // resolves the reference, so the surface shows the root's accent.
+    expect(declared['--color-accent']).toBe('var(--color-on-dark)');
+    expect(declared['--color-border-emphasized']).toBe(
+      referring.tokens['--color-accent'],
+    );
+  });
+
+  it('restates a reference under an adaptation that changes the surface token', () => {
+    const adapted = defineTheme({
+      name: 'media-scheme-replay-adapted-reference',
+      tokens: {
+        '--color-accent': ['#111111', '#eeeeee'],
+        '--color-border-emphasized': 'var(--color-accent)',
+      },
+      adaptations: {
+        rules: [
+          {
+            when: {contrast: 'more'},
+            value: {tokens: {'--color-accent': '#ff0000'}},
+          },
+        ],
+      },
+    });
+    const adaptedCss = generateOnMediaCSS(adapted);
+    const query = adaptedCss.slice(adaptedCss.indexOf('\n@media '));
+    // Without lowering, the root resolves the reference to the adapted accent
+    // under the query, and the surface inherits that value.
+    expect(query).toContain('--color-border-emphasized: #ff0000;');
+  });
+
+  it('does not re-declare a reference to a surface token the theme leaves unset', () => {
+    const referring = defineTheme({
+      name: 'media-scheme-replay-unset-reference',
+      tokens: {'--color-border-emphasized': 'var(--color-accent)'},
+    });
+    // The accent comes from an ancestor theme or Core, so the surface keeps
+    // inheriting the value the root resolved.
+    expect(
+      mediaDeclarations(generateOnMediaCSS(referring), 'dark'),
+    ).not.toHaveProperty('--color-border-emphasized');
+  });
+
+  it('re-declares a token that an adaptation makes scheme-dependent', () => {
+    const adapted = defineTheme({
+      name: 'media-scheme-replay-adapted-dependence',
+      tokens: {
+        '--color-text-secondary': '#555555',
+        '--color-border': 'var(--color-text-secondary)',
+      },
+      adaptations: {
+        rules: [
+          {
+            when: {contrast: 'more'},
+            value: {tokens: {'--color-text-secondary': ['#000000', '#ffffff']}},
+          },
+        ],
+      },
+    });
+    const adaptedCss = generateOnMediaCSS(adapted);
+    expect(mediaDeclarations(adaptedCss, 'dark')).not.toHaveProperty(
+      '--color-border',
+    );
+    const query = adaptedCss.slice(adaptedCss.indexOf('\n@media '));
+    expect(query).toContain('--color-border: var(--color-text-secondary);');
+  });
+
+  it('writes no core default the theme leaves unset', () => {
+    expect(mediaDeclarations(css, 'dark')).not.toHaveProperty(
+      '--color-background-surface',
+    );
+  });
+
+  it('restates an adaptation value over the base replay under its query', () => {
+    const adapted = defineTheme({
+      name: 'media-scheme-replay-adapted',
+      tokens: {'--color-text-secondary': ['#555555', '#aaaaaa']},
+      adaptations: {
+        rules: [
+          {
+            when: {contrast: 'more'},
+            value: {tokens: {'--color-text-secondary': '#000000'}},
+          },
+        ],
+      },
+    });
+    const adaptedCss = generateOnMediaCSS(adapted);
+    const query = adaptedCss.slice(adaptedCss.indexOf('\n@media '));
+    expect(query).toContain('--color-text-secondary: #000000;');
+  });
+});
+
 describe('reset.css baseline media rules', () => {
   /**
    * Validates that reset.css provides the minimum baseline for
