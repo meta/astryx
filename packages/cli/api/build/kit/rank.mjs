@@ -23,7 +23,10 @@
  * "board" picks the kanban board for a game board. Here every matched term
  * counts, weighted by how rare it is among page templates (inverse document
  * frequency), so the page that answers more of the idea — and its rarer words —
- * wins. Structural signals sit on top:
+ * wins. Structural signals sit on top. They order the ranker's list; for a
+ * whole page, the page-pick model in weights.mjs reads that list beside its
+ * own word tables and picks the start, so the start can differ from the
+ * ranker's first template:
  *
  * - The head noun. The words before the first "with", ":" or "," name what
  *   the page is ("audit dashboard: dense table with …"); a family word there

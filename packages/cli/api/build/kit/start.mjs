@@ -149,8 +149,9 @@ export function chooseStart(ranked, kind, pages, directMatch, catalog, idea) {
       : place[0].toUpperCase() + place.slice(1);
   const proposed = pickStart(ranked, kind);
   // The checked-in word weights (weights.mjs), blended with the ranker's
-  // scores, decide the start of a whole page. A part or an edit starts where
-  // the ranker's placement rules put it (spec:AST-048/FR3).
+  // scores, decide the start of a whole page, so it can differ from the
+  // ranker's own pick, its head-noun family included. A part or an edit starts
+  // where the ranker's placement rules put it (spec:AST-048/FR3).
   const weighed =
     kind === 'page'
       ? weighStart(idea, ranked, proposed, catalog, {
