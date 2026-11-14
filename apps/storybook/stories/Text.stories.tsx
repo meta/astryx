@@ -2,6 +2,7 @@
 
 import type {Meta, StoryObj} from '@storybook/react';
 import {Text} from '@astryxdesign/core/Text';
+import {Heading} from '@astryxdesign/core/Heading';
 
 const meta: Meta<typeof Text> = {
   title: 'Core/Text',
@@ -690,6 +691,46 @@ export const FormLikeContext: Story = {
           Active supporting text draws attention to important details.
         </Text>
       </div>
+    </div>
+  ),
+};
+
+const WORD_BREAK_SAMPLES = [
+  ['Sentence', 'Strength through brought thoughts straight schedule wrought'],
+  [
+    'URL',
+    'https://example.com/a/very/long/path/without/any/spaces/at/all?query=value&another=thing',
+  ],
+  [
+    'CJK',
+    '日本語のテキストはスペースなしで続きます。中文文本也没有空格继续下去。한국어텍스트도공백없이',
+  ],
+  [
+    'Long word',
+    'Supercalifragilisticexpialidocious-antidisestablishmentarianism',
+  ],
+] as const;
+
+export const OneLineWordBreakCompare: Story = {
+  render: () => (
+    <div style={{display: 'grid', gap: 12, width: 180}}>
+      {WORD_BREAK_SAMPLES.map(([name, sample]) => (
+        <div key={name} data-sample={name} style={{display: 'grid', gap: 4}}>
+          <Text>{name}: break-all, break-word</Text>
+          <Text maxLines={1} wordBreak="break-all" hasTruncateTooltip={false}>
+            {sample}
+          </Text>
+          <Text maxLines={1} wordBreak="break-word" hasTruncateTooltip={false}>
+            {sample}
+          </Text>
+          <Heading level={3} maxLines={1} wordBreak="break-all">
+            {sample}
+          </Heading>
+          <Heading level={3} maxLines={1} wordBreak="break-word">
+            {sample}
+          </Heading>
+        </div>
+      ))}
     </div>
   ),
 };
