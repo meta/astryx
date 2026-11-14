@@ -38,6 +38,7 @@ import {
   findThemeProject,
   editorThemeRecord,
   isLocalThemeOwner,
+  isUneditedThemeModule,
   LOCAL_THEME_ROOT,
   ThemeStateError,
   planThemeAppWrite,
@@ -1415,7 +1416,8 @@ function recordedThemeSlug(state, slug) {
 }
 
 /**
- * Remove one non-default theme from the app record.
+ * Remove one added theme from the app record. The default is removed only
+ * when it is the only added theme: that deletes the generated module.
  * @param {string} slug
  * @param {{cwd?: string}} [options]
  * @returns {Promise<import('./theme.type.mjs').ThemeAppResponse>}
@@ -1436,22 +1438,14 @@ async function removeThemeFromAppLocked(slug, cwd) {
     const others = Object.keys(state.themes).filter(
       other => other !== recordedSlug,
     );
+    if (others.length === 0) return removeLastTheme(state, recordedSlug);
     const uses = others.slice(0, 3).map(other => ({
       name: formatCliCommand(`theme use ${other}`, state.projectDir),
       reason: `make ${other} the default`,
     }));
     throw new AstryxError(
-      uses.length > 0
-        ? `Theme "${recordedSlug}" is the default. Run \`${uses[0].name}\` before removing it.`
-        : `Theme "${recordedSlug}" is the default and the only added theme. Add another theme and make it the default before removing it.`,
-      uses.length > 0
-        ? uses
-        : [
-            {
-              name: formatCliCommand('theme list', state.projectDir),
-              reason: 'the themes you can add',
-            },
-          ],
+      `Theme "${recordedSlug}" is the default. Run \`${uses[0].name}\` before removing it.`,
+      uses,
       ERROR_CODES.ERR_THEME_INVALID,
     );
   }
@@ -1482,6 +1476,65 @@ async function removeThemeFromAppLocked(slug, cwd) {
     true,
     available,
   );
+}
+
+/**
+ * Remove the only added theme by deleting the generated module, which is the
+ * app's whole theme record. A module with changes the CLI did not write stays,
+ * and the error says how to finish by hand.
+ * @param {ReturnType<typeof readThemeState>} state
+ * @param {string} slug
+ * @returns {import('./theme.type.mjs').ThemeAppResponse}
+ */
+function removeLastTheme(state, slug) {
+  const {module} = state;
+  const original = module.expectedOriginal;
+  const source = original?.toString('utf-8') ?? '';
+  if (original == null || !isUneditedThemeModule(source, module.typescript)) {
+    throw new AstryxError(
+      `Theme "${slug}" is the only added theme, and ${module.path} has changes the CLI did not write, so the CLI leaves it. To stop using app themes, delete ${module.path} and remove its import and the Theme wrapper from the app root.`,
+      [
+        {
+          name: formatCliCommand('theme list', state.projectDir),
+          reason: 'the themes you can add',
+        },
+      ],
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
+  }
+  try {
+    if (fs.lstatSync(module.file).isSymbolicLink()) {
+      throw new Error(`${module.path} is a symlink`);
+    }
+    if (!fs.readFileSync(module.file).equals(original)) {
+      throw new Error(`${module.path} changed while the command ran`);
+    }
+    fs.unlinkSync(module.file);
+  } catch (error) {
+    throw new AstryxError(
+      `Failed to delete the generated theme module: ${fsErrorMessage(error, module.path) ?? (error instanceof Error ? error.message : String(error))}`,
+      undefined,
+      ERROR_CODES.ERR_WRITE_FAILED,
+    );
+  }
+  return {
+    type: 'theme.app',
+    data: {
+      themes: [],
+      default: '',
+      modulePath: module.path,
+      change: {
+        action: 'remove',
+        slug,
+        changed: true,
+        firstAdd: false,
+        moduleRemoved: true,
+        ...(/\bexport const themeModes\b/u.test(source)
+          ? {themeModes: true}
+          : {}),
+      },
+    },
+  };
 }
 
 /**

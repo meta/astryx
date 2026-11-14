@@ -122,4 +122,57 @@ describe('themeRemove', () => {
     const result = await themeRemove('reef', {cwd: tmpDir});
     expect(result.data.themes.map(theme => theme.slug)).toEqual(['ocean']);
   });
+
+  describe('the only added theme', () => {
+    const modulePath = () => path.join(tmpDir, 'src/astryx-themes.ts');
+
+    beforeEach(async () => {
+      await themeRemove('reef', {cwd: tmpDir});
+    });
+
+    it('is removed by deleting the generated module', async () => {
+      const result = await themeRemove('ocean', {cwd: tmpDir});
+      expect(result).toEqual({
+        type: 'theme.app',
+        data: {
+          themes: [],
+          default: '',
+          modulePath: 'src/astryx-themes.ts',
+          change: {
+            action: 'remove',
+            slug: 'ocean',
+            changed: true,
+            firstAdd: false,
+            moduleRemoved: true,
+          },
+        },
+      });
+      expect(fs.existsSync(modulePath())).toBe(false);
+      const again = await themeAdd('ocean', {
+        cwd: tmpDir,
+        package: '@acme/themes',
+      });
+      expect(again.data.change.firstAdd).toBe(true);
+    });
+
+    it('is removed after its package is uninstalled', async () => {
+      fs.rmSync(path.join(tmpDir, 'node_modules/@acme'), {recursive: true});
+      const result = await themeRemove('ocean', {cwd: tmpDir});
+      expect(result.data.change.moduleRemoved).toBe(true);
+      expect(fs.existsSync(modulePath())).toBe(false);
+    });
+
+    it('leaves a module with changes the CLI did not write, and says how to finish', async () => {
+      const edited = `${fs.readFileSync(modulePath(), 'utf-8')}// mine\n`;
+      fs.writeFileSync(modulePath(), edited);
+      await expect(themeRemove('ocean', {cwd: tmpDir})).rejects.toMatchObject({
+        code: 'ERR_THEME_INVALID',
+        message: expect.stringContaining(
+          'src/astryx-themes.ts has changes the CLI did not write, so the CLI leaves it.',
+        ),
+        suggestions: [{name: expect.stringMatching(/ theme list$/)}],
+      });
+      expect(fs.readFileSync(modulePath(), 'utf-8')).toBe(edited);
+    });
+  });
 });

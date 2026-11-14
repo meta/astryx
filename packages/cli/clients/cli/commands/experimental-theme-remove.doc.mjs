@@ -12,9 +12,9 @@ export const doc = {
   displayName: 'astryx experimental theme remove',
   namespace: 'cli/commands',
   stability: 'experimental',
-  summary: 'Remove a non-default theme from the app',
+  summary: 'Remove a theme from the app',
   description:
-    'Removes one added theme from the generated module and regenerates the whole module. Choose another default with `astryx experimental theme use` before removing the current default.',
+    'Removes one added theme from the generated module and regenerates the whole module. While other themes are added, choose another default with `astryx experimental theme use` before removing the current default. Removing the only added theme deletes the module and prints the lines the app root must drop.',
   fn: 'themeRemove',
   args: [
     {
