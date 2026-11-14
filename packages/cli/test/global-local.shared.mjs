@@ -31,6 +31,7 @@ import {
   writeJson,
 } from '../test-utils/release-fixtures.mjs';
 import {npmCommand} from '../foundation/release/cache.mjs';
+import {userCacheDir, userConfigDir} from '../foundation/env/user-dirs.mjs';
 
 export const POSIX = process.platform !== 'win32';
 export const ROOT =
@@ -88,8 +89,14 @@ export function computer(options = {}) {
   const pc = {
     home,
     cache,
+    // macOS ignores the XDG settings, so ask the CLI where its folders are.
     /** The `astryx` cache folder global mode uses. */
-    astryxCache: path.join(cache, 'astryx'),
+    astryxCache: userCacheDir({home, env: {XDG_CACHE_HOME: cache}}),
+    /** The `astryx` configuration folder, which holds the state file. */
+    configDir: userConfigDir({
+      home,
+      env: {XDG_CONFIG_HOME: path.join(home, '.config')},
+    }),
     path: [...(options.path ?? []), nodeBin],
   };
   computers.push(pc);
@@ -112,7 +119,7 @@ export async function settleBackgroundSteps(pcs) {
   /** @type {string[]} */
   const busy = [];
   for (const pc of pcs) {
-    const stateDir = path.join(pc.home, '.config', 'astryx');
+    const stateDir = pc.configDir;
     const writing = () => {
       if (
         fs.existsSync(path.join(stateDir, '.lock-check')) ||
@@ -290,7 +297,7 @@ export function filesIn(dir) {
  * @param {Record<string, unknown>} state
  */
 export function globalState(pc, state) {
-  writeJson(path.join(pc.home, '.config', 'astryx', 'state.json'), state);
+  writeJson(path.join(pc.configDir, 'state.json'), state);
 }
 
 /**
@@ -301,10 +308,7 @@ export function globalState(pc, state) {
 export function readState(pc) {
   try {
     return JSON.parse(
-      fs.readFileSync(
-        path.join(pc.home, '.config', 'astryx', 'state.json'),
-        'utf8',
-      ),
+      fs.readFileSync(path.join(pc.configDir, 'state.json'), 'utf8'),
     );
   } catch {
     return {};
