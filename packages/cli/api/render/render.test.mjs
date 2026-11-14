@@ -303,6 +303,49 @@ describe('render(): every write takes its place in one step', () => {
   }, 120_000);
 
   it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'says a file it cannot read cannot be read, not that it does not exist',
+    async () => {
+      put('unreadable/page.tsx', 'export default function Page() {\n  return <p>Unreadable</p>;\n}\n');
+      await render('unreadable/page.tsx', {cwd: dir});
+      const files = ['unreadable/page.tsx', 'unreadable/page.html'];
+      for (const file of files) fs.chmodSync(path.join(dir, file), 0o000);
+      try {
+        for (const [file, options] of [[files[0], {}], [files[1], {reverse: true}]]) {
+          /** @type {any} */
+          let refused;
+          try {
+            await render(file, {cwd: dir, ...options});
+          } catch (e) {
+            refused = e;
+          }
+          expect(refused?.code, file).toBe('ERR_READ_FAILED');
+          expect(refused.message).toBe(`${file} cannot be read (EACCES: no permission); nothing was written.`);
+        }
+      } finally {
+        for (const file of files) fs.chmodSync(path.join(dir, file), 0o644);
+      }
+      expect(await codeOf(() => render('unreadable/missing.tsx', {cwd: dir}))).toBe('ERR_FILE_NOT_FOUND');
+      // A folder or a pipe given as the file is refused before it is opened,
+      // so nothing waits on a pipe no one writes.
+      fs.mkdirSync(path.join(dir, 'unreadable/folder.tsx'));
+      const entries = [['unreadable/folder.tsx', 'it is a folder']];
+      if (spawnSync('mkfifo', [path.join(dir, 'unreadable/pipe.tsx')]).status === 0) entries.push(['unreadable/pipe.tsx', 'it is not a regular file']);
+      for (const [file, why] of entries) {
+        /** @type {any} */
+        let refused;
+        try {
+          await render(file, {cwd: dir});
+        } catch (e) {
+          refused = e;
+        }
+        expect(refused?.code, file).toBe('ERR_READ_FAILED');
+        expect(refused.message).toBe(`${file} cannot be read (${why}); nothing was written.`);
+      }
+    },
+    60_000,
+  );
+
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
     'leaves a file this user cannot write as it is, and keeps the permission bits of a file it replaces',
     async () => {
       await render('page.tsx', {cwd: dir, out: 'modes.html'});
