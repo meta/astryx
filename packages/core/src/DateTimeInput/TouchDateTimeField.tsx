@@ -46,7 +46,8 @@ import {
   inputStatusHoverShadowStyles,
   inputStatusFocusWithinStyles,
 } from '../Field';
-import {useInputStatusIcon, useMergedRefs} from '../hooks';
+import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
+import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {useToday} from '../hooks/useToday';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';

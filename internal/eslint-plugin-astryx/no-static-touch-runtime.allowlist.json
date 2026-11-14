@@ -1,22 +1,6 @@
 {
   "$comment": "Imports that put the shared touch runtime in a Core component's first load today (architecture:react-component-runtime INV13 gap line). Each stays allowed until the change in removedBy lands. The list only shrinks: no-static-touch-runtime.test.mjs fails when an entry no longer reaches the runtime.",
   "entries": {
-    "Calendar/Calendar.tsx -> hooks/index.ts": {
-      "why": "Imports the hooks barrel, which re-exports the public useAnimator, usePanGesture and useDragToSnapPoints, and with them the animator and the gesture host.",
-      "removedBy": "touch-loader follow-up 6: Calendar and the date and time fields import the defining hooks, not the hooks barrel"
-    },
-    "DateInput/NativeDateField.tsx -> hooks/index.ts": {
-      "why": "Imports the hooks barrel, which re-exports the public useAnimator, usePanGesture and useDragToSnapPoints, and with them the animator and the gesture host.",
-      "removedBy": "touch-loader follow-up 6: Calendar and the date and time fields import the defining hooks, not the hooks barrel"
-    },
-    "DateInput/TouchDateField.tsx -> hooks/index.ts": {
-      "why": "Imports the hooks barrel, which re-exports the public useAnimator, usePanGesture and useDragToSnapPoints, and with them the animator and the gesture host.",
-      "removedBy": "touch-loader follow-up 6: Calendar and the date and time fields import the defining hooks, not the hooks barrel"
-    },
-    "DateTimeInput/TouchDateTimeField.tsx -> hooks/index.ts": {
-      "why": "Imports the hooks barrel, which re-exports the public useAnimator, usePanGesture and useDragToSnapPoints, and with them the animator and the gesture host.",
-      "removedBy": "touch-loader follow-up 6: Calendar and the date and time fields import the defining hooks, not the hooks barrel"
-    },
     "DateInput/MonthScroller.tsx -> motion/reducedMotion.ts": {
       "why": "reducedMotion reads two pointer and motion queries from the animator module.",
       "removedBy": "touch-loader follow-up 7: the date and time fields' wheels take the gesture host and the animator from the touch loader"

@@ -23,7 +23,6 @@
     "../Button",
     "../Icon",
     "../VisuallyHidden",
-    "../hooks",
     "../i18n",
     "../utils",
     "./hooks"
@@ -147,7 +146,6 @@
     "../Spinner",
     "../Tooltip",
     "../VisuallyHidden",
-    "../hooks",
     "../i18n",
     "../utils"
   ],
@@ -163,7 +161,6 @@
     "../Spinner",
     "../Tooltip",
     "../VisuallyHidden",
-    "../hooks",
     "../i18n",
     "../utils"
   ],
@@ -214,7 +211,6 @@
     "../SegmentedControl",
     "../Spinner",
     "../Tooltip",
-    "../hooks",
     "../utils"
   ],
   "packages/core/src/Drawer/Drawer.tsx": [

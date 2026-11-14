@@ -49,7 +49,8 @@ import {
   inputStatusHoverShadowStyles,
   inputWrapperStyles,
 } from '../Field';
-import {useInputStatusIcon, useMergedRefs} from '../hooks';
+import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
+import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
