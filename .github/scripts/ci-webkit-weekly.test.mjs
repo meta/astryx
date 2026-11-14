@@ -289,7 +289,7 @@ describe('the release check WebKit scope', () => {
 
   it('gives the deciding job no Actions read it no longer needs', () => {
     expect(ci.jobs['interaction-legs'].permissions.actions).toBeUndefined();
-    // The WebKit lane still reads runs for its heavy-suite caps and downloads artifacts.
+    // The WebKit lane still reads the author's runs for its heavy-suite caps.
     expect(ci.jobs['pr-interaction-webkit'].permissions.actions).toBe('read');
   });
 });
