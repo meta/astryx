@@ -124,8 +124,8 @@ const QUESTIONS = [
     {
       parts: ['button'],
       aspects: ['background'],
-      top: /^set q background '#7c3aed' --on button --when variant:primary$/,
-      adds: /button\.variant:primary\.background=#7c3aed/,
+      top: /^set q background-color '#7c3aed' --on button --when variant:primary$/,
+      adds: /button\.variant:primary\.backgroundColor=#7c3aed/,
     },
   ],
   [
@@ -177,16 +177,16 @@ const QUESTIONS = [
     'card background light gray',
     {
       parts: ['card'],
-      top: /^set q background '#e5e7eb' --on card$/,
-      adds: /card\.base\.background=#e5e7eb/,
+      top: /^set q background-color '#e5e7eb' --on card$/,
+      adds: /card\.base\.backgroundColor=#e5e7eb/,
     },
   ],
   [
     'header background navy',
     {
       parts: ['app-shell-header'],
-      top: /^set q background '#1e3a8a' --on app-shell-header$/,
-      adds: /app-shell-header\.base\.background=#1e3a8a/,
+      top: /^set q background-color '#1e3a8a' --on app-shell-header$/,
+      adds: /app-shell-header\.base\.backgroundColor=#1e3a8a/,
     },
   ],
   [
@@ -232,15 +232,15 @@ const QUESTIONS = [
     {
       parts: ['tab-indicator'],
       top: /--on tab-indicator --state selected$/,
-      adds: /tab-indicator\.selected\.background=var\(--color-accent\)/,
+      adds: /tab-indicator\.selected\.backgroundColor=var\(--color-accent\)/,
     },
   ],
   [
     'make the toggle switch blue when on',
     {
       parts: ['switch'],
-      top: /^set q background '#2563eb' --on switch --state checked$/,
-      adds: /switch\.checked\.background=#2563eb/,
+      top: /^set q background-color '#2563eb' --on switch --state checked$/,
+      adds: /switch\.checked\.backgroundColor=#2563eb/,
     },
   ],
   [
@@ -248,14 +248,14 @@ const QUESTIONS = [
     {
       parts: ['checks'],
       top: /--on checks --state checked$/,
-      adds: /checkbox-indicator\.checked\.background=#db2777/,
+      adds: /checkbox-indicator\.checked\.backgroundColor=#db2777/,
     },
   ],
   [
     'progress bar fill should be green',
     {
       top: /--on progress-bar-fill$/,
-      adds: /progress-bar-fill\.base\.background=#16a34a/,
+      adds: /progress-bar-fill\.base\.backgroundColor=#16a34a/,
     },
   ],
   [
@@ -278,7 +278,7 @@ const QUESTIONS = [
     'tooltip black with white text',
     {
       parts: ['tooltip'],
-      top: /background '#000000' --on tooltip && set q color '#ffffff' --on tooltip$/,
+      top: /background-color '#000000' --on tooltip && set q color '#ffffff' --on tooltip$/,
       adds: /tooltip\.base\.color=#ffffff/,
     },
   ],
@@ -302,14 +302,14 @@ const QUESTIONS = [
     {
       parts: ['table-header-cell'],
       top: /--on table-header-cell$/,
-      adds: /table-header-cell\.base\.background=/,
+      adds: /table-header-cell\.base\.backgroundColor=/,
     },
   ],
   [
     'danger button should be orange not red',
     {
-      top: /^set q background '#f97316' --on button --when variant:destructive$/,
-      adds: /button\.variant:destructive\.background=#f97316/,
+      top: /^set q background-color '#f97316' --on button --when variant:destructive$/,
+      adds: /button\.variant:destructive\.backgroundColor=#f97316/,
     },
   ],
   [
@@ -670,7 +670,7 @@ const QUESTIONS = [
   [
     'make the header dark with white text and a bottom border',
     {
-      top: /background '#1f2937' --on app-shell-header && set q --color-text-primary '#ffffff'/,
+      top: /background-color '#1f2937' --on app-shell-header && set q --color-text-primary '#ffffff'/,
       adds: /borderBottom=/,
     },
   ],
@@ -687,8 +687,9 @@ const QUESTIONS = [
     },
   ],
   [
+    // A part and an aspect alone name no change: nothing is written.
     'shaddow on cardz',
-    {parts: ['card'], top: /--on card$/, adds: /card\.base\.boxShadow=/},
+    {parts: ['card'], top: null},
   ],
   [
     'Make The Buttons ROUNDER',
@@ -723,15 +724,15 @@ const QUESTIONS = [
   [
     'кнопки синие',
     {
-      top: /^set q background '#2563eb' --on button$/,
-      adds: /button\.base\.background=#2563eb/,
+      top: /^set q background-color '#2563eb' --on button$/,
+      adds: /button\.base\.backgroundColor=#2563eb/,
     },
   ],
   [
     'set button background to rgb(255 0 0)',
     {
-      top: /^set q background 'rgb\(255 0 0\)' --on button$/,
-      adds: /button\.base\.background=rgb\(255 0 0\)/,
+      top: /^set q background-color 'rgb\(255 0 0\)' --on button$/,
+      adds: /button\.base\.backgroundColor=rgb\(255 0 0\)/,
     },
   ],
   [
@@ -804,7 +805,7 @@ describe('how commands, run by set', () => {
       ],
       [
         'make the toggle switch blue when on',
-        /switch[^{]*\{[^}]*background:\s*#2563eb/,
+        /switch[^{]*\{[^}]*background-color:\s*#2563eb/,
       ],
       ['change the brand color to #ff6600', /--color-accent:[^;]*#ff6600/i],
     ])) {
@@ -1034,7 +1035,7 @@ const QUESTIONS_2 = [
   [
     'compact spacing except in dialogs',
     {
-      top: /^set q spacing less && set q spacing medium --on dialog$/,
+      top: /^set q spacing compact && set q spacing medium --on dialog$/,
       adds: /dialog\.base\.--spacing-/,
     },
   ],
@@ -1050,8 +1051,8 @@ const QUESTIONS_2 = [
     {
       // The danger variant keeps the fill (and the text on it) the base
       // theme gives it.
-      top: /--on button && set q background 'var\(--color-error(-muted)?\)' --on button --when variant:destructive( && set q color 'var\(--color-on-error(-muted)?\)' --on button --when variant:destructive)?$/,
-      adds: /variant:destructive\.background=var\(--color-error(-muted)?\)/,
+      top: /--on button && set q background-color 'var\(--color-error(-muted)?\)' --on button --when variant:destructive( && set q color 'var\(--color-on-error(-muted)?\)' --on button --when variant:destructive)?$/,
+      adds: /variant:destructive\.backgroundColor=var\(--color-error(-muted)?\)/,
     },
   ],
   [
@@ -1164,7 +1165,7 @@ const QUESTIONS_2 = [
   [
     'in dark mode, cards should be #1c1c1e',
     {
-      top: /^set q background '#1c1c1e' --on card --mode dark$/,
+      top: /^set q background-color '#1c1c1e' --on card --mode dark$/,
       adds: /card\.variant:default\.@dark\.backgroundColor=/,
     },
   ],
@@ -1184,14 +1185,14 @@ const QUESTIONS_2 = [
     'selected side nav item has accent background',
     {
       top: /--on side-nav-item --state selected$/,
-      adds: /side-nav-item\.selected\.background=/,
+      adds: /side-nav-item\.selected\.backgroundColor=/,
     },
   ],
   [
     'the sidebar is #111827 and nav items are #9ca3af',
     {
-      top: /--on side-nav && set q background '#9ca3af' --on side-nav-item$/,
-      adds: /side-nav-item\.base\.background=#9ca3af/,
+      top: /--on side-nav && set q background-color '#9ca3af' --on side-nav-item$/,
+      adds: /side-nav-item\.base\.backgroundColor=#9ca3af/,
     },
   ],
   [
@@ -1204,8 +1205,8 @@ const QUESTIONS_2 = [
   [
     'tabs: selected tab has a 2px #6366f1 underline',
     {
-      top: /^set q background '#6366f1' --on tab-indicator --state selected && set q height 2px --on tab-indicator$/,
-      adds: /tab-indicator\.selected\.background=#6366f1/,
+      top: /^set q background-color '#6366f1' --on tab-indicator --state selected && set q height 2px --on tab-indicator$/,
+      adds: /tab-indicator\.selected\.backgroundColor=#6366f1/,
     },
   ],
   [
@@ -1250,8 +1251,8 @@ const QUESTIONS_2 = [
   [
     'transparent header',
     {
-      top: /^set q background transparent --on app-shell-header$/,
-      adds: /app-shell-header\.base\.background=transparent/,
+      top: /^set q background-color transparent --on app-shell-header$/,
+      adds: /app-shell-header\.base\.backgroundColor=transparent/,
     },
   ],
   [
@@ -1349,8 +1350,8 @@ const QUESTIONS_2 = [
   [
     'ボタンを青く',
     {
-      top: /^set q background '#2563eb' --on button$/,
-      adds: /button\.base\.background=#2563eb/,
+      top: /^set q background-color '#2563eb' --on button$/,
+      adds: /button\.base\.backgroundColor=#2563eb/,
     },
   ],
   // contradictions and repeats
@@ -1565,7 +1566,7 @@ const QUESTIONS_3 = [
   [
     'brand colors: primary #ff5a1f, secondary #1f2937',
     {
-      top: /^set q accent '#ff5a1f' && set q background '#1f2937' --on button --when variant:secondary$/,
+      top: /^set q accent '#ff5a1f' && set q background-color '#1f2937' --on button --when variant:secondary$/,
       adds: /--color-accent[^\n]*=#ff5a1f/,
     },
   ],
@@ -1674,7 +1675,10 @@ const QUESTIONS_3 = [
       adds: /button\.base\.fontWeight=700/,
     },
   ],
-  ['make the switch green', {top: /^set q background '#16a34a' --on switch$/}],
+  [
+    'make the switch green',
+    {top: /^set q background-color '#16a34a' --on switch$/},
+  ],
   [
     'all radius values are 0, it is very sharp',
     {top: /^set q corners square$/, adds: /--radius-element=0px/},
@@ -1732,13 +1736,13 @@ const QUESTIONS_3 = [
   [
     'the table has zebra rows #f9fafb and a header #f3f4f6',
     {
-      top: /^set q --color-background-muted '#f9fafb' --on table-row && set q background '#f3f4f6' --on table-header-cell$/,
+      top: /^set q --color-background-muted '#f9fafb' --on table-row && set q background-color '#f3f4f6' --on table-header-cell$/,
     },
   ],
   [
     'the error banner is #fef2f2 with #991b1b text',
     {
-      top: /^set q background '#fef2f2' --on banner --when status:error && set q color '#991b1b' --on banner --when status:error$/,
+      top: /^set q background-color '#fef2f2' --on banner --when status:error && set q color '#991b1b' --on banner --when status:error$/,
     },
   ],
   ['button color #fff', {top: /^set q color '#fff' --on button$/}],
@@ -1755,7 +1759,7 @@ const QUESTIONS_3 = [
   [
     'cards sin sombra y botones azules',
     {
-      top: /^set q box-shadow none --on card && set q background '#2563eb' --on button$/,
+      top: /^set q box-shadow none --on card && set q background-color '#2563eb' --on button$/,
     },
   ],
   // a refusal says why
@@ -2010,13 +2014,13 @@ const QUESTIONS_F = [
   [
     'radio buttons accent color when checked',
     {
-      top: /^set q background 'var\(--color-accent\)' --on radio-indicator --state checked --only$/,
+      top: /^set q background-color 'var\(--color-accent\)' --on radio-indicator --state checked --only$/,
     },
   ],
   [
     'success badge green #dcfce7 with #166534 text',
     {
-      top: /^set q background '#dcfce7' --on badge --when variant:success && set q color '#166534' --on badge --when variant:success$/,
+      top: /^set q background-color '#dcfce7' --on badge --when variant:success && set q color '#166534' --on badge --when variant:success$/,
     },
   ],
   [
@@ -2027,7 +2031,7 @@ const QUESTIONS_F = [
   ],
   [
     'match the header color to the sidebar (#1e293b)',
-    {top: /^set q background '#1e293b' --on app-shell-header$/},
+    {top: /^set q background-color '#1e293b' --on app-shell-header$/},
   ],
   [
     'Notion look: serif headings, no shadows',
@@ -2046,7 +2050,7 @@ const QUESTIONS_F = [
   [
     'skeleton loaders lighter',
     {
-      top: /--on skeleton --mode light && set q background '#[0-9a-f]+' --on skeleton --mode dark$/,
+      top: /--on skeleton --mode light && set q background-color '#[0-9a-f]+' --on skeleton --mode dark$/,
     },
   ],
   [
@@ -2089,7 +2093,7 @@ const QUESTIONS_F = [
   [
     'make buttons pill shaped and the header dark',
     {
-      top: /^set q corners pill --on button && set q background '#[0-9a-f]+' --on app-shell-header$/,
+      top: /^set q corners pill --on button && set q background-color '#[0-9a-f]+' --on app-shell-header$/,
     },
   ],
   [
@@ -2270,7 +2274,7 @@ const QUESTIONS_G = [
   [
     'card background color-mix(in srgb, #2563eb 10%, white)',
     {
-      top: /^set q background 'color-mix\(in srgb, #2563eb 10%, white\)' --on card$/,
+      top: /^set q background-color 'color-mix\(in srgb, #2563eb 10%, white\)' --on card$/,
     },
   ],
   [
@@ -2601,11 +2605,13 @@ const QUESTIONS_H = [
   ],
   [
     'card background light-dark(#fff, #111)',
-    {top: /^set q background 'light-dark\(#fff, #111\)' --on card$/},
+    {top: /^set q background-color 'light-dark\(#fff, #111\)' --on card$/},
   ],
   [
     'card background var(--color-background-muted)',
-    {top: /^set q background 'var\(--color-background-muted\)' --on card$/},
+    {
+      top: /^set q background-color 'var\(--color-background-muted\)' --on card$/,
+    },
   ],
   [
     'card padding var(--spacing-6)',
@@ -2695,7 +2701,9 @@ const QUESTIONS_H = [
   ['notification rounder', {top: /^set q corners more --on toast$/}],
   [
     'error toasts red',
-    {top: /^set q background '#dc2626' --on toast --when type:error$/},
+    {
+      top: /^set q background-color '#dc2626' --on toast --when type:error$/,
+    },
   ],
   ['read-only inputs gray background', {top: /--on inputs --state readonly$/}],
   [
@@ -3128,7 +3136,9 @@ const QUESTIONS_J = [
   ],
   [
     'after I check a checkbox it should be green',
-    {top: /^set q background '#16a34a' --on checks --state checked$/},
+    {
+      top: /^set q background-color '#16a34a' --on checks --state checked$/,
+    },
   ],
   ['once a tab is picked make it bold', {top: null}],
   [
@@ -3213,7 +3223,7 @@ describe('how answers final-5 questions', () => {
 const QUESTIONS_K = [
   [
     'in dark mode only, cards #111111',
-    {top: /^set q background '#111111' --on card --mode dark$/},
+    {top: /^set q background-color '#111111' --on card --mode dark$/},
   ],
   ['only dark mode please', {top: /^set q mode dark-only$/}],
   [
@@ -3288,7 +3298,7 @@ const QUESTIONS_L = [
   ],
   [
     'tooltips and toasts black',
-    /^set q background '#000000' --on tooltip && set q background '#000000' --on toast$/,
+    /^set q background-color '#000000' --on tooltip && set q background-color '#000000' --on toast$/,
   ],
   [
     'less padding on cards but more on buttons',
@@ -3474,7 +3484,7 @@ const QUESTIONS_N = [
   ['rounded-full buttons', /^set q corners pill --on button$/],
   [
     '.btn-primary { background: #16a34a }',
-    /^set q background '#16a34a' --on button --when variant:primary$/,
+    /^set q background-color '#16a34a' --on button --when variant:primary$/,
   ],
   ['角を四角に', /^set q corners square$/],
 ];
@@ -3623,7 +3633,7 @@ const QUESTIONS_P = [
   ['dropdown shadow', /--on dropdown-menu$/],
   [
     'checkboxes green',
-    /^set q background '#16a34a' --on checks --state checked$/,
+    /^set q background-color '#16a34a' --on checks --state checked$/,
   ],
   ['is my theme valid', null, /show builds q/],
 ];
@@ -3730,11 +3740,11 @@ const QUESTIONS_R = [
   ['darkmode accent teal', /^set q --color-accent '#0d9488' --mode dark$/],
   [
     'html.dark .card { background: #111 }',
-    /^set q background '#111' --on card --mode dark$/,
+    /^set q background-color '#111' --on card --mode dark$/,
   ],
   [
     '@media (prefers-color-scheme: dark) { .card { background: #111 } }',
-    /^set q background '#111' --on card --mode dark$/,
+    /^set q background-color '#111' --on card --mode dark$/,
   ],
   ['take back the shadow change', null, /sets nothing for shadow/],
   ['pointer cursor on hover for cards', /^set q cursor pointer --on card$/],
@@ -4022,7 +4032,7 @@ describe('how reads muted, "less X" and sarcasm', () => {
     expect(await top('less muted colors')).toBe('set vc vibrancy more');
     // A token name is never read as a word.
     expect(await top('card background var(--color-background-muted)')).toBe(
-      "set vc background 'var(--color-background-muted)' --on card",
+      "set vc background-color 'var(--color-background-muted)' --on card",
     );
   }, 120_000);
 
@@ -4154,7 +4164,8 @@ const QUESTIONS_Y = [
     "don't touch the buttons, only square the cards",
     /^set q corners square --on card$/,
   ],
-  ['leave the corners; spacing compact', /^set q spacing less$/],
+  // A named rung is that rung.
+  ['leave the corners; spacing compact', /^set q spacing compact$/],
   [
     'boutons arrondis, sans ombre',
     /^set q corners round --on button && set q box-shadow none --on button$/,
@@ -4165,7 +4176,7 @@ const QUESTIONS_Y = [
   ],
   [
     'Specifically she wants the cards to have softer corners (maybe around 12px), the primary buttons should use our brand blue which is #0057ff, and the page background should be a very light gray',
-    /set q background '#0057ff' --on button --when variant:primary/,
+    /set q background-color '#0057ff' --on button --when variant:primary/,
   ],
 ];
 
@@ -4233,7 +4244,7 @@ describe('how lookups', () => {
     expect(data.recorded).toBe(false);
     expect(data.unrecorded.reason).toMatch(/what tooltip reads is unknown/);
     expect(data.unrecorded.examples.map(bare)).toContain(
-      "set q background '#f3f4f6' --on tooltip",
+      "set q background-color '#f3f4f6' --on tooltip",
     );
   });
 

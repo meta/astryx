@@ -335,7 +335,7 @@ describe('hunt68: a second part with an ask of its own', () => {
     async () => {
       const r = await top('make the text bigger on buttons and cards red');
       expect(r.all).toMatch(/--on button/);
-      expect(r.all).toMatch(/background '#dc2626' --on card/);
+      expect(r.all).toMatch(/background-color '#dc2626' --on card/);
     },
     T,
   );

@@ -216,7 +216,7 @@ describe('wrong writes that are no longer accepted', () => {
     async test => {
       needsBase(test);
       expect((await answer('blue card background')).first[0]).toBe(
-        "set t background '#2563eb' --on card",
+        "set t background-color '#2563eb' --on card",
       );
     },
     T,
@@ -310,8 +310,8 @@ describe('clear asks it used to drop', () => {
         (await answer('card background: light mode #eee, dark mode #222'))
           .first,
       ).toEqual([
-        "set t background '#eee' --on card --mode light",
-        "set t background '#222' --on card --mode dark",
+        "set t background-color '#eee' --on card --mode light",
+        "set t background-color '#222' --on card --mode dark",
       ]);
     },
     T,

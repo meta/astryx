@@ -246,7 +246,7 @@ describe('opacity and see-through amounts', () => {
     'a percent color is that color at that alpha',
     async () => {
       expect((await top('card background 5% gray')).all).toBe(
-        "set q background 'color-mix(in srgb, gray 5%, transparent)' --on card",
+        "set q background-color 'color-mix(in srgb, gray 5%, transparent)' --on card",
       );
     },
     T,

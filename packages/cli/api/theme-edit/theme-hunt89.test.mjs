@@ -156,7 +156,7 @@ describe('variant words after except', () => {
         (await answer('red background on cards except transparent ones'))
           .commands[1],
       ).toBe(
-        'set q background transparent --on card --when variant:transparent',
+        'set q background-color transparent --on card --when variant:transparent',
       );
     },
     T,

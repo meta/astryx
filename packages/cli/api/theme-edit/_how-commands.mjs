@@ -12,6 +12,7 @@ import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {checkSetting} from './_check.mjs';
 import {baseResolved} from './_project.mjs';
+import {readThemeListState} from '../theme/_adapter.mjs';
 import {
   compileTheme,
   editedThemes,
@@ -116,12 +117,25 @@ export async function howTheme(ctx, cwd, name) {
     }
     if (themes.length > 1 && !note)
       note = `the commands are for ${slug}, the theme changed last; --theme picks another of: ${themes.join(', ')}`;
-  } else
-    note = `the app has no theme yet; the commands are for a theme named ${EXAMPLE_THEME}, made first with: ${P} new ${EXAMPLE_THEME} --like ${LIKE[0]}`;
+  }
+  // With no editor theme, the theme the app shows now (its default, read
+  // as `theme add` and doctor read it) is what the answer starts from and
+  // measures against, when it is a base the editor can start from.
+  const appDefault = (() => {
+    try {
+      const d = readThemeListState(cwd).defaultSlug;
+      return d && LIKE.includes(d) ? d : null;
+    } catch {
+      return null;
+    }
+  })();
+  const startLike = appDefault ?? LIKE[0];
+  if (!name && !themes.length)
+    note = `the app has no theme yet; the commands are for a theme named ${EXAMPLE_THEME}, made first with: ${P} new ${EXAMPLE_THEME} --like ${startLike}${appDefault ? ` (${appDefault} is the theme the app shows now)` : ''}`;
   const exists = Boolean(data);
   if (!data) {
     if (!themes.length) slug = EXAMPLE_THEME;
-    data = {name: slug, like: LIKE[0], mode: 'both', settings: []};
+    data = {name: slug, like: startLike, mode: 'both', settings: []};
   }
   const theme = /** @type {import('./_settings.mjs').ThemeData} */ (data);
   const base = await baseResolved(ctx.project, theme.like);
@@ -313,8 +327,10 @@ function resolveIn(v, map, mode) {
   let out = String(v ?? '');
   for (let i = 0; i < 8; i++) {
     const next = out
-      .replace(/var\(\s*(--[a-z0-9-]+)\s*(?:,\s*([^()]*))?\)/gi, (_, t, fb) =>
-        String(map[t] ?? fb ?? ''),
+      // (A variable with no value here and no fallback stays as written:
+      // a value read in part is no value, never the rest of it.)
+      .replace(/var\(\s*(--[a-z0-9-]+)\s*(?:,\s*([^()]*))?\)/gi, (m, t, fb) =>
+        String(map[t] ?? fb ?? m),
       )
       .replace(
         /light-dark\(\s*([^,()]+(?:\([^()]*\))?)\s*,\s*([^()]+(?:\([^()]*\))?)\s*\)/gi,
@@ -517,12 +533,38 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
           w === '' ||
           /^variant=(default|primary|accent|neutral)$|^size=md$/.test(w),
       );
+    // What Core writes for a property in a rule (a card's padding is its
+    // container padding less the border width): the whole declaration, so
+    // a value is never read from one token of several.
+    const declOf = (
+      /** @type {string} */ prop,
+      /** @type {string} */ w,
+      /** @type {string} */ token,
+    ) => {
+      const at = C.MAP[part]?.at?.[prop] ?? {};
+      const attrs = w ? w.split(' ') : [];
+      const key = Object.keys(at).find(k =>
+        attrs.every(x => k.split(',').includes(x)),
+      );
+      // (Only a declaration of several theme tokens: one token alone is
+      // read as that token.)
+      const decl = key ? String(at[key]) : '';
+      const tokens = new Set(
+        [...decl.matchAll(/var\(\s*(--[a-z][a-z0-9-]*)/g)]
+          .map(m => m[1])
+          .filter(t => !/^--(_|astryx-)/.test(t)),
+      );
+      return decl.includes(token) && tokens.size > 1 ? decl : `var(${token})`;
+    };
     for (const g of Object.keys(GROUPS))
       for (const r of C.partReads(part, g) ?? [])
         if (mainWhen(r.when?.length ? r.when : ['']))
           for (const prop of r.props ?? []) {
             const key = `base||${prop}`;
-            if (!raw.has(key)) raw.set(key, `var(${r.token})`);
+            const w = (r.when?.length ? r.when : ['']).find(
+              (/** @type {string} */ x) => mainWhen([x]),
+            );
+            if (!raw.has(key)) raw.set(key, declOf(prop, w ?? '', r.token));
           }
     for (const g of Object.keys(GROUPS))
       for (const r of C.partReads(part, g) ?? [])
@@ -533,7 +575,10 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
               // A variant with no rule of its own takes the part's own base
               // rule over the token it reads.
               if (!raw.has(key))
-                raw.set(key, own.get(`base||${prop}`) ?? `var(${r.token})`);
+                raw.set(
+                  key,
+                  own.get(`base||${prop}`) ?? declOf(prop, w, r.token),
+                );
             }
     /** @type {Map<string, {light: string, dark: string, raw: string}>} */
     const out = new Map();
@@ -862,8 +907,8 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
   // "more colorful", "more muted": the accent colors the theme shows (the
   // accent and the text and icons drawn in it) move that way in saturation
   // together, in each mode shown (a step that dulls them is not more
-  // colorful). A muted wash is a surface drawn from them, as saturated as
-  // the page under it lets it be, so it is not counted.
+  // colorful), and the accent wash, as it paints over the page, never moves
+  // the other way (a faint wash made a solid fill is not less colorful).
   if (intent.saturation)
     for (const mode of /** @type {Array<'light' | 'dark'>} */ (
       visible ? [visible] : ['light', 'dark']
@@ -890,6 +935,19 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
         (intent.saturation === 'more' ? x < y - 0.02 * n : x > y + 0.02 * n)
       )
         return `the accent colors would get ${intent.saturation === 'more' ? 'duller' : 'more saturated'} in ${mode} mode`;
+      const wash = (/** @type {Record<string, string>} */ t) =>
+        t['--color-accent-muted'] == null
+          ? null
+          : saturationOf(
+              painted(resolveIn('var(--color-accent-muted)', t, mode), t, mode),
+            );
+      const [wa, wb] = [wash(tn[mode]), wash(tw[mode])];
+      if (
+        wa != null &&
+        wb != null &&
+        (intent.saturation === 'more' ? wa < wb - 0.02 : wa > wb + 0.02)
+      )
+        return `the accent wash (--color-accent-muted) would get ${intent.saturation === 'more' ? 'duller' : 'more saturated'} in ${mode} mode, as it paints over the page`;
     }
   if (!shadowMoved && steps.some(st => familyOf(st.thing) === 'shadow'))
     return 'the shadows would look the same as they do now (a shadow color at full strength gets no stronger; a bigger or blurrier shadow can)';
