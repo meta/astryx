@@ -704,6 +704,42 @@ describe('InputGroup', () => {
     }
   });
 
+  it('marks the native time picker invalid on a group error', () => {
+    render(
+      <InputGroup
+        label="Price"
+        status={{type: 'error', message: 'Price is required'}}>
+        <TimeInput label="Time" presentation="native" onChange={() => {}} />
+      </InputGroup>,
+    );
+
+    // `presentation="native"` swaps the text control for the picker segment;
+    // the group error still reaches the picker input itself.
+    expect(screen.getByLabelText('Price Time')).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
+  });
+
+  it('does not mark the native time picker invalid for warning, success, or no status', () => {
+    const cases = [
+      {status: {type: 'warning', message: 'Price looks high'} as const},
+      {status: {type: 'success', message: 'Price accepted'} as const},
+      {status: undefined},
+    ];
+    for (const {status} of cases) {
+      const {unmount} = render(
+        <InputGroup label="Price" status={status}>
+          <TimeInput label="Time" presentation="native" onChange={() => {}} />
+        </InputGroup>,
+      );
+      expect(screen.getByLabelText('Price Time')).not.toHaveAttribute(
+        'aria-invalid',
+      );
+      unmount();
+    }
+  });
+
   it('marks every admitted input invalid on a group error and leaves addons unmarked', () => {
     const onChange = () => {};
     render(

@@ -877,7 +877,9 @@ function TimeField({
           isFocusableDisabled
           isEffectivelyRequired={isEffectivelyRequired}
           isBusy={isBusy}
-          statusType={fieldStatus?.type}
+          // The native picker marks for an error of its own or of the group;
+          // rejection marks through the segment's own validity instead.
+          statusType={isInvalid ? 'error' : undefined}
           ariaDescribedBy={ariaDescribedBy}
           isRejected={typedTime.isSurfaceRejectionShown}
           onRejectedChange={typedTime.setSurfaceRejected}

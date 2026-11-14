@@ -14,8 +14,6 @@ export interface InputARIAInputGroup {
   labelID: string;
   /** Space-separated IDs for InputGroup description/status text. */
   describedByIDs?: string;
-  /** Status type the InputGroup owns, when it has one. */
-  statusType?: InputStatusType;
 }
 
 export interface InputARIA {
@@ -28,6 +26,19 @@ export interface InputARIA {
 }
 
 type AriaID = string | null | undefined | false;
+
+/**
+ * Resolves an input's invalid state from the two status types the input can
+ * see: its own and the surrounding InputGroup's. An error of either marks the
+ * input invalid; warning, success, and no status never do, matching each
+ * input's own error-only mapping.
+ */
+function isInputInvalid(
+  statusType?: InputStatusType,
+  groupStatusType?: InputStatusType,
+): boolean {
+  return statusType === 'error' || groupStatusType === 'error';
+}
 
 export function joinAriaIDs(...values: AriaID[]): string | undefined {
   const ids = values
@@ -61,7 +72,14 @@ export function joinAriaIDs(...values: AriaID[]): string | undefined {
 export function getInputARIA(
   labelID: string,
   describedByIDs: AriaID[] = [],
-  inputGroup?: InputARIAInputGroup | null,
+  inputGroup?: {
+    /** ID of the visible InputGroup label. */
+    labelID: string;
+    /** Space-separated IDs for InputGroup description/status text. */
+    describedByIDs?: string;
+    /** Status type the InputGroup owns, when it has one. */
+    statusType?: InputStatusType;
+  } | null,
   statusType?: InputStatusType,
 ): InputARIA {
   return {
@@ -69,6 +87,6 @@ export function getInputARIA(
       ? joinAriaIDs(inputGroup.labelID, labelID)
       : undefined,
     ariaDescribedBy: joinAriaIDs(inputGroup?.describedByIDs, ...describedByIDs),
-    isInvalid: statusType === 'error' || inputGroup?.statusType === 'error',
+    isInvalid: isInputInvalid(statusType, inputGroup?.statusType),
   };
 }
