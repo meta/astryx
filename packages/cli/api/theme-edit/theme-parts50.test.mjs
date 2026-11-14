@@ -69,17 +69,20 @@ const answer = async (/** @type {string} */ question, theme = 'n') => {
 };
 
 describe('part facts from Core', () => {
-  it("reads a side nav's background from the shell region it sits in", async ctx => {
+  it("reads the shell's side nav region's background, and an inherited one as no paint of its own", async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('n', {cwd, like: 'neutral'});
-    for (const part of ['side-nav', 'app-shell-sidenav']) {
-      const {data} = await themeEditHow(part, {cwd, theme: 'n'});
-      expect(data.recorded, part).toBe(true);
-      expect(
-        data.reads.background.map((/** @type {any} */ r) => r.token),
-        part,
-      ).toContain('--color-background-body');
-    }
+    const region = (await themeEditHow('app-shell-sidenav', {cwd, theme: 'n'}))
+      .data;
+    expect(region.recorded).toBe(true);
+    expect(
+      region.reads.background.map((/** @type {any} */ r) => r.token),
+    ).toContain('--color-background-body');
+    // The side nav's background is `inherit`: it shows the region's, and
+    // reads no token itself.
+    const nav = (await themeEditHow('side-nav', {cwd, theme: 'n'})).data;
+    expect(nav.recorded).toBe(true);
+    expect(nav.reads.background ?? []).toEqual([]);
   }, 240_000);
 
   it('answers a color ask with a color, from the page it is compared to', async ctx => {

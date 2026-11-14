@@ -208,7 +208,7 @@ describe('results and refusals', () => {
       mode: 'dark',
     });
     expect(r.data.styled.join('\n')).toMatch(
-      /button variant:secondary :hover: color /,
+      /button variant:secondary @dark :hover: color /,
     );
   }, 240_000);
 
@@ -250,22 +250,17 @@ describe('results and refusals', () => {
     expect(r.run[0]).toMatch(/ set l spacing roomy$/);
   }, 240_000);
 
-  it('names the group member that cannot keep the other mode and offers --only', async ctx => {
+  it('takes a one-mode state color on every group member, none of which needs a value of its own there', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('m', {cwd, like: 'butter'});
-    const r = await refusal(() =>
-      themeEditSet('m', 'border-color', '#ff0000', {
-        cwd,
-        on: 'text-input',
-        state: 'focus-within',
-        mode: 'dark',
-      }),
-    );
-    // The members that cannot keep it are named, never the part asked for.
-    expect(r.message).toMatch(/complex-selector/);
-    expect(r.message).not.toMatch(/^text-input /);
-    expect(r.run[0]).toMatch(
-      /--on text-input --only --state focus-within --mode dark$/,
-    );
+    // The mode block writes nothing in the other mode, so a member with no
+    // focus color of its own (a complex selector) takes it too.
+    const r = await themeEditSet('m', 'border-color', '#ff0000', {
+      cwd,
+      on: 'text-input',
+      state: 'focus-within',
+      mode: 'dark',
+    });
+    expect(r.data.styled.join('\n')).toMatch(/complex-selector/);
   }, 240_000);
 });

@@ -31,7 +31,7 @@ import {
 import {SAMPLE_PAGE, elementNames, pageSource} from './_catalog.mjs';
 
 /** Bump when the shape of the cached part data changes. */
-const PART_DATA_VERSION = 9;
+const PART_DATA_VERSION = 10;
 
 /**
  * Flags that change what a component does or whether it shows, not how it
@@ -941,16 +941,9 @@ export function walkMarkup(html, decls, tokens) {
       ].join(',');
       for (const d of own) {
         if (d.prop.startsWith('--')) continue;
-        // An inherited background reads what its parent paints.
-        const inherited =
-          ownsTarget &&
-          d.prop === 'background-color' &&
-          /^inherit$/i.test(d.value.trim())
-            ? parent.bg?.tokens
-            : null;
-        const toks = inherited
-          ? new Set(inherited)
-          : expand(d.value, env, tokens);
+        // (An inherited background paints nothing of its own: it reads no
+        // token, and what shows is its parent's.)
+        const toks = expand(d.value, env, tokens);
         const cond = [cond0, d.cond].filter(Boolean).join(' ');
         if (ownsTarget) {
           const P = (T.own[d.prop] ??= {tokens: {}, values: new Set()});

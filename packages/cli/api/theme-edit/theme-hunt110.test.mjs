@@ -102,12 +102,19 @@ describe('wrong writes that are no longer accepted', () => {
     T,
   );
   it(
-    'a focus except the inputs cannot keep leaves the plain answer out too',
+    'a focus except on the inputs keeps the focused fill in each mode',
     async test => {
       needsBases(test);
-      expect(
-        (await answer('make inputs darker except when focused')).first,
-      ).toEqual([]);
+      // Each mode's change goes in that mode's block, so the focused input
+      // keeps its own fill in each mode.
+      const {first} = await answer('make inputs darker except when focused');
+      for (const m of ['light', 'dark'])
+        expect(
+          first.some(c =>
+            new RegExp(`--on inputs --state focus-within --mode ${m}$`).test(c),
+          ),
+          m,
+        ).toBe(true);
     },
     T,
   );

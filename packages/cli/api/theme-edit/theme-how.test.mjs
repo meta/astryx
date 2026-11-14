@@ -271,7 +271,7 @@ const QUESTIONS = [
       parts: ['card'],
       // Each card variant from its own fill, dark mode only.
       top: /--on card( --when variant:default)? --mode dark( && |$)/,
-      adds: /card\.variant:default\.background(Color)?=/,
+      adds: /card\.variant:default\.@dark\.background(Color)?=/,
     },
   ],
   [
@@ -293,7 +293,7 @@ const QUESTIONS = [
     'hover color for buttons a bit darker',
     {
       top: /--on button --when variant:\w+ --state hover( --mode (light|dark))?$/,
-      adds: /button\.variant:\w+\.:hover\./,
+      adds: /button\.variant:\w+\.@(light|dark)\.:hover\./,
     },
   ],
   ['table rows striped', {parts: ['table-row'], top: null}],
@@ -1165,7 +1165,7 @@ const QUESTIONS_2 = [
     'in dark mode, cards should be #1c1c1e',
     {
       top: /^set q background '#1c1c1e' --on card --mode dark$/,
-      adds: /card\.variant:default\.backgroundColor=light-dark\(/,
+      adds: /card\.variant:default\.@dark\.backgroundColor=/,
     },
   ],
   [
@@ -1481,7 +1481,7 @@ describe('how answers pass-2 questions', () => {
       ],
       [
         'in dark mode, cards should be #1c1c1e',
-        /card[^{]*\{[^}]*background-color:\s*light-dark\(.*#1c1c1e/,
+        /card[^{]*\):where\(:scope\[data-theme="dark"\] \*\)[^{]*\{[^}]*background-color:\s*#1c1c1e/,
       ],
       ['button padding 12px 20px', /button[^{]*\{[^}]*padding:\s*12px 20px/],
       [
