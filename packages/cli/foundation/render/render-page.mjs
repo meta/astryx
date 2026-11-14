@@ -884,11 +884,21 @@ export async function renderPage(entry, options = {}) {
         .map(([name, version]) => `${name}@${version}`),
       ...(options.title === undefined ? {} : {title: options.title}),
     };
+    // The file each alias import named, for the files the page carries, so a
+    // reverse where no alias names it still finds the file.
+    const carried = new Map(embedded.map(f => [path.resolve(base, f.path), f.path]));
+    /** @type {Record<string, string>} */
+    const aliases = {};
+    for (const {spec, file: named} of /** @type {{spec: string, file: string}[]} */ (message.aliasImports ?? []).sort((a, b) => (a.spec < b.spec ? -1 : a.spec > b.spec ? 1 : 0))) {
+      const rel = carried.get(path.resolve(named));
+      if (rel) aliases[spec] = rel;
+    }
     const record = {
       ...(facts.cli ? {cli: facts.cli} : {}),
       page: facts.page,
       ...(options.title === undefined ? {} : {title: options.title}),
       packages,
+      ...(Object.keys(aliases).length > 0 ? {aliases} : {}),
       markup: {
         sha256: sha256(markup),
         style: sha256(style),

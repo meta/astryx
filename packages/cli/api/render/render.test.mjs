@@ -390,12 +390,64 @@ describe('render(): every write stays inside the current folder', () => {
     const again = /** @type {any} */ (await render('src/app/page.tsx', {cwd}));
     expect(again.type).toBe('render.page');
     expect(fs.readFileSync(path.join(cwd, 'src/app/page.html'), 'utf8')).toContain('Alias header');
-    // Without the alias, the file it names is refused, naming why.
+    // Without the alias, the file comes back in the page's own layout inside
+    // the new folder, and the result names the import and its file.
     put('no-alias/package.json', '{"name":"no-alias","private":true}');
     fs.copyFileSync(path.join(dir, 'aliased-src/src/app/page.html'), path.join(dir, 'no-alias/page.html'));
-    expect(
-      await codeOf(() => render('page.html', {cwd: path.join(dir, 'no-alias'), reverse: true, out: 'page.tsx'})),
-    ).toBe('ERR_RENDER_SOURCE_DAMAGED');
+    const away = /** @type {any} */ (await render('page.html', {cwd: path.join(dir, 'no-alias'), reverse: true}));
+    expect(away.data).toMatchObject({
+      exact: true,
+      files: ['page-restored/app/page.tsx', 'page-restored/components/Header.tsx'],
+      aliased: [{import: '@/components/Header', file: 'page-restored/components/Header.tsx'}],
+    });
+    expect(fs.readFileSync(path.join(dir, 'no-alias/page-restored/components/Header.tsx'))).toEqual(
+      fs.readFileSync(path.join(dir, 'aliased-src/src/components/Header.tsx')),
+    );
+  }, 60_000);
+
+  it('gives back an aliased page anywhere: the files come back in its own layout, and the text names the alias to add', async () => {
+    put('alias-home/tsconfig.json', '{"compilerOptions": {"paths": {"@/*": ["./src/*"], "@members": ["./src/lib/members.ts"]}}}\n');
+    put('alias-home/package.json', '{"name":"alias-home","private":true}');
+    put('alias-home/src/components/Header.tsx', 'export function Header() { return <h1>Team</h1>; }\n');
+    put('alias-home/src/lib/members.ts', "export const members = ['Ana', 'Bo'];\n");
+    put(
+      'alias-home/src/app/team/page.tsx',
+      "import {Header} from '@/components/Header';\nimport {members} from '@members';\nexport default function Page() { return <main><Header />{members.join(', ')}</main>; }\n",
+    );
+    await render('alias-home/src/app/team/page.tsx', {cwd: dir});
+    // Someone with only the HTML file, in a folder with no tsconfig.json.
+    const cwd = path.join(dir, 'alias-away');
+    fs.mkdirSync(cwd, {recursive: true});
+    fs.copyFileSync(path.join(dir, 'alias-home/src/app/team/page.html'), path.join(cwd, 'team.html'));
+    const back = /** @type {any} */ (await render('team.html', {cwd, reverse: true}));
+    expect(back.data).toMatchObject({
+      mode: 'embedded',
+      exact: true,
+      output: 'team-restored/app/team/page.tsx',
+      aliased: [
+        {import: '@/components/Header', file: 'team-restored/components/Header.tsx'},
+        {import: '@members', file: 'team-restored/lib/members.ts'},
+      ],
+    });
+    for (const name of ['app/team/page.tsx', 'components/Header.tsx', 'lib/members.ts']) {
+      expect(fs.readFileSync(path.join(cwd, 'team-restored', name))).toEqual(fs.readFileSync(path.join(dir, 'alias-home/src', name)));
+    }
+    const {stdout} = await runCli(['experimental', 'render', '--reverse', 'team.html'], {cwd});
+    expect(stdout).toContain('"@/*": ["./team-restored-2/*"], "@members": ["./team-restored-2/lib/members.ts"]');
+    // A record entry that names no carried file counts for nothing.
+    const {sourceBlock} = await import('../../foundation/render/source-block.mjs');
+    put(
+      'alias-away/forged.html',
+      `<!doctype html><html><body><p class="astryx-text">x</p>${sourceBlock(
+        'page.tsx',
+        [
+          {path: 'page.tsx', bytes: Buffer.from("import {X} from '@/x';\nexport default function Page() { return <X />; }\n")},
+          {path: 'other.ts', bytes: Buffer.from('export const other = 1;\n')},
+        ],
+        {aliases: {'@/x': 'missing.ts'}},
+      )}</body></html>`,
+    );
+    expect(await codeOf(() => render('forged.html', {cwd, reverse: true}))).toBe('ERR_RENDER_SOURCE_DAMAGED');
   }, 60_000);
 
   it('never writes through a symbolic link or over a protected file, even with --overwrite', async () => {

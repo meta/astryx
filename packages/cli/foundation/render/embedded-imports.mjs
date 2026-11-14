@@ -156,18 +156,23 @@ export function receivingAliases(dir) {
  *   page), so it goes where the page's layout puts it.
  * @property {Set<string>} aliased - Absolute paths a receiving-project alias
  *   import names for it, so it also goes there.
+ * @property {Set<string>} unaliased - Alias imports that name it where no
+ *   receiving-project alias does: the render recorded the file each named,
+ *   so it goes where the page's layout puts it, and the page needs the alias.
  */
 
 /**
  * The embedded files the page reaches through its imports.
  * @param {{path: string, base64: string}[]} files the embedded files, page
  *   first; every path appears once (callers refuse duplicates first)
- * @param {{aliases?: import('./ts-paths.mjs').PathPattern[]}} [options] the
- *   receiving project's path aliases (see receivingAliases)
+ * @param {{aliases?: import('./ts-paths.mjs').PathPattern[], recorded?: unknown}} [options]
+ *   the receiving project's path aliases (see receivingAliases), and the
+ *   alias imports the render recorded (an untrusted record: only an entry
+ *   that names a carried file counts)
  * @returns {{reached: Map<string, Reach>, missing: string[]}} the reached
  *   tree paths, and the relative imports the file does not carry
  */
-export function reachableFiles(files, {aliases = []} = {}) {
+export function reachableFiles(files, {aliases = [], recorded} = {}) {
   const byPath = new Map(files.map(f => [f.path, f]));
   /** @type {Map<string, Reach>} */
   const reached = new Map();
@@ -203,7 +208,7 @@ export function reachableFiles(files, {aliases = []} = {}) {
     let r = reached.get(p);
     const fresh = !r;
     if (!r) {
-      r = {relative: false, aliased: new Set()};
+      r = {relative: false, aliased: new Set(), unaliased: new Set()};
       reached.set(p, r);
     }
     return {r, fresh};
@@ -317,6 +322,16 @@ export function reachableFiles(files, {aliases = []} = {}) {
           r.aliased.add(chosen.abs);
           if (fresh) queue.push(chosen.hit.path);
         }
+        continue;
+      }
+      // No alias here names it, but the render recorded the carried file it
+      // named: that file comes back in the page's own layout.
+      const sent = recorded && typeof recorded === 'object' && Object.hasOwn(recorded, bare) ? /** @type {Record<string, unknown>} */ (recorded)[bare] : undefined;
+      if (typeof sent === 'string' && byPath.has(sent)) {
+        const {r, fresh} = reach(sent);
+        r.relative = true;
+        r.unaliased.add(bare);
+        if (fresh) queue.push(sent);
       }
     }
   }

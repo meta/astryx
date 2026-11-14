@@ -178,7 +178,7 @@ export const doc = {
       value: 'render.reverse',
       stability: 'experimental',
       description:
-        'A rendered file turned back into a page: `input`, `mode` (`embedded`: the embedded source written back byte for byte; `rebuilt`: rebuilt from Astryx markup, text and layout only), `output`, every file written (`files`), `exact`, the relative imports it did not carry (`missing`, when any), and for a rebuilt page `components`, `elements`, `unknown` and `omitted`. Experimental: may change or be removed in a patch release.',
+        'A rendered file turned back into a page: `input`, `mode` (`embedded`: the embedded source written back byte for byte; `rebuilt`: rebuilt from Astryx markup, text and layout only), `output`, every file written (`files`), `exact`, the relative imports it did not carry (`missing`, when any), the path-alias imports no alias here names, each with the file it came back as (`aliased`, when any), and for a rebuilt page `components`, `elements`, `unknown` and `omitted`. Experimental: may change or be removed in a patch release.',
     },
 
     // experimental icon (installed icon sets, AST-084): experimental values,

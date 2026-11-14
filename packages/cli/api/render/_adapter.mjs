@@ -535,7 +535,7 @@ export function reverseToFile({cwd, input, output, overwrite}) {
     // Modules, stylesheets and JSON are written only when the page reaches
     // them through its own imports: one it never imports is not part of it,
     // whatever its name.
-    const {reached, missing} = reachableFiles(source.files, {aliases: receivingAliases(path.dirname(requested))});
+    const {reached, missing} = reachableFiles(source.files, {aliases: receivingAliases(path.dirname(requested)), recorded: source.aliases});
     // A carried image, font or media file needs no import to be part of the
     // page (it may be named in markup, a stylesheet, JSON or a computed
     // path): the render's own list is the authority, so it is kept when its
@@ -543,12 +543,12 @@ export function reverseToFile({cwd, input, output, overwrite}) {
     // extension), and goes where the layout puts it.
     for (const f of source.files) {
       if (reached.has(f.path) || !isAssetPath(f.path)) continue;
-      if (isAssetBytes(Buffer.from(f.base64, 'base64'))) reached.set(f.path, {relative: true, aliased: new Set()});
+      if (isAssetBytes(Buffer.from(f.base64, 'base64'))) reached.set(f.path, {relative: true, aliased: new Set(), unaliased: new Set()});
     }
     const stray = source.files.filter(f => !reached.has(f.path)).map(f => f.path);
     if (stray.length > 0) {
       throw new AstryxError(
-        `${shown(cwd, input)} carries ${stray.length === 1 ? 'a file' : 'files'} the page does not import, or that is not the image, font or media file its name says (${stray.join(', ')}), which a render never embeds; nothing was written. A file reached through a path alias needs the same alias in this project's tsconfig.json or jsconfig.json.`,
+        `${shown(cwd, input)} carries ${stray.length === 1 ? 'a file' : 'files'} the page does not reach through its imports here, or that is not the image, font or media file its name says (${stray.join(', ')}), which a render never embeds; nothing was written. A file the page imports through a path alias (\`@/components/Header\`) comes back where this project's tsconfig.json or jsconfig.json has that alias, and anywhere when a CLI that records the page's alias imports rendered the file: render the page again with the current CLI.`,
         [],
         ERROR_CODES.ERR_RENDER_SOURCE_DAMAGED,
       );
@@ -580,6 +580,11 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
     };
     const target = path.join(anchor, path.basename(requested));
+    // The alias imports no alias here names: their files come back in the
+    // page's own layout, and the page needs the alias to build.
+    const aliased = [...reached]
+      .flatMap(([p, r]) => [...r.unaliased].map(spec => ({import: spec, file: shown(cwd, placeFrom(p))})))
+      .sort((a, b) => (a.import < b.import ? -1 : a.import > b.import ? 1 : 0));
     /** @type {{file: string, bytes: Buffer}[]} */
     const writes = [];
     const placed = new Set();
@@ -634,6 +639,7 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       // the file does not carry (a file a render never embeds) is named.
       exact: missing.length === 0,
       ...(missing.length > 0 ? {missing} : {}),
+      ...(aliased.length > 0 ? {aliased} : {}),
       format: source.version,
       ...(renderedBy ? {renderedBy} : {}),
       ...(packages ? {packages} : {}),
