@@ -40,7 +40,6 @@ import {spawn} from 'node:child_process';
 import {
   getCliInvocation,
   commandInFolder,
-  formatCliCommand,
   quoteCommandArgument,
 } from '../../../foundation/env/package-manager.mjs';
 import {isOutsideProject} from '../../../foundation/env/project-scope.mjs';
@@ -235,15 +234,13 @@ function themeError(err, words = THEME_WORDS, fallback = []) {
   /** @param {string} text */
   const local = text => inGroupWords(text, words);
   const given = err.suggestions || [];
-  // A suggested command starts the way this project runs the CLI, in JSON
-  // as in text; any other suggestion (a `cd` first, a shell step) as given.
-  /** @param {string} name */
-  const runnable = name =>
-    /^astryx(\s|$)/.test(name) ? formatCliCommand(name, process.cwd()) : name;
+  // Suggested commands stay bare (`astryx …`): the JSON envelope carries
+  // them so, and the text output starts them the way this project runs the
+  // CLI.
   return cliError(local(err.message), {
     suggestions: (given.length > 0 ? given : fallback).map(x => ({
       ...x,
-      name: runnable(local(x.name)),
+      name: local(x.name),
       ...(x.reason ? {reason: local(x.reason)} : {}),
     })),
     code: err.code,

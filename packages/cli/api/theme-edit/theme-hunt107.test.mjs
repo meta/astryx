@@ -209,8 +209,8 @@ describe('a family refusal from a subfolder', () => {
   }, 240_000);
 });
 
-describe('suggested commands run the same way in text and JSON', () => {
-  it('the source-shape refusal and the damaged-settings refusal give the runner form in JSON', async () => {
+describe('suggested commands are bare in JSON', () => {
+  it('the source-shape refusal and the damaged-settings refusal give bare commands in JSON', async () => {
     await themeEditNew('w12', {cwd});
     const settings = path.join(cwd, 'themes/w12/w12.settings.json');
     const kept = fs.readFileSync(settings, 'utf8');
@@ -225,8 +225,9 @@ describe('suggested commands run the same way in text and JSON', () => {
           'themes/w12/w12.theme.ts',
         ]).stdout,
       );
-      expect(env.suggestions[0].name).not.toMatch(/^astryx /);
-      expect(env.suggestions[0].name).toContain('experimental theme editor');
+      expect(env.suggestions[0].name).toMatch(
+        /^astryx experimental theme editor /,
+      );
     } finally {
       fs.writeFileSync(settings, kept);
     }
@@ -240,7 +241,7 @@ describe('suggested commands run the same way in text and JSON', () => {
         'themes/w12/w12.theme.ts',
       ]).stdout,
     );
-    expect(env.suggestions[0].name).not.toMatch(/^astryx /);
+    expect(env.suggestions[0].name).toMatch(/^astryx /);
   }, 240_000);
 });
 
