@@ -291,7 +291,10 @@ const QUESTIONS = [
   ],
   [
     'hover color for buttons a bit darker',
-    {top: /--on button --state hover$/, adds: /button\.base\.:hover\./},
+    {
+      top: /--on button --when variant:\w+ --state hover( --mode (light|dark))?$/,
+      adds: /button\.variant:\w+\.:hover\./,
+    },
   ],
   ['table rows striped', {parts: ['table-row'], top: null}],
   [
@@ -1682,10 +1685,9 @@ const QUESTIONS_3 = [
   ],
   [
     'Can you please make the tooltip darker? Thanks!',
-    {
-      top: /^set q filter 'brightness\(0\.85\)' --on tooltip$/,
-      adds: /tooltip\.base\.filter/,
-    },
+    // A color ask never answers with a filter, which dims the text too; the
+    // tooltip's fill is not read, so the answer asks for a color.
+    {top: null, text: /has not read the fill of tooltip/},
   ],
   [
     'make inputs taller (44px)',
@@ -1726,7 +1728,9 @@ const QUESTIONS_3 = [
   // parts
   [
     'the table has zebra rows #f9fafb and a header #f3f4f6',
-    {top: /^set q background '#f3f4f6' --on table-header-cell$/},
+    {
+      top: /^set q --color-background-muted '#f9fafb' --on table-row && set q background '#f3f4f6' --on table-header-cell$/,
+    },
   ],
   [
     'the error banner is #fef2f2 with #991b1b text',
@@ -2368,10 +2372,8 @@ const QUESTIONS_G = [
   // answer names the parts inside that show one.
   [
     'list rounder',
-    {
-      top: null,
-      text: /list has no background, border or shadow of its own[\s\S]*item/,
-    },
+    // A list draws no edge of its own; its items draw the rounded edges.
+    {top: /^set q corners more --on list-item$/},
   ],
   ['footer rounder', {top: /^set q corners more --on layout-footer$/}],
   // a word for a component how has no part for: the closest parts
@@ -2935,7 +2937,9 @@ const QUESTIONS_I = [
   ],
   [
     'hover on buttons does nothing visible',
-    {top: /--on button --state hover$/},
+    {
+      top: /--on button --when variant:\w+ --state hover( --mode (light|dark))?$/,
+    },
   ],
   // tool questions
   ['how do I rename my theme', {top: null, text: /no command renames a theme/}],
@@ -3115,7 +3119,9 @@ const QUESTIONS_J = [
   ],
   [
     'when I click a button it should get darker',
-    {top: /--on button --state active$/},
+    {
+      top: /--on button --when variant:\w+ --state active( --mode (light|dark))?$/,
+    },
   ],
   [
     'after I check a checkbox it should be green',
@@ -3732,7 +3738,10 @@ const QUESTIONS_R = [
   ['squre corners', /^set q corners square$/],
   ['eckiger corners', /^set q corners square$/],
   ['cards look flat', /^set q box-shadow 'var\(--shadow-[a-z]+\)' --on card$/],
-  ['buttons darker while being clicked', /--on button --state active$/],
+  [
+    'buttons darker while being clicked',
+    /--on button --when variant:\w+ --state active( --mode (light|dark))?$/,
+  ],
 ];
 
 describe('how answers final-10 questions', () => {
@@ -4038,7 +4047,8 @@ describe('how reads muted, "less X" and sarcasm', () => {
     ['great, even more shadows, just what I wanted', null],
     ['oh sure, let us make every corner a circle', null],
     ['buttons as round as a bowling ball, nice', null],
-    ['the tooltips are too dark, I hate it', /brightness\(1\.15\)/],
+    // (Dislike is an ask for the other way: lighter.)
+    ['the cards are too dark, I hate it', /lighter|--on card/],
     [
       'quit with the big gaps in the sidebar',
       /^set q spacing less --on side-nav$/,
@@ -4148,7 +4158,7 @@ const QUESTIONS_Y = [
   ],
   [
     'I need: 1. accent #7c3aed 2. pill badges 3. no borders on tables 4. tooltips darker 5. links green',
-    /--on table-row && set q filter 'brightness\(0\.85\)' --on tooltip/,
+    /^(?!.*filter).*--on table-row/,
   ],
   [
     'Specifically she wants the cards to have softer corners (maybe around 12px), the primary buttons should use our brand blue which is #0057ff, and the page background should be a very light gray',

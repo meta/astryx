@@ -3355,7 +3355,8 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           '--when takes <prop>:<value>, such as variant:primary.',
           {run: [`${HOW} ${s.on}`]},
         );
-      if (!t.props.includes(p))
+      const conditions = Object.keys(C.variantValues(s.on));
+      if (!t.props.includes(p) && !conditions.includes(p))
         refuse(
           E.ERR_THEME_UNKNOWN_VARIANT,
           `${s.on} has no prop "${p}". It has: ${t.props.join(', ') || 'none'}.`,
@@ -3537,6 +3538,13 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     if (parts.length && dead.length === parts.length) {
       const bare = Object.keys(own(dead[0])).length === 0;
       const within = keys(dead[0], 'focus-within');
+      // A ring Core draws inline on the part at focus time (an indicator's)
+      // is changed by its token, with no state.
+      const inlineAlways = ctx.C.MAP[dead[0]]?.inline?.[''] ?? {};
+      const ringToken = /^focus/.test(s.state)
+        ? (inlineAlways[kebab(thing)] ??
+          (Object.values(inlineAlways).includes(thing) ? thing : null))
+        : null;
       refuse(
         E.ERR_THEME_NO_EFFECT,
         bare
@@ -3552,12 +3560,21 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           ...(within && !bare && /^focus/.test(s.state)
             ? {didYouMean: ['focus-within']}
             : {}),
+          ...(ringToken
+            ? {
+                also: [
+                  `Core draws ${dead[0]}'s focus ring at focus time from ${ringToken}, set on the part with no state`,
+                ],
+              }
+            : {}),
           run: [
-            within && !bare && /^focus/.test(s.state)
-              ? setLine(slug, thing, v, {...s, state: 'focus-within'}, unset)
-              : bare
-                ? `${HOW} --list parts ${s.on.split('-')[0]}`
-                : `${HOW} ${quoteCommandArgument(s.on)}`,
+            ringToken
+              ? `${P} set ${slug} ${ringToken} ${quoteCommandArgument(v)} --on ${s.on}${s.mode ? ` --mode ${s.mode}` : ''}`
+              : within && !bare && /^focus/.test(s.state)
+                ? setLine(slug, thing, v, {...s, state: 'focus-within'}, unset)
+                : bare
+                  ? `${HOW} --list parts ${s.on.split('-')[0]}`
+                  : `${HOW} ${quoteCommandArgument(s.on)}`,
           ],
         },
       );
@@ -3609,7 +3626,12 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     if (s.when) {
       const [p, wv, ...more] = s.when.split(':');
       const fits = members.some(([m, t]) => {
-        if (!wv || more.length || !t.props.includes(p)) return false;
+        if (
+          !wv ||
+          more.length ||
+          !(t.props.includes(p) || p in C.variantValues(m))
+        )
+          return false;
         const vals = C.variantValues(m)[p] ?? [];
         return !vals.length || vals.includes(wv);
       });
@@ -5213,29 +5235,124 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           },
         );
     }
-    // A state Core paints at run time with an inline style (a selected table
-    // row's wash) outranks any theme rule for that property while Core paints
-    // it: the token the inline style reads is what changes it. A component
-    // option can turn that paint off (a table without its row highlight), and
-    // then a rule in the state applies; the refusal says both.
-    if (s.state && !unset) {
+    // A property Core paints with an inline style from a token outranks any
+    // theme rule for it: the token the inline style reads is what changes it.
+    // A paint Core always makes (an indicator's focus ring) is changed by the
+    // token on the part with no state. A paint in a state (a selected table
+    // row's wash) is changed by the token in that state; a component option
+    // can turn that paint off (a table without its row highlight), and then
+    // a rule in the state applies, so the refusal says both.
+    if (!unset) {
       const family =
         prop === 'background' || prop === 'background-color'
           ? 'background-color'
           : prop;
       const inline = partsOf(ctx, s)
-        .map(t => [t, ctx.C.MAP[t]?.inline?.[s.state ?? '']?.[family]])
+        .map(t => {
+          const at = ctx.C.MAP[t]?.inline ?? {};
+          const tok =
+            (s.state ? at[s.state]?.[family] : undefined) ?? at['']?.[family];
+          return /** @type {const} */ ([t, tok]);
+        })
         .find(([, tok]) => tok);
-      if (inline)
+      if (inline) {
+        const [part, token] = inline;
+        const alwaysInline = Boolean(ctx.C.MAP[part]?.inline?.['']?.[family]);
         refuse(
           E.ERR_THEME_NO_EFFECT,
-          `By default Core paints ${inline[0]}'s ${family} when ${s.state} as an inline style from ${inline[1]}, which no theme rule can replace, so set ${inline[1]} on ${inline[0]} when ${s.state} instead; only where the component is set not to paint it (such as a table with its row highlight off) does a ${s.state} ${family} apply, and there ${inline[1]} paints nothing.`,
+          alwaysInline
+            ? `Core paints ${part}'s ${family} as an inline style from ${token}, which no theme rule can replace; set ${token} on ${part} instead.`
+            : `By default Core paints ${part}'s ${family} when ${s.state} as an inline style from ${token}, which no theme rule can replace, so set ${token} on ${part} when ${s.state} instead; only where the component is set not to paint it (such as a table with its row highlight off) does a ${s.state} ${family} apply, and there ${token} paints nothing.`,
           {
             run: [
-              `${P} set ${slug} ${inline[1]} ${quoteCommandArgument(v)} --on ${inline[0]} --state ${s.state}${s.mode ? ` --mode ${s.mode}` : ''}`,
+              `${P} set ${slug} ${token} ${quoteCommandArgument(v)} --on ${part}${alwaysInline || !s.state ? '' : ` --state ${s.state}`}${s.mode ? ` --mode ${s.mode}` : ''}`,
             ],
           },
         );
+      }
+    }
+    // A border on a part that draws none itself, whose edges are drawn by
+    // parts of its own inside it (a date-time input's date and time boxes):
+    // those parts take it.
+    if (
+      !unset &&
+      /^border(?!.*radius)(-|$)/.test(prop) &&
+      partsOf(ctx, s).length === 1
+    ) {
+      const part = partsOf(ctx, s)[0];
+      const own = ctx.C.MAP[part]?.own ?? {};
+      const inner = cornerParts(ctx, part).filter(t => t !== part);
+      if (
+        inner.length &&
+        !Object.keys(own).some(k => /^border(?!.*radius)/.test(k))
+      )
+        refuse(
+          E.ERR_THEME_NO_EFFECT,
+          `${part} draws no border of its own; its edges are the borders of ${inner.join(' and ')}, so set ${prop} on ${inner.length > 1 ? 'those parts' : 'that part'}.`,
+          {
+            run: inner.map(t =>
+              setLine(slug, prop, v, {...s, on: t, only: undefined}),
+            ),
+          },
+        );
+    }
+    // A text property on a part whose text is drawn by elements inside it
+    // that set that property themselves from a token (a top nav heading's
+    // title span) never reaches that text: the token, on the part, does.
+    if (
+      !unset &&
+      !s.state &&
+      ['font-size', 'font-weight', 'line-height', 'letter-spacing'].includes(
+        prop,
+      )
+    ) {
+      const inner = partsOf(ctx, s)
+        .map(t => {
+          const rec = ctx.C.MAP[t];
+          const toks = Object.entries(rec?.inside ?? {})
+            .filter(([, props]) => props.includes(prop))
+            .map(([tok]) => tok);
+          return /** @type {const} */ ([
+            t,
+            rec && !rec.own?.[prop] ? toks : [],
+          ]);
+        })
+        .filter(([, toks]) => toks.length);
+      if (inner.length && inner.length === partsOf(ctx, s).length) {
+        const [part, toks] = inner[0];
+        refuse(
+          E.ERR_THEME_NO_EFFECT,
+          `${part}'s text is drawn by elements inside it that set their own ${prop} from ${toks.join(', ')}, so a ${prop} on ${part} never reaches it; set ${toks.length > 1 ? 'one of those tokens' : 'that token'} on ${part} instead.`,
+          {
+            run: toks.map(
+              tok =>
+                `${P} set ${slug} ${tok} ${quoteCommandArgument(v)} --on ${part}`,
+            ),
+          },
+        );
+      }
+    }
+    // A text property CSS inherits reaches the parts inside the part that
+    // do not set it themselves (a side nav section's items): the result
+    // says which.
+    if (
+      !unset &&
+      /^(font-(size|weight|style|family|variant)|text-(transform|align)|letter-spacing|line-height|white-space|word-spacing)$/.test(
+        prop,
+      )
+    ) {
+      const reached = [
+        ...new Set(
+          partsOf(ctx, s).flatMap(t =>
+            /** @type {string[]} */ (ctx.C.MAP[t]?.contains ?? []).filter(
+              inner =>
+                ctx.project.target.has(inner) && !ctx.C.MAP[inner]?.own?.[prop],
+            ),
+          ),
+        ),
+      ];
+      if (reached.length)
+        s.note = `${prop} is inherited, so it also reaches ${reached.slice(0, 4).join(', ')}${reached.length > 4 ? ' and more' : ''} inside ${s.on}, which set no ${prop} of their own`;
     }
     // Text, headings and links take their color from the color prop.
     const textParts = COLOR_PROP_PARTS;

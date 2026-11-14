@@ -402,6 +402,10 @@ export function makeCompiler(project, parts) {
     const out = {};
     for (const p of TARGET.get(target)?.props ?? [])
       out[p] = fromDocs[p]?.length ? fromDocs[p] : (seen[p] ?? []);
+    // A state Core marks with more than one value (a checkbox's checked and
+    // indeterminate looks) is a condition --when names by value.
+    for (const st of TARGET.get(target)?.states ?? [])
+      if ((seen[st] ?? []).some(v => v !== st)) out[st] = seen[st];
     return out;
   }
 

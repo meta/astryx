@@ -33,7 +33,13 @@ import {
   wordTable,
 } from './_tables.mjs';
 import {PALETTE_DIALS, isGraySeed, seedOf} from './_palette.mjs';
-import {focusStateOf, innerTextTokens, partRuleTokens} from './_settings.mjs';
+import {
+  cornerParts,
+  focusStateOf,
+  innerTextTokens,
+  lengthPx,
+  partRuleTokens,
+} from './_settings.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {cssProperties, keywordsOf, matchValue, splitTop} from './_css.mjs';
 
@@ -2326,6 +2332,17 @@ export function draftAnswer(ctx, env, question) {
         },
       ],
     };
+  // A part whose name joins two words with "and" when said ("date and time
+  // input") is that part, read before "and" splits the question.
+  for (const key of TARGET.keys()) {
+    const words = key.split('-');
+    if (words.length < 3) continue;
+    const said = new RegExp(
+      `\\b${words.slice(0, 2).join('\\s+and\\s+')}[\\s-]+${words.slice(2).join('[\\s-]+')}(e?s)?\\b`,
+      'gi',
+    );
+    question = question.replace(said, (_, plural) => `${key}${plural ?? ''}`);
+  }
   // Sarcasm and dislike name the thing to drop: "enough with the shadows",
   // "nobody asked for borders", "who needs X", "shadows 👎".
   question = question
@@ -4292,6 +4309,19 @@ export function draftAnswer(ctx, env, question) {
         !/\bunderline|indicator\b/.test(c.text)
       )
         p.on = 'tab';
+  // A border or corners on a part that draws no edge of its own, whose
+  // edges are parts of its own inside it (a date-time input's date and time
+  // boxes): those parts.
+  for (const c of clauses)
+    if (c.aspects.some(a => a === 'border' || a === 'corners'))
+      c.parts = c.parts.flatMap(p => {
+        if (FAMILIES[p.on]) return [p];
+        const own = C.MAP[p.on]?.own ?? {};
+        const inner = cornerParts(ctx, p.on).filter(t => t !== p.on);
+        return inner.length && !Object.keys(own).some(k => /^border/.test(k))
+          ? inner.map(on => ({...p, on}))
+          : [p];
+      });
   fillAspect();
   const modal = env.data.mode === 'both';
   const modeOf = (/** @type {Clause} */ c) =>
@@ -4359,6 +4389,21 @@ export function draftAnswer(ctx, env, question) {
   };
   /** The member a group's checks read. @param {string} on */
   const one = on => (FAMILIES[on] ? FAMILIES[on][0] : on);
+  /**
+   * The tokens the elements inside a part read for a text property they
+   * set themselves (a top nav heading's title span), when the part sets no
+   * such property of its own: a property on the part never reaches that
+   * text, the token on the part does.
+   * @param {string} on @param {string} prop
+   * @returns {string[]}
+   */
+  const innerTextReads = (on, prop) => {
+    const rec = C.MAP[one(on)];
+    if (!rec || rec.own?.[prop]) return [];
+    return Object.entries(rec.inside ?? {})
+      .filter(([, props]) => /** @type {string[]} */ (props).includes(prop))
+      .map(([tok]) => tok);
+  };
   /**
    * Steps for a color how works out from the one a token has now. On a
    * theme with both modes there is one step per mode, each from that mode's
@@ -4759,6 +4804,22 @@ export function draftAnswer(ctx, env, question) {
     const missing = clauseNow?.parts.find(x => x.missing);
     if (missing && !d.text.startsWith('Core has no'))
       d.text = `Core has no ${missing.missing} part of its own, so this is for the whole ${missing.on}: ${d.text}`;
+    // A state Core also paints under another value of the same attribute
+    // (a checkbox's checked look on an indeterminate box, which it marks
+    // `checked="indeterminate"`): that value too, so the change reaches
+    // every box drawn that way.
+    for (const o of options)
+      for (const st of [...o])
+        if (st.verb === 'set' && st.state && st.on) {
+          const values = new Set(
+            (FAMILIES[st.on] ?? [st.on]).flatMap(
+              t => C.MAP[t]?.attrs?.[st.state ?? ''] ?? [],
+            ),
+          );
+          for (const value of values)
+            if (value !== st.state && !st.when)
+              o.push({...st, state: undefined, when: `${st.state}:${value}`});
+        }
     input.text = d.text;
     input.options = options;
     const pushed = {
@@ -4928,6 +4989,21 @@ export function draftAnswer(ctx, env, question) {
           said.push(
             `${name} is the part being changed, so it cannot be kept apart`,
           );
+          continue;
+        }
+        // Steps the change writes for the kept variant itself (one per
+        // variant): dropped, so the variant keeps what it has.
+        const ownSteps = p.when
+          ? prior.steps.filter(
+              st =>
+                st.on === p.on &&
+                st.when === p.when &&
+                (!p.state || st.state === p.state),
+            )
+          : [];
+        if (ownSteps.length) {
+          prior.steps = prior.steps.filter(st => !ownSteps.includes(st));
+          said.push(`${name} keeps what it has now`);
           continue;
         }
         // A new fill brings a text color that reads on it: a kept variant
@@ -8566,6 +8642,13 @@ export function draftAnswer(ctx, env, question) {
             text: `body text weight: --text-body-weight (now ${current('--text-body-weight')})`,
             options: [[set('--text-body-weight', value)]],
           };
+        const innerWeight = f.state ? [] : innerTextReads(on, 'font-weight');
+        if (innerWeight.length)
+          return {
+            text: `${rung ?? value} text${where}: ${innerWeight.join(' and ')} on ${on}, which the text inside it reads for its weight`,
+            options: [innerWeight.map(tok => set(tok, value, {on}))],
+            sequence: innerWeight.length > 1,
+          };
         return {
           text: `${rung ?? value} text${where}: font-weight ${value}`,
           options: [[set('font-weight', value, f)]],
@@ -8755,6 +8838,21 @@ export function draftAnswer(ctx, env, question) {
                   levelSizes(1.15),
                 ].filter(o => o.length),
               };
+        // Text drawn by elements inside the part that size it themselves:
+        // the largest of their size tokens is the part's main text.
+        const innerSizes =
+          on && !f.state ? innerTextReads(on, 'font-size') : [];
+        if (innerSizes.length) {
+          const largest = innerSizes
+            .map(tok => /** @type {const} */ ([tok, current(tok)]))
+            .sort((a, b) => (lengthPx(b[1]) ?? 0) - (lengthPx(a[1]) ?? 0))[0];
+          const value = px ?? scaled(largest[1], factor);
+          if (value)
+            return {
+              text: `the text size${where}: ${largest[0]} on ${on}, the size of its main text${px ? '' : ` (now ${largest[1]})`}`,
+              options: [[set(largest[0], value, {on})]],
+            };
+        }
         const sizeTok =
           on === 'heading' && p?.level
             ? `--text-heading-${p.level}-size`
@@ -9394,11 +9492,34 @@ export function draftAnswer(ctx, env, question) {
               ],
             ],
           };
-        if (/\bstripe[sd]?\b|\bstriped\b|\bzebra\b/.test(c.text))
+        if (/\bstripe[sd]?\b|\bstriped\b|\bzebra\b/.test(c.text)) {
+          // The token Core paints every other row with, read from the part
+          // data (a row's fill under an nth-child condition): set on the part,
+          // it colors the stripes alone, and transparent takes them away.
+          const stripeOn =
+            [on ? one(on) : null, 'table-row'].find(
+              p =>
+                p &&
+                C.partReads(p, 'background').some(r =>
+                  r.when.some(w => /:nth-child\(/.test(w)),
+                ),
+            ) ?? null;
+          const stripe = stripeOn
+            ? C.partReads(stripeOn, 'background').find(r =>
+                r.when.some(w => /:nth-child\(/.test(w)),
+              )?.token
+            : null;
+          const value = c.neg ? 'transparent' : colorFor(c, 'fill');
+          if (stripeOn && stripe && value)
+            return {
+              text: `${c.neg ? 'no stripes' : 'the stripe color'} on ${stripeOn}: ${stripe}, which Core paints every other row with`,
+              options: [[set(stripe, value, {on: stripeOn, ...modeOf(c)})]],
+            };
           return {
             text: 'striped rows need a style on every other row, and set has no condition for that; a row background colors every row',
             options: [],
           };
+        }
         const design = /\bglossy\b/.test(c.text)
           ? 'glossy'
           : /\bgradient\b/.test(c.text)
@@ -9640,7 +9761,6 @@ export function draftAnswer(ctx, env, question) {
                 : null))
             : null;
           // The amount asked ("20% darker", "a bit lighter"), else a step.
-          const pct = /(\d{1,3})\s?%/.exec(c.text);
           const amount = colorAmount(c.text, 0.12);
           // A fill of the theme's own on the part comes first.
           const ownFill =
@@ -9708,22 +9828,71 @@ export function draftAnswer(ctx, env, question) {
                 sequence: steps.length > 1,
               };
           }
-          // A part with no recorded fill: what its color is now is unknown,
-          // so a brightness filter makes it darker or lighter from there.
-          // The amount asked holds there too: "20% darker" is brightness 0.8.
-          if (!read || f.state)
-            return {
-              text: `${lighter ? 'a lighter' : 'a darker'} ${on}${where}: a brightness filter, from whatever color it has now${pct ? ` (${lighter ? '+' : '-'}${pct[1]}%)` : ''}`,
-              options: [
-                [
-                  set(
-                    'filter',
-                    `brightness(${pct ? Number((lighter ? 1 + amount : 1 - amount).toFixed(2)) : lighter ? 1.15 : 0.85})`,
-                    f,
+          // "darker than the page": from the page's own color, so the part
+          // ends up past it. A part with no fill of its own shows the page
+          // through it, so the page's color is where it starts too; and a
+          // state with no fill of its own starts from the part's resting
+          // fill. A color ask always sets a color, never a filter, which
+          // would dim the text and icons too.
+          const thanPage =
+            /\b(?:lighter|darker|brighter|paler|deeper) than (?:the )?page\b/.test(
+              c.text,
+            );
+          // A state on a part whose variants each fill differently: each
+          // variant's own fill a step darker or lighter in that state.
+          const variantsInState = f.state
+            ? byVariant(
+                on,
+                'background',
+                'background-color',
+                'background-color',
+                {...f, state: undefined},
+                (now, m) =>
+                  shiftKeepAlpha(
+                    now,
+                    lighter ? amount : -amount,
+                    current('--color-background-body', m),
                   ),
-                ],
-              ],
+                c,
+              )
+            : null;
+          if (variantsInState)
+            return {
+              text: `${lighter ? 'a lighter' : 'a darker'} ${on}${where}: each variant's own fill, stepped from its value now`,
+              options: [variantsInState.map(st => ({...st, state: f.state}))],
+              sequence: true,
             };
+          // A part the editor never saw drawn (a tooltip, which Core opens
+          // only after it mounts): its color now is unknown, so there is no
+          // color to step from; the answer says so and asks for a color.
+          if (!read && !thanPage && on && !C.MAP[one(on)])
+            return {
+              text: `the editor has not read the fill of ${one(on)} (Core draws it only once it opens), so there is no color to make ${lighter ? 'lighter' : 'darker'}; name the color, as in "${one(on)} background #333333"`,
+              options: [],
+              lookup: one(on),
+            };
+          if (!read || f.state || thanPage) {
+            const from = thanPage || !read ? '--color-background-body' : read;
+            const steps = perMode(
+              from,
+              'background-color',
+              f,
+              (now, m) =>
+                shiftKeepAlpha(
+                  now,
+                  lighter ? amount : -amount,
+                  current('--color-background-body', m),
+                ),
+              c,
+            );
+            if (steps.length)
+              return {
+                text: `${lighter ? 'a lighter' : 'a darker'} background${where}, from ${from === '--color-background-body' ? 'the page color' : from}${modesSaid(steps)}`,
+                options: [steps],
+                sequence: steps.length > 1,
+              };
+          }
+          if (!read) return null;
           const perVariant = byVariant(
             on,
             'background',
@@ -9763,19 +9932,31 @@ export function draftAnswer(ctx, env, question) {
               sequence: steps.length > 1,
             };
         }
-        if (!color && f.state === 'hover')
-          return {
-            text: `a slightly darker ${on}${where}`,
-            options: [
-              [
-                set(
-                  'filter',
-                  `brightness(${/\bdark/.test(c.text) ? 0.9 : 0.95})`,
-                  f,
-                ),
-              ],
-            ],
-          };
+        // A visible hover with no color named: the part's resting fill (or
+        // the page's, for a part with none of its own) a step darker there.
+        if (!color && f.state === 'hover' && on && C.MAP[one(on)]) {
+          const rest =
+            restColorRead(C.partReads(one(on), 'background'), f.when) ??
+            '--color-background-body';
+          const steps = perMode(
+            rest,
+            'background-color',
+            f,
+            (now, m) =>
+              shiftKeepAlpha(
+                now,
+                /\bdark/.test(c.text) ? -0.1 : -0.05,
+                current('--color-background-body', m),
+              ),
+            c,
+          );
+          if (steps.length)
+            return {
+              text: `a slightly darker ${on}${where}, from ${rest}${modesSaid(steps)}`,
+              options: [steps],
+              sequence: steps.length > 1,
+            };
+        }
         if (!color) return null;
         return {
           text: `the background${where}${c.mode && modal ? ` in ${c.mode} mode` : ''}`,
