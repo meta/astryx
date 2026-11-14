@@ -825,6 +825,7 @@
     "/templates/useHotkeysHookUsage/",
     "/templates/useIconHookUsage/",
     "/templates/useImageModeHookUsage/",
+    "/templates/useIndicatorFocusRingHookUsage/",
     "/templates/useInputContainerHookUsage/",
     "/templates/useInputStatusIconHookUsage/",
     "/templates/useInteractiveRoleHookUsage/",

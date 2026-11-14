@@ -3837,6 +3837,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-indicator-focus-ring-custom-checkbox-ring",
+      "path": "examples/use-indicator-focus-ring/custom-checkbox-ring",
+      "aliases": []
+    },
+    {
       "name": "example-use-input-container-search-field-wrapper",
       "path": "examples/use-input-container/search-field-wrapper",
       "aliases": []
