@@ -275,19 +275,9 @@ export async function recordRunFor(argv, fn) {
   }
   // The first recorded run on a machine (search, build, component, template,
   // theme, discover or docs) makes the folder and keeps its gathers at once.
-  const dir = cacheDirPath();
-  if (!withoutRecording(() => fs.existsSync(dir))) {
-    // Once the per-user cache folder exists doctor uses it; it never makes
-    // it, so a doctor alone changes nothing on the machine (nor its own
-    // cache row).
-    if (command === 'doctor') return fn();
-    try {
-      withoutRecording(() => fs.mkdirSync(dir, {recursive: true, mode: 0o700}));
-    } catch {
-      // A folder that cannot be made keeps no catalogs; nothing more.
-      return fn();
-    }
-  }
+  // Once the per-user cache folder exists doctor uses it; it never makes it,
+  // so a doctor alone changes nothing on the machine (nor its own cache row).
+  if (command !== 'doctor') makeGatherCacheDir();
   // A folder the cache would refuse (not the user's own, open to others, a
   // link) leaves the run exactly as without the cache: no hook is installed.
   if (withoutRecording(gatherCacheDir) == null) return fn();
@@ -295,6 +285,33 @@ export async function recordRunFor(argv, fn) {
   // its run records modules and variables to the end, not only during each
   // gather.
   return recordRun(fn, {armedThroughout: command === 'doctor'});
+}
+
+/**
+ * Make the kept catalogs' folder where this run could keep entries in it and
+ * it does not exist yet: an installed CLI with a build id, outside Yarn
+ * Plug'n'Play, on a system with user ids. Recorded runs make it at their
+ * start; the lookup commands' not-found hint makes it before it keeps its
+ * name index, so a project's first miss keeps what later misses read. A
+ * folder that cannot be made keeps nothing; nothing more.
+ */
+export function makeGatherCacheDir() {
+  if (
+    runsUnderPnp() ||
+    currentUid() == null ||
+    withoutRecording(buildId) == null
+  ) {
+    return;
+  }
+  const dir = cacheDirPath();
+  try {
+    withoutRecording(() => {
+      if (!fs.existsSync(dir))
+        fs.mkdirSync(dir, {recursive: true, mode: 0o700});
+    });
+  } catch {
+    // A folder that cannot be made keeps no catalogs.
+  }
 }
 
 /**
@@ -912,12 +929,14 @@ function storedSummary({file, entry}) {
 
 /**
  * Keep `value` at `at` with its stamps, unless a stamp is too young or the
- * value does not read back the same. Silent on any failure.
+ * value does not read back the same. Silent on any failure. A file in jiti's
+ * cache is not kept as a stamp, as for a kept gather (inJitiCache).
  * @param {{dir: string, file: string, entry: string}} at
  * @param {unknown} value
- * @param {[string, string][]} stamps
+ * @param {[string, string][]} made the stamps the summary was made with
  */
-function storeSummary({dir, file, entry}, value, stamps) {
+function storeSummary({dir, file, entry}, value, made) {
+  const stamps = made.filter(([at]) => !inJitiCache(at));
   if (!settled(stamps)) return;
   withoutRecording(() => {
     try {

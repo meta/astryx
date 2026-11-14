@@ -7,7 +7,8 @@
  * @input a project folder and the integrations it loads
  * @output the routes, in tree order
  * @position api/docs: given by the component, hook and template lookups to
- *   the not-found hint (foundation/suggest/other-command.mjs). Where no
+ *   the not-found hint (foundation/suggest/other-command.mjs), loaded only
+ *   when the hint asks (./_entry-names-lazily.mjs). Where no
  *   integration adds docs, the routes are the CLI's own, stored at publish
  *   (scripts/generate-docs-routes.mjs); elsewhere they are kept between runs.
  *   The tree is built only when neither answers: in a checkout, or after a

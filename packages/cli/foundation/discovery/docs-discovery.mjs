@@ -31,10 +31,10 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {CLI_ROOT} from '../fs/paths.mjs';
 import {listDir, listDirEntries} from '../fs/listing-cache.mjs';
 import {importDocModule} from '../doc-compiler/import.mjs';
 import {CLI_PROVIDER_ID} from '../identity/providers.mjs';
+import {BUILTIN_DOCS_DIR, BUILTIN_TOPIC_FILE_RE} from './name-roots.mjs';
 import {parseReadableDoc} from '../doc-compiler/parse-readable.mjs';
 import {
   sectionKey,
@@ -45,22 +45,12 @@ import {
 
 export {withSourceTitle};
 
-/** Where the CLI's own topics live. */
-const BUILTIN_DOCS_DIR = path.join(CLI_ROOT, 'assets', 'docs');
-
 /**
  * Owner package recorded for the built-in topics. They ship inside the CLI
  * (assets/docs), not in @astryxdesign/core, so this is the CLI's own name —
  * unlike component discovery, whose built-ins belong to core.
  */
 export const BUILTIN_DOCS_PACKAGE = CLI_PROVIDER_ID;
-
-/**
- * A built-in topic file: `{topic}.doc.mjs`. Anchored at both ends so a
- * localization overlay (`{topic}.doc.zh.mjs`) is not read as a topic of its
- * own — it is loaded by the topic it overlays.
- */
-const BUILTIN_TOPIC_FILE_RE = /^([\w-]+)\.doc\.mjs$/;
 
 /** Conventional doc-file suffixes for an integration's topics. */
 const INTEGRATION_DOC_SUFFIXES = ['.doc.ts', '.doc.mjs', '.doc.js'];
@@ -144,93 +134,24 @@ export function discoverBuiltinTopics() {
 }
 
 /**
- * The name of the root namespace a docs tree file declares, read from its
- * text without loading it, or null: a namespace doc without `placement`.
+ * The name an integration doc declares, and whether it is placed (has
+ * `placement`, so it is no topic or root namespace), as docs discovery reads
+ * the doc; null when the doc does not load or parse, or names nothing.
  *
- * @param {string} text the file's text
- * @returns {string | null}
+ * @param {string} file an integration doc file
+ * @returns {Promise<{name: string, placed: boolean} | null>}
  */
-export function rootNamespaceName(text) {
-  if (!/["']?type["']?\s*:\s*["']namespace["']/u.test(text)) return null;
-  if (/["']?placement["']?\s*:/u.test(text)) return null;
-  return /["']?name["']?\s*:\s*["']([\w-]+)["']/u.exec(text)?.[1] ?? null;
-}
-
-/**
- * The names `keep` accepts among those `astryx docs <name>` reads from the
- * CLI's own docs: each flat topic, and each root namespace of its docs tree.
- * A topic's name comes from its file name, and a tree file is named after its
- * doc, so only the tree files whose names `keep` accepts are read.
- *
- * @param {(name: string) => boolean} keep
- * @returns {string[]}
- */
-export function builtinDocNamesWhere(keep) {
-  const names = Object.keys(discoverBuiltinTopics()).filter(keep);
-  const tree = path.join(BUILTIN_DOCS_DIR, 'tree');
-  if (!fs.existsSync(tree)) return names;
-  for (const file of listDir(tree)) {
-    const stem = /^([\w-]+)\.doc\.mjs$/u.exec(file)?.[1];
-    if (!stem || !keep(stem)) continue;
-    const name = rootNamespaceName(
-      fs.readFileSync(path.join(tree, file), 'utf8'),
+export async function integrationDocDeclaration(file) {
+  let doc;
+  try {
+    doc = /** @type {any} */ (
+      parseReadableDoc(await loadTopicModule(file), path.basename(file))
     );
-    if (name && keep(name)) names.push(name);
+  } catch {
+    return null;
   }
-  return names;
-}
-
-/**
- * Whether a doc the CLI ships has a name `keep` accepts, by its file name: a
- * flat topic, or any namespace or guide of its docs tree, since a tree file
- * is named after its doc.
- *
- * @param {(name: string) => boolean} keep
- * @returns {boolean}
- */
-export function builtinDocNamed(keep) {
-  if (Object.keys(discoverBuiltinTopics()).some(keep)) return true;
-  const tree = path.join(BUILTIN_DOCS_DIR, 'tree');
-  if (!fs.existsSync(tree)) return false;
-  return listDir(tree).some(file => {
-    const stem = /^([\w-]+)\.doc\.mjs$/u.exec(file)?.[1];
-    return stem != null && keep(stem);
-  });
-}
-
-/**
- * The names `keep` accepts among the names these integration docs declare,
- * by the name each doc's text gives: by default only the topics and root
- * namespaces, the docs without `placement`; with `placed`, every doc. A doc
- * that does not load or parse names nothing.
- *
- * @param {string[]} files integration doc files
- * @param {(name: string) => boolean} keep
- * @param {{placed?: boolean}} [options]
- * @returns {Promise<string[]>}
- */
-export async function integrationDocNamesWhere(
-  files,
-  keep,
-  {placed = false} = {},
-) {
-  /** @type {string[]} */
-  const names = [];
-  for (const file of files) {
-    let doc;
-    try {
-      doc = /** @type {any} */ (
-        parseReadableDoc(await loadTopicModule(file), path.basename(file))
-      );
-    } catch {
-      continue;
-    }
-    if ((!placed && doc?.placement != null) || typeof doc?.name !== 'string') {
-      continue;
-    }
-    if (keep(doc.name)) names.push(doc.name);
-  }
-  return names;
+  if (typeof doc?.name !== 'string') return null;
+  return {name: doc.name, placed: doc.placement != null};
 }
 
 /**

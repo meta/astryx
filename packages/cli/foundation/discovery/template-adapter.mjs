@@ -57,7 +57,6 @@ export {
   coreTemplateIds,
   integrationTemplateIds,
   listTemplates,
-  templateFilesNaming,
 } from './template-ids.mjs';
 
 /** Identity used for core (built-in) templates in package-scoped listings. */

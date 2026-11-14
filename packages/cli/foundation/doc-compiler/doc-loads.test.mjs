@@ -492,6 +492,10 @@ const RUNNERS = {
       'require(postcss-selector-parser)',
     ],
   },
+  'foundation/suggest/name-index.mjs': {
+    runs: "docs discovery, to load each integration doc once and keep the name it declares in the not-found hint's name index, when no kept index answers",
+    sites: ['import(../discovery/docs-discovery.mjs)'],
+  },
   'host/index.mjs': {
     runs: "another release's host entry, from one of the host's package sets, when that release answers a hosted run",
     sites: ['import(<computed>)'],
@@ -542,19 +546,16 @@ const LOADER_MODULES = {
   // loadTopicModule hands back a topic's raw doc.
   'foundation/discovery/docs-discovery.mjs': [
     'BUILTIN_DOCS_PACKAGE',
-    'builtinDocNamed',
-    'builtinDocNamesWhere',
     'DocsCatalog',
     'discoverBuiltinTopics',
     'discoverIntegrationDocs',
     'GRAPH_BLOCK_TYPES',
     'GRAPH_ONLY_FIELDS',
-    'integrationDocNamesWhere',
+    'integrationDocDeclaration',
     'isGuideRoute',
     'mergeTopic',
     'mergeTopicReport',
     'problemsInTopic',
-    'rootNamespaceName',
     'withoutPosition',
     'withSourceTitle',
   ],

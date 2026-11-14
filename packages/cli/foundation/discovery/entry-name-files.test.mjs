@@ -1,12 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Tests for the integration docs spelling check: the words index lets
- * a folder skip its docs only when no doc there can spell the name, so the
- * answer is the docs a full read of every folder gives.
+ * @file Tests for the integration docs spelling check: the name index's
+ * words of each doc let a doc go unread only when it cannot spell the name,
+ * so the answer, in order, is the docs a full read of every folder gives.
  *
  * @input two integration docs folders with docs that spell names with
- *   spaces, hyphens and mixed case
+ *   spaces, hyphens and mixed case, a subfolder listed between two docs
  * @output assertions on integrationsDocsSpelling against
  *   integrationDocsSpelling
  * @position foundation/discovery/ beside the module it tests
@@ -21,13 +21,16 @@ import {
   integrationDocsSpelling,
   integrationsDocsSpelling,
 } from './entry-name-files.mjs';
+import {hintNameIndex} from '../suggest/name-index.mjs';
 
 /** @type {string} */
 let root;
 /** @type {Array<string | undefined>} */
 let dirs;
+/** @type {import('../suggest/name-index.mjs').NameIndex['docs']} */
+let indexes;
 
-beforeAll(() => {
+beforeAll(async () => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-docs-spelling-'));
   const one = path.join(root, 'one');
   const two = path.join(root, 'two');
@@ -41,6 +44,10 @@ beforeAll(() => {
     path.join(one, 'nested', 'setup.doc.mjs'),
     "export default {name: 'set up_now', text: 'see wobble$x and -zeta'};\n",
   );
+  fs.writeFileSync(
+    path.join(one, 'zz-more.doc.mjs'),
+    "export default {name: 'quoxle-more', title: 'More quoxle'};\n",
+  );
   fs.writeFileSync(path.join(one, 'notes.txt'), 'glimmer panel\n');
   fs.writeFileSync(
     path.join(two, 'panel.doc.ts'),
@@ -51,6 +58,12 @@ beforeAll(() => {
     "export default {name: 'hidden-topic'};\n",
   );
   dirs = [one, undefined, two, path.join(root, 'missing')];
+  indexes = (
+    await hintNameIndex(
+      null,
+      dirs.map(docs => ({docs})),
+    )
+  ).docs;
 });
 
 afterAll(() => {
@@ -78,20 +91,20 @@ describe('integrationsDocsSpelling', () => {
       'zorblet',
     ]) {
       const wanted = foldEntryName(typed);
-      expect(integrationsDocsSpelling(dirs, wanted), typed).toEqual(
+      expect(integrationsDocsSpelling(dirs, indexes, wanted), typed).toEqual(
         dirs.flatMap(dir => integrationDocsSpelling(dir, wanted)),
       );
     }
   });
 
   it('finds a name spelled across words, and none no doc spells', () => {
-    expect(integrationsDocsSpelling(dirs, 'quoxleguide')).toEqual([
+    expect(integrationsDocsSpelling(dirs, indexes, 'quoxleguide')).toEqual([
       path.join(root, 'one', 'guide.doc.mjs'),
     ]);
-    expect(integrationsDocsSpelling(dirs, 'glimmerpanel')).toEqual([
+    expect(integrationsDocsSpelling(dirs, indexes, 'glimmerpanel')).toEqual([
       path.join(root, 'two', 'panel.doc.ts'),
     ]);
-    expect(integrationsDocsSpelling(dirs, 'zorblet')).toEqual([]);
-    expect(integrationsDocsSpelling(dirs, 'hiddentopic')).toEqual([]);
+    expect(integrationsDocsSpelling(dirs, indexes, 'zorblet')).toEqual([]);
+    expect(integrationsDocsSpelling(dirs, indexes, 'hiddentopic')).toEqual([]);
   });
 });

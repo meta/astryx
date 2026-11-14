@@ -76,10 +76,6 @@ import {
   discoverCoreTemplates,
   discoverIntegrationTemplatesForOne,
 } from '../../foundation/discovery/template-adapter.mjs';
-import {
-  findOtherCommand,
-  withOtherCommand,
-} from '../../foundation/suggest/other-command.mjs';
 import {findCoreDir} from '../../foundation/fs/paths.mjs';
 import {reusedWhileUnchanged} from '../../foundation/fs/read-record.mjs';
 import {AstryxError} from '../error.mjs';
@@ -2028,20 +2024,24 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
   // A project that does not load gives no hint.
   const project =
     suggestions.length > 0 ? await catalogProject(catalog, cwd) : undefined;
-  const elsewhere = project
-    ? await findOtherCommand(topic, {
+  // The hint's modules load only on this path.
+  const hint = project
+    ? await import('../../foundation/suggest/other-command.mjs')
+    : undefined;
+  const elsewhere = hint
+    ? await hint.findOtherCommand(topic, {
         from: 'docs',
         cwd,
-        coreDir: project.coreDir(),
-        integrations: project.loadedIntegrations,
+        coreDir: project?.coreDir(),
+        integrations: project?.loadedIntegrations,
       })
     : null;
-  if (elsewhere) {
+  if (hint && elsewhere) {
     const sharesAWord =
       !everyDoc ||
       suggestions.some(entry => carriesTypedWord(String(topic), entry.name));
     suggestions =
-      withOtherCommand(suggestions, elsewhere, String(topic), {
+      hint.withOtherCommand(suggestions, elsewhere, String(topic), {
         from: 'docs',
         alone: !sharesAWord,
       }) ?? [];

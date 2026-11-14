@@ -59,11 +59,6 @@ import {
   linkComponentDoc,
   loadDocsCatalog,
 } from '../docs/_adapter.mjs';
-import {docsEntryNames} from '../docs/_entry-names.mjs';
-import {
-  findOtherCommand,
-  withOtherCommand,
-} from '../../foundation/suggest/other-command.mjs';
 
 /** How far below the first suggestion's score a later one may be. */
 const NEAR_FIRST = 10;
@@ -932,12 +927,18 @@ export async function withOtherCommandHint(
     return error;
   }
   try {
+    // The hint's modules load only on this path.
+    const [{findOtherCommand, withOtherCommand}, {docsEntryNamesLazily}] =
+      await Promise.all([
+        import('../../foundation/suggest/other-command.mjs'),
+        import('../docs/_entry-names-lazily.mjs'),
+      ]);
     const hint = await findOtherCommand(dirName, {
       from: 'component',
       cwd,
       coreDir,
       integrations: loadedIntegrations,
-      docsNames: docsEntryNames,
+      docsNames: docsEntryNamesLazily,
     });
     if (!hint) return error;
     return new AstryxError(

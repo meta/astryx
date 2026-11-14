@@ -17,10 +17,8 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {fileURLToPath} from 'node:url';
 import {CLI_ROOT} from '../fs/paths.mjs';
-import {keptTreeSummary, nameLines} from '../fs/kept-tree.mjs';
-import {foldEntryName} from './entry-name-files.mjs';
+import {CLI_SELF_DOC_DIRS, skipCliSelfDocFolder} from './name-roots.mjs';
 import {listDirEntries} from '../fs/listing-cache.mjs';
 import {readDocView} from '../doc-compiler/read.mjs';
 import {AUTHORING_SELF_DOCS, selfDocSection} from './authoring-self-docs.mjs';
@@ -30,14 +28,6 @@ import {
 } from './docs-output-budget.mjs';
 import {routeSegment} from './docs-section-key.mjs';
 import {formatCliCommand} from '../env/package-manager.mjs';
-
-/** The directories, relative to the CLI root, that hold the CLI's own docs. */
-export const CLI_SELF_DOC_DIRS = [
-  'clients/cli/commands',
-  'api',
-  'authoring',
-  'foundation',
-];
 
 /** The doc kinds that declare a namespace. */
 const NAMESPACED_KINDS = new Set(['command', 'function', 'schema', 'enum']);
@@ -71,13 +61,7 @@ export function discoverCliSelfDocSources(root = CLI_ROOT) {
   const walk = dir => {
     if (!fs.existsSync(dir)) return;
     for (const entry of listDirEntries(dir)) {
-      if (
-        entry.name === 'node_modules' ||
-        entry.name.startsWith('__') ||
-        entry.name.startsWith('.')
-      ) {
-        continue;
-      }
+      if (skipCliSelfDocFolder(entry.name)) continue;
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) walk(full);
       else if (entry.name.endsWith('.doc.mjs')) {
@@ -87,56 +71,6 @@ export function discoverCliSelfDocSources(root = CLI_ROOT) {
   };
   for (const dir of CLI_SELF_DOC_DIRS) walk(path.join(root, dir));
   return found.sort();
-}
-
-/** A `name` field and its quoted value, as a doc's text writes it. */
-const NAME_FIELD_RE = /["']?\bname["']?\s*:\s*["']([^"'\n]+)["']/gu;
-
-/**
- * The route segment of every name the CLI's own typed docs can carry, read
- * from their text without loading them: each `name` field's value as a route
- * segment, folded ({@link foldEntryName}), as lines ({@link nameLines}). The
- * tree gives such a doc the segment of its name, so a segment that is not a
- * line here is no such doc's. Kept between runs while
- * the docs are unchanged (../fs/kept-tree.mjs).
- * @param {string} [root]
- * @returns {string | string[]}
- */
-export function cliSelfDocNames(root = CLI_ROOT) {
-  return keptTreeSummary(
-    {
-      kind: 'cli-self-doc-names',
-      roots: CLI_SELF_DOC_DIRS.map(dir => path.join(root, dir)),
-      code: [
-        fileURLToPath(import.meta.url),
-        fileURLToPath(new URL('./entry-name-files.mjs', import.meta.url)),
-      ],
-      skip: name =>
-        name === 'node_modules' ||
-        name.startsWith('__') ||
-        name.startsWith('.'),
-    },
-    trees => {
-      const names = new Set();
-      for (const {folders, readText} of trees) {
-        for (const {rel, entries} of folders) {
-          for (const {name, isDir} of entries) {
-            if (isDir || !name.endsWith('.doc.mjs')) continue;
-            let text;
-            try {
-              text = readText(rel === '' ? name : path.join(rel, name));
-            } catch {
-              continue;
-            }
-            for (const [, value] of text.matchAll(NAME_FIELD_RE)) {
-              names.add(foldEntryName(routeSegment(value)));
-            }
-          }
-        }
-      }
-      return nameLines(names);
-    },
-  );
 }
 
 /**

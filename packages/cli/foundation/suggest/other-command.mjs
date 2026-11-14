@@ -23,29 +23,22 @@
  *   component, hook, template and docs adapters
  */
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {
-  builtinDocNamed,
-  builtinDocNamesWhere,
-  integrationDocNamesWhere,
-} from '../discovery/docs-discovery.mjs';
-import {routeSegment} from '../discovery/docs-section-key.mjs';
 import {
   coreFilesNaming,
   foldEntryName,
   integrationsDocsSpelling,
   integrationsFilesNaming,
 } from '../discovery/entry-name-files.mjs';
-import {KIND_GROUPS, TOPIC_LEVELS} from '../doc-compiler/generated-levels.mjs';
-import {
-  coreTemplateIds,
-  listTemplates,
-  templateFilesNaming,
-} from '../discovery/template-ids.mjs';
+import {BUILTIN_DOCS_DIR, rootNamespaceName} from '../discovery/name-roots.mjs';
+import {TOPIC_LEVELS} from '../doc-compiler/generated-levels.mjs';
 import {hasNameLine, keptTreeSummary} from '../fs/kept-tree.mjs';
 import {carriesEveryTypedWord} from '../text/suggest-order.mjs';
 import {findCoreDir} from '../fs/paths.mjs';
 import {mayHaveIntegrations} from '../integrations/may-have-integrations.mjs';
+import {hintNameIndex, templateFilesNaming} from './name-index.mjs';
 
 /** The code that makes the kept integration component names. */
 const NAMES_CODE = [
@@ -282,13 +275,14 @@ export function withOtherCommand(
 }
 
 /**
- * {@link otherCommand} over the names the project's catalogs hold. File names
- * and doc text say first which catalogs can hold the name; a catalog is asked
- * only then, only for the names that fold to it, and only until a catalog
- * before it has an exact match. So a name no file carries reads no doc. The
- * docs catalog is every route of the docs tree, from `docsNames`, which the
- * docs lookup owns; it is read only when the name's last segment can end a
- * route. A check that fails gives no hint.
+ * {@link otherCommand} over the names the project's catalogs hold. The
+ * project's name index (./name-index.mjs), made from file names and doc
+ * text, says first which catalogs can hold the name; a catalog is asked only
+ * then, only for the names that fold to it, and only until a catalog before
+ * it has an exact match. So a name no file carries reads no doc and loads no
+ * discovery. The docs catalog is every route of the docs tree, from
+ * `docsNames`, which the docs lookup owns; it is read only when the name's
+ * last segment can end a route. A check that fails gives no hint.
  * @param {unknown} typed
  * @param {{
  *   from: LookupCommand,
@@ -332,11 +326,20 @@ export async function findOtherCommand(
 
   /** @type {string | null} */
   let coreDir = null;
+  /** @type {import('./name-index.mjs').NameIndex | undefined} */
+  let index;
+  const indexOnce = async () =>
+    (index ??= await hintNameIndex(coreDir, await integrationsOnce()));
   /** @type {ReturnType<typeof coreFilesNaming> | {component: boolean, hook: boolean, componentTops?: undefined, hookTops?: undefined}} */
   let inCore = {component: false, hook: false};
   try {
     coreDir = knownCoreDir ?? findCoreDir(cwd);
-    if (coreDir && !isPath) inCore = coreFilesNaming(coreDir, wanted);
+    if (coreDir && !isPath) {
+      inCore = coreFilesNaming(
+        /** @type {string | string[]} */ ((await indexOnce()).core),
+        wanted,
+      );
+    }
   } catch {
     inCore = {component: true, hook: true};
   }
@@ -361,6 +364,7 @@ export async function findOtherCommand(
       async () => ({
         components: await integrationComponentNames(
           await integrationsOnce(),
+          (await indexOnce()).components,
           wanted,
           isWanted,
         ),
@@ -382,7 +386,11 @@ export async function findOtherCommand(
     [
       'template',
       async () => ({
-        templates: await templateNames(await integrationsOnce(), wanted),
+        templates: await templateNames(
+          await integrationsOnce(),
+          (await indexOnce()).templates,
+          wanted,
+        ),
       }),
     ],
     [
@@ -391,14 +399,15 @@ export async function findOtherCommand(
         const docsDirs = (await integrationsOnce()).map(
           integration => integration?.docs,
         );
+        const names = await indexOnce();
         if (!isPath) {
-          const roots = await rootDocNames(docsDirs, wanted, isWanted);
+          const roots = await rootDocNames(docsDirs, names, wanted, isWanted);
           if (roots.length > 0) return {docs: roots};
         }
         const segment = foldEntryName(typed.slice(typed.lastIndexOf('/') + 1));
         return {
           docs:
-            docsNames && (await docNamed(docsDirs, segment))
+            docsNames && docNamed(docsDirs, names, segment)
               ? await docsNames(cwd, await integrationsOnce())
               : [],
         };
@@ -433,23 +442,37 @@ export async function findOtherCommand(
  * The root routes of the docs tree whose names `isWanted` accepts, from file
  * names and doc text: the CLI's flat topics and root namespaces, the levels
  * that hold the flat topics, and each integration's topics and root
- * namespaces. Only an integration doc whose text spells the name is read.
+ * namespaces. Only a CLI tree file whose name `isWanted` accepts, and only an
+ * integration doc whose text spells the name, is read.
  * @param {Array<string | undefined>} docsDirs the integrations' docs folders
+ * @param {import('./name-index.mjs').NameIndex} index
  * @param {string} wanted the folded name
  * @param {(name: string) => boolean} isWanted
  * @returns {Promise<string[]>}
  */
-async function rootDocNames(docsDirs, wanted, isWanted) {
+async function rootDocNames(docsDirs, index, wanted, isWanted) {
   const builtin = [
-    ...builtinDocNamesWhere(isWanted),
+    ...index.topics.filter(isWanted),
+    ...index.treeStems.filter(isWanted).flatMap(stem => {
+      const name = rootNamespaceName(
+        fs.readFileSync(
+          path.join(BUILTIN_DOCS_DIR, 'tree', `${stem}.doc.mjs`),
+          'utf8',
+        ),
+      );
+      return name && isWanted(name) ? [name] : [];
+    }),
     ...Object.values(TOPIC_LEVELS)
       .map(level => level.route)
       .filter(isWanted),
   ];
   if (builtin.length > 0) return builtin;
-  return integrationDocNamesWhere(
-    integrationsDocsSpelling(docsDirs, wanted),
-    isWanted,
+  // A topic or root namespace: a doc without `placement`.
+  return declaredNames(
+    docsDirs,
+    index,
+    wanted,
+    declared => !declared.placed && isWanted(declared.name),
   );
 }
 
@@ -460,28 +483,52 @@ async function rootDocNames(docsDirs, wanted, isWanted) {
  * node's segment is its doc's name as a route segment, so when none can, no
  * route ends in it and the tree is not built.
  * @param {Array<string | undefined>} docsDirs the integrations' docs folders
+ * @param {import('./name-index.mjs').NameIndex} index
  * @param {string} segment a folded route segment
- * @returns {Promise<boolean>}
+ * @returns {boolean}
  */
-async function docNamed(docsDirs, segment) {
-  /** @param {string} name */
-  const isSegment = name => foldEntryName(routeSegment(name)) === segment;
+function docNamed(docsDirs, index, segment) {
   if (
-    [
-      ...Object.values(TOPIC_LEVELS).map(level => level.route),
-      ...Object.values(KIND_GROUPS).map(group => group.segment),
-    ].some(isSegment) ||
-    builtinDocNamed(isSegment)
+    hasNameLine(index.segments, segment) ||
+    hasNameLine(index.selfDocs, segment)
   ) {
     return true;
   }
-  const {cliSelfDocNames} = await import('../discovery/cli-self-docs.mjs');
-  if (hasNameLine(cliSelfDocNames(), segment)) return true;
-  const files = integrationsDocsSpelling(docsDirs, segment);
   return (
-    (await integrationDocNamesWhere(files, isSegment, {placed: true})).length >
-    0
+    declaredNames(
+      docsDirs,
+      index,
+      segment,
+      declared => declared.segment === segment,
+    ).length > 0
   );
+}
+
+/**
+ * The names the integration docs whose text spells `wanted` declare, among
+ * the declarations `keep` accepts, in the order the docs folders are walked.
+ * The name each doc declares is the index's, so only a doc whose declaration
+ * `keep` accepts is read, to check its text spells the name.
+ * @param {Array<string | undefined>} docsDirs the integrations' docs folders
+ * @param {import('./name-index.mjs').NameIndex} index
+ * @param {string} wanted a folded name
+ * @param {(declared: NonNullable<import('./name-index.mjs').DocEntry['declared']>) => boolean} keep
+ * @returns {string[]}
+ */
+function declaredNames(docsDirs, index, wanted, keep) {
+  /** @type {Map<string, string>} */
+  const names = new Map();
+  const files = integrationsDocsSpelling(
+    docsDirs,
+    index.docs,
+    wanted,
+    ({declared}, file) => {
+      if (!declared || !keep(declared)) return false;
+      names.set(file, declared.name);
+      return true;
+    },
+  );
+  return files.map(file => /** @type {string} */ (names.get(file)));
 }
 
 /**
@@ -546,13 +593,21 @@ function integrationComponentList(
  * a component whose doc is not valid with ERR_INVALID_DOC. Only an
  * integration whose files can carry the name is read.
  * @param {import('../integrations/integrations.mjs').LoadedIntegration[]} integrations
+ * @param {import('./name-index.mjs').NameIndex['components']} indexes the
+ *   integrations' components folders' indexes
  * @param {string} wanted the folded name
  * @param {(name: string) => boolean} isWanted
  * @returns {Promise<string[]>}
  */
-async function integrationComponentNames(integrations, wanted, isWanted) {
+async function integrationComponentNames(
+  integrations,
+  indexes,
+  wanted,
+  isWanted,
+) {
   const naming = integrationsFilesNaming(
     integrations.map(integration => integration.components),
+    indexes,
     wanted,
   );
   /** @type {typeof import('../discovery/component-discovery.mjs') | undefined} */
@@ -575,15 +630,20 @@ async function integrationComponentNames(integrations, wanted, isWanted) {
  * only those ids' docs, as it does for the template list, so a doc without
  * its source, or one that does not load, is no hint.
  * @param {import('../integrations/integrations.mjs').LoadedIntegration[]} integrations
+ * @param {import('./name-index.mjs').NameIndex['templates']} ids the
+ *   template ids' lines
  * @param {string} wanted the folded name
  * @returns {Promise<string[]>}
  */
-async function templateNames(integrations, wanted) {
+async function templateNames(integrations, ids, wanted) {
   /** @param {string} name */
   const isWanted = name =>
     foldEntryName(name) === wanted ||
     foldEntryName(name.slice(name.lastIndexOf('/') + 1)) === wanted;
-  const {blocks, listed} = templateFilesNaming(integrations, wanted);
+  const {pages, blocks, listed} = templateFilesNaming(ids, wanted);
+  if (!pages && !blocks && !listed) return [];
+  const {coreTemplateIds, listTemplates} =
+    await import('../discovery/template-ids.mjs');
   const core = blocks
     ? coreTemplateIds(isWanted)
     : listTemplates().filter(isWanted);

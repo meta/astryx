@@ -24,7 +24,7 @@ import {listDir} from '../fs/listing-cache.mjs';
 import {loadCliSelfDocs} from '../discovery/cli-self-docs.mjs';
 import {astryxIconDefinitions} from '../discovery/icon-definition-discovery.mjs';
 import {routeSegment} from '../discovery/docs-section-key.mjs';
-import {rootNamespaceName} from '../discovery/docs-discovery.mjs';
+import {rootNamespaceName} from '../discovery/name-roots.mjs';
 import {diagnostic, sortDiagnostics} from './diagnostics.mjs';
 import {readDocView} from './read.mjs';
 import {packageSource} from './source.mjs';

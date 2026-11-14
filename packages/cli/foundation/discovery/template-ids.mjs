@@ -10,16 +10,16 @@
  * @output ids, suffixes and folders; whether a template id folds to the name
  * @position foundation/discovery: read by template discovery
  *   (./template-adapter.mjs), which re-exports the ids, and by the lookup
- *   commands' not-found hint (../suggest/other-command.mjs), which reads an
- *   integration's template doc only when its file names can match
+ *   commands' not-found hint (../suggest/name-index.mjs keeps the ids'
+ *   lines; ../suggest/other-command.mjs reads an integration's template doc
+ *   only when its file names can match)
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {fileURLToPath} from 'node:url';
-import {hasNameLine, keptTreeSummary, nameLines} from '../fs/kept-tree.mjs';
+import {nameLines} from '../fs/kept-tree.mjs';
 import {listDirEntries} from '../fs/listing-cache.mjs';
-import {CLI_ROOT} from '../fs/paths.mjs';
+import {BLOCKS_DIR, PAGES_DIR} from './name-roots.mjs';
 import {foldEntryName} from './entry-name-files.mjs';
 
 /**
@@ -58,9 +58,7 @@ export function matchedTemplateSuffix(file) {
  */
 export const TEMPLATE_SUFFIX_RE = /\.(template|doc)\.(ts|mjs|js)$/;
 
-const TEMPLATES_DIR = path.join(CLI_ROOT, 'assets', 'templates');
-export const PAGES_DIR = path.join(TEMPLATES_DIR, 'pages');
-export const BLOCKS_DIR = path.join(TEMPLATES_DIR, 'blocks');
+export {BLOCKS_DIR, PAGES_DIR};
 
 /**
  * List the core page-template directory names (sorted). The `template --list`
@@ -118,69 +116,35 @@ export function coreTemplateIds(keep = () => true) {
   return ids;
 }
 
-/** This module's own file: its code decides the template-ids summary's shape. */
-const OWN_FILE = fileURLToPath(import.meta.url);
-
-/** The file of foldEntryName, which decides the template-ids summary too. */
-const FOLD_FILE = fileURLToPath(
-  new URL('./entry-name-files.mjs', import.meta.url),
-);
-
 /**
- * Which template files can give an id that folds to `wanted`, read from a
- * kept summary of file names: `blocks` false means {@link coreTemplateIds}
- * gives no block id that folds to it, and `listed` says whether any of the
- * integrations ships a template doc whose id ({@link integrationTemplateIds})
- * or the id's last segment folds to it. Discovery lists a template only when
- * its doc has its same-stem `.tsx` source beside it, so a doc without one
- * counts for neither.
- * @param {Array<{templates?: string}>} integrations
- * @param {string} wanted a folded name
- * @returns {{blocks: boolean, listed: boolean}}
+ * The folded ids the template docs under one templates folder give, as lines
+ * ({@link nameLines}): Core's block ids are stems; an integration's are paths,
+ * folded whole and by their last segment, as a reader types one. Discovery
+ * lists a template only when its doc has its same-stem `.tsx` source beside
+ * it, so a doc without one gives no id.
+ * @param {import('../fs/kept-tree.mjs').TreeFolder[]} folders the folder's tree
+ * @param {boolean} isCore whether it is Core's {@link BLOCKS_DIR}
+ * @returns {string | string[]}
  */
-export function templateFilesNaming(integrations, wanted) {
-  const roots = integrations.flatMap(integration =>
-    typeof integration?.templates === 'string' && integration.templates !== ''
-      ? [integration.templates]
-      : [],
-  );
-  /** @type {Array<string | string[]>} */
-  const [blocks, ...listed] = keptTreeSummary(
-    {
-      kind: 'template-ids',
-      roots: [BLOCKS_DIR, ...roots],
-      code: [OWN_FILE, FOLD_FILE],
-    },
-    trees =>
-      trees.map(({folders}, at) => {
-        const folded = new Set();
-        for (const {rel, entries} of folders) {
-          const files = new Set(
-            entries.flatMap(({name, isDir}) => (isDir ? [] : [name])),
-          );
-          for (const name of files) {
-            const suffix = matchedTemplateSuffix(name);
-            if (!suffix || !files.has(`${name.slice(0, -suffix.length)}.tsx`))
-              continue;
-            // Core's block ids are stems; an integration's are paths.
-            const id =
-              at === 0
-                ? name.slice(0, -suffix.length)
-                : path.join(rel, name).slice(0, -suffix.length);
-            // A reader types an integration's id in full or by its last
-            // segment.
-            const parts = id.split(path.sep);
-            folded.add(foldEntryName(parts.join('/')));
-            folded.add(foldEntryName(parts[parts.length - 1]));
-          }
-        }
-        return nameLines(folded);
-      }),
-  );
-  return {
-    blocks: hasNameLine(blocks, wanted),
-    listed: listed.some(ids => hasNameLine(ids, wanted)),
-  };
+export function templateIdLines(folders, isCore) {
+  const folded = new Set();
+  for (const {rel, entries} of folders) {
+    const files = new Set(
+      entries.flatMap(({name, isDir}) => (isDir ? [] : [name])),
+    );
+    for (const name of files) {
+      const suffix = matchedTemplateSuffix(name);
+      if (!suffix || !files.has(`${name.slice(0, -suffix.length)}.tsx`))
+        continue;
+      const id = isCore
+        ? name.slice(0, -suffix.length)
+        : path.join(rel, name).slice(0, -suffix.length);
+      const parts = id.split(path.sep);
+      folded.add(foldEntryName(parts.join('/')));
+      folded.add(foldEntryName(parts[parts.length - 1]));
+    }
+  }
+  return nameLines(folded);
 }
 
 /**
