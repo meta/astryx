@@ -691,26 +691,43 @@ function generatedHeader(sourceFile, lang = 'js', command, versions) {
 }
 
 /**
- * Normalize generated file content for staleness comparison by dropping the
+ * The built module's doc-comment line that names the command that built it.
+ * That command follows the package manager and host of the run.
+ */
+export const BUILT_BY_LINE =
+  /^( \* \S(?:.*\S)? theme — built by `)(\S(?:.*\S)?)( theme build`)(\s*)$/u;
+
+/**
+ * Normalize generated file content for staleness comparison. It drops the
  * volatile `Command:` line of the `@generated` header (it embeds the
- * invocation, e.g. an explicit --out). Everything else — including the rest of
- * the header and all real content — is compared verbatim. Used only by
- * `--check`: a differing command must NOT report a file as stale, but any real
- * content drift must. The `CLI:`/`Core:` provenance lines are deterministic
- * for a given toolchain, so they compare verbatim like real content. CRLF
- * line endings read as LF.
+ * invocation, e.g. an explicit --out), and in a built module it hides the
+ * command on its one `built by` line (BUILT_BY_LINE), because a theme built
+ * with one package manager and checked with another has the same outputs.
+ * Everything else — including the rest of the header and all real content —
+ * is compared verbatim. Used by `--check`: a differing command must NOT report
+ * a file as stale, but any real content drift must. A second `built by` line
+ * is content. The `CLI:`/`Core:` provenance lines are deterministic for a
+ * given toolchain, so they compare verbatim like real content. CRLF line
+ * endings read as LF.
  * @param {string} content
  * @returns {string}
  */
 export function normalizeThemeBuildForCompare(content) {
   // A checkout may turn line endings into CRLF; the text is the same.
-  return content
+  const lines = content
     .replace(/\r\n/g, '\n')
     .split('\n')
     .filter(line => {
       const t = line.replace(/^\s*\*?\s?/, '');
       return !t.startsWith('Command:');
-    })
+    });
+  const builtBy = lines.filter(line => BUILT_BY_LINE.test(line)).length;
+  return lines
+    .map(line =>
+      builtBy === 1 && BUILT_BY_LINE.test(line)
+        ? line.replace(BUILT_BY_LINE, '$1<command>$3$4')
+        : line,
+    )
     .join('\n');
 }
 
