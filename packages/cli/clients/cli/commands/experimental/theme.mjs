@@ -468,6 +468,31 @@ function newFlagLine(o) {
 }
 
 /**
+ * The options of a preview command as the one option reader reads them
+ * ({@link optionsAsWritten}): a typed dash (`—template`, `−−path`), other
+ * letters or a typo of an option it takes is that option, refused with
+ * the command as meant. Commander reads a word that starts with a typed
+ * dash as a word of the command, so it is read here. Null when every
+ * option is written as the command takes it.
+ * @param {string} command `add` under preview
+ * @param {import('@astryxdesign/cli/authoring').CommandDoc} doc
+ * @returns {null}
+ */
+function previewOptionsRead(command, doc) {
+  const head = `${PREFIX} preview ${command}`;
+  const read = optionsAsWritten(command, doc, {group: 'preview', head});
+  if (!read) return null;
+  throw new AstryxError(
+    `${read.why}.`,
+    [
+      ...(read.line ? [{name: cmd(read.line), reason: 'do this instead'}] : []),
+      {name: cmd(`${head} --help`), reason: 'every option it takes'},
+    ],
+    ERROR_CODES.ERR_INVALID_OPTION,
+  );
+}
+
+/**
  * Refuse a preview flag given twice with different values: the command
  * would keep only the last one without a word. Undefined when each is
  * given once.
@@ -1753,6 +1778,7 @@ export function registerExperimentalTheme(group, program) {
           program,
           () =>
             previewFlagsOnce('add', ['theme', 'template', 'top', 'path']) ??
+            previewOptionsRead('add', previewAddDoc) ??
             resultStands(
               themeEditPreviewAdd([words ?? []].flat().join(' ') || undefined, {
                 cwd: process.cwd(),

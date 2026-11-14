@@ -38,7 +38,11 @@ import {makeCompiler} from './_compiler.mjs';
 import {openProject, installLine} from './_project.mjs';
 import {partData} from './_parts.mjs';
 import {writeWhole} from './_palette.mjs';
-import {assetRef, CSS_URL} from '../../foundation/render/render-page.mjs';
+import {
+  assetRef,
+  CSS_URL,
+  cssUrlRef,
+} from '../../foundation/render/render-page.mjs';
 import {MAX_ASSET_BYTES} from '../../foundation/render/assets.mjs';
 import {typoNear} from './_normal.mjs';
 import {
@@ -628,7 +632,7 @@ export function themeImageNotes(ctx, slug) {
   /** @type {Map<string, string>} */
   const notes = new Map();
   for (const m of css.matchAll(new RegExp(CSS_URL.source, 'g'))) {
-    const named = assetRef(m[2], at);
+    const named = assetRef(cssUrlRef(m), at);
     if (!named || notes.has(named.ref)) continue;
     if (named.kind === 'remote')
       notes.set(
@@ -644,6 +648,11 @@ export function themeImageNotes(ctx, slug) {
       notes.set(
         named.ref,
         `${named.ref} is not a regular file (a pipe, a device or a folder), so the previews do not read it and show the theme without it.`,
+      );
+    else if (named.kind === 'unreadable')
+      notes.set(
+        named.ref,
+        `${shown(ctx.project.cwd, named.file)} cannot be read (no permission), so the previews show the theme without it; make it readable (chmod u+r) to show it.`,
       );
     else {
       const bytes = fs.statSync(named.file).size;

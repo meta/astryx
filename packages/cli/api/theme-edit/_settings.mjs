@@ -102,6 +102,7 @@ import {
   writeWhole,
   setOwnTokenReader,
   readRecordIn,
+  readRegularFile,
   readWrittenRecord,
   writeWrittenRecord,
 } from './_palette.mjs';
@@ -306,7 +307,7 @@ export function dialValueFits(dial, value) {
 /** @param {string} file @returns {string | null} */
 const contentHash = file => {
   try {
-    return createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+    return createHash('sha256').update(readRegularFile(file)).digest('hex');
   } catch {
     return null;
   }
@@ -343,8 +344,10 @@ export function editorWrote(cwd, slug, file) {
   if (was) return was === contentHash(file);
   // With no record of it, the picture's stamp names the theme it shows.
   try {
-    return pngTexts(fs.readFileSync(file))[EDITOR_STAMP] === slug;
+    return pngTexts(readRegularFile(file))[EDITOR_STAMP] === slug;
   } catch {
+    // Not there, unreadable, or not a regular file (a pipe): not the
+    // editor's.
     return false;
   }
 }
@@ -6727,6 +6730,33 @@ export function holdAfterBuild(ctx) {
  * @returns {Promise<{warnings: string[], lifted: string[], notes: string[], removedPictures: string[]}>} `notes`: what the color config kept or replaced of a hand edit; `removedPictures`: the editor's pictures of the look before, removed
  */
 export async function buildTheme(ctx, slug, data) {
+  // A change around the build (commitTheme) owns the rollback of what it
+  // writes. With none (a preview command building a stale theme first), a
+  // build that fails puts back what it wrote itself: a refused command
+  // writes nothing.
+  if (ctx.wrote) return buildThemeSteps(ctx, slug, data);
+  const dir = themeFiles(ctx.project.cwd, slug).dir;
+  const was = snapshotDir(dir);
+  /** @type {Map<string, string | null>} */
+  const wrote = new Map();
+  ctx.wrote = wrote;
+  try {
+    return await buildThemeSteps(ctx, slug, data);
+  } catch (e) {
+    restoreWritten(was, wrote);
+    throw e;
+  } finally {
+    ctx.wrote = undefined;
+  }
+}
+
+/**
+ * {@link buildTheme}'s steps, each write recorded in `ctx.wrote`.
+ * @param {Ctx} ctx
+ * @param {string} slug
+ * @param {ThemeData} data
+ */
+async function buildThemeSteps(ctx, slug, data) {
   const {cwd} = ctx.project;
   const f = themeFiles(cwd, slug);
   await refuseThemeSource(cwd, slug);
@@ -6786,21 +6816,21 @@ export async function buildTheme(ctx, slug, data) {
     if (!fs.existsSync(f.ts)) writeWhole(f.ts, themeModuleSource(slug));
   });
   // Files an earlier build wrote that this one may not: the variants types
-  // of an older base, and the pictures the editor took of an older look.
-  // Only a picture the editor recorded writing, unchanged since, goes: a
-  // file of the user's is never touched. Section sheets stay, marked as
-  // out of date like sheet.html.
+  // of an older base, and the pictures the editor took of an older look
+  // (a section sheet's too). Only a picture the editor recorded writing,
+  // unchanged since, goes: a file of the user's is never touched. Section
+  // sheets' html stays, marked as out of date like sheet.html.
   /** The pictures removed: named in the result. @type {string[]} */
   let removedPictures = [];
   await step(() => {
-    // The full sheet's and the preview's pictures, in each mode; a section
-    // sheet's (`sheet-inputs.png`) is not one of them.
+    // The preview's and the sheets' pictures (a section's, `sheet-inputs.png`,
+    // included), in each mode: none shows the look this build makes.
     const pictures = fs.existsSync(f.dir)
       ? fs
           .readdirSync(f.dir)
           .filter(
             n =>
-              /^(sheet|preview)(-dark)?\.png$/.test(n) &&
+              /^(preview(-dark)?|sheet(-[a-z][a-z-]*)?)\.png$/.test(n) &&
               editorRecorded(cwd, slug, path.join(f.dir, n)),
           )
       : [];
@@ -6940,7 +6970,19 @@ export async function buildTheme(ctx, slug, data) {
   if (removedPictures.length)
     notes = [
       ...notes,
-      `removed ${removedPictures.join(', ')}: ${removedPictures.length === 1 ? 'a picture' : 'pictures'} of ${slug} as it was before this build; ${P} show ${slug} --png takes new ones`,
+      `removed ${removedPictures.join(', ')}: ${removedPictures.length === 1 ? 'a picture' : 'pictures'} of ${slug} as it was before this build; ${[
+        ...new Set(
+          removedPictures.map(p => {
+            const section =
+              /\/sheet-(?!dark\.png$)([a-z][a-z-]*?)(-dark)?\.png$/.exec(
+                p,
+              )?.[1];
+            return `${P} show ${slug} --png${section ? ` --section ${section}` : ''}`;
+          }),
+        ),
+      ].join(
+        ' and ',
+      )} ${removedPictures.length === 1 ? 'takes a new one' : 'take new ones'}`,
     ];
   return {warnings, lifted, notes, removedPictures};
 }
