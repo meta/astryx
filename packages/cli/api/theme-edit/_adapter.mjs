@@ -601,6 +601,9 @@ export const themeEditPreviewAdd = (description, options = {}) =>
       ),
   );
 
+/** A stop after a preview command finished: its result stands. */
+const doneAlready = () => {};
+
 /**
  * Run a preview command with a stop (Ctrl-C, SIGTERM) heard for its whole
  * run, and after it: the stop ends the process as stopped, with one line
@@ -627,6 +630,15 @@ async function stopTold(where, fn) {
     // A turn of the event loop, so a stop that came while the work ran
     // without a pause is heard now, before the result is printed.
     await new Promise(resolve => setImmediate(resolve));
+    // Done in full from here: a stop after this point lands while the
+    // result is printed, and must not turn a printed ok into exit 130. The
+    // process ends as soon as the result is out (a signal listener keeps
+    // nothing running).
+    process.removeListener('SIGINT', on);
+    process.removeListener('SIGTERM', on);
+    for (const sig of /** @type {const} */ (['SIGINT', 'SIGTERM']))
+      if (!process.listeners(sig).includes(doneAlready))
+        process.on(sig, doneAlready);
     return r;
   } finally {
     process.removeListener('SIGINT', on);
