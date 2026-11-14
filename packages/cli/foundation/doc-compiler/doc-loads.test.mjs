@@ -433,14 +433,19 @@ const RUNNERS = {
     sites: ['importDocModule', 'importNativeModule ×3', 'importTemplateModule'],
   },
   'foundation/render/page-worker.mjs': {
-    runs: 'the page `astryx experimental render` renders, its local modules, React, and the StyleX compiler, in a worker thread of the render host process, then React DOM and the recharts settings to draw its charts; outside a project, Node resolves the packages its folder lacks, and React and StyleX for every module (resolve hooks for ES modules), from the package set the CLI runs from',
+    runs: 'the page `astryx experimental render` renders, its local modules, React, and the StyleX compiler, in a worker thread of the render host process, then React DOM and the recharts settings to draw its charts and the overlays it shows or opens (placed after it, or where the page asked through the global it installs for that); outside a project, Node resolves the packages its folder lacks, and React and StyleX for every module (resolve hooks for ES modules), from the package set the CLI runs from',
     sites: [
-      '.import() ×6',
+      '.import() ×10',
       'createJiti ×2',
+      'globalThis[<computed>]',
       'module',
       'module.register',
       'require(@stylexjs/babel-plugin)',
     ],
+  },
+  'foundation/render/layers.mjs': {
+    runs: "the browser's DOM classes and observers, from the small document the render worker draws overlays in, put on the worker thread's globals",
+    sites: ['g[<computed>] ×3'],
   },
   'foundation/render/picture-chrome.mjs': {
     runs: 'a Chrome found on the machine, over its DevTools pipe, to picture a preview only with --png',
