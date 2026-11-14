@@ -18,6 +18,7 @@ import {
   removeLinkedFixture,
 } from '../../test-utils/linked-fixture.mjs';
 import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
+import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
 
 vi.mock('./_preview.mjs', async importOriginal =>
   (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
@@ -27,10 +28,15 @@ vi.mock('./_preview.mjs', async importOriginal =>
 
 /** @type {string} */
 let cwd;
+/** Why the real neutral theme could not be built here, or ''. */
+let unbuilt = '';
 
-beforeAll(() => {
+beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-hunt101-', FIXTURE_PACKAGES);
-});
+  // The phone note needs a base whose rule for phones sets the type again,
+  // as the real neutral theme does.
+  unbuilt = await installRealBaseThemes(cwd, ['neutral']);
+}, 300_000);
 
 afterAll(() => {
   if (cwd) removeLinkedFixture(cwd);
@@ -41,10 +47,10 @@ afterAll(() => {
  * `head` lines above it and files beside it.
  * @param {string} slug
  * @param {string} lines
- * @param {{head?: string, files?: Record<string, string>}} [more]
+ * @param {{head?: string, files?: Record<string, string>, like?: string}} [more]
  */
-const withOwn = async (slug, lines, {head = '', files = {}} = {}) => {
-  await themeEditNew(slug, {cwd});
+const withOwn = async (slug, lines, {head = '', files = {}, like} = {}) => {
+  await themeEditNew(slug, {cwd, ...(like ? {like} : {})});
   const dir = path.join(cwd, 'themes', slug);
   for (const [name, text] of Object.entries(files))
     fs.writeFileSync(path.join(dir, name), text);
@@ -162,12 +168,25 @@ describe('the own-token check judges what the build writes', () => {
     expect(s.message).toContain('(in themes/ij/tok.json, line 2)');
   }, 240_000);
 
-  it('gives no phone note for a family the typography sets', async () => {
+  it('gives the phone note for a family the tokens map sets, and none for one the typography sets', async ctx => {
+    if (unbuilt) {
+      console.warn(`skipped: ${unbuilt}`);
+      return ctx.skip();
+    }
+    // The base's rule for phones sets the type again, so a family the
+    // tokens map sets is lost there: the note shows the case is reproduced.
+    await withOwn('pt', "  tokens: {'--font-family-body': 'Georgia, serif'},", {
+      like: 'neutral',
+    });
+    const t = await accepted('pt');
+    expect(t.data.notes.join('\n')).toMatch(/on phones.*--font-family-body/);
+    // That rule keeps the theme's typography: no note.
     await withOwn(
       'pn',
       "  typography: {body: {family: 'Georgia', fallbacks: 'serif'}},",
+      {like: 'neutral'},
     );
     const r = await accepted('pn');
     expect(r.data.notes.join('\n')).not.toMatch(/on phones/);
-  }, 240_000);
+  }, 300_000);
 });
