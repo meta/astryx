@@ -132,6 +132,24 @@ describe('hunt21, R03-05-07 final 11', () => {
 });
 
 describe('hunt21, chaos13', () => {
+  it('R13-A2: undo keeps its error code when themes is a link to a file, on every Node', async () => {
+    const app = makeLinkedFixture(
+      'astryx-theme-hunt21-link-',
+      FIXTURE_PACKAGES,
+    );
+    try {
+      fs.writeFileSync(path.join(app, 'themes-file'), 'hi\n');
+      fs.symlinkSync('themes-file', path.join(app, 'themes'));
+      const {themeEditUndo} = await import('./theme-edit.mjs');
+      const r = await refusal(() => themeEditUndo('g', {cwd: app}));
+      // The same refusal on Node 22.13, where the stat of a file under a
+      // themes link throws ENOTDIR, as on later Node, where it does not.
+      expect(r.code).toBe('ERR_THEME_INVALID');
+    } finally {
+      removeLinkedFixture(app);
+    }
+  }, 240_000);
+
   it('R13-A: themes as a file is refused by every command, naming the fix', async () => {
     const app = makeLinkedFixture(
       'astryx-theme-hunt21-file-',

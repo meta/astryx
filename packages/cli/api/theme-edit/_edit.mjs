@@ -15,6 +15,7 @@ import {coversProperty} from './_css.mjs';
 import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
 import {vetSuggestions} from './_vet.mjs';
+import {colorPair, offersTyped} from './_normal.mjs';
 import {
   AUTO_SPREAD,
   CORNERS,
@@ -70,11 +71,14 @@ import {
   settingsEntriesOk,
   slugFor,
   typedThemeName,
+  themeNameReadings,
   themeSource,
   themeSourceProblem,
   refuseThemeParse,
   ownSourceTokens,
   ownSourceTokenValues,
+  ownTokenEntries,
+  nonTextMessage,
   ownPartTokens,
   PHONE_TYPE,
   refreshSourceStamp,
@@ -88,14 +92,11 @@ import {
   folderIsEmpty,
   dialValueFits,
   holdAfterBuild,
+  fieldsMeant,
 } from './_settings.mjs';
-import {
-  checkSetting,
-  exampleOf,
-  normalizeEntry,
-  storedProblems,
-} from './_check.mjs';
-import {MODAL} from './_compiler.mjs';
+import {checkSetting, normalizeEntry, storedProblems} from './_check.mjs';
+import {MODAL, isColorToken} from './_compiler.mjs';
+import {colorProblem} from './_color.mjs';
 import {
   PALETTE_DIALS,
   VIBRANCY_DEFAULT,
@@ -108,6 +109,7 @@ import {
   writeWhole,
   isGraySeed,
   seedOf,
+  isEditorTemp,
 } from './_palette.mjs';
 import {
   renderPreview,
@@ -116,9 +118,12 @@ import {
   takeFirstAppCopy,
   appCopyBehind,
   appCopyStale,
+  copyFontsCss,
   writeAppCopy,
 } from './_preview.mjs';
 import {appWiring, refreshPreviewRoute, seeLine} from './_preview-app.mjs';
+/** The preview command, as a person runs it. */
+const PREVIEW_CMD = `${P.replace(/ editor$/, '')} preview`;
 import {baseInstalled, baseResolved, installLine} from './_project.mjs';
 import {reactMissing} from './_parts.mjs';
 import {
@@ -134,6 +139,7 @@ import {
 } from './_context.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
+  formatCliCommand,
   getCliInvocation,
   quoteCommandArgument,
 } from '../../foundation/env/package-manager.mjs';
@@ -179,9 +185,8 @@ function editorLeftovers(dir, slug, damaged = false) {
     /^(preview(-[a-z]+)?\.(html|png)|sheet(-[a-z-]+)?\.(html|png)|palette\.config\.json)$/.test(
       n,
     ) ||
-    // The editor's temp names: `.<name>.astryx-<pid>-<rand>.tmp`, and the
-    // build's `.<name>.tmp-<id>`.
-    /^\..+\.(astryx-\d+-[a-z0-9]+\.tmp|tmp-[\w-]+)$/.test(n);
+    // The editor's temp names (writes, builds, pictures).
+    isEditorTemp(n);
   for (const e of fs.readdirSync(dir, {withFileTypes: true})) {
     const p = path.join(dir, e.name);
     if (FOLDER_JUNK.has(e.name)) continue;
@@ -355,12 +360,18 @@ export async function themeEditNew(name, options = {}) {
   if (!slugOk(name)) {
     // A path typed for the name (themes/brand, ./t, t/) names the theme the
     // path ends in.
+    // A file name, the app copy's export (tTheme), camelCase or spaces
+    // (BrandDark, "Brand Dark") name the theme they read as: when it is
+    // here already, that is said, never a numbered second copy offered.
     const typed = String(name ?? '');
     const path_ = /[\\/]/.test(typed);
-    const fixed = slugFor(path_ ? typedThemeName(typed) : typed);
-    // A name typed in another case, or as a path, is the theme here already.
-    const sameName = path_ || typed.toLowerCase() === fixed;
-    const exists = sameName && fs.existsSync(themeFiles(cwd, fixed).settings);
+    const readings = themeNameReadings(typed);
+    const present = readings.find(n =>
+      fs.existsSync(themeFiles(cwd, n).settings),
+    );
+    const fixed =
+      present ?? readings[0] ?? slugFor(path_ ? typedThemeName(typed) : typed);
+    const exists = Boolean(present);
     refuse(
       E.ERR_INVALID_ARGUMENT,
       `"${String(name ?? '').slice(0, 80)}" is not a theme name (${NAME_RULE})${exists ? `; ${fixed} is a theme here already` : ''}.${dropped}`,
@@ -598,7 +609,7 @@ export async function themeEditNew(name, options = {}) {
   }
   refuseIfLockLost();
   fs.rmSync(marker, {force: true});
-  const p = await previewAndRoute(ctx, name, data, png);
+  const p = await previewAndRoute(ctx, name, data, png, 'overview', 'new');
   /** @type {string[]} */
   const notes = [
     ...keptNotes,
@@ -677,15 +688,34 @@ function applyNewSettings(
       /** @type {import('./_settings.mjs').Setting} */
       let s;
       try {
-        s = checkSetting(ctx, slug, data, thing, String(value), {}, false);
+        // The same input cleanup set gives a typed value (quotes of any
+        // kind around a font, invisible spaces, a pasted `name: value`).
+        const typed = normalizeEntry(thing, String(value)).value;
+        s = checkSetting(
+          ctx,
+          slug,
+          data,
+          thing,
+          typed ?? String(value),
+          {},
+          false,
+        );
       } catch (e) {
-        throw asNewRefusal(
-          vetSuggestions(e, ctx, slug, data),
+        throw newColorPair(
+          asNewRefusal(
+            vetSuggestions(e, ctx, slug, data),
+            slug,
+            settings,
+            likeFlag,
+            png,
+            {thing, index},
+          ),
           slug,
           settings,
           likeFlag,
           png,
-          {thing, index},
+          thing,
+          String(value),
         );
       }
       if (thing === 'mode')
@@ -794,6 +824,81 @@ function asNewRefusal(e, slug, settings, like, png = false, at = null) {
 }
 
 /**
+ * A color dial on `new` given a light and a dark color ("light #111111 dark
+ * #eeeeee"): the refusal offers the user's own colors, per mode, as set
+ * does, never a stock color they did not type.
+ * @param {unknown} e
+ * @param {string} slug
+ * @param {Record<string, any>} settings
+ * @param {string | undefined} like
+ * @param {boolean} png
+ * @param {string} thing
+ * @param {string} typed
+ */
+function newColorPair(e, slug, settings, like, png, thing, typed) {
+  if (!(e instanceof AstryxError) || !PALETTE_DIALS.includes(thing)) return e;
+  const typedLower = typed.toLowerCase();
+  // A color in a line the user did not type (a stock example) goes.
+  e.suggestions = (e.suggestions ?? []).filter(x => {
+    if (!x.name.startsWith(`${P} new `)) return true;
+    const m = new RegExp(`--${thing} '?(#[0-9a-f]{3,8})'?`, 'i').exec(x.name);
+    return !m || typedLower.includes(m[1].toLowerCase());
+  });
+  // With every color line gone, the same new without that color, every
+  // other option kept.
+  if (!e.suggestions.some(x => x.name.startsWith(`${P} new `)))
+    e.suggestions.push({
+      name: `${P} new ${slug}${newFlags(like, {...settings, [thing]: undefined}, png)}`,
+      reason: `without --${thing} ${quoteCommandArgument(typed)}`,
+    });
+  /** @type {Record<string, string>} */
+  const pair = {};
+  for (const m of typed.matchAll(
+    /\b(light|dark)\b\s*(?:mode\s*)?[:=]?\s*(#[0-9a-f]{3,8}\b|[a-z]+\([^)]*\)|[a-z]+)/gi,
+  ))
+    pair[m[1].toLowerCase()] = m[2];
+  if (!pair.light && !pair.dark) return e;
+  const mode = String(
+    Array.isArray(settings.mode) ? settings.mode[0] : (settings.mode ?? 'both'),
+  );
+  /** @type {Array<{name: string, reason: string}>} */
+  const lines = [];
+  /** @param {string} color @param {string} reason @param {Record<string, any>} [extra] */
+  const line = (color, reason, extra = {}) =>
+    lines.push({
+      name: `${P} new ${slug}${newFlags(like, {...settings, ...extra, [thing]: color}, png)}`,
+      reason,
+    });
+  if (mode === 'dark-only' && pair.dark)
+    line(pair.dark, 'do this instead: the dark color you gave');
+  else if (mode === 'light-only' && pair.light)
+    line(pair.light, 'do this instead: the light color you gave');
+  else if (mode === 'both') {
+    if (pair.light)
+      line(
+        pair.light,
+        `the light color you gave; then set ${slug} --color-${thing} ${pair.dark ?? '…'} --mode dark for the dark one`,
+      );
+    if (pair.dark)
+      line(pair.dark, 'or a dark-only theme with the dark color you gave', {
+        mode: 'dark-only',
+      });
+  }
+  // No color for the mode the theme has: how the dial works, and the
+  // same new without it, never a color made up.
+  if (!lines.length)
+    lines.push({
+      name: `${P} how ${thing}`,
+      reason: `no ${mode === 'light-only' ? 'light' : 'dark'} color was given for this ${mode} theme`,
+    });
+  e.suggestions = [
+    ...lines,
+    ...(e.suggestions ?? []).filter(x => !lines.some(l => l.name === x.name)),
+  ];
+  return e;
+}
+
+/**
  * Headings values with every later value for an axis already given left
  * out (the first weight and the first tracking stay); a word of neither
  * axis stays, for its own refusal.
@@ -846,16 +951,25 @@ function changeFocus(s) {
 
 /**
  * A signal handler for the checks and pictures after a change is saved: it
- * says the change is saved and how to run what did not, then lets the
+ * says what is saved (in the words of the command that ran) and how to run
+ * what did not, with the project's own CLI invocation, then lets the
  * signal end the process (the render's own handler re-raises it; with none,
  * this one does).
  * @param {string} slug
+ * @param {'set' | 'undo' | 'new'} [kind] the command that saved
+ * @param {string} [cwd] the project, for the CLI invocation
  * @returns {(sig: NodeJS.Signals) => void}
  */
-export function stoppedAfterSave(slug) {
+export function stoppedAfterSave(slug, kind = 'set', cwd = process.cwd()) {
+  const done =
+    kind === 'undo'
+      ? `the undo is done: ${slug} is saved and built as it was before that change`
+      : kind === 'new'
+        ? `${slug} is made and built`
+        : `the change to ${slug} is saved and built (and its undo step kept)`;
   return sig => {
     process.stderr.write(
-      `Stopped: the change to ${slug} is saved and built (and its undo step kept); its checks and pictures did not run. ${P} show ${slug} runs them.\n`,
+      `Stopped: ${done}; its checks and pictures did not run. ${formatCliCommand(`${P} show ${slug}`, cwd)} runs them.\n`,
     );
     if (process.listenerCount(sig) === 0) process.kill(process.pid, sig);
   };
@@ -871,11 +985,19 @@ export function stoppedAfterSave(slug) {
  * @param {boolean} png
  * @param {'colors' | 'components' | 'overview'} [focus] the preview page
  *   most about the change: Colors for a color, Components for a part
+ * @param {'set' | 'undo' | 'new'} [kind] the command that saved
  */
-async function previewAndRoute(ctx, slug, data, png, focus = 'overview') {
+async function previewAndRoute(
+  ctx,
+  slug,
+  data,
+  png,
+  focus = 'overview',
+  kind = /** @type {'set' | 'undo' | 'new'} */ ('set'),
+) {
   // Stopped (Ctrl-C) while the checks and pictures run: the change is saved
   // and built already, which one line says before the process ends.
-  const stopped = stoppedAfterSave(slug);
+  const stopped = stoppedAfterSave(slug, kind, ctx.project.cwd);
   process.once('SIGINT', stopped);
   process.once('SIGTERM', stopped);
   /** @type {Awaited<ReturnType<typeof previewAfter>>} */
@@ -904,7 +1026,13 @@ async function previewAndRoute(ctx, slug, data, png, focus = 'overview') {
             cause: 'no preview was rendered',
           })
         : null,
-      {pictureProblem: png ? p.pictureProblem : null, stale: previewStale},
+      {
+        // Only a run that took no picture failed: a note on pictures that
+        // were taken (cut to 2400 pixels, adopted) is not a failure.
+        pictureProblem:
+          png && !(p.pictures ?? []).length ? p.pictureProblem : null,
+        stale: previewStale,
+      },
     ),
     // The first time the theme's app copy is written, its files are named.
     ...(wrote ? {appCopy: {wrote}} : {}),
@@ -925,8 +1053,17 @@ async function previewAndRoute(ctx, slug, data, png, focus = 'overview') {
 async function keepPreviewRoute(ctx, slug) {
   try {
     return (await refreshPreviewRoute(ctx.project.cwd, slug)).stale;
-  } catch {
-    // A damaged or moved preview.
+  } catch (e) {
+    // A route that could not be written (its permissions, a folder in its
+    // place) does not follow this change: said, never a quiet ok. A
+    // damaged preview record is named by the preview commands themselves.
+    const code = /** @type {any} */ (e)?.code;
+    if (code && /^E[A-Z]+$/.test(code)) {
+      const where = /** @type {any} */ (e)?.path;
+      return [
+        `${where ? path.relative(ctx.project.cwd, where) : 'the in-app preview route'} could not be written (${code}), so the in-app preview does not follow this change; fix its permissions, then ${PREVIEW_CMD} add writes it again`,
+      ];
+    }
     return [];
   }
 }
@@ -982,6 +1119,19 @@ export async function themeEditSet(theme, thing, value, options = {}) {
 function refuseStoredTokens(ctx, slug, data, skip) {
   const bad = storedProblems(ctx, slug, data, skip);
   if (!bad.length) return;
+  // A repair offers only the value it holds, cleaned: never a stock value
+  // the saved setting did not hold.
+  for (const b of bad) {
+    if (b.fix && !offersTyped(String(b.fix), String(b.setting.value)))
+      delete b.fix;
+    // A light and a dark color saved as one (`red / blue`) is that pair.
+    const pair =
+      !b.fix && isColorToken(b.setting.thing)
+        ? colorPair(String(b.setting.value))
+        : null;
+    if (pair && !colorProblem(pair.light) && !colorProblem(pair.dark))
+      b.fix = `light-dark(${pair.light}, ${pair.dark})`;
+  }
   const found = bad.length === 1 ? bad[0] : null;
   // A clean value is offered only when set takes it, so the line works.
   const takes = (/** @type {typeof found} */ b) => {
@@ -1040,13 +1190,14 @@ function refuseStoredTokens(ctx, slug, data, skip) {
         // A value to set only for a token whose stored value has the wrong
         // type; any other thing `set` would refuse, or read as a dial.
         ...(one &&
+        one.fix &&
         !one.scope &&
         one.setting.source === 'token' &&
         ctx.C.isToken(one.setting.thing)
           ? [
               // The value the check suggests for this value, else a stock
               // one of the token's type.
-              `${P} set ${slug} ${one.setting.thing} ${quoteCommandArgument(one.fix ?? exampleOf(ctx.C.typeOf(one.setting.thing), one.setting.thing))}`,
+              `${P} set ${slug} ${one.setting.thing} ${quoteCommandArgument(String(one.fix))}`,
             ]
           : one && one.fix && one.setting.source === 'dial'
             ? [
@@ -1074,6 +1225,169 @@ export async function editorStoredRefusal(root, slug) {
     if (e instanceof AstryxError) return e;
     throw e;
   }
+}
+
+/**
+ * The token values the theme's own source gives that `set` refuses (a
+ * radius of `banana`, a color of `12px`), each with why and the line of
+ * the file that sets it; checked with the very rules `set` uses.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {Array<{token: string, value: string, why: string, line: number | null}>}
+ */
+function ownTokenProblems(ctx, slug, data) {
+  const {cwd} = ctx.project;
+  /** @type {Array<{token: string, value: string, why: string, line: number | null}>} */
+  const out = [];
+  const known = ctx.project.core.tokenDefaults;
+  /** @param {string} token @param {string} value @returns {string | null} */
+  const refused = (token, value) => {
+    // A family list wholly in quotes (`"Georgia, serif"`, as Core returns
+    // a family set through typography) is that list.
+    const v = /^--font-family-/.test(token)
+      ? value.replace(/^\s*"([^"]*,[^"]*)"\s*$/, '$1')
+      : value;
+    try {
+      checkSetting(ctx, slug, {...data, settings: []}, token, v, {});
+      return null;
+    } catch (e) {
+      if (!(e instanceof AstryxError)) throw e;
+      return e.message.replace(/ Nothing was changed\.$/, '');
+    }
+  };
+  // The tokens map as written, entry by entry, with the line that sets
+  // each: every value is checked as `set` checks it (each half of a
+  // [light, dark] pair; a number is not text, as show says), and a key no
+  // read of the file can resolve is named as not checked.
+  const entries = ownTokenEntries(cwd, slug);
+  const seen = new Set();
+  for (const e of entries) {
+    if (e.token == null) {
+      out.push({
+        token: e.key,
+        value: '',
+        why: `the key ${e.key} is computed, so the editor cannot read which token it sets and has not checked its value; write the token's name as text, such as '--radius-page'`,
+        line: e.line,
+      });
+      continue;
+    }
+    seen.add(e.token);
+    if (!(e.token in known)) continue;
+    if (e.kind === 'number') {
+      out.push({
+        token: e.token,
+        value: String(e.value),
+        why: nonTextMessage(ctx, slug, [e.token, e.value]),
+        line: e.line,
+      });
+      continue;
+    }
+    if (e.kind === 'text') {
+      const why = refused(e.token, String(e.value));
+      if (why)
+        out.push({token: e.token, value: String(e.value), why, line: e.line});
+      continue;
+    }
+    const token = e.token;
+    if (e.kind === 'pair' && isColorToken(token)) {
+      const halves = e.halves ?? [];
+      halves.forEach((h, i) => {
+        const half = i === 0 ? 'light' : 'dark';
+        const why =
+          typeof h === 'string'
+            ? refused(token, h)
+            : nonTextMessage(ctx, slug, [token, halves]);
+        if (why)
+          out.push({
+            token,
+            value: String(h),
+            why: `its ${half} half: ${why}`,
+            line: e.line,
+          });
+      });
+    }
+  }
+  // A value the file gives another way (a spread, a const), as the build
+  // or the file shows it; a family set through typography is not in the
+  // map, so it is not checked here (the font dial checks it).
+  for (const [token, value] of Object.entries(
+    ownSourceTokenValues(cwd, slug),
+  )) {
+    if (seen.has(token) || !(token in known)) continue;
+    if (/^--font-family-/.test(token)) continue;
+    const why = refused(token, value);
+    if (why) out.push({token, value, why, line: null});
+  }
+  return out;
+}
+
+/**
+ * Refuse a theme whose own source gives a token a value `set` refuses: the
+ * build would write it as it is (a browser drops it), so it is named, with
+ * the line of the file, before anything is written.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ */
+function refuseOwnTokenValues(ctx, slug, data) {
+  const err = ownTokenRefusal(ctx, slug, data);
+  if (err) throw err;
+}
+
+/**
+ * The refusal for own-source token values `set` refuses, or null.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {AstryxError | null}
+ */
+function ownTokenRefusal(ctx, slug, data) {
+  const bad = ownTokenProblems(ctx, slug, data);
+  if (!bad.length) return null;
+  const file = `themes/${slug}/${slug}.theme.ts`;
+  return new AstryxError(
+    `${file} gives ${bad.length === 1 ? 'a token a value' : `${bad.length} tokens values`} the editor refuses, which the build would write as it is: ${bad
+      .slice(0, 3)
+      .map(
+        b =>
+          `${b.token}${b.value ? `: "${b.value}"` : ''}${b.line ? ` (line ${b.line})` : ''}: ${b.why}`,
+      )
+      .join(
+        '; ',
+      )}${bad.length > 3 ? `; and ${bad.length - 3} more` : ''}. Change it in ${file}. Nothing was changed.`,
+    [
+      bad[0].line
+        ? {
+            name: `sed -n ${bad[0].line}p ${quoteCommandArgument(file)}`,
+            reason: 'see the line that sets it',
+          }
+        : {
+            name: `grep -n -- ${quoteCommandArgument(bad[0].token)} ${quoteCommandArgument(file)}`,
+            reason: 'see the line',
+          },
+    ],
+    ERROR_CODES.ERR_THEME_INVALID,
+  );
+}
+
+/**
+ * The refusal `compile` gives an editor theme whose own source gives a
+ * token a value `set` refuses, or null.
+ * @param {string} root
+ * @param {string} slug
+ * @returns {Promise<AstryxError | null>}
+ */
+export async function editorOwnTokenRefusal(root, slug) {
+  const ctx = await context(root);
+  /** @type {import('./_settings.mjs').ThemeData} */
+  let data;
+  try {
+    data = loadTheme(root, slug);
+  } catch {
+    return null;
+  }
+  return ownTokenRefusal(ctx, slug, data);
 }
 
 /**
@@ -1120,6 +1434,78 @@ function extremeSteps(res) {
     : [];
 }
 
+export {carriesTyped, offersTyped} from './_normal.mjs';
+
+/**
+ * An object of settings written as JSON, with single quotes, or as its
+ * entries with no braces (`"accent": "#e11d48", "corners": "pill"`).
+ * Throws when it is none of these.
+ * @param {string} text
+ * @returns {any}
+ */
+function looseObject(text) {
+  const t = text.trim();
+  const braced = t.startsWith('{') ? t : `{${t}}`;
+  try {
+    return JSON.parse(braced);
+  } catch {
+    return JSON.parse(
+      braced.replace(/'((?:[^'\\]|\\.)*)'/g, (_, x) =>
+        JSON.stringify(x.replace(/\\'/g, "'")),
+      ),
+    );
+  }
+}
+
+/**
+ * A refusal with each line that sets the typed setting again kept only
+ * when it carries the value typed; with none left, `how` for the setting.
+ * Another setting's line, an undo or a look stays.
+ * @param {any} e
+ * @param {'set' | 'undo'} sub
+ * @param {string} slug
+ * @param {string} thing
+ * @param {unknown} typed
+ */
+function carryTyped(e, sub, slug, thing, typed) {
+  if (
+    sub !== 'set' ||
+    !(e instanceof AstryxError) ||
+    typeof typed !== 'string' ||
+    !e.suggestions?.length
+  )
+    return e;
+  const head = new RegExp(
+    `^.* set \\S+ (?:'([^']+)'|(\\S+)) (?:'((?:[^']|'\\\\'')*)'|(\\S+))`,
+  );
+  const same = (/** @type {string} */ x) =>
+    x.replace(/^-+/, '').toLowerCase() ===
+    String(thing).replace(/^-+/, '').toLowerCase();
+  const kept = e.suggestions.filter(x => {
+    const m = head.exec(x.name);
+    if (!m) return true;
+    const v = m[3] ?? m[4];
+    // A stock value on another setting's line (the typed thing held an
+    // object or a label) is no more the input's than on this one.
+    if (!same(m[1] ?? m[2]))
+      return /^\s*[{"']/.test(String(thing))
+        ? offersTyped(v, `${String(thing)} ${typed}`)
+        : true;
+    return offersTyped(v, typed);
+  });
+  if (kept.length === e.suggestions.length) return e;
+  e.suggestions = kept.some(x => / (set|undo|new) /.test(` ${x.name} `))
+    ? kept
+    : [
+        ...kept,
+        {
+          name: `${P} how ${quoteCommandArgument(String(thing))}`,
+          reason: 'what it takes',
+        },
+      ];
+  return e;
+}
+
 /**
  * @param {'set' | 'undo'} sub
  * @param {string} slug
@@ -1132,18 +1518,27 @@ async function change(sub, slug, thing, value, options) {
   // As typed: an undo of a saved entry written in a form the cleanup below
   // repairs (`Corners`, `var(--radius-page)`) removes that exact entry.
   const typedThing = thing;
-  // A JSON object of several settings pasted as one: one set line each.
-  if (
-    typeof thing === 'string' &&
-    (value == null || value === '') &&
-    /^\s*\{[\s\S]*\}\s*$/.test(thing)
-  ) {
+  const typedValue = value;
+  // An object of several settings pasted as one (JSON, single quotes, or
+  // its entries with no braces, split at the first colon on the way): one
+  // set line each.
+  const objectText =
+    typeof thing !== 'string'
+      ? null
+      : value == null || value === ''
+        ? /^\s*\{[\s\S]*\}\s*$/.test(thing)
+          ? thing
+          : null
+        : /^\s*\{?\s*["']/.test(thing) && /["']\s*:/.test(String(value))
+          ? `${thing}:${value}`
+          : null;
+  if (objectText != null) {
     /** @type {any} */
     let obj = null;
     try {
-      obj = JSON.parse(thing);
+      obj = looseObject(objectText);
     } catch {
-      // Not JSON: read as typed.
+      // Not an object: read as typed.
     }
     if (obj && typeof obj === 'object' && Object.keys(obj).length > 1)
       refuse(
@@ -1161,15 +1556,55 @@ async function change(sub, slug, thing, value, options) {
   }
   // How it was typed, put right before anything reads it (a pasted
   // declaration, a dash, a var(), invisible spaces).
+  /** @type {string | undefined} */
+  let dropped;
   if (typeof thing === 'string') {
     const entry = normalizeEntry(thing, value);
     thing = entry.thing;
     value = entry.value;
+    dropped = entry.dropped;
   }
   /** @type {{ctx?: import('./_settings.mjs').Ctx, data?: import('./_settings.mjs').ThemeData}} */
   const seen = {};
   try {
-    return await changeOnce(sub, slug, thing, value, options, seen, typedThing);
+    const r = await changeOnce(
+      sub,
+      slug,
+      thing,
+      value,
+      options,
+      seen,
+      typedThing,
+    );
+    // A second declaration pasted after the first is not set: said, with
+    // its own set line.
+    if (dropped && sub === 'set') {
+      const m = /^([^:]+):\s*(.*?);?\s*$/.exec(dropped);
+      const flags = [
+        ...(options.on ? [`--on ${options.on}`] : []),
+        ...(options.when ? [`--when ${options.when}`] : []),
+        ...(options.state ? [`--state ${options.state}`] : []),
+      ].join(' ');
+      /** @type {any} */ (r.data).notes = [
+        ...(r.data.notes ?? []),
+        `the pasted text also held "${dropped}", which this did not set${m ? `: ${P} set ${slug} ${quoteCommandArgument(m[1].trim())} ${quoteCommandArgument(m[2].trim())}${flags ? ` ${flags}` : ''} sets it` : ''}`,
+      ];
+    }
+    // A mode or base entry in the settings list does nothing: said after
+    // every change, with the undo that removes it.
+    if (seen.ctx && r.data.theme) {
+      /** @type {import('./_settings.mjs').ThemeData | null} */
+      let now = null;
+      try {
+        now = loadTheme(seen.ctx.project.cwd, r.data.theme);
+      } catch {
+        now = null;
+      }
+      const left = now ? misplacedNotes(r.data.theme, now) : [];
+      if (left.length)
+        /** @type {any} */ (r.data).notes = [...left, ...(r.data.notes ?? [])];
+    }
+    return r;
   } catch (e) {
     // A theme name one letter off an existing theme, or typed in other
     // letters or as a path (T, ./t, themes/t): the same command with that
@@ -1214,8 +1649,19 @@ async function change(sub, slug, thing, value, options) {
       }
       throw e;
     }
-    // Every `set` the refusal suggests is checked as `set` checks it.
-    throw vetSuggestions(e, seen.ctx, slug, seen.data);
+    // Every `set` the refusal suggests is checked as `set` checks it, and
+    // carries the value typed (cleaned), never a stock value.
+    throw misplacedFirst(
+      carryTyped(
+        vetSuggestions(e, seen.ctx, slug, seen.data),
+        sub,
+        slug,
+        typedThing,
+        typedValue,
+      ),
+      seen.data?.name ?? slug,
+      seen.data,
+    );
   }
 }
 
@@ -1257,22 +1703,42 @@ async function changeOnce(
     // A damaged field the command does not set goes back to its default,
     // so the theme loads again (a change or removal of any setting repairs
     // it on the way).
+    // One written in other letters or as a package name (`Dark-Only`,
+    // `@astryxdesign/theme-neutral`) is cleaned to the value meant, never
+    // reset.
+    const meant = fieldsMeant(data);
     if (
       thing !== 'mode' &&
       !['both', 'light-only', 'dark-only'].includes(data.mode)
     ) {
-      data.mode = 'both';
-      fieldNotes.push('mode was missing or damaged, so it is both again');
+      if (['both', 'light-only', 'dark-only'].includes(meant.mode)) {
+        fieldNotes.push(
+          `mode was written "${data.mode}", so it is saved as ${meant.mode}`,
+        );
+        data.mode = /** @type {'both' | 'light-only' | 'dark-only'} */ (
+          meant.mode
+        );
+      } else {
+        data.mode = 'both';
+        fieldNotes.push('mode was missing or damaged, so it is both again');
+      }
     }
     if (thing !== 'base' && data.like != null && !LIKE.includes(data.like)) {
-      delete data.like;
-      fieldNotes.push('base was not a built-in theme, so it is none again');
+      if (LIKE.includes(meant.like) && baseInstalled(cwd, meant.like)) {
+        fieldNotes.push(
+          `base was written "${data.like}", so it is saved as ${meant.like}`,
+        );
+        data.like = meant.like;
+      } else {
+        delete data.like;
+        fieldNotes.push('base was not a built-in theme, so it is none again');
+      }
     }
   }
   const ctx = await context(cwd);
   // An undo of one setting only removes it, so it never waits on the
   // others being fixed.
-  if (sub !== 'undo')
+  if (sub !== 'undo') {
     refuseStoredTokens(ctx, slug, data, {
       thing,
       on: options.on,
@@ -1280,6 +1746,8 @@ async function changeOnce(
       state: options.state,
       mode: options.mode,
     });
+    refuseOwnTokenValues(ctx, slug, data);
+  }
   const flags = {
     on: options.on,
     when: options.when,
@@ -1495,7 +1963,7 @@ async function changeOnce(
     } else
       data.mode = /** @type {'both' | 'light-only' | 'dark-only'} */ (s.value);
     const r = await commitTheme(ctx, slug, data, {history: true});
-    const p = await previewAndRoute(ctx, slug, data, png);
+    const p = await previewAndRoute(ctx, slug, data, png, 'overview', sub);
     const after = await baseResolved(ctx.project, data.like).catch(() => base);
     return {
       type: 'themeEdit.set',
@@ -1566,13 +2034,27 @@ async function changeOnce(
   }
   const k = keyOf(s);
   const prevIdx =
-    rawIdx >= 0 ? rawIdx : data.settings.findIndex(x => keyOf(x) === k);
+    rawIdx >= 0
+      ? rawIdx
+      : // A setting listed twice by hand: the last entry is the one the
+        // build reads, so it is the one this command changes.
+        data.settings.map(x => keyOf(x)).lastIndexOf(k);
   /** @type {string | null} */
   let vibrancyGone = null;
   const prev = prevIdx >= 0 ? data.settings[prevIdx] : null;
   if (sub === 'undo') {
     if (!prev) {
-      const near = data.settings.filter(x => x.thing === s.thing).map(describe);
+      // A padding set in the other form (a side for the shorthand, or the
+      // shorthand for a side) on the same part is a near one too.
+      const PAD = /^padding(?:-(?:inline|block|top|right|bottom|left))?$/;
+      const nearOnes = data.settings.filter(
+        x =>
+          x.thing === s.thing ||
+          (PAD.test(s.thing) &&
+            PAD.test(x.thing) &&
+            (x.on ?? null) === (s.on ?? null)),
+      );
+      const near = nearOnes.map(describe);
       // headings has two halves: name the one that is set.
       const otherHalf =
         s.thing === 'headings'
@@ -1585,11 +2067,12 @@ async function changeOnce(
           : `The theme does not set ${describe({...s, value: '?'}).replace(' = ?', '')}.`,
         {
           also: near.length
-            ? [`settings for ${s.thing}: ${near.join('; ')}`]
+            ? [
+                `settings for ${s.thing}: ${near.join('; ')}${nearOnes.some(x => x.thing === 'padding' && s.thing !== 'padding') ? ' (undoing padding removes all four sides)' : ''}`,
+              ]
             : [],
           run: [
-            ...data.settings
-              .filter(x => x.thing === s.thing)
+            ...nearOnes
               .slice(0, 3)
               .map(x => `${P} undo ${slug} ${undoArgs(x)}`),
             `${P} show ${slug}`,
@@ -1648,7 +2131,21 @@ async function changeOnce(
   const covered =
     sub === 'set' && !s.mode && s.source !== 'dial'
       ? data.settings.filter(
-          x => x !== s && x.mode && keyOf({...x, mode: undefined}) === k,
+          x =>
+            x !== s &&
+            x.mode &&
+            (keyOf({...x, mode: undefined}) === k ||
+              // The background shorthand and its color are one property
+              // here: a one-mode one is replaced by either for both modes.
+              (s.source === 'property' &&
+                x.source === 'property' &&
+                x.on === s.on &&
+                x.when === s.when &&
+                x.state === s.state &&
+                [x.thing, s.thing].every(t =>
+                  /^background(-color)?$/.test(kebab(t)),
+                ) &&
+                !/gradient\(|url\(/i.test(String(s.value)))),
         )
       : [];
   data.settings = data.settings.filter(x => !covered.includes(x));
@@ -1668,6 +2165,9 @@ async function changeOnce(
                 ))) &&
             x.when === s.when &&
             x.state === s.state &&
+            // A shorthand for one mode replaces longhands of that mode or of
+            // both, never the other mode's.
+            (!s.mode || !x.mode || x.mode === s.mode) &&
             // A longhand the shorthand really sets (MDN's data), never a
             // property that only shares its name (overflow-wrap).
             (coversProperty(s.thing, x.thing) ||
@@ -1722,6 +2222,18 @@ async function changeOnce(
         !x.on &&
         !x.when &&
         x.thing === `--font-family-${s.on}`,
+    );
+  // A whole-theme spacing dial keeps a part's own exact control size too,
+  // on that part.
+  if (sub === 'set' && s.source === 'dial' && s.thing === 'spacing' && !s.on)
+    exactWins.push(
+      ...data.settings.filter(
+        x =>
+          x.source === 'token' &&
+          !!x.on &&
+          !x.state &&
+          /^--size-element-/.test(x.thing),
+      ),
     );
   // A spacing dial on a part keeps the exact spacing and sizes there too:
   // the whole theme's, and the part's own.
@@ -2204,7 +2716,10 @@ async function changeOnce(
   const f0 = themeFiles(cwd, slug);
   // A change that changed nothing still writes back an app copy file that
   // is gone or not the current build.
-  if (r.unchanged && appCopyBehind(cwd, slug)) writeAppCopy(ctx, slug, data);
+  // Its font stylesheet follows the fonts the theme loads now (a font
+  // package installed or removed since).
+  if (r.unchanged && appCopyBehind(cwd, slug, copyFontsCss(ctx, slug, data)))
+    writeAppCopy(ctx, slug, data);
   const p =
     r.unchanged &&
     !png &&
@@ -2220,7 +2735,7 @@ async function changeOnce(
           // A copy something keeps behind is said here too.
           ...appCopyStale(cwd, slug),
         }
-      : await previewAndRoute(ctx, slug, data, png, changeFocus(s));
+      : await previewAndRoute(ctx, slug, data, png, changeFocus(s), sub);
   return {
     type: sub === 'set' ? 'themeEdit.set' : 'themeEdit.undo',
     data: {
@@ -2295,6 +2810,50 @@ function unsetColorNotes(data, base, slug) {
 }
 
 /**
+ * Whether a settings entry is a mode or base a hand edit put in the list:
+ * it does nothing there (the theme's mode and base are its own fields).
+ * @param {{thing: string}} s
+ */
+const misplaced = s => s.thing === 'mode' || s.thing === 'base';
+
+/**
+ * The note for each misplaced entry: listed here only, never as a
+ * setting, with the undo that removes it first.
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {string[]}
+ */
+function misplacedNotes(slug, data) {
+  return data.settings
+    .filter(misplaced)
+    .map(
+      x =>
+        `misplaced: the settings list holds ${x.thing} = ${x.value}, which does nothing there (the theme's ${x.thing} is ${x.thing === 'mode' ? data.mode : (data.like ?? 'none')}); \`${P} undo ${slug} ${x.thing}\` removes it, and \`${P} set ${slug} ${x.thing} <value>\` sets the theme's ${x.thing}`,
+    );
+}
+
+/**
+ * A refusal for a theme with misplaced entries, its suggestions led by the
+ * undo that removes each.
+ * @param {unknown} e
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData | undefined} data
+ */
+function misplacedFirst(e, slug, data) {
+  if (!(e instanceof AstryxError) || !data) return e;
+  const undos = data.settings.filter(misplaced).map(x => ({
+    name: `${P} undo ${slug} ${x.thing}`,
+    reason: `removes the ${x.thing} entry that does nothing in the settings list`,
+  }));
+  if (!undos.length) return e;
+  e.suggestions = [
+    ...undos,
+    ...(e.suggestions ?? []).filter(x => !undos.some(u => u.name === x.name)),
+  ];
+  return e;
+}
+
+/**
  * Every setting of a theme, key resolved values, problems it caused, the
  * sample page and the theme-building page with every component.
  * @experimental
@@ -2315,6 +2874,7 @@ export async function themeEditShow(theme, options = {}) {
   // build a later refusal puts back.
   holdAfterBuild(ctx);
   refuseStoredTokens(ctx, theme, data);
+  refuseOwnTokenValues(ctx, theme, data);
   // Without React, show still lists the settings and builds the theme, as
   // set does; only the pages, pictures and the checks that render are
   // skipped, and the result says how to fix it.
@@ -2536,29 +3096,32 @@ export async function themeEditShow(theme, options = {}) {
         const looksBase = await baseResolved(ctx.project, data.like).catch(
           () => null,
         );
-        return data.settings.map(s => {
-          let masked = maskedSettings(data, ctx).get(s);
-          // A look dial (buttons, surfaces) under an exact property on a
-          // part it writes: named, as corners under border-radius is.
-          if (!masked && looksBase && s.source === 'dial' && !s.on) {
-            const writes = dialWrites(ctx, data, s, looksBase);
-            const exact = writes.size
-              ? data.settings.find(
-                  x =>
-                    x.source === 'property' &&
-                    x.on &&
-                    !x.when &&
-                    !x.state &&
-                    partsOf(ctx, x).some(t => writes.has(`${t}\0${x.thing}`)),
-                )
-              : undefined;
-            if (exact)
-              masked = `${describe(exact)} is an exact property and wins over ${s.thing} on ${exact.on}`;
-          }
-          return {...s, parts: partsOf(ctx, s), ...(masked ? {masked} : {})};
-        });
+        return data.settings
+          .filter(s => !misplaced(s))
+          .map(s => {
+            let masked = maskedSettings(data, ctx).get(s);
+            // A look dial (buttons, surfaces) under an exact property on a
+            // part it writes: named, as corners under border-radius is.
+            if (!masked && looksBase && s.source === 'dial' && !s.on) {
+              const writes = dialWrites(ctx, data, s, looksBase);
+              const exact = writes.size
+                ? data.settings.find(
+                    x =>
+                      x.source === 'property' &&
+                      x.on &&
+                      !x.when &&
+                      !x.state &&
+                      partsOf(ctx, x).some(t => writes.has(`${t}\0${x.thing}`)),
+                  )
+                : undefined;
+              if (exact)
+                masked = `${describe(exact)} is an exact property and wins over ${s.thing} on ${exact.on}`;
+            }
+            return {...s, parts: partsOf(ctx, s), ...(masked ? {masked} : {})};
+          });
       })(),
       notes: [
+        ...misplacedNotes(theme, data),
         ...(noReact
           ? [
               `react and react-dom cannot be found from this app, so the pages and pictures were not made again and the checks that render components were skipped; install them (${installLine(cwd, ['react', 'react-dom'])}), then run show again`,
@@ -3228,6 +3791,66 @@ function colorFiles(slug) {
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditUndoResponse | import('./theme-edit.type.mjs').ThemeEditChangeResponse>}
  */
 export async function themeEditUndo(theme, options = {}) {
+  try {
+    return await undoTheme(theme, options);
+  } catch (e) {
+    // A theme name typed in another form (tTheme, T, brand_dark, themes/t):
+    // the same undo with the theme's name comes first, never a look at the
+    // theme that drops the undo.
+    if (
+      e instanceof AstryxError &&
+      (e.code === E.ERR_INVALID_ARGUMENT || e.code === E.ERR_UNKNOWN_THEME)
+    ) {
+      const cwd = options.cwd ?? process.cwd();
+      const showOf = (/** @type {{name: string}} */ x) => {
+        const rest = x.name.startsWith(`${P} show `)
+          ? x.name.slice(`${P} show `.length)
+          : null;
+        return rest && !/\s/.test(rest) ? rest : null;
+      };
+      // A list of themes (t,u) stays a look at each: one theme at a time.
+      const shows = (e.suggestions ?? []).filter(x => showOf(x) != null);
+      const near = (shows.length === 1 ? shows : []).find(x => {
+        const n = showOf(x);
+        return (
+          n != null &&
+          n !== theme &&
+          slugOk(n) &&
+          fs.existsSync(themeFiles(cwd, n).settings)
+        );
+      });
+      const name = near ? showOf(near) : null;
+      if (near && name) {
+        const words = [
+          ...(options.thing ? [options.thing] : []),
+          ...(options.value ? [options.value] : []),
+          ...(options.on ? ['--on', options.on] : []),
+          ...(options.when ? ['--when', options.when] : []),
+          ...(options.state ? ['--state', options.state] : []),
+          ...(options.mode ? ['--mode', options.mode] : []),
+        ].map(w =>
+          String(w).startsWith('--') ? w : quoteCommandArgument(String(w)),
+        );
+        e.suggestions = [
+          {
+            name: `${P} undo ${name}${words.length ? ` ${words.join(' ')}` : ''}`,
+            reason: `do this instead: ${name} is a theme here`,
+          },
+          ...(e.suggestions ?? []).filter(x => x !== near),
+        ];
+      }
+    }
+    throw e;
+  }
+}
+
+/**
+ * {@link themeEditUndo}'s work.
+ * @param {string} theme
+ * @param {import('./theme-edit.type.mjs').ThemeEditUndoOptions} options
+ * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditUndoResponse | import('./theme-edit.type.mjs').ThemeEditChangeResponse>}
+ */
+async function undoTheme(theme, options) {
   const {cwd = process.cwd(), png = false, thing} = options;
   // base and mode are not settings in the list: undoing one goes back to
   // what the theme was made with (the oldest step the history keeps).
@@ -3507,7 +4130,7 @@ export async function themeEditUndo(theme, options = {}) {
     : touched.includes('components')
       ? 'components'
       : 'overview';
-  const p = await previewAndRoute(ctx, theme, prev, png, focus);
+  const p = await previewAndRoute(ctx, theme, prev, png, focus, 'undo');
   return {
     type: 'themeEdit.undo',
     data: {

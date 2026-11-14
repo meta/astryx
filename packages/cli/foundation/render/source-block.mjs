@@ -18,6 +18,7 @@
 
 import {createHash} from 'node:crypto';
 import {isValidSemver} from '../env/semver.mjs';
+import {scanHtml} from './html-reader.mjs';
 
 /** The script type of the embedded-source block. */
 export const SOURCE_TYPE = 'application/x-astryx-source';
@@ -81,13 +82,45 @@ export function sourceBlock(entry, files, record = {}) {
 }
 
 /**
+ * The parts of a rendered file a reverse reads, found as a browser finds them:
+ * outside comments (the note is one, and it may quote a path that looks like
+ * a tag) and outside the text of a style, script, title or textarea element
+ * (a stylesheet may hold any text).
+ * @param {string} html
+ * @returns {{title: string | null, style: string | null, body: number}} the
+ *   text of the first title and the first style element before <body>, and
+ *   where the content of <body> starts (-1 without a <body> tag)
+ */
+function pageParts(html) {
+  /** @type {string | null} */
+  let title = null;
+  /** @type {string | null} */
+  let style = null;
+  let styleStart = -1;
+  let titleNext = false;
+  for (const token of scanHtml(html)) {
+    if (token.kind === 'start') {
+      if (token.tag === 'body') return {title, style, body: token.end};
+      titleNext = token.tag === 'title' && title === null;
+      if (token.tag === 'style' && styleStart < 0) styleStart = token.start;
+    } else if (token.kind === 'raw' && titleNext) {
+      title = html.slice(token.start, token.end);
+      titleNext = false;
+    } else if (token.kind === 'end' && token.tag === 'style' && styleStart >= 0 && style === null) {
+      style = html.slice(styleStart, token.end);
+    }
+  }
+  return {title, style, body: -1};
+}
+
+/**
  * Every embedded-source block in a file's body, in order, with its index in
- * the whole file. The note in <head> may quote a title with any text, so the
- * search starts at <body>.
+ * the whole file. The note in <head> may quote a title or a path with any
+ * text, so the search starts at <body>.
  * @param {string} html
  */
 const blocksIn = html => {
-  const start = Math.max(0, html.search(/<body\b/i));
+  const start = Math.max(0, pageParts(html).body);
   return [
     ...html.slice(start).matchAll(
       new RegExp(
@@ -109,7 +142,7 @@ export function readSourceBlock(html) {
   const m = blocksIn(html).at(-1);
   if (!m) {
     // An opening tag with no block after it: the file ends inside the block.
-    return html.slice(Math.max(0, html.search(/<body\b/i))).includes(`<script type="${SOURCE_TYPE}">`)
+    return html.slice(Math.max(0, pageParts(html).body)).includes(`<script type="${SOURCE_TYPE}">`)
       ? {found: true, damaged: 'its embedded source is cut short: the file ends inside it'}
       : {found: false};
   }
@@ -162,11 +195,8 @@ export function readSourceBlock(html) {
 export function renderedMarkupOf(html) {
   const block = blocksIn(html).at(-1);
   if (!block || block.index === undefined) return null;
-  const headEnd = html.indexOf('</head>');
-  const body = /<body\b[^>]*>/i.exec(html.slice(headEnd < 0 ? 0 : headEnd));
-  if (!body) return null;
-  const start = (headEnd < 0 ? 0 : headEnd) + body.index + body[0].length;
-  return start > block.index ? null : html.slice(start, block.index);
+  const start = pageParts(html).body;
+  return start < 0 || start > block.index ? null : html.slice(start, block.index);
 }
 
 /**
@@ -176,13 +206,8 @@ export function renderedMarkupOf(html) {
  * @returns {{title: string | null, style: string | null}}
  */
 export function renderedHeadOf(html) {
-  const body = html.search(/<body\b/i);
-  // The note is a comment and may quote a title that looks like a tag.
-  const head = (body < 0 ? html : html.slice(0, body)).replace(/<!--[\s\S]*?-->/g, '');
-  return {
-    title: /<title>([\s\S]*?)<\/title>/.exec(head)?.[1] ?? null,
-    style: /<style>[\s\S]*?<\/style>/.exec(head)?.[0] ?? null,
-  };
+  const {title, style} = pageParts(html);
+  return {title, style};
 }
 
 /**
