@@ -97,7 +97,7 @@ async function openDesktop(browser: Browser) {
 }
 
 async function openPhone(page: Page, size = {width: 3000, height: 2000}) {
-  await page.route('https://picsum.photos/**', async route =>
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
     route.fulfill({
       contentType: 'image/svg+xml',
       body: photoSvg(size.width, size.height),
@@ -128,7 +128,7 @@ function photoSvg(width: number, height: number): string {
 }
 
 async function routePhoto(page: Page) {
-  await page.route('https://picsum.photos/**', async route =>
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
     route.fulfill({contentType: 'image/svg+xml', body: photoSvg(3000, 2000)}),
   );
 }
