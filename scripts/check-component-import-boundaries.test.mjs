@@ -9,7 +9,10 @@
  *   import chain, also through a re-export-only module of any name, a listed
  *   crossing passes, a stale row fails, an import() of
  *   a surface whose graph reaches touch modules passes, and an import() of a
- *   touch module or of a capability module fails
+ *   touch module or of a capability module fails; an entry that reaches a
+ *   module its "Must not reach" row lists fails with the chain and the cost,
+ *   past an allowlisted crossing too; a row for an entry the check does not
+ *   build fails; a row a pull request removes or loosens is reported
  * @position Node test beside scripts/check-component-import-boundaries.mjs
  */
 
@@ -20,10 +23,16 @@ import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {
   compareWithAllowlist,
   CORE_BOUNDARIES,
+  cutsInto,
+  ENTRIES,
   findBoundaryViolations,
+  findMustNotReach,
   formatReport,
+  loosenedRows,
+  matchesModule,
   measureEntry,
   parseAllowlist,
+  parseMustNotReach,
   rowsByCrossing,
 } from './check-component-import-boundaries.mjs';
 
@@ -259,7 +268,7 @@ describe('an import() from an entry', () => {
       'Layer/useTouchTrigger.ts': {bytes: 0},
       'gestures/GestureArena.ts': {bytes: 0},
     });
-    expect(violationsOf('Text', graph)).toEqual({
+    expect(violationsOf('Text', graph)).toMatchObject({
       crossings: [],
       dynamicViolations: [],
     });
@@ -403,6 +412,150 @@ describe('the allowlist', () => {
   });
 });
 
+describe('the "Must not reach" table', () => {
+  const row = (entries, modules, invariant = 'INV10') => ({
+    entries,
+    modules,
+    feature: 'touch gestures',
+    invariant,
+    since: '2026-11-14',
+  });
+  // Text reaches gestures/ only through an allowlisted crossing: the walk
+  // that holds the table goes past crossings.
+  const textGraph = graphOf('Text/__entry__.mjs', {
+    'Text/__entry__.mjs': {imports: [['Text/Text.tsx']]},
+    'Text/Text.tsx': {imports: [['Text/TruncationTooltip.tsx']]},
+    'Text/TruncationTooltip.tsx': {imports: [['Layer/useTouchTrigger.ts']]},
+    'Layer/useTouchTrigger.ts': {imports: [['gestures/tap.ts']]},
+    'gestures/tap.ts': {imports: [['gestures/arena.ts']]},
+    'gestures/arena.ts': {},
+  });
+  const textResult = {
+    entryName: 'Text',
+    ...violationsOf('Text', textGraph),
+  };
+
+  it('fails an entry that reaches a listed module, and names the chain', () => {
+    const verdict = findMustNotReach(
+      [textResult],
+      [row(['Text'], ['gestures/'])],
+      ['Text'],
+    );
+    expect(verdict.ok).toBe(false);
+    expect(verdict.reached).toHaveLength(1);
+    expect(verdict.reached[0].hits.map(({chain}) => chain)).toEqual([
+      'Text → Text/Text → Text/TruncationTooltip → Layer/useTouchTrigger → gestures/tap',
+      'Text → Text/Text → Text/TruncationTooltip → Layer/useTouchTrigger → gestures/tap → gestures/arena',
+    ]);
+    // The cost cuts only the edge into the listed folder.
+    expect(cutsInto(verdict.reached[0].hits)).toEqual([
+      {
+        fromPath: `${SRC}Layer/useTouchTrigger.ts`,
+        toPath: `${SRC}gestures/tap.ts`,
+      },
+    ]);
+    const report = formatReport(compareWithAllowlist(rowsByCrossing([]), []), {
+      mustNotReach: verdict,
+      reachCosts: new Map([['Text gestures/', 2150]]),
+    });
+    expect(report).toContain(
+      '| Text | `gestures/tap`, `gestures/arena` | 2.1 KB | touch gestures | INV10 |',
+    );
+    expect(report).toContain(
+      '- Text → Text/Text → Text/TruncationTooltip → Layer/useTouchTrigger → gestures/tap',
+    );
+    expect(report).toContain('Component import boundaries fail.');
+  });
+
+  it('passes an entry whose eager graph reaches none of its listed modules', () => {
+    const verdict = findMustNotReach(
+      [textResult],
+      [row(['Text'], ['motion/animator', 'keyboard/'])],
+      ['Text'],
+    );
+    expect(verdict.ok).toBe(true);
+    expect(verdict.held).toEqual([
+      {row: row(['Text'], ['motion/animator', 'keyboard/']), entryName: 'Text'},
+    ]);
+  });
+
+  it('does not count a listed module that only an import() reaches', () => {
+    const graph = graphOf('Text/__entry__.mjs', {
+      'Text/__entry__.mjs': {imports: [['Text/Text.tsx']]},
+      'Text/Text.tsx': {imports: [['gestures/tap.ts', 'dynamic-import']]},
+      'gestures/tap.ts': {},
+    });
+    const verdict = findMustNotReach(
+      [{entryName: 'Text', ...violationsOf('Text', graph)}],
+      [row(['Text'], ['gestures/'])],
+      ['Text'],
+    );
+    expect(verdict.ok).toBe(true);
+  });
+
+  it('fails a row that names an entry the check does not build', () => {
+    const verdict = findMustNotReach(
+      [textResult],
+      [row(['Txet'], ['gestures/'])],
+      ['Text'],
+    );
+    expect(verdict.ok).toBe(false);
+    expect(verdict.unknownEntries.map(({entryName}) => entryName)).toEqual([
+      'Txet',
+    ]);
+  });
+
+  it('matches a folder with a trailing slash, and a module or its folder otherwise', () => {
+    expect(matchesModule('gestures/tap', 'gestures/')).toBe(true);
+    expect(matchesModule('gesturesExtra/tap', 'gestures/')).toBe(false);
+    expect(matchesModule('motion/animator', 'motion/animator')).toBe(true);
+    expect(matchesModule('motion/animatorUtils', 'motion/animator')).toBe(
+      false,
+    );
+    expect(matchesModule('Tooltip/useTooltip', 'Tooltip')).toBe(true);
+  });
+
+  it('reports a row a pull request removes or loosens, and not one it tightens', () => {
+    const base = [
+      row(['Text', 'Heading'], ['gestures/', 'motion/animator']),
+      row(['List'], ['List/listReorderEngine']),
+    ];
+    const head = [
+      row(['Text'], ['gestures/', 'motion/animator', 'keyboard/']),
+      row(['Heading'], ['gestures/']),
+    ];
+    const loosened = loosenedRows(base, head);
+    expect(loosened).toEqual([
+      {entryName: 'Heading', modules: ['motion/animator']},
+      {entryName: 'List', modules: ['List/listReorderEngine']},
+    ]);
+    const report = formatReport(compareWithAllowlist(rowsByCrossing([]), []), {
+      loosened,
+    });
+    expect(report).toContain(
+      '"Must not reach" rows this pull request removes or loosens (each needs the owner\'s approval in docs/architecture/component-import-boundaries.md):',
+    );
+    expect(report).toContain('- List: `List/listReorderEngine`');
+    expect(loosenedRows(head, base.concat(head))).toEqual([]);
+  });
+
+  it("is read from the record's table, and each row holds on the check's entries", () => {
+    const rows = parseMustNotReach(fs.readFileSync(RECORD, 'utf8'));
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.map(({entries}) => entries[0])).not.toContain('Entry');
+    const names = ENTRIES.map(({name}) => name);
+    for (const {entries, modules, invariant} of rows) {
+      expect(entries.every(name => names.includes(name))).toBe(true);
+      expect(modules.length).toBeGreaterThan(0);
+      expect(invariant).toContain('INV10');
+    }
+  });
+
+  it('is empty when the record has no such table', () => {
+    expect(parseMustNotReach('# A record\n\nNo table.\n')).toEqual([]);
+  });
+});
+
 describe('the build', () => {
   // Fixture sources live under the repository's node_modules/.cache, never
   // the system temp directory: esbuild reads the listing of each directory
@@ -446,6 +599,19 @@ describe('the build', () => {
       'Table/plugins/virtualization/useTableWindow.ts',
       'export const windowRows = rows => rows.slice(0, 10);\n',
     );
+    write(
+      'Label/Label.ts',
+      "import {holdFor} from '../gestures/longPress';\nexport const Label = text => holdFor(text) && text;\n",
+    );
+    // Big enough that cutting it shrinks the entry past the empty module that
+    // replaces it.
+    const table = Array.from({length: 400}, (_, index) =>
+      ((index * 2_654_435_761) % 4_294_967_291).toString(36),
+    );
+    write(
+      'gestures/longPress.ts',
+      `const table = ${JSON.stringify(table)};\nexport const holdFor = text => table.indexOf(text);\n`,
+    );
   });
   afterAll(() => {
     fs.rmSync(root, {recursive: true, force: true});
@@ -486,6 +652,40 @@ describe('the build', () => {
     ]);
   });
 
+  it('finds a listed module an entry reaches in a real build, and prices the cut (positive control)', async () => {
+    const labelEntry = entry('Label', 'Label/Label.ts');
+    const result = await measureEntry(labelEntry, {
+      root,
+      boundaries: BOUNDARIES,
+    });
+    const verdict = findMustNotReach(
+      [result],
+      [
+        {
+          entries: ['Label'],
+          modules: ['gestures/'],
+          feature: 'touch gestures',
+          invariant: 'INV10',
+          since: '2026-11-14',
+        },
+      ],
+      ['Label'],
+    );
+    expect(verdict.ok).toBe(false);
+    expect(verdict.reached[0].hits.map(({chain}) => chain)).toEqual([
+      'Label → Label/Label → gestures/longPress',
+    ]);
+    const cut = await measureEntry(labelEntry, {
+      root,
+      boundaries: BOUNDARIES,
+      cut: cutsInto(verdict.reached[0].hits),
+    });
+    expect(cut.eagerReach.map(({name}) => name)).not.toContain(
+      'gestures/longPress',
+    );
+    expect(result.eagerGzipBytes).toBeGreaterThan(cut.eagerGzipBytes);
+  });
+
   it('passes an import() of a surface that reaches touch code in a real build', async () => {
     const result = await measureEntry(entry('Chip', 'Chip/Chip.ts'), {
       root,
@@ -493,6 +693,19 @@ describe('the build', () => {
     });
     expect(result.crossings).toEqual([]);
     expect(result.dynamicViolations).toEqual([]);
+  });
+});
+
+describe("Core's entries", () => {
+  it('include the entries the "Must not reach" table holds', () => {
+    expect(ENTRIES.map(({name}) => name)).toEqual(
+      expect.arrayContaining([
+        'List',
+        'CheckboxList',
+        'Selector',
+        'DropdownMenu',
+      ]),
+    );
   });
 });
 

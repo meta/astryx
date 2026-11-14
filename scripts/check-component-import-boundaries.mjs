@@ -11,7 +11,10 @@
  *   unless the allowlist lists it; fails on a stale allowlist row; fails on
  *   an import() of a touch module or of a capability module. Prints each
  *   crossing's import chain, each listed crossing's gzip cost, and each
- *   entry's eager gzip size, base against head
+ *   entry's eager gzip size, base against head. Also fails when an entry's
+ *   eager graph reaches a module the record's "Must not reach" table lists
+ *   for it (INV10), naming the chain and the gzip cost, and reports a row
+ *   that a pull request removes or loosens against the base record
  * @position CI check run by the Lint workflow, and locally with
  *   `pnpm check:component-import-boundaries`
  */
@@ -35,7 +38,11 @@ const {
 const RECORD = 'docs/architecture/component-import-boundaries.md';
 const CORE_SRC = 'packages/core/src';
 
-/** The entry list. Each entry is one public import of a component. */
+/**
+ * The entry list. Each entry is one public import of a component. An entry
+ * with `crossings: false` is held by the "Must not reach" table only, until
+ * its crossings have allowlist rows (INV9).
+ */
 export const ENTRIES = [
   {name: 'Text', module: `${CORE_SRC}/Text/Text.tsx`},
   {name: 'Heading', module: `${CORE_SRC}/Heading/Heading.tsx`},
@@ -43,6 +50,26 @@ export const ENTRIES = [
   {name: 'IconButton', module: `${CORE_SRC}/IconButton/IconButton.tsx`},
   {name: 'Link', module: `${CORE_SRC}/Link/Link.tsx`},
   {name: 'Table', module: `${CORE_SRC}/Table/Table.tsx`},
+  {
+    name: 'List',
+    module: `${CORE_SRC}/List/List.tsx`,
+    crossings: false,
+  },
+  {
+    name: 'CheckboxList',
+    module: `${CORE_SRC}/CheckboxList/CheckboxList.tsx`,
+    crossings: false,
+  },
+  {
+    name: 'Selector',
+    module: `${CORE_SRC}/Selector/Selector.tsx`,
+    crossings: false,
+  },
+  {
+    name: 'DropdownMenu',
+    module: `${CORE_SRC}/DropdownMenu/DropdownMenu.tsx`,
+    crossings: false,
+  },
 ];
 
 /**
@@ -280,6 +307,39 @@ export function findBoundaryViolations({entryName, graph, boundaries}) {
     }
   }
 
+  // Every module the entry loads at once, crossings included: what the
+  // "Must not reach" table is held against (INV10).
+  // Each module also lists every eager module that imports it, so a cost
+  // measure can cut all the imports that bring it.
+  const eagerReach = [];
+  const reachByPath = new Map();
+  const reachParents = new Map();
+  const reachSeen = new Set([graph.entry]);
+  const reachQueue = [graph.entry];
+  while (reachQueue.length > 0) {
+    const from = reachQueue.shift();
+    for (const {path: target, kind} of importsOf(from)) {
+      if (!STATIC_KINDS.has(kind) || !isLive(target, 'eagerBytes')) continue;
+      if (reachSeen.has(target)) {
+        const item = reachByPath.get(target);
+        if (item && !item.importers.includes(from)) item.importers.push(from);
+        continue;
+      }
+      reachSeen.add(target);
+      reachParents.set(target, {from, kind});
+      reachQueue.push(target);
+      const item = {
+        name: moduleName(target),
+        path: target,
+        fromPath: from,
+        importers: [from],
+        chain: chainTo(reachParents, target),
+      };
+      reachByPath.set(target, item);
+      eagerReach.push(item);
+    }
+  }
+
   // Every module the entry can load, import() targets included.
   const dynamicViolations = [];
   const parents = new Map();
@@ -318,7 +378,7 @@ export function findBoundaryViolations({entryName, graph, boundaries}) {
     }
   }
 
-  return {crossings, dynamicViolations};
+  return {crossings, dynamicViolations, eagerReach};
 }
 
 /**
@@ -344,23 +404,29 @@ function buildOptions(root) {
 const ENTRY_SOURCE = '__astryx-import-entry__.mjs';
 
 /**
- * Replaces one static import with an empty module, to measure what that
- * import alone adds to the entry.
+ * Replaces static imports with an empty module, to measure what those
+ * imports alone add to the entry. Takes one cut or a list of cuts.
  */
-function cutPlugin(root, cut) {
-  const fromAbs = path.join(root, cut.fromPath);
-  const toAbs = path.join(root, cut.toPath);
-  const stem = path.basename(cut.toPath).replace(/\.[cm]?[jt]sx?$/, '');
-  const filter = new RegExp(
-    stem === 'index'
-      ? escapeRegExp(path.basename(path.dirname(cut.toPath)))
-      : escapeRegExp(stem),
+function cutPlugin(root, cutOrCuts) {
+  const cuts = (Array.isArray(cutOrCuts) ? cutOrCuts : [cutOrCuts]).map(
+    cut => ({
+      fromAbs: path.join(root, cut.fromPath),
+      toAbs: path.join(root, cut.toPath),
+    }),
   );
+  const stems = cuts.map(({toAbs}) => {
+    const stem = path.basename(toAbs).replace(/\.[cm]?[jt]sx?$/, '');
+    return stem === 'index' ? path.basename(path.dirname(toAbs)) : stem;
+  });
+  const filter = new RegExp(stems.map(escapeRegExp).join('|'));
   return {
     name: 'astryx-cut-import',
     setup(build) {
       build.onResolve({filter}, async args => {
-        if (args.pluginData?.cutResolve || args.importer !== fromAbs) {
+        if (
+          args.pluginData?.cutResolve ||
+          !cuts.some(({fromAbs}) => fromAbs === args.importer)
+        ) {
           return undefined;
         }
         const resolved = await build.resolve(args.path, {
@@ -369,8 +435,12 @@ function cutPlugin(root, cut) {
           kind: args.kind,
           pluginData: {cutResolve: true},
         });
-        if (resolved.path !== toAbs) return undefined;
-        return {path: toAbs, namespace: 'astryx-cut'};
+        const isCut = cuts.some(
+          ({fromAbs, toAbs}) =>
+            fromAbs === args.importer && toAbs === resolved.path,
+        );
+        if (!isCut) return undefined;
+        return {path: resolved.path, namespace: 'astryx-cut'};
       });
       build.onLoad({filter: /.*/, namespace: 'astryx-cut'}, () => ({
         contents: 'module.exports = {};',
@@ -474,6 +544,113 @@ export function parseAllowlist(recordText) {
   return rows;
 }
 
+/**
+ * The record's "Must not reach" rows: `{entries, modules, feature,
+ * invariant, since}`. A module ending in `/` names a folder; any other names
+ * a module and the folder of that name.
+ */
+export function parseMustNotReach(recordText) {
+  const section = /^### Must not reach\s*$([\s\S]*?)(?=^#{1,3} )/m.exec(
+    `${recordText}\n# end`,
+  );
+  if (!section) return [];
+  const rows = [];
+  for (const line of section[1].split('\n')) {
+    const cells = line.split('|').map(cell => cell.trim());
+    // The header row names its module column with a backticked path too.
+    if (cells.length < 7 || cells[1] === 'Entry' || !cells[2]?.includes('`')) {
+      continue;
+    }
+    const modules = [...cells[2].matchAll(/`([^`]+)`/g)].map(
+      ([, name]) => name,
+    );
+    if (modules.length === 0) continue;
+    rows.push({
+      entries: cells[1]
+        .split(',')
+        .map(name => name.trim())
+        .filter(Boolean),
+      modules,
+      feature: cells[3],
+      invariant: cells[4],
+      since: cells[5],
+    });
+  }
+  return rows;
+}
+
+/** Whether a module name falls under a "Must not reach" module or folder. */
+export function matchesModule(name, pattern) {
+  if (pattern.endsWith('/')) return name.startsWith(pattern);
+  return name === pattern || name.startsWith(`${pattern}/`);
+}
+
+/**
+ * Holds each entry's eager graph against the "Must not reach" rows. A row
+ * fails for an entry that reaches a listed module; a row naming an entry
+ * the check does not build fails too, since it holds nothing.
+ */
+export function findMustNotReach(results, rows, entryNames) {
+  const byEntry = new Map(results.map(result => [result.entryName, result]));
+  const reached = [];
+  const unknownEntries = [];
+  const held = [];
+  for (const row of rows) {
+    for (const entryName of row.entries) {
+      if (!entryNames.includes(entryName)) {
+        unknownEntries.push({row, entryName});
+        continue;
+      }
+      const result = byEntry.get(entryName);
+      const hits = (result?.eagerReach ?? []).filter(item =>
+        row.modules.some(pattern => matchesModule(item.name, pattern)),
+      );
+      if (hits.length > 0) reached.push({row, entryName, hits});
+      else held.push({row, entryName});
+    }
+  }
+  return {
+    ok: reached.length === 0 && unknownEntries.length === 0,
+    reached,
+    unknownEntries,
+    held,
+  };
+}
+
+/**
+ * Every import that brings a row's listed modules into an entry from a
+ * module outside them: what to cut to price the row.
+ */
+export function cutsInto(hits) {
+  const inside = new Set(hits.map(hit => hit.path));
+  return hits.flatMap(hit =>
+    (hit.importers ?? [hit.fromPath])
+      .filter(from => !inside.has(from))
+      .map(from => ({fromPath: from, toPath: hit.path})),
+  );
+}
+
+/**
+ * The "Must not reach" rows a pull request removes or loosens: an entry or
+ * a module the base record lists for a row and the head record does not.
+ * Each needs the owner's approval in the record; the check reports it.
+ */
+export function loosenedRows(baseRows, headRows) {
+  const loosened = [];
+  for (const baseRow of baseRows) {
+    for (const entryName of baseRow.entries) {
+      const headModules = new Set(
+        headRows
+          .filter(row => row.entries.includes(entryName))
+          .flatMap(row => row.modules),
+      );
+      const dropped = baseRow.modules.filter(name => !headModules.has(name));
+      if (dropped.length > 0) loosened.push({entryName, modules: dropped});
+    }
+  }
+  return loosened;
+}
+
 /** One row per crossing, listing every entry that reaches it. */
 export function rowsByCrossing(results) {
   const group = (items, entryName, byKey) => {
@@ -571,7 +748,16 @@ function chainLines(row) {
  * bytes that the crossing alone adds; `sizes` lists each entry's eager gzip
  * bytes at head and, when known, at base.
  */
-export function formatReport(comparison, {costs = new Map(), sizes = []} = {}) {
+export function formatReport(
+  comparison,
+  {
+    costs = new Map(),
+    sizes = [],
+    mustNotReach = null,
+    reachCosts = new Map(),
+    loosened = [],
+  } = {},
+) {
   const lines = [];
   const costCell = row => {
     const byEntry = costs.get(row.key);
@@ -625,6 +811,55 @@ export function formatReport(comparison, {costs = new Map(), sizes = []} = {}) {
     }
     lines.push('');
   }
+  if (mustNotReach && mustNotReach.reached.length > 0) {
+    lines.push(
+      'Entries that reach a module the "Must not reach" table lists (entry | module | gzip cost | owning feature | invariant):',
+    );
+    for (const {row, entryName, hits} of mustNotReach.reached) {
+      const cost = reachCosts.get(`${entryName} ${row.modules.join(',')}`);
+      lines.push(
+        `| ${entryName} | ${[...new Set(hits.map(hit => hit.name))].map(name => `\`${name}\``).join(', ')} | ${cost === undefined ? 'n/a' : kilobytes(cost)} | ${row.feature} | ${row.invariant} |`,
+        ...hits.slice(0, 3).map(hit => `    - ${hit.chain}`),
+      );
+      if (hits.length > 3)
+        lines.push(`    - and ${hits.length - 3} more modules`);
+    }
+    lines.push(
+      `    Keep these modules out of the entry's eager graph (load them on first use), or ask the owner of ${RECORD} to change the row.`,
+      '',
+    );
+  }
+  if (mustNotReach && mustNotReach.unknownEntries.length > 0) {
+    lines.push(
+      '"Must not reach" rows that name an entry the check does not build:',
+    );
+    for (const {row, entryName} of mustNotReach.unknownEntries) {
+      lines.push(
+        `    - ${entryName} (${row.modules.map(name => `\`${name}\``).join(', ')}): add it to the entry list or fix the row in ${RECORD}.`,
+      );
+    }
+    lines.push('');
+  }
+  if (loosened.length > 0) {
+    lines.push(
+      `"Must not reach" rows this pull request removes or loosens (each needs the owner's approval in ${RECORD}):`,
+    );
+    for (const {entryName, modules} of loosened) {
+      lines.push(
+        `    - ${entryName}: ${modules.map(name => `\`${name}\``).join(', ')}`,
+      );
+    }
+    lines.push('');
+  }
+  if (mustNotReach && mustNotReach.held.length > 0) {
+    lines.push('"Must not reach" rows that hold:');
+    for (const {row, entryName} of mustNotReach.held) {
+      lines.push(
+        `    - ${entryName}: ${row.modules.map(name => `\`${name}\``).join(', ')} (${row.invariant})`,
+      );
+    }
+    lines.push('');
+  }
   if (comparison.allowed.length > 0) {
     lines.push(
       'Allowlisted crossings (crossing | entries | gzip cost of this crossing alone, per entry | invariant):',
@@ -649,9 +884,9 @@ export function formatReport(comparison, {costs = new Map(), sizes = []} = {}) {
     lines.push('');
   }
   lines.push(
-    comparison.ok
+    comparison.ok && (mustNotReach?.ok ?? true)
       ? 'Component import boundaries hold.'
-      : `Component import boundaries fail. Fix the import, or ask the owner of ${RECORD} to change its allowlist.`,
+      : `Component import boundaries fail. Fix the import, or ask the owner of ${RECORD} to change its allowlist or its "Must not reach" table.`,
   );
   return lines.join('\n');
 }
@@ -754,12 +989,22 @@ function parseArgs(argv) {
 async function main(argv) {
   const started = performance.now();
   const args = parseArgs(argv);
-  const allowlist = parseAllowlist(
-    fs.readFileSync(path.resolve(REPO, args.record), 'utf8'),
-  );
+  const recordText = fs.readFileSync(path.resolve(REPO, args.record), 'utf8');
+  const allowlist = parseAllowlist(recordText);
+  const mustNotReachRows = parseMustNotReach(recordText);
   const results = await Promise.all(ENTRIES.map(entry => measureEntry(entry)));
-  const rows = rowsByCrossing(results);
+  const crossingEntries = new Set(
+    ENTRIES.filter(entry => entry.crossings !== false).map(({name}) => name),
+  );
+  const rows = rowsByCrossing(
+    results.filter(result => crossingEntries.has(result.entryName)),
+  );
   const comparison = compareWithAllowlist(rows, allowlist);
+  const mustNotReach = findMustNotReach(
+    results,
+    mustNotReachRows,
+    ENTRIES.map(({name}) => name),
+  );
 
   const costs = new Map();
   const headSize = new Map(
@@ -784,17 +1029,56 @@ async function main(argv) {
     ),
   );
 
+  // A "Must not reach" failure's cost: the entry's eager gzip with every
+  // import into the row's listed modules cut.
+  const reachCosts = new Map();
+  await Promise.all(
+    mustNotReach.reached.map(async ({row, entryName, hits}) => {
+      const entry = ENTRIES.find(({name}) => name === entryName);
+      const {eagerGzipBytes} = await measureEntry(entry, {
+        cut: cutsInto(hits),
+      });
+      reachCosts.set(
+        `${entryName} ${row.modules.join(',')}`,
+        Math.max(0, headSize.get(entryName) - eagerGzipBytes),
+      );
+    }),
+  );
+
+  let loosened = [];
+  if (args.baseRef) {
+    try {
+      const baseRecord = execFileSync(
+        'git',
+        ['show', `${args.baseRef}:${RECORD}`],
+        {cwd: REPO, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024},
+      );
+      loosened = loosenedRows(parseMustNotReach(baseRecord), mustNotReachRows);
+    } catch {
+      console.log(
+        `Must-not-reach base skipped: cannot read ${RECORD} at ${args.baseRef}.`,
+      );
+    }
+  }
   const base = args.baseRef ? await baseSizes(args.baseRef) : new Map();
   const sizes = ENTRIES.map(({name}) => ({
     entryName: name,
     head: headSize.get(name),
     base: base.get(name),
   }));
-  console.log(formatReport(comparison, {costs, sizes}));
+  console.log(
+    formatReport(comparison, {
+      costs,
+      sizes,
+      mustNotReach,
+      reachCosts,
+      loosened,
+    }),
+  );
   console.log(
     `Checked ${ENTRIES.length} entries in ${((performance.now() - started) / 1000).toFixed(1)} s.`,
   );
-  return comparison.ok ? 0 : 1;
+  return comparison.ok && mustNotReach.ok ? 0 : 1;
 }
 
 if (
