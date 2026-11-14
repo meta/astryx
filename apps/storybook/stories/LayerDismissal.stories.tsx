@@ -35,6 +35,7 @@ import {
 import {BottomSheet} from '@astryxdesign/core/BottomSheet';
 import {InfoTip} from '@astryxdesign/core/InfoTip';
 import type {Meta, StoryObj} from '@storybook/react-vite';
+import {SAMPLE_IMAGES} from './assets/samples/samples';
 
 const sheetStyles = stylex.create({
   body: {padding: 24},
@@ -377,7 +378,7 @@ function RequiredModalWithLightboxExample() {
                 isOpen={isLightboxOpen}
                 onOpenChange={setIsLightboxOpen}
                 media={{
-                  src: 'https://picsum.photos/id/1015/1200/800',
+                  src: SAMPLE_IMAGES.canyon1200x800,
                   alt: 'A river through a canyon',
                 }}
               />
@@ -494,7 +495,7 @@ function LightboxAloneExample() {
         isOpen={isOpen}
         onOpenChange={setIsOpen}
         media={{
-          src: 'https://picsum.photos/id/1015/1200/800',
+          src: SAMPLE_IMAGES.canyon1200x800,
           alt: 'A river through a canyon',
         }}
       />

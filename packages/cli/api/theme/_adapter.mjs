@@ -1186,6 +1186,7 @@ async function writeThemeApp(
         stylesheet: theme.stylesheet,
         ...(theme.fontStylesheet ? {fontStylesheet: theme.fontStylesheet} : {}),
         source: theme.source,
+        ...(theme.mode ? {mode: theme.mode} : {}),
       })),
       default: defaultSlug,
       modulePath: prepared.module.path,
@@ -1194,6 +1195,15 @@ async function writeThemeApp(
         slug,
         changed,
         firstAdd: action === 'add' && !state.configured,
+        // The module lists one-mode themes' modes for the first time, after
+        // the app was wired without them: the wiring takes the mode now.
+        ...(state.configured &&
+        /\bexport const themeModes\b/.test(prepared.moduleContents) &&
+        !/\bexport const themeModes\b/.test(
+          String(prepared.module.expectedOriginal ?? ''),
+        )
+          ? {wireModes: true}
+          : {}),
       },
       ...(notes.length > 0 ? {notes} : {}),
     },

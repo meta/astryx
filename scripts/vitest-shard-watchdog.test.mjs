@@ -82,4 +82,18 @@ describe('the Node shard watchdog', () => {
       typeof recorded['scripts/fixtures/shard-watchdog/quick.fixture.mjs'],
     ).toBe('number');
   }, 60_000);
+
+  it("records a file's own test time, as the recorded times do, not its loading", () => {
+    const times = path.join(scratch, 'times-import.json');
+    const result = runFixtures(['slow-import.fixture.mjs'], {
+      VITEST_SHARD_WATCHDOG_SECONDS: '60',
+      VITEST_SHARD_TIMES_FILE: times,
+    });
+    expect(result.status, result.stdout + result.stderr).toBe(0);
+    const seconds = JSON.parse(fs.readFileSync(times, 'utf8'))[
+      'scripts/fixtures/shard-watchdog/slow-import.fixture.mjs'
+    ];
+    // It spent 1.5 s loading and well under a second in its test.
+    expect(seconds).toBeLessThan(1);
+  }, 60_000);
 });
