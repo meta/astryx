@@ -553,7 +553,7 @@ export function SelectableCard({
           selected: isSelected ? 'true' : 'false',
         }),
         // Rings for the card's own checkbox only; a control in its children
-        // rings itself (`architecture:interaction-modality` INV3).
+        // rings itself.
         stylex.props(focusWithinOwner),
         classNameProp,
         style,

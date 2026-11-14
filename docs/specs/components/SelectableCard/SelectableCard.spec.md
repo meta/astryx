@@ -15,6 +15,7 @@ verified_by:
     packages/core/src/CheckboxInput/__tests__/Checkbox.a11y.test.tsx,
     packages/core/src/CheckboxInput/__tests__/Checkbox.a11y.chromium.spec.ts,
     packages/core/src/__tests__/CardPress.a11y.chromium.spec.ts,
+    packages/core/src/__tests__/FocusRingOwner.a11y.chromium.spec.ts,
     packages/core/src/__tests__/ReducedMotionPress.a11y.chromium.spec.ts,
     .github/visual-baseline/manifest.json,
     packages/core/src/SelectableCard/SelectableCard.test.tsx,
@@ -45,7 +46,7 @@ system_specs: [spec:AST-009, spec:AST-020, spec:AST-085]
 | Behavior                | A visually hidden native checkbox carries the role, name, and checked state; the whole surface toggles; selection draws an inset ring without moving layout.                                                                                                                                                                |
 | End-user impact         | Screen-reader users hear a named checkbox and its state; pointer users click anywhere on the card; disabled cards stay discoverable by keyboard.                                                                                                                                                                            |
 | Builder impact          | At the next minor, a click inside an open layer inside the card (e.g. a Tooltip or HoverCard surface) no longer reaches the caller's `onClick`; a handler that needs those presses moves to the layer content. A theme's exit duration and easing set the touch press release (FR4).                                        |
-| Compatibility/readiness | No API changes. One `[breaking]` behavior change is staged for the next minor and not built: `onClick` stops receiving clicks inside an open layer. Three implementation gaps are listed under Current-state impact. The touch press release changes (FR4, `spec:AST-094` FR5).                                             |
+| Compatibility/readiness | No API changes. One `[breaking]` behavior change is staged for the next minor and not built: `onClick` stops receiving clicks inside an open layer. Two implementation gaps are listed under Current-state impact. The touch press release changes (FR4, `spec:AST-094` FR5).                                               |
 | Review checks           | Reject a toggle that fires twice for one press, a disabled card that toggles or leaves the tab order, a ring that shifts layout, or a nested control that toggles the card.                                                                                                                                                 |
 | Governing rules         | `spec:AST-085/FR1,FR2,FR5,FR6`; `spec:AST-020/FR9`; `architecture:interaction-modality/INV3`; `architecture:component-theming-surface/INV6,INV14`; `architecture:public-component-api/INV5,INV6,INV7,INV8`; `component:SelectableCard/FR4` (the touch press release); `spec:AST-094/FR5` (the press release's exit tokens). |
 
@@ -101,10 +102,6 @@ Consumer migration instructions belong in consumer docs and release notes.
   not a layer. It does not toggle. At the next minor, staged as `[breaking]` (`CLN-0026`),
   that handler is removed and callers move a handler that needs those presses
   to the layer content.
-- **Two focus indicators on nested controls (FR4, AR2).** The card draws its
-  outline whenever any descendant has `:focus-visible`, so focusing a nested
-  control shows the card outline and the control's own, where
-  `architecture:interaction-modality` INV3 allows one indicator per focus move.
 - **Disabled state not reflected on the target (FR5).** The
   `selectable-card` target carries no disabled state, so a theme cannot style it
   there, where `architecture:component-theming-surface` INV6 keeps state on the
@@ -194,8 +191,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   that a fixed-height card whose content overflows is a scroll container that
   browsers may make an unnamed tab stop (`component:Card` AR1).
 - **AR2 — Delegated focus indicator.** Keyboard focus on the hidden checkbox is
-  shown on the visible card root (`architecture:interaction-modality` INV3).
-  Implementation gap: a focused nested control shows a second outline.
+  shown on the visible card root (`architecture:interaction-modality` INV3); a
+  focused nested control shows only its own outline.
 - **AR3 — Focusable disabled.** A disabled card keeps its tab stop, exposes
   `aria-disabled`, and blocks every toggle path (`spec:AST-085` FR1, FR2, FR5).
 - **AR4 — Persistent selection.** Selection changes the

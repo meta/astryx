@@ -26,6 +26,7 @@ verified_by:
     packages/core/src/Button/__tests__/Button.a11y.test.tsx,
     packages/core/src/Button/__tests__/Button.a11y.chromium.spec.ts,
     packages/core/src/__tests__/CardPress.a11y.chromium.spec.ts,
+    packages/core/src/__tests__/FocusRingOwner.a11y.chromium.spec.ts,
     packages/core/src/__tests__/ReducedMotionPress.a11y.chromium.spec.ts,
     packages/core/src/hooks/useClickableContainer.test.tsx,
     packages/core/src/theme/themingTargets.test.ts,
@@ -57,7 +58,7 @@ system_specs: [spec:AST-005, spec:AST-009, spec:AST-085]
 | Behavior                | A visually hidden native button or link owns the card's action; the whole card surface activates it, while nested controls and selected text keep their own outcomes.                                                                                                                                                                                             |
 | End-user impact         | People can activate a card from anywhere on it, by pointer or keyboard, and a disabled card stays reachable and announced while doing nothing.                                                                                                                                                                                                                    |
 | Builder impact          | A theme's exit duration and easing set the touch press release (FR5); no API changes.                                                                                                                                                                                                                                                                             |
-| Compatibility/readiness | No API changes; the touch press release changes (FR5, `spec:AST-094` FR5). Two implementation gaps are listed under Current-state impact.                                                                                                                                                                                                                         |
+| Compatibility/readiness | No API changes; the touch press release changes (FR5, `spec:AST-094` FR5). One implementation gap is listed under Current-state impact.                                                                                                                                                                                                                           |
 | Review checks           | Reject a live destination while disabled, duplicate activation, activation from a nested control or selected text, a destination that skips the shared decision, or lost focus paint.                                                                                                                                                                             |
 | Governing rules         | `family:navigation-destinations/FR1,FR3–FR5`; `architecture:interaction-modality/INV2–INV5`; `architecture:public-component-api/INV5–INV8`; `spec:AST-085` FR1, FR2, FR5, FR6; `component:ClickableCard/FR5` (the touch press release); `spec:AST-094/FR5` (the press release's exit tokens).                                                                     |
 
@@ -82,10 +83,6 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Current-state impact
 
-- **Two focus indicators on nested controls (AR3).** The card draws its focus
-  outline while any descendant has keyboard focus, so focusing a nested
-  control shows the card outline and the control's own, where
-  `architecture:interaction-modality` INV3 allows one indicator per focus move.
 - **Disabled state not reflected on the target (FR4).** The `clickable-card`
   target reflects `variant` but not the disabled state, so a theme cannot
   style it there, where `architecture:component-theming-surface` INV6 keeps
@@ -173,9 +170,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 - **AR2 — Disabled stays perceivable.** A disabled card's control stays in the
   tab order, announces `aria-disabled`, and is inert (FR4).
 - **AR3 — One focus indicator per focus move.** Focus on the hidden control is
-  shown once, on the card root (`architecture:interaction-modality` INV3).
-  Implementation gap: the root also outlines while a nested control has focus,
-  so that control shows two indicators (Current-state impact).
+  shown once, on the card root (`architecture:interaction-modality` INV3); a
+  nested control shows only its own indicator.
 - **AR4 — Modality parity.** Keyboard, pointer, and touch users each have an
   operable path; hover is never the only one.
 

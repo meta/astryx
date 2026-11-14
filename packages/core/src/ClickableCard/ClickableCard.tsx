@@ -449,7 +449,7 @@ export function ClickableCard({
       {...mergeProps(
         themeProps('clickable-card', {variant}),
         // Rings for the card's own link or button only; a control in its
-        // children rings itself (`architecture:interaction-modality` INV3).
+        // children rings itself.
         stylex.props(focusWithinOwner),
         classNameProp,
         style,
