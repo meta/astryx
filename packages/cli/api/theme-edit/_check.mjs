@@ -5158,9 +5158,67 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
       );
     }
     const type = C.typeOf(thing);
-    // Only colors differ by mode: a shadow list cannot sit inside
-    // light-dark(), so a shadow per mode would remove it in both.
-    // undo still removes a setting an earlier release saved for one mode.
+    // A shadow's colors can differ by mode inside the value: each layer's
+    // color as light-dark(), the other mode's half kept from what that mode
+    // shows now (the theme's own value, else the base theme's).
+    if (s.mode && type === 'shadow' && !unset) {
+      const other = s.mode === 'dark' ? 'light' : 'dark';
+      const saved = [...(Array.isArray(data.settings) ? data.settings : [])]
+        .reverse()
+        .find(
+          (/** @type {any} */ x) =>
+            x?.thing === thing && !x.on && (!x.mode || x.mode === other),
+        )?.value;
+      const now = String(
+        saved ?? ctx.base?.[other]?.[thing] ?? TOKENS[thing] ?? '',
+      );
+      /** The one color word of a layer, or null. @param {string} layer */
+      const colorOf = layer =>
+        splitTop(layer.trim(), ' ').find(
+          w => /^light-dark\(/i.test(w) || isColorValue(w),
+        ) ?? null;
+      /** A light-dark() pair's half for a mode, or the color itself. @param {string} c @param {'light' | 'dark'} m */
+      const halfOf = (c, m) => {
+        const inner = /^light-dark\((.*)\)$/is.exec(c.trim())?.[1];
+        const halves = inner == null ? [] : splitTop(inner, ',');
+        return halves.length === 2 ? halves[m === 'light' ? 0 : 1].trim() : c;
+      };
+      const typedLayers = splitTop(String(v), ',').map(x => x.trim());
+      const nowLayers = splitTop(now, ',').map(x => x.trim());
+      const paired =
+        typedLayers.length === nowLayers.length &&
+        typedLayers.every(l => colorOf(l)) &&
+        nowLayers.every(l => colorOf(l))
+          ? typedLayers
+              .map((l, i) => {
+                const typedColor = /** @type {string} */ (colorOf(l));
+                const kept = halfOf(
+                  /** @type {string} */ (colorOf(nowLayers[i])),
+                  other,
+                );
+                return l.replace(
+                  typedColor,
+                  s.mode === 'dark'
+                    ? `light-dark(${kept}, ${typedColor})`
+                    : `light-dark(${typedColor}, ${kept})`,
+                );
+              })
+              .join(', ')
+          : null;
+      refuse(
+        E.ERR_THEME_NO_MODE,
+        `--mode takes a plain color; ${thing} mixes colors with sizes, so --mode cannot hold it. Its colors can still differ between light and dark: write each in the value as light-dark(<light>, <dark>).${paired ? '' : ` Only the colors can differ: the ${other} ${thing} has ${nowLayers.length} layer${nowLayers.length === 1 ? '' : 's'} with their own sizes, so a value of ${typedLayers.length} changes the ${other} mode too.`}`,
+        {
+          run: [
+            paired
+              ? `${P} set ${slug} ${thing} ${quoteCommandArgument(paired)}${onFlag}   # the colors in ${s.mode} only, ${other} kept`
+              : `${P} set ${slug} ${thing} ${quoteCommandArgument(v)}${onFlag}   # both modes`,
+          ],
+        },
+      );
+    }
+    // Only colors differ by mode. undo still removes a setting an earlier
+    // release saved for one mode.
     if (s.mode && type !== 'color' && !unset)
       refuse(
         E.ERR_THEME_NO_MODE,
@@ -5746,19 +5804,29 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
         !/url\(/i.test(v)
       )
     ) {
-      // A color mixed into the value (a border's) can go per mode on its
-      // own; a value with none (a radius) is just set for both modes.
-      const hasColor = /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i.test(v);
-      // A gradient's colors sit in its image, above any background-color:
-      // no color step can make them differ per mode.
-      const alt =
-        !hasColor || /gradient\(/i.test(v)
-          ? null
-          : prop === 'border' || prop.startsWith('border-')
-            ? 'border-color'
-            : prop === 'background'
-              ? 'background-color'
-              : null;
+      // A shorthand's color can go per mode through its color longhand
+      // (border-color for border), set for that mode alone: the other mode
+      // keeps its color. Its other words (width, style) are not colors, so
+      // they are set for both modes, as their own longhands. A value with
+      // no color (a radius) is just set for both modes.
+      const words = splitTop(String(v).trim(), ' ').filter(Boolean);
+      const colorWord = /gradient\(/i.test(v)
+        ? null
+        : (words.find(
+            w =>
+              isColorValue(w) &&
+              !/^(currentcolor|inherit|initial|unset|revert)$/i.test(w),
+          ) ?? null);
+      const longhandOf = (/** @type {string} */ part) =>
+        cssProperties().has(`${prop}-${part}`) ? `${prop}-${part}` : null;
+      // The longhands a shorthand's words go to, from CSS's own names.
+      const alt = !colorWord
+        ? null
+        : prop === 'background'
+          ? 'background-color'
+          : longhandOf('color') && COLOR_PROPS.test(`${prop}-color`)
+            ? `${prop}-color`
+            : null;
       // On a part whose variants each have their own color, the color per
       // mode is set for one variant at a time (as that refusal says): the
       // step names the default one, or the first.
@@ -5784,20 +5852,71 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
         if (variants.length && !plain)
           altWhen = ` --when variant:${variants.includes('default') ? 'default' : variants[0]}`;
       }
+      // The shorthand's other words, each to its own longhand (a width, a
+      // style), for both modes: only what the value gives.
+      const shapeLines =
+        alt && prop !== 'background'
+          ? words
+              .filter(w => w !== colorWord)
+              .map(w => {
+                const longhand = ['style', 'width', 'line', 'thickness']
+                  .map(longhandOf)
+                  .find(
+                    lh =>
+                      lh &&
+                      matchValue(lh, w) &&
+                      !(lh.endsWith('-width') && /^(none|hidden)$/.test(w)),
+                  );
+                return longhand
+                  ? `${P} set ${slug} ${longhand} ${quoteCommandArgument(w)}${onFlag}${whenFlag}   # both modes`
+                  : null;
+              })
+          : [];
+      const shapeRuns = /** @type {string[]} */ (
+        shapeLines.filter(x => x != null)
+      );
+      // A color with no longhand of its own (a shadow's) goes per mode in
+      // the value: light-dark() holds each mode's color, and a part with
+      // no such property of its own shows none in the other mode.
+      const ownShadow = partsOf(ctx, s).some(t => ctx.C.MAP[t]?.own?.[prop]);
+      const inValue =
+        !alt &&
+        colorWord &&
+        /shadow$/.test(prop) &&
+        !ownShadow &&
+        matchValue(prop, String(v).replace(colorWord, 'red'))
+          ? String(v).replace(
+              colorWord,
+              s.mode === 'dark'
+                ? `light-dark(transparent, ${colorWord})`
+                : `light-dark(${colorWord}, transparent)`,
+            )
+          : null;
+      const runs = alt
+        ? shapeRuns.length < shapeLines.length
+          ? null
+          : [
+              ...shapeRuns,
+              `${P} set ${slug} ${alt} ${quoteCommandArgument(String(colorWord))}${onFlag}${altWhen}${whenFlag} --mode ${s.mode}   # the color, ${s.mode} only${altWhen ? ', for each variant' : ''}`,
+            ]
+        : inValue
+          ? [
+              `${P} set ${slug} ${prop} ${quoteCommandArgument(inValue)}${onFlag}${whenFlag}   # the color in ${s.mode} only`,
+            ]
+          : null;
       refuse(
         E.ERR_THEME_NO_MODE,
-        prop === 'box-shadow' || prop === 'border'
-          ? `--mode takes a plain color; ${prop} mixes a color with sizes, so --mode cannot hold it. Its color can still differ between light and dark: write it in the value as light-dark(<light>, <dark>).`
-          : `--mode works on plain colors; ${prop} is not a color, so it cannot differ between light and dark.`,
+        alt
+          ? `--mode takes a plain color; ${prop} mixes a color with ${words.length > 1 ? 'other words' : 'nothing else'}, so its color goes per mode through ${alt}${shapeLines.length ? `, and its ${prop === 'text-decoration' ? 'line and style' : 'width and style'} for both modes` : ''}.`
+          : colorWord && /shadow$/.test(prop)
+            ? `--mode takes a plain color; ${prop} mixes a color with sizes, so --mode cannot hold it. Its color can still differ between light and dark: write it in the value as light-dark(<light>, <dark>).`
+            : `--mode works on plain colors; ${prop} is not a color, so it is set for both modes.`,
         {
-          run: alt
-            ? [
-                `${P} set ${slug} ${prop} ${quoteCommandArgument(v.replace(/#[0-9a-f]{3,8}|rgba?\([^)]*\)/i, 'currentcolor'))} --on ${s.on}${whenFlag}   # the shape, both modes`,
-                `${P} set ${slug} ${alt} ${quoteCommandArgument(/#[0-9a-f]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\)/i.exec(v)?.[0] ?? '#1f2937')} --on ${s.on}${altWhen}${whenFlag} --mode ${s.mode}   # then the color per mode${altWhen ? ', for each variant' : ''}`,
-              ]
-            : [
-                `${P} set ${slug} ${prop} ${quoteCommandArgument(v)} --on ${s.on}${whenFlag}   # both modes`,
-              ],
+          run: runs ?? [
+            colorWord
+              ? `${HOW} ${s.on ?? ''}`.trim()
+              : `${P} set ${slug} ${prop} ${quoteCommandArgument(v)}${onFlag}${whenFlag}   # both modes`,
+          ],
         },
       );
     }

@@ -8491,20 +8491,13 @@ export async function commitTheme(
           const modal = MODAL.has(ctx.C.typeOf(k));
           if (!modal && m === 'dark') continue;
           // A one-mode theme writes its mode on both sides: the other side
-          // that moved with it says nothing new, and a setting made for the
-          // mode it dropped (and what reads it) is named as not applied
-          // instead.
+          // that moved with it says nothing new. A setting for the other
+          // mode applies where Core draws that mode, so its change is named.
           if (
             modal &&
             !own &&
-            ((same(resBefore[m][k], resBefore[modes[0]][k]) &&
-              same(res[m][k], res[modes[0]][k])) ||
-              data.settings.some(
-                x =>
-                  x.source === 'token' &&
-                  x.mode === m &&
-                  (x.thing === k || same(x.value, resBefore[m][k])),
-              ))
+            same(resBefore[m][k], resBefore[modes[0]][k]) &&
+            same(res[m][k], res[modes[0]][k])
           )
             continue;
           changed.push(
