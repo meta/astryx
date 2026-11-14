@@ -41,9 +41,11 @@ import {LOCKFILES} from './same-beside-lockfiles.mjs';
  * What gathers the catalog in the working folder with the CLI copy at `cli`,
  * with docs' commands spelled for `pm` (the project's own when null), and
  * prints it with that package manager and the state of each file and folder
- * of the two packages it read. It fails when the gather reads a path in the
- * project (other than code it loads) that the run's live steps do not: the
- * lookup of the project's Core and the check that the project adds nothing.
+ * of the two packages it read. It fails when the gather reads or probes a
+ * path outside the two packages (other than code it loads, and the per-user
+ * folders, where only integrations installed for the computer are read, which
+ * never load inside a project) that the run's live steps do not: the lookup of
+ * the project's Core and the check that the project adds nothing.
  * @param {string} cli
  * @param {string} core
  * @param {string | null} pm
@@ -59,22 +61,29 @@ const {docPackageManager, runWithDocPackageManager} = await import(${at('foundat
 const {gatherCandidates, encodeStoredCatalog, requireSearchCoreDir, resolveSearchCore} = await import(${at('api/search/_adapter.mjs')});
 const project = process.cwd();
 const live = new Map();
+const {realDir} = await import(${at('foundation/fs/paths.mjs')});
 const adds = await recordReads(live, async () => {
+  // What search's adapter does before it reads the store: the kept gather's
+  // key (the real folder), the lookup of Core, and the project check.
+  realDir(project);
   resolveSearchCore(undefined, requireSearchCoreDir, project);
   return projectAddsToCatalog(project);
-});
+}, {exact: true});
 if (adds) throw new Error('the probe project adds to a catalog');
 const pm = ${JSON.stringify(pm)} ?? docPackageManager(project);
 const seen = new Map();
-const gathered = await runWithDocPackageManager(pm, () => recordReads(seen, () => gatherCandidates({cwd: project})));
+const probed = new Map();
+const gathered = await runWithDocPackageManager(pm, () =>
+  recordReads(probed, () => recordReads(seen, () => gatherCandidates({cwd: project})), {exact: true}));
 if (gathered.coreSkipped != null) throw new Error('the gather found no Core: ' + gathered.coreSkipped);
 const packages = [${JSON.stringify(cli)}, ${JSON.stringify(core)}];
-const uncovered = [...seen.keys()].filter(file =>
-  (file === project || file.startsWith(project + '/')) &&
+const home = process.env.HOME;
+const uncovered = [...probed.keys()].filter(file =>
+  !(file === home || file.startsWith(home + '/')) &&
   !packages.some(root => file === root || file.startsWith(root + '/')) &&
   !/\\.[cm]?js$/.test(file) &&
   !live.has(file));
-if (uncovered.length > 0) throw new Error('the gather reads paths of the project the live check does not: ' + uncovered.join(', '));
+if (uncovered.length > 0) throw new Error('the gather reads paths outside the packages that the live check does not: ' + uncovered.join(', '));
 process.stdout.write(JSON.stringify({
   pm,
   cli: selfAuditInputs(seen.keys(), {root: ${JSON.stringify(cli)}}),

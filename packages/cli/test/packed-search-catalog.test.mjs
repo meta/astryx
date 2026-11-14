@@ -17,6 +17,7 @@ import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {CLI_ROOT} from '../foundation/fs/paths.mjs';
 import {copyPublishedCore} from '../scripts/generate-component-list.mjs';
 import {
+  globalCli,
   placeCli,
   recyclePlacedCopies,
 } from '../test-utils/global-local-fixtures.mjs';
@@ -106,6 +107,49 @@ process.stdout.write(String(storedSearchCatalog(${JSON.stringify(core)}, process
   );
   if (result.status !== 0) throw new Error(result.stderr);
   return result.stdout === 'true';
+}
+
+/**
+ * A project of its own beside the main one, holding the same installed
+ * Astryx packages, so what a case adds stays out of the other cases.
+ * @param {Record<string, unknown>} [pkg] - Its package.json.
+ * @returns {string}
+ */
+function sideProject(pkg = {name: 'consumer', private: true}) {
+  const dir = fs.mkdtempSync(path.join(work, 'side-'));
+  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify(pkg));
+  fs.mkdirSync(path.join(dir, 'node_modules'));
+  fs.symlinkSync(
+    path.join(project, 'node_modules', '@astryxdesign'),
+    path.join(dir, 'node_modules', '@astryxdesign'),
+    'dir',
+  );
+  return dir;
+}
+
+/**
+ * Write a package with an integration manifest at `dir`.
+ * @param {string} dir
+ * @param {string} name
+ */
+function writeIntegration(dir, name) {
+  fs.mkdirSync(path.join(dir, 'templates'), {recursive: true});
+  fs.writeFileSync(
+    path.join(dir, 'package.json'),
+    JSON.stringify({name, version: '1.0.0'}),
+  );
+  fs.writeFileSync(
+    path.join(dir, 'astryx.integration.mjs'),
+    `export default { templates: './templates' };\n`,
+  );
+  fs.writeFileSync(
+    path.join(dir, 'templates', 'tally.doc.mjs'),
+    `export default {type: 'page', name: 'tally', description: 'Running totals, tallied by team.', category: 'Widget - Tally'};\n`,
+  );
+  fs.writeFileSync(
+    path.join(dir, 'templates', 'tally.tsx'),
+    `export default function Page() { return null; }\n`,
+  );
 }
 
 /** The packed CLI's stored catalog file. */
@@ -244,6 +288,76 @@ describe('the stored search catalog', () => {
       fs.rmSync(external, {recursive: true, force: true});
     }
     expect(storeAnswers()).toBe(true);
+  }, 120_000);
+
+  it('is not used where the project is an integration or declares one', () => {
+    const own = sideProject({name: '@acme/own', version: '1.0.0'});
+    expect(storeAnswers(own)).toBe(true);
+    writeIntegration(own, '@acme/own');
+    expect(storeAnswers(own)).toBe(false);
+    const declares = sideProject({
+      name: 'consumer',
+      private: true,
+      dependencies: {'@acme/dep': '1.0.0'},
+    });
+    expect(storeAnswers(declares)).toBe(true);
+    writeIntegration(
+      path.join(declares, 'node_modules', '@acme', 'dep'),
+      '@acme/dep',
+    );
+    expect(storeAnswers(declares)).toBe(false);
+    const ask = ['search', 'tally', '--type', 'template', '--json'];
+    const answer = run(packed, ask, {}, declares);
+    expect(answer.stdout).toContain('tally');
+    expect(answer).toEqual(run(CLI_ROOT, ask, {}, declares));
+  }, 120_000);
+
+  it('answers in a folder with installed packages and no package.json, as a live gather does', () => {
+    const bare = fs.mkdtempSync(path.join(work, 'bare-'));
+    fs.symlinkSync(
+      path.join(project, 'node_modules'),
+      path.join(bare, 'node_modules'),
+      'dir',
+    );
+    const ask = ['search', 'button', '--json'];
+    const answer = run(packed, ask, {}, bare);
+    expect(answer.status, answer.stderr).toBe(0);
+    expect(answer).toEqual(run(CLI_ROOT, ask, {}, bare));
+  }, 60_000);
+
+  it('answers for the package manager a project declares or runs under, as a live gather does', () => {
+    const declared = sideProject({
+      name: 'consumer',
+      private: true,
+      packageManager: 'pnpm@9.0.0',
+    });
+    const ask = ['search', 'install', '--json'];
+    expect(storeAnswers(declared)).toBe(true);
+    expect(run(packed, ask, {}, declared)).toEqual(
+      run(CLI_ROOT, ask, {}, declared),
+    );
+    const agent = {npm_config_user_agent: 'bun/1.1.0 npm/? node/v22'};
+    expect(run(packed, ask, agent)).toEqual(run(CLI_ROOT, ask, agent));
+  }, 120_000);
+
+  it('answers inside a project beside an integration installed for the computer, which loads only outside one', () => {
+    const global = globalCli('npm', VERSION);
+    // The home folder the layout sits in: .npm-global/lib/node_modules/@astryxdesign/cli.
+    const home = path.resolve(global.dir, '..', '..', '..', '..', '..');
+    writeIntegration(
+      path.join(home, '.npm-global', 'lib', 'node_modules', '@acme', 'beside'),
+      '@acme/beside',
+    );
+    const env = {
+      HOME: home,
+      PATH: `${global.binDir}${path.delimiter}${process.env.PATH}`,
+    };
+    expect(storeAnswers()).toBe(true);
+    const ask = ['search', 'tally', '--type', 'template', '--json'];
+    const answer = run(packed, ask, env);
+    expect(answer.status, answer.stderr).toBe(0);
+    expect(answer.stdout).not.toContain('Running totals');
+    expect(answer).toEqual(run(CLI_ROOT, ask, env));
   }, 120_000);
 
   it('is not used where the project holds a local theme, whose search finds it', () => {
