@@ -3,6 +3,7 @@
 import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {Thumbnail} from '@astryxdesign/core/Thumbnail';
+import {SAMPLE_IMAGES} from './assets/samples/samples';
 
 const meta: Meta<typeof Thumbnail> = {
   title: 'Core/Thumbnail',
@@ -36,11 +37,11 @@ const meta: Meta<typeof Thumbnail> = {
 export default meta;
 type Story = StoryObj<typeof Thumbnail>;
 
-// Deterministic picsum images by ID
-const DARK_IMAGE = 'https://picsum.photos/id/1042/200/200'; // dark interior
-const LIGHT_IMAGE = 'https://picsum.photos/id/1043/200/200'; // bright snow/sky
-const WARM_IMAGE = 'https://picsum.photos/id/1044/200/200'; // warm tones
-const MIXED_IMAGE = 'https://picsum.photos/id/1047/200/200'; // mixed tones
+// Bundled sample images, one per tone
+const DARK_IMAGE = SAMPLE_IMAGES.dark200x200; // dark interior
+const LIGHT_IMAGE = SAMPLE_IMAGES.light200x200; // bright snow/sky
+const WARM_IMAGE = SAMPLE_IMAGES.warm200x200; // warm tones
+const MIXED_IMAGE = SAMPLE_IMAGES.mixed200x200; // mixed tones
 
 export const Default: Story = {
   args: {
