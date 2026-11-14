@@ -83,14 +83,11 @@ function printHuman(report) {
         : 'All checks passed. Your Astryx setup looks healthy.';
 
   // One check per line, status first so the counted value stays a column.
-  // The key line names each field by its JSON key, so text and --json map
-  // one to one.
+  // The legend names each field by its JSON key, so text and --json map one
+  // to one.
   const summaryFields = /** @type {const} */ (['pass', 'warn', 'fail', 'info']);
   emit(
-    section(
-      'astryx doctor',
-      `${CHECK_FIELDS[0]}  ${CHECK_FIELDS.slice(1).join(' - ')}`,
-    ),
+    section('astryx doctor', `One line per check: ${CHECK_FIELDS.join(', ')}`),
     records(report.checks, {
       fields: [...CHECK_FIELDS],
       layout: 'inline',

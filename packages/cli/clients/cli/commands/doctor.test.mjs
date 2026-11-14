@@ -469,7 +469,7 @@ describe('doctor — command', () => {
 describe('doctor — text output mirrors the JSON', () => {
   const TOKEN = {pass: '[ok]', warn: '[warn]', fail: '[fail]', info: '[info]'};
 
-  it('prints each check on one line, every field in key-line order, and the summary on one line', async () => {
+  it('prints each check on one line, every field in legend order, and the summary on one line', async () => {
     const prevCwd = process.cwd();
     const prevExit = process.exitCode;
     process.chdir(tmpDir);
@@ -481,7 +481,9 @@ describe('doctor — text output mirrors the JSON', () => {
       // A wrapped record continues on indented lines; join them back.
       const lines = logCalls.join('\n').replace(/\n +/g, ' ').split('\n');
 
-      expect(lines[1]).toBe('status  id - label - message - fix');
+      expect(lines[1]).toBe(
+        'One line per check: status, id, label, message, fix',
+      );
       const column = Math.max(
         ...checks.map(check => TOKEN[check.status].length),
       );

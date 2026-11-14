@@ -545,13 +545,13 @@ Every response has a `type` discriminant. The full set is below (generated from 
 changes nothing in the project; once the per-user cache folder exists, it
 keeps its docs checks, its theme-wiring scan and integration check results there. Each check prints on one
 line: its status (`[ok]`, `[warn]`, `[fail]`, or `[info]`), then its id, label and message, and an actionable
-`fix` when one is available. The key line under the heading names each field by its `--json` key. The exact
+`fix` when one is available. The legend under the heading names each field by its `--json` key. The exact
 checks and values depend on the project; the output shape is stable:
 
 ```
 $ astryx doctor
 astryx doctor
-status  id - label - message - fix
+One line per check: status, id, label, message, fix
 
 [ok]    node-version - Node.js version - Node v24.18.1 meets the minimum (>=22.13.0).
 [warn]  themes - Theme packages - No @astryxdesign/theme-* packages are installed. - fix: Install a theme, e.g. `npm
