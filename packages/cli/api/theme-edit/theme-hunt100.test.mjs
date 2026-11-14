@@ -13,6 +13,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import * as zlib from 'node:zlib';
 import {createRequire} from 'node:module';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {
@@ -24,7 +25,7 @@ import {
 } from './theme-edit.mjs';
 import {themeEditShow as showInside} from './_edit.mjs';
 import {screenshot} from './_preview.mjs';
-import {EDITOR_STAMP, withPngText} from './_png.mjs';
+import {EDITOR_STAMP, pngTexts, withPngText} from './_png.mjs';
 import {doc as removeDoc} from './themeEditPreviewRemove.doc.mjs';
 import {
   makeLinkedFixture,
@@ -41,12 +42,29 @@ vi.mock('./_preview.mjs', async importOriginal =>
   ),
 );
 
-/** A 1x1 PNG. */
-const PNG = Buffer.from(
-  '89504e470d0a1a0a0000000d4948445200000001000000010806000000' +
-    '1f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082',
-  'hex',
-);
+/** A valid 1x1 PNG (its chunk checksums right, so a stamp can be added). */
+const PNG = (() => {
+  /** @param {string} type @param {Buffer} data */
+  const chunk = (type, data) => {
+    const body = Buffer.concat([Buffer.from(type, 'latin1'), data]);
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(data.length);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(zlib.crc32(body) >>> 0);
+    return Buffer.concat([len, body, crc]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(1, 0);
+  ihdr.writeUInt32BE(1, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 2;
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    chunk('IHDR', ihdr),
+    chunk('IDAT', zlib.deflateSync(Buffer.from([0, 0, 0, 0]))),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
+})();
 
 /** A project folder with a stand-in Playwright and a page to picture. */
 function pwProject(/** @type {string} */ launchSource) {
@@ -144,6 +162,8 @@ describe('pictures', () => {
   it('a copy of a picture, stamp and all, is never deleted by a change', async () => {
     const copy = path.join(cwd, 'themes/t/preview-before.png');
     fs.writeFileSync(copy, withPngText(PNG, EDITOR_STAMP, 't'));
+    // The copy carries the editor's stamp, as a byte copy of its picture.
+    expect(pngTexts(fs.readFileSync(copy))[EDITOR_STAMP]).toBe('t');
     await themeEditSet('t', 'corners', 'pill', {cwd});
     expect(fs.existsSync(copy)).toBe(true);
     fs.rmSync(copy);
@@ -178,13 +198,17 @@ describe('pictures', () => {
 describe('the in-app preview', () => {
   it('add finds a preview renamed by hand instead of starting a second one', async () => {
     await themeEditPreviewAdd(undefined, {cwd, theme: 't'});
+    await themeEditPreviewRemove('components', {cwd});
     fs.renameSync(
       path.join(cwd, 'src/app/theme-preview'),
       path.join(cwd, 'src/app/look'),
     );
-    // Its components page is there already: the refusal says so of the
-    // renamed preview, and no second preview is started.
-    await themeEditPreviewAdd('components', {cwd}).catch(() => {});
+    // The page goes into the renamed preview; no second preview starts.
+    const r = /** @type {any} */ (
+      await themeEditPreviewAdd(undefined, {cwd, template: 'components'})
+    );
+    expect(r.data.folder).toBe('src/app/look');
+    expect(r.data.added).toEqual(['components']);
     expect(fs.existsSync(path.join(cwd, 'src/app/theme-preview'))).toBe(false);
     expect(
       fs.existsSync(path.join(cwd, 'src/app/look/theme-preview.json')),
@@ -192,17 +216,26 @@ describe('the in-app preview', () => {
   }, 240_000);
 
   it('a default page asked for again says only it was added', async () => {
-    await themeEditPreviewRemove('overview', {cwd});
-    await themeEditPreviewRemove('components', {cwd}).catch(() => {});
-    const r = /** @type {any} */ (
-      await themeEditPreviewAdd(undefined, {cwd, template: 'components'})
-    );
-    const notes = r.data.notes.join('\n');
-    expect(notes).not.toMatch(
-      /brings back the default pages that are missing, as/,
-    );
-    if (notes.includes('only components was added'))
-      expect(notes).toMatch(/preview add with no page brings back/);
+    // A preview of its own with one default page missing (overview).
+    const at = {cwd, path: 'src/app/again'};
+    await themeEditPreviewAdd(undefined, {...at, theme: 't'});
+    try {
+      await themeEditPreviewRemove('overview', at);
+      await themeEditPreviewRemove('components', at);
+      const r = /** @type {any} */ (
+        await themeEditPreviewAdd(undefined, {...at, template: 'components'})
+      );
+      const notes = r.data.notes.join('\n');
+      expect(notes).not.toMatch(
+        /brings back the default pages that are missing, as/,
+      );
+      expect(r.data.added).toEqual(['components']);
+      expect(notes).toMatch(
+        /only components was added; .*preview add with no page brings back the other default pages that are missing \(overview/,
+      );
+    } finally {
+      await themeEditPreviewRemove(undefined, at);
+    }
   }, 240_000);
 
   it('a page remove over a theme that does not parse names the whole-preview remove', async () => {
