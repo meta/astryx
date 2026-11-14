@@ -341,16 +341,17 @@ function editorMissingMessage(err, message) {
 let editorThemesHere = () => [];
 
 /**
- * How the theme commands read an option commander does not know, which the
- * editor registers: the message and the commands that work, or undefined
- * for a command it does not read.
- * @type {(cmd: any) => {message: string, suggestions: Array<{name: string, reason: string}>} | undefined}
+ * How the theme commands read an option commander does not know, or one
+ * given no value (commander's code says which), which the editor
+ * registers: the message and the commands that work, or undefined for a
+ * command it does not read.
+ * @type {(cmd: any, code: string) => {message: string, suggestions: Array<{name: string, reason: string}>} | undefined}
  */
 let unknownOptionReader = () => undefined;
 
 /**
  * Register how the theme commands read an option they do not take.
- * @param {(cmd: any) => {message: string, suggestions: Array<{name: string, reason: string}>} | undefined} read
+ * @param {(cmd: any, code: string) => {message: string, suggestions: Array<{name: string, reason: string}>} | undefined} read
  */
 export function setUnknownOptionReader(read) {
   unknownOptionReader = read;
@@ -633,8 +634,9 @@ export function handleCommanderError(err) {
   // An option a theme command does not take is read by the editor's one
   // option reader: the option meant, with the command that works.
   const read =
-    code === 'commander.unknownOption'
-      ? unknownOptionReader(/** @type {any} */ (err)?.[REJECTED_COMMAND])
+    code === 'commander.unknownOption' ||
+    code === 'commander.optionMissingArgument'
+      ? unknownOptionReader(/** @type {any} */ (err)?.[REJECTED_COMMAND], code)
       : undefined;
   const suggestions = read?.suggestions ?? usageSuggestion(err, code);
   // In the theme editor a missing argument names what was given: in

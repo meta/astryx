@@ -535,6 +535,33 @@ export async function pictures(project, shots, modes) {
 }
 
 /**
+ * The families the theme's build writes that no package loads: not a
+ * system or desktop font, not loaded by a font stylesheet the app copy
+ * imports (the base's fonts included), and none of `packages` (the font
+ * packages that load it where the fonts go: the project's, or a new app's).
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {Array<{family: string}>} packages
+ * @returns {string[]}
+ */
+export function familiesNothingLoads(ctx, data, packages) {
+  const built = builtFontFamilies(ctx, data.name);
+  /** @type {Set<string>} */
+  const loaded = new Set();
+  for (const spec of copyFontsCss(ctx, data.name, data))
+    for (const f of importedFontFamilies(spec, ctx.project.cwd)) loaded.add(f);
+  return [...(built?.values() ?? [])].filter(family => {
+    const key = fontKey(family);
+    return !(
+      loaded.has(key) ||
+      packages.some(x => fontKey(x.family) === key) ||
+      isDesktopFamily(family) ||
+      oneSystemOf(family)
+    );
+  });
+}
+
+/**
  * Font notes for the families the theme builds: the import line for an
  * open font, the install line when its package is missing, and a warning
  * for a family no package loads, naming the closest open font.
@@ -629,10 +656,6 @@ export function fontNotes(ctx, data) {
   // font, a font token, a family the theme's own source sets) is named
   // once, with the package that would load it: the same built families
   // the app copy and the previews load fonts for.
-  /** @type {Set<string>} */
-  const loaded = new Set();
-  for (const spec of copyFontsCss(ctx, data.name, data))
-    for (const f of importedFontFamilies(spec, ctx.project.cwd)) loaded.add(f);
   const dialFamilies = new Set(
     data.settings
       .filter(s => s.thing === 'font')
@@ -655,16 +678,8 @@ export function fontNotes(ctx, data) {
         `"${family}" comes from ${base.spec}, which loads it from ${new URL(base.remote[0], 'https://x').host}: the app shows it, but the previews (preview.html, sheet.html and their pictures) cannot load a remote stylesheet and show the next font in the stack.${pkg ? ` ${installLine(ctx.project.cwd, [pkg])} installs a copy the previews load too.` : ''}`,
       );
     }
-  for (const family of built?.values() ?? []) {
-    const key = fontKey(family);
-    if (
-      loaded.has(key) ||
-      dialFamilies.has(key) ||
-      packages.some(x => fontKey(x.family) === key) ||
-      isDesktopFamily(family) ||
-      oneSystemOf(family)
-    )
-      continue;
+  for (const family of familiesNothingLoads(ctx, data, packages)) {
+    if (dialFamilies.has(fontKey(family))) continue;
     notes.push(unloadedNote(family));
   }
   return notes;
@@ -980,17 +995,25 @@ function markSheetStale(file, slug, cwd) {
  * that is not a section.
  * @param {string | undefined} section
  * @param {string} [theme] the theme the suggestions name
+ * @param {string} [rest] the command's other options as typed (` --png`):
+ *   the offered command keeps them, with only the section fixed
  * @returns {string | undefined}
  */
-export function checkSection(section, theme = 'my') {
+export function checkSection(section, theme = 'my', rest = '') {
   // A section is offered only when one is within a typo of what was typed;
   // otherwise the way on is the whole sheet (show with no --section), with
-  // the sections listed in the message.
+  // the sections listed in the message. An option where the section
+  // belongs (`--section --png`) was read as its value: it stays an option.
+  const eaten =
+    typeof section === 'string' && /^--[a-z][a-z-]*$/.test(section.trim())
+      ? ` ${section.trim()}`
+      : '';
+  const show = `${P} show ${theme}${rest}${rest.includes(eaten) ? '' : eaten}`;
   if (section === '')
     refuse(
       E.ERR_MISSING_ARGUMENT,
       `--section was given no value; it takes ${SHOWCASE_GROUPS.join(', ')}, and show with no --section makes the whole sheet.`,
-      {run: [`${P} show ${theme}`]},
+      {run: [show]},
     );
   const s = section?.toLowerCase();
   if (s != null && !SHOWCASE_GROUPS.includes(s)) {
@@ -1000,11 +1023,7 @@ export function checkSection(section, theme = 'my') {
       `--section takes ${SHOWCASE_GROUPS.join(', ')}, not "${section}"${near.length ? '' : '; show with no --section makes the whole sheet'}.`,
       {
         didYouMean: near,
-        run: [
-          near.length === 1
-            ? `${P} show ${theme} --section ${near[0]}`
-            : `${P} show ${theme}`,
-        ],
+        run: [near.length === 1 ? `${show} --section ${near[0]}` : show],
       },
     );
   }

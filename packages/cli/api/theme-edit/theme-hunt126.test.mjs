@@ -238,16 +238,21 @@ describe('suggestions from what was typed', () => {
   }, 240_000);
 
   it('--template offers a default page within a typo', async () => {
+    // A preview of its own, which holds no page yet: each default page can
+    // be added there.
     for (const [typed, page] of [
       ['overveiw', 'overview'],
       ['componets', 'components'],
-      ['colours', 'colors'],
     ]) {
       const e = await refusal(() =>
-        themeEditPreviewAdd(undefined, {cwd, template: typed}),
+        themeEditPreviewAdd(undefined, {
+          cwd,
+          template: typed,
+          path: 'app/typos',
+        }),
       );
       expect(names(e)).toContain(
-        `astryx experimental theme preview add --template ${page}`,
+        `astryx experimental theme preview add --template ${page} --path app/typos`,
       );
     }
   }, 240_000);

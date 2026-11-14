@@ -61,6 +61,7 @@ import {
   familyOf,
   WRAPPED_PARTS,
   CARD_LIKE,
+  SHOWCASE_GROUPS,
 } from './_tables.mjs';
 import {TOP_BAR_COMPONENTS} from './_catalog.mjs';
 import {
@@ -96,6 +97,7 @@ import {
   removeEmptyFolder,
   writeWhole,
   setOwnTokenReader,
+  readRecordIn,
   readWrittenRecord,
   writeWrittenRecord,
 } from './_palette.mjs';
@@ -7834,17 +7836,41 @@ export const EDITOR_SUFFIXES = [
 ];
 
 /**
+ * The pages and pictures the editor writes in a theme folder, by exact
+ * name: the preview and the sheet, each section's sheet, and a picture of
+ * each in each mode. A file of the user's named like one (`sheet-old.png`,
+ * `preview-v.html`) is not one of them.
+ */
+export const EDITOR_PAGES = new Set([
+  'preview.html',
+  'sheet.html',
+  ...SHOWCASE_GROUPS.map(g => `sheet-${g}.html`),
+  ...['preview', 'sheet', ...SHOWCASE_GROUPS.map(g => `sheet-${g}`)].flatMap(
+    b => [`${b}.png`, `${b}-dark.png`],
+  ),
+]);
+
+/**
+ * Whether a name in a theme folder is a page or picture the editor writes:
+ * one of {@link EDITOR_PAGES}, or a picture its record says it wrote.
+ * @param {string} n
+ * @param {Record<string, unknown>} [recorded] the theme's pictures record
+ */
+export const isEditorPage = (n, recorded = {}) =>
+  EDITOR_PAGES.has(n) || Object.hasOwn(recorded, n);
+
+/**
  * Whether a name in a theme folder is a file the editor writes: the
  * theme's generated files, settings, history, picture record, pages and
  * pictures, and its color config.
  * @param {string} slug
  * @param {string} n
+ * @param {Record<string, unknown>} [recorded] the theme's pictures record
  */
-export const isEditorFile = (slug, n) =>
+export const isEditorFile = (slug, n, recorded = {}) =>
   EDITOR_SUFFIXES.some(x => n === `${slug}.${x}`) ||
-  /^(preview(-[a-z]+)?\.(html|png)|sheet(-[a-z-]+)?\.(html|png)|palette\.config(\.damaged(-\d+)?)?\.json)$/.test(
-    n,
-  );
+  isEditorPage(n, recorded) ||
+  /^palette\.config(\.damaged(-\d+)?)?\.json$/.test(n);
 
 /**
  * The files in a theme folder that the editor writes, by name: the
@@ -7859,7 +7885,8 @@ export const isEditorFile = (slug, n) =>
 function ownFiles(dir) {
   if (!fs.lstatSync(dir, {throwIfNoEntry: false})?.isDirectory()) return [];
   const slug = path.basename(dir);
-  const mine = (/** @type {string} */ n) => isEditorFile(slug, n);
+  const recorded = readRecordIn(dir, slug);
+  const mine = (/** @type {string} */ n) => isEditorFile(slug, n, recorded);
   /** @type {string[]} */
   const out = [];
   for (const e of fs.readdirSync(dir, {withFileTypes: true}))
@@ -8003,9 +8030,15 @@ export function refuseLinks(cwd, slug) {
   link(f.root);
   link(f.dir);
   // Only the files the editor reads or writes: a link to a file of the
-  // user's (notes, a mockup) is theirs, and is left alone.
+  // user's (notes, a mockup) is theirs, and is left alone. A picture is
+  // never written over a file that is not the editor's (a link included):
+  // that picture is skipped and named, so a link at a picture's name
+  // refuses nothing.
+  const recorded = readWrittenRecord(cwd, slug);
   const own = (/** @type {string} */ n) =>
-    isEditorFile(slug, n) || n === `${slug}.theme.ts` || n === 'tokens';
+    (isEditorFile(slug, n, recorded) && !n.endsWith('.png')) ||
+    n === `${slug}.theme.ts` ||
+    n === 'tokens';
   /** @type {string[]} */
   let names;
   try {

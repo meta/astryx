@@ -780,6 +780,8 @@ function optionsAsWritten(
       .flatMap(f => f.split(/[\s,]+/).filter(w => w.startsWith('--')));
   const booleans = ['--json', ...names(f => !/[<[]/.test(f))];
   const all = [...booleans, ...names(f => /[<[]/.test(f))];
+  // The options that must have a value (`--section <name>`).
+  const valued = names(f => /</.test(f));
   /** The option a word names, as the command takes it, or null. @param {string} word */
   const meant = word => {
     const w = word.toLowerCase();
@@ -824,14 +826,19 @@ function optionsAsWritten(
           read == null
             ? `${flag} takes no value ("${shown}"), and "${value}" reads as neither yes nor no: give ${flag} alone for yes, or leave it out`
             : `${flag} takes no value ("${shown}"): give it alone for yes, or leave it out`;
-        if (read === true && flag !== '--json') words.push(flag);
+        if (read === true && flag !== '--json' && !words.includes(flag))
+          words.push(flag);
         continue;
       }
-      if (flag !== '--json') words.push(flag);
+      // A yes/no option given twice is one option.
+      if (flag !== '--json' && !words.includes(flag)) words.push(flag);
       continue;
     }
     // An option that takes a value, given none, is left out of the line.
-    if (m[3] == null && (next == null || /^-/.test(next))) continue;
+    if (m[3] == null && (next == null || /^-/.test(next))) {
+      if (valued.includes(flag)) why ??= `${flag} was given no value`;
+      continue;
+    }
     words.push(flag);
     if (m[3] != null) words.push(m[3]);
   }
@@ -845,36 +852,58 @@ function optionsAsWritten(
 }
 
 /**
- * An option a theme command does not take, as the one option reader reads
- * it (the json shim asks, for the options commander refuses: preview's
- * subcommands): the option meant with the command that works, else what
- * the command takes and its help. Undefined for any other command.
+ * An option a theme command does not take, or one written with no value,
+ * as the one option reader reads it (the json shim asks, for the options
+ * commander refuses): the option meant, or the command without the empty
+ * option, with the command that works, else what the command takes and its
+ * help. Undefined for any other command.
  * @param {any} c the command commander refused
+ * @param {string} [code] commander's code for the refusal
  * @returns {{message: string, suggestions: Array<{name: string, reason: string}>} | undefined}
  */
-function unknownThemeOption(c) {
+function unknownThemeOption(c, code = 'commander.unknownOption') {
   const sub = c?.name?.();
+  const group = c?.parent?.name?.();
   const doc =
-    /** @type {Record<string, import('@astryxdesign/cli/authoring').CommandDoc>} */ ({
-      add: previewAddDoc,
-      app: previewAppDoc,
-      list: previewListDoc,
-      remove: previewRemoveDoc,
-    })[sub];
-  if (!doc || c.parent?.name?.() !== 'preview') return undefined;
-  const head = `${PREFIX} preview ${sub}`;
+    group === 'preview'
+      ? /** @type {Record<string, import('@astryxdesign/cli/authoring').CommandDoc>} */ ({
+          add: previewAddDoc,
+          app: previewAppDoc,
+          list: previewListDoc,
+          remove: previewRemoveDoc,
+        })[sub]
+      : group === 'editor'
+        ? /** @type {Record<string, import('@astryxdesign/cli/authoring').CommandDoc>} */ ({
+            new: newDoc,
+            set: setDoc,
+            show: showDoc,
+            undo: undoDoc,
+            how: howDoc,
+          })[sub]
+        : undefined;
+  if (!doc) return undefined;
+  const head = `${group === 'preview' ? `${PREFIX} preview` : EDITOR} ${sub}`;
   const help = {name: cmd(`${head} --help`), reason: 'every option it takes'};
-  const read = optionsAsWritten(sub, doc, {group: 'preview', head});
+  const read = optionsAsWritten(sub, doc, {group, head});
+  // An option given no value is left out of the offered command, unless
+  // leaving it out widens what the command removes (a preview remove
+  // without its page removes the whole preview).
+  const widens =
+    code === 'commander.optionMissingArgument' &&
+    group === 'preview' &&
+    sub === 'remove';
   if (read)
     return {
       message: `${read.why}.`,
       suggestions: [
-        ...(read.line
+        ...(read.line && !widens
           ? [{name: cmd(read.line), reason: 'do this instead'}]
           : []),
         help,
       ],
     };
+  if (code !== 'commander.unknownOption' || group !== 'preview')
+    return undefined;
   const takes = (doc.options ?? []).flatMap(o =>
     String(o.flag)
       .split(/[\s,]+/)

@@ -4837,7 +4837,7 @@ export async function themeEditShow(theme, options = {}) {
   // reports the last build as it is.
   const readOnly = Boolean(/** @type {any} */ (options).readOnly);
   requireProject(cwd);
-  const section = checkSection(options.section, theme);
+  const section = checkSection(options.section, theme, png ? ' --png' : '');
   /** What each build this show makes reports (the pictures it removed). @type {string[]} */
   const rebuiltNotes = [];
   /** @type {import('./_settings.mjs').ThemeData} */
@@ -5031,7 +5031,7 @@ export async function themeEditShow(theme, options = {}) {
     ? []
     : await rendering(() => keepPreviewRoute(ctx, theme));
   const sheet = noPages
-    ? {file: shown(cwd, f.sheet), components: 0, skipped: []}
+    ? {file: shown(cwd, f.sheet), components: 0, skipped: [], notes: []}
     : await rendering(() => renderSheet(ctx, theme, data, {group: section}));
   // The full sheet records the build it shows, so a later change tells a
   // sheet that still matches (after an undo) from one that does not.
@@ -5111,6 +5111,7 @@ export async function themeEditShow(theme, options = {}) {
       })(),
       notes: [
         ...rebuiltNotes,
+        ...sheet.notes,
         ...misplacedNotes(theme, data),
         ...(noReact
           ? [

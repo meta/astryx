@@ -125,7 +125,7 @@ export function stubRenders(original) {
         out,
         `<!doctype html><title>${slug}: every component${options.group ? ` (${options.group})` : ''}</title><!-- test stand-in -->\n`,
       );
-      return {file: shown(cwd, out), components: 1, skipped: []};
+      return {file: shown(cwd, out), components: 1, skipped: [], notes: []};
     },
   };
 }

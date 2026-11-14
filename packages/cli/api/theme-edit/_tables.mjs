@@ -977,3 +977,16 @@ for (const table of [
   MODE_WORDS,
 ])
   Object.setPrototypeOf(table, null);
+
+/** The groups of the theme-building page (its sections), in order. */
+export const SHOWCASE_GROUPS = Object.freeze([
+  'actions',
+  'inputs',
+  'selection',
+  'navigation',
+  'feedback',
+  'data',
+  'containers',
+  'overlays',
+  'pages',
+]);
