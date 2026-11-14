@@ -1650,45 +1650,54 @@ test("two pages on, a rotation keeps a zoomed photo's centre point", async ({
  * listener to its bubble listener. React commits a discrete input in a
  * microtask after its root's listener, so that commit falls inside. A layout
  * there is one that script forced, by reading geometry the browser had not laid
- * out yet.
+ * out yet. Trace marks bound the window. Chromium coarsens `performance.now()`
+ * to 100 µs, with jitter, and a button's activation lays out the commit's
+ * changes within that time after the bubble listener. That layout is the
+ * frame's own, done early.
  */
 async function taskLayouts(
   page: Page,
   type: 'click' | 'keydown',
   act: () => Promise<unknown>,
 ): Promise<{layouts: number; events: string[]}> {
-  await page.evaluate(eventType => {
-    const at = () => performance.timeOrigin + performance.now();
-    const marks = {from: 0, to: 0};
-    (window as unknown as {__task: typeof marks}).__task = marks;
-    document.addEventListener(
-      eventType,
-      () => {
-        marks.from = at();
-      },
-      {capture: true, once: true},
-    );
-    document.addEventListener(
-      eventType,
-      () => {
-        marks.to = at();
-      },
-      {once: true},
-    );
-  }, type);
-  const trace = await traceRendering(page, async () => {
-    await act();
-    await page.waitForTimeout(100);
-  });
-  const task = await page.evaluate(
-    () => (window as unknown as {__task: {from: number; to: number}}).__task,
+  const tag = `task-${Math.random().toString(36).slice(2, 8)}`;
+  await page.evaluate(
+    ({eventType, name}) => {
+      document.addEventListener(
+        eventType,
+        () => {
+          performance.mark(`${name}:from`);
+        },
+        {capture: true, once: true},
+      );
+      document.addEventListener(
+        eventType,
+        () => {
+          performance.mark(`${name}:to`);
+        },
+        {once: true},
+      );
+    },
+    {eventType: type, name: tag},
   );
-  expect(task.to).toBeGreaterThan(task.from);
+  const trace = await traceRendering(
+    page,
+    async () => {
+      await act();
+      await page.waitForTimeout(100);
+    },
+    {keepEvents: true},
+  );
+  const markAt = (name: string) =>
+    trace.mainThread?.find(e => e.name === name)?.t ?? Number.NaN;
+  const from = markAt(`${tag}:from`);
+  const to = markAt(`${tag}:to`);
+  expect(to).toBeGreaterThan(from);
   return {
-    layouts: countBetween(trace, task.from, task.to).Layout ?? 0,
+    layouts: countBetween(trace, from, to).Layout ?? 0,
     events: trace.events
-      .filter(e => e.t >= task.from && e.t <= task.to)
-      .map(e => `${e.name}@${(e.t - task.from).toFixed(1)}`),
+      .filter(e => e.t >= from && e.t <= to)
+      .map(e => `${e.name}@${(e.t - from).toFixed(1)}`),
   };
 }
 
@@ -2191,7 +2200,11 @@ for (const {name, story, expectedReads} of SHRINK_CASES) {
 // are not this window's, as in a Picture-in-Picture window. Then captions whose
 // last line holds more than text or holds hidden text, a paragraph with its own
 // generated content, a padded paragraph, an end-aligned one, and two captions
-// right to left, where the place sits at the left.
+// right to left, where the place sits at the left. Last, content that takes
+// room no text node measures: a clipped chip, an inline or a contents element's
+// generated words, a float, a list marker, a text indent, a drop cap. Then
+// layouts the check does not measure: a flex row, a clipped block, a
+// justified last line and an offset element.
 const FIT_CASES: {
   name: string;
   story: string;
@@ -2257,6 +2270,50 @@ const FIT_CASES: {
     name: 'a paragraph caption with start padding, right to left',
     story: 'core-lightbox--gallery-with-padded-paragraph-caption-fixture',
     isRtl: true,
+  },
+  {
+    name: 'a caption ending in a clipped chip',
+    story: 'core-lightbox--gallery-with-clipped-chip-caption-fixture',
+  },
+  {
+    name: 'a caption ending in an inline element with generated words',
+    story: 'core-lightbox--gallery-with-inline-words-caption-fixture',
+  },
+  {
+    name: 'a caption inside a contents element with generated words',
+    story: 'core-lightbox--gallery-with-contents-words-caption-fixture',
+  },
+  {
+    name: 'a caption whose last paragraph starts with a float',
+    story: 'core-lightbox--gallery-with-float-caption-fixture',
+  },
+  {
+    name: 'a caption whose last block is a list item with its marker inside',
+    story: 'core-lightbox--gallery-with-inside-marker-caption-fixture',
+  },
+  {
+    name: 'a caption whose last paragraph has a text indent',
+    story: 'core-lightbox--gallery-with-indented-paragraph-caption-fixture',
+  },
+  {
+    name: 'a caption whose last paragraph starts with a drop cap',
+    story: 'core-lightbox--gallery-with-drop-cap-caption-fixture',
+  },
+  {
+    name: 'a caption ending in a flex row',
+    story: 'core-lightbox--gallery-with-flex-row-caption-fixture',
+  },
+  {
+    name: 'a caption ending in a block that clips its overflow',
+    story: 'core-lightbox--gallery-with-clipped-block-caption-fixture',
+  },
+  {
+    name: 'a paragraph caption with its last line justified',
+    story: 'core-lightbox--gallery-with-justified-last-line-caption-fixture',
+  },
+  {
+    name: 'a caption ending in an element with a relative offset',
+    story: 'core-lightbox--gallery-with-offset-end-caption-fixture',
   },
 ];
 
