@@ -90,7 +90,10 @@ describe('hunt26: suggestions are checked', () => {
     const {loadTheme} = await import('./_settings.mjs');
     const ctx = await context(cwd);
     const out = vetSuggestions(e, ctx, 'b', loadTheme(cwd, 'b', {}));
+    // A refused line is followed through its own refusal's repair (a bare
+    // number takes its unit), and offered as the line that works.
     expect(bare(out.suggestions.map(s => s.name))).toEqual([
+      'set b corners 1.25px',
       'set b corners pill',
       'how corners',
     ]);

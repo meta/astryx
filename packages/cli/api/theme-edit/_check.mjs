@@ -93,6 +93,7 @@ import {
   partsOf,
   refuse,
   lengthPx,
+  cornersPlain,
   radiusAt,
   radiusTokenOf,
   cornerParts,
@@ -111,7 +112,7 @@ import {
   fontsourcePackageOf,
   dialWordOf,
   paddedParts,
-  onBuiltIn,
+  onBuiltInSteps,
 } from './_settings.mjs';
 import {isColorToken} from './_compiler.mjs';
 import {
@@ -4334,12 +4335,11 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
         // A rung in any case, a size in px written any way: the plain form.
         const lower = v.toLowerCase();
         // Any CSS number in px (2e1px, +4px), the shared length parse; a
-        // rem is that many 16px, saved in px.
-        const pxLen = /\d(px|rem)$/.test(lower) ? lengthPx(lower) : null;
-        if (CORNERS.some(([n]) => n === lower)) s.value = lower;
-        else if (pxLen != null && pxLen >= 0) {
-          s.value =
-            pxLen >= 1000 ? 'pill' : `${Math.round(pxLen * 10000) / 10000}px`;
+        // rem is that many 16px, saved in px (the one reading, cornersPlain,
+        // which the settings reader gives a saved value too).
+        const plain = cornersPlain(v);
+        if (plain) {
+          s.value = plain;
           if (/rem$/.test(lower))
             s.note = `corners ${v.trim()} is saved as ${s.value}`;
         }
@@ -4971,16 +4971,23 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
     } else if (thing === 'base') {
       // A built-in base this project has not installed: install it, then
       // the same set.
+      // A theme that builds on a base keeps it by changing nothing: no
+      // base is offered only to a theme on none.
       if (LIKE.includes(v) && !unset && !baseInstalled(ctx.project, v))
-        refuse(
+        throw new AstryxError(
+          `The ${v} theme is not installed, so ${slug} cannot build on it. Install @astryxdesign/theme-${v}, then set the base again${data.like ? `; ${slug} stays on ${data.like} until then` : ', or build on no theme'}. Nothing was changed.`,
+          [
+            ...onBuiltInSteps(ctx.project.cwd, v, `${P} set ${slug} base ${v}`),
+            ...(data.like
+              ? []
+              : [
+                  {
+                    name: `${P} set ${slug} base none`,
+                    reason: 'build on no theme',
+                  },
+                ]),
+          ],
           E.ERR_UNKNOWN_THEME,
-          `The ${v} theme is not installed, so ${slug} cannot build on it. Install @astryxdesign/theme-${v}, then set the base again, or build on no theme.`,
-          {
-            run: [
-              ...onBuiltIn(ctx.project.cwd, v, `${P} set ${slug} base ${v}`),
-              `${P} set ${slug} base none`,
-            ],
-          },
         );
       if (s.on)
         refuse(

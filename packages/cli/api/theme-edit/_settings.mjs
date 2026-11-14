@@ -999,17 +999,18 @@ export function loadTheme(
     name,
     reason: 'do this instead',
   }));
+  /** @type {any} */
+  const data = settingsJson(fs.readFileSync(f.settings, 'utf8'));
+  // A step back when there is one; else `new` only for damage `new` itself
+  // keeps aside and makes again (settingsRemade): never a `new` it refuses.
   const recover = steps
     ? {
         text: `, or step back to the settings before the last change with ${P} undo ${slug} (the last change is then lost)`,
         run: [{name: `${P} undo ${slug}`, reason: 'do this instead'}],
       }
-    : {
-        text: `; or ${remakeText}`,
-        run: remakeRun,
-      };
-  /** @type {any} */
-  const data = settingsJson(fs.readFileSync(f.settings, 'utf8'));
+    : settingsRemade(data)
+      ? {text: `; or ${remakeText}`, run: remakeRun}
+      : {text: '', run: []};
   if (data === undefined)
     throw new AstryxError(
       `themes/${slug}/${slug}.settings.json is not valid JSON. Fix it by hand${recover.text}.`,
@@ -1269,6 +1270,28 @@ export function onBuiltIn(cwd, base, line) {
 }
 
 /**
+ * {@link onBuiltIn} with what each line is for: the install first, then
+ * the line, which works once it is installed (never offered as working
+ * now).
+ * @param {string} cwd
+ * @param {string} base
+ * @param {string} line
+ * @returns {Array<{name: string, reason: string}>}
+ */
+export function onBuiltInSteps(cwd, base, line) {
+  return onBuiltIn(cwd, base, line).map(name =>
+    name === line
+      ? {
+          name,
+          reason: baseInstalled(cwd, base)
+            ? 'do this instead'
+            : `then this, once @astryxdesign/theme-${base} is installed`,
+        }
+      : {name, reason: 'install it'},
+  );
+}
+
+/**
  * The first setting listed more than once, with every value it is listed
  * with, in order.
  * @param {any} data
@@ -1459,6 +1482,19 @@ export function dialWordOf(thing, value) {
 function readEntryWords(data) {
   /** @type {string[]} */
   const notes = [];
+  // `lifted` is written by the build: one that is no list of text is
+  // dropped, and the next build writes it again.
+  if (
+    data &&
+    data.lifted != null &&
+    (!Array.isArray(data.lifted) ||
+      data.lifted.some((/** @type {unknown} */ x) => typeof x !== 'string'))
+  ) {
+    notes.push(
+      `lifted was ${JSON.stringify(data.lifted)}, not a list of text; the build writes it again`,
+    );
+    delete data.lifted;
+  }
   for (const s of Array.isArray(data?.settings) ? data.settings : []) {
     if (!s || typeof s !== 'object' || typeof s.thing !== 'string') continue;
     if (typeof s.mode === 'string' && s.mode !== 'light' && s.mode !== 'dark') {
@@ -1494,8 +1530,12 @@ function readEntryWords(data) {
       ['dial', undefined, null, ''].includes(s.source) ||
       String(s.source).toLowerCase() === 'dial'
     ) {
+      // A corners size saved in rem is the px set saves it as.
       const word =
-        typeof s.value === 'string' ? dialWordOf(s.thing, s.value) : null;
+        typeof s.value !== 'string'
+          ? null
+          : (dialWordOf(s.thing, s.value) ??
+            (s.thing === 'corners' ? cornersPlain(s.value) : null));
       if (word && word !== s.value) {
         notes.push(
           `${s.thing} was saved as ${JSON.stringify(s.value)}, read as ${word}`,
@@ -2889,6 +2929,22 @@ export function partsOf(ctx, s) {
 }
 
 export {modesOf};
+
+/**
+ * A corners value in the plain form the editor saves, typed or saved: a
+ * rung in any case is that rung; a size in px or rem, any way a CSS number
+ * is written, is that many px (a rem is 16px; 1000px and more is pill).
+ * Null for any other value.
+ * @param {string} v
+ * @returns {string | null}
+ */
+export function cornersPlain(v) {
+  const lower = String(v).trim().toLowerCase();
+  if (CORNERS.some(([n]) => n === lower)) return lower;
+  const px = /\d(px|rem)$/.test(lower) ? lengthPx(lower) : null;
+  if (px == null || px < 0) return null;
+  return px >= 1000 ? 'pill' : `${Math.round(px * 10000) / 10000}px`;
+}
 
 /**
  * A length in pixels: px as given, rem and em at 16px; null for anything
@@ -7095,6 +7151,17 @@ function stepText(text, cwd, radii) {
 export function readAsMeant(data, cwd, fixing) {
   readEntryWords(data);
   return [...entryNotes(data), ...readFields(data, cwd, fixing)];
+}
+
+/**
+ * Whether `new` makes a theme again over these settings, keeping the file
+ * aside: text that does not parse, or entries it cannot read (no thing, no
+ * value, no source). The one rule both `new` and the refusals that offer
+ * it read; any other damage is repaired by the lines its refusal names.
+ * @param {unknown} data the parsed file (undefined when it does not parse)
+ */
+export function settingsRemade(data) {
+  return data === undefined || !settingsEntriesOk(data);
 }
 
 /**

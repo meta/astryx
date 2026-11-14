@@ -19,6 +19,7 @@ import {
   readSetLine,
   splitCommand,
   vetSuggestions,
+  repairGate,
 } from './_vet.mjs';
 import {
   allowedLine,
@@ -81,7 +82,7 @@ import {
   NEW_MARKER,
   clearNewMarker,
   refuseThemeSource,
-  settingsEntriesOk,
+  settingsRemade,
   entriesReadable,
   readAsMeant,
   editorMadeFolder,
@@ -253,7 +254,7 @@ function readableJson(file) {
   try {
     // An entry with no thing or no source is damage too: `new` keeps the
     // file aside, as the refusal for it says.
-    return settingsEntriesOk(settingsJson(fs.readFileSync(file, 'utf8')));
+    return !settingsRemade(settingsJson(fs.readFileSync(file, 'utf8')));
   } catch {
     return false;
   }
@@ -305,12 +306,16 @@ function putBack(kept, tokensDir) {
 
 export async function themeEditNew(name, options = {}) {
   try {
-    return await newTheme(name, options);
+    // Without `check`, newTheme makes the theme and answers it.
+    return /** @type {import('./theme-edit.type.mjs').ThemeEditNewResponse} */ (
+      await newTheme(name, options)
+    );
   } catch (e) {
     throw await vetNewLines(
       e,
       options.cwd ?? process.cwd(),
       options.settings ?? {},
+      options.like,
     );
   }
 }
@@ -320,14 +325,16 @@ export async function themeEditNew(name, options = {}) {
  * memory, nothing written) before it is offered: a dial value the line
  * gives in place of one typed passes only as an exact reading of what was
  * typed (never a stock value); a flag `new` refuses is left out, and the
- * reason names it; a line that is still refused is not offered. The one
- * gate for `new` lines, as set's lines have theirs.
+ * reason names it; a line that adds a setting nobody typed, or is still
+ * refused, is not offered; a did-you-mean reads a whole value typed. The
+ * one gate for `new` lines, as set's lines have theirs.
  * @param {unknown} e
  * @param {string} cwd
  * @param {Record<string, string | string[] | undefined>} typed the dial options given
+ * @param {string} [like] the base given (--like), which a did-you-mean may read
  * @returns {Promise<unknown>}
  */
-async function vetNewLines(e, cwd, typed) {
+async function vetNewLines(e, cwd, typed, like) {
   if (!(e instanceof AstryxError) || !(e.suggestions ?? []).length) return e;
   const prefix = `${P} new `;
   /** @type {import('./_settings.mjs').Ctx | null} */
@@ -410,12 +417,33 @@ async function vetNewLines(e, cwd, typed) {
       });
   /** @type {Array<{name: string, reason?: string}>} */
   const out = [];
+  const typedKeys = Object.keys(typed).filter(k => typed[k] != null);
+  /** Settings whose typed value no reading makes work. @type {Set<string>} */
+  const unread = new Set();
   for (const x of e.suggestions ?? []) {
+    // A did-you-mean value passes the same gate as a line: a reading of a
+    // whole value typed, never one word of it.
+    if (x.reason === 'did you mean') {
+      if (
+        (typeof like === 'string' &&
+          allowedLine({offered: x.name, typed: like, thing: 'base'})) ||
+        typedKeys.some(k =>
+          typedValues(k).some(t =>
+            allowedLine({offered: x.name, typed: t, thing: k}),
+          ),
+        )
+      )
+        out.push(x);
+      continue;
+    }
     const line = x.name.startsWith(prefix) ? read(x.name) : null;
     if (!line) {
       out.push(x);
       continue;
     }
+    // A line that adds a setting nobody typed (a mode read from a color's
+    // words) is another command, never offered.
+    if (line.flags.some(([k]) => !typedKeys.includes(k))) continue;
     /** @type {string[]} */
     const untyped = [];
     /** @type {string[]} */
@@ -438,7 +466,10 @@ async function vetNewLines(e, cwd, typed) {
             ...(lineMode ? {saved: new Map([['mode', [lineMode]]])} : {}),
           }),
         );
-      if (!ok) untyped.push(shown(f));
+      if (!ok) {
+        untyped.push(shown([f[0], was[0]]));
+        unread.add(f[0]);
+      }
       return ok;
     });
     // Each flag in turn is kept when new still takes the line with it, so a
@@ -452,7 +483,7 @@ async function vetNewLines(e, cwd, typed) {
     if (await problem(line.slug, line.like, flags, line.png)) continue;
     const dropped = [
       ...(untyped.length
-        ? [`${untyped.join(' and ')} (not what was typed)`]
+        ? [`${untyped.join(' and ')}, which no reading makes work`]
         : []),
       ...(refused.length
         ? [`${refused.join(' and ')}, which new refuses`]
@@ -478,15 +509,20 @@ async function vetNewLines(e, cwd, typed) {
         : {...x, name},
     );
   }
+  // What such a setting takes, as set ends for the same value.
+  for (const k of unread)
+    if (!out.some(y => y.name === `${P} how ${k}`))
+      out.push({name: `${P} how ${k}`, reason: 'what it takes'});
   e.suggestions = out;
   return e;
 }
 
 /**
- * {@link themeEditNew}'s work.
+ * {@link themeEditNew}'s work; with `check`, its checks only (null when
+ * they pass, nothing written).
  * @param {string} name
- * @param {import('./theme-edit.type.mjs').ThemeEditNewOptions} options
- * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditNewResponse>}
+ * @param {import('./theme-edit.type.mjs').ThemeEditNewOptions & {check?: boolean}} options
+ * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditNewResponse | null>}
  */
 async function newTheme(name, options) {
   const {cwd = process.cwd(), png = false, settings = {}} = options;
@@ -746,6 +782,9 @@ async function newTheme(name, options) {
   } catch (e) {
     throw await followNewLine(e, ctx, name, data);
   }
+  // Checked only (checkedNewLines): every check has passed, and nothing
+  // is written.
+  if (options.check) return null;
   applyNewSettings(ctx, name, data, settings, png, likeFixed ?? undefined);
   if (left?.keep.some(p => path.basename(p) === `${name}.theme.ts`))
     await refuseThemeSource(cwd, name);
@@ -1187,17 +1226,12 @@ function modeColorsOf(typed) {
  */
 function newColorPair(e, slug, settings, like, png, thing, typed) {
   if (!(e instanceof AstryxError) || !PALETTE_DIALS.includes(thing)) return e;
-  const typedLower = typed.toLowerCase();
-  // A color in a line the user did not type (a stock example) goes.
-  e.suggestions = (e.suggestions ?? []).filter(x => {
-    if (!x.name.startsWith(`${P} new `)) return true;
-    const m = new RegExp(`--${thing} '?(#[0-9a-f]{3,8})'?`, 'i').exec(x.name);
-    return !m || typedLower.includes(m[1].toLowerCase());
-  });
-  // With every color line gone, the same new without that color, every
-  // other option kept.
-  if (!e.suggestions.some(x => x.name.startsWith(`${P} new `)))
-    e.suggestions.push({
+  // (A color the user did not type, such as a stock example, is left out
+  // by the one gate every offered new line passes: vetNewLines.)
+  // With no new line, the same new without that color, every other option
+  // kept.
+  if (!(e.suggestions ?? []).some(x => x.name.startsWith(`${P} new `)))
+    (e.suggestions ??= []).push({
       name: `${P} new ${slug}${newFlags(like, {...settings, [thing]: undefined}, png)}`,
       reason: `without --${thing} ${quoteCommandArgument(typed)}`,
     });
@@ -1689,6 +1723,32 @@ async function withSavedRepair(e, slug, cwd) {
     ...list.slice(at + 1),
   ];
   return e;
+}
+
+/**
+ * The lines that carry out a `new` the CLI builds (words of a value read
+ * back into it): the line when new takes it, else what new's own refusal
+ * of it offers, vetted as every offered new line is. new's checks only:
+ * nothing is written.
+ * @param {string} line the whole command, `astryx experimental theme editor new <theme> …`
+ * @param {string} name
+ * @param {import('./theme-edit.type.mjs').ThemeEditNewOptions} options
+ * @returns {Promise<import('../../foundation/response/base').Suggestion[]>}
+ */
+export async function checkedNewLines(line, name, options) {
+  try {
+    await newTheme(name, {...options, check: true});
+    return [{name: line, reason: 'do this instead'}];
+  } catch (e) {
+    const vetted = await vetNewLines(
+      e,
+      options.cwd ?? process.cwd(),
+      options.settings ?? {},
+      options.like,
+    );
+    if (vetted instanceof AstryxError) return vetted.suggestions ?? [];
+    throw vetted;
+  }
 }
 
 /**
@@ -2816,7 +2876,6 @@ async function followChangeLine(sub, slug, line, cwd, skip) {
   const loaded = await loadedForCheck(cwd, slug, skip);
   if (!loaded) return {line, why: null};
   const {data, ctx} = loaded;
-  const prefix = `${P} ${sub} ${slug} `;
   return followLine(
     line,
     now => {
@@ -2846,25 +2905,7 @@ async function followChangeLine(sub, slug, line, cwd, skip) {
         throw e;
       }
     },
-    name => {
-      if (!name.startsWith(prefix)) return false;
-      // A repair passes the one input gate: it adds no scope that was not
-      // typed (never a stock part), and a value in place of the one typed
-      // is an exact reading of it.
-      const toSet = (/** @type {string} */ l) =>
-        sub === 'undo' ? l.replace(`${P} undo `, `${P} set `) : l;
-      const was = readSetLine(toSet(line), slug);
-      const next = readSetLine(toSet(name), slug);
-      if (!was || !next) return true;
-      const scopes = /** @type {const} */ (['on', 'when', 'state', 'mode']);
-      if (scopes.some(k => next.flags[k] != null && was.flags[k] == null))
-        return false;
-      return (
-        sub === 'undo' ||
-        next.value === was.value ||
-        allowedLine({offered: next.value, typed: was.value, thing: next.thing})
-      );
-    },
+    name => repairGate(sub, slug, line, name),
   );
 }
 
