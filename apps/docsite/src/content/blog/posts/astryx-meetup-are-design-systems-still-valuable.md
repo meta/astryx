@@ -1,5 +1,5 @@
 ---
-title: 'Astryx Meetup: Are Design Systems Still Valuable?'
+title: 'Astryx Meetup SF: Are Design Systems Still Valuable?'
 description: 'Lessons and community perspectives from our November 12 meetup in San Francisco on building design systems for people and agents.'
 date: '2026-11-13'
 type: 'story'

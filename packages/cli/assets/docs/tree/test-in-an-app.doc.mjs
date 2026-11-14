@@ -98,7 +98,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'text',
-          code: 'id:      implicit-integrations\nstatus:  [info]\nlabel:   Implicitly linked integrations\nmessage: 1 integration loaded from installed dependencies with no astryx.config entry: @acme/astryx-widgets@1.0.0 from dependencies, contributing components, templates, themes, docs, codemods.',
+          code: '[info]  implicit-integrations - Implicitly linked integrations - 1 integration loaded from installed dependencies with\n        no astryx.config entry: @acme/astryx-widgets@1.0.0 from dependencies, contributing components, templates,\n        themes, docs, codemods.',
         },
         {
           type: 'list',

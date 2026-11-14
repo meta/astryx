@@ -15,8 +15,11 @@ export declare function partitionByDuration(
   files: string[],
   count: number,
   seconds: Record<string, number>,
-  options?: {legOneSeconds?: number},
+  options?: {legOneSeconds?: number; idle?: Set<string>},
 ): string[][];
+export declare function idleSwizzleSlices(
+  files: string[],
+): Promise<Set<string>>;
 export declare function readLegOneSeconds(file?: string): number;
 export declare function recordLegOneSteps(
   text: string,

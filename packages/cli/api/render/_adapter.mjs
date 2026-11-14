@@ -437,13 +437,18 @@ function pageChanges(source, html, modules) {
   if (!markupEdited && !titleEdited && !stylesEdited) return {edited: false, ...styles};
   const {edits, more} = markupEdited ? textEdits(text?.runs ?? [], textRuns(now ?? '')) : {edits: [], more: 0};
   // A title that changed with the heading it comes from is one change, not two.
-  const titleEdit = {was: clip(/** @type {string} */ (text?.title)), now: titleNow === null ? null : clip(titleNow)};
+  const titleEdit = {was: /** @type {string} */ (text?.title), now: titleNow};
   const titleAgain = edits.some(edit => edit.was === titleEdit.was && edit.now === titleEdit.now);
   const all = [...(titleEdited && !titleAgain ? [titleEdit] : []), ...edits];
   return {
     edited: true,
     ...styles,
-    edits: all.map(edit => ({...edit, ...((edit.was && locate(edit.was, modules)) || {})})),
+    // Each change is found in the source by its whole text, then cut to show.
+    edits: all.map(edit => ({
+      was: edit.was === null ? null : clip(edit.was),
+      now: edit.now === null ? null : clip(edit.now),
+      ...((edit.was && locate(edit.was, modules)) || {}),
+    })),
     ...(more > 0 ? {moreEdits: more} : {}),
   };
 }
@@ -456,6 +461,17 @@ function pageChanges(source, html, modules) {
 export function reverseToFile({cwd, input, output, overwrite}) {
   const html = readInput(input, cwd).toString('utf8');
   const block = readSourceBlock(html);
+  const rendered = /<meta name="generator" content="Astryx[ "]/.test(html);
+  // A merge that left conflict markers in an Astryx page holds two versions
+  // of it at once, the embedded source too: choosing one would choose for
+  // the user.
+  if ((block.found || rendered || isAstryxMarkup(html)) && /^<{7}(?: |$)/m.test(html) && /^>{7}(?: |$)/m.test(html)) {
+    throw new AstryxError(
+      `${shown(cwd, input)} holds unresolved merge conflict markers (<<<<<<< and >>>>>>>), so it holds two versions at once; nothing was written. Keep the whole file from one side, or render the merged page again, then run this again.`,
+      [],
+      ERROR_CODES.ERR_RENDER_SOURCE_DAMAGED,
+    );
+  }
   /** @param {string[]} files */
   const refuseExisting = files => {
     if (overwrite) return;
@@ -641,9 +657,19 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       ...pageChanges(source, html, modules),
     };
   }
+  // A render always ends its file with `</html>`. A file a render wrote that
+  // has none lost its end on the way, the embedded source with it: the
+  // markup left is only part of the page.
+  if (rendered && !/<\/html>/i.test(html)) {
+    throw new AstryxError(
+      `${shown(cwd, input)} is cut short: it ends before its embedded source, so the page cannot be given back; nothing was written. Get the whole file again.`,
+      [],
+      ERROR_CODES.ERR_RENDER_SOURCE_DAMAGED,
+    );
+  }
   // A file a render wrote, whose source block was taken out on the way
   // (sanitizers and editors strip <script> elements), says so.
-  if (!isAstryxMarkup(html) && /<meta name="generator" content="Astryx[ "]/.test(html)) {
+  if (!isAstryxMarkup(html) && rendered) {
     throw new AstryxError(
       `${shown(cwd, input)} was rendered by Astryx, but its embedded source was removed (a sanitizer or an editor strips <script> blocks) and it has no Astryx components to rebuild from; nothing was written. Render the page again from its source and send the new file as is.`,
       [],
