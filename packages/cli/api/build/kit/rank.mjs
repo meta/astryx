@@ -56,6 +56,8 @@ import {
   normalized,
   SYNONYMS_OF,
   familyWordsOf,
+  keywordUnits,
+  phrasesIn,
 } from './words.mjs';
 
 /**
@@ -136,14 +138,17 @@ const START_TERMS = 2;
 export function rankPages(query, pages) {
   const docs = pages.map(page => {
     const [family = '', ...variantParts] = page.category.split(' - ');
+    const keywords = page.keywords ?? [];
+    const phrases = keywordUnits(keywords, terms).filter(u => u.includes(' '));
     /** @type {Record<keyof typeof FIELD_WEIGHT, string>} */
     const fields = {
       id: page.name.replace(/-/g, ' '),
       variant: variantParts.join(' - '),
       family,
       display: page.displayName,
-      // Each keyword is its own phrase: a pair never spans two of them.
-      keywords: (page.keywords ?? []).join(', '),
+      // A one-word keyword is a term like any other; a longer one is a
+      // single phrase unit (keywordUnits), added below.
+      keywords: keywords.filter(k => terms(k).length === 1).join(', '),
       description: page.description,
     };
     /** @type {Map<string, number>} */
@@ -154,11 +159,15 @@ export function rankPages(query, pages) {
       for (const t of terms(text))
         bag.set(t, Math.max(bag.get(t) ?? 0, weight));
     }
+    for (const unit of phrases)
+      bag.set(unit, Math.max(bag.get(unit) ?? 0, FIELD_WEIGHT.keywords));
     return {
       page,
       family: family.trim(),
       bag,
-      pairs: pairsOf(Object.values(fields)),
+      phrases,
+      // Each keyword is its own phrase: a pair never spans two of them.
+      pairs: pairsOf([...Object.values(fields), keywords.join(', ')]),
     };
   });
 
@@ -190,7 +199,17 @@ export function rankPages(query, pages) {
   const familiesIn = ts =>
     new Set(ts.filter(t => familyOfWord.has(t)).map(t => familyOfWord.get(t)));
 
-  const queryTerms = [...new Set(terms(query))];
+  const queryWords = terms(query);
+  // A phrase keyword the idea names is one term of the idea, like a word.
+  const queryTerms = [
+    ...new Set([
+      ...queryWords,
+      ...phrasesIn(
+        queryWords,
+        docs.flatMap(d => d.phrases),
+      ),
+    ]),
+  ];
   const headFamilies = familiesIn(
     terms(String(query).split(HEAD_END)[0] ?? ''),
   );

@@ -163,6 +163,23 @@ describe('rankPages on any catalog', () => {
     expect(rankPages('uptime overview', catalog)[0].name).toBe('health');
   });
 
+  it('matches a phrase keyword only as the whole phrase, as one term', () => {
+    const catalog = [
+      page('article', 'Docs - Article', 'Long-form prose.', [
+        'table of contents',
+      ]),
+      page('grid', 'Table - Grid', 'Rows and columns.', ['table']),
+    ];
+    // The phrase's words never count alone: a table request is the table.
+    const table = rankPages('a table of orders with contents', catalog);
+    expect(table[0].name).toBe('grid');
+    expect(table.find(r => r.name === 'article')?.hits).toBe(0);
+    // Named in order, the phrase matches once.
+    const docs = rankPages('docs article with a table of contents', catalog);
+    const article = docs.find(r => r.name === 'article');
+    expect([...(article?.matched ?? [])]).toContain('table content');
+  });
+
   it("lets a variant displace its family's base only with two words of its own", () => {
     const catalog = [
       page('widget', 'Widget - Basic', 'One compact card.', ['widget']),

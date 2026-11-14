@@ -130,6 +130,38 @@ export function containersOf(query) {
   return found;
 }
 
+/**
+ * A template's keywords as the units a request can match, each read with the
+ * caller's own word reader. A one-word keyword is that word. A longer keyword
+ * is one phrase unit, its words joined by single spaces: a request matches it
+ * only when it names those words in that order (`phrasesIn`), and its words
+ * never count alone. So "table of contents" on a docs page adds no "table" to
+ * that page, and a table request still reads as a table.
+ * @param {readonly string[]} keywords
+ * @param {(text: string) => string[]} read the caller's word reader
+ * @returns {string[]}
+ */
+export function keywordUnits(keywords, read) {
+  return keywords.map(keyword => read(keyword).join(' ')).filter(Boolean);
+}
+
+/**
+ * The phrase units (two or more words) a request names: the unit's words
+ * appear next to each other, in order, in the request's words as the same
+ * reader reads them.
+ * @param {readonly string[]} words the request's words, in order
+ * @param {Iterable<string>} units
+ * @returns {Set<string>}
+ */
+export function phrasesIn(words, units) {
+  const text = ` ${words.join(' ')} `;
+  const found = new Set();
+  for (const unit of units) {
+    if (unit.includes(' ') && text.includes(` ${unit} `)) found.add(unit);
+  }
+  return found;
+}
+
 /** @param {string} text */
 export const normalized = text =>
   (

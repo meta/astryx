@@ -14,7 +14,8 @@ export const doc = {
     'palette',
     'typography',
     'styling',
-    'design system preview',
+    'design system',
+    'preview',
   ],
   isReady: true,
   // The standalone entry demonstrates an application shell; the named preview

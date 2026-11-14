@@ -524,13 +524,14 @@ describe('build kit — every page starts from a template', () => {
   });
 
   it('does not keep a loose match over the app shell', async () => {
-    // Search matches no template directly, so the ranker's closest page does
-    // not override the shell the weights choose.
+    // Search matches no template directly, and the idea names only one phrase
+    // of the scorecard's keywords: too little to start from, so the app shell
+    // starts and the scorecard is the alternative.
     const r = await build('quarterly business review', {cwd: REPO});
     if (r.type !== 'build.kit') throw new Error(r.type);
     expect(r.data.directMatch).toBe(false);
     expect(r.data.start).toMatchObject({name: 'shell-top-nav', basis: 'fallback'});
-    expect(r.data.start?.reason).toMatch(/closest/);
+    expect(r.data.start?.reason).toMatch(/loosely/);
   });
 
   it('starts a new page with no matching template from the app shell', async () => {
