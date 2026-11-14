@@ -23,7 +23,11 @@ export const doc = {
     'With --check it writes nothing and reports source drift. --icons-specifier keeps ' +
     'its existing generated-module behavior. It prints one line per built theme and ' +
     'one line naming fonts the themes do not load; --detail full adds the install ' +
-    'example and the font recipe, once for a batch.',
+    'example and the font recipe, once for a batch. A source that also exports ' +
+    "`colorModes` (`['light']` or `['dark']`) for a theme with one color mode gets " +
+    'the same export in its built module, which `theme add` reads to wire the theme ' +
+    'in that mode; any other value is ignored without a warning, and a --family ' +
+    'build never writes the export.',
   fn: 'themeBuild',
   args: [{name: 'files', param: 'file', required: true, variadic: true}],
   options: [

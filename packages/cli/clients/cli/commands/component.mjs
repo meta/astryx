@@ -95,9 +95,16 @@ function summarize(result) {
  * @param {string} requestedName
  * @param {'full'|'compact'|'brief'} detail
  * @param {Awaited<ReturnType<typeof resolveTheme>>} themeData
+ * @param {string} [scopePackage] - the `--package` the read was scoped to
  * @returns {import('../formatters/index.mjs').Block[]}
  */
-function componentDetailBlocks(result, requestedName, detail, themeData) {
+function componentDetailBlocks(
+  result,
+  requestedName,
+  detail,
+  themeData,
+  scopePackage,
+) {
   const requested = (requestedName.split('/').pop() ?? requestedName).replace(
     /^XDS/,
     '',
@@ -110,6 +117,12 @@ function componentDetailBlocks(result, requestedName, detail, themeData) {
     result.data.replaces === requested
       ? result.data.name
       : requested;
+  // The command that prints this read's props whole names the read's own
+  // selector and scope, so it resolves to the same component.
+  const scope = scopePackage ? ` --package ${scopePackage}` : '';
+  const propsCommand = requestedName
+    ? `component ${requestedName}${scope} --props`
+    : null;
   switch (result.type) {
     case 'component.detail': {
       /** @type {import('../formatters/index.mjs').Block[]} */
@@ -126,12 +139,15 @@ function componentDetailBlocks(result, requestedName, detail, themeData) {
             )
           : detail === 'compact'
             ? code(
-                formatCompact(result.data, resolvedName, result.data.import),
+                formatCompact(result.data, resolvedName, result.data.import, {
+                  propsCommand,
+                }),
               )
             : code(
                 formatFull(result.data, {
                   themeData,
                   importHint: result.data.import,
+                  propsCommand,
                 }),
               ),
       );
@@ -425,6 +441,7 @@ export function registerComponent(program) {
                   row.selector,
                   detail,
                   themeData,
+                  options.package,
                 ),
               );
               continue;
@@ -472,6 +489,7 @@ export function registerComponent(program) {
               name ?? '',
               detail,
               themeData,
+              options.package,
             ),
           );
           break;
