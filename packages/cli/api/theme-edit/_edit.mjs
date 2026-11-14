@@ -102,6 +102,8 @@ import {
   describeValue,
   nonTextMessage,
   ownPartTokens,
+  PHONE_RULE_WHEN,
+  builtTouchTokens,
   PHONE_TYPE,
   refreshSourceStamp,
   sourceChangedReason,
@@ -4824,7 +4826,7 @@ function dialTouched(ctx, data, s, base) {
  * @param {import('./_settings.mjs').ThemeData} data
  * @returns {string[]}
  */
-function ownPhoneNotes(cwd, slug, data) {
+export function ownPhoneNotes(cwd, slug, data) {
   if (!data.like) return [];
   const exact = new Set(
     data.settings
@@ -4850,18 +4852,58 @@ function ownPhoneNotes(cwd, slug, data) {
       return roles.has(role) || (role === 'heading' && roles.has('body'));
     return roles.has('scale') && !/^--font-family-/.test(k);
   };
+  // A value the build already writes for those screens too (the theme's
+  // own rule for them, say) is kept there.
+  const touch = builtTouchTokens(cwd, slug);
+  const ownValue = (/** @type {string} */ k) =>
+    entries.find(x => x.token === k && typeof x.value === 'string')?.value;
   const lost = ownSourceTokens(cwd, slug).filter(
     k =>
       PHONE_TYPE.test(k) &&
       !exact.has(k) &&
-      (!fromTypography(k) || inMap.has(k)),
+      (!fromTypography(k) || inMap.has(k)) &&
+      !(ownValue(k) !== undefined && touch.get(k) === ownValue(k)),
   );
   if (!lost.length) return [];
   const families = lost.filter(k => /^--font-family-/.test(k));
+  const others = lost.filter(k => !/^--font-family-/.test(k));
   const role =
     /^--font-family-([a-z]+)$/.exec(families[0] ?? '')?.[1] ?? 'body';
+  // A family the theme's typography sets is kept on those screens; a
+  // weight is kept there only by a rule for the same screens (a role's
+  // weight without a scale builds nothing), so the fix names that rule
+  // with the theme's own values.
+  const valueOf = (/** @type {string} */ k) => ownValue(k) ?? '...';
+  /** A value as a theme source writes it. @param {any} v @returns {string} */
+  const literal = v =>
+    typeof v === 'string'
+      ? `'${v}'`
+      : `{${Object.entries(v)
+          .map(
+            ([k, x]) =>
+              `${/^[a-z]\w*$/i.test(k) ? k : `'${k}'`}: ${literal(x)}`,
+          )
+          .join(', ')}}`;
+  const rule = `adaptations: {rules: [${literal({
+    when: PHONE_RULE_WHEN,
+    value: {
+      tokens: Object.fromEntries(others.slice(0, 3).map(k => [k, valueOf(k)])),
+    },
+  })}]}`;
+  const fix = [
+    ...(families.length
+      ? [
+          `set ${families.length > 1 ? 'the families' : 'the family'} on the theme's typography in ${slug}.theme.ts (such as typography: {${role}: {family: ...}}, which that rule then keeps)`,
+        ]
+      : []),
+    ...(others.length
+      ? [
+          `give ${others.length > 1 ? 'the weights' : 'the weight'} in a rule for the same screens in ${slug}.theme.ts (${rule})`,
+        ]
+      : []),
+  ].join(', and ');
   return [
-    `on ${PHONES}, the base theme's type shows for ${lost.slice(0, 4).join(', ')}${lost.length > 4 ? ` and ${lost.length - 4} more` : ''}, which ${slug}.theme.ts sets as plain tokens: the base theme's rule for those screens sets its type again, and a rule wins over plain tokens there. To keep yours on every screen, set ${lost.length > 1 ? 'them' : 'it'} on the theme's typography in ${slug}.theme.ts (such as typography: {${role}: {family: ...}}, which that rule then keeps), or in a rule for the same screens`,
+    `on ${PHONES}, the base theme's type shows for ${lost.slice(0, 4).join(', ')}${lost.length > 4 ? ` and ${lost.length - 4} more` : ''}, which ${slug}.theme.ts sets as plain tokens: the base theme's rule for those screens sets its type again, and a rule wins over plain tokens there. To keep yours on every screen, ${fix}`,
   ];
 }
 

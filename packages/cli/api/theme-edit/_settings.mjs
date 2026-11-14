@@ -24,6 +24,7 @@ import {cliVersion} from '../../foundation/release/run-context.mjs';
 import {AstryxError} from '../error.mjs';
 import {logger} from '../logger.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {cssUnescape} from '../../foundation/text/css-escape.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {
   loadThemeExport,
@@ -32,10 +33,14 @@ import {
   themeBuildForReport,
 } from '../theme/build/build.mjs';
 import {
+  expandFontVars,
   fontShorthandFamilyList,
   namedFontFamilies,
 } from '../theme/build/font-warning.mjs';
-import {declarationValues} from '../../foundation/fonts/font-stylesheet.mjs';
+import {
+  customPropertyValues,
+  declarationValues,
+} from '../../foundation/fonts/font-stylesheet.mjs';
 import {
   MODE_WORDS,
   AUTO_SPREAD,
@@ -3045,6 +3050,37 @@ export function sourceChangedReason(slug) {
 export const PHONE_TYPE = /^--font-family|^--(text-[a-z0-9-]+|font)-weight/;
 
 /**
+ * The tokens the theme's last build sets for touch screens (in its rules
+ * for a coarse pointer), each with the last value it is given there.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {Map<string, string>}
+ */
+export function builtTouchTokens(cwd, slug) {
+  /** @type {Map<string, string>} */
+  const out = new Map();
+  try {
+    postcss
+      .parse(fs.readFileSync(themeFiles(cwd, slug).css, 'utf8'))
+      .walkAtRules('media', rule => {
+        if (!/pointer\s*:\s*coarse/i.test(rule.params)) return;
+        rule.walkDecls(/^--/, decl => {
+          out.set(decl.prop, decl.value);
+        });
+      });
+  } catch {
+    // Not built, or not readable: nothing known.
+  }
+  return out;
+}
+
+/**
+ * The screens a base theme's type rule is for (touch screens below the
+ * large breakpoint), as an adaptation rule's `when` writes them.
+ */
+export const PHONE_RULE_WHEN = {pointer: 'coarse', width: {below: 'lg'}};
+
+/**
  * Record in an editor theme's generated settings that they were built with
  * its own source as it is now, after `compile` built that source (the
  * settings do not depend on what the source sets), only in a module as the
@@ -5067,7 +5103,7 @@ export function compileTheme(ctx, data, base) {
     theme.adaptations = {
       rules: [
         {
-          when: {pointer: 'coarse', width: {below: 'lg'}},
+          when: PHONE_RULE_WHEN,
           value: {tokens: phone},
         },
       ],
@@ -8315,7 +8351,7 @@ export async function commitTheme(
  * @returns {string}
  */
 export function fontsourcePackageOf(family) {
-  const name = String(family).replace(/["']/g, '').trim();
+  const name = cssUnescape(String(family).replace(/["']/g, '')).trim();
   const open = Object.values(OPEN_FONTS).find(
     f =>
       f.family.replace(/["']/g, '').trim().toLowerCase() === name.toLowerCase(),
@@ -8342,11 +8378,14 @@ export function builtFontFamilies(ctx, slug) {
   /** @type {Map<string, string>} */
   const out = new Map();
   // Every family the build writes: the font tokens, a part's own
-  // font-family, and the families a `font` shorthand names last.
+  // font-family, the families a `font` shorthand names last, and a family
+  // held in the theme's own property that one of those reads.
+  // A var() of the theme's own property reads as each value it sets.
+  const own = customPropertyValues(css);
   const lists = [
     ...declarationValues(css, /^(--font-family-.*|font-family)$/),
     ...declarationValues(css, /^font$/).map(fontShorthandFamilyList),
-  ];
+  ].flatMap(value => expandFontVars(value, name => own.get(name) ?? []));
   for (const value of lists)
     for (const family of namedFontFamilies(value))
       if (!out.has(family.toLowerCase())) out.set(family.toLowerCase(), family);

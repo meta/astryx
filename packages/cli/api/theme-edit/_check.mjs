@@ -14,6 +14,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {partForWord} from './_part-words.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {cssUnescape} from '../../foundation/text/css-escape.mjs';
 import {baseInstalled, baseThemeFile, installLine} from './_project.mjs';
 import {
   withFallbacks,
@@ -5972,20 +5973,19 @@ export function unknownVarRef(v, TOKENS, thing, reads) {
  * @returns {string | null}
  */
 export function fontFileReason(value) {
-  const hit = String(value)
+  // Each family as CSS reads it: an escape (`Gill\ Sans`, `\5FAE`) is part
+  // of the name, never a path separator.
+  const families = String(value)
     .split(',')
-    .map(f => f.trim().replace(/^["']|["']$/g, ''))
-    .find(
-      f =>
-        /^url\(/i.test(f) ||
-        /:\/\//.test(f) ||
-        /[\\/]/.test(f) ||
-        /\.(woff2?|ttf|otf|eot)$/i.test(f),
-    );
-  const colon = String(value)
-    .split(',')
-    .map(f => f.trim().replace(/^["']|["']$/g, ''))
-    .find(f => f.includes(':'));
+    .map(f => cssUnescape(f.trim().replace(/^["']|["']$/g, '')));
+  const hit = families.find(
+    f =>
+      /^url\(/i.test(f) ||
+      /:\/\//.test(f) ||
+      /[\\/]/.test(f) ||
+      /\.(woff2?|ttf|otf|eot)$/i.test(f),
+  );
+  const colon = families.find(f => f.includes(':'));
   if (!hit && colon)
     return `"${colon}" holds a colon, so it is a pasted declaration or a link, not a font family name. Give the family alone, such as Inter, sans-serif.`;
   return hit
