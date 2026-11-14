@@ -206,6 +206,13 @@ describe('render(): page to one HTML file', () => {
     );
   });
 
+  it('gives back a file whose markup a hand edit left with an open comment, and says it was edited', async () => {
+    put('open-comment.html', html.replace('</h1>', '</h1><!-- todo: reword'));
+    const back = /** @type {any} */ (await render('open-comment.html', {cwd: dir, reverse: true, out: 'open-comment-back/page.tsx'}));
+    expect(back.data).toMatchObject({mode: 'embedded', exact: true, edited: true});
+    expect(fs.readFileSync(path.join(dir, 'open-comment-back/page.tsx'), 'utf8')).toBe(PAGE);
+  });
+
   it('gives back a file a minifier rewrote: comments gone, the tag unquoted, its attributes reordered', async () => {
     const minified = html
       .replace(/<!--[\s\S]*?-->/g, '')

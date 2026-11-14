@@ -18,7 +18,7 @@
 
 import {createHash} from 'node:crypto';
 import {isValidSemver} from '../env/semver.mjs';
-import {decode, scanHtml} from './html-reader.mjs';
+import {decode, readTag, scanHtml} from './html-reader.mjs';
 
 /** The script type of the embedded-source block. */
 export const SOURCE_TYPE = 'application/x-astryx-source';
@@ -124,11 +124,14 @@ const isSourceType = attrs => {
 };
 
 /**
- * Every embedded-source block in a file, in order: each script element whose
- * type is the source type, found as a browser finds it. The tag may hold its
- * attributes in any order, quoted or not, in any letter case (a minifier
- * rewrites it so), and a tag inside a comment (the note) or inside the text
- * of another element is not one.
+ * Every embedded-source block in a file's body, in order: each script
+ * element whose type is the source type, its tag read as a browser reads a
+ * tag, with its attributes in any order, quoted or not, in any letter case
+ * (a minifier rewrites it so). Every `<script` from the start of the body on
+ * is read this way, inside a comment or other text too, so a hand edit that
+ * leaves a comment or a textarea open before the block does not hide it. The
+ * note in <head> may quote a title or a path with any text, so the search
+ * starts at <body>.
  * @param {string} html
  * @returns {{index: number, json: string, closed: boolean}[]} where each
  *   opening tag starts, the text of the block, and whether its end tag is
@@ -137,14 +140,16 @@ const isSourceType = attrs => {
 const blocksIn = html => {
   /** @type {{index: number, json: string, closed: boolean}[]} */
   const blocks = [];
-  /** @type {number | null} */
-  let opened = null;
-  for (const token of scanHtml(html)) {
-    // The text of a script element is the raw piece right after its tag.
-    if (token.kind === 'raw' && opened !== null) {
-      blocks.push({index: opened, json: html.slice(token.start, token.end), closed: /^<\/script/i.test(html.slice(token.end, token.end + 8))});
-    }
-    opened = token.kind === 'start' && token.tag === 'script' && isSourceType(token.attrs) ? token.start : null;
+  const opening = /<script(?=[\t\n\f\r />])/gi;
+  opening.lastIndex = Math.max(0, pageParts(html).body);
+  for (let m = opening.exec(html); m; m = opening.exec(html)) {
+    const tag = readTag(html, m.index + 1);
+    if (typeof tag !== 'object' || !isSourceType(tag.attrs)) continue;
+    const closing = /<\/script/gi;
+    closing.lastIndex = tag.end;
+    const end = closing.exec(html)?.index;
+    blocks.push({index: m.index, json: html.slice(tag.end, end ?? html.length), closed: end !== undefined});
+    opening.lastIndex = end ?? html.length;
   }
   return blocks;
 };
