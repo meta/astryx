@@ -452,14 +452,14 @@ const QUESTIONS = [
     'make the buttons a bit rounder',
     {
       top: /^set q corners more --on button$/,
-      adds: /button\.base\.borderRadius=12px/,
+      adds: /button\.base\.--radius-element=12px/,
     },
   ],
   [
     'pill shaped buttons',
     {
       top: /^set q corners pill --on button$/,
-      adds: /button\.base\.borderRadius=9999px/,
+      adds: /button\.base\.--radius-element=9999px/,
     },
   ],
   [
@@ -488,7 +488,7 @@ const QUESTIONS = [
     'small buttons 6px, large stay pill',
     {
       top: /border-radius 6px --on button --when size:sm && set q corners pill --on button --when size:lg$/,
-      adds: /button\.size:sm\.borderRadius=6px/,
+      adds: /button\.size:sm\.--radius-element=6px/,
     },
   ],
   [
@@ -520,7 +520,7 @@ const QUESTIONS = [
     'cards: 8px radius; buttons: 4px radius; inputs: 2px',
     {
       top: /--on card && set q border-radius 4px --on button && set q border-radius 2px --on inputs$/,
-      adds: /button\.base\.borderRadius=4px/,
+      adds: /button\.base\.--radius-element=4px/,
     },
   ],
   // spacing
@@ -683,7 +683,7 @@ const QUESTIONS = [
     {
       parts: ['button'],
       top: /^set q corners more --on button$/,
-      adds: /button\.base\.borderRadius=/,
+      adds: /button\.base\.--radius-element=/,
     },
   ],
   [
@@ -694,7 +694,7 @@ const QUESTIONS = [
     'Make The Buttons ROUNDER',
     {
       top: /^set q corners more --on button$/,
-      adds: /button\.base\.borderRadius=/,
+      adds: /button\.base\.--radius-element=/,
     },
   ],
   [
@@ -702,7 +702,7 @@ const QUESTIONS = [
     {
       parts: ['button'],
       top: /--on button$/,
-      adds: /button\.base\.borderRadius=/,
+      adds: /button\.base\.--radius-element=/,
     },
   ],
   [
@@ -710,7 +710,7 @@ const QUESTIONS = [
     {
       parts: ['button'],
       top: /--on button$/,
-      adds: /button\.base\.borderRadius=/,
+      adds: /button\.base\.--radius-element=/,
     },
   ],
   [
@@ -742,7 +742,7 @@ const QUESTIONS = [
     'make primary button 10px radius',
     {
       top: /^set q border-radius 10px --on button --when variant:primary$/,
-      adds: /button\.variant:primary\.borderRadius=10px/,
+      adds: /button\.variant:primary\.--radius-element=10px/,
     },
   ],
   ['modern', {top: null}],
@@ -1299,7 +1299,7 @@ const QUESTIONS_2 = [
     'make the buttnos roudner',
     {
       top: /^set q corners more --on button$/,
-      adds: /button\.base\.borderRadius=12px/,
+      adds: /button\.base\.--radius-element=12px/,
     },
   ],
   [
@@ -1321,7 +1321,7 @@ const QUESTIONS_2 = [
     'bttn pill',
     {
       top: /^set q corners pill --on button$/,
-      adds: /button\.base\.borderRadius=9999px/,
+      adds: /button\.base\.--radius-element=9999px/,
     },
   ],
   [
@@ -1335,14 +1335,17 @@ const QUESTIONS_2 = [
     'botões mais arredondados',
     {
       top: /^set q corners more --on button$/,
-      adds: /button\.base\.borderRadius/,
+      adds: /button\.base\.--radius-element/,
     },
   ],
   [
     'pulsanti arrotondati',
-    {top: /--on button$/, adds: /button\.base\.borderRadius/},
+    {top: /--on button$/, adds: /button\.base\.--radius-element/},
   ],
-  ['버튼을 둥글게', {top: /--on button$/, adds: /button\.base\.borderRadius/}],
+  [
+    '버튼을 둥글게',
+    {top: /--on button$/, adds: /button\.base\.--radius-element/},
+  ],
   [
     'ボタンを青く',
     {
@@ -1357,7 +1360,7 @@ const QUESTIONS_2 = [
     'pill buttons and pill buttons',
     {
       top: /^set q corners pill --on button$/,
-      adds: /button\.base\.borderRadius=9999px/,
+      adds: /button\.base\.--radius-element=9999px/,
     },
   ],
 ];
@@ -1527,7 +1530,7 @@ const QUESTIONS_3 = [
     '- rounder buttons\n- no shadow on cards',
     {
       top: /^set q corners more --on button && set q box-shadow none --on card$/,
-      adds: /button\.base\.borderRadius=12px[\s\S]*card\.base\.boxShadow=none/,
+      adds: /button\.base\.--radius-element=12px[\s\S]*card\.base\.boxShadow=none/,
     },
   ],
   [
@@ -3229,7 +3232,7 @@ const QUESTIONS_K = [
   [
     'only in dark mode and only on cards, darker background',
     {
-      top: /^set q background '#[0-9a-f]{6}' --on card( --when variant:default)? --mode dark( && .*)?$/,
+      top: /^set q background(-color)? '#[0-9a-f]{6}' --on card( --when variant:default)? --mode dark( && .*)?$/,
     },
   ],
   [

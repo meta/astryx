@@ -3394,6 +3394,16 @@ export function compileTheme(ctx, data, base) {
       ]),
     );
   };
+  /** Whether the base theme's own rule for the part writes a radius. */
+  const baseWritesRadius = (
+    /** @type {string} */ target,
+    /** @type {string | undefined} */ when,
+  ) => {
+    const rules = /** @type {any} */ (base).components?.[target] ?? {};
+    return [rules.base, when ? rules[when] : undefined].some(
+      r => r && typeof r === 'object' && 'borderRadius' in r,
+    );
+  };
   /**
    * A radius of more than one value on a part whose radius Core copies
    * into a variable for the content inside it (a card's full-bleed
@@ -4453,12 +4463,23 @@ export function compileTheme(ctx, data, base) {
           for (const t of parts.flatMap(p => cornerParts(ctx, p))) {
             // A rung on a part gives what the whole-theme rung gives the
             // radius token the part reads; an exact size is as given.
-            putComp(
-              {...s, mode: undefined},
-              t,
-              'borderRadius',
-              rung || pill ? derived(radiusTokenOf(ctx, t, s.when)) : `${px}px`,
-            );
+            {
+              const value =
+                rung || pill
+                  ? derived(radiusTokenOf(ctx, t, s.when))
+                  : `${px}px`;
+              // (A base rule that writes the part's own radius would win
+              // over the token: the radius is written there as before.)
+              const token = baseWritesRadius(t, s.when)
+                ? null
+                : positionalCornerToken(ctx, t);
+              putComp(
+                {...s, mode: undefined},
+                t,
+                token ?? 'borderRadius',
+                value,
+              );
+            }
           }
         else {
           for (const token of DIAL_RADII)
@@ -4816,11 +4837,23 @@ export function compileTheme(ctx, data, base) {
             continue;
           }
         }
-        const sides =
-          wrappedPadding(t, s) ??
-          containerSides(t, s) ??
-          cornerRadii(t, s) ??
-          boxSides(t, s);
+        // One radius for a part whose corners Core draws by position: its
+        // corner token on the part.
+        const cornerToken =
+          kebab(s.thing) === 'border-radius' &&
+          !s.mode &&
+          splitTop(String(s.value).trim(), ' ').length === 1 &&
+          !String(s.value).includes('/')
+            ? baseWritesRadius(t, s.when)
+              ? null
+              : positionalCornerToken(ctx, t)
+            : null;
+        const sides = cornerToken
+          ? {[cornerToken]: String(s.value)}
+          : (wrappedPadding(t, s) ??
+            containerSides(t, s) ??
+            cornerRadii(t, s) ??
+            boxSides(t, s));
         if (sides)
           for (const [k, v] of Object.entries(sides)) {
             // A per-direction block joins what that direction already has,
@@ -7010,6 +7043,32 @@ export function focusStateOf(ctx, part) {
   const conds = JSON.stringify(ctx.C.MAP[part]?.own ?? {});
   for (const st of ['focus-within', 'focus-visible', 'focus'])
     if (conds.includes(`:${st}`)) return st;
+  return null;
+}
+
+/**
+ * The radius token a part's corners follow when Core draws its corners one
+ * by one from that token by position (a button squares the joins inside a
+ * button group), or null. A radius for such a part is written as that
+ * token on the part, so every position keeps its own corner; a radius
+ * written on the part would override Core's per-corner rules.
+ * @param {Ctx} ctx
+ * @param {string} part
+ * @returns {string | null}
+ */
+export function positionalCornerToken(ctx, part) {
+  const own = ctx.C.MAP[part]?.own ?? {};
+  for (const prop of [
+    'border-start-start-radius',
+    'border-start-end-radius',
+    'border-end-start-radius',
+    'border-end-end-radius',
+  ]) {
+    const e = own[prop];
+    const token = Object.keys(e?.tokens ?? {}).find(t => /^--radius-/.test(t));
+    if (token && (e.values ?? []).some((/** @type {string} */ v) => v === '0'))
+      return token;
+  }
   return null;
 }
 
