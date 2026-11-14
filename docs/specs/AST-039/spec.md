@@ -150,8 +150,9 @@ change.
   package's themes root, so it MUST NOT be repeated in a theme's descriptor or
   keyed by theme. Each theme's stylesheet stays the one the package exports
   for it (`spec:AST-050/FR7`). A CLI that does not know the key ignores it
-  with a warning and loads the rest of the manifest, so the key needs no CLI
-  floor.
+  with a warning and loads the rest of the manifest. An integration adds the
+  key in the same change that moves its exact CLI pin to the first release
+  that reads it, so an app on that pin never sees the warning.
 
 ### Compatibility transition
 
