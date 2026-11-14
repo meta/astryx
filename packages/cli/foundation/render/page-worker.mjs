@@ -422,7 +422,6 @@ function pagePlugin(filename) {
           // the file as it loads without one: an image, font or media file as
           // its address (`?url`, `?inline`, `?w=400`), a module as itself.
           const file = path.resolve(dir, target);
-          const local = p.node.specifiers.find((/** @type {any} */ s) => s.type === 'ImportDefaultSpecifier');
           if (query === 'raw' || (query === 'inline' && /\.css$/i.test(target))) {
             if (!fs.existsSync(file)) {
               const err = new Error(`${path.basename(filename)} imports ${spec}, which does not exist.`);
@@ -430,11 +429,21 @@ function pagePlugin(filename) {
               throw err;
             }
             if (!localFiles.includes(file)) localFiles.push(file);
-            if (local) {
-              p.replaceWith(t.variableDeclaration('const', [t.variableDeclarator(t.identifier(local.local.name), t.stringLiteral(fs.readFileSync(file, 'utf8')))]));
-            } else {
-              p.remove();
-            }
+            // The text is the module's default export, as Vite gives it, to
+            // every way of importing it.
+            const text = t.stringLiteral(fs.readFileSync(file, 'utf8'));
+            const declarators = p.node.specifiers.map((/** @type {any} */ s) =>
+              t.variableDeclarator(
+                t.identifier(s.local.name),
+                s.type === 'ImportNamespaceSpecifier'
+                  ? t.objectExpression([t.objectProperty(t.identifier('default'), text)])
+                  : s.type === 'ImportDefaultSpecifier' || (s.imported.name ?? s.imported.value) === 'default'
+                    ? text
+                    : t.identifier('undefined'),
+              ),
+            );
+            if (declarators.length > 0) p.replaceWith(t.variableDeclaration('const', declarators));
+            else p.remove();
             return;
           }
         }

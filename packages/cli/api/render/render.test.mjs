@@ -1479,20 +1479,22 @@ describe('render(): every write stays inside the current folder', () => {
 
 describe('render(): imports with a query, as Vite gives them', () => {
   it('gives ?raw the file text, ?inline a stylesheet text, ?url an image address, and gives the files back', async () => {
-    put('queries/notes.css', '.note { color: teal; }\n');
+    put('queries/notes.css', '.note { color: teal; --note-marker: 1; }\n');
     put('queries/dot.png', PNG);
     put('queries/data.json', '{"a": 1}\n');
     put(
       'queries/page.tsx',
-      "import sheet from './notes.css?inline';\nimport text from './data.json?raw';\nimport dot from './dot.png?url';\nexport default function Page() {\n  return <main><pre>{sheet}</pre><pre>{text}</pre><img src={dot} alt=\"\" /></main>;\n}\n",
+      "import sheet from './notes.css?inline';\nimport text from './data.json?raw';\nimport * as whole from './data.json?raw';\nimport {default as named} from './data.json?raw';\nimport dot from './dot.png?url';\nexport default function Page() {\n  return <main><pre className=\"note\">{sheet}</pre><pre>{text}</pre><pre>{whole.default === text && named === text ? 'every import gets the text' : 'no'}</pre><img src={dot} alt=\"\" /></main>;\n}\n",
     );
     const result = /** @type {any} */ (await render('queries/page.tsx', {cwd: dir}));
     const html = fs.readFileSync(path.join(dir, 'queries/page.html'), 'utf8');
-    expect(html).toContain('.note { color: teal; }');
+    expect(html).toContain('.note { color: teal; --note-marker: 1; }');
+    expect(html).toContain('every import gets the text');
     expect(html).toContain('{&quot;a&quot;: 1}');
     expect(html).toContain('src="data:image/png;base64,');
-    // A stylesheet imported with ?inline is text, not a sheet of the page.
-    expect(result.data.stylesheets).not.toContain('notes.css');
+    // A stylesheet imported with ?inline is text, not a sheet of the page:
+    // the class it styles is used, and no rule of it is in the page's styles.
+    expect(html.match(/<style[^>]*>([\s\S]*?)<\/style>/)?.[1]).not.toContain('--note-marker');
     expect(result.data.files.sort()).toEqual(['data.json', 'dot.png', 'notes.css', 'page.tsx']);
     const back = /** @type {any} */ (await render('queries/page.html', {cwd: dir, reverse: true, out: 'queries-back/page.tsx'}));
     expect(back.data.exact).toBe(true);
