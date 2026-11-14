@@ -1034,13 +1034,28 @@ export function Lightbox({
           const textBox = text.getBoundingClientRect();
           const textHeight =
             textBox.height > 0 ? textBox.bottom - textBox.top : 0;
-          const belowHeight =
-            flow.getBoundingClientRect().bottom -
-            blockBelowPlace.getBoundingClientRect().top;
-          textLines =
-            Math.round(textHeight / line) + Math.round(belowHeight / line);
-          lineCount = Math.min(lineCount, textLines);
-          isPlaceOff = true;
+          const textBottom =
+            textBox.height > 0
+              ? textBox.bottom
+              : flow.getBoundingClientRect().top;
+          // A block that starts at the place's bottom only because the text
+          // ends on the place's last line, such as an empty block, a thin
+          // rule or a 1x1 image, stays beside the place. The loop here
+          // happens only when the place pushed the block down, so its top
+          // sits a line below the end of the text. The range's box is the glyphs',
+          // which end above the line box, so the gap is read in half lines.
+          if (
+            blockBelowPlace.getBoundingClientRect().top - textBottom >
+            line / 2
+          ) {
+            const belowHeight =
+              flow.getBoundingClientRect().bottom -
+              blockBelowPlace.getBoundingClientRect().top;
+            textLines =
+              Math.round(textHeight / line) + Math.round(belowHeight / line);
+            lineCount = Math.min(lineCount, textLines);
+            isPlaceOff = true;
+          }
         }
       }
       captionPlaceOffRef.current = isPlaceOff;
@@ -1802,7 +1817,9 @@ export function Lightbox({
   const hasCaptionBand = mediaArray.some(item => isRenderable(item.caption));
   // Its place ends the caption's last line, unless the open caption scrolls.
   const hasCaptionTogglePlace =
-    hasCaptionToggle && !isCaptionScrolling && !isCaptionPlaceOff;
+    hasCaptionToggle &&
+    !isCaptionScrolling &&
+    !(isCaptionOpen && isCaptionPlaceOff);
   // The keyboard's zoom button is the current page's photo box, so the
   // caption band stays outside it.
   const zoomButtonProps = {
@@ -2019,6 +2036,7 @@ export function Lightbox({
                                           ),
                                         i === index &&
                                           hasCaptionToggle &&
+                                          isCaptionOpen &&
                                           isCaptionPlaceOff &&
                                           !isCaptionScrolling &&
                                           styles.captionTextToggleOwnLine,

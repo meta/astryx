@@ -255,6 +255,41 @@ export const CaptionEndingInWideImage: Story = {
 };
 
 /**
+ * A long caption that ends in a block shorter than half a line, here an empty
+ * block. It sits on the toggle's own line, so "less" stays beside the text.
+ */
+export const CaptionEndingInShortBlock: Story = {
+  args: {
+    media: [
+      {
+        ...GALLERY_MEDIA[0],
+        caption: (
+          <>
+            A winding path through the forest, past the old mill and down to the
+            river, where the trail turns back toward the village. In autumn the
+            beeches along it turn copper, and on a clear morning you can see the
+            church spire from the bridge.
+            <div style={{height: 2}} />
+          </>
+        ),
+      },
+      {...GALLERY_MEDIA[1], caption: 'Morning fog'},
+    ],
+  },
+  render: ({media}) => {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <>
+        <button onClick={() => setIsOpen(true)}>
+          Open short-block caption
+        </button>
+        <Lightbox isOpen={isOpen} onOpenChange={setIsOpen} media={media} />
+      </>
+    );
+  },
+};
+
+/**
  * A controlled gallery whose parent keeps its index, paging only with its own
  * buttons, say while a change is confirmed. A swipe returns to the photo the
  * parent shows.

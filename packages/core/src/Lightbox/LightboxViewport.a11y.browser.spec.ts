@@ -893,3 +893,81 @@ test.describe('an open caption that ends in a block image wider than the room be
     expect(facts.toggleBottom).toBeLessThanOrEqual(facts.textBottom + 0.5);
   });
 });
+
+test.describe('an open caption that ends in a block, with no ResizeObserver loop error', () => {
+  test.use({hasTouch: true, isMobile: true});
+
+  for (const [id, name, width] of [
+    ['caption-ending-in-wide-image', 'Open wide-image caption', 362],
+    ['caption-ending-in-short-block', 'Open short-block caption', 400],
+  ] as const) {
+    test(`${id} opens and closes cleanly`, async ({page}) => {
+      await page.addInitScript(() => {
+        const errors: string[] = [];
+        (window as unknown as {__pageErrors: string[]}).__pageErrors = errors;
+        window.addEventListener('error', event => {
+          errors.push(event.message);
+        });
+      });
+      await page.setViewportSize({width: width, height: 874});
+      await page.route(/picsum\.photos/, async route =>
+        route.fulfill({contentType: 'image/svg+xml', body: PHOTO_SVG}),
+      );
+      await page.goto(
+        `${storybook.origin}/iframe.html?id=core-lightbox--${id}&viewMode=story`,
+      );
+      await page.getByRole('button', {name}).click();
+      const dialog = page.getByRole('dialog');
+      await expect(dialog).toBeVisible();
+      for (let round = 0; round < 2; round++) {
+        await dialog.getByRole('button', {name: 'more'}).click();
+        await expect(dialog.getByRole('button', {name: 'less'})).toBeVisible();
+        await dialog.getByRole('button', {name: 'less'}).click();
+        await expect(dialog.getByRole('button', {name: 'more'})).toBeVisible();
+      }
+      await page.evaluate(
+        async () =>
+          new Promise(resolve => {
+            requestAnimationFrame(() => requestAnimationFrame(resolve));
+          }),
+      );
+      const errors = await page.evaluate(
+        () => (window as unknown as {__pageErrors: string[]}).__pageErrors,
+      );
+      expect(errors).toEqual([]);
+    });
+  }
+
+  test('a short block leaves "less" on the last line of text', async ({
+    page,
+  }) => {
+    await page.setViewportSize({width: 400, height: 874});
+    await page.route(/picsum\.photos/, async route =>
+      route.fulfill({contentType: 'image/svg+xml', body: PHOTO_SVG}),
+    );
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=core-lightbox--caption-ending-in-short-block&viewMode=story`,
+    );
+    await page.getByRole('button', {name: 'Open short-block caption'}).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('button', {name: 'more'}).click();
+    await expect(dialog.getByRole('button', {name: 'less'})).toBeVisible();
+    const facts = await dialog.evaluate(element => {
+      const caption = element.querySelector(
+        '[data-current] [data-lightbox-caption]',
+      ) as HTMLElement;
+      const toggle = caption.querySelector('button') as HTMLElement;
+      const block = caption.querySelector(
+        '.astryx-text div div',
+      ) as HTMLElement;
+      return {
+        toggleTop: toggle.getBoundingClientRect().top,
+        toggleBottom: toggle.getBoundingClientRect().bottom,
+        blockTop: block.getBoundingClientRect().top,
+      };
+    });
+    // The toggle ends the text's last line, above the short block. A toggle
+    // on a line of its own would sit below the block.
+    expect(facts.toggleTop).toBeLessThan(facts.blockTop - 1);
+  });
+});
