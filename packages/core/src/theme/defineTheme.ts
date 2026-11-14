@@ -191,8 +191,12 @@ export type TokenValue = string | [light: string, dark: string];
  * The `@light` and `@dark` keys hold a style block (properties and
  * pseudo-class overrides) that applies only where the element's color mode is
  * that mode: the mode `Theme` resolves from its own `mode`, the system
- * preference, or a `MediaTheme` surface. In the other mode the block writes
- * nothing, so every other rule applies there as it would without it. Use it
+ * preference, or a `MediaTheme` surface. Inside media surfaces it applies as
+ * the `onDark` and `onLight` overrides do: inside any surface of its mode, so
+ * where surfaces of both modes enclose an element (a light `MediaTheme` inside
+ * a dark one) both blocks apply and the light block wins a property both set.
+ * Where no enclosing mode matches, the block writes nothing, so every other
+ * rule applies there as it would without it. Use it
  * for a value that is not a color, or to leave the other mode untouched; a
  * color that differs per mode can also be one `light-dark()` value.
  *

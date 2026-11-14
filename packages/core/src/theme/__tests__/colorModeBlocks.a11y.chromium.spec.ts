@@ -109,6 +109,8 @@ test.describe('color-mode blocks', () => {
     const ghost = page.locator(
       '[data-case="blocks-dark"] .astryx-button[data-variant="ghost"]:not([aria-current])',
     );
+    // The button sits below the fold: bring it into view before pressing.
+    await ghost.first().scrollIntoViewIfNeeded();
     const box = await ghost.first().boundingBox();
     if (!box) {
       throw new Error('no ghost button');
