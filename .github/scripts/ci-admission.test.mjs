@@ -537,13 +537,10 @@ describe('peaks', () => {
     // that runs only for an agent push; spec:AST-030 FR20) start together the
     // moment admission ends; the Storybook build may still be running then.
     const waits = ['room', 'admission', 'heavy-ci'];
-    // superseded-runs starts with room and ends after one lookup, before
-    // admission does (superseded-runs.test.mjs).
     const first = Object.keys(ci.jobs).filter(
       name =>
         !waits.includes(name) &&
         name !== 'ci-full' &&
-        name !== 'superseded-runs' &&
         needsOf(ci.jobs[name]).every(need => waits.includes(need)),
     );
     const onPullRequest = first.filter(name => {

@@ -183,7 +183,7 @@ jobs:
         timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 125 || 13 }}
         with:
           phase: room
-          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 20 }}
+          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 21 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
@@ -238,7 +238,7 @@ jobs:
           started: ${{ needs.room.outputs.started }}
           looks: ${{ needs.room.outputs.looks }}
           next: ${{ needs.room.outputs.next }}
-          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 20 }}
+          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 21 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
@@ -281,11 +281,14 @@ jobs:
   # takes a concurrency group of its own, so a new push does not cancel it:
   # the run for the new head does it here. It is the one job with
   # `actions: write` for this, and it runs only for a pull request from this
-  # repository, since a fork's token is read-only. It never fails.
+  # repository, since a fork's token is read-only. No job needs it, and no
+  # required context reads it, so its own failure fails nothing else. It
+  # starts with the run, so the pull-request peak counts it.
   superseded-runs:
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ubuntu-slim
     timeout-minutes: 5
+    continue-on-error: true
     permissions:
       actions: write
       contents: read

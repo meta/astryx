@@ -331,6 +331,14 @@ describe('a superseded run in ci.yml', () => {
       'pull-requests': 'read',
     });
     expect(job.steps.at(-1).with).toEqual({cancel: true});
+    expect(job['runs-on']).toBe('ubuntu-slim');
+    expect(job['timeout-minutes']).toBeLessThanOrEqual(5);
+    // Its own failure fails no other job: it is not required, no job needs
+    // it, and a skip (a fork's run) blocks nothing.
+    expect(job['continue-on-error']).toBe(true);
+    for (const [id, other] of Object.entries(ci.jobs))
+      expect([other.needs ?? []].flat(), id).not.toContain('superseded-runs');
+    expect(REQUIRED).not.toContain('superseded-runs');
     expect(evaluate(job.if, {github: github(), needs: {}})).toBe(true);
     // A fork's token is read-only: its run skips the sweep.
     expect(evaluate(job.if, {github: github({fork: true}), needs: {}})).toBe(
