@@ -36,6 +36,12 @@ export default function ChatComposerInputMultipleTriggers() {
   const mentionTrigger: ChatComposerTrigger = {
     character: '@',
     searchSource: userSource,
+    deserialize: serialized => {
+      const user = USERS.find(user => `@${user.id}` === serialized);
+      return user
+        ? {value: serialized, label: user.label, variant: 'blue'}
+        : null;
+    },
     onSelect: item => ({
       value: `@${item.id}`,
       label: item.label,
