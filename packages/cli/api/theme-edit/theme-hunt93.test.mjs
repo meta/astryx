@@ -13,9 +13,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {spawnSync} from 'node:child_process';
-import {fileURLToPath} from 'node:url';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {splitCommand} from './_vet.mjs';
 import {
@@ -23,11 +21,16 @@ import {
   removeLinkedFixture,
 } from '../../test-utils/linked-fixture.mjs';
 import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
+import {runCli} from '../../test-utils/run-cli.mjs';
 
-const BIN = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '../../clients/cli/bin/astryx.mjs',
+// The renders are stood in for: these tests are about settings, files and
+// messages, not the rendered pages.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    await importOriginal(),
+  ),
 );
+
 const T = 240_000;
 
 /** @type {string} */
@@ -51,11 +54,8 @@ afterAll(() => {
  * @param {string[]} args
  * @returns {any}
  */
-const cli = args => {
-  const r = spawnSync(process.execPath, [BIN, ...args, '--json'], {
-    cwd,
-    encoding: 'utf8',
-  });
+const cli = async args => {
+  const r = await runCli([...args, '--json'], cwd);
   return JSON.parse(r.stdout);
 };
 
@@ -63,10 +63,10 @@ const cli = args => {
  * Run a suggested command as printed (from `experimental` on).
  * @param {string} line
  */
-const follow = line => {
+const follow = async line => {
   const args = splitCommand(line.slice(line.indexOf('experimental ')));
   if (!args) throw new Error(`cannot read ${line}`);
-  return cli(args);
+  return await cli(args);
 };
 
 /** @param {string} t */
@@ -103,7 +103,7 @@ const drop = t => {
 describe('an entry mode written in other words', () => {
   it(
     'Dark, night, dark-mode, Light, day and Light-Mode are read as dark or light, said in a note, and saved that way by the next change',
-    () => {
+    async () => {
       for (const [typed, read] of [
         ['Dark', 'dark'],
         ['night', 'dark'],
@@ -119,7 +119,7 @@ describe('an entry mode written in other words', () => {
           value: '#224466',
           mode: typed,
         });
-        const r = cli([
+        const r = await cli([
           'experimental',
           'theme',
           'editor',
@@ -143,7 +143,7 @@ describe('an entry mode written in other words', () => {
 
   it(
     'an undo by the mode it is read as removes only that entry',
-    () => {
+    async () => {
       drop('m');
       add(
         'm',
@@ -155,7 +155,7 @@ describe('an entry mode written in other words', () => {
           mode: 'Dark',
         },
       );
-      const r = cli([
+      const r = await cli([
         'experimental',
         'theme',
         'editor',
@@ -179,7 +179,7 @@ describe('an entry mode written in other words', () => {
 
   it(
     'a mode that means nothing is refused with the undo of that entry first, and the step back second',
-    () => {
+    async () => {
       drop('m');
       add(
         'm',
@@ -191,7 +191,7 @@ describe('an entry mode written in other words', () => {
           mode: 'purple',
         },
       );
-      const r = cli([
+      const r = await cli([
         'experimental',
         'theme',
         'editor',
@@ -204,7 +204,7 @@ describe('an entry mode written in other words', () => {
       expect(r.suggestions[0].name).toMatch(/ editor undo m --color-accent$/);
       expect(r.suggestions[1].name).toMatch(/ editor undo m$/);
       expect(r.suggestions[1].reason).toContain('the last change is then lost');
-      expect(follow(r.suggestions[0].name).error).toBeUndefined();
+      expect((await follow(r.suggestions[0].name)).error).toBeUndefined();
       const left = settings('m').filter(
         (/** @type {any} */ x) => x.thing === '--color-accent',
       );
@@ -212,8 +212,17 @@ describe('an entry mode written in other words', () => {
       kept('m');
       // The command refused before runs now.
       expect(
-        cli(['experimental', 'theme', 'editor', 'set', 'm', 'corners', 'more'])
-          .error,
+        (
+          await cli([
+            'experimental',
+            'theme',
+            'editor',
+            'set',
+            'm',
+            'corners',
+            'more',
+          ])
+        ).error,
       ).toBeUndefined();
     },
     T,
@@ -223,7 +232,7 @@ describe('an entry mode written in other words', () => {
 describe('an entry source written in other letters, or missing', () => {
   it(
     'Dial in any case is read as dial, and a missing source follows from the thing; each is noted and saved',
-    () => {
+    async () => {
       drop('s');
       add(
         's',
@@ -232,7 +241,7 @@ describe('an entry source written in other letters, or missing', () => {
         {thing: '--color-accent', value: '#224466'},
         {thing: 'margin', value: '4px', on: 'card'},
       );
-      const r = cli([
+      const r = await cli([
         'experimental',
         'theme',
         'editor',
@@ -267,10 +276,10 @@ describe('an entry source written in other letters, or missing', () => {
 
   it(
     'a source that means nothing is named as such and refused with the undo of that entry, which works',
-    () => {
+    async () => {
       drop('s');
       add('s', {source: 'banana', thing: '--color-accent', value: '#224466'});
-      const r = cli([
+      const r = await cli([
         'experimental',
         'theme',
         'editor',
@@ -284,7 +293,7 @@ describe('an entry source written in other letters, or missing', () => {
       );
       expect(r.error).not.toContain('has no source');
       expect(r.suggestions[0].name).toMatch(/ editor undo s --color-accent$/);
-      expect(follow(r.suggestions[0].name).error).toBeUndefined();
+      expect((await follow(r.suggestions[0].name)).error).toBeUndefined();
       expect(settings('s')).not.toContainEqual(
         expect.objectContaining({thing: '--color-accent'}),
       );
@@ -297,8 +306,8 @@ describe('an entry source written in other letters, or missing', () => {
 describe('a theme name typed as a path', () => {
   it(
     'set leads with one line that carries every repair, and that line works',
-    () => {
-      const r = cli([
+    async () => {
+      const r = await cli([
         'experimental',
         'theme',
         'editor',
@@ -312,7 +321,7 @@ describe('a theme name typed as a path', () => {
       expect(r.suggestions[0].name).toMatch(
         / editor set t border 1\.5px --on card$/,
       );
-      expect(follow(r.suggestions[0].name).error).toBeUndefined();
+      expect((await follow(r.suggestions[0].name)).error).toBeUndefined();
       expect(settings('t')).toContainEqual(
         expect.objectContaining({thing: 'border', value: '1.5px', on: 'card'}),
       );
@@ -323,8 +332,8 @@ describe('a theme name typed as a path', () => {
 
   it(
     'undo leads with one line that carries every repair, and that line works',
-    () => {
-      const r = cli([
+    async () => {
+      const r = await cli([
         'experimental',
         'theme',
         'editor',
@@ -335,7 +344,7 @@ describe('a theme name typed as a path', () => {
         'cards',
       ]);
       expect(r.suggestions[0].name).toMatch(/ editor undo t border --on card$/);
-      expect(follow(r.suggestions[0].name).error).toBeUndefined();
+      expect((await follow(r.suggestions[0].name)).error).toBeUndefined();
       expect(settings('t')).not.toContainEqual(
         expect.objectContaining({thing: 'border'}),
       );
@@ -346,8 +355,8 @@ describe('a theme name typed as a path', () => {
 
   it(
     'undo of the padding by a path and a plural part leads with the undo that works',
-    () => {
-      const r = cli([
+    async () => {
+      const r = await cli([
         'experimental',
         'theme',
         'editor',
@@ -360,7 +369,7 @@ describe('a theme name typed as a path', () => {
       expect(r.suggestions[0].name).toMatch(
         / editor undo t padding --on card$/,
       );
-      expect(follow(r.suggestions[0].name).error).toBeUndefined();
+      expect((await follow(r.suggestions[0].name)).error).toBeUndefined();
       expect(settings('t')).not.toContainEqual(
         expect.objectContaining({thing: 'padding'}),
       );
@@ -368,17 +377,19 @@ describe('a theme name typed as a path', () => {
         expect.objectContaining({thing: 'accent'}),
       );
       expect(
-        cli([
-          'experimental',
-          'theme',
-          'editor',
-          'set',
-          't',
-          'padding',
-          '20px',
-          '--on',
-          'card',
-        ]).error,
+        (
+          await cli([
+            'experimental',
+            'theme',
+            'editor',
+            'set',
+            't',
+            'padding',
+            '20px',
+            '--on',
+            'card',
+          ])
+        ).error,
       ).toBeUndefined();
     },
     T,
@@ -386,8 +397,8 @@ describe('a theme name typed as a path', () => {
 
   it(
     'when the rest cannot be repaired, the reason says so',
-    () => {
-      const r = cli([
+    async () => {
+      const r = await cli([
         'experimental',
         'theme',
         'editor',
@@ -408,8 +419,8 @@ describe('a theme name typed as a path', () => {
 
   it(
     'compile of the app copy with --out in it leads with the compile of the theme itself, which works',
-    () => {
-      const r = cli([
+    async () => {
+      const r = await cli([
         'experimental',
         'theme',
         'compile',
@@ -421,7 +432,7 @@ describe('a theme name typed as a path', () => {
       expect(r.suggestions[0].name).toMatch(
         / experimental theme compile themes\/t\/t\.theme\.ts --check$/,
       );
-      expect(follow(r.suggestions[0].name).error).toBeUndefined();
+      expect((await follow(r.suggestions[0].name)).error).toBeUndefined();
       kept('t');
     },
     T,
@@ -429,9 +440,9 @@ describe('a theme name typed as a path', () => {
 
   it(
     'compile of the theme folder with --out outside the working folder leads with the theme source and no --out, saying why',
-    () => {
+    async () => {
       const outside = path.join(path.dirname(cwd), 'elsewhere', 't.css');
-      const r = cli([
+      const r = await cli([
         'experimental',
         'theme',
         'compile',
@@ -444,7 +455,7 @@ describe('a theme name typed as a path', () => {
       );
       expect(r.suggestions[0].reason).toContain('without --out');
       expect(r.suggestions[0].reason).toContain('outside the working folder');
-      expect(follow(r.suggestions[0].name).error).toBeUndefined();
+      expect((await follow(r.suggestions[0].name)).error).toBeUndefined();
       expect(fs.existsSync(outside)).toBe(false);
       kept('t');
     },
@@ -453,8 +464,8 @@ describe('a theme name typed as a path', () => {
 
   it(
     'a quoted --icons-specifier stays intact through the repairs',
-    () => {
-      const r = cli([
+    async () => {
+      const r = await cli([
         'experimental',
         'theme',
         'compile',

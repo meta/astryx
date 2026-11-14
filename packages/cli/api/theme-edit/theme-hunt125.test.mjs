@@ -10,8 +10,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {spawnSync} from 'node:child_process';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew} from './theme-edit.mjs';
 import {cssUnescape} from '../../foundation/text/css-escape.mjs';
 import {
@@ -26,13 +25,18 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {runCli} from '../../test-utils/run-cli.mjs';
+
+// The renders are stood in for: these tests are about settings, files and
+// messages, not the rendered pages.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    await importOriginal(),
+  ),
+);
 
 /** @type {string} */
 let cwd;
-const BIN = path.resolve(
-  import.meta.dirname,
-  '../../clients/cli/bin/astryx.mjs',
-);
 
 beforeAll(() => {
   cwd = makeLinkedFixture('astryx-theme-hunt125-', FIXTURE_PACKAGES);
@@ -46,10 +50,9 @@ afterAll(() => {
 /** @param {string} rel */
 const read = rel => fs.readFileSync(path.join(cwd, rel), 'utf8');
 /** @param {string[]} args */
-const cli = args =>
-  spawnSync(process.execPath, [BIN, ...args], {cwd, encoding: 'utf8'});
-const compile = (/** @type {string[]} */ ...args) =>
-  cli(['experimental', 'theme', 'compile', ...args]);
+const cli = async args => await runCli([...args], cwd);
+const compile = async (/** @type {string[]} */ ...args) =>
+  await cli(['experimental', 'theme', 'compile', ...args]);
 /** @param {string} slug @param {string} body @param {string} [imports] */
 const writeSource = (slug, body, imports = '') =>
   fs.writeFileSync(
@@ -102,7 +105,7 @@ describe('font names as CSS reads them', () => {
         'z4',
         `export const z4Theme = defineTheme({extends: z4Settings, name: 'z4', tokens: {'--font-family-body': '${family.replace(/'/g, "\\'")}'}});`,
       );
-      const r = compile('themes/z4/z4.theme.ts');
+      const r = await compile('themes/z4/z4.theme.ts');
       expect(r.status, family).toBe(0);
       expect(r.stdout + r.stderr).not.toContain('a font file or a link');
     }
@@ -132,11 +135,11 @@ describe("a family held in the theme's own property", () => {
       'z8',
       "export const z8Theme = defineTheme({extends: z8Settings, name: 'z8', localTokens: {'--brand-font': 'Lora, serif'}, components: {button: {base: {fontFamily: 'var(--brand-font)'}}}});",
     );
-    const missing = compile('themes/z8/z8.theme.ts');
+    const missing = await compile('themes/z8/z8.theme.ts');
     expect(missing.stdout + missing.stderr).toMatch(/not loaded[^\n]*Lora/);
     const remove = installFont('lora', 'Lora');
     try {
-      expect(compile('themes/z8/z8.theme.ts').status).toBe(0);
+      expect((await compile('themes/z8/z8.theme.ts')).status).toBe(0);
       expect(read('src/themes/z8/z8.fonts.css')).toContain(
         '@fontsource/lora/index.css',
       );
@@ -147,7 +150,7 @@ describe("a family held in the theme's own property", () => {
 });
 
 describe('a theme bound with let or var', () => {
-  it('builds as a const does, and a reassigned one is refused naming that', () => {
+  it('builds as a const does, and a reassigned one is refused naming that', async () => {
     const dir = path.join(cwd, 'plain9');
     fs.mkdirSync(dir, {recursive: true});
     // A base with an icon registry: the build follows the theme to carry it.
@@ -164,13 +167,16 @@ describe('a theme bound with let or var', () => {
         path.join(dir, 'p.theme.ts'),
         `import {defineTheme} from '@astryxdesign/core/theme';\nimport {baseTheme} from './base';\nexport ${kind} pTheme = defineTheme({extends: baseTheme, name: 'p'});\n`,
       );
-      expect(cli(['theme', 'build', 'plain9/p.theme.ts']).status, kind).toBe(0);
+      expect(
+        (await cli(['theme', 'build', 'plain9/p.theme.ts'])).status,
+        kind,
+      ).toBe(0);
     }
     fs.writeFileSync(
       path.join(dir, 'p.theme.ts'),
       "import {defineTheme} from '@astryxdesign/core/theme';\nimport {baseTheme} from './base';\nexport let pTheme = defineTheme({extends: baseTheme, name: 'p'});\npTheme = defineTheme({extends: baseTheme, name: 'p'});\n",
     );
-    const r = cli(['theme', 'build', 'plain9/p.theme.ts']);
+    const r = await cli(['theme', 'build', 'plain9/p.theme.ts']);
     expect(r.status).not.toBe(0);
     expect(r.stdout + r.stderr).toContain('pTheme is assigned again');
     expect(r.stdout + r.stderr).not.toContain('Theme sets');
@@ -184,16 +190,18 @@ describe('own type tokens on phones', () => {
       'z11',
       "export const z11Theme = defineTheme({extends: z11Settings, name: 'z11', tokens: {'--text-heading-3-weight': '800'}});",
     );
-    const text = compile('themes/z11/z11.theme.ts');
+    const text = await compile('themes/z11/z11.theme.ts');
     expect(text.stdout).toContain('on phones');
     const json = JSON.parse(
-      cli([
-        '--json',
-        'experimental',
-        'theme',
-        'compile',
-        'themes/z11/z11.theme.ts',
-      ]).stdout,
+      (
+        await cli([
+          '--json',
+          'experimental',
+          'theme',
+          'compile',
+          'themes/z11/z11.theme.ts',
+        ])
+      ).stdout,
     );
     const note = json.data.notices.find((/** @type {string} */ n) =>
       n.includes('on phones'),
@@ -206,7 +214,7 @@ describe('own type tokens on phones', () => {
       'z11',
       `export const z11Theme = defineTheme({extends: z11Settings, name: 'z11', tokens: {'--text-heading-3-weight': '800'}, ${rule}});`,
     );
-    const after = compile('themes/z11/z11.theme.ts');
+    const after = await compile('themes/z11/z11.theme.ts');
     expect(after.status).toBe(0);
     expect(after.stdout).not.toContain('on phones');
   }, 240_000);
@@ -215,7 +223,7 @@ describe('own type tokens on phones', () => {
 describe('the full report of an editor theme', () => {
   it('wires the app copy, not the theme folder', async () => {
     await themeEditNew('z13', {cwd});
-    const full = compile('themes/z13/z13.theme.ts', '--detail', 'full');
+    const full = await compile('themes/z13/z13.theme.ts', '--detail', 'full');
     expect(full.stdout).toContain('theme add z13');
     expect(full.stdout).not.toContain("from '../themes/z13/z13'");
   }, 240_000);

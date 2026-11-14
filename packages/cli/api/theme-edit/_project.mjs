@@ -432,6 +432,26 @@ function builtModule(pkg, name) {
 }
 
 /**
+ * Whether a package is installed for the app in `dir`, as the folder is
+ * now: Node keeps a path it resolved once for the life of the process, so
+ * the file it names is checked too (a package removed since, in a process
+ * that runs several commands, is not installed).
+ * @param {string} dir the app
+ * @param {string} pkg
+ */
+export function packageInstalled(dir, pkg) {
+  try {
+    return fs.existsSync(
+      createRequire(path.join(path.resolve(dir), 'noop.js')).resolve(
+        `${pkg}/package.json`,
+      ),
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Whether a base's theme package is installed in the project.
  * @param {ThemeProject | string} from
  * @param {string} like

@@ -1101,11 +1101,13 @@ export function registerExperimentalTheme(group, program) {
         /** @type {any} */ o,
         /** @type {any} */ cmd,
       ) =>
+        // An option given a value is refused before the run, as for every
+        // other editor command: a refusal inside run is thrown, never
+        // printed there.
+        readOptions('new', newDoc) ??
         run(
           program,
           async () => {
-            const valued = readOptions('new', newDoc);
-            if (valued) return valued;
             // An option new does not take (--force, --dry-run, -t) is refused
             // with new's help, as every editor command's unknown option is.
             const takes = new Set(
