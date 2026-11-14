@@ -1162,6 +1162,7 @@ describe('Slider', () => {
         'Volume is locked while sharing your screen',
       );
       fireEvent.mouseEnter(getTrack());
+      fireEvent.pointerMove(getTrack());
       await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
       fireEvent.mouseLeave(getTrack());
       await waitFor(() => expect(tooltip).not.toHaveAttribute('popover-open'));

@@ -2523,6 +2523,7 @@ describe('Tokenizer', () => {
       );
       const wrapper = screen.getByRole('group', {name: 'Members'});
       fireEvent.mouseEnter(wrapper);
+      fireEvent.pointerMove(wrapper);
       await waitFor(() => expect(isOpen(tooltip)).toBe(true));
       fireEvent.mouseLeave(wrapper);
       await waitFor(() => expect(isOpen(tooltip)).toBe(false));

@@ -539,6 +539,7 @@ describe('PowerSearch', () => {
       expect(tooltip).toHaveTextContent('You need edit access to search');
       const wrapper = screen.getByRole('group');
       fireEvent.mouseEnter(wrapper);
+      fireEvent.pointerMove(wrapper);
       await waitFor(() => expect(isOpen(tooltip)).toBe(true));
       fireEvent.mouseLeave(wrapper);
       await waitFor(() => expect(isOpen(tooltip)).toBe(false));

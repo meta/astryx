@@ -204,6 +204,7 @@ describe('InfoTip press-to-pin (component:InfoTip FR2)', () => {
     const trigger = screen.getByRole('button', {name: 'About billing'});
     fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
     fireEvent.mouseEnter(trigger);
+    fireEvent.pointerMove(trigger);
     act(() => {
       vi.advanceTimersByTime(500);
     });
@@ -228,6 +229,7 @@ describe('InfoTip press-to-pin (component:InfoTip FR2)', () => {
     const trigger = screen.getByRole('button', {name: 'About billing'});
     fireEvent.pointerEnter(trigger, {pointerType: 'pen'});
     fireEvent.mouseEnter(trigger);
+    fireEvent.pointerMove(trigger);
     act(() => {
       vi.advanceTimersByTime(500);
     });
@@ -273,6 +275,7 @@ describe('InfoTip press-to-pin (component:InfoTip FR2)', () => {
     const trigger = screen.getByRole('button', {name: 'About billing'});
     fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
     fireEvent.mouseEnter(trigger);
+    fireEvent.pointerMove(trigger);
     act(() => {
       vi.advanceTimersByTime(500);
     });
@@ -280,6 +283,7 @@ describe('InfoTip press-to-pin (component:InfoTip FR2)', () => {
     fireEvent.pointerDown(trigger, {pointerType: 'mouse', button: 0});
     fireEvent.mouseLeave(trigger);
     fireEvent.mouseEnter(help);
+    fireEvent.pointerMove(help);
     fireEvent.pointerUp(help, {pointerType: 'mouse', button: 0});
     act(() => {
       vi.advanceTimersByTime(500);
@@ -323,6 +327,7 @@ describe('InfoTip press-to-pin (component:InfoTip FR2)', () => {
     for (const button of [2, 1]) {
       fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
       fireEvent.mouseEnter(trigger);
+      fireEvent.pointerMove(trigger);
       act(() => {
         vi.advanceTimersByTime(500);
       });
@@ -464,6 +469,7 @@ describe('InfoTip trigger state (component:InfoTip FR2)', () => {
     const trigger = screen.getByRole('button', {name: 'About billing'});
     fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
     fireEvent.mouseEnter(trigger);
+    fireEvent.pointerMove(trigger);
     act(() => {
       vi.advanceTimersByTime(500);
     });

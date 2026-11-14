@@ -84,6 +84,7 @@ describe('InputClearButton', () => {
     expect(button.getAttribute('aria-describedby')).toBe(tooltip.id);
 
     fireEvent.mouseEnter(button);
+    fireEvent.pointerMove(button);
     await waitFor(() => expect(showPopover).toHaveBeenCalled());
     showPopover.mockRestore();
   });
