@@ -414,6 +414,39 @@ function pagePlugin(filename) {
         // (`@/styles/site.css`) resolves the way modules do.
         const bare =
           isAliased(raw) && (/\.(css|scss|sass|less|json)$/i.test(raw) || isAssetPath(raw)) ? resolveAlias(raw) : raw;
+        const query = spec.includes('?') ? spec.slice(spec.indexOf('?') + 1) : '';
+        const target = isAliased(raw) ? resolveAlias(raw) : raw;
+        if (query && (target.startsWith('.') || path.isAbsolute(target))) {
+          // `?raw` gives the file's text and `?inline` a stylesheet's text (not
+          // added to the page), as Vite does by itself. Any other query loads
+          // the file as it loads without one: an image, font or media file as
+          // its address (`?url`, `?inline`, `?w=400`), a module as itself.
+          const file = path.resolve(dir, target);
+          if (query === 'raw' || (query === 'inline' && /\.css$/i.test(target))) {
+            if (!fs.existsSync(file)) {
+              const err = new Error(`${path.basename(filename)} imports ${spec}, which does not exist.`);
+              /** @type {any} */ (err).renderCode = 'ERR_FILE_NOT_FOUND';
+              throw err;
+            }
+            if (!localFiles.includes(file)) localFiles.push(file);
+            // The text is the module's default export, as Vite gives it, to
+            // every way of importing it.
+            const text = t.stringLiteral(fs.readFileSync(file, 'utf8'));
+            const declarators = p.node.specifiers.map((/** @type {any} */ s) =>
+              t.variableDeclarator(
+                t.identifier(s.local.name),
+                s.type === 'ImportNamespaceSpecifier'
+                  ? t.objectExpression([t.objectProperty(t.identifier('default'), text)])
+                  : s.type === 'ImportDefaultSpecifier' || (s.imported.name ?? s.imported.value) === 'default'
+                    ? text
+                    : t.identifier('undefined'),
+              ),
+            );
+            if (declarators.length > 0) p.replaceWith(t.variableDeclaration('const', declarators));
+            else p.remove();
+            return;
+          }
+        }
         if (!bare.startsWith('.') && !path.isAbsolute(bare) && !isAliased(bare)) {
           packages.add(
             bare.startsWith('@')
@@ -961,6 +994,8 @@ try {
   // such as a built theme), so they never pass the transform that records
   // local files. Follow the imports of every local module instead, so the
   // file carries each module the page reaches, as --reverse expects.
+  /** Every path-alias import a local module makes, with the file it names. @type {{spec: string, file: string}[]} */
+  const aliasImports = [];
   for (let i = 0; i < localFiles.length; i++) {
     const file = localFiles[i];
     if (!/\.[cm]?[jt]sx?$/.test(file)) continue;
@@ -972,6 +1007,8 @@ try {
     }
     for (const spec of importSpecifiers(source, file)) {
       const target = importedFile(spec, file);
+      const raw = spec.split('?')[0];
+      if (target && !raw.startsWith('.')) aliasImports.push({spec: raw, file: target});
       // Modules and JSON only: the transform already carries the stylesheets
       // and images a module imports, and a Sass file is never carried.
       if (target && /\.([cm]?[jt]sx?|json)$/i.test(target) && isLocal(target) && !localFiles.includes(target)) {
@@ -992,6 +1029,7 @@ try {
     chartsAlone,
     assets: [...assetsInlined],
     files: localFiles,
+    aliasImports,
     texts,
     fnTexts,
     logs,

@@ -61,6 +61,7 @@ import {
 import {fsErrorMessage} from '../../foundation/fs/fs-error.mjs';
 import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
 import {analyzeTemplateNeeds} from '../../foundation/discovery/template-needs.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
 
 export {BUNDLED_THEME_PACKAGE, THEMES_DIR};
 
@@ -1005,7 +1006,7 @@ export function themeCommandsFor(command, slug, available, cwd) {
       (a, b) =>
         levenshteinDistance(needle, a.slug.toLowerCase()) -
           levenshteinDistance(needle, b.slug.toLowerCase()) ||
-        a.slug.localeCompare(b.slug),
+        compareText(a.slug, b.slug),
     )
     .slice(0, 5)
     .map(theme => ({

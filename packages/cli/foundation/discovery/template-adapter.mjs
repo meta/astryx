@@ -45,6 +45,7 @@ import {hasNameLine, keptTreeSummary, nameLines} from '../fs/kept-tree.mjs';
 import {foldEntryName} from './entry-name-files.mjs';
 import {EXACT_CODEC} from '../fs/exact-codec.mjs';
 import {babelParser} from '../runtime/lazy-dependencies.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 /** Identity used for core (built-in) templates in package-scoped listings. */
 const CORE_PACKAGE = CORE_PROVIDER_ID;
@@ -1617,7 +1618,7 @@ export function applyTemplateReplacements(templates, declarationErrors = []) {
   });
 
   return {
-    templates: effective.sort((a, b) => a.name.localeCompare(b.name)),
+    templates: effective.sort((a, b) => compareText(a.name, b.name)),
     errors,
   };
 }
@@ -1648,7 +1649,7 @@ async function discoverAllSources(cwd = process.cwd()) {
  */
 export async function discoverAllUnresolved(cwd = process.cwd()) {
   return (await discoverAllSources(cwd)).templates.sort((a, b) =>
-    a.name.localeCompare(b.name),
+    compareText(a.name, b.name),
   );
 }
 
