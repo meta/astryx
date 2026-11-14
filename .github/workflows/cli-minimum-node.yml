@@ -31,8 +31,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          # The script and every module it imports.
           sparse-checkout: |
             .github/scripts/cli-minimum-node.mjs
+            .github/scripts/node-time-drift.mjs
+            scripts/lib/duration-split.mjs
             packages/cli/package.json
           sparse-checkout-cone-mode: false
           persist-credentials: false
@@ -43,12 +46,21 @@ jobs:
           echo "The CLI declares Node $node as its minimum."
           echo "node=$node" >> "$GITHUB_OUTPUT"
 
+  # The CLI's tests, in four legs split by this Node's own recorded times
+  # (scripts/vitest-node-durations.min-node.json, read by
+  # scripts/vitest-shard-sequencer.mjs): in one job they outgrew its time
+  # limit on the minimum Node, where every gather is fresh.
   cli-tests:
     needs: version
+    name: cli-tests (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -59,10 +71,71 @@ jobs:
         with:
           node-version: ${{ needs.version.outputs.node }}
           package-manager-cache: false
-      - name: Run the CLI's tests on Node ${{ needs.version.outputs.node }}
+      # The shard watchdog stops the leg before the job limit and names the
+      # file still running (scripts/vitest-shard-watchdog.mjs).
+      - name: Run this leg of the CLI's tests on Node ${{ needs.version.outputs.node }}
+        id: tests
+        env:
+          SHARD: ${{ matrix.shard }}
+          # The legs pack by this Node's own times, not the main Node legs'.
+          VITEST_DURATIONS_FILE: scripts/vitest-node-durations.min-node.json
+          VITEST_SHARD_TIMES_FILE: ${{ runner.temp }}/min-node-times.json
         run: |
           node --version
-          pnpm -F @astryxdesign/cli test
+          started=$(ps -o etimes= -C Runner.Worker 2>/dev/null | sort -n | tail -1 | tr -d ' ')
+          VITEST_SHARD_WATCHDOG_SECONDS=$(( 28 * 60 - ${started:-180} ))
+          export VITEST_SHARD_WATCHDOG_SECONDS
+          set -o pipefail
+          pnpm -F @astryxdesign/cli test --shard="$SHARD/4" \
+            --reporter=default --reporter=github-actions \
+            --reporter=./scripts/vitest-shard-watchdog.mjs 2>&1 | tee "$RUNNER_TEMP/cli-tests.log"
+
+      # pass, fail, or none. A failed test is fail even when the watchdog then
+      # stopped the leg; a leg the watchdog stopped with no failure judged
+      # nothing (none). A leg the job limit cancels uploads no verdict, which
+      # also means none.
+      - name: Record this leg's verdict
+        if: always() && steps.tests.outcome != 'skipped'
+        env:
+          OUTCOME: ${{ steps.tests.outcome }}
+          SHARD: ${{ matrix.shard }}
+        run: |
+          # Vitest colours its lines on CI: read the log without the colour codes.
+          log="$RUNNER_TEMP/cli-tests.plain.log"
+          sed $'s/\x1b\\[[0-9;]*m//g' "$RUNNER_TEMP/cli-tests.log" > "$log" 2>/dev/null || : > "$log"
+          if [ "$OUTCOME" = success ]; then verdict=pass
+          # A failed test (×), a failed file that ran no test or whose hook threw
+          # (❯), or the summary (FAIL): only a failure prints any of them.
+          elif grep -qE '^ *(FAIL |×|❯ )' "$log" 2>/dev/null; then verdict=fail
+          elif grep -q 'Node shard stuck' "$log" 2>/dev/null; then verdict=none
+          elif [ "$OUTCOME" = failure ]; then verdict=fail
+          else verdict=none
+          fi
+          echo "Leg $SHARD/4: $verdict"
+          mkdir -p verdict
+          printf '{"shard": %s, "verdict": "%s"}\n' "$SHARD" "$verdict" > "verdict/leg-$SHARD.json"
+
+      - name: Keep this leg's verdict
+        if: always() && steps.tests.outcome != 'skipped'
+        uses: actions/upload-artifact@v7
+        with:
+          name: cli-tests-verdict-${{ matrix.shard }}
+          path: verdict/leg-${{ matrix.shard }}.json
+          retention-days: 7
+
+      # A warning, never a failure: a scheduled run has no change to fix.
+      - name: Name the files past their minimum-Node time
+        if: always() && steps.tests.outcome != 'skipped'
+        run: node .github/scripts/cli-minimum-node.mjs slow --times "$RUNNER_TEMP/min-node-times.json" --record scripts/vitest-node-durations.min-node.json
+
+      - name: Keep this leg's times
+        if: always() && steps.tests.outcome != 'skipped'
+        uses: actions/upload-artifact@v7
+        with:
+          name: min-node-times-${{ matrix.shard }}
+          path: ${{ runner.temp }}/min-node-times.json
+          if-no-files-found: ignore
+          retention-days: 7
 
   pack:
     needs: version
@@ -129,18 +202,70 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          sparse-checkout: .github/scripts/cli-minimum-node.mjs
+          # The CLI's test files too, so the refreshed record drops a deleted one.
+          sparse-checkout: |
+            .github/scripts/cli-minimum-node.mjs
+            .github/scripts/node-time-drift.mjs
+            scripts/lib/duration-split.mjs
+            scripts/vitest-node-durations.min-node.json
+            packages/cli/**/*.test.*
           sparse-checkout-cone-mode: false
           persist-credentials: false
+      - name: Read the legs' times
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: min-node-times-*
+          path: times
+      - name: Read the legs' verdicts
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: cli-tests-verdict-*
+          path: verdicts
+          merge-multiple: true
+      # A failed test fails the run; a leg with no verdict (stopped or cancelled
+      # at its time limit) makes the run's verdict none, which never closes the
+      # issue or calls the CLI failed.
       - name: Open, update or close the minimum-Node issue
         uses: actions/github-script@v9
         env:
-          OK: ${{ needs.version.result == 'success' && needs.cli-tests.result == 'success' && needs.pack.result == 'success' && needs.smoke.result == 'success' }}
+          VERSION_RESULT: ${{ needs.version.result }}
+          PACK_RESULT: ${{ needs.pack.result }}
+          SMOKE_RESULT: ${{ needs.smoke.result }}
           NODE_VERSION: ${{ needs.version.outputs.node || 'unknown' }}
+          VERDICTS: ${{ github.workspace }}/verdicts
+          TIMES: ${{ github.workspace }}/times
         with:
           script: |
-            const {reportIssue} = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/cli-minimum-node.mjs`);
+            const {reportIssue, runVerdict, readLegVerdicts, readLegTimes, slowFiles, refreshRecord} = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/cli-minimum-node.mjs`);
+            const fs = require('node:fs');
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const done = await reportIssue({github, context, ok: process.env.OK === 'true', version: process.env.NODE_VERSION, runUrl});
-            core.info(`minimum-Node issue: ${done}`);
-            if (process.env.OK !== 'true') core.setFailed(`The CLI failed on Node ${process.env.NODE_VERSION}.`);
+            // This run's times: the refreshed record, and the files past theirs.
+            const recordFile = `${process.env.GITHUB_WORKSPACE}/scripts/vitest-node-durations.min-node.json`;
+            const record = JSON.parse(fs.readFileSync(recordFile, 'utf8'));
+            const times = readLegTimes(process.env.TIMES);
+            fs.mkdirSync(`${process.env.GITHUB_WORKSPACE}/refreshed`, {recursive: true});
+            fs.writeFileSync(`${process.env.GITHUB_WORKSPACE}/refreshed/vitest-node-durations.min-node.json`, `${JSON.stringify(refreshRecord(record, times, {source: `CLI on minimum Node run ${context.runId} (Node ${process.env.NODE_VERSION})`, exists: file => fs.existsSync(`${process.env.GITHUB_WORKSPACE}/${file}`)}), null, 2)}\n`);
+            const slow = slowFiles(times, record.seconds ?? {});
+            core.summary.addHeading('Files past their minimum-Node time', 3);
+            core.summary.addRaw(slow.length ? slow.map(({file, recorded, measured}) => `- \`${file}\`: ${measured} s (recorded ${recorded} s)`).join('\n') : `None of the ${Object.keys(times).length} timed files.`, true);
+            await core.summary.write();
+            const verdict = runVerdict({
+              version: process.env.VERSION_RESULT,
+              legs: readLegVerdicts(process.env.VERDICTS, 4),
+              pack: process.env.PACK_RESULT,
+              smoke: process.env.SMOKE_RESULT,
+            });
+            const done = await reportIssue({github, context, verdict, version: process.env.NODE_VERSION, runUrl});
+            core.info(`minimum-Node verdict: ${verdict}; issue: ${done}`);
+            if (verdict === 'fail') core.setFailed(`The CLI failed on Node ${process.env.NODE_VERSION}.`);
+            if (verdict === 'none') core.setFailed(`No verdict on Node ${process.env.NODE_VERSION}: a part of the run stopped or was cancelled before it judged anything.`);
+      - name: Keep the refreshed minimum-Node record
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: min-node-record
+          path: refreshed/vitest-node-durations.min-node.json
+          if-no-files-found: ignore
+          retention-days: 14

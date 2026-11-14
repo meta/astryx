@@ -3,9 +3,10 @@
 /**
  * @file Which Node test files one `--shard <i>/<n>` leg runs.
  * @input The test specifications Vitest collected; `--shard`; recorded
- *   seconds per Node test file (scripts/vitest-node-durations.json).
+ *   seconds per Node test file (scripts/vitest-node-durations.json, or the
+ *   record `VITEST_DURATIONS_FILE` names, such as the minimum-Node legs').
  * @output The specifications this leg runs. With `record <log>…`, a fresh
- *   durations file from Node leg logs.
+ *   durations file (the same record) from Node leg logs.
  * @position `sequence.sequencer` in vitest.config.ts, so every `--shard` run,
  *   the Main workflow's legs and pull requests' alike, splits the `node` project
  *   this way. Vitest's own split deals files out by a hash of their path, by
@@ -26,10 +27,26 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {BaseSequencer} from 'vitest/node';
-import {costOf, slowestFirst, splitByDuration} from './lib/duration-split.mjs';
+import {
+  costOf,
+  mergeRecord as mergeSeconds,
+  slowestFirst,
+  splitByDuration,
+  SWIZZLE_PROOF,
+} from './lib/duration-split.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const DURATIONS = path.join(ROOT, 'scripts/vitest-node-durations.json');
+
+/**
+ * The record this run reads and writes: `VITEST_DURATIONS_FILE` (relative to
+ * the repository) when set, so a workflow on another Node version packs by
+ * that version's times; else DURATIONS.
+ */
+export function durationsFile() {
+  const other = process.env.VITEST_DURATIONS_FILE;
+  return other ? path.resolve(ROOT, other) : DURATIONS;
+}
 const PROJECT = 'node';
 // Seconds of import and transform per Node test file, as the legs report.
 export const PER_FILE_SECONDS = 0.4;
@@ -58,7 +75,7 @@ export function partitionByDuration(
 }
 
 /** Recorded seconds per file, or none when the file cannot be read. */
-export function readDurations(file = DURATIONS) {
+export function readDurations(file = durationsFile()) {
   try {
     return JSON.parse(fs.readFileSync(file, 'utf8')).seconds ?? {};
   } catch {
@@ -107,8 +124,6 @@ export function recordDurations(text) {
   return seconds;
 }
 
-const SWIZZLE_PROOF = /(^|\/)swizzle-proof\.\d+\.test\.mjs$/;
-
 /**
  * The swizzle-proof slices among `files` that prove nothing in this run: every
  * slice reads the same scope first (packages/cli/test/swizzle-proof/scope.mjs
@@ -130,9 +145,8 @@ export async function idleSwizzleSlices(files) {
 }
 
 /**
- * The record after a run. The run's times replace those files' times; files
- * the run did not reach keep their earlier times; a swizzle-proof slice keeps
- * the largest time seen; a file that no longer exists leaves the record.
+ * The record after a run (duration-split.mjs `mergeRecord`), dropping a file
+ * that no longer exists in the repository unless `exists` says otherwise.
  * @param {Record<string, number>} current
  * @param {Record<string, number>} recorded
  * @param {(file: string) => boolean} [exists]
@@ -143,18 +157,7 @@ export function mergeRecord(
   recorded,
   exists = file => fs.existsSync(path.join(ROOT, file)),
 ) {
-  const merged = {...current};
-  for (const [file, seconds] of Object.entries(recorded)) {
-    merged[file] =
-      SWIZZLE_PROOF.test(file) && typeof current[file] === 'number'
-        ? Math.max(current[file], seconds)
-        : seconds;
-  }
-  return Object.fromEntries(
-    Object.entries(merged)
-      .filter(([file]) => exists(file))
-      .sort(([a], [b]) => a.localeCompare(b)),
-  );
+  return mergeSeconds(current, recorded, exists);
 }
 
 export default class DurationShardSequencer extends BaseSequencer {
@@ -226,11 +229,12 @@ if (
     console.error('No Node test file times found in those logs.');
     process.exit(1);
   }
-  const current = fs.existsSync(DURATIONS)
-    ? JSON.parse(fs.readFileSync(DURATIONS, 'utf8'))
+  const record = durationsFile();
+  const current = fs.existsSync(record)
+    ? JSON.parse(fs.readFileSync(record, 'utf8'))
     : {};
   fs.writeFileSync(
-    DURATIONS,
+    record,
     `${JSON.stringify(
       {
         ...current,
@@ -242,6 +246,6 @@ if (
     )}\n`,
   );
   console.error(
-    `Recorded ${Object.keys(seconds).length} Node test files in ${path.relative(ROOT, DURATIONS)}.`,
+    `Recorded ${Object.keys(seconds).length} Node test files in ${path.relative(ROOT, record)}.`,
   );
 }

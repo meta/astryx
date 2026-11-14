@@ -130,3 +130,37 @@ describe('the recorded-time check for the test files a change touches', () => {
     expect(drifted({'new.test.mjs': 400}, {}, ['new.test.mjs'])).toEqual([]);
   });
 });
+
+describe('judging every file, for a scheduled run', () => {
+  const recorded = {
+    'a.test.mjs': 10,
+    'b.test.mjs': 10,
+    'c.test.mjs': 10,
+    'd.test.mjs': 10,
+    'e.test.mjs': 10,
+    'f.test.mjs': 10,
+  };
+
+  it('reads the slowdown from every file, so a uniformly slow run names none', () => {
+    const measured = Object.fromEntries(
+      Object.keys(recorded).map(file => [file, 25]),
+    );
+    expect(drifted(measured, recorded, [], {all: true, margin: 10})).toEqual(
+      [],
+    );
+  });
+
+  it('names a file past its share of that slowdown, with the margin given', () => {
+    const measured = {
+      ...Object.fromEntries(Object.keys(recorded).map(file => [file, 10])),
+      'a.test.mjs': 40,
+    };
+    expect(
+      drifted(measured, recorded, [], {all: true, margin: 10}).map(
+        row => row.file,
+      ),
+    ).toEqual(['a.test.mjs']);
+    // Without `all`, only the changed files are judged.
+    expect(drifted(measured, recorded, [])).toEqual([]);
+  });
+});
