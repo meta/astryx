@@ -3077,23 +3077,46 @@ export async function loadThemeExport(file, {cwd = process.cwd(), base} = {}) {
  * made of it. When Core refuses the input, the input the module gave for
  * the named theme (else its last) and Core's error; null when the module
  * does not load at all.
+ * `chain` holds the inputs of the themes it extends, nearest first, as far
+ * as each was made by a `defineTheme()` call this load saw.
  * @param {string} file
  * @param {{cwd?: string, name?: string}} [ctx]
- * @returns {Promise<{input: any, theme: any, error: Error | null} | null>}
+ * @returns {Promise<{input: any, theme: any, error: Error | null, chain: any[]} | null>}
  */
 export async function loadThemeInput(file, {cwd = process.cwd(), name} = {}) {
   const filePath = path.resolve(cwd, file);
   await selectCore(cwd, {projectOnly: false});
   const interception = interceptCore(_coreThemeModule, _coreRootModule);
+  /** @param {any} input */
+  const chainOf = input => {
+    const chain = [];
+    /** @type {Set<any>} */
+    const seen = new Set([input]);
+    let parent = interception.inputOf(input?.extends);
+    while (parent && typeof parent === 'object' && !seen.has(parent)) {
+      seen.add(parent);
+      chain.push(parent);
+      parent = interception.inputOf(parent.extends);
+    }
+    return chain;
+  };
   try {
     const {theme} = await extractThemeDefinition(filePath, interception);
-    return {input: interception.inputOf(theme) ?? null, theme, error: null};
+    const input = interception.inputOf(theme) ?? null;
+    return {input, theme, error: null, chain: chainOf(input)};
   } catch (e) {
     const given = interception.inputs;
     const input =
       given.filter(x => x && typeof x === 'object' && x.name === name).at(-1) ??
       given.at(-1);
-    return input ? {input, theme: null, error: /** @type {Error} */ (e)} : null;
+    return input
+      ? {
+          input,
+          theme: null,
+          error: /** @type {Error} */ (e),
+          chain: chainOf(input),
+        }
+      : null;
   }
 }
 

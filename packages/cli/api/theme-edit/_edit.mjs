@@ -100,6 +100,7 @@ import {
   ownTokenEntries,
   ownThemeInput,
   describeValue,
+  settingsThemeName,
   nonTextMessage,
   ownPartTokens,
   PHONE_RULE_WHEN,
@@ -117,7 +118,12 @@ import {
   holdAfterBuild,
   setArgs,
 } from './_settings.mjs';
-import {checkSetting, normalizeEntry, storedProblems} from './_check.mjs';
+import {
+  checkSetting,
+  normalizeEntry,
+  propertyValueProblem,
+  storedProblems,
+} from './_check.mjs';
 import {MODAL, isColorToken} from './_compiler.mjs';
 import {colorProblem} from './_color.mjs';
 import {
@@ -1899,7 +1905,9 @@ async function ownTokenProblems(ctx, slug, data) {
   const tokensLine = entries.find(e => e.kind === 'unresolved')?.line ?? null;
   /** Where a page token's value comes from. @param {string} token */
   const whereOf = token => {
-    const e = entries.find(x => x.token === token && x.kind !== 'scoped');
+    const e = entries.find(
+      x => x.token === token && x.kind !== 'scoped' && x.kind !== 'chain',
+    );
     return e ? atOf(e) : {line: tokensLine, file: null};
   };
   /** Where a scoped token's value comes from. @param {string} scope @param {string} token */
@@ -1927,7 +1935,11 @@ async function ownTokenProblems(ctx, slug, data) {
         why: `${key} is no token: a token name starts with -- (such as --color-accent), and the build writes any other key as a CSS declaration on the theme's root, which styles every element; for one part, set it as a property on that part (\`${P} set ${slug} ${key} <value> --on <part>\`)`,
         ...atOf(e),
       });
-    } else if (e.token?.startsWith('--_') && e.kind !== 'scoped')
+    } else if (
+      e.token?.startsWith('--_') &&
+      e.kind !== 'scoped' &&
+      e.kind !== 'chain'
+    )
       out.push({
         token: e.token,
         value: '',
@@ -1956,12 +1968,11 @@ async function ownTokenProblems(ctx, slug, data) {
   if (!input || typeof input !== 'object') return out;
   const named = new Set(out.map(b => b.token));
   /**
-   * Why a token's value is refused, or null. An undefined value is not set
-   * (the build writes nothing for it). Any token, a design token or the
-   * theme's own, takes text or a pair of two texts; any other value (null,
-   * a boolean, a number, a BigInt, a symbol, an object) is no text. A design
-   * token's text is checked as `set` checks it, and only a color takes a
-   * pair.
+   * Why a token's value is refused, or null. Any token, a design token or
+   * the theme's own, takes text or a pair of two texts; any other value
+   * (null, a boolean, a number, a BigInt, a symbol, an object) is no text.
+   * A design token's text is checked as `set` checks it, and only a color
+   * takes a pair.
    * @param {string} token
    * @param {unknown} value
    * @param {string} file the file named in a pair's refusal
@@ -1969,7 +1980,6 @@ async function ownTokenProblems(ctx, slug, data) {
    * @returns {string | null}
    */
   const judge = (token, value, file, reads) => {
-    if (value === undefined) return null;
     const custom = !(token in known);
     if (Array.isArray(value)) {
       if (value.length !== 2 || value.some(h => typeof h !== 'string'))
@@ -2003,17 +2013,19 @@ async function ownTokenProblems(ctx, slug, data) {
     return refused(token, value, reads);
   };
   /**
-   * Why a part's CSS property value is refused, or null: an undefined
-   * value is not set; text is the property's own check; a number is
-   * written as it is, so it stands only where the property takes a bare
-   * number; any other value is no text.
+   * Why a part's CSS property value is refused, or null: text as `set`
+   * checks it for that property; a number is written as it is, so it
+   * stands only where the property takes a bare number; any other value is
+   * no text.
    * @param {string} prop the property, as CSS names it
    * @param {unknown} value
    * @param {string} file
+   * @param {ReadonlySet<string>} reads custom properties the theme sets where the value is read
    * @returns {string | null}
    */
-  const judgeProperty = (prop, value, file) => {
-    if (value === undefined || typeof value === 'string') return null;
+  const judgeProperty = (prop, value, file, reads) => {
+    if (typeof value === 'string')
+      return propertyValueProblem(ctx, prop, value, known, reads);
     if (typeof value === 'number')
       return matchValue(prop, String(value))
         ? null
@@ -2033,73 +2045,166 @@ async function ownTokenProblems(ctx, slug, data) {
         : '';
   /** The custom properties a block of tokens sets. @param {any} node */
   const varsIn = node =>
-    node && typeof node === 'object'
+    node && typeof node === 'object' && !Array.isArray(node)
       ? Object.keys(node).filter(k => k.startsWith('--'))
       : [];
-  const pageVars = new Set(varsIn(input.tokens));
-  // The page's own tokens, a design token or the theme's own.
-  for (const [token, value] of Object.entries(input.tokens ?? {})) {
-    if (named.has(token) || token.startsWith('--_')) continue;
-    const at = whereOf(token);
-    const why = judge(token, value, fileName(at), pageVars);
-    if (why)
+  /** A scope path as the file writes it (`adaptations.rules[0].value`). @param {string[]} path */
+  const labelOf = path => path.join('.').replace(/\.(\d+)(?=\.|$)/g, '[$1]');
+  /** The camelCase name of each CSS property, for a misspelled one. */
+  const camelNames = () =>
+    [...cssProperties()].map(p =>
+      p.replace(/-([a-z])/g, (_m, c) => c.toUpperCase()),
+    );
+  /**
+   * Judge one block of what a theme gives: its tokens and local tokens,
+   * its parts, its onDark and onLight surfaces, and each adaptation rule's
+   * value, which is a block too. A var() reads the custom properties the
+   * block and the blocks around it set.
+   * @param {any} block
+   * @param {string[]} path where the block is, as the file writes it
+   * @param {Set<string>} around custom properties the blocks around it set
+   * @param {(scope: string, key: string) => {line: number | null, file: string | null}} where
+   * @param {string} prefix what names a value of this theme in a refusal
+   */
+  const judgeBlock = (block, path, around, where, prefix) => {
+    if (!block || typeof block !== 'object') return;
+    const reads = new Set([
+      ...around,
+      ...varsIn(block.tokens),
+      ...varsIn(block.localTokens),
+    ]);
+    /**
+     * @param {string[]} at
+     * @param {string} key
+     * @param {string} why
+     * @param {string} [value]
+     */
+    const refuse = (at, key, why, value = '') => {
+      const scope = at.join('.');
+      const label = labelOf(at);
       out.push({
-        token,
-        value: asWritten(value),
+        token: `${prefix}${label ? `${label} ` : ''}${key}`.trim(),
+        value,
         why,
-        ...at,
+        ...(at.length || prefix ? where(scope, key) : whereOf(key)),
       });
-  }
-  // The tokens and part properties each scope sets, wherever in it; a
-  // var() there reads the page's custom properties and the block's own.
-  /** @param {any} node @param {string[]} path @param {number} depth */
-  const scoped = (node, path, depth) => {
-    if (!node || typeof node !== 'object' || depth > 12) return;
-    const reads = new Set([...pageVars, ...varsIn(node)]);
-    const scope = path.join('.');
-    for (const [k, v] of Object.entries(node)) {
-      // In a scope the build writes an undefined value as the text
-      // `undefined` (the page's tokens drop it), which no browser reads.
-      if (
-        v === undefined &&
-        (k.startsWith('--') ||
-          cssProperties().has(k.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`)))
-      ) {
-        const at = whereIn(scope, k);
-        out.push({
-          token: `${scope} ${k}`,
-          value: '',
-          why: `${fileName(at)} gives ${k} the value undefined here, which the build writes as the text undefined in this rule, where the browser drops it: remove the key to leave it unset`,
-          ...at,
-        });
-        continue;
+    };
+    /**
+     * A custom property and its value, wherever a block sets one.
+     * @param {string[]} at @param {string} k @param {unknown} v @param {Set<string>} here
+     * @param {boolean} dropsUndefined
+     */
+    const token = (at, k, v, here, dropsUndefined) => {
+      const loc = at.length || prefix ? where(at.join('.'), k) : whereOf(k);
+      if (k.startsWith('--_'))
+        return refuse(
+          at,
+          k,
+          `${k} is a private variable (--_*), which Core sets itself, so the build refuses a theme that sets one: remove it`,
+        );
+      if (v === undefined) {
+        if (!dropsUndefined)
+          refuse(
+            at,
+            k,
+            `${fileName(loc)} gives ${k} the value undefined here, which the build writes as the text undefined in this rule, where the browser drops it: remove the key to leave it unset`,
+          );
+        return;
       }
-      if (k.startsWith('--')) {
-        if (k.startsWith('--_')) continue;
-        const at = whereIn(scope, k);
-        const why = judge(k, v, fileName(at), reads);
-        if (why)
-          out.push({
-            token: `${scope} ${k}`,
-            value: asWritten(v),
-            why,
-            ...at,
-          });
-        continue;
-      }
-      if (v && typeof v === 'object' && !Array.isArray(v)) {
-        scoped(v, [...path, k], depth + 1);
-        continue;
-      }
-      const prop = k.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`);
-      if (!cssProperties().has(prop)) continue;
-      const at = whereIn(scope, k);
-      const why = judgeProperty(prop, v, fileName(at));
-      if (why) out.push({token: `${scope} ${prop}`, value: '', why, ...at});
+      if (!at.length && !prefix && named.has(k)) return;
+      const why = judge(k, v, fileName(loc), here);
+      if (why) refuse(at, k, why, asWritten(v));
+    };
+    for (const map of ['tokens', 'localTokens']) {
+      const m = block[map];
+      if (!m || typeof m !== 'object') continue;
+      // A theme's own tokens map: the build drops an undefined token there,
+      // and the exported theme's are named by token alone.
+      const top = path.length === 0 && map === 'tokens';
+      const at = top && !prefix ? [] : [...path, map];
+      for (const [k, v] of Object.entries(m)) token(at, k, v, reads, top);
     }
+    /** A part's style block. @param {any} node @param {string[]} at @param {Set<string>} outer @param {number} depth */
+    const part = (node, at, outer, depth) => {
+      if (!node || typeof node !== 'object' || depth > 12) return;
+      const here = new Set([...outer, ...varsIn(node)]);
+      for (const [k, v] of Object.entries(node)) {
+        if (k.startsWith('--')) {
+          token(at, k, v, here, false);
+          continue;
+        }
+        if (v && typeof v === 'object' && !Array.isArray(v)) {
+          part(v, [...at, k], here, depth + 1);
+          continue;
+        }
+        const prop = k.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`);
+        // A vendor-prefixed property is the browser's own: Core checks
+        // that the declaration stays one.
+        if (/^-|^(webkit|moz|ms|o)-/.test(prop)) continue;
+        const loc = where(at.join('.'), k);
+        if (v === undefined) {
+          refuse(
+            at,
+            prop,
+            `${fileName(loc)} gives ${k} the value undefined here, which the build writes as the text undefined in this rule, where the browser drops it: remove the key to leave it unset`,
+          );
+          continue;
+        }
+        if (!cssProperties().has(prop)) {
+          const near = nearest(k, camelNames())[0];
+          refuse(
+            at,
+            k,
+            `${k} is not a CSS property, so the build writes a declaration no browser reads${near ? `; did you mean ${near}?` : ''}`,
+          );
+          continue;
+        }
+        const why = judgeProperty(prop, v, fileName(loc), here);
+        if (why) refuse(at, prop, why, typeof v === 'string' ? v : '');
+      }
+    };
+    const components = block.components;
+    if (components && typeof components === 'object')
+      for (const [name, styles] of Object.entries(components))
+        part(styles, [...path, 'components', name], reads, 0);
+    for (const surface of ['onDark', 'onLight'])
+      judgeBlock(block[surface], [...path, surface], reads, where, prefix);
+    const rules = block.adaptations?.rules;
+    if (Array.isArray(rules))
+      rules.forEach((rule, i) =>
+        judgeBlock(
+          rule?.value,
+          [...path, 'adaptations', 'rules', String(i), 'value'],
+          reads,
+          where,
+          prefix,
+        ),
+      );
   };
-  for (const scope of ['components', 'onDark', 'onLight', 'adaptations'])
-    scoped(input[scope], [scope], 0);
+  judgeBlock(input, [], new Set(), whereIn, '');
+  // The custom properties the theme's own page sets, which a typography
+  // token Core builds may read.
+  const pageVars = new Set([
+    ...varsIn(input.tokens),
+    ...varsIn(input.localTokens),
+  ]);
+  // Every theme the exported one extends that this source defines (one
+  // between the editor's settings and the export), judged the same way:
+  // the build writes what each gives.
+  for (const parent of loaded?.chain ?? []) {
+    if (parent?.name === settingsThemeName(slug)) break;
+    const theme = String(parent?.name ?? '');
+    /** @param {string} _scope @param {string} key */
+    const whereChain = (_scope, key) => {
+      const e =
+        entries.find(
+          x => x.kind === 'chain' && x.theme === theme && x.token === key,
+        ) ??
+        entries.find(x => x.kind === 'chain' && x.theme === theme && !x.token);
+      return e ? atOf(e) : {line: null, file: null};
+    };
+    judgeBlock(parent, [], new Set(), whereChain, `theme '${theme}' `);
+  }
   // Typography: each field the source gives, as given, then each token
   // Core builds from it, named by the field that gives it.
   const typo = entries.filter(e => e.kind === 'typography');
@@ -2128,6 +2233,30 @@ async function ownTokenProblems(ctx, slug, data) {
     }
   };
   fields(input.typography, []);
+  // Core writes a role's weight only from a type scale: without one, a
+  // weight builds nothing.
+  if (
+    input.typography &&
+    typeof input.typography === 'object' &&
+    !input.typography.scale
+  )
+    for (const role of ['body', 'heading', 'code']) {
+      const r = input.typography[role];
+      if (!r || typeof r !== 'object' || flagged.has(role)) continue;
+      for (const field of ['weight', 'weights']) {
+        if (r[field] === undefined) continue;
+        const key = `${role}.${field}`;
+        const e =
+          typo.find(x => x.key === key || x.key.startsWith(`${key}.`)) ??
+          typo[0];
+        out.push({
+          token: `typography.${key}`,
+          value: typeof r[field] === 'string' ? r[field] : '',
+          why: `Core writes a role's weight only from a type scale, and this typography has none, so ${key} builds nothing: add scale: {base: 16, ratio: 1.2} beside it`,
+          ...(e ? atOf(e) : {line: null, file: null}),
+        });
+      }
+    }
   const scale = input.typography?.scale;
   if (
     scale &&
@@ -2157,19 +2286,23 @@ async function ownTokenProblems(ctx, slug, data) {
       const family = /^--font-family-([a-z]+)$/.exec(token)?.[1];
       if (family) return roleEntry(family) ?? null;
       if (!/^--(font-size|text|heading)-/.test(token)) return null;
-      if (/-weight$/.test(token))
+      if (/-weight$/.test(token)) {
+        const role = /heading/.test(token)
+          ? 'heading'
+          : /code/.test(token)
+            ? 'code'
+            : 'body';
         return (
-          roleEntry(
-            /heading/.test(token)
-              ? 'heading'
-              : /code/.test(token)
-                ? 'code'
-                : 'body',
+          typo.find(
+            e =>
+              e.key === `${role}.weight` || e.key.startsWith(`${role}.weights`),
           ) ??
+          roleEntry(role) ??
           typo.find(e => /weight/.test(e.key)) ??
           typo[0] ??
           null
         );
+      }
       return typo.find(e => e.key.startsWith('scale.')) ?? typo[0] ?? null;
     };
     /** @type {Set<any>} */
@@ -2198,6 +2331,19 @@ async function ownTokenProblems(ctx, slug, data) {
 }
 
 /**
+ * A type scale field as the number Core reads, or NaN: a number, or text
+ * that is a number; any other value (a boolean, a symbol, an array) is no
+ * number of pixels, whatever Number() would make of it.
+ * @param {unknown} value
+ */
+const scaleNumber = value =>
+  typeof value === 'number'
+    ? value
+    : typeof value === 'string' && value.trim() !== ''
+      ? Number(value)
+      : NaN;
+
+/**
  * What is wrong with one typography field of a theme's own source, or
  * null: a family is one family name without quotes (Core quotes it whole)
  * and with nothing CSS would read as the end of the value; the scale's
@@ -2213,7 +2359,7 @@ function typographyProblem(key, value) {
     (field === 'weight' || key.split('.').includes('weights')) &&
     typeof value !== 'string'
   )
-    return `a typography weight is a CSS value in quotes, which Core writes as it is; ${JSON.stringify(value)} is not text: write ${typeof value === 'number' ? `'${value}'` : "'600'"} (or a weight token, such as 'var(--font-weight-bold)')`;
+    return `a typography weight is a CSS value in quotes, which Core writes as it is; ${describeValue(value)} is not text: write ${typeof value === 'number' ? `'${value}'` : "'600'"} (or a weight token, such as 'var(--font-weight-bold)')`;
   if (field === 'family') {
     if (typeof value !== 'string')
       return 'a typography family is a family name in quotes, such as "Inter"';
@@ -2238,18 +2384,18 @@ function typographyProblem(key, value) {
     return null;
   }
   if (field === 'ratio') {
-    const n = Number(value);
+    const n = scaleNumber(value);
     if (!Number.isFinite(n) || n <= 1 || n > 4)
-      return `the type scale's ratio is how much each size grows over the last, a number above 1 and at most 4 (such as 1.2); ${JSON.stringify(value)} makes ${n <= 0 ? 'sizes that are not numbers' : n <= 1 ? 'every size the same or smaller' : 'sizes no page can use'}`;
+      return `the type scale's ratio is how much each size grows over the last, a number above 1 and at most 4 (such as 1.2); ${describeValue(value)} makes ${n <= 0 ? 'sizes that are not numbers' : n <= 1 ? 'every size the same or smaller' : 'sizes no page can use'}`;
     return null;
   }
   if (field === 'base') {
-    const n = Number(value);
+    const n = scaleNumber(value);
     if (!Number.isFinite(n) || n <= 0) {
       // A size with a unit builds NaNrem: the number of pixels it means.
       const m = /^\s*([0-9.]+)\s*(px|rem|em)\s*$/i.exec(String(value));
       const px = m ? Number(m[1]) * (/^r?em$/i.test(m[2]) ? 16 : 1) : null;
-      return `the type scale's base is the body size, a positive number of pixels${px ? `, so ${JSON.stringify(value)} is base: ${px}` : ' (such as 16)'}; ${JSON.stringify(value)} builds sizes no page can use${m ? ' (NaNrem)' : ''}`;
+      return `the type scale's base is the body size, a positive number of pixels${px ? `, so ${describeValue(value)} is base: ${px}` : ' (such as 16)'}; ${describeValue(value)} builds sizes no page can use${m ? ' (NaNrem)' : ''}`;
     }
     return null;
   }
@@ -3331,7 +3477,11 @@ async function changeOnce(
       const ownEntry =
         s.thing.startsWith('--') && !s.on && !s.when && !s.state
           ? ownTokenEntries(cwd, slug).find(
-              x => x.token === s.thing && !x.overridden && x.kind !== 'scoped',
+              x =>
+                x.token === s.thing &&
+                !x.overridden &&
+                x.kind !== 'scoped' &&
+                x.kind !== 'chain',
             )
           : undefined;
       if (ownEntry) {
@@ -4842,7 +4992,10 @@ export function ownPhoneNotes(cwd, slug, data) {
   );
   const inMap = new Set(
     entries
-      .filter(e => e.token && !e.overridden && e.kind !== 'scoped')
+      .filter(
+        e =>
+          e.token && !e.overridden && e.kind !== 'scoped' && e.kind !== 'chain',
+      )
       .map(e => e.token),
   );
   /** @param {string} k */
