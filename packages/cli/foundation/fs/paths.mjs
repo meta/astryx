@@ -292,15 +292,28 @@ export function homeFolder() {
 }
 
 /**
+ * Whether a relative path climbs out of the folder it starts in: `..`
+ * itself, or a path that begins with `../` (or `..` and the platform's
+ * separator). A name that only
+ * begins with two dots (`..x`) is a folder or file like any other.
+ *
+ * @param {string} rel
+ * @returns {boolean}
+ */
+export function climbsOut(rel) {
+  return rel === '..' || rel.startsWith('../') || rel.startsWith(`..${path.sep}`);
+}
+
+/**
  * Whether `child` lies strictly inside `parent`.
  *
  * @param {string} child
  * @param {string} parent
  * @returns {boolean}
  */
-function isInside(child, parent) {
+export function isInside(child, parent) {
   const rel = path.relative(parent, child);
-  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+  return rel !== '' && !climbsOut(rel) && !path.isAbsolute(rel);
 }
 
 /**

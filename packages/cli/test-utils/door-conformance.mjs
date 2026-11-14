@@ -1,10 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Door conformance (spec AST-081 FR1): every command example, run
- * through the bin and through the host entry, gives the same exit status,
- * output, and file changes, in an empty folder, a project on the current
- * minor, and a project on the previous minor.
+ * @file Door conformance (spec AST-081 FR1), shared by the three test files,
+ * one per folder: every command example, run through the bin and through the
+ * host entry, gives the same exit status, output, and file changes.
  *
  * Each run is a child process with its own copy of the folder, its own home
  * folder, and its own per-user cache. The package registry is unreachable and
@@ -12,6 +11,11 @@
  * run's own folders read as placeholders. Neither door is given a command
  * name, so FR5's command names are the same through both, and no line FR5 or
  * FR6 lets differ prints.
+ *
+ * @input the command docs' examples
+ * @output `describeDoorConformance(folder)`, one folder's tests
+ * @position packages/cli/test-utils; each host/door-conformance.*.test.mjs calls
+ *   it once
  */
 
 import {spawn} from 'node:child_process';
@@ -25,7 +29,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CLI_ROOT = path.resolve(HERE, '..');
 const CORE_ROOT = path.resolve(CLI_ROOT, '../core');
 const BIN = path.join(CLI_ROOT, 'clients', 'cli', 'bin', 'astryx.mjs');
-const HOST_URL = pathToFileURL(path.join(HERE, 'index.mjs')).href;
+const HOST_URL = pathToFileURL(path.join(CLI_ROOT, 'host', 'index.mjs')).href;
 const COMMANDS = path.join(CLI_ROOT, 'clients', 'cli', 'commands');
 const VERSION = JSON.parse(
   fs.readFileSync(path.join(CLI_ROOT, 'package.json'), 'utf8'),
@@ -35,7 +39,11 @@ const PREVIOUS_MINOR = `${MAJOR}.${Math.max(MINOR - 1, 0)}.0`;
 /** How long one run may take before it counts as hung. */
 const RUN_TIMEOUT_MS = 90_000;
 
-/** Split an example's command line the way a shell would, quotes included. */
+/**
+ * Split an example's command line the way a shell would, quotes included.
+ * @param {string} line
+ * @returns {string[]}
+ */
 function splitArgs(line) {
   const out = [];
   let current = '';
@@ -251,41 +259,51 @@ async function inBatches(tasks, limit) {
 
 const examples = await commandExamples();
 
-// Only a run that failed before removing its folder leaves one here.
-afterAll(() => {
-  for (const base of bases) fs.rmSync(base, {recursive: true, force: true});
-});
+/**
+ * The tests for one folder: each example runs through both doors in a fresh
+ * copy of it, and the two runs must match. Each test file runs one folder, so
+ * the Node legs can spread the three.
+ * @param {keyof typeof FOLDERS} folder
+ */
+export function describeDoorConformance(folder) {
+  const setUp = FOLDERS[folder];
+  // Only a run that failed before removing its folder leaves one here.
+  afterAll(() => {
+    for (const base of bases) fs.rmSync(base, {recursive: true, force: true});
+  });
 
-describe.each(Object.entries(FOLDERS))('in %s', (_folder, setUp) => {
-  /** @type {Map<string, {bin: Awaited<ReturnType<typeof runThrough>>, host: Awaited<ReturnType<typeof runThrough>>}>} */
-  const runs = new Map();
+  describe(`in ${folder}`, () => {
+    /** @type {Map<string, {bin: Awaited<ReturnType<typeof runThrough>>, host: Awaited<ReturnType<typeof runThrough>>}>} */
+    const runs = new Map();
 
-  beforeAll(async () => {
-    const limit = Math.max(2, Math.min(16, os.availableParallelism()));
-    const results = await inBatches(
-      examples.flatMap(({argv}) => [
-        () => runThrough('bin', argv, setUp),
-        () => runThrough('host entry', argv, setUp),
-      ]),
-      limit,
-    );
-    examples.forEach(({cli}, index) => {
-      runs.set(cli, {bin: results[2 * index], host: results[2 * index + 1]});
+    beforeAll(async () => {
+      const limit = Math.max(2, Math.min(16, os.availableParallelism()));
+      const results = await inBatches(
+        examples.flatMap(({argv}) => [
+          () => runThrough('bin', argv, setUp),
+          () => runThrough('host entry', argv, setUp),
+        ]),
+        limit,
+      );
+      examples.forEach(({cli}, index) => {
+        runs.set(cli, {bin: results[2 * index], host: results[2 * index + 1]});
+      });
+      // Each folder runs every example twice (bin and host entry), `limit` at a
+      // time: 4 on CI's 4-core runners. The three folders together took 467 s
+      // on a slow CI leg, so one folder takes about a third of that. 10 minutes
+      // leaves a wide margin, and a hung hook that starts early in its leg
+      // fails by this hook's name. Later in a leg, the shard watchdog names
+      // the file instead.
+    }, 10 * 60_000);
+
+    it('runs every example', () => {
+      expect(examples.length).toBeGreaterThan(100);
     });
-    // Each folder runs every example twice (bin and host entry), `limit` at a
-    // time: 4 on CI's 4-core runners. The whole file, three folders, took
-    // 377 s on a loaded CI leg. 10 minutes per folder leaves a margin over
-    // that, and a hung hook that starts early in its leg fails by this hook's
-    // name. Later in a leg, the shard watchdog names the file instead.
-  }, 10 * 60_000);
 
-  it('runs every example', () => {
-    expect(examples.length).toBeGreaterThan(100);
+    it.each(examples.map(({cli}) => [cli]))('%s', cli => {
+      const {bin, host} = runs.get(cli) ?? {};
+      expect(bin?.status, `${cli} finished through the bin`).not.toBeNull();
+      expect(host).toEqual(bin);
+    });
   });
-
-  it.each(examples.map(({cli}) => [cli]))('%s', cli => {
-    const {bin, host} = runs.get(cli) ?? {};
-    expect(bin?.status, `${cli} finished through the bin`).not.toBeNull();
-    expect(host).toEqual(bin);
-  });
-});
+}
