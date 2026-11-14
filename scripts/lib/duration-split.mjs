@@ -9,7 +9,10 @@
  *   by it; the accessibility contract legs (.github/scripts/a11y-contract-shard.mjs),
  *   which split single tests, share its median for a test with no recorded
  *   time. The numbers only steer balance; which items run never depends on
- *   them.
+ *   them. `mergeRecord` refreshes a durations record after a run, for the
+ *   sequencer's record and the minimum-Node legs'
+ *   (.github/scripts/cli-minimum-node.mjs). No imports, so a sparse checkout
+ *   can load it.
  */
 
 /** The median of recorded times, or 1 when there are none. */
@@ -128,4 +131,31 @@ export function fitLegsToBudget(items, cost, {budget, maxLegs, start = 1}) {
     shares,
     longest: Math.max(0, ...shares.map(total)),
   };
+}
+
+/** A swizzle-proof slice file. */
+export const SWIZZLE_PROOF = /(^|\/)swizzle-proof\.\d+\.test\.mjs$/;
+
+/**
+ * The record after a run. The run's times replace those files' times; files
+ * the run did not reach keep their earlier times; a swizzle-proof slice keeps
+ * the largest time seen; a file `exists` no longer finds leaves the record.
+ * @param {Record<string, number>} current
+ * @param {Record<string, number>} recorded
+ * @param {(file: string) => boolean} exists
+ * @returns {Record<string, number>}
+ */
+export function mergeRecord(current, recorded, exists) {
+  const merged = {...current};
+  for (const [file, seconds] of Object.entries(recorded)) {
+    merged[file] =
+      SWIZZLE_PROOF.test(file) && typeof current[file] === 'number'
+        ? Math.max(current[file], seconds)
+        : seconds;
+  }
+  return Object.fromEntries(
+    Object.entries(merged)
+      .filter(([file]) => exists(file))
+      .sort(([a], [b]) => a.localeCompare(b)),
+  );
 }

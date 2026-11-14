@@ -92,14 +92,27 @@ describe('the workflow', () => {
   });
 
   it('checks out every module the version step and the report import, and the version step runs in that tree alone', () => {
-    const script = fs.readFileSync(
-      path.join(root, '.github/scripts/cli-minimum-node.mjs'),
-      'utf8',
+    // Every module the script loads, following relative imports to any depth.
+    const imports = [];
+    const visit = file => {
+      const text = fs.readFileSync(path.join(root, file), 'utf8');
+      for (const [, spec] of text.matchAll(/from '(\.\.?\/[^']+)'/g)) {
+        const next = path.posix.normalize(
+          path.posix.join(path.posix.dirname(file), spec),
+        );
+        if (!imports.includes(next)) {
+          imports.push(next);
+          visit(next);
+        }
+      }
+    };
+    visit('.github/scripts/cli-minimum-node.mjs');
+    expect(imports).toEqual(
+      expect.arrayContaining([
+        '.github/scripts/node-time-drift.mjs',
+        'scripts/lib/duration-split.mjs',
+      ]),
     );
-    const imports = [...script.matchAll(/from '\.\/([^']+)'/g)].map(
-      ([, file]) => `.github/scripts/${file}`,
-    );
-    expect(imports).toContain('.github/scripts/node-time-drift.mjs');
     for (const job of ['version', 'report']) {
       const listed = jobs[job].steps[0].with['sparse-checkout'];
       for (const file of ['.github/scripts/cli-minimum-node.mjs', ...imports])
@@ -347,6 +360,11 @@ describe('the minimum-Node times', () => {
       source: 'run 7',
       seconds: {'a.test.mjs': 1, 'b.test.mjs': 4, 'c.test.mjs': 5},
     });
+    // The Node legs' rule: a swizzle-proof slice keeps its largest time.
+    const slice = 'packages/cli/test/swizzle-proof/swizzle-proof.1.test.mjs';
+    expect(
+      refreshRecord({seconds: {[slice]: 300}}, {[slice]: 120}).seconds,
+    ).toEqual({[slice]: 300});
     expect(refreshRecord(record, {}, {source: 'run 7'}).$comment).toMatch(
       /Refreshed from that workflow's run named in `source`/,
     );

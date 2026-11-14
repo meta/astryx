@@ -35,6 +35,7 @@ jobs:
           sparse-checkout: |
             .github/scripts/cli-minimum-node.mjs
             .github/scripts/node-time-drift.mjs
+            scripts/lib/duration-split.mjs
             packages/cli/package.json
           sparse-checkout-cone-mode: false
           persist-credentials: false
@@ -205,6 +206,7 @@ jobs:
           sparse-checkout: |
             .github/scripts/cli-minimum-node.mjs
             .github/scripts/node-time-drift.mjs
+            scripts/lib/duration-split.mjs
             scripts/vitest-node-durations.min-node.json
             packages/cli/**/*.test.*
           sparse-checkout-cone-mode: false

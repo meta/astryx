@@ -21,6 +21,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
+import {mergeRecord} from '../../scripts/lib/duration-split.mjs';
 import {drifted} from './node-time-drift.mjs';
 
 export const ISSUE_TITLE = 'CLI fails on its minimum Node';
@@ -154,9 +155,11 @@ export function slowFiles(times, recorded) {
 }
 
 /**
- * The record with this run's times in it: each measured file takes its new
- * time, every other file keeps its own, and a file `exists` no longer finds
- * leaves it. `source` names the run the times came from.
+ * The record with this run's times in it, by the same rule as the Node legs'
+ * record (duration-split.mjs `mergeRecord`): each measured file takes its new
+ * time, every other file keeps its own, a swizzle-proof slice keeps its
+ * largest time, and a file `exists` no longer finds leaves it. `source` names
+ * the run the times came from.
  * @param {{seconds?: Record<string, number>}} record
  * @param {Record<string, number>} times
  * @param {{source?: string, exists?: (file: string) => boolean}} [options]
@@ -166,7 +169,6 @@ export function refreshRecord(
   times,
   {source, exists = () => true} = {},
 ) {
-  const seconds = {...record.seconds, ...times};
   return {
     ...record,
     ...(source
@@ -176,11 +178,7 @@ export function refreshRecord(
           source,
         }
       : {}),
-    seconds: Object.fromEntries(
-      Object.entries(seconds)
-        .filter(([file]) => exists(file))
-        .sort(([a], [b]) => a.localeCompare(b)),
-    ),
+    seconds: mergeRecord(record.seconds ?? {}, times, exists),
   };
 }
 

@@ -27,7 +27,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {BaseSequencer} from 'vitest/node';
-import {costOf, slowestFirst, splitByDuration} from './lib/duration-split.mjs';
+import {
+  costOf,
+  mergeRecord as mergeSeconds,
+  slowestFirst,
+  splitByDuration,
+  SWIZZLE_PROOF,
+} from './lib/duration-split.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const DURATIONS = path.join(ROOT, 'scripts/vitest-node-durations.json');
@@ -118,8 +124,6 @@ export function recordDurations(text) {
   return seconds;
 }
 
-const SWIZZLE_PROOF = /(^|\/)swizzle-proof\.\d+\.test\.mjs$/;
-
 /**
  * The swizzle-proof slices among `files` that prove nothing in this run: every
  * slice reads the same scope first (packages/cli/test/swizzle-proof/scope.mjs
@@ -141,9 +145,8 @@ export async function idleSwizzleSlices(files) {
 }
 
 /**
- * The record after a run. The run's times replace those files' times; files
- * the run did not reach keep their earlier times; a swizzle-proof slice keeps
- * the largest time seen; a file that no longer exists leaves the record.
+ * The record after a run (duration-split.mjs `mergeRecord`), dropping a file
+ * that no longer exists in the repository unless `exists` says otherwise.
  * @param {Record<string, number>} current
  * @param {Record<string, number>} recorded
  * @param {(file: string) => boolean} [exists]
@@ -154,18 +157,7 @@ export function mergeRecord(
   recorded,
   exists = file => fs.existsSync(path.join(ROOT, file)),
 ) {
-  const merged = {...current};
-  for (const [file, seconds] of Object.entries(recorded)) {
-    merged[file] =
-      SWIZZLE_PROOF.test(file) && typeof current[file] === 'number'
-        ? Math.max(current[file], seconds)
-        : seconds;
-  }
-  return Object.fromEntries(
-    Object.entries(merged)
-      .filter(([file]) => exists(file))
-      .sort(([a], [b]) => a.localeCompare(b)),
-  );
+  return mergeSeconds(current, recorded, exists);
 }
 
 export default class DurationShardSequencer extends BaseSequencer {
