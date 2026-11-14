@@ -241,7 +241,7 @@ import {
   formatEditableNumber,
   formatGroupedEditableNumber,
   groupEditableDraft,
-  holdsTypedGroup,
+  typedGroupIndexes,
 } from './numberParser';
 import {
   getNumberInputRejection,
@@ -776,11 +776,15 @@ export function NumberInput({
   // it to tell the field's own separators, which a composed digit shifted,
   // from ones the person typed.
   const compositionStartTextRef = useRef<string | undefined>(undefined);
-  // Whether the draft at compositionstart held a typed group character.
-  const compositionStartHoldsTypedGroupRef = useRef(false);
-  // The draft text that holds a group character the person typed, or null.
-  // Keyed by text so a draft the field rewrote (commit, stepping) drops it.
-  const typedGroupDraftRef = useRef<string | null>(null);
+  // The typed group character indexes of the draft at compositionstart.
+  const compositionStartTypedGroupsRef = useRef<ReadonlyArray<number>>([]);
+  // The draft text that holds group characters the person typed, with their
+  // indexes, or null. Keyed by text so a draft the field rewrote (commit,
+  // stepping) drops them.
+  const typedGroupDraftRef = useRef<{
+    text: string;
+    indexes: ReadonlyArray<number>;
+  } | null>(null);
   const inputGroup = useInputGroup();
   const inputGroupState = use(InputGroupInternalContext);
   const isDisabled = isDisabledProp || inputGroupState.isDisabled;
@@ -980,14 +984,16 @@ export function NumberInput({
     [rejectionRules, reportEntryError, shownRejection],
   );
 
-  // True when `text` is the current draft and holds a group character the
-  // person typed, so regrouping must leave it as typed.
-  const isTypedGroupDraft = useCallback(
-    (text: string) =>
+  // The indexes of the group characters the person typed when `text` is the
+  // current draft, so regrouping leaves them as typed.
+  const getTypedGroups = useCallback(
+    (text: string): ReadonlyArray<number> =>
       holdDraft === null &&
       pendingInput !== null &&
       text === pendingInput &&
-      typedGroupDraftRef.current === text,
+      typedGroupDraftRef.current?.text === text
+        ? typedGroupDraftRef.current.indexes
+        : [],
     [holdDraft, pendingInput],
   );
 
@@ -997,7 +1003,7 @@ export function NumberInput({
       text: string,
       caret: number,
       previousText?: string,
-      previousHoldsTypedGroup = false,
+      previousTypedGroups: ReadonlyArray<number> = [],
     ) => {
       const isGrouping = isGroupedWhileEditing && !isComposingRef.current;
       const next = isGrouping
@@ -1006,14 +1012,16 @@ export function NumberInput({
             caret,
             locale,
             previousText,
-            previousHoldsTypedGroup,
+            previousTypedGroups,
           )
         : {text, caret};
+      // A draft that holds typed group characters stays as typed, so their
+      // indexes still match `next.text`.
+      const indexes = isGrouping
+        ? typedGroupIndexes(text, locale, previousText, previousTypedGroups)
+        : [];
       typedGroupDraftRef.current =
-        isGrouping &&
-        holdsTypedGroup(text, locale, previousText, previousHoldsTypedGroup)
-          ? next.text
-          : null;
+        indexes.length > 0 ? {text: next.text, indexes} : null;
       if (next.text !== input.value) {
         // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the grouped text must be in the input before this event restores the caret
         flushSync(() => {
@@ -1053,17 +1061,17 @@ export function NumberInput({
         text,
         input.selectionStart ?? text.length,
         displayValue,
-        isTypedGroupDraft(displayValue),
+        getTypedGroups(displayValue),
       );
     },
     [
       applyGroupedDraft,
       commitDraftText,
       displayValue,
+      getTypedGroups,
       isDisabled,
       isGroupedWhileEditing,
       isReadOnly,
-      isTypedGroupDraft,
     ],
   );
 
@@ -1073,24 +1081,23 @@ export function NumberInput({
     (e: CompositionEvent<HTMLInputElement>) => {
       isComposingRef.current = true;
       compositionStartTextRef.current = e.currentTarget.value;
-      compositionStartHoldsTypedGroupRef.current = isTypedGroupDraft(
+      compositionStartTypedGroupsRef.current = getTypedGroups(
         e.currentTarget.value,
       );
       if (!isDisabled) {
         onCompositionStart?.(e);
       }
     },
-    [isDisabled, isTypedGroupDraft, onCompositionStart],
+    [getTypedGroups, isDisabled, onCompositionStart],
   );
 
   const handleCompositionEnd = useCallback(
     (e: CompositionEvent<HTMLInputElement>) => {
       isComposingRef.current = false;
       const previousText = compositionStartTextRef.current;
-      const previousHoldsTypedGroup =
-        compositionStartHoldsTypedGroupRef.current;
+      const previousTypedGroups = compositionStartTypedGroupsRef.current;
       compositionStartTextRef.current = undefined;
-      compositionStartHoldsTypedGroupRef.current = false;
+      compositionStartTypedGroupsRef.current = [];
       if (!isDisabled) {
         onCompositionEnd?.(e);
       }
@@ -1111,7 +1118,7 @@ export function NumberInput({
         text,
         foldedCaret,
         previousText,
-        previousHoldsTypedGroup,
+        previousTypedGroups,
       );
     },
     [
@@ -1465,7 +1472,11 @@ export function NumberInput({
         const end = input.selectionEnd;
         // A typed group character is the person's own, so the browser
         // deletes just that character.
-        if (start != null && start === end && !isTypedGroupDraft(input.value)) {
+        if (
+          start != null &&
+          start === end &&
+          getTypedGroups(input.value).length === 0
+        ) {
           const result = deleteDigitAcrossGroupSeparator(
             input.value,
             start,
@@ -1497,10 +1508,10 @@ export function NumberInput({
     [
       commitDraftText,
       commitPendingInput,
+      getTypedGroups,
       isDisabled,
       isGroupedWhileEditing,
       isReadOnly,
-      isTypedGroupDraft,
       locale,
       onEnter,
       onKeyDown,

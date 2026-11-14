@@ -4,7 +4,7 @@
  * @file numberParser.ts
  * @input Text a person typed or pasted, plus the resolved BCP 47 locale
  * @output Exports parseLocaleNumber, formatEditableNumber, formatPercent,
- *   formatGroupedEditableNumber, groupEditableDraft, holdsTypedGroup, and
+ *   formatGroupedEditableNumber, groupEditableDraft, typedGroupIndexes, and
  *   deleteDigitAcrossGroupSeparator
  * @position Internal number reading and writing for NumberInput, and the
  *   percentage ProgressBar writes; not part of the public surface
@@ -540,8 +540,11 @@ function findIntegerRun(
   return {runStart, runEnd};
 }
 
-/** The text an edit inserted between the unchanged prefix and suffix. */
-function insertedByEdit(previous: string, next: string): string {
+/** The lengths of the prefix and suffix an edit left unchanged. */
+function editBounds(
+  previous: string,
+  next: string,
+): {prefix: number; suffix: number} {
   const maxPrefix = Math.min(previous.length, next.length);
   let prefix = 0;
   while (prefix < maxPrefix && previous[prefix] === next[prefix]) {
@@ -555,6 +558,12 @@ function insertedByEdit(previous: string, next: string): string {
   ) {
     suffix++;
   }
+  return {prefix, suffix};
+}
+
+/** The text an edit inserted between the unchanged prefix and suffix. */
+function insertedByEdit(previous: string, next: string): string {
+  const {prefix, suffix} = editBounds(previous, next);
   return next.slice(prefix, next.length - suffix);
 }
 
@@ -593,30 +602,49 @@ function hasOnlyFieldGrouping(
 }
 
 /**
- * True when the integer run of `text` holds a group character the person
- * typed. An edit that inserts one sets it, and it carries forward from the
- * previous draft until the run holds no group character. Without it, a typed
- * en-US `1,234` or de-DE `3.141` looks like the field's own grouping.
+ * The indexes in `text` of the group characters in its integer run that the
+ * person typed. An edit that inserts a group character adds its index, the
+ * typed ones from `previousText` (`previousTypedGroups`) move with the
+ * unchanged text around the edit, and one the edit deleted drops out. Without
+ * them, a typed en-US `1,234` or de-DE `3.141` looks like the field's own
+ * grouping, and a typed group character the person deleted again would leave
+ * the field's own separators looking typed.
  */
-export function holdsTypedGroup(
+export function typedGroupIndexes(
   text: string,
   locale?: Locale,
   previousText?: string,
-  previousHoldsTypedGroup = false,
-): boolean {
+  previousTypedGroups: ReadonlyArray<number> = [],
+): number[] {
   const {group, hasGrouping} = getLocaleNumberSymbols(locale);
-  if (!hasGrouping || group === '') {
-    return false;
+  if (!hasGrouping || group === '' || previousText === undefined) {
+    return [];
+  }
+  const {prefix, suffix} = editBounds(previousText, text);
+  const shift = text.length - previousText.length;
+  const indexes: number[] = [];
+  for (const index of previousTypedGroups) {
+    if (index + group.length <= prefix) {
+      indexes.push(index);
+    } else if (index >= previousText.length - suffix) {
+      indexes.push(index + shift);
+    }
+  }
+  for (let i = prefix; i < text.length - suffix; i++) {
+    if (text.startsWith(group, i)) {
+      indexes.push(i);
+      i += group.length - 1;
+    }
   }
   const {runStart, runEnd} = findIntegerRun(text, group);
-  if (!text.slice(runStart, runEnd).includes(group)) {
-    return false;
-  }
-  return (
-    previousHoldsTypedGroup ||
-    (previousText !== undefined &&
-      insertedByEdit(previousText, text).includes(group))
-  );
+  return indexes
+    .filter(
+      index =>
+        index >= runStart &&
+        index + group.length <= runEnd &&
+        text.startsWith(group, index),
+    )
+    .sort((x, y) => x - y);
 }
 
 /**
@@ -630,7 +658,7 @@ export function holdsTypedGroup(
  * shifted those separators off their boundaries (en-US `1,500` then `0` is
  * `15,000`, Backspace at the end of `1,500,000` is `150,000`).
  *
- * With `previousHoldsTypedGroup` (see `holdsTypedGroup`), a draft that still
+ * With `previousTypedGroups` (see `typedGroupIndexes`), a draft that still
  * holds a group character the person typed stays as typed, even once three
  * digits follow it (en-US `1,234` then `5` stays `1,2345`).
  */
@@ -639,7 +667,7 @@ export function groupEditableDraft(
   caret: number,
   locale?: Locale,
   previousText?: string,
-  previousHoldsTypedGroup = false,
+  previousTypedGroups: ReadonlyArray<number> = [],
 ): GroupedEditableDraft {
   const clampedCaret = Math.max(0, Math.min(caret, text.length));
   const {group, primaryGroupSize, secondaryGroupSize, hasGrouping} =
@@ -667,8 +695,11 @@ export function groupEditableDraft(
 
   // A group character typed earlier is still in the run. Once three digits
   // follow it, it sits on a grouping boundary and looks like the field's own,
-  // so only the carried flag tells them apart.
-  if (previousHoldsTypedGroup && run.includes(group)) {
+  // so only the carried indexes tell them apart.
+  if (
+    typedGroupIndexes(text, locale, previousText, previousTypedGroups).length >
+    0
+  ) {
     return {text, caret: clampedCaret};
   }
 

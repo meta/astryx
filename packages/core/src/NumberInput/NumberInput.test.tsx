@@ -791,6 +791,44 @@ describe('NumberInput', () => {
       expect(input).toHaveValue('123,456');
     });
 
+    it('regroups once a typed vi-VN group character is deleted again', () => {
+      const onChange = vi.fn();
+      render(<GroupedField locale="vi-VN" value={null} onChange={onChange} />);
+      const input = screen.getByRole('spinbutton');
+      fireEvent.focus(input);
+      for (const draft of ['1', '15', '150', '1500']) {
+        fireEvent.input(input, {target: {value: draft}});
+      }
+      expect(input).toHaveValue('1.500');
+      for (const draft of ['1.500.', '1.500']) {
+        fireEvent.input(input, {target: {value: draft}});
+        expect(input).toHaveValue(draft);
+      }
+      fireEvent.input(input, {target: {value: '1.5005'}});
+      expect(input).toHaveValue('15.005');
+      fireEvent.blur(input);
+      expect(onChange).toHaveBeenCalledWith(15005);
+    });
+
+    it('regroups once a typed en-US group character is deleted again', () => {
+      const onChange = vi.fn();
+      render(<GroupedField locale="en-US" value={null} onChange={onChange} />);
+      const input = screen.getByRole('spinbutton');
+      fireEvent.focus(input);
+      for (const draft of ['1', '12', '123', '1234']) {
+        fireEvent.input(input, {target: {value: draft}});
+      }
+      expect(input).toHaveValue('1,234');
+      for (const draft of ['1,234,', '1,234']) {
+        fireEvent.input(input, {target: {value: draft}});
+        expect(input).toHaveValue(draft);
+      }
+      fireEvent.input(input, {target: {value: '1,2345'}});
+      expect(input).toHaveValue('12,345');
+      fireEvent.blur(input);
+      expect(onChange).toHaveBeenCalledWith(12345);
+    });
+
     it('deletes the digit beyond a separator on Backspace', () => {
       render(<GroupedField locale="en-US" />);
       const input = screen.getByRole<HTMLInputElement>('spinbutton');

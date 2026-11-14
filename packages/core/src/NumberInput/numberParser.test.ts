@@ -7,7 +7,7 @@ import {
   formatGroupedEditableNumber,
   formatPercent,
   groupEditableDraft,
-  holdsTypedGroup,
+  typedGroupIndexes,
   parseLocaleNumber,
 } from './numberParser';
 
@@ -356,19 +356,19 @@ describe('groupEditableDraft', () => {
   });
 
   it('leaves a draft that holds a typed group character as typed', () => {
-    expect(groupEditableDraft('1,2345', 6, 'en-US', '1,234', true)).toEqual({
+    expect(groupEditableDraft('1,2345', 6, 'en-US', '1,234', [1])).toEqual({
       text: '1,2345',
       caret: 6,
     });
-    expect(groupEditableDraft('31.415', 6, 'de-DE', '3.141', true)).toEqual({
+    expect(groupEditableDraft('31.415', 6, 'de-DE', '3.141', [1])).toEqual({
       text: '31.415',
       caret: 6,
     });
-    expect(groupEditableDraft('3.1415', 6, 'de-DE', '3.141', true)).toEqual({
+    expect(groupEditableDraft('3.1415', 6, 'de-DE', '3.141', [1])).toEqual({
       text: '3.1415',
       caret: 6,
     });
-    // Without the flag, `1,234` reads as the field's own grouping.
+    // Without typed indexes, `1,234` reads as the field's own grouping.
     expect(groupEditableDraft('1,2345', 6, 'en-US', '1,234')).toEqual({
       text: '12,345',
       caret: 6,
@@ -387,24 +387,28 @@ describe('groupEditableDraft', () => {
   });
 });
 
-describe('holdsTypedGroup', () => {
-  it('sets when an edit inserts a group character', () => {
-    expect(holdsTypedGroup('1,', 'en-US', '1')).toBe(true);
-    expect(holdsTypedGroup('3.', 'de-DE', '3')).toBe(true);
+describe('typedGroupIndexes', () => {
+  it('adds a group character an edit inserts', () => {
+    expect(typedGroupIndexes('1,', 'en-US', '1')).toEqual([1]);
+    expect(typedGroupIndexes('3.', 'de-DE', '3')).toEqual([1]);
   });
 
-  it('carries forward while the integer run holds a group character', () => {
-    expect(holdsTypedGroup('1,234', 'en-US', '1,23', true)).toBe(true);
-    expect(holdsTypedGroup('3.141', 'de-DE', '3.14', true)).toBe(true);
+  it('carries typed indexes across edits around them', () => {
+    expect(typedGroupIndexes('1,234', 'en-US', '1,23', [1])).toEqual([1]);
+    expect(typedGroupIndexes('3.141', 'de-DE', '3.14', [1])).toEqual([1]);
+    expect(typedGroupIndexes('91,234', 'en-US', '1,234', [1])).toEqual([2]);
   });
 
-  it('clears once the integer run holds no group character', () => {
-    expect(holdsTypedGroup('12345', 'en-US', '1,2345', true)).toBe(false);
+  it('drops a typed group character the edit deleted', () => {
+    expect(typedGroupIndexes('12345', 'en-US', '1,2345', [1])).toEqual([]);
+    // The field's own separator in `1.500` stays the field's.
+    expect(typedGroupIndexes('1.500', 'de-DE', '1.500.', [5])).toEqual([]);
+    expect(typedGroupIndexes('1,234', 'en-US', '1,234,', [5])).toEqual([]);
   });
 
-  it('stays clear for digits typed into the field grouping', () => {
-    expect(holdsTypedGroup('1,2345', 'en-US', '1,234')).toBe(false);
-    expect(holdsTypedGroup('1234', 'en-US')).toBe(false);
+  it('stays empty for digits typed into the field grouping', () => {
+    expect(typedGroupIndexes('1,2345', 'en-US', '1,234')).toEqual([]);
+    expect(typedGroupIndexes('1234', 'en-US')).toEqual([]);
   });
 });
 
