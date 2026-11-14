@@ -464,7 +464,10 @@ const QUESTIONS = [
   ],
   [
     'square corners everywhere',
-    {top: /^set q corners square$/, adds: /--radius-element=0px/},
+    {
+      top: /^set q corners square && set q --radius-full 0px$/,
+      adds: /--radius-element=0px/,
+    },
   ],
   [
     'no rounded corners',
@@ -3096,7 +3099,10 @@ const QUESTIONS_J = [
   // numbers written as words
   [
     'zero radius everywhere',
-    {top: /^set q corners square$/, adds: /--radius-element=0px/},
+    {
+      top: /^set q corners square && set q --radius-full 0px$/,
+      adds: /--radius-element=0px/,
+    },
   ],
   ['twelve pixel corners', {top: /^set q corners 12px$/}],
   [

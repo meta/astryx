@@ -5671,9 +5671,71 @@ export function draftAnswer(ctx, env, question) {
         }
       : d;
   };
+  /**
+   * A border color written on a part's resting rule covers the colors Core
+   * gives it by status and state (an error input's red border, the focus
+   * border): theme rules sit over Core's. Each of those is written back as
+   * it is, after the step, so only the plain border takes the new color.
+   * @param {Draft} d
+   * @returns {Draft}
+   */
+  const keepLineColors = d => {
+    let kept = 0;
+    const options = d.options.map(o =>
+      o.flatMap(st => {
+        if (
+          st.verb !== 'set' ||
+          !st.on ||
+          st.when ||
+          st.state ||
+          !/^border(?:-color)?$/.test(st.thing) ||
+          !colorsIn(String(st.value ?? '')).length
+        )
+          return [st];
+        const part = one(st.on);
+        const attrs = C.variantValues(part) ?? {};
+        /** @type {Step[]} */
+        const pins = [];
+        for (const r of C.partReads(part, 'border') ?? []) {
+          if (!r.props.includes('border-color')) continue;
+          for (const w of r.when) {
+            const m =
+              /^(?:([a-z-]+)=([\w-]+))?\s*(?::(focus-within|focus-visible|hover|active))?$/.exec(
+                w.trim(),
+              );
+            if (!m || (!m[1] && !m[3])) continue;
+            if (m[1] && !(attrs[m[1]] ?? []).includes(m[2])) continue;
+            // (The plain look, "variant=default", takes the new color; so
+            // does hover, which follows it. Statuses and focus keep theirs.)
+            if (m[2] === 'default' || m[3] === 'hover' || m[3] === 'active')
+              continue;
+            const state = m[3] ? stateFor(st.on, m[3]) : null;
+            if (m[3] && !state) continue;
+            const pin = set('border-color', `var(${r.token})`, {
+              on: st.on,
+              ...(m[1] ? {when: `${m[1]}:${m[2]}`} : {}),
+              ...(state ? {state} : {}),
+              ...(st.mode ? {mode: st.mode} : {}),
+            });
+            if (!pins.some(x => x.when === pin.when && x.state === pin.state))
+              pins.push(pin);
+          }
+        }
+        kept += pins.length;
+        return [st, ...pins];
+      }),
+    );
+    return kept
+      ? {
+          ...d,
+          options,
+          text: `${d.text} (the border colors Core gives by status and state are written back as they are)`,
+        }
+      : d;
+  };
   /** @param {Draft} input */
   const push = input => {
-    const d0 = groupCornerEnds(withMode(input, clauseNow));
+    const d0 = keepLineColors(groupCornerEnds(withMode(input, clauseNow)));
     // A resting shadow on a part that rings itself in its shadow would wipe
     // those rings: not offered, and said.
     const ringed = d0.options
@@ -5825,8 +5887,13 @@ export function draftAnswer(ctx, env, question) {
         rest = rest.replace(g, ' ');
       }
     if (!named) return false;
+    // (The nouns that name what to look at; a word that says the change,
+    // "bold", "red", is not one.)
     rest = rest
-      .replace(/\b(?:corners?|radius|radii|shadows?|padding|spacing)\b/g, ' ')
+      .replace(
+        /\b(?:corners?|radius|radii|shadows?|padding|spacing|backgrounds?|bg|fills?|colou?rs?|text|fonts?|font sizes?|text sizes?|weights?|opacity|line height|leading)\b/g,
+        ' ',
+      )
       .replace(
         /\b(?:the|a|an|my|our|its|their|of|on|for|all|every)\b|'s\b|[?!.:'"]/g,
         ' ',
@@ -6403,8 +6470,11 @@ export function draftAnswer(ctx, env, question) {
             p ? {on: p.on, ...(p.when ? {when: p.when} : {})} : {},
           );
         });
+        const pills =
+          r.dial === 'corners' && !c.parts.length ? pillsSquare(r.value) : null;
+        if (pills) steps.push(pills.step);
         const d = {
-          text: `${r.dial} ${r.value}${ons[0] ? ` on ${ons.map(p => p?.on).join(', ')}` : ''}: the ${r.dial} dial set to ${r.value}, as set reads it`,
+          text: `${r.dial} ${r.value}${ons[0] ? ` on ${ons.map(p => p?.on).join(', ')}` : ''}: the ${r.dial} dial set to ${r.value}, as set reads it${pills ? `, ${pills.said}` : ''}`,
           options: [steps],
           sequence: steps.length > 1,
         };
@@ -8301,6 +8371,37 @@ export function draftAnswer(ctx, env, question) {
   }
 
   /**
+   * "No rounding anywhere", "… badges and switches too": the corners dial
+   * leaves the parts drawn as pills round (they read --radius-full), so
+   * that token goes square too, and the answer names those parts. Null
+   * unless the value is square and the question asks for it everywhere or
+   * names a pill part.
+   * @param {string} value
+   * @returns {{step: Step, said: string} | null}
+   */
+  function pillsSquare(value) {
+    if (!/^(?:square|none|0(?:px)?)$/.test(value)) return null;
+    const pills = Object.keys(C.MAP).filter(p =>
+      partReadsToken(p, '--radius-full'),
+    );
+    if (
+      !pills.length ||
+      !(
+        /\b(?:anywhere|everywhere|everything|at all|pills?|too|as well)\b/.test(
+          question.toLowerCase(),
+        ) ||
+        clauses.some(
+          o => !o.except && o.parts.some(p => pills.includes(one(p.on))),
+        )
+      )
+    )
+      return null;
+    return {
+      step: set('--radius-full', '0px'),
+      said: `and --radius-full 0px for the parts drawn as pills (${pills.slice(0, 6).join(', ')}${pills.length > 6 ? ` and ${pills.length - 6} more` : ''})`,
+    };
+  }
+  /**
    * Whether a part reads a token in any of its rules.
    * @param {string} part
    * @param {string} token
@@ -9567,6 +9668,13 @@ export function draftAnswer(ctx, env, question) {
           const dial = /^\d*\.?\d+r?em$/.test(value)
             ? `${Math.round(parseFloat(value) * 16 * 100) / 100}px`
             : value;
+          const pills = pillsSquare(dial);
+          if (pills)
+            return {
+              text: `no rounding anywhere: the corners dial square, ${pills.said}`,
+              options: [[set('corners', dial), pills.step]],
+              sequence: true,
+            };
           return {
             text: `corners${where}: the corners dial (sets the corner tokens together)${dial !== value ? `, ${value} as ${dial}` : ''}`,
             options: [[set('corners', dial)]],
@@ -9888,10 +9996,66 @@ export function draftAnswer(ctx, env, question) {
               text: 'no borders: the shared border width to 0',
               options: [[set('--border-width', '0px')]],
             };
+          // "thick black borders on everything": the shared width (thick is
+          // one pixel past it), the shared border colors (inputs draw the
+          // emphasized one), and on "everything" a border on the surfaces
+          // that draw none (dialogs, popovers, menus).
+          const bwNow0 = String(current('--border-width') ?? '1px');
+          const onePast = (() => {
+            const m = /^(\d*\.?\d+)(px|rem)$/.exec(bwNow0);
+            const px = m ? Number(m[1]) * (m[2] === 'rem' ? 16 : 1) : 1;
+            return `${Math.round((px + 1) * 100) / 100}px`;
+          })();
+          const wide =
+            c.lengths[0] ??
+            (/\b(?:thick|thicker|heavy|heavier|chunky)\b/.test(c.text)
+              ? onePast
+              : null);
+          const everywhere =
+            /\b(?:everything|everywhere|all|every part)\b/.test(c.text);
+          if (color && (wide || everywhere)) {
+            const borderless = [
+              ...new Set([
+                ...(FAMILIES.containers ?? []),
+                ...(FAMILIES.menus ?? []),
+                ...Object.keys(C.MAP).filter(pt =>
+                  (C.partReads(pt, 'shadow') ?? []).some(
+                    r =>
+                      /^--shadow-/.test(r.token) &&
+                      r.when.some(w => !/:|selected/.test(w)),
+                  ),
+                ),
+              ]),
+            ].filter(pt => !drawsLine(C, [pt], 'border', null));
+            /** @type {Step[]} */
+            const steps = [
+              ...(wide ? [set('--border-width', wide)] : []),
+              set('--color-border', color, modeOf(c)),
+              set('--color-border-emphasized', color, modeOf(c)),
+              ...(everywhere
+                ? borderless.map(pt =>
+                    set('border', `${wide ?? bwNow0} solid ${color}`, {
+                      on: pt,
+                      ...modeOf(c),
+                    }),
+                  )
+                : []),
+            ];
+            return {
+              text: `borders${wide ? ` ${wide} wide` : ''} in ${color}: the shared border width and colors (--color-border-emphasized is what inputs draw)${everywhere && borderless.length ? `, and a border on the surfaces that draw none (${borderless.join(', ')})` : ''}`,
+              options: [steps],
+              sequence: true,
+            };
+          }
           if (color)
             return {
               text: 'the border color of the whole theme: --color-border',
               options: [[set('--color-border', color, modeOf(c))]],
+            };
+          if (wide && !c.lengths[0])
+            return {
+              text: `thick borders: the shared border width one pixel past what it is (${bwNow0} to ${wide})`,
+              options: [[set('--border-width', wide)]],
             };
           // Darker, lighter, subtler or more contrast asks for the color.
           if (
@@ -13138,6 +13302,17 @@ export function draftAnswer(ctx, env, question) {
     )
       result.splice(i, 1);
   }
+  // Nothing else answered a part and an aspect said alone ("toast
+  // background"): it names what to look at, never "No match".
+  const named0 = !result.length
+    ? clauses.find(c => c.parts.length && c.aspects.length && bareNoun(c))
+    : undefined;
+  if (named0)
+    result.push({
+      text: `"${named0.text}" names ${named0.parts.map(p => p.on).join(' and ')} and what to look at, but no change (a value, or a way such as darker or more); how ${named0.parts[0].on} shows what it has now`,
+      options: [],
+      lookup: `${HOW} ${named0.parts[0].on}`,
+    });
   const unsure = gateAll;
   if (unsure && result.some(d => d.options.some(o => o.length))) {
     const part = partsSeen[0];
