@@ -73,14 +73,10 @@ function withoutUndefined(value: StyleValue): StyleValue {
 export function withoutUnsetComponents(
   map: ComponentStyleMap | undefined,
 ): ComponentStyleMap | undefined {
-  return readEntries(
-    map,
-    (rules: StyleValue): StyleValue =>
-      readEntries(
-        rules,
-        (styles: StyleValue): StyleValue =>
-          readEntries(styles, withoutUndefined),
-      ),
+  return readEntries(map, (rules: StyleValue): StyleValue =>
+    readEntries(rules, (styles: StyleValue): StyleValue =>
+      readEntries(styles, withoutUndefined),
+    ),
   );
 }
 
