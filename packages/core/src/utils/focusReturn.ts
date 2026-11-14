@@ -27,20 +27,7 @@ function focusRoot(node: Node): Document | ShadowRoot | null {
   if (!('activeElement' in root)) {
     return null;
   }
-  const focusRoot = root as Document | ShadowRoot;
-  if (!('host' in focusRoot)) {
-    const view = focusRoot.defaultView;
-    // frameElement is also null for cross-origin parents; do not infer lost focus.
-    if (
-      view &&
-      view.parent !== view &&
-      view.frameElement === null &&
-      !focusRoot.hasFocus()
-    ) {
-      return null;
-    }
-  }
-  return focusRoot;
+  return root as Document | ShadowRoot;
 }
 
 /** Whether the element owns focus through its shadow hosts and frames. Internal. */

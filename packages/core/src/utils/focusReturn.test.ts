@@ -10,6 +10,7 @@ import {
   isFocusUnclaimed,
   moveFocusLeftBehind,
   noteFocusWithin,
+  ownsFocus,
   prepareFocusReturnOnRemoval,
   returnFocusForLastInput,
 } from './focusReturn';
@@ -409,16 +410,20 @@ describe('isFocusUnclaimed', () => {
     expect(isFocusUnclaimed(innerDocument)).toBe(false);
   });
 
-  it('does not repair an unfocused child when its parent frame is inaccessible', () => {
+  it('keeps document-local ownership in an unfocused child with an inaccessible parent', () => {
     const frame = document.createElement('iframe');
     document.body.append(frame);
     const doc = frame.contentDocument!;
     vi.spyOn(doc.defaultView!, 'frameElement', 'get').mockReturnValue(null);
-    const hasFocus = vi.spyOn(doc, 'hasFocus').mockReturnValue(true);
+    vi.spyOn(doc, 'hasFocus').mockReturnValue(false);
+    const target = doc.createElement('button');
+    doc.body.append(target);
 
-    expect(isFocusUnclaimed(doc)).toBe(true);
-    hasFocus.mockReturnValue(false);
+    target.focus();
+    expect(ownsFocus(target)).toBe(true);
     expect(isFocusUnclaimed(doc)).toBe(false);
+    target.remove();
+    expect(isFocusUnclaimed(doc)).toBe(true);
   });
 });
 

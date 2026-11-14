@@ -205,11 +205,13 @@ describe('useFocusAcrossSwap', () => {
     }
   });
 
-  it('does not resurrect owned-content focus after availability changes while hidden', () => {
+  it('does not resurrect nested owned-content focus after availability changes while hidden', () => {
     const fixture = (isHidden: boolean, isDisabled: boolean) => (
       <StrictMode>
         <Activity mode={isHidden ? 'hidden' : 'visible'}>
-          <ContentExample isDisabled={isDisabled} />
+          <div>
+            <ContentExample isDisabled={isDisabled} />
+          </div>
         </Activity>
       </StrictMode>
     );
