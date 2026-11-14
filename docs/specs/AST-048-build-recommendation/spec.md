@@ -424,8 +424,9 @@ evidence is too weak for the ranker to lead alone. The pick model reads the
 whole request, so its choice rests on many words rather than one shared word,
 and across representative requests its starts on weak ranker evidence help the
 builder more often than the empty app shell does. DEC-2 still holds when no
-part of build's ranking leads: the start is the app shell. Parts, edits, and
-requests with an edit phrase keep their placement rules (DEC-4).
+part of build's ranking leads: the start is the app shell. Requests build reads
+as parts or as changes to an existing page keep their placement rules (DEC-4);
+the edit-phrase check belongs to DEC-10's shell lift, not to the page pick.
 
 Rejected: sending every start the ranker cannot lead alone to the app shell,
 which leaves more whole pages on the empty shell than it keeps parts off a page
