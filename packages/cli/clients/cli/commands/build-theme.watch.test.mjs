@@ -409,7 +409,7 @@ describe('theme build --watch', () => {
       await waitForOutput(child, read, 'rebuilding wi\\.mjs', {
         onPoll: () => {
           try {
-            fs.writeFileSync(colors, changed);
+            saveWhole(colors, changed);
           } catch {
             // The temporary folder is gone at teardown.
           }
@@ -605,7 +605,7 @@ describe('theme build --watch', () => {
       );
 
       const changed = `export default { name: 'w2', tokens: { '--color-bg': '#010203' } };\n`;
-      fs.writeFileSync(second, changed);
+      saveWhole(second, changed);
 
       // fs.watch can drop an event under load, so the write repeats until the
       // watcher reports the change; the next "Watching" line follows the
@@ -613,7 +613,7 @@ describe('theme build --watch', () => {
       await waitForOutput(child, () => stdout, 'rebuilding w2\\.mjs', {
         onPoll: () => {
           try {
-            fs.writeFileSync(second, changed);
+            saveWhole(second, changed);
           } catch {
             // The temporary folder is gone at teardown.
           }
