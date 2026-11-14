@@ -575,6 +575,25 @@ describe('an exact tie in the pick model', () => {
   });
 
   it('does not depend on the order of the candidates in the weights file', () => {
+    // Only the rank features count here, so an order-based rank of the tied
+    // pair would decide the start.
+    const byRank = {
+      ...weights,
+      pick: {...weights.pick, blend: [0, 1, 0, 0, 1, 0, 0]},
+    };
+    const reversedByRank = {
+      ...byRank,
+      candidates: [SHELL, 'grid', 'charts', 'board'],
+      tables: WEIGHTS.tables.map(t => ({
+        ...t,
+        bias: [t.bias[0], t.bias[3], t.bias[2], t.bias[1]],
+        rows: t.rows.map(r => r[0] + r[3] + r[2] + r[1]),
+      })),
+    };
+    const idea = 'cards laid out in a grid';
+    expect(
+      blendOrder(idea, ranked, null, catalog, reversedByRank)?.slice(0, 2),
+    ).toEqual(blendOrder(idea, ranked, null, catalog, byRank)?.slice(0, 2));
     const reversed = {
       ...weights,
       candidates: [SHELL, 'grid', 'charts', 'board'],

@@ -65,7 +65,7 @@ import {
   keywordWordsFor,
   framesOf,
 } from './words.mjs';
-import {tieReading} from './weights.mjs';
+import {namedOutright, tieReading} from './weights.mjs';
 import {compareText} from '../../../foundation/text/compare-text.mjs';
 
 /**
@@ -298,11 +298,11 @@ export function rankPages(query, pages) {
 
 /**
  * Order each run of templates the ranker scores exactly the same (and that
- * are all bases or all variants), whatever their families: by how strongly
- * each one's own descriptor answers the idea (`tieReading`), then by how
- * typical of its family it is,
- * then by name. The catalog's order never decides, and neither does the host's
- * locale.
+ * are all bases or all variants), whatever their families: first the one the
+ * idea names by its whole name (`namedOutright`), then by how strongly each
+ * one's own descriptor answers the idea (`tieReading`), then by how typical of
+ * its family it is, then by name. The catalog's order never decides, and
+ * neither does the host's locale.
  * @param {RankedPage[]} ranked sorted by score, then base first
  * @param {string} query
  * @param {PageTemplate[]} pages
@@ -325,9 +325,16 @@ function settleTies(ranked, query, pages) {
         query,
         pages,
       );
+      const named = namedOutright(
+        run.map(r => r.name),
+        query,
+        pages,
+      );
       const at = new Map(run.map((r, k) => [r, reading[k]]));
+      const outright = new Map(run.map((r, k) => [r, named[k]]));
       run.sort(
         (a, b) =>
+          Number(outright.get(b)) - Number(outright.get(a)) ||
           Number(at.get(b)) - Number(at.get(a)) ||
           b.typical - a.typical ||
           compareText(a.name, b.name),

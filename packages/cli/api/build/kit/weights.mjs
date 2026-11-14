@@ -248,9 +248,13 @@ function memberFeatures(v) {
         Math.max(1, finite.length),
     ) || 1;
   const val = v.map(x => (x === undefined ? -1e9 : x));
-  const order = [...val.keys()].sort((a, b) => val[b] - val[a]);
-  const rank = new Array(v.length);
-  order.forEach((ci, r) => (rank[ci] = r));
+  // Equal values share the average of the ranks they span. That is the mean
+  // rank an arbitrary order gives them, which is what the blend numbers were
+  // fit on, and the candidates' order in the weights file never decides.
+  const rank = val.map(
+    x =>
+      val.filter(y => y > x).length + (val.filter(y => y === x).length - 1) / 2,
+  );
   return v.map((x, i) => [
     x === undefined ? -4 : Math.max(-4, Math.min(4, (x - mean) / sd)),
     1 / (rank[i] + 1),
@@ -399,8 +403,9 @@ function blend(idea, ranked, pick, catalog, weights) {
 
 /**
  * The most typical of the ready templates the ranker ties with `name` in its
- * family (same score, and both the family's base or both variants): the one whose descriptor's words are
- * shared by the most of its family's templates, on average. `name` keeps its
+ * family (same score, and both the family's base or both variants): the one
+ * whose descriptor's words are shared by the most of its family's templates,
+ * on average. `name` keeps its
  * place on an equal value. Reads only the templates' descriptors.
  * @param {string} name
  * @param {import('./rank.mjs').RankedPage[]} ranked
@@ -441,6 +446,29 @@ function descriptorWords(t, order) {
     t.keywords ?? [],
     order,
   );
+}
+
+/**
+ * Which of a set of tied templates the idea names by its whole name: its
+ * display name or its id, as consecutive words of the idea ("a form wizard
+ * page" names `form-wizard`, "Form Wizard"). A whole name is stronger evidence
+ * than any descriptor word, so it settles an exact tie first.
+ * @param {string[]} names the tied templates' ids
+ * @param {string} idea
+ * @param {DescribedTemplate[]} catalog
+ * @returns {boolean[]} one flag per name, in order
+ */
+export function namedOutright(names, idea, catalog) {
+  const said = weightWords(idea).map(stem);
+  const holds = (/** @type {string[]} */ phrase) =>
+    phrase.length > 0 &&
+    said.some((_, i) => phrase.every((w, k) => said[i + k] === w));
+  return names.map(name => {
+    const t = catalog.find(c => c.name === name);
+    return [t?.displayName ?? '', name.replace(/-/g, ' ')].some(text =>
+      holds(weightWords(text).map(stem)),
+    );
+  });
 }
 
 /**
@@ -500,6 +528,12 @@ function fullerOfTie(name, idea, ranked, cands, catalog) {
       cands.includes(r.name),
   );
   if (tied.length < 2) return name;
+  const named = namedOutright(
+    tied.map(r => r.name),
+    idea,
+    catalog,
+  );
+  if (named.filter(Boolean).length === 1) return tied[named.indexOf(true)].name;
   const score = tieReading(
     tied.map(r => r.name),
     idea,
@@ -565,9 +599,12 @@ function pickOrder(idea, ranked, pick, catalog, weights) {
     const run = sorted.slice(i, j).map(x => x.c);
     if (run.length > 1) {
       const reading = tieReading(run, idea, catalog);
+      const named = namedOutright(run, idea, catalog);
       const at = new Map(run.map((c, k) => [c, reading[k]]));
+      const outright = new Map(run.map((c, k) => [c, named[k]]));
       run.sort(
         (a, b) =>
+          Number(outright.get(b)) - Number(outright.get(a)) ||
           Number(at.get(b)) - Number(at.get(a)) ||
           (typical.get(b) ?? 0) - (typical.get(a) ?? 0) ||
           compareText(a, b),
