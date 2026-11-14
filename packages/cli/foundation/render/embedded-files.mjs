@@ -18,6 +18,13 @@ import {isAssetPath} from './assets.mjs';
 /** The file extensions a page module may have. */
 export const PAGE_EXTENSIONS = ['.tsx', '.jsx', '.ts', '.js', '.mjs'];
 
+/**
+ * The file extensions of a module a render carries: a page module's, and the
+ * module kinds a page module may import that hold no JSX (`.mts`, `.cts`,
+ * `.cjs`).
+ */
+export const MODULE_EXTENSIONS = [...PAGE_EXTENSIONS, '.mts', '.cts', '.cjs'];
+
 /** JSON files that configure a project or a tool rather than hold page data. */
 const CONFIG_JSON =
   /^(package|package-lock|composer|deno|turbo|vercel|nx|lerna|app|bower|now|netlify|firebase|renovate|project|workspace|angular|biome|components)\.jsonc?$|config|(^|[._-])rc\.jsonc?$|(^|[._-])lock\.jsonc?$/i;
@@ -103,6 +110,6 @@ export function embeddedPathProblem(p, options = {}) {
   if (((ext === '.json' || ext === '.jsonc') && CONFIG_JSON.test(base)) || CONFIG_MODULE.test(base)) {
     return {code: 'ERR_RENDER_SOURCE_DAMAGED', reason: `a project or tool configuration file (${p})`};
   }
-  if (PAGE_EXTENSIONS.includes(ext) || ext === '.css' || ext === '.json' || isAssetPath(p)) return null;
+  if (MODULE_EXTENSIONS.includes(ext) || ext === '.css' || ext === '.json' || isAssetPath(p)) return null;
   return {code: 'ERR_RENDER_SOURCE_DAMAGED', reason: `a kind of file a render never embeds (${p})`};
 }

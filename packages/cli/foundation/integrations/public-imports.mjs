@@ -283,7 +283,7 @@ function declarationIn(exportsField, packageDir, subpath) {
  * @param {string} file
  * @returns {string | null}
  */
-function subpathFor(exportsField, packageDir, file) {
+export function subpathFor(exportsField, packageDir, file) {
   if (!isRecord(exportsField)) return null;
   const wanted = `./${rel(packageDir, file)}`;
   for (const [key, value] of Object.entries(exportsField)) {

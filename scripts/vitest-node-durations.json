@@ -1071,6 +1071,7 @@
     "packages/cli/test/invalid-component-metadata.regression.test.mjs": 2.5,
     "packages/cli/test/lazy-dependencies.test.mjs": 1.3,
     "packages/cli/test/packed-command-list.test.mjs": 5.5,
+    "packages/cli/test/packed-component-list.test.mjs": 40,
     "packages/cli/test/packed-gather-cache.changes.test.mjs": 115.5,
     "packages/cli/test/packed-gather-cache.fresh.test.mjs": 149.1,
     "packages/cli/test/packed-gather-cache.installed.test.mjs": 137,

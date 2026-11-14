@@ -356,6 +356,43 @@ describe('ideaKind: a part of a page, told by the components the system ships', 
     expect(kind('reuse the existing tooltip on the chart')).toBe('edit');
   });
 
+  it('takes an idea that opens with "add" as an edit', () => {
+    expect(kind('add a filter row above the table')).toBe('edit');
+    expect(kind('add a date picker to the settings page')).toBe('edit');
+    // A head that names a page, or a new page, is still a page; "add" inside
+    // an idea opens nothing.
+    expect(kind('add a settings page')).toBe('page');
+    expect(kind('add a new settings page')).toBe('page');
+    expect(kind('a settings page where admins add users')).toBe('page');
+  });
+
+  it('takes an "add" idea that says nowhere the piece goes as before', () => {
+    expect(kind('add a settings page to the app')).toBe('page');
+    expect(kind('add a settings page')).toBe('page');
+    expect(kind('add a data table to my app')).toBe('page');
+    expect(kind('add a tooltip to my app')).toBe('part');
+    expect(kind('add a settings page to my project')).toBe('page');
+    expect(kind('add a data table with filters to my website')).toBe('page');
+    expect(kind('add a data table with filters')).toBe('page');
+    expect(kind('add a tooltip')).toBe('part');
+  });
+
+  it('names a component in an "add" place only by its head word', () => {
+    const own = [page('table', 'Table - Basic', 'Rows.')];
+    const parts = [component('ChatToolCalls', ['tool']), component('Banner')];
+    expect(ideaKind('add a task board to my tool', own, parts)).toBe('page');
+    expect(ideaKind('add a banner to the tool calls', own, parts)).toBe('edit');
+  });
+
+  it('names a template in an "add" place only by its whole name', () => {
+    const own = [page('product-detail', 'Content - Detail', 'One product.')];
+    const parts = [component('Banner')];
+    expect(ideaKind('add a task board to my product', own, parts)).toBe('page');
+    expect(
+      ideaKind('add a banner to the product detail page', own, parts),
+    ).toBe('edit');
+  });
+
   it('does not take "existing" that names no page or part as an edit', () => {
     expect(kind('a new settings page inspired by the existing one')).toBe(
       'page',

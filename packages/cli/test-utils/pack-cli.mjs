@@ -34,6 +34,10 @@ export const PREPACK_FILES = [
     script: 'scripts/generate-template-components.mjs',
   },
   {
+    file: 'assets/component-list.generated.json',
+    script: 'scripts/generate-component-list.mjs',
+  },
+  {
     file: 'assets/docs.generated.json',
     script: 'scripts/generate-stored-docs.mjs',
   },
@@ -65,7 +69,13 @@ const PREPACK_STAGES = [
     'scripts/generate-stored-docs.mjs',
     'scripts/generate-command-list.mjs',
   ],
-  ['scripts/generate-self-audit.mjs', 'scripts/generate-manifest.mjs'],
+  // The two that copy a package's published files run side by side, each
+  // waiting mostly on `npm pack --dry-run`.
+  [
+    'scripts/generate-self-audit.mjs',
+    'scripts/generate-component-list.mjs',
+    'scripts/generate-manifest.mjs',
+  ],
   ['scripts/generate-build-id.mjs'],
 ];
 

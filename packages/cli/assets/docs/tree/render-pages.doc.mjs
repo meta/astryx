@@ -56,7 +56,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: 'The result is ONE file with nothing beside it: the markup, only the CSS rules the page uses (from Core and from any stylesheet it imports, such as a theme), the page\u2019s own StyleX styles, and local images as data: URIs. It runs no script and loads nothing from the network, so it opens from disk, attaches to a message, and displays inside a sandboxed frame that blocks network and script. Colors follow the viewer\u2019s light or dark setting, and a `data-theme` of `light` or `dark` on the root element picks one. The file also carries the source of the page and of every local module, stylesheet, JSON file and image it imports, so whoever you share it with can read that code; keep secrets out of what the page imports.',
+          text: 'The result is ONE file with nothing beside it: the markup, only the CSS rules the page uses (from Core and from any stylesheet it imports, such as a theme), the page\u2019s own StyleX styles, and local images as data: URIs. For `--reverse`, it also carries every image, font or media file (up to 8 MB each) that a carried module or stylesheet names by a relative path inside the folder that holds the carried files, also when the page does not show it. It runs no script and loads nothing from the network, so it opens from disk, attaches to a message, and displays inside a sandboxed frame that blocks network and script. Colors follow the viewer\u2019s light or dark setting, and a `data-theme` of `light` or `dark` on the root element picks one. The file also carries the source of the page and of every local module, stylesheet, JSON file and image it imports, so whoever you share it with can read that code; keep secrets out of what the page imports.',
         },
         {
           type: 'prose',
@@ -123,7 +123,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'The embedded source carries a render format number. Every CLI reads each format up to its own, and a new optional field never changes the number, so an older CLI keeps reading files a newer one writes. A file in a newer format than the running CLI reads is refused with `ERR_RENDER_NEWER_FORMAT`, and the message names the CLI version that wrote it, which reads it. A file from an older CLI carries no note, but its `generator` meta names the version that wrote it, and `--reverse` reports that version as `renderedBy`.',
+          text: 'The embedded source carries a render format number. Every CLI reads each format up to its own, and a new optional field never changes the number, so an older CLI keeps reading files a newer one writes. A file that carries a kind of file an older CLI does not take (an `.mts`, `.cts` or `.cjs` module) says format 2; every other file says format 1. A file in a newer format than the running CLI reads is refused with `ERR_RENDER_NEWER_FORMAT`, and the message names the CLI version that wrote it, which reads it. A file from an older CLI carries no note, but its `generator` meta names the version that wrote it, and `--reverse` reports that version as `renderedBy`.',
         },
         {
           type: 'prose',

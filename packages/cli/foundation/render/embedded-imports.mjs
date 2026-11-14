@@ -15,7 +15,7 @@
 
 import * as path from 'node:path';
 import {babelParse as parse} from '../runtime/lazy-dependencies.mjs';
-import {PAGE_EXTENSIONS} from './embedded-files.mjs';
+import {MODULE_EXTENSIONS} from './embedded-files.mjs';
 import postcss from 'postcss';
 import {matchPath, pathsFor} from './ts-paths.mjs';
 import {isAssetPath} from './assets.mjs';
@@ -42,7 +42,7 @@ export function cssImports(css) {
 }
 
 /** Extensions an extensionless import may stand for, in resolution order. */
-const RESOLVE_EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js', '.mjs', '.json'];
+const RESOLVE_EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js', '.mjs', '.mts', '.cts', '.cjs', '.json'];
 
 /**
  * The string specifiers one module imports.
@@ -68,6 +68,18 @@ export function assetRefsIn(text) {
     if (isAssetPath(ref)) out.push(ref);
   }
   return out;
+}
+
+/**
+ * The images, fonts and media a carried file names by a relative path: in a
+ * module's strings, or in a stylesheet. A render carries each one that
+ * exists, and {@link reachableFiles} expects each one back.
+ * @param {string} source
+ * @param {string} file its path; a `.css` file is read as a stylesheet
+ * @returns {string[]}
+ */
+export function assetRefsOf(source, file) {
+  return /\.css$/i.test(file) ? assetRefsIn(source) : scanModule(source, file).assets;
 }
 
 /**
@@ -208,7 +220,7 @@ export function reachableFiles(files, {aliases = []} = {}) {
   while (queue.length > 0) {
     const current = /** @type {string} */ (queue.shift());
     const ext = path.posix.extname(current).toLowerCase();
-    const isModule = PAGE_EXTENSIONS.includes(ext);
+    const isModule = MODULE_EXTENSIONS.includes(ext);
     if (!isModule && ext !== '.css') continue;
     const entry = byPath.get(current);
     if (!entry) continue;
@@ -216,7 +228,7 @@ export function reachableFiles(files, {aliases = []} = {}) {
     // Images and fonts a module or stylesheet names by a relative path are
     // part of the page too.
     const scanned = isModule
-      ? scanModule(source, current)
+      ? {imports: importSpecifiers(source, current), assets: assetRefsOf(source, current)}
       : {
           // A stylesheet's own `@import`s count as imports.
           // A stylesheet's own relative `@import`s count as imports (read
@@ -228,7 +240,7 @@ export function reachableFiles(files, {aliases = []} = {}) {
             // carries one, else a package's.
             .filter(ref => ref.startsWith('.') || byPath.has(path.posix.normalize(path.posix.join(path.posix.dirname(current), ref))))
             .map(ref => (ref.startsWith('.') ? ref : `./${ref}`)),
-          assets: assetRefsIn(source),
+          assets: assetRefsOf(source, current),
         };
     for (const ref of scanned.assets) {
       const joined = path.posix.normalize(path.posix.join(path.posix.dirname(current), ref));
