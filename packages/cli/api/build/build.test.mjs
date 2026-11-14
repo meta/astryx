@@ -579,13 +579,21 @@ describe('build kit — every page starts from a template', () => {
     }
   });
 
-  it('starts a component in a container from a template with that frame', async () => {
-    // "in a modal": the modal is the frame, so the dialog template leads
-    // instead of the app shell.
+  it('starts a page in a frame from the template with that frame', async () => {
+    // "in a dialog" holds the checkout form, the page the idea names, so the
+    // dialog template leads.
+    const r = await build('a checkout form in a dialog', {cwd: REPO});
+    expect(r.type).toBe('build.kit');
+    if (r.type !== 'build.kit') return;
+    expect(r.data.start?.name).toBe('form-wizard-dialog');
+  });
+
+  it('starts a part in a frame from the app shell', async () => {
+    // The modal holds saved drafts, a part, not a page family.
     const r = await build('saved drafts in a modal with resume and delete row actions', {cwd: REPO});
     expect(r.type).toBe('build.kit');
     if (r.type !== 'build.kit') return;
-    expect(r.data.start?.name).toBe('settings-dialog');
+    expect(r.data.start?.name).toBe('shell-top-nav');
   });
 
   it('does not start from a template named only by a word that modifies another', async () => {

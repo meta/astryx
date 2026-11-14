@@ -58,6 +58,7 @@ import {
   familyWordsOf,
   keywordUnits,
   keywordWordsFor,
+  framesOf,
 } from './words.mjs';
 
 /**
@@ -210,6 +211,7 @@ export function rankPages(query, pages) {
   const namedFamilies = familiesIn(queryTerms);
   const modifiers = modifiersOf(query);
   const containers = containersOf(query);
+  const frames = framesOf(query);
 
   const ranked = docs
     .map(({page, family, bag, phrases, pairs}) => {
@@ -251,7 +253,12 @@ export function rankPages(query, pages) {
           score += value;
           hits++;
           matched.add(t);
-          if (containers.has(t)) containerMatched = true;
+          // A frame is start evidence only when it holds the template's
+          // family itself, not a part placed on some page.
+          if (
+            [...(frames.get(t) ?? [])].some(h => familyOfWord.get(h) === family)
+          )
+            containerMatched = true;
         }
       }
       const familyNamed = namedFamilies.has(family);
