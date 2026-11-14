@@ -249,10 +249,10 @@ describe('duration-balanced Node legs', () => {
     expect(config).toContain('sequence: {sequencer: DurationShardSequencer},');
   });
 
-  it('records seconds per file from Node leg log lines, failed files included', () => {
+  it('records seconds per file from Node leg log lines, failed files included, wholly skipped files at 0', () => {
     const log = [
       '2026-11-01T07:54:35.11Z  ✓  node  packages/cli/a.test.mjs (124 tests) 2733ms',
-      'job\tstep\t2026-11-01T07:57:41.61Z  ❯  node  packages/cli/b.test.mjs (40 tests | 1 failed) 192231ms',
+      'test-node (2/5)\tstep\t2026-11-01T07:57:41.61Z  ❯  node  packages/cli/b.test.mjs (40 tests | 1 failed) 192231ms',
       ' ✓ |node| scripts/c.test.mjs (3 tests) 1.5s',
       ' ↓  node  internal/d.test.ts (31 tests | 31 skipped)',
       ' ✓  ui  packages/core/src/E/E.test.tsx (5 tests) 900ms',
@@ -262,6 +262,7 @@ describe('duration-balanced Node legs', () => {
       'packages/cli/a.test.mjs': 2.7,
       'packages/cli/b.test.mjs': 192.2,
       'scripts/c.test.mjs': 1.5,
+      'internal/d.test.ts': 0,
     });
     expect(path.relative(ROOT, DURATIONS)).toBe(
       'scripts/vitest-node-durations.json',
@@ -289,9 +290,20 @@ describe('duration-balanced Node legs', () => {
     });
   });
 
+  it("reads a whole run's log by its Node legs alone", () => {
+    // The build job runs `--project node` tests the Node legs skip; its
+    // times are no leg's.
+    const log = [
+      'test-node (1/5)\tRun tests\t2026-11-13T22:53:30.36Z  ✓  node  packages/cli/a.test.mjs (4 tests) 1200ms',
+      'test-build\tRun tests\t2026-11-13T22:53:30.36Z  ✓  node  packages/build/src/next.turbopack.test.mjs (10 tests) 109318ms',
+      'build-storybook\tRun tests\t2026-11-13T22:53:30.36Z  ✓  node  packages/x/y.browser.test.mjs (1 test) 300ms',
+    ].join('\n');
+    expect(recordDurations(log)).toEqual({'packages/cli/a.test.mjs': 1.2});
+  });
+
   it('reads colour codes spelled out, as `gh run view --log` prints them', () => {
     const log =
-      'job\tstep\t2026-11-11T07:54:35.11Z ^[[32m✓^[[39m ^[[30m^[[46m node ^[[49m^[[39m packages/cli/a.test.mjs ^[[2m(12 tests)^[[22m^[[33m 542123^[[2mms^[[22m^[[39m';
+      'test-node (1/5)\tstep\t2026-11-11T07:54:35.11Z ^[[32m✓^[[39m ^[[30m^[[46m node ^[[49m^[[39m packages/cli/a.test.mjs ^[[2m(12 tests)^[[22m^[[33m 542123^[[2mms^[[22m^[[39m';
     expect(recordDurations(log)).toEqual({'packages/cli/a.test.mjs': 542.1});
   });
 });

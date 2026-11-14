@@ -58,20 +58,40 @@ export function readDurations(file = DURATIONS) {
   }
 }
 
-/** Seconds per Node test file from Vitest's default reporter lines. */
+/** A Node leg's job name, as `gh run view --log` starts each of its lines. */
+const NODE_LEG_JOB = /^test-node \(\d+\/\d+\)$/;
+
+/**
+ * Seconds per Node test file from Vitest's default reporter lines. A whole
+ * run's log (`gh run view --log`) names each line's job in its first
+ * tab-separated column: only the Node legs' lines count, since other jobs (the
+ * build job runs its own `--project node` tests, which the Node legs skip)
+ * would book time no leg spends. A single leg's own log has no job column.
+ */
 export function recordDurations(text) {
   const seconds = {};
   // Colour codes arrive as escape bytes, or, in `gh run view --log` output,
   // spelled out as `^[[…m`.
   const plain = text.replace(/(?:\x1b|\^\[)\[[0-9;]*m/g, '');
   for (const line of plain.split('\n')) {
+    const columns = line.split('\t');
+    if (columns.length >= 3 && !NODE_LEG_JOB.test(columns[0])) continue;
     const match =
       /[✓❯×]\s+\|?node\|?\s+(\S+\.(?:test|spec)\.[cm]?[jt]sx?)\s+\(\d+ tests?[^)]*\)\s+(\d+(?:\.\d+)?)(ms|s)\s*$/.exec(
         line,
       );
-    if (!match) continue;
-    const value = Number(match[2]) / (match[3] === 'ms' ? 1000 : 1);
-    seconds[match[1]] = Math.round(value * 10) / 10;
+    if (match) {
+      const value = Number(match[2]) / (match[3] === 'ms' ? 1000 : 1);
+      seconds[match[1]] = Math.round(value * 10) / 10;
+      continue;
+    }
+    // A file whose every test skips in the leg costs the leg nothing: it is
+    // recorded at 0, so a time another job gave it never stays booked.
+    const skipped =
+      /↓\s+\|?node\|?\s+(\S+\.(?:test|spec)\.[cm]?[jt]sx?)\s+\((\d+) tests? \| (\d+) skipped\)/.exec(
+        line,
+      );
+    if (skipped && skipped[2] === skipped[3]) seconds[skipped[1]] = 0;
   }
   return seconds;
 }
