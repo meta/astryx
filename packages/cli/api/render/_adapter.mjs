@@ -309,9 +309,6 @@ function writeRestore(writes, folder, cwd, overwrite) {
   return true;
 }
 
-/** How many times a restore without --out takes the next folder name when another run took one first. */
-const RESTORE_ATTEMPTS = 100;
-
 /**
  * The refusal for a restore whose new folder another run created first.
  * @param {string} folder
@@ -601,7 +598,10 @@ export function reverseToFile({cwd, input, output, overwrite}) {
         );
       }
     });
-    for (let attempt = 1; ; attempt++) {
+    // A restore without --out picks the first folder name no folder has.
+    // When another run takes that name first, this one takes the next: each
+    // name it loses exists from then on, so every pass picks a new one.
+    for (;;) {
       // Without --out, the page and the files it imports come back into a new
       // folder beside the HTML file, named after it (`report.html` gives
       // `report-restored/`), with the layout they were rendered in. Nothing in
@@ -708,7 +708,7 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       if (!writeRestore(writes, home, cwd, overwrite)) {
         // Another run took the folder's name first: a restore without --out
         // takes the next one.
-        if (output || attempt >= RESTORE_ATTEMPTS) throw folderTaken(/** @type {string} */ (home), cwd);
+        if (output) throw folderTaken(/** @type {string} */ (home), cwd);
         continue;
       }
       const renderedBy = renderedByOf(source, html);
@@ -754,7 +754,8 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       ERROR_CODES.ERR_RENDER_NOT_ASTRYX,
     );
   }
-  for (let attempt = 1; ; attempt++) {
+  // As above: a name another run takes first exists from then on.
+  for (;;) {
     const folder = output ? null : restoreFolder(input);
     const target = output ?? path.join(/** @type {string} */ (folder), 'page.tsx');
     const home = folder ?? newFolderOf(target);
@@ -769,7 +770,7 @@ export function reverseToFile({cwd, input, output, overwrite}) {
     const rebuilt = rebuildPage(html, from);
     refuseProtected([target], cwd, home);
     if (!writeRestore([{file: target, bytes: Buffer.from(rebuilt.source)}], home, cwd, overwrite)) {
-      if (output || attempt >= RESTORE_ATTEMPTS) throw folderTaken(/** @type {string} */ (home), cwd);
+      if (output) throw folderTaken(/** @type {string} */ (home), cwd);
       continue;
     }
     return {
