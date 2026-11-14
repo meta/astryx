@@ -22,7 +22,7 @@ import React, {use, useId, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
-import {RadioListContext} from './RadioList';
+import {RadioListContext, RadioListFormContext} from './RadioList';
 import {RadioListReasonContext} from './RadioListReasonContext';
 import {joinAriaIDs} from '../utils/inputAria';
 import {radiusVars} from '../theme/tokens.stylex';
@@ -33,6 +33,7 @@ import {indicatorScope} from '../Indicator/indicator.markers.stylex';
 import {useIndicatorFocusRing} from '../hooks/useIndicatorFocusRing';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useTouchHitArea} from '../utils/touchHitArea';
 import {pressBoxProps} from '../privateAttributes/pressBox.stylex';
 import {registerBoxHold} from '../utils/boxHold';
@@ -251,14 +252,19 @@ export function RadioListItem({
   const id = useId();
   const labelID = useId();
   const descriptionID = useId();
+  const formContext = use(RadioListFormContext);
   const isDisabled = context.isDisabled || isItemDisabled;
-  // When the whole group is disabled with a disabledMessage, radios stay
-  // focusable via aria-disabled (instead of native `disabled`) so the group's
-  // reason tooltip is keyboard-discoverable. Per-item disabling is unaffected
-  // and always uses the native disabled attribute.
-  const keepsFocusableForMessage =
-    context.hasDisabledMessage && !isItemDisabled;
   const isChecked = context.value === value;
+  const isSelectedDisabled = isItemDisabled && isChecked;
+  useIsomorphicLayoutEffect(() => {
+    if (!isSelectedDisabled || formContext == null) {
+      return;
+    }
+    return formContext.holdSelectedDisabled();
+  }, [isSelectedDisabled, formContext]);
+  // Every disabled radio stays focusable via aria-disabled. The optional group
+  // message controls only the reason tooltip and its description, not the
+  // radio's focusability.
   // One predicate for both the rendered element and the aria-describedby that
   // points at it. A ReactNode description can be `false` or `''`, which render
   // nothing — a `!= null` check would leave the link dangling.
@@ -271,7 +277,7 @@ export function RadioListItem({
   // See CheckboxInput: the ring goes on the indicator's own element, because
   // the native input is visually hidden and only the indicator knows its shape.
   const indicatorRef = useRef<HTMLSpanElement>(null);
-  const {focusProps} = useIndicatorFocusRing(indicatorRef, isDisabled);
+  const {focusProps} = useIndicatorFocusRing(indicatorRef);
 
   // The radio is the row's single keyboard control and action. The row is an
   // enlarged click/tap target that delegates surface clicks — the description
@@ -310,12 +316,10 @@ export function RadioListItem({
         name={context.name}
         value={value}
         checked={isChecked}
-        disabled={isDisabled && !keepsFocusableForMessage}
-        aria-disabled={keepsFocusableForMessage ? 'true' : undefined}
-        // A focusable-disabled radio is not natively disabled, so detach it
-        // from the form instead: it keeps its name (grouping) but is excluded
-        // from submission, matching a natively disabled control.
-        form={keepsFocusableForMessage ? '' : undefined}
+        aria-disabled={isDisabled ? 'true' : undefined}
+        // Disabled radios stay focusable. The group detaches every radio
+        // together when needed, so they keep one native radio group.
+        form={formContext?.detachesFromForm ? '' : undefined}
         required={context.isRequired}
         // Chromium reports an unanswered native-required radio invalid before
         // any interaction; the invalid state follows the group's status

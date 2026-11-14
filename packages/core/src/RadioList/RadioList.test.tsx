@@ -214,6 +214,12 @@ describe('RadioList', () => {
       </RadioList>,
     );
 
+    const radio = screen.getByRole('radio', {name: 'Option A'});
+    expect(radio).not.toHaveAttribute('disabled');
+    expect(radio).toHaveAttribute('aria-disabled', 'true');
+    radio.focus();
+    expect(radio).toHaveFocus();
+
     // userEvent honors `pointer-events: none`, so clicking the disabled row's
     // delegate surface is genuinely blocked (it refuses and throws) rather than
     // merely ignored by the handler — the guarantee this PR's delegation relies
@@ -232,6 +238,12 @@ describe('RadioList', () => {
         <RadioListItem label="Option A" value="a" isDisabled />
       </RadioList>,
     );
+
+    const radio = screen.getByRole('radio', {name: 'Option A'});
+    expect(radio).not.toHaveAttribute('disabled');
+    expect(radio).toHaveAttribute('aria-disabled', 'true');
+    radio.focus();
+    expect(radio).toHaveFocus();
 
     // userEvent honors `pointer-events: none`, so clicking the disabled row's
     // delegate surface is genuinely blocked (it refuses and throws) rather than
@@ -498,7 +510,7 @@ describe('RadioList', () => {
       expect(radios[2]).toHaveFocus();
     });
 
-    it('skips disabled radios when choosing the deterministic tab stop', () => {
+    it('keeps disabled radios in the deterministic tab stop', () => {
       render(
         <>
           <button type="button">before</button>
@@ -511,13 +523,13 @@ describe('RadioList', () => {
         </>,
       );
       const outside = screen.getByText('before');
-      const optionB = screen.getByLabelText('Option B');
       const optionC = screen.getByLabelText('Option C');
-      // A middle enabled radio (C) entered from outside is normalized to the
-      // first *enabled* radio (B) — the disabled Option A is skipped.
+      // A middle radio (C) entered from outside is normalized to the first
+      // radio (A). Disabled radios stay focusable and remain in the group's
+      // tab sequence.
       outside.focus();
       optionC.focus();
-      expect(optionB).toHaveFocus();
+      expect(screen.getByLabelText('Option A')).toHaveFocus();
     });
   });
 
@@ -768,6 +780,30 @@ describe('RadioList', () => {
       expect([
         ...new FormData(container.querySelector('form')!).keys(),
       ]).toEqual([]);
+    });
+
+    it('keeps a selected disabled option in one detached radio group', () => {
+      const {container} = render(
+        <form>
+          <RadioList
+            label="Preference"
+            htmlName="pref"
+            value="a"
+            onChange={() => {}}
+            isRequired>
+            <RadioListItem label="Option A" value="a" isDisabled />
+            <RadioListItem label="Option B" value="b" />
+          </RadioList>
+        </form>,
+      );
+      const form = container.querySelector('form')!;
+      const radios = container.querySelectorAll<HTMLInputElement>(
+        'input[type="radio"]',
+      );
+      expect(radios[0].form).toBeNull();
+      expect(radios[1].form).toBeNull();
+      expect([...new FormData(form).keys()]).toEqual([]);
+      expect(form.checkValidity()).toBe(true);
     });
 
     it('keeps working as an isolated group when htmlName is omitted', () => {
