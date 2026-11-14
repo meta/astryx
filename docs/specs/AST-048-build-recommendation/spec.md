@@ -413,6 +413,25 @@ page.
 Rejected: lifting only requests the kind call reads as pages, which keeps whole
 pages the kind call misreads on the empty shell.
 
+### DEC-11 — The page pick reads past weak ranker evidence
+
+**Reference:** `spec:AST-048/DEC-11`
+**Decider:** `josephfarina`, `2026-11-14`
+
+When build's fixed word tables read a request as a whole page, its page-pick
+model chooses among the ready page templates even when the page ranker's own
+evidence is too weak for the ranker to lead alone. The pick model reads the
+whole request, so its choice rests on many words rather than one shared word,
+and across representative requests its starts on weak ranker evidence help the
+builder more often than the empty app shell does. DEC-2 still holds when no
+part of build's ranking leads: the start is the app shell. Requests build reads
+as parts or as changes to an existing page keep their placement rules (DEC-4);
+the edit-phrase check belongs to DEC-10's shell lift, not to the page pick.
+
+Rejected: sending every start the ranker cannot lead alone to the app shell,
+which leaves more whole pages on the empty shell than it keeps parts off a page
+template.
+
 ## Open questions
 
 - **OQ1 — How recommendation quality is measured.** Whether changes to what
