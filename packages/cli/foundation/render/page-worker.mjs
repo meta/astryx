@@ -37,7 +37,7 @@ import {assetDataUri, isAssetPath} from './assets.mjs';
 import {SINGLE_COPY, isServedPackage, packageOf, resolveServed} from './served-packages.mjs';
 import {findNodeModulesPackage} from '../fs/paths.mjs';
 import {importSpecifiers} from './embedded-imports.mjs';
-import {CHART_GLOBAL, CHART_ROOTS, FOLLOWS_WIDTH, boxHeights, chartDocument, chartDrawings, foldLegends, roundCoordinates} from './charts.mjs';
+import {CHART_GLOBAL, CHART_ROOTS, FOLLOWS_WIDTH, boxHeights, chartDocument, chartDrawings, foldLegends, roundCoordinates, separateIds} from './charts.mjs';
 
 /** @typedef {{level: string, text: string}} PageLog */
 
@@ -336,6 +336,7 @@ async function drawCharts(markup, Page) {
     }
     if (!error) {
       foldLegends(host);
+      separateIds(host);
       roundCoordinates(host);
     }
     const out = error ? null : read(host);

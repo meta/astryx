@@ -30,7 +30,7 @@ const READER_WIDTHS = [390, 800, 1280];
  */
 const MOST_SCALE = 2 ** 0.25;
 
-const PAGE = `import {ResponsiveContainer, LineChart, Line, XAxis, YAxis, Legend, BarChart, Bar} from 'recharts';
+const PAGE = `import {ResponsiveContainer, LineChart, Line, XAxis, YAxis, Legend, BarChart, Bar, AreaChart, Area} from 'recharts';
 const data = [
   {m: 'Jan', a: 40, b: 24, c: 10}, {m: 'Feb', a: 30, b: 13, c: 22}, {m: 'Mar', a: 20, b: 58, c: 29},
   {m: 'Apr', a: 27, b: 39, c: 20}, {m: 'May', a: 18, b: 48, c: 21}, {m: 'Jun', a: 23, b: 38, c: 25},
@@ -48,6 +48,14 @@ export default function Page() {
       </div>
       <div data-case="aspect">
         <ResponsiveContainer width="100%" aspect={3}><LineChart data={data}>{lines}</LineChart></ResponsiveContainer>
+      </div>
+      <div data-case="gradient">
+        <ResponsiveContainer width="100%" height={200}>
+          <AreaChart data={data}>
+            <defs><linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#36c" /><stop offset="100%" stopColor="#36c" stopOpacity={0} /></linearGradient></defs>
+            <XAxis dataKey="m" /><Area dataKey="a" fill="url(#fade)" />
+          </AreaChart>
+        </ResponsiveContainer>
       </div>
       <div data-case="fixed">
         <BarChart width={300} height={150} data={data}><XAxis dataKey="m" /><Bar dataKey="a" /></BarChart>
@@ -103,6 +111,9 @@ describe.runIf(BROWSER_STEP)('a rendered chart at a reader’s width', () => {
                 (/** @type {any} */ b) => b.top >= rect.top - 1 && b.bottom <= rect.bottom + 1 && b.left >= rect.left - 1 && b.right <= rect.right + 1,
               );
               const tick = svg?.querySelector('.recharts-cartesian-axis-tick-value');
+              // The gradient an area fills with is the one in the drawing shown.
+              const fill = /url\(#([^)]+)\)/.exec(svg?.querySelector('.recharts-area-area')?.getAttribute('fill') ?? '')?.[1];
+              const paint = fill ? document.getElementById(fill) : null;
               return [
                 box.getAttribute('data-case'),
                 {
@@ -113,12 +124,14 @@ describe.runIf(BROWSER_STEP)('a rendered chart at a reader’s width', () => {
                   scale: svg?.getScreenCTM()?.a ?? 0,
                   // A tick's text measured on the screen, against its own font size.
                   textScale: tick ? tick.getBoundingClientRect().height / tick.getBBox().height : 0,
+                  fillShown: paint ? paint.closest('.recharts-wrapper') === shown[0] : null,
                 },
               ];
             }),
           );
         });
-        for (const name of ['fills-box', 'own-height', 'aspect', 'fixed']) {
+        expect(cases.gradient.fillShown).toBe(true);
+        for (const name of ['fills-box', 'own-height', 'aspect', 'gradient', 'fixed']) {
           const shown = cases[name];
           expect(shown.shown, name).toBe(1);
           expect(shown.fits, name).toBe(true);

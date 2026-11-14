@@ -2450,6 +2450,32 @@ export default function Page() {
     expect(new Set(unstated.map(d => d.height))).toEqual(new Set([300]));
   }, 60_000);
 
+  it('gives each drawing of a container chart its own ids, so a gradient the page defines in it fills every drawing', async () => {
+    put(
+      'charts-gradient.tsx',
+      `import {ResponsiveContainer, AreaChart, Area, XAxis} from 'recharts';
+${DATA}
+export default function Page() {
+  return (
+    <ResponsiveContainer width="100%" height={200}>
+      <AreaChart data={data}>
+        <defs><linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#36c" /><stop offset="100%" stopColor="#36c" stopOpacity={0} /></linearGradient></defs>
+        <XAxis dataKey="d" /><Area dataKey="v" fill="url(#fade)" />
+      </AreaChart>
+    </ResponsiveContainer>
+  );
+}
+`,
+    );
+    await render('charts-gradient.tsx', {cwd: dir});
+    const [container] = containersIn(fs.readFileSync(path.join(dir, 'charts-gradient.html'), 'utf8'));
+    for (const {width, html: part} of container) {
+      expect(part).toMatch(new RegExp(`<linearGradient\\b[^>]*\\bid="fade-at-${width}"`));
+      expect(part).toContain(`fill="url(#fade-at-${width})"`);
+      expect(part).not.toMatch(/id="fade"|url\(#fade\)/);
+    }
+  }, 60_000);
+
   it("keeps room for a chart's legend where its props place it, and puts a container chart's legend inside its picture", async () => {
     put(
       'charts-legend.tsx',

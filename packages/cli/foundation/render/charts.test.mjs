@@ -8,7 +8,7 @@
 
 import {describe, expect, it} from 'vitest';
 import {parseHTML} from 'linkedom';
-import {CHART_CSS, CHART_WIDTHS, FOLLOWS_WIDTH, boxHeights, chartDrawings, roundCoordinates} from './charts.mjs';
+import {CHART_CSS, CHART_WIDTHS, FOLLOWS_WIDTH, boxHeights, chartDrawings, roundCoordinates, separateIds} from './charts.mjs';
 
 /** The width ranges the CSS shows each drawing in, from its container queries. */
 function bands() {
@@ -130,5 +130,30 @@ describe('roundCoordinates', () => {
     expect(several.querySelector('text')?.getAttribute('x')).toBe('12.35');
     expect(several.querySelector('tspan')?.textContent).toBe('3.14159');
     expect(once.querySelector('path')?.getAttribute('d')).toBe('M5,206.66666666666669L60.123456,-3.3333333333333335');
+  });
+});
+
+describe('separateIds', () => {
+  it("gives each drawing of a chart drawn at several widths its own ids, and points its references at them", () => {
+    /** @param {number} width */
+    const drawing = width =>
+      `<div class="recharts-wrapper"><svg viewBox="0 0 ${width} 200" class="recharts-surface"><defs><linearGradient id="fade"></linearGradient></defs>` +
+      `<path fill="url(#fade)" style="stroke:url('#fade')"></path><use href="#fade"></use><path fill="url(#page-wide)"></path><text id="t" aria-labelledby="t other">x</text></svg></div>`;
+    const {document} = parseHTML(
+      `<!doctype html><html><body><div ${FOLLOWS_WIDTH}="" class="recharts-responsive-container">${drawing(60)}${drawing(85)}</div>` +
+        `<div class="recharts-responsive-container">${drawing(320)}</div></body></html>`,
+    );
+    separateIds(document.body);
+    const [narrow, wide, once] = [...document.querySelectorAll('svg')];
+    expect(narrow.querySelector('linearGradient')?.getAttribute('id')).toBe('fade-at-60');
+    expect(wide.querySelector('linearGradient')?.getAttribute('id')).toBe('fade-at-85');
+    const paths = wide.querySelectorAll('path');
+    expect(paths[0].getAttribute('fill')).toBe('url(#fade-at-85)');
+    expect(paths[0].getAttribute('style')).toBe("stroke:url('#fade-at-85')");
+    expect(wide.querySelector('use')?.getAttribute('href')).toBe('#fade-at-85');
+    expect(wide.querySelector('text')?.getAttribute('aria-labelledby')).toBe('t-at-85 other');
+    // An id from outside the chart, and a chart drawn once, are left as they are.
+    expect(paths[1].getAttribute('fill')).toBe('url(#page-wide)');
+    expect(once.querySelector('linearGradient')?.getAttribute('id')).toBe('fade');
   });
 });

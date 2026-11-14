@@ -212,6 +212,46 @@ export function foldLegends(root) {
   }
 }
 
+/** Attributes that name other elements by their ids, separated by spaces. */
+const ID_LISTS = ['for', 'aria-labelledby', 'aria-describedby', 'aria-controls', 'aria-owns', 'aria-activedescendant'];
+
+/**
+ * Give each drawing of a chart drawn at several widths its own ids. Every
+ * drawing renders the page's chart children again, so an id the page writes
+ * inside the chart (a `<linearGradient id>` its areas fill with, say) would
+ * appear once per drawing, and `url(#…)` would find the copy in the first
+ * drawing, which the reader may not see. Each id takes the drawing's width
+ * as a suffix, and each reference inside that drawing (`url(#…)`, `href`,
+ * and the attributes that list ids) follows it. Ids from outside the chart
+ * are left as they are.
+ * @param {any} root the element the charts were drawn in
+ */
+export function separateIds(root) {
+  for (const wrapper of root.querySelectorAll(`${CONTAINER}[${FOLLOWS_WIDTH}] > .recharts-wrapper`)) {
+    const width = String(wrapper.querySelector(':scope > svg.recharts-surface')?.getAttribute('viewBox') ?? '').split(/[\s,]+/)[2];
+    const elements = [wrapper, ...wrapper.querySelectorAll('*')];
+    /** @type {Map<string, string>} */
+    const own = new Map();
+    for (const el of elements) {
+      const id = el.getAttribute('id');
+      if (!id) continue;
+      own.set(id, `${id}-at-${width}`);
+      el.setAttribute('id', /** @type {string} */ (own.get(id)));
+    }
+    if (own.size === 0) continue;
+    /** @param {string} id */
+    const renamed = id => own.get(id) ?? id;
+    for (const el of elements) {
+      for (const {name, value} of [...el.attributes]) {
+        let next = value.replace(/url\(\s*(['"]?)#([^'")\s]+)\1\s*\)/g, (/** @type {string} */ _, /** @type {string} */ q, /** @type {string} */ id) => `url(${q}#${renamed(id)}${q})`);
+        if ((name === 'href' || name === 'xlink:href') && next.startsWith('#')) next = `#${renamed(next.slice(1))}`;
+        if (ID_LISTS.includes(name)) next = next.split(/\s+/).map(renamed).join(' ');
+        if (next !== value) el.setAttribute(name, next);
+      }
+    }
+  }
+}
+
 /** The SVG attributes that place and shape what a chart draws. */
 const GEOMETRY = ['d', 'points', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 'width', 'height', 'transform'];
 
