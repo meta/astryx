@@ -344,8 +344,7 @@ those contracts.
   so that no component's static graph carries the touch runtime, while every
   page still has it once the page settles. Nothing loads them on demand or on
   an interaction. Until the shared touch runtime has loaded, SegmentedControl
-  and Switch work by taps, clicks and keys, with no drag tracking and no slide
-  or spring; a bottom sheet still drags, and a drag that closes it takes the
+  and Switch work by taps, clicks and keys, with no drag tracking and no slide or spring, and a tap under a finger or under Reduce Motion changes them at once, with no cross-fade; a bottom sheet still drags, and a drag that closes it takes the
   stylesheet exit instead of the spring; a toast does not swipe (its close
   button and timer still dismiss it), and a popover presents as under a fine
   pointer. A gesture in that window does not start the load. The bundler keeps
@@ -369,19 +368,19 @@ those contracts.
   component lazy-loading its own touch code (`spec:AST-080` DEC-5). A touch
   behavior that a caller opts into and that carries a large resource cost
   comes through a public constructor whose module statically imports the
-  modules that behavior runs on; the component imports none of those, so
-  only an app that imports the constructor ships them
+  modules that behavior runs on; the component imports none of those, so only
+  an app that imports the constructor ships them
   (`architecture:public-component-api` INV19). `Item`'s swipe actions come
-  from `createSwipe` (`spec:AST-057` FR10): `Item` and `ListItem` import
-  none of the swipe modules — the gesture core, the animator, the panels'
+  from `createSwipe` (`spec:AST-057` FR10): `Item` and `ListItem` import none
+  of the swipe modules — the gesture core, the animator, the panels'
   rendering, and the row's gesture code — while `Item` keeps using the touch
   modules for its other jobs, such as press feedback. The only swipe code in
   `Item` is its deprecated path, serving its deprecated `swipeActions` and
   `swipeBehavior` props only until they leave in 0.8.0 (`spec:AST-057`
   DEP-0017, CLN-0025): the released loader, the one `import()` of swipe code;
   the released row style; the role gate and the `commit` warning; the bridge
-  the loaded layer fills, the click guard, and the event forwarders into that
-  bridge; and the coexistence diagnostic. There is no
+  the loaded layer fills and the key forwarder into that bridge; and the
+  coexistence diagnostic. There is no
   install call, no public entry, and no public installed check; tests reset
   the modules through an internal hook only. A component's own touch logic is
   small glue in its own build over these modules. The gesture host attaches for
@@ -600,7 +599,10 @@ contracts.
   reads: "Stores values only. Refs to DOM nodes are not attached yet when this
   runs." Internal: never in `hooks/index.ts` or the package entry; Lab imports
   both from `@astryxdesign/core/internal/committed-ref`, as it reaches other
-  Core internals.
+  Core internals. Lab imports `createSharedContext`, its one export, from
+  `@astryxdesign/core/internal/shared-context`, so a Lab component's context
+  reaches a swizzled copy's provider under one shared key (`spec:AST-110`
+  FR3).
 
 ## Deciding specs
 

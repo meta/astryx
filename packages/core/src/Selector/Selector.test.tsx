@@ -2996,6 +2996,50 @@ describe('Selector', () => {
       expect(trigger).toHaveAttribute('tabIndex', '0');
     });
   });
+  describe('isDefaultOpen', () => {
+    it('opens on mount when enabled', () => {
+      render(<Selector label="Fruit" options={OPTIONS} isDefaultOpen />);
+
+      expect(screen.getByRole('combobox')).toHaveAttribute(
+        'aria-expanded',
+        'true',
+      );
+    });
+
+    it('stays closed on mount when disabled and read-only', () => {
+      render(
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          isDefaultOpen
+          isDisabled
+          isReadOnly
+        />,
+      );
+
+      expect(screen.getByRole('combobox')).toHaveAttribute(
+        'aria-expanded',
+        'false',
+      );
+    });
+
+    it('does not retry a group-disabled default opening when enabled later', () => {
+      const field = (isDisabled: boolean) => (
+        <InputGroup label="Fruit" isDisabled={isDisabled}>
+          <Selector label="Fruit" options={OPTIONS} isDefaultOpen />
+        </InputGroup>
+      );
+      const {rerender} = render(field(true));
+      const trigger = screen.getByRole('combobox');
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+      rerender(field(false));
+
+      expect(trigger).not.toHaveAttribute('aria-disabled');
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    });
+  });
+
   describe('isReadOnly', () => {
     const readOnlyCases = [
       {presentation: 'popover', hasSearch: false},

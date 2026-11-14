@@ -43,6 +43,7 @@ import {
   announceInModal,
   enclosingModalDialog,
   useAnnounce,
+  type AnnounceFn,
   type AnnouncePoliteness,
 } from '../hooks/useAnnounce';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
@@ -260,6 +261,7 @@ interface ToastRowProps {
   isReversed: boolean;
   onExited: (id: string) => void;
   onDismiss: (id: string, reason: ToastDismissReason) => void;
+  announce: AnnounceFn;
   /** Whether the card carries its own live region (see ToastViewport). */
   isLiveRegion: boolean;
 }
@@ -284,6 +286,7 @@ function ToastRow({
   isReversed,
   onExited,
   onDismiss,
+  announce,
   isLiveRegion,
 }: ToastRowProps) {
   const o = entry.options;
@@ -366,6 +369,10 @@ function ToastRow({
           renderContent={o.renderContent}
           timerKey={entry.id}
           isLiveRegion={isLiveRegion}
+          announce={announce}
+          isRenderedBodyAnnouncement={
+            o.renderContent == null && getNodeText(o.body) === ''
+          }
           hasEntryStarted={hasEntryStarted}
         />
       </div>
@@ -494,13 +501,10 @@ export function ToastViewport({
 
   // Announce toasts through the persistent singleton live regions. They are
   // mounted empty and only mutated afterwards, which screen readers announce
-  // (see useAnnounce.ts). The announcement happens in addToast — the imperative
-  // dispatch path invoked once per useToast() call from an event handler,
-  // never from render — so each toast is announced exactly once by
-  // construction, independent of the React render lifecycle (StrictMode
-  // double-render/double-effect, viewport remounts, and unrelated list
-  // re-renders never re-announce). It is client-only (addToast never runs
-  // during SSR), so it is SSR-safe.
+  // (see useAnnounce.ts). Plain React text is announced in addToast — the
+  // event-driven dispatch path. ToastSurface reads a component body or a
+  // custom layout after commit. getNodeText cannot see what a component
+  // renders. Both paths use this modal-aware writer.
   // The viewport is each toast's only announcement owner; the card carries no
   // live role. A top-layer viewport's host moves into the latest open native
   // modal, where the page's shared channel is not exposed, so it writes
@@ -511,7 +515,7 @@ export function ToastViewport({
   // The top-layer host (below), read at write time for the modal it sits in.
   const hostRef = useRef<HTMLDivElement | null>(null);
   const announce = useCallback(
-    (text: string, politeness: AnnouncePoliteness) => {
+    (text: string, politeness: AnnouncePoliteness = 'polite') => {
       const modal = isTopLayer ? enclosingModalDialog(hostRef.current) : null;
       if (modal != null) {
         announceInModal(modal, text, politeness);
@@ -541,7 +545,7 @@ export function ToastViewport({
       }
       // Only text is announced; interactive endContent is reachable via F6.
       const text = getNodeText(entry.options.body);
-      if (text) {
+      if (text && entry.options.renderContent == null) {
         // Error toasts map to the assertive region (role="alert"); everything
         // else to the polite region (role="status") — mirrors Toast.tsx.
         announce(text, entry.options.type === 'error' ? 'assertive' : 'polite');
@@ -1012,6 +1016,7 @@ export function ToastViewport({
             isReversed={isReversed}
             onExited={handleExited}
             onDismiss={removeToast}
+            announce={announce}
             isLiveRegion={false}
           />
         ))}
