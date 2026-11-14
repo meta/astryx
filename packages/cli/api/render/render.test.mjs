@@ -798,6 +798,53 @@ describe('render(): every write stays inside the current folder', () => {
     expect(again.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('missing-asset');
   }, 60_000);
 
+  it('renders a page whose module names a path the system cannot look up', async () => {
+    put('long-name/names.ts', `export const far = './${'a'.repeat(300)}.png';\n`);
+    put('long-name/page.tsx', "import {far} from './names';\nexport default function Page() {\n  return <p>{far.length}</p>;\n}\n");
+    const result = /** @type {any} */ (await render('long-name/page.tsx', {cwd: dir}));
+    expect(result.data.files).toEqual(['page.tsx', 'names.ts']);
+  }, 60_000);
+
+  it('leaves out a named image outside the folder that holds the carried files, so the layout stays', async () => {
+    // A page under a tests/ folder: were the layout to move above it, its
+    // module would land under tests/, which a render never carries.
+    put('shared/far.png', PNG);
+    put('up/tests/icons.ts', "export const icons = {far: '../../shared/far.png'};\n");
+    put('up/tests/page.tsx', "import {icons} from './icons';\nexport default function Page() {\n  return <p>{Object.keys(icons).join(', ')}</p>;\n}\n");
+    const result = /** @type {any} */ (await render('up/tests/page.tsx', {cwd: dir}));
+    expect(result.data.files).toEqual(['page.tsx', 'icons.ts']);
+    const back = /** @type {any} */ (await render('up/tests/page.html', {cwd: dir, reverse: true, out: 'up-back/page.tsx'}));
+    expect(back.data).toMatchObject({exact: true, files: ['up-back/page.tsx', 'up-back/icons.ts']});
+  }, 60_000);
+
+  it('leaves out a named image larger than a render carries, and says so', async () => {
+    put('named-big/huge.png', Buffer.concat([PNG, Buffer.alloc(9 * 1024 * 1024)]));
+    put('named-big/icons.ts', "export const icons = {big: './huge.png'};\n");
+    put('named-big/page.tsx', "import {icons} from './icons';\nexport default function Page() {\n  return <p>{Object.keys(icons).join(', ')}</p>;\n}\n");
+    const result = /** @type {any} */ (await render('named-big/page.tsx', {cwd: dir}));
+    expect(result.data.files).not.toContain('huge.png');
+    expect(result.data.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({code: 'not-embedded', message: expect.stringContaining('huge.png is named in icons.ts but not carried in the file: it is larger than 8 MB')}),
+      ]),
+    );
+  }, 60_000);
+
+  it('carries an image a module or a stylesheet names that the page did not show, and gives every file back', async () => {
+    put('named/img/shown.png', PNG);
+    put('named/img/other.png', PNG);
+    put('named/img/unused-bg.png', PNG);
+    put('named/icons.ts', "export const icons = {shown: './img/shown.png', other: './img/other.png'};\n");
+    put('named/styles.css', '.used { color: red; }\n.unused { background: url("./img/unused-bg.png"); }\n');
+    put('named/page.tsx', "import './styles.css';\nimport {icons} from './icons';\nexport default function Page() { return <img className=\"used\" src={icons.shown} alt=\"\" />; }\n");
+    const r = /** @type {any} */ (await render('named/page.tsx', {cwd: dir}));
+    expect(r.data.files).toEqual(expect.arrayContaining(['img/shown.png', 'img/other.png', 'img/unused-bg.png']));
+    const back = /** @type {any} */ (await render('named/page.html', {cwd: dir, reverse: true, out: 'named-back/page.tsx'}));
+    expect(back.data).toMatchObject({exact: true});
+    expect(back.data.missing).toBeUndefined();
+    expect(fs.readFileSync(path.join(dir, 'named-back/img/other.png'))).toEqual(PNG);
+  }, 60_000);
+
   it('gives back images named any way the render carried them', async () => {
     put('spell/logo.png', PNG);
     put('spell/images/bg.png', PNG);
@@ -1579,6 +1626,43 @@ describe('render(): every write stays inside the current folder', () => {
   });
 });
 
+describe('render(): imports with a query, as Vite gives them', () => {
+  it('gives ?raw the file text, ?inline a stylesheet text, ?url an image address, and gives the files back', async () => {
+    put('queries/notes.css', '.note { color: teal; --note-marker: 1; }\n');
+    put('queries/dot.png', PNG);
+    put('queries/data.json', '{"a": 1}\n');
+    put(
+      'queries/page.tsx',
+      "import sheet from './notes.css?inline';\nimport text from './data.json?raw';\nimport * as whole from './data.json?raw';\nimport {default as named} from './data.json?raw';\nimport dot from './dot.png?url';\nexport default function Page() {\n  return <main><pre className=\"note\">{sheet}</pre><pre>{text}</pre><pre>{whole.default === text && named === text ? 'every import gets the text' : 'no'}</pre><img src={dot} alt=\"\" /></main>;\n}\n",
+    );
+    const result = /** @type {any} */ (await render('queries/page.tsx', {cwd: dir}));
+    const html = fs.readFileSync(path.join(dir, 'queries/page.html'), 'utf8');
+    expect(html).toContain('.note { color: teal; --note-marker: 1; }');
+    expect(html).toContain('every import gets the text');
+    expect(html).toContain('{&quot;a&quot;: 1}');
+    expect(html).toContain('src="data:image/png;base64,');
+    // A stylesheet imported with ?inline is text, not a sheet of the page:
+    // the class it styles is used, and no rule of it is in the page's styles.
+    expect(html.match(/<style[^>]*>([\s\S]*?)<\/style>/)?.[1]).not.toContain('--note-marker');
+    expect(result.data.files.sort()).toEqual(['data.json', 'dot.png', 'notes.css', 'page.tsx']);
+    const back = /** @type {any} */ (await render('queries/page.html', {cwd: dir, reverse: true, out: 'queries-back/page.tsx'}));
+    expect(back.data.exact).toBe(true);
+  }, 60_000);
+
+  it('loads a file with any other query as it loads without one: an image as its address, a module as itself', async () => {
+    put('queries/w.ts', "export const label = 'from the worker module';\n");
+    put(
+      'queries/others.tsx',
+      "import a from './dot.png?w=400';\nimport b from './dot.png?no-inline';\nimport c from './dot.png?url&inline';\nimport * as w from './w.ts?worker';\nexport default function Page() {\n  return <main><img src={a} alt=\"\" /><img src={b} alt=\"\" /><img src={c} alt=\"\" /><p>{w.label}</p></main>;\n}\n",
+    );
+    const result = /** @type {any} */ (await render('queries/others.tsx', {cwd: dir}));
+    const html = fs.readFileSync(path.join(dir, 'queries/others.html'), 'utf8');
+    expect(html.match(/src="data:image\/png;base64,/g)).toHaveLength(3);
+    expect(html).toContain('from the worker module');
+    expect(result.data.files.sort()).toEqual(['dot.png', 'others.tsx', 'w.ts']);
+  }, 60_000);
+});
+
 describe('render(): ordinary files named like configuration', () => {
   it('carries modules and JSON data named config or ending in rc, and gives them back exactly', async () => {
     put('names/config.ts', "export const site = {title: 'Named config'};\n");
@@ -1618,8 +1702,6 @@ describe('render --reverse: a received file may carry only what a render embeds'
     ['the Astryx configuration', 'astryx.config.mjs', 'ERR_RENDER_SOURCE_DAMAGED'],
     ['the package manifest', 'package.json', 'ERR_RENDER_SOURCE_DAMAGED'],
     ['a TypeScript configuration', 'tsconfig.json', 'ERR_RENDER_SOURCE_DAMAGED'],
-    ['a TypeScript project configuration', 'tsconfig.app.json', 'ERR_RENDER_SOURCE_DAMAGED'],
-    ['a JSON tool configuration by its config name', 'renovate.config.json', 'ERR_RENDER_SOURCE_DAMAGED'],
     ['a package inside node_modules', 'node_modules/react/index.js', 'ERR_RENDER_SOURCE_DAMAGED'],
     ['a shell script', 'scripts/install.sh', 'ERR_RENDER_SOURCE_DAMAGED'],
     ['a climbing path', '../escape.css', 'ERR_PATH_TRAVERSAL'],

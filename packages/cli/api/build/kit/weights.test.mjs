@@ -87,6 +87,28 @@ describe('the pick model', () => {
     expect(start).toBe('grid');
   });
 
+  it('chooses the listed page an unlisted pick is weighed against', () => {
+    // The tables do not list gauge-fleet; the idea names none of its words,
+    // so the best listed page starts: the pick model's (grid), not the call
+    // model's (charts).
+    const catalog = [
+      {name: 'board', displayName: 'Board'},
+      {name: 'charts', displayName: 'Charts'},
+      {name: 'grid', displayName: 'Grid'},
+      {name: 'gauge-fleet', displayName: 'Fleet Gauges'},
+    ];
+    const ranked = [page('gauge-fleet', 9, 'Gauges'), ...RANKED];
+    const idea = 'a grid of charts and cards';
+    expect(
+      weighStart(idea, ranked, ranked[0], catalog, {weights: WEIGHTS}),
+    ).toBe('charts');
+    expect(
+      weighStart(idea, ranked, ranked[0], catalog, {
+        weights: {...WEIGHTS, pick: PICK},
+      }),
+    ).toBe('grid');
+  });
+
   it('never turns the app shell into a page', () => {
     const start = weighStart(
       'tweak the existing cards',

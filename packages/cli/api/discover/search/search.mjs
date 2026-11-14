@@ -24,6 +24,7 @@ import {levenshteinDistance} from '../../../foundation/text/string-utils.mjs';
 import {AstryxError} from '../../error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {DISCOVER_KINDS} from '../../../authoring/discover/parse.mjs';
+import {compareText} from '../../../foundation/text/compare-text.mjs';
 
 /**
  * @typedef {import('../_package-scanner.mjs').ScannedPackage} ScannedPackage
@@ -131,8 +132,8 @@ export async function search(packages, query, opts) {
         a.score - b.score ||
         Number(b.item.installed) - Number(a.item.installed) ||
         KIND_ORDER.indexOf(a.item.kind) - KIND_ORDER.indexOf(b.item.kind) ||
-        a.item.package.localeCompare(b.item.package) ||
-        a.item.name.localeCompare(b.item.name),
+        compareText(a.item.package, b.item.package) ||
+        compareText(a.item.name, b.item.name),
     );
 
   if (ranked.length > 0) {

@@ -62,6 +62,7 @@ import {
   keywordWordsFor,
   framesOf,
 } from './words.mjs';
+import {compareText} from '../../../foundation/text/compare-text.mjs';
 
 /**
  * @typedef {import('./words.mjs').PageTemplate} PageTemplate
@@ -289,7 +290,7 @@ export function rankPages(query, pages) {
       (a, b) =>
         b.score - a.score ||
         a.name.split('-').length - b.name.split('-').length ||
-        a.name.localeCompare(b.name),
+        compareText(a.name, b.name),
     );
   return baseFirst(ranked);
 }

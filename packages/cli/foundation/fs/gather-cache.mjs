@@ -91,8 +91,9 @@ const KEPT_COMMANDS = new Set([
   'theme',
   'discover',
   'docs',
-  // The project check alone (no subcommand): its docs checks and theme-wiring
-  // scan are kept.
+  // Its project check, with or without `--built`, keeps its docs checks and
+  // theme-wiring scan; its `integration` checks run neither, and keep only
+  // the project gathers they load, as the commands above do.
   'doctor',
 ]);
 
@@ -259,8 +260,6 @@ export async function recordRunFor(argv, fn) {
   if (
     !command ||
     !KEPT_COMMANDS.has(command) ||
-    (command === 'doctor' &&
-      argv.filter(arg => !arg.startsWith('-')).length > 1) ||
     runsUnderPnp() ||
     currentUid() == null ||
     withoutRecording(buildId) == null ||

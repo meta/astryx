@@ -499,15 +499,17 @@ function fullerOfTie(name, idea, ranked, cands, catalog) {
 }
 
 /**
- * The pick model's best ready, non-shell template, or null when it has none.
+ * The pick model's best ready, non-shell template that `ok` accepts, or null
+ * when it has none.
  * @param {string} idea
  * @param {import('./rank.mjs').RankedPage[]} ranked
  * @param {import('./rank.mjs').RankedPage | null} pick
  * @param {DescribedTemplate[]} catalog
  * @param {WeightsFile} weights
+ * @param {(c: string) => boolean} [ok]
  * @returns {string | null}
  */
-function bestPage(idea, ranked, pick, catalog, weights) {
+function bestPage(idea, ranked, pick, catalog, weights, ok = () => true) {
   const {cands, scores} = blend(
     idea,
     ranked,
@@ -517,7 +519,12 @@ function bestPage(idea, ranked, pick, catalog, weights) {
   );
   let at = -1;
   for (let c = 0; c < cands.length; c++) {
-    if (cands[c] !== SHELL && (at < 0 || scores[c] > scores[at])) at = c;
+    if (
+      cands[c] !== SHELL &&
+      ok(cands[c]) &&
+      (at < 0 || scores[c] > scores[at])
+    )
+      at = c;
   }
   return at < 0 ? null : cands[at];
 }
@@ -586,12 +593,14 @@ export function weighStart(
   // The tables cannot judge a template they do not list (an integration's
   // template, or one added since they were fit), so its own descriptor
   // decides: the ranker's pick stands when the idea names as many words of its
-  // display name, category and keywords as of the tables' first listed
-  // template's, or names its family first and nearly as many; otherwise that
-  // listed template starts. Nothing learned about the template is involved,
+  // display name, category and keywords as of the best listed template's (the
+  // pick model's choice, as for every other page), or names its family first
+  // and nearly as many; otherwise that listed template starts. Nothing learned about the template is involved,
   // so a new template competes on its own words.
   if (kept && !position.has(kept)) {
-    const listed = best(c => c !== SHELL && position.has(c));
+    const listed = bestPage(idea, ranked, pick, catalog, weights, c =>
+      position.has(c),
+    );
     if (!listed) return kept;
     // The idea's own words, less search's stopwords: "basically" must not
     // answer the "Basic" of a category.

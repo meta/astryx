@@ -111,6 +111,15 @@ const RUNNERS = {
     runs: "each integration's codemods, through the codemod parser, to plan an upgrade",
     sites: ['loadModuleWithParser(..., parseCodemod)'],
   },
+  'authoring/example/preview.mjs': {
+    runs: 'Babel, its TypeScript plugin and the `globals` lists (CommonJS), each on first use, to read a doc example as the module a live preview runs',
+    sites: [
+      'require(@babel/core)',
+      'require(@babel/parser)',
+      'require(@babel/plugin-transform-typescript)',
+      'require(globals)',
+    ],
+  },
   'authoring/shadcn/source-variants.mjs': {
     runs: "Babel, its TypeScript plugin and recast (CommonJS), each on first use, to reproduce the ShadCN client's transform",
     sites: [
@@ -458,6 +467,10 @@ const RUNNERS = {
   'foundation/fs/paths.mjs': {
     runs: "Yarn's pnpapi, under Plug'n'Play, to find an installed package",
     sites: ['require(pnpapi)'],
+  },
+  'foundation/integrations/example-code.mjs': {
+    runs: 'the React the package resolves, to read its named exports for the example check',
+    sites: ['require(react)'],
   },
   'foundation/integrations/integrations.mjs': {
     runs: "each installed integration's manifest",

@@ -30,6 +30,7 @@ import {
 } from './module-exports.mjs';
 import {inspectPackageExport, sourceExportTarget} from './package-exports.mjs';
 import {babelParser} from '../runtime/lazy-dependencies.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 const SKIP_DIRS = new Set(['hooks', 'utils', '__tests__', 'node_modules']);
 
@@ -544,13 +545,13 @@ function readComponentGroups(coreDir, keep = () => true, tops) {
 }
 
 /**
- * Groups as one record, keys in the running locale's order: a live read and
- * the list stored at publish (in the publishing locale's order) print alike.
+ * Groups as one record, keys in the fixed text order (`compareText`), so a
+ * live read and the list stored at publish print alike on every host.
  * @param {Array<{key: string, values: string[]}>} entries
  * @returns {Record<string, string[]>}
  */
 function inGroupOrder(entries) {
-  entries.sort((a, b) => a.key.localeCompare(b.key));
+  entries.sort((a, b) => compareText(a.key, b.key));
   /** @type {Record<string, string[]>} */
   const ordered = {};
   for (const {key, values} of entries) {
@@ -1035,7 +1036,7 @@ export function discoverExternalComponentsGrouped(docsDir) {
   for (const name of ungrouped) {
     entries.push({key: name, values: [name]});
   }
-  entries.sort((a, b) => a.key.localeCompare(b.key));
+  entries.sort((a, b) => compareText(a.key, b.key));
 
   /** @type {Record<string, string[]>} */
   const ordered = {};
