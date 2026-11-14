@@ -393,7 +393,7 @@ Rejected: lazy loading inside each component, and an app-installed module.
 
 Amended 2026-11-12 by the owner ("I think we could defer load but not lazy load"): components do not import the shared touch modules statically. One shared loader loads them once on every page after first paint, whatever the input, and nothing loads them on demand or on an interaction. Until they have loaded, a component that uses them works by taps, clicks and keys, with no drag tracking and no spring.
 
-Clarification (Specs, 2026-11-12): the before-load behavior applies per component as `architecture:react-component-runtime` INV13 lists it; a component outside the loader keeps its static behavior until its follow-up moves it.
+Clarification (Specs, 2026-11-12): the before-load behavior applies per component as `architecture:react-component-runtime` INV13 lists it; a component that INV13's gap line names keeps its static behavior.
 
 ### DEC-6 — Source builds cover Turbopack and every styled package; the fast path is the goal
 

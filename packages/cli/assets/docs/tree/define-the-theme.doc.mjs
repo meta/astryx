@@ -90,7 +90,7 @@ export const oceanContrastTheme = defineTheme({
       content: [
         {
           type: 'prose',
-          text: 'Core private variables start with `--_`, such as `--_field-radius`. They are internals and can change in any Core release, so `theme build` reports each one it finds as an `[error]`. Set the standard CSS property instead — `borderRadius`, `padding` — and let the build emit the internal variable where Core needs it.',
+          text: 'Core private variables start with `--_`, such as `--_field-radius`. They are internals and can change in any Core release, so `theme build` refuses a theme that sets one (`ERR_THEME_INVALID`, naming each) and writes nothing. Set the standard CSS property instead — `borderRadius`, `padding` — and let the build emit the internal variable where Core needs it.',
         },
       ],
     },

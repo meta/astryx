@@ -25,7 +25,9 @@ describe('init Next steps theme guidance', () => {
   });
 
   it('wires the generated theme record once', () => {
-    expect(text).toContain("{ themes, defaultThemeSlug } from './astryx-themes'");
+    expect(text).toContain(
+      "{ themes, defaultThemeSlug } from './astryx-themes'",
+    );
     expect(text).toContain('themes[defaultThemeSlug]');
   });
 
@@ -33,6 +35,15 @@ describe('init Next steps theme guidance', () => {
     expect(text).toContain('Extend an imported theme');
     expect(text).toContain('npx astryx theme eject <slug>');
     expect(text).toContain('only to fork source');
+  });
+
+  it('sends making or changing a theme to the theme editor', () => {
+    expect(text).toContain(
+      'To make or change a theme: the experimental theme editor',
+    );
+    expect(text).toContain(
+      'npx astryx experimental theme editor new <name> --like neutral',
+    );
   });
 
   it('does not teach a direct package theme import', () => {
