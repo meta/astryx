@@ -203,7 +203,13 @@ describe('generateThemeRules', () => {
           },
         },
       },
-      onDark: {tokens: {'--color-accent': undefined}},
+      onDark: {
+        tokens: {'--color-accent': undefined},
+        components: {
+          button: {base: {padding: undefined as unknown as string}},
+          card: undefined as unknown as Record<string, Record<string, string>>,
+        },
+      },
     });
     const warnings: string[] = [];
     const css = [
@@ -211,6 +217,7 @@ describe('generateThemeRules', () => {
       generateOnMediaCSS(theme, warnings),
     ].join('\n');
     expect(css).not.toMatch(/:\s*undefined;/);
+    expect(css).not.toContain('.astryx-card');
     // A block left with no value writes no empty rule.
     expect(css).not.toMatch(/:hover[^{]*\{\s*\}/);
     expect(warnings).toEqual([]);
@@ -242,6 +249,22 @@ describe('generateThemeRules', () => {
     expect(css).toMatch(/padding: 8px;/);
     expect(css).toMatch(/color: white;/);
     expect(css).not.toMatch(/:\s*undefined;/);
+  });
+
+  it('writes nothing for a component or style key a rule source leaves undefined', () => {
+    const plain = generateThemeRules({
+      tokens: {},
+      components: {link: {base: {color: 'red'}}},
+    });
+    const unset = generateThemeRules({
+      tokens: {},
+      components: {
+        link: {base: {color: 'red'}},
+        card: {base: undefined as unknown as Record<string, string>},
+        text: undefined as unknown as Record<string, Record<string, string>>,
+      },
+    });
+    expect(unset).toEqual(plain);
   });
 
   it('keeps null as it was: it replaces an inherited value and is written as it is', () => {

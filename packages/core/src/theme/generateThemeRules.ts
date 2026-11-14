@@ -1372,7 +1372,14 @@ function generateComponentRules(
   }: ComponentRuleOptions = {},
 ): void {
   for (const [component, rules] of Object.entries(components)) {
+    // A component or style key left undefined is not set.
+    if (rules === undefined) {
+      continue;
+    }
     for (const [key, styles] of Object.entries(rules)) {
+      if (styles === undefined) {
+        continue;
+      }
       /**
        * Emit a style block on a selector: its declarations, then its
        * pseudo-class overrides, each rule passed through `wrap`; then, for a
@@ -1655,9 +1662,9 @@ function generateColorOverrides(
     inherit: 'inherit',
   };
 
-  const touchesText = 'text' in components;
-  const touchesHeading = 'heading' in components;
-  const touchesLink = 'link' in components;
+  const touchesText = components.text !== undefined;
+  const touchesHeading = components.heading !== undefined;
+  const touchesLink = components.link !== undefined;
 
   if (touchesText || touchesHeading || touchesLink) {
     for (const [colorName, colorValue] of Object.entries(TEXT_COLOR_MAP)) {
@@ -1722,7 +1729,7 @@ function generateSizeOverrides(
   parts: string[],
   surface?: MediaSurface,
 ): void {
-  if (!('text' in components)) {
+  if (components.text === undefined) {
     return;
   }
   for (const [sizeName, sizeValue] of Object.entries(TEXT_SIZE_TOKEN_MAP)) {

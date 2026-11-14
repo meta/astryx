@@ -668,11 +668,6 @@ function assertConcreteLeaf(value: unknown, path: string): void {
   }
   if (isRecord(value)) {
     for (const [key, nested] of Object.entries(value)) {
-      // A part value left undefined is not set, as everywhere else.
-      if (nested === undefined) {
-        continue;
-      }
-      // A null value is no CSS string, so the check below refuses it.
       assertConcreteLeaf(nested, `${path}.${key}`);
     }
     return;
