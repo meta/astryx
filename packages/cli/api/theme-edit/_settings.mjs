@@ -7052,7 +7052,8 @@ export function focusStateOf(ctx, part) {
 /**
  * The radius token a part's corners follow when Core draws its corners one
  * by one from that token by position (a button squares the joins inside a
- * button group), or null. A radius for such a part is written as that
+ * button group; a button group's outer corners are its end buttons'), or
+ * null. A radius for such a part is written as that
  * token on the part, so every position keeps its own corner; a radius
  * written on the part would override Core's per-corner rules.
  * @param {Ctx} ctx
@@ -7072,6 +7073,15 @@ export function positionalCornerToken(ctx, part) {
     if (token && (e.values ?? []).some((/** @type {string} */ v) => v === '0'))
       return token;
   }
+  // A part with no corners of its own whose outer corners are the corners
+  // Core draws by place on the parts inside it (a button group's first and
+  // last buttons): the one token those read, set on the part.
+  const inner = ctx.C.MAP[part]?.innerCorners ?? [];
+  if (
+    inner.length === 1 &&
+    !Object.keys(own).some(k => /^border-.*radius$/.test(k))
+  )
+    return inner[0];
   return null;
 }
 
@@ -7099,6 +7109,42 @@ export function cornerParts(ctx, part) {
       ctx.C.MAP[t]?.own?.['border-radius'] &&
       t.startsWith(`${part}-`) &&
       ctx.project.target.has(t),
+  );
+  return inner.length ? inner : [part];
+}
+
+/** The table boxes CSS draws no padding on: rows, row groups and columns. */
+const UNPADDED_BOXES = new Set([
+  'tr',
+  'thead',
+  'tbody',
+  'tfoot',
+  'col',
+  'colgroup',
+]);
+
+/**
+ * The parts that take a part's padding: the part itself, or, when Core
+ * renders it as a box CSS draws no padding on (a table row) and gives it no
+ * other display, the parts inside it with padding of their own (its cells).
+ * @param {Ctx} ctx
+ * @param {string} part
+ * @returns {string[]}
+ */
+export function paddedParts(ctx, part) {
+  const rec = ctx.C.MAP[part];
+  const tags = rec?.tags ?? [];
+  if (
+    !rec ||
+    !tags.length ||
+    !tags.every(t => UNPADDED_BOXES.has(t)) ||
+    rec.own?.display
+  )
+    return [part];
+  const inner = (rec.contains ?? []).filter(
+    (/** @type {string} */ t) =>
+      ctx.project.target.has(t) &&
+      Object.keys(ctx.C.MAP[t]?.own ?? {}).some(k => /^padding/.test(k)),
   );
   return inner.length ? inner : [part];
 }
