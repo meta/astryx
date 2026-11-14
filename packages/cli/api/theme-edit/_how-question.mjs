@@ -1263,15 +1263,9 @@ function noMode(t) {
 function isOneColor(v) {
   const t = String(v).trim();
   if (/gradient\(|url\(|image-set\(|^none$/i.test(t)) return false;
-  // A comma outside parentheses is a layer list.
-  let depth = 0;
-  for (const ch of t) {
-    if (ch === '(') depth++;
-    else if (ch === ')') depth--;
-    else if (ch === ',' && depth === 0) return false;
-    else if (ch === ' ' && depth === 0) return false;
-  }
-  return true;
+  // A comma outside parentheses is a layer list; white space there, more
+  // than one value.
+  return splitTop(t, ',').length <= 1 && splitTop(t, ' ').length <= 1;
 }
 
 /** A keep step for a part the change does not reach. */

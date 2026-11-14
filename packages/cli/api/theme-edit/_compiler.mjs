@@ -10,6 +10,7 @@
  */
 
 import {DIRECT, GROUPS, HOW} from './_tables.mjs';
+import {splitTop} from './_css.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
 /** Only these token types may differ between light and dark. */
@@ -420,23 +421,11 @@ export function makeCompiler(project, parts) {
    * @returns {string[] | null}
    */
   function gradientStops(v) {
-    /** Split at commas outside parentheses. @param {string} x */
-    const top = x => {
-      /** @type {string[]} */
-      const out = [];
-      let depth = 0;
-      let from = 0;
-      for (let i = 0; i < x.length; i++) {
-        if (x[i] === '(') depth++;
-        else if (x[i] === ')') depth--;
-        else if (x[i] === ',' && depth === 0) {
-          out.push(x.slice(from, i).trim());
-          from = i + 1;
-        }
-      }
-      out.push(x.slice(from).trim());
-      return out.filter(Boolean);
-    };
+    /** The parts between commas outside parentheses. @param {string} x */
+    const top = x =>
+      splitTop(x, ',')
+        .map(part => part.trim())
+        .filter(Boolean);
     /** @type {string[]} */
     const stops = [];
     for (const layer of top(v)) {
