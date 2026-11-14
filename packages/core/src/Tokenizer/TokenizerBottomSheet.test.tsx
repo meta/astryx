@@ -1062,6 +1062,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
               tags.filter(tag =>
                 tag.label.toLowerCase().includes(q.toLowerCase()),
               ),
+            bootstrap: () => [],
           }}
           value={[tags[4]]}
           onChange={() => {}}

@@ -234,7 +234,7 @@ describe('BaseTypeahead', () => {
     }));
     render(
       <BaseTypeahead
-        searchSource={{search: () => projects}}
+        searchSource={{search: () => projects, bootstrap: () => []}}
         value={null}
         onChange={() => {}}
         debounceMs={0}

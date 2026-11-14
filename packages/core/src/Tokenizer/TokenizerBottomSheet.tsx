@@ -814,8 +814,8 @@ function TokenizerSheetContent<T extends SearchableItem>({
     if (!isSettledEmpty && !isQueryEmpty) {
       // The rows the sheet lists for this query — the source's results,
       // selected items the source did not return, such as a created value,
-      // and the create row when it is offered — plus the matches past
-      // `maxMenuItems`, as the inline field counts them.
+      // and the create row when it is offered — plus the matches the cap hid
+      // that the sheet does not already list.
       announce(
         t('@astryx.typeahead.resultCount', {
           count:
