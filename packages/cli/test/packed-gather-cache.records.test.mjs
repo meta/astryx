@@ -32,6 +32,7 @@ import {
   entries,
   QUERIES,
   hasModuleHooks,
+  readKept,
 } from '../test-utils/packed-gather-cache-fixture.mjs';
 
 usePackedCli();
@@ -141,7 +142,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
       for (const name of files) {
         const text = fs.readFileSync(path.join(dir, name), 'utf8');
         expect(text, name).not.toContain(secret);
-        for (const [, state] of JSON.parse(text).env ?? []) {
+        for (const [, state] of readKept(path.join(dir, name)).env ?? []) {
           states += 1;
           expect(state === null || /^[0-9a-f]{32}$/.test(state), name).toBe(
             true,

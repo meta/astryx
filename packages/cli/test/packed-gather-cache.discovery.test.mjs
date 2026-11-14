@@ -35,6 +35,7 @@ import {
   themeEntries,
   QUERIES,
   hasModuleHooks,
+  readKept,
 } from '../test-utils/packed-gather-cache-fixture.mjs';
 
 usePackedCli();
@@ -344,11 +345,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
             fs
               .readdirSync(path.join(tmp, CACHE_NAME))
               .map(name => path.join(tmp, CACHE_NAME, name))
-              .filter(
-                file =>
-                  JSON.parse(fs.readFileSync(file, 'utf8')).value?.type ===
-                  'component.list',
-              )
+              .filter(file => readKept(file).value?.type === 'component.list')
               .map(file => [file, fs.statSync(file).ino]),
           );
         for (const ask of [
@@ -462,9 +459,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
             .readdirSync(path.join(tmp, CACHE_NAME))
             .filter(name =>
               Array.isArray(
-                JSON.parse(
-                  fs.readFileSync(path.join(tmp, CACHE_NAME, name), 'utf8'),
-                ).value?.wired,
+                readKept(path.join(tmp, CACHE_NAME, name)).value?.wired,
               ),
             );
         // Nothing wired yet: kept, then read back, as a fresh run answers.
