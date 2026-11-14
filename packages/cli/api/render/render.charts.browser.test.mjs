@@ -4,7 +4,8 @@
  * @file A rendered page with charts sized by their containers, shown in
  * Chromium at a phone's, a tablet's and a desktop's width with no
  * JavaScript: each chart shows one drawing, which fits its box whole and
- * keeps the box's height, and its text stays near its own size.
+ * keeps the box's height, and its text stays near its own size. CI runs it
+ * in node-browser-contracts' "Render chart browser case" step.
  */
 
 import * as fs from 'node:fs';
@@ -15,8 +16,8 @@ import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {render} from './render.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
 
-// The case runs only in test-node's "Render chart browser case" step, after
-// the Chromium install; the Node shards list it as skipped.
+// The case runs only in node-browser-contracts' "Render chart browser case"
+// step, after the Chromium install; the Node shards list it as skipped.
 const BROWSER_STEP = process.env.ASTRYX_RENDER_CHART_BROWSER === '1';
 const {chromium} = createRequire(import.meta.url)('playwright');
 
@@ -91,8 +92,13 @@ describe.runIf(BROWSER_STEP)('a rendered chart at a reader’s width', () => {
               const rect = box.getBoundingClientRect();
               const shown = [...box.querySelectorAll('.recharts-wrapper')].filter((/** @type {any} */ w) => getComputedStyle(w).display !== 'none');
               const svg = shown[0]?.querySelector(':scope > svg.recharts-surface');
-              // Everything the drawing paints, its legend included.
-              const parts = shown.flatMap((/** @type {any} */ w) => [w, ...w.querySelectorAll('*')]).map((/** @type {any} */ e) => e.getBoundingClientRect()).filter((/** @type {any} */ b) => b.width && b.height);
+              // The drawing's own boxes: its wrapper and its picture, which
+              // clips what it paints, its legend included. A glyph's box
+              // depends on the font, so it is not one of them.
+              const parts = shown
+                .flatMap((/** @type {any} */ w) => [w, w.querySelector(':scope > svg.recharts-surface')])
+                .filter(Boolean)
+                .map((/** @type {any} */ e) => e.getBoundingClientRect());
               const fits = parts.every(
                 (/** @type {any} */ b) => b.top >= rect.top - 1 && b.bottom <= rect.bottom + 1 && b.left >= rect.left - 1 && b.right <= rect.right + 1,
               );

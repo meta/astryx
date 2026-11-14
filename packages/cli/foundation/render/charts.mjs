@@ -133,10 +133,12 @@ const DRAWING = `${CONTAINER}>.recharts-wrapper`;
 
 /**
  * A container chart fills the box the page gives it and its drawing fits
- * that box whole, scaled down if it must be and never up past its own size,
- * so it never overflows or clips. Its legend is part of the drawing (see
- * {@link foldLegends}), so it scales with it. A container drawn at several
- * widths shows only the drawing nearest its width.
+ * that box whole, so it never overflows or clips. A drawing as high as its
+ * box scales down when the box is narrower and never grows past its own
+ * size; a drawing that keeps an aspect scales with its box both ways. Its
+ * legend is part of the drawing (see {@link foldLegends}), so it scales with
+ * it. A container drawn at several widths shows only the drawing nearest its
+ * width, so that scale stays within the fourth root of two.
  */
 export const CHART_CSS =
   `${CONTAINER}{max-width:100%}` +
@@ -152,6 +154,21 @@ export const CHART_CSS =
       return `@container ${query}{${CONTAINER}[${FOLLOWS_WIDTH}]>.recharts-wrapper:nth-child(${k + 1}){display:block}}`;
     })
     .join('');
+
+/** The properties that place and size a legend in the layer above a picture. */
+const LEGEND_PLACEMENT = new Set(['position', 'left', 'right', 'top', 'bottom', 'width', 'height']);
+
+/**
+ * A legend's own style without the properties that place and size it, so it
+ * keeps the rest (`wrapperStyle`'s font, say) inside the picture.
+ * @param {string} style
+ * @returns {string[]} its other declarations
+ */
+const placement = style =>
+  style
+    .split(';')
+    .map(d => d.trim())
+    .filter(d => d && !LEGEND_PLACEMENT.has(d.slice(0, d.indexOf(':')).trim().toLowerCase()));
 
 /**
  * Put each container chart's legend inside its picture, where recharts
@@ -189,7 +206,7 @@ export function foldLegends(root) {
     for (const [name, value] of Object.entries({x, y, width: w, height: h, overflow: 'visible'})) {
       object.setAttribute(name, String(value));
     }
-    legend.setAttribute('style', 'width:100%');
+    legend.setAttribute('style', [...placement(style), 'width:100%'].join(';'));
     object.appendChild(legend);
     svg.appendChild(object);
   }

@@ -2469,6 +2469,9 @@ export default function Page() {
       <ResponsiveContainer width="100%" height={220}>
         <LineChart data={data}><XAxis dataKey="d" /><Line dataKey="v" name="Wins" /><Legend layout="vertical" align="left" verticalAlign="bottom" /></LineChart>
       </ResponsiveContainer>
+      <ResponsiveContainer width="100%" height={220}>
+        <LineChart data={data}><XAxis dataKey="d" /><Line dataKey="v" name="Bold" /><Legend wrapperStyle={{fontSize: 12, fontWeight: 700}} /></LineChart>
+      </ResponsiveContainer>
     </div>
   );
 }
@@ -2490,7 +2493,7 @@ export default function Page() {
       return {x: n('x'), y: n('y'), width: n('width'), height: n('height')};
     };
     const fixed = drawingsIn(html);
-    const [bottom, right, left] = containersIn(html);
+    const [bottom, right, left, styled] = containersIn(html);
     const wide = bottom.find(d => d.width === 960);
     // Each chart keeps a row for a bottom legend: 200 - 5 - 24 - 30 = 141.
     expect(axis(/** @type {any} */ (wide).html).y).toBe(141);
@@ -2508,6 +2511,12 @@ export default function Page() {
     const low = legendBox(/** @type {any} */ (left.find(d => d.width === 960)).html);
     expect(low.x).toBe(5);
     expect(low.y + low.height).toBe(220 - 5);
+    // Inside the picture a legend keeps the rest of its own style.
+    const styledLegend = /<div style="([^"]*)" class="recharts-legend-wrapper">/.exec(/** @type {any} */ (styled.find(d => d.width === 960)).html)?.[1];
+    expect(styledLegend).toContain('font-size:12px');
+    expect(styledLegend).toContain('font-weight:700');
+    expect(styledLegend).toContain('width:100%');
+    expect(styledLegend).not.toMatch(/position|left|bottom/);
     // A chart of fixed size keeps its legend in the layer recharts puts it in.
     expect(fixed.find(d => d.width === 550)?.html).not.toContain('<foreignObject');
     expect(html).not.toContain('data-legend-side');
