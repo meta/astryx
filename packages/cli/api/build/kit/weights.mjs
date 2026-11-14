@@ -178,12 +178,16 @@ export function weightWords(idea) {
  * @param {WeightsFile} weights
  * @returns {boolean}
  */
-const hasPickModel = weights =>
-  Boolean(weights.pick) &&
-  isWordModel(
-    {...weights.pick, tables: weights.pick.tables ?? weights.tables},
-    weights.candidates.length,
+const hasPickModel = weights => {
+  const pick = weights.pick;
+  return (
+    pick !== undefined &&
+    isWordModel(
+      {...pick, tables: pick.tables ?? weights.tables},
+      weights.candidates.length,
+    )
   );
+};
 
 /**
  * The pick model of a weights file: its `pick` blend, over its own tables or
