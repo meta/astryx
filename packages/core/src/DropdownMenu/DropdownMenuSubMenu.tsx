@@ -67,7 +67,7 @@ import {moveRegionsTab} from './menuRegionStops';
 import {Item} from '../Item';
 import {useLayer} from '../Layer/useLayer';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
-import {useListFocus} from '../hooks/useListFocus';
+import {useInternalListFocus} from '../hooks/useListFocus';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useMenuHover} from '../hooks/useMenuHover';
 import {
@@ -107,8 +107,10 @@ import type {BaseProps} from '../BaseProps';
 import {
   MENU_ITEM_ROLES,
   MENU_ITEM_SELECTOR,
+  MENU_ROW_SELECTOR,
   MENU_BOUNDARY_SELECTOR,
   activateMenuItem,
+  keepDisabledRowUnfocused,
 } from './menuItemRoles';
 import {
   DropdownMenuContext,
@@ -208,6 +210,19 @@ const flyoutStyles = stylex.create({
     borderRadius: 'var(--_dropdown-menu-radius)',
     backgroundColor: colorVars['--color-background-popover'],
     boxShadow: shadowVars['--shadow-low'],
+    // Forced colors removes box-shadow, which is this surface's only edge.
+    borderWidth: {
+      default: null,
+      '@media (forced-colors: active)': '1px',
+    },
+    borderStyle: {
+      default: null,
+      '@media (forced-colors: active)': 'solid',
+    },
+    borderColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
     opacity: 1,
     transitionProperty: 'opacity',
     transitionDuration: durationVars['--duration-fast'],
@@ -377,6 +392,17 @@ interface DropdownMenuSubMenuBaseProps extends Omit<
    */
   presentation?: DropdownMenuSubMenuPresentation;
   /**
+   * How long a hovering pointer waits before the flyout opens, in
+   * milliseconds. Keyboard focus and touch never wait.
+   * @default 150
+   */
+  delay?: number;
+  /**
+   * How long the flyout stays open after the pointer leaves, in milliseconds.
+   * @default 200
+   */
+  hideDelay?: number;
+  /**
    * Content above the sub-menu's rows: a field that filters them, say. Like
    * the root menu's `header`, it sits beside the sub-menu's `role="menu"`
    * element, never inside it, and keeps its own keys and presses. With a
@@ -495,6 +521,8 @@ export function DropdownMenuSubMenu(
     menuWidth,
     onOpenChange,
     presentation = 'adaptive',
+    delay = 150,
+    hideDelay = 200,
     header,
     footer,
     children,
@@ -658,8 +686,9 @@ export function DropdownMenuSubMenu(
     focusItem,
     ownsEvent,
     getItems,
-  } = useListFocus<HTMLDivElement>({
-    itemSelector: MENU_ITEM_SELECTOR,
+  } = useInternalListFocus<HTMLDivElement>({
+    itemSelector: MENU_ROW_SELECTOR,
+    reachesDisabledItems: true,
     boundarySelector: MENU_BOUNDARY_SELECTOR,
     // Menus wrap.
     wrap: true,
@@ -708,6 +737,8 @@ export function DropdownMenuSubMenu(
       hide: hideLayer,
       isOpen: isFlyoutOpen,
       isEnabled: canOpen && !isDrillIn && isRootMenuOpen,
+      showDelay: delay,
+      hideDelay,
       // The safe triangle toward the flyout's near edge is built from the
       // flyout this component renders, not the hook's own list ref: the
       // frame, with a header or footer.
@@ -775,8 +806,15 @@ export function DropdownMenuSubMenu(
     }
     pendingViewFocusRef.current = null;
     const items = getItems();
-    // Back is the first row; a keyboard open lands on the first row after it.
-    const target = mode === 'first' ? (items[1] ?? items[0]) : null;
+    // Back is the first row; a keyboard open lands on the first enabled row
+    // after it. The keys reach a disabled row, but an open never starts there.
+    const target =
+      mode === 'first'
+        ? (items.find(
+            (item, index) =>
+              index > 0 && item.getAttribute('aria-disabled') !== 'true',
+          ) ?? items[0])
+        : null;
     if (target != null) {
       target.focus({preventScroll: true});
     } else {
@@ -1140,7 +1178,13 @@ export function DropdownMenuSubMenu(
           // on it; a drilled-in view sits inside the root's surface.
           mergeProps(
             themeProps('dropdown-menu', {presentation: 'popover'}),
-            stylex.props(regionStyles.frame, regionStyles.flyoutSurface),
+            stylex.props(
+              regionStyles.frame,
+              regionStyles.flyoutSurface,
+              // The entrance runs on the surface: an anchored layer lays out again on
+              // each frame its own style animates.
+              layerAnimations.end,
+            ),
           )
         : stylex.props(
             regionStyles.frame,
@@ -1196,10 +1240,14 @@ export function DropdownMenuSubMenu(
         // state and wiring are set after them, and its own handlers run
         // before the caller's.
         {...rest}
+        onMouseDown={composeEventHandlers(
+          rest.onMouseDown,
+          isDisabled ? keepDisabledRowUnfocused : undefined,
+        )}
         ref={triggerRowRef}
         id={triggerId}
         role="menuitem"
-        tabIndex={isDisabled ? undefined : -1}
+        tabIndex={-1}
         aria-haspopup={hasRegions ? 'dialog' : 'menu'}
         aria-expanded={isOpen}
         aria-controls={isOpen ? (hasRegions ? frameId : contentId) : undefined}
@@ -1365,6 +1413,7 @@ export function DropdownMenuSubMenu(
                         ? flyoutStyles.touchPanYPinchZoom
                         : flyoutStyles.touchPinchZoom,
                       hasOverflow && flyoutStyles.scrollable,
+                      layerAnimations.end,
                     ),
                   )}>
                   {nestedContent}
@@ -1374,11 +1423,7 @@ export function DropdownMenuSubMenu(
                 placement: 'end',
                 alignment: 'start',
                 offset: spacingVars['--spacing-1'],
-                xstyle: [
-                  flyoutStyles.popoverViewport,
-                  popoverXstyle,
-                  layerAnimations.end,
-                ],
+                xstyle: [flyoutStyles.popoverViewport, popoverXstyle],
               },
             ),
           )}

@@ -51,7 +51,7 @@ export const doc = {
     {
       flag: '--props',
       param: 'options.props',
-      description: 'Print only the props table',
+      description: 'Print only the props list',
     },
     {
       flag: '--source',

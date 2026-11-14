@@ -20,12 +20,13 @@ import {
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
+  advanceFrozenPage,
+  armHold,
   curveOf,
   drag,
   flick,
   frames,
   freezePageOn,
-  holdAnimations,
   installPageFreeze,
   installTimerGate,
   openStory,
@@ -35,11 +36,12 @@ import {
   thawPage,
   timeline,
   touchDriver,
-  waitForAnimation,
+  type TouchScript,
   waitForRest,
   withStorybook,
-  type TouchScript,
 } from '@astryxdesign/interaction-harness';
+import {UIKIT_TAP} from '../../motion/uikit/gestures';
+import {recordLiftOffset} from './liftOffset';
 
 const storybook = withStorybook(test);
 
@@ -95,7 +97,7 @@ async function openDesktop(browser: Browser) {
 }
 
 async function openPhone(page: Page, size = {width: 3000, height: 2000}) {
-  await page.route('https://picsum.photos/**', async route =>
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
     route.fulfill({
       contentType: 'image/svg+xml',
       body: photoSvg(size.width, size.height),
@@ -126,7 +128,7 @@ function photoSvg(width: number, height: number): string {
 }
 
 async function routePhoto(page: Page) {
-  await page.route('https://picsum.photos/**', async route =>
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
     route.fulfill({contentType: 'image/svg+xml', body: photoSvg(3000, 2000)}),
   );
 }
@@ -145,6 +147,12 @@ function doubleTap(at: {x: number; y: number}): TouchScript {
     {t: 220, fingers: []},
   ];
 }
+
+// A double tap whose second touch reaches the page past UIKit's interval
+// between taps is two taps there: the play fails by name.
+const DOUBLE_TAP = {
+  boundaries: {tapIntervalMs: UIKIT_TAP.maximumIntervalBetweenTaps.value},
+};
 
 test('with a fine pointer (a desktop) the stage fills the viewer, as under a coarse pointer: its gestures take the whole viewer', async ({
   browser,
@@ -168,18 +176,30 @@ test('with a fine pointer (a desktop) the stage fills the viewer, as under a coa
     const img = dialog.getByRole('img', {name: 'Forest path'});
     await decoded(img);
     await frames(page, 2);
-    // The stage and its group stretch to fill the viewer for every pointer. A
-    // click or a drag beside the photo is the stage's, as a finger's is.
+    // The stage and its group stretch to fill the viewer for every pointer.
+    // The zoom button is the stage's one page, the photo's box, and with no
+    // caption it fills the stage. A click or a drag beside the photo is the
+    // stage's, as a finger's is.
     const layout = await stage.evaluate(el => {
-      const own = getComputedStyle(el);
-      const group = getComputedStyle(el.parentElement as HTMLElement);
+      const viewport = el.closest(
+        '[data-lightbox-media] > :first-child',
+      ) as HTMLElement;
+      const own = getComputedStyle(viewport);
+      const group = getComputedStyle(viewport.parentElement as HTMLElement);
+      const v = viewport.getBoundingClientRect();
+      const b = el.getBoundingClientRect();
       return {
         stage: [own.alignSelf, own.flexGrow],
         group: [group.alignSelf, group.flexGrow],
+        button: [
+          Math.round(b.width - v.width),
+          Math.round(b.height - v.height),
+        ],
       };
     });
     expect(layout.stage).toEqual(['stretch', '1']);
     expect(layout.group).toEqual(['stretch', '1']);
+    expect(layout.button).toEqual([0, 0]);
     // The photo fits inside the viewer, as before.
     const imgBox = await img.boundingBox();
     if (imgBox == null) {
@@ -216,11 +236,16 @@ test('under Reduce Motion a double tap cross-fades to its zoom instead of travel
   if (rect == null) {
     throw new Error('no photo');
   }
+  // Armed before the taps, so the fade is held as it starts. A hold sent
+  // after them can come after a 200 ms fade ends on a loaded runner.
+  const hold = await armHold(page, img, {
+    judges: {target: img, property: 'opacity'},
+  });
   await driver.play(
     doubleTap({x: rect.x + rect.width / 2, y: rect.y + rect.height / 2}),
+    DOUBLE_TAP,
   );
-  await waitForAnimation(img);
-  const held = await holdAnimations(page, img);
+  const held = await hold.held();
   const duration = Math.max(...held.map(a => a.curveEndMs));
   const samples = await sampleCurve(img, timeline(duration));
   await releaseAnimations(page);
@@ -297,7 +322,7 @@ test('with a mouse the zoom-in cursor shows over the fitted photo, not over the 
     if (photo == null) {
       throw new Error('no photo');
     }
-    // The fitted photo leaves dark stage on its left, where a click closes.
+    // The fitted photo leaves dark stage on its left.
     expect(photo.x - stage.x).toBeGreaterThan(20);
     const cursorAt = async (x: number, y: number) => {
       await page.mouse.move(x, y);
@@ -309,6 +334,66 @@ test('with a mouse the zoom-in cursor shows over the fitted photo, not over the 
     expect(await cursorAt(stage.x + 20, y)).toBe('default');
     expect(await cursorAt(photo.x + photo.width / 2, y)).toBe('zoom-in');
     expect(await cursorAt(stage.x + 20, y)).toBe('default');
+    // A click on that dark stage closes the viewer.
+    await page.mouse.click(stage.x + 20, y);
+    await expect(page.getByRole('dialog')).toBeHidden();
+  } finally {
+    await context.close();
+  }
+});
+
+test('with a mouse a gallery page shows the zoom-in cursor over the fitted photo, the arrow beside it and the grab cursor while zoomed', async ({
+  browser,
+}) => {
+  const context = await browser.newContext({
+    viewport: {width: 1280, height: 800},
+    hasTouch: false,
+    isMobile: false,
+  });
+  try {
+    const page = await context.newPage();
+    await routePhoto(page);
+    await openStory(page, storybook(), 'core-lightbox--gallery-with-zoom');
+    await page.getByRole('button', {name: 'Open gallery with zoom'}).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    const img = dialog.getByRole('img', {name: 'Forest path'});
+    await decoded(img);
+    await waitForRest(img);
+    await frames(page, 2);
+    const photo = await img.boundingBox();
+    if (photo == null) {
+      throw new Error('no photo');
+    }
+    // The page shows the cursor of the element under the pointer.
+    const cursorAt = async (x: number, y: number) => {
+      await page.mouse.move(x, y);
+      return page.evaluate(
+        ([px, py]) => {
+          const el = document.elementFromPoint(px, py);
+          return el == null ? null : getComputedStyle(el).cursor;
+        },
+        [x, y],
+      );
+    };
+    const x = photo.x + photo.width / 2;
+    const y = photo.y + photo.height / 2;
+    // The fitted photo leaves dark stage on its left.
+    expect(await cursorAt(photo.x - 20, y)).toBe('default');
+    expect(await cursorAt(x, y)).toBe('zoom-in');
+    expect(await cursorAt(photo.x - 20, y)).toBe('default');
+    // A double-click zooms the photo about the pointer.
+    await page.mouse.dblclick(x, y);
+    await waitForRest(img);
+    expect((await readTransform(img)).scale).toBeGreaterThan(1);
+    expect(await cursorAt(x, y)).toBe('grab');
+    // Back at fit, a click on the dark stage beside the photo closes the
+    // viewer.
+    await page.mouse.dblclick(x, y);
+    await waitForRest(img);
+    expect((await readTransform(img)).scale).toBe(1);
+    await page.mouse.click(photo.x - 20, y);
+    await expect(dialog).toBeHidden();
   } finally {
     await context.close();
   }
@@ -363,15 +448,31 @@ test('under Reduce Motion, + then - pressed mid-fade leave the photo at full opa
   page,
 }) => {
   await page.emulateMedia({reducedMotion: 'reduce'});
+  // The freeze has to be in the page before the story loads, and it needs
+  // the timer gate too.
+  await installPageFreeze(page);
   const {img} = await openPhone(page);
+  await installTimerGate(page);
   const dialog = page.getByRole('dialog', {name: 'Forest path'});
   const opacity = async () =>
     img.evaluate(el => parseFloat(getComputedStyle(el).opacity));
   await dialog.getByRole('button', {name: 'Zoom'}).focus();
-  // The second key lands mid-dip of the first one's cross-fade.
+  // The scene freezes in the first key's own task, before the page handles
+  // it. So the cross-fade the key starts is held at its start, however late
+  // this process reacts and however few frames a loaded runner draws.
+  await freezePageOn(page, 'keydown');
   await page.keyboard.press('+');
-  await expect.poll(opacity, {timeout: 2000}).toBeLessThan(0.9);
+  // Moved on by its own clock, the frozen scene stands in the dip.
+  await advanceFrozenPage(page, MID_DIP_MS);
+  const dip = await opacity();
+  if (!(dip < 0.9)) {
+    throw new Error(
+      `The first key started no cross-fade: ${MID_DIP_MS} ms on, the photo stands at opacity ${dip}`,
+    );
+  }
+  // The second key lands mid-dip.
   await page.keyboard.press('-');
+  await thawPage(page);
   await waitForRest(img);
   expect(await opacity()).toBeCloseTo(1, 3);
   await page.keyboard.press('Escape');
@@ -382,6 +483,12 @@ test('under Reduce Motion, + then - pressed mid-fade leave the photo at full opa
   await frames(page, 2);
   expect(await opacity()).toBeCloseTo(1, 3);
 });
+
+/**
+ * Where the Reduce Motion plus-then-minus case stops the first key's
+ * cross-fade, ms: halfway through its fade out, which lasts 100 ms.
+ */
+const MID_DIP_MS = 50;
 
 test('with zoom off, a tap on the dark area around the photo closes the viewer on a touch screen', async ({
   page,
@@ -477,6 +584,9 @@ test('under Reduce Motion a pinch released past the maximum settles in place, wi
   // The fade then starts held, however late this process reacts. A hold sent
   // after the lift can come after a 200 ms fade ends on a loaded runner.
   await freezePageOn(page, 'touchend');
+  const hold = await armHold(page, img, {
+    judges: {target: img, property: 'opacity'},
+  });
   await driver.play(
     pinch({
       center: centre,
@@ -493,7 +603,7 @@ test('under Reduce Motion a pinch released past the maximum settles in place, wi
       },
     },
   );
-  const held = await holdAnimations(page, img);
+  const held = await hold.held();
   expect(held.length).toBeGreaterThan(0);
   const duration = Math.max(...held.map(a => a.curveEndMs));
   const opacity = curveOf(
@@ -541,17 +651,11 @@ test('under Reduce Motion a zoomed flick coasts on and settles at the edge, as o
     x: s.stage.x + s.stage.width / 2,
     y: s.stage.y + s.stage.height / 2,
   };
-  await driver.play(doubleTap(mid));
+  await driver.play(doubleTap(mid), DOUBLE_TAP);
   await waitForRest(img);
   await frames(page, 2);
-  let lifted = Number.NaN;
-  await driver.play(flick(mid, {velocity: {x: -1500, y: 0}, durationMs: 80}), {
-    onEvent: async step => {
-      if (step.type === 'touchEnd') {
-        lifted = (await read()).x;
-      }
-    },
-  });
+  const liftOffset = await recordLiftOffset(img);
+  await driver.play(flick(mid, {velocity: {x: -1500, y: 0}, durationMs: 80}));
   const opacities = await img.evaluate(
     async el =>
       new Promise<number[]>(resolve => {
@@ -570,7 +674,7 @@ test('under Reduce Motion a zoomed flick coasts on and settles at the edge, as o
   );
   await waitForRest(img);
   // It coasted on past where the finger lifted.
-  expect((await read()).x).toBeLessThan(lifted - 20);
+  expect((await read()).x).toBeLessThan((await liftOffset()) - 20);
   // No cross-fade.
   expect(Math.min(...opacities)).toBe(1);
   // It rests with no gap at the stage's edges.
@@ -591,7 +695,7 @@ test('under Reduce Motion a zoomed photo pulled past its edge settles back to it
     x: s.stage.x + s.stage.width / 2,
     y: s.stage.y + s.stage.height / 2,
   };
-  await driver.play(doubleTap(mid));
+  await driver.play(doubleTap(mid), DOUBLE_TAP);
   await waitForRest(img);
   await frames(page, 2);
   // One slow drag right across the stage: the photo, centred and zoomed,

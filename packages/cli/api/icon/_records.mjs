@@ -15,6 +15,7 @@ import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
 export {
+  answeringMatches,
   iconRecord,
   importLine,
   leadingReading,
@@ -76,6 +77,32 @@ export function unusableSet(sets, withdrawn, selector) {
     ),
     ERROR_CODES.ERR_NOT_FOUND,
   );
+}
+
+/**
+ * The one valid installed set a selector names. Throws `ERR_NOT_FOUND` when
+ * it names none (see `unusableSet`), and `ERR_INVALID_ARGUMENT` when it names
+ * more than one, so the caller names the package too.
+ * @template {{name: string, package: string}} T
+ * @param {T[]} sets the valid sets
+ * @param {Array<{name: string, package: string, reason: string}>} withdrawn
+ * @param {string} selector
+ * @returns {T}
+ */
+export function oneNamedSet(sets, withdrawn, selector) {
+  const named = setsNamed(sets, selector);
+  if (named.length === 0) throw unusableSet(sets, withdrawn, selector);
+  if (named.length > 1) {
+    throw new AstryxError(
+      `"${selector}" names ${named.length} sets; name one as <package>/<set>`,
+      named.map(each => ({
+        name: `${each.package}/${each.name}`,
+        reason: 'name the package',
+      })),
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
+  }
+  return named[0];
 }
 
 /**

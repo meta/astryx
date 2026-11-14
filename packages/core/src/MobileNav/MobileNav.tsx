@@ -43,6 +43,7 @@
  * - /packages/cli/assets/templates/blocks/components/MobileNav/ (showcase blocks)
  */
 
+import {usePresentationHold} from '../Layer/presentationHold';
 import {
   useCallback,
   useEffect,
@@ -77,8 +78,11 @@ import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
+import {matchesMediaQuery} from '../utils/coarsePointer';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {isRtlElement} from '../hooks/isRtlElement';
+import {useIsHydrating} from '../hooks/useIsHydrating';
 import {useScrollLock} from '../hooks/useScrollLock';
 import {useFocusRegionContainment} from '../hooks/useFocusTrap';
 import {
@@ -341,7 +345,10 @@ function resolveCloseDelay(dialog: HTMLDialogElement): number {
   // Reduced motion makes the close sooner; it must not make the hold shorter.
   // Shrinking both leaves no slack — one slow frame between the commit and this
   // macrotask and the drawer has already stopped being rendered.
-  const cap = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const cap = matchesMediaQuery(
+    dialog.ownerDocument.defaultView,
+    '(prefers-reduced-motion: reduce)',
+  )
     ? 0
     : MAX_CLOSE_DELAY_MS;
 
@@ -529,56 +536,68 @@ export function MobileNav({
   // once the native dialog has closed (see closeAndRestoreFocus).
   const triggerElementRef = useRef<HTMLElement | null>(null);
 
-  // Keeps the dialog rendered from the commit that closes it until the delayed
-  // `close()` below has run. The `display` transition on the dialog is meant to
-  // do this, but a browser that does not hold a discrete `display` transition
-  // (WebKit) drops the dialog to `display: none` at once while it is still an
-  // open modal: nothing is visible, yet the whole page stays inert until the
-  // timer fires. Set during render, so it is already true in the commit that
-  // closes. The drawer's transform and the backdrop stay keyed to `isOpen`, so
-  // the slide-out is unchanged.
-  const [isCloseHeld, setIsCloseHeld] = useState(false);
-  const [wasOpen, setWasOpen] = useState(isOpen);
-  if (wasOpen !== isOpen) {
-    setWasOpen(isOpen);
-    setIsCloseHeld(!isOpen);
-  }
+  // Keeps the dialog rendered from the open until the delayed `close()` below
+  // has run: the layer runtime's presentation hold. The `display` transition
+  // on the dialog is meant to do this, but a browser that does not hold a
+  // discrete `display` transition (WebKit) drops the dialog to
+  // `display: none` at once while it is still an open modal: nothing is
+  // visible, yet the whole page stays inert until the timer fires. Held during
+  // render, so it is already held in the commit that closes. The drawer's
+  // transform and the backdrop stay keyed to `isOpen`, so the slide-out is
+  // unchanged.
+  const {isHeld: isPresentationHeld, release: releasePresentation} =
+    usePresentationHold({isOpen, presentation: true});
   // The same page lock as every other modal. Its effect runs before the
   // open/close effect below, so it measures the scrollbar gutter before
   // showModal() can hide the scrollbar.
   useScrollLock(isOpen);
-  // Resolved side — computed from trigger position when side='auto'
-  const [resolvedSide, setResolvedSide] = useState<'start' | 'end'>(
-    side === 'auto' ? 'end' : side,
-  );
-
-  // Resolve which edge the drawer slides from. Deliberately its own effect,
-  // declared before the open/close effect below so the trigger is still the
-  // active element when `side='auto'` reads it. Keeping it out of that effect
-  // is what stops a `side` change during a close from re-arming the delay: the
-  // CSS hold runs from the commit that started the slide-out and does not
-  // restart, so a fresh full delay could land after the drawer had already
-  // stopped being rendered — #4290 again.
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    if (side === 'auto') {
-      const trigger = document.activeElement as HTMLElement | null;
-      if (trigger && trigger !== document.body) {
+  // For side='auto', the edge is resolved while rendering the transition to
+  // open (or to `auto` while open). An Effect would commit the default `end`
+  // first, so the drawer would slide in from the wrong edge. An explicit
+  // `side` is used directly.
+  const [autoSide, setAutoSide] = useState<'start' | 'end'>('end');
+  const [wasAutoOpen, setWasAutoOpen] = useState(false);
+  const isAutoOpen = isOpen && side === 'auto';
+  // Hydration must not read focus or layout; resolve after it.
+  const canReadDom = !useIsHydrating();
+  if (canReadDom && isAutoOpen !== wasAutoOpen) {
+    setWasAutoOpen(isAutoOpen);
+    if (isAutoOpen) {
+      // The opener is the focused element. If a tap left no focus, or focus is
+      // already inside this dialog (a server-open drawer, where showModal()
+      // ran before this render), fall back to the element whose
+      // `aria-controls` names this dialog.
+      const active = document.activeElement as HTMLElement | null;
+      const hasOpenerFocus =
+        active !== null &&
+        active !== document.body &&
+        !dialogRef.current?.contains(active);
+      const dialogIds = [dialogId, dialogRef.current?.id, rest.id];
+      const trigger =
+        hasOpenerFocus && active
+          ? active
+          : Array.from(
+              // eslint-disable-next-line @eslint-react/purity -- runs only on the closed-to-open render. Never on the server or while hydrating.
+              document.querySelectorAll<HTMLElement>('[aria-controls]'),
+            ).find(el =>
+              (el.getAttribute('aria-controls') ?? '')
+                .split(/\s+/)
+                .some(token => token !== '' && dialogIds.includes(token)),
+            );
+      if (trigger) {
         const rect = trigger.getBoundingClientRect();
         const triggerCenter = rect.left + rect.width / 2;
-        // eslint-disable-next-line @eslint-react/set-state-in-effect -- side is resolved from trigger layout immediately before showModal()
-        setResolvedSide(
-          triggerCenter < window.innerWidth / 2 ? 'start' : 'end',
-        );
+        const half = window.innerWidth / 2;
+        // An opener in the inline-start half opens the drawer at the start. A
+        // centred opener opens it at the end in both directions.
+        const isInStartHalf = isRtlElement(trigger)
+          ? triggerCenter > half
+          : triggerCenter < half;
+        setAutoSide(isInStartHalf ? 'start' : 'end');
       }
-    } else {
-      // eslint-disable-next-line @eslint-react/set-state-in-effect -- side prop changes must update the open dialog placement
-      setResolvedSide(side);
     }
-  }, [isOpen, side]);
+  }
+  const resolvedSide = side === 'auto' ? autoSide : side;
 
   // Open/close the dialog via showModal()/close()
   // close() is delayed so the slide-out transition can play.
@@ -612,12 +631,12 @@ export function MobileNav({
       releaseHoldRef.current = null;
       closeTimeoutRef.current = setTimeout(() => {
         closeAndRestoreFocus(dialog, triggerElementRef);
-        setIsCloseHeld(false);
+        releasePresentation();
       }, resolveCloseDelay(dialog));
     } else {
       // Nothing is open, so there is no close to hold the dialog for, and no
       // close timer is left to release the hold.
-      setIsCloseHeld(false);
+      releasePresentation();
     }
 
     return () => {
@@ -630,7 +649,7 @@ export function MobileNav({
       releaseHoldRef.current?.();
       releaseHoldRef.current = null;
     };
-  }, [isOpen]);
+  }, [isOpen, releasePresentation]);
 
   // Close the native dialog on unmount if it's still open. Inside AppShell the
   // drawer is mounted in an <Activity> that switches to mode="hidden" when the
@@ -716,7 +735,7 @@ export function MobileNav({
           layerStructureReset.reset,
           styles.dialog,
           overlayPaddingReset.reset,
-          (isOpen || isCloseHeld) && styles.open,
+          isPresentationHeld && styles.open,
           styles.backdrop,
           isOpen && styles.backdropOpen,
           xstyle,

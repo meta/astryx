@@ -7,8 +7,9 @@
 
 import {loadWeights} from '../_adapter.mjs';
 import {asksForNewPage} from './kind.mjs';
-import {pickStart} from './rank.mjs';
-import {weighStart} from './weights.mjs';
+import {pickAlternatives, pickStart} from './rank.mjs';
+import {hasEditPhrase, shellCallScore} from './shellcall.mjs';
+import {blendOrder, blendSummary, weighStart} from './weights.mjs';
 
 /**
  * @typedef {import('../../search/search.type.mjs').SearchResultEntry} SearchResultEntry
@@ -55,6 +56,60 @@ function placement(kind, inPage) {
       ? 'the idea is a part of a page, so it starts from the page it names.'
       : 'the idea is a part of a page and names no page, so it starts from the app shell.';
   return null;
+}
+
+/**
+ * Fixed coefficients of a logistic decision over build's own numbers: bias,
+ * whole page, edit, blend margin over the shell, the shell's blend score, the
+ * gap to the blend's second template, the idea's comma count, the text score
+ * (shellcall.mjs) and its edit-word flag. Fixed constants; nothing is trained
+ * at run time. An edit phrase keeps the shell before the decision runs, so the
+ * two edit inputs are 0 whenever it runs; they stay because the constants were
+ * fit with them.
+ */
+const LIFT = [
+  -0.7707, 0.6706, -0.2642, 0.2815, -0.1621, 0.1759, 0.1713, 0.2891, -0.3491,
+];
+
+/** The decision replaces the shell with a page when p >= 0.30. */
+const LIFT_AT = 0.3;
+
+/**
+ * The page template that replaces an app-shell start, or null to keep the
+ * shell. The blend's best template takes the start when the decision's
+ * whole-page probability is at least 0.30.
+ * @param {import('./rank.mjs').RankedPage[]} ranked
+ * @param {import('./rank.mjs').IdeaKind} kind
+ * @param {PageTemplate[]} catalog
+ * @param {string} idea
+ * @returns {PageTemplate | null}
+ */
+function liftFromShell(ranked, kind, catalog, idea) {
+  const b = blendSummary(
+    idea,
+    ranked,
+    pickStart(ranked, 'page'),
+    catalog,
+    loadWeights(),
+  );
+  if (!b || !b.best) return null;
+  // A change to a page or app the builder already has keeps its shell.
+  if (hasEditPhrase(idea)) return null;
+  const text = shellCallScore(idea, kind, ranked);
+  const x = [
+    1,
+    kind === 'page' ? 1 : 0,
+    kind === 'edit' ? 1 : 0,
+    b.bestScore - b.shell,
+    b.shell,
+    b.bestScore - b.secondScore,
+    (String(idea).match(/,/g) ?? []).length,
+    text?.score ?? 0,
+    text?.edit ? 1 : 0,
+  ];
+  const logit = x.reduce((s, v, i) => s + v * LIFT[i], 0);
+  if (1 / (1 + Math.exp(-logit)) < LIFT_AT) return null;
+  return catalog.find(t => t.name === b.best) ?? null;
 }
 
 /**
@@ -113,10 +168,18 @@ export function chooseStart(ranked, kind, pages, directMatch, catalog, idea) {
           ? proposed
           : null
         : (ranked.find(r => r.name === weighed) ?? proposed);
-  const closest = pick && catalog.find(t => t.name === pick.name);
-  if (pick && closest) {
+  // An idea that would start on the app shell starts from the blend's best page
+  // when the decision's whole-page probability is at least 0.30. A direct match,
+  // ready or not, keeps the start and reason it already has.
+  const lifted =
+    !direct && (!pick || pick.family === 'Shell')
+      ? liftFromShell(ranked, kind, catalog, idea)
+      : null;
+  const closest = lifted ?? (pick && catalog.find(t => t.name === pick.name));
+  if (closest) {
     const agrees = closest.name === direct;
-    const place = placement(kind, pick.base && pick.familyNamed);
+    const place =
+      lifted || !pick ? null : placement(kind, pick.base && pick.familyNamed);
     return {
       ...asTemplate(closest),
       basis: agrees ? 'direct' : 'closest',
@@ -160,4 +223,51 @@ export function chooseStart(ranked, kind, pages, directMatch, catalog, idea) {
     }
   }
   return null;
+}
+
+/**
+ * The next best page templates beside the start (spec:AST-048/FR7), in the
+ * order the start itself is chosen from. The candidates are the ranker's (a
+ * template with matched words and half a start's score); a whole page orders
+ * them by the word weights' blend, the same ranking that picks its start, so
+ * the templates build names are the blend's best. The blend knows only the
+ * templates its tables list: one it does not list (a shell, an integration's
+ * template, or one added since the tables were fit) keeps the place the ranker
+ * gives it, so a new template is never pushed out by tables that have not seen
+ * it. A part or an edit, or a project without weights, keeps the ranker's
+ * order.
+ * @param {import('./rank.mjs').RankedPage[]} ranked
+ * @param {import('./rank.mjs').IdeaKind} kind
+ * @param {string} startName
+ * @param {PageTemplate[]} catalog
+ * @param {string} idea
+ * @returns {import('./rank.mjs').RankedPage[]}
+ */
+export function pickStartAlternatives(ranked, kind, startName, catalog, idea) {
+  const eligible = pickAlternatives(ranked, startName, ranked.length);
+  const byRanker = eligible.slice(0, 2);
+  if (kind !== 'page') return byRanker;
+  const weights = loadWeights();
+  const order = blendOrder(
+    idea,
+    ranked,
+    pickStart(ranked, kind),
+    catalog,
+    weights,
+  );
+  if (!weights || !order) return byRanker;
+  const listed = new Set(weights.candidates);
+  const at = new Map(order.map((name, i) => [name, i]));
+  // Unlisted templates keep their ranker slot; the rest follow the blend.
+  /** @type {(import('./rank.mjs').RankedPage | null)[]} */
+  const slots = byRanker.map(r => (listed.has(r.name) ? null : r));
+  const rest = eligible
+    .filter(r => listed.has(r.name) && at.has(r.name))
+    .sort(
+      (a, b) =>
+        /** @type {number} */ (at.get(a.name)) -
+        /** @type {number} */ (at.get(b.name)),
+    );
+  const out = slots.map(slot => slot ?? rest.shift() ?? null);
+  return /** @type {import('./rank.mjs').RankedPage[]} */ (out.filter(Boolean));
 }

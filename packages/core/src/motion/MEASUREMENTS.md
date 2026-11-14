@@ -106,6 +106,7 @@ of a page scroll, so many of these can be read off Safari itself.
 | M-G18 | `HAPTIC_VIBRATION_PATTERNS` (every kind)        | On an Android device, compare against the platform HapticFeedbackConstants for the same moments.                                                                                                 | C      |
 | M-G19 | `UIKIT_GESTURES.press.momentumMemory`           | Safari page, hardest HID flick: time from the lift to the last scroll event.                                                                                                                     | C      |
 | M-G20 | `LongPressGestureRecognizer` taps phase         | Probe app: a UILongPressGestureRecognizer with numberOfTapsRequired 1: HID taps held 0.2, 0.5, 1, 2 s, then the press after gaps of 100 to 600 ms; record which recognize.                       | C      |
+| M-G21 | `UIKIT_MENU_PRESS.holdOpenSlop`                 | UIKit lab, a pull-down button inside a UIScrollView: HID presses moved 12.5, 13 and 13.5 pt within the content-touch delay; the largest move that still opens the menu.                          | C      |
 
 Done (UIKit lab, iOS 26.2 simulator, Oct 23 2026: the recognizers' ivars read
 in process, each confirmed with HID touches and the state log; values in
@@ -222,9 +223,8 @@ Bookmarks sheet.
 Done (UIKit lab, iOS 26.2 simulator, Oct 23–24 2026; in the segmented control's
 own table, `uikit/segmented.ts`, tagged `measured:`): M-SG02 (the selection
 spring and the drag clamp; the tracking spring is the shared
-`springs.fingerTracking`; the lift was measured too and is not in the table,
-since a pressed thumb's lift is a theme's) and M-SG03 (the tap's frames,
-fitted per frame).
+`springs.fingerTracking`; the lift's growth and spring are in the table too,
+as `liftGrowth` and `lift`) and M-SG03 (the tap's frames, fitted per frame).
 
 ## Sheets (UISheetPresentationController)
 
@@ -339,9 +339,10 @@ action (`showsMenuAsPrimaryAction`), three to twelve items, on a plain view
 and inside a UIScrollView; the gesture-state, presentation-modifier,
 display-link and feedback hooks; real HID touches.
 
-| ID    | Scene                  | Gesture                                                                                                                                                 | Extract                                                                                                                                 | Method |
-| ----- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| M-MN2 | button on a plain view | hold until the menu is open, then lift still; move 8 pt down, 8 pt right, 12 pt down, (7, 7), (8, 8) and lift; move 6 pt before the open and 6 pt after | row picked or not; handoff and list-selection recognizer states; highlighted row per frame: threshold, metric, where it is counted from | C      |
+| ID    | Scene                                                         | Gesture                                                                                                                                                 | Extract                                                                                                                                      | Method |
+| ----- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| M-MN1 | button on a plain view; the same button inside a UIScrollView | holds of 100, 130, 140, 150, 160, 170, 200 ms then lift; a press moved 12 and 30 pt within 80 ms                                                        | when the touch-down recognizer recognizes and the open spring starts, against touch-down; its minimum duration and allowable movement (read) | C, D   |
+| M-MN2 | button on a plain view                                        | hold until the menu is open, then lift still; move 8 pt down, 8 pt right, 12 pt down, (7, 7), (8, 8) and lift; move 6 pt before the open and 6 pt after | row picked or not; handoff and list-selection recognizer states; highlighted row per frame: threshold, metric, where it is counted from      | C      |
 
 ## Zoom media (UIScrollView zooming, Photos)
 
@@ -349,13 +350,51 @@ Values Lightbox's zoom stage reads (`uikit/zoomMedia.ts`). Done (UIKit lab and
 Photos, iOS 26.2 simulator, Oct 23 2026; tagged `measured:`): the overshoot
 past the limits, the absence of scale momentum and of a two-finger-tap action,
 the content point under the centroid staying put, Photos' aspect-fill double
-tap and its maximum zoom on 3000 × 2000 and 2000 × 3000 photos. M-ZM2 confirms
-that maximum on two other sizes. A zoomed pan flicked into an edge coasts and
-bounces like any scroll view (`scroll.*`). UIKit settles a zoom on an eased
-curve whose length grows with the zoom ratio (100 ms plus 300 ms per unit of
-its log, at most 400 ms). Lightbox's zoom settles on `springs.settle` instead,
-since its main interaction is a gesture (`spec:AST-094` FR45).
+tap and its maximum zoom on 3000 × 2000 and 2000 × 3000 photos, the 40 pt gap
+between Photos' pages, and its drag-to-dismiss: the shrink and fades by
+travel, the release rule and the dismissal's springs. M-ZM2 confirms that
+maximum on two other sizes. M-ZM3 measures the cancel distance and M-ZM5 the
+release's projection. A zoomed pan flicked into an edge coasts and bounces
+like any scroll view (`scroll.*`). UIKit settles a zoom on an eased curve
+whose length grows with the zoom ratio (100 ms plus 300 ms per unit of its
+log, at most 400 ms). Lightbox's zoom settles on `springs.settle` instead,
+since its main interaction is a gesture (`spec:AST-094` FR45). Photos returns
+a cancelled drag on critically damped springs (stiffness 877.63 for its
+position, 955.23 for its size). Lightbox's return plays `springs.settle`,
+since only an exit may play a measured spring (`spec:AST-094` FR4).
 
-| ID    | What         | App and gesture                                                      | Extract                                                                   | Method |
-| ----- | ------------ | -------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------ |
-| M-ZM2 | Maximum zoom | Photos: pinch a 4032 × 3024 and a 1200 × 800 photo as far as it goes | the zoom it settles on against the photo's pixel size and the fitted size | B, C   |
+| ID    | What                     | App and gesture                                                                  | Extract                                                                       | Method |
+| ----- | ------------------------ | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------ |
+| M-ZM2 | Maximum zoom             | Photos: pinch a 4032 × 3024 and a 1200 × 800 photo as far as it goes             | the zoom it settles on against the photo's pixel size and the fitted size     | B, C   |
+| M-ZM3 | Dismiss cancel distance  | Photos: pull a photo down 6–19 pt, bring it back to N pt and lift without moving | the largest N that still cancels                                              | B, C   |
+| M-ZM5 | Dismiss flick projection | Photos: flick a photo down from rest, lifting after 6–19 pt at a range of speeds | the shortest travel that still dismisses at each speed: the projection's rate | B, C   |
+
+## Reorder (UITableView edit-mode reorder)
+
+Subject "table T": a plain `UITableView` in editing mode with reorder controls
+only, 40 rows of 44 pt (rows 6 and 9 at 88 pt where noted), in the UIKit lab
+app. Measured so far: the claim, tracking, the crossing rule for a 44 pt row
+moving past 44 and 88 pt rows below its place and back, the slides, the drop,
+the autoscroll steps, Reduce Motion.
+
+| ID     | Scene                          | Gesture                                                                                                      | Extract                                                                                                                           | Method |
+| ------ | ------------------------------ | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| M-RO26 | table T, one row at 88 pt      | drag the 88 pt row to edge depths 0 to 44 pt and hold; 44 pt rows held 4, 6, 8, 10 pt inside the bottom edge | autoscroll step per 20 ms tick by depth: indexed by the edge depth in points or by a fraction of the row; the exact start inset   | C      |
+| M-RO07 | table T                        | a system touch cancel mid-drag (a call or Control Center); `reloadData` mid-drag                             | does the row return to its origin or move to its slot; positions per frame                                                        | C      |
+| M-RO27 | table T, rows 6 and 9 at 88 pt | drag row 7 (44 pt) up past row 6; drag row 6 (88 pt) down past row 7 and back                                | the dragged row's centre travel at each change of the proposed slot, against `List/reorderModel.ts`'s slot rule (GUESS for these) | C      |
+
+## Swipe actions (UIContextualAction)
+
+UIKit lab host app: a plain `UITableView` (402 and 375 pt wide, 60 pt rows)
+with one, two and three trailing `UIContextualAction`s (the last one
+`.destructive`) and one leading `.normal` action; drags driven with known
+velocity, the touch stream, the swipe handler's tracking and move calls and
+every animator and `CAAnimation` logged.
+
+| ID     | Value                                    | Gesture                                                                                                                               | Extract                                                                                                                                           | Method |
+| ------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| M-SA01 | `swipeActions.openFraction`              | swipes released at rest at 0.3, 0.35, 0.4, 0.45, 0.5, 0.55 × the open width (past the 25 pt threshold)                                | open or closed per release: the fraction                                                                                                          | C      |
+| M-SA02 | `swipeActions.confirmFraction`           | slow drags out to 320, 325, 330 and 335 pt of swipe and released at rest, with open widths of 83, 157 and 230 pt, 375 and 402 pt wide | perform or not per release: where the full swipe confirms against the open width and the confirmation offset                                      | C      |
+| M-SA03 | the confirmed row's lead over the finger | drag past the confirmation point and back at 100 pt/s, 402 pt wide                                                                    | the row's offset against the finger's, per frame, in and out of confirm; `-[UISwipeOccurrence _extraOffsetForOffset:withDirection:]` over a sweep | C, D   |
+| M-SA04 | `swipeActions.slideOutOvershoot`         | full swipe released past the confirmation point, `.normal` and `.destructive`                                                         | the row's position per frame until the action runs and the row returns or is removed; when the handler runs                                       | A, C   |
+| M-SA05 | `swipeActions.releaseVelocity`           | releases at 0.7 × the open width coming back at 20, 25, 30, 35, 40 and 45 pt/s                                                        | open or closed per release: the slowest closing speed that closes the row                                                                         | C      |

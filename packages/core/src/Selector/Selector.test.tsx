@@ -29,7 +29,7 @@ import {
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
-import {useState} from 'react';
+import {Suspense, startTransition, use, useState} from 'react';
 import type {ReactNode} from 'react';
 import {Selector} from './Selector';
 import {SelectorOption} from './SelectorOption';
@@ -628,15 +628,71 @@ describe('Selector', () => {
       const popover = screen
         .getByRole('listbox', {hidden: true})
         .closest('[popover]');
+      // The measured shift, or higher by the software keyboard's term. With
+      // no keyboard inset the term falls back to the room below the anchor,
+      // so it is 0 and the shift stands.
       await waitFor(() => {
         expect(popover?.getAttribute('style')).toContain(
-          'margin-block-start: -110px',
+          '--_selector-overlay-margin: min(-110px, max(-190px, calc(-110px - var(--_layer-keyboard-inset-block-end, -110px))))',
         );
       });
+      expect(popover?.getAttribute('style')).toContain(
+        'margin-block-start: var(--_selector-overlay-margin)',
+      );
     } finally {
       restoreRects();
     }
   });
+
+  it.each([
+    ['below its anchor', 'marginBlockEnd'],
+    ['already flipped above its anchor', 'marginBlockStart'],
+  ])(
+    "keeps the overlay out of the layer's viewport gutter, the layer %s",
+    async (_, gutterMargin) => {
+      const restoreRects = mockSelectorRects();
+      // The layer keeps a 16 px gutter from the viewport's block end.
+      const realGetComputedStyle = window.getComputedStyle.bind(window);
+      const styleSpy = vi
+        .spyOn(window, 'getComputedStyle')
+        .mockImplementation((element, pseudo) => {
+          const style = realGetComputedStyle(element, pseudo);
+          if (
+            element instanceof HTMLElement &&
+            element.hasAttribute('popover')
+          ) {
+            Object.defineProperty(style, gutterMargin, {value: '16px'});
+          }
+          return style;
+        });
+      const user = userEvent.setup();
+      try {
+        render(
+          <Selector
+            label="Fruit"
+            options={OPTIONS}
+            value="Banana"
+            onChange={() => {}}
+          />,
+        );
+
+        await user.click(screen.getByRole('combobox'));
+        const popover = screen
+          .getByRole('listbox', {hidden: true})
+          .closest('[popover]');
+        // 16 px higher than without the gutter (110 px), so the list ends at
+        // the gutter in the 200 px viewport.
+        await waitFor(() => {
+          expect(popover?.getAttribute('style')).toContain(
+            '--_selector-overlay-margin: min(-126px,',
+          );
+        });
+      } finally {
+        styleSpy.mockRestore();
+        restoreRects();
+      }
+    },
+  );
 
   it('aligns the selected item using untransformed layout geometry', async () => {
     const restoreRects = mockSelectorRects({
@@ -673,7 +729,7 @@ describe('Selector', () => {
       await waitFor(() => {
         // 68px geometric alignment plus the 1px optical correction.
         expect(popover?.getAttribute('style')).toContain(
-          'margin-block-start: -69px',
+          '--_selector-overlay-margin: min(-69px,',
         );
       });
     } finally {
@@ -826,7 +882,7 @@ describe('Selector', () => {
           .closest('[popover]') as HTMLElement;
         await waitFor(() => {
           expect(popover.getAttribute('style')).toContain(
-            'margin-block-start: -110px',
+            '--_selector-overlay-margin: min(-110px,',
           );
         });
         expect(popover.style.getPropertyValue('--x-marginBlockStart')).toBe('');
@@ -1066,6 +1122,42 @@ describe('Selector', () => {
   });
 
   describe('hasSearch', () => {
+    it('focuses the search input on open after React discards a render without search', async () => {
+      // A transition that suspends for good: React renders it, then keeps the
+      // committed tree and never commits that render.
+      const forever = new Promise<never>(() => {});
+      function Forever(): null {
+        use(forever);
+        return null;
+      }
+      const field = (hasSearch: boolean, isPending = false) => (
+        <Suspense fallback={null}>
+          <Selector
+            label="Fruit"
+            options={OPTIONS}
+            value="Apple"
+            onChange={() => {}}
+            hasSearch={hasSearch}
+          />
+          {isPending ? <Forever /> : null}
+        </Suspense>
+      );
+      const user = userEvent.setup();
+      const {rerender} = render(field(true));
+      await act(async () => {
+        startTransition(() => {
+          rerender(field(false, true));
+        });
+      });
+
+      await user.click(screen.getByRole('button', {name: SEARCH_TRIGGER_NAME}));
+
+      // The committed selector has search, so its show focuses the input.
+      await waitFor(() =>
+        expect(screen.getByRole('combobox', h)).toHaveFocus(),
+      );
+    });
+
     it('renders search input when hasSearch is true', async () => {
       const user = userEvent.setup();
       render(
@@ -2904,6 +2996,50 @@ describe('Selector', () => {
       expect(trigger).toHaveAttribute('tabIndex', '0');
     });
   });
+  describe('isDefaultOpen', () => {
+    it('opens on mount when enabled', () => {
+      render(<Selector label="Fruit" options={OPTIONS} isDefaultOpen />);
+
+      expect(screen.getByRole('combobox')).toHaveAttribute(
+        'aria-expanded',
+        'true',
+      );
+    });
+
+    it('stays closed on mount when disabled and read-only', () => {
+      render(
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          isDefaultOpen
+          isDisabled
+          isReadOnly
+        />,
+      );
+
+      expect(screen.getByRole('combobox')).toHaveAttribute(
+        'aria-expanded',
+        'false',
+      );
+    });
+
+    it('does not retry a group-disabled default opening when enabled later', () => {
+      const field = (isDisabled: boolean) => (
+        <InputGroup label="Fruit" isDisabled={isDisabled}>
+          <Selector label="Fruit" options={OPTIONS} isDefaultOpen />
+        </InputGroup>
+      );
+      const {rerender} = render(field(true));
+      const trigger = screen.getByRole('combobox');
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+      rerender(field(false));
+
+      expect(trigger).not.toHaveAttribute('aria-disabled');
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    });
+  });
+
   describe('isReadOnly', () => {
     const readOnlyCases = [
       {presentation: 'popover', hasSearch: false},
@@ -3849,16 +3985,19 @@ describe('Selector search focus ring', () => {
     await waitForSearchFocus();
     const search = screen.getByRole('combobox', {hidden: true});
     await user.type(search, 'a');
+    const clear = screen.getByRole('button', {
+      name: 'Clear Search options',
+      hidden: true,
+    });
 
-    await user.tab();
-    expect(
-      screen.getByRole('button', {
-        name: 'Clear Search options',
-        hidden: true,
-      }),
-    ).toHaveFocus();
+    // Tab and Shift+Tab between the input and the clear button are the
+    // browser's own moves; the focus region leaves both alone.
+    expect(fireEvent.keyDown(search, {key: 'Tab'})).toBe(true);
+    act(() => clear.focus());
+    expect(clear).toHaveFocus();
 
-    await user.tab({shift: true});
+    expect(fireEvent.keyDown(clear, {key: 'Tab', shiftKey: true})).toBe(true);
+    act(() => search.focus());
     expect(search).toHaveFocus();
     expect(field()).toHaveAttribute('data-keyboard-focus', 'true');
   });
@@ -4061,14 +4200,19 @@ describe('Selector search affordances', () => {
     await user.type(search, 'ap');
     expect(search).toHaveFocus();
 
-    // Forward-tab lands on the clear (✕) button and the popup stays open, so
-    // the affordance is keyboard-reachable rather than being skipped when the
-    // input's Tab dismisses the popup.
-    await user.tab();
+    // The clear (✕) button is the next Tab stop after the input, the focus
+    // region leaves the input's Tab to the browser, and the popup stays open
+    // when focus moves there, so the affordance is keyboard-reachable rather
+    // than skipped by the input's Tab dismissing the popup.
     const clear = screen.getByRole('button', {
       name: 'Clear Search options',
       hidden: true,
     });
+    expect(
+      search.compareDocumentPosition(clear) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(fireEvent.keyDown(search, {key: 'Tab'})).toBe(true);
+    act(() => clear.focus());
     expect(clear).toHaveFocus();
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
   });

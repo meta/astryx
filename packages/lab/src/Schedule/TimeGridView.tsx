@@ -18,7 +18,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type UIEvent,
 } from 'react';
@@ -179,18 +178,17 @@ export function TimeGridView({
       timezoneID,
     ],
   );
-  const positioning = useRef({
-    currentTime,
-    days,
-    minHour: normalizedMinHour,
-    hourHeight,
-  });
-  positioning.current = {
+  const latestPositioning = {
     currentTime,
     days,
     minHour: normalizedMinHour,
     hourHeight,
   };
+  const positioning = useRef(latestPositioning);
+  // Syncs the positioning effect's inputs at commit, before it reads them.
+  useLayoutEffect(() => {
+    positioning.current = latestPositioning;
+  });
   const isBlockScrollable = scrollState.block.isScrollable;
   // The clock is 0 only in the server snapshot; wait for the client's.
   const hasClock = currentTime !== 0;
@@ -246,8 +244,6 @@ export function TimeGridView({
     eventID: string;
     dayISO: string;
   } | null>(null);
-  const openBlockRef = useRef(openBlock);
-  openBlockRef.current = openBlock;
   const openEvent =
     openBlock == null
       ? null
@@ -257,59 +253,27 @@ export function TimeGridView({
     // Popover's own defaults, spelled out where the hook's differ.
     padding: 3,
     surfaceTarget: 'popover',
+    // The entrance runs on the surface: an anchored layer lays out again on
+    // each frame its own style animates.
+    xstyle: layerAnimations.below,
     onHide: useCallback(() => {
       setOpenBlock(null);
     }, []),
   });
-  const popoverRef = useRef(popover);
-  popoverRef.current = popover;
-  // A pointer press on a block while the popover is open would close it by
-  // the browser's light dismiss before the click arrives, and the layer then
-  // absorbs a show() from that same press. So the press itself decides: a
-  // press on another block closes the popover here, ahead of the browser,
-  // and the click that follows opens the pressed block; a press on the open
-  // block is remembered so its click ends closed, whichever of the two
-  // closed it. A key press starts a new gesture and forgets the press.
-  const openBlockAtPressRef = useRef<string | null>(null);
-  const handlePointerDownCapture = (
-    pointerEvent: ReactPointerEvent<HTMLDivElement>,
-  ) => {
-    const target = pointerEvent.target as Element | null;
-    const pressedKey =
-      target
-        ?.closest('[data-schedule-event-block]')
-        ?.getAttribute('data-schedule-event-block') ?? null;
-    const current = openBlockRef.current;
-    const currentKey =
-      current == null ? null : blockKeyOf(current.eventID, current.dayISO);
-    openBlockAtPressRef.current = pressedKey == null ? null : currentKey;
-    if (
-      pressedKey != null &&
-      currentKey != null &&
-      pressedKey !== currentKey &&
-      popover.isOpen
-    ) {
-      popover.hide();
-    }
-  };
-  const forgetPress = () => {
-    openBlockAtPressRef.current = null;
-  };
   const toggleBlock = (
     event: CalendarEvent,
     dayISO: string,
     button: HTMLButtonElement,
   ) => {
     const key = blockKeyOf(event.id, dayISO);
-    const openAtPress = openBlockAtPressRef.current;
-    openBlockAtPressRef.current = null;
-    const current = openBlockRef.current;
     const isCurrent =
-      current != null && blockKeyOf(current.eventID, current.dayISO) === key;
-    if (openAtPress === key || (isCurrent && popover.isOpen)) {
-      if (popover.isOpen) {
-        popover.hide();
-      }
+      openBlock != null &&
+      blockKeyOf(openBlock.eventID, openBlock.dayISO) === key;
+    // A press on another block while the popover is open opens it there; a
+    // press on the open block ends closed: the layer absorbs a show from the
+    // trigger its light dismiss closed it for.
+    if (isCurrent && popover.isOpen) {
+      popover.hide();
       return;
     }
     setOpenBlock({eventID: event.id, dayISO});
@@ -324,7 +288,7 @@ export function TimeGridView({
   let openContent: ReactNode = null;
   useEffect(() => {
     if (openBlockKey != null && !paintedBlockKeys.has(openBlockKey)) {
-      popoverRef.current.hide();
+      popover.hide();
       setOpenBlock(null);
     }
   });
@@ -332,8 +296,6 @@ export function TimeGridView({
   const viewportProps = getViewportProps<HTMLDivElement>({
     ref: viewportRef,
     onScroll: rememberScroll,
-    onPointerDownCapture: handlePointerDownCapture,
-    onKeyDownCapture: forgetPress,
     ...stylex.props(styles.timeGridViewport, timeGridViewportScope),
   });
   const contentProps = getContentProps<HTMLDivElement>(
@@ -689,7 +651,6 @@ export function TimeGridView({
             placement: 'below',
             alignment: 'start',
             offset: spacingVars['--spacing-1'],
-            xstyle: layerAnimations.below,
           },
         )}
     </>

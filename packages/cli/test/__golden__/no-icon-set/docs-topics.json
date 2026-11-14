@@ -103,7 +103,7 @@
         "token-utilities",
         "usetheme-hook"
       ],
-      "skeleton": "9d5b6d6c228d6f569726bc06c61eaac8fbe073ff28d1d8b2d33ad4c5644188b8",
+      "skeleton": "cc6829150c7417adc6cc1ef0c45e007441e56a8cefa3f6019baef632ae1790a3",
       "mentions": []
     },
     "browser-support": {
@@ -249,7 +249,7 @@
         "what-each-file-does",
         "further-reading"
       ],
-      "skeleton": "2bb79103d25e7b1f1a0cb160776a00d871056f95a6b8a728bb5c4c487475a25f",
+      "skeleton": "ef4e4158ed2cdf854f1136340b28822987012bda257287dff750fea105ec5d8d",
       "mentions": []
     },
     "theme": {

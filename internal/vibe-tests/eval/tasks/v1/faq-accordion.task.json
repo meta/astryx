@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "faq-accordion",
+  "source": "new",
+  "title": "FAQ accordion with one open answer",
+  "prompt": "Build a FAQ with four questions. Each question is a button that shows or hides its answer: \"What is Orbit?\" answers \"Orbit is a project tracker.\", \"Is there a free plan?\" answers \"Yes, for up to three projects.\", \"Can I export my data?\" answers \"Yes, as CSV or JSON.\", and \"How do I contact support?\" answers \"Email support@example.com.\". All answers start hidden. Each question button reports whether its answer is shown with aria-expanded. Opening one question closes any other open one."
+}

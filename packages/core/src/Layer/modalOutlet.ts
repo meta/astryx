@@ -5,7 +5,9 @@
 /**
  * @file modalOutlet.ts
  * @input The open Dialog and scrim BottomSheet `<dialog>` elements
- * @output Exports useModalOutlet (a modal supplies its outlet),
+ * @output Exports useModalOutlet (a modal supplies its outlet, and withdraws
+ *   it through the ref it returns), useModalOutletWithoutRef (the same for a
+ *   modal with no element for that ref),
  *   getActiveModalOutlet, subscribeModalOutlets (a global host follows the
  *   latest one), and notifyTopLayerEntry (a non-modal surface entered the
  *   top layer above the hosts)
@@ -30,14 +32,27 @@
  * - /docs/architecture/layer-runtime.md
  */
 
-import {useEffect, useLayoutEffect, useRef, type RefObject} from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  type RefCallback,
+  type RefObject,
+} from 'react';
+import {sharedState} from '../utils/sharedRealm';
 
-const outlets: HTMLDialogElement[] = [];
-// Outlets whose order among themselves is decided by their caller (a stack of
-// bottom sheets), keyed by that caller's group. Reordering stays inside the
-// group: such an outlet never moves above an outlet of another group supplied
-// later (a Dialog opened from a sheet).
-const outletGroups = new WeakMap<HTMLDialogElement, string>();
+// Every copy of Core on the page shares these outlets. The top layer is one
+// per document, so a swizzled modal and a package modal order as one.
+const modalState = sharedState('layer/modal-outlet/state', 1, () => ({
+  outlets: [] as HTMLDialogElement[],
+  // Outlets whose order among themselves is decided by their caller (a stack of
+  // bottom sheets), keyed by that caller's group. Reordering stays inside the
+  // group: such an outlet never moves above an outlet of another group supplied
+  // later (a Dialog opened from a sheet).
+  outletGroups: new WeakMap<HTMLDialogElement, string>(),
+  listeners: new Set<(change: ModalOutletChange) => void>(),
+}));
 
 /**
  * Why a host is told to place itself: `outlet` when the latest open modal
@@ -47,10 +62,8 @@ const outletGroups = new WeakMap<HTMLDialogElement, string>();
  */
 export type ModalOutletChange = 'outlet' | 'entry';
 
-const listeners = new Set<(change: ModalOutletChange) => void>();
-
 function notify(change: ModalOutletChange): void {
-  for (const listener of listeners) {
+  for (const listener of modalState.listeners) {
     listener(change);
   }
 }
@@ -63,31 +76,31 @@ function notify(change: ModalOutletChange): void {
  * a toast raised from it still lands there, not in the covered, inert step.
  */
 function addOutlet(element: HTMLDialogElement, beneathGroupTop: boolean): void {
-  const index = outlets.indexOf(element);
+  const index = modalState.outlets.indexOf(element);
   if (index !== -1) {
-    outlets.splice(index, 1);
+    modalState.outlets.splice(index, 1);
   }
-  const group = outletGroups.get(element);
+  const group = modalState.outletGroups.get(element);
   if (beneathGroupTop && group != null) {
-    for (let other = outlets.length - 1; other >= 0; other -= 1) {
-      if (outletGroups.get(outlets[other]) === group) {
-        outlets.splice(other, 0, element);
+    for (let other = modalState.outlets.length - 1; other >= 0; other -= 1) {
+      if (modalState.outletGroups.get(modalState.outlets[other]) === group) {
+        modalState.outlets.splice(other, 0, element);
         notify('outlet');
         return;
       }
     }
   }
-  outlets.push(element);
+  modalState.outlets.push(element);
   notify('outlet');
 }
 
 function removeOutlet(element: HTMLDialogElement): void {
-  const index = outlets.indexOf(element);
+  const index = modalState.outlets.indexOf(element);
   if (index === -1) {
     return;
   }
-  outlets.splice(index, 1);
-  outletGroups.delete(element);
+  modalState.outlets.splice(index, 1);
+  modalState.outletGroups.delete(element);
   notify('outlet');
 }
 
@@ -99,14 +112,14 @@ function removeOutlet(element: HTMLDialogElement): void {
  * not a sheet.
  */
 function raiseWithinGroup(element: HTMLDialogElement): void {
-  const group = outletGroups.get(element);
-  const index = outlets.indexOf(element);
+  const group = modalState.outletGroups.get(element);
+  const index = modalState.outlets.indexOf(element);
   if (group == null || index === -1) {
     return;
   }
-  let target = outlets.length;
-  for (let other = outlets.length - 1; other > index; other -= 1) {
-    if (outletGroups.get(outlets[other]) !== group) {
+  let target = modalState.outlets.length;
+  for (let other = modalState.outlets.length - 1; other > index; other -= 1) {
+    if (modalState.outletGroups.get(modalState.outlets[other]) !== group) {
       target = other;
     } else {
       break;
@@ -117,14 +130,14 @@ function raiseWithinGroup(element: HTMLDialogElement): void {
   if (target - 1 === index) {
     return;
   }
-  outlets.splice(index, 1);
-  outlets.splice(target - 1, 0, element);
+  modalState.outlets.splice(index, 1);
+  modalState.outlets.splice(target - 1, 0, element);
   notify('outlet');
 }
 
 /** The latest open native modal, or null when none is open. */
 export function getActiveModalOutlet(): HTMLDialogElement | null {
-  return outlets[outlets.length - 1] ?? null;
+  return modalState.outlets[modalState.outlets.length - 1] ?? null;
 }
 
 /**
@@ -134,9 +147,9 @@ export function getActiveModalOutlet(): HTMLDialogElement | null {
 export function subscribeModalOutlets(
   listener: (change: ModalOutletChange) => void,
 ): () => void {
-  listeners.add(listener);
+  modalState.listeners.add(listener);
   return () => {
-    listeners.delete(listener);
+    modalState.listeners.delete(listener);
   };
 }
 
@@ -168,6 +181,10 @@ export function notifyTopLayerEntry(): void {
  * above an outlet of another group supplied later, such as a Dialog opened
  * from the sheet — and when it turns false the outlet stays supplied (every
  * open modal supplies one) but is no longer the group's latest.
+ *
+ * Returns a callback ref that withdraws the outlet in the commit that closes
+ * or unmounts the modal. Attach it to an element the modal owns that stays
+ * mounted while the modal is open and has no other ref.
  */
 export function useModalOutlet(
   ref: RefObject<HTMLDialogElement | null>,
@@ -175,7 +192,54 @@ export function useModalOutlet(
   isLatest: boolean = true,
   group?: string,
   hostKey?: string | null,
+): RefCallback<HTMLElement> {
+  const withdraw = useOutletSupply(ref, isActive, isLatest, group, hostKey);
+  // The commit that closes the modal hides the dialog, so a host still inside
+  // it paints nothing. The passive cleanup of the supply can run after the
+  // next paint, or after React removes the dialog. The ref changes with
+  // `isActive`, so React detaches the open modal's ref in the closing commit,
+  // before the paint. On unmount, React detaches it before it removes the
+  // dialog, so hosts leave while they are still in the document.
+  return useCallback(
+    (element: HTMLElement | null) =>
+      isActive && element != null ? withdraw : undefined,
+    [isActive, withdraw],
+  );
+}
+
+/**
+ * The same as `useModalOutlet`, for a modal that owns no element for the
+ * returned ref: no element that stays mounted while the modal is open and has
+ * no other ref. A layout cleanup then withdraws the outlet in the commit that
+ * closes or unmounts the modal.
+ */
+export function useModalOutletWithoutRef(
+  ref: RefObject<HTMLDialogElement | null>,
+  isActive: boolean,
+  isLatest: boolean = true,
+  group?: string,
+  hostKey?: string | null,
 ): void {
+  const withdraw = useOutletSupply(ref, isActive, isLatest, group, hostKey);
+  // Syncs the outlet registry in the commit that closes or unmounts the
+  // modal, before the paint.
+  useLayoutEffect(
+    () => (isActive ? withdraw : undefined),
+    [isActive, withdraw],
+  );
+}
+
+/**
+ * Supplies the outlet while the modal is active, and returns a stable
+ * function that withdraws the supplied outlet at once.
+ */
+function useOutletSupply(
+  ref: RefObject<HTMLDialogElement | null>,
+  isActive: boolean,
+  isLatest: boolean,
+  group: string | undefined,
+  hostKey: string | null | undefined,
+): () => void {
   // `hostKey` names which element `ref` currently resolves to, for a caller
   // whose ref moves between dialogs while it stays active (a switcher flow
   // whose host dialog changes on a handoff): a change re-supplies the outlet
@@ -199,7 +263,7 @@ export function useModalOutlet(
     const isResupply = suppliedRef.current != null;
     suppliedRef.current = element;
     if (group != null) {
-      outletGroups.set(element, group);
+      modalState.outletGroups.set(element, group);
     }
     // A native close (a `method="dialog"` form) ends the modal without a
     // render. A `close` that arrives while the dialog is open again is stale:
@@ -235,19 +299,10 @@ export function useModalOutlet(
     raiseWithinGroup(element);
   }, [ref, isActive, isLatest, hostKey]);
 
-  // Syncs the outlet registry in the commit that closes or unmounts the modal.
-  // That commit hides the dialog, so a host still inside it paints nothing. A
-  // passive cleanup can run after the next paint, or after React detaches the
-  // dialog.
-  useLayoutEffect(() => {
-    if (!isActive) {
-      return;
+  return useCallback(() => {
+    const supplied = suppliedRef.current;
+    if (supplied != null) {
+      removeOutlet(supplied);
     }
-    return () => {
-      const supplied = suppliedRef.current;
-      if (supplied != null) {
-        removeOutlet(supplied);
-      }
-    };
-  }, [isActive]);
+  }, []);
 }

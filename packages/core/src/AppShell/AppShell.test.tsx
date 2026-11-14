@@ -18,7 +18,8 @@ import {
   beforeEach,
   afterEach,
 } from 'vitest';
-import {use} from 'react';
+import {Activity, Suspense, use} from 'react';
+import {hydrateRoot} from 'react-dom/client';
 import {renderToString} from 'react-dom/server';
 import {act, render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -561,6 +562,71 @@ describe('AppShell', () => {
       ),
     ).not.toBeNull();
   });
+
+  it.each(['Suspense', 'Activity'] as const)(
+    'keeps server-rendered content that has not hydrated when the client is below the breakpoint (%s boundary)',
+    async boundary => {
+      // The server renders the page. On the client its code arrives late, so
+      // the page suspends while the shell hydrates.
+      let isPageCodeLate = false;
+      let deliverPageCode = () => {};
+      const pageCode = new Promise<void>(resolve => {
+        deliverPageCode = resolve;
+      });
+      function Page() {
+        if (isPageCodeLate) {
+          use(pageCode);
+        }
+        return <p data-testid="page">Page</p>;
+      }
+      // An app's layout puts elements between the shell and the boundary.
+      // React skips a boundary that is the shell's own child.
+      const app = (
+        <AppShell sideNav={<TestSideNav />}>
+          <div>
+            {boundary === 'Suspense' ? (
+              <Suspense fallback={null}>
+                <Page />
+              </Suspense>
+            ) : (
+              <Activity mode="visible">
+                <Page />
+              </Activity>
+            )}
+          </div>
+        </AppShell>
+      );
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      host.innerHTML = renderToString(app);
+      const serverPage = host.querySelector('[data-testid="page"]');
+      expect(serverPage).not.toBeNull();
+      expect(host.querySelector('dialog')).toBeNull();
+
+      mockMql = createMockMatchMedia(true);
+      vi.stubGlobal('matchMedia', vi.fn().mockReturnValue(mockMql));
+      isPageCodeLate = true;
+      let root: ReturnType<typeof hydrateRoot> | undefined;
+      try {
+        await act(async () => {
+          root = hydrateRoot(host, app);
+        });
+        expect(serverPage?.isConnected).toBe(true);
+
+        await act(async () => {
+          deliverPageCode();
+          await pageCode;
+        });
+
+        expect(host.querySelector('[data-testid="page"]')).toBe(serverPage);
+        // The shell is in its mobile layout: the drawer is mounted.
+        expect(host.querySelector('dialog')).not.toBeNull();
+      } finally {
+        act(() => root?.unmount());
+        host.remove();
+      }
+    },
+  );
 
   // ===========================================================================
   // Mobile overlay (default MobileNav wrapping sideNav)

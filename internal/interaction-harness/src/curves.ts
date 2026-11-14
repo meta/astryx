@@ -5,15 +5,15 @@
  * @input Uses a Playwright `Page`, a `Locator` for the animated element, and
  *   the Web Animations API in the page (CSS transitions and CSS animations are
  *   Web Animations too)
- * @output `holdAnimations` (pause every running animation and describe it),
- *   `armHold` (the page holds what an action starts, as soon as it runs),
- *   `seekAnimations` (move them to t ms from the held origin, each keeping
- *   its offset), `sampleCurve` (the presented
- *   transform/opacity at each t, with the individual `translate`, `rotate` and
- *   `scale` properties composed in), `releaseAnimations`, `curveOf`, which
- *   picks one channel out of the samples for ./math's `compareCurve`, and the
- *   animation-state waits `waitForAnimation`, `watchAnimations` and
- *   `waitForRest`.
+ * @output `holdAnimations` pauses every running animation and describes it.
+ *   `armHold` makes the page hold what an action starts, as soon as it runs,
+ *   and checks that it took the motion the test judges. `seekAnimations`
+ *   moves them to t ms from the held origin, each keeping its offset, and
+ *   `releaseAnimations` lets them go. `sampleCurve` reads the presented
+ *   transform/opacity at each t, with the individual `translate`, `rotate`
+ *   and `scale` properties composed in. `curveOf` picks one channel out of
+ *   the samples for ./math's `compareCurve`. The animation-state waits are
+ *   `waitForAnimation`, `watchAnimations`, `waitForRest` and `settlesAt`.
  * @position Curve sampling: the exact presented value of an animation at a
  *   fixed time, independent of frame timing, so a curve can be compared with
  *   the UIKit reference to a fraction of a pixel. A paused animation's effect
@@ -23,11 +23,33 @@
  */
 
 import type {Locator, Page} from '@playwright/test';
+import {defineAnimatedProperties} from './animated-properties';
 import {defineCurveEnd} from './curve-end';
+import {FRAME_STARVATION_MS, FrameStarvationError} from './frames';
 import {parseTransform, type TimedValue, type Transform2D} from './math';
+import {TARGET_WAIT_MS} from './target-wait';
 
 /** How far inside its end a seek past an animation's end lands, ms. */
 export const END_INSET_MS = 0.5;
+
+/**
+ * The element that `scope` names, or null without a scope. Throws by name
+ * when no element matches within TARGET_WAIT_MS: it is gone, or it never
+ * came.
+ */
+async function scopeElement(caller: string, scope: Locator | undefined) {
+  if (scope == null) {
+    return null;
+  }
+  return scope.elementHandle({timeout: TARGET_WAIT_MS}).catch(error => {
+    if (error instanceof Error && error.name === 'TimeoutError') {
+      throw new Error(
+        `${caller}: the scope ${scope.toString()} is not on the page after ${TARGET_WAIT_MS} ms: it is gone, or it never came`,
+      );
+    }
+    throw error;
+  });
+}
 
 /**
  * Page side: records every animation the document runs, from its first frame
@@ -41,12 +63,21 @@ export const END_INSET_MS = 0.5;
  * `startTime`.
  *
  * A run that the page cancels while it plays is dated at the cancel.
+ *
+ * With `passive`, as `blockMainThread` starts it, the recorder only logs what
+ * starts, through the `animate()` wrapper and the CSS events. It has no frame
+ * loop and makes no document-wide read. A later start without `passive`, as
+ * every wait of this module makes, adopts it as if it started then.
  */
-function animationRecorder(): void {
+export function animationRecorder(passive?: boolean): void {
   const w = window as unknown as {__harnessAnimations?: unknown};
   if (w.__harnessAnimations) {
+    if (passive !== true) {
+      (w.__harnessAnimations as {adopt: () => void}).adopt();
+    }
     return;
   }
+  let isPassive = passive === true;
   // The run a CSS animation or transition event names.
   const cssRunName = (event: Event) =>
     event.type.startsWith('animation')
@@ -83,7 +114,14 @@ function animationRecorder(): void {
     name: string;
   }[] = [];
   // Each recorded animation's entry.
-  const entries = new WeakMap<Animation, (typeof log)[number]>();
+  let entries = new WeakMap<Animation, (typeof log)[number]>();
+  // CSS runs whose end event came while a rendering trace ran, with the
+  // event's time (real) and the active time the event reports.
+  const endedInTrace: {
+    entry: (typeof log)[number];
+    at: number;
+    elapsedMs: number;
+  }[] = [];
   // The times kept below are real: a page time plus the span a page freeze
   // stood still so far. A later freeze then leaves them where they were.
   const span = () =>
@@ -244,8 +282,10 @@ function animationRecorder(): void {
   // harness touches for the first time) is seen now, before any watch arms;
   // first seen a frame later, it would read as started by the watched action.
   // (A recorder that starts during a trace reads once here, then waits.)
-  record();
-  loop();
+  if (!isPassive) {
+    record();
+    loop();
+  }
   // A start event with nothing left to read: a CSS animation shorter than the
   // gap between two of the page's frames can start and finish inside it, and
   // WebKit sends its start event only at the next frame, when
@@ -268,9 +308,9 @@ function animationRecorder(): void {
     );
   };
   const onStart = (event: Event) => {
-    if (tracing()) {
+    if (tracing() || isPassive) {
       // Inside a trace, read only the element the event names, once: a
-      // document-wide read flushes style.
+      // document-wide read flushes style. A passive recorder reads so too.
       const target = event.target;
       if (target instanceof Element) {
         // A pseudo-element's animation (`::backdrop`) is in the subtree.
@@ -351,12 +391,42 @@ function animationRecorder(): void {
   // event came before it finished, and a cancelled run never finishes: under
   // load, a CSS exit reversed partway sent `transitionend` at current time 0,
   // still `running`, and was cancelled a frame later with no finish event.
+  // Chromium sends a run's end event before its finish event, so the run is
+  // still unfinished here. While a rendering trace runs, no run's state is
+  // read, as in the cancel wrapper below. That read flushes style, and lays
+  // out the run's anchored layer at the end of its own window. Only the newest
+  // run the event names is kept: an older run of that name that the page cut
+  // short stays unfinished. The recorder's resume() dates the kept run from
+  // what it stored.
   const onEnd = (event: Event) => {
+    if (tracing()) {
+      for (let i = log.length - 1; i >= 0; i--) {
+        const entry = log[i];
+        if (!isRunOf(entry, event)) {
+          continue;
+        }
+        if (entry.finishedAt == null) {
+          endedInTrace.push({
+            entry,
+            at: performance.now() + span(),
+            // The event carries the active time, so nothing is read from the
+            // run.
+            elapsedMs:
+              1000 *
+              Number(
+                (event as AnimationEvent | TransitionEvent).elapsedTime || 0,
+              ),
+          });
+        }
+        return;
+      }
+      return;
+    }
     for (const entry of log) {
       if (
         entry.finishedAt == null &&
-        atEnd(entry.animation) &&
-        isRunOf(entry, event)
+        isRunOf(entry, event) &&
+        atEnd(entry.animation)
       ) {
         dateFinish(entry, null);
       }
@@ -434,10 +504,34 @@ function animationRecorder(): void {
         record();
       }
     },
-    // Catches up on what started during a trace, then runs its frames again.
+    // Dates the CSS runs that ended during a trace, then catches up on what
+    // started during it and runs its frames again. A run ends where its start
+    // puts its end, through its specified timing, as the cancel wrapper reads
+    // it. Its stored start comes first: the page may have cancelled the run at
+    // its end since then. Without one, the end event's time and active time
+    // stand in.
     resume: () => {
-      record();
-      loop();
+      for (const {entry, at, elapsedMs} of endedInTrace.splice(0)) {
+        if (entry.finishedAt != null) {
+          continue;
+        }
+        const timing = entry.animation.effect?.getTiming();
+        const delay = Number(timing?.delay ?? 0);
+        const duration =
+          typeof timing?.duration === 'number' ? timing.duration : 0;
+        const end =
+          delay +
+          duration * Number(timing?.iterations ?? 1) +
+          Number(timing?.endDelay ?? 0);
+        const speed = Math.abs(entry.animation.playbackRate || 1);
+        entry.finishStart = entry.startedAt ?? at - (delay + elapsedMs) / speed;
+        entry.startedAt ??= entry.finishStart;
+        entry.finishedAt = entry.finishStart + end / speed;
+      }
+      if (!isPassive) {
+        record();
+        loop();
+      }
     },
     // Record first, then stamp strictly after the newest entry: a step that
     // changed style just before has its transition created by that read,
@@ -466,6 +560,23 @@ function animationRecorder(): void {
       log.length = 0;
       unread.length = 0;
       unstarted = [];
+      endedInTrace.length = 0;
+    },
+    // The first call of this module takes a passive recorder as if it
+    // started now: nothing it logged before counts, and the loop starts.
+    adopt: () => {
+      if (!isPassive) {
+        return;
+      }
+      isPassive = false;
+      log.length = 0;
+      unread.length = 0;
+      unstarted = [];
+      endedInTrace.length = 0;
+      entries = new WeakMap();
+      armedAt = performance.now();
+      record();
+      loop();
     },
   };
 }
@@ -478,7 +589,7 @@ async function installRecorder(page: Page): Promise<void> {
     recordingPages.add(page);
     await page.addInitScript(animationRecorder);
   }
-  await page.evaluate(animationRecorder);
+  await page.evaluate(animationRecorder, false);
 }
 
 /**
@@ -495,10 +606,11 @@ async function installRecorder(page: Page): Promise<void> {
  */
 async function installCurveEnd(page: Page): Promise<void> {
   await installRecorder(page);
-  // The hold, installed with the curve end it reads: one round trip installs
-  // both, so a hold sent from the test costs no extra one.
+  // The hold is installed with the curve end it reads and the property match
+  // of its judged motions. One round trip installs all three, so a hold sent
+  // from the test costs no extra one.
   await page.evaluate(
-    `(${defineCurveEnd.toString()})();(${defineHold.toString()})();`,
+    `(${defineCurveEnd.toString()})();(${defineHold.toString()})();(${defineAnimatedProperties.toString()})();`,
   );
 }
 
@@ -654,34 +766,119 @@ export interface HeldAnimation {
  * only it. A second call adds to the held set: what the first held stays held
  * until the release, and offsets keep counting from the origin the first call
  * set (the earliest start it took), so offsets already returned stay true.
- * An animation the page cancels after the hold (retargeting a CSS transition
- * cancels it) leaves the held set: seeking, sampling and releasing skip it
- * rather than revive it.
+ * An animation the page cancels after the hold leaves the held set.
+ * Retargeting a CSS transition cancels it. Seeking, sampling and releasing
+ * skip such an animation rather than revive it. A judged motion's run fails
+ * the next seek or sample instead: a read would show a run that the hold did
+ * not take.
+ *
+ * `judges` names the motion that the test reads from the hold, as for
+ * `armHold`. A hold sent from the test takes what runs when it reaches the
+ * page: the judged motion can still be to come, or already over on a busy
+ * runner, while other animations under the scope run. So the call rejects
+ * when it took no animation of each judged motion.
  */
 export async function holdAnimations(
   page: Page,
-  scope?: Locator,
+  scope: Locator | undefined,
+  options: HoldOptions,
 ): Promise<HeldAnimation[]> {
-  const scopeHandle = scope ? await scope.elementHandle() : null;
+  const motions = judgedMotions('holdAnimations', options?.judges);
+  const scopeHandle = await scopeElement('holdAnimations', scope);
   await installCurveEnd(page);
-  return page.evaluate(
-    root =>
-      (
-        window as unknown as {
-          __harnessHold: (root: Element | null) => HeldAnimation[];
-        }
-      ).__harnessHold(root),
-    scopeHandle,
+  holdKeys += 1;
+  const key = holdKeys;
+  const held = await page.evaluate(
+    ([root, id, judged]) => {
+      const w = window as unknown as {
+        __harnessHold: (root: Element | null) => HeldAnimation[];
+        __harnessHeld?: Animation[];
+        __harnessTook?: Record<number, Animation[]>;
+      };
+      const took = w.__harnessHold(root);
+      // The hold appends what it took to the held set. The judged-motion
+      // check reads these animations.
+      if (judged && took.length > 0) {
+        w.__harnessTook = {
+          ...w.__harnessTook,
+          [id]: (w.__harnessHeld ?? []).slice(-took.length),
+        };
+      }
+      return took;
+    },
+    [scopeHandle, key, motions.length > 0] as const,
   );
+  await expectJudgedMotionsHeld(page, key, motions, {
+    caller: 'holdAnimations',
+    cause:
+      'The judged motion did not run when the hold reached the page (not started yet, or already over)',
+    remedy:
+      'Arm the hold before the action that starts the motion (armHold), so the page holds it as it starts.',
+  });
+  return held;
 }
 
 /** An armed hold (`armHold`): the page holds on its own; read what it held. */
 export interface ArmedHold {
-  /** What the page held, once an animation under the scope ran. */
+  /**
+   * What the page held, once an animation under the scope ran. Rejects when
+   * the hold took no animation of a judged motion.
+   */
   held(): Promise<HeldAnimation[]>;
 }
 
-let armedHolds = 0;
+/**
+ * A motion that a test judges from an armed hold: an animation of `property`
+ * on `target`.
+ */
+export interface JudgedMotion {
+  readonly target: Locator;
+  /**
+   * The animated property, as CSS names it (`translate`, `background-color`,
+   * `--press-strength`).
+   */
+  readonly property: string;
+  /** The pseudo-element that runs the motion, when the target's own does. */
+  readonly pseudoElement?: '::before' | '::after';
+}
+
+/**
+ * The motions an armed hold must take. `'count-only'` checks none: it marks a
+ * call site whose hold does not yet take the motion that the test judges.
+ */
+export type HoldJudges = JudgedMotion | readonly JudgedMotion[] | 'count-only';
+
+/** What a hold must take (`holdAnimations`). */
+export interface HoldOptions {
+  readonly judges: HoldJudges;
+}
+
+/** How an armed hold waits (`armHold`), and what it must take. */
+export interface ArmHoldOptions extends HoldOptions {
+  readonly count?: number;
+  readonly minProgressMs?: number;
+  readonly newOnly?: boolean;
+  readonly timeout?: number;
+}
+
+/** Keys each hold's record of what it took, for the judged-motion check. */
+let holdKeys = 0;
+
+/**
+ * The judged motions as a list: empty for `'count-only'`. Throws when the
+ * caller names none.
+ */
+function judgedMotions(
+  caller: string,
+  judges: HoldJudges | undefined,
+): readonly JudgedMotion[] {
+  if (judges == null) {
+    throw new Error(
+      `${caller}: name the motion that the test judges ({judges: {target, property}}). Other animations can be what the hold takes while that motion does not run. Pass 'count-only' only for a call site that does not hold its judged motion yet.`,
+    );
+  }
+  return judges === 'count-only' ? [] : 'target' in judges ? [judges] : judges;
+}
 
 /**
  * Arms the page to hold every running animation under `scope` (the whole
@@ -705,45 +902,53 @@ let armedHolds = 0;
  * `held()` rejects when nothing under the scope runs within `timeout` ms of
  * arming.
  *
+ * `judges` names the motion that the test reads from the hold. Other
+ * animations under the scope (a press, a colour change) can meet the count
+ * before that motion starts, and a hold that took only them proves nothing
+ * about it. So `held()` also rejects when the hold took no animation of
+ * each judged motion.
+ *
  * @example
  * ```
- * const hold = await armHold(page, row);
+ * const hold = await armHold(page, row, {
+ *   judges: {target: row, property: 'opacity'},
+ * });
  * await driver.play(tap(center, {holdMs: 400}));
  * const [release] = await hold.held();
  * ```
  */
 export async function armHold(
   page: Page,
-  scope?: Locator,
-  {
+  scope: Locator | undefined,
+  options: ArmHoldOptions,
+): Promise<ArmedHold> {
+  const {
+    judges,
     count = 1,
     minProgressMs = 0,
     newOnly = false,
     timeout = 5_000,
-  }: {
-    count?: number;
-    minProgressMs?: number;
-    newOnly?: boolean;
-    timeout?: number;
-  } = {},
-): Promise<ArmedHold> {
-  const scopeHandle = scope ? await scope.elementHandle() : null;
+  } = options ?? ({} as Partial<ArmHoldOptions>);
+  const motions = judgedMotions('armHold', judges);
+  const scopeHandle = await scopeElement('armHold', scope);
   await installCurveEnd(page);
-  armedHolds += 1;
-  const id = armedHolds;
+  holdKeys += 1;
+  const id = holdKeys;
   await page.evaluate(
-    ([root, needed, minProgress, fresh, wait, key]) => {
+    ([root, needed, minProgress, fresh, wait, key, judged]) => {
       const w = window as unknown as {
         __harnessHold: (
           root: Element | null,
           skip?: ReadonlySet<Animation>,
         ) => unknown[];
+        __harnessHeld?: Animation[];
         __harnessTimerGate?: {
           frame?: typeof requestAnimationFrame;
           now?: () => number;
           timeout?: typeof setTimeout;
         };
         __harnessArmed?: Record<number, Promise<unknown[]>>;
+        __harnessTook?: Record<number, Animation[]>;
       };
       // The harness's own waits run on the real timers: a frozen timer gate
       // (story.ts) holds only the page's.
@@ -803,7 +1008,16 @@ export async function armHold(
           if (document.getAnimations().filter(counts).length >= needed) {
             done = true;
             try {
-              resolve(w.__harnessHold(root, before));
+              const took = w.__harnessHold(root, before);
+              // The hold appends what it took to the held set. `held()` reads
+              // these animations to find the judged motions.
+              if (judged && took.length > 0) {
+                w.__harnessTook = {
+                  ...w.__harnessTook,
+                  [key]: (w.__harnessHeld ?? []).slice(-took.length),
+                };
+              }
+              resolve(took);
             } catch (error) {
               reject(error);
             }
@@ -831,22 +1045,132 @@ export async function armHold(
       newOnly,
       timeout,
       id,
+      motions.length > 0,
     ] as const,
   );
   return {
-    held: () =>
-      page.evaluate(key => {
+    held: async () => {
+      const held = await page.evaluate(key => {
         const w = window as unknown as {
           __harnessArmed?: Record<number, Promise<HeldAnimation[]>>;
         };
-        const held = w.__harnessArmed?.[key];
-        if (held == null) {
+        const armed = w.__harnessArmed?.[key];
+        if (armed == null) {
           throw new Error('armHold: this hold was never armed on this page');
         }
         delete w.__harnessArmed?.[key];
-        return held;
-      }, id),
+        return armed;
+      }, id);
+      await expectJudgedMotionsHeld(page, id, motions, {
+        caller: 'armHold',
+        cause: `Other animations met its count of ${Math.max(count, 1)} first`,
+        remedy:
+          'Arm the hold so that it waits for the judged motion (count, newOnly, minProgressMs, scope).',
+      });
+      return held;
+    },
   };
+}
+
+/**
+ * Throws unless the hold `key` took an animation of each judged motion. The
+ * targets resolve only now: the action that an armed hold waits for can add
+ * them to the page. `cause` and `remedy` complete the error for the caller.
+ */
+async function expectJudgedMotionsHeld(
+  page: Page,
+  key: number,
+  motions: readonly JudgedMotion[],
+  failure: {caller: string; cause: string; remedy: string},
+): Promise<void> {
+  if (motions.length === 0) {
+    return;
+  }
+  const targets = await Promise.all(
+    motions.map(motion =>
+      motion.target.elementHandle({timeout: TARGET_WAIT_MS}).catch(() => {
+        throw new Error(
+          `${failure.caller}: the judged target ${motion.target.toString()} is not on the page`,
+        );
+      }),
+    ),
+  );
+  const {missing, took} = await page.evaluate(
+    ([armed, elements, wanted]) => {
+      const w = window as unknown as {
+        __harnessTook?: Record<number, Animation[]>;
+        __harnessHeldJudged?: {animation: Animation; motion: string}[];
+        __harnessAnimatedProperties: (animation: Animation) => string[];
+        __harnessAnimates: (animation: Animation, property: string) => boolean;
+      };
+      const animations = w.__harnessTook?.[armed] ?? [];
+      delete w.__harnessTook?.[armed];
+      const nameOf = (animation: Animation) => {
+        const effect = animation.effect as KeyframeEffect | null;
+        const target = effect?.target ?? null;
+        const name =
+          target == null
+            ? 'no target'
+            : target.tagName.toLowerCase() +
+              (target.id ? `#${target.id}` : '') +
+              (target.classList.length
+                ? `.${[...target.classList].slice(0, 2).join('.')}`
+                : '');
+        return `${name}${effect?.pseudoElement ?? ''}`;
+      };
+      const describe = (animation: Animation) =>
+        `${nameOf(animation)} ${w.__harnessAnimatedProperties(animation).join(' ')}`;
+      const runs = wanted.map((motion, index) =>
+        animations.filter(animation => {
+          const effect = animation.effect as KeyframeEffect | null;
+          return (
+            effect != null &&
+            effect.target === elements[index] &&
+            (effect.pseudoElement ?? null) === motion.pseudoElement &&
+            w.__harnessAnimates(animation, motion.property)
+          );
+        }),
+      );
+      // A seek or a sample fails by name once the page cancels one of these.
+      w.__harnessHeldJudged = [
+        ...(w.__harnessHeldJudged ?? []),
+        ...runs.flatMap((found, index) =>
+          found.map(animation => ({
+            animation,
+            motion: `${wanted[index].property} on ${nameOf(animation)}`,
+          })),
+        ),
+      ];
+      return {
+        missing: runs.flatMap((found, index) =>
+          found.length > 0 ? [] : [index],
+        ),
+        took: animations.map(describe),
+      };
+    },
+    [
+      key,
+      targets,
+      motions.map(motion => ({
+        property: motion.property,
+        pseudoElement: motion.pseudoElement ?? null,
+      })),
+    ] as const,
+  );
+  if (missing.length > 0) {
+    const judged = missing
+      .map(index => {
+        const motion = motions[index];
+        return `${motion.property} on ${motion.target.toString()}${motion.pseudoElement ?? ''}`;
+      })
+      .join(', ');
+    throw new Error(
+      `${failure.caller}: the hold took no animation of the judged motion (${judged}). ` +
+        `${failure.cause}; it took: ` +
+        `${took.length > 0 ? took.join('; ') : 'nothing'}. ` +
+        failure.remedy,
+    );
+  }
 }
 
 /**
@@ -858,6 +1182,8 @@ export async function armHold(
  * round `currentTime` writes to their timer resolution.) Returns the time the
  * page then presents: `timeMs`, or the latest clamped end when every held
  * animation was clamped.
+ * It throws when the page has cancelled a judged motion's held run since the
+ * hold.
  */
 export async function seekAnimations(
   page: Page,
@@ -869,7 +1195,16 @@ export async function seekAnimations(
         __harnessHeld?: Animation[];
         __harnessHeldStarts?: number[];
         __harnessHeldOrigin?: number;
+        __harnessHeldJudged?: {animation: Animation; motion: string}[];
       };
+      const cancelled = (w.__harnessHeldJudged ?? []).filter(
+        run => run.animation.playState === 'idle',
+      );
+      if (cancelled.length > 0) {
+        throw new Error(
+          `seekAnimations: the page cancelled the held run of a judged motion (${[...new Set(cancelled.map(run => run.motion))].join(', ')}) since the hold. A later style change retargeted it, so a read now shows a run that the hold did not take`,
+        );
+      }
       // An animation the page cancelled since the hold (a CSS transition is
       // cancelled whenever the page retargets its property) leaves the held set:
       // applying or playing it again would revive what the page dropped.
@@ -914,6 +1249,7 @@ export async function releaseAnimations(
       __harnessHeld?: Animation[];
       __harnessHeldStarts?: number[];
       __harnessHeldOrigin?: number;
+      __harnessHeldJudged?: {animation: Animation; motion: string}[];
     };
     // An animation the page cancelled since the hold (a CSS transition is
     // cancelled whenever the page retargets its property) leaves the held set:
@@ -940,6 +1276,7 @@ export async function releaseAnimations(
       w.__harnessHeld = [];
       w.__harnessHeldStarts = [];
       w.__harnessHeldOrigin = undefined;
+      w.__harnessHeldJudged = [];
     }
   }, finish);
 }
@@ -1003,7 +1340,16 @@ export async function sampleCurve(
         __harnessHeld?: Animation[];
         __harnessHeldStarts?: number[];
         __harnessHeldOrigin?: number;
+        __harnessHeldJudged?: {animation: Animation; motion: string}[];
       };
+      const cancelled = (w.__harnessHeldJudged ?? []).filter(
+        run => run.animation.playState === 'idle',
+      );
+      if (cancelled.length > 0) {
+        throw new Error(
+          `sampleCurve: the page cancelled the held run of a judged motion (${[...new Set(cancelled.map(run => run.motion))].join(', ')}) since the hold. A later style change retargeted it, so a read now shows a run that the hold did not take`,
+        );
+      }
       // An animation the page cancelled since the hold (a CSS transition is
       // cancelled whenever the page retargets its property) leaves the held set:
       // applying or playing it again would revive what the page dropped.
@@ -1759,6 +2105,17 @@ export async function watchAnimations(
  * easing or direction, waitForRest waits the hold out, and a hold longer than
  * `timeout` rejects with "still moving".
  *
+ * It throws `FrameStarvationError` instead when the page drew too few frames
+ * to tell. Then, since the element last moved, no frame came for longer than
+ * `FRAME_STARVATION_MS`. It held still in its last frame, or no frame came
+ * after the deadline. So the still frames must come by `timeout` plus
+ * `FRAME_STARVATION_MS`. A frame past the deadline can show motion after a gap
+ * longer than `FRAME_STARVATION_MS`. That tells nothing either: the element
+ * may have stopped unseen in the gap. That also throws `FrameStarvationError`,
+ * and its message gives the last move. So does a run of still frames that
+ * begins just after such a gap and is too short at the deadline. An animation whose
+ * curve outlasts the gap is still moving, and rejects with "still moving".
+ *
  * While a rendering trace runs (`traceRendering`), it stands down as the
  * animation recorder does: a per-frame callback would make every frame a
  * main-thread frame, which the trace counts. It then waits on timers for the
@@ -1784,9 +2141,15 @@ export async function waitForRest(
     locator,
     Date.now() + timeout + 1_000,
     async evaluateTimeout => {
-      await locator.evaluate(
-        (element, {ms, need}) =>
-          new Promise<void>((resolve, reject) => {
+      const starved = await locator.evaluate(
+        (element, {ms, need, starvationMs}) =>
+          new Promise<{
+            frames: number;
+            spanMs: number;
+            longestGapMs: number;
+            /** What still moved at the frame past the deadline, if it did. */
+            moved?: string;
+          } | null>((resolve, reject) => {
             // The deadline reads the real clock, which a page freeze does not
             // stop.
             const realNow =
@@ -1818,29 +2181,74 @@ export async function waitForRest(
                 __harnessTimerGate?: {
                   frame: typeof requestAnimationFrame;
                   timeout?: typeof setTimeout;
+                  clearTimeout?: typeof clearTimeout;
                 };
               }
             ).__harnessTimerGate;
             const frame = gate?.frame ?? requestAnimationFrame;
             const timeout = gate?.timeout ?? setTimeout;
+            const clearTimer = gate?.clearTimeout ?? clearTimeout;
             // Set by traceRendering while it traces (see the recorder above).
             const tracing = () =>
               (window as unknown as {__harnessRenderingTrace?: boolean})
                 .__harnessRenderingTrace === true;
+            // The deadline timer below holds this wait's scope, the element
+            // too, until it fires: every ending clears it.
+            const end = () => clearTimer(deadlineTimer);
             const settle = () => {
+              end();
               // Later waits count animations from here.
               (
                 window as unknown as {__harnessAnimations?: {arm: () => number}}
               ).__harnessAnimations?.arm();
-              resolve();
+              resolve(null);
             };
             let last = '';
             let still = 0;
+            // When the per-frame check last looked, and when the last gap longer
+            // than the starvation bound ended, and how long it was.
+            let tickAt = realNow();
+            let starvedEndAt = Number.NEGATIVE_INFINITY;
+            let starvedGapMs = 0;
+            // When each frame of the per-frame check came since the element
+            // last moved, on the real clock: only those can show it at rest.
+            let watchedFrom = realNow();
+            const drawn: number[] = [];
+            const shortfall = () => {
+              const times = [watchedFrom, ...drawn, realNow()];
+              let longestGapMs = 0;
+              for (let i = 1; i < times.length; i += 1) {
+                longestGapMs = Math.max(longestGapMs, times[i] - times[i - 1]);
+              }
+              return {
+                frames: drawn.length,
+                spanMs: realNow() - watchedFrom,
+                longestGapMs,
+              };
+            };
             const frames = () => {
               last = read();
               still = 0;
+              watchedFrom = realNow();
+              tickAt = watchedFrom;
+              starvedEndAt = Number.NEGATIVE_INFINITY;
+              starvedGapMs = 0;
+              drawn.length = 0;
               frame(tick);
             };
+            // A frame that never comes cannot reach the deadline check in
+            // `tick`: a starved page is caught here.
+            let starvedOut = false;
+            const deadlineTimer = timeout(
+              () => {
+                const lastFrame = drawn[drawn.length - 1] ?? watchedFrom;
+                if (!tracing() && realNow() - lastFrame > starvationMs) {
+                  starvedOut = true;
+                  resolve(shortfall());
+                }
+              },
+              ms + starvationMs + 1,
+            );
             // While traced: one look at the animations, then a timer to the latest
             // scheduled curve end. One not started yet is looked at again a frame
             // later; a trace that has ended hands over to the per-frame check.
@@ -1887,6 +2295,7 @@ export async function waitForRest(
               timeout(
                 () => {
                   if (realNow() > deadline) {
+                    end();
                     reject(
                       new Error('waitForRest: still moving at the deadline'),
                     );
@@ -1899,7 +2308,47 @@ export async function waitForRest(
                 Math.min(wait, Math.max(0, room)) + 1,
               );
             };
+            // How long the element's animations still move: a pending one moves
+            // for its whole curve, a running one for what its curve has left.
+            const curveLeftMs = () => {
+              // After a long task, the frame's timeline time can lag the page's
+              // clock, so each curve is read at the page's time. A page freeze
+              // shifts both clocks alike.
+              const lagMs = Math.max(
+                0,
+                performance.now() -
+                  Number(document.timeline.currentTime ?? performance.now()),
+              );
+              let left = 0;
+              for (const a of element.getAnimations({subtree: true})) {
+                if (!(a.timeline instanceof DocumentTimeline)) {
+                  continue;
+                }
+                const rate = a.playbackRate || 1;
+                const at = Number(a.currentTime ?? 0) + lagMs * rate;
+                if (a.pending) {
+                  left = Math.max(left, curveEnd(a) / Math.abs(rate));
+                } else if (a.playState === 'running') {
+                  left = Math.max(
+                    left,
+                    rate > 0 ? (curveEnd(a) - at) / rate : at / -rate,
+                  );
+                }
+              }
+              return left;
+            };
             const tick = () => {
+              if (starvedOut) {
+                return;
+              }
+              const lookedAt = realNow();
+              const gapMs = lookedAt - tickAt;
+              tickAt = lookedAt;
+              if (gapMs > starvationMs) {
+                starvedEndAt = lookedAt;
+                starvedGapMs = gapMs;
+              }
+              const before = last;
               const now = read();
               const moving = element.getAnimations({subtree: true}).some(
                 a =>
@@ -1912,12 +2361,51 @@ export async function waitForRest(
                         Number(a.effect?.getComputedTiming().delay ?? 0)
                       : Number(a.currentTime ?? 0) < curveEnd(a))),
               );
-              still = !moving && now === last ? still + 1 : 0;
+              const resting = !moving && now === last;
+              if (resting) {
+                drawn.push(realNow());
+              } else {
+                watchedFrom = realNow();
+                drawn.length = 0;
+              }
+              still = resting ? still + 1 : 0;
               last = now;
               if (still >= need) {
                 settle();
               } else if (realNow() > deadline) {
-                reject(new Error(`waitForRest: still moving (${now})`));
+                const short = shortfall();
+                end();
+                // A starved gap that ended just before the still frames began,
+                // or just before this frame, hides when the element stopped.
+                // The first frames after a long task can still catch up on it.
+                const isAfterStarvedGap =
+                  (resting ? watchedFrom : lookedAt) - starvedEndAt <=
+                  starvationMs;
+                if (resting && short.longestGapMs > starvationMs) {
+                  resolve(short);
+                } else if (resting && isAfterStarvedGap) {
+                  resolve({
+                    frames: short.frames,
+                    spanMs: realNow() - (starvedEndAt - starvedGapMs),
+                    longestGapMs: starvedGapMs,
+                  });
+                } else if (
+                  !resting &&
+                  isAfterStarvedGap &&
+                  curveLeftMs() <= starvedGapMs
+                ) {
+                  resolve({
+                    frames: drawn.length,
+                    spanMs: lookedAt - (starvedEndAt - starvedGapMs),
+                    longestGapMs: starvedGapMs,
+                    moved:
+                      before === now
+                        ? `an animation on it still had ${Math.round(curveLeftMs())} ms of its curve to run`
+                        : `the element still moved at its last frame (${before} → ${now})`,
+                  });
+                } else {
+                  reject(new Error(`waitForRest: still moving (${now})`));
+                }
               } else if (tracing()) {
                 scheduled();
               } else {
@@ -1930,13 +2418,209 @@ export async function waitForRest(
               frames();
             }
           }),
-        {ms: timeout, need: frames},
+        {ms: timeout, need: frames, starvationMs: FRAME_STARVATION_MS},
         {timeout: evaluateTimeout},
       );
+      if (starved != null) {
+        throw new FrameStarvationError({
+          by: 'waitForRest',
+          frames: starved.frames,
+          during: `it waited ${Math.round(starved.spanMs)} ms for the element to rest${
+            starved.moved == null ? '' : `, and ${starved.moved}`
+          }`,
+          min: frames,
+          longestGapMs: starved.longestGapMs,
+        });
+      }
       return true;
     },
   );
   if (rested == null) {
     throw new Error('waitForRest: still moving at the deadline');
   }
+}
+
+/** What the page saw by the end of a `settlesAt` wait. */
+interface SettleOutcome {
+  readonly settled: boolean;
+  /** No frame came for longer than the starvation gap before the deadline. */
+  readonly starved: boolean;
+  /** The value the last check read. */
+  readonly seen: string;
+  /** The animations still unfinished, described for the error. */
+  readonly unfinished: readonly string[];
+  /** From the start of the wait to its end, ms. */
+  readonly spanMs: number;
+  /** From the last frame before the deadline to the deadline, ms. */
+  readonly unwatchedMs: number;
+}
+
+/**
+ * Resolves once `locator`'s element shows `property` at `value` and no
+ * animation inside it is left unfinished. Held final keyframes count until
+ * their end, where `waitForRest` reads them as rest. The page checks once a
+ * frame, on its real frames, so a frozen timer gate does not hold it.
+ *
+ * Its deadline is `waitForRest`'s. Past `timeout` ms it rejects, and names
+ * the property, the last value it read and the animations still unfinished.
+ * It throws `FrameStarvationError` with the same names instead when the
+ * page drew no frame for longer than `FRAME_STARVATION_MS` before the
+ * deadline. A stall after the deadline does not count, because the page was
+ * watched up to it. An animation that repeats forever never finishes, so a
+ * wait under one reaches the deadline.
+ */
+export async function settlesAt(
+  locator: Locator,
+  property: string,
+  value: string,
+  {timeout = 5_000}: {timeout?: number} = {},
+): Promise<void> {
+  // The page-side wait answers at its own deadline; the read gets a second
+  // more, so only an element that is gone runs it out.
+  const outcome = await withinTimeout(
+    'settlesAt',
+    locator,
+    Date.now() + timeout + 1_000,
+    async evaluateTimeout =>
+      locator.evaluate(
+        (element, {prop, expected, ms, starvationMs}) =>
+          new Promise<SettleOutcome>(resolve => {
+            // The wait uses the page's real frames, timers and clock, so a
+            // frozen timer gate does not hold it.
+            const gate = (
+              window as unknown as {
+                __harnessTimerGate?: {
+                  frame: typeof requestAnimationFrame;
+                  now?: () => number;
+                  timeout?: typeof setTimeout;
+                  clearTimeout?: typeof clearTimeout;
+                };
+              }
+            ).__harnessTimerGate;
+            const frame = gate?.frame ?? requestAnimationFrame;
+            const realNow = gate?.now ?? (() => performance.now());
+            const later = gate?.timeout ?? setTimeout;
+            const clearTimer = gate?.clearTimeout ?? clearTimeout;
+            const startedAt = realNow();
+            const deadline = startedAt + ms;
+            let lastFrame = startedAt;
+            let seen = '';
+            let ended = false;
+            const unfinished = () =>
+              element
+                .getAnimations({subtree: true})
+                .filter(animation => animation.playState !== 'finished');
+            const describe = (animation: Animation) => {
+              const effect = animation.effect as KeyframeEffect | null;
+              const target = effect?.target ?? null;
+              const where =
+                target == null
+                  ? 'no element'
+                  : `${target.tagName.toLowerCase()}${target.id === '' ? '' : `#${target.id}`}${effect?.pseudoElement ?? ''}`;
+              const css = animation as Animation & {
+                transitionProperty?: string;
+                animationName?: string;
+              };
+              const label =
+                css.transitionProperty ?? css.animationName ?? animation.id;
+              const end = Number(
+                effect?.getComputedTiming().endTime ?? Infinity,
+              );
+              const at = Math.round(Number(animation.currentTime ?? 0));
+              const length = Number.isFinite(end)
+                ? `${Math.round(end)} ms`
+                : 'forever';
+              return `${animation.constructor.name}${label === '' ? '' : ` ${label}`} on ${where}, ${animation.playState} at ${at} of ${length}`;
+            };
+            const finish = (
+              settled: boolean,
+              starved: boolean,
+              unwatchedMs: number,
+            ) => {
+              ended = true;
+              clearTimer(deadlineTimer);
+              const listed = settled ? [] : unfinished().map(describe);
+              resolve({
+                settled,
+                starved,
+                seen,
+                unfinished:
+                  listed.length > 5
+                    ? [...listed.slice(0, 5), `${listed.length - 5} more`]
+                    : listed,
+                spanMs: realNow() - startedAt,
+                unwatchedMs,
+              });
+            };
+            // A frame that never comes cannot reach the deadline check in
+            // `check`, so this timer gives the verdict instead.
+            const deadlineTimer = later(
+              () => {
+                if (!ended) {
+                  const unwatched = Math.max(0, deadline - lastFrame);
+                  finish(false, unwatched > starvationMs, unwatched);
+                }
+              },
+              ms + starvationMs + 1,
+            );
+            const check = (frameBefore: number) => {
+              seen = getComputedStyle(element).getPropertyValue(prop);
+              if (seen === expected && unfinished().length === 0) {
+                finish(true, false, 0);
+              } else if (realNow() > deadline) {
+                // Only the span from the frame before this one to the
+                // deadline went unwatched. A stall after the deadline does
+                // not hide the value read before it.
+                const unwatched = Math.max(0, deadline - frameBefore);
+                finish(false, unwatched > starvationMs, unwatched);
+              } else {
+                frame(onFrame);
+              }
+            };
+            const onFrame = () => {
+              if (!ended) {
+                const frameBefore = lastFrame;
+                lastFrame = realNow();
+                check(frameBefore);
+              }
+            };
+            check(startedAt);
+          }),
+        {
+          prop: property,
+          expected: value,
+          ms: timeout,
+          starvationMs: FRAME_STARVATION_MS,
+        },
+        {timeout: evaluateTimeout},
+      ),
+  );
+  if (outcome == null) {
+    throw new Error(
+      `settlesAt: ${property} did not settle at ${value} by the deadline, and the page did not answer`,
+    );
+  }
+  if (outcome.settled) {
+    return;
+  }
+  const read =
+    outcome.seen === value
+      ? `${property} read ${JSON.stringify(outcome.seen)}`
+      : `${property} read ${JSON.stringify(outcome.seen)} (not ${JSON.stringify(value)})`;
+  const running =
+    outcome.unfinished.length === 0
+      ? 'no animation under it was unfinished'
+      : `unfinished under it: ${outcome.unfinished.join('; ')}`;
+  if (outcome.starved) {
+    throw new FrameStarvationError({
+      by: 'settlesAt',
+      frames: 0,
+      during: `it looked for ${property} to settle at ${value} in the ${Math.round(outcome.unwatchedMs)} ms up to its deadline (${read}; ${running})`,
+      min: 1,
+      longestGapMs: outcome.unwatchedMs,
+    });
+  }
+  throw new Error(
+    `settlesAt: not settled ${Math.round(outcome.spanMs)} ms after it began: ${read}; ${running}`,
+  );
 }

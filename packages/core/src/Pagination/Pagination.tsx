@@ -23,7 +23,7 @@
  *   hasFirstLast, step, siblingCount, size, isDisabled, label, data-testid, xstyle
  */
 
-import {useOptimistic, useTransition} from 'react';
+import {useOptimistic, useState, useTransition} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
@@ -183,16 +183,23 @@ export interface PaginationProps extends Omit<
 const PAGE_SIZE_SELECTOR_WIDTH = 80;
 
 const styles = stylex.create({
+  // Both rows wrap when their controls do not fit, as at a larger text size,
+  // so no control leaves the screen.
   root: {
     display: 'flex',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacingVars['--spacing-4'],
   },
   controls: {
     display: 'flex',
+    flexWrap: 'wrap',
     alignItems: 'center',
     gap: spacingVars['--spacing-1'],
+    // Lets the controls row narrow to the landmark's width, so it wraps
+    // instead of pushing past it.
+    minWidth: 0,
   },
   compactFirst: {
     marginInlineEnd: `calc(-1 * ${spacingVars['--spacing-1']})`,
@@ -205,14 +212,14 @@ const styles = stylex.create({
     alignItems: 'center',
     justifyContent: 'center',
     minWidth: sizeVars['--size-element-md'],
-    height: sizeVars['--size-element-md'],
+    minHeight: sizeVars['--size-element-md'],
     color: colorVars['--color-text-secondary'],
     fontSize: typeScaleVars['--text-label-size'],
     userSelect: 'none',
   },
   ellipsisSm: {
     minWidth: sizeVars['--size-element-sm'],
-    height: sizeVars['--size-element-sm'],
+    minHeight: sizeVars['--size-element-sm'],
     fontSize: typeScaleVars['--text-supporting-size'],
   },
   infoText: {
@@ -448,6 +455,9 @@ export function Pagination({
   // Track the page optimistically so rapid prev/next clicks advance from the
   // in-flight target instead of stalling on the last committed page.
   const [optimisticPage, setOptimisticPage] = useOptimistic(page);
+  // A kept rejected entry widens the page box to fit the status icon beside
+  // the typed text.
+  const [isPageEntryRejected, setIsPageEntryRejected] = useState(false);
 
   // Roving-tabindex + arrow/Home/End keyboard nav for the dots variant, owned
   // by the shared useListFocus primitive (mirrors SegmentedControl). It stamps a
@@ -755,20 +765,28 @@ export function Pagination({
         // convention that a typeable page box requires a known total.
         const isInputDisabled = isDisabled || computedTotalPages == null;
 
+        const pageBoxWidth = isSm
+          ? sizeVars['--size-element-sm']
+          : sizeVars['--size-element-md'];
         const inputNode = (
           <NumberInput
             label={goToPageLabel}
             isLabelHidden
+            entryErrorBehavior="complete"
             value={inputCommittedValue}
             onChange={handleInputCommit}
             min={1}
             max={computedTotalPages ?? undefined}
             isIntegerOnly
             size={size}
+            // The message shows on the status icon, so a rejection keeps the
+            // bar's height; the box grows to hold the icon beside the text.
+            statusVariant="tooltip"
+            onEntryErrorChange={error => setIsPageEntryRejected(error != null)}
             width={
-              isSm
-                ? sizeVars['--size-element-sm']
-                : sizeVars['--size-element-md']
+              isPageEntryRejected
+                ? `calc(${pageBoxWidth} + ${spacingVars['--spacing-10']})`
+                : pageBoxWidth
             }
             isDisabled={isInputDisabled}
             data-testid={testId != null ? `${testId}-input` : undefined}

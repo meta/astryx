@@ -23,6 +23,7 @@ import React from 'react';
 import {
   isValidElement,
   useCallback,
+  useDeferredValue,
   useEffect,
   useId,
   useMemo,
@@ -79,6 +80,7 @@ import {
   focusOutlineStyles,
 } from '../utils/focusOutline.stylex';
 import {useMediaQuery} from '../hooks/useMediaQuery';
+import {matchesMediaQuery} from '../utils/coarsePointer';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {themeProps} from '../utils/themeProps';
 import {useThemeDefinition} from '../theme/useTheme';
@@ -627,9 +629,17 @@ export function AppShell({
           activeWidthBreakpoints?.[sideNavBreakpoint] ??
           DEFAULT_WIDTH_BREAKPOINTS[sideNavBreakpoint]
         }px)`;
-  const isBelowBreakpoint = useMediaQuery(
-    breakpointQuery,
-    sideNavBreakpoint === 'none' ? false : mobileNavConfig?.defaultIsMobile,
+  // The client's first answer can differ from the server's. That correction
+  // is an urgent update, and it changes the mobile context above the page.
+  // React answers an urgent update above content it has not hydrated by
+  // rendering that content again in place of its server HTML. A deferred
+  // value takes the client's answer in a transition, which waits for that
+  // content to hydrate.
+  const isBelowBreakpoint = useDeferredValue(
+    useMediaQuery(
+      breakpointQuery,
+      sideNavBreakpoint === 'none' ? false : mobileNavConfig?.defaultIsMobile,
+    ),
   );
   const [uncontrolledMobileOpen, setUncontrolledMobileOpen] = useState(false);
   const isMobileNavOpen = mobileNavConfig?.isOpen ?? uncontrolledMobileOpen;
@@ -653,8 +663,10 @@ export function AppShell({
     if (!HasActivity || isMobileNavOpen) {
       return;
     }
-    const delayMs = window.matchMedia('(prefers-reduced-motion: reduce)')
-      .matches
+    const delayMs = matchesMediaQuery(
+      window,
+      '(prefers-reduced-motion: reduce)',
+    )
       ? 0
       : MOBILE_NAV_MAX_CLOSE_DELAY_MS + ACTIVITY_HIDE_BUFFER_MS;
     const timeout = setTimeout(() => {

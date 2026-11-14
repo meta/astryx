@@ -14,11 +14,13 @@
  *            default naming a variant the set does not declare);
  *            `icon_builtin_definition_missing`; `icon_module_not_public`;
  *            `icon_not_component`; `icon_export_missing` (an export, the
- *            generated module, or the adapter its module does not have, read
- *            statically with re-exports followed); `icon_module_invalid`;
- *            `icon_generated_types_mismatch`; `icon_theme_map_mismatch` (a
- *            theme map whose keys or values disagree with the built-in
- *            entries of `map`);
+ *            generated module, the adapter, or a look's theme map its module
+ *            does not have, read statically with re-exports followed);
+ *            `icon_module_invalid`; `icon_generated_types_mismatch`;
+ *            `icon_theme_map_mismatch` (a theme map, or the theme map of a
+ *            look an icon draws, whose keys or values disagree with the
+ *            built-in entries of `map`, or a look's theme map the generated
+ *            module lacks);
  *   warnings `icon_export_name` (an export not named `<Name>Icon`);
  *            `icon_definition_unused` and `icon_definition_shadowed` (a
  *            definition the set declares that `map` leaves out, or that has
@@ -44,8 +46,9 @@ import * as path from 'node:path';
 import {findInstalledPackage} from '../fs/paths.mjs';
 import {satisfiesRange} from '../env/semver.mjs';
 import {
-  NOTICE_FILE_RE,
   discoverIconSetDirectory,
+  hasLicenseNotice,
+  licenseNoticeFix,
   resolveIconModule,
   splitSpecifier,
 } from './icon-set-discovery.mjs';
@@ -53,11 +56,14 @@ import {inspectPackageExport} from './package-exports.mjs';
 import {
   THEME_MAP_NAME,
   entryWiringNote,
+  generatedOrigins,
   generatedTypesPath,
   otherNamesOf,
   generatedTypesText,
   readGeneratedStatements,
+  generatedTypesMatch,
 } from './icon-set-writer.mjs';
+import {variantThemeMaps} from './icon-set-theme-maps.mjs';
 import {
   exportValueKind,
   aliasedOrigin,
@@ -67,6 +73,8 @@ import {
 } from './module-exports.mjs';
 import {astryxIconDefinitions} from './icon-definition-discovery.mjs';
 import {rankIcons} from './icon-ranking.mjs';
+import {unmappedTemplateMeanings} from './template-icon-meanings.mjs';
+import {shellArg} from '../text/shell-arg.mjs';
 import {
   issueError,
   issueWarning,
@@ -276,16 +284,17 @@ function checkContract(set, packageName, pkg, unchecked) {
       const actual = fs.existsSync(typesFile)
         ? fs.readFileSync(typesFile, 'utf-8')
         : null;
-      // The header comment is the writer's, and changes between releases;
-      // the declarations are what must match.
-      const code = (/** @type {string} */ text) =>
-        text
-          .split('\n')
-          .filter(line => !line.startsWith('//'))
-          .join('\n');
+      // The declarations must match, statement by statement, however a
+      // formatter left the file; the header comment is the writer's and
+      // changes between releases.
       if (
         expected != null &&
-        (actual == null || code(actual) !== code(expected))
+        (actual == null ||
+          !generatedTypesMatch(
+            actual,
+            expected,
+            /** @type {string} */ (typesRel),
+          ))
       ) {
         issues.push(
           issueError(
@@ -359,12 +368,12 @@ function checkDefinitions(set) {
     if (mapped.has(doc.name) || !doc.builtIn) continue;
     const suggestion = suggestIcon(set, doc);
     const hint = suggestion
-      ? ` Suggested: astryx experimental icon map ${doc.name} ${suggestion.icon}.`
+      ? ` Suggested: astryx experimental icon map ${doc.name} ${suggestion.icon} --set ${set.name}.`
       : '';
     issues.push(
       issueError(
         ICON_BUILTIN_DEFINITION_MISSING,
-        `${label} maps no icon to the built-in icon definition "${doc.name}" (${doc.description} Words: ${doc.words.join(', ')}.). Every set maps every built-in definition: run \`astryx experimental icon map ${doc.name} <icon id>\` with the icon that draws it${findHint(set, doc)}.${hint}`,
+        `${label} maps no icon to the built-in icon definition "${doc.name}" (${doc.description} Words: ${doc.words.join(', ')}.). Every set maps every built-in definition: run \`astryx experimental icon map ${doc.name} <icon id> --set ${set.name}\` with the icon that draws it${findHint(set, doc)}.${hint}`,
       ),
     );
   }
@@ -382,7 +391,7 @@ function checkDefinitions(set) {
       issues.push(
         issueWarning(
           ICON_DEFINITION_UNUSED,
-          `${label} declares the icon definition "${doc.name}", but "map" names no icon for it. Map it with \`astryx experimental icon map ${doc.name} <icon id>\`, or remove definitions/${doc.name}.doc.mjs.${suggestion ? ` Suggested: astryx experimental icon map ${doc.name} ${suggestion.icon}.` : ''}`,
+          `${label} declares the icon definition "${doc.name}", but "map" names no icon for it. Map it with \`astryx experimental icon map ${doc.name} <icon id> --set ${set.name}\`, or remove definitions/${doc.name}.doc.mjs.${suggestion ? ` Suggested: astryx experimental icon map ${doc.name} ${suggestion.icon} --set ${set.name}.` : ''}`,
         ),
       );
     }
@@ -401,6 +410,10 @@ function checkDefinitions(set) {
  *   {@link suggestedIcons} gives, if any
  * @property {IconSetUnchecked[]} unchecked what the checks could not judge:
  *   never counted, never failing, even under `--strict`
+ * @property {{unmapped: import('./template-icon-meanings.mjs').TemplateMeaning[]}} [templateMeanings]
+ *   the icon definitions the bundled templates use that the set's `map` does
+ *   not name, most used first: a copied template renders a placeholder for
+ *   each. Never counted, never failing
  */
 
 /**
@@ -410,9 +423,16 @@ function checkDefinitions(set) {
  * @param {{name: string, iconSets?: string}} loaded
  * @param {Map<string, IconSetUnchecked[]>} [unchecked] what
  *   {@link iconSetIssues} could not judge, by set name
+ * @param {import('./template-icon-meanings.mjs').TemplateMeaning[]} [templateMeanings]
+ *   the definitions the bundled templates use; each set lists the ones it
+ *   leaves unmapped
  * @returns {IconSetCoverage[]}
  */
-export function iconSetCoverage(loaded, unchecked = new Map()) {
+export function iconSetCoverage(
+  loaded,
+  unchecked = new Map(),
+  templateMeanings,
+) {
   if (!loaded.iconSets) return [];
   const found = discoverIconSetDirectory(loaded.iconSets, loaded.name);
   const astryx = astryxIconDefinitions().definitions.map(each => each.doc);
@@ -441,6 +461,16 @@ export function iconSetCoverage(loaded, unchecked = new Map()) {
           : [];
       }),
       unchecked: unchecked.get(set.name) ?? [],
+      ...(templateMeanings
+        ? {
+            templateMeanings: {
+              unmapped: unmappedTemplateMeanings(
+                templateMeanings,
+                set.data.map,
+              ),
+            },
+          }
+        : {}),
     };
   });
 }
@@ -538,13 +568,7 @@ export function suggestedIcons(set, doc) {
     ...nameWords,
     ...wordIds.flatMap(id => id.split('-')).map(stem),
   ]);
-  const icons = set.data.icons.map(icon => ({
-    id: icon.id,
-    words: icon.id.split('-').map(stem),
-    raw: icon.id.split('-'),
-    // The library's other names for it, the same ones `map` accepts.
-    other: otherNamesOf(icon),
-  }));
+  const icons = suggestionIndex(set.data.icons);
   /** How many of the definition's words an id has: more is a better fit. */
   const fit = (/** @type {string[]} */ words) =>
     words.filter(word => meaning.has(word)).length;
@@ -594,27 +618,47 @@ export function suggestedIcons(set, doc) {
   }
   // 3. Ids that start with the name as written (`video` → `video-camera`),
   //    never a negated form. A plural is not the same start: `users` is not
-  //    `user-plus`, and `apps` is not `app-window`.
+  //    `user-plus`, and `apps` is not `app-window`. Only an id whose other
+  //    words are the definition's words, or a size, shape, or number, comes
+  //    here; one whose other words name something else (`delete-left`, a
+  //    key) comes after the icons the definition's words name.
   const nameRaw = nameId.split('-');
-  ranked(
+  const startsWithName = ranked(
     icons.filter(
       icon =>
         icon.raw.length > nameRaw.length &&
         nameRaw.every((word, index) => icon.raw[index] === word) &&
         !negated(icon.raw.slice(nameRaw.length)),
     ),
-  ).forEach(icon => add(icon.id, nameId));
+  );
+  const onlyMeaning = (/** @type {{raw: string[]}} */ icon) =>
+    icon.raw
+      .slice(nameRaw.length)
+      .every(word => meaning.has(stem(word)) || QUALIFIER_RE.test(word));
+  startsWithName.filter(onlyMeaning).forEach(icon => add(icon.id, nameId));
+  // A word another Astryx definition also has (`store` for save and for a
+  // shopping bag) does not say which one an icon draws: the words only this
+  // definition has come first.
+  const shared = sharedWords(doc.name);
+  const wordOrder = [
+    ...[...wordIds.keys()].filter(index => !shared.has(wordIds[index])),
+    ...[...wordIds.keys()].filter(index => shared.has(wordIds[index])),
+  ];
   // 4. An icon whose whole id is one of the definition's words.
-  for (const id of wordIds) {
+  for (const index of wordOrder) {
+    const id = wordIds[index];
     if (icons.some(icon => icon.id === id)) add(id, id.replace(/-/gu, ' '));
   }
   // 5. Another name the library gives an icon that is one of the
   //    definition's words (Lucide's `smile` on `face-slightly-smiling`).
-  for (const [index, id] of wordIds.entries()) {
+  for (const index of wordOrder) {
     for (const icon of icons) {
-      if (icon.other.includes(id)) add(icon.id, doc.words[index]);
+      if (icon.other.includes(wordIds[index])) add(icon.id, doc.words[index]);
     }
   }
+  startsWithName
+    .filter(icon => !onlyMeaning(icon))
+    .forEach(icon => add(icon.id, nameId));
   // 6. Last, two-word ids that are a one-word word with only a size, shape,
   //    or number after it (`columns` → `columns-3`, `plus` → `plus-circle`,
   //    `grid` → `grid-2x2`), best fit first. Any other second word names
@@ -634,6 +678,48 @@ export function suggestedIcons(set, doc) {
     ).forEach(icon => add(icon.id, word));
   }
   return found.slice(0, SUGGESTIONS_PER_DEFINITION);
+}
+
+/**
+ * The words, written as ids, that another Astryx definition than `name` also
+ * has as its name or one of its words.
+ * @param {string} name
+ * @returns {Set<string>}
+ */
+function sharedWords(name) {
+  /** @type {Set<string>} */
+  const shared = new Set();
+  for (const {doc} of astryxIconDefinitions().definitions) {
+    if (doc.name === name) continue;
+    shared.add(doc.name.replace(/([a-z0-9])([A-Z])/gu, '$1-$2').toLowerCase());
+    for (const word of doc.words) {
+      shared.add(word.trim().toLowerCase().replace(/\s+/gu, '-'));
+    }
+  }
+  return shared;
+}
+
+/**
+ * Each icon as the suggestion rules read it: its id's words as written and
+ * in singular form, and the library's other names for it (the same ones
+ * `map` accepts). Built once per list of icons, so suggesting for every
+ * definition of a large library reads each icon once.
+ * @type {WeakMap<object, Array<{id: string, words: string[], raw: string[], other: string[]}>>}
+ */
+const suggestionIndexes = new WeakMap();
+
+/** @param {Array<{id: string, words?: string[]}>} list */
+function suggestionIndex(list) {
+  const cached = suggestionIndexes.get(list);
+  if (cached) return cached;
+  const index = list.map(icon => ({
+    id: icon.id,
+    words: icon.id.split('-').map(stem),
+    raw: icon.id.split('-'),
+    other: otherNamesOf(icon),
+  }));
+  suggestionIndexes.set(list, index);
+  return index;
 }
 
 /**
@@ -807,6 +893,8 @@ function checkExports(set, packageDir, packageName, unchecked) {
   }
   /** @type {Map<string, {file: string, name: string} | null>} */
   const iconOrigins = new Map();
+  /** @type {Map<string, Map<string, {file: string, name: string} | null>>} each icon's variant origins, by variant */
+  const variantOrigins = new Map();
   for (const icon of set.data.icons) {
     const module = icon.module ?? set.data.module;
     if (wiring && module === set.data.module) continue;
@@ -814,14 +902,20 @@ function checkExports(set, packageDir, packageName, unchecked) {
       icon.id,
       originOf(module, icon.export, `icon "${icon.id}"`, {icon: icon.id}),
     );
+    /** @type {Map<string, {file: string, name: string} | null>} */
+    const looks = new Map();
     for (const variant of icon.variants ?? []) {
-      originOf(
-        variant.module ?? module,
-        variant.export,
-        `a variant of icon "${icon.id}"`,
-        {icon: icon.id},
+      looks.set(
+        variant.variant,
+        originOf(
+          variant.module ?? module,
+          variant.export,
+          `a variant of icon "${icon.id}"`,
+          {icon: icon.id},
+        ),
       );
     }
+    variantOrigins.set(icon.id, looks);
   }
 
   /** @type {Map<string, {id: string, origin: {file: string, name: string} | null}>} */
@@ -852,65 +946,169 @@ function checkExports(set, packageDir, packageName, unchecked) {
   );
   const file = fileOf(set.data.module);
   if (!mapOrigin || !file) return issues;
-  const bindings = staticExportBindings(file, themeMap);
-  // A theme map built at runtime cannot be read, so it is not checked.
-  if (!bindings) {
-    unchecked.push({
-      entry: themeMap,
-      reason: `Theme map "${themeMap}" is not one object literal the static reader can read, so none of its entries were checked. Export it as \`export const ${themeMap} = {...}\` to have it checked.`,
-    });
+
+  /**
+   * Hold one theme map to the built-in entries of `map`: the same keys, each
+   * drawing the artwork `expected` names for it.
+   * @param {string} name the theme map's export
+   * @param {(name: string, filler: {id: string, origin: {file: string, name: string} | null}) => {origin: {file: string, name: string} | null, what: string, fix: string}} expected
+   *   for each entry, the origin it must draw, what that is, and the fix
+   */
+  const compareThemeMap = (name, expected) => {
+    const bindings = staticExportBindings(file, name);
+    // A theme map built at runtime cannot be read, so it is not checked.
+    if (!bindings) {
+      unchecked.push({
+        entry: name,
+        reason: `Theme map "${name}" is not one object literal the static reader can read, so none of its entries were checked. Export it as \`export const ${name} = {...}\` to have it checked.`,
+      });
+      return;
+    }
+    for (const key of bindings.keys()) {
+      if (!fillers.has(key)) {
+        issues.push(
+          issueError(
+            ICON_THEME_MAP_MISMATCH,
+            `${label}: theme map "${name}" has "${key}", which "map" does not map. Remove it, or add "${key}" to "map" with the id of the icon that draws it.`,
+          ),
+        );
+      }
+    }
+    for (const [definition, filler] of fillers) {
+      if (!bindings.has(definition)) {
+        issues.push(
+          issueError(
+            ICON_THEME_MAP_MISMATCH,
+            `${label}: theme map "${name}" has no "${definition}", which "map" maps to icon "${filler.id}". Add it.`,
+          ),
+        );
+        continue;
+      }
+      const value = bindings.get(definition);
+      if (!value) {
+        unchecked.push({
+          entry: definition,
+          reason: `Theme map "${name}" has an entry for "${definition}" the static reader cannot read. Write it as the icon's binding (${definition}: TrashIcon), an element (<TrashIcon />), or createElement(TrashIcon) to have it checked.`,
+        });
+        continue;
+      }
+      const want = expected(definition, filler);
+      if (!want.origin) continue;
+      // Compare the bindings each finally names: \`const XIcon = X\` is X. A
+      // mismatch is reported only when both are followed to their declarations.
+      const mapped = aliasedOrigin(value);
+      const drawn = aliasedOrigin(want.origin);
+      if (!mapped || !drawn) {
+        unchecked.push({
+          entry: definition,
+          reason: `Theme map "${name}" maps "${definition}" through an alias the static reader cannot follow to its declaration, so it was not compared with ${want.what}. ${want.fix}, or alias a binding declared in this package.`,
+        });
+        continue;
+      }
+      if (mapped.file !== drawn.file || mapped.name !== drawn.name) {
+        issues.push(
+          issueError(
+            ICON_THEME_MAP_MISMATCH,
+            `${label}: theme map "${name}" maps "${definition}" to other artwork than ${want.what}, which "map" names for it. ${want.fix}.`,
+          ),
+        );
+      }
+    }
+  };
+
+  compareThemeMap(themeMap, (_, filler) => ({
+    origin: filler.origin,
+    what: `icon "${filler.id}"`,
+    fix: "Point it at the icon's export",
+  }));
+
+  // A look an icon draws has its own theme map in the generated module
+  // (`themeIconsFilled`), keyed like `themeIcons`: each entry draws the
+  // icon's export for that variant, or its own export when it has none.
+  const lookMaps = variantThemeMaps(set.data);
+  if (lookMaps.length === 0) return issues;
+  const generated = /** @type {string} */ (set.data.generated);
+  const generatedFile = path.join(packageDir, generated);
+  if (!fs.existsSync(generatedFile)) return issues;
+  /** @type {string[]} */
+  let statements;
+  try {
+    statements = readGeneratedStatements(
+      fs.readFileSync(generatedFile, 'utf-8'),
+      generated,
+    );
+  } catch {
     return issues;
   }
-  for (const key of bindings.keys()) {
-    if (!fillers.has(key)) {
+  const sources = generatedOrigins(packageDir, generated);
+  const byId = new Map(set.data.icons.map(icon => [icon.id, icon]));
+  for (const {variant, name} of lookMaps) {
+    if (!statements.some(line => line.startsWith(`export const ${name} = `))) {
       issues.push(
         issueError(
           ICON_THEME_MAP_MISMATCH,
-          `${label}: theme map "${themeMap}" has "${key}", which "map" does not map. Remove it, or add "${key}" to "map" with the id of the icon that draws it.`,
-        ),
-      );
-    }
-  }
-  for (const [name, filler] of fillers) {
-    if (!bindings.has(name)) {
-      issues.push(
-        issueError(
-          ICON_THEME_MAP_MISMATCH,
-          `${label}: theme map "${themeMap}" has no "${name}", which "map" maps to icon "${filler.id}". Add it.`,
+          `${label}: its generated module ${generated} has no theme map "${name}", which draws the built-in icons in the ${variant} look an icon draws. Rewrite the module: \`${lookRewriteCommand(set, variant, sources)}\`.`,
         ),
       );
       continue;
     }
-    const value = bindings.get(name);
-    if (!value) {
+    const found = exportOriginVerdict(file, name);
+    if (found?.verdict === 'unknown') {
       unchecked.push({
         entry: name,
-        reason: `Theme map "${themeMap}" has an entry for "${name}" the static reader cannot read. Write it as the icon's binding (${name}: TrashIcon), an element (<TrashIcon />), or createElement(TrashIcon) to have it checked.`,
+        reason: `Theme map "${name}" is in ${generated}, but this check could not prove "${set.data.module}" exports it: ${found.reason}`,
       });
       continue;
     }
-    if (!filler.origin) continue;
-    // Compare the bindings each finally names: \`const XIcon = X\` is X. A
-    // mismatch is reported only when both are followed to their declarations.
-    const mapped = aliasedOrigin(value);
-    const drawn = aliasedOrigin(filler.origin);
-    if (!mapped || !drawn) {
-      unchecked.push({
-        entry: name,
-        reason: `Theme map "${themeMap}" maps "${name}" through an alias the static reader cannot follow to its declaration, so it was not compared with icon "${filler.id}". Point it at the icon's export, or alias a binding declared in this package.`,
-      });
-      continue;
-    }
-    if (mapped.file !== drawn.file || mapped.name !== drawn.name) {
+    if (found?.verdict !== 'exports') {
       issues.push(
         issueError(
-          ICON_THEME_MAP_MISMATCH,
-          `${label}: theme map "${themeMap}" maps "${name}" to other artwork than icon "${filler.id}", which "map" names for it. Point it at the icon's export.`,
+          ICON_EXPORT_MISSING,
+          `${label}: theme map "${name}" is in ${generated}, but "${set.data.module}" does not export it. Export it from the package's entry, as it exports "${themeMap}".`,
         ),
       );
+      continue;
     }
+    compareThemeMap(name, (_, filler) => {
+      const icon = byId.get(filler.id);
+      const own = icon?.variants?.find(each => each.variant === variant);
+      return own
+        ? {
+            origin: variantOrigins.get(filler.id)?.get(variant) ?? null,
+            what: `the ${variant} variant of icon "${filler.id}"`,
+            fix: `Point it at ${own.export}, the icon's ${variant} export`,
+          }
+        : {
+            origin: filler.origin,
+            what: `icon "${filler.id}", which has no ${variant} variant`,
+            fix: "Point it at the icon's export",
+          };
+    });
   }
   return issues;
+}
+
+/**
+ * The command that rewrites a set's generated module with its theme map for
+ * one look: `add --variant <variant> --all` from the module most of that
+ * look's exports come from, which writes the module again.
+ * @param {DiscoveredIconSet} set
+ * @param {string} variant
+ * @param {Map<string, {module: string, source: string, adapt: boolean}>} origins
+ *   where each export of the generated module comes from
+ */
+function lookRewriteCommand(set, variant, origins) {
+  /** @type {Map<string, number>} */
+  const counts = new Map();
+  for (const icon of set.data.icons) {
+    const own = icon.variants?.find(each => each.variant === variant);
+    const from = own ? origins.get(own.export)?.module : undefined;
+    if (from) counts.set(from, (counts.get(from) ?? 0) + 1);
+  }
+  const module = [...counts].sort(
+    (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+  )[0]?.[0];
+  return `astryx experimental icon add --variant ${shellArg(variant)} --from ${module ? shellArg(module) : '<module>'} --all --set ${shellArg(set.name)}`;
 }
 
 /** The lowest search score a find hint needs: a whole word or a word start. */
@@ -934,10 +1132,10 @@ function findHint(set, doc) {
       each => each.score >= FIND_FLOOR,
     );
     if (found.length > 0) {
-      return ` (icons matching "${query}": \`astryx experimental icon ${query} --set ${set.name}\`)`;
+      return ` (icons matching "${query}": \`astryx experimental icon ${shellArg(query)} --set ${set.name}\`)`;
     }
   }
-  return ' (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with `astryx experimental icon add <Name> --from ./src/icons/<name>.js --definition <definition>`)';
+  return ` (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with \`astryx experimental icon add <Name> --from ./src/icons/<name>.js --definition ${doc.name} --set ${set.name}\`)`;
 }
 
 /**
@@ -983,14 +1181,11 @@ function checkUpstream(set, packageDir, pkg) {
       ),
     );
   }
-  const rootNotices = safeList(packageDir).filter(name =>
-    NOTICE_FILE_RE.test(name),
-  );
-  if (set.notices.length === 0 && rootNotices.length === 0) {
+  if (!hasLicenseNotice(set.dir) && !hasLicenseNotice(packageDir)) {
     issues.push(
       issueWarning(
         ICON_LICENSE_NOTICE_MISSING,
-        `${label} is generated from ${source.package} but ships no license notice. Copy the library's LICENSE (and NOTICE, if any) into the set directory or the package root.`,
+        `${label} is generated from ${source.package}@${source.version} but ships no license notice. ${licenseNoticeFix(path.relative(packageDir, set.dir).split(path.sep).join('/'), `${source.package}@${source.version}`)} If the library ships a LICENSE or NOTICE file, copy that file there instead.`,
       ),
     );
   }
@@ -1004,14 +1199,5 @@ function safeSatisfies(version, range) {
   } catch {
     // A range this reader cannot judge is not reported.
     return true;
-  }
-}
-
-/** @param {string} dir */
-function safeList(dir) {
-  try {
-    return fs.readdirSync(dir);
-  } catch {
-    return [];
   }
 }

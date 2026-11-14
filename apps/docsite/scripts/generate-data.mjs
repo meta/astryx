@@ -20,6 +20,7 @@
  *   - blogRegistry.ts      — blog posts (plus canary-only test fixtures)
  *   - blogExampleAssets.ts — each post's live-example assets, loaded on demand
  *   - searchLinks.json     — search destinations and document presentation metadata
+ *   - searchIndex.ts       — the candidates the search API ranks
  */
 
 import * as fs from 'node:fs';
@@ -35,9 +36,11 @@ import {
   GUIDE_NAMESPACE_PAGES,
   GUIDE_PAGE_NAMESPACES,
   ROOT_PAGE_ALIASES,
+  applySidebarParents,
   movedGuideRedirects,
   mergeFlatTopics,
   namespacePage,
+  rootNamespacePages,
   routeSlug,
   sectionAnchors,
   withCliCommands,
@@ -1854,9 +1857,11 @@ export const templateMetadataCount = ${templateMetadata.length};
  * The docsite pages of the CLI's docs tree, read through the CLI's public docs
  * API. Every root namespace is one full page at its own slug (docs-pages.mjs),
  * so splitting a flat topic into a namespace keeps its URL, sidebar spot and
- * text; the guides under it redirect to their sections on that page. A root
- * namespace in GUIDE_PAGE_NAMESPACES shows the pages GUIDE_NAMESPACE_PAGES
- * lists, the same way one level down, and its other guides keep a page each.
+ * text; the guides under it redirect to their sections on that page. A nested
+ * namespace in NESTED_NAMESPACE_PAGES is a page of its own instead, under its
+ * root's page in the sidebar. A root namespace in GUIDE_PAGE_NAMESPACES shows
+ * the pages GUIDE_NAMESPACE_PAGES lists, the same way one level down, and its
+ * other guides keep a page each.
  */
 async function docsTreePages() {
   const pages = [];
@@ -1882,9 +1887,13 @@ async function docsTreePages() {
       continue;
     }
     routes.push(...(await treeRoutes(root)));
-    const full = await namespacePage(readDocs, root, {
+    const {root: full, nested} = await rootNamespacePages(readDocs, root, {
       aliases: ROOT_PAGE_ALIASES.get(root) ?? [],
     });
+    for (const page of nested) {
+      pages.push(page.page);
+      Object.assign(redirects, page.redirects);
+    }
     if (!full) continue;
     pages.push(full.page);
     Object.assign(
@@ -2022,6 +2031,7 @@ async function generateDocsRegistry() {
     }
     docTopics.push(page);
   }
+  applySidebarParents(docTopics);
   const docsTreeRoutes = [...new Set(tree.routes)].sort();
   const docRedirects = Object.fromEntries(
     Object.entries({...merged.redirects, ...tree.redirects}).sort(([a], [b]) =>
@@ -2095,6 +2105,8 @@ export interface DocTopic {
   description: string;
   /** Navigation category: 'guide' | 'foundations' | null */
   category: string | null;
+  /** Slug of the page the sidebar shows this page under, if any */
+  parent?: string;
   /** Full doc sections with content blocks */
   sections: DocSection[];
 }
@@ -2157,6 +2169,21 @@ function generateSearchLinks({
   );
   console.log(
     `  wrote ${path.relative(REPO_ROOT, path.join(OUT_DIR, 'searchLinks.json'))}`,
+  );
+}
+
+/**
+ * The candidates the search API ranks (generate-search-index.mjs). A process
+ * of its own gathers them. This process reads docs with the site's package
+ * manager, and the CLI keeps the docs it has read. `astryx search` reads them
+ * with this project's package manager.
+ */
+function generateSearchIndex() {
+  console.log('Generating search index...');
+  execFileSync(
+    process.execPath,
+    [path.join(__dirname, 'generate-search-index.mjs')],
+    {stdio: 'inherit'},
   );
 }
 
@@ -2453,6 +2480,13 @@ ${itemPathLines}
 // demos read as one set; any other example blocks follow in name order.
 const DOC_EXAMPLE_ORDER = new Map();
 
+// Setup examples (`kind: 'setup'`), per documented component or sub-component.
+// They do not run on their own: an app setup file, a server route, or a
+// snippet that uses variables defined elsewhere. The page shows them as code
+// only, and never gives one a live preview, not even through a block of the
+// same name.
+const DOC_SETUP_EXAMPLES = new Map();
+
 function recordDocExampleOrder(doc) {
   const entries = [
     doc,
@@ -2465,7 +2499,24 @@ function recordDocExampleOrder(doc) {
       .map(example => example?.label)
       .filter(label => typeof label === 'string');
     if (labels.length > 0) DOC_EXAMPLE_ORDER.set(name, labels);
+    const setup = entry.examples
+      .filter(
+        example =>
+          example?.kind === 'setup' && typeof example.code === 'string',
+      )
+      .map(example => ({
+        label: typeof example.label === 'string' ? example.label : 'Setup',
+        code: example.code,
+      }));
+    if (setup.length > 0) DOC_SETUP_EXAMPLES.set(name, setup);
   }
+}
+
+/** Whether a block is named after one of its component's setup examples. */
+function isSetupExampleBlock(component, blockName) {
+  return (DOC_SETUP_EXAMPLES.get(component) ?? []).some(
+    example => example.label === blockName,
+  );
 }
 
 /** Sorts one component's examples by its doc's example order (stable). */
@@ -2508,7 +2559,15 @@ function generateExampleRegistry(blocks, availableRegistryPaths) {
       ? `integration-${block.dirName}`
       : block.dirName;
 
-    if (!block.isShowcase && block.exampleFor) {
+    if (
+      !block.isShowcase &&
+      block.exampleFor &&
+      isSetupExampleBlock(block.exampleFor, block.name || block.dirName)
+    ) {
+      console.log(
+        `  skipping live preview for ${block.dirName} — its doc example is a setup example`,
+      );
+    } else if (!block.isShowcase && block.exampleFor) {
       const destFile = writeBlockPreview(block, EXAMPLES_OUT, base);
       if (destFile) {
         entries.push({
@@ -2524,6 +2583,7 @@ function generateExampleRegistry(blocks, availableRegistryPaths) {
     }
 
     for (const target of block.alsoExampleFor ?? []) {
+      if (isSetupExampleBlock(target, block.name || block.dirName)) continue;
       const basename = `${base}__${target}`;
       const destFile = writeBlockPreview(block, EXAMPLES_OUT, basename);
       if (destFile) {
@@ -2573,6 +2633,14 @@ export interface ExampleEntry {
 export const exampleRegistry: Record<string, ExampleEntry[]> = {
 ${componentLines}
 };
+
+/** A doc example with \`kind: 'setup'\`: shown as code only, never live. */
+export interface SetupExampleEntry {
+  label: string;
+  code: string;
+}
+
+export const setupExampleRegistry: Record<string, SetupExampleEntry[]> = ${JSON.stringify(Object.fromEntries(DOC_SETUP_EXAMPLES), null, 2)};
 `;
 
   writeRegistry('exampleRegistry.ts', registryContent);
@@ -2767,6 +2835,7 @@ async function main() {
   const {templates, templateCount} = await generateTemplateRegistry();
   const {docTopics, docsCount} = await generateDocsRegistry();
   generateSearchLinks({docTopics, allComponents, templates, blocks, packages});
+  generateSearchIndex();
   const {blogPostCount} = await generateBlogRegistry();
   const shadcnCounts = generateShadcnRegistryForTarget({
     target: DOCSITE_TARGET,

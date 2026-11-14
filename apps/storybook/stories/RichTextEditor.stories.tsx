@@ -2,6 +2,7 @@
 
 import {useId, useRef, useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
+import * as stylex from '@stylexjs/stylex';
 import {
   RichTextEditor,
   RichTextView,
@@ -27,6 +28,13 @@ import {
 import {MarkdownPluginsImportExport as MarkdownPluginsImportExportStory} from './RichTextEditor.markdownPluginsImportExport';
 import {MarkdownPluginsSandbox} from './RichTextEditor.markdownPlugins';
 import {RichTextEditorPlayground} from './RichTextEditor.playground';
+
+const styles = stylex.create({
+  // Room above the toolbar for the link popover, which opens above it.
+  roomAbove: {
+    paddingBlockStart: 120,
+  },
+});
 
 const meta: Meta<typeof RichTextEditor> = {
   title: 'RichText/RichTextEditor',
@@ -162,6 +170,29 @@ export const WithLinks: Story = {
     // baked into the node). No extra plugin needed.
     toolbar: <RichTextEditorToolbar />,
   },
+  // The link popover opens above the toolbar when there is room.
+  decorators: [
+    Story => (
+      <div {...stylex.props(styles.roomAbove)}>
+        <Story />
+      </div>
+    ),
+  ],
+};
+
+/**
+ * The toolbar at the top of the page, with no room above it: the link
+ * popover flips below the toolbar.
+ */
+export const WithLinksNoRoomAbove: Story = {
+  args: {
+    label: 'Notes',
+    isLabelHidden: true,
+    placeholder:
+      'Select text and press the Link button (or Cmd/Ctrl+K) to add a link…',
+    toolbar: <RichTextEditorToolbar />,
+  },
+  parameters: {layout: 'fullscreen'},
 };
 
 export const WithAutoLink: Story = {
@@ -244,6 +275,30 @@ export const ReadOnly: Story = {
   },
 };
 
+/** A disabled editor and toolbar with formatted content. */
+export const Disabled: Story = {
+  args: {
+    label: 'Notes',
+    isDisabled: true,
+    toolbar: <RichTextEditorToolbar />,
+    defaultValue: markdownToEditorStateJSON(
+      'A **disabled** editor keeps its *formatted* text.\n',
+    ),
+  },
+};
+
+/** A disabled editor whose content holds a link. */
+export const DisabledWithLink: Story = {
+  name: 'Disabled with a link',
+  args: {
+    label: 'Notes',
+    isDisabled: true,
+    defaultValue: markdownToEditorStateJSON(
+      'Read [the guide](https://example.com/guide) before you edit.\n',
+    ),
+  },
+};
+
 const SEED = JSON.stringify({
   root: {
     children: [
@@ -303,6 +358,55 @@ export const ControlledPersistence = {
           </div>
           <RichTextView value={json} />
         </div>
+      </div>
+    );
+  },
+};
+
+const IMAGE_SOURCE_MARKDOWN = [
+  'Chart: ![](https://example.com/chart.png) and ![Weekly chart](https://example.com/weekly.png "Week 44") above.',
+  '',
+  '![Diagram](<https://example.com/system diagram.png>)',
+  '',
+  'Type in this paragraph.',
+  '',
+].join('\n');
+
+/**
+ * RichText has no image node: an image shows as its Markdown source, one token
+ * that is deleted whole, and getMarkdown() writes it back as written through
+ * any edit around it (spec:AST-062 FR5). The readout updates as you type.
+ */
+export const ImageSourceThroughEdits = {
+  render: () => {
+    const ref = useRef<RichTextEditorRef>(null);
+    const [seed] = useState(() =>
+      markdownToEditorStateJSON(IMAGE_SOURCE_MARKDOWN),
+    );
+    const [markdown, setMarkdown] = useState(IMAGE_SOURCE_MARKDOWN);
+    return (
+      <div style={{display: 'grid', gap: 16, maxWidth: 640}}>
+        <RichTextEditor
+          ref={ref}
+          label="Notes with images"
+          defaultValue={seed}
+          plugins={<RichTextEditorAutoLinkPlugin />}
+          onChange={() => setMarkdown(ref.current?.getMarkdown() ?? '')}
+        />
+        <pre
+          data-image-source-readout
+          style={{
+            background: 'var(--color-background-muted)',
+            color: 'var(--color-text-primary)',
+            padding: 12,
+            borderRadius: 6,
+            fontSize: 13,
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            margin: 0,
+          }}>
+          {markdown}
+        </pre>
       </div>
     );
   },
