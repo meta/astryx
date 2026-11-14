@@ -455,6 +455,15 @@ function pageChanges(source, html, modules) {
  */
 export function reverseToFile({cwd, input, output, overwrite}) {
   const html = readInput(input, cwd).toString('utf8');
+  // A merge that left conflict markers holds two versions at once, the
+  // embedded source too: choosing one would choose for the user.
+  if (/^<{7}(?: |$)/m.test(html) && /^>{7}(?: |$)/m.test(html)) {
+    throw new AstryxError(
+      `${shown(cwd, input)} holds unresolved merge conflict markers (<<<<<<< and >>>>>>>), so it holds two versions at once; nothing was written. Keep one side's whole file, or render the merged page again, then run this again.`,
+      [],
+      ERROR_CODES.ERR_RENDER_SOURCE_DAMAGED,
+    );
+  }
   const block = readSourceBlock(html);
   /** @param {string[]} files */
   const refuseExisting = files => {
@@ -641,9 +650,20 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       ...pageChanges(source, html, modules),
     };
   }
+  const rendered = /<meta name="generator" content="Astryx[ "]/.test(html);
+  // A render always ends its file with `</html>`. A file a render wrote that
+  // ends before then lost its end on the way, the embedded source with it:
+  // the markup left is only part of the page.
+  if (rendered && !/<\/html>\s*$/i.test(html)) {
+    throw new AstryxError(
+      `${shown(cwd, input)} is cut short: it ends before its embedded source, so the page cannot be given back; nothing was written. Get the whole file again.`,
+      [],
+      ERROR_CODES.ERR_RENDER_SOURCE_DAMAGED,
+    );
+  }
   // A file a render wrote, whose source block was taken out on the way
   // (sanitizers and editors strip <script> elements), says so.
-  if (!isAstryxMarkup(html) && /<meta name="generator" content="Astryx[ "]/.test(html)) {
+  if (!isAstryxMarkup(html) && rendered) {
     throw new AstryxError(
       `${shown(cwd, input)} was rendered by Astryx, but its embedded source was removed (a sanitizer or an editor strips <script> blocks) and it has no Astryx components to rebuild from; nothing was written. Render the page again from its source and send the new file as is.`,
       [],

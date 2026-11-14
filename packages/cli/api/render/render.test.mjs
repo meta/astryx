@@ -205,6 +205,36 @@ describe('render(): page to one HTML file', () => {
       'ERR_RENDER_SOURCE_DAMAGED',
     );
   });
+
+  it('refuses a rendered file cut short before its embedded source, instead of rebuilding part of the page', async () => {
+    put('cut-short.html', html.slice(0, html.indexOf('<script type="application/x-astryx-source"') - 40));
+    /** @type {any} */
+    let refused;
+    try {
+      await render('cut-short.html', {cwd: dir, reverse: true, out: 'cut-short-back/page.tsx'});
+    } catch (e) {
+      refused = e;
+    }
+    expect(refused?.code).toBe('ERR_RENDER_SOURCE_DAMAGED');
+    expect(refused.message).toContain('cut-short.html is cut short');
+    expect(fs.existsSync(path.join(dir, 'cut-short-back'))).toBe(false);
+  });
+
+  it('refuses a file a merge left with conflict markers, instead of choosing a side', async () => {
+    const lines = html.split('\n');
+    const at = lines.findIndex(line => line.includes('application/x-astryx-source'));
+    put('conflicted.html', [...lines.slice(0, at), '<<<<<<< HEAD', lines[at], '=======', lines[at], '>>>>>>> theirs', ...lines.slice(at + 1)].join('\n'));
+    /** @type {any} */
+    let refused;
+    try {
+      await render('conflicted.html', {cwd: dir, reverse: true, out: 'conflicted-back/page.tsx'});
+    } catch (e) {
+      refused = e;
+    }
+    expect(refused?.code).toBe('ERR_RENDER_SOURCE_DAMAGED');
+    expect(refused.message).toContain('merge conflict markers');
+    expect(fs.existsSync(path.join(dir, 'conflicted-back'))).toBe(false);
+  });
 });
 
 describe('render(): embedded files stay inside the current folder', () => {
