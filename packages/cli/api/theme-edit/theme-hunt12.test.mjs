@@ -76,7 +76,22 @@ describe('a theme name with a space', () => {
     await themeEditNew('my-theme', {cwd});
     const {refusal} = await import('../../test-utils/theme-edit-fixture.mjs');
     const r = await refusal(() => themeEditUndo('My Theme', {cwd}));
-    expect(r.run[0]).toMatch(/ show my-theme$/);
+    // The same undo, with the theme's name.
+    expect(r.run[0]).toMatch(/ undo my-theme$/);
     expect(r.message).not.toMatch(/more than one theme/);
+    // A name that starts with a label word is still one name: "Theme Park"
+    // is theme-park, never a label on "Park".
+    await themeEditNew('theme-park', {cwd});
+    const park = await refusal(() => themeEditUndo('Theme Park', {cwd}));
+    expect(park.run[0]).toMatch(/ undo theme-park$/);
+    expect(park.run.join(' ')).not.toMatch(/ new park/);
+    // With park there too, a pasted label names park, as --theme does.
+    await themeEditNew('park', {cwd});
+    for (const typed of ['theme: park', '--theme park']) {
+      const r2 = await refusal(() => themeEditUndo(typed, {cwd}));
+      expect(r2.run[0], typed).toMatch(/ undo park$/);
+    }
+    const both = await refusal(() => themeEditUndo('Theme Park', {cwd}));
+    expect(both.run[0]).toMatch(/ undo theme-park$/);
   }, 240_000);
 });

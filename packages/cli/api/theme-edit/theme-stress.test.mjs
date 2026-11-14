@@ -752,8 +752,9 @@ describe('review fixes', () => {
       'not applied in a dark-only theme',
     );
     expect(r.data.changedTokens.join(' ')).not.toContain('#bbbbbb');
+    // Both halves stay: the mode is the one the app's <Theme> is given.
     expect(read('themes/om/om.settings.ts')).toMatch(
-      /"--color-accent": palette\.accent\.dark\[\d+\],/,
+      /"--color-accent": \[\s*palette\.accent\.light\[\d+\],\s*palette\.accent\.dark\[\d+\]/,
     );
     const show = await themeEditShow('om', {cwd});
     expect(

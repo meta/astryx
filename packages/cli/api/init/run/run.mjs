@@ -64,6 +64,7 @@ export function getNextSteps(invocation) {
     "       import { themes, defaultThemeSlug } from './astryx-themes'",
     '       <Theme theme={themes[defaultThemeSlug]}>...</Theme>',
     `       Extend an imported theme to customize it. Run \`${invocation} theme eject <slug>\` only to fork source.`,
+    `       To make or change a theme: the experimental theme editor, \`${invocation} experimental theme editor new <name> --like neutral\` (then editor set / editor how).`,
     `    5. ${invocation} --help for all commands`,
     '',
   ];

@@ -353,8 +353,8 @@ those contracts.
   `swipeBehavior` props only until they leave in 0.8.0 (`spec:AST-057`
   DEP-0017, CLN-0025): the released loader, the one `import()` of swipe code;
   the released row style; the role gate and the `commit` warning; the bridge
-  the loaded layer fills, the click guard, and the event forwarders into that
-  bridge; and the coexistence diagnostic. There is no
+  the loaded layer fills and the key forwarder into that bridge; and the
+  coexistence diagnostic. There is no
   install call, no public entry, and no public installed check; tests reset
   the modules through an internal hook only. A component's own touch logic is
   small glue in its own build over these modules. The gesture host attaches for
@@ -573,7 +573,10 @@ contracts.
   reads: "Stores values only. Refs to DOM nodes are not attached yet when this
   runs." Internal: never in `hooks/index.ts` or the package entry; Lab imports
   both from `@astryxdesign/core/internal/committed-ref`, as it reaches other
-  Core internals.
+  Core internals. Lab imports `createSharedContext`, its one export, from
+  `@astryxdesign/core/internal/shared-context`, so a Lab component's context
+  reaches a swizzled copy's provider under one shared key (`spec:AST-110`
+  FR3).
 
 ## Deciding specs
 
