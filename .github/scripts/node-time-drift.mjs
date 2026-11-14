@@ -14,12 +14,16 @@
  * MIN_PEERS such files there is no baseline in the leg: the factor is 1, and
  * the output says so. A changed file fails when it ran
  * more than RATIO times its record × the leg factor, and more than MARGIN_S
- * seconds over that. A file with no recorded time counts as the median and is
- * not checked. The failure names the one entry to update and its value.
+ * seconds over that. A changed file with no recorded time under its own path
+ * fails when it ran more than NEW_FILE_S × the leg factor: the legs' split
+ * looks the record up by path, so it counts that file as the median until the
+ * path is recorded. That includes a renamed file, whose old entry the failure
+ * asks to move. Each failure names the one entry to add, move or update.
  *
  * @input --times <file> (the shard watchdog's per-file seconds),
  *   --changed <base> (the merge commit's first parent)
- * @output exit 1 and one error line per drifted file; exit 0 otherwise
+ * @output exit 1 and one error line per drifted or unrecorded file; exit 0
+ *   otherwise
  * @position .github/scripts — run by ci.yml's Node legs after their tests
  */
 
@@ -31,6 +35,7 @@ import {fileURLToPath, pathToFileURL} from 'node:url';
 export const RATIO = 1.5;
 export const MARGIN_S = 60;
 export const MIN_PEERS = 5;
+export const NEW_FILE_S = 60;
 const ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '../..',
@@ -94,6 +99,60 @@ export function drifted(measured, recorded, changed) {
     .sort((a, b) => b.measured - b.recorded - (a.measured - a.recorded));
 }
 
+/**
+ * Changed test files with no recorded time under their own path that ran more
+ * than NEW_FILE_S × the leg factor. A renamed file whose old path has a record
+ * names that path as `from`, so the entry can move.
+ * @param {Record<string, number>} measured
+ * @param {Record<string, number>} recorded
+ * @param {string[]} changed
+ * @param {Array<[string, string]>} [renames] [old, new] paths
+ */
+export function unrecorded(measured, recorded, changed, renames = []) {
+  const touched = new Set(changed);
+  const fromOf = new Map(renames.map(([from, to]) => [to, from]));
+  const {factor} = legFactor(measured, recorded, touched);
+  return Object.entries(measured)
+    .filter(
+      ([file, seconds]) =>
+        touched.has(file) &&
+        typeof recorded[file] !== 'number' &&
+        seconds > NEW_FILE_S * factor,
+    )
+    .map(([file, seconds]) => {
+      const from = fromOf.get(file);
+      return {
+        file,
+        measured: seconds,
+        factor: Math.round(factor * 100) / 100,
+        suggested: Math.round((seconds / factor) * 10) / 10,
+        ...(from && typeof recorded[from] === 'number'
+          ? {from, fromRecorded: recorded[from]}
+          : {}),
+      };
+    })
+    .sort((a, b) => b.measured - a.measured);
+}
+
+/**
+ * Changed paths and renames from `git diff --name-status -M`.
+ * @param {string} text
+ * @returns {{changed: string[], renames: Array<[string, string]>}}
+ */
+export function parseNameStatus(text) {
+  const changed = [];
+  /** @type {Array<[string, string]>} */
+  const renames = [];
+  for (const line of text.split('\n').filter(Boolean)) {
+    const [status, ...paths] = line.split('\t');
+    if (status.startsWith('R') && paths.length === 2) {
+      renames.push([paths[0], paths[1]]);
+      changed.push(paths[1]);
+    } else if (paths.length) changed.push(paths[paths.length - 1]);
+  }
+  return {changed, renames};
+}
+
 /** @param {string[]} args */
 function main(args) {
   const option = (/** @type {string} */ name) => args[args.indexOf(name) + 1];
@@ -110,18 +169,16 @@ function main(args) {
     return 0;
   }
   const measured = JSON.parse(fs.readFileSync(timesFile, 'utf8'));
+  const {changed, renames} = parseNameStatus(
+    execFileSync(
+      'git',
+      ['-C', ROOT, 'diff', '--name-status', '-M', base, 'HEAD'],
+      {encoding: 'utf8'},
+    ),
+  );
   const recorded = JSON.parse(
     fs.readFileSync(path.join(ROOT, RECORD), 'utf8'),
   ).seconds;
-  const changed = execFileSync(
-    'git',
-    ['-C', ROOT, 'diff', '--name-only', base, 'HEAD'],
-    {
-      encoding: 'utf8',
-    },
-  )
-    .split('\n')
-    .filter(Boolean);
   const leg = legFactor(measured, recorded, new Set(changed));
   if (!leg.baseline)
     console.log(
@@ -142,9 +199,19 @@ function main(args) {
       `::error file=${file},title=Recorded Node test time is stale::${file} ran ${now} s; ${RECORD} records ${before} s, and ${legSays}. This change touches the file, so set only its entry in ${RECORD}: "${file}": ${suggested} (${value}). Leave every other entry as it is.`,
     );
   }
-  if (late.length === 0)
+  const unseen = unrecorded(measured, recorded, changed, renames);
+  const legSentence = `${legSays[0].toUpperCase()}${legSays.slice(1)}`;
+  for (const {file, measured: now, suggested, from, fromRecorded} of unseen) {
+    const fix = from
+      ? `It was renamed from ${from} (recorded at ${fromRecorded} s), so move that entry: replace "${from}" with "${file}": ${suggested} (${value}).`
+      : `Add only its entry to ${RECORD}: "${file}": ${suggested} (${value}).`;
+    console.log(
+      `::error file=${file},title=Node test file has no recorded time::test file ${file} ran ${now} s and has no recorded time under that path. ${legSentence}; the legs' split looks the record up by path, so it counts this file as the median. ${fix}`,
+    );
+  }
+  if (late.length === 0 && unseen.length === 0)
     console.log('The changed Node test files run within their recorded times.');
-  return late.length ? 1 : 0;
+  return late.length || unseen.length ? 1 : 0;
 }
 
 if (
