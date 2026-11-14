@@ -13,6 +13,9 @@ import {describe, it, expect, vi} from 'vitest';
 import {render, screen, act, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {useState, type MouseEvent} from 'react';
+import {Button} from '../Button';
+import {ButtonGroup} from '../ButtonGroup';
+import {Toolbar} from '../Toolbar';
 import {ToggleButton} from './ToggleButton';
 import {ToggleButtonGroup} from './ToggleButtonGroup';
 import {
@@ -25,6 +28,48 @@ import {
 // =============================================================================
 
 describe('ToggleButton', () => {
+  it('inherits the size from a Toolbar', () => {
+    render(
+      <Toolbar
+        label="Formatting"
+        size="sm"
+        startContent={
+          <>
+            <Button label="Undo" />
+            <ToggleButton label="Bold" />
+          </>
+        }
+      />,
+    );
+
+    expect(screen.getByRole('button', {name: 'Undo'})).toHaveAttribute(
+      'data-size',
+      'sm',
+    );
+    expect(screen.getByRole('button', {name: 'Bold'})).toHaveAttribute(
+      'data-size',
+      'sm',
+    );
+  });
+
+  it('inherits the size from a ButtonGroup', () => {
+    render(
+      <ButtonGroup label="View" size="sm">
+        <Button label="Refresh" />
+        <ToggleButton label="Pin" />
+      </ButtonGroup>,
+    );
+
+    expect(screen.getByRole('button', {name: 'Refresh'})).toHaveAttribute(
+      'data-size',
+      'sm',
+    );
+    expect(screen.getByRole('button', {name: 'Pin'})).toHaveAttribute(
+      'data-size',
+      'sm',
+    );
+  });
+
   describe('elevation', () => {
     it('reflects the elevation prop as a theme attribute', () => {
       const attrFor = (elevation: 'none' | 'low' | 'med' | 'high') => {
