@@ -1,5 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope core/Layer core/Dialog core/Drawer core/CommandPalette core/DropdownMenu core/Typeahead core/DateInput core/InfoTip core/Tooltip core/ContextMenu ^apps/storybook/stories/BackdropPressA11y
+// @pr-a11y scope core/Layer core/Dialog core/Drawer core/CommandPalette core/BottomSheet core/DropdownMenu core/Typeahead core/DateInput core/InfoTip core/Tooltip core/ContextMenu ^apps/storybook/stories/BackdropPressA11y
 
 /**
  * @file BackdropPress.a11y.chromium.spec.ts
@@ -48,6 +48,18 @@ const MEMBERS = [
     open: 'Open palette',
     dialog: 'Commands',
     field: null,
+  },
+  {
+    name: 'BottomSheet',
+    open: 'Open sheet',
+    dialog: 'Note sheet',
+    field: 'Note',
+  },
+  {
+    name: 'BottomSheetSwitcher',
+    open: 'Open switcher',
+    dialog: 'Note step',
+    field: 'Note',
   },
 ] as const;
 

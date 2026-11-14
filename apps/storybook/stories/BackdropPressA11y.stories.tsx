@@ -2,9 +2,10 @@
 
 /**
  * @file BackdropPressA11y.stories.tsx
- * @input Dialog, Drawer and CommandPalette, each with a text field, opened
- *   from a button; Dialog and Drawer also hold a DropdownMenu; a second
- *   Dialog holds a Typeahead, a DateInput, an InfoTip and a ContextMenu
+ * @input Dialog, Drawer, CommandPalette, BottomSheet and a BottomSheetSwitcher
+ *   step, each with a text field, opened from a button; all but CommandPalette
+ *   also hold a DropdownMenu; a second Dialog holds a Typeahead, a DateInput,
+ *   an InfoTip and a ContextMenu
  * @output Fixtures for the Chromium check that a backdrop press dismisses only
  *   when it starts and ends on the backdrop, and that a press which closes a
  *   menu open inside leaves the host open; excluded from the visual matrix
@@ -20,6 +21,7 @@ import {Typeahead} from '@astryxdesign/core/Typeahead';
 import type {SearchableItem} from '@astryxdesign/core/Typeahead';
 import type {Meta, StoryObj} from '@storybook/react';
 import {Button} from '@astryxdesign/core/Button';
+import {BottomSheet, BottomSheetSwitcher} from '@astryxdesign/core/BottomSheet';
 import {CommandPalette} from '@astryxdesign/core/CommandPalette';
 import {Dialog} from '@astryxdesign/core/Dialog';
 import {Drawer} from '@astryxdesign/core/Drawer';
@@ -47,9 +49,9 @@ const commands = createStaticSource([
 
 export const Members: StoryObj = {
   render: function MembersStory() {
-    const [open, setOpen] = useState<'dialog' | 'drawer' | 'palette' | null>(
-      null,
-    );
+    const [open, setOpen] = useState<
+      'dialog' | 'drawer' | 'palette' | 'sheet' | 'switcher' | null
+    >(null);
     const close = (isOpen: boolean) => {
       if (!isOpen) {
         setOpen(null);
@@ -60,6 +62,8 @@ export const Members: StoryObj = {
         <Button label="Open dialog" onClick={() => setOpen('dialog')} />
         <Button label="Open drawer" onClick={() => setOpen('drawer')} />
         <Button label="Open palette" onClick={() => setOpen('palette')} />
+        <Button label="Open sheet" onClick={() => setOpen('sheet')} />
+        <Button label="Open switcher" onClick={() => setOpen('switcher')} />
         <Dialog
           isOpen={open === 'dialog'}
           onOpenChange={close}
@@ -88,6 +92,33 @@ export const Members: StoryObj = {
           aria-label="Commands"
           searchSource={commands}
         />
+        <BottomSheet
+          isOpen={open === 'sheet'}
+          onOpenChange={close}
+          label="Note sheet">
+          <input
+            aria-label="Note"
+            defaultValue={NOTE}
+            style={{width: '100%'}}
+          />
+          <DropdownMenu button={{label: 'Actions'}} items={menuItems} />
+        </BottomSheet>
+        <BottomSheetSwitcher
+          activeSheet={open === 'switcher' ? 'note' : null}
+          onActiveSheetChange={sheet => {
+            if (sheet == null) {
+              setOpen(null);
+            }
+          }}>
+          <BottomSheet sheetId="note" label="Note step">
+            <input
+              aria-label="Note"
+              defaultValue={NOTE}
+              style={{width: '100%'}}
+            />
+            <DropdownMenu button={{label: 'Actions'}} items={menuItems} />
+          </BottomSheet>
+        </BottomSheetSwitcher>
       </>
     );
   },

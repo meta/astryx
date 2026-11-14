@@ -17,6 +17,7 @@
 import type {
   KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
   SyntheticEvent,
 } from 'react';
 
@@ -113,6 +114,15 @@ export interface BottomSheetSwitcherContextValue {
   onDialogCancel: (event: SyntheticEvent<HTMLDialogElement>) => void;
   onDialogClick: (event: ReactMouseEvent<HTMLDialogElement>) => void;
   onDialogKeyDown: (event: ReactKeyboardEvent<HTMLDialogElement>) => void;
+  onDialogPointerDownCapture: (
+    event: ReactPointerEvent<HTMLDialogElement>,
+  ) => void;
+  onDialogPointerUpCapture: (
+    event: ReactPointerEvent<HTMLDialogElement>,
+  ) => void;
+  onDialogPointerCancelCapture: (
+    event: ReactPointerEvent<HTMLDialogElement>,
+  ) => void;
 }
 
 export const BottomSheetSwitcherContext =

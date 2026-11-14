@@ -32,6 +32,14 @@ import {
   subscribeScrollLock,
 } from '../hooks/rootScrollStyles';
 
+// A press that starts and ends on the scrim: the browser targets the dialog
+// element with the pointer events and with the click.
+function pressScrim(dialog: HTMLElement) {
+  fireEvent.pointerDown(dialog);
+  fireEvent.pointerUp(dialog);
+  fireEvent.click(dialog);
+}
+
 // jsdom implements no <dialog> presentation. The stubs record which open
 // dialogs are modal, standing in for the `:modal` pseudo-class jsdom cannot
 // match.
@@ -586,6 +594,8 @@ describe('BottomSheetSwitcher', () => {
     expect(dialog).toHaveClass('consumer-switcher');
     expect(dialog).toHaveStyle({insetInlineStart: '12px'});
 
+    fireEvent.pointerDown(dialog);
+    fireEvent.pointerUp(dialog);
     fireEvent.click(dialog);
     expect(onClick).toHaveBeenCalledTimes(1);
     expect(onActiveSheetChange).toHaveBeenCalledWith(null);
@@ -862,6 +872,8 @@ describe('BottomSheetSwitcher', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Start flow'}));
     const activeDialog = getActiveDialog();
 
+    fireEvent.pointerDown(activeDialog);
+    fireEvent.pointerUp(activeDialog);
     fireEvent.click(activeDialog);
 
     const outgoingSheet = getSheetLayer('details-sheet');
@@ -875,6 +887,38 @@ describe('BottomSheetSwitcher', () => {
 
     expect(activeDialog).not.toHaveAttribute('open');
     expect(isScrollLockEngaged()).toBe(false);
+  });
+
+  it("stays open on a press that starts inside and ends on the active sheet's scrim (family:overlay-dismissal FR10)", () => {
+    render(<Flow />);
+    fireEvent.click(screen.getByRole('button', {name: 'Start flow'}));
+    const activeDialog = getActiveDialog();
+    const panel = getSheetPanel(activeDialog);
+
+    fireEvent.pointerDown(panel);
+    fireEvent.pointerUp(activeDialog);
+    fireEvent.click(activeDialog);
+
+    const sheet = getSheetLayer('details-sheet');
+    expect(sheet).not.toHaveAttribute('hidden');
+    expect(sheet).not.toHaveAttribute('inert');
+    expect(activeDialog).toHaveAttribute('open');
+  });
+
+  it('stays open on a press that starts on the scrim and ends inside the sheet (family:overlay-dismissal FR10)', () => {
+    render(<Flow />);
+    fireEvent.click(screen.getByRole('button', {name: 'Start flow'}));
+    const activeDialog = getActiveDialog();
+    const panel = getSheetPanel(activeDialog);
+
+    fireEvent.pointerDown(activeDialog);
+    fireEvent.pointerUp(panel);
+    fireEvent.click(activeDialog);
+
+    const sheet = getSheetLayer('details-sheet');
+    expect(sheet).not.toHaveAttribute('hidden');
+    expect(sheet).not.toHaveAttribute('inert');
+    expect(activeDialog).toHaveAttribute('open');
   });
 
   it('releases the modal layer when the closing sheet unmounts immediately', () => {
@@ -1002,6 +1046,8 @@ describe('BottomSheetSwitcher', () => {
       throw new Error('sheet handle not found');
     }
 
+    fireEvent.pointerDown(dialog);
+    fireEvent.pointerUp(dialog);
     fireEvent.click(dialog);
     flick(handle);
 
@@ -1063,6 +1109,8 @@ describe('BottomSheetSwitcher', () => {
       throw new Error('sheet handle not found');
     }
 
+    fireEvent.pointerDown(dialog);
+    fireEvent.pointerUp(dialog);
     fireEvent.click(dialog);
     fireEvent.keyDown(dialog, {key: 'Escape'});
     fireEvent(dialog, new Event('cancel', {cancelable: true}));
@@ -1954,7 +2002,7 @@ describe('BottomSheetSwitcher', () => {
       fireEvent.keyDown(confirmDialog, {key: 'Escape'});
       const cancel = new Event('cancel', {cancelable: true});
       confirmDialog.dispatchEvent(cancel);
-      fireEvent.click(confirmDialog);
+      pressScrim(confirmDialog);
 
       // Always prevented: the browser never closes a controlled dialog.
       expect(cancel.defaultPrevented).toBe(true);
@@ -1990,13 +2038,15 @@ describe('BottomSheetSwitcher', () => {
       expect(onActiveSheetChange).toHaveBeenNthCalledWith(1, null);
 
       // A `::backdrop` click targets the dialog element itself.
+      fireEvent.pointerDown(activeDialog);
+      fireEvent.pointerUp(activeDialog);
       fireEvent.click(activeDialog);
       expect(onActiveSheetChange).toHaveBeenNthCalledWith(2, null);
 
       // A click that is not on a backdrop, or on a dialog other than the
       // host's, dismisses nothing.
       fireEvent.click(screen.getByRole('button', {name: 'Inside'}));
-      fireEvent.click(getSheetDialog('a'));
+      pressScrim(getSheetDialog('a'));
       expect(onActiveSheetChange).toHaveBeenCalledTimes(2);
 
       // The composed cancel handler is on every sheet dialog, not the host

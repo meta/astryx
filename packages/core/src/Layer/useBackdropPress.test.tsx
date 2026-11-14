@@ -2,7 +2,8 @@
 
 /**
  * @file useBackdropPress.test.tsx
- * @input Dialog, Drawer and CommandPalette with their backdrop dismissal on
+ * @input Dialog, Drawer, CommandPalette, BottomSheet and BottomSheetSwitcher
+ *   with their backdrop dismissal on
  * @output Tests that a backdrop press dismisses only when it starts and ends
  *   on the backdrop, for a mouse and for a finger, that a cancelled pointer
  *   ends the press, and that a press which light-dismisses a popover open
@@ -17,6 +18,7 @@ import type {ReactElement} from 'react';
 import {Dialog} from '../Dialog/Dialog';
 import {Drawer} from '../Drawer/Drawer';
 import {CommandPalette} from '../CommandPalette/CommandPalette';
+import {BottomSheet, BottomSheetSwitcher} from '../BottomSheet';
 import {DateTimeInput} from '../DateTimeInput/DateTimeInput';
 import type {ISODateTimeString} from '../DateTimeInput/DateTimeInput';
 import {createStaticSource} from '../Typeahead/createStaticSource';
@@ -71,6 +73,26 @@ const MEMBERS: Member[] = [
         aria-label="Note"
         searchSource={createStaticSource([])}
       />
+    ),
+  },
+  {
+    name: 'BottomSheet (purpose="info")',
+    render: onOpenChange => (
+      <BottomSheet isOpen onOpenChange={onOpenChange} label="Note">
+        <input aria-label="Field" defaultValue="A note to select" />
+      </BottomSheet>
+    ),
+  },
+  {
+    name: 'BottomSheetSwitcher (step scrim)',
+    render: onOpenChange => (
+      <BottomSheetSwitcher
+        activeSheet="note"
+        onActiveSheetChange={sheet => onOpenChange(sheet != null)}>
+        <BottomSheet sheetId="note" label="Note">
+          <input aria-label="Field" defaultValue="A note to select" />
+        </BottomSheet>
+      </BottomSheetSwitcher>
     ),
   },
 ];
@@ -170,6 +192,26 @@ describe.each([
       </Drawer>
     ),
   },
+  {
+    name: 'BottomSheet (purpose="info")',
+    render: (onOpenChange: (isOpen: boolean) => void) => (
+      <BottomSheet isOpen onOpenChange={onOpenChange} label="Note">
+        <NestedLayer />
+      </BottomSheet>
+    ),
+  },
+  {
+    name: 'BottomSheetSwitcher (step scrim)',
+    render: (onOpenChange: (isOpen: boolean) => void) => (
+      <BottomSheetSwitcher
+        activeSheet="note"
+        onActiveSheetChange={sheet => onOpenChange(sheet != null)}>
+        <BottomSheet sheetId="note" label="Note">
+          <NestedLayer />
+        </BottomSheet>
+      </BottomSheetSwitcher>
+    ),
+  },
 ])('a press through a nested layer on $name', ({render: renderMember}) => {
   it('a drag from the backdrop into the nested layer, then from it to the backdrop, does not dismiss', () => {
     const onOpenChange = vi.fn();
@@ -220,6 +262,26 @@ describe.each([
       <Drawer isOpen onOpenChange={onOpenChange} label="Note">
         <PopoverInside />
       </Drawer>
+    ),
+  },
+  {
+    name: 'BottomSheet (purpose="info")',
+    render: (onOpenChange: (isOpen: boolean) => void) => (
+      <BottomSheet isOpen onOpenChange={onOpenChange} label="Note">
+        <PopoverInside />
+      </BottomSheet>
+    ),
+  },
+  {
+    name: 'BottomSheetSwitcher (step scrim)',
+    render: (onOpenChange: (isOpen: boolean) => void) => (
+      <BottomSheetSwitcher
+        activeSheet="note"
+        onActiveSheetChange={sheet => onOpenChange(sheet != null)}>
+        <BottomSheet sheetId="note" label="Note">
+          <PopoverInside />
+        </BottomSheet>
+      </BottomSheetSwitcher>
     ),
   },
 ])(
