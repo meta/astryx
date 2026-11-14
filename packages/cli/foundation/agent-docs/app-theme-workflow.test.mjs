@@ -16,6 +16,8 @@ describe('generated agent docs app-theme workflow', () => {
       'astryx experimental theme editor show <name> --png',
     );
     expect(result).toContain('not done until you have looked');
+    // A denser or roomier app is a theme change, as colors are.
+    expect(result).toContain('editor set <name> spacing tight');
     expect(result).not.toContain('theme add <slug> --import');
     // Extending a theme comes before forking it (AST-050 FR13), on the same
     // one theme line.
