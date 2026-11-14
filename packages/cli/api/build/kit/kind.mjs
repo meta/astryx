@@ -31,6 +31,7 @@ import {
   HEAD_END,
   CONTAINER_PHRASE,
   PHRASE_END,
+  PLACE_PHRASE,
   terms,
   containersOf,
   familyWordsOf,
@@ -62,13 +63,6 @@ const EXISTING = /\bexisting\b/i;
 const ADDS = /^\s*add\b/i;
 
 /**
- * Where an added piece goes: a preposition of place before what it names
- * ("to the table", "above the chart").
- */
-const PUT =
-  /\b(?:to|into|onto|in|inside|within|on|above|below|beside|under|next to)\s+(?:the|a|an|my|our|this|each|every|existing)\b/i;
-
-/**
  * The word that marks an idea asking for a new page ("a new dashboard", "as a
  * new page"), which is never a change to one the builder has.
  */
@@ -90,7 +84,7 @@ export function ideaKind(query, pages, components) {
   if (changesExistingPage(text, familyWords, components)) return 'edit';
   if (
     ADDS.test(text) &&
-    PUT.test(text) &&
+    PLACE_PHRASE.test(text) &&
     !namesPage(text.split(HEAD_END)[0] ?? '', familyWords) &&
     !asksNewPage(text.toLowerCase().split(PHRASE_END), familyWords)
   )
