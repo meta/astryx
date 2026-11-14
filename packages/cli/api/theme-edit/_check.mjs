@@ -2509,6 +2509,28 @@ export function drawsLine(C, parts, prop, state) {
 }
 
 /**
+ * The states a part (or a group's members) draws a ring of its own in,
+ * with its box-shadow (an input's hover and focus rings), or none. A shadow
+ * the theme sets on the part's resting rule replaces them in every state:
+ * Core's state rules sit under the theme's rules.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} on
+ * @returns {string[]}
+ */
+export function ringStatesOf(ctx, on) {
+  const states = new Set();
+  for (const member of FAMILIES[on] ?? [on]) {
+    const at = ctx.C.MAP[member]?.at?.['box-shadow'] ?? {};
+    for (const [k, v] of Object.entries(at)) {
+      const st = /:(hover|focus|active)/.exec(k)?.[1];
+      if (st && !/^\s*(?:none|var\(\s*--_[^)]*\))\s*$/.test(String(v)))
+        states.add(st === 'active' ? 'pressed' : st);
+    }
+  }
+  return [...states];
+}
+
+/**
  * What a text property CSS inherits, set on a part, also reaches: the parts
  * inside it that set no such property of their own, said in one line; null
  * for any other property or when none does.
@@ -5772,6 +5794,18 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
           },
         );
       }
+    }
+    // A shadow on the resting rule of a part that draws its rings in its
+    // box-shadow (an input's hover and focus rings) would replace them in
+    // every state: refused, with the states named.
+    if (prop === 'box-shadow' && s.on && !s.state && !unset) {
+      const rings = ringStatesOf(ctx, s.on);
+      if (rings.length)
+        refuse(
+          E.ERR_THEME_NO_EFFECT,
+          `${FAMILIES[s.on] ? `${s.on} draw their` : `${s.on} draws its`} ${rings.join(' and ')} rings in ${FAMILIES[s.on] ? 'their' : 'its'} box-shadow, and a shadow set on ${FAMILIES[s.on] ? 'them' : 'it'} would replace them in every state (Core's state rules sit under the theme's), so it is not set. A shadow in one state replaces only that state's ring.`,
+          {run: [`${HOW} ${s.on}`]},
+        );
     }
     // A text property CSS inherits reaches the parts inside the part that
     // do not set it themselves (a side nav section's items): the result

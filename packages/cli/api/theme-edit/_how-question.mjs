@@ -51,7 +51,12 @@ import {
   partRuleTokens,
   positionalCornerToken,
 } from './_settings.mjs';
-import {drawsLine, inheritedReach, settableStates} from './_check.mjs';
+import {
+  drawsLine,
+  inheritedReach,
+  ringStatesOf,
+  settableStates,
+} from './_check.mjs';
 import {NUMBER_WORDS, commaNumbers} from './_normal.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {cssProperties, keywordsOf, matchValue, splitTop} from './_css.mjs';
@@ -5398,18 +5403,7 @@ export function draftAnswer(ctx, env, question) {
    * @param {string} on
    * @returns {string[]}
    */
-  const ringStates = on => {
-    const states = new Set();
-    for (const member of FAMILIES[on] ?? [on]) {
-      const at = C.MAP[member]?.at?.['box-shadow'] ?? {};
-      for (const [k, v] of Object.entries(at)) {
-        const st = /:(hover|focus|active)/.exec(k)?.[1];
-        if (st && !/^\s*(?:none|var\(\s*--_[^)]*\))\s*$/.test(String(v)))
-          states.add(st === 'active' ? 'pressed' : st);
-      }
-    }
-    return [...states];
-  };
+  const ringStates = (/** @type {string} */ on) => ringStatesOf(ctx, on);
   /** @param {Draft} input */
   const push = input => {
     const d0 = withMode(input, clauseNow);
@@ -8238,17 +8232,33 @@ export function draftAnswer(ctx, env, question) {
       st.thing === 'font-weight'
     ) {
       // The weight it has now: its own, else the token it reads for it.
+      // A kept state reads the weight the part has in that state (a
+      // selected tab's own weight), before any other.
       const wantW = p.when?.replace(':', '=');
       const reads = C.partReads(one(p.on), 'font').filter(r =>
         r.props.includes('font-weight'),
       );
+      /** Whether a read's condition is the kept state. @param {string} w */
+      const inKeptState = w =>
+        !!p.state &&
+        (w.includes(`:${p.state}`) ||
+          w
+            .split(/[\s,]+/)
+            .some(c => c.split('=')[0] === p.state && !c.endsWith('=false')));
       const read =
+        (p.state ? reads.find(r => r.when.some(inKeptState)) : undefined) ??
         (wantW ? reads.find(r => r.when.includes(wantW)) : undefined) ??
         reads[0];
-      // The base theme's own weight for that variant or level comes first.
-      const ownW = /** @type {any} */ (env.base).components?.[one(p.on)]?.[
-        p.when ?? 'base'
-      ]?.fontWeight;
+      // The base theme's own weight for that variant or level (in the kept
+      // state, its own state rule) comes first.
+      const baseRules = /** @type {any} */ (env.base).components?.[one(p.on)];
+      const ownW = p.state
+        ? (baseRules?.[p.state]?.fontWeight ??
+          baseRules?.[p.when ?? 'base']?.[`:${p.state}`]?.fontWeight ??
+          (read?.when.some(inKeptState)
+            ? undefined
+            : baseRules?.[p.when ?? 'base']?.fontWeight))
+        : baseRules?.[p.when ?? 'base']?.fontWeight;
       if (typeof ownW === 'string' && !partValue(p.on, 'font-weight')) {
         const v = ownW.replace(
           /var\(\s*(--[a-z0-9-]+)\s*(?:,[^)]*)?\)/gi,

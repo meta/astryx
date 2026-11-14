@@ -5727,6 +5727,21 @@ export function maskedSettings(data, ctx = null) {
 }
 
 /**
+ * A style key in one spelling: each condition as `prop:value` (a bare state
+ * `selected` is `selected:selected`), in order, as Core's parseStyleKey
+ * writes the selector.
+ * @param {string} key
+ */
+function styleKeyOf(key) {
+  if (key === 'base') return key;
+  return key
+    .split('+')
+    .map(part => (part.includes(':') ? part : `${part}:${part}`))
+    .sort()
+    .join('+');
+}
+
+/**
  * A plain part setting can lose to a more specific rule for the same part
  * and property, such as a base theme's `.astryx-heading[data-level="1"]
  * {font-weight}`. Find those rules in the built stylesheet.
@@ -6618,6 +6633,22 @@ export async function buildTheme(ctx, slug, data) {
       o => o === css || coversProperty(o, css) || coversProperty(css, o),
     );
   };
+  /**
+   * The theme's own rules for a style key, whichever way it is written: a
+   * bare state (`selected`) is the same selector as `selected:selected`, as
+   * Core's parseStyleKey reads it.
+   * @param {string} target @param {string} key
+   */
+  const ownRule = (target, key) => {
+    const rules = /** @type {Record<string, any>} */ (
+      theme.components[target] ?? {}
+    );
+    /** @type {Record<string, any>} */
+    const out = {};
+    for (const [k, r] of Object.entries(rules))
+      if (styleKeyOf(k) === styleKeyOf(key)) Object.assign(out, r);
+    return out;
+  };
   const found = findOverrides(fs.readFileSync(f.css, 'utf8'), theme).filter(
     x =>
       // By property: a variant whose rule the settings give this property
@@ -6629,8 +6660,8 @@ export async function buildTheme(ctx, slug, data) {
       // base holds it).
       !Object.entries(
         (x.state
-          ? theme.components[x.target][x.key]?.[x.state]
-          : theme.components[x.target][x.key]) ?? {},
+          ? ownRule(x.target, x.key)[x.state]
+          : ownRule(x.target, x.key)) ?? {},
       ).some(([k, v]) => {
         if (k.startsWith(':')) return false;
         if (k === x.prop || coversProperty(kebab(k), kebab(x.prop)))
