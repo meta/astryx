@@ -181,7 +181,9 @@ describe('corrected new commands keep every option', () => {
         '--mode',
         'dark-only',
       ],
-      / new brand --like neutral (--accent '#e11d48' --mode dark-only|--mode dark-only --accent '#e11d48')$/,
+      // Neutral in any case is neutral, which this app has not installed:
+      // the same new on no base is the new offered.
+      / new brand (--accent '#e11d48' --mode dark-only|--mode dark-only --accent '#e11d48')$/,
     ],
     [
       [

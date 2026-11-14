@@ -507,28 +507,22 @@ export function nearest(x, list, n = 3) {
   // A long input (a pasted stylesheet or blob) holds many names inside
   // it: it is near nothing.
   if (x.length > 64) return [];
-  // Within the editor's one typo limit (typoLimit: none under four
+  // Only within the editor's one typo limit (typoLimit: none under four
   // letters, so only the name itself in other letters is near those),
-  // nearest by edit distance first (brand-drak is brand-dark, not brand); a
-  // name one holds inside the other is near too, after the close ones, for
-  // a word long enough to be a typo.
+  // nearest by edit distance first (brand-drak is brand-dark, not brand). A
+  // name that only holds the typed word inside it is no typo of it.
   const limit = typoLimit(x);
   const typed = x.toLowerCase();
   return [...list]
     .filter(c => c.length > 2)
-    .map(c => {
-      const name = c.toLowerCase();
-      const d = levenshteinDistance(typed, name, limit, {swaps: true});
-      return /** @type {[string, number]} */ ([
-        c,
-        d <= limit
-          ? d
-          : limit > 0 && (name.includes(typed) || typed.includes(name))
-            ? limit + 0.5
-            : d,
-      ]);
-    })
-    .filter(([, s]) => s <= limit + 0.5)
+    .map(
+      c =>
+        /** @type {[string, number]} */ ([
+          c,
+          levenshteinDistance(typed, c.toLowerCase(), limit, {swaps: true}),
+        ]),
+    )
+    .filter(([, d]) => d <= limit)
     .sort((a, b) => a[1] - b[1])
     .slice(0, n)
     .map(([c]) => c);
@@ -835,14 +829,18 @@ export function loadTheme(
     // none): the settings were lost after.
     const stopped =
       fs.existsSync(path.join(f.dir, NEW_MARKER)) && !fs.existsSync(f.history);
-    if (!same && (stopped || madeByEditor(f.settingsTs)))
+    if (!same && (stopped || madeByEditor(f.settingsTs))) {
+      const remake = remakeLines(cwd, slug);
       refuse(
         ERROR_CODES.ERR_UNKNOWN_THEME,
-        stopped
-          ? `themes/${slug} was left by a \`new\` that was stopped part way, so it has no settings yet. Run new again to finish it; files you added there are kept.`
-          : `themes/${slug} has lost its settings (${slug}.settings.json is gone), but the editor made it. Run new to make it again: your own files there are kept${fs.existsSync(f.history) ? `, and \`undo ${slug}\` then steps back to the settings from before the last change (the last change itself is not kept)` : ''}.`,
-        {run: [`${P} new ${slug}`]},
+        `${
+          stopped
+            ? `themes/${slug} was left by a \`new\` that was stopped part way, so it has no settings yet. Run new again to finish it; files you added there are kept`
+            : `themes/${slug} has lost its settings (${slug}.settings.json is gone), but the editor made it. Run new to make it again: your own files there are kept${fs.existsSync(f.history) ? `, and \`undo ${slug}\` then steps back to the settings from before the last change (the last change itself is not kept)` : ''}`
+        }; ${remake.base ? `it is made again on ${remake.base}, the base it was built on` : 'it starts on no base (the base it was built on cannot be read)'}.`,
+        {run: remake.lines},
       );
+    }
     // A folder copied or renamed by hand from an editor theme: its files
     // still carry the old name (t.settings.json in themes/t2).
     const copied =
@@ -982,14 +980,22 @@ export function loadTheme(
   refuseUnreadableFiles(cwd, slug);
   // undo is offered only when there is a step to go back to.
   const steps = readHistory(f.history).steps.length;
+  // Made again, the theme keeps the base it was built on when that can be
+  // read; else the text says it starts on no base.
+  const remake = remakeLines(cwd, slug);
+  const remakeText = `make the theme again with ${remake.lines.at(-1)}, which keeps the damaged file beside it and every file of yours${remake.base ? `, on ${remake.base}, the base it was built on` : ', on no base (the base it was built on cannot be read)'}`;
+  const remakeRun = remake.lines.map(name => ({
+    name,
+    reason: 'do this instead',
+  }));
   const recover = steps
     ? {
         text: `, or step back to the settings before the last change with ${P} undo ${slug} (the last change is then lost)`,
         run: [{name: `${P} undo ${slug}`, reason: 'do this instead'}],
       }
     : {
-        text: `; or make the theme again with ${P} new ${slug}, which keeps the damaged file beside it and every file of yours`,
-        run: [{name: `${P} new ${slug}`, reason: 'do this instead'}],
+        text: `; or ${remakeText}`,
+        run: remakeRun,
       };
   /** @type {any} */
   const data = settingsJson(fs.readFileSync(f.settings, 'utf8'));
@@ -1003,11 +1009,8 @@ export function loadTheme(
   // invalid JSON: `new` makes the theme again, keeping the file aside.
   if (!settingsShapeOk(data))
     throw new AstryxError(
-      `themes/${slug}/${slug}.settings.json is damaged: ${settingsProblem(data) ?? 'it is not a settings object'}. Fix it by hand${steps ? `, step back to the settings before the last change with ${P} undo ${slug},` : ''} or make the theme again with ${P} new ${slug}, which keeps the damaged file beside it and every file of yours. Nothing was changed.`,
-      [
-        ...recover.run.filter(r => !/ new /.test(r.name)),
-        {name: `${P} new ${slug}`, reason: 'do this instead'},
-      ],
+      `themes/${slug}/${slug}.settings.json is damaged: ${settingsProblem(data) ?? 'it is not a settings object'}. Fix it by hand${steps ? `, step back to the settings before the last change with ${P} undo ${slug},` : ''} or ${remakeText}. Nothing was changed.`,
+      [...recover.run.filter(r => !/ new /.test(r.name)), ...remakeRun],
       ERROR_CODES.ERR_THEME_INVALID,
     );
   readEntryWords(data);
@@ -1043,7 +1046,11 @@ export function loadTheme(
   // A value made under looser rules is not damage: the command that
   // changes or removes that setting still works, with the other bad ones
   // left out of the build, so each listed fix runs on its own.
-  const all = problem ? badSettings(data) : [];
+  // A setting listed twice is named as such, with keep and remove lines,
+  // even when one of its values is bad: removing the bad one by its name
+  // would remove both.
+  const listedTwice = Boolean(problem?.includes(' is listed twice ('));
+  const all = problem && !listedTwice ? badSettings(data) : [];
   if (
     problem &&
     skip &&
@@ -1089,7 +1096,7 @@ export function loadTheme(
     (/^base "/.test(problem ?? '') &&
       data?.like != null &&
       !LIKE.includes(data.like));
-  const bad = problem && !fieldBroken ? badSetting(data) : null;
+  const bad = problem && !fieldBroken && !listedTwice ? badSetting(data) : null;
   if (problem && bad && settingsProblem(data, bad.thing) !== problem) {
     // The value it holds, cleaned as typed input is (stray or invisible
     // spaces, other letters, a pasted `corners: pill`), when the dial takes
@@ -1298,6 +1305,11 @@ export function settingsProblem(
     return `lifted is ${JSON.stringify(data.lifted)}, not a list of text (the build writes it; remove the field and the next build writes it again)`;
   /** @type {Map<string, any>} */
   const keys = new Map();
+  /** How many entries each key has. @type {Map<string, number>} */
+  const twins = new Map();
+  for (const s of data.settings)
+    if (s && typeof s.thing === 'string')
+      twins.set(keyOf(s), (twins.get(keyOf(s)) ?? 0) + 1);
   for (const s of data.settings) {
     // A value or scope that is not text is a bad setting `undo` removes;
     // a setting with no name is damage.
@@ -1312,20 +1324,79 @@ export function settingsProblem(
       return `${s.thing} has mode ${JSON.stringify(s.mode)}, not light or dark`;
     if (s.only != null && s.only !== true)
       return `${s.thing} has only ${JSON.stringify(s.only)}, not true or false`;
-    // A bad value comes first: an entry under the wrong headings half is
-    // that, not a second entry of the half it names.
-    if (!skips(s, skip)) {
-      const problem = valueProblem(s);
-      if (problem) return problem;
-    }
+    if (s.only === true && !onlyFits(s))
+      return `${describe({...s, only: undefined, value: '?'}).replace(' = ?', '')} has only, which is for one member of a group styled alike (${AUTO_SPREAD.join(', ')})`;
     const key = keyOf(s);
     // The command that changes or removes a setting listed twice keeps one
-    // value, or none, so it fixes the list.
+    // value, or none, so it fixes the list. An entry with a twin is named
+    // as listed twice, even when one value is bad: an undo of that setting
+    // would remove both.
     if (keys.has(key) && !skips(s, skip))
       return `${describe({...s, value: '?'}).replace(' = ?', '')} is listed twice (${JSON.stringify(keys.get(key).value)}, ${JSON.stringify(s.value)})`;
     keys.set(key, s);
+    if (!skips(s, skip) && (twins.get(key) ?? 0) < 2) {
+      const problem = valueProblem(s);
+      if (problem) return problem;
+    }
   }
   return null;
+}
+
+/**
+ * The `new` that makes a theme again in place, on the base it was built on
+ * as far as can still be read: the settings file's base (in any case), else
+ * the base the generated module was built on. With none, it says the theme
+ * starts on no base.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {{lines: string[], base: string | null}}
+ */
+export function remakeLines(cwd, slug) {
+  const f = themeFiles(cwd, slug);
+  const read = (/** @type {string} */ file) => {
+    try {
+      return fs.readFileSync(file, 'utf8');
+    } catch {
+      return '';
+    }
+  };
+  const saved = settingsJson(read(f.settings));
+  const typed =
+    saved && typeof saved.like === 'string'
+      ? dialWordOf('base', saved.like)
+      : null;
+  const built =
+    /\/\/ Built on @astryxdesign\/theme-([a-z0-9-]+) /.exec(
+      read(f.settingsTs),
+    )?.[1] ?? null;
+  const base = [typed, built].find(b => b && LIKE.includes(b)) ?? null;
+  return {
+    base,
+    lines: base
+      ? onBuiltIn(cwd, base, `${P} new ${slug} --like ${base}`)
+      : [`${P} new ${slug}`],
+  };
+}
+
+/**
+ * A dial's own word typed in any case (ROOMY, MORE, Both, NONE): the word,
+ * or null when the value is no word of that dial. The one case rule for
+ * every dial, typed or saved. On the font dial several words are a family
+ * list, whose names keep their letters; one word is the preset.
+ * @param {string} thing
+ * @param {string} value
+ * @returns {string | null}
+ */
+export function dialWordOf(thing, value) {
+  if (!DIALS[thing]) return null;
+  const words = new Set(
+    String(DIALS[thing].values ?? '')
+      .split('|')
+      .filter(w => /^[a-z][a-z-]*$/.test(w)),
+  );
+  const lower = value.trim().toLowerCase();
+  const read = thing === 'font' ? [lower] : lower.split(/\s+/);
+  return lower && read.every(w => words.has(w)) ? lower : null;
 }
 
 /**
@@ -1350,6 +1421,40 @@ function readEntryWords(data) {
           `${s.thing} was saved with mode ${JSON.stringify(s.mode)}, read as ${read}`,
         );
         s.mode = read;
+      }
+    }
+    // A dial's word saved in other letters (`Pill`) is that word.
+    if (
+      ['dial', undefined, null, ''].includes(s.source) ||
+      String(s.source).toLowerCase() === 'dial'
+    ) {
+      const word =
+        typeof s.value === 'string' ? dialWordOf(s.thing, s.value) : null;
+      if (word && word !== s.value) {
+        notes.push(
+          `${s.thing} was saved as ${JSON.stringify(s.value)}, read as ${word}`,
+        );
+        s.value = word;
+      }
+    }
+    // A headings word saved under the other half (or a tracking word with
+    // no half) is filed under the half the word belongs to.
+    if (
+      s.thing === 'headings' &&
+      typeof s.value === 'string' &&
+      (s.axis == null || s.axis === 'weight' || s.axis === 'tracking')
+    ) {
+      const half = Object.hasOwn(HEADING_TRACKING, s.value)
+        ? 'tracking'
+        : Object.hasOwn(HEADING_WEIGHTS, s.value)
+          ? 'weight'
+          : null;
+      if (half && (s.axis ?? 'weight') !== half) {
+        notes.push(
+          `headings "${s.value}" was saved under ${s.axis ?? 'weight'}, read as ${half}`,
+        );
+        if (half === 'tracking') s.axis = 'tracking';
+        else delete s.axis;
       }
     }
     // `only` is true or absent; `"true"` and `"false"` written as text are
@@ -1411,8 +1516,20 @@ export function entryDamage(s) {
   if (!s || typeof s.thing !== 'string') return null;
   if (!['dial', 'token', 'property'].includes(s.source)) return 'source';
   if (s.mode != null && s.mode !== 'light' && s.mode !== 'dark') return 'mode';
-  if (s.only != null && s.only !== true) return 'only';
+  if (s.only != null && (s.only !== true || !onlyFits(s))) return 'only';
   return null;
+}
+
+/**
+ * Whether `only` fits a setting: it names one member of a group styled
+ * alike (a text input of inputs), as `set --only` takes it.
+ * @param {any} s
+ */
+function onlyFits(s) {
+  const fam = typeof s.on === 'string' ? familyOf(s.on) : null;
+  return Boolean(
+    fam && !FAMILIES[s.on] && AUTO_SPREAD.includes(/** @type {string} */ (fam)),
+  );
 }
 
 /**
@@ -1446,7 +1563,8 @@ function damagedEntry(data, problem) {
         (entryDamage(s) === 'mode' &&
           problem.startsWith(`${s.thing} has mode `)) ||
         (entryDamage(s) === 'only' &&
-          problem.startsWith(`${s.thing} has only `)),
+          (problem.startsWith(`${s.thing} has only `) ||
+            problem.includes(' has only, which is for one member'))),
     ) ?? null
   );
 }
@@ -7671,7 +7789,9 @@ export function builtFiles(cwd, slug, data, some = false) {
   const colors = data.settings.some(
     s => s.source === 'dial' && PALETTE_DIALS.includes(s.thing),
   )
-    ? [pal.palette, pal.refs, pal.receipt].map(p => path.join(cwd, p))
+    ? [pal.config, pal.palette, pal.refs, pal.receipt].map(p =>
+        path.join(cwd, p),
+      )
     : [];
   return [
     f.settingsTs,

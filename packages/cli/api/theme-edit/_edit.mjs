@@ -84,6 +84,7 @@ import {
   settingsEntriesOk,
   entriesReadable,
   readAsMeant,
+  dialWordOf,
   onBuiltIn,
   readFields,
   settingsJson,
@@ -291,8 +292,14 @@ function putBack(kept, tokensDir) {
 
 export async function themeEditNew(name, options = {}) {
   const {cwd = process.cwd(), png = false, settings = {}} = options;
-  // `--like none` builds on no base, as `set <theme> base none` does.
-  const like = options.like === 'none' ? undefined : options.like;
+  // --like reads a base in any case, by the one case rule of every dial
+  // (`set <theme> base Neutral` is neutral); `--like none` builds on no
+  // base, as `set <theme> base none` does.
+  const likeWord =
+    typeof options.like === 'string'
+      ? (dialWordOf('base', options.like) ?? options.like)
+      : options.like;
+  const like = likeWord === 'none' ? undefined : likeWord;
   requireProject(cwd);
   // A corrected `new` keeps every option given, fixing only the bad one.
   // A --like in another case is the built-in theme it names.
@@ -312,7 +319,7 @@ export async function themeEditNew(name, options = {}) {
       .replace(/^theme-/, '');
   const likeFixed =
     like == null
-      ? options.like === 'none'
+      ? likeWord === 'none'
         ? 'none'
         : undefined
       : LIKE.includes(baseName(like))
@@ -1274,8 +1281,60 @@ export async function themeEditSet(theme, thing, value, options = {}) {
   try {
     return await change('set', theme, thing, value, options);
   } catch (e) {
-    throw await swappedOrder(e, 'set', [theme, thing, value], options);
+    throw await swappedThingValue(
+      await swappedOrder(e, 'set', [theme, thing, value], options),
+      theme,
+      thing,
+      value,
+      options,
+    );
   }
+}
+
+/**
+ * A refused set whose thing is no setting, with a value that names one
+ * (`set t round corners`): the same set with the two in the other order,
+ * checked by set, leads when it works.
+ * @param {unknown} e
+ * @param {string} slug
+ * @param {string} thing
+ * @param {string | undefined} value
+ * @param {{cwd?: string, on?: string, when?: string, state?: string, mode?: string, only?: boolean}} options
+ * @returns {Promise<unknown>}
+ */
+async function swappedThingValue(e, slug, thing, value, options) {
+  if (
+    !(e instanceof AstryxError) ||
+    e.code !== E.ERR_THEME_UNKNOWN_THING ||
+    !value ||
+    !slugOk(slug)
+  )
+    return e;
+  const line = `${P} set ${slug} ${[
+    value,
+    thing,
+    ...(options.on ? ['--on', options.on] : []),
+    ...(options.when ? ['--when', options.when] : []),
+    ...(options.state ? ['--state', options.state] : []),
+    ...(options.mode ? ['--mode', options.mode] : []),
+  ]
+    .map(w => quoteCommandArgument(String(w)))
+    .join(' ')}${options.only ? ' --only' : ''}`;
+  const followed = await followChangeLine(
+    'set',
+    slug,
+    line,
+    options.cwd ?? process.cwd(),
+  );
+  if (followed.why) return e;
+  e.suggestions = [
+    {
+      name: followed.line,
+      reason: `do this instead: ${value} is the setting and ${thing} its value`,
+    },
+    ...(e.suggestions ?? []).filter(x => x.name !== followed.line),
+  ];
+  return e;
 }
 
 /**
@@ -1312,15 +1371,30 @@ async function swappedOrder(e, sub, words, options) {
     ...(options.state ? ['--state', options.state] : []),
     ...(options.mode ? ['--mode', options.mode] : []),
   ];
-  const line = `${P} ${sub} ${theme} ${[...moved, ...flags]
-    .map(w => quoteCommandArgument(w))
-    .join(' ')}${options.only ? ' --only' : ''}`;
-  const followed = await followChangeLine(sub, theme, line, cwd);
+  // The line with the theme first, as set or undo checks it; for a set
+  // whose other two words are also in the other order, the line with those
+  // swapped too. Only a line that works is offered.
+  const lineOf = (/** @type {string[]} */ ws) =>
+    `${P} ${sub} ${theme} ${[...ws, ...flags]
+      .map(w => quoteCommandArgument(w))
+      .join(' ')}${options.only ? ' --only' : ''}`;
+  let followed = await followChangeLine(sub, theme, lineOf(moved), cwd);
+  if (followed.why && sub === 'set' && moved.length === 2)
+    followed = await followChangeLine(
+      sub,
+      theme,
+      lineOf([moved[1], moved[0]]),
+      cwd,
+    );
   e.suggestions = [
-    {
-      name: followed.line,
-      reason: `do this instead: ${theme} is the theme, so it comes first${followed.why ? `, but this still needs a fix: ${followed.why}` : ''}`,
-    },
+    ...(followed.why
+      ? []
+      : [
+          {
+            name: followed.line,
+            reason: `do this instead: ${theme} is the theme, so it comes first`,
+          },
+        ]),
     ...(e.suggestions ?? []).filter(
       x => x.name !== followed.line && !x.name.startsWith(`${P} new `),
     ),
@@ -2006,6 +2080,30 @@ function savedAsWritten(cwd, slug) {
 }
 
 /**
+ * A refusal of the settings file (a setting listed twice, a damaged
+ * entry) with every `set` it suggests checked as set checks it, against
+ * the file as written: a keep line whose value set refuses is dropped.
+ * @param {unknown} e
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {Promise<unknown>}
+ */
+async function vetLoadRefusal(e, cwd, slug) {
+  if (!(e instanceof AstryxError) || e.code !== E.ERR_THEME_INVALID) return e;
+  const data = savedAsWritten(cwd, slug);
+  if (!data) return e;
+  try {
+    const ctx = /** @type {import('./_settings.mjs').Ctx} */ (
+      await context(cwd)
+    );
+    ctx.base = await baseResolved(ctx.project, data.like ?? undefined);
+    return vetSuggestions(e, ctx, slug, data);
+  } catch {
+    return e;
+  }
+}
+
+/**
  * The lines of a repair that work: each run through set's own check (in
  * memory) and offered only when set takes it as offered and its value
  * passes the allowlist of exact readings of what was typed. A line left
@@ -2358,7 +2456,9 @@ async function change(sub, slug, thing, value, options) {
     // carries the value typed (cleaned), never a stock value.
     throw misplacedFirst(
       carryTyped(
-        vetSuggestions(e, seen.ctx, slug, seen.data),
+        seen.ctx
+          ? vetSuggestions(e, seen.ctx, slug, seen.data)
+          : await vetLoadRefusal(e, options.cwd ?? process.cwd(), slug),
         sub,
         slug,
         typedThing,
@@ -2776,6 +2876,8 @@ async function changeOnce(
   /** @type {string | null} */
   let vibrancyGone = null;
   const prev = prevIdx >= 0 ? data.settings[prevIdx] : null;
+  /** The other entries of a setting listed twice by hand that this command replaces or removes. @type {import('./_settings.mjs').Setting[]} */
+  let alsoReplaced = [];
   if (sub === 'undo') {
     if (!prev) {
       // A padding set in the other form (a side for the shorthand, or the
@@ -2839,7 +2941,9 @@ async function changeOnce(
       );
     }
     data.settings.splice(prevIdx, 1);
-    // A setting listed twice by hand goes in full.
+    // A setting listed twice by hand goes in full, and each entry removed
+    // is named.
+    alsoReplaced = data.settings.filter(x => keyOf(x) === k);
     data.settings = data.settings.filter(x => keyOf(x) !== k);
     // Vibrancy needs a color: undoing the last one takes it along, so the
     // theme never holds a state `set` refuses.
@@ -2878,8 +2982,6 @@ async function changeOnce(
   }
   // A setting listed twice by hand keeps only the entry this command left;
   // every other entry it replaces is named in the notes.
-  /** @type {import('./_settings.mjs').Setting[]} */
-  let alsoReplaced = [];
   if (sub === 'set') {
     const last = data.settings.map(x => keyOf(x)).lastIndexOf(k);
     alsoReplaced = data.settings.filter((x, i) => keyOf(x) === k && i !== last);
@@ -3211,7 +3313,7 @@ async function changeOnce(
     ...fieldNotes,
     ...(alsoReplaced.length && prev
       ? [
-          `${describe({...prev, value: '?'}).replace(' = ?', '')} was listed ${alsoReplaced.length === 1 ? 'twice' : `${alsoReplaced.length + 1} times`} (${[...alsoReplaced, prev].map(x => x.value).join(', ')}); each is replaced`,
+          `${describe({...prev, value: '?'}).replace(' = ?', '')} was listed ${alsoReplaced.length === 1 ? 'twice' : `${alsoReplaced.length + 1} times`} (${[...alsoReplaced, prev].map(x => x.value).join(', ')}); each is ${sub === 'set' ? 'replaced' : 'removed'}`,
         ]
       : []),
     ...(covered.length ? [`replaces ${covered.map(describe).join(', ')}`] : []),
@@ -3651,7 +3753,13 @@ export async function themeEditShow(theme, options = {}) {
   const readOnly = Boolean(/** @type {any} */ (options).readOnly);
   requireProject(cwd);
   const section = checkSection(options.section, theme);
-  const data = loadTheme(cwd, theme);
+  /** @type {import('./_settings.mjs').ThemeData} */
+  let data;
+  try {
+    data = loadTheme(cwd, theme);
+  } catch (e) {
+    throw await vetLoadRefusal(e, cwd, theme);
+  }
   const ctx = await context(cwd);
   // The app copy is written once show succeeds (at its end), never by a
   // build a later refusal puts back.

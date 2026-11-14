@@ -109,6 +109,7 @@ import {
   familySpaces,
   baseTextPx,
   fontsourcePackageOf,
+  dialWordOf,
 } from './_settings.mjs';
 import {isColorToken} from './_compiler.mjs';
 import {
@@ -2354,18 +2355,8 @@ export function checkSetting(
   // A light-dark() written with another separator (`light-dark(red /
   // blue)`, `light-dark(red; blue)`): the pair meant, with a comma.
   // A dial's own words in any case (ROOMY, MORE, Both, NONE): the word.
-  if (!unset && typeof value === 'string' && DIALS[thing]) {
-    const words = new Set(
-      String(DIALS[thing].values ?? '')
-        .split('|')
-        .filter(w => /^[a-z][a-z-]*$/.test(w)),
-    );
-    const lower = value.trim().toLowerCase();
-    // (On the font dial several words are a family list, whose names keep
-    // their letters; one word is the preset.)
-    const read = thing === 'font' ? [lower] : lower.split(/\s+/);
-    if (lower && read.every(w => words.has(w))) value = lower;
-  }
+  if (!unset && typeof value === 'string')
+    value = dialWordOf(thing, value) ?? value;
   if (!unset && typeof value === 'string') {
     const near =
       /^\s*light-dark\(\s*([^,;/()]+?)\s*(?:\s\/\s|\/|;)\s*([^,;/()]+?)\s*\)\s*$/i.exec(
@@ -3225,8 +3216,14 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       // A part named in words (dialog header, text inputs) is the dashed
       // part, read before any group a single word of it names.
       const dashed = lower.trim().replace(/[\s_]+/g, '-');
-      // A plain word how reads as a part or group (checkboxes: checks).
-      const byWord = partForWord(lower);
+      // A plain word how reads as a part or group (checkboxes: checks):
+      // only the whole value as one word, never one word inside a longer
+      // name (nmber-input is no word for inputs).
+      const byWord = /^[a-z]+$/.test(lower) ? partForWord(lower) : null;
+      // A typo of one whole part or group name is that name.
+      const typoParts = [...TARGET.keys(), ...Object.keys(FAMILIES)].filter(
+        n => n !== lower && n !== dashed && typoNear(dashed, n),
+      );
       // A plain plural of a part (cards, dialogs, tabs) is that part.
       const singular = [lower, dashed]
         .flatMap(w => [
@@ -3279,9 +3276,11 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
             ? dashed
             : singular
               ? singular
-              : byWord && (TARGET.has(byWord) || FAMILIES[byWord])
-                ? byWord
-                : null;
+              : typoParts.length === 1
+                ? typoParts[0]
+                : byWord && (TARGET.has(byWord) || FAMILIES[byWord])
+                  ? byWord
+                  : null;
       // The page (the body behind every part) is painted by the app shell.
       if (
         !named &&
