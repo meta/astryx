@@ -8,8 +8,7 @@
  *   that exact commit (or any commit, without one), or null; or every such
  *   artifact (mainArtifacts)
  * @position Shared by the CI jobs that read what Main keeps for a merge base
- *   (its size records), the PR report's daily CI history and the release
- *   check's weekly WebKit verdicts, so each trusts
+ *   (its size records) and the PR report's daily CI history, so each trusts
  *   the same thing: only Main's own run on `main` for this exact commit, in this
  *   repository. A pull request's run can upload an artifact under any name.
  */

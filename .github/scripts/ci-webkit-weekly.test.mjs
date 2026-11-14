@@ -11,15 +11,6 @@ import path from 'node:path';
 import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
 
-import {
-  FAILED,
-  GREEN,
-  MAX_AGE_MS,
-  listVerdicts,
-  releaseScope,
-  releaseVersion,
-} from './webkit-release-scope.mjs';
-
 const read = name =>
   yaml.parse(
     fs.readFileSync(
@@ -83,6 +74,11 @@ const weeklyDispatch = {
   },
   inputs: {operation: 'webkit-weekly', recheck: false},
 };
+
+// The weekly run's verdict artifacts (nothing reads them to scope a release:
+// a release runs every WebKit spec, spec:AST-030 DEC-24).
+const GREEN = 'webkit-weekly-green';
+const FAILED = 'webkit-weekly-failed';
 
 describe('the weekly full WebKit run', () => {
   const weekly = read('webkit-weekly.yml');
@@ -242,7 +238,7 @@ describe('the weekly full WebKit run', () => {
     );
   });
 
-  it('records a green or failed verdict for the release check to read', () => {
+  it('records a green or failed verdict of each weekly run (no release check reads it)', () => {
     const verdict = ci.jobs['webkit-weekly-verdict'];
     expect(verdict.needs).toEqual([
       'webkit-weekly-request',
@@ -260,126 +256,7 @@ describe('the weekly full WebKit run', () => {
 });
 
 describe('the release check WebKit scope', () => {
-  const now = Date.parse('2026-11-16T15:00:00Z');
-  const green = (createdAt, sha = 'a'.repeat(40)) => ({
-    name: GREEN,
-    createdAt,
-    sha,
-  });
-  const failed = (createdAt, sha = 'b'.repeat(40)) => ({
-    name: FAILED,
-    createdAt,
-    sha,
-  });
-
-  it('reads the release version from the release tooling title', () => {
-    expect(
-      releaseVersion('[do not merge] v0.7.12 interaction check at c99ad4aa20'),
-    ).toBe('0.7.12');
-    expect(
-      releaseVersion('[do not merge] interaction check at c99ad4aa20'),
-    ).toBeNull();
-  });
-
-  it('runs the subset while the last full weekly run is green and at most 7 days old', () => {
-    expect(
-      releaseScope({
-        version: '0.7.13',
-        verdicts: [green('2026-11-15T11:00:00Z')],
-        now,
-      }).full,
-    ).toBe(false);
-  });
-
-  it('runs the full suite when the last green full weekly run is more than 7 days old', () => {
-    const old = new Date(now - MAX_AGE_MS - 60_000).toISOString();
-    const scope = releaseScope({
-      version: '0.7.13',
-      verdicts: [green(old)],
-      now,
-    });
-    expect(scope.full).toBe(true);
-    expect(scope.reason).toContain('more than 7');
-  });
-
-  it('runs the full suite when the last full weekly run failed, so a reproducing failure blocks the release', () => {
-    const scope = releaseScope({
-      version: '0.7.13',
-      verdicts: [green('2026-11-08T11:00:00Z'), failed('2026-11-15T11:00:00Z')],
-      now,
-    });
-    expect(scope.full).toBe(true);
-    expect(scope.reason).toContain('failed');
-  });
-
-  it('reads only verdicts a run on main in this repository recorded, through the shared lookup', async () => {
-    const artifact = (name, createdAt, run = {}, extra = {}) => ({
-      name,
-      created_at: createdAt,
-      expired: false,
-      ...extra,
-      workflow_run: {
-        head_branch: 'main',
-        head_sha: 'e'.repeat(40),
-        head_repository_id: 1,
-        repository_id: 1,
-        ...run,
-      },
-    });
-    const artifacts = {
-      [GREEN]: [
-        artifact(GREEN, '2026-11-15T11:00:00Z', {head_branch: 'fix/thing'}),
-        artifact(GREEN, '2026-11-15T12:00:00Z', {head_repository_id: 2}),
-        artifact(GREEN, '2026-11-15T13:00:00Z', {}, {expired: true}),
-      ],
-      [FAILED]: [artifact(FAILED, '2026-11-08T11:00:00Z')],
-    };
-    const github = {
-      rest: {
-        actions: {
-          listArtifactsForRepo: async ({name}) => ({
-            data: {artifacts: artifacts[name]},
-          }),
-        },
-      },
-    };
-    const verdicts = await listVerdicts({
-      github,
-      owner: 'meta',
-      repo: 'astryx',
-    });
-    expect(verdicts).toEqual([
-      {name: FAILED, createdAt: '2026-11-08T11:00:00Z', sha: 'e'.repeat(40)},
-    ]);
-    const scope = releaseScope({version: '0.7.13', verdicts, now});
-    expect(scope.full).toBe(true);
-    expect(scope.reason).toContain('failed');
-  });
-
-  it('runs the full suite when no full weekly run is recorded', () => {
-    expect(releaseScope({version: '0.7.13', verdicts: [], now}).full).toBe(
-      true,
-    );
-  });
-
-  it('runs the full suite at every minor release, and when the version is unknown', () => {
-    expect(
-      releaseScope({
-        version: '0.8.0',
-        verdicts: [green('2026-11-15T11:00:00Z')],
-        now,
-      }).full,
-    ).toBe(true);
-    expect(
-      releaseScope({
-        version: null,
-        verdicts: [green('2026-11-15T11:00:00Z')],
-        now,
-      }).full,
-    ).toBe(true);
-  });
-
-  it('decides in both the leg count job and every WebKit leg, the same way', () => {
+  it('runs every WebKit interaction spec at the release commit, in both jobs that decide it', () => {
     const lane = step(
       ci.jobs['pr-interaction-webkit'],
       'Decide the WebKit scope',
@@ -390,17 +267,30 @@ describe('the release check WebKit scope', () => {
     );
     // The same decision; only the scope step it waits on is named apart.
     expect(counter.run).toBe(lane.run);
-    expect(counter.env).toEqual(lane.env);
     expect(lane.if).toBe("steps.scope.outputs.applies == 'true'");
     expect(counter.if).toBe("steps.scope-webkit.outputs.applies == 'true'");
-    expect(lane.env.RELEASE_TITLE).toBe(
-      '${{ github.event.pull_request.title }}',
+    const release =
+      /elif \[ "\$\{WEBKIT_RELEASE_CHECK:-\}" = true \]; then\n([\s\S]*?)\n\s*else/.exec(
+        lane.run,
+      );
+    expect(release, lane.run).not.toBe(null);
+    expect(release[1]).toContain(
+      'echo "WEBKIT_ALL_SPECS=true" >> "$GITHUB_ENV"',
     );
-    expect(lane.run).toContain(
-      'node .test-scope/.github/scripts/webkit-release-scope.mjs >> "$GITHUB_ENV"',
-    );
-    for (const id of ['pr-interaction-webkit', 'interaction-legs'])
-      expect(ci.jobs[id].permissions.actions, id).toBe('read');
+    // No weekly verdict, subset or selection decides a release's scope.
+    expect(lane.run).not.toContain('webkit-release-scope');
+    expect(lane.env ?? {}).toEqual({});
+    expect(
+      fs.existsSync(
+        path.resolve(import.meta.dirname, 'webkit-release-scope.mjs'),
+      ),
+    ).toBe(false);
+  });
+
+  it('gives the deciding job no Actions read it no longer needs', () => {
+    expect(ci.jobs['interaction-legs'].permissions.actions).toBeUndefined();
+    // The WebKit lane still reads the author's runs for its heavy-suite caps.
+    expect(ci.jobs['pr-interaction-webkit'].permissions.actions).toBe('read');
   });
 });
 
