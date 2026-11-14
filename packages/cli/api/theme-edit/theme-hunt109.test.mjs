@@ -195,20 +195,20 @@ describe('headings halves', () => {
   );
 
   it(
-    'a value under the wrong half, or an axis on another dial, is refused with the undo that works',
+    'a value under the wrong half is read as its own half; an axis on another dial is refused with the undo that works',
     () => {
       edit(d => {
         d.settings = [
           {thing: 'headings', value: 'bold', source: 'dial', axis: 'tracking'},
         ];
       });
-      const r = cli([...ED, 'show', 't']);
-      expect(r.error).toContain('headings "bold" is not a tracking');
-      expect(r.suggestions[0].name).toMatch(
-        / editor undo t headings tracking$/,
+      const r = cli([...ED, 'set', 't', 'spacing', 'roomy']);
+      expect(r.data.notes).toContain(
+        'headings "bold" was saved under tracking, read as weight',
       );
-      expect(follow(r.suggestions[0].name).error).toBeUndefined();
-      expect(data().settings).toEqual([]);
+      expect(
+        data().settings.find((/** @type {any} */ x) => x.thing === 'headings'),
+      ).not.toHaveProperty('axis');
       edit(d => {
         d.settings = [
           {thing: 'corners', value: 'pill', source: 'dial', axis: 'x'},

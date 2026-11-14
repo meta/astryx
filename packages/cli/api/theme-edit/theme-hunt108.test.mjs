@@ -274,13 +274,19 @@ describe('asks it used to drop', () => {
     T,
   );
   it(
-    'a shadow typed for one mode goes into light-dark()',
+    'a shadow typed for one mode goes into light-dark() on a part with no shadow',
     async () => {
       expect(
-        (await answer('card shadow 0 4px 12px #00000080 in dark mode')).first,
+        (await answer('popover shadow 0 4px 12px #00000080 in dark mode'))
+          .first,
       ).toEqual([
-        "set q box-shadow '0 4px 12px light-dark(transparent, #00000080)' --on card",
+        "set q box-shadow '0 4px 12px light-dark(transparent, #00000080)' --on popover",
       ]);
+      // A card draws a selection ring and an elevation in its shadow, in
+      // both modes: a one-mode shadow there would wipe them.
+      expect(
+        (await answer('card shadow 0 4px 12px #00000080 in dark mode')).first,
+      ).toEqual([]);
     },
     T,
   );
