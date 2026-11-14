@@ -162,9 +162,9 @@ describe('firstCharacter fast path', () => {
   });
 
   it('keeps precomposed accented letters whole', () => {
-    expect(firstCharacter('Zoë')).toBe('Z');
-    expect(firstCharacter('Ëmile')).toBe('Ë');
-    expect(firstCharacter('Łukasz')).toBe('Ł');
+    expect(firstCharacter('Zo\u00eb')).toBe('Z');
+    expect(firstCharacter('\u00cbmile')).toBe('\u00cb');
+    expect(firstCharacter('\u0141ukasz')).toBe('\u0141');
   });
 
   it('keeps a base letter with its combining accent', () => {
@@ -183,13 +183,17 @@ describe('firstCharacter fast path', () => {
   });
 
   it('keeps a lone combining mark', () => {
-    expect(firstCharacter('́a')).toBe('́');
+    expect(firstCharacter('\u0301a')).toBe('\u0301');
+  });
+
+  it('defers to the segmenter when the first unit is U+0300 or above', () => {
+    expect(firstCharacter('\u2764\ufe0f')).toBe('\u2764\ufe0f');
+    expect(firstCharacter('\u06001')).toBe('\u06001');
   });
 
   it('defers to the segmenter when the second unit is U+0300 or above', () => {
-    expect(firstCharacter('a‍')).toBe('a‍');
-    expect(firstCharacter('❤️')).toBe('❤️');
-    expect(firstCharacter('àb')).toBe('à');
+    expect(firstCharacter('a\u200d')).toBe('a\u200d');
+    expect(firstCharacter('a\u0300b')).toBe('a\u0300');
   });
 
   it('matches Intl.Segmenter for every first unit below U+0300 and a spread of next units', () => {
@@ -214,7 +218,7 @@ describe('firstCharacter fast path', () => {
       0xd83d,
       0xdc00,
     ];
-    const tails = ['', 'a', '́', '\r\n'];
+    const tails = ['', 'a', '\u0301', '\r\n'];
     let checked = 0;
     for (let first = 0; first < 0x300; first++) {
       for (const second of seconds) {
