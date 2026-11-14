@@ -359,9 +359,7 @@ describe('Switch', () => {
       />,
     );
     const switchEl = screen.getByRole('switch');
-    const description = screen.getByText(
-      'Enables sync for this row',
-    ).parentElement!;
+    const description = screen.getByText('Enables sync for this row');
     expect(description.id).not.toBe('');
     expect(switchEl.getAttribute('aria-describedby')).toContain(description.id);
   });

@@ -527,7 +527,7 @@ describe('InputGroup', () => {
 
     const group = screen.getByRole('group', {name: 'Price'});
     expect(group.getAttribute('aria-labelledby')).toBe(
-      screen.getByText('Price').parentElement!.id,
+      screen.getByText('Price').id,
     );
     expect(screen.getByRole('textbox', {name: 'Price Amount'})).toBe(
       screen.getByRole('textbox'),

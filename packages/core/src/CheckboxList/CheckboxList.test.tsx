@@ -391,11 +391,7 @@ describe('CheckboxList', () => {
     ).not.toBeInTheDocument();
     // The text also exists in the checkbox's visually hidden <label>; target
     // the row's label <span> to click the row surface.
-    await user.click(
-      screen
-        .getAllByText('Option B', {selector: 'span'})
-        .find(el => el.closest('label') == null)!,
-    );
+    await user.click(screen.getByText('Option B', {selector: 'span'}));
 
     expect(handleClick).toHaveBeenCalledTimes(1);
     expect(handleChange).toHaveBeenCalledWith(['a', 'b']);
@@ -448,11 +444,7 @@ describe('CheckboxList', () => {
       );
       // The text also exists in the checkbox's visually hidden <label>;
       // target the row's label <span> to click the row surface.
-      await user.click(
-        screen
-          .getAllByText('Option B', {selector: 'span'})
-          .find(el => el.closest('label') == null)!,
-      );
+      await user.click(screen.getByText('Option B', {selector: 'span'}));
       expect(handleChange).toHaveBeenCalledTimes(1);
       expect(handleChange).toHaveBeenCalledWith(['a', 'b']);
     });
@@ -1223,11 +1215,7 @@ describe('CheckboxListItem ARIA props', () => {
     // With an onClick, a row-surface click still delegates to the checkbox.
     // The text also exists in the checkbox's visually hidden <label>; target
     // the row's label <span> to click the row surface.
-    fireEvent.click(
-      within(itemA)
-        .getAllByText('Option A', {selector: 'span'})
-        .find(el => el.closest('label') == null)!,
-    );
+    fireEvent.click(within(itemA).getByText('Option A', {selector: 'span'}));
     expect(onItemClick).toHaveBeenCalledTimes(1);
     fireEvent.click(checkboxA);
     expect(onItemClick).toHaveBeenCalledTimes(2);
@@ -1240,11 +1228,7 @@ describe('CheckboxListItem ARIA props', () => {
     // Without one, the read-only row does not delegate at all.
     const delegated = vi.fn();
     checkboxB.addEventListener('click', delegated);
-    fireEvent.click(
-      within(itemB)
-        .getAllByText('Option B', {selector: 'span'})
-        .find(el => el.closest('label') == null)!,
-    );
+    fireEvent.click(within(itemB).getByText('Option B', {selector: 'span'}));
     expect(delegated).not.toHaveBeenCalled();
     fireEvent.click(checkboxB);
     expect(checkboxB).not.toBeChecked();
