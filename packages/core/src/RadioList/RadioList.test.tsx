@@ -1190,6 +1190,39 @@ describe('one Tab stop', () => {
     }
   });
 
+  it('works for a group rendered in a same-origin iframe', () => {
+    vi.useFakeTimers();
+    const iframe = document.createElement('iframe');
+    document.body.appendChild(iframe);
+    try {
+      const frameDocument = iframe.contentDocument!;
+      const container = frameDocument.body.appendChild(
+        frameDocument.createElement('div'),
+      );
+      const {unmount} = render(
+        <RadioList label="Notify" value="sms" onChange={() => {}}>
+          <RadioListItem label="Email" value="email" />
+          <RadioListItem label="SMS" value="sms" />
+        </RadioList>,
+        {container},
+      );
+      const email = container.querySelector<HTMLInputElement>(
+        'input[value="email"]',
+      )!;
+      const sms =
+        container.querySelector<HTMLInputElement>('input[value="sms"]')!;
+      expect(email instanceof HTMLInputElement).toBe(false);
+      fireEvent.keyDown(email, {key: 'Tab'});
+      expect(sms.tabIndex).toBe(-1);
+      vi.runAllTimers();
+      expect(sms).not.toHaveAttribute('tabindex');
+      unmount();
+    } finally {
+      iframe.remove();
+      vi.useRealTimers();
+    }
+  });
+
   it('leaves the Tab order alone for other keys and for Ctrl+Tab', () => {
     render(
       <RadioList label="Notify" value="sms" onChange={() => {}}>

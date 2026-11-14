@@ -40,6 +40,7 @@ import {
 } from '../Field/fieldParts';
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
+import {isElement} from '../utils/nodeType';
 
 /**
  * Size of the radio controls, matching CheckboxInput sizes.
@@ -379,12 +380,14 @@ export function RadioList({
       const group = groupRef.current;
       const from = e.target;
       // A RadioList inside another one's option bubbles its key presses to the
-      // outer group. Each group acts only on its own radios.
+      // outer group. Each group acts only on its own radios. The check does not
+      // use `instanceof`: a group can render in another window, such as a
+      // same-origin iframe, where that window's element classes apply.
       if (
         group == null ||
-        !(from instanceof HTMLInputElement) ||
-        from.type !== 'radio' ||
-        from.name !== name
+        !isElement(from) ||
+        !from.matches('input[type="radio"]') ||
+        (from as HTMLInputElement).name !== name
       ) {
         return;
       }
