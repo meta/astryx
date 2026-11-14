@@ -52,16 +52,18 @@ const PACKAGE_FIELDS = [
 /**
  * A file's or folder's state as an audit read it: a file by its content
  * (package.json by its packer-stable fields), a folder by the names it holds
- * (but PACKING_NAMES), `-` when absent.
+ * (but the names `skip` matches: PACKING_NAMES unless given), `-` when
+ * absent.
  * @param {string} file
+ * @param {RegExp} [skip] - Folder entries a packer or installer adds or drops.
  * @returns {string}
  */
-export function inputState(file) {
+export function inputState(file, skip = PACKING_NAMES) {
   try {
     if (fs.statSync(file).isDirectory()) {
       const names = fs
         .readdirSync(file)
-        .filter(name => !PACKING_NAMES.test(name))
+        .filter(name => !skip.test(name))
         .sort();
       return `dir:${storedKey(names.join('\n'))}`;
     }
@@ -81,23 +83,30 @@ export function inputState(file) {
 }
 
 /**
- * The inputs an audit read, by path in the package, with their state. Code
- * in node_modules is the package's dependencies, not its own files.
- * Paths outside the package are where it runs (the package manager is found
- * from the working folder, to spell commands in rendered docs); the
- * generator proves the audit's answer is the same wherever it runs, so they
- * are not inputs.
- * @param {Iterable<string>} files every path the audit read
+ * The inputs a stored answer's work read, by path under `root` (`.` for
+ * `root` itself), with their state. Code in a node_modules folder under
+ * `root` is the package's dependencies, not its own files. Paths outside
+ * `root` are where the work runs (the package manager is found from the
+ * working folder, to spell commands in rendered docs); the generator proves
+ * the answer is the same wherever it runs, so they are not inputs.
+ * @param {Iterable<string>} files every path the work read
+ * @param {{root?: string, skip?: RegExp}} [options] - The package folder
+ *   (the CLI's unless given) and, as for {@link inputState}, the folder
+ *   entries to skip.
  * @returns {Record<string, string>}
  */
-export function selfAuditInputs(files) {
+export function selfAuditInputs(
+  files,
+  {root = CLI_ROOT, skip = PACKING_NAMES} = {},
+) {
   /** @type {Record<string, string>} */
   const inputs = {};
   for (const file of [...files].sort()) {
-    if (file.split(path.sep).includes('node_modules')) continue;
-    const rel = path.relative(CLI_ROOT, file);
+    const rel = path.relative(root, file);
     if (rel.startsWith('..') || path.isAbsolute(rel)) continue;
-    inputs[rel.split(path.sep).join('/')] = inputState(file);
+    const parts = rel === '' ? [] : rel.split(path.sep);
+    if (parts.includes('node_modules')) continue;
+    inputs[parts.join('/') || '.'] = inputState(file, skip);
   }
   return inputs;
 }
@@ -112,27 +121,29 @@ export function storedSelfAudit(name) {
   /** @type {{inputs: Record<string, string>, value: unknown} | undefined} */
   const entry = readStore(SELF_AUDIT_FILE).get(name);
   if (!entry) return undefined;
-  return inputsUnchanged(entry.inputs) ? entry.value : undefined;
+  return inputsUnchanged(CLI_ROOT, entry.inputs) ? entry.value : undefined;
 }
 
 /**
- * Whether every input, by path in the package ({@link selfAuditInputs}), is
- * in the state stored for it.
- * @param {Record<string, string>} inputs
+ * Whether every recorded input under `root` is in its recorded state.
+ * @param {string} root
+ * @param {Record<string, string>} inputs - State by path under `root`.
+ * @param {RegExp} [skip] - As for {@link inputState}.
  * @returns {boolean}
  */
-export function inputsUnchanged(inputs) {
+export function inputsUnchanged(root, inputs, skip = PACKING_NAMES) {
   for (const [rel, state] of Object.entries(inputs)) {
-    if (inputState(inputPath(rel)) !== state) return false;
+    if (inputState(inputPath(root, rel), skip) !== state) return false;
   }
   return true;
 }
 
 /**
- * An input's path, from its path in the package.
+ * An input's path, from its path under `root` ({@link selfAuditInputs}).
+ * @param {string} root
  * @param {string} rel
  * @returns {string}
  */
-export function inputPath(rel) {
-  return path.join(CLI_ROOT, ...rel.split('/'));
+export function inputPath(root, rel) {
+  return path.join(root, ...rel.split('/'));
 }

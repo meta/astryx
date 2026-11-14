@@ -93,11 +93,11 @@ function storedCliRoutes() {
     const stored = readStore(DOCS_ROUTES_FILE).get('routes');
     if (!stored) return {value: null, stamps};
     for (const rel of Object.keys(stored.inputs)) {
-      const file = inputPath(rel);
+      const file = inputPath(CLI_ROOT, rel);
       stamps.push([file, fileStamp(file)]);
     }
     return {
-      value: inputsUnchanged(stored.inputs) ? stored.value : null,
+      value: inputsUnchanged(CLI_ROOT, stored.inputs) ? stored.value : null,
       stamps,
     };
   });

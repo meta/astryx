@@ -7,36 +7,14 @@
  *   they read there, folders included, is what an installed package holds.
  */
 
-import {spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {CLI_ROOT} from '../foundation/fs/paths.mjs';
+import {copyPublishedFiles} from './published-files.mjs';
 
 /** The repository's folder, two levels above the package. */
 const REPO_DIR = path.resolve(CLI_ROOT, '..', '..');
-
-/**
- * The files the package publishes, by path in the package.
- * @returns {string[]}
- */
-function publishedFiles() {
-  const result = spawnSync(
-    process.platform === 'win32' ? 'npm.cmd' : 'npm',
-    ['pack', '--dry-run', '--json', '--ignore-scripts'],
-    {
-      cwd: CLI_ROOT,
-      encoding: 'utf8',
-      maxBuffer: 64 * 1024 * 1024,
-      shell: process.platform === 'win32',
-    },
-  );
-  if (result.status !== 0) {
-    throw new Error(`npm pack --dry-run failed: ${result.stderr}`);
-  }
-  const [{files}] = JSON.parse(result.stdout);
-  return files.map((/** @type {{path: string}} */ f) => f.path);
-}
 
 /**
  * Run `fn` on a copy of the published files, with the package's and the
@@ -52,10 +30,7 @@ export function withPublishedCopy(prefix, fn) {
   const stage = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   try {
     const pkg = path.join(stage, 'packages', 'cli');
-    for (const file of publishedFiles()) {
-      fs.mkdirSync(path.dirname(path.join(pkg, file)), {recursive: true});
-      fs.copyFileSync(path.join(CLI_ROOT, file), path.join(pkg, file));
-    }
+    copyPublishedFiles(CLI_ROOT, pkg);
     const link = (/** @type {string} */ target, /** @type {string} */ at) => {
       if (!fs.existsSync(target)) return;
       fs.mkdirSync(path.dirname(at), {recursive: true});

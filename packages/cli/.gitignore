@@ -28,6 +28,11 @@ assets/templates/components.generated.json
 # of importing each doc. Not committed: a checkout imports every doc.
 assets/docs.generated.json
 
+# Core's component list and imports, written at `prepack` by
+# scripts/generate-component-list.mjs so the published package reads them for
+# an unchanged installed Core. Not committed: a checkout works them out.
+assets/component-list.generated.json
+
 # The root help's command list, written at `prepack` by
 # scripts/generate-command-list.mjs so the published package prints its root
 # help without loading every command. Not committed: a checkout loads them.
