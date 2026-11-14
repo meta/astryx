@@ -18,7 +18,7 @@
  * so the server render sets them aside and draws them after it with React
  * DOM in a small document (charts.mjs).
  *
- * @input workerData {entry, root, served, withoutSegmenter}
+ * @input workerData {entry, root, scope, served, withoutSegmenter}
  * @output one message: {ok: true, markup, css, files, texts, logs} or
  *   {ok: false, error: {code, message, detail?}}
  * @position foundation/render — started by page-host.mjs
@@ -31,18 +31,18 @@ import {pathToFileURL} from 'node:url';
 import {format} from 'node:util';
 import {parentPort, workerData} from 'node:worker_threads';
 import {transformSync} from '@babel/core';
-import {LOAD_EXTENSIONS, existingFile, matchPath, readPathsIn, resolvePath} from './ts-paths.mjs';
+import {LOAD_EXTENSIONS, existingFile, matchPath, pathsFor, resolvePath} from './ts-paths.mjs';
 import {createJiti} from 'jiti';
 import {assetDataUri, isAssetPath} from './assets.mjs';
-import {SINGLE_COPY, isServedPackage, packageOf} from './served-packages.mjs';
+import {SINGLE_COPY, isServedPackage, packageOf, resolveServed} from './served-packages.mjs';
 import {findNodeModulesPackage} from '../fs/paths.mjs';
 import {importSpecifiers} from './embedded-imports.mjs';
 import {CHART_GLOBAL, CHART_ROOTS, chartDocument, chartSize, markLegends} from './charts.mjs';
 
 /** @typedef {{level: string, text: string}} PageLog */
 
-/** @type {{entry: string, root: string, served: {dir: string, integrations: string[]} | null, withoutSegmenter?: boolean}} */
-const {entry, root} = workerData;
+/** @type {{entry: string, root: string, scope: string, served: {dir: string, integrations: string[]} | null, withoutSegmenter?: boolean}} */
+const {entry, root, scope} = workerData;
 
 // Some Node builds crash in Intl.Segmenter. Without it, Core splits text by
 // code points, so a joined emoji can count as several characters.
@@ -50,7 +50,8 @@ if (workerData.withoutSegmenter) delete (/** @type {any} */ (Intl)).Segmenter;
 
 /** The package set, for a page outside a project whose folder has no Core of its own. */
 const served = workerData.served && findNodeModulesPackage(path.dirname(entry), '@astryxdesign/core') === null ? workerData.served : null;
-const ROOT_PREFIX = root.endsWith(path.sep) ? root : root + path.sep;
+/** The folder whose modules the page carries (see render-page.mjs `carryScopeOf`). */
+const SCOPE_PREFIX = scope.endsWith(path.sep) ? scope : scope + path.sep;
 
 /** @type {PageLog[]} */
 const logs = [];
@@ -144,10 +145,10 @@ const fnKey = p => {
 
 const NODE_MODULES = `${path.sep}node_modules${path.sep}`;
 
-/** A module of the project itself: inside its folder, not a package.
+/** A module of the page's own: inside the folder whose modules it carries, not a package.
  * @param {string} file */
 const isLocal = file =>
-  !file.includes(NODE_MODULES) && (file === entry || file.startsWith(ROOT_PREFIX));
+  !file.includes(NODE_MODULES) && (file === entry || file.startsWith(SCOPE_PREFIX));
 
 /** Charts the server render set aside, drawn after it. @type {any[]} */
 const charts = [];
@@ -413,6 +414,39 @@ function pagePlugin(filename) {
         // (`@/styles/site.css`) resolves the way modules do.
         const bare =
           isAliased(raw) && (/\.(css|scss|sass|less|json)$/i.test(raw) || isAssetPath(raw)) ? resolveAlias(raw) : raw;
+        const query = spec.includes('?') ? spec.slice(spec.indexOf('?') + 1) : '';
+        const target = isAliased(raw) ? resolveAlias(raw) : raw;
+        if (query && (target.startsWith('.') || path.isAbsolute(target))) {
+          // `?raw` gives the file's text and `?inline` a stylesheet's text (not
+          // added to the page), as Vite does by itself. Any other query loads
+          // the file as it loads without one: an image, font or media file as
+          // its address (`?url`, `?inline`, `?w=400`), a module as itself.
+          const file = path.resolve(dir, target);
+          if (query === 'raw' || (query === 'inline' && /\.css$/i.test(target))) {
+            if (!fs.existsSync(file)) {
+              const err = new Error(`${path.basename(filename)} imports ${spec}, which does not exist.`);
+              /** @type {any} */ (err).renderCode = 'ERR_FILE_NOT_FOUND';
+              throw err;
+            }
+            if (!localFiles.includes(file)) localFiles.push(file);
+            // The text is the module's default export, as Vite gives it, to
+            // every way of importing it.
+            const text = t.stringLiteral(fs.readFileSync(file, 'utf8'));
+            const declarators = p.node.specifiers.map((/** @type {any} */ s) =>
+              t.variableDeclarator(
+                t.identifier(s.local.name),
+                s.type === 'ImportNamespaceSpecifier'
+                  ? t.objectExpression([t.objectProperty(t.identifier('default'), text)])
+                  : s.type === 'ImportDefaultSpecifier' || (s.imported.name ?? s.imported.value) === 'default'
+                    ? text
+                    : t.identifier('undefined'),
+              ),
+            );
+            if (declarators.length > 0) p.replaceWith(t.variableDeclaration('const', declarators));
+            else p.remove();
+            return;
+          }
+        }
         if (!bare.startsWith('.') && !path.isAbsolute(bare) && !isAliased(bare)) {
           packages.add(
             bare.startsWith('@')
@@ -580,10 +614,11 @@ function pagePlugin(filename) {
 }
 
 /**
- * The project's path aliases (`compilerOptions.paths` in tsconfig.json or
- * jsconfig.json), matched by TypeScript's rules (see ts-paths.mjs).
+ * The page's path aliases (`compilerOptions.paths` in the tsconfig.json or
+ * jsconfig.json that TypeScript reads for the page), matched by TypeScript's
+ * rules (see ts-paths.mjs).
  */
-const PATHS = readPathsIn(root) ?? [];
+const PATHS = pathsFor(path.resolve(entry));
 
 /** @param {string} spec whether a specifier goes through a project alias */
 const isAliased = spec => resolvePath(PATHS, spec) !== null;
@@ -713,6 +748,32 @@ if (servedParent && Object.keys(SINGLE_COPY_ALIASES).length > 0) {
   });
 }
 
+/** What the StyleX compiler reads as a theme or constants file, by name. */
+const STYLEX_THEME_FILE = /\.(?:stylex(?:\.const)?|transformed)(?:\.(?:js|ts|tsx|jsx|mjs|cjs))?$/;
+
+/**
+ * Outside a project, the file the page loads for each StyleX theme file a
+ * module imports from a package, for the StyleX compiler. The compiler finds
+ * a theme import from the folder of the file that imports it, which outside
+ * a project holds no copy of the packages the set serves, so it is given the
+ * file the page loads. Its own rules still name that file for the variables'
+ * names, so they match the package's stylesheet.
+ * @param {string} source
+ * @param {string} filename
+ * @returns {Record<string, string[]> | null}
+ */
+function servedThemeFiles(source, filename) {
+  if (!served) return null;
+  /** @type {Record<string, string[]>} */
+  const files = {};
+  for (const spec of importSpecifiers(source, filename)) {
+    if (spec.startsWith('.') || path.isAbsolute(spec) || !STYLEX_THEME_FILE.test(spec)) continue;
+    const file = resolveServed(spec, filename, served);
+    if (file) files[spec] = [file];
+  }
+  return Object.keys(files).length > 0 ? files : null;
+}
+
 const plain = createJiti(entry, {fsCache: false, jsx: {runtime: 'automatic'}});
 
 const jiti = createJiti(entry, {
@@ -735,6 +796,7 @@ const jiti = createJiti(entry, {
     if (filename && isLocal(filename) && /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename)) {
       if (!localFiles.includes(filename)) localFiles.push(filename);
       const ts = /\.(tsx?|mts|cts)$/.test(filename);
+      const themeFiles = source.includes('stylex') ? servedThemeFiles(source, filename) : null;
       const result = transformSync(source, {
         filename,
         babelrc: false,
@@ -755,6 +817,7 @@ const jiti = createJiti(entry, {
                     runtimeInjection: false,
                     treeshakeCompensation: true,
                     unstable_moduleResolution: {type: 'commonJS', rootDir: root},
+                    ...(themeFiles ? {aliases: themeFiles} : {}),
                   },
                 ],
               ]
@@ -931,6 +994,8 @@ try {
   // such as a built theme), so they never pass the transform that records
   // local files. Follow the imports of every local module instead, so the
   // file carries each module the page reaches, as --reverse expects.
+  /** Every path-alias import a local module makes, with the file it names. @type {{spec: string, file: string}[]} */
+  const aliasImports = [];
   for (let i = 0; i < localFiles.length; i++) {
     const file = localFiles[i];
     if (!/\.[cm]?[jt]sx?$/.test(file)) continue;
@@ -942,6 +1007,8 @@ try {
     }
     for (const spec of importSpecifiers(source, file)) {
       const target = importedFile(spec, file);
+      const raw = spec.split('?')[0];
+      if (target && !raw.startsWith('.')) aliasImports.push({spec: raw, file: target});
       // Modules and JSON only: the transform already carries the stylesheets
       // and images a module imports, and a Sass file is never carried.
       if (target && /\.([cm]?[jt]sx?|json)$/i.test(target) && isLocal(target) && !localFiles.includes(target)) {
@@ -962,6 +1029,7 @@ try {
     chartsAlone,
     assets: [...assetsInlined],
     files: localFiles,
+    aliasImports,
     texts,
     fnTexts,
     logs,

@@ -26,7 +26,12 @@
  * @position packages/core/src/theme/generateThemeRules.ts
  */
 
-import type {ComponentStyleMap, DefinedTheme} from './defineTheme';
+import type {
+  ComponentStyleMap,
+  DefinedTheme,
+  StyleBlock,
+  StyleOverrides,
+} from './defineTheme';
 import {
   normalizeThemeAdaptations,
   resolveThemeAdaptationRules,
@@ -1350,10 +1355,7 @@ interface ComponentRuleOptions {
  * expansion and container padding mapping for every theme layer.
  */
 function generateComponentRules(
-  components: Record<
-    string,
-    Record<string, Record<string, string | Record<string, string>>>
-  >,
+  components: Record<string, Record<string, StyleOverrides>>,
   parts: string[],
   {
     resetInheritedPaddingSpecificity = false,
@@ -1364,133 +1366,209 @@ function generateComponentRules(
 ): void {
   for (const [component, rules] of Object.entries(components)) {
     for (const [key, styles] of Object.entries(rules)) {
-      const entries = Object.entries(styles);
-      if (entries.length === 0) {
-        continue;
-      }
-
-      const suffix = parseStyleKey(key);
-      const baseSelector = componentSelector(component, suffix, surface);
-      const location = componentLocation(locationPrefix, component, key);
-
-      // Separate regular properties from pseudo-class overrides
-      const props: [string, string][] = [];
-      const pseudos: [string, Record<string, string>][] = [];
-
-      for (const [prop, value] of entries) {
-        if (prop.startsWith(':') && typeof value === 'object') {
-          pseudos.push([prop, value]);
-        } else if (
-          acceptDeclaration(
-            toKebabCase(prop),
-            `${value as string}`,
-            location,
-            sink,
-          )
-        ) {
-          props.push([prop, value as string]);
-        }
-      }
-
-      // Derived var expansion: for each CSS property, check if the
-      // component has derived var entries and emit additional declarations.
-      // Entries are processed in order (priority).
-      // - `vars`: emit internal CSS custom property declarations
-      // - `expand: 'container'`: expand padding to container layout tokens
-      // - `replaces: true`: emit only the var, dropping the source property
-      let finalProps = props;
-      const derivedProps: [string, string][] = [];
-      let containerExpanded = false;
-      const replacedProps = new Set<string>();
-
-      for (const [prop, value] of props) {
-        const derived = getDerivedVars(component, prop);
-        // Padding longhands (paddingBlock, paddingInline, etc.) also
-        // match the 'padding' derived entry for container expansion.
-        const paddingDerived =
-          PADDING_PROPS.has(prop) && prop !== 'padding'
-            ? getDerivedVars(component, 'padding')
-            : [];
-        for (const entry of [...derived, ...paddingDerived]) {
-          if (entry.expand === 'container' && PADDING_PROPS.has(prop)) {
-            containerExpanded = true;
+      /**
+       * Emit a style block on a selector: its declarations, then its
+       * pseudo-class overrides, each rule passed through `wrap`; then, for a
+       * style key, its color-mode blocks.
+       */
+      const emit = (
+        block: StyleOverrides,
+        selector: string,
+        location: string,
+        wrap: (rule: string) => string,
+        withModes: boolean,
+      ): void => {
+        const props: [string, string][] = [];
+        const nested: [string, StyleBlock][] = [];
+        for (const [prop, value] of Object.entries(block)) {
+          const isObject = value !== null && typeof value === 'object';
+          // A pseudo-class override or a color-mode block nests. Anything
+          // else is a declaration as written, so the boundary check reports
+          // one that cannot be a declaration, such as a misspelled block key.
+          if (
+            isObject &&
+            (prop.startsWith(':') ||
+              (withModes && (prop === '@light' || prop === '@dark')))
+          ) {
+            nested.push([prop, value]);
+            continue;
           }
-          if (entry.replaces) {
-            replacedProps.add(prop);
-          }
-          if (entry.vars) {
-            for (const varName of entry.vars) {
-              derivedProps.push([varName, value]);
-            }
+          const text =
+            typeof value === 'object' && value !== null
+              ? JSON.stringify(value)
+              : `${value}`;
+          if (acceptDeclaration(toKebabCase(prop), text, location, sink)) {
+            props.push([prop, text]);
           }
         }
-        // A physical block longhand reaches the container expansion only. It
-        // names one edge, so it must not feed a `vars` entry above, which
-        // carries the padding for the whole box.
-        if (
-          prop in PHYSICAL_BLOCK_PADDING_PROPS &&
-          getDerivedVars(component, 'padding').some(
-            e => e.expand === 'container',
-          )
-        ) {
-          containerExpanded = true;
-        }
-      }
-
-      // Container padding expansion: replace padding props with
-      // component-scoped container tokens for layout integration.
-      if (containerExpanded) {
-        const paddingProps = props.filter(([p]) =>
-          CONTAINER_PADDING_PROPS.has(p),
-        );
-        const nonPaddingProps = props.filter(
-          ([p]) => !CONTAINER_PADDING_PROPS.has(p),
-        );
-        const parsed = parsePadding(paddingProps);
-        const containerTokens = expandContainerPadding(
+        const finalProps = expandComponentDeclarations(
           component,
-          parsed,
+          props,
           resetInheritedPaddingSpecificity,
         );
-        finalProps = [...nonPaddingProps, ...containerTokens];
-      }
-
-      // Drop properties whose derived entry set `replaces` — their value is
-      // carried by the emitted var and must not land on the class element.
-      if (replacedProps.size > 0) {
-        finalProps = finalProps.filter(([p]) => !replacedProps.has(p));
-      }
-
-      if (derivedProps.length > 0) {
-        finalProps = [...finalProps, ...derivedProps];
-      }
-
-      // Emit base rule
-      if (finalProps.length > 0) {
-        const declarations = joinDeclarations(
-          finalProps,
-          location,
-          sink,
-          toKebabCase,
-        );
-        parts.push(`  ${baseSelector} {\n${declarations}\n  }`);
-      }
-
-      // Emit pseudo-class rules
-      for (const [pseudo, pseudoStyles] of pseudos) {
-        const pseudoEntries = Object.entries(pseudoStyles);
-        if (pseudoEntries.length > 0) {
+        if (finalProps.length > 0) {
           const declarations = joinDeclarations(
-            pseudoEntries,
-            `${location}[${JSON.stringify(pseudo)}]`,
+            finalProps,
+            location,
             sink,
             toKebabCase,
           );
-          parts.push(...pseudoRules(baseSelector, pseudo, declarations));
+          parts.push(wrap(`  ${selector} {\n${declarations}\n  }`));
+        }
+        for (const [pseudo, pseudoStyles] of nested) {
+          const pseudoEntries = Object.entries(pseudoStyles);
+          if (pseudo.startsWith(':') && pseudoEntries.length > 0) {
+            const declarations = joinDeclarations(
+              pseudoEntries as [string, string][],
+              `${location}[${JSON.stringify(pseudo)}]`,
+              sink,
+              toKebabCase,
+            );
+            for (const rule of pseudoRules(selector, pseudo, declarations)) {
+              parts.push(wrap(rule));
+            }
+          }
+        }
+        if (!withModes) {
+          return;
+        }
+        // Color-mode blocks follow the rules they refine at the same weight,
+        // so in their mode they win over the style key's own values, and in
+        // the other mode they write nothing. Dark comes before light, as the
+        // onDark and onLight surface overrides do.
+        for (const name of ['dark', 'light'] as const) {
+          const modeStyles = nested.find(([key]) => key === `@${name}`)?.[1];
+          if (!modeStyles) {
+            continue;
+          }
+          const modeEmit = (at: string, modeWrap: (rule: string) => string) =>
+            emit(
+              modeStyles,
+              at,
+              `${location}[${JSON.stringify(`@${name}`)}]`,
+              modeWrap,
+              false,
+            );
+          if (surface) {
+            // A media surface fixes the mode: only its own block applies.
+            if (surface === name) {
+              modeEmit(selector, wrap);
+            }
+            continue;
+          }
+          // The theme root decides outside media surfaces. Inside one, the
+          // surface decides as the onDark and onLight overrides do: by an
+          // ancestor condition, at the root's weight.
+          const inside = (ancestor: string) =>
+            `:is(${selector}):where(${ancestor} *)`;
+          const outsideSurfaces = `:where(:not(:scope [data-${dataAttrNamespace}-media] *))`;
+          modeEmit(
+            `${inside(`:scope[${THEME_MODE_ATTR}="${name}"]`)}${outsideSurfaces}`,
+            wrap,
+          );
+          modeEmit(
+            `${inside(
+              `:scope:not([${THEME_MODE_ATTR}="light"], [${THEME_MODE_ATTR}="dark"])`,
+            )}${outsideSurfaces}`,
+            rule =>
+              wrap(`  @media (prefers-color-scheme: ${name}) {\n${rule}\n  }`),
+          );
+          modeEmit(inside(`:scope ${mediaSelector(name)}`), wrap);
+        }
+      };
+      emit(
+        styles,
+        componentSelector(component, parseStyleKey(key), surface),
+        componentLocation(locationPrefix, component, key),
+        rule => rule,
+        true,
+      );
+    }
+  }
+}
+
+/** Theme's own color-mode attribute (`<Theme mode>` and `<html data-theme>`). */
+const THEME_MODE_ATTR = 'data-theme';
+
+/**
+ * A component block's declarations with Core's derived variables added,
+ * padding written to the container layout tokens, and the declarations a
+ * derived entry replaces dropped.
+ */
+function expandComponentDeclarations(
+  component: string,
+  props: [string, string][],
+  resetInheritedPaddingSpecificity: boolean,
+): [string, string][] {
+  // Derived var expansion: for each CSS property, check if the
+  // component has derived var entries and emit additional declarations.
+  // Entries are processed in order (priority).
+  // - `vars`: emit internal CSS custom property declarations
+  // - `expand: 'container'`: expand padding to container layout tokens
+  // - `replaces: true`: emit only the var, dropping the source property
+  let finalProps = props;
+  const derivedProps: [string, string][] = [];
+  let containerExpanded = false;
+  const replacedProps = new Set<string>();
+
+  for (const [prop, value] of props) {
+    const derived = getDerivedVars(component, prop);
+    // Padding longhands (paddingBlock, paddingInline, etc.) also
+    // match the 'padding' derived entry for container expansion.
+    const paddingDerived =
+      PADDING_PROPS.has(prop) && prop !== 'padding'
+        ? getDerivedVars(component, 'padding')
+        : [];
+    for (const entry of [...derived, ...paddingDerived]) {
+      if (entry.expand === 'container' && PADDING_PROPS.has(prop)) {
+        containerExpanded = true;
+      }
+      if (entry.replaces) {
+        replacedProps.add(prop);
+      }
+      if (entry.vars) {
+        for (const varName of entry.vars) {
+          derivedProps.push([varName, value]);
         }
       }
     }
+    // A physical block longhand reaches the container expansion only. It
+    // names one edge, so it must not feed a `vars` entry above, which
+    // carries the padding for the whole box.
+    if (
+      prop in PHYSICAL_BLOCK_PADDING_PROPS &&
+      getDerivedVars(component, 'padding').some(e => e.expand === 'container')
+    ) {
+      containerExpanded = true;
+    }
   }
+
+  // Container padding expansion: replace padding props with
+  // component-scoped container tokens for layout integration.
+  if (containerExpanded) {
+    const paddingProps = props.filter(([p]) => CONTAINER_PADDING_PROPS.has(p));
+    const nonPaddingProps = props.filter(
+      ([p]) => !CONTAINER_PADDING_PROPS.has(p),
+    );
+    const parsed = parsePadding(paddingProps);
+    const containerTokens = expandContainerPadding(
+      component,
+      parsed,
+      resetInheritedPaddingSpecificity,
+    );
+    finalProps = [...nonPaddingProps, ...containerTokens];
+  }
+
+  // Drop properties whose derived entry set `replaces` — their value is
+  // carried by the emitted var and must not land on the class element.
+  if (replacedProps.size > 0) {
+    finalProps = finalProps.filter(([p]) => !replacedProps.has(p));
+  }
+
+  if (derivedProps.length > 0) {
+    finalProps = [...finalProps, ...derivedProps];
+  }
+  return finalProps;
 }
 
 /**
