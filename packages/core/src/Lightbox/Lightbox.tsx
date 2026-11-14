@@ -205,7 +205,10 @@ const REPLACED_ELEMENTS = new Set([
   'progress',
 ]);
 
-/** A box on a line, and the node it belongs to. */
+/**
+ * A box on a line, with the node it belongs to, so the check can tell which
+ * element holds it.
+ */
 interface LineBox {
   left: number;
   right: number;
@@ -382,13 +385,18 @@ function hasMarker(element: Element, view: Window): boolean {
 
 /**
  * The current layout has the place below the text, so the text's lines are its
- * own. The check measures text, inline elements, one-box elements and plain
- * blocks. Null means that the flow holds any other layout, or that content no
- * node measures can take room on the last line: a list marker, a text indent,
- * a justified last line, or a block's generated content on that line or below
+ * own. `line` is the caption's line height. The check measures text, inline
+ * elements, one-box elements and plain blocks. Null means that the flow holds
+ * any other layout, or that content no node measures can take room on the
+ * last line or under it. Such content is a list marker, a text indent, a
+ * justified last line or an empty inline-block. It is also room under the
+ * last line of text, or a block's generated content on that line or below
  * it.
  */
-function placeFitsBesideLastLine(flow: HTMLElement): boolean | null {
+function placeFitsBesideLastLine(
+  flow: HTMLElement,
+  line: number,
+): boolean | null {
   const place = flow.firstElementChild;
   const doc = flow.ownerDocument;
   const view = doc.defaultView ?? window;
@@ -463,7 +471,13 @@ function placeFitsBesideLastLine(flow: HTMLElement): boolean | null {
     }
     const margins = style.display.startsWith('inline') ? style : undefined;
     if (isOneBox(node, view)) {
-      keep(lineBoxes, node.getClientRects(), node, margins);
+      const rects = node.getClientRects();
+      // An empty one-box element takes room on its line, but its box has no
+      // height to mark the line it is on.
+      if (Array.from(rects).some(rect => rect.width > 0 && rect.height <= 0)) {
+        return null;
+      }
+      keep(lineBoxes, rects, node, margins);
       skipDescendants(walker);
       continue;
     }
@@ -522,6 +536,16 @@ function placeFitsBesideLastLine(flow: HTMLElement): boolean | null {
     return true;
   }
   const lowest = lineBoxes.reduce((a, b) => (b.bottom > a.bottom ? b : a));
+  // The flow can hold room under its lowest measured box that no node
+  // measures. A block's bottom padding or border, a trailing line break or an
+  // empty inline-block makes it. Layout can put the place's last line there.
+  const flowBox = flow.getBoundingClientRect();
+  if (
+    Math.round(flowBox.height / line) >
+    Math.round((lowest.bottom - flowBox.top) / line)
+  ) {
+    return null;
+  }
   const boxes = [...lineBoxes, ...inlineBoxes];
   // No box inside the element is on a line above the last one.
   const isFirstLineOf = (element: Element) =>
@@ -590,7 +614,6 @@ function placeFitsBesideLastLine(flow: HTMLElement): boolean | null {
   const placeBox = place.getBoundingClientRect();
   const placeLeft = placeBox.left - parseFloat(placeStyle.marginLeft);
   const placeRight = placeBox.right + parseFloat(placeStyle.marginRight);
-  const flowBox = flow.getBoundingClientRect();
   const isPlaceAtRight = placeLeft + placeRight > flowBox.left + flowBox.right;
   const room = isPlaceAtRight
     ? Math.min(contentRight, placeLeft) - contentLeft
@@ -1413,7 +1436,7 @@ export function Lightbox({
         // frame reads the result after it commits the text's lines, a forced
         // layout.
         const fit =
-          textLines < lineCount ? placeFitsBesideLastLine(flow) : true;
+          textLines < lineCount ? placeFitsBesideLastLine(flow, line) : true;
         // A toggle that does not fit beside the text's last line takes a line
         // of its own. That decides the count only when the caption shows one
         // line more than its text.
