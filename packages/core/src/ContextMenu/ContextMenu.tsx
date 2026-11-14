@@ -5,7 +5,7 @@
  * @file ContextMenu.tsx
  * @input Uses React, StyleX, useLayer, shared layer dismissal, BottomSheet,
  *   useListFocus, the presentation resolver (usePresentation), useLongPress,
- *   and the touch layer (ContextMenuTouchLayer)
+ *   and the touch layer (ContextMenuTouchLayer), which loads after first paint
  * @output Exports ContextMenu with cursor-popover and touch-sheet presentations
  * @position Core implementation; consumed by index.ts
  *
@@ -39,6 +39,7 @@
  * - /packages/core/src/ContextMenu/ContextMenu.doc.mjs
  * - /packages/core/src/ContextMenu/ContextMenu.test.tsx
  * - /packages/core/src/ContextMenu/ContextMenuTouchLayer.tsx (the touch layer)
+ * - /packages/core/src/ContextMenu/contextMenuTouchLoader.ts (its load)
  * - /packages/core/src/ContextMenu/contextMenuPress.ts (touch timeline)
  * - /packages/core/src/ContextMenu/contextMenuPressFeedback.ts (press feedback)
  * - /packages/core/src/ContextMenu/index.ts
@@ -90,10 +91,8 @@ import {useMenuPress} from '../hooks/useMenuPress';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {shadowHostOf} from '../utils/flatTree';
 import {usePresentation} from '../utils/presentation';
-import {
-  ContextMenuTouchLayer,
-  type ContextMenuTouchHandle,
-} from './ContextMenuTouchLayer';
+import type {ContextMenuTouchHandle} from './ContextMenuTouchLayer';
+import {useContextMenuTouchLayer} from './contextMenuTouchLoader';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {
@@ -482,6 +481,17 @@ export function ContextMenu({
   const endTouchOpen = useCallback(() => {
     touchHandleRef.current?.release();
   }, []);
+  // The touch layer loads after the page's first paint, and only while the
+  // touch model applies.
+  const TouchLayer = useContextMenuTouchLayer(touchModes && !isDisabled);
+  // A finger that lands before the touch layer has loaded. The layer begins
+  // it as it mounts, if the finger is still down.
+  const lateTouchRef = useRef<TouchEvent | null>(null);
+  const takeLateTouch = useCallback(() => {
+    const touchStart = lateTouchRef.current;
+    lateTouchRef.current = null;
+    return touchStart;
+  }, []);
 
   const updateOpenState = useCallback(
     (nextIsOpen: boolean) => {
@@ -851,9 +861,20 @@ export function ContextMenu({
   const handleTriggerTouchStart = useCallback(
     (event: React.TouchEvent<HTMLElement>) => {
       handleLongPressTouchStart(event);
+      if (touchModes && !isDisabled && TouchLayer == null) {
+        // Kept while the touch layer loads: one finger, until it lifts.
+        lateTouchRef.current =
+          event.touches.length === 1 ? event.nativeEvent : null;
+      }
       onTouchStartProp?.(event);
     },
-    [handleLongPressTouchStart, onTouchStartProp],
+    [
+      handleLongPressTouchStart,
+      onTouchStartProp,
+      touchModes,
+      isDisabled,
+      TouchLayer,
+    ],
   );
   const handleTriggerTouchMove = useCallback(
     (event: React.TouchEvent<HTMLElement>) => {
@@ -864,6 +885,7 @@ export function ContextMenu({
   );
   const handleTriggerTouchEnd = useCallback(
     (event: React.TouchEvent<HTMLElement>) => {
+      lateTouchRef.current = null;
       handleLongPressTouchEnd(event);
       onTouchEndProp?.(event);
     },
@@ -871,6 +893,7 @@ export function ContextMenu({
   );
   const handleTriggerTouchCancel = useCallback(
     (event: React.TouchEvent<HTMLElement>) => {
+      lateTouchRef.current = null;
       handleLongPressTouchCancel(event);
       onTouchCancelProp?.(event);
     },
@@ -882,9 +905,13 @@ export function ContextMenu({
   // the public API does not promise as cancelable.
   const handleTriggerContextMenu = useCallback(
     (event: React.MouseEvent<HTMLElement>) => {
-      if (touchHandleRef.current?.isTracking() === true) {
+      if (
+        touchHandleRef.current?.isTracking() === true ||
+        lateTouchRef.current != null
+      ) {
         // The browser's own long-press menu (Android Chrome) for a finger the
-        // recognizer is timing: the recognizer decides, not this event.
+        // recognizer is timing, or will time once the touch layer loads: the
+        // recognizer decides, not this event.
         event.preventDefault();
       } else {
         handleContextMenu(event);
@@ -1069,8 +1096,8 @@ export function ContextMenu({
           })}
         />
       </TriggerElement>
-      {touchModes && !isDisabled ? (
-        <ContextMenuTouchLayer
+      {TouchLayer != null ? (
+        <TouchLayer
           ref={touchHandleRef}
           triggerRef={triggerRef}
           visualRef={visualRef}
@@ -1078,6 +1105,7 @@ export function ContextMenu({
           onOpen={openFromFinger}
           onCommit={prepareMenu}
           onCancel={layer.releasePrepared}
+          takeLateTouch={takeLateTouch}
         />
       ) : null}
 

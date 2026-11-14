@@ -3077,7 +3077,21 @@ export class GestureHost {
   }
 
   private readonly onTouchStart = (event: TouchEvent): void => {
-    this.endWheel(eventTime(event, this.timing));
+    this.beginTouches(event, eventTime(event, this.timing));
+  };
+
+  /**
+   * Begins, now, the fingers of a `touchstart` this host did not hear: a
+   * recognizer that attaches while a finger is down on its element hands
+   * over that finger's own touchstart. The caller passes only a touchstart
+   * whose fingers are still down.
+   */
+  beginLateTouches(event: TouchEvent): void {
+    this.beginTouches(event, this.arena.pageTime());
+  }
+
+  private beginTouches(event: TouchEvent, time: number): void {
+    this.endWheel(time);
     this.noteFingersDown(event);
     // Where the host reads a finger from its pointer events (no ontouchstart,
     // as after touch emulation turns on), its Touch Events would track it twice.
@@ -3087,7 +3101,6 @@ export class GestureHost {
     if (this.fingerTargets.length > 1) {
       this.failUnclaimedLoneFingerPans();
     }
-    const time = eventTime(event, this.timing);
     const inputs: ArenaBeganInput[] = [];
     const untracked: TouchBeganInput[] = [];
     const stale: number[] = [];
@@ -3198,7 +3211,7 @@ export class GestureHost {
     if (isNode(landed)) {
       this.lastTouch = {target: landed, time};
     }
-  };
+  }
 
   private readonly onTouchMove = (event: TouchEvent): void => {
     this.noteFingersDown(event);
