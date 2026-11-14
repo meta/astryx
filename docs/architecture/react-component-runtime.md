@@ -357,7 +357,7 @@ those contracts.
   animator, so a component that reads the threshold statically does not pull
   in the deferred runtime. Gap: these modules still import the shared touch
   modules statically, so a page that renders them carries the touch runtime in
-  its first load: `hooks/useActionGroupTracking`, `hooks/usePager`, Lightbox
+  its first load: AlertDialog (`useAlertMotion`), `hooks/useActionGroupTracking`, `hooks/usePager`, Lightbox
   (`useZoomCore`, `useZoomStage`), Resizable (`resizablePane`), Slider
   (`sliderTouchController`), SnapPaging, Chat (`useChatKeyboard`), and the
   date and time fields' wheels (`motion/reducedMotion`). A surface
