@@ -209,6 +209,18 @@ describe('render --reverse says what changed after the render', () => {
     ]);
   });
 
+  it('names where an edited run of several thousand words sits', async () => {
+    const words = Array.from({length: 6000}, (_, i) => `w${i}`);
+    const lines = Array.from({length: 60}, (_, i) => `        ${words.slice(i * 100, i * 100 + 100).join(' ')}`).join('\n');
+    put('many-words/page.tsx', `export default function Page() {\n  return (\n    <p>\n${lines}\n    </p>\n  );\n}\n`);
+    await render('many-words/page.tsx', {cwd: dir});
+    put('many-words/edited.html', read('many-words/page.html').replace(' w5999<', ' last<'));
+    const back = /** @type {any} */ (await render('many-words/edited.html', {cwd: dir, reverse: true, out: 'many-words-back/page.tsx'}));
+    expect(back.data.edits).toEqual([
+      {was: clip(words.join(' ')), now: clip([...words.slice(0, -1), 'last'].join(' ')), file: 'many-words-back/page.tsx', line: 4},
+    ]);
+  });
+
   it('reports text added and removed after the render, and an edit with no text change', async () => {
     put('added.html', editBody(html, body => body.replace('</main>', '<p>Footnote</p></main>').replace('Revenue grew in every region.', '')));
     const added = /** @type {any} */ (await render('added.html', {cwd: dir, reverse: true, out: 'added-back/report.tsx'}));

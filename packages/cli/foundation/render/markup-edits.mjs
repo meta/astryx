@@ -127,25 +127,55 @@ export function textEdits(before, after) {
 }
 
 /**
+ * A module's text with its white space collapsed the way a run of text's is,
+ * and the line of the source each of its characters comes from; kept per
+ * module, so every run is found in one pass over each.
+ * @type {WeakMap<{file: string, text: string}, {text: string, lines: number[]}>}
+ */
+const collapsedModules = new WeakMap();
+
+/** @param {{file: string, text: string}} module */
+function collapsedOf(module) {
+  let found = collapsedModules.get(module);
+  if (!found) {
+    let text = '';
+    /** @type {number[]} */
+    const lines = [];
+    let line = 1;
+    for (const part of module.text.split(/(\s+)/)) {
+      if (part === '') continue;
+      const space = /^\s/.test(part);
+      text += space ? ' ' : part;
+      for (let i = 0; i < (space ? 1 : part.length); i++) lines.push(line);
+      line += part.split('\n').length - 1;
+    }
+    found = {text, lines};
+    collapsedModules.set(module, found);
+  }
+  return found;
+}
+
+/**
  * Where a run of text sits in the restored source: the file and line where
  * it starts, when it appears exactly once across the files. A run is text
  * with its white space collapsed, and in source the same text may wrap
- * across lines (JSX joins them with one space), so any white space in the
- * source matches a space in the run.
+ * across lines (JSX joins them with one space), so the run is found in each
+ * module's text collapsed the same way.
  * @param {string} text a whole run of text
  * @param {{file: string, text: string}[]} files the restored modules
  * @returns {{file: string, line: number} | null}
  */
 export function locate(text, files) {
-  const words = text.split(' ').filter(Boolean);
-  if (words.length === 0) return null;
-  const pattern = new RegExp(words.map(word => word.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')).join('\\s+'), 'g');
+  if (!text) return null;
   /** @type {{file: string, line: number} | null} */
   let found = null;
-  for (const {file, text: source} of files) {
-    for (const match of source.matchAll(pattern)) {
+  for (const module of files) {
+    const collapsed = collapsedOf(module);
+    let at = collapsed.text.indexOf(text);
+    while (at >= 0) {
       if (found) return null;
-      found = {file, line: source.slice(0, match.index).split('\n').length};
+      found = {file: module.file, line: collapsed.lines[at]};
+      at = collapsed.text.indexOf(text, at + 1);
     }
   }
   return found;
