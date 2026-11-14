@@ -18,7 +18,9 @@
  * @position Beside rank.mjs (api/build/kit/); kit.mjs calls it for every
  *   whole page (a part or an edit follows the ranker's placement rules). A
  *   template the tables do not list competes on its own descriptor's words
- *   (`ownWords`), so a new template can start a build.
+ *   (`ownWords`), and on the listed templates' scale when the idea names a
+ *   word only its label carries (`placeUnlisted`), so a new template can start
+ *   a build.
  */
 
 import {STOPWORDS} from '../../search/search.mjs';
@@ -354,6 +356,78 @@ function familyAt(name, catalog, order) {
 }
 
 /**
+ * Whether the idea names a word that only one template's own label carries
+ * (display name, category and keywords), per template. A word several labels
+ * share ("detail" in every detail page) names none of them.
+ * @param {DescribedTemplate[]} catalog
+ * @param {string[]} order the idea's words, in order (`contentWords`)
+ * @returns {(name: string) => boolean}
+ */
+function namesOwnLabel(catalog, order) {
+  const labels = new Map(
+    catalog.map(t => [
+      t.name,
+      descriptorWordsFor(
+        [t.displayName ?? '', t.category ?? ''],
+        t.keywords ?? [],
+        order,
+      ),
+    ]),
+  );
+  const said = new Set(order);
+  return name => {
+    const own = labels.get(name);
+    if (!own) return false;
+    for (const w of own) {
+      if (!said.has(w)) continue;
+      let shared = false;
+      for (const [other, words] of labels)
+        if (other !== name && words.has(w)) shared = true;
+      if (!shared) return true;
+    }
+    return false;
+  };
+}
+
+/**
+ * A table's scores with a score for each template the table does not list.
+ * Such a template takes the table score that the listed templates hold at its
+ * place in the ranker's order for this idea: the listed template the ranker
+ * puts at the same place gives its table score. The scale comes from the
+ * listed templates' own scores for the idea, so a template the table never saw
+ * competes on its descriptor's match instead of sitting below every listed one.
+ * @param {(number | undefined)[]} column a score per candidate, undefined when unlisted
+ * @param {string[]} cands
+ * @param {import('./rank.mjs').RankedPage[]} ranked
+ * @param {(name: string) => boolean} named whether the idea names a word of
+ *   the template's own label (display name, category or keywords)
+ * @returns {(number | undefined)[]}
+ */
+function placeUnlisted(column, cands, ranked, named) {
+  const rank = new Map(ranked.map(r => [r.name, r.score]));
+  const scoreOf = (/** @type {number} */ k) => rank.get(cands[k]) ?? 0;
+  const listed = cands
+    .map((_, k) => k)
+    .filter(k => cands[k] !== SHELL && column[k] !== undefined);
+  if (listed.length === 0) return column;
+  const tableOrder = listed
+    .map(k => /** @type {number} */ (column[k]))
+    .sort((a, b) => b - a);
+  return column.map((x, k) => {
+    if (x !== undefined || cands[k] === SHELL || !named(cands[k])) return x;
+    let above = 0;
+    let level = 0;
+    for (const j of listed) {
+      if (scoreOf(j) > scoreOf(k)) above++;
+      else if (scoreOf(j) === scoreOf(k)) level++;
+    }
+    return tableOrder[
+      Math.min(tableOrder.length - 1, Math.floor(above + level / 2))
+    ];
+  });
+}
+
+/**
  * The blend's score for every candidate: the app shell and every ready,
  * non-shell template, the table's first, then any the table does not list.
  * @param {string} idea
@@ -377,14 +451,20 @@ function blend(idea, ranked, pick, catalog, weights) {
   const cands = [...listed, ...extra];
   const position = new Map(weights.candidates.map((c, i) => [c, i]));
   const words = new Set(weightWords(idea).map(stem));
+  const said = contentWords(idea);
   /** @type {(number | undefined)[][]} */
   const members = weights.tables.map(table => {
     const index = new Map(table.words.map((w, i) => [w, i]));
     const s = tableScores(table, index, words, weights.candidates.length);
-    return cands.map(c => {
-      const i = position.get(c);
-      return i === undefined ? undefined : round4(s[i]);
-    });
+    return placeUnlisted(
+      cands.map(c => {
+        const i = position.get(c);
+        return i === undefined ? undefined : round4(s[i]);
+      }),
+      cands,
+      ranked,
+      namesOwnLabel(catalog, said),
+    );
   });
   const fromRanker = rankerScores(ranked, pick);
   const rankerMember = cands.map(c => {
