@@ -768,6 +768,12 @@ function finish(env, drafts) {
         if (why) unmet.push(why);
         return !why;
       });
+      // One change in growing amounts: the first kept is the answer, and
+      // the smaller amounts that fell short are no reason to tell.
+      if (d.smallest && d.options.length) {
+        d.options = d.options.slice(0, 1);
+        unmet.length = 0;
+      }
       unmetOf.set(d, unmet);
     }
   for (const d of drafts) {

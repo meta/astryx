@@ -23,6 +23,7 @@ import {
   DENSITY,
   DIALS,
   densityWords,
+  HEADING_TRACKING,
   HEADING_WEIGHTS,
   P,
   FAMILIES,
@@ -69,8 +70,10 @@ import {cssProperties, keywordsOf, matchValue, splitTop} from './_css.mjs';
 
 /**
  * One answer: what it does, and the ways to do it. Each option is a list of
- * steps run in order; most options are one step.
- * @typedef {{text: string, options: Step[][], sequence?: boolean, lookup?: string, intent?: MeasureIntent}} Draft
+ * steps run in order; most options are one step. `smallest`: the options
+ * are one change in growing amounts, and the answer is the first the
+ * measured check keeps.
+ * @typedef {{text: string, options: Step[][], sequence?: boolean, lookup?: string, intent?: MeasureIntent, smallest?: boolean}} Draft
  */
 
 /**
@@ -1194,35 +1197,46 @@ function exampleOf(prop) {
  * least or past it), whether the bound itself is outside it (strict), the
  * limit in px, and the words as written. One reader for "bigger than 4px",
  * "no bigger than 12px", "at least 2px", "at most 8px", "under 40px".
+ * The limit is in px for a px or rem length, in em for an em length
+ * (letter spacing), and as written for a line height's plain number.
  * @param {string} t
- * @returns {{up: boolean, strict: boolean, limit: number, said: string} | null}
+ * @returns {{up: boolean, strict: boolean, limit: number, said: string, unit: 'px' | 'em' | ''} | null}
  */
 function boundOf(t) {
   const UP =
-    /^(bigger|larger|more|wider|roomier|rounder|thicker|taller|heavier|bolder)$/;
-  const cmp =
-    /\b(?:(no|not)\s+)?(bigger|larger|more|wider|roomier|rounder|thicker|taller|heavier|bolder|smaller|less|tighter|narrower|sharper|thinner|shorter|lighter)\s+than\s+(\d*\.?\d+)(px|rem)\b/i.exec(
-      t,
-    );
+    /^(bigger|larger|more|wider|roomier|rounder|thicker|taller|heavier|bolder|looser)$/;
+  // A plain number is a bound only on a line height, which has no unit.
+  const unit = /\b(line[- ]?height|leading)\b/i.test(t)
+    ? '(px|rem|em)?'
+    : '(px|rem|em)';
+  /** @param {string} n @param {string | undefined} u */
+  const measure = (n, u) => ({
+    limit: Number(n) * (u === 'rem' ? 16 : 1),
+    unit: /** @type {'px' | 'em' | ''} */ (u === 'em' ? 'em' : u ? 'px' : ''),
+  });
+  const cmp = new RegExp(
+    `\\b(?:(no|not)\\s+)?(bigger|larger|more|wider|roomier|rounder|thicker|taller|heavier|bolder|looser|smaller|less|tighter|narrower|sharper|thinner|shorter|lighter)\\s+than\\s+(-?\\d*\\.?\\d+)${unit}(?![\\w%])`,
+    'i',
+  ).exec(t);
   if (cmp) {
     const way = UP.test(cmp[2].toLowerCase());
     return {
       up: cmp[1] ? !way : way,
       strict: !cmp[1],
-      limit: Number(cmp[3]) * (cmp[4] === 'rem' ? 16 : 1),
+      ...measure(cmp[3], cmp[4]),
       said: cmp[0],
     };
   }
-  const word =
-    /\b(at least|at most|under|below|over|above)\s+(\d*\.?\d+)(px|rem)\b/i.exec(
-      t,
-    );
+  const word = new RegExp(
+    `\\b(at least|at most|under|below|over|above)\\s+(-?\\d*\\.?\\d+)${unit}(?![\\w%])`,
+    'i',
+  ).exec(t);
   if (!word) return null;
   const w = word[1].toLowerCase();
   return {
     up: /^(at least|over|above)$/.test(w),
     strict: !/^at (least|most)$/.test(w),
-    limit: Number(word[2]) * (word[3] === 'rem' ? 16 : 1),
+    ...measure(word[2], word[3]),
     said: word[0],
   };
 }
@@ -1239,7 +1253,9 @@ function ownWay(t) {
   if (!bound) return null;
   const rest = t.replace(bound.said, ' ');
   const up =
-    /\b(bigger|larger|more|rounder|wider|taller|thicker|roomier)\b/.test(rest);
+    /\b(bigger|larger|more|rounder|wider|taller|thicker|roomier|looser)\b/.test(
+      rest,
+    );
   const down =
     /\b(smaller|less|sharper|narrower|shorter|thinner|tighter)\b/.test(rest);
   return up && !down ? 'more' : down && !up ? 'less' : null;
@@ -1757,6 +1773,7 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
  * @property {Record<string, string>} decl - CSS written as `prop: value`
  * @property {string[]} [quoted] - family names the clause writes in quotes
  * @property {{prop: string, value: string, bad?: string} | null} named - a CSS property the clause names, with its value as typed
+ * @property {string} [colorRef] - a part whose color the clause names as a value ("the sidebar the page color"): read, never changed
  */
 
 /**
@@ -2190,6 +2207,35 @@ function clausesOf(q, partWords) {
       parts.push(p);
       rest = rest.replace(re, ' ');
     }
+    // "the sidebar the page color", "the header the card color": a part
+    // named as "the <part> color" after another part is a color to take,
+    // read from that part and never changed.
+    /** @type {string | undefined} */
+    let colorRef;
+    if (parts.length > 1) {
+      // Where the clause first names a part, by any of its words.
+      const at = (/** @type {{on: string}} */ p) =>
+        partWords
+          .filter(([, x]) => x.on === p.on)
+          .map(([re]) => new RegExp(re.source, 'g').exec(text))
+          .filter(m => m != null)
+          .map(m => ({index: m.index, end: m.index + m[0].length}))
+          .sort((x, y) => x.index - y.index)[0] ?? null;
+      const first = Math.min(...parts.map(p => at(p)?.index ?? Infinity));
+      const ref = parts.find(p => {
+        const where = at(p);
+        return (
+          where != null &&
+          where.index > first &&
+          /\b(?:the|my|a)\s+$/.test(text.slice(0, where.index)) &&
+          /^(?:'s)?\s+colou?r\b/.test(text.slice(where.end))
+        );
+      });
+      if (ref) {
+        colorRef = ref.on;
+        parts.splice(parts.indexOf(ref), 1);
+      }
+    }
     // "list rounder": a catalog name that is also a plain word is the part
     // when the clause names no other part and asks for a shape change.
     const shapeAsk =
@@ -2343,6 +2389,7 @@ function clausesOf(q, partWords) {
     return {
       text,
       parts,
+      ...(colorRef ? {colorRef} : {}),
       aspects,
       named: namedProperty(text),
       neg,
@@ -2813,13 +2860,21 @@ export function draftAnswer(ctx, env, question) {
   const QUESTION_CLAUSE =
     /^\s*(?!(?:can|could|would|will) you\b|why (?:are|is|aren'?t|isn'?t)\b[^?]*\bnot\b|why not\b|why don'?t (?:we|you)\b|what about\b|what if\b|how about\b|is it possible\b|is there a way\b|can we\b|could we\b)(what|whats|what's|which|why|where|who|when|is|are|does|do|did|can|could|should|will)\b[^?]*\?+!*\s*$|^\s*(?!why not\b|why don'?t (?:we|you)\b|what about\b|what if\b|why (?:are|is|aren'?t|isn'?t)\b[^?]*\bnot\b)(what|whats|what's|which|why|where)\b|^\s*(?!is it possible\b|is there a way\b)(are|is|does|did|would|should) (my|the|it|this|these|those|our|there|a|an|square|round|rounder|bigger|smaller|darker|lighter)\b/i;
   // "if you can", "if possible": politeness, not a condition. "no fewer
-  // than 2px": a limit, the number.
+  // than 2px": the number, the value asked; beside a way ("smaller but no
+  // less than 64px") a lower bound on it, as the bound reader names it.
+  const wayBeside =
+    /\b(smaller|thinner|sharper|narrower|shorter|tighter|bigger|larger|thicker|rounder|wider|taller|roomier)\b/i.test(
+      question,
+    );
   question = question
     .replace(
       /\b(?:if (?:you can|possible|you could|you don'?t mind|it'?s not too much trouble|it is not too much trouble)|when you get a chance)\b[,]?\s*/gi,
       '',
     )
-    .replace(/\bno (?:less|fewer) than\s+(?=\d)/gi, '');
+    .replace(
+      /\bno (?:less|fewer) than\s+(?=\d)/gi,
+      wayBeside ? 'at least ' : '',
+    );
   // "dark page #0b0b0f", "dark.page=#…", "dark page: #…": the mode word
   // scopes the color. "dark mode only: accent #…" is that mode, not a
   // dark-only theme. Vocabulary that names a direction: nuke/kill/zap =
@@ -3131,9 +3186,11 @@ export function draftAnswer(ctx, env, question) {
     .replace(/\b([a-z][a-z -]*?)\s*\+\+/gi, 'more $1')
     .replace(/\b([a-z][a-z -]*?)\s*--(?![a-z])/gi, 'less $1')
     .replace(/\b([a-z][a-z -]*?)\s*[:=]\s*(?:off|none|no)\b/gi, 'no $1');
+  // ("the accent color, but lighter": a way after the comma with nothing
+  // else is a way of the color before it, one segment.)
   const segments = question
     .split(
-      /\s*(?:,(?![^(]*\))|[;\n|]|\s[/+]\s(?![^(]*\))|\.{2,}|[.?!](?=\s)|\bjust\b|\bthen\b|\s[-\u2013\u2014]\s|\bstep \d+\b|\bbut\b(?= (?:make|set|change|use|give|turn|remove|add)\b)|\b(?:but|and)\b(?=\s+(?:don'?t|do not|never|leave|keep)\b)|(?<=\S)(?<!\b(?:don'?t|never|do not|not|to|please|and|you|we|i|let'?s|can|could|would|will))\s+(?=(?:make|set|change|give|turn) (?:it|them|the|my|this|that|those|these)\b)|(?<=\S)\s+(?=(?:do|does|will) \w+ (?:follow|match)\b))\s*/i,
+      /\s*(?:,(?![^(]*\))(?!\s*but\s+(?:(?:a )?(?:bit|little|touch|lot)\s+|slightly\s+|much\s+)?(?:lighter|darker|brighter|paler|deeper|warmer|cooler)\s*(?:$|[;.!?]))|[;\n|]|\s[/+]\s(?![^(]*\))|\.{2,}|[.?!](?=\s)|\bjust\b|\bthen\b|\s[-\u2013\u2014]\s|\bstep \d+\b|\bbut\b(?= (?:make|set|change|use|give|turn|remove|add)\b)|\b(?:but|and)\b(?=\s+(?:don'?t|do not|never|leave|keep)\b)|(?<=\S)(?<!\b(?:don'?t|never|do not|not|to|please|and|you|we|i|let'?s|can|could|would|will))\s+(?=(?:make|set|change|give|turn) (?:it|them|the|my|this|that|those|these)\b)|(?<=\S)\s+(?=(?:do|does|will) \w+ (?:follow|match)\b))\s*/i,
     )
     .map(x => x.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, ''))
     .filter(x => x.trim());
@@ -3830,7 +3887,7 @@ export function draftAnswer(ctx, env, question) {
     // "8px more but at most 20px": a bound after "but" limits the amount
     // before it, in the same clause.
     .replace(
-      /\s*,?\s*\bbut\s+(?=(?:at (?:most|least)|no (?:more|less|bigger|smaller|larger|wider|taller|rounder) than|not (?:more|less) than|(?:a )?(?:max|min)(?:imum)? of)\b)/gi,
+      /\s*,?\s*\bbut\s+(?=(?:at (?:most|least)|(?:no|not) (?:more|less|[a-z]+er) than|(?:a )?(?:max|min)(?:imum)? of)\b)/gi,
       ' ',
     )
     // "the accent color but lighter": a way after "but" with nothing else
@@ -5972,6 +6029,43 @@ export function draftAnswer(ctx, env, question) {
     if (exceptWord && !c.except) unread.push(exceptWord[0]);
     return [...new Set(unread.filter(Boolean))];
   };
+  /**
+   * A theme color with a way ("the accent color but lighter"): that color
+   * as each mode has it, made lighter or darker there, written as `thing`;
+   * the way is measured from that color, never from the part's own. Null
+   * when the color is no theme color or the words give no way.
+   * @param {Clause} c
+   * @param {string | null} color the color the words name
+   * @param {string} thing what the steps set
+   * @param {Record<string, string | undefined>} flags
+   * @param {string} what what the answer colors ("the fill on card")
+   * @returns {Draft | null}
+   */
+  const themeColorWay = (c, color, thing, flags, what) => {
+    const ref = /^var\((--[a-z0-9-]+)\)$/.exec(color ?? '')?.[1];
+    if (!ref || !/\b(light|dark)er\b/.test(noMode(c.text))) return null;
+    const lighter = /\blighter\b/.test(noMode(c.text));
+    const amount = colorAmount(c.text, 0.2);
+    const steps = perMode(
+      ref,
+      thing,
+      flags,
+      (now, m) =>
+        shiftKeepAlpha(
+          now,
+          lighter ? amount : -amount,
+          current('--color-background-body', m),
+        ),
+      c,
+    );
+    if (!steps.length) return null;
+    return {
+      text: `${what}: ${ref} made ${lighter ? 'lighter' : 'darker'}${modesSaid(steps)}`,
+      options: [steps],
+      sequence: steps.length > 1,
+      ...(c.except ? {} : {intent: {...intentOf(c, []), from: ref}}),
+    };
+  };
   /** @param {Draft} input */
   const push = input => {
     const d1 = keepLineColors(groupCornerEnds(withMode(input, clauseNow)));
@@ -6105,6 +6199,7 @@ export function draftAnswer(ctx, env, question) {
       ...(d.sequence && options.length ? {sequence: true} : {}),
       ...(d.lookup ? {lookup: d.lookup} : {}),
       ...(d.intent ? {intent: d.intent} : {}),
+      ...(d.smallest ? {smallest: true} : {}),
     };
     drafts.push(pushed);
     if (clauseNow) draftClause.set(pushed, clauseNow);
@@ -6189,6 +6284,25 @@ export function draftAnswer(ctx, env, question) {
       return c.colors[0];
     for (const [re, fill, text] of THEME_COLOR_WORDS)
       if (re.test(ownText)) return kind === 'fill' ? fill : text;
+    // "the danger color", "the success colour": that status's color (its
+    // text color for text).
+    const role = /\b(danger|error|success|warning|info) colou?r\b/.exec(
+      ownText,
+    )?.[1];
+    if (role) {
+      const fill = ROLE_COLOR_TOKENS[role === 'error' ? 'danger' : role];
+      const ink = fill.replace(/^--color-/, '--color-text-');
+      return kind === 'fill'
+        ? `var(${fill})`
+        : `var(${TOKENS[ink] !== undefined ? ink : fill})`;
+    }
+    // "the sidebar the page color": the color the named part shows (the
+    // page's for one with no fill of its own).
+    if (kind === 'fill' && c.colorRef)
+      return c.colorRef === 'page'
+        ? 'var(--color-background-body)'
+        : (partPropNow(c.colorRef, 'background-color', true) ??
+            (C.MAP[one(c.colorRef)] ? 'var(--color-background-body)' : null));
     if (kind === 'text' && c.colors.length) return null;
     if (kind === 'text' && !c.colors.length) {
       if (/\bdark (text|labels?|writing|words)\b/.test(c.text))
@@ -7147,6 +7261,87 @@ export function draftAnswer(ctx, env, question) {
       });
       continue;
     }
+    // Headings tighter or looser: their letter spacing, the headings
+    // dial's tracking half, one rung from where it is now, held to a bound
+    // in em the words give ("no tighter than -0.01em"); nothing when it is
+    // already past the bound the way asked.
+    if (
+      /\b(tighter|looser)\b/.test(c.text) &&
+      (c.parts.some(p => p.on === 'heading') ||
+        (!c.parts.length && /\bheadings?\b/.test(c.text))) &&
+      c.parts.every(p => p.on === 'heading') &&
+      !/\b(padding|gaps?|spacing|room|line[- ]?height|leading|level)\b/.test(
+        c.text,
+      )
+    ) {
+      const bound = boundOf(c.text);
+      const looser = /\blooser\b/.test(c.text.replace(bound?.said ?? '', ' '));
+      const em = (/** @type {string} */ v) => {
+        const m = /^(-?\d*\.?\d+)em$/.exec(String(v).trim());
+        return m
+          ? Number(m[1])
+          : /^(0|normal)$/.test(String(v).trim())
+            ? 0
+            : null;
+      };
+      const saved = env.data.settings.find(
+        x =>
+          x.thing === 'headings' &&
+          !x.on &&
+          Object.hasOwn(HEADING_TRACKING, String(x.value)),
+      );
+      const baseTracking = /** @type {any} */ (env.base).components?.heading
+        ?.base?.letterSpacing;
+      const nowText = saved
+        ? HEADING_TRACKING[String(saved.value)]
+        : (partValue('heading', 'letter-spacing') ??
+          (typeof baseTracking === 'string' ? baseTracking : '0'));
+      const now = em(nowText);
+      if (now != null && (!bound || bound.unit === 'em')) {
+        seenPart('heading');
+        if (
+          bound &&
+          ((!looser && bound.up && now <= bound.limit) ||
+            (looser && !bound.up && now >= bound.limit))
+        ) {
+          push({
+            text: `heading letter spacing is ${nowText} now, already ${now === bound.limit ? 'at' : looser ? 'past' : 'below'} ${bound.limit}em, so ${looser ? 'loosening' : 'tightening'} it ${bound.said} leaves nothing to change`,
+            options: [],
+          });
+          continue;
+        }
+        const rungs = Object.entries(HEADING_TRACKING)
+          .map(
+            ([word, v]) => /** @type {[string, number]} */ ([word, em(v) ?? 0]),
+          )
+          .sort((x, y) => x[1] - y[1]);
+        const next = looser
+          ? rungs.find(([, v]) => v > now)
+          : rungs.filter(([, v]) => v < now).pop();
+        const within =
+          next &&
+          (!bound ||
+            (bound.up ? next[1] >= bound.limit : next[1] <= bound.limit));
+        const d = within
+          ? {
+              text: `heading letter spacing, one rung ${looser ? 'looser' : 'tighter'}: headings ${next[0]} (${HEADING_TRACKING[next[0]]}, now ${nowText})`,
+              options: [[set('headings', next[0])]],
+            }
+          : bound
+            ? {
+                text: `heading letter spacing ${bound.said}: ${bound.limit}em, the most the ask allows (now ${nowText})`,
+                options: [
+                  [set('letter-spacing', `${bound.limit}em`, {on: 'heading'})],
+                ],
+              }
+            : null;
+        if (d) {
+          push(d);
+          recordTop(c, d.options[0] ?? []);
+          continue;
+        }
+      }
+    }
     // A bound on a length ("bigger than 4px", "at least 2px", "under 40px",
     // "no bigger than 12px"): held from the value now; nothing when the
     // part is already inside it.
@@ -7156,17 +7351,67 @@ export function draftAnswer(ctx, env, question) {
         ? 'gap'
         : /\b(tall|taller|shorter|height)\b/.test(c.text)
           ? 'height'
-          : /\b(padding|spacing|room)\b/.test(c.text)
-            ? 'padding'
-            : /\b(radius|corners?|rounder|sharper)\b/.test(c.text)
-              ? 'border-radius'
-              : /\b(text|font)\b/.test(c.text)
-                ? 'font-size'
-                : /\bborders?\b/.test(c.text)
-                  ? 'border-width'
-                  : null;
+          : // (A width only beside a way: "width at most 300px" is the
+            // width answer's own cap.)
+            /\b(wider|narrower)\b/.test(c.text) && !/\bborders?\b/.test(c.text)
+            ? 'width'
+            : /\b(padding|spacing|room)\b/.test(c.text)
+              ? 'padding'
+              : /\b(radius|corners?|rounder|sharper)\b/.test(c.text)
+                ? 'border-radius'
+                : /\b(text|font)\b/.test(c.text)
+                  ? 'font-size'
+                  : /\bborders?\b/.test(c.text)
+                    ? 'border-width'
+                    : null;
+      // A whole-theme size with a way beside its bound (the corners dial,
+      // the base text size, the body line height): already past the bound
+      // the way asked, nothing is written, never a move the other way.
+      if (bound && !c.parts.length && !/\b\w+ steps?\b/.test(c.text)) {
+        const way = ownWay(c.text);
+        const leading = /\b(line[- ]?height|leading)\b/.test(c.text);
+        const tok = leading
+          ? '--text-body-leading'
+          : prop === 'border-radius'
+            ? '--radius-element'
+            : prop === 'font-size'
+              ? '--font-size-base'
+              : prop === 'border-width'
+                ? '--border-width'
+                : null;
+        const now = tok ? String(current(tok) ?? '') : '';
+        const m = /^(\d*\.?\d+)(px|rem)?$/.exec(now);
+        const n = m ? Number(m[1]) * (m[2] === 'rem' ? 16 : 1) : null;
+        const fits = leading ? bound.unit === '' : bound.unit === 'px';
+        if (
+          tok &&
+          n != null &&
+          fits &&
+          ((way === 'more' && !bound.up && n >= bound.limit) ||
+            (way === 'less' && bound.up && n <= bound.limit))
+        ) {
+          const what = leading
+            ? 'the body line height'
+            : prop === 'border-radius'
+              ? 'the corners'
+              : prop === 'border-width'
+                ? 'the shared border width'
+                : 'the base text size';
+          push({
+            text: `${what} ${prop === 'border-radius' && !leading ? 'are' : 'is'} ${now} now, already ${n === bound.limit ? 'at' : way === 'more' ? 'past' : 'below'} ${bound.limit}${bound.unit}, so ${way === 'more' ? 'growing' : 'shrinking'} ${prop === 'border-radius' && !leading ? 'them' : 'it'} ${bound.said} leaves nothing to change`,
+            options: [],
+          });
+          continue;
+        }
+      }
       // (Steps with a bound are held to it by the steps answer.)
-      if (bound && prop && c.parts.length && !/\b\w+ steps?\b/.test(c.text)) {
+      if (
+        bound &&
+        bound.unit === 'px' &&
+        prop &&
+        c.parts.length &&
+        !/\b\w+ steps?\b/.test(c.text)
+      ) {
         const {up, strict, limit, said} = bound;
         // The direction the words ask, beside the bound (ownWay).
         const way = ownWay(c.text);
@@ -7192,6 +7437,17 @@ export function draftAnswer(ctx, env, question) {
           // other way.
           const wantsUp = grows && !shrinks;
           const wantsDown = shrinks && !grows;
+          // A way with no length to move from (a card that fills its
+          // column has no width of its own): the bound could move it the
+          // other way, so nothing is written.
+          if (nowPx == null && (wantsUp || wantsDown)) {
+            push({
+              text: `${p.on} has no ${prop} of its own that how can read now${prop === 'width' ? ' (it takes the width its container gives it)' : ''}, so ${wantsUp ? 'growing' : 'shrinking'} it ${said} could move it the other way; name the ${prop} you want, as in "${p.on} ${prop} ${limit}px"`,
+              options: [],
+              lookup: `${HOW} ${p.on}`,
+            });
+            continue;
+          }
           if (
             nowPx != null &&
             ((wantsUp && !up && nowPx >= limit) ||
@@ -7395,18 +7651,30 @@ export function draftAnswer(ctx, env, question) {
         const rp =
           colorProp(right) ?? (sp === 'color' ? 'color' : 'background-color');
         const [subjectOn, sourceOn] = ordered;
-        const value = partPropNow(sourceOn, rp, true);
+        // A part with no fill of its own shows the page color beneath it,
+        // as a direction answer steps it from.
+        const own = partPropNow(sourceOn, rp, true);
+        const showsPage =
+          !own && rp === 'background-color' && Boolean(C.MAP[one(sourceOn)]);
+        const value =
+          own ?? (showsPage ? 'var(--color-background-body)' : null);
+        seenPart(subjectOn);
+        seenPart(sourceOn);
         if (value) {
-          seenPart(subjectOn);
-          seenPart(sourceOn);
           const d = {
-            text: `${subjectOn}'s ${sp} takes ${sourceOn}'s ${rp}: ${value} (${sourceOn} is not changed)`,
+            text: `${subjectOn}'s ${sp} takes ${sourceOn}'s ${rp}: ${value}${showsPage ? `, the page color ${sourceOn} shows, as it has no fill of its own` : ''} (${sourceOn} is not changed)`,
             options: [[set(sp, value, {on: subjectOn})]],
           };
           push(d);
           recordTop(c, d.options[0] ?? []);
           continue;
         }
+        push({
+          text: `the editor has not read ${sourceOn}'s ${rp} (Core draws it only once it is shown), so there is no color for ${subjectOn} to take; name the color, as in "${subjectOn} ${sp === 'color' ? 'text' : sp === 'border-color' ? 'border' : 'background'} #333333"`,
+          options: [],
+          lookup: `${HOW} ${sourceOn}`,
+        });
+        continue;
       }
     }
     // "the card and dialog corners match", "cards and dialogs equally
@@ -7977,7 +8245,11 @@ export function draftAnswer(ctx, env, question) {
               ? 'font-size'
               : c.aspects.includes('spacing') || /\bpadding\b/.test(c.text)
                 ? 'padding'
-                : null;
+                : /\b(taller|shorter)\b/.test(c.text)
+                  ? 'height'
+                  : /\b(wider|narrower)\b/.test(c.text)
+                    ? 'padding-inline'
+                    : null;
         const level = /^level:([1-6])$/.exec(pf.when ?? '')?.[1];
         // All headings by a length: each level from its own size (held to a
         // bound the words give), as a factor moves them.
@@ -8031,21 +8303,58 @@ export function draftAnswer(ctx, env, question) {
                 })())
               : prop === 'padding'
                 ? (partValue(on, 'padding') ?? paddingBoxNow(on))
-                : prop === 'border-width'
-                  ? (partValue(on, 'border-width') ??
-                    (() => {
-                      const r = C.partReads(one(on), 'border').find(x =>
-                        x.props.includes('border-width'),
-                      );
-                      return r ? current(r.token) : current('--border-width');
-                    })())
-                  : partPropNow(on, prop);
+                : partPropNow(on, prop);
         /** @param {string} v */
         const toPx = v => {
           const m = /^(\d*\.?\d+)(px|rem|em)$/.exec(v);
           return m ? Number(m[1]) * (m[2] === 'px' ? 1 : 16) : null;
         };
-        const sides = now ? String(now).trim().split(/\s+/) : [];
+        // Wider or narrower by a length: the inline padding, half on each
+        // side, the block sides as they are (the part's padding box now).
+        if (prop === 'padding-inline') {
+          const box = String(
+            partValue(on, 'padding') ?? paddingBoxNow(on) ?? '',
+          )
+            .trim()
+            .split(/\s+/)
+            .filter(Boolean);
+          const four =
+            box.length === 1
+              ? [box[0], box[0], box[0], box[0]]
+              : box.length === 2
+                ? [box[0], box[1], box[0], box[1]]
+                : box.length === 3
+                  ? [box[0], box[1], box[2], box[1]]
+                  : box.length === 4
+                    ? box
+                    : [];
+          const half = n / 2;
+          const side = (/** @type {string} */ x) => {
+            const px = toPx(x);
+            return px == null
+              ? null
+              : `${Math.max(0, Math.round((px + (down ? -half : half)) * 100) / 100)}px`;
+          };
+          const right = four.length ? side(four[1]) : null;
+          const left = four.length ? side(four[3]) : null;
+          if (right && left) {
+            const next =
+              four[0] === four[2] && right === left
+                ? `${four[0]} ${right}`
+                : `${four[0]} ${right} ${four[2]} ${left}`;
+            const d = {
+              text: `${on} ${down ? 'narrower' : 'wider'} by ${n}px: its inline padding ${down ? 'down' : 'up'} by ${half}px on each side, from ${box.join(' ')} to ${next}`,
+              options: [[set('padding', next, pf)]],
+            };
+            push(d);
+            recordTop(c, d.options[0] ?? []);
+            continue;
+          }
+        }
+        const sides =
+          now && prop !== 'padding-inline'
+            ? String(now).trim().split(/\s+/)
+            : [];
         const moved = sides.map(x => {
           const px = toPx(x);
           return px == null
@@ -8591,6 +8900,17 @@ export function draftAnswer(ctx, env, question) {
   function partPropNow(part, prop, live = false) {
     const own = partValue(part, prop);
     if (own) return own;
+    // A border width: the token the part's border reads for it, else the
+    // theme's shared --border-width when the part draws a border at all;
+    // a part that draws none has no width to read.
+    if (prop === 'border-width') {
+      const reads = C.partReads(one(part), 'border') ?? [];
+      if (!reads.length) return null;
+      const token =
+        reads.find(x => x.props.includes('border-width'))?.token ??
+        '--border-width';
+      return live ? `var(${token})` : current(token);
+    }
     // A color: the text color (or fill) the part shows at rest.
     if (
       prop === 'color' ||
@@ -10661,6 +10981,14 @@ export function draftAnswer(ctx, env, question) {
             ],
           };
         const color = colorFor(c, 'fill');
+        const borderWay = themeColorWay(
+          c,
+          color,
+          'border-color',
+          f,
+          `the border color${where}`,
+        );
+        if (borderWay) return borderWay;
         // "the card border darker", "input borders a bit lighter": the
         // border's color, from the one the part shows now, never its width.
         if (
@@ -11890,6 +12218,7 @@ export function draftAnswer(ctx, env, question) {
               text: `text color${where}: ${ref} made ${lighter ? 'lighter' : 'darker'}${viaLink ? ' (the token a link reads; it also colors other accent text)' : ''}${modesSaid(steps)}`,
               options: [steps],
               sequence: steps.length > 1,
+              ...(c.except ? {} : {intent: {...intentOf(c, []), from: ref}}),
             };
         }
         const tok =
@@ -12467,6 +12796,16 @@ export function draftAnswer(ctx, env, question) {
           (/\btransparent\b/.test(c.text) ? 'transparent' : null) ??
           colorFor(c, 'fill') ??
           (c.dir ? null : toneIn(c.text));
+        // (A fill takes a theme color's own fill property: Core draws its
+        // hover and press tints over it as an image.)
+        const fillWay = themeColorWay(
+          c,
+          color,
+          'background-color',
+          f,
+          `the fill${where}`,
+        );
+        if (fillWay) return fillWay;
         if (on === 'tab-indicator' && color && c.lengths[0])
           return {
             text: `the tab underline${where}: its color and height`,
@@ -12630,11 +12969,19 @@ export function draftAnswer(ctx, env, question) {
             !f.when &&
             (C.variantValues(one(on ?? ''))?.variant ?? []).length > 1;
           if (!read || f.state || (thanPage && !ownVariants)) {
-            const from = thanPage || !read ? '--color-background-body' : read;
+            // A state Core paints with an inline style from a token (a
+            // selected table row's wash): that token, stepped from its
+            // value, on the part in that state.
+            const inline =
+              on && f.state
+                ? C.MAP[one(on)]?.inline?.[f.state]?.['background-color']
+                : null;
+            const from =
+              inline ?? (thanPage || !read ? '--color-background-body' : read);
             const steps = perMode(
               from,
-              'background-color',
-              f,
+              inline ?? 'background-color',
+              inline ? {on: one(on ?? ''), state: f.state} : f,
               (now, m) =>
                 shiftKeepAlpha(
                   now,
@@ -12645,7 +12992,9 @@ export function draftAnswer(ctx, env, question) {
             );
             if (steps.length)
               return {
-                text: `${lighter ? 'a lighter' : 'a darker'} background${where}, from ${from === '--color-background-body' ? 'the page color' : from}${modesSaid(steps)}`,
+                text: inline
+                  ? `${lighter ? 'a lighter' : 'a darker'} background${where}: ${inline}, which Core paints ${one(on ?? '')} with when ${f.state}, stepped from its value${modesSaid(steps)}`
+                  : `${lighter ? 'a lighter' : 'a darker'} background${where}, from ${from === '--color-background-body' ? 'the page color' : from}${modesSaid(steps)}`,
                 options: [steps],
                 sequence: steps.length > 1,
               };
@@ -13015,13 +13364,31 @@ export function draftAnswer(ctx, env, question) {
             !x.on &&
             String(x.value).toLowerCase() === hex(now).toLowerCase(),
         );
+        if (saved)
+          return {
+            text: `${help}; ${less ? 'less' : 'more'} steps it by 10.`,
+            options: [[step]],
+            intent: vibIntent,
+          };
+        // Setting the accent makes every shade from it, which may sit
+        // apart from the shades the theme shows now (a base's hand-tuned
+        // ones, a one-mode theme's own mode): the vibrancy is the first,
+        // in steps of 10, at which the accents each shown mode has move
+        // the way asked from what they are now.
+        // (The first is one step, as the dial word gives it.)
+        const levels = less ? [30, 20, 10, 0] : [70, 80, 90, 100];
         return {
-          text: saved
-            ? `${help}; ${less ? 'less' : 'more'} steps it by 10.`
-            : `${help}. It works once the theme sets a color, so the first command sets accent to the color it has now.`,
-          options: [saved ? [step] : [set('accent', hex(now)), step]],
-          sequence: !saved,
+          text: `${help}. It works once the theme sets a color, so the first command sets accent to the color it has now, and the vibrancy is the first that makes the accents ${env.slug} shows ${less ? 'less' : 'more'} saturated than now.`,
+          options: [
+            [set('accent', hex(now)), step],
+            ...levels.map(v => [
+              set('accent', hex(now)),
+              set('vibrancy', String(v)),
+            ]),
+          ],
+          sequence: true,
           intent: vibIntent,
+          smallest: true,
         };
       }
       // No color to change, and none was asked for: never pick one.
@@ -13771,8 +14138,19 @@ export function draftAnswer(ctx, env, question) {
       : /\blight mode\b|\bin light\b/.test(qWords)
         ? 'light'
         : null;
+    // The modes the theme shows: a one-mode theme's value is the one it
+    // shows, and a mode it never shows has no value to tell.
+    const shownModes = /** @type {Array<'light' | 'dark'>} */ (
+      env.data.mode === 'dark-only'
+        ? ['dark']
+        : env.data.mode === 'light-only'
+          ? ['light']
+          : ['light', 'dark']
+    );
+    const unshown = qMode && !shownModes.includes(qMode) ? qMode : null;
+    const readMode = qMode ?? (shownModes.length === 1 ? shownModes[0] : null);
     const variantNow = () => {
-      if (!named || (!vWord && !qMode)) return null;
+      if (!named || (!vWord && !readMode)) return null;
       const when = vWord ? `variant:${vWord}` : 'base';
       const camel = asked.replace(/-([a-z])/g, (_m, x) => x.toUpperCase());
       const own = /** @type {any} */ (env.base).components?.[one(named)]?.[
@@ -13800,7 +14178,7 @@ export function draftAnswer(ctx, env, question) {
           .find(r => r.props.includes(asked))?.token ??
         (asked === 'color' ? '--color-text-primary' : null);
       if (!anyTok) return null;
-      const v = current(anyTok, qMode ?? 'light');
+      const v = current(anyTok, readMode ?? 'light');
       return v
         ? `${v}${qMode ? ` in ${qMode} mode` : ''}${vWord ? ` (${vWord})` : ''}`
         : null;
@@ -13834,15 +14212,18 @@ export function draftAnswer(ctx, env, question) {
         ? `${vals.map(([m, v]) => `${v}${modes.length > 1 || qMode ? ` in ${m} mode` : ''}`).join(', ')} (${pageToken}, which paints the page)`
         : null;
     };
-    const now = named
-      ? (pageNow() ?? variantNow() ?? partPropNow(named, asked) ?? anyRead())
-      : null;
+    const now =
+      named && !unshown
+        ? (pageNow() ?? variantNow() ?? partPropNow(named, asked) ?? anyRead())
+        : null;
     result.splice(0, result.length, {
-      text: named
-        ? now
-          ? `${named} has ${asked} ${now} now (nothing is changed); to change it, ask for the change ("${asked === 'color' ? `${named} text red` : asked === 'border-color' ? `${named} border red` : /color|background/.test(asked) ? `${named} background red` : asked === 'font-weight' ? `${named} font-weight 700` : asked === 'opacity' ? `${named} opacity 0.8` : asked === 'font-family' ? `${named} font Georgia` : asked === 'box-shadow' ? `${named} shadow stronger` : `${named} ${asked} 12px`}")`
-          : `${named} has no ${asked} of its own that how can read; ${HOW} ${named} lists what it reads`
-        : `how changes a theme; ${P} show ${env.slug} lists what it has now`,
+      text: unshown
+        ? `${env.slug} has only a ${shownModes[0]} mode, so ${named ?? 'it'} has no ${asked} in ${unshown} mode to tell (nothing is changed)`
+        : named
+          ? now
+            ? `${named} has ${asked} ${now} now (nothing is changed); to change it, ask for the change ("${asked === 'color' ? `${named} text red` : asked === 'border-color' ? `${named} border red` : /color|background/.test(asked) ? `${named} background red` : asked === 'font-weight' ? `${named} font-weight 700` : asked === 'opacity' ? `${named} opacity 0.8` : asked === 'font-family' ? `${named} font Georgia` : asked === 'box-shadow' ? `${named} shadow stronger` : `${named} ${asked} 12px`}")`
+            : `${named} has no ${asked} of its own that how can read; ${HOW} ${named} lists what it reads`
+          : `how changes a theme; ${P} show ${env.slug} lists what it has now`,
       options: [],
       // (The page's lookup is the token it is painted with: `how page` is
       // the CSS property page.)

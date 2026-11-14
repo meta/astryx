@@ -3560,7 +3560,12 @@ const QUESTIONS_O = [
     /^set q border-radius 10px --on button$/,
   ],
   ['make buttons 2px sharper', /^set q border-radius 6px --on button$/],
-  ['make buttons 4px wider', null, /not a change by 4px/],
+  [
+    'make buttons 4px wider',
+    // Wider by a length: the inline padding, half on each side.
+    /^set q padding '\S+ \S+' --on button$/,
+    /inline padding up by 2px on each side/,
+  ],
   [
     'all corners like the buttons',
     /^set q --radius-inner 'var\(--radius-element\)' && set q --radius-container 'var\(--radius-element\)'/,
