@@ -403,7 +403,7 @@ function buildVisualDeltas({verdict, frames = null}) {
       .toLowerCase()
       .replace(/[^a-z0-9]/g, '');
   const components = new Set(all.map(componentOf));
-  return `<details>\n<summary>Visual changes: ${num(all.length)} snapshot${all.length === 1 ? '' : 's'} in ${components.size} component${components.size === 1 ? '' : 's'}</summary>\n\nA change is a question for the reviewer, not a failure.\n\n${header}${rows.map(line).join('\n')}\n\n${unshown > 0 ? `${num(unshown)} more are in the run's visual report.\n\n` : ''}${num(verdict?.inheritedNotChecked) > 0 ? `Inherited status not checked: ${num(verdict.inheritedNotChecked)} shot${num(verdict.inheritedNotChecked) === 1 ? '' : 's'}.\n\n` : ''}</details>\n\n`;
+  return `<details>\n<summary>Visual changes: ${num(all.length)} snapshot${all.length === 1 ? '' : 's'} in ${components.size} component${components.size === 1 ? '' : 's'}</summary>\n\nA change is a question for the reviewer, not a failure.\n\n${header}${rows.map(line).join('\n')}\n\n${unshown > 0 ? `${num(unshown)} more are in the run's visual report.\n\n` : ''}${verdict?.inheritedLookupFailed ? `Inheritance lookup failed: ${inline(String(verdict.inheritedLookupFailed).slice(0, 200))}.\n\n` : ''}${num(verdict?.inheritedNotChecked) > 0 ? `Inherited status not checked: ${num(verdict.inheritedNotChecked)} shot${num(verdict.inheritedNotChecked) === 1 ? '' : 's'}.\n\n` : ''}</details>\n\n`;
 }
 
 function previewLine(preview) {

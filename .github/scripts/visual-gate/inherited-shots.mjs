@@ -9,7 +9,9 @@
  *   changed, with the same image, gets `inherited: {pr}`: the pull request
  *   that introduced it when the record shows one, else `pr: null`. With more
  *   changed shots than the API budget covers, `inheritedNotChecked` counts
- *   the shots left unchecked.
+ *   the shots left unchecked. A failed lookup marks nothing and sets
+ *   `inheritedLookupFailed` to its reason, which the comment and the step
+ *   summary show, so a broken lookup is never silent.
  * @position The pull-request comment job, after `publish-pr-report.mjs`. The
  *   label is report text only: no check, status or baseline reads it.
  */
@@ -25,6 +27,21 @@ export const MAX_CALLS = 20;
 /** Other pull requests' reports examined, newest first. */
 export const MAX_REPORTS = 100;
 const SHA256 = /^[0-9a-f]{64}$/;
+
+/** A lookup error as one short line of report text. */
+export function failureReason(error) {
+  const text = String(error?.message ?? error ?? 'unknown error')
+    .replace(/[\r\n|`<>]+/g, ' ')
+    .trim();
+  return (text || 'unknown error').slice(0, 200);
+}
+
+/** The step-summary line for a failed lookup, or '' when it did not fail. */
+export function lookupSummary(verdict) {
+  return verdict?.inheritedLookupFailed
+    ? `inheritance lookup failed: ${verdict.inheritedLookupFailed}\n`
+    : '';
+}
 
 /**
  * The shot images a report's run captured, by key, for its changed shots.
@@ -83,6 +100,34 @@ export async function markInherited({
 }) {
   const mine = changedImages({verdict, manifest});
   if (mine.size === 0) return verdict;
+  try {
+    return await lookUp({
+      verdict,
+      mine,
+      headRef,
+      listReports,
+      readReport,
+      pullFor,
+      maxCalls,
+    });
+  } catch (error) {
+    // Partial results could name the wrong pull request: mark nothing.
+    for (const change of verdict.changes ?? []) delete change.inherited;
+    delete verdict.inheritedNotChecked;
+    verdict.inheritedLookupFailed = failureReason(error);
+    return verdict;
+  }
+}
+
+async function lookUp({
+  verdict,
+  mine,
+  headRef,
+  listReports,
+  readReport,
+  pullFor,
+  maxCalls,
+}) {
   let calls = 0;
   const spend = () => (calls < maxCalls ? ((calls += 1), true) : false);
   /** @type {Map<string, Array<{createdAt: string, headSha: string}>>} */
@@ -161,7 +206,10 @@ function githubReads({token, repository}) {
         accept: 'application/vnd.github+json',
       },
     });
-    if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
+    // An artifact that expired after the list is gone, not a failure.
+    if (response.status === 404 || response.status === 410) return null;
+    if (!response.ok)
+      throw new Error(`${url.replace(base, '')}: HTTP ${response.status}`);
     return response;
   };
   return {
@@ -185,7 +233,15 @@ function githubReads({token, repository}) {
       try {
         const zip = path.join(dir, 'report.zip');
         const response = await get(`${base}/actions/artifacts/${id}/zip`);
+        if (!response) return null;
         fs.writeFileSync(zip, Buffer.from(await response.arrayBuffer()));
+        const names = execFileSync('unzip', ['-Z1', zip], {
+          encoding: 'utf8',
+          maxBuffer: 1 << 24,
+        }).split('\n');
+        // A report without both files has no images to compare.
+        if (!names.includes('verdict.json') || !names.includes('manifest.json'))
+          return null;
         const read = name =>
           JSON.parse(
             execFileSync('unzip', ['-p', zip, name], {
@@ -194,22 +250,17 @@ function githubReads({token, repository}) {
             }),
           );
         return {verdict: read('verdict.json'), manifest: read('manifest.json')};
-      } catch {
-        return null;
       } finally {
         fs.rmSync(dir, {recursive: true, force: true});
       }
     },
     pullFor: async sha => {
-      try {
-        const pulls = await (await get(`${base}/commits/${sha}/pulls`)).json();
-        const pull = (pulls ?? []).find(each => each.merged_at) ?? pulls?.[0];
-        return pull
-          ? {number: pull.number, mergedAt: pull.merged_at ?? null}
-          : null;
-      } catch {
-        return null;
-      }
+      const response = await get(`${base}/commits/${sha}/pulls`);
+      const pulls = response ? await response.json() : [];
+      const pull = (pulls ?? []).find(each => each.merged_at) ?? pulls?.[0];
+      return pull
+        ? {number: pull.number, mergedAt: pull.merged_at ?? null}
+        : null;
     },
   };
 }
@@ -220,24 +271,34 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     return at === -1 ? undefined : process.argv[at + 1];
   };
   const verdictPath = flag('verdict');
-  const manifestPath = flag('manifest');
+  const summary = line => {
+    console.error(`::warning title=Inherited visual changes::${line.trim()}`);
+    if (process.env.GITHUB_STEP_SUMMARY)
+      fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, line);
+  };
+  let verdict;
   try {
-    const verdict = JSON.parse(fs.readFileSync(verdictPath, 'utf8'));
-    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-    await markInherited({
-      verdict,
-      manifest,
-      headRef: flag('head-ref') ?? '',
-      ...githubReads({
-        token: process.env.GITHUB_TOKEN,
-        repository: process.env.GITHUB_REPOSITORY,
-      }),
-    });
-    fs.writeFileSync(verdictPath, `${JSON.stringify(verdict, null, 2)}\n`);
+    verdict = JSON.parse(fs.readFileSync(verdictPath, 'utf8'));
   } catch (error) {
-    // Report text only: a failure leaves the report as it was.
-    console.error(
-      `::warning title=Inherited visual changes not marked::${error.message}`,
-    );
+    // No verdict means no visual section to label; the summary still says so.
+    summary(`inheritance lookup failed: ${failureReason(error)}\n`);
+  }
+  if (verdict) {
+    try {
+      const manifest = JSON.parse(fs.readFileSync(flag('manifest'), 'utf8'));
+      await markInherited({
+        verdict,
+        manifest,
+        headRef: flag('head-ref') ?? '',
+        ...githubReads({
+          token: process.env.GITHUB_TOKEN,
+          repository: process.env.GITHUB_REPOSITORY,
+        }),
+      });
+    } catch (error) {
+      verdict.inheritedLookupFailed = failureReason(error);
+    }
+    if (lookupSummary(verdict)) summary(lookupSummary(verdict));
+    fs.writeFileSync(verdictPath, `${JSON.stringify(verdict, null, 2)}\n`);
   }
 }

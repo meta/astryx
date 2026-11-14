@@ -7,7 +7,12 @@
 
 import {describe, expect, it} from 'vitest';
 
-import {MAX_CALLS, changedImages, markInherited} from './inherited-shots.mjs';
+import {
+  MAX_CALLS,
+  changedImages,
+  lookupSummary,
+  markInherited,
+} from './inherited-shots.mjs';
 
 const H = c => c.repeat(64);
 const KEY = 'core-bottomsheet--text-only__neutral-dark';
@@ -196,6 +201,54 @@ describe('inherited visual changes', () => {
     await markInherited({verdict, manifest, headRef: 'this', ...gh});
     expect(gh.total()).toBeLessThanOrEqual(MAX_CALLS);
     expect(verdict.inheritedNotChecked).toBe(2);
+  });
+
+  it('makes a failed lookup visible: it marks nothing and records the reason for the comment and the step summary', async () => {
+    const gh = fakeGitHub({
+      reports: [
+        {id: 2, createdAt: '2026-11-12T10:00:00Z', headRef: 'b', headSha: 'c2'},
+        {id: 1, createdAt: '2026-11-11T10:00:00Z', headRef: 'a', headSha: 'c1'},
+      ],
+      contents: {2: report({[KEY]: H('a')}, [KEY])},
+      pulls: {},
+    });
+    const readReport = async id => {
+      if (id === 1)
+        throw new Error('/actions/artifacts/1/zip: HTTP 502\nretry');
+      return gh.readReport(id);
+    };
+    const {verdict, manifest} = mine();
+    await markInherited({
+      verdict,
+      manifest,
+      headRef: 'this',
+      ...gh,
+      readReport,
+    });
+    expect(verdict.inheritedLookupFailed).toBe(
+      '/actions/artifacts/1/zip: HTTP 502 retry',
+    );
+    expect(
+      verdict.changes.every(change => change.inherited === undefined),
+    ).toBe(true);
+    expect(lookupSummary(verdict)).toBe(
+      'inheritance lookup failed: /actions/artifacts/1/zip: HTTP 502 retry\n',
+    );
+  });
+
+  it('records a failed artifact list the same way', async () => {
+    const {verdict, manifest} = mine();
+    await markInherited({
+      verdict,
+      manifest,
+      headRef: 'this',
+      listReports: async () => {
+        throw new Error('HTTP 403');
+      },
+      readReport: async () => null,
+      pullFor: async () => null,
+    });
+    expect(verdict.inheritedLookupFailed).toBe('HTTP 403');
   });
 
   it('makes no call when nothing changed', async () => {

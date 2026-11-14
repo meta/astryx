@@ -322,6 +322,17 @@ describe('buildVisualDeltas', () => {
     expect(section).toContain('Inherited status not checked: 2 shots.');
   });
 
+  it('says when the inheritance lookup failed, so a broken lookup is never silent', () => {
+    const section = buildVisualDeltas({
+      verdict: {
+        status: 'changed',
+        changes: [change('a', 30)],
+        inheritedLookupFailed: 'HTTP 403',
+      },
+    });
+    expect(section).toContain('Inheritance lookup failed: HTTP 403.');
+  });
+
   it('collapses the changed shots under their count, largest change first', () => {
     const verdict = {
       status: 'changed',
