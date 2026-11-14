@@ -345,6 +345,32 @@ describe('weighStart', () => {
       expect(start).toBe('gauge-fleet');
     });
 
+    it('takes the table score the listed templates hold at its place in the ranker order', () => {
+      // Every idea word is in a table, so the listed templates get distinct
+      // table scores: board 3 and charts 2 in the first table, grid 1 in the
+      // second. The ranker ties gauge-fleet with charts at the top, so it
+      // takes the best listed score in each table and starts. A place one
+      // lower, or a table order read from the bottom, gives it a lower score,
+      // and a listed template starts.
+      const tied = [
+        page('gauge-fleet', 5, 'Gauges'),
+        page('charts', 5, 'Charts'),
+        page('board', 4, 'Board'),
+        page('grid', 1, 'Grid'),
+        page('top-nav', 0, 'Shell'),
+      ];
+      const start = weighStart(
+        'kanban charts cards gauges',
+        tied,
+        null,
+        catalog,
+        {
+          weights: blendWeights,
+        },
+      );
+      expect(start).toBe('gauge-fleet');
+    });
+
     it('stays below the listed templates when the idea names only a word labels share', () => {
       const start = weighStart('detail', ranked, null, catalog, {
         weights: blendWeights,

@@ -390,12 +390,14 @@ function namesOwnLabel(catalog, order) {
 }
 
 /**
- * A table's scores with a score for each template the table does not list.
- * Such a template takes the table score that the listed templates hold at its
- * place in the ranker's order for this idea: the listed template the ranker
- * puts at the same place gives its table score. The scale comes from the
- * listed templates' own scores for the idea, so a template the table never saw
- * competes on its descriptor's match instead of sitting below every listed one.
+ * A table's scores with a score for each template the table does not list
+ * and the idea names (`named`). Such a template's place is the number of listed
+ * templates the ranker scores above it, plus half of those it ties; it takes
+ * the table's score at that place in the table's own order for this idea, best
+ * first (the last place when it is below them all). So a template the table
+ * never saw competes on the table's scale at its ranker place, instead of
+ * sitting below every listed one. A template the idea does not name stays
+ * unscored.
  * @param {(number | undefined)[]} column a score per candidate, undefined when unlisted
  * @param {string[]} cands
  * @param {import('./rank.mjs').RankedPage[]} ranked
