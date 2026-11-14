@@ -6439,6 +6439,14 @@ export async function buildTheme(ctx, slug, data) {
     await step(() => {
       afterBuild?.(ctx, slug, data);
     });
+  // Every caller reports the build's notes, so the pictures it removed are
+  // named in the result of whatever command built (set, undo, show, a
+  // preview command).
+  if (removedPictures.length)
+    notes = [
+      ...notes,
+      `removed ${removedPictures.join(', ')}: ${removedPictures.length === 1 ? 'a picture' : 'pictures'} of ${slug} as it was before this build; ${P} show ${slug} --png takes new ones`,
+    ];
   return {warnings, lifted, notes, removedPictures};
 }
 
@@ -8328,10 +8336,6 @@ export async function commitTheme(
     );
   }
   notes.push(...built.notes);
-  if (built.removedPictures.length)
-    notes.push(
-      `removed ${built.removedPictures.join(', ')}: ${built.removedPictures.length === 1 ? 'a picture' : 'pictures'} of the look before this change; ${P} show ${slug} --png takes new ones`,
-    );
   // The change is saved from here on: a failure to check it is reported
   // as "saved, not checked", never as a failed change.
   /** @type {Record<'light' | 'dark', Record<string, string>>} */

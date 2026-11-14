@@ -38,13 +38,13 @@ import {makeCompiler} from './_compiler.mjs';
 import {openProject, installLine} from './_project.mjs';
 import {partData} from './_parts.mjs';
 import {writeWhole} from './_palette.mjs';
+import {typoNear} from './_normal.mjs';
 import {
   fontOf,
   builtFontFamilies,
   fontPackages,
   fontsourcePackageOf,
   modesOf,
-  nearest,
   refuse,
   editorWrote,
   recordWritten,
@@ -55,6 +55,7 @@ import {
 import {
   SHOWCASE_GROUPS,
   copyFontsCss,
+  baseFontsSheet,
   newPictureRun,
   renderPreview,
   screenshot,
@@ -351,6 +352,19 @@ function usesCore(/** @type {any} */ json) {
  * @param {string} message
  */
 export function renderCause(project, message) {
+  const two = reactCopies(project);
+  return two
+    ? `${message} The likely cause: two copies of React, the app's (${two.app}) and the one Core resolves (${two.core}). Make Core resolve the app's React.`
+    : message;
+}
+
+/**
+ * The two copies of React a render saw, when the app's and the one Core
+ * resolves differ; else null.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @returns {{app: string, core: string} | null}
+ */
+export function reactCopies(project) {
   /** @param {(id: string) => string} resolve */
   const reactOf = resolve => {
     try {
@@ -374,9 +388,7 @@ export function renderCause(project, message) {
   } catch {
     // No Core package file: nothing to compare.
   }
-  return app && core && app !== core
-    ? `${message} The likely cause: two copies of React, the app's (${app}) and the one Core resolves (${core}). Make Core resolve the app's React.`
-    : message;
+  return app && core && app !== core ? {app, core} : null;
 }
 
 /**
@@ -472,7 +484,18 @@ export async function pictures(project, shots, modes) {
       const r = await screenshot(project, html, part, m, run);
       if (!r.ok) {
         fs.rmSync(part, {force: true});
-        return {files, problem: r.reason};
+        // Said for the whole run: the pictures taken before this one stand,
+        // and this one and every one after it were not taken.
+        const all = shots.flatMap(s => modes.map(mm => outOf(s.png, mm)));
+        const missed = all
+          .slice(all.indexOf(out))
+          .map(f => path.relative(project.cwd, f).split(path.sep).join('/'));
+        return {
+          files,
+          problem: files.length
+            ? `${files.join(', ')} ${files.length === 1 ? 'was' : 'were'} taken, but ${missed.join(', ')} ${missed.length === 1 ? 'was' : 'were'} not: ${r.reason}`
+            : `No picture was taken: ${r.reason}`,
+        };
       }
       try {
         fs.renameSync(part, out);
@@ -601,6 +624,23 @@ export function fontNotes(ctx, data) {
       .filter(s => s.thing === 'font')
       .map(s => fontKey(fontOf(s.value).family)),
   );
+  // A base family the app loads from a remote stylesheet (a Google Fonts
+  // import in the base's fonts.css) is not in the static previews: a page
+  // opened from disk cannot load a remote stylesheet. Unless an installed
+  // package loads it, the previews and pictures show the next font.
+  const base = baseFontsSheet(ctx, data);
+  if (base?.remote.length)
+    for (const family of base.families) {
+      if (built && !built.has(family.toLowerCase())) continue;
+      if (
+        packages.some(x => x.installed && fontKey(x.family) === fontKey(family))
+      )
+        continue;
+      const pkg = fontsourcePackageOf(family);
+      notes.push(
+        `"${family}" comes from ${base.spec}, which loads it from ${new URL(base.remote[0], 'https://x').host}: the app shows it, but the previews (preview.html, sheet.html and their pictures) cannot load a remote stylesheet and show the next font in the stack. ${installLine(ctx.project.cwd, [pkg])} installs a copy the previews load too.`,
+      );
+    }
   for (const family of built?.values() ?? []) {
     const key = fontKey(family);
     if (
@@ -931,21 +971,30 @@ function markSheetStale(file, slug, cwd) {
  * @returns {string | undefined}
  */
 export function checkSection(section, theme = 'my') {
+  // A section is offered only when one is within a typo of what was typed;
+  // otherwise the way on is the whole sheet (show with no --section), with
+  // the sections listed in the message.
   if (section === '')
-    refuse(E.ERR_MISSING_ARGUMENT, '--section was given no value.', {
-      run: [`${P} show ${theme} --section ${SHOWCASE_GROUPS[0]}`],
-    });
+    refuse(
+      E.ERR_MISSING_ARGUMENT,
+      `--section was given no value; it takes ${SHOWCASE_GROUPS.join(', ')}, and show with no --section makes the whole sheet.`,
+      {run: [`${P} show ${theme}`]},
+    );
   const s = section?.toLowerCase();
-  if (s != null && !SHOWCASE_GROUPS.includes(s))
+  if (s != null && !SHOWCASE_GROUPS.includes(s)) {
+    const near = SHOWCASE_GROUPS.filter(g => typoNear(s, g));
     refuse(
       E.ERR_INVALID_ARGUMENT,
-      `--section takes ${SHOWCASE_GROUPS.join(', ')}, not "${section}".`,
+      `--section takes ${SHOWCASE_GROUPS.join(', ')}, not "${section}"${near.length ? '' : '; show with no --section makes the whole sheet'}.`,
       {
-        didYouMean: nearest(s, SHOWCASE_GROUPS),
+        didYouMean: near,
         run: [
-          `${P} show ${theme} --section ${nearest(s, SHOWCASE_GROUPS)[0] ?? SHOWCASE_GROUPS[0]}`,
+          near.length === 1
+            ? `${P} show ${theme} --section ${near[0]}`
+            : `${P} show ${theme}`,
         ],
       },
     );
+  }
   return s;
 }
