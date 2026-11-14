@@ -899,6 +899,7 @@ test.describe('an open caption that ends in a block, with no ResizeObserver loop
 
   for (const [id, name, width] of [
     ['caption-ending-in-wide-image', 'Open wide-image caption', 362],
+    ['caption-ending-in-tall-image', 'Open tall-image caption', 362],
     ['caption-ending-in-short-block', 'Open short-block caption', 400],
   ] as const) {
     test(`${id} opens and closes cleanly`, async ({page}) => {
@@ -937,6 +938,47 @@ test.describe('an open caption that ends in a block, with no ResizeObserver loop
       expect(errors).toEqual([]);
     });
   }
+
+  test('"more" shows a caption that ends in a tall image at its final height in every frame', async ({
+    page,
+  }) => {
+    await page.setViewportSize({width: 362, height: 874});
+    await page.route(/picsum\.photos/, async route =>
+      route.fulfill({contentType: 'image/svg+xml', body: PHOTO_SVG}),
+    );
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=core-lightbox--caption-ending-in-tall-image&viewMode=story`,
+    );
+    await page.getByRole('button', {name: 'Open tall-image caption'}).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('button', {name: 'more'})).toBeVisible();
+    // The caption's height in each frame from the tap on, read in the frame
+    // callback, before the browser paints that frame.
+    const heights = await dialog.evaluate(
+      async element =>
+        new Promise<number[]>(resolve => {
+          const caption = element.querySelector(
+            '[data-current] [data-lightbox-caption]',
+          ) as HTMLElement;
+          const toggle = caption.querySelector('button') as HTMLElement;
+          const seen: number[] = [];
+          const sample = () => {
+            seen.push(caption.getBoundingClientRect().height);
+            if (seen.length < 10) {
+              requestAnimationFrame(sample);
+            } else {
+              resolve(seen);
+            }
+          };
+          toggle.click();
+          requestAnimationFrame(sample);
+        }),
+    );
+    const final = heights[heights.length - 1];
+    for (const [frame, height] of heights.entries()) {
+      expect(height, `frame ${frame}`).toBeCloseTo(final, 0);
+    }
+  });
 
   test('a short block leaves "less" on the last line of text', async ({
     page,
