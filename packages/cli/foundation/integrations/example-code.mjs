@@ -33,7 +33,7 @@ import {
 import {discoverHooks} from '../discovery/hook-discovery.mjs';
 import {loadComponentDoc} from '../discovery/component-loader.mjs';
 import {babelParse} from '../runtime/lazy-dependencies.mjs';
-import {declaredTargets, readImports} from './public-imports.mjs';
+import {declaredTargets, readImports, subpathFor} from './public-imports.mjs';
 import {allTargets, isRecord, subpathDeclaration} from './exports-subpaths.mjs';
 
 /**
@@ -104,8 +104,12 @@ function coreNames(packageDir) {
  */
 function importsServerOnly(file) {
   try {
-    return readImports(fs.readFileSync(file, 'utf8')).some(
-      statement => statement.source === 'server-only' && !statement.typeOnly,
+    const text = fs.readFileSync(file, 'utf8');
+    return (
+      text.includes('server-only') &&
+      readImports(text).some(
+        statement => statement.source === 'server-only' && !statement.typeOnly,
+      )
     );
   } catch {
     return false;
@@ -141,75 +145,51 @@ function filesUnder(dir, out = []) {
 
 /**
  * The package's own import specifiers whose module imports `server-only`:
- * each subpath its `exports` declares, a wildcard subpath matched against the
- * files its targets can name. A package with no `exports` names none, as no
- * subpath of it is declared.
+ * each subpath its `exports` declares, and for a wildcard subpath, each file
+ * its target pattern can name, by the subpath that exports that file. A
+ * package with no `exports` names none, as no subpath of it is declared.
  * @param {string} packageDir
  * @param {string} packageName
  * @param {unknown} exportsField
  * @returns {string[]}
  */
 function serverOnlyModules(packageDir, packageName, exportsField) {
+  if (exportsField == null) return [];
   /** @type {Set<string>} */
   const found = new Set();
-  /** @type {Set<string>} */
-  const seen = new Set();
+  /** @param {string} subpath */
+  const targets = subpath =>
+    declaredTargets(packageDir, subpathDeclaration(exportsField, subpath))
+      .files;
   /** @param {string} subpath `.` or `./…` */
-  const consider = subpath => {
-    if (seen.has(subpath)) return;
-    seen.add(subpath);
-    const {files} = declaredTargets(
-      packageDir,
-      subpathDeclaration(exportsField, subpath),
+  const add = subpath =>
+    found.add(
+      subpath === '.' ? packageName : `${packageName}${subpath.slice(1)}`,
     );
-    if (files.some(importsServerOnly)) {
-      found.add(
-        subpath === '.' ? packageName : `${packageName}${subpath.slice(1)}`,
-      );
-    }
-  };
-  if (exportsField == null) return [];
   const keys = isRecord(exportsField) ? Object.keys(exportsField) : [];
   if (keys.length === 0 || !keys.every(key => key.startsWith('.'))) {
-    consider('.');
+    if (targets('.').some(importsServerOnly)) add('.');
     return [...found];
   }
   const map = /** @type {Record<string, unknown>} */ (exportsField);
+  const root = path.resolve(packageDir);
   for (const key of keys) {
-    const keyParts = key.split('*');
-    if (keyParts.length === 1) {
-      consider(key);
+    if (!key.includes('*')) {
+      if (targets(key).some(importsServerOnly)) add(key);
       continue;
     }
-    if (keyParts.length !== 2) continue;
     for (const target of allTargets(map[key])) {
-      const targetParts = target.split('*');
-      if (!target.startsWith('./') || targetParts.length !== 2) continue;
-      const [prefix, suffix] = targetParts;
+      const star = target.indexOf('*');
+      if (!target.startsWith('./') || star === -1) continue;
       const folder = path.resolve(
-        packageDir,
-        prefix.slice(0, prefix.lastIndexOf('/') + 1),
+        root,
+        target.slice(0, target.lastIndexOf('/', star) + 1),
       );
-      if (
-        folder !== path.resolve(packageDir) &&
-        !folder.startsWith(path.resolve(packageDir) + path.sep)
-      ) {
-        continue;
-      }
+      if (folder !== root && !folder.startsWith(root + path.sep)) continue;
       for (const file of filesUnder(folder)) {
-        const shown = `./${rel(packageDir, file)}`;
-        if (
-          shown.length < prefix.length + suffix.length ||
-          !shown.startsWith(prefix) ||
-          !shown.endsWith(suffix)
-        ) {
-          continue;
-        }
-        const wildcard = shown.slice(
-          prefix.length,
-          shown.length - suffix.length,
-        );
-        consider(`${keyParts[0]}${wildcard}${keyParts[1]}`);
+        if (!importsServerOnly(file)) continue;
+        const subpath = subpathFor(exportsField, packageDir, file);
+        if (subpath != null && targets(subpath).includes(file)) add(subpath);
       }
     }
   }

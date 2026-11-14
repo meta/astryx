@@ -330,26 +330,40 @@ const isCommentBlock = node =>
   (node.directives ?? []).length === 0;
 
 /**
+ * Whether a statement is a block that holds one expression, as a `{…}` line
+ * such as `{items.map(…)}` between JSX elements parses at the top level.
+ * @param {any} node
+ */
+const isExpressionBlock = node =>
+  node?.type === 'BlockStatement' &&
+  node.body.length === 1 &&
+  node.body[0].type === 'ExpressionStatement' &&
+  (node.directives ?? []).length === 0;
+
+/**
+ * Whether a statement can be part of the JSX an example ends with: an
+ * element, or a `{…}` line between or after elements.
+ * @param {any} node
+ */
+const isMarkupStatement = node =>
+  isJsxStatement(node) || isCommentBlock(node) || isExpressionBlock(node);
+
+/**
  * Where the JSX a list of statements ends with begins: the first of the
- * trailing JSX statements and comment-only blocks between or after them. The
+ * trailing JSX statements and the `{…}` lines between or after them. The
  * list's length when it does not end with JSX.
  * @param {any[]} body
  */
 function trailingMarkupStart(body) {
   let start = body.length;
-  while (
-    start > 0 &&
-    (isJsxStatement(body[start - 1]) || isCommentBlock(body[start - 1]))
-  ) {
-    start -= 1;
-  }
-  while (start < body.length && isCommentBlock(body[start])) start += 1;
+  while (start > 0 && isMarkupStatement(body[start - 1])) start -= 1;
+  while (start < body.length && !isJsxStatement(body[start])) start += 1;
   return start;
 }
 
 /**
- * A trailing JSX statement as a fragment child: the element, or the comment
- * a comment-only block holds (`{/* … *\/}` is a JSX child too).
+ * A trailing JSX statement as a fragment child: the element, or a `{…}` line
+ * as it is written (`{/* … *\/}` and `{items.map(…)}` are JSX children too).
  * @param {string} code
  * @param {any} node
  * @param {number} [offset] where `code` starts in the example's code
@@ -430,9 +444,9 @@ function moduleFor(code) {
 /**
  * Code that ends with sibling elements, split where the parser says one
  * element ends and the next begins: the statements before them, and each
- * element, in order, with a `{/* … *\/}` line between them kept as a JSX
+ * element, in order, with a `{…}` line between or after them kept as a JSX
  * child. Null when the code fails to parse for any other reason, or when
- * something other than an element follows the first sibling.
+ * something else follows the first sibling.
  * @param {string} code
  * @returns {{directives: any[], statements: any[], elements: Piece[]} | null}
  */
@@ -450,9 +464,7 @@ function trailingSiblings(code) {
     if ('ast' in whole) {
       if (offset === 0) return null;
       const body = /** @type {any[]} */ (whole.ast.program.body);
-      if (!body.every(node => isJsxStatement(node) || isCommentBlock(node))) {
-        return null;
-      }
+      if (!body.every(isMarkupStatement)) return null;
       for (const node of body) elements.push(markupPiece(rest, node, offset));
       return {directives, statements, elements};
     }
@@ -472,9 +484,7 @@ function trailingSiblings(code) {
     if (offset === 0) {
       directives = segment.ast.program.directives;
       statements = body.slice(0, markupFrom);
-    } else if (
-      !body.every(node => isJsxStatement(node) || isCommentBlock(node))
-    ) {
+    } else if (!body.every(isMarkupStatement)) {
       return null;
     }
     for (const node of body.slice(markupFrom)) {

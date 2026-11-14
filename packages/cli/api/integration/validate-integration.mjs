@@ -50,6 +50,7 @@ import {integrationDocConsistency} from '../../foundation/discovery/doc-consiste
 import {
   integrationDocCommands,
   integrationDocTargets,
+  integrationExampleCode,
   projectUsesIconSets,
 } from './_adapter.mjs';
 import {
@@ -88,7 +89,6 @@ import {
 import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
 import {cliPeerVersionProblem} from '../../foundation/integrations/cli-peer-version.mjs';
 import {publicImportIssues} from '../../foundation/integrations/public-imports.mjs';
-import {exampleCodeCheck} from '../../foundation/integrations/example-code.mjs';
 import {runChoice} from '../../foundation/release/run-context.mjs';
 
 /** The running CLI is outside the package's `@astryxdesign/cli` peer range. */
@@ -895,7 +895,7 @@ export async function validateIntegration(pkg, options = {}) {
   // Component doc examples that are not `kind: 'setup'` but cannot run on
   // their own, by the rule a live preview uses.
   const exampleCode = integration
-    ? await exampleCodeCheck(integration)
+    ? await integrationExampleCode(integration)
     : undefined;
   // What a catalog needs to list the package: a logo, and an example of
   // its components.

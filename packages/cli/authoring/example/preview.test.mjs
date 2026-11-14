@@ -147,6 +147,29 @@ describe('previewableExample', () => {
     );
   });
 
+  it('keeps a {…} line between and after sibling elements as a child', () => {
+    expect(
+      moduleOf(
+        [
+          "const items = ['a', 'b'];",
+          '<Text>Items</Text>',
+          '{items.map(item => <Text key={item}>{item}</Text>)}',
+          '<Text>Total</Text>',
+          '{items.length}',
+        ].join('\n'),
+      ),
+    ).toContain(
+      'return (\n<>\n<Text>Items</Text>\n{items.map(item => <Text key={item}>{item}</Text>)}\n<Text>Total</Text>\n{items.length}\n</>\n);',
+    );
+    expect(
+      moduleOf(
+        "const items = ['a'];\n<Text>A</Text>\n<Text>B</Text>\n{items.map(item => <Text key={item}>{item}</Text>)}\n<Text>C</Text>",
+      ),
+    ).toContain(
+      'return (\n<>\n<Text>A</Text>\n<Text>B</Text>\n{items.map(item => <Text key={item}>{item}</Text>)}\n<Text>C</Text>\n</>\n);',
+    );
+  });
+
   it('names its component so that no name of the example clashes with it', () => {
     const imported = moduleOf(
       "import {Example} from '@acme/widgets';\n<Example />",

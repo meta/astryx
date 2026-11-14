@@ -28,7 +28,10 @@ import {
   loadLocalIntegration,
   resolveInstalledIntegrationDir,
 } from '../../foundation/integrations/integrations.mjs';
-import {exampleScopeFor} from '../../foundation/integrations/example-code.mjs';
+import {
+  exampleCodeCheck,
+  exampleScopeFor,
+} from '../../foundation/integrations/example-code.mjs';
 
 /**
  * Each component doc's props compared with the component's TypeScript props,
@@ -237,4 +240,13 @@ export async function loadExampleScope(pkg, cwd) {
     ...(read.reason ? {reason: read.reason} : {}),
     ...(read.incomplete ? {incomplete: read.incomplete} : {}),
   };
+}
+
+/**
+ * Each of the package's component examples that cannot run on its own, as a
+ * note with its fix, and the examples that could not be judged.
+ * @param {any} integration a loaded integration
+ */
+export function integrationExampleCode(integration) {
+  return exampleCodeCheck(integration);
 }
