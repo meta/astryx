@@ -56,7 +56,6 @@ import {useAttachment} from '../hooks/useAttachment';
 import {observeResizeAfterLayout} from '../utils/sharedResizeObserver';
 import {useTouchHitArea} from '../utils/touchHitArea';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
-import {usePressTracker} from '../gestures/usePressTracker';
 import {mergeProps, rtlStyles} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
@@ -73,16 +72,14 @@ import {useFocusRegionContainment} from '../hooks/useFocusTrap';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {isRtlElement} from '../hooks/isRtlElement';
-import {useZoomCore} from './useZoomCore';
+import type {PanDirection, UseZoomCoreOptions} from './useZoomCore';
 import type {UsePagerOptions} from '../hooks/usePager';
-import {useTouchRuntime} from '../utils/touchRuntime';
-import {TapGestureRecognizer} from '../gestures/TapGestureRecognizer';
+import {getTouchRuntime, useTouchRuntime} from '../utils/touchRuntime';
 import type {GestureTouch} from '../gestures/types';
-import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
 import {resolveMotion} from '../motion/resolveMotion';
 import {springs} from '../motion/uikit/springs';
 import {zoomMedia} from '../motion/uikit/zoomMedia';
-import {useZoomStage} from './useZoomStage';
+import type {UseZoomStageOptions, ZoomStageWithTouch} from './useZoomStage';
 import {useTouchPresentation} from '../utils/touchPresentation';
 import {
   registerEnglishFallback,
@@ -98,7 +95,7 @@ import {
   returnFocusForLastInput,
   type FocusWithin,
 } from '../utils/focusReturn';
-import {animatorFor, type Animator} from '../motion/animator';
+import type {Animator} from '../motion/animator';
 import {dismissBackdropAlpha, dismissChromeAlpha} from './zoomStage';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {MediaTheme} from '../theme/MediaTheme';
@@ -1103,7 +1100,6 @@ export function Lightbox({
     captionToggleRef,
     captionToggleHitAreaRef,
   );
-  usePressTracker(captionToggleRef);
   // Counts an open caption's lines while the toggle's place is not shown, so
   // the count is the text's own lines. The place also takes the toggle's width
   // for its current label. A toggle that does not fit beside the last line
@@ -1230,6 +1226,10 @@ export function Lightbox({
       (press != null && isOutside(press))
     );
   }, []);
+  // Zoom, the touch gestures and the pager come with the shared touch
+  // runtime, which loads after first paint. Until then a Lightbox shows each
+  // item at its fit size, and its buttons, keys and backdrop work as always.
+  const touchRuntime = useTouchRuntime();
   const handleBackdropClick = useCallback(
     (e: ReactMouseEvent<HTMLDialogElement>) => {
       if (didDragRef.current) {
@@ -1237,7 +1237,8 @@ export function Lightbox({
         return;
       }
       const isMediaClose =
-        pointerTypeRef.current !== 'touch' && isClickOutsideMedia(e);
+        (pointerTypeRef.current !== 'touch' || touchRuntime == null) &&
+        isClickOutsideMedia(e);
       if (
         e.target === e.currentTarget ||
         e.target === containerRef.current ||
@@ -1246,7 +1247,7 @@ export function Lightbox({
         handleClose();
       }
     },
-    [handleClose, isClickOutsideMedia],
+    [handleClose, isClickOutsideMedia, touchRuntime],
   );
 
   const isZoomTarget = hasZoom && !isVideo;
@@ -1260,7 +1261,8 @@ export function Lightbox({
   } => {
     const dialog = dialogRef.current;
     const container = containerRef.current;
-    if (dialog == null || container == null) {
+    const animatorFor = getTouchRuntime()?.animatorFor;
+    if (dialog == null || container == null || animatorFor == null) {
       return {backdrop: null, chrome: []};
     }
     // A caption in a band fades as the band, which carries its backing.
@@ -1288,7 +1290,7 @@ export function Lightbox({
   };
   // The zoom stage takes the keyboard's zoom and pan and every pointer's
   // gestures. Past a limit, a pinch or a pan gives way and returns.
-  const zoom = useZoomCore({
+  const zoomOptions: UseZoomCoreOptions = {
     stageRef: pageMediaRef,
     surfaceRef: trackRef,
     isEnabled: isOpen && isZoomTarget,
@@ -1301,7 +1303,7 @@ export function Lightbox({
         next ? t('@astryx.lightbox.zoomedIn') : t('@astryx.lightbox.zoomedOut'),
       );
     },
-  });
+  };
   const {isTouch} = useTouchPresentation();
   const startsOnCaption = (touch: GestureTouch | undefined) => {
     const target = touch?.target;
@@ -1310,7 +1312,7 @@ export function Lightbox({
       target.closest('[data-lightbox-caption]') != null
     );
   };
-  const stage = useZoomStage(zoom, {
+  const stageOptions: UseZoomStageOptions = {
     stageRef: pageMediaRef,
     surfaceRef: trackRef,
     isEnabled: isOpen && isZoomTarget,
@@ -1390,7 +1392,27 @@ export function Lightbox({
         renderAfterDismissal();
       },
     },
-  });
+  };
+  // The zoom stage, once the runtime has mounted it. Before that every call
+  // does nothing and nothing is zoomed.
+  const stageRef = useRef<ZoomStageWithTouch | null>(null);
+  const contentElementRef = useRef<HTMLElement | null>(null);
+  const [stage] = useState(() => ({
+    contentRef: (element: HTMLElement | null) => {
+      contentElementRef.current = element;
+      stageRef.current?.contentRef(element);
+    },
+    isZoomed: () => stageRef.current?.isZoomed() ?? false,
+    isAtEdge: (direction: PanDirection) =>
+      stageRef.current?.isAtEdge(direction) ?? true,
+    toggle: () => stageRef.current?.toggle(),
+    zoomIn: () => stageRef.current?.zoomIn(),
+    zoomOut: () => stageRef.current?.zoomOut(),
+    panBy: (dx: number, dy: number) => stageRef.current?.panBy(dx, dy),
+    doubleClickAt: (x: number, y: number) =>
+      stageRef.current?.doubleClickAt(x, y),
+    reset: () => stageRef.current?.reset(),
+  }));
 
   // Restore the photo, the backdrop and the controls only when the viewer
   // opens or a dismissal is answered. Each write promotes a layer, and
@@ -1491,7 +1513,6 @@ export function Lightbox({
   // The pager comes with the shared touch runtime, which loads after first
   // paint. Until then the buttons and the arrow keys page at once, and no
   // drag pages.
-  const touchRuntime = useTouchRuntime();
   const pagerOptions: UsePagerOptions = {
     viewportRef: imageWrapperRef,
     // A single photo has no pager, since it has nothing to page to. Its track
@@ -1573,24 +1594,26 @@ export function Lightbox({
   // press that moves past the tap's movement limit is no tap. A mouse's or a
   // pen's click closes it only outside the media (`isClickOutsideMedia`).
   // With zoom, the stage's own tap closes it.
-  useGestureRecognizer(
-    imageWrapperRef,
-    () =>
-      new TapGestureRecognizer({
-        name: 'lightbox-backdrop-tap',
-        allowedPointerTypes: ['touch'],
-      }),
-    tap => {
-      if (tap.state !== 'ended') {
-        return;
-      }
-      const {x, y} = tap.location();
+  const backdropTap = {
+    targetRef: imageWrapperRef,
+    isEnabled: isOpen && !isZoomTarget,
+    onTap: (x: number, y: number) => {
       if (!isOnCurrentMedia(x, y)) {
         handleClose();
       }
     },
-    {isEnabled: isOpen && !isZoomTarget, manageStyle: false},
-  );
+  };
+  const touchPart =
+    touchRuntime == null ? null : (
+      <touchRuntime.LightboxTouch
+        zoom={zoomOptions}
+        stage={stageOptions}
+        stageRef={stageRef}
+        contentElementRef={contentElementRef}
+        captionToggleRef={captionToggleRef}
+        backdropTap={backdropTap}
+      />
+    );
 
   // Gallery navigation. The buttons and the arrow keys ask for the new item.
   // Under the touch presentation the pager then slides there, as a paging
@@ -2081,6 +2104,7 @@ export function Lightbox({
                 </div>
               </div>
             </MediaTheme>
+            {touchPart}
             {pagerPart}
           </LayerContentBoundary>
         </ModalAnnounceProvider>

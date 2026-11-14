@@ -9,7 +9,15 @@
  * SYNC: When useLightbox.tsx changes, update tests to match new behavior
  */
 
-import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  beforeAll,
+} from 'vitest';
 import {
   render,
   screen,
@@ -19,6 +27,12 @@ import {
 } from '@testing-library/react';
 import {useLightbox} from './useLightbox';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
+import {__loadTouchRuntimeForTest} from '../utils/touchRuntime';
+
+// Zoom comes with the shared touch runtime once the page has loaded it.
+beforeAll(async () => {
+  await __loadTouchRuntimeForTest();
+});
 
 // jsdom doesn't implement dialog.showModal/close.
 beforeEach(() => {

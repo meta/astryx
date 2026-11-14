@@ -11,10 +11,16 @@
  */
 
 import {render, screen} from '@testing-library/react';
-import {beforeEach, describe, expect, it, vi} from 'vitest';
+import {beforeEach, describe, expect, it, vi, beforeAll} from 'vitest';
 import {observeResize} from '../utils/sharedResizeObserver';
 import type * as SharedResizeObserver from '../utils/sharedResizeObserver';
 import {Lightbox} from './Lightbox';
+import {__loadTouchRuntimeForTest} from '../utils/touchRuntime';
+
+// Zoom comes with the shared touch runtime once the page has loaded it.
+beforeAll(async () => {
+  await __loadTouchRuntimeForTest();
+});
 
 vi.mock('../utils/sharedResizeObserver', async importOriginal => {
   const actual = await importOriginal<typeof SharedResizeObserver>();
