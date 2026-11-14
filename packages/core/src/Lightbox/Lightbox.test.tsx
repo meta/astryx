@@ -1560,6 +1560,45 @@ describe('Lightbox', () => {
       expect(zoomTarget()).toHaveAttribute('aria-pressed', 'true');
     });
 
+    it('does nothing visible and announces nothing for a zoom key or a double-click before the touch runtime loads', async () => {
+      __resetTouchRuntimeForTest();
+      try {
+        render(
+          <Lightbox
+            isOpen={true}
+            onOpenChange={() => {}}
+            media={{src: '/photo.jpg', alt: 'Photo'}}
+            hasZoom
+          />,
+        );
+        const dialog = document.querySelector('dialog')!;
+        fireEvent.keyDown(dialog, {key: '+'});
+        fireEvent.doubleClick(zoomTarget());
+        expect(zoomTarget()).toHaveAttribute('aria-pressed', 'false');
+        expect(zoomTarget().querySelector('img')?.style.scale ?? '').toBe('');
+        expect(document.body.textContent).not.toMatch(/zoomed in/i);
+      } finally {
+        await __loadTouchRuntimeForTest();
+      }
+    });
+
+    it('zooms the moment the touch runtime loads, in a Lightbox already open', async () => {
+      __resetTouchRuntimeForTest();
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          media={{src: '/photo.jpg', alt: 'Photo'}}
+          hasZoom
+        />,
+      );
+      await act(async () => {
+        await __loadTouchRuntimeForTest();
+      });
+      fireEvent.keyDown(document.querySelector('dialog')!, {key: '+'});
+      expect(zoomTarget()).toHaveAttribute('aria-pressed', 'true');
+    });
+
     it('returns a zoomed photo to its fitted size with 0', () => {
       render(
         <Lightbox

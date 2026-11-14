@@ -6,7 +6,7 @@
  * @file touchRuntimeModules.tsx
  * @input The shared touch modules: the animator, and the touch parts of
  *   SegmentedControl, Switch, Toast, Popover, action groups and Lightbox's
- *   pager, which use the animator and the gesture host
+ *   pager and zoom, which use the animator and the gesture host
  * @output `touchRuntime`, the one object the touch loader publishes
  * @position Loaded only through `import()` in utils/touchRuntime.ts. No
  *   other module imports this file
@@ -34,6 +34,14 @@ import {
   type ActionGroupTrackingOptions,
 } from '../hooks/useActionGroupTracking';
 import {usePager, type UsePagerOptions} from '../hooks/usePager';
+import {usePressTracker} from '../gestures/usePressTracker';
+import {TapGestureRecognizer} from '../gestures/TapGestureRecognizer';
+import {useZoomCore, type UseZoomCoreOptions} from '../Lightbox/useZoomCore';
+import {
+  useZoomStage,
+  type UseZoomStageOptions,
+  type ZoomStageWithTouch,
+} from '../Lightbox/useZoomStage';
 
 interface SegmentedMotionProps {
   readonly trackRef: RefObject<HTMLElement | null>;
@@ -160,12 +168,72 @@ function LightboxPager(options: UsePagerOptions): null {
   return null;
 }
 
+interface LightboxTouchProps {
+  readonly zoom: UseZoomCoreOptions;
+  readonly stage: UseZoomStageOptions;
+  /** Holds the zoom stage while this part is mounted. */
+  readonly stageRef: RefObject<ZoomStageWithTouch | null>;
+  /** The current item's content, which the stage zooms. */
+  readonly contentElementRef: RefObject<HTMLElement | null>;
+  readonly captionToggleRef: RefObject<HTMLElement | null>;
+  /** A finger's tap on a gallery's stage without zoom. */
+  readonly backdropTap: {
+    readonly targetRef: RefObject<HTMLElement | null>;
+    readonly isEnabled: boolean;
+    readonly onTap: (x: number, y: number) => void;
+  };
+}
+
+/**
+ * Lightbox's zoom stage and touch gestures: zoom for every pointer and the
+ * keyboard, the drag to dismiss, a finger's tap beside the media, and the
+ * caption toggle's press feedback. It renders nothing. It mounts once the
+ * runtime has loaded, also in a Lightbox that is already open.
+ */
+function LightboxTouch({
+  zoom: zoomOptions,
+  stage: stageOptions,
+  stageRef,
+  contentElementRef,
+  captionToggleRef,
+  backdropTap,
+}: LightboxTouchProps): null {
+  const zoom = useZoomCore(zoomOptions);
+  const stage = useZoomStage(zoom, stageOptions);
+  useCommittedRefInto(stageRef, stage);
+  const {contentRef} = stage;
+  // Syncs the stage with the content the Lightbox already shows.
+  useIsomorphicLayoutEffect(() => {
+    contentRef(contentElementRef.current);
+  }, [contentRef, contentElementRef]);
+  usePressTracker(captionToggleRef);
+  const onTapRef = useRef(backdropTap.onTap);
+  useCommittedRefInto(onTapRef, backdropTap.onTap);
+  useGestureRecognizer(
+    backdropTap.targetRef,
+    () =>
+      new TapGestureRecognizer({
+        name: 'lightbox-backdrop-tap',
+        allowedPointerTypes: ['touch'],
+      }),
+    tap => {
+      if (tap.state === 'ended') {
+        const {x, y} = tap.location();
+        onTapRef.current(x, y);
+      }
+    },
+    {isEnabled: backdropTap.isEnabled, manageStyle: false},
+  );
+  return null;
+}
+
 /** What the touch loader publishes once the page has loaded it. */
 export const touchRuntime = {
   ActionGroupTracking,
   animatorFor,
   createPopoverSurfaceMotion,
   LightboxPager,
+  LightboxTouch,
   SegmentedMotion,
   SwitchTouch,
   ToastSwipeClaim,

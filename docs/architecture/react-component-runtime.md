@@ -349,24 +349,26 @@ those contracts.
   button and timer still dismiss it), and a popover presents as under a fine
   pointer; each action in AlertDialog, ButtonGroup and ToggleButtonGroup keeps
   its own press, with no slide between actions; Lightbox pages by its buttons
-  and arrow keys at once, with no drag or slide. A gesture in that window does
-  not start the load. The bundler keeps one copy per page however many
-  components use them. If the runtime's chunk fails to load, the page stays as
-  it is before the load: components work by taps, clicks and keys, and no
-  gesture retries the load. `utils/touchRuntimeModules.tsx` is the one module
-  the loader's `import()` targets; it gathers the touch runtime, so the loader
-  names a single chunk. `motion/settleThreshold.ts` holds `SETTLE_THRESHOLD`
-  apart from the animator, so a component that reads the threshold statically
-  does not pull in the deferred runtime. `hooks/pagerIndex.ts` holds a looping
-  pager's index arithmetic apart from the pager, so the date and time wheels
-  read it without loading the pager. `hooks/actionGroupNeighbours.ts` holds
-  the action-group target helpers apart from the tracking runtime, so a
-  group's static code finds its neighbours without loading gesture code. Gap:
-  these modules still import the shared touch modules statically, so a page
-  that renders them carries the touch runtime in its first load: Lightbox
-  (`useZoomCore`, `useZoomStage`), Resizable (`resizablePane`), Slider
-  (`sliderTouchController`), SnapPaging, Chat (`useChatKeyboard`), and the
-  date and time fields' wheels (`motion/reducedMotion`). A surface
+  and arrow keys at once, with no drag or slide; a Lightbox shows each item at
+  its fit size: pinch, double-tap, double-click and the zoom keys do not zoom,
+  and a drag does not dismiss; the close button, Escape and the backdrop work
+  as always. A gesture in that window does not start the load. The bundler
+  keeps one copy per page however many components use them. If the runtime's
+  chunk fails to load, the page stays as it is before the load: components
+  work by taps, clicks and keys, and no gesture retries the load.
+  `utils/touchRuntimeModules.tsx` is the one module the loader's `import()`
+  targets; it gathers the touch runtime, so the loader names a single chunk.
+  `motion/settleThreshold.ts` holds `SETTLE_THRESHOLD` apart from the
+  animator, so a component that reads the threshold statically does not pull
+  in the deferred runtime. `hooks/pagerIndex.ts` holds a looping pager's index
+  arithmetic apart from the pager, so the date and time wheels read it without
+  loading the pager. `hooks/actionGroupNeighbours.ts` holds the action-group
+  target helpers apart from the tracking runtime, so a group's static code
+  finds its neighbours without loading gesture code. Gap: these modules still
+  import the shared touch modules statically, so a page that renders them
+  carries the touch runtime in its first load: Resizable (`resizablePane`),
+  Slider (`sliderTouchController`), SnapPaging, Chat (`useChatKeyboard`), and
+  the date and time fields' wheels (`motion/reducedMotion`). A surface
   revealed by interaction that a component loads with `import()` under
   `architecture:component-import-boundaries` INV1 imports these modules
   statically too; the bundler still keeps one copy per page. That `import()`
