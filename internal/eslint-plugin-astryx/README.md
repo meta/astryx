@@ -224,7 +224,8 @@ component folders it follows every static import. It reports the import where
 a component file reaches a shared module that reaches the runtime. Type-only
 imports and `import()` are not edges, so a runtime part that only the loader
 reaches may use the runtime freely. A folder a caller opts into, such as
-`SnapPaging`, is a shared module, not a component entry.
+`SnapPaging` or `Swipe` (`createSwipe`), is a shared module, not a component
+entry.
 
 The imports that reach the runtime today are listed in
 `no-static-touch-runtime.allowlist.json`, each with why it reaches the runtime
