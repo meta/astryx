@@ -379,8 +379,7 @@ those contracts.
   loading the pager. `hooks/actionGroupNeighbours.ts` holds the action-group
   target helpers apart from the tracking runtime, so a group's static code
   finds its neighbours without loading gesture code.
-  `@astryx/no-static-touch-runtime` reports any static path from a component
-  into these modules. A surface revealed by interaction that a component loads
+  Gap: AlertDialog (`useAlertMotion`) still imports the shared touch modules statically, so a page that renders it carries the touch runtime in its first load. `@astryx/no-static-touch-runtime` reports any other static path from a component into these modules; its allowlist names exactly that import and empties when it moves behind the loader. A surface revealed by interaction that a component loads
   with `import()` under `architecture:component-import-boundaries` INV1
   imports these modules statically too; the bundler still keeps one copy per
   page. That `import()` targets the surface module, never one of these
