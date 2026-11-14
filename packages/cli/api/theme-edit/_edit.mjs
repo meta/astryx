@@ -129,6 +129,7 @@ import {
   storedProblems,
 } from './_check.mjs';
 import {MODAL, isColorToken} from './_compiler.mjs';
+import {fontShorthandFamilyList} from '../theme/build/font-warning.mjs';
 import {colorProblem} from './_color.mjs';
 import {
   PALETTE_DIALS,
@@ -2218,15 +2219,22 @@ async function ownTokenProblems(ctx, slug, data) {
    */
   const judgeProperty = (prop, value, file, reads, component) => {
     // A family list is read as set reads one for that part (a comma
-    // missing before a generic family, a quoted generic, a dial word).
+    // missing before a generic family, a quoted generic, a dial word):
+    // font-family's value, and the families a `font` shorthand names last.
     if (
       typeof value === 'string' &&
-      prop === 'font-family' &&
+      (prop === 'font-family' || prop === 'font') &&
       component &&
       ctx.project.target.has(component)
     ) {
-      const why = refused(prop, value, reads, {on: component});
-      if (why) return why;
+      const families = prop === 'font' ? fontShorthandFamilyList(value) : value;
+      const why = families
+        ? refused('font-family', families, reads, {on: component})
+        : null;
+      if (why)
+        return prop === 'font'
+          ? `font names the families "${families}" last, read as font-family: ${why}`
+          : why;
     }
     // A var() of a custom property the theme's own page sets reads the
     // text it gives: the property must take that text there.

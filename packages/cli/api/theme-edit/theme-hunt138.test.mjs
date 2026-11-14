@@ -164,6 +164,28 @@ describe("a part's keys", () => {
       "  components: {button: {base: {fontFamily: 'Lora, serif'}}},",
     );
     await accepted('fg');
+    // The families a `font` shorthand names last are read the same way.
+    await withOwn(
+      'fh',
+      "  components: {button: {base: {font: '600 16px/1.4 Lora sans-serif'}}},",
+    );
+    await refused(
+      'fh',
+      /components\.button\.base font: "600 16px\/1\.4 Lora sans-serif" \(line \d+\): font names the families "Lora sans-serif" last, read as font-family: .*a comma goes before the generic family sans-serif/,
+    );
+    await withOwn(
+      'fi',
+      '  components: {button: {base: {font: \'600 16px Lora, "serif"\'}}},',
+    );
+    await refused(
+      'fi',
+      /font names the families "Lora, "serif"" last.*quotes a generic family/,
+    );
+    await withOwn(
+      'fj',
+      "  components: {button: {base: {font: '600 16px/1.4 Lora, serif'}}},",
+    );
+    await accepted('fj');
   }, 240_000);
 
   it("reads a var() of the theme's own property as the text it holds", async () => {
