@@ -249,6 +249,16 @@ describe("a leg's verdict, as its step decides it", () => {
     expect(verdictFor('failure', failed).verdict).toBe('fail');
   });
 
+  it('fails when a test file failed to load, or its hook threw, though no test line shows a ×', () => {
+    const noTests =
+      ' \u001b[31m❯\u001b[39m \u001b[30m\u001b[46m node \u001b[49m\u001b[39m packages/cli/c.test.mjs (0 test)\n';
+    const hookFailed =
+      ' \u001b[31m❯\u001b[39m \u001b[30m\u001b[46m node \u001b[49m\u001b[39m packages/cli/d.test.mjs (2 tests | 2 skipped) 30ms\n' +
+      '   \u001b[2m↓\u001b[22m reads d\n   \u001b[2m↓\u001b[22m writes d\n';
+    expect(verdictFor('failure', noTests + stuck).verdict).toBe('fail');
+    expect(verdictFor('failure', hookFailed + stuck).verdict).toBe('fail');
+  });
+
   it('has no verdict when the watchdog stopped the leg before any test failed', () => {
     expect(
       verdictFor('failure', ' ✓ |node| a.test.mjs (2 tests) 10ms\n' + stuck)
@@ -296,10 +306,13 @@ describe('the minimum-Node times', () => {
         {'b.test.mjs': 4, 'c.test.mjs': 5},
         {source: 'run 7', exists: file => file !== 'gone.test.mjs'},
       ),
-    ).toEqual({
+    ).toMatchObject({
       source: 'run 7',
       seconds: {'a.test.mjs': 1, 'b.test.mjs': 4, 'c.test.mjs': 5},
     });
+    expect(refreshRecord(record, {}, {source: 'run 7'}).$comment).toMatch(
+      /Refreshed from that workflow's run named in `source`/,
+    );
   });
 
   it('reads every leg’s times, skipping a file it cannot read', () => {

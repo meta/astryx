@@ -169,7 +169,13 @@ export function refreshRecord(
   const seconds = {...record.seconds, ...times};
   return {
     ...record,
-    ...(source ? {source} : {}),
+    ...(source
+      ? {
+          $comment:
+            "Seconds per CLI test file on the CLI's minimum Node, which the \"CLI on minimum Node\" workflow packs its legs by (VITEST_DURATIONS_FILE). Refreshed from that workflow's run named in `source`; refresh it from the latest run's min-node-record artifact.",
+          source,
+        }
+      : {}),
     seconds: Object.fromEntries(
       Object.entries(seconds)
         .filter(([file]) => exists(file))

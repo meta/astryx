@@ -100,7 +100,9 @@ jobs:
           log="$RUNNER_TEMP/cli-tests.plain.log"
           sed $'s/\x1b\\[[0-9;]*m//g' "$RUNNER_TEMP/cli-tests.log" > "$log" 2>/dev/null || : > "$log"
           if [ "$OUTCOME" = success ]; then verdict=pass
-          elif grep -qE '^ *(FAIL |×)' "$log" 2>/dev/null; then verdict=fail
+          # A failed test (×), a failed file that ran no test or whose hook threw
+          # (❯), or the summary (FAIL): only a failure prints any of them.
+          elif grep -qE '^ *(FAIL |×|❯ )' "$log" 2>/dev/null; then verdict=fail
           elif grep -q 'Node shard stuck' "$log" 2>/dev/null; then verdict=none
           elif [ "$OUTCOME" = failure ]; then verdict=fail
           else verdict=none
