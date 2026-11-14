@@ -320,6 +320,19 @@ describe('render --reverse says what changed after the render', () => {
     expect(long.data.edits[0].now).toHaveLength(300);
   });
 
+  it('leaves an untouched file unedited when its stylesheet text or its page folder looks like HTML', async () => {
+    put('odd/<body>/page.tsx', `import './look.css';\nexport default function Page() {\n  return <p className="tagged">Tagged</p>;\n}\n`);
+    put('odd/<body>/look.css', '.tagged::before { content: "</head><body><!-- x -->"; }\n');
+    await render('odd/<body>/page.tsx', {cwd: dir, out: 'odd.html'});
+    const odd = read('odd.html');
+    // The render keeps the stylesheet's text (it only escapes a comment
+    // opener), and the note names the page's folder.
+    expect(odd).toContain('content: "</head><body>');
+    expect(odd).toContain('Page: odd/<body>/page.tsx');
+    const back = /** @type {any} */ (await render('odd.html', {cwd: dir, reverse: true, out: 'odd-back/page.tsx'}));
+    expect(back.data).toMatchObject({exact: true, edited: false, stylesEdited: false});
+  });
+
   it('keeps every path in the note relative to the project: no folder above it, user or host name', () => {
     expect(html).not.toContain(path.dirname(dir));
     expect(html).not.toContain(os.homedir());
