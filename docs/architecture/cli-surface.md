@@ -120,7 +120,8 @@ and remains available through explicit Core package selection.
 - **INV1 — The CLI never asks a question.** No prompt, no TTY detection, no
   read of stdin for control flow. A non-TTY environment is the only supported
   condition, not a fallback. A command with nothing to do exits with a result,
-  never a question.
+  never a question. `astryx mcp` reads protocol requests that an MCP client
+  program writes to its stdin, and asks nothing (`spec:AST-121` FR1).
 - **INV2 — Every `--json` emission is one valid envelope.** Success is
   `{apiVersion, type, data}` plus optional `package` (INV28) and `meta`, which
   carries `answeredBy` on every success (`spec:AST-081` FR5). Failure is
@@ -138,7 +139,8 @@ and remains available through explicit Core package selection.
   detection, no width wrapping, byte-for-byte identical printed or piped. A
   projection may shorten a prose field to its first sentence; a command's
   `--verbose`, where it has one, prints such a field whole, and `--json` carries
-  every field.
+  every field. The stdout of `astryx mcp` carries protocol messages only, and
+  each answer in them is a command's `--json` output (`spec:AST-121` FR4).
 - **INV5 — Text field names mirror JSON keys one to one.** The two views cannot
   drift, and every field stays greppable.
 - **INV6 — One command, one file.** A command is
@@ -494,8 +496,9 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   renders the result through `jsonOut` or the formatter kit. It reads no files,
   loads no project, runs no discovery, and starts no subprocess or network
   request; it may phrase hints with the command name `spec:AST-081` FR5's picker
-  chooses. Only command handlers, their `CommandDoc` files, and
-  their tests live in that directory. `clients/cli/commands/blog.mjs` is the
+  chooses. The `mcp` handler hands its run to the CLI's MCP server, which
+  starts one run of the CLI per tool call (`spec:AST-121` FR4). Only command
+  handlers, their `CommandDoc` files, and their tests live in that directory. `clients/cli/commands/blog.mjs` is the
   reference handler.
 - **INV23 — The formatter kit is closed.** Text output is built only from the
   block constructors in `clients/cli/formatters/index.mjs` — `section`, `text`,

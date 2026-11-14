@@ -182,15 +182,45 @@ npm run astryx -- docs tokens --dense`,
       content: [
         {
           type: 'prose',
-          text: 'Astryx ships a Model Context Protocol (MCP) server that any MCP-compatible AI tool can connect to. Instead of manually pasting CLI output, the AI can query the Astryx design system directly, searching for components, reading full documentation, and pulling code examples on demand.',
+          text: 'Astryx serves the Model Context Protocol (MCP) two ways. In a project, connect the CLI itself: {@command mcp} serves every astryx command as a tool, and each answer is for the version of Astryx the project has, with its theme and integrations. With nothing installed, the hosted server searches the docs of the latest release.',
         },
         {
           type: 'prose',
-          text: 'The MCP server exposes two tools: search(query) for discovering components, doc topics, and templates; and get(name) for retrieving full documentation with props, usage, and examples.',
+          text: 'The CLI server runs on standard input and output, so your AI tool starts it in the project folder. Each command that answers with --json is one tool, named by its words (theme build is theme_build), and its inputs are the command\'s arguments and options under their CLI names. A tool call runs the command with --json and answers with its output unchanged, so a tool answers as the command does, and a new command or option is a tool input at once. The server also gives the agent the project\'s agent docs, the text init writes, when the project has none yet.',
+        },
+        {
+          type: 'code',
+          lang: 'json',
+          label: 'Claude Code (.mcp.json), Cursor (.cursor/mcp.json) and Cline',
+          code: `{
+  "mcpServers": {
+    "astryx": {
+      "command": "npx",
+      "args": ["@astryxdesign/cli", "mcp"]
+    }
+  }
+}`,
         },
         {
           type: 'prose',
-          text: 'Add the server to your MCP config file. The entry is a remote HTTP server, and the exact shape differs per client, so use the snippet for the tool you run. An entry with an unrecognized transport is skipped with a warning rather than an error, which reads as a server that connects but exposes no tools.',
+          text: 'Claude Code can also write that entry from the terminal:',
+        },
+        {
+          type: 'code',
+          lang: 'bash',
+          code: `claude mcp add astryx -- npx @astryxdesign/cli mcp`,
+        },
+        {
+          type: 'code',
+          lang: 'toml',
+          label: 'Codex (~/.codex/config.toml)',
+          code: `[mcp_servers.astryx]
+command = "npx"
+args = ["@astryxdesign/cli", "mcp"]`,
+        },
+        {
+          type: 'prose',
+          text: 'The hosted server exposes two tools: search(query) for discovering components, doc topics, and templates; and get(name) for retrieving full documentation with props, usage, and examples. It answers for the latest published release, not for your project. Its entry is a remote HTTP server, and the exact shape differs per client, so use the snippet for the tool you run. An entry with an unrecognized transport is skipped with a warning rather than an error, which reads as a server that connects but exposes no tools.',
         },
         {
           type: 'code',
@@ -246,7 +276,7 @@ npm run astryx -- docs tokens --dense`,
         },
         {
           type: 'prose',
-          text: 'Once connected, your AI tool can search for components by natural language (e.g. "dropdown menu", "success message") and retrieve full documentation without any manual CLI invocation. The server uses the same keyword index from component docs, so search quality improves automatically as component documentation is updated.',
+          text: 'Once connected, your AI tool can search for components by natural language (e.g. "dropdown menu", "success message") and retrieve full documentation without any manual CLI invocation. The hosted server uses the same keyword index from component docs, so search quality improves automatically as component documentation is updated.',
         },
       ],
     },
