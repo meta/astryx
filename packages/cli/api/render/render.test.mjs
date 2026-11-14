@@ -1702,6 +1702,8 @@ describe('render --reverse: a received file may carry only what a render embeds'
     ['the Astryx configuration', 'astryx.config.mjs', 'ERR_RENDER_SOURCE_DAMAGED'],
     ['the package manifest', 'package.json', 'ERR_RENDER_SOURCE_DAMAGED'],
     ['a TypeScript configuration', 'tsconfig.json', 'ERR_RENDER_SOURCE_DAMAGED'],
+    ['a TypeScript project configuration', 'tsconfig.app.json', 'ERR_RENDER_SOURCE_DAMAGED'],
+    ['a JSON tool configuration by its config name', 'renovate.config.json', 'ERR_RENDER_SOURCE_DAMAGED'],
     ['a package inside node_modules', 'node_modules/react/index.js', 'ERR_RENDER_SOURCE_DAMAGED'],
     ['a shell script', 'scripts/install.sh', 'ERR_RENDER_SOURCE_DAMAGED'],
     ['a climbing path', '../escape.css', 'ERR_PATH_TRAVERSAL'],
