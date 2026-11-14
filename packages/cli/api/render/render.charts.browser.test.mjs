@@ -37,6 +37,17 @@ const data = [
 ];
 const lines = [<XAxis key="x" dataKey="m" />, <YAxis key="y" />, <Legend key="l" />,
   <Line key="a" dataKey="a" stroke="#c00" />, <Line key="b" dataKey="b" stroke="#0a0" />, <Line key="c" dataKey="c" stroke="#00c" />];
+// One chart component used twice, so both charts write the same gradient id.
+function Faded() {
+  return (
+    <ResponsiveContainer width="100%" height={200}>
+      <AreaChart data={data}>
+        <defs><linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#36c" /><stop offset="100%" stopColor="#36c" stopOpacity={0} /></linearGradient></defs>
+        <XAxis dataKey="m" /><Area dataKey="a" fill="url(#fade)" />
+      </AreaChart>
+    </ResponsiveContainer>
+  );
+}
 export default function Page() {
   return (
     <main style={{padding: 16}}>
@@ -49,14 +60,8 @@ export default function Page() {
       <div data-case="aspect">
         <ResponsiveContainer width="100%" aspect={3}><LineChart data={data}>{lines}</LineChart></ResponsiveContainer>
       </div>
-      <div data-case="gradient">
-        <ResponsiveContainer width="100%" height={200}>
-          <AreaChart data={data}>
-            <defs><linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#36c" /><stop offset="100%" stopColor="#36c" stopOpacity={0} /></linearGradient></defs>
-            <XAxis dataKey="m" /><Area dataKey="a" fill="url(#fade)" />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
+      <div data-case="gradient"><Faded /></div>
+      <div data-case="gradient-twin" style={{width: 300}}><Faded /></div>
       <div data-case="fixed">
         <BarChart width={300} height={150} data={data}><XAxis dataKey="m" /><Bar dataKey="a" /></BarChart>
       </div>
@@ -131,7 +136,8 @@ describe.runIf(BROWSER_STEP)('a rendered chart at a reader’s width', () => {
           );
         });
         expect(cases.gradient.fillShown).toBe(true);
-        for (const name of ['fills-box', 'own-height', 'aspect', 'gradient', 'fixed']) {
+        expect(cases['gradient-twin'].fillShown).toBe(true);
+        for (const name of ['fills-box', 'own-height', 'aspect', 'gradient', 'gradient-twin', 'fixed']) {
           const shown = cases[name];
           expect(shown.shown, name).toBe(1);
           expect(shown.fits, name).toBe(true);

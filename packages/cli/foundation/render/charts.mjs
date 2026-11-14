@@ -220,14 +220,18 @@ const ID_LISTS = ['for', 'aria-labelledby', 'aria-describedby', 'aria-controls',
  * drawing renders the page's chart children again, so an id the page writes
  * inside the chart (a `<linearGradient id>` its areas fill with, say) would
  * appear once per drawing, and `url(#…)` would find the copy in the first
- * drawing, which the reader may not see. Each id takes the drawing's width
- * as a suffix, and each reference inside that drawing (`url(#…)`, `href`,
- * and the attributes that list ids) follows it. Ids from outside the chart
- * are left as they are.
+ * drawing, which the reader may not see. Two charts can write the same id
+ * too (one chart component used twice). Each id takes the chart's place and
+ * the drawing's width as a suffix, and each reference inside that drawing
+ * (`url(#…)`, `href`, and the attributes that list ids) follows it. Ids from
+ * outside the chart are left as they are.
  * @param {any} root the element the charts were drawn in
+ * @param {number} [first] the place of the first chart in `root` among the page's charts
  */
-export function separateIds(root) {
+export function separateIds(root, first = 0) {
+  const containers = [...root.querySelectorAll(`${CONTAINER}[${FOLLOWS_WIDTH}]`)];
   for (const wrapper of root.querySelectorAll(`${CONTAINER}[${FOLLOWS_WIDTH}] > .recharts-wrapper`)) {
+    const place = first + containers.indexOf(wrapper.parentElement);
     const width = String(wrapper.querySelector(':scope > svg.recharts-surface')?.getAttribute('viewBox') ?? '').split(/[\s,]+/)[2];
     const elements = [wrapper, ...wrapper.querySelectorAll('*')];
     /** @type {Map<string, string>} */
@@ -235,7 +239,7 @@ export function separateIds(root) {
     for (const el of elements) {
       const id = el.getAttribute('id');
       if (!id) continue;
-      own.set(id, `${id}-at-${width}`);
+      own.set(id, `${id}-chart${place}-at-${width}`);
       el.setAttribute('id', /** @type {string} */ (own.get(id)));
     }
     if (own.size === 0) continue;

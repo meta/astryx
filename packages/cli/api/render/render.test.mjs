@@ -2470,8 +2470,8 @@ export default function Page() {
     await render('charts-gradient.tsx', {cwd: dir});
     const [container] = containersIn(fs.readFileSync(path.join(dir, 'charts-gradient.html'), 'utf8'));
     for (const {width, html: part} of container) {
-      expect(part).toMatch(new RegExp(`<linearGradient\\b[^>]*\\bid="fade-at-${width}"`));
-      expect(part).toContain(`fill="url(#fade-at-${width})"`);
+      expect(part).toMatch(new RegExp(`<linearGradient\\b[^>]*\\bid="fade-chart0-at-${width}"`));
+      expect(part).toContain(`fill="url(#fade-chart0-at-${width})"`);
       expect(part).not.toMatch(/id="fade"|url\(#fade\)/);
     }
   }, 60_000);

@@ -336,7 +336,8 @@ async function drawCharts(markup, Page) {
     }
     if (!error) {
       foldLegends(host);
-      separateIds(host);
+      // Drawn by itself, a chart's place in the page is its own place.
+      separateIds(host, mode === 'alone' ? alonePlace : 0);
       roundCoordinates(host);
     }
     const out = error ? null : read(host);

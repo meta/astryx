@@ -134,26 +134,34 @@ describe('roundCoordinates', () => {
 });
 
 describe('separateIds', () => {
-  it("gives each drawing of a chart drawn at several widths its own ids, and points its references at them", () => {
+  it("gives each drawing of a chart drawn at several widths, and each such chart, its own ids, and points its references at them", () => {
     /** @param {number} width */
     const drawing = width =>
       `<div class="recharts-wrapper"><svg viewBox="0 0 ${width} 200" class="recharts-surface"><defs><linearGradient id="fade"></linearGradient></defs>` +
       `<path fill="url(#fade)" style="stroke:url('#fade')"></path><use href="#fade"></use><path fill="url(#page-wide)"></path><text id="t" aria-labelledby="t other">x</text></svg></div>`;
     const {document} = parseHTML(
       `<!doctype html><html><body><div ${FOLLOWS_WIDTH}="" class="recharts-responsive-container">${drawing(60)}${drawing(85)}</div>` +
-        `<div class="recharts-responsive-container">${drawing(320)}</div></body></html>`,
+        `<div class="recharts-responsive-container">${drawing(320)}</div>` +
+        `<div ${FOLLOWS_WIDTH}="" class="recharts-responsive-container">${drawing(60)}</div></body></html>`,
     );
     separateIds(document.body);
-    const [narrow, wide, once] = [...document.querySelectorAll('svg')];
-    expect(narrow.querySelector('linearGradient')?.getAttribute('id')).toBe('fade-at-60');
-    expect(wide.querySelector('linearGradient')?.getAttribute('id')).toBe('fade-at-85');
+    const [narrow, wide, once, second] = [...document.querySelectorAll('svg')];
+    expect(narrow.querySelector('linearGradient')?.getAttribute('id')).toBe('fade-chart0-at-60');
+    expect(wide.querySelector('linearGradient')?.getAttribute('id')).toBe('fade-chart0-at-85');
+    // A second chart that writes the same id keeps its own.
+    expect(second.querySelector('linearGradient')?.getAttribute('id')).toBe('fade-chart1-at-60');
+    expect(second.querySelector('path')?.getAttribute('fill')).toBe('url(#fade-chart1-at-60)');
     const paths = wide.querySelectorAll('path');
-    expect(paths[0].getAttribute('fill')).toBe('url(#fade-at-85)');
-    expect(paths[0].getAttribute('style')).toBe("stroke:url('#fade-at-85')");
-    expect(wide.querySelector('use')?.getAttribute('href')).toBe('#fade-at-85');
-    expect(wide.querySelector('text')?.getAttribute('aria-labelledby')).toBe('t-at-85 other');
+    expect(paths[0].getAttribute('fill')).toBe('url(#fade-chart0-at-85)');
+    expect(paths[0].getAttribute('style')).toBe("stroke:url('#fade-chart0-at-85')");
+    expect(wide.querySelector('use')?.getAttribute('href')).toBe('#fade-chart0-at-85');
+    expect(wide.querySelector('text')?.getAttribute('aria-labelledby')).toBe('t-chart0-at-85 other');
     // An id from outside the chart, and a chart drawn once, are left as they are.
     expect(paths[1].getAttribute('fill')).toBe('url(#page-wide)');
     expect(once.querySelector('linearGradient')?.getAttribute('id')).toBe('fade');
+    // A chart drawn by itself takes the place it is given.
+    const alone = parseHTML(`<!doctype html><html><body><div ${FOLLOWS_WIDTH}="" class="recharts-responsive-container">${drawing(60)}</div></body></html>`).document;
+    separateIds(alone.body, 4);
+    expect(alone.querySelector('linearGradient')?.getAttribute('id')).toBe('fade-chart4-at-60');
   });
 });
