@@ -1130,6 +1130,132 @@ describe('RadioList', () => {
   });
 });
 
+describe('one Tab stop', () => {
+  it('takes the other radios out of the Tab order for one Tab press', () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <RadioList label="Notify" value="sms" onChange={() => {}}>
+          <RadioListItem label="Email" value="email" />
+          <RadioListItem label="SMS" value="sms" />
+          <RadioListItem label="Push" value="push" />
+        </RadioList>,
+      );
+      const email = screen.getByRole('radio', {name: 'Email'});
+      const sms = screen.getByRole('radio', {name: 'SMS'});
+      const push = screen.getByRole('radio', {name: 'Push'});
+      email.focus();
+      fireEvent.keyDown(email, {key: 'Tab'});
+      expect(sms.tabIndex).toBe(-1);
+      expect(push.tabIndex).toBe(-1);
+      expect(email.tabIndex).toBe(0);
+      vi.runAllTimers();
+      expect(sms).not.toHaveAttribute('tabindex');
+      expect(push).not.toHaveAttribute('tabindex');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("restores a nested group's radios after a Tab press in it", () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <RadioList label="Plan" value="team" onChange={() => {}}>
+          <RadioListItem label="Solo" value="solo" />
+          <RadioListItem
+            label="Team"
+            value="team"
+            endContent={
+              <RadioList label="Seats" value="ten" onChange={() => {}}>
+                <RadioListItem label="Five" value="five" />
+                <RadioListItem label="Ten" value="ten" />
+              </RadioList>
+            }
+          />
+        </RadioList>,
+      );
+      const five = screen.getByRole('radio', {name: 'Five'});
+      const ten = screen.getByRole('radio', {name: 'Ten'});
+      const solo = screen.getByRole('radio', {name: 'Solo'});
+      five.focus();
+      fireEvent.keyDown(five, {key: 'Tab'});
+      expect(ten.tabIndex).toBe(-1);
+      expect(solo).not.toHaveAttribute('tabindex');
+      vi.runAllTimers();
+      expect(ten).not.toHaveAttribute('tabindex');
+      expect(solo).not.toHaveAttribute('tabindex');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('works for a group rendered in a same-origin iframe', () => {
+    vi.useFakeTimers();
+    const iframe = document.createElement('iframe');
+    document.body.appendChild(iframe);
+    try {
+      const frameDocument = iframe.contentDocument!;
+      const container = frameDocument.body.appendChild(
+        frameDocument.createElement('div'),
+      );
+      const {unmount} = render(
+        <RadioList label="Notify" value="sms" onChange={() => {}}>
+          <RadioListItem label="Email" value="email" />
+          <RadioListItem label="SMS" value="sms" />
+        </RadioList>,
+        {container},
+      );
+      const email = container.querySelector<HTMLInputElement>(
+        'input[value="email"]',
+      )!;
+      const sms =
+        container.querySelector<HTMLInputElement>('input[value="sms"]')!;
+      expect(email instanceof HTMLInputElement).toBe(false);
+      fireEvent.keyDown(email, {key: 'Tab'});
+      expect(sms.tabIndex).toBe(-1);
+      vi.runAllTimers();
+      expect(sms).not.toHaveAttribute('tabindex');
+      unmount();
+    } finally {
+      iframe.remove();
+      vi.useRealTimers();
+    }
+  });
+
+  it('leaves the Tab order alone for other keys and for Ctrl+Tab', () => {
+    render(
+      <RadioList label="Notify" value="sms" onChange={() => {}}>
+        <RadioListItem label="Email" value="email" />
+        <RadioListItem label="SMS" value="sms" />
+      </RadioList>,
+    );
+    const email = screen.getByRole('radio', {name: 'Email'});
+    const sms = screen.getByRole('radio', {name: 'SMS'});
+    fireEvent.keyDown(email, {key: 'ArrowDown'});
+    fireEvent.keyDown(email, {key: 'Tab', ctrlKey: true});
+    expect(sms).not.toHaveAttribute('tabindex');
+  });
+
+  it("runs a caller's onKeyDown after its own handling", () => {
+    const onKeyDown = vi.fn();
+    render(
+      <RadioList
+        label="Notify"
+        value="sms"
+        onChange={() => {}}
+        onKeyDown={onKeyDown}>
+        <RadioListItem label="Email" value="email" />
+        <RadioListItem label="SMS" value="sms" />
+      </RadioList>,
+    );
+    fireEvent.keyDown(screen.getByRole('radio', {name: 'Email'}), {
+      key: 'Tab',
+    });
+    expect(onKeyDown).toHaveBeenCalledTimes(1);
+  });
+});
+
 // jsdom cannot emulate forced-colors rendering, so this asserts that the
 // compiled output includes the forced-colors rule; visual behavior needs
 // manual verification under Windows High Contrast.
