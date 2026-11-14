@@ -53,6 +53,9 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     // Every kind of entry the folder holds is named, the docs not-found
     // hint's name summaries (kept-tree.mjs) included.
     expect(plain).toContain("the docs not-found hint's name summaries");
+    // The bound on the folder, and on jiti's folder beside it.
+    expect(plain).toContain('at most 64 MB');
+    expect(plain).toContain(path.join(tmp, 'astryx', 'jiti'));
     const pnp = path.join(work, 'as-pnp.cjs');
     fs.writeFileSync(pnp, "process.versions.pnp = '3';\n");
     const underPnp = row({NODE_OPTIONS: `--require ${pnp}`}).message;

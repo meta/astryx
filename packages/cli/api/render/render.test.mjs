@@ -1782,6 +1782,31 @@ describe('render(): a page outside a project', () => {
     expect(fs.readFileSync(path.join(away, 'page-restored', 'page.tsx'), 'utf8')).toBe(PAGE);
   }, 60_000);
 
+  it('carries the modules a page imports from above its own folder, as a restore lays them out', () => {
+    const tree = path.join(away, 'tree');
+    fs.mkdirSync(path.join(tree, 'app/x'), {recursive: true});
+    fs.mkdirSync(path.join(tree, 'components'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'components/Banner.tsx'), 'export function Banner() {\n  return <p>Banner above the page</p>;\n}\n');
+    fs.writeFileSync(path.join(tree, 'app/x/page.tsx'), "import {Banner} from '../../components/Banner';\nexport default function Page() {\n  return <main><Banner /></main>;\n}\n");
+    const run = runBin(tree, ['experimental', 'render', 'app/x/page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.files).toEqual(['app/x/page.tsx', 'components/Banner.tsx']);
+    const back = runBin(tree, ['experimental', 'render', '--reverse', 'app/x/page.html']);
+    expect(back.json.data).toMatchObject({exact: true, files: ['app/x/page-restored/app/x/page.tsx', 'app/x/page-restored/components/Banner.tsx']});
+    // The page's own folder still holds the tsconfig.json and the public/
+    // images it is rendered with.
+    fs.mkdirSync(path.join(tree, 'site/public'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'site/tsconfig.json'), '{"compilerOptions": {"paths": {"@/*": ["./*"]}}}\n');
+    fs.writeFileSync(path.join(tree, 'site/public/logo.png'), PNG);
+    fs.writeFileSync(path.join(tree, 'site/Note.tsx'), 'export function Note() {\n  return <p>Note by alias</p>;\n}\n');
+    fs.writeFileSync(path.join(tree, 'site/page.tsx'), "import {Note} from '@/Note';\nexport default function Page() {\n  return <main><Note /><img src=\"/logo.png\" alt=\"\" /></main>;\n}\n");
+    const site = runBin(tree, ['experimental', 'render', 'site/page.tsx']);
+    expect(site.status).toBe(0);
+    const siteHtml = fs.readFileSync(path.join(tree, 'site/page.html'), 'utf8');
+    expect(siteHtml).toContain('Note by alias');
+    expect(siteHtml).toContain('src="data:image/png;base64,');
+  }, 60_000);
+
   it('loads one React outside a project, even when the folder holds its own copy', () => {
     const sub = path.join(away, 'own-react');
     for (const name of ['react', 'react-dom']) {
@@ -1852,6 +1877,34 @@ console.log(JSON.stringify({inside, outside}));
     const {inside, outside} = JSON.parse(run.stdout.trim().split('\n').pop() ?? '{}');
     expect(inside).toBe('@astryxdesign/core is not installed where the page is, so the page has no Astryx styles; install it, or render from inside the project.');
     expect(outside).toContain('and the CLI runs without one');
+  }, 60_000);
+
+  it("compiles a page's StyleX that reads Core's theme variables, with the names Core's stylesheet defines", () => {
+    const sub = path.join(away, 'tokens');
+    fs.mkdirSync(sub, {recursive: true});
+    fs.writeFileSync(
+      path.join(sub, 'page.tsx'),
+      [
+        "import * as stylex from '@stylexjs/stylex';",
+        "import {colorVars, spacingVars} from '@astryxdesign/core/theme/tokens.stylex';",
+        "import {Text} from '@astryxdesign/core/Text';",
+        '',
+        "const styles = stylex.create({box: {backgroundColor: colorVars['--color-background-surface'], padding: spacingVars['--spacing-2']}});",
+        '',
+        'export default function Page() {',
+        '  return <div {...stylex.props(styles.box)}><Text>Themed box</Text></div>;',
+        '}',
+        '',
+      ].join('\n'),
+    );
+    const run = runBin(sub, ['experimental', 'render', 'page.tsx']);
+    expect(run.status, JSON.stringify(run.json)).toBe(0);
+    const html = fs.readFileSync(path.join(sub, 'page.html'), 'utf8');
+    const style = html.slice(html.indexOf('<style>'), html.indexOf('</style>'));
+    for (const name of ['--color-background-surface', '--spacing-2']) {
+      expect(style).toContain(`var(${name})`);
+      expect(style).toContain(`${name}:`);
+    }
   }, 60_000);
 
   it('still names a package the CLI does not carry as not installed', () => {
