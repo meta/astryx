@@ -36,6 +36,10 @@ import {
   type ActionGroupTrackingOptions,
 } from '../hooks/useActionGroupTracking';
 import {usePager, type UsePagerOptions} from '../hooks/usePager';
+import {
+  useSliderTouch,
+  type UseSliderTouchOptions,
+} from '../Slider/useSliderTouch';
 import {usePressTracker} from '../gestures/usePressTracker';
 import {TapGestureRecognizer} from '../gestures/TapGestureRecognizer';
 import {useZoomCore, type UseZoomCoreOptions} from '../Lightbox/useZoomCore';
@@ -295,6 +299,16 @@ function WheelGestures({
   return null;
 }
 
+/**
+ * A Slider's touch tracking: the thumbs' pans, the track's tap, the lift and
+ * the coast. It renders nothing. It mounts once the runtime has loaded, so
+ * the first press it tracks is the first one after the load.
+ */
+function SliderTouch(options: UseSliderTouchOptions): null {
+  useSliderTouch(options);
+  return null;
+}
+
 /** What the touch loader publishes once the page has loaded it. */
 export const touchRuntime = {
   ActionGroupTracking,
@@ -304,6 +318,7 @@ export const touchRuntime = {
   LightboxPager,
   LightboxTouch,
   SegmentedMotion,
+  SliderTouch,
   SwitchTouch,
   ToastSwipeClaim,
   WheelGestures,

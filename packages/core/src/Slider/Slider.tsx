@@ -62,11 +62,12 @@ import {themeProps} from '../utils/themeProps';
 import {isPrimaryClick} from '../utils/primaryClick';
 import {useTouchPresentation} from '../utils/touchPresentation';
 import {slider as UIKIT_SLIDER} from '../motion/uikit/slider';
-import {
-  useSliderTouch,
-  type SliderTouchModel,
-  type SliderTouchParts,
+import type {
+  SliderTouchModel,
+  SliderTouchParts,
+  UseSliderTouchOptions,
 } from './useSliderTouch';
+import {useTouchRuntime} from '../utils/touchRuntime';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
@@ -829,6 +830,11 @@ export function Slider({ref, ...props}: SliderProps) {
   // device. A mouse press on the track keeps the pointer
   // handlers below.
   const isTouchPresentation = useTouchPresentation().isTouch;
+  // The thumbs' pans, the track's tap, the lift and the coast come with the
+  // shared touch runtime, which loads after first paint. Until then a press
+  // takes the pointer handlers: a press on the track sets the value, and a
+  // mouse drag moves the thumb, with no lift and no coast.
+  const touchRuntime = useTouchRuntime();
   const hasTouchTargets = isTouchPresentation && !isDisabled;
 
   // A thumb is a div[role="slider"], and `handlePointerDown` focuses it from
@@ -1084,16 +1090,19 @@ export function Slider({ref, ...props}: SliderProps) {
       // which pan it for every pointer. The thumb still takes focus from any
       // press, as it did. A finger's or a pen's tap on the track sets the
       // value when it lifts. So only a mouse press on the track goes on.
+      // Before the touch runtime loads, every press goes on.
       const thumb = (e.target as Element).closest<HTMLElement>(
         '[role="slider"]',
       );
-      if (thumb != null) {
-        thumb.focus();
-        setKeyboardFocusThumb(null);
-        return;
-      }
-      if (e.pointerType === 'touch' || e.pointerType === 'pen') {
-        return;
+      if (touchRuntime != null) {
+        if (thumb != null) {
+          thumb.focus();
+          setKeyboardFocusThumb(null);
+          return;
+        }
+        if (e.pointerType === 'touch' || e.pointerType === 'pen') {
+          return;
+        }
       }
       e.preventDefault();
       if (draggingThumbRef.current !== null) {
@@ -1153,7 +1162,10 @@ export function Slider({ref, ...props}: SliderProps) {
       }
       draggingThumbRef.current = thumbIndex;
       setDraggingThumb(thumbIndex);
-      updateValue(thumbIndex, parks ? values[thumbIndex] : newVal);
+      // A press on a thumb changes no value; only its drag does.
+      if (parks || pressedThumbIndex < 0) {
+        updateValue(thumbIndex, parks ? values[thumbIndex] : newVal);
+      }
 
       // Focus the thumb that owns this drag.
       thumbs?.[thumbIndex]?.focus();
@@ -1190,6 +1202,7 @@ export function Slider({ref, ...props}: SliderProps) {
       getClosestThumb,
       updateValue,
       endDrag,
+      touchRuntime,
     ],
   );
 
@@ -1361,7 +1374,7 @@ export function Slider({ref, ...props}: SliderProps) {
     },
     thumbFor: value => getClosestThumb(value),
   };
-  useSliderTouch({
+  const sliderTouchOptions: UseSliderTouchOptions = {
     isEnabled: !isDisabled,
     model: touchModel,
     thumbCount: values.length,
@@ -1387,7 +1400,11 @@ export function Slider({ref, ...props}: SliderProps) {
         }),
       };
     },
-  });
+  };
+  const sliderTouchPart =
+    touchRuntime == null ? null : (
+      <touchRuntime.SliderTouch {...sliderTouchOptions} />
+    );
 
   // Keyboard handler
   const handleKeyDown = useCallback(
@@ -1897,6 +1914,7 @@ export function Slider({ref, ...props}: SliderProps) {
       )}
       {showsDisabledMessage &&
         disabledMessageTooltip.renderTooltip(disabledMessage)}
+      {sliderTouchPart}
     </Field>
   );
 }

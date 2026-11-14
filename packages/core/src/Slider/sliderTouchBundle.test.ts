@@ -86,8 +86,12 @@ const LAYER = 'Slider/sliderTouchController.ts';
 
 describe('Slider’s touch layer is one module, imported from one site', () => {
   it('imports sliderTouchController.ts from useSliderTouch.ts alone', () => {
-    const graph = staticGraph('Slider/index.ts');
+    const graph = staticGraph('utils/touchRuntimeModules.tsx');
     expect([...(graph.get(LAYER) ?? [])]).toEqual(['Slider/useSliderTouch.ts']);
+  });
+
+  it('keeps the touch layer out of Slider’s static graph: it comes with the touch runtime', () => {
+    expect(staticGraph('Slider/index.ts').has(LAYER)).toBe(false);
   });
 
   it('reaches no recognizer, gesture host or animator but through it', () => {
