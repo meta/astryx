@@ -403,7 +403,7 @@ works on is `spec:AST-040` FR9's.
     index; used only while it is
     a real folder the user owns and others cannot open, never where the
     system has no user ids), each
-    kept value used only while every input its gather read is unchanged; a
+    kept value used only while every input its gather read is unchanged. For the installed CLI's own files, the CLI's build id stands for their contents (an upgrade or reinstall changes it; in-place edits to an installed CLI aren't supported). A
     run under Yarn Plug'n'Play's loader, such as `yarn astryx`, keeps and
     uses no catalog; `doctor` lists that folder and its size in an info row,
     which also names the size limit it shares with the transpile cache below
