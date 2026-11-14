@@ -1205,13 +1205,13 @@ jobs:
           # steps' scope condition. Every leg sets the same value, so every
           # leg computes the same split.
           VITEST_LEG_ONE_RESERVE: "${{ steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && '1' || '0' }}"
+          # The swizzle proof's slices run in their own job (swizzle-proof).
+          VITEST_SWIZZLE_PROOF_OWN_JOB: '1'
         run: |
           started=$(ps -o etimes= -C Runner.Worker 2>/dev/null | sort -n | tail -1 | tr -d ' ')
           VITEST_SHARD_WATCHDOG_SECONDS=$(( 14 * 60 - ${started:-180} ))
           export VITEST_SHARD_WATCHDOG_SECONDS
           WATCHDOG=(--reporter=default --reporter=github-actions --reporter=./scripts/vitest-shard-watchdog.mjs)
-          # The swizzle proof's slices run in their own job (swizzle-proof).
-          SWIZZLE_PROOF_OWN_JOB=(--exclude 'packages/cli/test/swizzle-proof/swizzle-proof.*.test.mjs')
           if [ "$SCOPED" = true ]; then
             # One run covers the tests the change reaches and the tests no
             # module graph relates to it: guards that read sources, and tests
@@ -1226,10 +1226,10 @@ jobs:
             .github/scripts/run-named.sh "List the tests to run" --stdout "$RUNNER_TEMP/node-tests.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --reached "$RUNNER_TEMP/reached.json"
             mapfile -t TESTS < "$RUNNER_TEMP/node-tests.txt"
             if [ "${#TESTS[@]}" -gt 0 ]; then
-              .github/scripts/run-named.sh "Tests the change reaches and tests that read source files" -- pnpm test:node --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${WATCHDOG[@]}" "${SWIZZLE_PROOF_OWN_JOB[@]}" "${TESTS[@]}"
+              .github/scripts/run-named.sh "Tests the change reaches and tests that read source files" -- pnpm test:node --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${WATCHDOG[@]}" "${TESTS[@]}"
             fi
           else
-            pnpm test:node --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${WATCHDOG[@]}" "${SWIZZLE_PROOF_OWN_JOB[@]}"
+            pnpm test:node --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${WATCHDOG[@]}"
           fi
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
 

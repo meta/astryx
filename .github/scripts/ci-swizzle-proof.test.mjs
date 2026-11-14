@@ -9,6 +9,7 @@
  * @position Beside the other ci.yml shape tests
  */
 
+import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -73,16 +74,32 @@ describe('the swizzle proof in CI', () => {
   });
 
   it('keeps the slices out of the Node legs', () => {
-    const run = ci.jobs['test-node'].steps.find(
+    const node = ci.jobs['test-node'].steps.find(
       step => step.name === 'Run this shard of the Node tests',
-    ).run;
-    expect(run).toContain(
-      `SWIZZLE_PROOF_OWN_JOB=(--exclude '${SLICES}/swizzle-proof.*.test.mjs')`,
     );
-    const runs = run.split('\n').filter(line => /pnpm test:node/.test(line));
-    expect(runs.length).toBeGreaterThan(0);
-    for (const line of runs) {
-      expect(line).toContain('"${SWIZZLE_PROOF_OWN_JOB[@]}"');
-    }
-  });
+    expect(node.env.VITEST_SWIZZLE_PROOF_OWN_JOB).toBe('1');
+    // The Node project leaves the slices out under that switch, and keeps
+    // them otherwise (a local run, Main's release re-check).
+    const slicesListed = own =>
+      execFileSync(
+        process.execPath,
+        [
+          path.join(ROOT, 'node_modules/vitest/vitest.mjs'),
+          'list',
+          '--project',
+          'node',
+          '--filesOnly',
+          SLICES,
+        ],
+        {
+          cwd: ROOT,
+          encoding: 'utf8',
+          env: {...process.env, VITEST_SWIZZLE_PROOF_OWN_JOB: own},
+        },
+      )
+        .split('\n')
+        .filter(line => /swizzle-proof\.\d+\.test\.mjs/.test(line));
+    expect(slicesListed('1')).toEqual([]);
+    expect(slicesListed('')).toHaveLength(sliceFiles.length);
+  }, 120_000);
 });
