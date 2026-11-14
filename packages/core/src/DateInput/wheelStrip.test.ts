@@ -11,9 +11,24 @@
  *   wheel that drives it, and the browser specs the compositor
  */
 
-import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  beforeAll,
+} from 'vitest';
 import {createWheelStrip} from './wheelStrip';
 import type {WheelCurve, WheelLayout} from './wheelPhysics';
+import {__loadTouchRuntimeForTest} from '../utils/touchRuntime';
+
+// A wheel's drag, spin and snap come with the shared touch runtime once the
+// page has loaded it.
+beforeAll(async () => {
+  await __loadTouchRuntimeForTest();
+});
 
 const haptics = vi.hoisted(() => ({
   canVibrate: vi.fn(() => true),

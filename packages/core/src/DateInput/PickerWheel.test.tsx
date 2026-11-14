@@ -35,6 +35,16 @@ import {
   type WheelOption,
   type WheelProps,
 } from './wheelOptions';
+import {
+  __loadTouchRuntimeForTest,
+  __resetTouchRuntimeForTest,
+} from '../utils/touchRuntime';
+
+// A wheel's drag, spin and snap come with the shared touch runtime once the
+// page has loaded it.
+beforeAll(async () => {
+  await __loadTouchRuntimeForTest();
+});
 
 const ROW = WHEEL_ROW_HEIGHT;
 /** The column is laid out 216 px tall, its band's centre 108 px down. */
@@ -484,6 +494,25 @@ describe('PickerWheel — a finger', () => {
     expect(marked()).toEqual([]);
     advance(1000);
     expect(marked()).toEqual(['12']);
+  });
+
+  it('turns by a key at once and tracks no drag before the touch runtime loads', async () => {
+    __resetTouchRuntimeForTest();
+    try {
+      const {column, option} = renderWheel();
+      touch('touchstart', column, 150);
+      for (let i = 1; i <= 8; i++) {
+        advance(16);
+        touch('touchmove', column, 150 - i * 6);
+      }
+      expect(distanceOf(option('10'))).toBeCloseTo(0, 1);
+      touch('touchend', column, 102);
+      fireEvent.keyDown(column, {key: 'ArrowDown'});
+      // The key lands on 11 with no spin to wait for.
+      expect(distanceOf(option('11'))).toBeCloseTo(0, 1);
+    } finally {
+      await __loadTouchRuntimeForTest();
+    }
   });
 
   it('drags the rows with it, without committing until the wheel rests', () => {

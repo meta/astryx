@@ -16,7 +16,8 @@
  */
 
 import {canVibrate, playHaptic} from '../gestures/haptics';
-import {createMotionEngine, type MotionCurve} from '../motion/animator';
+import type {Animator, MotionCurve} from '../motion/animator';
+import {getTouchRuntime} from '../utils/touchRuntime';
 import {reducedMotionFade} from '../motion/reducedMotion';
 import {picker} from '../motion/uikit/picker';
 import {
@@ -132,7 +133,46 @@ function now(): number {
  * ```
  */
 export function createWheelStrip(initialLayout: WheelLayout): WheelStrip {
-  const animator = createMotionEngine(null);
+  // The animator comes with the shared touch runtime, which loads after first
+  // paint. Until then the strip is placed directly, and every move lands at
+  // once. The strip takes the animator at its first call after the load.
+  const placed = createPlacedStrip();
+  let engine: Animator | null = null;
+  const motionEngine = (): Animator | null => {
+    if (engine == null) {
+      const create = getTouchRuntime()?.createMotionEngine;
+      if (create != null) {
+        engine = create(null);
+        if (placed.element != null) {
+          engine.attach(placed.element);
+        }
+        engine.set({y: placed.y}, {promote: false});
+      }
+    }
+    return engine;
+  };
+  const animator = {
+    get element(): HTMLElement | null {
+      return motionEngine()?.element ?? placed.element;
+    },
+    get: (property: 'y', time?: number): number =>
+      motionEngine()?.get(property, time) ?? placed.y,
+    set: (values: {y: number}, options?: {promote?: boolean}): void => {
+      const current = motionEngine();
+      if (current == null) {
+        placed.set(values.y);
+      } else {
+        current.set(values, options);
+      }
+    },
+    attach: (element: HTMLElement | null): void => {
+      placed.attach(element);
+      motionEngine()?.attach(element);
+    },
+    dispose: (): void => {
+      engine?.dispose();
+    },
+  };
   let layout = initialLayout;
   let running: Running | null = null;
   let nearestListener: ((position: number) => void) | null = null;
@@ -293,11 +333,12 @@ export function createWheelStrip(initialLayout: WheelLayout): WheelStrip {
       stop();
       dragPrevious = null;
       const element = animator.element;
+      const motionNow = motionEngine();
       // What Reduce Motion makes of a transition: null while motion plays.
       // Momentum is never substituted.
       const fade = momentum ? null : reducedMotionFade(element, {touchRelease});
       const endMs = fade == null ? curve.duration * 1000 : fade.duration;
-      if (!(endMs > 0)) {
+      if (!(endMs > 0) || motionNow == null) {
         animator.set({y: -curve.to});
         reportNearest(curve.to);
         onEnd?.('arrived', curve.to);
@@ -309,8 +350,8 @@ export function createWheelStrip(initialLayout: WheelLayout): WheelStrip {
         velocity: t => -curve.velocity(t),
       };
       const handle = momentum
-        ? animator.decay({y: motionCurve}, {touchRelease})
-        : animator.play({y: motionCurve}, {touchRelease});
+        ? motionNow.decay({y: motionCurve}, {touchRelease})
+        : motionNow.play({y: motionCurve}, {touchRelease});
       const motion: Running = {curve, onEnd, timers: []};
       running = motion;
       const plan = {
@@ -336,6 +377,42 @@ export function createWheelStrip(initialLayout: WheelLayout): WheelStrip {
     dispose() {
       stop();
       animator.dispose();
+    },
+  };
+}
+
+/**
+ * The strip before the touch runtime loads: placed by its `translate`, as the
+ * animator writes it, so the animator takes over from the same place.
+ */
+function createPlacedStrip(): {
+  readonly element: HTMLElement | null;
+  readonly y: number;
+  attach(element: HTMLElement | null): void;
+  set(y: number): void;
+} {
+  let element: HTMLElement | null = null;
+  let y = 0;
+  const write = () => {
+    if (element != null) {
+      const shown = Number(y.toFixed(3));
+      element.style.translate = shown === 0 ? 'none' : `0px ${shown}px`;
+    }
+  };
+  return {
+    get element() {
+      return element;
+    },
+    get y() {
+      return y;
+    },
+    attach(next) {
+      element = next;
+      write();
+    },
+    set(next) {
+      y = next;
+      write();
     },
   };
 }
