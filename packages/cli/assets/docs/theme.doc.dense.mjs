@@ -3,7 +3,7 @@
 /** @type {import('@astryxdesign/cli/authoring').ReferenceTranslationDoc} */
 
 export const docsDense = {
-  description: 'use + create themes: see use-a-theme and author-a-theme.',
+  description: 'make/change a theme (experimental theme editor): astryx experimental theme editor new <name> --like neutral; editor set|how; theme add <name>; after each change look: experimental theme editor show <name> --png (takes pictures of real components); not done until you have looked. use + create themes: see use-a-theme and author-a-theme.',
   sections: [
     {
       section: 'Wrap your app in a theme',
@@ -33,7 +33,7 @@ export const docsDense = {
       section: 'Dark mode',
       title: 'Dark mode',
       content: [
-        {type: 'prose', text: "[light, dark] tuples, mode='system'. {@link generic:use-a-theme} for full guide."},
+        {type: 'prose', text: "[light, dark] tuples, mode='system'. A one-mode theme exports `colorModes`; wire `mode={themeModes[defaultThemeSlug] ?? 'system'}`. {@link generic:use-a-theme} for full guide."},
       ],
     },
     {

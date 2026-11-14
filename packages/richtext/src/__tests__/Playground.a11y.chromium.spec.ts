@@ -678,7 +678,7 @@ test('the insert dialog is tabbable, outside the toolbar roving tab stop', async
   // A Toolbar is a roving tab stop: everything inside it is tabindex="-1", so
   // a dialog rendered in its endContent could not be tabbed through at all.
   // The dialog goes in the editor's plugins slot instead, beside the toolbar
-  // — which is where RichTextEditorToolbar puts its own link dialog.
+  // — which is where RichTextEditorToolbar puts its own link popover.
   const insert = page.getByRole('button', {name: 'Insert image', exact: true});
   for (let press = 0; press < 12; press += 1) {
     if (await insert.evaluate(el => el === document.activeElement)) {
