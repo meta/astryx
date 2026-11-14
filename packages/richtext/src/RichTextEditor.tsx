@@ -77,6 +77,7 @@ import {TablePlugin} from '@lexical/react/LexicalTablePlugin';
 import {HorizontalRuleExtension} from '@lexical/extension';
 import {TextSemanticsExtension} from './textSemantics';
 import {TableColumnFloorPlugin} from './TableColumnFloorPlugin';
+import {TablePastePlugin} from './TablePastePlugin';
 import {CodeBackspacePlugin} from './CodeBackspacePlugin';
 import {CodeBlockHeaderPlugin} from './CodeBlockHeaderPlugin';
 import {CodePastePlugin} from './CodePastePlugin';
@@ -86,6 +87,7 @@ import {MarkdownExtensionsPlugin} from './MarkdownExtensionsPlugin';
 import type {RichTextMarkdownExtension} from './markdownExtensions';
 import type {CodeLanguage} from '@astryxdesign/core/CodeBlock';
 import {TaskCheckboxPlugin} from './TaskCheckboxPlugin';
+import {ListItemShortcutsPlugin} from './ListItemShortcutsPlugin';
 import {DisabledLinkGuardPlugin} from './DisabledLinkGuardPlugin';
 import {SelectAllScopePlugin} from './SelectAllScopePlugin';
 import {ImageSourceCaretPlugin} from './ImageSourceCaretPlugin';
@@ -424,7 +426,10 @@ export interface RichTextEditorProps extends Omit<
   /**
    * Whether to enable Markdown shortcut typing (e.g. `# ` for a heading,
    * `- ` for a list). Uses the `transformers` prop (defaults to the standard
-   * `@lexical/markdown` transformers plus GFM tables).
+   * `@lexical/markdown` transformers plus GFM tables). At the start of a list
+   * item, `- `, `1. `, or `[ ] ` switches its list between bullets, numbers,
+   * and tasks, and `# ` or `> ` takes a top-level item out of its list as a
+   * heading or a quote.
    * @default true
    */
   hasMarkdownShortcuts?: boolean;
@@ -730,6 +735,7 @@ export const RichTextEditor = function RichTextEditor({
                 hasHorizontalScroll
               />
               <TableColumnFloorPlugin />
+              <TablePastePlugin />
               <CodeBlockHeaderPlugin codeLanguages={codeLanguages} />
               <CodeSyntaxPlugin codeLanguages={codeLanguages} />
               {/* Backspace at the very start of a code block makes it a
@@ -751,6 +757,9 @@ export const RichTextEditor = function RichTextEditor({
               <ImageSourceCaretPlugin />
               {hasMarkdownShortcuts && (
                 <MarkdownShortcutPlugin transformers={markdownTransformers} />
+              )}
+              {hasMarkdownShortcuts && (
+                <ListItemShortcutsPlugin transformers={markdownTransformers} />
               )}
               {hasAutoFocus && <AutoFocusOnMount />}
               {onChange && (

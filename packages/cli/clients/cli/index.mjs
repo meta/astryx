@@ -17,15 +17,16 @@ import {fileURLToPath} from 'node:url';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {formatCliCommand, getCliInvocation, quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
-import {hasRecordedProject} from '../../foundation/env/cli-command.mjs';
+import {hasRecordedProject, recordDeclaredCliCommands} from '../../foundation/env/cli-command.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
+import {mayHaveIntegrations} from '../../foundation/integrations/may-have-integrations.mjs';
 import {findConfigPath} from '../../foundation/config/config-path.mjs';
 import {API_VERSION, setJsonMode} from '../../foundation/response/json.mjs';
 import {answeredBy, runChoice} from '../../foundation/release/run-context.mjs';
 import {cliInstallAdvice, installFolder, projectRelease, SETUP_REMINDER_KEY, takeNotice} from '../../foundation/release/notices.mjs';
 import {isCi} from '../../foundation/release/update-notice-env.mjs';
-import {buildManifest} from './lib/manifest.mjs';
-import {cliError} from './lib/cli-error.mjs';
+import {buildManifest, storedManifest} from './lib/manifest.mjs';
+import {cliError, themeGroupUnknownSubcommand} from './lib/cli-error.mjs';
 import {section, text, records} from './formatters/index.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
@@ -106,6 +107,10 @@ export const JSON_SUPPORTED = new Set([
   'experimental icon new-set',
   'experimental icon new-definition',
   'experimental render',
+  // The groups answer --json with their own help, as the root does.
+  'experimental theme',
+  'experimental theme editor',
+  'experimental theme preview',
   'experimental theme editor new',
   'experimental theme editor set',
   'experimental theme editor undo',
@@ -231,7 +236,10 @@ export async function loadProjectDebugHandler() {
  * Commander parses, before any hook, so the preAction load cannot reach it.
  * `Project.load` reads astryx.config and each integration's manifest; it does
  * no discovery. Skipped when the debug preload already loaded the project, and
- * outside a package. Called from the bin before Commander parses.
+ * where no integration can load (no config, no manifest of its own, no
+ * installed dependency that ships one): nothing there declares a command, so
+ * help prints the same without loading the project module. Called from the
+ * bin before Commander parses.
  *
  * @param {string[]} [argv] arguments after the binary.
  * @returns {Promise<void>}
@@ -243,6 +251,11 @@ export async function loadProjectForHelp(argv = process.argv.slice(2)) {
   try {
     const cwd = process.cwd();
     if (hasRecordedProject(cwd)) return;
+    if (!mayHaveIntegrations(cwd)) {
+      // What loading this project would record: no declared command.
+      recordDeclaredCliCommands(cwd, []);
+      return;
+    }
     const {Project} = await import('../../foundation/config/project.mjs');
     await Project.load(cwd);
   } catch {
@@ -364,7 +377,8 @@ const READS_EVERY_COMMAND = new Set(['manifest']);
  * same way. It returns that one command, no command for a run that only
  * prints the version, or null for every command. These runs load every
  * command: the root help when no stored list ships (a checkout; the published
- * package prints it from the list, see `printsRootHelp`), the manifest,
+ * package prints it from the list, see `printsRootHelp`), the manifest
+ * when no stored manifest ships (the published package reads its own),
  * `help <command>`, an unknown word, and a flag the root does not declare.
  * They print or read the whole list.
  *
@@ -378,7 +392,8 @@ export function commandsForArgs(program, argv) {
     const arg = argv[i];
     // Commander reads a lone `-` as an operand, as it reads any word.
     if (arg.length < 2 || arg[0] !== '-') {
-      return commands.some(cmd => cmd.name === arg) && !READS_EVERY_COMMAND.has(arg)
+      return commands.some(cmd => cmd.name === arg) &&
+        (!READS_EVERY_COMMAND.has(arg) || (arg === 'manifest' && storedManifest() != null))
         ? new Set([arg])
         : null;
     }
@@ -398,6 +413,36 @@ export function commandsForArgs(program, argv) {
     if (option.long === '--version') printsVersion = true;
   }
   return printsVersion ? new Set() : null;
+}
+
+/**
+ * Make `help <group> <command> ...` print the help of the deepest command the
+ * words name. Commander's help command reads only the first word, so
+ * `help theme build` printed the help of `theme`. Commander has no public hook
+ * for this; the override wraps its help dispatch and falls back to it.
+ * @param {import('commander').Command} program
+ */
+export function resolveDeepHelp(program) {
+  const root = /** @type {any} */ (program);
+  // A Commander release without this method keeps its own help dispatch.
+  if (typeof root._dispatchHelpCommand !== 'function') return;
+  const dispatch = root._dispatchHelpCommand.bind(root);
+  root._dispatchHelpCommand = (/** @type {string | undefined} */ name) => {
+    const words = (root.args ?? [])
+      .slice(1)
+      .filter((/** @type {string} */ word) => !word.startsWith('-'));
+    /** @type {any} */
+    let target = root;
+    for (const word of words) {
+      const next = target._findCommand(word);
+      if (!next) break;
+      target = next;
+    }
+    if (words.length > 1 && target !== root && !target._executableHandler) {
+      target.help();
+    }
+    return dispatch(name);
+  };
 }
 
 /**
@@ -550,7 +595,7 @@ export async function createProgram({argv} = {}) {
 
   program
     .name('astryx')
-    .description('Design system CLI — components, themes, and tooling')
+    .description('Design system CLI — components, themes, and tooling\n\nMaking or changing a theme? Use the experimental theme editor: astryx experimental theme editor new <name> --like neutral, then editor set / editor how "<what you want>"; after each change look at it with astryx experimental theme editor show <name> --png (takes pictures of real components): a theme change is not done until you have looked. No app yet: astryx experimental theme preview app <dir>.')
     .version(pkg.version)
     // These four change only the reads named in their text; every other
     // command ignores them.
@@ -653,6 +698,7 @@ export async function createProgram({argv} = {}) {
       program.help();
     });
   markReportsResult(program);
+  resolveDeepHelp(program);
 
   /**
    * Pre-action hook: gate --json BEFORE any command body runs.
@@ -695,10 +741,25 @@ export async function createProgram({argv} = {}) {
     const extras = actionCommand.commands.length > 0 ? actionCommand.args : [];
     const unknown = extras.find(arg => !String(arg).startsWith('-'));
     if (unknown != null) {
+      const names = actionCommand.commands.map(child => child.name());
+      if (fullName === 'theme' || fullName === 'experimental') {
+        // The theme groups name whole commands, closest first, and point at
+        // `experimental theme <word>` when the word is one of its commands.
+        const {message, suggestions} = themeGroupUnknownSubcommand(
+          fullName,
+          String(unknown),
+          names,
+          actionCommand,
+        );
+        cliError(message, {
+          code: ERROR_CODES.ERR_UNKNOWN_SUBCOMMAND,
+          suggestions,
+        });
+      }
       cliError(`unknown subcommand '${fullName} ${unknown}'`, {
         code: ERROR_CODES.ERR_UNKNOWN_SUBCOMMAND,
-        suggestions: actionCommand.commands.map(child => ({
-          name: child.name(),
+        suggestions: names.map(name => ({
+          name,
           reason: 'available subcommand',
         })),
       });
@@ -740,13 +801,20 @@ export async function createProgram({argv} = {}) {
    * Load the project's integrations before any command runs, so every command
    * it prints starts with the `cliCommand` they declare (the picker reads them
    * synchronously; see foundation/env/cli-command.mjs). Skipped when this
-   * process already loaded the project, such as the bin's debug preload. A
-   * project that cannot load is the command's to report, never this hook's.
+   * process already loaded the project, such as the bin's debug preload, and
+   * where no integration can load, so nothing declares a command (a command
+   * that needs the project still loads it). A project that cannot load is the
+   * command's to report, never this hook's.
    */
   program.hook('preAction', async () => {
     try {
       const cwd = process.cwd();
       if (hasRecordedProject(cwd)) return;
+      if (!mayHaveIntegrations(cwd)) {
+        // What loading this project would record: no declared command.
+        recordDeclaredCliCommands(cwd, []);
+        return;
+      }
       const {Project} = await import('../../foundation/config/project.mjs');
       await Project.load(cwd);
     } catch {
@@ -881,6 +949,10 @@ export async function createProgram({argv} = {}) {
       const stub = program
         .command(cmd.name)
         .description(`(failed to load: ${reason})`)
+        // Whatever options and words the run passed, it gets the load
+        // error, not a complaint about an option this stand-in never knew.
+        .allowUnknownOption()
+        .allowExcessArguments()
         .action(() => {
           // Nothing loaded, so nothing was answered — say that rather than
           // leaving the run's result unreported.

@@ -3,7 +3,7 @@
   "type": "search",
   "data": {
     "query": "delete",
-    "matchCount": 19,
+    "matchCount": 20,
     "results": [
       {
         "domain": "component",
@@ -14,6 +14,17 @@
         "description": "<text>",
         "import": "@astryxdesign/core/AlertDialog",
         "command": "astryx component AlertDialog",
+        "mentions": []
+      },
+      {
+        "domain": "hook",
+        "name": "createSwipe",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/Swipe",
+        "command": "astryx hook createSwipe",
         "mentions": []
       },
       {

@@ -24,11 +24,11 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {createHash} from 'node:crypto';
-import {createRequire} from 'node:module';
+import {fileURLToPath} from 'node:url';
 import {readDocView} from '../doc-compiler/read.mjs';
 import {importDocModule} from '../doc-compiler/import.mjs';
-import {CLI_ROOT, discoverExternalPackages} from '../fs/paths.mjs';
+import {readStore, storedKey} from '../doc-compiler/stored-docs.mjs';
+import {CLI_ROOT, discoverExternalPackages, realDir} from '../fs/paths.mjs';
 import {listDirEntries} from '../fs/listing-cache.mjs';
 import {CORE_PROVIDER_ID} from '../identity/providers.mjs';
 import {Project} from '../config/project.mjs';
@@ -38,9 +38,14 @@ import {
   programPath,
   traverseTemplateSource,
   writtenNames,
+  TEMPLATE_COMPONENTS_FILE,
 } from './template-source-tree.mjs';
-
-const require = createRequire(import.meta.url);
+import {persistedGather} from '../fs/gather-cache.mjs';
+import {hasNameLine, keptTreeSummary, nameLines} from '../fs/kept-tree.mjs';
+import {foldEntryName} from './entry-name-files.mjs';
+import {EXACT_CODEC} from '../fs/exact-codec.mjs';
+import {hostedRun} from '../runtime/package-root.mjs';
+import {babelParser} from '../runtime/lazy-dependencies.mjs';
 
 /** Identity used for core (built-in) templates in package-scoped listings. */
 const CORE_PACKAGE = CORE_PROVIDER_ID;
@@ -358,10 +363,41 @@ export function stripTemplateAssetRefs(source) {
  * @returns {{source: string, demoMediaReplaced: number}}
  */
 export function replaceDemoMedia(source, {videoPlaceholder = ''} = {}) {
+  const {source: output, replaced} = mapFixtureRefs(source, ({kind}) =>
+    kind === 'video' ? videoPlaceholder : PLACEHOLDER_IMAGE,
+  );
+  return {source: output, demoMediaReplaced: replaced};
+}
+
+/**
+ * One Astryx template fixture reference in template source.
+ * @typedef {object} FixtureRef
+ * @property {string} reference - The whole reference, query and fragment
+ *   included.
+ * @property {'image' | 'video'} kind - What the suffix of its last path
+ *   segment names.
+ * @property {boolean} isValue - Whether the reference is a whole quoted or
+ *   `url()` value. False for a mention in text.
+ */
+
+/**
+ * Replace each Astryx template fixture reference with what `map` returns for
+ * it. This is the one scanner for fixture references: a copy replaces them
+ * with placeholders ({@link replaceDemoMedia}), and the docsite's preview
+ * build points them at its image optimizer. It finds and refuses references
+ * as {@link stripTemplateAssetRefs} describes.
+ *
+ * @param {string} source - Template source code.
+ * @param {(ref: FixtureRef) => string | null} map - The replacement text, or
+ *   null to keep the reference as written.
+ * @returns {{source: string, replaced: number}} `replaced` counts the
+ *   references that `map` replaced.
+ */
+export function mapFixtureRefs(source, map) {
   const needle = `/${FIXTURE_SEGMENT}`;
   let output = '';
   let copied = 0;
-  let demoMediaReplaced = 0;
+  let replaced = 0;
   /** @type {Array<[number, number]> | undefined} */
   let comments;
   let at = source.indexOf(needle);
@@ -373,7 +409,7 @@ export function replaceDemoMedia(source, {videoPlaceholder = ''} = {}) {
     /** @type {{text: string, end: number} | null} */
     let edit;
     try {
-      edit = fixtureEdit(source, start, at, end, videoPlaceholder);
+      edit = fixtureEdit(source, start, at, end, map);
     } catch (err) {
       comments ??= commentRanges(source);
       if (!comments.some(([from, to]) => from <= at && at < to)) throw err;
@@ -382,11 +418,11 @@ export function replaceDemoMedia(source, {videoPlaceholder = ''} = {}) {
     if (edit) {
       output += source.slice(copied, start) + edit.text;
       copied = edit.end;
-      demoMediaReplaced += 1;
+      replaced += 1;
     }
     at = source.indexOf(needle, end);
   }
-  return {source: output + source.slice(copied), demoMediaReplaced};
+  return {source: output + source.slice(copied), replaced};
 }
 
 /**
@@ -911,15 +947,15 @@ function fixtureSegments(reference) {
 /**
  * The replacement for the fixture reference in the URL token [start, end),
  * which contains FIXTURE_SEGMENT's path at `at`; null when the token is not a
- * fixture reference or is a prose mention.
+ * fixture reference, is a prose mention, or `map` keeps it.
  * @param {string} source
  * @param {number} start
  * @param {number} at
  * @param {number} end
- * @param {string} videoPlaceholder
+ * @param {(ref: FixtureRef) => string | null} map
  * @returns {{text: string, end: number} | null}
  */
-function fixtureEdit(source, start, at, end, videoPlaceholder) {
+function fixtureEdit(source, start, at, end, map) {
   const token = source.slice(start, end);
   if (ABSOLUTE_URL.test(token)) return null;
   if (!token.startsWith('/')) {
@@ -987,11 +1023,17 @@ function fixtureEdit(source, start, at, end, videoPlaceholder) {
     .extname(segments[segments.length - 1])
     .slice(1)
     .toLowerCase();
-  if (VIDEO_EXTENSIONS.has(ext)) {
-    return {text: videoPlaceholder, end: referenceEnd};
-  }
-  if (IMAGE_EXTENSIONS.has(ext)) {
-    return {text: PLACEHOLDER_IMAGE, end: referenceEnd};
+  /** @type {FixtureRef['kind'] | null} */
+  let kind = null;
+  if (VIDEO_EXTENSIONS.has(ext)) kind = 'video';
+  else if (IMAGE_EXTENSIONS.has(ext)) kind = 'image';
+  if (kind) {
+    const text = map({
+      reference: source.slice(start, referenceEnd),
+      kind,
+      isValue: whole,
+    });
+    return text === null ? null : {text, end: referenceEnd};
   }
   if (whole || ext) {
     throw new Error(
@@ -1032,19 +1074,6 @@ function expressionUse(source, open, close) {
   return null;
 }
 
-/** @type {typeof import('@babel/parser') | undefined} */
-let babelParser;
-
-/**
- * The template source parser, loaded on first use so listing templates
- * never pays for it.
- * @returns {typeof import('@babel/parser')}
- */
-function templateSourceParser() {
-  babelParser ??= require('@babel/parser');
-  return /** @type {typeof import('@babel/parser')} */ (babelParser);
-}
-
 /**
  * The [start, end) range of every comment in `source`, or none when it does
  * not parse as TSX.
@@ -1053,7 +1082,7 @@ function templateSourceParser() {
  */
 function commentRanges(source) {
   try {
-    const {comments} = templateSourceParser().parse(source, {
+    const {comments} = babelParser().parse(source, {
       sourceType: 'module',
       plugins: ['jsx', 'typescript'],
     });
@@ -1223,6 +1252,99 @@ async function discoverBlocks() {
     });
   }
   return blocks;
+}
+
+/**
+ * The ids of Core's templates that `keep` accepts, read from file names: each
+ * page folder, and each block doc that has its same-stem source. Discovery
+ * gives Core's templates exactly these ids. Only a kept block's source is
+ * looked for.
+ * @param {(id: string) => boolean} [keep]
+ * @returns {string[]}
+ */
+export function coreTemplateIds(keep = () => true) {
+  const ids = listTemplates().filter(keep);
+  /** @param {string} dir */
+  const walk = dir => {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, {withFileTypes: true});
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (!TEMPLATE_SUFFIX_RE.test(entry.name)) continue;
+      const suffix = matchedTemplateSuffix(entry.name);
+      if (!suffix) continue;
+      const basename = entry.name.slice(0, -suffix.length);
+      if (keep(basename) && fs.existsSync(path.join(dir, basename + '.tsx'))) {
+        ids.push(basename);
+      }
+    }
+  };
+  walk(BLOCKS_DIR);
+  return ids;
+}
+
+/** This module's own file: its code decides the kept summaries' shape. */
+const OWN_FILE = fileURLToPath(import.meta.url);
+
+/** The file of foldEntryName, which decides the template-ids summary too. */
+const FOLD_FILE = fileURLToPath(
+  new URL('./entry-name-files.mjs', import.meta.url),
+);
+
+/**
+ * Which template files can give an id that folds to `wanted`, read from a
+ * kept summary of file names: `blocks` false means {@link coreTemplateIds}
+ * gives no block id that folds to it, and `listed` says whether any of the
+ * integrations ships a template doc whose id ({@link integrationTemplateIds})
+ * folds to it.
+ * @param {Array<{templates?: string}>} integrations
+ * @param {string} wanted a folded name
+ * @returns {{blocks: boolean, listed: boolean}}
+ */
+export function templateFilesNaming(integrations, wanted) {
+  const roots = integrations.flatMap(integration =>
+    typeof integration?.templates === 'string' && integration.templates !== ''
+      ? [integration.templates]
+      : [],
+  );
+  /** @type {Array<string | string[]>} */
+  const [blocks, ...listed] = keptTreeSummary(
+    {
+      kind: 'template-ids',
+      roots: [BLOCKS_DIR, ...roots],
+      code: [OWN_FILE, FOLD_FILE],
+    },
+    trees =>
+      trees.map(({folders}, at) => {
+        const folded = new Set();
+        for (const {rel, entries} of folders) {
+          for (const {name, isDir} of entries) {
+            if (isDir) continue;
+            const suffix = matchedTemplateSuffix(name);
+            if (!suffix) continue;
+            // Core's block ids are stems; an integration's are paths.
+            const id =
+              at === 0
+                ? name.slice(0, -suffix.length)
+                : path.join(rel, name).slice(0, -suffix.length);
+            folded.add(foldEntryName(id.split(path.sep).join('/')));
+          }
+        }
+        return nameLines(folded);
+      }),
+  );
+  return {
+    blocks: hasNameLine(blocks, wanted),
+    listed: listed.some(ids => hasNameLine(ids, wanted)),
+  };
 }
 
 /**
@@ -1531,6 +1653,18 @@ export async function discoverAllUnresolved(cwd = process.cwd()) {
   );
 }
 
+/** Template discovery's records, kept exactly, with the shape they need. */
+const TEMPLATE_SOURCES_CODEC = {
+  ...EXACT_CODEC,
+  valid: (/** @type {any} */ value) =>
+    value != null &&
+    Array.isArray(value.templates) &&
+    Array.isArray(value.errors) &&
+    value.templates.every(
+      (/** @type {any} */ t) => t != null && typeof t.name === 'string',
+    ),
+};
+
 /**
  * Resolve replacement declarations while retaining package-addressable entries
  * that are shadowed or rejected in the default discovery view.
@@ -1538,6 +1672,31 @@ export async function discoverAllUnresolved(cwd = process.cwd()) {
  * @returns {Promise<{templates: DiscoveredTemplate[], errors: Array<TemplateDiscoveryError | TemplateReplacementError>}>}
  */
 async function resolveAllSources(cwd = process.cwd()) {
+  // A function of the files discovery reads, which the kept gather stamps:
+  // a later run with every one unchanged reads the records back.
+  return /** @type {Awaited<ReturnType<typeof resolveAllSourcesNow>>} */ (
+    await persistedGather(
+      // The folder, and the copy of the CLI that answers with the
+      // integrations a host approves: outside a project the integrations
+      // beside the answering copy load too.
+      [
+        'template-sources',
+        realDir(cwd),
+        CLI_ROOT,
+        hostedRun()?.integrations ?? [],
+      ],
+      () => resolveAllSourcesNow(cwd),
+      TEMPLATE_SOURCES_CODEC,
+    )
+  );
+}
+
+/**
+ * resolveAllSources, worked out now.
+ * @param {string} cwd
+ * @returns {Promise<{templates: DiscoveredTemplate[], errors: Array<TemplateDiscoveryError | TemplateReplacementError>}>}
+ */
+async function resolveAllSourcesNow(cwd) {
   const discovered = await discoverAllSources(cwd);
   const replacementErrors = discovered.errors.filter(
     error => error.replacementTarget != null,
@@ -1616,6 +1775,79 @@ function findIntegrationDocFiles(root) {
   };
   walk(root);
   return results;
+}
+
+/**
+ * Code that lets a template doc declare a replacement: the field itself, or an
+ * import, a require or a spread that can bring it in. Comments do not count.
+ */
+const MAY_REPLACE_RE =
+  /\breplaces\b|^\s*import\b|\bimport\s*\(|\brequire\s*\(|\.\.\.\s*[A-Za-z_$]/m;
+
+/**
+ * The id of each template doc an integration ships, valid or not, read from
+ * file names alone.
+ * @param {{templates?: string}} integration
+ * @returns {string[]}
+ */
+export function integrationTemplateIds(integration) {
+  const root = integration?.templates;
+  if (!root) return [];
+  return findIntegrationDocFiles(root).flatMap(docPath => {
+    const suffix = matchedTemplateSuffix(docPath);
+    if (!suffix) return [];
+    return [
+      path
+        .relative(root, docPath)
+        .slice(0, -suffix.length)
+        .split(path.sep)
+        .join('/'),
+    ];
+  });
+}
+
+/**
+ * Whether any template doc an integration ships can declare a replacement,
+ * read from its text without loading it.
+ * @param {{templates?: string}} integration
+ * @returns {boolean}
+ */
+export function integrationMayReplaceTemplate(integration) {
+  return integrationsMayReplaceTemplate([integration]);
+}
+
+/**
+ * Whether any template doc any of the integrations ships can declare a
+ * replacement, read from a kept summary of the docs' text.
+ * @param {Array<{templates?: string}>} integrations
+ * @returns {boolean}
+ */
+export function integrationsMayReplaceTemplate(integrations) {
+  const roots = integrations.flatMap(integration =>
+    typeof integration?.templates === 'string' && integration.templates !== ''
+      ? [integration.templates]
+      : [],
+  );
+  if (roots.length === 0) return false;
+  return keptTreeSummary(
+    {kind: 'integration-template-replaces', roots, code: [OWN_FILE]},
+    trees =>
+      trees.some(({folders, readText}) =>
+        folders.some(({rel, entries}) =>
+          entries.some(({name, isDir}) => {
+            if (isDir || !matchedTemplateSuffix(name)) return false;
+            try {
+              const code = readText(rel === '' ? name : path.join(rel, name))
+                .replace(/\/\*[\s\S]*?\*\//g, '')
+                .replace(/^\s*\/\/.*$/gm, '');
+              return MAY_REPLACE_RE.test(code);
+            } catch {
+              return true;
+            }
+          }),
+        ),
+      ),
+  );
 }
 
 /**
@@ -2041,7 +2273,7 @@ function topLevelBindings(src) {
   const astryxImports = new Map();
   let program;
   try {
-    program = templateSourceParser().parse(src, {
+    program = babelParser().parse(src, {
       sourceType: 'module',
       plugins: ['jsx', 'typescript'],
       errorRecovery: true,
@@ -2104,52 +2336,12 @@ export function extractComponents(pagePath) {
  * @returns {string[]}
  */
 export function componentsInSource(src) {
-  const known = shippedTemplateComponents().get(sourceKey(src));
+  const known = readStore(TEMPLATE_COMPONENTS_FILE).get(storedKey(src));
   if (known) return [...known];
   return parsedComponents(src);
 }
 
-/** Where the component lists of the templates Astryx ships are stored. */
-export const TEMPLATE_COMPONENTS_FILE = path.join(
-  CLI_ROOT,
-  'assets',
-  'templates',
-  'components.generated.json',
-);
-
-/**
- * The key of a template source in TEMPLATE_COMPONENTS_FILE: a hash of its
- * text, so an edited or unknown source is never answered from the file.
- * @param {string} src
- * @returns {string}
- */
-export function sourceKey(src) {
-  return createHash('sha256').update(src).digest('hex').slice(0, 32);
-}
-
-/** @type {Map<string, string[]> | undefined} */
-let shippedComponents;
-
-/**
- * The component lists of the templates Astryx ships, by source key, read
- * once. Each is what parsedComponents returns for that source; parsing a
- * source costs far more than reading its list. A missing or unreadable file
- * leaves the map empty, so every source is parsed.
- * @returns {Map<string, string[]>}
- */
-function shippedTemplateComponents() {
-  if (shippedComponents) return shippedComponents;
-  try {
-    shippedComponents = new Map(
-      Object.entries(
-        JSON.parse(fs.readFileSync(TEMPLATE_COMPONENTS_FILE, 'utf-8')),
-      ),
-    );
-  } catch {
-    shippedComponents = new Map();
-  }
-  return shippedComponents;
-}
+export {TEMPLATE_COMPONENTS_FILE} from './template-source-tree.mjs';
 
 /**
  * The components a template source composes, read from its syntax tree (see

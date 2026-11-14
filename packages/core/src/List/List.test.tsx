@@ -9,9 +9,11 @@
  * SYNC: When modified, update this header
  */
 
-import {useRef} from 'react';
+import {createRef, useRef} from 'react';
+import * as stylex from '@stylexjs/stylex';
 import {describe, it, expect, vi} from 'vitest';
 import {cleanup, render, screen} from '@testing-library/react';
+import {createSwipe} from '../Swipe/createSwipe';
 import userEvent from '@testing-library/user-event';
 import {rulesDeclaredFor} from '../__tests__/pressState';
 import {swipeLayerLoaded} from '../Item/__tests__/swipeLayerLoaded';
@@ -745,14 +747,15 @@ describe('List', () => {
     expect(item).toHaveAttribute('aria-disabled', 'true');
   });
 
-  it('disables the invisible button when isDisabled', () => {
+  it('keeps the disabled action button focusable', () => {
     const {container} = render(
       <List>
         <ListItem label="Disabled" onClick={() => {}} isDisabled />
       </List>,
     );
     const button = container.querySelector('button');
-    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).not.toBeDisabled();
   });
 
   it('does not fire onClick when disabled item is clicked', async () => {
@@ -1008,6 +1011,84 @@ describe('List', () => {
     expect(list.getAttribute('aria-labelledby')).not.toBe('elsewhere');
   });
 
+  it('forwards ref to the list element, with or without a header', () => {
+    for (const header of [undefined, 'Steps']) {
+      for (const listStyle of ['none', 'decimal'] as const) {
+        const ref = createRef<HTMLUListElement | HTMLOListElement>();
+        const {container} = render(
+          <List ref={ref} header={header} listStyle={listStyle}>
+            <ListItem label="First" />
+          </List>,
+        );
+        expect(ref.current).toBe(
+          container.querySelector(listStyle === 'decimal' ? 'ol' : 'ul'),
+        );
+        cleanup();
+      }
+    }
+  });
+
+  it('merges className and style onto the list element beside its target, with or without a header', () => {
+    for (const header of [undefined, 'Steps']) {
+      const {container} = render(
+        <List header={header} className="consumer" style={{maxWidth: 320}}>
+          <ListItem label="First" />
+        </List>,
+      );
+      const list = container.querySelector('ul')!;
+      expect(list).toHaveClass('astryx-list', 'consumer');
+      expect(list.style.maxWidth).toBe('320px');
+      cleanup();
+    }
+  });
+
+  it('keeps its own counter start beside a consumer style', () => {
+    const {container} = render(
+      <List listStyle="decimal" start={3} style={{maxWidth: 320}}>
+        <ListItem label="Third" />
+      </List>,
+    );
+    const list = container.querySelector('ol')!;
+    expect(list.style.maxWidth).toBe('320px');
+    expect(list.getAttribute('style')).toContain('astryx-list 2');
+  });
+
+  it('marks the corner reader where a bleeding list meets its container: the list, or its root under a header', () => {
+    // A rounded container gives its corner only to a direct child that
+    // carries the marker.
+    const marked = (container: HTMLElement) => [
+      ...container.querySelectorAll('[data-container-corner]'),
+    ];
+    const {container: bare} = render(
+      <List edge="bleed">
+        <ListItem label="First" />
+      </List>,
+    );
+    expect(marked(bare)).toEqual([bare.querySelector('ul')]);
+    cleanup();
+
+    const {container: titled} = render(
+      <List edge="bleed" header="Steps">
+        <ListItem label="First" />
+      </List>,
+    );
+    expect(marked(titled)).toEqual([titled.firstElementChild]);
+    expect(titled.firstElementChild).toContainElement(
+      titled.querySelector('ul'),
+    );
+    cleanup();
+
+    for (const edge of ['padded', 'flush', 'outset'] as const) {
+      const {container} = render(
+        <List edge={edge} header="Steps">
+          <ListItem label="First" />
+        </List>,
+      );
+      expect(marked(container)).toEqual([]);
+      cleanup();
+    }
+  });
+
   it('accepts number as description (ReactNode)', () => {
     render(
       <List>
@@ -1126,10 +1207,58 @@ function DelegateSwipeRow() {
           Open
         </button>
       }
-      swipeActions={{trailing: [{label: 'Archive', onActivate: () => {}}]}}
+      swipeActions={{
+        trailing: [{id: 'archive', label: 'Archive', onActivate: () => {}}],
+      }}
     />
   );
 }
+
+describe('ListItem passthrough', () => {
+  const callerStyles = stylex.create({
+    uncounted: {counterIncrement: 'none'},
+  });
+
+  it('forwards ref to its <li>, in a List and outside one', () => {
+    for (const inList of [true, false]) {
+      const ref = createRef<HTMLLIElement>();
+      const row = <ListItem ref={ref} label="Row" onClick={() => {}} />;
+      const {container} = render(inList ? <List>{row}</List> : row);
+      expect(ref.current).toBe(container.querySelector('li'));
+      cleanup();
+    }
+  });
+
+  it('merges className and style onto the row beside its list-item and item targets', () => {
+    const {container} = render(
+      <List>
+        <ListItem label="Row" className="consumer" style={{maxWidth: 320}} />
+      </List>,
+    );
+    const row = container.querySelector('li')!;
+    expect(row).toHaveClass('astryx-list-item', 'astryx-item', 'consumer');
+    expect(row.style.maxWidth).toBe('320px');
+  });
+
+  it("applies xstyle after the row's own styles, so a caller's value for the same property wins", () => {
+    const {container} = render(
+      <List listStyle="disc">
+        <ListItem label="First" xstyle={callerStyles.uncounted} />
+        <ListItem label="Second" />
+      </List>,
+    );
+    const counters = (row: Element) =>
+      rulesDeclaredFor(row)
+        .map(rule => rule.replace(/\s+/g, ''))
+        .filter(rule => rule.includes('counter-increment:'));
+    const [first, second] = [...container.querySelectorAll('li')];
+    expect(counters(first).length).toBeGreaterThan(0);
+    expect(counters(first).every(rule => rule.includes(':none'))).toBe(true);
+    expect(counters(second).some(rule => rule.includes('astryx-list'))).toBe(
+      true,
+    );
+  });
+});
 
 describe('List and swipe actions', () => {
   it('clips the rows in the inline axis with clip, never hidden, so a row dragged aside paints no further than the list', () => {
@@ -1183,12 +1312,16 @@ describe('List and swipe actions', () => {
         <ListItem
           label="Swipeable"
           onClick={() => {}}
-          swipeActions={{trailing: [{label: 'Archive', onActivate: () => {}}]}}
+          swipeActions={{
+            trailing: [{id: 'archive', label: 'Archive', onActivate: () => {}}],
+          }}
         />
         <ListItem label="Pressable" onClick={() => {}} />
         <ListItem
           label="Static"
-          swipeActions={{trailing: [{label: 'Archive', onActivate: () => {}}]}}
+          swipeActions={{
+            trailing: [{id: 'archive', label: 'Archive', onActivate: () => {}}],
+          }}
         />
         <ListItem
           label="Empty sides"
@@ -1235,7 +1368,9 @@ describe('List and swipe actions', () => {
         <ListItem
           label="Outside"
           onClick={() => {}}
-          swipeActions={{trailing: [{label: 'Archive', onActivate: () => {}}]}}
+          swipeActions={{
+            trailing: [{id: 'archive', label: 'Archive', onActivate: () => {}}],
+          }}
         />
       </ul>,
     );
@@ -1257,14 +1392,39 @@ describe('List and swipe actions', () => {
     ).toEqual([]);
   });
 
-  it('passes swipeActions and swipeBehavior through to the row unchanged', async () => {
+  it('passes swipe through to the row unchanged', () => {
+    render(
+      <List>
+        <ListItem
+          label="A"
+          data-testid="row"
+          swipe={createSwipe({
+            trailing: [{id: 'archive', label: 'Archive', onActivate: () => {}}],
+            swipeBehavior: 'commit',
+          })}
+        />
+      </List>,
+    );
+    const row = screen.getByTestId('row');
+    expect(row.tagName).toBe('LI');
+    expect(row.parentElement).toBe(screen.getByRole('list'));
+    // Commit: presentational, at the row's first render.
+    expect(row.querySelector('[data-swipe-panel="trailing"]')).toHaveAttribute(
+      'aria-hidden',
+      'true',
+    );
+  });
+
+  it('passes the deprecated swipeActions and swipeBehavior through to the row unchanged (spec:AST-057 DEP-0017)', async () => {
     render(
       <List>
         <ListItem
           label="A"
           data-testid="row"
           swipeBehavior="commit"
-          swipeActions={{trailing: [{label: 'Archive', onActivate: () => {}}]}}
+          swipeActions={{
+            trailing: [{id: 'archive', label: 'Archive', onActivate: () => {}}],
+          }}
         />
       </List>,
     );

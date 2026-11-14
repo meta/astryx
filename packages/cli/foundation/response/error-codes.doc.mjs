@@ -220,6 +220,11 @@ export const doc = {
         'A theme file could not be loaded / parsed into a defineTheme result.',
     },
     {
+      value: 'ERR_THEME_STALE',
+      description:
+        '`theme build --check` found stale or missing outputs: exit 1, in the check result (`code`), not an error.',
+    },
+    {
       value: 'ERR_PALETTE_GENERATION',
       description:
         'A palette generation request or one of its constraints was invalid.',
@@ -332,7 +337,7 @@ export const doc = {
       value: 'ERR_RENDER_FAILED',
       stability: 'experimental',
       description:
-        'The page threw while rendering, or Node crashed while it rendered the page. Nothing was written. Raised only by the experimental render command.',
+        "The page threw while rendering, or Node crashed while it rendered the page. Raised by the experimental render command, which then writes nothing, and by the experimental theme editor when it cannot render a theme's pages (two copies of React, a component that throws, or a render past its time limit; the theme it built is kept, and the refusal says so). A React that is not installed is ERR_RENDER_MISSING_DEPENDENCY.",
     },
     {
       value: 'ERR_RENDER_NOT_ASTRYX',
@@ -344,7 +349,13 @@ export const doc = {
       value: 'ERR_RENDER_SOURCE_DAMAGED',
       stability: 'experimental',
       description:
-        '`render --reverse` refused the received file, and nothing was written: its embedded source was removed (a file a render wrote, with no Astryx components left to rebuild from) or is damaged (not valid, or a file does not match its checksum), lists a path twice, carries a module, stylesheet or JSON file the page does not reach through its own imports, or an image, font or media file whose bytes are not one, or carries a file a render never embeds: a dotfile or dot-folder, anything under node_modules, a package manifest, lockfile or tool configuration, a file a test, story or benchmark runner would run, or any kind but a page module, stylesheet, JSON file or image. Raised only by the experimental render command.',
+        '`render --reverse` refused the received file, and nothing was written: its embedded source was removed (a file a render wrote, with no Astryx components left to rebuild from), is cut short, or is damaged (not valid, a file does not match its checksum, or it names a CLI version that is not a release version), lists a path twice, carries a module, stylesheet or JSON file the page does not reach through its own imports, or an image, font or media file whose bytes are not one, or carries a file a render never embeds: a dotfile or dot-folder, anything under node_modules, a package manifest, lockfile or tool configuration, a file a test, story or benchmark runner would run, or any kind but a page module, stylesheet, JSON file or image. Raised only by the experimental render command.',
+    },
+    {
+      value: 'ERR_RENDER_NEWER_FORMAT',
+      stability: 'experimental',
+      description:
+        '`render --reverse` was given a file in a newer render format than this CLI reads. Nothing was written. The message names the version of the CLI that wrote the file, which reads it. Raised only by the experimental render command.',
     },
     {
       value: 'ERR_THEME_BAD_VALUE',

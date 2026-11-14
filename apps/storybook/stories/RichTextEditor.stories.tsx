@@ -2,6 +2,7 @@
 
 import {useId, useRef, useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
+import * as stylex from '@stylexjs/stylex';
 import {
   RichTextEditor,
   RichTextView,
@@ -27,6 +28,13 @@ import {
 import {MarkdownPluginsImportExport as MarkdownPluginsImportExportStory} from './RichTextEditor.markdownPluginsImportExport';
 import {MarkdownPluginsSandbox} from './RichTextEditor.markdownPlugins';
 import {RichTextEditorPlayground} from './RichTextEditor.playground';
+
+const styles = stylex.create({
+  // Room above the toolbar for the link popover, which opens above it.
+  roomAbove: {
+    paddingBlockStart: 120,
+  },
+});
 
 const meta: Meta<typeof RichTextEditor> = {
   title: 'RichText/RichTextEditor',
@@ -162,6 +170,29 @@ export const WithLinks: Story = {
     // baked into the node). No extra plugin needed.
     toolbar: <RichTextEditorToolbar />,
   },
+  // The link popover opens above the toolbar when there is room.
+  decorators: [
+    Story => (
+      <div {...stylex.props(styles.roomAbove)}>
+        <Story />
+      </div>
+    ),
+  ],
+};
+
+/**
+ * The toolbar at the top of the page, with no room above it: the link
+ * popover flips below the toolbar.
+ */
+export const WithLinksNoRoomAbove: Story = {
+  args: {
+    label: 'Notes',
+    isLabelHidden: true,
+    placeholder:
+      'Select text and press the Link button (or Cmd/Ctrl+K) to add a link…',
+    toolbar: <RichTextEditorToolbar />,
+  },
+  parameters: {layout: 'fullscreen'},
 };
 
 export const WithAutoLink: Story = {

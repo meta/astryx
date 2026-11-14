@@ -143,6 +143,34 @@ a view of the envelope, not a separate design. Do not pad strings, align
 columns, or draw tables yourself; map rows onto `records()`. A new block kind
 needs the evidence that `spec:AST-042` FR3 asks for.
 
+## Output: keep answers short
+
+An agent that does not pass `--json` reads every byte a command prints, on
+every call. Before you add to an answer, think about what an agent does with
+each line. Keep the text short without losing anything it needs
+(`architecture:cli-surface` INV4 and INV5, `spec:AST-017` FR13):
+
+- **Shorten prose, never drop a field.** A long prose field may print its first
+  sentence (`firstSentence` in `foundation/text/string-utils.mjs`) when another
+  route prints it whole: `--verbose`, a focused view such as
+  `component <Name> --props`, or `--json`. Name that route in the answer, with
+  the read's own selector and scope, and print the field whole when the
+  pointer would cost more than the cut saves.
+- **One item per line.** A list prints each item on one line under a group
+  heading (a version, a package), not a block of `key: value` lines per item.
+  Use `records(items, {layout: 'inline'})`.
+- **Say a shared label once.** A label that applies to a run of items (Do and
+  Don't, a package) goes on one line above the run, with a blank line between
+  runs so each run stays its own Markdown list.
+- **Prefer records or a list to a table.** `spec:AST-042` FR3 admits no table
+  drawn from characters. Keep a yes/no value that readers count as its own
+  field, not a marker inside prose: `(optional)` inside prose can collide with
+  the same word in a description.
+- **Test the change with agents.** A shorter answer is a behavior change, and
+  so is a longer one. Give agents with no context the same tasks with the old
+  and the new output, and keep the change when every task comes out the same
+  or better.
+
 ## Errors: every failure carries a code
 
 Add a code to `foundation/response/error-codes.mjs` when no existing one fits.
@@ -246,6 +274,8 @@ change.
 - [ ] No `console.log`; all human output goes through the formatters, with no
       hand-padded columns.
 - [ ] Text field names match the JSON keys.
+- [ ] You read the default text as an agent would, and tested any change to
+      its length with agents.
 - [ ] Exit code is the same with and without `--json`.
 - [ ] The composition matrix is closed: every pair composes with a test, is
       refused with a message, or cannot co-occur.

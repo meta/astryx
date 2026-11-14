@@ -3,10 +3,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {describe, expect, it} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {configDefaults} from 'vitest/config';
 import DurationShardSequencer, {
   DURATIONS,
+  LEG_PARALLELISM,
+  mergeRecord,
   partitionByDuration,
+  readLegOneSeconds,
+  recordLegOneSteps,
   readDurations,
   recordDurations,
 } from './vitest-shard-sequencer.mjs';
@@ -18,6 +23,37 @@ const total = leg => leg.reduce((sum, file) => sum + recorded[file], 0);
 const slowest = [...files].sort((a, b) => recorded[b] - recorded[a]);
 
 describe('duration-balanced Node legs', () => {
+  // The Node shard step sets the switch for its own run; these tests set it
+  // themselves, so they read the same in that step as anywhere else.
+  beforeEach(() => vi.stubEnv('VITEST_LEG_ONE_RESERVE', '0'));
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('balances a slow changed test with the guards when one run lists both', () => {
+    // A scoped run whose one changed test is the slowest recorded file, with
+    // a set of slow guards. Split as two runs, leg 1 takes the changed test
+    // on top of a full share of the guards; split as one run, it does not.
+    const changed = [slowest[0]];
+    const guards = Object.entries(recorded)
+      .filter(([file]) => file !== changed[0])
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 40)
+      .map(([file]) => file);
+    const load = leg => leg.reduce((sum, file) => sum + recorded[file], 0);
+    const twoRuns = partitionByDuration(changed, 4, recorded).map(
+      (leg, index) =>
+        load(leg) + load(partitionByDuration(guards, 4, recorded)[index]),
+    );
+    const oneRun = partitionByDuration(
+      [...changed, ...guards],
+      4,
+      recorded,
+    ).map(load);
+    expect(Math.max(...oneRun)).toBeLessThan(Math.max(...twoRuns));
+    expect(Math.max(...twoRuns)).toBeGreaterThan(
+      recorded[changed[0]] + load(guards) / 4 - 60,
+    );
+  });
+
   it('records a time for the whole Node suite', () => {
     expect(files.length).toBeGreaterThan(500);
     for (const file of files) {
@@ -28,6 +64,33 @@ describe('duration-balanced Node legs', () => {
     // The slowest files still exist, so the split they steer is real.
     for (const file of slowest.slice(0, 6))
       expect(fs.existsSync(path.join(ROOT, file)), file).toBe(true);
+  });
+
+  it("keeps a recorded time for nine in ten of the Node project's test files, so the record cannot go stale unnoticed", () => {
+    // The `node` project's own include and exclude lists, read from
+    // vitest.config.ts so this check never drifts from what the project runs.
+    const config = fs
+      .readFileSync(path.join(ROOT, 'vitest.config.ts'), 'utf8')
+      .replace(/\/\/[^\n]*/g, '');
+    const block =
+      /name:\s*'node'[\s\S]*?include:\s*\[([\s\S]*?)\][\s\S]*?exclude:\s*\[([\s\S]*?)\]/.exec(
+        config,
+      );
+    expect(block, 'vitest.config.ts: no node project include list').not.toBe(
+      null,
+    );
+    const globs = list =>
+      [...list.matchAll(/'([^']+)'/g)].map(([, glob]) => glob);
+    const nodeFiles = fs.globSync(globs(block[1]), {
+      cwd: ROOT,
+      exclude: [...configDefaults.exclude, ...globs(block[2])],
+    });
+    const missing = nodeFiles.filter(file => !(file in recorded));
+    expect(nodeFiles.length).toBeGreaterThan(500);
+    expect(
+      missing.length / nodeFiles.length,
+      `${missing.length} Node test files have no recorded time (${missing.slice(0, 5).join(', ')}, …). Regenerate the record from the Main workflow's Node leg logs: node scripts/vitest-shard-sequencer.mjs record <log>…`,
+    ).toBeLessThanOrEqual(0.1);
   });
 
   it.each([4, 6])(
@@ -125,6 +188,32 @@ describe('duration-balanced Node legs', () => {
     }
   });
 
+  it("gives the first leg its own steps' recorded time when the switch is set", async () => {
+    vi.stubEnv('VITEST_LEG_ONE_RESERVE', '1');
+    expect(readLegOneSeconds()).toBeGreaterThan(0);
+    const node = slowest.slice(0, 40).map(file => ({
+      project: {name: 'node'},
+      moduleId: path.join(ROOT, file),
+    }));
+    const count = 5;
+    const expected = partitionByDuration(
+      node.map(item => path.relative(ROOT, item.moduleId)),
+      count,
+      recorded,
+      {legOneSeconds: readLegOneSeconds()},
+    );
+    for (let index = 1; index <= count; index += 1) {
+      const sequencer = new DurationShardSequencer({
+        config: {root: ROOT, shard: {index, count}},
+      });
+      expect(
+        (await sequencer.shard(node))
+          .map(item => path.relative(ROOT, item.moduleId))
+          .sort(),
+      ).toEqual(expected[index - 1]);
+    }
+  });
+
   it('runs a new test file that has no recorded time in exactly one leg', async () => {
     const added = 'packages/cli/a-brand-new.test.mjs';
     expect(recorded[added]).toBeUndefined();
@@ -211,5 +300,67 @@ describe('duration-balanced Node legs', () => {
     expect(path.relative(ROOT, DURATIONS)).toBe(
       'scripts/vitest-node-durations.json',
     );
+  });
+
+  it('merges a run into the record: unreached files keep their times, swizzle-proof slices keep the largest, gone files leave', () => {
+    const slice = 'packages/cli/test/swizzle-proof/swizzle-proof.1.test.mjs';
+    expect(
+      mergeRecord(
+        {
+          'a.test.mjs': 10,
+          'unreached.test.mjs': 50,
+          [slice]: 300,
+          'gone.test.mjs': 5,
+        },
+        {'a.test.mjs': 20, [slice]: 200, 'new.test.mjs': 3},
+        file => file !== 'gone.test.mjs',
+      ),
+    ).toEqual({
+      'a.test.mjs': 20,
+      'new.test.mjs': 3,
+      [slice]: 300,
+      'unreached.test.mjs': 50,
+    });
+  });
+
+  it("leaves the first leg its own steps' time, in file time", () => {
+    const files = Array.from({length: 60}, (_, i) => `f${i}.test.mjs`);
+    const seconds = Object.fromEntries(files.map(f => [f, 20]));
+    const sum = leg => leg.reduce((total, f) => total + seconds[f], 0);
+    const even = partitionByDuration(files, 5, seconds).map(sum);
+    expect(Math.max(...even) - Math.min(...even)).toBeLessThanOrEqual(20);
+    const legs = partitionByDuration(files, 5, seconds, {
+      legOneSeconds: 100,
+    }).map(sum);
+    const others = legs.slice(1).reduce((a, b) => a + b, 0) / 4;
+    // 100 s of steps is 100 x LEG_PARALLELISM s of file time, within a file.
+    expect(others - legs[0]).toBeGreaterThan(100 * LEG_PARALLELISM - 40);
+    expect(others - legs[0]).toBeLessThan(100 * LEG_PARALLELISM + 40);
+  });
+
+  it("records the seconds of the first leg's own steps from a job log", () => {
+    const log = [
+      'test-node (1/5)\tInstall Playwright for theme-family contract\t2026-11-13T18:41:58.0000000Z ##[group]Run npx playwright install chromium',
+      'test-node (1/5)\tInstall Playwright for theme-family contract\t2026-11-13T18:42:07.0000000Z done',
+      'test-node (1/5)\tRun the theme-family contract\t2026-11-13T18:42:24.0000000Z ##[group]Run',
+      'test-node (1/5)\tRun the theme-family contract\t2026-11-13T18:43:06.0000000Z Theme family cascade guard passed.',
+      'test-node (2/5)\tRun the theme-family contract\t2026-11-13T18:00:00.0000000Z another leg',
+    ].join('\n');
+    expect(
+      recordLegOneSteps(log, [
+        'Install Playwright for theme-family contract',
+        'Run the theme-family contract',
+        'Offline-media browser cases',
+      ]),
+    ).toEqual({
+      'Install Playwright for theme-family contract': 9,
+      'Run the theme-family contract': 42,
+    });
+  });
+
+  it('reads colour codes spelled out, as `gh run view --log` prints them', () => {
+    const log =
+      'job\tstep\t2026-11-11T07:54:35.11Z ^[[32m✓^[[39m ^[[30m^[[46m node ^[[49m^[[39m packages/cli/a.test.mjs ^[[2m(12 tests)^[[22m^[[33m 542123^[[2mms^[[22m^[[39m';
+    expect(recordDurations(log)).toEqual({'packages/cli/a.test.mjs': 542.1});
   });
 });

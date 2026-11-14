@@ -255,8 +255,9 @@ export async function searchComponents(needle, coreDir, components) {
 
 /**
  * The first sentence of a text, whitespace collapsed. A period after "e.g" or
- * "i.e" does not end the sentence. Used where a description has to fit on one
- * line: `build`'s alternatives and its text kit.
+ * "i.e", or inside an open quote (a quoted date such as "2. Nov. 2026"), does
+ * not end the sentence. Used where a description has to fit on one line:
+ * `build`'s text kit, and the text views of `search` and `template --list`.
  * @param {string} text
  * @returns {string}
  */
@@ -264,9 +265,21 @@ export function firstSentence(text) {
   const flat = String(text ?? '').replace(/\s+/g, ' ').trim();
   const ends = /[.!?](?=\s|$)/g;
   for (let m = ends.exec(flat); m; m = ends.exec(flat)) {
-    if (!/\b(e\.g|i\.e)$/i.test(flat.slice(0, m.index))) {
+    const before = flat.slice(0, m.index);
+    if (!/\b(e\.g|i\.e)$/i.test(before) && !insideQuote(before)) {
       return flat.slice(0, m.index + 1);
     }
   }
   return flat;
+}
+
+/**
+ * Whether a text ends inside a quote it opened: an odd count of straight
+ * double quotes, or more opening curly quotes than closing ones.
+ * @param {string} text
+ * @returns {boolean}
+ */
+function insideQuote(text) {
+  const count = (/** @type {RegExp} */ re) => (text.match(re) ?? []).length;
+  return count(/"/g) % 2 === 1 || count(/\u201C/g) > count(/\u201D/g);
 }

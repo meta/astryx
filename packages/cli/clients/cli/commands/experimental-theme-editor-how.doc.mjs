@@ -94,7 +94,7 @@ export const doc = {
     },
     {
       code: 1,
-      when: 'an unknown option, an unknown or empty theme, --theme given twice, an unknown --list kind, --list given twice, --at without a picture, a picture that is not a PNG or is damaged or too big, an --at point that is not whole pixel numbers or falls outside the picture, a count beside --at, or a count that is not a positive whole number, or a missing picture',
+      when: 'an unknown option, an unknown or empty theme, --theme given twice, an unknown --list kind, --list given twice, --at without a picture, a picture that is not a PNG or is damaged or too big, an --at point that is not whole pixel numbers or falls outside the picture, a count beside --at, or a count that is not a positive whole number, or a missing picture; or a folder outside a project with Core installed (ERR_PROJECT_REQUIRED)',
     },
   ],
   related: ['experimental theme editor', 'experimental theme targets'],

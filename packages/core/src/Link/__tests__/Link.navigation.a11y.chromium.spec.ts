@@ -1,5 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 // @pr-a11y release-only
+// @visits Markdown Citation ClickableCard
 
 /**
  * @file Link.navigation.a11y.chromium.spec.ts

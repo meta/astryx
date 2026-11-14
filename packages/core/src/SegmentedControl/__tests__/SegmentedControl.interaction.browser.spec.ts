@@ -440,8 +440,8 @@ test('a tap slides the selected surface to the new segment on UIKit’s spring, 
       centerOf(from) + (centerOf(to) - centerOf(from)) * springStep(SLIDE, t),
     0.25,
   );
-  // ...and the width follows Grid's to Table's on the same spring; nothing
-  // lifts it (a pressed thumb's lift is a theme's, none by default).
+  // ...and the width follows Grid's to Table's on the same spring; a tap
+  // lifts nothing (FR14 lifts only a held selected segment).
   const width = compareCurve(
     samples.map(s => ({t: s.t, value: s.width})),
     t => from.width + (to.width - from.width) * springStep(SLIDE, t),
@@ -1661,7 +1661,7 @@ async function clientCenter(control: Control, value: string) {
   return {x: box.x + box.width / 2, y: box.y + box.height / 2};
 }
 
-test('holding the selected segment lifts nothing by default (a theme’s pressed-thumb lift turns it on): no lens and no shadow; letting go changes nothing', async ({
+test('holding the selected segment lifts its surface and shows no other layer; letting go changes nothing and hands the surface back (FR14)', async ({
   page,
 }) => {
   const control = await openControl(page);
@@ -1683,12 +1683,14 @@ test('holding the selected segment lifts nothing by default (a theme’s pressed
   await control.driver.play(
     touchTap(await clientCenter(control, 'grid'), {holdMs: 700}),
   );
-  expect(
-    await page.evaluate(
-      () => (window as unknown as {__layersShown: string[]}).__layersShown,
-    ),
-  ).toEqual([]);
-  // The selected segment kept painting its own surface throughout.
+  const shown = await page.evaluate(
+    () => (window as unknown as {__layersShown: string[]}).__layersShown,
+  );
+  // The lens showed for the lift; the ::after never did.
+  expect(shown.some(entry => entry.startsWith('lens=visible'))).toBe(true);
+  expect(shown.every(entry => entry.endsWith('after='))).toBe(true);
+  await expectLensHidden(control);
+  // Handed back: the selected segment paints its own surface again.
   expect(
     await control
       .segment('grid')
@@ -1730,12 +1732,14 @@ test('a drag from the selected segment carries the lens and commits once, at the
   expect(changes.map(change => change.value)).toEqual(['table']);
   // Not before the finger let go.
   expect(changes[0].at).toBeGreaterThanOrEqual((lift?.dispatchedAt ?? 0) - 5);
-  // The lens followed the finger at its resting size (trailing it on the
-  // tracking spring, by less than the width of a segment).
+  // The lifted lens followed the finger (trailing it on the tracking spring,
+  // by less than the width of a segment).
   const trackLeft = (await control.group.boundingBox())?.x ?? 0;
-  for (const sample of midDrag.slice(2)) {
-    // Nothing lifts it: its width stays a segment's.
-    expect(sample.width).toBeLessThan(boxOf(boxes, 'grid').width + 12);
+  for (const sample of midDrag.slice(3)) {
+    // Lifted: a segment's width plus 24 px.
+    expect(
+      Math.abs(sample.width - (boxOf(boxes, 'grid').width + 24)),
+    ).toBeLessThan(2);
     const lag = sample.finger - trackLeft - sample.lens;
     expect(lag).toBeGreaterThan(-2);
     expect(lag).toBeLessThan(40);
@@ -3275,13 +3279,14 @@ test('RTL: a drag carries the lens toward the finger and commits once, at the li
   const changes = await selections();
   expect(changes.map(change => change.value)).toEqual(['table']);
   expect(changes[0].at).toBeGreaterThanOrEqual((lift?.dispatchedAt ?? 0) - 5);
-  // Trailing the finger from the right as it moves left, at its resting
-  // size.
+  // Trailing the finger from the right as it moves left, lifted.
   const trackLeft = (await control.group.boundingBox())?.x ?? 0;
   expect(midDrag.length).toBeGreaterThan(3);
-  for (const sample of midDrag.slice(2)) {
-    // Nothing lifts it: its width stays a segment's.
-    expect(sample.width).toBeLessThan(boxOf(boxes, 'grid').width + 12);
+  for (const sample of midDrag.slice(3)) {
+    // Lifted: a segment's width plus 24 px.
+    expect(
+      Math.abs(sample.width - (boxOf(boxes, 'grid').width + 24)),
+    ).toBeLessThan(2);
     const lag = sample.lens - (sample.finger - trackLeft);
     expect(lag).toBeGreaterThan(-2);
     expect(lag).toBeLessThan(40);
@@ -3300,6 +3305,8 @@ test(
     }
     const from = await clientCenter(control, 'grid');
     const to = await clientCenter(control, 'table');
+    // Grid's width while it is selected: the commit reweighs the titles.
+    const rest = boxOf(await control.boxes(), 'grid').width;
     const board = await touchStoryboard(
       page,
       control.driver,
@@ -3318,15 +3325,14 @@ test(
       },
     );
     await board.write(testInfo);
-    // Nothing lifts while the finger holds the selected segment: the lens
-    // appears only once the drag moves it, at the resting size.
-    const rest = boxOf(await control.boxes(), 'grid').width;
+    // The finger's press lifts the selected surface: the lens shows from the
+    // press on, and once lifted it is a segment's width plus 24 px.
     const held = board.frames.filter(frame =>
       frame.label.startsWith('touchStart'),
     );
     for (const frame of held) {
       const data = frame.data as {width: number; visible: boolean};
-      expect(data.visible, frame.label).toBe(false);
+      expect(data.visible, frame.label).toBe(true);
     }
     // Carried the whole way: the selected face moving to the title under the
     // finger reflows the titles, and the lens stays with the finger.
@@ -3337,7 +3343,152 @@ test(
     for (const frame of dragged) {
       const data = frame.data as {width: number; visible: boolean};
       expect(data.visible, frame.label).toBe(true);
-      expect(data.width, frame.label).toBeLessThan(rest + 12);
+      // Lifted by then: the lift settles within about 0.3 s of the
+      // highlight, which a scrolling page delays by its content delay.
+      if (frame.t >= 700) {
+        expect(Math.abs(data.width - (rest + 24)), frame.label).toBeLessThan(2);
+      }
     }
   },
 );
+
+test('a finger holding the selected segment lifts its surface by 24 × 16 px, as UIKit’s does, and it settles back at the release; a mouse press and Reduce Motion lift nothing (FR14)', async ({
+  page,
+  browser,
+}) => {
+  const control = await openControl(page);
+  const grid = await control.segment('grid').boundingBox();
+  if (grid == null) {
+    throw new Error('no grid segment');
+  }
+  const at = {x: grid.x + grid.width / 2, y: grid.y + grid.height / 2};
+  // Lands on Grid, rests 450 ms (a 1 px move to read the lens, well inside
+  // the drag's slop), then lifts there.
+  let edge = 'none';
+  const theme = await control.group.evaluate(group => {
+    // The theme's low elevation, as the browser resolves it.
+    const probe = group.ownerDocument.createElement('div');
+    probe.style.boxShadow = getComputedStyle(group)
+      .getPropertyValue('--shadow-low')
+      .trim();
+    group.ownerDocument.body.append(probe);
+    const resolved = getComputedStyle(probe).boxShadow;
+    probe.remove();
+    return resolved;
+  });
+  const holdAndRead = async () => {
+    const held: Awaited<ReturnType<typeof readLayer>>[] = [];
+    await control.driver.play(
+      [
+        {t: 0, fingers: [{id: 0, ...at}]},
+        {t: 450, fingers: [{id: 0, x: at.x + 1, y: at.y}]},
+        {t: 470, fingers: []},
+      ],
+      {
+        onEvent: async step => {
+          if (step.type === 'touchMove') {
+            held.push(await readLayer(control.group));
+            edge = await control.group.evaluate(
+              group => getComputedStyle(group, '::before').boxShadow,
+            );
+          }
+        },
+      },
+    );
+    return held.at(-1) ?? null;
+  };
+  const lifted = await holdAndRead();
+  expect(lifted?.visible).toBe(true);
+  expect(Math.abs((lifted?.width ?? 0) - (grid.width + 24))).toBeLessThan(1);
+  expect(Math.abs((lifted?.height ?? 0) - (grid.height + 16))).toBeLessThan(1);
+  // The lifted surface has an edge, the theme's low elevation. So the track
+  // stays visible around the held segment, even where the surface matches
+  // the page.
+  expect(edge).not.toBe('none');
+  expect(edge).toBe(theme);
+  // It shrinks back and hands the surface back to Grid.
+  await expectLensHidden(control);
+  await expect(control.segment('grid')).toHaveAttribute('aria-checked', 'true');
+  // Reduce Motion: nothing lifts.
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  const still = await holdAndRead();
+  expect(
+    still == null || !still.visible || Math.abs(still.width - grid.width) < 1,
+  ).toBe(true);
+  // A mouse press on the selected segment lifts nothing either.
+  const mouse = await openWithMouse(browser);
+  try {
+    const from = await mouse.centerOf('grid');
+    await mouse.page.mouse.move(from.x, from.y);
+    await mouse.page.mouse.down();
+    await mouse.page.waitForTimeout(450);
+    expect(await mouse.lensShown()).toBe(false);
+    await mouse.page.mouse.up();
+  } finally {
+    await mouse.context.close();
+  }
+});
+
+test('under the touch presentation a pen holding the selected segment lifts its surface as a finger does (FR14)', async ({
+  page,
+}) => {
+  const control = await openControl(page);
+  const pen = await webInputDriver(page);
+  test.skip(!pen.pens, PEN_SKIP);
+  const grid = await control.segment('grid').boundingBox();
+  if (grid == null) {
+    throw new Error('no grid segment');
+  }
+  const at = {x: grid.x + grid.width / 2, y: grid.y + grid.height / 2};
+  const playing = pen.pen([
+    {x: at.x, y: at.y, t: 0},
+    {x: at.x + 1, y: at.y, t: 600},
+  ]);
+  await page.waitForTimeout(450);
+  const lifted = await readLayer(control.group);
+  await playing;
+  expect(lifted.visible).toBe(true);
+  expect(Math.abs(lifted.width - (grid.width + 24))).toBeLessThan(1.5);
+  await expectLensHidden(control);
+  await expect(control.segment('grid')).toHaveAttribute('aria-checked', 'true');
+});
+
+test('a drag that commits another segment keeps the lifted edge until the surface is handed back (FR14)', async ({
+  page,
+}) => {
+  const control = await openControl(page);
+  // Every state the lens shows: its visibility and its shadow.
+  await control.group.evaluate(group => {
+    const states: string[] = [];
+    (window as unknown as {__lensStates: string[]}).__lensStates = states;
+    new MutationObserver(() => {
+      const visible = group.style.getPropertyValue(
+        '--_segmented-lens-visibility',
+      );
+      const shadow = group.style.getPropertyValue(
+        '--_segmented-lens-box-shadow',
+      );
+      states.push(`${visible}|${shadow}`);
+    }).observe(group, {attributes: true, attributeFilter: ['style']});
+  });
+  const selections = await recordSelections(control.group);
+  await control.driver.play(
+    touchDrag(
+      await clientCenter(control, 'grid'),
+      await clientCenter(control, 'table'),
+      {durationMs: 300, restMs: 100},
+    ),
+  );
+  await expectLensHidden(control);
+  expect((await selections()).map(change => change.value)).toEqual(['table']);
+  const states = await page.evaluate(
+    () => (window as unknown as {__lensStates: string[]}).__lensStates,
+  );
+  const shown = states.filter(state => state.startsWith('visible|'));
+  expect(shown.length).toBeGreaterThan(0);
+  // From the lift to the hand-back, the commit's repaint included, the lens
+  // always wears the theme's elevation.
+  expect(shown.filter(state => state !== 'visible|var(--shadow-low)')).toEqual(
+    [],
+  );
+});

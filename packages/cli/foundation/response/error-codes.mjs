@@ -77,6 +77,7 @@
  *   | 'ERR_WRITE_FAILED'
  *   | 'ERR_THEME_INVALID'
  *   | 'ERR_THEME_LOAD'
+ *   | 'ERR_THEME_STALE'
  *   | 'ERR_PALETTE_GENERATION'
  *   | 'ERR_VERSION_DETECT'
  *   | 'ERR_INVALID_VERSION'
@@ -99,6 +100,7 @@
  *   | 'ERR_RENDER_FAILED'
  *   | 'ERR_RENDER_NOT_ASTRYX'
  *   | 'ERR_RENDER_SOURCE_DAMAGED'
+ *   | 'ERR_RENDER_NEWER_FORMAT'
  *   | 'ERR_THEME_BAD_VALUE'
  *   | 'ERR_THEME_NO_MODE'
  *   | 'ERR_THEME_UNKNOWN_PART'
@@ -219,6 +221,8 @@ export const ERROR_CODES = Object.freeze({
   ERR_THEME_INVALID: 'ERR_THEME_INVALID',
   /** A theme file could not be loaded / parsed into a defineTheme result. */
   ERR_THEME_LOAD: 'ERR_THEME_LOAD',
+  /** `--check` found built outputs stale or missing (a result, exit 1). */
+  ERR_THEME_STALE: 'ERR_THEME_STALE',
 
   // ── Palette generation ──────────────────────────────────────────
   /** A palette generation request or its constraints were invalid. */
@@ -328,6 +332,12 @@ export const ERROR_CODES = Object.freeze({
    * was written.
    */
   ERR_RENDER_SOURCE_DAMAGED: 'ERR_RENDER_SOURCE_DAMAGED',
+  /**
+   * `render --reverse` was given a file in a newer render format than this
+   * CLI reads. Nothing was written. The message names the CLI version that
+   * wrote the file, which reads it.
+   */
+  ERR_RENDER_NEWER_FORMAT: 'ERR_RENDER_NEWER_FORMAT',
   /**
    * A value does not fit what it sets: not a color for a color token, not a size for a size, a step (`more`/`less`) on something that is not a dial, or a word a dial does not take. Nothing was changed. Raised only by `experimental theme`.
    */

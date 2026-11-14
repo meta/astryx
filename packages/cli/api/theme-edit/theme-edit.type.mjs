@@ -51,7 +51,11 @@
  * @property {string[]} pictures - PNG pictures taken (only with `png`).
  * @property {string | null} pictureProblem - Why no picture was taken, and how to get a browser for it.
  * @property {{code: string, cause: string} | null} notChecked - Set when the change is saved but the components could not be rendered, so it was not checked and has no preview: the cause, such as two copies of React.
- * @property {string[]} [previewStale] - Files of the in-app theme preview that were changed by hand, so they were not written again and still show the theme as it was.
+ * @property {string} [sheetStale] - Set when sheet.html (the sheet of every component, made by `show`) shows the theme as it was before this change: it says so at its top until `show` makes it again.
+ * @property {string[]} [previewStale] - Files of the in-app theme preview that were not written again and still show the theme as it was: changed by hand, or a preview folder where a stopped preview change waits for the next preview command.
+ * @property {string} see - One line on how to see the change: first a look that changes nothing in the app (the editor's preview.html, current after the change, and `png`, which takes pictures with no dev server; when this result's own picture run was blocked, what blocked it instead), then the in-app preview page most about it (Colors for a color, Components for a part, else Overview) at its own URL when there is a preview, and adding one to the app last, as an option. When the change could not be rendered, it names why instead of the editor's page.
+ * @property {{wrote: string[]}} [appCopy] - Only the first time the theme's app copy is written (src/themes/<theme>/, a standard local theme `astryx theme add <theme>` takes, written again after every build): the files written.
+ * @property {string} [appCopyStale] - Set when the app copy (src/themes/<theme>/) was not written: a file, folder or link of yours at one of its names; a link on the way to it (src/, src/themes/ or the copy's folder; the editor writes nothing through one); a file where src/, src/themes/ or the copy's folder goes; or a folder that cannot be written, or a write that failed (with the system's reason, such as not writable or the disk is full). The app keeps the theme as it was, and this says what is in the way and why.
  */
 
 /**
@@ -59,7 +63,7 @@
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditNewResponse
  * @property {'themeEdit.new'} type
- * @property {{theme: string, like: string | null, files: {settings: string, source: string, css: string, module: string}, settings: string[], notes: string[], problems: string[]} & ThemeEditPreviewFields} data - `settings`: the dial settings it started with; `notes`: font loading.
+ * @property {{theme: string, like: string | null, files: {settings: string, source: string, css: string, module: string}, settings: string[], notes: string[], problems: string[], wiring: string[]} & ThemeEditPreviewFields} data - `settings`: the dial settings it started with; `notes`: font loading; `wiring`: the steps that put the theme into this app (`theme add <theme>` for its app copy in src/themes/<theme>/, else the root file, its imports and the Theme around the app; what builds it).
  */
 
 /**
@@ -95,6 +99,10 @@
  * @property {string | null} pictureProblem
  * @property {{code: string, cause: string} | null} notChecked - Saved but not checked: see ThemeEditPreviewFields.
  * @property {string[]} [previewStale] - In-app preview files changed by hand: see ThemeEditPreviewFields.
+ * @property {string} see - How to see the change: see ThemeEditPreviewFields.
+ * @property {string} [sheetStale] - Set when sheet.html shows the theme as it was before this change: see ThemeEditPreviewFields.
+ * @property {string} [appCopyStale] - Set when the app copy could not be written (something of yours at a copy name or on the way, or a write that failed): see ThemeEditPreviewFields.
+ * @property {{wrote: string[]}} [appCopy] - Only the first time the theme's app copy is written: see ThemeEditPreviewFields.
  */
 
 /**
@@ -130,6 +138,9 @@
  * @property {string[]} data.pictures
  * @property {string | null} data.pictureProblem
  * @property {{config: string, module: string, receipt: string} | null} data.colorFiles - The generated color files: the input (in the shape `theme palette generate` reads), the module the theme imports, and the receipt; null when the theme sets no color.
+ * @property {{wrote: string[]}} [data.appCopy] - Only the first time the theme's app copy is written: the files written in src/themes/<theme>/.
+ * @property {string} [data.appCopyStale] - Set when the app copy was not written: a file, folder or link of yours at one of its names; a link on the way to it (src/, src/themes/ or the copy's folder; the editor writes nothing through one); a file where src/, src/themes/ or the copy's folder goes; or a folder that cannot be written, or a write that failed (with the system's reason, such as not writable or the disk is full).
+ * @property {string[]} data.wiring - The steps that put the theme into this app: the root file, its imports, the Theme around the app, and what builds it (`theme add <theme>`, for the app copy the editor writes in src/themes/<theme>/; the imports by hand when a folder of yours is there).
  */
 
 /**
@@ -161,7 +172,7 @@
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditUndoResponse
  * @property {'themeEdit.undo'} type
- * @property {{theme: string, action: 'step', undone: string[], settings: number, stepsLeft: number} & ThemeEditPreviewFields} data
+ * @property {{theme: string, action: 'step', undone: string[], settings: number, stepsLeft: number, changedTokens: string[], problems: string[]} & ThemeEditPreviewFields} data
  */
 
 /**
@@ -190,6 +201,7 @@
  * @property {string[]} data.pages - Every page of the preview, in order.
  * @property {string[]} data.files - Every file the preview wrote.
  * @property {string} data.open - How to open the preview.
+ * @property {Record<string, string>} data.urls - Each page's own URL in the running app (the preview's path with ?page=<id>), so any page can be opened or pictured; empty when no URL can be told.
  */
 
 /**
@@ -211,6 +223,7 @@
  * @property {string[]} data.files - Every file written.
  * @property {string[]} data.notes - What else to know.
  * @property {string} data.open - How to install, run and open the app.
+ * @property {Record<string, string>} data.urls - Each page's own URL once the app runs (/theme-preview?page=<id>).
  */
 
 /**
@@ -225,7 +238,7 @@
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditPreviewListResponse
  * @property {'themeEdit.previewList'} type
- * @property {{folder: string | null, theme: string | null, pages: Array<{id: string, label: string}>}} data
+ * @property {{folder: string | null, theme: string | null, themeMissing: boolean, pages: Array<{id: string, label: string, url?: string, missing?: boolean}>, notes: string[]}} data - `themeMissing`: the theme the preview wears is gone, so its route does not build; a page's `url`: its own URL in the running app; a page's `missing`: its file is gone; `notes`: what else to know, such as the command that fixes it.
  */
 
 /**
@@ -251,6 +264,7 @@
  * @property {string} [theme] - The theme the suggested commands are for, checked against its settings (default: the only theme the editor made in the app; with several, the one an editor command changed last; with none, `my-theme`, which the answer makes first). An empty name is refused.
  * @property {string[]} [at] - With a PNG picture: pixel points x,y, whole numbers inside the picture ("40,20;300,180", "40,20 300,180", several entries, or a flat "40,20,300,180").
  * @property {number} [count] - With a PNG picture: how many main colors (default 14).
+ * @property {string[]} [words] - The words as typed after `how`: a picture first takes only a count after it (the count is read from the words); anything else is one question. Replaces `subject`.
  */
 
 /**
