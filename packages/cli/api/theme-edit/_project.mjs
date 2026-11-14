@@ -21,7 +21,10 @@ import {loadComponentDoc} from '../../foundation/discovery/component-loader.mjs'
 import {collectThemingTargets} from '../../foundation/discovery/theming-targets.mjs';
 import {resolveImportPath} from '../../foundation/discovery/component-discovery.mjs';
 import {detectPackageManager} from '../../foundation/env/package-manager.mjs';
-import {findProjectCoreDir} from '../../foundation/fs/paths.mjs';
+import {
+  findInstalledPackage,
+  findProjectCoreDir,
+} from '../../foundation/fs/paths.mjs';
 import {
   oncePerListing,
   withListingCache,
@@ -334,17 +337,35 @@ export function importPathOf(project, name) {
  * resolves it: from the project (an open project, or its folder, relative
  * or not). Null when it is not installed there. The one base resolution:
  * `new`, `set base`, `how` and every suggestion ask this.
+ *
+ * Only the packages the project installs count, as the app's bundler reads
+ * them: its node_modules folders, or Plug'n'Play. NODE_PATH and Node's global
+ * folders do not: a base found only there would not build.
  * @param {ThemeProject | string} from
  * @param {string} like
  * @returns {string | null}
  */
 export function baseModule(from, like) {
-  const req =
-    typeof from === 'string'
-      ? createRequire(path.join(path.resolve(from), 'noop.js'))
-      : from.req;
+  const name = `@astryxdesign/theme-${like}`;
+  const start = typeof from === 'string' ? path.resolve(from) : from.cwd;
+  const pkg = findInstalledPackage(start, name, Infinity);
+  return pkg == null ? null : builtModule(pkg, name);
+}
+
+/**
+ * The `built` export of the package in `pkg`, or null. A file Node finds
+ * anywhere else (it searches NODE_PATH after a miss) does not count.
+ * @param {string} pkg
+ * @param {string} name
+ * @returns {string | null}
+ */
+function builtModule(pkg, name) {
   try {
-    return req.resolve(`@astryxdesign/theme-${like}/built`);
+    const file = createRequire(path.join(pkg, 'package.json')).resolve(
+      `${name}/built`,
+    );
+    const root = fs.realpathSync(pkg) + path.sep;
+    return fs.realpathSync(file).startsWith(root) ? file : null;
   } catch {
     return null;
   }

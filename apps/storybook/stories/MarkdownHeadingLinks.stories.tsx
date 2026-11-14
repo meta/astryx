@@ -25,7 +25,7 @@ type Story = StoryObj<typeof Markdown>;
 const SOURCE = [
   '# Linkable headings',
   '',
-  'Hover a heading area or move keyboard focus to reveal the `#` copy button. On touch it stays visible. Activating it copies the full permalink without changing the current hash, scroll position, or page.',
+  'Hover a heading area or move keyboard focus to reveal the `#` copy button. On a phone or tablet it stays visible. Activating it copies the full permalink without changing the current hash, scroll position, or page.',
   '',
   '> ## Nested heading',
   '',

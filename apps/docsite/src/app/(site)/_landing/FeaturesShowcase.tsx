@@ -584,7 +584,7 @@ export function FeaturesShowcase({
   templatesPreview,
   themesStore,
 }: {
-  /** The templates card preview (TemplatesPreview), rendered on the server. */
+  /** The templates card preview (TemplatesPreview). */
   templatesPreview: ReactNode;
   /** The themes card store snapshot (FrozenPreview), rendered on the server. */
   themesStore: ReactNode;

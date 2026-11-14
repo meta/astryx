@@ -33,6 +33,9 @@ export const DURATIONS = path.join(ROOT, 'scripts/vitest-node-durations.json');
 const PROJECT = 'node';
 // Seconds of import and transform per Node test file, as the legs report.
 export const PER_FILE_SECONDS = 0.4;
+// Seconds of summed file time a leg finishes per second of its run: test files
+// run side by side (measured on main's six Node legs: 2.1 to 2.5).
+export const LEG_PARALLELISM = 2.3;
 
 /**
  * Splits files into `count` legs by recorded seconds.
@@ -41,12 +44,64 @@ export const PER_FILE_SECONDS = 0.4;
  * @param {Record<string, number>} seconds recorded seconds per file
  * @returns {string[][]} each leg's files, sorted; together exactly `files`
  */
-export function partitionByDuration(files, count, seconds) {
+export function partitionByDuration(
+  files,
+  count,
+  seconds,
+  {legOneSeconds = 0} = {},
+) {
   const cost = costOf(files, seconds);
   // Every file also costs its import and transform, which its recorded time
   // leaves out; without it the hundreds of files recorded at 0 s would all go
   // to one leg.
-  return splitByDuration(files, count, file => cost(file) + PER_FILE_SECONDS);
+  return splitByDuration(
+    files,
+    count,
+    file => cost(file) + PER_FILE_SECONDS,
+    // The first leg's own steps take that much of its run, in file time.
+    count > 1 ? [legOneSeconds * LEG_PARALLELISM] : [],
+  );
+}
+
+/**
+ * Seconds of the steps only the first leg runs (the record's legOneSteps), or
+ * 0 when the record has none.
+ */
+export function readLegOneSeconds(file = DURATIONS) {
+  try {
+    const steps = JSON.parse(fs.readFileSync(file, 'utf8')).legOneSteps ?? {};
+    return Object.values(steps).reduce((sum, s) => sum + (Number(s) || 0), 0);
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Seconds per step of the first Node leg, from a job log as `gh run view
+ * --log` prints it (job, step and a timestamp per line), for the step names
+ * given.
+ * @param {string} text
+ * @param {string[]} names
+ * @returns {Record<string, number>}
+ */
+export function recordLegOneSteps(text, names) {
+  const wanted = new Set(names);
+  /** @type {Map<string, [number, number]>} */
+  const spans = new Map();
+  for (const line of text.split('\n')) {
+    const [job, step, rest] = line.split('\t');
+    if (!/^test-node \(1\//.test(job ?? '') || !wanted.has(step)) continue;
+    const at = Date.parse((rest ?? '').split(' ')[0]);
+    if (!Number.isFinite(at)) continue;
+    const span = spans.get(step) ?? [at, at];
+    spans.set(step, [Math.min(span[0], at), Math.max(span[1], at)]);
+  }
+  return Object.fromEntries(
+    [...spans].map(([step, [from, to]]) => [
+      step,
+      Math.round((to - from) / 1000),
+    ]),
+  );
 }
 
 /** Recorded seconds per file, or none when the file cannot be read. */
@@ -76,6 +131,36 @@ export function recordDurations(text) {
   return seconds;
 }
 
+const SWIZZLE_PROOF = /(^|\/)swizzle-proof\.\d+\.test\.mjs$/;
+
+/**
+ * The record after a run. The run's times replace those files' times; files
+ * the run did not reach keep their earlier times; a swizzle-proof slice keeps
+ * the largest time seen; a file that no longer exists leaves the record.
+ * @param {Record<string, number>} current
+ * @param {Record<string, number>} recorded
+ * @param {(file: string) => boolean} [exists]
+ * @returns {Record<string, number>}
+ */
+export function mergeRecord(
+  current,
+  recorded,
+  exists = file => fs.existsSync(path.join(ROOT, file)),
+) {
+  const merged = {...current};
+  for (const [file, seconds] of Object.entries(recorded)) {
+    merged[file] =
+      SWIZZLE_PROOF.test(file) && typeof current[file] === 'number'
+        ? Math.max(current[file], seconds)
+        : seconds;
+  }
+  return Object.fromEntries(
+    Object.entries(merged)
+      .filter(([file]) => exists(file))
+      .sort(([a], [b]) => a.localeCompare(b)),
+  );
+}
+
 export default class DurationShardSequencer extends BaseSequencer {
   relative(spec) {
     return path
@@ -89,10 +174,12 @@ export default class DurationShardSequencer extends BaseSequencer {
     const relative = spec => this.relative(spec);
     const node = specs.filter(spec => spec.project.name === PROJECT);
     const others = specs.filter(spec => spec.project.name !== PROJECT);
+    const legOneSeconds =
+      process.env.VITEST_LEG_ONE_RESERVE === '1' ? readLegOneSeconds() : 0;
     const mine = new Set(
-      partitionByDuration(node.map(relative), count, readDurations())[
-        index - 1
-      ],
+      partitionByDuration(node.map(relative), count, readDurations(), {
+        legOneSeconds,
+      })[index - 1],
     );
     return [
       ...node.filter(spec => mine.has(relative(spec))),
@@ -147,15 +234,22 @@ if (
   const current = fs.existsSync(DURATIONS)
     ? JSON.parse(fs.readFileSync(DURATIONS, 'utf8'))
     : {};
+  // The first leg's own steps, from the same logs; a step the logs do not
+  // show keeps its earlier time.
+  const legOneSteps = {...(current.legOneSteps ?? {})};
+  for (const log of logs)
+    Object.assign(
+      legOneSteps,
+      recordLegOneSteps(fs.readFileSync(log, 'utf8'), Object.keys(legOneSteps)),
+    );
   fs.writeFileSync(
     DURATIONS,
     `${JSON.stringify(
       {
         ...current,
         source: 'recorded Node leg logs',
-        seconds: Object.fromEntries(
-          Object.entries(seconds).sort(([a], [b]) => a.localeCompare(b)),
-        ),
+        seconds: mergeRecord(current.seconds ?? {}, seconds),
+        legOneSteps,
       },
       null,
       2,

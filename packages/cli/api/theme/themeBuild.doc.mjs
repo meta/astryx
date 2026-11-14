@@ -104,7 +104,7 @@ export const doc = {
     },
     {
       code: 'ERR_THEME_INVALID',
-      when: 'the resolved theme is invalid, for example it has no name, a custom Heading type has no standalone rule with a declaration the compiler can emit, or its icon registry cannot be preserved through an import (also rejected in check mode); or an output would replace the theme source, two outputs share one path, or the file is itself an output of a build, whatever its extension (refused before loading, naming the source it was built from); in a batch, two themes that build the same outputs are refused before either writes',
+      when: 'the resolved theme is invalid, for example it has no name, it sets a private `--_*` variable (refused before anything is written, also in check mode; each one is named), a custom Heading type has no standalone rule with a declaration the compiler can emit, or its icon registry cannot be preserved through an import (also rejected in check mode); or an output would replace the theme source, two outputs share one path, or the file is itself an output of a build, whatever its extension (refused before loading, naming the source it was built from); in a batch, two themes that build the same outputs are refused before either writes',
     },
     {
       code: 'ERR_FILE_EXISTS',
