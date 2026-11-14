@@ -2758,8 +2758,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      # The release check reads the weekly WebKit verdicts.
-      actions: read
       contents: read
       pull-requests: read
     env:
@@ -2929,15 +2927,13 @@ jobs:
       # other run keeps the subset (spec:AST-030 DEC-24).
       - name: Decide the WebKit scope
         if: steps.scope-webkit.outputs.applies == 'true'
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          RELEASE_TITLE: ${{ github.event.pull_request.title }}
         run: |
           if [ "${WEBKIT_WEEKLY:-}" = true ]; then
             echo "The weekly run: every WebKit interaction spec."
             echo "WEBKIT_ALL_SPECS=true" >> "$GITHUB_ENV"
           elif [ "${WEBKIT_RELEASE_CHECK:-}" = true ]; then
-            node .test-scope/.github/scripts/webkit-release-scope.mjs >> "$GITHUB_ENV"
+            echo "A release check: every WebKit interaction spec, at the release commit (spec:AST-030 DEC-24)."
+            echo "WEBKIT_ALL_SPECS=true" >> "$GITHUB_ENV"
           else
             echo "WEBKIT_ALL_SPECS=false" >> "$GITHUB_ENV"
           fi
@@ -3408,15 +3404,13 @@ jobs:
       # other run keeps the subset (spec:AST-030 DEC-24).
       - name: Decide the WebKit scope
         if: steps.scope.outputs.applies == 'true'
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          RELEASE_TITLE: ${{ github.event.pull_request.title }}
         run: |
           if [ "${WEBKIT_WEEKLY:-}" = true ]; then
             echo "The weekly run: every WebKit interaction spec."
             echo "WEBKIT_ALL_SPECS=true" >> "$GITHUB_ENV"
           elif [ "${WEBKIT_RELEASE_CHECK:-}" = true ]; then
-            node .test-scope/.github/scripts/webkit-release-scope.mjs >> "$GITHUB_ENV"
+            echo "A release check: every WebKit interaction spec, at the release commit (spec:AST-030 DEC-24)."
+            echo "WEBKIT_ALL_SPECS=true" >> "$GITHUB_ENV"
           else
             echo "WEBKIT_ALL_SPECS=false" >> "$GITHUB_ENV"
           fi
