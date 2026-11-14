@@ -18,7 +18,6 @@ export const doc = {
     'rail',
     'navigation',
     'desktop',
-    'app',
     'directory',
     'workspace',
   ],

@@ -20,7 +20,7 @@ export const doc = {
     'file',
     'browser',
     'repository',
-    'rolled-up',
+    'rollup',
     'parents',
   ],
   isReady: true,

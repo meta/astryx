@@ -34,7 +34,9 @@ export interface BaseTemplateDoc extends AuthoredDocGraphFields {
    *  one keyword only for a term the words do not mean apart, such as
    *  `'table of contents'` or `'reading pane'`: `astryx build` matches such a
    *  keyword only when the request names the whole phrase, in order, and
-   *  never matches its words alone.
+   *  never matches its words alone. Inside a phrase, build skips search's
+   *  stopwords and one-letter words, so `'sign in'` matches as `'sign'` and
+   *  `'on-call'` as `'call'`.
    *  `astryx search` matches them as it matches the description, and
    *  `astryx build` ranks page templates on them, so the `description` can
    *  stay a description of the layout. Integration templates need
