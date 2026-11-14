@@ -84,6 +84,7 @@ import {
   buildColorModes,
   camel,
   folderIsEmpty,
+  editorMadeFolder,
   loadTheme,
   setAfterBuild,
   editedThemes,
@@ -782,11 +783,15 @@ export const themeEditPreviewRemove = (page, options = {}) =>
  * does not).
  * @param {string} root
  * @param {string} word a path or a name
+ * @param {{made?: boolean}} [options] `made`: a folder the editor made that
+ *   lost its settings counts too (the editor commands refuse it, and so
+ *   does compile)
  * @returns {{root: string, slug: string} | null}
  */
-function editorThemeAt(root, word) {
+function editorThemeAt(root, word, {made = false} = {}) {
   const has = (/** @type {string} */ r, /** @type {string} */ slug) =>
-    fs.existsSync(path.join(r, 'themes', slug, `${slug}.settings.json`));
+    fs.existsSync(path.join(r, 'themes', slug, `${slug}.settings.json`)) ||
+    (made && editorMadeFolder(r, slug));
   if (/^[a-z][a-z0-9-]*$/.test(word))
     return has(root, word) ? {root, slug: word} : null;
   // Through a link, the real path decides (a linked theme folder is the
@@ -1240,9 +1245,21 @@ export async function editorCompileProblem(
         ERROR_CODES.ERR_INVALID_ARGUMENT,
       );
     }
-    const at = editorThemeAt(cwdRoot, abs);
+    const at = editorThemeAt(cwdRoot, abs, {made: true});
     if (!at || !editorOwnFile(at.slug, file)) continue;
     const {root, slug} = at;
+    // An editor theme that lost its settings is refused as every editor
+    // command refuses it, with the line that makes it again: a plain build
+    // of it would drop the editor's settings and app copy.
+    if (
+      !fs.existsSync(path.join(root, 'themes', slug, `${slug}.settings.json`))
+    )
+      try {
+        loadTheme(root, slug);
+      } catch (e) {
+        if (e instanceof AstryxError) return e;
+        throw e;
+      }
     const source = `themes/${slug}/${slug}.theme.ts`;
     // An editor theme is built from its project's root, as every editor
     // command runs there: from a subfolder the build would write outside

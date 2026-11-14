@@ -1919,7 +1919,8 @@ export function valueProblem(s) {
 
 /**
  * The entries of the top-level `tokens` map in a theme's own source, read
- * from its syntax tree, each with the line that sets it.
+ * from its syntax tree, each with the line that sets it. Entries read from
+ * the file the source re-exports its theme from name that file.
  * @param {string} cwd
  * @param {string} slug
  * @returns {OwnTokenEntry[]}
@@ -1928,7 +1929,68 @@ export function ownTokenEntries(cwd, slug) {
   /** @type {OwnTokenEntry[]} */
   const detail = [];
   ownPageTokens(cwd, slug, detail);
+  const source = themeSourceFile(cwd, slug);
+  if (source && source.file !== themeFiles(cwd, slug).ts)
+    for (const e of detail) e.file ??= source.file;
   return detail;
+}
+
+/**
+ * The file that holds a theme's `defineTheme()` call, with its code: the
+ * theme's own source, or the file beside it the source re-exports the
+ * theme from (`export * from './impl'`). Null when the source cannot be
+ * read.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {{file: string, code: string} | null}
+ */
+function themeSourceFile(cwd, slug) {
+  let file = themeFiles(cwd, slug).ts;
+  /** @param {any} node @returns {boolean} */
+  const callsDefineTheme = node =>
+    !!node &&
+    typeof node === 'object' &&
+    ((node.type === 'CallExpression' &&
+      node.callee?.type === 'Identifier' &&
+      node.callee.name === 'defineTheme') ||
+      Object.entries(node).some(
+        ([k, v]) =>
+          k !== 'loc' &&
+          (Array.isArray(v)
+            ? v.some(callsDefineTheme)
+            : v && typeof v === 'object' && v.type && callsDefineTheme(v)),
+      ));
+  for (let hop = 0; hop < 4; hop++) {
+    /** @type {string} */
+    let code;
+    try {
+      code = fs.readFileSync(file, 'utf8');
+    } catch {
+      return null;
+    }
+    /** @type {any} */
+    let ast;
+    try {
+      ast = parseModule(code, {sourceType: 'module', plugins: ['typescript']});
+    } catch {
+      return {file, code};
+    }
+    if (callsDefineTheme(ast.program)) return {file, code};
+    const from = file;
+    const next = ast.program.body
+      .map((/** @type {any} */ st) =>
+        (st.type === 'ExportAllDeclaration' ||
+          st.type === 'ExportNamedDeclaration') &&
+        st.source &&
+        String(st.source.value).startsWith('.')
+          ? localModuleFile(path.dirname(from), String(st.source.value))
+          : null,
+      )
+      .find(Boolean);
+    if (!next) return {file, code};
+    file = next;
+  }
+  return null;
 }
 
 /**
@@ -1947,13 +2009,9 @@ function ownPageTokens(
 ) {
   /** @type {Map<string, string | null>} */
   const out = new Map();
-  /** @type {string} */
-  let code;
-  try {
-    code = fs.readFileSync(themeFiles(cwd, slug).ts, 'utf8');
-  } catch {
-    return out;
-  }
+  const source = themeSourceFile(cwd, slug);
+  if (!source) return out;
+  const {code} = source;
   /** @type {any} */
   let ast;
   try {
@@ -2086,27 +2144,78 @@ function ownPageTokens(
           });
       }
     }
-  const dir = path.dirname(themeFiles(cwd, slug).ts);
+  const dir = path.dirname(source.file);
+  /** @param {string} from */
+  const localFile = from =>
+    from.startsWith('.') ? (localModuleFile(dir, from) ?? null) : null;
   /**
-   * The file a relative import names, as the build resolves it; null for
-   * a package or a file that is not there.
-   * @param {string} from
-   * @returns {string | null}
+   * The object a name imported from a file beside the theme gives (`import
+   * {mine} from './mine'`, a default import of a .json file), read from
+   * that file, with its own code and path; null for any other name.
+   * @param {string} name
+   * @returns {{obj: any, code: string, file: string, unwrap: (n: any) => any} | null}
    */
-  const localFile = from => {
-    if (!from.startsWith('.')) return null;
-    const base = path.resolve(dir, from);
-    return (
-      ['', '.ts', '.mts', '.tsx', '.js', '.mjs', '.json', '/index.ts']
-        .map(x => base + x)
-        .find(f => {
-          try {
-            return fs.statSync(f).isFile();
-          } catch {
-            return false;
-          }
-        }) ?? null
-    );
+  const imported = name => {
+    for (const st of ast.program.body) {
+      if (st.type !== 'ImportDeclaration') continue;
+      const spec = st.specifiers.find(
+        (/** @type {any} */ x) => x.local?.name === name,
+      );
+      const from = String(st.source?.value ?? '');
+      if (!spec || !from.startsWith('.')) continue;
+      const file = localFile(from);
+      if (!file) return null;
+      try {
+        const text = fs.readFileSync(file, 'utf8');
+        const json = file.endsWith('.json');
+        const source = json ? `export default ${text}` : text;
+        const other = /** @type {any} */ (
+          parseModule(source, {sourceType: 'module', plugins: ['typescript']})
+        );
+        /** @type {Map<string, any>} */
+        const local = new Map();
+        /** @type {any} */
+        let found = null;
+        const want =
+          spec.type === 'ImportDefaultSpecifier'
+            ? 'default'
+            : (spec.imported?.name ?? spec.imported?.value);
+        for (const top of other.program.body) {
+          const d =
+            top.type === 'ExportNamedDeclaration' ? top.declaration : top;
+          for (const v of d?.declarations ?? [])
+            if (v.id?.type === 'Identifier') {
+              local.set(v.id.name, v.init);
+              if (top.type === 'ExportNamedDeclaration' && v.id.name === want)
+                found = v.init;
+            }
+          if (top.type === 'ExportDefaultDeclaration' && want === 'default')
+            found = top.declaration;
+        }
+        /** @param {any} n @param {number} [k] @returns {any} */
+        const unwrapIn = (n, k = 0) => {
+          if (!n || k > 20) return null;
+          if (
+            [
+              'TSAsExpression',
+              'TSSatisfiesExpression',
+              'TSNonNullExpression',
+              'ParenthesizedExpression',
+            ].includes(n.type)
+          )
+            return unwrapIn(n.expression, k + 1);
+          if (n.type === 'Identifier' && local.has(n.name))
+            return unwrapIn(local.get(n.name), k + 1);
+          return n;
+        };
+        return found
+          ? {obj: unwrapIn(found), code: source, file, unwrap: unwrapIn}
+          : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
   };
   // A theme the exported one extends that a file beside it defines
   // (`import {mid} from './mid'`): its call and each token its literal
@@ -2238,23 +2347,63 @@ function ownPageTokens(
         kind: 'scope',
         line: p.loc?.start?.line ?? null,
       });
-      /** @param {any} node @param {string[]} at @param {number} depth */
-      const walk = (node, at, depth) => {
-        const obj = unwrap(node);
+      /**
+       * A value as a block: a name imported from a file beside the theme
+       * (`components: parts`) or a member of one (`parts.button`) is read
+       * in that file, so its keys and lines are its own.
+       * @param {any} node
+       * @param {{file: string | null, unwrap: (n: any) => any}} src the file the node is in (null for the source)
+       * @returns {{obj: any, src: {file: string | null, unwrap: (n: any) => any}}}
+       */
+      const blockOf = (node, src) => {
+        let obj = src.unwrap(node);
+        const member =
+          obj?.type === 'MemberExpression' && !obj.computed ? obj : null;
+        const name = member ? member.object : obj;
+        if (name?.type === 'Identifier' && src.file == null) {
+          const from = imported(name.name);
+          if (from) {
+            src = from;
+            obj = from.obj;
+          } else if (member) obj = src.unwrap(member.object);
+        } else if (member) obj = src.unwrap(member.object);
+        if (member) {
+          const prop =
+            obj?.type === 'ObjectExpression'
+              ? obj.properties.find(
+                  (/** @type {any} */ p) =>
+                    p.type === 'ObjectProperty' &&
+                    keyOf(p.key) === member.property?.name,
+                )
+              : null;
+          obj = prop ? src.unwrap(prop.value) : null;
+        }
+        return {obj, src};
+      };
+      /**
+       * @param {any} node
+       * @param {string[]} at
+       * @param {number} depth
+       * @param {{file: string | null, unwrap: (n: any) => any}} [from] the file the node is in (null for the source)
+       */
+      const walk = (node, at, depth, from = {file: null, unwrap}) => {
         if (depth > 12) return;
+        const {obj, src} = blockOf(node, from);
+        /** The file a read entry is in, when not the source. */
+        const inFile = src.file ? {file: src.file} : {};
         if (obj?.type === 'ArrayExpression') {
           obj.elements.forEach(
             (/** @type {any} */ el, /** @type {number} */ i) =>
-              walk(el, [...at, String(i)], depth + 1),
+              walk(el, [...at, String(i)], depth + 1, src),
           );
           return;
         }
         if (obj?.type !== 'ObjectExpression') return;
         for (const q of obj.properties) {
           if (q.type !== 'ObjectProperty') continue;
-          const k = q.computed ? textOf(unwrap(q.key)) : keyOf(q.key);
+          const k = q.computed ? textOf(src.unwrap(q.key)) : keyOf(q.key);
           if (!k) continue;
-          const leaf = unwrap(q.value);
+          const leaf = blockOf(q.value, src).obj;
           // A token, or a part's property (its value no block), by its
           // scope path and line.
           if (
@@ -2268,6 +2417,7 @@ function ownPageTokens(
               kind: 'scoped',
               scope: at.join('.'),
               line: q.loc?.start?.line ?? null,
+              ...inFile,
             });
           else {
             // A block's own key (a style key, a pseudo-class, onDark's
@@ -2278,8 +2428,9 @@ function ownPageTokens(
               kind: 'key',
               scope: at.join('.'),
               line: q.loc?.start?.line ?? null,
+              ...inFile,
             });
-            walk(q.value, [...at, k], depth + 1);
+            walk(q.value, [...at, k], depth + 1, src);
           }
         }
       };
@@ -2341,75 +2492,6 @@ function ownPageTokens(
   const tokensProp = tokensProps[tokensProps.length - 1];
   if (!tokensProp) return out;
   let unresolved = false;
-  /**
-   * The object a name imported from a file beside the theme gives (`import
-   * {mine} from './mine'`, a default import of a .json file), read from
-   * that file, with its own code and path; null for any other name.
-   * @param {string} name
-   * @returns {{obj: any, code: string, file: string, unwrap: (n: any) => any} | null}
-   */
-  const imported = name => {
-    for (const st of ast.program.body) {
-      if (st.type !== 'ImportDeclaration') continue;
-      const spec = st.specifiers.find(
-        (/** @type {any} */ x) => x.local?.name === name,
-      );
-      const from = String(st.source?.value ?? '');
-      if (!spec || !from.startsWith('.')) continue;
-      const file = localFile(from);
-      if (!file) return null;
-      try {
-        const text = fs.readFileSync(file, 'utf8');
-        const json = file.endsWith('.json');
-        const source = json ? `export default ${text}` : text;
-        const other = /** @type {any} */ (
-          parseModule(source, {sourceType: 'module', plugins: ['typescript']})
-        );
-        /** @type {Map<string, any>} */
-        const local = new Map();
-        /** @type {any} */
-        let found = null;
-        const want =
-          spec.type === 'ImportDefaultSpecifier'
-            ? 'default'
-            : (spec.imported?.name ?? spec.imported?.value);
-        for (const top of other.program.body) {
-          const d =
-            top.type === 'ExportNamedDeclaration' ? top.declaration : top;
-          for (const v of d?.declarations ?? [])
-            if (v.id?.type === 'Identifier') {
-              local.set(v.id.name, v.init);
-              if (top.type === 'ExportNamedDeclaration' && v.id.name === want)
-                found = v.init;
-            }
-          if (top.type === 'ExportDefaultDeclaration' && want === 'default')
-            found = top.declaration;
-        }
-        /** @param {any} n @param {number} [k] @returns {any} */
-        const unwrapIn = (n, k = 0) => {
-          if (!n || k > 20) return null;
-          if (
-            [
-              'TSAsExpression',
-              'TSSatisfiesExpression',
-              'TSNonNullExpression',
-              'ParenthesizedExpression',
-            ].includes(n.type)
-          )
-            return unwrapIn(n.expression, k + 1);
-          if (n.type === 'Identifier' && local.has(n.name))
-            return unwrapIn(local.get(n.name), k + 1);
-          return n;
-        };
-        return found
-          ? {obj: unwrapIn(found), code: source, file, unwrap: unwrapIn}
-          : null;
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  };
   /**
    * @param {any} node
    * @param {number} depth
@@ -6214,40 +6296,55 @@ export async function themeSourceProblem(cwd, slug) {
     // the settings says that first.
     return importsSettings ? null : notImported;
   }
-  if (loaded.theme?.name !== slug) {
-    // Another export of the file names the theme: the build reads a
-    // different one, so say which, and how to make it read the theme.
-    const other = exportedNames(ast).find(
-      name =>
-        name !== loaded.exportName &&
-        plainText(
-          unwrapConst(
-            ast,
-            exportedDefinition(ast, name)?.properties.find(
-              (/** @type {any} */ p) =>
-                p.type === 'ObjectProperty' &&
-                (p.key.name ?? p.key.value) === 'name',
-            )?.value,
-          ),
-        ) === slug,
+  /** A field of an export's definition, as written. @param {any} def @param {string} key */
+  const field = (def, key) =>
+    def?.properties.find(
+      (/** @type {any} */ p) =>
+        p.type === 'ObjectProperty' && (p.key.name ?? p.key.value) === key,
+    )?.value;
+  /** An export's definition names the theme. @param {any} def */
+  const namesTheme = def =>
+    plainText(unwrapConst(ast, field(def, 'name'))) === slug;
+  /** An export's definition extends the settings. @param {any} def */
+  const extendsSettings = def => {
+    const base = field(def, 'extends');
+    return base?.type === 'Identifier' && base.name === settings;
+  };
+  /**
+   * Another export of the file that is the theme the build should read,
+   * by a test of its definition.
+   * @param {(def: any) => boolean} test
+   */
+  const otherExport = test =>
+    exportedNames(ast).find(
+      name => name !== loaded.exportName && test(exportedDefinition(ast, name)),
     );
+  /** The build reads another export than the theme: say which, and how to make it read the theme. @param {string} other @param {string} what */
+  const readsOther = (other, what) => ({
+    problem: `a build of ${slug}.theme.ts reads its export ${loaded.exportName} (the theme '${loaded.theme?.name}'), not ${other}, ${what}`,
+    fix: `Make ${other} the theme a build reads: export it as the default (export default ${other}), or move the other theme to a file of its own.`,
+  });
+  if (loaded.theme?.name !== slug) {
+    const other = otherExport(namesTheme);
     return other
-      ? {
-          problem: `a build of ${slug}.theme.ts reads its export ${loaded.exportName} (the theme '${loaded.theme?.name}'), not ${other}, the theme named '${slug}'`,
-          fix: `Make ${other} the theme a build reads: export it as the default (export default ${other}), or move the other theme to a file of its own.`,
-        }
+      ? readsOther(other, `the theme named '${slug}'`)
       : {
           problem: `${slug}.theme.ts no longer names the theme '${slug}'`,
           fix: putBack,
         };
   }
-  if (!loaded.extendsBase)
+  if (!loaded.extendsBase) {
+    // The export the build reads is named for the theme but does not
+    // extend the settings; another export that does is the theme.
+    const other = otherExport(def => namesTheme(def) && extendsSettings(def));
+    if (other) return readsOther(other, `the theme that extends ${settings}`);
     return importsSettings
       ? {
           problem: `${slug}.theme.ts no longer extends ${settings}`,
           fix: putBack,
         }
       : notImported;
+  }
   return null;
 }
 

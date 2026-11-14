@@ -2238,15 +2238,44 @@ async function ownTokenProblems(ctx, slug, data) {
   const named = new Set(out.map(b => b.token));
   // Core refuses the input itself, naming the path of what it refuses
   // (`defineTheme("t").adaptations.rules[0].when.pointr is not
-  // supported.`): its message, at the line that writes that path.
-  const coreSays =
-    /defineTheme\("([^"]*)"\)((?:\.[A-Za-z_$][\w$]*|\[\d+\]|\["[^"]*"\])+) ([^\n]*)/.exec(
-      loaded?.error?.message ?? '',
+  // supported.`) or a local token by name: its message, at the line that
+  // writes that path. A path the source does not have (a rule Core derives
+  // from the typography) is Core's own: the source is judged on its own.
+  const coreError = loaded?.error?.message ?? '';
+  const corePath =
+    /defineTheme\("[^"]*"\)((?:\.[A-Za-z_$][\w$]*|\[\d+\]|\["[^"]*"\])+) ([^\n]*)/.exec(
+      coreError,
     );
-  if (coreSays) {
-    const steps = [
-      ...coreSays[2].matchAll(/\.([A-Za-z_$][\w$]*)|\[(\d+)\]|\["([^"]*)"\]/g),
-    ].map(m => m[1] ?? m[2] ?? m[3]);
+  const coreLocal =
+    /defineTheme\("[^"]*"\): local token "([^"]*)" ([^\n]*)/.exec(coreError);
+  const coreSays = corePath
+    ? {
+        steps: [
+          ...corePath[1].matchAll(
+            /\.([A-Za-z_$][\w$]*)|\[(\d+)\]|\["([^"]*)"\]/g,
+          ),
+        ].map(m => /** @type {string} */ (m[1] ?? m[2] ?? m[3])),
+        says: corePath[2],
+      }
+    : coreLocal
+      ? {
+          steps: ['localTokens', coreLocal[1]],
+          says: `(a local token) ${coreLocal[2]}`,
+        }
+      : null;
+  /** The input has every step of a path. @param {string[]} steps */
+  const inInput = steps => {
+    /** @type {any} */
+    let node = input;
+    for (const step of steps) {
+      if (!node || typeof node !== 'object' || !Object.hasOwn(node, step))
+        return false;
+      node = node[step];
+    }
+    return true;
+  };
+  if (coreSays && inInput(coreSays.steps)) {
+    const {steps} = coreSays;
     const key = /** @type {string} */ (steps.at(-1));
     const scope = steps.slice(0, -1).join('.');
     const at =
@@ -2257,10 +2286,11 @@ async function ownTokenProblems(ctx, slug, data) {
       token: labelOf(steps),
       key,
       value: '',
-      why: `Core refuses the theme: ${labelOf(steps)} ${coreSays[3].replace(/\.+$/, '')}`,
+      why: `Core refuses the theme: ${labelOf(steps)} ${coreSays.says.replace(/\.+$/, '')}`,
       ...(at ?? {line: null, file: null}),
     });
   }
+
   /**
    * Why a token's value is refused, or null. Any token, a design token or
    * the theme's own, takes text or a pair of two texts; any other value
