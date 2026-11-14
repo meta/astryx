@@ -6,7 +6,8 @@
  * @file useMenuPress.ts
  * @input The menu root, its trigger, the enabled-row selector, and callbacks
  *   for opening, highlighting, activating and dismissing
- * @output useMenuPress, the marker attributes and the activation mark
+ * @output useMenuPress, useMenuPressInternal (with the internal row
+ *   lookup), the marker attributes and the activation mark
  * @position Core hook for DropdownMenu, ContextMenu, DropdownMenuSubMenu,
  *   Selector, MenuBottomSheetActionList and the navigation menus. The
  *   transition table lives in menuPressGesture.ts.
@@ -151,6 +152,28 @@ const INNER_CONTROL_SELECTOR = 'a[href], button, [tabindex]';
 let isModelActivation = false;
 
 /**
+ * The item of the row that holds `element`: a direct child of that row. A
+ * control inside the row's content is not its item, and a row that holds
+ * other rows (a section around its rows) has no item of its own.
+ */
+function findRowItem(
+  element: Element,
+  itemSelector: string,
+  rowSelector: string,
+): HTMLElement | null {
+  const row = element.closest(rowSelector);
+  if (row == null) {
+    return null;
+  }
+  for (const child of row.children) {
+    if (child.matches(itemSelector)) {
+      return child as HTMLElement;
+    }
+  }
+  return null;
+}
+
+/**
  * Whether a menu row activation dispatched by the press model is in flight.
  * True for the synchronous extent of that dispatch, so a row that forwards
  * the activation to a control inside it (a link) can tell the model's click
@@ -227,7 +250,7 @@ export interface UseMenuPressOptions {
  * The options the model runs on: the public ones, plus the touch model the
  * hook picks from the delay and the scroll-view probe.
  */
-interface MenuPressConfig extends UseMenuPressOptions {
+interface MenuPressConfig extends UseMenuPressInternalOptions {
   /**
    * How a finger on the trigger opens the menu and picks from it.
    * `'pointer'`: after `longPressDelayMs`, and the opening press follows the
@@ -242,6 +265,18 @@ interface MenuPressConfig extends UseMenuPressOptions {
    * the content-touch delay.
    */
   isInScrollView?: (control: Element) => boolean;
+}
+
+/** The options of {@link useMenuPressInternal}: the public ones, and more. */
+export interface UseMenuPressInternalOptions extends UseMenuPressOptions {
+  /**
+   * Selector matching a whole row when its item (the `itemSelector` match) is
+   * only a part of it, as the action of a list row with an icon beside it. A
+   * pointer over the rest of that row (its icon, its end content, its padding)
+   * then picks the row's item: the direct child of the row that matches
+   * `itemSelector`. If no direct child matches, the pointer picks no item.
+   */
+  rowSelector?: string;
 }
 
 export interface UseMenuPressReturn {
@@ -394,6 +429,20 @@ interface ResolvedPoint {
  * ```
  */
 export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
+  // The row lookup is internal: an untyped caller's `rowSelector` does not
+  // reach the model.
+  const {rowSelector: _rowSelector, ...options} =
+    input as UseMenuPressInternalOptions;
+  return useMenuPressInternal(options);
+}
+
+/**
+ * useMenuPress, with the options internal to Core's menus. Not exported from
+ * the hooks entry point.
+ */
+export function useMenuPressInternal(
+  input: UseMenuPressInternalOptions,
+): UseMenuPressReturn {
   // The touch model is the hook's own: an untyped caller's `touchModel` does
   // not reach the model.
   const {touchModel: _touchModel, ...publicOptions} = input as MenuPressConfig;
@@ -466,7 +515,8 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
 
   const resolvePoint = useCallback(
     (event: PointerEvent): ResolvedPoint => {
-      const {menuRef, triggerRef, itemSelector, hitTest} = optionsRef.current;
+      const {menuRef, triggerRef, itemSelector, rowSelector, hitTest} =
+        optionsRef.current;
       const menu = menuRef.current;
       const doc = getDocument();
       let element: Element | null;
@@ -507,6 +557,9 @@ export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
       let row: HTMLElement | null = null;
       if (isInMenu && element != null) {
         row = element.closest<HTMLElement>(itemSelector);
+        if (row == null && rowSelector != null) {
+          row = findRowItem(element, itemSelector, rowSelector);
+        }
         if (row != null && !isInMenuTree(row, root)) {
           row = null;
         }

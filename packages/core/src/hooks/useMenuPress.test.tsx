@@ -21,6 +21,7 @@ import {
   MENU_PRESS_STRAY_CLICK_MS,
   __resetMenuPressForTest,
   useMenuPress,
+  useMenuPressInternal,
 } from './useMenuPress';
 import {MENU_PRESS_HANDOFF_PX, MENU_PRESS_SETTLE_MS} from './menuPressGesture';
 import {holdInput, isInputShield} from '../Layer/inputHold';
@@ -281,6 +282,127 @@ describe('useMenuPress — an input hold over the menu', () => {
     } finally {
       overlay.remove();
     }
+  });
+});
+
+describe('useMenuPressInternal — rowSelector', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(document, 'elementFromPoint');
+  });
+
+  const ACTION = 'button:not(:disabled)';
+
+  /**
+   * Rows whose action is a part of the row, beside an icon, as a list row
+   * renders them. A section row holds rows of its own.
+   */
+  function RowList({
+    onSelect,
+    rowSelector,
+    isPublic = false,
+  }: {
+    onSelect: (label: string) => void;
+    rowSelector?: string;
+    isPublic?: boolean;
+  }) {
+    const menuRef = useRef<HTMLUListElement>(null);
+    const usePress = isPublic ? useMenuPress : useMenuPressInternal;
+    const press = usePress({menuRef, itemSelector: ACTION, rowSelector});
+    const actionRow = (label: string, isDisabled = false) => (
+      <li key={label} data-testid={`row-${label}`}>
+        <span data-testid={`icon-${label}`}>*</span>
+        <button
+          type="button"
+          disabled={isDisabled}
+          onClick={() => onSelect(label)}>
+          {label}
+        </button>
+        {isDisabled && (
+          <span>
+            <button type="button" onClick={() => onSelect(`${label} pin`)}>
+              Pin
+            </button>
+          </span>
+        )}
+      </li>
+    );
+    return (
+      <ul ref={menuRef} tabIndex={-1} {...press.menuProps}>
+        {actionRow('A')}
+        {actionRow('B')}
+        {actionRow('Off', true)}
+        <li data-testid="section">
+          <h4>Section</h4>
+          <ul>{actionRow('C')}</ul>
+        </li>
+        <p data-testid="note">Not a row</p>
+      </ul>
+    );
+  }
+
+  function press(element: Element) {
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: () => element,
+    });
+    fireEvent.pointerDown(element, touch());
+    fireEvent.pointerUp(element, touch());
+  }
+
+  it('a press on the rest of a row picks that row’s own item', () => {
+    const onSelect = vi.fn();
+    render(<RowList onSelect={onSelect} rowSelector="li" />);
+    press(screen.getByTestId('icon-B'));
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith('B');
+    onSelect.mockClear();
+    press(screen.getByTestId('row-A'));
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith('A');
+    onSelect.mockClear();
+    press(screen.getByTestId('icon-C'));
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith('C');
+  });
+
+  it('a finger that moves onto the rest of a row highlights the row’s item', () => {
+    render(<RowList onSelect={() => {}} rowSelector="li" />);
+    const a = screen.getByRole('button', {name: 'A'});
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: () => a,
+    });
+    fireEvent.pointerDown(a, touch());
+    const icon = screen.getByTestId('icon-B');
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: () => icon,
+    });
+    fireEvent.pointerMove(icon, touch());
+    expect(screen.getByRole('button', {name: 'B'})).toHaveFocus();
+  });
+
+  it('picks nothing for a row with no enabled item, even with a control in its content, a row around other rows, or content outside every row', () => {
+    const onSelect = vi.fn();
+    render(<RowList onSelect={onSelect} rowSelector="li" />);
+    press(screen.getByTestId('icon-Off'));
+    press(screen.getByTestId('row-Off'));
+    press(screen.getByRole('heading', {name: 'Section'}));
+    press(screen.getByTestId('note'));
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('the public useMenuPress takes no row lookup, even from an untyped caller', () => {
+    const onSelect = vi.fn();
+    render(<RowList onSelect={onSelect} rowSelector="li" isPublic />);
+    press(screen.getByTestId('icon-B'));
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('without it, a press beside a row’s item picks nothing, as before', () => {
+    const onSelect = vi.fn();
+    render(<RowList onSelect={onSelect} />);
+    press(screen.getByTestId('icon-B'));
+    expect(onSelect).not.toHaveBeenCalled();
+    press(screen.getByRole('button', {name: 'B'}));
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith('B');
   });
 });
 
