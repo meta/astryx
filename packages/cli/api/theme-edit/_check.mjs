@@ -136,6 +136,7 @@ import {
   withoutCopyDebris,
   commaNumbers,
   weightSetting,
+  baseWord,
 } from './_normal.mjs';
 
 export {
@@ -1042,7 +1043,7 @@ const NUMBERISH = /^[+-]?(\d+\.?\d*|\.\d+)(px|rem|em|pt|%)?$/i;
  * @param {string} value
  * @param {any} ctx
  * @param {boolean} [presets] whether a preset name is read (the font dial)
- * @returns {{why: string, families: string, rung: string | null, size: boolean, textSize: number | null, style: string | null} | null}
+ * @returns {{why: string, families: string, asTyped: string | null, rung: string | null, size: boolean, textSize: number | null, style: string | null} | null}
  */
 function fontListProblem(value, ctx, presets = false) {
   // Copy debris (a trailing `;`, `!important`, a comment) is read away
@@ -1074,6 +1075,12 @@ function fontListProblem(value, ctx, presets = false) {
 
   /** @type {string[]} */
   const kept = [];
+  /**
+   * Each family read as a misspelling, as typed in quotes: quotes keep a
+   * family the editor does not know as written (Inder, Monaspace).
+   * @type {Map<number, string>}
+   */
+  const asTyped = new Map();
   /** @type {number | null} */
   let weight = null;
   let number = false;
@@ -1158,8 +1165,20 @@ function fontListProblem(value, ctx, presets = false) {
       } else break;
     }
     const base = words.slice(0, end).join(' ');
-    // Only those words: a font shorthand, not a list.
-    if (!base) return null;
+    // Only those words: alone, a font shorthand (read where the font dial
+    // reads one); in a list of several, an item that is no family.
+    if (!base) {
+      if (pieces.length < 2) return null;
+      for (const t of tail) {
+        if (t.kind === 'weight') weight ??= t.value ?? null;
+        else if (t.kind === 'style') style ??= t.text;
+        else if (t.kind === 'size') {
+          size = true;
+          sizeTyped ??= t.text;
+        }
+      }
+      continue;
+    }
     if (!tail.length) {
       // A family the editor does not know that is a typo of a generic, or
       // (on the font dial, alone) of a preset: that name.
@@ -1174,6 +1193,7 @@ function fontListProblem(value, ctx, presets = false) {
       if (generic || preset) {
         misspelled = true;
         kept.push(/** @type {string} */ (generic ?? preset));
+        asTyped.set(kept.length - 1, JSON.stringify(name));
       } else kept.push(name);
       continue;
     }
@@ -1228,8 +1248,11 @@ function fontListProblem(value, ctx, presets = false) {
               ? 'holds a number where a family goes (a weight is a whole hundred, a size has a unit), so the browser reads it as a family named that and falls back'
               : quotedGeneric
                 ? 'quotes a generic family, which makes it a family named that, so there is no generic to fall back to'
-                : 'misspells a generic family or font, so the browser reads it as a family named that and falls back',
+                : 'is near a generic family or font the editor knows; a family the editor does not know is kept as written when it is quoted',
     families: kept.join(', '),
+    asTyped: misspelled
+      ? kept.map((k, i) => asTyped.get(i) ?? k).join(', ')
+      : null,
     rung,
     size,
     textSize: sizeTyped ? textSizePx(sizeTyped) : null,
@@ -2038,6 +2061,15 @@ function propertyProblem(prop, value) {
       // Below the property's range (a negative width) is no size of the
       // other sign: the mirrored value is never offered.
       (takes(joined) && joined !== v ? joined : null) ??
+      // A comma between two bare numbers that the grammar pairs with a
+      // slash (`aspect-ratio 16,9`, `grid-row 2,4`) separates them: the
+      // pair, never a decimal (16.9).
+      (() => {
+        const pair = /^\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*$/.exec(v);
+        return pair && takes(`${pair[1]} / ${pair[2]}`)
+          ? `${pair[1]} / ${pair[2]}`
+          : null;
+      })() ??
       // A comma between digits is a decimal point (1,5rem is 1.5rem), never
       // a split into layers.
       (takes(commaNumbers(v, weightSetting(prop))) &&
@@ -2531,6 +2563,12 @@ export function checkSetting(
           ...(listProblem.families
             ? [
                 `${P} set ${slug} ${thing} ${quoteCommandArgument(listProblem.families)}${on}`,
+              ]
+            : []),
+          // The family as typed, kept as written by its quotes.
+          ...(listProblem.asTyped
+            ? [
+                `${P} set ${slug} ${thing} ${quoteCommandArgument(listProblem.asTyped)}${on}`,
               ]
             : []),
           ...(thing === 'font' && listProblem.rung
@@ -4952,12 +4990,13 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
         );
       if (![...LIKE, 'none'].includes(v)) {
         // `NEUTRAL`, `base=neutral`, `None`: the base meant.
-        const meant = v
-          .toLowerCase()
-          .replace(/^base\s*[=:]\s*/, '')
-          .trim()
-          .replace(/^@astryxdesign\/theme-/, '')
-          .replace(/^theme-/, '');
+        // Read from the value as typed: its letters' case marks an export
+        // name (neutralTheme).
+        const meant = baseWord(
+          String(value ?? v)
+            .trim()
+            .replace(/^base\s*[=:]\s*/i, ''),
+        );
         // Only a base this project has installed is suggested; a theme
         // made here is never a base.
         const bases = [
