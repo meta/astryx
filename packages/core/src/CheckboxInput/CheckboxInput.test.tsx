@@ -373,9 +373,7 @@ describe('CheckboxInput', () => {
       />,
     );
     const checkbox = screen.getByRole('checkbox');
-    const description = screen.getByText(
-      'Selects this row for bulk actions',
-    ).parentElement!;
+    const description = screen.getByText('Selects this row for bulk actions');
     expect(description.id).not.toBe('');
     expect(checkbox.getAttribute('aria-describedby')).toContain(description.id);
   });
@@ -395,9 +393,7 @@ describe('CheckboxInput', () => {
       </>,
     );
     const checkbox = screen.getByRole('checkbox');
-    const description = screen.getByText(
-      'Selects this row for bulk actions',
-    ).parentElement!;
+    const description = screen.getByText('Selects this row for bulk actions');
     const ids = checkbox.getAttribute('aria-describedby')!.split(' ');
     expect(ids).toContain('row-hint');
     expect(ids).toContain(description.id);

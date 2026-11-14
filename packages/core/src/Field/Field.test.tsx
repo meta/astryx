@@ -140,7 +140,7 @@ describe('Field', () => {
       </Field>,
     );
     // Description should still be in the DOM for screen readers
-    const description = screen.getByText('Search for items').parentElement!;
+    const description = screen.getByText('Search for items');
     expect(description).toBeInTheDocument();
     // But should have the visually-hidden styles applied
     expect(description.className).toContain('srOnly');

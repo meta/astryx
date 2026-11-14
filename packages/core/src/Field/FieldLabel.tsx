@@ -297,9 +297,12 @@ export function FieldLabel({
   });
   // Plain text with no right-to-left letter keeps its written order on a
   // right-to-left page. The direction goes on an inner span, so the label's
-  // alignment and its marker still follow the page.
-  const labelText = withTextDirection(label);
-  const descriptionText = withTextDirection(description);
+  // alignment and its marker still follow the page. A hidden label has no
+  // visual order to keep, so its text stays as the caller wrote it.
+  const labelText = isLabelHidden ? label : withTextDirection(label);
+  const descriptionText = isLabelHidden
+    ? description
+    : withTextDirection(description);
   const labelContent = (
     <>
       {labelIcon && renderIconSlot(labelIcon, {size: 'sm', color: 'inherit'})}
