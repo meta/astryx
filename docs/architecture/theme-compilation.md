@@ -170,7 +170,11 @@ Platform-specific details stay inside that compiler.
   In a re-declared value, a reference to a token the surface declares itself
   takes the theme's value of that token, so CSS that keeps `light-dark()`
   resolves as before. When the theme does not declare that token, the surface
-  does not re-declare the referring token. A token the surface re-declares does
+  does not re-declare the referring token. A token that depends on the color
+  scheme only through tokens the theme does not declare is not re-declared.
+  Where two adaptation queries match together and a surface's re-declared
+  value differs from the value the root resolves under both, the surface
+  inherits that token there. A token the surface re-declares does
   not take a value set for it on an element between the theme root and the
   surface. `substituteVarReferences` in `declarationBoundary.ts` writes those
   values with the declaration scanner, so a comment or a string never counts as

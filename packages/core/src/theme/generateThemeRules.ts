@@ -49,8 +49,6 @@ import {
   checkDeclarationValue,
 } from './declarationBoundary';
 import {readerTextSizeEntries} from './dynamicType';
-import {colorDefaults, shadowDefaults} from './tokens.stylex';
-import {domainTokenDefaults} from './domainTokens/domainTokenDefaults';
 import {splitTopLevelWhitespace} from './tokenReferences';
 import {PRESS_BELIEVED_SELECTOR} from '../privateAttributes/press';
 
@@ -1842,13 +1840,6 @@ function resolvedAdaptationRules(
   );
 }
 
-/** Core token defaults whose values can depend on the color scheme. */
-const SCHEME_CAPABLE_DEFAULTS: Record<string, string> = {
-  ...colorDefaults,
-  ...shadowDefaults,
-  ...domainTokenDefaults,
-};
-
 /**
  * Root tokens that a media surface re-declares, so that they resolve under the
  * surface's own color scheme.
@@ -1858,7 +1849,9 @@ const SCHEME_CAPABLE_DEFAULTS: Record<string, string> = {
  * element that declares it. So the theme root fixes such a token in the page's
  * scheme, and a surface that does not re-declare it inherits that value. A
  * token depends on the scheme when its value holds `light-dark()` or refers to
- * a token that does.
+ * a token in `values` that does. A token outside `values`, such as a Core
+ * default, resolves on the page root, where a surface re-declaration cannot
+ * change it.
  */
 function schemeDependentEntries(
   values: Record<string, string>,
@@ -1974,6 +1967,96 @@ function withoutDeclarationCycles(
 }
 
 /**
+ * Per surface, the tokens one adaptation rule's block restates and the names
+ * the surface keeps as its own under that rule.
+ */
+type RuleSurfaceReplays = Map<
+  'dark' | 'light',
+  {restated: Map<string, string>; excluded: Set<string>}
+>;
+
+/**
+ * Blocks for a later rule that matches together with an earlier one. Each
+ * rule's surface block restates values that the root resolves under that rule
+ * alone. When both rules match, the root resolves a reference with the values
+ * of both, so the later rule's restatement can be wrong. There the surface
+ * inherits the token instead, which is the value the root resolves. The block
+ * applies only where both queries match, and follows the later rule's block.
+ */
+function overlappingRuleBlocks(
+  laterIndex: number,
+  rules: ReadonlyArray<{query: string}>,
+  scopeSelector: string,
+  context: {
+    rootValues: Record<string, string>;
+    ruleRootValues: ReadonlyArray<Record<string, string>>;
+    ruleSurfaceReplays: ReadonlyArray<RuleSurfaceReplays>;
+    sink: DiagnosticSink;
+  },
+): string[] {
+  const {rootValues, ruleRootValues, ruleSurfaceReplays, sink} = context;
+  const later = ruleSurfaceReplays[laterIndex];
+  const blocks: string[] = [];
+  for (let earlierIndex = 0; earlierIndex < laterIndex; earlierIndex++) {
+    const earlier = ruleSurfaceReplays[earlierIndex];
+    const declared = {
+      ...rootValues,
+      ...ruleRootValues[earlierIndex],
+      ...ruleRootValues[laterIndex],
+    };
+    const parts: string[] = [];
+    for (const surface of ['dark', 'light'] as const) {
+      const laterReplays = later.get(surface);
+      const earlierReplays = earlier.get(surface);
+      if (!laterReplays || !earlierReplays) {
+        continue;
+      }
+      const excluded = new Set([
+        ...laterReplays.excluded,
+        ...earlierReplays.excluded,
+      ]);
+      const inherited: [string, string][] = [];
+      for (const name of new Set([
+        ...laterReplays.restated.keys(),
+        ...earlierReplays.restated.keys(),
+      ])) {
+        const shown =
+          laterReplays.restated.get(name) ?? earlierReplays.restated.get(name);
+        if (excluded.has(name) || shown === undefined || shown === 'inherit') {
+          continue;
+        }
+        const value = declared[name];
+        const resolved =
+          typeof value === 'string'
+            ? withRootValuesForSurfaceTokens(value, excluded, declared)
+            : null;
+        if (resolved !== shown) {
+          inherited.push([name, 'inherit']);
+        }
+      }
+      if (inherited.length > 0) {
+        const declarations = joinDeclarations(
+          inherited,
+          `adaptations[${laterIndex}].on${surface}.tokens.`,
+          sink,
+        );
+        parts.push(`  ${mediaSelector(surface)} {\n${declarations}\n  }`);
+      }
+    }
+    if (parts.length > 0) {
+      blocks.push(
+        `@media ${rules[earlierIndex].query} {\n${generateAdaptationMediaBlock(
+          rules[laterIndex].query,
+          parts,
+          scopeSelector,
+        )}\n}`,
+      );
+    }
+  }
+  return blocks;
+}
+
+/**
  * Generate CSS for on-media token and component overrides.
  *
  * Emitted in an unbounded @scope (no `to` limit) so the rules can reach
@@ -1994,14 +2077,12 @@ export function generateOnMediaCSS(
     'dark' | 'light',
     [string, string][]
   >();
-  // The values the theme root declares. Core defaults stay in Core's own
-  // stylesheet. They only show whether a root value depends on the scheme.
+  // The values the theme root declares.
   const rootValues: Record<string, string> = {
     ...theme.tokens,
     ...Object.fromEntries(rootAliases),
     ...theme.localTokens,
   };
-  const schemeValues = {...SCHEME_CAPABLE_DEFAULTS, ...rootValues};
   const surfaceOwnNames = new Map<'dark' | 'light', Set<string>>();
   const surfaceReplays = new Map<'dark' | 'light', [string, string][]>();
 
@@ -2033,7 +2114,7 @@ export function generateOnMediaCSS(
     ];
     const replayedEntries = withoutDeclarationCycles(
       surfaceValues(
-        schemeDependentEntries(schemeValues, Object.keys(rootValues), ownNames),
+        schemeDependentEntries(rootValues, Object.keys(rootValues), ownNames),
         ownNames,
         rootValues,
       ),
@@ -2076,6 +2157,10 @@ export function generateOnMediaCSS(
 
   const adaptationMediaRoleBlocks: string[] = [];
   const adaptationAliases = adaptationStatusRoleDefaults(context);
+  // Per rule: the values it writes on the theme root, and per surface the
+  // tokens its block restates and the names the surface keeps as its own.
+  const ruleRootValues: Record<string, string>[] = [];
+  const ruleSurfaceReplays: RuleSurfaceReplays[] = [];
   for (const [index, rule] of rules.entries()) {
     const authoredRoles = authoredStatusRoleEntries(rule.tokens);
     // The values this rule writes on the theme root under its query.
@@ -2084,6 +2169,9 @@ export function generateOnMediaCSS(
       ...Object.fromEntries(adaptationAliases[index] ?? []),
       ...rule.localTokens,
     };
+    ruleRootValues.push(ruleValues);
+    const surfaceReplaysOfRule: RuleSurfaceReplays = new Map();
+    ruleSurfaceReplays.push(surfaceReplaysOfRule);
     const roleParts: string[] = [];
     for (const surface of ['dark', 'light'] as const) {
       const onMedia = surface === 'dark' ? theme.__onDark : theme.__onLight;
@@ -2114,7 +2202,7 @@ export function generateOnMediaCSS(
       const baseReplayValues = new Map(surfaceReplays.get(surface) ?? []);
       const candidateNames = new Set([
         ...schemeDependentEntries(
-          {...SCHEME_CAPABLE_DEFAULTS, ...ruleDeclared},
+          ruleDeclared,
           Object.keys(ruleDeclared),
           excluded,
         ).map(([name]) => name),
@@ -2146,6 +2234,10 @@ export function generateOnMediaCSS(
         ...baseReplays,
         ...ownSurfaceEntries,
       ]);
+      surfaceReplaysOfRule.set(surface, {
+        restated: new Map(schemeEntries),
+        excluded,
+      });
       if (schemeEntries.length > 0) {
         const declarations = joinDeclarations(
           schemeEntries,
@@ -2169,6 +2261,14 @@ export function generateOnMediaCSS(
         generateAdaptationMediaBlock(rule.query, roleParts, scopeSelector),
       );
     }
+    adaptationMediaRoleBlocks.push(
+      ...overlappingRuleBlocks(index, rules, scopeSelector, {
+        rootValues,
+        ruleRootValues,
+        ruleSurfaceReplays,
+        sink,
+      }),
+    );
   }
 
   if (parts.length === 0 && adaptationMediaRoleBlocks.length === 0) {
