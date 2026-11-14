@@ -306,6 +306,7 @@ jobs:
         steps.identity.outcome == 'failure' ||
         steps.cross-check.outcome == 'failure' ||
         steps.visual.outcome == 'failure' ||
+        steps.inherited.outcome == 'failure' ||
         steps.ci-history.outcome == 'failure' ||
         steps.publish.outcome == 'failure' }}
     steps:
@@ -491,6 +492,22 @@ jobs:
             --head-sha "$HEAD_SHA" \
             --run-id "$RUN_ID" \
             --run-attempt "$RUN_ATTEMPT"
+
+      # Marks a changed shot another pull request's run also showed changed,
+      # with the same image, as inherited from main (at most 20 API calls).
+      # Report text only: no check or status reads it.
+      - name: Mark inherited visual changes
+        id: inherited
+        continue-on-error: true
+        if: steps.identity.outputs.valid == 'true' && steps.visual.outcome == 'success'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ steps.identity.outputs.head_ref }}
+        run: |
+          node .github/scripts/visual-gate/inherited-shots.mjs \
+            --verdict trusted-visual/verdict.json \
+            --manifest visual-pr-report/manifest.json \
+            --head-ref "$HEAD_REF"
 
       # The CI-impact baseline (recent pull-request runs) is read once a day
       # and kept as an artifact, so later CI-changing PRs that day reuse it.

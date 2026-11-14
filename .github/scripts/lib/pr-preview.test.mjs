@@ -574,6 +574,29 @@ describe('trusted PR preview identity', () => {
   });
 });
 
+describe('the comment job marks inherited visual changes', () => {
+  it('runs the marker between the trusted report and the comment, as report text only', () => {
+    const steps = PR_COMMENT_WORKFLOW.jobs.comment.steps;
+    const at = name => steps.findIndex(step => step.name === name);
+    const mark = steps[at('Mark inherited visual changes')];
+    expect(mark).toBeDefined();
+    expect(at('Prepare canonical visual report')).toBeLessThan(
+      at('Mark inherited visual changes'),
+    );
+    expect(at('Mark inherited visual changes')).toBeLessThan(
+      at('Generate and post PR comment'),
+    );
+    // A failure leaves the report as it was; it never fails the comment.
+    expect(mark['continue-on-error']).toBe(true);
+    expect(mark.if).toBe(
+      "steps.identity.outputs.valid == 'true' && steps.visual.outcome == 'success'",
+    );
+    expect(mark.run).toContain('--verdict trusted-visual/verdict.json');
+    expect(mark.run).toContain('--manifest visual-pr-report/manifest.json');
+    expect(PR_COMMENT_WORKFLOW.jobs.comment.permissions.actions).toBe('read');
+  });
+});
+
 describe('PR Comment keeps its outcome off main', () => {
   // workflow_run attaches these jobs to main's latest commit, so a failing step
   // here would turn main red for a pull request's problem.

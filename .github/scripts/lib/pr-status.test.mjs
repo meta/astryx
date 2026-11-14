@@ -301,6 +301,27 @@ describe('buildVisualDeltas', () => {
     diffPixels,
   });
 
+  it('marks a change another pull request showed as inherited, naming the introducer only when known, and counts unchecked shots', () => {
+    const verdict = {
+      status: 'changed',
+      changes: [
+        {...change('a', 30), inherited: {pr: 8558}},
+        {...change('b', 20), inherited: {pr: null}},
+        change('c', 10),
+      ],
+      inheritedNotChecked: 2,
+    };
+    const section = buildVisualDeltas({verdict});
+    expect(section).toContain(
+      '| Card · a (neutral, light) · inherited from #8558 |',
+    );
+    expect(section).toContain(
+      '| Card · b (neutral, light) · inherited (introducer not recorded) |',
+    );
+    expect(section).toContain('| Card · c (neutral, light) | changed');
+    expect(section).toContain('Inherited status not checked: 2 shots.');
+  });
+
   it('collapses the changed shots under their count, largest change first', () => {
     const verdict = {
       status: 'changed',

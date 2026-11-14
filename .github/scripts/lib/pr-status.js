@@ -364,7 +364,15 @@ function buildVisualDeltas({verdict, frames = null}) {
       .filter(Boolean)
       .map(inline)
       .join(', ');
-    return variant ? `${story} (${variant})` : story;
+    const shown = variant ? `${story} (${variant})` : story;
+    // A change another pull request's run also showed came from main
+    // (inherited-shots.mjs); the label says so, and names the pull request
+    // that introduced it only when the record proves it.
+    const pr = row.inherited?.pr;
+    if (row.inherited == null) return shown;
+    return Number.isInteger(pr) && pr > 0
+      ? `${shown} · inherited from #${pr}`
+      : `${shown} · inherited (introducer not recorded)`;
   };
   const published = new Set(frames?.published || []);
   const base =
@@ -395,7 +403,7 @@ function buildVisualDeltas({verdict, frames = null}) {
       .toLowerCase()
       .replace(/[^a-z0-9]/g, '');
   const components = new Set(all.map(componentOf));
-  return `<details>\n<summary>Visual changes: ${num(all.length)} snapshot${all.length === 1 ? '' : 's'} in ${components.size} component${components.size === 1 ? '' : 's'}</summary>\n\nA change is a question for the reviewer, not a failure.\n\n${header}${rows.map(line).join('\n')}\n\n${unshown > 0 ? `${num(unshown)} more are in the run's visual report.\n\n` : ''}</details>\n\n`;
+  return `<details>\n<summary>Visual changes: ${num(all.length)} snapshot${all.length === 1 ? '' : 's'} in ${components.size} component${components.size === 1 ? '' : 's'}</summary>\n\nA change is a question for the reviewer, not a failure.\n\n${header}${rows.map(line).join('\n')}\n\n${unshown > 0 ? `${num(unshown)} more are in the run's visual report.\n\n` : ''}${num(verdict?.inheritedNotChecked) > 0 ? `Inherited status not checked: ${num(verdict.inheritedNotChecked)} shot${num(verdict.inheritedNotChecked) === 1 ? '' : 's'}.\n\n` : ''}</details>\n\n`;
 }
 
 function previewLine(preview) {
