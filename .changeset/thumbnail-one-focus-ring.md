@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] Thumbnail: focusing the remove button rings only that button, and focusing Open rings only the image container. Each focus move now shows one ring instead of two.
+[fix] Thumbnail: focusing Open now shows one ring, on the image container, instead of a second ring on the button inside it.
 
 @cixzhang

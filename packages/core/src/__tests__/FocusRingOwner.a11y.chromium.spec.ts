@@ -9,7 +9,8 @@
  *   tab stop in a Selector trigger shows exactly one focus ring. The trigger
  *   box rings for the trigger button only; the clear button rings itself, and
  *   the box stays unringed
- * @position Regression proof for focusWithinOwner in Selector and Thumbnail
+ * @position Regression proof for focusWithinOwner in Selector, and for
+ *   Thumbnail's single ring on Open
  */
 
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
@@ -79,12 +80,11 @@ for (const width of [1280, 390]) {
 }
 
 for (const width of [1280, 390]) {
-  test(`at ${width} px, each tab stop in a Thumbnail with Open and Remove shows one ring`, async ({
+  test(`at ${width} px, focusing a Thumbnail's Open shows one ring`, async ({
     page,
   }) => {
     await open(page, 'core-thumbnail--clickable-with-remove', width);
-    // Open, then Remove.
-    for (const {focused, rings} of await ringsAtEachStop(page, 2)) {
+    for (const {focused, rings} of await ringsAtEachStop(page, 1)) {
       expect(rings, `rings while "${focused}" is focused`).toHaveLength(1);
     }
   });

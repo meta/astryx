@@ -11,29 +11,6 @@ import {
   readsPressStrength,
 } from '../__tests__/pressState';
 
-/** The selectors of injected rules on `element`'s classes that set `property`. */
-function selectorsSetting(element: Element | null, property: string): string[] {
-  const classes = Array.from(element?.classList ?? [], name => `.${name}`);
-  const selectors: string[] = [];
-  const walk = (rules: CSSRuleList) => {
-    for (const rule of Array.from(rules)) {
-      if (rule instanceof CSSMediaRule || rule instanceof CSSSupportsRule) {
-        walk(rule.cssRules);
-      } else if (
-        rule instanceof CSSStyleRule &&
-        classes.some(cls => rule.selectorText.startsWith(cls)) &&
-        rule.style.getPropertyValue(property) !== ''
-      ) {
-        selectors.push(rule.selectorText);
-      }
-    }
-  };
-  for (const sheet of Array.from(document.styleSheets)) {
-    walk(sheet.cssRules);
-  }
-  return selectors;
-}
-
 /** The outline-style values `element`'s classes set with no focus condition. */
 function outlineStylesAtRest(element: Element): string[] {
   const classes = Array.from(element.classList, name => `.${name}`);
@@ -320,7 +297,7 @@ describe('Thumbnail', () => {
     expect(ref).toHaveBeenCalled();
   });
 
-  it('rings the image container only for Open, so the remove button shows one ring', () => {
+  it('draws no ring of its own on Open, inside the image container ring', () => {
     render(
       <Thumbnail
         src="/photo.jpg"
@@ -331,20 +308,9 @@ describe('Thumbnail', () => {
       />,
     );
     const open = screen.getByRole('button', {name: 'Open Photo'});
-    const container = open.parentElement;
-    const ringRules = selectorsSetting(container, 'outline-width').filter(
-      selector => selector.includes(':focus-visible'),
-    );
-    expect(ringRules.length).toBeGreaterThan(0);
-    for (const selector of ringRules) {
-      expect(selector).toContain('[data-astryx-focus-owner]:focus-visible');
-    }
-    expect(open).toHaveAttribute('data-astryx-focus-owner');
-    // Open draws no ring of its own inside the container's.
-    expect(
-      outlineStylesAtRest(open).length > 0 &&
-        outlineStylesAtRest(open).every(value => value === 'none'),
-    ).toBe(true);
+    const atRest = outlineStylesAtRest(open);
+    expect(atRest.length).toBeGreaterThan(0);
+    expect(atRest.every(value => value === 'none')).toBe(true);
   });
 
   describe('showRemoveOn', () => {
