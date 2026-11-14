@@ -279,6 +279,21 @@ describe('parts named once for two removals, the page, steps', () => {
         'remove the border and bigger padding on cards',
         ['set q border none --on card', 'set q spacing more --on card'],
       ],
+      // The clause reader's negation reads the same leads.
+      ['strip shadows from cards', ['set q box-shadow none --on card']],
+      [
+        'nix the shadow and rounder corners on cards',
+        ['set q box-shadow none --on card', 'set q corners more --on card'],
+      ],
+      [
+        'without the shadow and rounder corners on cards',
+        ['set q box-shadow none --on card', 'set q corners more --on card'],
+      ],
+      // A lead governs a plain removable thing after "and".
+      [
+        'no shadows and borders on cards',
+        ['set q box-shadow none --on card', 'set q border none --on card'],
+      ],
       [
         'no border and bigger padding on cards',
         ['set q border none --on card', 'set q spacing more --on card'],

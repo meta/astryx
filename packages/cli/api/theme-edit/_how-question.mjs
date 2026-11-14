@@ -1228,13 +1228,13 @@ const lexicons = new WeakMap();
 
 /**
  * The words that lead a removal ("no shadow", "without borders", "remove
- * the outline", "drop the gap"), shared by every rewrite that reads a
- * removal so they cannot drift apart. The verbs among them also govern a
- * plain thing after "and" ("remove the border and the shadow").
+ * the outline", "nix the gap"), shared by the clause reader's negation and
+ * every rewrite that reads a removal, so they cannot drift apart. A lead
+ * governs a plain removable thing after "and" too ("no shadows and
+ * borders", "remove the border and the shadow").
  */
 const REMOVAL_VERBS =
-  'without|remove(?: the| all| any)?|drop(?: the)?|get rid of(?: the)?|lose(?: the)?|ditch(?: the)?|kill(?: the)?|strip(?: the)?';
-const REMOVAL_VERB = `(?:${REMOVAL_VERBS})`;
+  '(?:without|remove|removing|drop|get rid of|lose|ditch|kill|strip|nix|scrap)(?: all the| the| all| any)?';
 const REMOVAL_LEAD = `(?:no|zero|${REMOVAL_VERBS})`;
 /** The things a removal can take away. */
 const REMOVABLE =
@@ -1697,7 +1697,9 @@ function clausesOf(q, partWords) {
         /\?/.test(text));
     const neg =
       !askedFor &&
-      /\b(no|not|nothing|none of|don'?t|do not|never|avoid|without|remove|removing|get rid of|lose|drop|ditch|nix|scrap|kill|none|shouldn'?t|should not|mustn'?t|turn off|turn (the|it|them) off|switch off|stop|unbold\w*|unround\w*|disable|(?:revert|undo|take back) (?:the|those|that|these|my|our|all)|(?:shadows?|borders?|underlines?|outlines?|gradients?|uppercase|caps) (?:off|out|gone))\b/.test(
+      new RegExp(
+        `\\b(?:no|not|nothing|none of|don'?t|do not|never|avoid|${REMOVAL_VERBS}|none|shouldn'?t|should not|mustn'?t|turn off|turn (?:the|it|them) off|switch off|stop|unbold\\w*|unround\\w*|disable|(?:revert|undo|take back) (?:the|those|that|these|my|our|all)|(?:shadows?|borders?|underlines?|outlines?|gradients?|uppercase|caps) (?:off|out|gone))\\b`,
+      ).test(
         negText
           .replace(/\bdisabled\b/g, ' ')
           // "not round enough" asks for more; "not so much" for less.
@@ -3168,8 +3170,8 @@ export function draftAnswer(ctx, env, question) {
     )
     // "no shadow and no border on dialogs", "remove the border and the
     // shadow from cards": both removals on that part. The second item is a
-    // removal only when it carries its own removal lead, or a removal verb
-    // ("remove", "without") governs a plain thing to remove.
+    // removal only when it carries its own removal lead, or is a plain
+    // removable thing the first lead governs ("no shadows and borders").
     .replace(
       new RegExp(
         `\\b${REMOVAL_LEAD} ([a-z]+(?: [a-z]+)?) and ${REMOVAL_LEAD} ([a-z]+(?: [a-z]+)?) (?:on|from|for) (?:the |my |all )?([a-z][a-z-]*s?)\\b`,
@@ -3179,7 +3181,7 @@ export function draftAnswer(ctx, env, question) {
     )
     .replace(
       new RegExp(
-        `\\b${REMOVAL_VERB} ([a-z]+(?: [a-z]+)?) and (?:the )?((?:rounded )?${REMOVABLE}) (?:on|from|for) (?:the |my |all )?([a-z][a-z-]*s?)\\b`,
+        `\\b${REMOVAL_LEAD} ([a-z]+(?: [a-z]+)?) and (?:the )?((?:rounded )?${REMOVABLE}) (?:on|from|for) (?:the |my |all )?([a-z][a-z-]*s?)\\b`,
         'gi',
       ),
       'no $1 on $3 and no $2 on $3',
