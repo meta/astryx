@@ -636,9 +636,9 @@ function TokenizerSheetContent<T extends SearchableItem>({
     }
   }, [isOpen, isPending, renderedItems]);
 
-  // `action` is declared on `SearchableItem` for the grid-adopting hosts; the
-  // sheet rows have not adopted it, so a row renders the item without the
-  // control and says so (`spec:AST-058` FR9), as the inline panel does.
+  // The sheet rows have not adopted `SearchableItem.action` (the inline panel
+  // has), so a row renders the item without the control and says so
+  // (`spec:AST-058` FR9).
   if (results.some(item => item.action != null)) {
     warnOnce(
       'tokenizer-sheet:item-action',

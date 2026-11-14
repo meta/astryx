@@ -6,6 +6,8 @@ import {expect, userEvent, waitFor, within} from 'storybook/test';
 import {Typeahead, TypeaheadItem} from '@astryxdesign/core/Typeahead';
 import type {SearchableItem, SearchSource} from '@astryxdesign/core/Typeahead';
 import {MagnifyingGlassIcon} from '@heroicons/react/24/outline';
+import {Icon} from '@astryxdesign/core/Icon';
+import {IconButton} from '@astryxdesign/core/IconButton';
 
 // Sample data
 const fruits: SearchableItem[] = [
@@ -115,6 +117,51 @@ export const Default: Story = {
         value={value}
         onChange={setValue}
       />
+    );
+  },
+  args: {
+    label: 'Fruit',
+    placeholder: 'Search fruits...',
+  },
+};
+
+/**
+ * A result's secondary control (`action`). The list becomes a grid: the
+ * inline-end arrow reaches a row's Edit button, Enter or a press runs it, and
+ * the fruit stays unselected.
+ */
+export const ResultActions: Story = {
+  render: args => {
+    const [value, setValue] = useState<SearchableItem | null>(null);
+    const [lastEdited, setLastEdited] = useState<string | null>(null);
+    const source: SearchSource = {
+      search: query =>
+        fruits
+          .filter(f => f.label.toLowerCase().includes(query.toLowerCase()))
+          .map(fruit => ({
+            ...fruit,
+            action: (
+              <IconButton
+                label={`Edit ${fruit.label}`}
+                icon={<Icon icon="moreHorizontal" />}
+                variant="ghost"
+                size="sm"
+                onClick={() => setLastEdited(fruit.label)}
+              />
+            ),
+          })),
+      bootstrap: () => [],
+    };
+    return (
+      <>
+        <Typeahead
+          {...args}
+          searchSource={source}
+          value={value}
+          onChange={setValue}
+        />
+        <p>Last edited: {lastEdited ?? 'none'}</p>
+      </>
     );
   },
   args: {

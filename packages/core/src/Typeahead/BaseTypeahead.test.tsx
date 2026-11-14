@@ -838,7 +838,7 @@ describe('BaseTypeahead', () => {
     );
   });
 
-  it('exposes a completed empty search as a disabled listbox option', async () => {
+  it('shows a completed empty search as a message outside the listbox options', async () => {
     render(
       <BaseTypeahead
         searchSource={emptySource}
@@ -854,13 +854,17 @@ describe('BaseTypeahead', () => {
     });
 
     await waitFor(() => {
-      expect(
-        screen.getByRole('option', {
-          hidden: true,
-          name: 'No matching frameworks',
-        }),
-      ).toHaveAttribute('aria-disabled', 'true');
+      expect(screen.getByRole('listbox', {hidden: true})).toHaveTextContent(
+        'No matching frameworks',
+      );
     });
+    // A listbox owns only options: the message is presentational, and the
+    // live region speaks it.
+    expect(screen.queryAllByRole('option', {hidden: true})).toEqual([]);
+    expect(screen.getByText('No matching frameworks')).toHaveAttribute(
+      'role',
+      'presentation',
+    );
   });
 
   describe('empty search followed by a newer query (#8903)', () => {
@@ -896,7 +900,8 @@ describe('BaseTypeahead', () => {
       fireEvent.change(input, {target: {value: 'none'}});
       await act(async () => vi.advanceTimersByTimeAsync(32));
       const options = within(screen.getByRole('listbox', {hidden: true}));
-      expect(options.getByRole('option', {hidden: true})).toHaveTextContent(
+      expect(options.queryByRole('option', {hidden: true})).toBeNull();
+      expect(screen.getByRole('listbox', {hidden: true})).toHaveTextContent(
         'No results found',
       );
 
@@ -964,7 +969,8 @@ describe('BaseTypeahead', () => {
           await act(async () => vi.advanceTimersByTimeAsync(debounceMs));
           await act(async () => vi.advanceTimersByTimeAsync(32));
           const options = within(screen.getByRole('listbox', {hidden: true}));
-          expect(options.getByRole('option', {hidden: true})).toHaveTextContent(
+          expect(options.queryByRole('option', {hidden: true})).toBeNull();
+          expect(screen.getByRole('listbox', {hidden: true})).toHaveTextContent(
             'No matching frameworks',
           );
           expect(liveRegion()).toHaveTextContent('No matching frameworks');
@@ -1010,12 +1016,9 @@ describe('BaseTypeahead', () => {
             screen.queryByRole('img', {name: 'Recherche en cours'}),
           ).toBeNull();
           if (outcome === 'empty') {
-            expect(options.getByRole('option', {hidden: true})).toHaveAttribute(
-              'aria-disabled',
-              'true',
-            );
+            expect(options.queryByRole('option', {hidden: true})).toBeNull();
             expect(
-              options.getByRole('option', {hidden: true}),
+              screen.getByRole('listbox', {hidden: true}),
             ).toHaveTextContent('No matching frameworks');
             expect(liveRegion()).toHaveTextContent('No matching frameworks');
             expect(input).not.toHaveAttribute('aria-activedescendant');
