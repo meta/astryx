@@ -8,13 +8,21 @@
  *   foundation and the UIKit context-menu constants
  * @output ContextMenuTouchLayer: renders nothing; runs the trigger's press
  *   recognizer while ContextMenu is under the touch model
- * @position Rendered by ContextMenu while the touch model applies
+ * @position Loaded after the page's first paint (contextMenuTouchLoader.ts);
+ *   rendered by ContextMenu while the touch model applies
  *
  * SYNC: When modified, update /packages/core/src/ContextMenu/ContextMenu.tsx
  */
 
-import {useImperativeHandle, useRef, type Ref, type RefObject} from 'react';
+import {
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  type Ref,
+  type RefObject,
+} from 'react';
 import {flushSync} from 'react-dom';
+import {getGestureHost} from '../gestures/GestureHost';
 import {playHaptic} from '../gestures/haptics';
 import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
 import {useCommittedRef} from '../hooks/useCommittedRef';
@@ -40,6 +48,11 @@ export interface ContextMenuTouchLayerProps {
   onCommit?: () => void;
   /** The press ended with no menu: what mounted at the commit can go. */
   onCancel?: () => void;
+  /**
+   * The `touchstart` of a finger that landed before this layer loaded and is
+   * still down, else null. Read once, as the layer mounts.
+   */
+  takeLateTouch?: () => TouchEvent | null;
 }
 
 /**
@@ -50,7 +63,8 @@ export interface ContextMenuTouchLayerProps {
  * lift sends no click and no compatibility mouse events. The menu opens where
  * the finger landed: at `menuDisplayMs` if it is still down, or at the lift.
  * Before the commit, a lift, a second finger or a scroll gets no menu. So
- * does a drift past the tolerance before the menu shows.
+ * does a drift past the tolerance before the menu shows. A finger that landed
+ * before the layer loaded starts its hold as the layer mounts.
  */
 export function ContextMenuTouchLayer({
   triggerRef,
@@ -58,6 +72,7 @@ export function ContextMenuTouchLayer({
   onOpen,
   onCommit,
   onCancel,
+  takeLateTouch,
 }: ContextMenuTouchLayerProps): null {
   const onCancelRef = useCommittedRef(onCancel);
   const hasPressOpenedRef = useRef(false);
@@ -120,6 +135,17 @@ export function ContextMenuTouchLayer({
     }),
     [recognizer],
   );
+
+  // Syncs a finger that landed before this layer loaded with the gesture
+  // host. It runs after the recognizer attaches, so the host begins that
+  // finger now and the hold starts at this mount.
+  useEffect(() => {
+    const touchStart = takeLateTouch?.() ?? null;
+    const trigger = triggerRef.current;
+    if (touchStart != null && trigger != null) {
+      getGestureHost(trigger.ownerDocument).beginLateTouches(touchStart);
+    }
+  }, [takeLateTouch, triggerRef]);
 
   return null;
 }

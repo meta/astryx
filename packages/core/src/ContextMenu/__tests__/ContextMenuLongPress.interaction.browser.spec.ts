@@ -45,7 +45,9 @@ interface TouchStory {
 async function openTouchStory(
   page: Page,
   story = 'core-contextmenu--touch-long-press',
+  {waitsForTouchLayer = true}: {waitsForTouchLayer?: boolean} = {},
 ): Promise<TouchStory> {
+  const touchLayerChunk = waitsForTouchLayer ? watchTouchLayer(page) : null;
   await installInputLog(page);
   // Note when the menu is asked to show, on the page clock (no per-frame
   // work: rendering proofs share this page).
@@ -101,6 +103,9 @@ async function openTouchStory(
     };
   });
   await openStory(page, storybook(), story);
+  if (touchLayerChunk != null) {
+    await waitForTouchLayer(page, touchLayerChunk);
+  }
   const driver = await touchDriver(page);
   const trigger = page.getByTestId('touch-context-menu');
   const box = await trigger.boundingBox();
@@ -246,11 +251,13 @@ test('a finger held on a Table’s sortable header gets the menu where it landed
 }) => {
   // The header leaves its trigger unpositioned, so the cell holds the cursor
   // anchor. A finger's point is measured from that cell, as a pointer's is.
+  const touchLayerChunk = watchTouchLayer(page);
   await openStory(
     page,
     storybook(),
     'core-tablecolumnresize--with-sortable-columns',
   );
+  await waitForTouchLayer(page, touchLayerChunk);
   const driver = await touchDriver(page);
   const header = page.getByRole('columnheader', {name: /Name/});
   const box = await header.boundingBox();
@@ -273,6 +280,34 @@ test('a finger held on a Table’s sortable header gets the menu where it landed
 
 /** The touch layer's own chunk, which loads after the page's first paint. */
 const TOUCH_LAYER_CHUNK = /\/ContextMenuTouchLayer-[\w-]+\.js(?:\?.*)?$/;
+
+type ChunkResponse = Awaited<ReturnType<Page['waitForResponse']>>;
+
+/** The touch layer chunk's response, watched from before the story opens. */
+async function watchTouchLayer(page: Page): Promise<ChunkResponse> {
+  return page.waitForResponse(response =>
+    TOUCH_LAYER_CHUNK.test(response.url()),
+  );
+}
+
+/**
+ * Waits for the touch layer, which loads after the page's first paint: its
+ * chunk's response, then the module itself (an import of the same URL
+ * resolves once it and its imports have run), then two frames for the layer
+ * to mount. A finger that lands sooner starts its hold only at that mount.
+ */
+async function waitForTouchLayer(
+  page: Page,
+  chunk: Promise<ChunkResponse>,
+): Promise<void> {
+  const url = (await chunk).url();
+  await page.evaluate(async layerUrl => {
+    await import(layerUrl);
+    await new Promise<void>(resolve => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
+  }, url);
+}
 
 /**
  * Holds back the touch layer's chunk. The call it returns releases the chunk
@@ -301,7 +336,9 @@ test('a finger that lands before the touch layer loads starts the hold once it l
   page,
 }) => {
   const releaseLayer = await holdTouchLayer(page);
-  const {driver, center} = await openTouchStory(page);
+  const {driver, center} = await openTouchStory(page, undefined, {
+    waitsForTouchLayer: false,
+  });
   const finger = await driver.press(center);
   const start = await touchStartedAt(page);
   await page.waitForFunction(
@@ -328,7 +365,9 @@ test('a finger that lifts before the touch layer loads makes a plain tap: one cl
   page,
 }) => {
   const releaseLayer = await holdTouchLayer(page);
-  const {driver, center} = await openTouchStory(page);
+  const {driver, center} = await openTouchStory(page, undefined, {
+    waitsForTouchLayer: false,
+  });
   test.skip(!driver.drivesNativeGestures, CLICK_FROM_SCRIPT_SKIP);
   const clicks = await countTriggerClicks(page);
   await driver.play(hold(center, 250));
@@ -347,7 +386,9 @@ test('a right click opens the menu at once while the touch layer has not loaded'
   page,
 }) => {
   await holdTouchLayer(page);
-  const {trigger} = await openTouchStory(page);
+  const {trigger} = await openTouchStory(page, undefined, {
+    waitsForTouchLayer: false,
+  });
   await trigger.click({button: 'right'});
   await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
 });
