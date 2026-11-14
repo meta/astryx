@@ -103,3 +103,63 @@ describe('StackItem', () => {
     expect(screen.getByTestId('stack-item').className).not.toBe('');
   });
 });
+
+/**
+ * `minWidth` (issue #2623): the floor for a `size="fill"` column, so a
+ * multi-pane strip holds each pane at its minimum and scrolls instead of
+ * squeezing it.
+ */
+describe('StackItem minWidth', () => {
+  it('floors a fill item at minWidth', () => {
+    render(
+      <StackItem size="fill" minWidth={320} data-testid="stack-item">
+        Content
+      </StackItem>,
+    );
+    const computed = getComputedStyle(screen.getByTestId('stack-item'));
+    expect(computed.flexGrow).toBe('1');
+    expect(computed.minWidth).toBe('320px');
+  });
+
+  it('accepts a string minWidth', () => {
+    render(
+      <StackItem minWidth="50%" data-testid="stack-item">
+        Content
+      </StackItem>,
+    );
+    expect(getComputedStyle(screen.getByTestId('stack-item')).minWidth).toBe(
+      '50%',
+    );
+  });
+
+  it('keeps the flex min-height reset when minWidth is set', () => {
+    // minWidth replaces only the min-width half of the flex min-size reset;
+    // the item must still be able to shrink (and scroll) on the cross axis.
+    render(
+      <StackItem size="fill" minWidth={320} data-testid="stack-item">
+        Content
+      </StackItem>,
+    );
+    expect(getComputedStyle(screen.getByTestId('stack-item')).minHeight).toBe(
+      '0',
+    );
+  });
+
+  it('keeps the flex min-width reset when minWidth is unset', () => {
+    render(<StackItem data-testid="stack-item">Content</StackItem>);
+    expect(getComputedStyle(screen.getByTestId('stack-item')).minWidth).toBe(
+      '0',
+    );
+  });
+
+  it('does not leak minWidth to the DOM', () => {
+    render(
+      <StackItem minWidth={320} data-testid="stack-item">
+        Content
+      </StackItem>,
+    );
+    expect(screen.getByTestId('stack-item').hasAttribute('minwidth')).toBe(
+      false,
+    );
+  });
+});

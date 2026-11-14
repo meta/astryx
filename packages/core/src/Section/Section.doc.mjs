@@ -98,6 +98,12 @@ export const docs = {
       description: 'Block-end (bottom) padding, using the spacing scale. Overrides paddingBlock and padding on that edge only.',
     },
     {
+      name: 'isScrollable',
+      type: 'boolean',
+      description: 'Makes the section scroll its own overflow (overflow: auto) — the "this pane scrolls on its own" prop. The section still needs a bounded height to scroll against: give it a height, or put it in a Stack that has one. Wrapped in a StackItem (a plain block box), give it height="100%" so it fills the item. Matches isScrollable on LayoutContent and LayoutPanel.',
+      default: 'false',
+    },
+    {
       name: 'xstyle',
       type: 'StyleXStyles',
       description: 'StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value, not an inline style object.',
