@@ -391,6 +391,9 @@ const styles = stylex.create({
       ':is([dir="rtl"] *)': 'left',
     },
     display: 'none',
+    // Also set while the place is not shown, so the open caption's count
+    // reads it then.
+    marginInlineStart: spacingVars['--spacing-1'],
     overflow: 'hidden',
     whiteSpace: 'pre',
     userSelect: 'none',
@@ -414,7 +417,6 @@ const styles = stylex.create({
     WebkitBoxOrient: 'vertical',
     WebkitLineClamp: lines,
     inlineSize: width,
-    marginInlineStart: spacingVars['--spacing-1'],
     shapeOutside: 'inset(calc(100% - 1lh + 0.5px) 0 0 0)',
   }),
   // The caption's link over its place: the caption's last line, inside the
@@ -425,6 +427,12 @@ const styles = stylex.create({
     position: 'absolute',
     insetInlineEnd: spacingVars['--spacing-3'],
     insetBlockEnd: 0,
+  },
+  // A block that does not fit beside the toggle's place sits below the place,
+  // so the place leaves the flow. The toggle takes a line of its own under
+  // the caption's last line.
+  captionTextToggleOwnLine: {
+    paddingBlockEnd: '1lh',
   },
   // The toggle's own display wins over `hidden`'s, so this hides it.
   captionToggleHidden: {
@@ -588,6 +596,57 @@ const KEYBOARD_PAN_OFFSETS: Record<string, [number, number]> = {
 
 /** The height of a video's native controls, px: no browser reports it. */
 const VIDEO_CONTROLS_BAND = 48;
+
+// Elements that the browser replaces with their own content.
+const REPLACED_ELEMENT =
+  /^(?:img|video|canvas|svg|iframe|embed|object|picture)$/;
+
+/**
+ * Whether a box in the caption's flow cannot narrow to sit beside a float. A
+ * block-level replaced element, such as an image, keeps its own width, so it
+ * drops below the toggle's place when it does not fit beside it. Any other
+ * block narrows beside the place, and inline boxes wrap around it.
+ */
+function isUnnarrowableBlock(element: Element, view: Window): boolean {
+  if (!REPLACED_ELEMENT.test(element.localName)) {
+    return false;
+  }
+  const style = view.getComputedStyle(element);
+  return (
+    !/^(?:inline|contents|none)/.test(style.display) &&
+    style.position !== 'absolute' &&
+    style.position !== 'fixed' &&
+    style.float === 'none'
+  );
+}
+
+/**
+ * Whether the toggle's place, shown with the flow's lines, would push a box
+ * in the flow down by half a line or more. The flow is read without the
+ * place. The place floats at the flow's start and is as long as the flow, so
+ * a box that cannot narrow and is wider than the room beside the place drops
+ * below the place's last line. A box shorter than half a line adds no line
+ * to the place, so it stays where the text ends.
+ */
+function wouldPlacePushBlock(
+  flow: HTMLElement,
+  place: HTMLElement,
+  view: Window,
+  room: number,
+  placeBottom: number,
+  line: number,
+): boolean {
+  for (const element of Array.from(flow.querySelectorAll('*'))) {
+    if (element === place || !isUnnarrowableBlock(element, view)) {
+      continue;
+    }
+    const box = element.getBoundingClientRect();
+    if (box.width > room + 0.5 && placeBottom - box.top > line / 2) {
+      return true;
+    }
+  }
+  return false;
+}
 
 /**
  * A fullscreen overlay for viewing images and videos at full resolution.
@@ -941,12 +1000,19 @@ export function Lightbox({
   const [captionShownLines, setCaptionShownLines] = useState(0);
   // The current caption's lines, without its toggle's place.
   const bandCaptionFlowRef = useRef<HTMLDivElement | null>(null);
+  const bandCaptionPlaceRef = useRef<HTMLSpanElement | null>(null);
   // The caption's width at its last measure, and the cancel of a smaller
   // count that waits for the next frame.
   const captionWidthRef = useRef(0);
   const cancelCaptionShrinkRef = useRef<(() => void) | null>(null);
   // Whether the open caption scrolls inside its panel.
   const [isCaptionScrolling, setIsCaptionScrolling] = useState(false);
+  // Whether a block in the open caption sits below the toggle's place, as a
+  // wide image does. The place then makes the caption taller, and the taller
+  // caption makes the place longer, so the place is not shown and the toggle
+  // takes the line below the caption.
+  const [isCaptionPlaceOff, setIsCaptionPlaceOff] = useState(false);
+  const captionPlaceOffRef = useRef(false);
   // The caption's toggle. Under a coarse pointer it takes taps out toward
   // 44 px. A finger's tap on it is its own, as UIKit gives a control's tap
   // precedence over the single tap of the photo around it.
@@ -977,21 +1043,111 @@ export function Lightbox({
       // The client height rounds to whole pixels, so this rounds to whole
       // lines.
       const lineCount = hasLine ? linesOf(caption.clientHeight) : 0;
+      const flow = bandCaptionFlowRef.current;
+      const place = bandCaptionPlaceRef.current;
+      const width = caption.clientWidth;
+      const hasNewWidth = width !== captionWidthRef.current;
+      // The flow's lines. A block that does not fit beside the place drops
+      // below it. The caption's height then counts the place's lines and the
+      // block's, and that height lengthens the place again in each delivery.
+      // So when the place has pushed a block down, the place leaves the flow.
+      const textLines =
+        hasLine && flow != null
+          ? Math.round(flow.getBoundingClientRect().height / line)
+          : 0;
+      // The place stays off until the caption closes. A wider caption could
+      // fit the block beside the place, but its height may not change, so no
+      // delivery would turn the place back on.
+      const isPlaceOff = isCaptionOpen && captionPlaceOffRef.current;
+      // The open caption's count decides the place once per open. A later
+      // width can still push a block below a shown place. Then this is the
+      // count without the place, for the next frame.
+      let linesWithPlaceOff: number | null = null;
+      if (
+        isCaptionOpen &&
+        !isPlaceOff &&
+        hasLine &&
+        flow != null &&
+        place != null
+      ) {
+        const placeBottom = place.getBoundingClientRect().bottom;
+        const blockBelowPlace =
+          place.getBoundingClientRect().height > 0
+            ? Array.from(flow.querySelectorAll<HTMLElement>('*')).find(
+                element =>
+                  element !== place &&
+                  !/^(?:inline|contents|none)/.test(
+                    view.getComputedStyle(element).display,
+                  ) &&
+                  Math.abs(element.getBoundingClientRect().top - placeBottom) <=
+                    1,
+              )
+            : undefined;
+        if (blockBelowPlace != null) {
+          // The lines without the place, from reads alone: the text before
+          // the block, and everything from the block's top down. The block
+          // starts at the place's bottom edge, so the flow's height below
+          // it is the same with or without the place.
+          const text = flow.ownerDocument.createRange();
+          text.setStartAfter(place);
+          text.setEndBefore(blockBelowPlace);
+          const textBox = text.getBoundingClientRect();
+          const textHeight =
+            textBox.height > 0 ? textBox.bottom - textBox.top : 0;
+          const textBottom =
+            textBox.height > 0
+              ? textBox.bottom
+              : flow.getBoundingClientRect().top;
+          // The text can end on the place's last line. Then an empty block, a
+          // thin rule or a 1x1 image starts at the place's bottom too, and it
+          // stays beside the place. The loop happens only when the place
+          // pushes the block a line below the text. The range's box ends at
+          // the glyphs, above the line box, so the check allows half a line.
+          if (
+            blockBelowPlace.getBoundingClientRect().top - textBottom >
+            line / 2
+          ) {
+            const belowHeight =
+              flow.getBoundingClientRect().bottom -
+              blockBelowPlace.getBoundingClientRect().top;
+            linesWithPlaceOff =
+              Math.round(textHeight / line) + Math.round(belowHeight / line);
+          }
+        }
+      }
+      captionPlaceOffRef.current = isPlaceOff;
+      setIsCaptionPlaceOff(isPlaceOff);
+      if (linesWithPlaceOff != null) {
+        // Turning the place off changes the caption's height. Inside this
+        // delivery that is a resize loop, so it waits for the next frame, and
+        // the place keeps its length until then.
+        const lines = linesWithPlaceOff;
+        const frame = view.requestAnimationFrame(() => {
+          cancelCaptionShrinkRef.current = null;
+          if (bandCaptionRef.current !== caption) {
+            return;
+          }
+          captionPlaceOffRef.current = true;
+          setIsCaptionPlaceOff(true);
+          setCaptionShownLines(lines);
+        });
+        cancelCaptionShrinkRef.current = () => {
+          view.cancelAnimationFrame(frame);
+        };
+        captionWidthRef.current = width;
+        setIsCaptionScrolling(caption.scrollHeight > caption.clientHeight + 1);
+        return;
+      }
       setCaptionShownLines(lineCount);
       // The open caption is a scroll container, so its height includes the
       // toggle's place, and that height never falls by itself. A new width
       // can need fewer lines. The flow's height counts only the text's lines.
-      const flow = bandCaptionFlowRef.current;
-      const width = caption.clientWidth;
       if (
         isCaptionOpen &&
         hasLine &&
         flow != null &&
-        (width !== captionWidthRef.current || wasShrinking)
+        (hasNewWidth || wasShrinking)
       ) {
-        const textLines = Math.round(
-          flow.getBoundingClientRect().height / line,
-        );
         if (textLines < lineCount) {
           // Fewer lines shrink the caption. Inside this delivery that is a
           // resize loop, so they wait for the next frame. A toggle that no
@@ -1116,9 +1272,28 @@ export function Lightbox({
     if (toggleWidth > 0) {
       setCaptionToggleWidth(toggleWidth);
     }
-    setCaptionShownLines(
-      Math.round(flow.getBoundingClientRect().height / line),
-    );
+    const flowBox = flow.getBoundingClientRect();
+    const lines = Math.round(flowBox.height / line);
+    // The place's state is decided here, once per open, from this layout
+    // without the place. A place that would push a block down stays off, so
+    // the first resize delivery finds the caption at its final size.
+    const place = bandCaptionPlaceRef.current;
+    const isPlaceOff =
+      place != null &&
+      toggleWidth > 0 &&
+      wouldPlacePushBlock(
+        flow,
+        place,
+        view,
+        flowBox.width -
+          toggleWidth -
+          parseFloat(view.getComputedStyle(place).marginInlineStart),
+        flowBox.top + lines * line,
+        line,
+      );
+    captionPlaceOffRef.current = isPlaceOff;
+    setIsCaptionPlaceOff(isPlaceOff);
+    setCaptionShownLines(lines);
   }, []);
   // Syncs the toggle's place in the caption's last line with its width. The
   // width is the delivery's own size, measured in the layout the delivery
@@ -1738,7 +1913,10 @@ export function Lightbox({
   );
   const hasCaptionBand = mediaArray.some(item => isRenderable(item.caption));
   // Its place ends the caption's last line, unless the open caption scrolls.
-  const hasCaptionTogglePlace = hasCaptionToggle && !isCaptionScrolling;
+  const hasCaptionTogglePlace =
+    hasCaptionToggle &&
+    !isCaptionScrolling &&
+    !(isCaptionOpen && isCaptionPlaceOff);
   // The keyboard's zoom button is the current page's photo box, so the
   // caption band stays outside it.
   const zoomButtonProps = {
@@ -1953,6 +2131,12 @@ export function Lightbox({
                                           styles.captionTextBesideToggle(
                                             captionToggleWidth,
                                           ),
+                                        i === index &&
+                                          hasCaptionToggle &&
+                                          isCaptionOpen &&
+                                          isCaptionPlaceOff &&
+                                          !isCaptionScrolling &&
+                                          styles.captionTextToggleOwnLine,
                                       ]}>
                                       <div
                                         ref={
@@ -1962,6 +2146,11 @@ export function Lightbox({
                                         }
                                         {...stylex.props(styles.captionFlow)}>
                                         <span
+                                          ref={
+                                            i === index
+                                              ? bandCaptionPlaceRef
+                                              : undefined
+                                          }
                                           aria-hidden="true"
                                           {...stylex.props(
                                             styles.captionTogglePlace,
