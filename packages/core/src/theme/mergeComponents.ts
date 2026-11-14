@@ -22,11 +22,9 @@ type StyleValue = string | number | boolean | null | undefined | object;
 const COLOR_MODE_KEYS = ['@light', '@dark'] as const;
 
 /**
- * An object's entries, each read through `read`: an entry `read` gives as
- * undefined is dropped, and an object that held entries and keeps none is
- * undefined itself. Anything that is not a plain object is returned as it
- * is (a null is a value). An object with nothing dropped or changed is
- * returned as it is.
+ * Reads each entry through `read` and drops an entry that reads as undefined.
+ * An object that loses all its entries becomes undefined. A null, an array or
+ * a non-object returns unchanged, and so does an object with no changes.
  */
 function readEntries<T>(
   value: T,
