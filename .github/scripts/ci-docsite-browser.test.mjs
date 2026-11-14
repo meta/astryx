@@ -39,7 +39,7 @@ describe('docsite-build', () => {
     expect(build.needs).toEqual(['room', 'admission', 'heavy-ci']);
     expect(build.if).toBe(
       gated(
-        "${{ github.event_name != 'workflow_dispatch' && !startsWith(github.base_ref, 'release/v') && !cancelled() && needs.heavy-ci.outputs.deferred != 'true' && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true' }}",
+        "${{ github.event_name != 'workflow_dispatch' && !startsWith(github.base_ref, 'release/v') && !cancelled() && needs.heavy-ci.outputs.deferred != 'true' && needs.room.outputs.full != 'true' && needs.room.outputs.superseded != 'true' && needs.admission.outputs.full != 'true' }}",
         PR_CI_GATE,
       ),
     );
@@ -230,7 +230,10 @@ describe('docsite-browser', () => {
     expect(check.run).toContain('built=$(cat apps/docsite/.next/BUILD_COMMIT)');
     expect(check.run).toContain('test "$built" = "$here"');
     // The checkout is the commit the build job checked out: no ref.
-    expect(browser.steps[0]).toEqual({uses: 'actions/checkout@v7', 'timeout-minutes': 8});
+    expect(browser.steps[0]).toEqual({
+      uses: 'actions/checkout@v7',
+      'timeout-minutes': 8,
+    });
     expect(
       browser.steps.some(s => /docsite build|next build/.test(s.run ?? '')),
     ).toBe(false);
@@ -304,9 +307,12 @@ describe('docsite-test, the required join', () => {
         PR_REPORT_GATE,
       ),
     );
-    expect(join.steps.slice(0, 3).map(s => s.name)).toEqual([
+    expect(join.steps.slice(0, 6).map(s => s.name)).toEqual([
       'Require a branch in this repository or the ci:run label',
       'Stop when CI is full',
+      'Check out the superseded-runs action',
+      "Check the pull request's head",
+      'Stop for a superseded head',
       'Heavy CI deferred',
     ]);
     expect(join['runs-on']).toBe('ubuntu-slim');

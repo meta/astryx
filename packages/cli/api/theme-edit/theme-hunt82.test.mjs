@@ -43,6 +43,26 @@ const read = rel => fs.readFileSync(path.join(cwd, rel), 'utf8');
 /** @param {string[]} args */
 const cli = args =>
   spawnSync(process.execPath, [BIN, ...args], {cwd, encoding: 'utf8'});
+
+/** Install a stand-in @fontsource/inter for the fixture; returns its remover. */
+const installInter = () => {
+  const pkg = path.join(path.dirname(cwd), 'node_modules/@fontsource/inter');
+  fs.mkdirSync(pkg, {recursive: true});
+  fs.writeFileSync(
+    path.join(pkg, 'package.json'),
+    JSON.stringify({
+      name: '@fontsource/inter',
+      version: '5.0.0',
+      exports: {
+        '.': './index.css',
+        './index.css': './index.css',
+        './package.json': './package.json',
+      },
+    }),
+  );
+  fs.writeFileSync(path.join(pkg, 'index.css'), '/* inter */\n');
+  return () => fs.rmSync(pkg, {recursive: true, force: true});
+};
 const compile = (/** @type {string[]} */ ...args) =>
   cli(['experimental', 'theme', 'compile', ...args]);
 const compileJson = (/** @type {string[]} */ ...args) =>
@@ -170,6 +190,123 @@ describe('the copy font stylesheet follows the fonts the theme loads', () => {
     expect(compile('themes/e10/e10.theme.ts').status).toBe(0);
     expect(read('src/themes/e10/e10.fonts.css')).not.toContain('@fontsource');
     expect(compile('themes/e10/e10.theme.ts', '--check').status).toBe(0);
+  }, 240_000);
+});
+
+describe('compile refusals from a subfolder and the font note', () => {
+  it('the --out refusal from a subfolder suggests the compile from the app root, and that compile runs', async () => {
+    await themeEditNew('s2', {cwd});
+    const sub = path.join(cwd, 'src/app');
+    fs.mkdirSync(sub, {recursive: true});
+    const r = spawnSync(
+      process.execPath,
+      [
+        BIN,
+        '--json',
+        'experimental',
+        'theme',
+        'compile',
+        '../../themes/s2/s2.theme.ts',
+        '--out',
+        '../themes/s2/x.css',
+      ],
+      {cwd: sub, encoding: 'utf8'},
+    );
+    const way = JSON.parse(r.stdout).suggestions[0].name;
+    expect(way).toMatch(
+      /^cd \.\.\/\.\. && .*compile themes\/s2\/s2\.theme\.ts$/,
+    );
+    const cmd = way.replace(/^cd \.\.\/\.\. && /, '');
+    expect(cli(cmd.slice(cmd.indexOf('experimental')).split(' ')).status).toBe(
+      0,
+    );
+  }, 240_000);
+
+  it('the font note follows the font file this compile writes, after an install and after an uninstall', async () => {
+    await themeEditNew('s5', {cwd});
+    await themeEditSet('s5', 'font', 'Inter', {cwd});
+    const remove = installInter();
+    try {
+      const installed = compile('themes/s5/s5.theme.ts');
+      expect(read('src/themes/s5/s5.fonts.css')).toContain('@fontsource/inter');
+      expect(installed.stdout + installed.stderr).not.toMatch(
+        /not loaded[^\n]*Inter/,
+      );
+    } finally {
+      remove();
+    }
+    const removed = compile('themes/s5/s5.theme.ts');
+    expect(read('src/themes/s5/s5.fonts.css')).not.toContain('@fontsource');
+    expect(removed.stdout + removed.stderr).toMatch(/not loaded[^\n]*Inter/);
+  }, 240_000);
+});
+
+describe('the app copy guard reads paths as the build does', () => {
+  it('a backslash --out, and one through a link, into the copy are refused', async () => {
+    await themeEditNew('b6', {cwd});
+    await themeEditNew('b6o', {cwd});
+    const before = read('src/themes/b6/b6.css');
+    const back = compile(
+      'themes/b6o/b6o.theme.ts',
+      '--out',
+      'src\\themes\\b6\\b6.css',
+    );
+    expect(back.status).not.toBe(0);
+    expect(back.stdout + back.stderr).toContain("in b6's app copy");
+    fs.symlinkSync(
+      path.join(cwd, 'src/themes/b6'),
+      path.join(cwd, 'b6-link'),
+      'dir',
+    );
+    try {
+      const link = compile(
+        'themes/b6o/b6o.theme.ts',
+        '--out',
+        'b6-link/b6.css',
+      );
+      expect(link.status).not.toBe(0);
+      expect(link.stdout + link.stderr).toContain("in b6's app copy");
+    } finally {
+      fs.rmSync(path.join(cwd, 'b6-link'));
+    }
+    expect(read('src/themes/b6/b6.css')).toBe(before);
+  }, 240_000);
+
+  it('a backslash copy source names the theme source, and a file of yours in the copy folder compiles', async () => {
+    await themeEditNew('b7', {cwd});
+    const r = cli([
+      '--json',
+      'experimental',
+      'theme',
+      'compile',
+      'src\\themes\\b7\\b7Theme.ts',
+    ]);
+    expect(r.stdout).toContain('themes/b7/b7.theme.ts');
+    expect(r.stdout).not.toContain('compile src/themes/b7/b7Theme.ts');
+    fs.writeFileSync(
+      path.join(cwd, 'src/themes/b7/mine.ts'),
+      "import {defineTheme} from '@astryxdesign/core/theme';\nexport const mineTheme = defineTheme({name: 'mine'});\n",
+    );
+    const mine = compile('src/themes/b7/mine.ts', '--out', 'out-b7/mine.css');
+    expect(mine.stdout + mine.stderr).not.toContain("part of b7's app copy");
+  }, 240_000);
+
+  it('with a file of yours in the way, the check names it and never sends you to show', async () => {
+    await themeEditNew('b10', {cwd});
+    fs.writeFileSync(path.join(cwd, 'src/themes/b10/b10Theme.ts'), '// mine\n');
+    const out = compileJson('themes/b10/b10.theme.ts', '--check');
+    expect(out.data.appCopyStale).toContain('b10Theme.ts is yours');
+    expect(out.data.appCopyStale).not.toContain(
+      'editor show b10 writes it again',
+    );
+  }, 240_000);
+
+  it('the copy font file never claims the system has a font no package loads', async () => {
+    await themeEditNew('b9', {cwd});
+    await themeEditSet('b9', 'font', 'Lora', {cwd});
+    expect(read('src/themes/b9/b9.fonts.css')).not.toContain(
+      'the theme uses fonts the system has',
+    );
   }, 240_000);
 });
 
