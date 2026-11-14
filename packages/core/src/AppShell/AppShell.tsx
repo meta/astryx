@@ -69,7 +69,7 @@ import {
   AppShellDrawerFocusContext,
   type AppShellDrawerFocus,
 } from './appShellDrawerFocus';
-import {topNavHasDrawerItems} from '../TopNav/TopNav';
+import {topNavHasDrawerItems} from '../TopNav/topNavDrawerItems';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {useAnimatedLayout} from '../hooks/useAnimatedLayout';
 import {

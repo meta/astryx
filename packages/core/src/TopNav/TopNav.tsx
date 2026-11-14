@@ -40,6 +40,7 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/TopNav/TopNav.generated';
 import {isRenderable} from '../utils/isRenderable';
+import {markTopNavType} from './topNavDrawerItems';
 
 registerEnglishFallback(english);
 
@@ -160,19 +161,6 @@ const styles = stylex.create({
   },
   drawerExtraContent: {},
 });
-
-/**
- * Whether a top nav element has items of its own to put in the phone drawer,
- * read from its props during render. Internal: AppShell reads it to tell an
- * empty drawer. A slot that is not a TopNav element counts as having items.
- */
-export function topNavHasDrawerItems(topNav: ReactNode): boolean {
-  if (!isValidElement<TopNavProps>(topNav) || topNav.type !== TopNav) {
-    return true;
-  }
-  const {startContent, children, centerContent} = topNav.props;
-  return isRenderable(startContent ?? children) || isRenderable(centerContent);
-}
 
 export interface TopNavProps extends BaseProps<HTMLElement> {
   /** Ref forwarded to the root element */
@@ -406,3 +394,4 @@ export function TopNav({
 }
 
 TopNav.displayName = 'TopNav';
+markTopNavType(TopNav);
