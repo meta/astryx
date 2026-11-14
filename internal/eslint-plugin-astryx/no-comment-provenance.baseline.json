@@ -13,7 +13,6 @@
     "FR18",
     "FR4",
     "FR4",
-    "FR4",
     "FR6",
     "FR8",
     "FR8",
@@ -22,7 +21,6 @@
     "component:SideNav",
     "design:reduced-motion",
     "design:reduced-motion",
-    "spec quote",
     "spec:AST-105"
   ],
   "packages/core/src/AppShell/observeMainOverflow.ts": [

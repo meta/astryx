@@ -12,6 +12,7 @@
  * never as a stray "0" beside it.
  */
 
+import {useMemo} from 'react';
 import {beforeAll, describe, it, expect, vi} from 'vitest';
 import {fireEvent, render, screen} from '@testing-library/react';
 import type {ReactNode} from 'react';
@@ -76,9 +77,17 @@ function InMode({
   mode: 'drawer' | 'mobile-bar';
   mobileContent?: ReactNode;
 }) {
+  const mobile = useMemo(
+    () => ({
+      content: mobileContent,
+      isOwnContentHidden: false,
+      isContentHidden: false,
+    }),
+    [mobileContent],
+  );
   return (
     <AppShellMobileContext value={OPEN_MOBILE_NAV}>
-      <TopNavMobileContentContext value={mobileContent}>
+      <TopNavMobileContentContext value={mobile}>
         <TopNavRenderContext value={mode}>{children}</TopNavRenderContext>
       </TopNavMobileContentContext>
     </AppShellMobileContext>

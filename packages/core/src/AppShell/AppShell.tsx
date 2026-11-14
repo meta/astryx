@@ -26,6 +26,7 @@ import {
   useDeferredValue,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -55,6 +56,21 @@ import {MobileNavToggle} from '../MobileNav/MobileNavToggle';
 import {MAX_CLOSE_DELAY_MS as MOBILE_NAV_MAX_CLOSE_DELAY_MS} from '../MobileNav/MobileNav';
 import {SideNavRenderContext} from '../SideNav/SideNavRenderContext';
 import {SideNavShellContext, type SideNavShell} from '../SideNav/railMotion';
+import {LayoutChangeSnapshot} from '../motion/LayoutChangeSnapshot';
+import {
+  moveFocusLeftBehind,
+  noteFocusWithin,
+  type FocusWithin,
+} from '../utils/focusReturn';
+import {useFocusLeavingChange} from '../utils/useFocusLeavingChange';
+import {useCommittedRef} from '../hooks/useCommittedRef';
+import {warnOnce} from '../utils/devWarning';
+import {
+  AppShellDrawerFocusContext,
+  type AppShellDrawerFocus,
+} from './appShellDrawerFocus';
+import {topNavHasDrawerItems} from '../TopNav/topNavDrawerItems';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {useAnimatedLayout} from '../hooks/useAnimatedLayout';
 import {
   holdLayoutSwap,
@@ -64,6 +80,7 @@ import {
   playLayoutFrames,
   playLayoutSwap,
   reportLayoutChange,
+  reportLayoutEdge,
   type LayoutChange,
   type LayoutSwap,
 } from '../motion/animatedLayout';
@@ -98,18 +115,43 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/AppShell/AppShell.generated';
+import {ActivityWrapper, HasActivity} from './appShellActivity';
+import {
+  readScrollOffsets,
+  scrollToOffsets,
+  type ScrollOffsets,
+} from '../motion/scrollOffsets';
 
 registerEnglishFallback(english);
-const HasActivity = typeof React.Activity !== 'undefined';
-const ActivityWrapper = HasActivity
-  ? ({
-      mode,
-      children,
-    }: {
-      mode: 'visible' | 'hidden';
-      children: React.ReactNode;
-    }) => <React.Activity mode={mode}>{children}</React.Activity>
-  : ({children}: {mode: string; children: React.ReactNode}) => <>{children}</>;
+
+/**
+ * Calls `pause` once every motion running on `elements` has ended, or at
+ * once when none runs. Returns a cancel for a change that comes first.
+ */
+function pauseAfterMotion(
+  elements: ReadonlyArray<HTMLElement | null>,
+  pause: () => void,
+): () => void {
+  if (!HasActivity) {
+    return () => {};
+  }
+  const running = elements.flatMap(element => element?.getAnimations?.() ?? []);
+  if (running.length === 0) {
+    pause();
+    return () => {};
+  }
+  let isCancelled = false;
+  void Promise.allSettled(
+    running.map(async animation => animation.finished),
+  ).then(() => {
+    if (!isCancelled) {
+      pause();
+    }
+  });
+  return () => {
+    isCancelled = true;
+  };
+}
 
 // =============================================================================
 // Constants
@@ -305,6 +347,28 @@ export interface AppShellProps extends BaseProps<HTMLDivElement> {
    * Same contract as `sideNav` — pass `undefined` when there's no top nav.
    */
   topNav?: ReactNode;
+
+  /**
+   * The navigation regions to hide while they stay mounted. A hidden region
+   * takes no space, its contents are inert and keep their state, and focus
+   * inside it moves to the main content when it hides. The region slides out
+   * by its edge as the content takes its space, in one motion. On a phone,
+   * the drawer leaves out each hidden region, and its menu button goes when
+   * nothing is left to show. Only the top nav and the side nav can be
+   * hidden. The state is yours: render your own
+   * control to show the regions again.
+   *
+   * @example
+   * ```
+   * <AppShell
+   *   topNav={topNav}
+   *   sideNav={sideNav}
+   *   hiddenRegions={isFocusMode ? ['topNav', 'sideNav'] : undefined}>
+   *   <Button label="Exit focus mode" onClick={() => setIsFocusMode(false)} />
+   * </AppShell>
+   * ```
+   */
+  hiddenRegions?: ReadonlyArray<'topNav' | 'sideNav'>;
 }
 
 // =============================================================================
@@ -312,6 +376,27 @@ export interface AppShellProps extends BaseProps<HTMLDivElement> {
 // =============================================================================
 
 const styles = stylex.create({
+  // A region `hiddenRegions` hides: it stays mounted and takes no space. The
+  // side nav's panel drops its divider with it.
+  regionHiddenInline: {
+    width: 0,
+    minWidth: 0,
+    overflow: 'clip',
+    borderInlineEndWidth: 0,
+  },
+  drawerContent: {
+    display: 'contents',
+  },
+  drawerContentHidden: {
+    display: 'none',
+  },
+  regionHiddenBlock: {
+    height: 0,
+    minHeight: 0,
+    overflow: 'clip',
+    paddingBlockStart: 0,
+    paddingBlockEnd: 0,
+  },
   root: {
     display: 'flex',
     flexDirection: 'column',
@@ -578,6 +663,7 @@ export function AppShell({
   mobileNav,
   sideNav,
   topNav,
+  hiddenRegions,
   xstyle,
   className,
   style,
@@ -641,8 +727,80 @@ export function AppShell({
       sideNavBreakpoint === 'none' ? false : mobileNavConfig?.defaultIsMobile,
     ),
   );
+  const hasBanner = isRenderable(banner);
+  const hasTopNav = isRenderable(topNav);
+  const hasSideNav = isRenderable(sideNav);
+  hiddenRegions?.forEach(region => {
+    if (region !== 'topNav' && region !== 'sideNav') {
+      warnOnce(
+        `AppShell.hiddenRegions.${String(region)}`,
+        'AppShell',
+        `hiddenRegions ignores "${String(region)}": only 'topNav' and 'sideNav' can be hidden.`,
+      );
+    }
+  });
+  const isTopNavHidden =
+    hasTopNav && hiddenRegions?.includes('topNav') === true;
+  const isSideNavHidden =
+    hasSideNav && hiddenRegions?.includes('sideNav') === true;
+  const showsTopNav = hasTopNav && !isTopNavHidden;
+  const showsSideNav = hasSideNav && !isSideNavHidden;
+  // A hidden region's content pauses in Activity once its edge motion ends,
+  // so its effects stop. It shows again in the commit that reveals it, before
+  // the reveal plays.
+  const [isTopNavPaused, setIsTopNavPaused] = useState(isTopNavHidden);
+  // The scroll offsets inside each hidden region, read before the commit
+  // that hides it (which can resize and clamp them) and put back when it
+  // shows. Activity's display: none drops them while it is paused.
+  const topNavScrollRef = useRef<ScrollOffsets>([]);
+  const sideNavScrollRef = useRef<ScrollOffsets>([]);
+  const [isSideNavPaused, setIsSideNavPaused] = useState(isSideNavHidden);
+  if (!isTopNavHidden && isTopNavPaused) {
+    setIsTopNavPaused(false);
+  }
+  if (!isSideNavHidden && isSideNavPaused) {
+    setIsSideNavPaused(false);
+  }
+  const topNavActivityMode =
+    isTopNavHidden && isTopNavPaused ? 'hidden' : 'visible';
+  const sideNavActivityMode =
+    isSideNavHidden && isSideNavPaused ? 'hidden' : 'visible';
+  // While a region is hidden, the drawer shows what is left: the side nav,
+  // the top nav's own items, or the app's own drawer content. With nothing
+  // left, it reads as closed and disabled. The app's own open state is kept,
+  // and hiding never writes it.
+  const drawerHasContent =
+    !(isTopNavHidden || isSideNavHidden) ||
+    mobileNavConfig?.content != null ||
+    showsSideNav ||
+    (showsTopNav && topNavHasDrawerItems(topNav));
+
   const [uncontrolledMobileOpen, setUncontrolledMobileOpen] = useState(false);
-  const isMobileNavOpen = mobileNavConfig?.isOpen ?? uncontrolledMobileOpen;
+  const isMobileNavOpenRequested =
+    mobileNavConfig?.isOpen ?? uncontrolledMobileOpen;
+  // A region that hides while the drawer is open closes the drawer.
+  // The drawer stays shut until the app opens it again. Revealing the
+  // region does not reopen it. Hiding never writes the app's open state.
+  const [isDrawerHeldShut, setIsDrawerHeldShut] = useState(false);
+  const hiddenKey = `${isTopNavHidden ? 'topNav' : ''}|${isSideNavHidden ? 'sideNav' : ''}`;
+  const [seenHiddenKey, setSeenHiddenKey] = useState(hiddenKey);
+  if (hiddenKey !== seenHiddenKey) {
+    setSeenHiddenKey(hiddenKey);
+    const isNewlyHidden =
+      (isTopNavHidden && !seenHiddenKey.includes('topNav')) ||
+      (isSideNavHidden && !seenHiddenKey.includes('sideNav'));
+    if (isNewlyHidden && isMobileNavOpenRequested && !isDrawerHeldShut) {
+      setIsDrawerHeldShut(true);
+    }
+  }
+  if (isMobileNavOpenRequested && !drawerHasContent && !isDrawerHeldShut) {
+    setIsDrawerHeldShut(true);
+  }
+  if (!isMobileNavOpenRequested && isDrawerHeldShut) {
+    setIsDrawerHeldShut(false);
+  }
+  const isMobileNavOpen =
+    isMobileNavOpenRequested && drawerHasContent && !isDrawerHeldShut;
 
   // Holds the mobile nav's `Activity` boundary visible for a beat after a
   // close, so MobileNav's own close effect gets a real chance to run its
@@ -679,6 +837,10 @@ export function AppShell({
   const mobileNavOnOpenChange = mobileNavConfig?.onOpenChange;
   const setMobileNavOpen = useCallback(
     (open: boolean) => {
+      // The app asks for the drawer again: the hold after a hide ends.
+      if (open) {
+        setIsDrawerHeldShut(false);
+      }
       if (!mobileNavIsControlled) {
         setUncontrolledMobileOpen(open);
       }
@@ -790,12 +952,12 @@ export function AppShell({
   }, [isMainScrollRegion, syncMainDelegation]);
 
   // Nav style derived values
-  const hasBanner = isRenderable(banner);
-  const hasTopNav = isRenderable(topNav);
-  const hasSideNav = isRenderable(sideNav);
   const hasNavContent = hasTopNav || hasSideNav;
   const mobileNavEnabled =
-    !mobileNavDisabled && hasNavContent && mobileNavReactNode == null;
+    !mobileNavDisabled &&
+    hasNavContent &&
+    drawerHasContent &&
+    mobileNavReactNode == null;
   const navHasDividers = variant === 'section';
   const isElevated = variant === 'elevated';
   const navAreaStyle =
@@ -812,7 +974,10 @@ export function AppShell({
   const contentAreaStyle =
     variant === 'wash'
       ? styles.contentBgWash
-      : variant === 'elevated' && hasTopNav && hasSideNav && !isBelowBreakpoint
+      : variant === 'elevated' &&
+          showsTopNav &&
+          showsSideNav &&
+          !isBelowBreakpoint
         ? styles.contentBgTransparent
         : variant === 'surface' || variant === 'elevated'
           ? styles.contentBgSurface
@@ -828,6 +993,10 @@ export function AppShell({
   // =========================================================================
   const headerRef = useRef<HTMLDivElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
+  // The regions `hiddenRegions` hides: the top nav's row in the header, and
+  // on a phone with no top nav, the side nav's top bar.
+  const topNavRegionRef = useRef<HTMLDivElement>(null);
+  const mobileBarRef = useRef<HTMLDivElement>(null);
 
   // Syncs the header-height CSS variable with a ResizeObserver while the height
   // is automatic.
@@ -899,22 +1068,49 @@ export function AppShell({
   // in the drawer and shows the toggle even without its own collapsible items.
   const mobileContentValue =
     hasSideNav && mobileNavHasToggle ? (
-      // eslint-disable-next-line @eslint-react/no-unstable-context-value -- context transports ReactNode; instability is inherent
       <SideNavRenderContext value="drawer-content">
         {sideNav}
       </SideNavRenderContext>
     ) : null;
 
+  // A hidden side nav stays mounted in the drawer, keeping its state.
   const drawerMobileContentValue = hasSideNav ? (
-    // eslint-disable-next-line @eslint-react/no-unstable-context-value -- context transports ReactNode; instability is inherent
-    <SideNavRenderContext value="drawer-content">
-      {sideNav}
-    </SideNavRenderContext>
+    <div
+      {...stylex.props(
+        isSideNavHidden ? styles.drawerContentHidden : styles.drawerContent,
+      )}
+      inert={isSideNavHidden || undefined}>
+      <ActivityWrapper mode={sideNavActivityMode}>
+        <SideNavRenderContext value="drawer-content">
+          {sideNav}
+        </SideNavRenderContext>
+      </ActivityWrapper>
+    </div>
   ) : null;
+  const drawerHasContentRef = useCommittedRef(drawerHasContent);
+  const drawerFocus = useMemo<AppShellDrawerFocus>(
+    () => ({
+      main: () => mainNodeRef.current,
+      isDrawerEmpty: () => !drawerHasContentRef.current,
+    }),
+    [drawerHasContentRef],
+  );
+  // eslint-disable-next-line @eslint-react/no-unstable-context-value -- context transports ReactNode; instability is inherent
+  const barMobileContent = {
+    content: mobileContentValue,
+    isOwnContentHidden: isTopNavHidden,
+    isContentHidden: isSideNavHidden,
+  };
+  // eslint-disable-next-line @eslint-react/no-unstable-context-value -- context transports ReactNode; instability is inherent
+  const drawerMobileContent = {
+    content: drawerMobileContentValue,
+    isOwnContentHidden: isTopNavHidden,
+    isContentHidden: isSideNavHidden,
+  };
 
   const topNavContent = hasTopNav ? (
     isBelowBreakpoint && !mobileNavDisabled && mobileNavReactNode == null ? (
-      <TopNavMobileContentContext value={mobileContentValue}>
+      <TopNavMobileContentContext value={barMobileContent}>
         <TopNavRenderContext value="mobile-bar">{topNav}</TopNavRenderContext>
       </TopNavMobileContentContext>
     ) : (
@@ -924,11 +1120,20 @@ export function AppShell({
 
   const headerInner =
     hasTopNav || hasBanner ? (
-      <LayoutHeader padding={0} hasDivider={navHasDividers && hasTopNav}>
+      <LayoutHeader padding={0} hasDivider={navHasDividers && showsTopNav}>
         {hasBanner && (
           <div {...stylex.props(styles.banner, navAreaStyle)}>{banner}</div>
         )}
-        {hasTopNav && topNavContent}
+        {hasTopNav && (
+          <div
+            ref={topNavRegionRef}
+            {...stylex.props(isTopNavHidden && styles.regionHiddenBlock)}
+            inert={isTopNavHidden || undefined}>
+            <ActivityWrapper mode={topNavActivityMode}>
+              {topNavContent}
+            </ActivityWrapper>
+          </div>
+        )}
       </LayoutHeader>
     ) : undefined;
 
@@ -937,7 +1142,8 @@ export function AppShell({
       ref={headerRef}
       // Top-level banner landmark for the header region (topNav + banner).
       // Safe here: the wrapper is never nested inside main/nav/other landmarks.
-      role="banner"
+      // With every header slot hidden, the header region is not shown.
+      role={showsTopNav || hasBanner ? 'banner' : undefined}
       {...mergeProps(
         themeProps('app-shell-header', {variant}),
         stylex.props(
@@ -1100,6 +1306,112 @@ export function AppShell({
     [contentLayout],
   );
 
+  // =========================================================================
+  // Hidden regions (`hiddenRegions`). A hidden region stays mounted, takes no
+  // space and goes inert. Its edge and the content's change in space play as
+  // one motion: each report measures the region and the content beside it
+  // before the commit and plays both on one clock after it.
+  // Focus inside a region that hides moves to main.
+  // =========================================================================
+  const topNavEdge = useMemo(
+    () =>
+      reportLayoutEdge(contentLayout, () => topNavRegionRef.current, {
+        edge: 'block-end',
+      }),
+    [contentLayout],
+  );
+  const sideNavEdge = useMemo(
+    () =>
+      reportLayoutEdge(contentLayout, () => railRef.current, {
+        edge: 'inline-end',
+      }),
+    [contentLayout],
+  );
+  const mobileBarEdge = useMemo(
+    () =>
+      reportLayoutEdge(contentLayout, () => mobileBarRef.current, {
+        edge: 'block-end',
+      }),
+    [contentLayout],
+  );
+  // `moveFocusLeftBehind` reads the last input. Keep modality tracking on.
+  useInteractionModalityTracking();
+  const noteTopNavFocus = useFocusLeavingChange(
+    isTopNavHidden,
+    (wasHidden: boolean): FocusWithin | null =>
+      wasHidden ? null : noteFocusWithin(topNavRegionRef.current),
+    (focus: FocusWithin, isHidden: boolean) => {
+      if (isHidden) {
+        moveFocusLeftBehind(
+          focus,
+          mainNodeRef.current,
+          topNavRegionRef.current,
+        );
+      }
+    },
+  );
+  const noteSideNavFocus = useFocusLeavingChange(
+    isSideNavHidden,
+    (wasHidden: boolean): FocusWithin | null =>
+      wasHidden
+        ? null
+        : (noteFocusWithin(railRef.current) ??
+          noteFocusWithin(mobileBarRef.current)),
+    (focus: FocusWithin, isHidden: boolean) => {
+      if (isHidden) {
+        moveFocusLeftBehind(focus, mainNodeRef.current, focus.container);
+      }
+    },
+  );
+  const beforeTopNavChange = useCallback(
+    (wasHidden: boolean) => {
+      noteTopNavFocus(wasHidden);
+      if (!wasHidden && topNavRegionRef.current != null) {
+        topNavScrollRef.current = readScrollOffsets(topNavRegionRef.current);
+      }
+      topNavEdge.measureBefore();
+    },
+    [noteTopNavFocus, topNavEdge],
+  );
+  const beforeSideNavChange = useCallback(
+    (wasHidden: boolean) => {
+      noteSideNavFocus(wasHidden);
+      if (!wasHidden) {
+        sideNavScrollRef.current = [railRef.current, mobileBarRef.current]
+          .filter(element => element != null)
+          .flatMap(element => readScrollOffsets(element));
+      }
+      sideNavEdge.measureBefore();
+      mobileBarEdge.measureBefore();
+    },
+    [noteSideNavFocus, sideNavEdge, mobileBarEdge],
+  );
+  useLayoutEffect(() => {
+    topNavEdge.animate();
+    if (!isTopNavHidden) {
+      // After the reveal starts: it puts back the offsets it measured, which
+      // the pause had already dropped.
+      scrollToOffsets(topNavScrollRef.current);
+      topNavScrollRef.current = [];
+      return;
+    }
+    return pauseAfterMotion([topNavRegionRef.current], () =>
+      setIsTopNavPaused(true),
+    );
+  }, [isTopNavHidden, topNavEdge]);
+  useLayoutEffect(() => {
+    sideNavEdge.animate();
+    mobileBarEdge.animate();
+    if (!isSideNavHidden) {
+      scrollToOffsets(sideNavScrollRef.current);
+      sideNavScrollRef.current = [];
+      return;
+    }
+    return pauseAfterMotion([railRef.current, mobileBarRef.current], () =>
+      setIsSideNavPaused(true),
+    );
+  }, [isSideNavHidden, sideNavEdge, mobileBarEdge]);
+
   // Build sideNav content
   //
   // In auto mode, the sideNav panel is not internally scrollable (the page
@@ -1114,12 +1426,16 @@ export function AppShell({
       hasDivider={navHasDividers}
       isScrollable={isFill}
       {...themeProps('app-shell-sidenav', {variant})}
+      inert={isSideNavHidden || undefined}
       xstyle={[
         navAreaStyle,
         isAuto && stickyBgStyle,
         isAuto && styles.panelAutoFill,
+        isSideNavHidden && styles.regionHiddenInline,
       ]}>
-      <SideNavShellContext value={sideNavShell}>{sideNav}</SideNavShellContext>
+      <SideNavShellContext value={sideNavShell}>
+        <ActivityWrapper mode={sideNavActivityMode}>{sideNav}</ActivityWrapper>
+      </SideNavShellContext>
     </LayoutPanel>
   ) : undefined;
 
@@ -1133,7 +1449,8 @@ export function AppShell({
   // =========================================================================
   // Build main content
   // =========================================================================
-  const shouldElevateWithCorner = isElevated && hasTopNav && showSideNavInline;
+  const shouldElevateWithCorner =
+    isElevated && showsTopNav && showSideNavInline && !isSideNavHidden;
   // While main is a keyboard stop, a Tab keydown anywhere in the document
   // (capture, so Shift+Tab from the page start counts too) marks the next
   // focus move, and so does the window's focus event for keyboard focus that
@@ -1142,7 +1459,7 @@ export function AppShell({
   // a key from a pointer. A mark counts only once its event's dispatch has
   // finished uncancelled (`eventPhase === 0`): the browser's own focus move
   // follows that dispatch in the same task, while a focus() a page's handler
-  // calls during it is programmatic and draws no ring (FR4). The marks expire
+  // calls during it is programmatic and draws no ring. The marks expire
   // on a zero-delay timer, so a cancelled Tab, a Tab out of the document or a
   // window focus with nothing focused leaves nothing for a later focus().
   useEffect(() => {
@@ -1278,15 +1595,20 @@ export function AppShell({
     !mobileNavDisabled && mobileNavHasToggle && isBelowBreakpoint;
 
   // For sidenav-only layouts with no TopNav, render the sideNav in topbar
-  // mode — it shows heading + footer icons horizontally, with the hamburger
+  // mode — it shows heading + footer icons horizontally, with the hamburger.
+  // A hidden top nav leaves this bar to hold the drawer's toggle.
   const autoMobileTopBar =
-    shouldShowAutoToggle && !hasTopNav && hasSideNav ? (
+    shouldShowAutoToggle && !showsTopNav && hasSideNav ? (
       <div
+        ref={mobileBarRef}
+        inert={isSideNavHidden || undefined}
         // Banner landmark for the mobile top bar, so the sidenav-only layout
         // exposes the same landmark structure as the topNav one. Only when
         // there is no headerContent: a banner slot with no topNav renders both,
         // and two sibling banner regions is worse than the one this restores.
-        role={headerContent == null ? 'banner' : undefined}
+        role={
+          !showsTopNav && !hasBanner && !isSideNavHidden ? 'banner' : undefined
+        }
         {...mergeProps(
           themeProps('app-shell-header', {variant}),
           stylex.props(
@@ -1297,6 +1619,7 @@ export function AppShell({
             // bar takes only the side insets.
             headerContent == null && styles.headerSafeAreaTop,
             isAuto && headerContent != null && styles.headerStickyBelowTopInset,
+            isSideNavHidden && styles.regionHiddenBlock,
           ),
         )}>
         <LayoutHeader padding={0} hasDivider={navHasDividers}>
@@ -1304,9 +1627,11 @@ export function AppShell({
             {...stylex.props(styles.autoMobileTopBar)}
             role="navigation"
             aria-label={t('@astryx.appShell.mobileNavigation')}>
-            <SideNavRenderContext value="topbar">
-              {sideNav}
-            </SideNavRenderContext>
+            <ActivityWrapper mode={sideNavActivityMode}>
+              <SideNavRenderContext value="topbar">
+                {sideNav}
+              </SideNavRenderContext>
+            </ActivityWrapper>
             <MobileNavToggle />
           </div>
         </LayoutHeader>
@@ -1344,6 +1669,14 @@ export function AppShell({
         <LayoutAreaContext value={null}>
           <LayoutSlotsContext value={DEFAULT_LAYOUT_SLOTS}>
             <LayoutDividerContext value={null}>
+              <LayoutChangeSnapshot
+                value={isTopNavHidden}
+                onBeforeChange={beforeTopNavChange}
+              />
+              <LayoutChangeSnapshot
+                value={isSideNavHidden}
+                onBeforeChange={beforeSideNavChange}
+              />
               {/* Skip-to-content link */}
               <a
                 href={`#${mainContentId}`}
@@ -1368,32 +1701,33 @@ export function AppShell({
 
               {/* Mobile nav — always mounted below breakpoint via Activity so DOM
             presence detection works. Hidden until the drawer opens. */}
-              {shouldRenderMobileNavReactNode && mobileNavReactNode}
-              {shouldRenderConfigContent && mobileNavConfigContent}
-              {isBelowBreakpoint &&
-                !mobileNavDisabled &&
-                mobileNavReactNode == null &&
-                !mobileNavConfigContent && (
-                  <ActivityWrapper
-                    mode={isMobileNavActivityVisible ? 'visible' : 'hidden'}>
-                    {/* SideNav drawer — always mounted so presence detection works.
+              <AppShellDrawerFocusContext value={drawerFocus}>
+                {shouldRenderMobileNavReactNode && mobileNavReactNode}
+                {shouldRenderConfigContent && mobileNavConfigContent}
+                {isBelowBreakpoint &&
+                  !mobileNavDisabled &&
+                  mobileNavReactNode == null &&
+                  !mobileNavConfigContent && (
+                    <ActivityWrapper
+                      mode={isMobileNavActivityVisible ? 'visible' : 'hidden'}>
+                      {/* SideNav drawer — always mounted so presence detection works.
                 Hidden when TopNav owns the drawer (combined mode passes
                 sideNav via TopNav's mobile content context instead). */}
-                    {hasSideNav && !hasTopNav && (
-                      <SideNavRenderContext value="drawer">
-                        {sideNav}
-                      </SideNavRenderContext>
-                    )}
-                    {hasTopNav && (
-                      <TopNavMobileContentContext
-                        value={drawerMobileContentValue}>
-                        <TopNavRenderContext value="drawer">
-                          {topNav}
-                        </TopNavRenderContext>
-                      </TopNavMobileContentContext>
-                    )}
-                  </ActivityWrapper>
-                )}
+                      {hasSideNav && !hasTopNav && (
+                        <SideNavRenderContext value="drawer">
+                          {sideNav}
+                        </SideNavRenderContext>
+                      )}
+                      {hasTopNav && (
+                        <TopNavMobileContentContext value={drawerMobileContent}>
+                          <TopNavRenderContext value="drawer">
+                            {topNav}
+                          </TopNavRenderContext>
+                        </TopNavMobileContentContext>
+                      )}
+                    </ActivityWrapper>
+                  )}
+              </AppShellDrawerFocusContext>
             </LayoutDividerContext>
           </LayoutSlotsContext>
         </LayoutAreaContext>
