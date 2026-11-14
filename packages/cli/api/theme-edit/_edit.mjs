@@ -80,7 +80,7 @@ import {
   ownSourceTokens,
   ownSourceTokenValues,
   ownTokenEntries,
-  evaluatedOwnTokens,
+  evaluatedTheme,
   nonTextMessage,
   ownPartTokens,
   PHONE_TYPE,
@@ -1237,11 +1237,11 @@ export async function editorStoredRefusal(root, slug) {
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
- * @returns {Promise<Array<{token: string, value: string, why: string, line: number | null}>>}
+ * @returns {Promise<Array<{token: string, value: string, why: string, line: number | null, file?: string | null}>>}
  */
 async function ownTokenProblems(ctx, slug, data) {
   const {cwd} = ctx.project;
-  /** @type {Array<{token: string, value: string, why: string, line: number | null}>} */
+  /** @type {Array<{token: string, value: string, why: string, line: number | null, file?: string | null}>} */
   const out = [];
   const known = ctx.project.core.tokenDefaults;
   /** @param {string} token @param {string} value @returns {string | null} */
@@ -1254,151 +1254,164 @@ async function ownTokenProblems(ctx, slug, data) {
       return e.message.replace(/ Nothing was changed\.$/, '');
     }
   };
-  // The tokens map as written, entry by entry, with the line that sets
-  // each: every value is checked as `set` checks it (each half of a
-  // [light, dark] pair; a number is not text, as show says), and what only
-  // a build can read (an imported module, an expression) is read from a
-  // build made now, so nothing ships unchecked.
-  const entries = ownTokenEntries(cwd, slug);
-  const needsBuild = entries.some(
-    e => e.kind === 'unresolved' || (e.kind === 'other' && e.token),
-  );
-  const evaluated = needsBuild ? await evaluatedOwnTokens(ctx, slug) : null;
-  const seen = new Set();
+  /** The file an entry is in, as the project names it; null for the theme file. @param {{file?: string}} e */
+  const fileOf = e => (e.file ? path.relative(cwd, e.file) : null);
+  // Every value is judged as a build made now writes it (an import, an
+  // expression, a spread or a computed key is its evaluated value). The
+  // source is read only to name the file and line that hold each value,
+  // and for the two facts a build erases: a `tokens` key given twice
+  // (JavaScript keeps the last) and a [light, dark] pair with other than
+  // two values (the build drops the rest).
+  const entries = ownTokenEntries(cwd, slug).filter(e => !e.overridden);
+  const built = await evaluatedTheme(ctx, slug);
+  const tokensLine = entries.find(e => e.kind === 'unresolved')?.line ?? null;
+  /** Where the build's value for a token comes from. @param {string} token */
+  const whereOf = token => {
+    const e = entries.find(x => x.token === token);
+    return e ? {line: e.line, file: fileOf(e)} : {line: tokensLine, file: null};
+  };
   for (const e of entries) {
-    if (e.kind === 'duplicate') {
+    if (e.kind === 'duplicate')
       out.push({
         token: 'tokens',
         value: '',
         why: `defineTheme is given tokens twice (lines ${(e.lines ?? []).join(' and ')}); the build keeps only the last, so the first does nothing: merge them into one`,
         line: e.line,
+        file: fileOf(e),
       });
-      continue;
-    }
-    if (e.kind === 'typography') {
-      const why = typographyProblem(e.key, e.value);
-      if (why)
-        out.push({
-          token: `typography.${e.key}`,
-          value: e.value == null ? '' : String(e.value),
-          why,
-          line: e.line,
-        });
-      continue;
-    }
-    if (e.kind === 'unresolved') continue;
-    if (e.token == null) {
-      out.push({
-        token: e.key,
-        value: '',
-        why: `the key ${e.key} is computed, so the editor cannot read which token it sets and has not checked its value; write the token's name as text, such as '--radius-page'`,
-        line: e.line,
-      });
-      continue;
-    }
-    const token = e.token;
-    seen.add(token);
-    if (!(token in known)) continue;
-    if (e.kind === 'object') {
-      out.push({
-        token,
-        value: '',
-        why: nonTextMessage(ctx, slug, [token, e.value, 'object']),
-        line: e.line,
-      });
-      continue;
-    }
-    if (e.kind === 'number') {
-      out.push({
-        token,
-        value: String(e.value),
-        why: nonTextMessage(ctx, slug, [token, e.value]),
-        line: e.line,
-      });
-      continue;
-    }
-    if (e.kind === 'text') {
-      const why = refused(token, String(e.value));
-      if (why) out.push({token, value: String(e.value), why, line: e.line});
-      continue;
-    }
-    if (e.kind === 'pair') {
+    else if (
+      e.kind === 'pair' &&
+      e.token &&
+      e.token in known &&
+      (e.halves ?? []).length !== 2
+    ) {
       const halves = e.halves ?? [];
-      if (halves.length === 2 && halves.some(h => typeof h !== 'string')) {
+      out.push({
+        token: e.token,
+        value: `[${halves.map(h => (h === undefined ? '…' : JSON.stringify(h))).join(', ')}]`,
+        why: `a [light, dark] pair holds exactly two values in quotes, and this holds ${halves.length}; the build would write ${halves.length < 2 ? 'light-dark() with an undefined half' : 'the first two and drop the rest'}`,
+        line: e.line,
+        file: fileOf(e),
+      });
+    }
+  }
+  if (!built) return out;
+  const named = new Set(out.map(b => b.token));
+  // A family or size the typography builds is judged with the typography.
+  const typo = entries.filter(e => e.kind === 'typography');
+  const roles = new Set(typo.map(e => e.key.split('.')[0]));
+  /** @param {string} token */
+  const byTypography = token => {
+    const role = /^--font-family-([a-z]+)$/.exec(token)?.[1];
+    if (role)
+      return roles.has(role) || (role === 'heading' && roles.has('body'));
+    return roles.has('scale') && /^--(font-size|text)-/.test(token);
+  };
+  for (const token of built.own.keys()) {
+    if (!(token in known) || named.has(token) || byTypography(token)) continue;
+    const shape = built.shapes.get(token) ?? {kind: 'other'};
+    const at = whereOf(token);
+    if (
+      shape.kind === 'number' ||
+      shape.kind === 'object' ||
+      shape.kind === 'pair'
+    ) {
+      const bad =
+        shape.kind === 'object'
+          ? /** @type {[string, unknown, 'object']} */ ([
+              token,
+              shape.value,
+              'object',
+            ])
+          : /** @type {[string, unknown]} */ ([
+              token,
+              shape.kind === 'pair' ? shape.halves : shape.value,
+            ]);
+      // A pair of two text values is the light-dark() the build writes,
+      // judged below; any other pair, a number or an object is no text.
+      if (!(
+        shape.kind === 'pair' &&
+        (shape.halves ?? []).every(h => typeof h === 'string')
+      )) {
         out.push({
           token,
           value: '',
-          why: nonTextMessage(ctx, slug, [token, halves]),
-          line: e.line,
+          why: nonTextMessage(ctx, slug, bad),
+          ...at,
         });
         continue;
       }
-      // A pair is exactly two values in quotes: one or none builds
-      // light-dark(red, undefined), a third is dropped.
-      if (halves.length !== 2) {
-        out.push({
-          token,
-          value: `[${halves.map(h => (h === undefined ? '' : JSON.stringify(h))).join(', ')}]`,
-          why: `a [light, dark] pair holds exactly two values in quotes, and this holds ${halves.length}; the build would write ${halves.length < 2 ? 'light-dark() with an undefined half' : 'the first two and drop the rest'}`,
-          line: e.line,
-        });
-        continue;
-      }
-      if (!isColorToken(token)) continue;
-      halves.forEach((h, i) => {
-        const why = refused(token, String(h));
-        if (why)
-          out.push({
-            token,
-            value: String(h),
-            why: `its ${i === 0 ? 'light' : 'dark'} half: ${why}`,
-            line: e.line,
-          });
-      });
-      continue;
     }
-    // An expression ('ban' + 'ana', a ternary, a template with ${}): the
-    // value a build makes of it, else named as not checked.
-    const v = evaluated?.get(token);
+    const value = built.own.get(token);
+    if (value == null) continue;
     // A pair on a token that is not a color is the pair refusal's.
-    if (
-      typeof v === 'string' &&
-      /^light-dark\(/i.test(v) &&
-      !isColorToken(token)
-    )
-      continue;
-    if (typeof v === 'string') {
-      const why = refused(token, v);
-      if (why) out.push({token, value: v, why, line: e.line});
-    } else
+    if (/^light-dark\(/i.test(value) && !isColorToken(token)) continue;
+    const why = refused(token, value);
+    if (why) out.push({token, value, why, ...at});
+  }
+  // Typography as the build was given it (each field the source sets, by
+  // its evaluated value), then the families and sizes the build writes.
+  /** @type {Set<string>} */
+  const flagged = new Set();
+  for (const e of typo) {
+    const value = e.key
+      .split('.')
+      .reduce(
+        (/** @type {any} */ o, /** @type {string} */ k) => o?.[k],
+        built.typography,
+      );
+    const why = typographyProblem(e.key, value);
+    if (why) {
+      flagged.add(e.key.split('.')[0]);
       out.push({
-        token,
-        value: '',
-        why: 'its value is an expression the editor could not evaluate, so it has not been checked; write it as text in quotes',
+        token: `typography.${e.key}`,
+        value: value == null ? '' : String(value),
+        why,
         line: e.line,
+        file: fileOf(e),
+      });
+    }
+  }
+  for (const role of ['body', 'heading', 'code']) {
+    const at = typo.find(e => e.key.startsWith(`${role}.`));
+    if (!at || flagged.has(role)) continue;
+    const token = `--font-family-${role}`;
+    const v = built.tops.get(token);
+    const why = v == null ? null : refused(token, v);
+    if (why && v != null)
+      out.push({
+        token: `typography.${role} (builds ${token})`,
+        value: v,
+        why,
+        line: at.line,
+        file: fileOf(at),
       });
   }
-  // A value the map gives another way (a spread of an imported module, a
-  // call), as a build made now evaluates it, else as the current build or
-  // the file shows it. A family the build shows that the map does not
-  // name came from typography, checked above.
-  const others =
-    evaluated ?? new Map(Object.entries(ownSourceTokenValues(cwd, slug)));
-  const tokensLine = entries.find(e => e.kind === 'unresolved')?.line ?? null;
-  for (const [token, value] of others) {
-    if (seen.has(token) || !(token in known) || value == null) continue;
-    if (/^light-dark\(/i.test(value) && !isColorToken(token)) continue;
-    if (!evaluated && /^--font-family-/.test(token)) continue;
-    const why = refused(token, value);
-    if (why) out.push({token, value, why, line: tokensLine});
+  const scale = typo.find(e => e.key.startsWith('scale.'));
+  if (scale && !flagged.has('scale')) {
+    const broken = [...built.tops].find(
+      ([k, v]) =>
+        /^--font-size-/.test(k) && /NaN|Infinity|^-/.test(String(v ?? '')),
+    );
+    if (broken)
+      out.push({
+        token: `typography.scale (builds ${broken[0]})`,
+        value: String(broken[1]),
+        why: typo.some(e => e.key === 'scale.base')
+          ? 'the type scale builds a size no page can use; the base is a positive number of pixels (such as 16) and the ratio a number above 1 and at most 4'
+          : 'the type scale is given no base, and Core needs one with the ratio: it builds sizes no page can use; add the body size in pixels, such as scale: {base: 16, ratio: …}',
+        line: scale.line,
+        file: fileOf(scale),
+      });
   }
   return out;
 }
 
 /**
  * What is wrong with one typography field of a theme's own source, or
- * null: a family is one family name (Core quotes it whole), the scale's
- * ratio is above 1 and at most 4, its base a positive size.
+ * null: a family is one family name without quotes (Core quotes it whole)
+ * and with nothing CSS would read as the end of the value; the scale's
+ * ratio is above 1 and at most 4, its base a positive number of pixels.
  * @param {string} key the dotted field (`body.family`, `scale.ratio`)
  * @param {unknown} value
  * @returns {string | null}
@@ -1409,6 +1422,11 @@ function typographyProblem(key, value) {
     if (typeof value !== 'string')
       return 'a typography family is a family name in quotes, such as "Inter"';
     const v = value.trim();
+    if (/[;{}<>]/.test(v))
+      return `"${v}" holds a ; { } < or >, so the CSS writer drops the whole declaration; give the family name alone, such as "Inter"`;
+    const quoted = /^(["'])(.*)\1$/.exec(v);
+    if (quoted)
+      return `the family is written in quotes, and Core adds its own, so it builds ${JSON.stringify(`"${v}"`)}, a name no font has; write it without them: family: '${quoted[2]}'`;
     // Core quotes a family with a space whole, so a list here is one
     // family by that whole name, which exists nowhere.
     if (v.includes(','))
@@ -1430,9 +1448,13 @@ function typographyProblem(key, value) {
     return null;
   }
   if (field === 'base') {
-    const n = typeof value === 'number' ? value : parseFloat(String(value));
-    if (!Number.isFinite(n) || n <= 0)
-      return `the type scale's base is the body size, a positive number of pixels (such as 16); ${JSON.stringify(value)} makes sizes no page can use`;
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) {
+      // A size with a unit builds NaNrem: the number of pixels it means.
+      const m = /^\s*([0-9.]+)\s*(px|rem|em)\s*$/i.exec(String(value));
+      const px = m ? Number(m[1]) * (/^r?em$/i.test(m[2]) ? 16 : 1) : null;
+      return `the type scale's base is the body size, a positive number of pixels${px ? `, so ${JSON.stringify(value)} is base: ${px}` : ' (such as 16)'}; ${JSON.stringify(value)} builds sizes no page can use${m ? ' (NaNrem)' : ''}`;
+    }
     return null;
   }
   return null;
@@ -1461,13 +1483,14 @@ async function refuseOwnTokenValues(ctx, slug, data) {
 async function ownTokenRefusal(ctx, slug, data) {
   const bad = await ownTokenProblems(ctx, slug, data);
   if (!bad.length) return null;
-  const file = `themes/${slug}/${slug}.theme.ts`;
+  const own = `themes/${slug}/${slug}.theme.ts`;
+  const file = bad[0].file ?? own;
   return new AstryxError(
-    `${file} gives ${bad.length === 1 ? 'a token a value' : `${bad.length} tokens values`} the editor refuses, which the build would write as it is: ${bad
+    `${own} gives ${bad.length === 1 ? 'a token a value' : `${bad.length} tokens values`} the editor refuses, which the build would write as it is: ${bad
       .slice(0, 3)
       .map(
         b =>
-          `${b.token}${b.value ? `: "${b.value}"` : ''}${b.line ? ` (line ${b.line})` : ''}: ${b.why}`,
+          `${b.token}${b.value ? `: "${b.value}"` : ''}${b.file ? ` (in ${b.file}${b.line ? `, line ${b.line}` : ''})` : b.line ? ` (line ${b.line})` : ''}: ${b.why}`,
       )
       .join(
         '; ',
@@ -3728,8 +3751,28 @@ function ownPhoneNotes(cwd, slug, data) {
       .filter(x => x.source === 'token' && !x.on && !x.when && !x.state)
       .map(x => x.thing),
   );
+  // A family or size the theme's typography sets is kept on phones (the
+  // base theme's rule for those screens keeps the theme's typography); only
+  // one the tokens map sets is lost there.
+  const entries = ownTokenEntries(cwd, slug);
+  const roles = new Set(
+    entries.filter(e => e.kind === 'typography').map(e => e.key.split('.')[0]),
+  );
+  const inMap = new Set(
+    entries.filter(e => e.token && !e.overridden).map(e => e.token),
+  );
+  /** @param {string} k */
+  const fromTypography = k => {
+    const role = /^--font-family-([a-z]+)$/.exec(k)?.[1];
+    if (role)
+      return roles.has(role) || (role === 'heading' && roles.has('body'));
+    return roles.has('scale') && !/^--font-family-/.test(k);
+  };
   const lost = ownSourceTokens(cwd, slug).filter(
-    k => PHONE_TYPE.test(k) && !exact.has(k),
+    k =>
+      PHONE_TYPE.test(k) &&
+      !exact.has(k) &&
+      (!fromTypography(k) || inMap.has(k)),
   );
   if (!lost.length) return [];
   const families = lost.filter(k => /^--font-family-/.test(k));

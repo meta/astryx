@@ -1527,7 +1527,7 @@ export function valueProblem(s) {
  * A `duplicate` entry names a second `tokens` key (with every line); a
  * `typography` entry is one typography field (its dotted key and value);
  * an `unresolved` entry says the map holds something only a build reads.
- * @typedef {{token: string | null, key: string, line: number | null, kind: 'text' | 'number' | 'pair' | 'object' | 'other' | 'duplicate' | 'typography' | 'unresolved', value?: any, halves?: Array<string | number | undefined>, lines?: Array<number | null>}} OwnTokenEntry
+ * @typedef {{token: string | null, key: string, line: number | null, kind: 'text' | 'number' | 'pair' | 'object' | 'other' | 'duplicate' | 'typography' | 'unresolved', value?: any, halves?: Array<string | number | undefined>, lines?: Array<number | null>, file?: string, overridden?: boolean, expression?: boolean}} OwnTokenEntry
  */
 
 /**
@@ -1696,6 +1696,13 @@ function ownPageTokens(
             key: [...at, k].join('.'),
             kind: 'typography',
             line: p.loc?.start?.line ?? null,
+            expression:
+              textOf(v) == null &&
+              v?.type !== 'NumericLiteral' &&
+              !(
+                v?.type === 'UnaryExpression' &&
+                v.argument?.type === 'NumericLiteral'
+              ),
             value:
               textOf(v) ??
               (v?.type === 'NumericLiteral'
@@ -1713,9 +1720,112 @@ function ownPageTokens(
   const tokensProp = tokensProps[tokensProps.length - 1];
   if (!tokensProp) return out;
   let unresolved = false;
-  /** @param {any} node @param {number} depth */
-  const collect = (node, depth) => {
-    const obj = unwrap(node);
+  const dir = path.dirname(themeFiles(cwd, slug).ts);
+  /**
+   * The object a name imported from a file beside the theme gives (`import
+   * {mine} from './mine'`, a default import of a .json file), read from
+   * that file, with its own code and path; null for any other name.
+   * @param {string} name
+   * @returns {{obj: any, code: string, file: string, unwrap: (n: any) => any} | null}
+   */
+  const imported = name => {
+    for (const st of ast.program.body) {
+      if (st.type !== 'ImportDeclaration') continue;
+      const spec = st.specifiers.find(
+        (/** @type {any} */ x) => x.local?.name === name,
+      );
+      const from = String(st.source?.value ?? '');
+      if (!spec || !from.startsWith('.')) continue;
+      const base = path.resolve(dir, from);
+      const file = [
+        '',
+        '.ts',
+        '.mts',
+        '.tsx',
+        '.js',
+        '.mjs',
+        '.json',
+        '/index.ts',
+      ]
+        .map(x => base + x)
+        .find(f => {
+          try {
+            return fs.statSync(f).isFile();
+          } catch {
+            return false;
+          }
+        });
+      if (!file) return null;
+      try {
+        const text = fs.readFileSync(file, 'utf8');
+        const json = file.endsWith('.json');
+        const source = json ? `export default ${text}` : text;
+        const other = /** @type {any} */ (
+          parseModule(source, {sourceType: 'module', plugins: ['typescript']})
+        );
+        /** @type {Map<string, any>} */
+        const local = new Map();
+        /** @type {any} */
+        let found = null;
+        const want =
+          spec.type === 'ImportDefaultSpecifier'
+            ? 'default'
+            : (spec.imported?.name ?? spec.imported?.value);
+        for (const top of other.program.body) {
+          const d =
+            top.type === 'ExportNamedDeclaration' ? top.declaration : top;
+          for (const v of d?.declarations ?? [])
+            if (v.id?.type === 'Identifier') {
+              local.set(v.id.name, v.init);
+              if (top.type === 'ExportNamedDeclaration' && v.id.name === want)
+                found = v.init;
+            }
+          if (top.type === 'ExportDefaultDeclaration' && want === 'default')
+            found = top.declaration;
+        }
+        /** @param {any} n @param {number} [k] @returns {any} */
+        const unwrapIn = (n, k = 0) => {
+          if (!n || k > 20) return null;
+          if (
+            [
+              'TSAsExpression',
+              'TSSatisfiesExpression',
+              'TSNonNullExpression',
+              'ParenthesizedExpression',
+            ].includes(n.type)
+          )
+            return unwrapIn(n.expression, k + 1);
+          if (n.type === 'Identifier' && local.has(n.name))
+            return unwrapIn(local.get(n.name), k + 1);
+          return n;
+        };
+        return found
+          ? {obj: unwrapIn(found), code: source, file, unwrap: unwrapIn}
+          : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  };
+  /**
+   * @param {any} node
+   * @param {number} depth
+   * @param {{code: string, file: string | null, unwrap: (n: any) => any}} [at]
+   *   the file the node is in (null for the theme file)
+   */
+  const collect = (node, depth, at = {code, file: null, unwrap}) => {
+    const obj = at.unwrap(node);
+    // A name imported from a file beside the theme: read in that file, so
+    // its values and lines are its own; the build still judges the result.
+    if (obj?.type === 'Identifier' && at.file == null) {
+      const from = imported(obj.name);
+      if (from) {
+        unresolved = true;
+        collect(from.obj, depth + 1, from);
+        return;
+      }
+    }
     if (obj?.type !== 'ObjectExpression' || depth > 20) {
       unresolved = true;
       return;
@@ -1723,17 +1833,18 @@ function ownPageTokens(
     // Spreads and keys merge in order: a later one wins. A computed key
     // that is text (`['--radius-page']`) is read like a literal one.
     for (const p of obj.properties) {
-      if (p.type === 'SpreadElement') collect(p.argument, depth + 1);
+      if (p.type === 'SpreadElement') collect(p.argument, depth + 1, at);
       else if (p.type === 'ObjectProperty') {
-        const k = p.computed ? textOf(unwrap(p.key)) : keyOf(p.key);
-        if (k?.startsWith('--')) out.set(k, textOf(unwrap(p.value)));
+        const k = p.computed ? textOf(at.unwrap(p.key)) : keyOf(p.key);
+        if (k?.startsWith('--')) out.set(k, textOf(at.unwrap(p.value)));
         else if (p.computed) unresolved = true;
         if (detail && (k?.startsWith('--') || p.computed))
           detail.push({
             token: k?.startsWith('--') ? k : null,
-            key: code.slice(p.key.start, p.key.end),
+            key: at.code.slice(p.key.start, p.key.end),
             line: p.loc?.start?.line ?? null,
-            ...valueShape(unwrap(p.value)),
+            ...(at.file ? {file: at.file} : {}),
+            ...valueShape(at.unwrap(p.value), at.unwrap),
           });
       } else unresolved = true;
     }
@@ -1742,9 +1853,10 @@ function ownPageTokens(
    * What a token's value is, as written: text, a number, a [light, dark]
    * pair (each half's text, a number, or undefined), or something else.
    * @param {any} node
+   * @param {(n: any) => any} [unwrapIn] how the node's file reads a name
    * @returns {Pick<OwnTokenEntry, 'kind' | 'value' | 'halves'>}
    */
-  const valueShape = node => {
+  const valueShape = (node, unwrapIn = unwrap) => {
     const t = textOf(node);
     if (t != null) return {kind: 'text', value: t};
     if (node?.type === 'NumericLiteral')
@@ -1753,7 +1865,7 @@ function ownPageTokens(
       return {
         kind: 'pair',
         halves: node.elements.map((/** @type {any} */ e) => {
-          const h = unwrap(e);
+          const h = unwrapIn(e);
           return (
             textOf(h) ?? (h?.type === 'NumericLiteral' ? h.value : undefined)
           );
@@ -1774,6 +1886,18 @@ function ownPageTokens(
     return {kind: 'other'};
   };
   collect(tokensProp.value, 0);
+  // Only the last entry for a token is what the build writes: an earlier
+  // one a later key or spread overrides is marked, never judged.
+  if (detail) {
+    /** @type {Map<string, number>} */
+    const last = new Map();
+    detail.forEach((e, i) => {
+      if (e.token) last.set(e.token, i);
+    });
+    detail.forEach((e, i) => {
+      if (e.token && last.get(e.token) !== i) e.overridden = true;
+    });
+  }
   // A value no read of the file can resolve (a call, an import) is read
   // from the build (ownTokens), and checked again after the next one.
   if (detail && unresolved)
@@ -5470,6 +5594,113 @@ export async function builtPairs(ctx, slug) {
  */
 export async function evaluatedOwnTokens(ctx, slug) {
   return cacheBuild(ctx, slug, js => builtOwnTokens(ctx.project.cwd, slug, js));
+}
+
+/**
+ * What a build made now writes for a theme: its own page-wide tokens (see
+ * builtOwnTokens), every top-level token, and the typography it was given
+ * (evaluated: an import or an expression is its value). Null when it does
+ * not build in the project's cache folder.
+ * @param {Ctx} ctx
+ * @param {string} slug
+ * @returns {Promise<{own: Map<string, string | null>, tops: Map<string, string | null>, shapes: Map<string, BuiltShape>, typography: any} | null>}
+ */
+export async function evaluatedTheme(ctx, slug) {
+  return cacheBuild(ctx, slug, js => {
+    const read = builtModule(js);
+    return {
+      own: builtOwnTokens(ctx.project.cwd, slug, js) ?? new Map(),
+      tops: topTokensOf(js),
+      shapes: read.shapes,
+      typography: read.axes?.typography ?? null,
+    };
+  });
+}
+
+/**
+ * What a built module writes for a top-level token: text, a number, an
+ * object, a pair (each half), or something else.
+ * @typedef {{kind: 'text' | 'number' | 'object' | 'pair' | 'other', value?: any, halves?: unknown[]}} BuiltShape
+ */
+
+/**
+ * What a built theme module holds: the shape of each top-level token, and
+ * its `__axes` (the typography and motion it was given, evaluated).
+ * @param {string} js
+ * @returns {{shapes: Map<string, BuiltShape>, axes: any}}
+ */
+function builtModule(js) {
+  /** @type {Map<string, BuiltShape>} */
+  const shapes = new Map();
+  try {
+    const ast = /** @type {any} */ (
+      parseModule(fs.readFileSync(js, 'utf8'), {
+        sourceType: 'module',
+        plugins: ['typescript'],
+      })
+    );
+    /** @param {any} n @returns {any} */
+    const plain = n =>
+      n?.type === 'StringLiteral' || n?.type === 'NumericLiteral'
+        ? n.value
+        : n?.type === 'UnaryExpression' && n.operator === '-'
+          ? -plain(n.argument)
+          : n?.type === 'NullLiteral'
+            ? null
+            : n?.type === 'ObjectExpression'
+              ? Object.fromEntries(
+                  n.properties.map((/** @type {any} */ p) => [
+                    p.key?.value ?? p.key?.name,
+                    plain(p.value),
+                  ]),
+                )
+              : n?.type === 'ArrayExpression'
+                ? n.elements.map(plain)
+                : undefined;
+    /** @type {any} */
+    let axes = null;
+    /** @type {any} */
+    let tokens = null;
+    /** @param {any} node @param {number} depth */
+    const visit = (node, depth) => {
+      if (!node || typeof node !== 'object') return;
+      if (node.type === 'ObjectProperty') {
+        const k = node.key?.name ?? node.key?.value;
+        if (k === '__axes' && !axes) axes = plain(node.value);
+        // The theme's own top-level tokens: the first `tokens` object.
+        if (
+          k === 'tokens' &&
+          !tokens &&
+          node.value?.type === 'ObjectExpression'
+        )
+          tokens = node.value;
+      }
+      for (const v of Object.values(node))
+        if (Array.isArray(v)) v.forEach(c => visit(c, depth + 1));
+        else if (v && typeof v === 'object' && v.type) visit(v, depth + 1);
+    };
+    visit(ast.program, 0);
+    for (const p of tokens?.properties ?? []) {
+      const k = p.key?.value ?? p.key?.name;
+      if (typeof k !== 'string') continue;
+      const v = p.value;
+      shapes.set(
+        k,
+        v?.type === 'StringLiteral'
+          ? {kind: 'text', value: v.value}
+          : v?.type === 'NumericLiteral'
+            ? {kind: 'number', value: v.value}
+            : v?.type === 'ObjectExpression'
+              ? {kind: 'object', value: plain(v)}
+              : v?.type === 'ArrayExpression'
+                ? {kind: 'pair', halves: plain(v)}
+                : {kind: 'other'},
+      );
+    }
+    return {shapes, axes};
+  } catch {
+    return {shapes, axes: null};
+  }
 }
 
 /**
