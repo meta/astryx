@@ -54,6 +54,7 @@ import {
   useOutsidePress,
 } from '../Layer/outsidePress';
 import {isImeKeyEvent} from '../utils/ime';
+import {isRtlElement} from '../hooks/isRtlElement';
 import {TypeaheadItem} from './TypeaheadItem';
 import {Icon} from '../Icon';
 import {Spinner} from '../Spinner';
@@ -61,6 +62,7 @@ import {SpinnerOwnerContext} from '../Spinner/SpinnerOwnerContext';
 import {
   borderVars,
   colorVars,
+  focusVars,
   spacingVars,
   radiusVars,
   typographyVars,
@@ -470,6 +472,29 @@ const styles = stylex.create({
     minWidth: 0,
     overflow: 'hidden',
   },
+  // In a grid (a result carries an `action`), the row's two cells split it
+  // into the option's press target and the action's slot. The action cell is
+  // a real cell for the active-descendant ring, drawn with the focus tokens
+  // because no element in the popup has DOM focus.
+  optionCell: {
+    display: 'flex',
+    alignItems: 'center',
+    flex: 1,
+    minWidth: 0,
+    alignSelf: 'stretch',
+  },
+  actionCell: {
+    display: 'flex',
+    alignItems: 'center',
+    marginInlineStart: spacingVars['--spacing-2'],
+    borderRadius: radiusVars['--radius-element'],
+  },
+  actionCellActive: {
+    outlineWidth: focusVars['--focus-outline-width'],
+    outlineStyle: focusVars['--focus-outline-style'],
+    outlineColor: focusVars['--focus-outline-color'],
+    outlineOffset: focusVars['--focus-outline-offset'],
+  },
   defaultItem: {
     minWidth: 0,
     width: '100%',
@@ -577,6 +602,44 @@ function startsWithRows<T extends SearchableItem>(
  * threshold. An empty query is not "below the minimum" — it is the
  * untouched state, and `hasEntriesOnFocus` owns what happens there.
  */
+// The caller's control must carry its own name: a screen reader reaches it
+// through the action cell. Checked on the rendered DOM, in development only.
+const useUnnamedActionWarning =
+  process.env.NODE_ENV === 'production'
+    ? () => {}
+    : (
+        isOpenGrid: boolean,
+        panelRef: React.RefObject<HTMLElement | null>,
+        results: ReadonlyArray<SearchableItem>,
+      ) => {
+        useEffect(() => {
+          const isUnnamed = (control: HTMLElement | null) =>
+            control != null &&
+            (control.getAttribute('aria-label') ?? '').trim() === '' &&
+            !control.hasAttribute('aria-labelledby') &&
+            (control.textContent ?? '').trim() === '' &&
+            (control.getAttribute('title') ?? '').trim() === '';
+          const cells =
+            panelRef.current?.querySelectorAll<HTMLElement>(
+              '[role="gridcell"] + [role="gridcell"]',
+            ) ?? [];
+          if (
+            isOpenGrid &&
+            Array.from(cells).some(cell =>
+              isUnnamed(cell.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)),
+            )
+          ) {
+            warnOnce(
+              'base-typeahead:unnamed-action',
+              'BaseTypeahead',
+              'A result `action` renders a control with no accessible name. ' +
+                'Give it a label: a screen reader reaches it through the ' +
+                'action cell.',
+            );
+          }
+        }, [isOpenGrid, panelRef, results]);
+      };
+
 function preventOptionFocus(event: React.MouseEvent) {
   event.preventDefault();
 }
@@ -689,20 +752,26 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<T[]>([]);
 
-  // `action` is declared on `SearchableItem` for the grid-adopting hosts;
-  // this panel has not adopted it, so it renders the item without the
-  // control and says so (spec:AST-058 FR9).
-  useEffect(() => {
-    if (results.some(item => item.action != null)) {
-      warnOnce(
-        'base-typeahead:item-action',
-        'BaseTypeahead',
-        'A result carries `action`, which the typeahead panel does not render ' +
-          'yet; the item is shown without it.',
-      );
-    }
-  }, [results]);
+  // Grid mode: once a result carries an `action`, the panel is a grid for
+  // the life of the field, so a later list without one never flips the role
+  // under a screen reader. Each row then has an option cell and an action
+  // cell.
+  const [isGrid, setIsGrid] = useState(false);
+  if (!isGrid && results.some(item => item.action != null)) {
+    setIsGrid(true);
+  }
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  // The row the arrow keys moved to, and which of its cells holds the
+  // highlight. Only on that row do the horizontal arrows move between cells:
+  // after typing, or on a row the list highlighted by itself, they move the
+  // caret.
+  const [gridCell, setGridCell] = useState<{
+    index: number;
+    isAction: boolean;
+  } | null>(null);
+  const isGridRowReached =
+    isGrid && highlightedIndex >= 0 && gridCell?.index === highlightedIndex;
+  const isActionCellActive = isGridRowReached && gridCell?.isAction === true;
   // Bumped whenever the rows are replaced rather than appended to, so the
   // highlighted-row scroll runs for a new list but not when a later list for
   // the same query appends rows below (spec:AST-092 FR6).
@@ -714,6 +783,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     setResults(next);
     setQueryEntryCount(entryCount);
     setListKey(key => key + 1);
+    setGridCell(null);
   }, []);
   // Highlight indexes count rows in displayed order (ungrouped first, then
   // groups), which is how the popup renders them.
@@ -747,6 +817,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
           ? -1
           : keptOrder.findIndex(item => item.id === highlightedId);
       setResults(kept);
+      setGridCell(null);
       setHighlightedIndex(
         keptIndex >= 0 ? keptIndex : keptOrder.length > 0 ? 0 : -1,
       );
@@ -1663,6 +1734,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // Handle input change
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
+      setGridCell(null);
       handleQueryChange(e.target.value);
     },
     [handleQueryChange],
@@ -1949,6 +2021,24 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     [popover, anchorRef, dismiss],
   );
 
+  // Option ids follow the item, not the row, so the active descendant keeps
+  // naming the same option while rows are added after it and a screen reader
+  // does not re-read it (spec:AST-092 FR7). A repeated id in one list falls
+  // back to its row so DOM ids stay unique.
+  const optionIds = useMemo(() => {
+    const seen = new Set<string>();
+    return displayedResults.map((item, index) => {
+      const byItem = `${listboxId}-option-${encodeURIComponent(item.id)}`;
+      const id = seen.has(byItem) ? `${byItem}-${index}` : byItem;
+      seen.add(byItem);
+      return id;
+    });
+  }, [displayedResults, listboxId]);
+  const getItemId = useCallback(
+    (index: number) => optionIds[index] ?? `${listboxId}-option-${index}`,
+    [optionIds, listboxId],
+  );
+
   // Keyboard navigation
   const trailingKeyDown = useTrailingKeyDown();
   const handleKeyDown = useCallback(
@@ -2035,26 +2125,59 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         return;
       }
 
+      const moveToRow = (index: number) => {
+        setHighlightedIndex(index);
+        setGridCell({index, isAction: false});
+      };
+      // On a row the arrow keys reached, the horizontal arrows move between
+      // the row's two cells in visual order.
+      if (
+        isGridRowReached &&
+        (e.key === 'ArrowLeft' || e.key === 'ArrowRight')
+      ) {
+        const toAction =
+          e.key ===
+          (isRtlElement(e.currentTarget) ? 'ArrowLeft' : 'ArrowRight');
+        if (
+          toAction !== isActionCellActive &&
+          (!toAction || displayedResults[highlightedIndex]?.action != null)
+        ) {
+          e.preventDefault();
+          setGridCell({index: highlightedIndex, isAction: toAction});
+        }
+        return;
+      }
+
       switch (e.key) {
         case 'ArrowDown':
           e.preventDefault();
           if (results.length > 0) {
-            setHighlightedIndex(prev =>
-              prev < results.length - 1 ? prev + 1 : 0,
+            moveToRow(
+              highlightedIndex < results.length - 1 ? highlightedIndex + 1 : 0,
             );
           }
           break;
         case 'ArrowUp':
           e.preventDefault();
           if (results.length > 0) {
-            setHighlightedIndex(prev =>
-              prev > 0 ? prev - 1 : results.length - 1,
+            moveToRow(
+              highlightedIndex > 0 ? highlightedIndex - 1 : results.length - 1,
             );
           }
           break;
         case 'Enter':
           e.preventDefault();
-          if (highlightedIndex >= 0 && highlightedIndex < results.length) {
+          if (isActionCellActive) {
+            // The highlight is on the caller's control: fire it, and only
+            // it. The selection, the highlight and the list stay as they are.
+            document
+              .getElementById(`${getItemId(highlightedIndex)}-action`)
+              ?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)
+              ?.click();
+          } else if (
+            highlightedIndex >= 0 &&
+            highlightedIndex < results.length
+          ) {
             handleSelect(displayedResults[highlightedIndex]);
           }
           break;
@@ -2074,7 +2197,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
           if (popover.isOpen) {
             e.preventDefault();
             if (results.length > 0) {
-              setHighlightedIndex(0);
+              moveToRow(0);
             }
           }
           break;
@@ -2082,7 +2205,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
           if (popover.isOpen) {
             e.preventDefault();
             if (results.length > 0) {
-              setHighlightedIndex(results.length - 1);
+              moveToRow(results.length - 1);
             }
           }
           break;
@@ -2095,6 +2218,9 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       results,
       displayedResults,
       highlightedIndex,
+      isGridRowReached,
+      isActionCellActive,
+      getItemId,
       handleSelect,
       hasEntriesOnFocus,
       query,
@@ -2223,24 +2349,6 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     }
   });
 
-  // Option ids follow the item, not the row, so the active descendant keeps
-  // naming the same option while rows are added after it and a screen reader
-  // does not re-read it (spec:AST-092 FR7). A repeated id in one list falls
-  // back to its row so DOM ids stay unique.
-  const optionIds = useMemo(() => {
-    const seen = new Set<string>();
-    return displayedResults.map((item, index) => {
-      const byItem = `${listboxId}-option-${encodeURIComponent(item.id)}`;
-      const id = seen.has(byItem) ? `${byItem}-${index}` : byItem;
-      seen.add(byItem);
-      return id;
-    });
-  }, [displayedResults, listboxId]);
-  const getItemId = useCallback(
-    (index: number) => optionIds[index] ?? `${listboxId}-option-${index}`,
-    [optionIds, listboxId],
-  );
-
   // Keep the highlighted option visible during keyboard navigation; hover
   // highlights never scroll (#6077). Both sides live in useHighlightedOptionScroll.
   // The scroll follows the highlighted option's id and the list it belongs
@@ -2277,11 +2385,13 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     };
   }, []);
 
+  useUnnamedActionWarning(isGrid && popover.isOpen, dropdownRef, results);
+
   const listbox = (
     <div
       ref={dropdownRef}
       id={listboxId}
-      role="listbox"
+      role={isGrid ? 'grid' : 'listbox'}
       aria-label={t('@astryx.typeahead.searchResults')}
       {...mergeProps(
         themeProps('typeahead-dropdown'),
@@ -2291,10 +2401,12 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         ),
       )}>
       {results.length === 0 && hasSearched && !isSearchPending ? (
+        // Out of the accessibility tree in both roles: a listbox or a grid
+        // owns only its options or rows. The live region announces the
+        // message from this rendered text.
         <div
           ref={emptyStateRef}
-          role="option"
-          aria-disabled="true"
+          role="presentation"
           {...mergeProps(
             themeProps('typeahead-empty-state'),
             stylex.props(styles.emptyState),
@@ -2308,15 +2420,34 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
             const index = flatIndex++;
             const itemKey = getKey(item.id, index);
             const isSelected = itemKey === selectedKey;
+            const itemId = getItemId(index);
+            const select = () => handleSelect(item);
+            const optionContent = (
+              <>
+                <span {...stylex.props(styles.itemContent)}>
+                  {renderItem ? (
+                    renderItem(item)
+                  ) : (
+                    <TypeaheadItem item={item} xstyle={styles.defaultItem} />
+                  )}
+                </span>
+                {isSelected && <Icon icon="check" size="sm" color="primary" />}
+              </>
+            );
+            // In a grid the row is named by its option cell alone, so the
+            // caller's control never joins the row's name, and only the
+            // option cell selects: a press on the action runs the caller's
+            // handler.
             return (
               <div
                 key={itemKey}
-                id={getItemId(index)}
-                role="option"
+                id={itemId}
+                role={isGrid ? 'row' : 'option'}
                 aria-selected={isSelected}
+                aria-labelledby={isGrid ? `${itemId}-option` : undefined}
                 tabIndex={-1}
                 onMouseDown={canKeepFocusList ? preventOptionFocus : undefined}
-                onClick={() => handleSelect(item)}
+                onClick={isGrid ? undefined : select}
                 // Highlight follows pointer movement, not pointer
                 // presence: a menu that opens or reflows under a resting
                 // pointer keeps its keyboard highlight, so Enter acts on
@@ -2329,14 +2460,30 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
                   index === highlightedIndex && styles.itemHighlighted,
                   isSelected && styles.itemSelected,
                 )}>
-                <span {...stylex.props(styles.itemContent)}>
-                  {renderItem ? (
-                    renderItem(item)
-                  ) : (
-                    <TypeaheadItem item={item} xstyle={styles.defaultItem} />
-                  )}
-                </span>
-                {isSelected && <Icon icon="check" size="sm" color="primary" />}
+                {isGrid ? (
+                  <>
+                    <div
+                      role="gridcell"
+                      id={`${itemId}-option`}
+                      onClick={select}
+                      {...stylex.props(styles.optionCell)}>
+                      {optionContent}
+                    </div>
+                    <div
+                      role="gridcell"
+                      id={`${itemId}-action`}
+                      {...stylex.props(
+                        styles.actionCell,
+                        index === highlightedIndex &&
+                          isActionCellActive &&
+                          styles.actionCellActive,
+                      )}>
+                      {item.action}
+                    </div>
+                  </>
+                ) : (
+                  optionContent
+                )}
               </div>
             );
           };
@@ -2352,7 +2499,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
             return (
               <div
                 key={`group-${group.heading}`}
-                role="group"
+                role={isGrid ? 'rowgroup' : 'group'}
                 aria-label={group.heading}>
                 <div aria-hidden="true" {...stylex.props(styles.groupHeading)}>
                   {group.heading}
@@ -2393,13 +2540,15 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         role="combobox"
         aria-expanded={popover.isOpen}
         aria-controls={isDialogMenu ? popover.id : listboxId}
-        aria-haspopup={isDialogMenu ? 'dialog' : undefined}
+        aria-haspopup={isDialogMenu ? 'dialog' : isGrid ? 'grid' : undefined}
         aria-activedescendant={
           popover.isOpen &&
           !isDialogMenu &&
           highlightedIndex >= 0 &&
           highlightedIndex < results.length
-            ? getItemId(highlightedIndex)
+            ? isActionCellActive
+              ? `${getItemId(highlightedIndex)}-action`
+              : getItemId(highlightedIndex)
             : undefined
         }
         aria-autocomplete="list"
