@@ -10,6 +10,7 @@ import {asksForNewPage} from './kind.mjs';
 import {pickAlternatives, pickStart} from './rank.mjs';
 import {hasEditPhrase, shellCallScore} from './shellcall.mjs';
 import {blendOrder, blendSummary, weighStart} from './weights.mjs';
+import {PHRASE_END, terms} from './words.mjs';
 
 /**
  * @typedef {import('../../search/search.type.mjs').SearchResultEntry} SearchResultEntry
@@ -68,16 +69,16 @@ function placement(kind, inPage) {
  * fit with them.
  */
 const LIFT = [
-  -0.7707, 0.6706, -0.2642, 0.2815, -0.1621, 0.1759, 0.1713, 0.2891, -0.3491,
+  -0.9336, 0.0234, 0.1441, 0.0196, -0.1264, 0.1509, 0.037, 0.3124, -0.1254,
 ];
 
-/** The decision replaces the shell with a page when p >= 0.30. */
-const LIFT_AT = 0.3;
+/** The decision replaces the shell with a page when p >= 0.1781. */
+const LIFT_AT = 0.1781;
 
 /**
  * The page template that replaces an app-shell start, or null to keep the
  * shell. The blend's best template takes the start when the decision's
- * whole-page probability is at least 0.30.
+ * whole-page probability is at least 0.1781.
  * @param {import('./rank.mjs').RankedPage[]} ranked
  * @param {import('./rank.mjs').IdeaKind} kind
  * @param {PageTemplate[]} catalog
@@ -109,7 +110,44 @@ function liftFromShell(ranked, kind, catalog, idea) {
   ];
   const logit = x.reduce((s, v, i) => s + v * LIFT[i], 0);
   if (1 / (1 + Math.exp(-logit)) < LIFT_AT) return null;
+  if (!namesAShippedKind(idea, catalog)) return null;
   return catalog.find(t => t.name === b.best) ?? null;
+}
+
+/** Words that name a page itself rather than what the page is for. */
+const PAGE_WORDS = new Set(['page', 'app', 'screen', 'site', 'view']);
+
+/**
+ * Whether the idea's leading phrase ("a support inbox", "an event page") names
+ * a kind of page that some template calls itself: a word of its name, display
+ * name, category or keywords. When no template uses any of those words, the
+ * system has no such page, and the idea keeps the app shell. A leading phrase
+ * with only page words ("a page with…") puts no limit on the page.
+ * @param {string} idea
+ * @param {PageTemplate[]} catalog
+ * @returns {boolean}
+ */
+function namesAShippedKind(idea, catalog) {
+  const lead = terms(String(idea).toLowerCase().split(PHRASE_END)[0]).filter(
+    t => !PAGE_WORDS.has(t),
+  );
+  if (!lead.length) return true;
+  const own = new Set(
+    catalog.flatMap(page =>
+      terms(
+        [
+          page.name.replace(/-/g, ' '),
+          page.displayName ?? '',
+          String(page.category ?? '')
+            .split(' - ')
+            .slice(1)
+            .join(' '),
+          ...(page.keywords ?? []),
+        ].join(' '),
+      ),
+    ),
+  );
+  return lead.some(t => own.has(t));
 }
 
 /**
@@ -151,13 +189,21 @@ export function chooseStart(ranked, kind, pages, directMatch, catalog, idea) {
   // The checked-in word weights (weights.mjs), blended with the ranker's
   // scores, decide the start of a whole page. A part or an edit starts where
   // the ranker's placement rules put it (spec:AST-048/FR3).
-  const weighed =
+  const weighedByBlend =
     kind === 'page'
       ? weighStart(idea, ranked, proposed, catalog, {
           weights: loadWeights(),
           newPage: asksForNewPage(idea, catalog),
         })
       : undefined;
+  // An idea that changes a page the builder already has keeps the shell the
+  // ranker starts it from: the blend never turns that shell into a page.
+  const weighed =
+    weighedByBlend &&
+    hasEditPhrase(idea) &&
+    (!proposed || proposed.family === 'Shell')
+      ? null
+      : weighedByBlend;
   // A shell start keeps the shell the ranker named, if any, and never replaces
   // the template the ranker chose for a page search matched directly.
   const pick =
@@ -169,7 +215,7 @@ export function chooseStart(ranked, kind, pages, directMatch, catalog, idea) {
           : null
         : (ranked.find(r => r.name === weighed) ?? proposed);
   // An idea that would start on the app shell starts from the blend's best page
-  // when the decision's whole-page probability is at least 0.30. A direct match,
+  // when the decision's whole-page probability is at least 0.1781. A direct match,
   // ready or not, keeps the start and reason it already has.
   const lifted =
     !direct && (!pick || pick.family === 'Shell')
