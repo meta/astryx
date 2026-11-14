@@ -565,19 +565,16 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
   // A shadow ask is answered only by a shadow that looks different: an
   // opaque color written with alpha ff, or clamped there, is no change.
   let shadowMoved = !intent.shadowDir;
-  // A dial step beside a typed value still moves the asked way ("smaller,
-  // 16px" never gives spacing more).
-  for (const st of steps)
-    if (
-      intent.dir &&
-      (st.value === 'more' || st.value === 'less') &&
-      st.value !== intent.dir
-    )
-      return `${st.thing} ${st.value} moves the other way`;
-  // A value the question types is the target: its way is as written, but
-  // the kind of change and a removal are still held.
-  const skipDir = steps.some(st =>
-    typed.has(String(st.value ?? '').toLowerCase()),
+  // A value the question types is the target: the way of what it writes
+  // is as written, but the kind of change and a removal are still held,
+  // and every other value is measured the way asked (a dial step beside a
+  // typed value included: "smaller, 16px" never gives spacing more). A dial
+  // is judged by what it does, never by its own word: "vibrancy less" is
+  // the way "more washed out" asks.
+  const typedFamilies = new Set(
+    steps
+      .filter(st => typed.has(String(st.value ?? '').toLowerCase()))
+      .map(st => familyOf(st.thing)),
   );
   // The subject's changed values: family, direction, removal.
   const touched = new Set([
@@ -638,7 +635,7 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
             return `${part}'s ${prop} would be ${after} in ${mode} mode, not none`;
           continue;
         }
-        if (before == null || skipDir) continue;
+        if (before == null || typedFamilies.has(fam)) continue;
         // A shadow's strength moves the way asked, in each mode.
         if (fam === 'shadow' && intent.shadowDir) {
           const x = shadowStrength(after);
@@ -751,7 +748,7 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
           return `${tok} would be ${after} in ${mode} mode, not none`;
         continue;
       }
-      if (skipDir) continue;
+      if (typedFamilies.has(fam)) continue;
       if (fam === 'shadow' && intent.shadowDir) {
         const x = shadowStrength(after);
         const y = shadowStrength(before);
