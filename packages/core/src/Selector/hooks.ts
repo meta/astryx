@@ -26,7 +26,10 @@ import {
   readLayerEntranceSide,
   writeLayerEntranceSide,
 } from '../Layer/layerEntranceSide';
-import {LAYER_KEYBOARD_INSET_PROPERTY} from '../Layer/useLayerKeyboardClearance';
+import {
+  LAYER_KEYBOARD_CLEARANCE_PX,
+  LAYER_KEYBOARD_INSET_PROPERTY,
+} from '../Layer/useLayerKeyboardClearance';
 import {isImeKeyEvent} from '../utils/ime';
 import {layoutViewportHeight} from '../utils/layoutViewport';
 import {observeResizeAfterLayout} from '../utils/sharedResizeObserver';
@@ -300,11 +303,10 @@ export function useSelectedItemOverlayMargin({
       belowAnchor = `min(${-offset}px, max(${-anchorBottom}px, calc(${room}px - var(${LAYER_KEYBOARD_INSET_PROPERTY}, ${room}px))))`;
       // A flip swaps the block margins, so this margin sets the list's end
       // from the anchor's top. It puts the list's top at the clamped top, or
-      // lifts the list's end above a software keyboard. The list's top stays
-      // below the gutter.
+      // lifts the list's end above a software keyboard.
       const flipped = anchorTop - placement.clampedTop - listboxHeight;
       const keyboardEnd = anchorTop - viewport;
-      aboveAnchor = `min(${anchorTop - listboxHeight - gutter}px, max(${flipped}px, calc(${keyboardEnd}px + var(${LAYER_KEYBOARD_INSET_PROPERTY}, 0px))))`;
+      aboveAnchor = `max(${flipped}px, calc(${keyboardEnd}px + var(${LAYER_KEYBOARD_INSET_PROPERTY}, 0px)))`;
     }
     // At the open, the browser picks the layer's side after this margin
     // applies. The margin below the anchor always fits there, so the layer
@@ -318,6 +320,22 @@ export function useSelectedItemOverlayMargin({
     );
     // eslint-disable-next-line @eslint-react/set-state-in-effect -- selector popover position is derived from DOM layout
     setIsPositioned(isOpen);
+
+    const listbox = listboxRef.current;
+    if (listbox != null) {
+      if (isOpen && isFlippedWhileOpen && placement != null) {
+        const viewport = layoutViewportHeight(window);
+        listbox.style.maxHeight = `min(300px, calc(${viewport}px - var(${LAYER_KEYBOARD_INSET_PROPERTY}, 0px) - ${LAYER_KEYBOARD_CLEARANCE_PX}px - ${placement.gutter}px))`;
+      } else {
+        listbox.style.maxHeight = '';
+      }
+    }
+
+    return () => {
+      if (listbox != null) {
+        listbox.style.maxHeight = '';
+      }
+    };
   }, [
     isOpen,
     selectedItemIndex,
