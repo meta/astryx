@@ -77,9 +77,9 @@ const CIRCLE_EDGE_OFFSET_RATIO = (1 - 1 / Math.SQRT2) / 2;
  * The ratio of font size to the rendered avatar box for initials.
  *
  * At 40%, two-letter initials fit comfortably within the circle with adequate
- * padding. It is read from the box the avatar actually draws (container query
- * units on the content), so a theme that resizes an avatar keeps the initials
- * in proportion:
+ * padding. The size follows the rendered box (container query units on the
+ * content), so a theme that resizes the avatar keeps the initials in
+ * proportion:
  *   - 24px box → 9.6px font
  *   - 48px box → 19.2px font
  *   - 128px box → 51.2px font
@@ -87,8 +87,8 @@ const CIRCLE_EDGE_OFFSET_RATIO = (1 - 1 / Math.SQRT2) / 2;
 const INITIALS_FONT_SIZE_RATIO = 0.4;
 
 /**
- * The smallest initials font size at `xsm`, whose 20px box would otherwise
- * give 8px, below the smallest text step in the type scale.
+ * The smallest initials size at `xsm`. 40% of its 20px box is 8px, which is too
+ * small to read.
  */
 const XSM_INITIALS_MIN_PX = 10;
 
