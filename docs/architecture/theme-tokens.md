@@ -214,8 +214,8 @@ then have contradictory winners.
   only cue to where the control is. It meets 3:1 against the default surface
   and the page body in light and dark mode in Core's defaults, and every
   Astryx theme template sets a value that does. A theme built from a colour
-  scale gets `--color-border-control` from the scale, at 3:1 or more against
-  its own surface and body, as its emphasized border already is
+  scale gets a generated `--color-border-control` held at 3:1 or more against
+  its own surface and body
   (`spec:AST-020` FR1; WCAG 2.2 SC 1.4.11). Other borders keep
   `--color-border-emphasized` and their own roles (DEC-2).
 
@@ -321,8 +321,8 @@ border role of their own, `--color-border-control`, held at 3:1 (INV13). Field
 shells and checkbox and radio boxes use it. Cards, dividers and every other
 surface keep the lighter `--color-border-emphasized` edge, so in Core's
 defaults and the theme templates only the controls darken. A theme built from
-a colour scale already holds its emphasized edge at 3:1, so its controls keep
-the edge they have.
+a colour scale gets a generated control edge held at 3:1 against its surface
+and body.
 
 Rejected: raising `--color-border-emphasized` to 3:1, because about twenty other
 surfaces would darken with it.
