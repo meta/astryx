@@ -1,5 +1,19 @@
 # @xds/theme-chocolate
 
+# 0.7.16
+
+#### Documentation
+
+- Fix the theme README usage examples to import `Theme` from `@astryxdesign/core/theme` instead of the removed `XDSTheme` alias, and refresh the bundled theme lists in the package index and contributor guide. ([#11016](https://github.com/meta/astryx/pull/11016))
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @karlmoriaty
+
+---
+
 # 0.7.15
 
 ---
