@@ -33,11 +33,11 @@ export const doc = {
   exitCodes: [
     {
       code: 0,
-      when: 'the module is regenerated without the theme',
+      when: 'the module is regenerated without the theme, or removed with the only added theme',
     },
     {
       code: 1,
-      when: 'the theme is not added, is the default, or state is invalid',
+      when: 'the theme is not added, is the default while other themes are added, is the only one and the module has changes the CLI did not write, or state is invalid',
     },
   ],
   related: [
