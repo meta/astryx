@@ -493,13 +493,17 @@ function acceptDeclaration(
  * declarations it means to emit.
  */
 function joinDeclarations(
-  entries: [string, string][],
+  entries: [string, unknown][],
   location: string,
   sink: DiagnosticSink,
   mapProp: (prop: string) => string = p => p,
 ): string {
   const lines: string[] = [];
   for (const [rawProp, rawValue] of entries) {
+    // An undefined value sets nothing, as a page token's does.
+    if (rawValue === undefined) {
+      continue;
+    }
     // Legacy unenrolled tokens retain non-string values. Scan the same text
     // interpolation has always emitted, without changing the normalized theme.
     const value = stringifyTokenValue(rawValue);
@@ -578,6 +582,9 @@ function assignTokenCascade(
 ): void {
   for (const tokens of tokenSets) {
     for (const [rawToken, rawValue] of Object.entries(tokens ?? {})) {
+      if (rawValue === undefined) {
+        continue;
+      }
       const token = canonicalizeDeclarationName(rawToken);
       const value = stringifyTokenValue(rawValue);
       const analysis = analyzeDeclarationValue(value);
@@ -1381,6 +1388,10 @@ function generateComponentRules(
         const props: [string, string][] = [];
         const nested: [string, StyleBlock][] = [];
         for (const [prop, value] of Object.entries(block)) {
+          // An undefined value sets nothing, as a page token's does.
+          if (value === undefined) {
+            continue;
+          }
           const isObject = value !== null && typeof value === 'object';
           // A pseudo-class override or a color-mode block nests. Anything
           // else is a declaration as written, so the boundary check reports
@@ -1416,7 +1427,9 @@ function generateComponentRules(
           parts.push(wrap(`  ${selector} {\n${declarations}\n  }`));
         }
         for (const [pseudo, pseudoStyles] of nested) {
-          const pseudoEntries = Object.entries(pseudoStyles);
+          const pseudoEntries = Object.entries(pseudoStyles).filter(
+            ([, value]) => value !== undefined,
+          );
           if (pseudo.startsWith(':') && pseudoEntries.length > 0) {
             const declarations = joinDeclarations(
               pseudoEntries as [string, string][],

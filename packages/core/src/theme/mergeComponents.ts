@@ -7,7 +7,8 @@
  * them: `extends` inheritance, generated type-scale rules, and the on-media
  * (`onDark`/`onLight`) surfaces. Merging is per style key, so a child that
  * restates one property of `button.base` keeps the rest of the base's; a
- * color-mode block (`@light`, `@dark`) merges per property the same way.
+ * color-mode block (`@light`, `@dark`) merges per property the same way. A
+ * property the overrides leave `undefined` keeps the base's value.
  *
  * @input two ComponentStyleMaps — the base and the overrides that win
  * @output a merged ComponentStyleMap
@@ -51,7 +52,14 @@ export function deepMergeComponents(
       result[component] = {...rules};
     } else {
       for (const [key, styles] of Object.entries(rules)) {
-        const merged = {...result[component][key], ...styles};
+        // A property left undefined is not set: the inherited value stays,
+        // as for a page token.
+        const merged = {
+          ...result[component][key],
+          ...Object.fromEntries(
+            Object.entries(styles).filter(([, value]) => value !== undefined),
+          ),
+        };
         // A color-mode block merges by property too, as the style key does.
         for (const mode of COLOR_MODE_KEYS) {
           const inherited = result[component][key]?.[mode];

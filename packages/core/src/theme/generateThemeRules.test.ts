@@ -190,6 +190,46 @@ describe('generateThemeRules', () => {
     }
   });
 
+  it('writes nothing for a part or surface value left undefined, as for a page token', () => {
+    const theme = defineTheme({
+      name: 'unset-values',
+      tokens: {'--radius-element': undefined},
+      components: {
+        button: {
+          base: {
+            '--radius-element': undefined as unknown as string,
+            padding: undefined as unknown as string,
+            ':hover': {color: undefined as unknown as string},
+          },
+        },
+      },
+      onDark: {tokens: {'--color-accent': undefined}},
+    });
+    const warnings: string[] = [];
+    const css = [
+      ...generateThemeRules(theme, warnings),
+      generateOnMediaCSS(theme, warnings),
+    ].join('\n');
+    expect(css).not.toMatch(/:\s*undefined;/);
+    // A block left with no value writes no empty rule.
+    expect(css).not.toMatch(/:hover[^{]*\{\s*\}/);
+    expect(warnings).toEqual([]);
+  });
+
+  it('keeps an inherited part value a child leaves undefined', () => {
+    const base = defineTheme({
+      name: 'unset-base',
+      components: {button: {base: {padding: '8px'}}},
+    });
+    const child = defineTheme({
+      extends: base,
+      name: 'unset-child',
+      components: {button: {base: {padding: undefined as unknown as string}}},
+    });
+    expect(child.components?.button?.base?.padding).toBe('8px');
+    expect(generateThemeRules(child).join('\n')).toMatch(/padding: 8px;/);
+  });
+
   it('includes explicit component overrides', () => {
     const buttonRule = rules.find(r =>
       r.includes('.astryx-button[data-variant="secondary"]'),
