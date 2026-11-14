@@ -162,6 +162,22 @@ export function phrasesIn(words, units) {
   return found;
 }
 
+/**
+ * The words a template's keyword units give an idea: each one-word keyword,
+ * and every word of each phrase keyword the idea names (`phrasesIn`). A named
+ * phrase carries all of its words, as the same words listed one by one would;
+ * a phrase the idea does not name gives none of them.
+ * @param {readonly string[]} units the template's keyword units (`keywordUnits`)
+ * @param {readonly string[]} words the idea's words, in order, read the same way
+ * @returns {string[]}
+ */
+export function keywordWordsFor(units, words) {
+  const named = phrasesIn(words, units);
+  return units.flatMap(unit =>
+    !unit.includes(' ') ? [unit] : named.has(unit) ? unit.split(' ') : [],
+  );
+}
+
 /** @param {string} text */
 export const normalized = text =>
   (

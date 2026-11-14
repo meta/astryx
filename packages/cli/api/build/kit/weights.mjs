@@ -20,7 +20,7 @@
  */
 
 import {STOPWORDS} from '../../search/search.mjs';
-import {keywordUnits, phrasesIn} from './words.mjs';
+import {keywordUnits, keywordWordsFor} from './words.mjs';
 
 /** The app shell, as one candidate. */
 export const SHELL = 'SHELL';
@@ -251,56 +251,38 @@ const contentWords = text =>
     .map(stem);
 
 /**
- * The units of a template's descriptor fields: every word of `texts`, and
- * each of its keywords as one unit, a phrase keyword as one phrase
- * (`keywordUnits`) whose words do not count alone.
+ * The words a template's descriptor gives an idea: every word of `texts`, and
+ * the words its keywords give the idea (`keywordWordsFor`): a phrase keyword
+ * counts all of its words when the idea names the whole phrase, and none of
+ * them otherwise.
  * @param {string[]} texts
  * @param {readonly string[]} keywords
+ * @param {string[]} order the idea's words, in order (`contentWords`)
  * @returns {Set<string>}
  */
-const descriptorUnits = (texts, keywords) =>
+const descriptorWordsFor = (texts, keywords, order) =>
   new Set([
     ...contentWords(texts.join(' ')),
-    ...keywordUnits(keywords, contentWords),
+    ...keywordWordsFor(keywordUnits(keywords, contentWords), order),
   ]);
 
 /**
- * The units of an idea a set of descriptors can match: its words, and the
- * phrases among `units` it names in order.
- * @param {string[]} order the idea's words, in order (`contentWords`)
- * @param {Iterable<Set<string>>} descriptors
- * @returns {Set<string>}
- */
-const ideaUnits = (order, descriptors) => {
-  const units = [];
-  for (const d of descriptors) units.push(...d);
-  return new Set([...order, ...phrasesIn(order, units)]);
-};
-
-/**
- * The units of a template's own descriptor: its display name, its category,
- * and its keywords.
+ * How many of the idea's words a template's own descriptor names: its display
+ * name, its category, and its keywords.
  * @param {string} name
  * @param {DescribedTemplate[]} catalog
- * @returns {Set<string>}
+ * @param {string[]} order the idea's words, in order (`contentWords`)
  */
-function ownUnits(name, catalog) {
+function ownWords(name, catalog, order) {
   const t = catalog.find(c => c.name === name);
-  if (!t) return new Set();
-  return descriptorUnits(
+  if (!t) return 0;
+  const own = descriptorWordsFor(
     [t.displayName ?? '', t.category ?? ''],
     t.keywords ?? [],
+    order,
   );
-}
-
-/**
- * How many of an idea's units a template's own descriptor names.
- * @param {Set<string>} own the template's units (`ownUnits`)
- * @param {Set<string>} said the idea's units (`ideaUnits`)
- */
-function ownWords(own, said) {
   let n = 0;
-  for (const w of said) if (own.has(w)) n++;
+  for (const w of new Set(order)) if (own.has(w)) n++;
   return n;
 }
 
@@ -414,19 +396,21 @@ function typicalOfTie(name, ranked, cands) {
 }
 
 /**
- * The units of a template's whole descriptor (`descriptorUnits`): its display
- * name, category, keywords, description, and the names of the components its
- * page composes.
+ * The words a template's whole descriptor gives an idea
+ * (`descriptorWordsFor`): its display name, category, keywords, description,
+ * and the names of the components its page composes.
  * @param {DescribedTemplate} t
+ * @param {string[]} order the idea's words, in order (`contentWords`)
  * @returns {Set<string>}
  */
-function descriptorWords(t) {
+function descriptorWords(t, order) {
   const components = (t.components ?? []).map(c =>
     c.replace(/([a-z0-9])([A-Z])/g, '$1 $2'),
   );
-  return descriptorUnits(
+  return descriptorWordsFor(
     [t.displayName ?? '', t.category ?? '', t.description ?? '', ...components],
     t.keywords ?? [],
+    order,
   );
 }
 
@@ -457,10 +441,11 @@ function fullerOfTie(name, idea, ranked, cands, catalog) {
   );
   if (tied.length < 2) return name;
   const family = catalog.filter(t => familyOf(t.name, catalog) === self.family);
-  const words = new Map(family.map(t => [t.name, descriptorWords(t)]));
+  const order = contentWords(idea);
+  const words = new Map(family.map(t => [t.name, descriptorWords(t, order)]));
   const df = (/** @type {string} */ w) =>
     family.filter(t => words.get(t.name)?.has(w)).length;
-  const said = ideaUnits(contentWords(idea), words.values());
+  const said = new Set(order);
   const own = tied.map(r => words.get(r.name) ?? new Set());
   const n = family.length;
   const score = tied.map((_, i) => {
@@ -552,11 +537,8 @@ export function weighStart(
     // The idea's own words, less search's stopwords: "basically" must not
     // answer the "Basic" of a category.
     const order = contentWords(idea);
-    const ownKept = ownUnits(kept, catalog);
-    const ownListed = ownUnits(listed, catalog);
-    const said = ideaUnits(order, [ownKept, ownListed]);
-    const mine = ownWords(ownKept, said);
-    const theirs = ownWords(ownListed, said);
+    const mine = ownWords(kept, catalog, order);
+    const theirs = ownWords(listed, catalog, order);
     // An idea that names the template's family before the listed one's
     // ("a dashboard with a data table") is that family's page, unless it
     // names far more of the listed template's words.

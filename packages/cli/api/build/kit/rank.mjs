@@ -57,7 +57,7 @@ import {
   SYNONYMS_OF,
   familyWordsOf,
   keywordUnits,
-  phrasesIn,
+  keywordWordsFor,
 } from './words.mjs';
 
 /**
@@ -146,8 +146,8 @@ export function rankPages(query, pages) {
       variant: variantParts.join(' - '),
       family,
       display: page.displayName,
-      // A one-word keyword is a term like any other; a longer one is a
-      // single phrase unit (keywordUnits), added below.
+      // A one-word keyword is a term like any other. A longer one gives its
+      // words only to an idea that names the whole phrase (keywordWordsFor).
       keywords: keywords.filter(k => terms(k).length === 1).join(', '),
       description: page.description,
     };
@@ -159,8 +159,6 @@ export function rankPages(query, pages) {
       for (const t of terms(text))
         bag.set(t, Math.max(bag.get(t) ?? 0, weight));
     }
-    for (const unit of phrases)
-      bag.set(unit, Math.max(bag.get(unit) ?? 0, FIELD_WEIGHT.keywords));
     return {
       page,
       family: family.trim(),
@@ -178,9 +176,14 @@ export function rankPages(query, pages) {
   for (const {bag} of docs)
     for (const t of bag.keys()) df.set(t, (df.get(t) ?? 0) + 1);
   const n = docs.length;
-  /** @param {string} t */
-  const idf = t => {
-    const d = df.get(t);
+  /**
+   * @param {string} t
+   * @param {number} [own] 1 when the template scored carries `t` only through
+   *   a phrase keyword the idea names, so it counts among the templates that
+   *   carry `t`
+   */
+  const idf = (t, own = 0) => {
+    const d = (df.get(t) ?? 0) + own;
     return d ? Math.log(1 + (n - d + 0.5) / (d + 0.5)) : 0;
   };
 
@@ -200,16 +203,7 @@ export function rankPages(query, pages) {
     new Set(ts.filter(t => familyOfWord.has(t)).map(t => familyOfWord.get(t)));
 
   const queryWords = terms(query);
-  // A phrase keyword the idea names is one term of the idea, like a word.
-  const queryTerms = [
-    ...new Set([
-      ...queryWords,
-      ...phrasesIn(
-        queryWords,
-        docs.flatMap(d => d.phrases),
-      ),
-    ]),
-  ];
+  const queryTerms = [...new Set(queryWords)];
   const headFamilies = familiesIn(
     terms(String(query).split(HEAD_END)[0] ?? ''),
   );
@@ -218,7 +212,15 @@ export function rankPages(query, pages) {
   const containers = containersOf(query);
 
   const ranked = docs
-    .map(({page, family, bag, pairs}) => {
+    .map(({page, family, bag, phrases, pairs}) => {
+      // The words of the phrase keywords this idea names count as keywords.
+      const phraseWords = new Set(keywordWordsFor(phrases, queryWords));
+      /** @param {string} t */
+      const weightOf = t =>
+        Math.max(
+          bag.get(t) ?? 0,
+          phraseWords.has(t) ? FIELD_WEIGHT.keywords : 0,
+        );
       let score = 0;
       let hits = 0;
       let containerMatched = false;
@@ -231,7 +233,10 @@ export function rankPages(query, pages) {
         const discounted =
           modified !== undefined &&
           ![...modified].some(n => pairs.has(`${t} ${n}`));
-        const direct = idf(t) * (bag.get(t) ?? 0) * (discounted ? MODIFIER : 1);
+        const direct =
+          idf(t, bag.has(t) ? 0 : Number(phraseWords.has(t))) *
+          weightOf(t) *
+          (discounted ? MODIFIER : 1);
         let viaSynonym = 0;
         for (const s of SYNONYMS_OF.get(t) ?? []) {
           if (queryTerms.includes(s)) continue;

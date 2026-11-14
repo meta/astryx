@@ -42,6 +42,20 @@ describe('rankPages on the shipped page templates', () => {
   const start = async query =>
     pickStart(rankPages(query, await loadPageTemplates(REPO)))?.name ?? null;
 
+  it('starts a new template its one phrase keyword describes', async () => {
+    // A new template's only evidence is its descriptor: a phrase the idea
+    // names must carry as much as its words listed one by one.
+    const catalog = [
+      ...(await loadPageTemplates(REPO)),
+      page('acme-books', 'Acme - Books', 'Rows of entries.', [
+        'quarterly vendor ledger',
+      ]),
+    ];
+    expect(
+      pickStart(rankPages('a quarterly vendor ledger page', catalog))?.name,
+    ).toBe('acme-books');
+  });
+
   it('starts a long dashboard idea from the family base', async () => {
     expect(
       await start(
@@ -163,7 +177,7 @@ describe('rankPages on any catalog', () => {
     expect(rankPages('uptime overview', catalog)[0].name).toBe('health');
   });
 
-  it('matches a phrase keyword only as the whole phrase, as one term', () => {
+  it('matches a phrase keyword only as the whole phrase', () => {
     const catalog = [
       page('article', 'Docs - Article', 'Long-form prose.', [
         'table of contents',
@@ -174,10 +188,12 @@ describe('rankPages on any catalog', () => {
     const table = rankPages('a table of orders with contents', catalog);
     expect(table[0].name).toBe('grid');
     expect(table.find(r => r.name === 'article')?.hits).toBe(0);
-    // Named in order, the phrase matches once.
+    // Named in order, the phrase counts every one of its words.
     const docs = rankPages('docs article with a table of contents', catalog);
     const article = docs.find(r => r.name === 'article');
-    expect([...(article?.matched ?? [])]).toContain('table content');
+    expect([...(article?.matched ?? [])]).toEqual(
+      expect.arrayContaining(['table', 'content']),
+    );
   });
 
   it("lets a variant displace its family's base only with two words of its own", () => {

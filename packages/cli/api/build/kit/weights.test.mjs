@@ -273,10 +273,33 @@ describe('weighStart', () => {
       /** @param {string} idea */
       const start = idea =>
         weighStart(idea, ranked, ranked[0], own, {weights: WEIGHTS});
-      expect(start('folding table with contents on cards')).toBe('fold');
+      expect(start('folding table of orders and contents on cards')).toBe(
+        'fold',
+      );
       expect(start('a grid table of contents with folding on cards')).toBe(
         'grid',
       );
+    });
+
+    it('starts a new template its one phrase keyword describes', () => {
+      // The tables do not list acme-ledger; its own words decide. The phrase
+      // the idea names counts all three of its words.
+      const own = [
+        {name: 'board', displayName: 'Kanban Board', keywords: ['kanban']},
+        {name: 'charts', displayName: 'Charts'},
+        {name: 'grid', displayName: 'Grid'},
+        {name: 'acme-ledger', keywords: ['quarterly vendor ledger']},
+      ];
+      const ranked = [page('acme-ledger', 9, 'Acme'), ...RANKED];
+      expect(
+        weighStart(
+          'a quarterly vendor ledger page on a kanban board',
+          ranked,
+          ranked[0],
+          own,
+          {weights: WEIGHTS},
+        ),
+      ).toBe('acme-ledger');
     });
 
     it("never counts a stopword from the idea's words", () => {
