@@ -244,9 +244,11 @@ Platform-specific details stay inside that compiler.
   the element's color mode is that mode, as Theme resolves it. Outside media
   surfaces the theme root's `data-theme` decides, and a root mode other than
   `light` or `dark` follows the system preference. Inside the theme's media
-  surfaces a block applies as the `onDark` and `onLight` overrides do: inside
-  any surface of its mode, so where surfaces of both modes enclose an element
-  both blocks apply and the light block wins a property both set. The mode
+  surfaces the nearest surface decides: a block applies where the closest
+  media surface around the element is of its mode, so a light surface inside
+  a dark one takes only the light block. This holds for up to five surfaces
+  of alternating modes nested one in another; deeper, the block writes
+  nothing. The mode
   conditions sit on the style key's selector before any pseudo-class, press
   state, or pseudo-element, add no specificity, and add no scope proximity, so
   a block weighs the same on a surface as at the root. The rules follow the
