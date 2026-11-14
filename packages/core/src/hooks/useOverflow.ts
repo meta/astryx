@@ -5,7 +5,7 @@
 /**
  * @file useOverflow.ts
  * @input Uses React useState, useCallback, useRef; react-dom flushSync;
- *   useIsomorphicLayoutEffect
+ *   useIsomorphicLayoutEffect; queueMicrotask
  * @output Exports useOverflow hook for measuring and managing horizontal overflow
  * @position Core hook; used by OverflowList and consumers for overflow patterns.
  *   Hidden copies of the children are measured, so nothing flickers. The
@@ -19,6 +19,7 @@
 import {useState, useCallback, useRef} from 'react';
 import {flushSync} from 'react-dom';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
+import {useCommittedRef} from './useCommittedRef';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {computeOverflow, countRows} from './computeOverflow';
 import {useDevWarning} from './useDevWarning';
@@ -87,56 +88,125 @@ export interface UseOverflowReturn {
   rowHeight: number;
 }
 
-// A measurement either applies its result at once or returns the update to
-// apply after the frame paints.
-type Measure = (timing: 'now' | 'beforePaint') => (() => void) | undefined;
+/**
+ * Why a list measures:
+ * - `'commit'`: a React commit mounted or changed it. Its result applies with
+ *   the others.
+ * - `'resize'`: the resize observer reported it. A result that can change an
+ *   observed size returns its update, to apply after the frame paints.
+ */
+type MeasureReason = 'commit' | 'resize';
 
-// Measurements that the resize observer reported in the current frame.
-const pendingMeasures = new Set<Measure>();
+type Measure = (reason: MeasureReason) => (() => void) | undefined;
+
+// The lists to measure in the next microtask, and why. A commit wins over a
+// resize, because a commit applies every result.
+const pendingMeasures = new Map<Measure, MeasureReason>();
 
 /**
- * Measures again for a resize the observer reported.
+ * Measures every pending list in one microtask, then renders every result in
+ * one pass.
  *
- * The observer reports after layout and before paint. A state update here
- * renders in a later task, after the frame paints. A microtask still runs
- * before paint. It measures every reported list and renders the results once.
- * An update that a measurement returns renders in a later task, after paint.
+ * A commit and the resize observer both run after layout and before paint. A
+ * microtask still runs before paint. All lists read their sizes before any
+ * result renders, so the page lays out once for all of them, not once per
+ * list. An update that a resize measurement returns renders in a later task,
+ * after paint.
  */
-function measureBeforePaint(measure: Measure): void {
+function scheduleMeasure(measure: Measure, reason: MeasureReason): void {
   if (pendingMeasures.size === 0) {
-    queueMicrotask(() => {
-      const measures = [...pendingMeasures];
-      pendingMeasures.clear();
-      const afterPaint: (() => void)[] = [];
-      // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the new visible set must render before the frame that reported the resize paints
-      flushSync(() => {
-        for (const run of measures) {
-          const deferred = run('beforePaint');
-          if (deferred) {
-            afterPaint.push(deferred);
-          }
-        }
-      });
-      for (const update of afterPaint) {
-        update();
-      }
-    });
+    queueMicrotask(measurePending);
   }
-  pendingMeasures.add(measure);
+  if (pendingMeasures.get(measure) !== 'commit') {
+    pendingMeasures.set(measure, reason);
+  }
+}
+
+function measurePending(): void {
+  const measures = [...pendingMeasures];
+  pendingMeasures.clear();
+  const afterPaint: (() => void)[] = [];
+  // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the measured set must render before the frame paints
+  flushSync(() => {
+    for (const [run, reason] of measures) {
+      const deferred = run(reason);
+      if (deferred) {
+        afterPaint.push(deferred);
+      }
+    }
+  });
+  for (const update of afterPaint) {
+    update();
+  }
 }
 
 /**
- * The registration call runs while React commits the ref, before paint, so it
- * measures at once.
+ * The size of each observed element that its list last measured from:
+ * - `'border'`: the element's border box, for the list's own box and its
+ *   measure copy.
+ * - `'content'`: the width of the parent's content box, for a list that
+ *   observes its parent. Only that width enters the measurement.
+ */
+type MeasuredSize =
+  | {box: 'border'; width: number; height: number}
+  | {box: 'content'; width: number};
+
+const measuredSizes = new WeakMap<Element, MeasuredSize>();
+
+/**
+ * Records the border box of an element that a list observes, as the list
+ * measures. The list reads its layout at the same time, so the layout is
+ * current and the read costs no extra layout.
+ */
+function recordBorderBox(element: Element | null): void {
+  if (element == null || typeof element.getBoundingClientRect !== 'function') {
+    return;
+  }
+  const {width, height} = element.getBoundingClientRect();
+  measuredSizes.set(element, {box: 'border', width, height});
+}
+
+/**
+ * Whether a resize report gives the size the element had when its list last
+ * measured. Then the list's measurement is still current. The browser sends
+ * such a report for each element it starts to observe, after the list's first
+ * measurement has rendered.
+ */
+function isMeasuredSize(entry: ResizeObserverEntry): boolean {
+  const recorded = measuredSizes.get(entry.target);
+  if (recorded == null) {
+    return false;
+  }
+  const isSame = (a: number, b: number) => Math.abs(a - b) < 0.01;
+  if (recorded.box === 'content') {
+    const content = entry.contentBoxSize?.[0];
+    return content != null && isSame(content.inlineSize, recorded.width);
+  }
+  const box = entry.borderBoxSize?.[0];
+  if (box == null) {
+    return false;
+  }
+  // The report gives logical sizes; the record gives physical ones.
+  return (
+    (isSame(box.inlineSize, recorded.width) &&
+      isSame(box.blockSize, recorded.height)) ||
+    (isSame(box.inlineSize, recorded.height) &&
+      isSame(box.blockSize, recorded.width))
+  );
+}
+
+/**
+ * The observer calls back once while it registers. That call runs while
+ * React commits the ref, so it counts as a commit. A later report of the
+ * size the list measured changes nothing, so it measures nothing.
  */
 function observeForOverflow(element: Element, measure: Measure): () => void {
   let isRegistering = true;
-  const unobserve = observeResize(element, () => {
-    if (isRegistering) {
-      measure('now');
-    } else {
-      measureBeforePaint(measure);
+  const unobserve = observeResize(element, entry => {
+    if (!isRegistering && isMeasuredSize(entry)) {
+      return;
     }
+    scheduleMeasure(measure, isRegistering ? 'commit' : 'resize');
   });
   isRegistering = false;
   return unobserve;
@@ -253,6 +323,12 @@ function observedSizeFollowsItems(
  * overflow indicator element (if any). The indicator is identified by
  * a `data-overflow-indicator` attribute.
  *
+ * After a commit that mounts or changes the container, the results land one
+ * microtask later, before the frame paints. Every list in that commit
+ * measures first, then one render applies all results. A test that asserts
+ * right after a synchronous render awaits that microtask first, for example
+ * with `await act(async () => {})`.
+ *
  * @example
  * ```
  * const { containerRef, measureRef, visibleCount, hasOverflow } = useOverflow(5, {
@@ -264,7 +340,12 @@ export function useOverflow(
   itemCount: number,
   options: UseOverflowOptions = {},
 ): UseOverflowReturn {
-  return useOverflowInternal(itemCount, options, {tracksRows: true});
+  const {remeasure: _remeasure, ...result} = useOverflowInternal(
+    itemCount,
+    options,
+    {tracksRows: true},
+  );
+  return result;
 }
 
 /**
@@ -272,13 +353,16 @@ export function useOverflow(
  * `rows` and `rowHeight`. With `tracksRows` false, the hook does not track
  * them and reports `rows: 1` and `rowHeight: 0`. A state write that nobody
  * reads still re-renders the host. Internal: the public hook always tracks
- * them.
+ * them. `onMeasure` runs after each measurement, in the same render as its
+ * result, so a host can mark what that measurement covered. `remeasure`
+ * measures again with the lists of the current commit, for a change that
+ * resizes nothing.
  */
 export function useOverflowInternal(
   itemCount: number,
   options: UseOverflowOptions,
-  {tracksRows}: {tracksRows: boolean},
-): UseOverflowReturn {
+  {tracksRows, onMeasure}: {tracksRows: boolean; onMeasure?: () => void},
+): UseOverflowReturn & {remeasure: () => void} {
   const {
     gap = 0,
     minVisibleItems = 0,
@@ -336,7 +420,7 @@ export function useOverflowInternal(
   );
 
   const calculate: Measure = useCallback(
-    (timing = 'now') => {
+    reason => {
       const container = containerElRef.current;
       const measure = measureElRef.current;
       if (!container || !measure) {
@@ -352,9 +436,12 @@ export function useOverflowInternal(
           parent.clientWidth -
           parseFloat(parentStyle.paddingLeft) -
           parseFloat(parentStyle.paddingRight);
+        measuredSizes.set(parent, {box: 'content', width: availableWidth});
       } else {
         availableWidth = container.offsetWidth;
+        recordBorderBox(container);
       }
+      recordBorderBox(measure);
 
       const allChildren = Array.from(measure.children) as HTMLElement[];
 
@@ -393,7 +480,7 @@ export function useOverflowInternal(
       // Folding to a new list height inside the resize step makes Chromium
       // report a loop error. That update renders after paint. The measure copy
       // sizes both sets, a plain-text indicator included.
-      if (timing === 'beforePaint') {
+      if (reason === 'resize') {
         const indicator = hasIndicator
           ? allChildren[allChildren.length - 1]
           : null;
@@ -459,6 +546,19 @@ export function useOverflowInternal(
     ],
   );
 
+  // The latest measurement, under one identity. A list stays pending once,
+  // and a pending measurement never runs with an earlier render's options.
+  const calculateRef = useCommittedRef(calculate);
+  const onMeasureRef = useCommittedRef(onMeasure);
+  const measureLatest: Measure = useCallback(
+    reason => {
+      const deferred = calculateRef.current(reason);
+      onMeasureRef.current?.();
+      return deferred;
+    },
+    [calculateRef, onMeasureRef],
+  );
+
   const containerRef = useCallback(
     (el: HTMLElement | null) => {
       containerElRef.current = el;
@@ -471,11 +571,14 @@ export function useOverflowInternal(
       if (el) {
         const target =
           observeParent && el.parentElement ? el.parentElement : el;
-        unobserveContainerRef.current = observeForOverflow(target, calculate);
+        unobserveContainerRef.current = observeForOverflow(
+          target,
+          measureLatest,
+        );
         observedElRef.current = target;
       }
     },
-    [calculate, observeParent],
+    [measureLatest, observeParent],
   );
 
   const measureRef = useCallback(
@@ -489,17 +592,23 @@ export function useOverflowInternal(
         return;
       }
 
-      unobserveMeasureRef.current = observeForOverflow(el, calculate);
+      unobserveMeasureRef.current = observeForOverflow(el, measureLatest);
       observedMeasureElRef.current = el;
     },
-    [calculate],
+    [measureLatest],
   );
 
   // Syncs the visible count with the rendered layout. It measures again after
-  // the items change.
+  // the items change, with the other lists in this commit.
+  // A new calculation (new options or a new item count) measures again.
   useIsomorphicLayoutEffect(() => {
-    calculate('now');
-  }, [calculate]);
+    scheduleMeasure(measureLatest, 'commit');
+  }, [calculate, measureLatest]);
+
+  const remeasure = useCallback(
+    () => scheduleMeasure(measureLatest, 'commit'),
+    [measureLatest],
+  );
 
   const hasOverflow = visibleCount < itemCount;
 
@@ -512,5 +621,6 @@ export function useOverflowInternal(
     // the return uses the fixed values.
     rows: tracksRows ? rows : 1,
     rowHeight: tracksRows ? rowHeight : 0,
+    remeasure,
   };
 }
