@@ -60,7 +60,9 @@ const LIFECYCLE_FLAGS = new Set([
 
 /**
  * @typedef {{target: string | null, tokens: string[], raw: string | null}} PaintSide
- * @typedef {{text: string, fg: PaintSide, bg: PaintSide, sample: string}} TextPair
+ * @typedef {{text: string, fg: PaintSide, bg: PaintSide, sample: string, over?: PaintSide}} TextPair
+ *   `over`: the region the part sits in (a header), whose background shows
+ *   through a see-through background of the part's own, else the page
  * @typedef {{version: number, coreKey: string, map: Record<string, PartRecord>, pairs: TextPair[], rendered: number, items: number}} PartData
  */
 

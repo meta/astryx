@@ -32,6 +32,18 @@ const ROWS = [
   {id: 3, task: 'Fix login timeout', owner: 'Riley', status: 'Blocked'},
 ];
 
+/**
+ * The Core components the in-app preview's top bar draws (its title and
+ * its light/dark/system switch). The route imports these, and the contrast
+ * check measures each one's text over the header, as the app shows it.
+ */
+export const TOP_BAR_COMPONENTS = Object.freeze([
+  'TopNav',
+  'TopNavHeading',
+  'SegmentedControl',
+  'SegmentedControlItem',
+]);
+
 /** The sample app page every preview shows. */
 export const SAMPLE_PAGE = h(
   'AppShell',
