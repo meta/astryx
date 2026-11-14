@@ -11,8 +11,7 @@
  */
 
 import * as path from 'node:path';
-import {spawnSync} from 'node:child_process';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
@@ -22,6 +21,15 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {runCli} from '../../test-utils/run-cli.mjs';
+
+// The renders are stood in for: these tests are about settings, files and
+// messages, not the rendered pages.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    await importOriginal(),
+  ),
+);
 
 /** @type {string} */
 let cwd;
@@ -396,11 +404,9 @@ describe('two variants and elided clauses', () => {
 describe('a theme name typed in another case keeps the question', () => {
   it(
     'suggests the same how with the right name',
-    () => {
-      const r = spawnSync(
-        process.execPath,
+    async () => {
+      const r = await runCli(
         [
-          path.resolve(import.meta.dirname, '../../clients/cli/bin/astryx.mjs'),
           'experimental',
           'theme',
           'editor',
@@ -409,7 +415,7 @@ describe('a theme name typed in another case keeps the question', () => {
           '--theme',
           'Q',
         ],
-        {cwd, encoding: 'utf8'},
+        cwd,
       );
       expect(r.stdout + r.stderr).toContain("how 'rounder cards' --theme q");
     },
