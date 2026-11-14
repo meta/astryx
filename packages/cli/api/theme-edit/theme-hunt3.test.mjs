@@ -36,7 +36,11 @@ import {
 } from '../../test-utils/base-theme-fixture.mjs';
 
 import {withRealRenders} from '../../test-utils/theme-render-stub.mjs';
-import {projectFiles, refusal} from '../../test-utils/theme-edit-fixture.mjs';
+import {
+  modeValue,
+  projectFiles,
+  refusal,
+} from '../../test-utils/theme-edit-fixture.mjs';
 // The page renders cost seconds and these tests read settings, builds and
 // files: a stand-in renders unless a test asks for the real thing.
 vi.mock('./_preview.mjs', async importOriginal =>
@@ -565,7 +569,7 @@ describe('fonts', () => {
 });
 
 describe('one mode with a state', () => {
-  it('never changes the other mode: each variant keeps its own, and a part with nothing to keep is refused', async () => {
+  it('never changes the other mode: a one-mode hover writes that mode only, on any part', async () => {
     await themeEditNew('sm', {cwd, like: 'neutral'});
     await themeEditSet('sm', 'background-color', '#00ff00', {
       cwd,
@@ -573,21 +577,25 @@ describe('one mode with a state', () => {
       state: 'hover',
       mode: 'dark',
     });
-    expect(read('themes/sm/sm.css')).toMatch(
-      /\.astryx-button\[data-variant="[a-z]+"\]:hover[^{]*\{[^}]*background-color: light-dark\([^,]+, #00ff00\)/,
+    const hover = (/** @type {string} */ variant) =>
+      `.astryx-button[data-variant="${variant}"]:hover:where(:not(:disabled,[aria-disabled="true"]))`;
+    let css = read('themes/sm/sm.css');
+    expect(modeValue(css, hover('primary'), 'background-color', 'dark')).toBe(
+      '#00ff00',
     );
-    expect(
-      (
-        await refusal(() =>
-          themeEditSet('sm', 'background-color', '#00ff00', {
-            cwd,
-            on: 'tab',
-            state: 'hover',
-            mode: 'light',
-          }),
-        )
-      ).code,
-    ).toBe('ERR_THEME_NO_MODE');
+    expect(css).not.toMatch(/light-dark\([^;]*#00ff00/);
+    // A part with no hover color of its own takes one for one mode too: the
+    // other mode keeps what Core gives it.
+    await themeEditSet('sm', 'background-color', '#00ff00', {
+      cwd,
+      on: 'tab',
+      state: 'hover',
+      mode: 'light',
+    });
+    css = read('themes/sm/sm.css');
+    expect(css).toMatch(
+      /:is\(\.astryx-tab[^){]*\):where\(:scope\[data-theme="light"\] \*\)[^{]*:hover[^{]*\{\s*background-color: #00ff00;/,
+    );
     await themeEditSet('sm', 'background-color', '#00ff00', {
       cwd,
       on: 'button',
@@ -595,10 +603,11 @@ describe('one mode with a state', () => {
       state: 'hover',
       mode: 'dark',
     });
-    // Light keeps the ghost button's own color.
-    expect(read('themes/sm/sm.css')).toMatch(
-      /light-dark\(var\(--color-[a-z-]+\), #00ff00\)/,
+    css = read('themes/sm/sm.css');
+    expect(modeValue(css, hover('ghost'), 'background-color', 'dark')).toBe(
+      '#00ff00',
     );
+    expect(css).not.toMatch(/light-dark\([^;]*#00ff00/);
     drop('sm');
   }, 240_000);
 });

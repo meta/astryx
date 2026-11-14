@@ -665,21 +665,37 @@ export function styledChanges(before, after, base) {
           typeof baseValue !== 'object' &&
           plain(baseValue) === plain(now);
         const where = `${target}${key === 'base' ? '' : ` ${key}`}`;
-        // A block (a state, `:hover`) lists each property it changes.
+        // A block (a state, `:hover`, a mode block, a state inside a mode
+        // block) lists each property it changes, under its path.
+        /**
+         * @param {string} path @param {any} xs @param {any} ys @param {any} shownIn
+         */
+        const blockLines = (path, xs, ys, shownIn) => {
+          for (const p of new Set([
+            ...Object.keys(xs ?? {}),
+            ...Object.keys(ys ?? {}),
+          ])) {
+            const was = xs?.[p];
+            const now = ys?.[p];
+            if (JSON.stringify(was) === JSON.stringify(now)) continue;
+            if (
+              (now && typeof now === 'object') ||
+              (was && typeof was === 'object')
+            ) {
+              blockLines(`${path} ${p}`, was ?? {}, now ?? {}, shownIn?.[p]);
+              continue;
+            }
+            if (repeatsBase(was, now, shownIn?.[p])) continue;
+            out.push(
+              `${where} ${path}: ${cssName(p)} ${now === undefined ? '(removed)' : String(now)}`,
+            );
+          }
+        };
         if (
           (y[prop] && typeof y[prop] === 'object') ||
           (x[prop] && typeof x[prop] === 'object')
         ) {
-          const xs = x[prop] ?? {};
-          const ys = y[prop] ?? {};
-          for (const p of new Set([...Object.keys(xs), ...Object.keys(ys)]))
-            if (
-              JSON.stringify(xs[p]) !== JSON.stringify(ys[p]) &&
-              !repeatsBase(xs[p], ys[p], shown?.[p])
-            )
-              out.push(
-                `${where} ${prop}: ${cssName(p)} ${ys[p] === undefined ? '(removed)' : String(ys[p])}`,
-              );
+          blockLines(prop, x[prop] ?? {}, y[prop] ?? {}, shown);
           continue;
         }
         if (repeatsBase(x[prop], y[prop], shown)) continue;

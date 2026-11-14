@@ -88,7 +88,6 @@ import {
   kebab,
   nearest,
   negates,
-  partDefault,
   partsOf,
   refuse,
   lengthPx,
@@ -103,7 +102,6 @@ import {
   baseTopTokens,
   baseComponent,
   baseComponentReads,
-  baseRuleHas,
   partRuleTokens,
   cssFamily,
   familySpaces,
@@ -5551,61 +5549,6 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
             : [
                 `${P} set ${slug} ${prop} ${quoteCommandArgument(v)} --on ${s.on}${whenFlag}   # both modes`,
               ],
-        },
-      );
-    }
-    // In a state, the other mode keeps the state's own value there (or a
-    // value set for both modes); with none to keep, the setting would
-    // change that mode too. Without a state, the other mode keeps the
-    // part's plain color.
-    /** Whether a part keeps a value of its own in the other mode. */
-    const keepsOther = (/** @type {string} */ t) =>
-      Boolean(partDefault(ctx, t, camel(prop), s.when, s.state)) ||
-      // The base theme's own value there (in the state, else at rest) is
-      // what the other mode keeps.
-      [`:${s.state}`, null].some(st =>
-        baseRuleHas(
-          ctx.project.cwd,
-          data.like,
-          t,
-          s.when ?? 'base',
-          st,
-          camel(prop),
-        ),
-      );
-    const cannotKeep =
-      s.mode && s.state ? partsOf(ctx, s).filter(t => !keepsOther(t)) : [];
-    if (
-      cannotKeep.length &&
-      !data.settings.some(
-        x =>
-          x.thing === prop &&
-          x.on === s.on &&
-          x.when === s.when &&
-          x.state === s.state &&
-          x.mode !== s.mode,
-      )
-    ) {
-      const flagsTail = `${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}`;
-      // The part named keeps its own when only other members of its group
-      // cannot: --only writes it alone, its mode kept.
-      const onlyThis =
-        s.on &&
-        !cannotKeep.includes(s.on) &&
-        familyOf(s.on) &&
-        AUTO_SPREAD.includes(/** @type {string} */ (familyOf(s.on)));
-      refuse(
-        E.ERR_THEME_NO_MODE,
-        `${cannotKeep.slice(0, 3).join(', ')}${cannotKeep.length > 3 ? ` and ${cannotKeep.length - 3} more` : ''} ${cannotKeep.length > 1 ? 'have' : 'has'} no ${prop}${s.state ? ` when ${s.state}` : ''}${s.when ? ` for ${s.when}` : ''} of ${cannotKeep.length > 1 ? 'their' : 'its'} own for the ${s.mode === 'light' ? 'dark' : 'light'} mode to keep, so a ${s.mode}-only value would change it too.${onlyThis ? ` ${s.on} has one: set it alone with --only.` : ' Set it for both modes.'}`,
-        {
-          run: [
-            ...(onlyThis
-              ? [
-                  `${P} set ${slug} ${prop} ${quoteCommandArgument(v)} --on ${s.on} --only${flagsTail} --mode ${s.mode}`,
-                ]
-              : []),
-            `${P} set ${slug} ${prop} ${quoteCommandArgument(v)} --on ${s.on}${flagsTail}`,
-          ],
         },
       );
     }

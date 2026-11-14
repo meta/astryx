@@ -2490,27 +2490,6 @@ export function partRuleTokens(cwd, slug, like, part) {
 }
 
 /**
- * Whether the base theme's own source gives a part's rule a property, in a
- * state (`:hover`) or at rest, read from its module as written.
- * @param {string} cwd
- * @param {string | undefined} like
- * @param {string} part
- * @param {string} scope `base` or a variant such as `variant:secondary`
- * @param {string | null} state a state block (`:hover`), or null
- * @param {string} prop camelCase
- */
-export function baseRuleHas(cwd, like, part, scope, state, prop) {
-  const file = like ? baseModule(cwd, like) : null;
-  if (!file) return false;
-  try {
-    const at = ['components', part, scope, ...(state ? [state] : [])];
-    return blockOf(file, at).has(prop);
-  } catch {
-    return false;
-  }
-}
-
-/**
  * The tokens and properties a theme's own source sets on a part's plain
  * rule, read from the build as ownTokens reads page-wide ones: what the
  * built rule holds that the settings module and the base theme do not give
@@ -2909,8 +2888,7 @@ export function cssFamily(name, spaced = false) {
 }
 
 /**
- * What a part reads for a property when the theme does not set it, so a
- * one-mode component setting keeps the other mode as it was.
+ * What a part reads for a property when the theme does not set it.
  * @param {Ctx} ctx
  * @param {string} target
  * @param {string} prop camelCase or kebab-case
@@ -3372,8 +3350,6 @@ export function compileTheme(ctx, data, base) {
   /** @param {string | null} t */
   const keptSizes = t =>
     [...keptTokens(t)].filter(([k]) => /^--size-element-/.test(k));
-  /** The one-mode gradient layers each block holds, by mode. @type {WeakMap<object, {light: string[], dark: string[]}>} */
-  const modeLayers = new WeakMap();
   /** @type {Record<string, {light?: string, dark?: string}>} */
   const tok = {};
   /** @param {string} name @param {string | [string, string]} v @param {string} [mode] */
@@ -3416,6 +3392,29 @@ export function compileTheme(ctx, data, base) {
       else b = b[stateKey(s.state, wrapsOneControl(ctx, target))] ??= {};
     }
     return b;
+  };
+  /**
+   * A setting's rule block for one color mode: the style key's `@light` or
+   * `@dark` block, with the state inside it for a state Core writes as a
+   * pseudo-class.
+   * @param {Setting} s @param {string} target @param {'light' | 'dark'} mode
+   * @returns {Record<string, any>}
+   */
+  const modeBlock = (s, target, mode) => {
+    const t = (theme.components[target] ??= {});
+    const tg = ctx.project.target.get(target);
+    const state = s.state;
+    const ownState = !!state && !!tg?.states.includes(state);
+    const key =
+      state && ownState
+        ? s.when == null
+          ? state
+          : `${s.when}+${state}`
+        : (s.when ?? 'base');
+    const rule = (t[key] ??= {});
+    const mb = (rule[`@${mode}`] ??= {});
+    if (!state || ownState) return mb;
+    return (mb[stateKey(state, wrapsOneControl(ctx, target))] ??= {});
   };
   /**
    * A padding on a part whose padding Core writes one variable per side
@@ -4182,79 +4181,19 @@ export function compileTheme(ctx, data, base) {
     const k = kebab(p);
     return k === 'background' ? 'background-color' : k;
   };
-  /** One-mode colors in a variant or a state, written after every other setting. @type {Array<() => void>} */
-  const scopedQueue = [];
-  let drainingScoped = false;
-  /**
-   * A part's rule for a scope as the theme has it, without making one.
-   * @param {Setting} s @param {string} target
-   * @returns {Record<string, any> | undefined}
-   */
-  const peekBlock = (s, target) => {
-    const t = theme.components[target];
-    if (!t) return undefined;
-    const rule = t[s.when ?? 'base'];
-    if (!s.state) return rule;
-    const tg = ctx.project.target.get(target);
-    if (tg?.states.includes(s.state))
-      return s.when == null ? t[s.state] : t[`${s.when}+${s.state}`];
-    return rule?.[stateKey(s.state, wrapsOneControl(ctx, target))];
-  };
-  /**
-   * The theme's own value of a property in one mode for the scope around a
-   * setting's scope: the variant's resting rule for a state, then the
-   * part's plain rule, then, for a token, the whole theme's value; null
-   * when the theme gives none, so the base theme's and Core's values apply.
-   * @param {Setting} s @param {string} target @param {string} prop
-   * @param {'light' | 'dark'} side
-   * @returns {string | null}
-   */
-  const enclosingValue = (s, target, prop, side) => {
-    const family = /^background(-color)?$/.test(kebab(prop))
-      ? ['backgroundColor', 'background']
-      : [prop];
-    /** @type {Setting[]} */
-    const scopes = [];
-    if (s.state) scopes.push({...s, state: undefined, mode: undefined});
-    if (s.when || s.state)
-      scopes.push({...s, when: undefined, state: undefined, mode: undefined});
-    for (const sc of scopes) {
-      const rule = peekBlock(sc, target);
-      for (const k of family) {
-        const x = rule?.[k];
-        if (typeof x === 'string' && !/gradient\(|url\(/i.test(x))
-          return halfOf(x, side === 'light' ? 1 : 2);
-      }
-    }
-    if (prop.startsWith('--')) return tok[prop]?.[side] ?? null;
-    return null;
-  };
   /** @param {Setting} s @param {string} target @param {string} prop @param {string} v */
   const putComp = (s, target, prop, v) => {
     const b = block(s, target);
-    // A gradient background for one mode: each layer's colors are painted
-    // in that mode only (transparent in the other), as background images
-    // beside the other mode's, so each mode keeps its own background color;
-    // a gradient for both modes held before keeps showing in the other
-    // mode. Which layers belong to which mode is recorded as they are
-    // written, never read back from their stops.
+    // A gradient background for one mode goes into the rule's block for
+    // that mode as its image layers (with their positions, sizes and
+    // repeats), and a layer that is a color alone as that mode's color: the
+    // other mode keeps every image and color it had, Core's own included.
     if (
       s.mode &&
       /^background(-image)?$/.test(kebab(prop)) &&
       /gradient\(/i.test(v)
     ) {
-      let rec = modeLayers.get(b);
-      if (!rec) {
-        rec = {light: [], dark: []};
-        for (const k of ['background', 'backgroundImage']) {
-          const held = b[k];
-          if (typeof held !== 'string' || !/gradient\(/i.test(held)) continue;
-          rec.light.push(...maskLayers(held, 'light'));
-          rec.dark.push(...maskLayers(held, 'dark'));
-          if (k === 'backgroundImage') delete b[k];
-        }
-        modeLayers.set(b, rec);
-      }
+      const mb = modeBlock(s, target, s.mode);
       // The background shorthand's last layer may carry the color under
       // the images: that color is this mode's background color, and the
       // rest are the images.
@@ -4262,23 +4201,28 @@ export function compileTheme(ctx, data, base) {
         kebab(prop) === 'background'
           ? backgroundColorLayer(v)
           : {images: v, color: null};
-      rec[s.mode] = images ? maskLayers(images, s.mode) : [];
-      const parts = [...rec.light, ...rec.dark].map(layerParts);
+      const parts = splitTop(images ?? '', ',')
+        .map(x => x.trim())
+        .filter(Boolean)
+        .map(layerParts);
       for (const k of [
+        'background',
         'backgroundImage',
         'backgroundPosition',
         'backgroundSize',
         'backgroundRepeat',
       ])
-        delete b[k];
-      b.backgroundImage = parts.map(x => x.image).join(', ');
+        delete mb[k];
+      mb.backgroundImage = parts.map(x => x.image).join(', ');
       if (parts.some(x => x.position || x.size || x.repeat)) {
-        b.backgroundPosition = parts.map(x => x.position || '0% 0%').join(', ');
-        b.backgroundSize = parts.map(x => x.size || 'auto').join(', ');
-        b.backgroundRepeat = parts.map(x => x.repeat || 'repeat').join(', ');
+        mb.backgroundPosition = parts
+          .map(x => x.position || '0% 0%')
+          .join(', ');
+        mb.backgroundSize = parts.map(x => x.size || 'auto').join(', ');
+        mb.backgroundRepeat = parts.map(x => x.repeat || 'repeat').join(', ');
       }
-      if (!parts.length) delete b.backgroundImage;
-      if (color) putComp(s, target, 'backgroundColor', color);
+      if (!parts.length) delete mb.backgroundImage;
+      if (color) mb.backgroundColor = color;
       return;
     }
     // A color set in a one-mode theme fills its mode's half only (as a
@@ -4287,34 +4231,14 @@ export function compileTheme(ctx, data, base) {
     const mode =
       s.mode ??
       (modeOnly && parseColor(String(v).trim()) ? modeOnly : undefined);
-    // A color for one mode on a part rule also gives the other mode a
-    // value in that rule, which outranks the rules the base theme and Core
-    // give the part in context there (a selected or current item, a status
-    // border): the result says so.
-    if (mode && !prop.startsWith('--')) {
-      const note = `a ${mode}-only color on ${target} gives the other mode ${target}'s own value, so in that mode it overrides what Core or the base theme gives ${target} in context (a selected or current item, a status border)`;
-      if (!(ctx.compileNotes ?? []).includes(note))
-        (ctx.compileNotes ??= []).push(note);
-    }
     if (mode && !s.when && variantsReading(ctx, target, prop, s.state).length) {
       // A color for one mode on a part whose variants each have their own:
       // each variant's rule (in the state, for a state setting) gets the
-      // color in that mode and, in the other, exactly the value it shows
-      // unset there (the base theme's, else Core's), so no variant takes
-      // another's and the other mode stays as it was. The part's own rule
-      // is left alone.
+      // color in its block for that mode, so no variant takes another's and
+      // the other mode stays as it was. The part's own rule is left alone.
       // The property itself (a border color stays a border color); the
       // background shorthand is written as its color.
       const css = colorFamily(prop);
-      const other = mode === 'light' ? 2 : 1;
-      // What the part's own rule holds of it (an earlier setting for both
-      // modes): the other half each variant keeps, before its unset value.
-      const plainHeld = [
-        css,
-        ...(css === 'background-color' ? ['background'] : []),
-      ]
-        .map(k => b[camel(k)])
-        .find(y => typeof y === 'string' && !/gradient\(|url\(/i.test(y));
       // The part's own background being an image (a gradient) covers any
       // color under it: the color is written, and the result says it does
       // not show.
@@ -4337,12 +4261,8 @@ export function compileTheme(ctx, data, base) {
       ]);
       for (const name of names) {
         const x = exactVariantValue(target, css, name, s.state);
-        const vb = block({...s, when: `variant:${name}`}, target);
-        // What the variant's rule already holds (a setting for the other
-        // mode, or one for both) keeps its other half; else the value the
-        // variant shows unset.
-        // The background shorthand is the same property: its color counts,
-        // and it is taken out so the color written here is in effect.
+        const variant = {...s, when: `variant:${name}`};
+        const vb = block({...variant, mode: undefined}, target);
         const family = [
           css,
           ...(css === 'background-color' ? ['background'] : []),
@@ -4358,36 +4278,13 @@ export function compileTheme(ctx, data, base) {
           );
           continue;
         }
-        const prev = family
-          .map(k => vb[camel(k)])
-          .find(y => typeof y === 'string');
-        // In a state, what the state shows now in the other mode: its own
-        // value there, else the resting color a setting gives the variant
-        // or the part (a state that does not change the color shows the
-        // resting one), else the unset value.
-        /** @param {Record<string, any> | undefined} rule */
-        const restOf = rule =>
-          family
-            .map(k => rule?.[camel(k)])
-            .find(y => typeof y === 'string' && !/gradient\(|url\(/i.test(y));
-        const rest = s.state
-          ? (exactVariantValue(target, css, name, s.state, true) ??
-            restOf(theme.components[target]?.[`variant:${name}`]) ??
-            plainHeld ??
-            restOf(theme.components[target]?.base))
-          : plainHeld;
-        const from = prev ?? rest ?? x;
-        if (from == null) continue;
-        for (const k of family) delete vb[camel(k)];
-        const half = halfOf(from, other);
-        vb[camel(css)] =
-          mode === 'light'
-            ? `light-dark(${v}, ${half})`
-            : `light-dark(${half}, ${v})`;
-        // A resting color written on the variant's rule would also hide the
-        // hover the variant shows unset: that hover is written back as it
-        // was, in both modes, unless a hover setting of the theme's own
-        // gives it one.
+        const mb = modeBlock(variant, target, mode);
+        for (const k of family) delete mb[camel(k)];
+        mb[camel(css)] = v;
+        // A resting color on the variant's rule in this mode would also hide
+        // the hover the variant shows unset in this mode: that hover is
+        // written back there as it was, unless a hover setting of the
+        // theme's own gives it one.
         if (
           !s.state &&
           !data.settings.some(
@@ -4398,36 +4295,13 @@ export function compileTheme(ctx, data, base) {
           )
         ) {
           const hover = exactVariantValue(target, css, name, 'hover', true);
-          if (hover != null && hover !== x) {
-            const hb = block(
-              {...s, when: `variant:${name}`, state: 'hover', mode: undefined},
-              target,
-            );
-            hb[camel(css)] ??= hover;
-          }
+          if (hover != null && hover !== x)
+            modeBlock({...variant, state: 'hover'}, target, mode)[
+              camel(css)
+            ] ??= halfOf(hover, mode === 'light' ? 1 : 2);
         }
       }
       return;
-    }
-    // A color for one mode in a variant or a state is written once every
-    // other setting is in, so its other half is the theme's own value for
-    // the scope around it as the theme finally has it (below).
-    if (mode && (s.when || s.state) && !drainingScoped) {
-      scopedQueue.push(() => putComp(s, target, prop, v));
-      return;
-    }
-    if (mode && colorFamily(prop) === 'background-color') {
-      // The background shorthand and its color are one property: the one
-      // the rule holds (as a color) gives the other half and is replaced, so
-      // one key carries both modes.
-      const held = ['backgroundColor', 'background'].find(
-        k => typeof b[k] === 'string' && !/gradient\(|url\(/i.test(b[k]),
-      );
-      if (held && held !== camel(prop)) {
-        const was = b[held];
-        delete b[held];
-        b[camel(prop)] ??= was;
-      }
     }
     // A color for one mode under the part's own gradient does not show:
     // the result says so.
@@ -4442,40 +4316,19 @@ export function compileTheme(ctx, data, base) {
       (ctx.compileNotes ??= []).push(
         `${target}${s.when ? ` ${s.when}` : ''}${s.state ? ` :${s.state}` : ''} has a background image (a gradient) over its color, so the ${mode} color does not show until that background is a color`,
       );
+    // A color for one mode goes into the rule's block for that mode, which
+    // applies only where the element's color mode is that mode: in the other
+    // mode the rule, and every rule the base theme and Core give the part in
+    // context, apply as they would without it.
+    // The background shorthand and its color are one property there: the
+    // later setting replaces the earlier.
     if (mode) {
-      const prev = b[prop];
-      // The other mode keeps exactly what it had: the value set for it, the
-      // part's own, else what the property shows unset (light-dark() takes
-      // colors only, so never inherit).
-      // A token on the part: its own value in the other mode (the base
-      // theme's, else Core's), never another color.
-      const otherSide = mode === 'light' ? 'dark' : 'light';
-      const tokenOther = prop.startsWith('--')
-        ? (base[otherSide]?.[prop] ??
-          /** @type {Record<string, string>} */ (TOKENS)[prop] ??
-          null)
-        : null;
-      const other =
-        prev ??
-        enclosingValue(s, target, prop, otherSide) ??
-        tokenOther ??
-        baseComponent(base, ctx, target, prop, s) ??
-        partDefault(ctx, target, prop, s.when, s.state) ??
-        (s.state
-          ? baseComponent(base, ctx, target, prop, {...s, state: undefined})
-          : null) ??
-        partDefault(ctx, target, prop, s.when) ??
-        (/^background/.test(kebab(prop)) ? 'transparent' : 'currentcolor');
-      // At the top-level comma: a mode's color may hold commas itself.
-      const split = (/** @type {string} */ x, /** @type {1 | 2} */ side) => {
-        const inner = /^light-dark\((.*)\)$/s.exec(x.trim())?.[1];
-        const halves = inner == null ? [] : splitTop(inner, ',');
-        return halves.length === 2 ? halves[side - 1].trim() : x;
-      };
-      b[prop] =
-        mode === 'light'
-          ? `light-dark(${v}, ${prev ? split(prev, 2) : other})`
-          : `light-dark(${prev ? split(prev, 1) : other}, ${v})`;
+      const mb = modeBlock(s, target, mode);
+      if (colorFamily(prop) === 'background-color')
+        for (const k of ['background', 'backgroundColor'])
+          if (typeof mb[k] === 'string' && !/gradient\(|url\(/i.test(mb[k]))
+            delete mb[k];
+      mb[prop] = v;
     } else b[prop] = v;
   };
   // Palette stops go first, so an exact token setting always wins over them.
@@ -4563,11 +4416,14 @@ export function compileTheme(ctx, data, base) {
   ];
   // The shell regions a setting gives a background of their own keep it
   // when the page background paints the rest of the shell.
+  // A background for one mode is that region's in its mode block only:
+  // the page background still paints the region in the other mode.
   const regionsWithOwnBackground = new Set(
     data.settings
       .filter(
         x =>
           x.source === 'property' &&
+          !x.mode &&
           /^background(-color|-image)?$/.test(kebab(x.thing)),
       )
       .flatMap(x => partsOf(ctx, x)),
@@ -5055,8 +4911,6 @@ export function compileTheme(ctx, data, base) {
       }
     }
   }
-  drainingScoped = true;
-  for (const write of scopedQueue) write();
   emitPadding();
   for (const r of fixedToViewport) {
     delete r.backgroundAttachment;
@@ -5186,56 +5040,6 @@ function coversSide(a, b) {
   if (coversProperty(a, b)) return true;
   const root = b.replace(/-(inline|block)(-start|-end)?(?=-|$)/, '');
   return root !== b && (a === root || coversProperty(a, root));
-}
-
-/**
- * A background's layers with each color painted in one mode only: a color
- * stop becomes light-dark(<color>, transparent) for light (the reverse for
- * dark), and a layer that is a color alone becomes a gradient of it, so
- * every layer is an image the other mode does not show.
- * @param {string} value
- * @param {'light' | 'dark'} mode
- * @returns {string[]}
- */
-export function maskLayers(value, mode) {
-  /** @param {string} c */
-  const wrap = c =>
-    mode === 'light'
-      ? `light-dark(${c}, transparent)`
-      : `light-dark(transparent, ${c})`;
-  /** @param {string} w */
-  const isColor = w =>
-    !/^light-dark\(/i.test(w) &&
-    (isColorValue(w) || /^var\(\s*--color-/i.test(w));
-  return splitTop(value, ',')
-    .map(x => x.trim())
-    .filter(Boolean)
-    .map(layer => {
-      const fn = /^((?:repeating-)?(?:linear|radial|conic)-gradient)\(/i.exec(
-        layer,
-      );
-      if (!fn)
-        return isColor(layer)
-          ? `linear-gradient(${wrap(layer)}, ${wrap(layer)})`
-          : layer;
-      // The gradient's own arguments, up to its closing bracket; what
-      // follows (position, size, repeat) stays as it is.
-      let depth = 0;
-      let end = fn[0].length - 1;
-      for (let i = end; i < layer.length; i++) {
-        if (layer[i] === '(') depth++;
-        if (layer[i] === ')' && --depth === 0) {
-          end = i;
-          break;
-        }
-      }
-      const args = splitTop(layer.slice(fn[0].length, end), ',').map(arg =>
-        splitTop(arg.trim(), ' ')
-          .map(w => (isColor(w.trim()) ? wrap(w.trim()) : w.trim()))
-          .join(' '),
-      );
-      return `${fn[1]}(${args.join(', ')})${layer.slice(end + 1)}`;
-    });
 }
 
 /**
@@ -5524,7 +5328,7 @@ export function findOverrides(cssText, theme) {
     /** @type {Record<string, any>} */ (theme.components ?? {}),
   )) {
     const props = Object.keys(keys.base ?? {}).filter(
-      p => !p.startsWith('--') && !p.startsWith(':'),
+      p => !p.startsWith('--') && !p.startsWith(':') && !p.startsWith('@'),
     );
     if (!props.length) continue;
     const re = new RegExp(
@@ -8421,5 +8225,3 @@ export function fontPackages(ctx, data) {
   }
   return out;
 }
-
-export {partDefault};

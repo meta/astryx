@@ -2142,7 +2142,7 @@ describe('colors11: refusals name a command that works', () => {
 });
 
 describe('colors12', () => {
-  it('splits a per-mode part color at its own comma, in either order', async () => {
+  it('keeps a per-mode part color whole in its own mode block, in either order', async () => {
     for (const [first, second] of [
       [
         ['dark', 'rgb(0, 0, 255)'],
@@ -2167,9 +2167,17 @@ describe('colors12', () => {
       });
       const [light, dark] =
         first[0] === 'light' ? [first[1], second[1]] : [second[1], first[1]];
-      expect(read('p.settings.ts')).toContain(
-        JSON.stringify(`light-dark(${light}, ${dark})`),
-      );
+      // Each mode's color, commas and all, in that mode's block.
+      const src = read('p.settings.ts');
+      for (const [m, v] of [
+        ['light', light],
+        ['dark', dark],
+      ])
+        expect(src).toMatch(
+          new RegExp(
+            `"@${m}": \\{\\s*"backgroundColor": ${JSON.stringify(v).replace(/[()[\]{}.*+?^$|\\]/g, '\\$&')}`,
+          ),
+        );
       for (const m of ['light', 'dark'])
         await themeEditUndo('p', {
           cwd,
