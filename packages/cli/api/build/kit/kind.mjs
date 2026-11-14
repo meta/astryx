@@ -105,7 +105,8 @@ export function ideaKind(query, pages, components) {
 /**
  * Whether an idea adds a piece to a page the builder already has: it opens
  * with "add", says where the piece goes with a place phrase that names
- * something build knows (a page family, a page template or a component:
+ * something build knows (a page family word, a page template by its whole
+ * name, or a component by the head word of its name:
  * "above the table", "to the settings page"; not "to my project"), the
  * piece's head names no page ("add a dashboard with a chart to my project"
  * is a new page), and it asks for no new page.
@@ -125,7 +126,7 @@ function addsToPage(text, familyWords, pages, components) {
   const named = new Set(terms(target));
   const known = new Set([
     ...familyWords.keys(),
-    ...components.flatMap(componentTerms),
+    ...components.map(c => nameTerms(c).at(-1) ?? ''),
   ]);
   const namesTemplate = pages.some(page => {
     const name = templateTerms(page);
