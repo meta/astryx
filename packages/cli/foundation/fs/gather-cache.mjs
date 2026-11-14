@@ -738,7 +738,7 @@ function confirmedEntry(file, version, confirmed, reading) {
   if (reading.has(file)) return null;
   reading.add(file);
   try {
-    const stored = readEntry(file).head;
+    const stored = readHead(file);
     if (
       stored?.format !== FORMAT ||
       typeof stored.version !== 'string' ||
@@ -1138,6 +1138,40 @@ function readEntry(file) {
     head: JSON.parse(cut < 0 ? text : text.slice(0, cut)),
     value: () => (cut < 0 ? undefined : JSON.parse(text.slice(cut + 1))),
   };
+}
+
+/** How much of an entry file one read takes while looking for its first line. */
+const HEAD_READ_BYTES = 64 * 1024;
+
+/**
+ * A gather's entry file's first line, parsed, read without the value after
+ * it: an entry another builds on is checked, never read back. A newline byte
+ * is never part of a longer UTF-8 character, so the bytes before the first
+ * one are the whole line.
+ * @param {string} file
+ * @returns {any}
+ */
+function readHead(file) {
+  return withoutRecording(() => {
+    const fd = fs.openSync(file, 'r');
+    try {
+      /** @type {Buffer[]} */
+      const chunks = [];
+      const chunk = Buffer.allocUnsafe(HEAD_READ_BYTES);
+      for (let at = 0; ;) {
+        const read = fs.readSync(fd, chunk, 0, chunk.length, at);
+        if (read === 0) break;
+        const piece = chunk.subarray(0, read);
+        const end = piece.indexOf(0x0a);
+        chunks.push(Buffer.from(end < 0 ? piece : piece.subarray(0, end)));
+        if (end >= 0) break;
+        at += read;
+      }
+      return JSON.parse(Buffer.concat(chunks).toString('utf-8'));
+    } finally {
+      fs.closeSync(fd);
+    }
+  });
 }
 
 /**
