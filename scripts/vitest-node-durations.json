@@ -660,6 +660,7 @@
     "packages/cli/assets/codemods/integration-runner.protection.test.mjs": 0.1,
     "packages/cli/assets/codemods/mentions.test.mjs": 0.1,
     "packages/cli/assets/codemods/outcome.test.mjs": 0,
+    "packages/cli/assets/codemods/run-codemod.test.mjs": 0.1,
     "packages/cli/assets/codemods/term-log.test.mjs": 0,
     "packages/cli/assets/codemods/transform-prop.test.mjs": 0,
     "packages/cli/assets/codemods/transforms/v0.0.10/__tests__/remove-size-props.test.mjs": 0.1,
