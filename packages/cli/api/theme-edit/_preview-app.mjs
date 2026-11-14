@@ -48,6 +48,7 @@ import {
   overviewPageSource,
   previewRouteSource,
   appCopyBlocker,
+  fontPackageSheets,
   themeImports,
 } from './_preview.mjs';
 import {
@@ -4965,7 +4966,7 @@ export async function themeEditPreviewApp(dir, options = {}) {
       css: [
         fromRoute(to.css),
         ...baseFontsCss(ctx, theme),
-        ...fonts.map(x => `${x.pkg}/index.css`),
+        ...fonts.flatMap(x => fontPackageSheets(ctx, slug, x.pkg)),
       ],
       mode: themeImports(ctx, slug, theme, path.join(cwd, routeDir)).mode,
     };

@@ -51,6 +51,7 @@ import {
   HEADING_WEIGHTS,
   LIKE,
   OPEN_FONTS,
+  isSystemFamily,
   P,
   SPACING,
   SURFACES,
@@ -8525,12 +8526,16 @@ export async function commitTheme(
 }
 
 /**
- * The @fontsource package for a font family: an open font's own package
- * as the editor's font table names it (Geist is `@fontsource/geist-sans`),
- * else the family's name in Fontsource's form (`Open Sans` is
- * `@fontsource/open-sans`).
+ * The Fontsource package for a font family, in Fontsource's own naming: an
+ * open font's own package as the editor's font table names it (Geist is
+ * `@fontsource/geist-sans`); a variable family, which Fontsource names
+ * `<Name> Variable`, from `@fontsource-variable/<name>`; else the family's
+ * name with every run of other characters as one dash (`Open Sans` is
+ * `@fontsource/open-sans`, `Mrs. Sheppards` is `@fontsource/mrs-sheppards`).
+ * Null when the name gives no such package name (a name with no Latin
+ * letters or digits).
  * @param {string} family
- * @returns {string}
+ * @returns {string | null}
  */
 export function fontsourcePackageOf(family) {
   const name = cssUnescape(String(family).replace(/["']/g, '')).trim();
@@ -8538,7 +8543,86 @@ export function fontsourcePackageOf(family) {
     f =>
       f.family.replace(/["']/g, '').trim().toLowerCase() === name.toLowerCase(),
   );
-  return open?.pkg ?? `@fontsource/${name.toLowerCase().replace(/\s+/g, '-')}`;
+  if (open) return open.pkg;
+  /** @param {string} n */
+  const slug = n =>
+    n
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  const variable = /^(.+?)\s+variable$/i.exec(name);
+  const base = slug(variable ? variable[1] : name);
+  if (!base) return null;
+  return variable ? `@fontsource-variable/${base}` : `@fontsource/${base}`;
+}
+
+/**
+ * The Fontsource package to suggest installing for a family: none for a
+ * font a system ships (on any platform), whose name Fontsource does not
+ * publish; else the family's package in Fontsource's naming.
+ * @param {string} family
+ * @returns {string | null}
+ */
+export function fontsourceSuggestion(family) {
+  const name = cssUnescape(String(family).replace(/["']/g, '')).trim();
+  return isSystemFamily(name) ? null : fontsourcePackageOf(name);
+}
+
+/**
+ * The font weights the app's text takes with the theme: Core's weight
+ * tokens (`--font-weight-*`, which its components' text reads) as the
+ * theme sets them, every `font-weight` and weight token the theme's build
+ * writes, each var() read through the theme's own values and then Core's
+ * stylesheet, and the normal weight (400). Null before the theme has been
+ * built.
+ * @param {Ctx} ctx
+ * @param {string} slug
+ * @returns {number[] | null}
+ */
+export function builtFontWeights(ctx, slug) {
+  /** @type {string} */
+  let css;
+  try {
+    css = fs.readFileSync(themeFiles(ctx.project.cwd, slug).css, 'utf8');
+  } catch {
+    return null;
+  }
+  const own = customPropertyValues(css);
+  // Core's stylesheet, which the app loads with the theme, gives the
+  // default of every token the theme does not set.
+  /** @type {Map<string, string[]>} */
+  let core = new Map();
+  try {
+    core = customPropertyValues(
+      fs.readFileSync(
+        ctx.project.req.resolve('@astryxdesign/core/astryx.css'),
+        'utf8',
+      ),
+    );
+  } catch {
+    // No Core stylesheet to read: the theme's own values only.
+  }
+  /** @param {string} name */
+  const lookup = name => own.get(name) ?? core.get(name) ?? [];
+  /** @type {Set<number>} */
+  const weights = new Set([400]);
+  const KEYWORDS = /** @type {Record<string, number>} */ ({
+    normal: 400,
+    bold: 700,
+  });
+  const coreWeightTokens = [...core.keys()].filter(k =>
+    /^--font-weight-/.test(k),
+  );
+  for (const value of [
+    ...coreWeightTokens.flatMap(lookup),
+    ...declarationValues(css, /^(font-weight|--.*-weight(-[a-z0-9]+)?)$/),
+  ].flatMap(v => expandFontVars(v, lookup)))
+    for (const word of value.split(/[\s,]+/)) {
+      const n = KEYWORDS[word.toLowerCase()] ?? Number(word);
+      if (Number.isInteger(n) && n >= 100 && n <= 900 && n % 100 === 0)
+        weights.add(n);
+    }
+  return [...weights].sort((a, b) => a - b);
 }
 
 /**
@@ -8605,13 +8689,13 @@ export function fontPackages(ctx, data, {forNewApp = false} = {}) {
     // An installed @fontsource package of the family always loads it, even
     // for a family some systems ship.
     const own = fontsourcePackageOf(name);
-    const pkg = known ?? (loads(own) ? own : null);
+    const pkg = known ?? (own && loads(own) ? own : null);
     if (!pkg || out.some(x => x.pkg === pkg)) continue;
     out.push({pkg, family: name, installed: isInstalled(pkg), of: s});
   }
   for (const family of built?.values() ?? []) {
     const pkg = fontsourcePackageOf(family);
-    if (out.some(x => x.pkg === pkg) || !loads(pkg)) continue;
+    if (!pkg || out.some(x => x.pkg === pkg) || !loads(pkg)) continue;
     out.push({pkg, family, installed: isInstalled(pkg), of: null});
   }
   return out;

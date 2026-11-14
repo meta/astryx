@@ -36,6 +36,7 @@ import {OVERVIEW_SECTIONS} from './_overview.mjs';
 import {
   camel,
   folderIsEmpty,
+  builtFontWeights,
   fontPackages,
   modesOf,
   shown,
@@ -323,6 +324,35 @@ export function baseFontsSheet(ctx, data) {
 }
 
 /**
+ * The stylesheets of an installed font package that load the theme's
+ * fonts in every weight it uses: a variable package's one stylesheet
+ * (every weight); for a package with a stylesheet per weight, as
+ * Fontsource ships them, each weight the theme's build uses that the
+ * package has; else its index stylesheet.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {string} pkg
+ * @returns {string[]}
+ */
+export function fontPackageSheets(ctx, slug, pkg) {
+  const index = `${pkg}/index.css`;
+  if (pkg.startsWith('@fontsource-variable/')) return [index];
+  /** @param {string} spec */
+  const has = spec => {
+    try {
+      ctx.project.req.resolve(spec);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const weights = (builtFontWeights(ctx, slug) ?? [400])
+    .map(w => `${pkg}/${w}.css`)
+    .filter(has);
+  return weights.length ? weights : [index];
+}
+
+/**
  * How a generated page imports the theme: its built module, its stylesheet,
  * and the stylesheets of open fonts the project has installed.
  * @param {import('./_settings.mjs').Ctx} ctx
@@ -340,7 +370,7 @@ export function themeImports(ctx, slug, data, fromDir) {
   const modes = modesOf(data);
   const fonts = fontPackages(ctx, data)
     .filter(x => x.installed)
-    .map(x => `${x.pkg}/index.css`);
+    .flatMap(x => fontPackageSheets(ctx, slug, x.pkg));
   return {
     module: rel(f.js),
     css: [rel(f.css), ...baseFontsCss(ctx, data), ...fonts],

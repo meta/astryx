@@ -43,7 +43,7 @@ import {
   fontOf,
   builtFontFamilies,
   fontPackages,
-  fontsourcePackageOf,
+  fontsourceSuggestion,
   modesOf,
   refuse,
   editorWrote,
@@ -55,6 +55,7 @@ import {
 import {
   SHOWCASE_GROUPS,
   copyFontsCss,
+  fontPackageSheets,
   baseFontsSheet,
   newPictureRun,
   renderPreview,
@@ -545,6 +546,13 @@ export function fontNotes(ctx, data) {
   /** @type {string[]} */
   const notes = [];
   const packages = fontPackages(ctx, data);
+  // A family nothing loads, with the Fontsource package that would load
+  // it, when Fontsource's naming gives one.
+  /** @param {string} family */
+  const unloadedNote = family => {
+    const pkg = fontsourceSuggestion(family);
+    return `"${family}" is not a system font and no package loads it: the app must load it, or it falls back.${pkg ? ` If Fontsource publishes it, ${installLine(ctx.project.cwd, [pkg])} installs its package, which the previews and the app copy then load.` : ''}`;
+  };
   for (const {pkg, family, installed} of packages) {
     const fallbacks =
       Object.values(OPEN_FONTS).find(f => f.pkg === pkg)?.fallbacks ?? '';
@@ -555,7 +563,13 @@ export function fontNotes(ctx, data) {
         : 'system';
     notes.push(
       installed
-        ? `${family} is installed (${pkg}), so the previews load it; the app loads it with one import: import '${pkg}';`
+        ? `${family} is installed (${pkg}), so the previews and the app copy load it, a stylesheet for each weight the theme uses: ${fontPackageSheets(
+            ctx,
+            data.name,
+            pkg,
+          )
+            .map(x => `import '${x}';`)
+            .join(' ')}`
         : `${family} is not installed, so it does not load: the previews and the app show the next font in the stack. Install it: ${installLine(ctx.project.cwd, [pkg])}. Then the preview imports it on the next set or show, and the app imports it once: import '${pkg}'; Until then, the closest font that needs no install is ${near}: ${P} set ${data.name} font ${near}`,
     );
   }
@@ -608,7 +622,7 @@ export function fontNotes(ctx, data) {
       continue;
     }
     notes.push(
-      `"${named}" is not a system font and no package loads it: the app must load it, or it falls back. If Fontsource publishes it, ${installLine(ctx.project.cwd, [fontsourcePackageOf(named)])} installs its package, which the previews and the app copy then load.${near ? ` The closest open font is ${near}: ${P} set ${data.name} font ${near}${s.on ? ` --on ${s.on}` : ''}` : ''}`,
+      `${unloadedNote(named)}${near ? ` The closest open font is ${near}: ${P} set ${data.name} font ${near}${s.on ? ` --on ${s.on}` : ''}` : ''}`,
     );
   }
   // Every other family the build writes that nothing loads (a part's own
@@ -636,9 +650,9 @@ export function fontNotes(ctx, data) {
         packages.some(x => x.installed && fontKey(x.family) === fontKey(family))
       )
         continue;
-      const pkg = fontsourcePackageOf(family);
+      const pkg = fontsourceSuggestion(family);
       notes.push(
-        `"${family}" comes from ${base.spec}, which loads it from ${new URL(base.remote[0], 'https://x').host}: the app shows it, but the previews (preview.html, sheet.html and their pictures) cannot load a remote stylesheet and show the next font in the stack. ${installLine(ctx.project.cwd, [pkg])} installs a copy the previews load too.`,
+        `"${family}" comes from ${base.spec}, which loads it from ${new URL(base.remote[0], 'https://x').host}: the app shows it, but the previews (preview.html, sheet.html and their pictures) cannot load a remote stylesheet and show the next font in the stack.${pkg ? ` ${installLine(ctx.project.cwd, [pkg])} installs a copy the previews load too.` : ''}`,
       );
     }
   for (const family of built?.values() ?? []) {
@@ -651,9 +665,7 @@ export function fontNotes(ctx, data) {
       oneSystemOf(family)
     )
       continue;
-    notes.push(
-      `"${family}" is not a system font and no package loads it: the app must load it, or it falls back. If Fontsource publishes it, ${installLine(ctx.project.cwd, [fontsourcePackageOf(family)])} installs its package, which the previews and the app copy then load.`,
-    );
+    notes.push(unloadedNote(family));
   }
   return notes;
 }

@@ -71,6 +71,7 @@ import {
   isColorValue,
   isNumber,
   isSafeValue,
+  withoutCssEscapes,
   isSize,
   parseColor,
   mixSide,
@@ -4986,9 +4987,11 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
           'A font family name is at most 100 characters.',
           {run: [`${P} set ${slug} font inter`]},
         );
+      // A CSS escape (`Gill\ Sans`, `\5FAE`) is part of a name, as any
+      // CSS value reads it; a boundary is not.
       if (
         !s.value ||
-        /[;{}<>\\\n]/.test(s.value) ||
+        /[;{}<>\\\n]/.test(withoutCssEscapes(s.value)) ||
         !s.value.split(',').every(f => family(f.trim()))
       )
         refuse(

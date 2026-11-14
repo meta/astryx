@@ -89,6 +89,7 @@ import {
   editedThemes,
   themeFiles,
   fontsourcePackageOf,
+  fontsourceSuggestion,
   themeSourceRefusal,
   typedThemeName,
 } from './_settings.mjs';
@@ -1314,12 +1315,10 @@ export async function editorCompileProblem(
         )
       )
         why = null;
-      // A missing built output is one compile writes itself.
-      if (
-        why &&
-        !check &&
-        /^[^/]+\.(css|js|d\.ts|css\.d\.ts) was missing$/.test(why)
-      )
+      // A missing built output is one compile writes itself, and one a
+      // check names in its own result (the stale outputs, upToDate false):
+      // never a reason to refuse either.
+      if (why && /^[^/]+\.(css|js|d\.ts|css\.d\.ts) was missing$/.test(why))
         why = null;
       // Saved settings the editor no longer accepts: show refuses them too,
       // so the refusal names the undo that removes each.
@@ -1591,18 +1590,26 @@ export function editorFontHelp(file, cwd) {
   const at = editorThemeAt(root, path.resolve(cwd, file));
   if (!at || path.basename(file) !== `${at.slug}.theme.ts`) return null;
   const copy = `src/themes/${at.slug}/${at.slug}.fonts.css`;
+  /** @param {string} family */
+  const notice = family => {
+    const pkg = fontsourceSuggestion(family);
+    return pkg
+      ? `Font "${family}" is named by this theme but not loaded; if Fontsource publishes it, ${installLine(root, [pkg])} installs its package, which ${copy} then imports`
+      : `Font "${family}" is named by this theme but not loaded, and no font package is named for it: the app must load it, or it falls back`;
+  };
   return {
-    notice: family =>
-      `Font "${family}" is named by this theme but not loaded; if Fontsource publishes it, ${installLine(root, [fontsourcePackageOf(family)])} installs its package, which ${copy} then imports`,
-    recipe:
-      families => `  The built CSS only sets font-family. ${at.slug}'s app copy loads a family
+    notice,
+    recipe: families => {
+      const pkgs = families
+        .map(fontsourceSuggestion)
+        .filter(/** @returns {p is string} */ p => p !== null);
+      return `  The built CSS only sets font-family. ${at.slug}'s app copy loads a family
   once its package is installed (if Fontsource publishes it), importing it in
   ${copy} on the next compile, set or show:
-
-    ${installLine(root, families.map(fontsourcePackageOf))}
-
+${pkgs.length ? `\n    ${installLine(root, pkgs)}\n` : '\n    (no Fontsource package is named for these families: load them in your app)\n'}
   Recipe and fallback-stack guidance: ${runLine(root, 'docs typography')}
-`,
+`;
+    },
   };
 }
 
@@ -1843,8 +1850,10 @@ export async function editorLoadedFonts(file, cwd) {
   // A family the build names whose @fontsource package is installed: the
   // copy written after this build imports that package (copyFontsCss).
   /** @param {string} family */
-  const installed = family =>
-    packageInstalled(root, fontsourcePackageOf(family));
+  const installed = family => {
+    const pkg = fontsourcePackageOf(family);
+    return pkg !== null && packageInstalled(root, pkg);
+  };
   return family => loaded.has(fontKey(family)) || installed(family);
 }
 
