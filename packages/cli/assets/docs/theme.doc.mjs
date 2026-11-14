@@ -15,7 +15,7 @@ export const docs = {
     'provider',
   ],
   description:
-    'How Astryx themes work: wrap your app in a theme, and create or change one with `astryx experimental theme editor new <name> --like neutral` (the first sections of this topic give the rest).',
+    'How Astryx themes work: wrap your app in a theme, and create or change one (also to make the app denser or roomier, or to change one kind of part) with `astryx experimental theme editor new <name> --like neutral` (the first sections of this topic give the rest).',
 
   sections: [
     {
