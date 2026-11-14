@@ -744,12 +744,33 @@ describe('render(): every write stays inside the current folder', () => {
     expect(back.data).toMatchObject({exact: true});
     expect(back.data.aliased).toEqual({
       config: 'tsconfig.json',
-      paths: {'$lib/*': ['./lib/*'], '@/*': ['./multi-restored/generated/*', './multi-restored/src/*']},
+      paths: {
+        '$lib/*': ['./lib/*'],
+        '@/*': ['./multi-restored/generated/*', './multi-restored/src/*'],
+        '@/api/client': ['./multi-restored/generated/api/client.ts'],
+        '@/components/Header': ['./multi-restored/src/components/Header.tsx'],
+      },
       imports: [
         {import: '@/api/client', file: 'multi-restored/generated/api/client.ts'},
         {import: '@/components/Header', file: 'multi-restored/src/components/Header.tsx'},
       ],
     });
+    // An alias whose first target overrides files of the second: the page
+    // renders again with the override, once the printed paths are set.
+    put('ov/package.json', '{"name":"ov","private":true}');
+    put('ov/tsconfig.json', '{"compilerOptions": {"paths": {"@/*": ["./src/overrides/*", "./src/*"]}}}\n');
+    put('ov/src/Zed.tsx', "export function Zed() { return <p>base Zed</p>; }\n");
+    put('ov/src/overrides/Zed.tsx', "import {Zed as Base} from '../Zed';\nexport function Zed() { return <section>override <Base /></section>; }\n");
+    put('ov/src/Apple.tsx', "export function Apple() { return <p>Apple</p>; }\n");
+    put('ov/src/page.tsx', "import {Zed} from '@/Zed';\nimport {Apple} from '@/Apple';\nexport default function Page() { return <main><Apple /><Zed /></main>; }\n");
+    await render('ov/src/page.tsx', {cwd: dir});
+    put('ov-to/package.json', '{"name":"ov-to","private":true}');
+    fs.copyFileSync(path.join(dir, 'ov/src/page.html'), path.join(dir, 'ov-to/ov.html'));
+    const ov = /** @type {any} */ (await render('ov.html', {cwd: path.join(dir, 'ov-to'), reverse: true}));
+    expect(ov.data.aliased.paths['@/Zed']).toEqual(['./ov-restored/overrides/Zed.tsx']);
+    put('ov-to/tsconfig.json', JSON.stringify({compilerOptions: {paths: ov.data.aliased.paths}}));
+    await render('ov-restored/page.tsx', {cwd: path.join(dir, 'ov-to'), out: 'again.html'});
+    expect(fs.readFileSync(path.join(dir, 'ov-to/again.html'), 'utf8')).toContain('override');
   }, 60_000);
 
   it('gives back an aliased page where no alias of the project names its imports: in its own layout, naming the paths to add', async () => {

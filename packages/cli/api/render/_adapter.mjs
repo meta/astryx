@@ -619,10 +619,16 @@ function aliasedResult(unaliased, page, cwd) {
   /** @type {Record<string, string[]>} */
   const paths = {};
   for (const pattern of home.current) paths[pattern.key] = pattern.targets.map(fromBase);
-  for (const {spec, file} of unaliased) {
-    const [key, target] = aliasEntry(spec, file, home.base);
-    paths[key] = [...new Set([...(paths[key] ?? []), target])];
-  }
+  const entries = unaliased.map(({spec, file}) => aliasEntry(spec, file, home.base));
+  for (const [key, target] of entries) paths[key] = [...new Set([...(paths[key] ?? []), target])];
+  // TypeScript tries a pattern's targets in turn, so an import through a
+  // pattern with more than one target could reach another file first; each
+  // such import gets an entry of its own, which TypeScript reads before any
+  // pattern.
+  unaliased.forEach(({spec, file}, i) => {
+    const [key] = entries[i];
+    if (key !== spec && paths[key].length > 1) paths[spec] = [fromBase(file)];
+  });
   return {
     config: shown(cwd, home.config),
     paths,

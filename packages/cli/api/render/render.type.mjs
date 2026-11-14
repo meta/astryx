@@ -60,7 +60,7 @@
  * @experimental May change or be removed in a patch release.
  * @typedef {object} RenderAliased
  * @property {string} config - The tsconfig.json or jsconfig.json the entries belong in, from the current folder: the one TypeScript reads for the page, else a new one at the project's root (or the current folder outside a project).
- * @property {Record<string, string[]>} paths - The whole `paths` it needs, relative to its `baseUrl`, else to its folder: the entries it has now, its own or inherited (a `paths` of its own replaces inherited ones), with every target the imports need (`{"@/*": ["./report-restored/*"]}`).
+ * @property {Record<string, string[]>} paths - The whole `paths` it needs, relative to its `baseUrl`, else to its folder: the entries it has now, its own or inherited (a `paths` of its own replaces inherited ones), with every target the imports need (`{"@/*": ["./report-restored/*"]}`), and an entry of its own for each import through a pattern with more than one target, which TypeScript reads first.
  * @property {{import: string, file: string}[]} imports - Each import as the page writes it (`@/components/Header`), with the file it came back as, from the current folder.
  */
 
