@@ -774,6 +774,20 @@ export const COMMON_STATES = [
   'disabled',
 ];
 
+/**
+ * Mode words a value or a saved entry may be labeled with, and the mode
+ * each means: `set` reads a typed label by it, and loading reads a saved
+ * entry's mode by it.
+ */
+export const MODE_WORDS = /** @type {Record<string, 'light' | 'dark'>} */ ({
+  light: 'light',
+  'light-mode': 'light',
+  day: 'light',
+  dark: 'dark',
+  'dark-mode': 'dark',
+  night: 'dark',
+});
+
 // These tables are looked up by words people type: with no prototype,
 // `constructor` or `__proto__` is never found in them.
 for (const table of [
@@ -790,5 +804,6 @@ for (const table of [
   DIRECT,
   THING_HINTS,
   DESIGN,
+  MODE_WORDS,
 ])
   Object.setPrototypeOf(table, null);
