@@ -63,6 +63,16 @@ function targetString(value) {
 }
 
 /**
+ * The order Node and TypeScript try export patterns in: the longer part
+ * before the `*` first, then the longer key.
+ * @param {string} a
+ * @param {string} b
+ */
+function patternKeyCompare(a, b) {
+  return b.indexOf('*') - a.indexOf('*') || b.length - a.length;
+}
+
+/**
  * Find an exact or one-star subpath mapping and the wildcard value it matched.
  * @param {Record<string, unknown>} map
  * @param {string} subpath
@@ -73,7 +83,7 @@ function subpathValue(map, subpath) {
   }
   const patterns = Object.keys(map)
     .filter(key => key.startsWith('./') && key.split('*').length === 2)
-    .sort((a, b) => b.length - a.length);
+    .sort(patternKeyCompare);
   for (const pattern of patterns) {
     const star = pattern.indexOf('*');
     const prefix = pattern.slice(0, star);
