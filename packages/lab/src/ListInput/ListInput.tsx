@@ -193,13 +193,14 @@ interface PendingMutationMotion<T> {
   matchesValue: (nextValue: T[]) => boolean;
 }
 
-// Core List's reorder handle is 28 px wide for every pointer.
-const REORDER_HANDLE_SIZE = 28;
+// Core List's reorder handle is its 16 px grip alone, for every pointer. Its
+// target reaches 4 px past it, into the gap beside it.
+const REORDER_HANDLE_SIZE = 16;
 /**
- * How far a hanging handle sits before its record's first field, px: core
- * List's hang.
+ * How far a hanging handle's target reaches before its record's first field,
+ * px: core List's hang, then the target past the grip.
  */
-const REORDER_HANDLE_HANG = 30;
+const REORDER_HANDLE_HANG = 28;
 /** As much of that room as the container's padding holds. */
 const HANG_REACH = `min(${REORDER_HANDLE_HANG}px, var(--container-padding-inline-start, ${REORDER_HANDLE_HANG}px))`;
 const HANG_REACH_END = `min(${REORDER_HANDLE_HANG}px, var(--container-padding-inline-end, ${REORDER_HANDLE_HANG}px))`;
