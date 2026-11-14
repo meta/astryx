@@ -935,7 +935,7 @@ export function editorThemeRefusal(err, cwd) {
 }
 
 /** The shared typo rule, for a typed subcommand. */
-export {typoOf, booleanWord} from './_normal.mjs';
+export {booleanWord, typoNear, typoOf} from './_normal.mjs';
 
 /**
  * The editor themes of the app the folder `cwd` is in, by name; none when

@@ -9,7 +9,7 @@
  * @position packages/cli/api/theme-edit — pure helpers, no environment access
  */
 
-import {DIALS, wordTable} from './_tables.mjs';
+import {DIALS, FONTS, OPEN_FONTS, fontStack, wordTable} from './_tables.mjs';
 import {colorProblem, hex, parseColor} from './_color.mjs';
 import {sameKindValues} from './_css.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
@@ -1392,6 +1392,13 @@ documentReadings(Object.values(PROPERTY_WORDS).flatMap(m => Object.entries(m)));
 documentReadings(Object.entries(WEIGHT_WORDS));
 documentReadings(Object.entries(WEIGHT_WORDS).map(([w, n]) => [n, w]));
 documentReadings(Object.entries(DENSITY_WORDS));
+// A font dial word as a part's font-family is the stack it stands for.
+documentReadings(
+  [...Object.keys(FONTS), ...Object.keys(OPEN_FONTS)].map(w => [
+    w,
+    /** @type {string} */ (fontStack(w)),
+  ]),
+);
 
 /**
  * Whether a repair line may offer `offered` as the whole typed value (see

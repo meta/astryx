@@ -305,6 +305,25 @@ export const OPEN_FONTS = wordTable(
 );
 
 /**
+ * The CSS font-family stack a font dial word stands for (a preset such as
+ * mono, or an open font such as inter): its family, quoted when it holds a
+ * space, then its fallbacks. Null for any other word. A part's font-family
+ * takes this stack, never the word itself, which names no family.
+ * @param {string} word
+ * @returns {string | null}
+ */
+export function fontStack(word) {
+  const w = String(word).trim().toLowerCase();
+  const [family, fallbacks] = FONTS[w]
+    ? FONTS[w]
+    : OPEN_FONTS[w]
+      ? [OPEN_FONTS[w].family.replace(/"/g, ''), OPEN_FONTS[w].fallbacks]
+      : [null, null];
+  if (!family) return null;
+  return `${/\s/.test(family) ? `"${family}"` : family}, ${fallbacks}`;
+}
+
+/**
  * Brand fonts no package loads, and the closest open font, for the warning
  * a theme that names one gets.
  * @type {Record<string, string>}

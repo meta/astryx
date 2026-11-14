@@ -63,6 +63,7 @@ import {
   WRAPPED_PARTS,
   CARD_LIKE,
   isSystemFamily,
+  fontStack,
 } from './_tables.mjs';
 import {
   COLOR_NAMES,
@@ -109,6 +110,7 @@ import {
   fontsourcePackageOf,
   dialWordOf,
   paddedParts,
+  onBuiltIn,
 } from './_settings.mjs';
 import {isColorToken} from './_compiler.mjs';
 import {
@@ -2530,6 +2532,21 @@ export function checkSetting(
         `"${value}" names a family that exists nowhere: ${fixed.why}.`,
         {run: [setLine(slug, thing, fixed.value, flags, false)]},
       );
+    // A font dial word that names no family (mono, system, rounded): a
+    // part's font-family takes the stack it stands for, never the word.
+    const word = value.trim().toLowerCase();
+    const stack = thing === 'font-family' ? fontStack(word) : null;
+    if (
+      stack &&
+      FONTS[word] &&
+      FONTS[word][0].toLowerCase() !== word &&
+      !isSystemFamily(word)
+    )
+      refuse(
+        E.ERR_THEME_BAD_VALUE,
+        `"${value.trim()}" is a font dial word, not a family: no font is named that. font-family takes the families it stands for (${stack}).`,
+        {run: [setLine(slug, thing, stack, flags, false)]},
+      );
   }
   // A light and a dark color on a part's color property (`background`,
   // `color`, `border-color` …) is that property's light-dark() pair.
@@ -4714,7 +4731,9 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
               )
           : family
             ? [
-                `${P} set ${slug} font-family ${quoteCommandArgument(v)} --on ${s.on}`,
+                // A font dial word (mono, system, inter) names no family:
+                // the part takes the stack it stands for.
+                `${P} set ${slug} font-family ${quoteCommandArgument(fontStack(v) ?? v)} --on ${s.on}`,
               ]
             : [example];
         refuse(
@@ -4880,6 +4899,19 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
           {run: [`${P} set ${slug} font inter`]},
         );
     } else if (thing === 'base') {
+      // A built-in base this project has not installed: install it, then
+      // the same set.
+      if (LIKE.includes(v) && !unset && !baseInstalled(ctx.project, v))
+        refuse(
+          E.ERR_UNKNOWN_THEME,
+          `The ${v} theme is not installed, so ${slug} cannot build on it. Install @astryxdesign/theme-${v}, then set the base again, or build on no theme.`,
+          {
+            run: [
+              ...onBuiltIn(ctx.project.cwd, v, `${P} set ${slug} base ${v}`),
+              `${P} set ${slug} base none`,
+            ],
+          },
+        );
       if (s.on)
         refuse(
           E.ERR_THEME_BAD_VALUE,
