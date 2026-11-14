@@ -98,6 +98,26 @@ describe('the parts of a rendered file a reverse compares', () => {
     expect(renderedMarkupOf(html)).toBe('Markup');
   });
 
+  it('reads <!--> and <!---> as whole comments, in the page and in its head alike', () => {
+    const p = /** @type {any} */ (parseHtml('<p>a<!-->b<!--->c<!---->d</p>').children[0]);
+    expect(p.children.map((/** @type {{text: string}} */ c) => c.text).join('')).toBe('abcd');
+    expect(renderedHeadOf('<html><head><!--><title>T</title><!---><style>s</style></head><body>M')).toEqual({
+      title: 'T',
+      style: '<style>s</style>',
+    });
+  });
+
+  it('reads crafted markup in time that grows with its length', () => {
+    const started = Date.now();
+    for (const html of ['<html><head>' + '<a '.repeat(32000), '<html><head>' + '<style>a</style>'.repeat(20000) + '<body>x']) {
+      parseHtml(html);
+      renderedHeadOf(html);
+      renderedMarkupOf(html);
+      readSourceBlock(html);
+    }
+    expect(Date.now() - started).toBeLessThan(1500);
+  });
+
   it('reads a file a released CLI wrote, with no note', () => {
     const html = '<!doctype html><html><head><title>A &amp; B</title><style>a{}</style></head><body><p>M</p><script type="application/x-astryx-source">{}</script></body></html>';
     expect(renderedHeadOf(html)).toEqual({title: 'A &amp; B', style: '<style>a{}</style>'});

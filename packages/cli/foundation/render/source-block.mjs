@@ -18,6 +18,7 @@
 
 import {createHash} from 'node:crypto';
 import {isValidSemver} from '../env/semver.mjs';
+import {scanHtml} from './html-reader.mjs';
 
 /** The script type of the embedded-source block. */
 export const SOURCE_TYPE = 'application/x-astryx-source';
@@ -80,9 +81,6 @@ export function sourceBlock(entry, files, record = {}) {
   return `<script type="${SOURCE_TYPE}">${json}</script>`;
 }
 
-/** Elements whose text is never markup: a comment opener or a tag in it is text. */
-const RAW_TEXT = new Set(['script', 'style', 'title', 'textarea']);
-
 /**
  * The parts of a rendered file a reverse reads, found as a browser finds them:
  * outside comments (the note is one, and it may quote a path that looks like
@@ -94,31 +92,23 @@ const RAW_TEXT = new Set(['script', 'style', 'title', 'textarea']);
  *   where the content of <body> starts (-1 without a <body> tag)
  */
 function pageParts(html) {
-  const tags = /<!--|<([a-z][a-z0-9-]*)\b[^>]*>/gi;
   /** @type {string | null} */
   let title = null;
   /** @type {string | null} */
   let style = null;
-  for (let m = tags.exec(html); m; m = tags.exec(html)) {
-    if (m[0] === '<!--') {
-      // A comment ends at the first `-->`, even `<!-->` and `<!--->`.
-      const end = html.indexOf('-->', m.index + 2);
-      tags.lastIndex = end < 0 ? html.length : end + 3;
-      continue;
+  let styleStart = -1;
+  let titleNext = false;
+  for (const token of scanHtml(html)) {
+    if (token.kind === 'start') {
+      if (token.tag === 'body') return {title, style, body: token.end};
+      titleNext = token.tag === 'title' && title === null;
+      if (token.tag === 'style' && styleStart < 0) styleStart = token.start;
+    } else if (token.kind === 'raw' && titleNext) {
+      title = html.slice(token.start, token.end);
+      titleNext = false;
+    } else if (token.kind === 'end' && token.tag === 'style' && styleStart >= 0 && style === null) {
+      style = html.slice(styleStart, token.end);
     }
-    const tag = m[1].toLowerCase();
-    if (tag === 'body') return {title, style, body: tags.lastIndex};
-    if (!RAW_TEXT.has(tag)) continue;
-    const closing = new RegExp(`</${tag}`, 'gi');
-    closing.lastIndex = tags.lastIndex;
-    const close = closing.exec(html)?.index ?? -1;
-    const stop = close < 0 ? html.length : close;
-    if (tag === 'title' && title === null) title = html.slice(tags.lastIndex, stop);
-    if (tag === 'style' && style === null) {
-      const end = close < 0 ? -1 : html.indexOf('>', close);
-      style = html.slice(m.index, end < 0 ? html.length : end + 1);
-    }
-    tags.lastIndex = stop;
   }
   return {title, style, body: -1};
 }
