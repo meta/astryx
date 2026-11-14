@@ -5,7 +5,7 @@ import {execFileSync} from 'node:child_process';
 // prettier-ignore
 import {afterEach, beforeAll, beforeEach, describe, expect, it, vi} from 'vitest';
 import * as fs from 'node:fs';
-import {createRequire} from 'node:module';
+import nodeModule, {createRequire} from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
@@ -104,6 +104,11 @@ export const resolvedOceanCalmTheme=defineTheme({
   return ['themes/ocean.mjs', 'themes/.hidden/ocean-calm.mjs', 'themes/.hidden/ocean-calm-deep.mjs', 'themes/ocean-midnight.mjs'];
 }
 const count = (text, needle) => text.split(needle).length - 1;
+// Node runs module hooks in the loading thread from 22.15; a theme build loads
+// imported stylesheets as empty modules only there.
+const hasModuleHooks =
+  typeof (/** @type {any} */ (nodeModule).registerHooks) === 'function';
+const STYLESHEET_RAN = '__astryxFamilyStylesheetRan';
 /** @param {string} source */
 // prettier-ignore
 function executableDependencies(source) {
@@ -292,7 +297,11 @@ describe('themeBuildFamily()', () => {
     );
     expect(checked?.type).toBe('theme.build.check');
     expect(checked?.data.upToDate).toBe(false);
-    // The `.css.d.ts` import stub may be absent in check mode.
+    // Every output is checked; a missing `.css.d.ts` stub warns instead of
+    // making the check stale.
+    expect(checked?.data.checked).toEqual(
+      OUTPUTS.map(file => `../themes/${file}`),
+    );
     expect(checked?.data.stale).toEqual(
       OUTPUTS.filter(file => !file.endsWith('.css.d.ts')).map(file => ({
         path: `../themes/${file}`,
@@ -429,7 +438,7 @@ describe('themeBuildFamily()', () => {
       {files: [files[0]], key: FAMILY_KEY, message: /at least two/i}, {files: [files[0], files[0]], key: FAMILY_KEY, message: /duplicate/i},
       {files: [files[0], duplicate], key: FAMILY_KEY, message: /duplicate.*ocean/i}, {files: [files[1], unrelated], key: FAMILY_KEY, message: /ancestor|parent/i},
       {files: [files[0], unrelated], key: FAMILY_KEY, message: /one selected root/i}, {files: [files[0], impostorChild], key: FAMILY_KEY, message: /does not extend the selected/i},
-      {files: [files[0], bypass], key: FAMILY_KEY, message: /exact family ancestry could not be observed/i},
+      {files: [files[0], bypass], key: FAMILY_KEY, message: /is a plain object, so a family build cannot see which theme it extends/i},
       {files: [cycleA, cycleB], key: FAMILY_KEY, message: /cycle/i},
       {files: [graphRoot, graphChild], key: 'graph-family', message: /registry graph imports CSS/i},
       {files: [emptyParent, unrelated], key: FAMILY_KEY, message: /invalid normalized parent/i},
@@ -484,6 +493,64 @@ describe('themeBuildFamily()', () => {
     // prettier-ignore
     for (const [file, content] of Object.entries(before)) expect(fs.readFileSync(path.join(dir, 'themes', file), 'utf8')).toBe(content);
   });
+
+  it.skipIf(!hasModuleHooks)(
+    'loads a stylesheet that a module between members imports, without running it',
+    async () => {
+      const dir = makeDir();
+      const pkg = path.join(dir, 'node_modules/@acme/brand');
+      fs.mkdirSync(path.join(pkg, 'dist/themes'), {recursive: true});
+      fs.mkdirSync(path.join(pkg, 'dist/Theme'), {recursive: true});
+      fs.writeFileSync(
+        path.join(pkg, 'package.json'),
+        JSON.stringify({
+          name: '@acme/brand',
+          type: 'module',
+          exports: {'./themes/brand': './dist/themes/brand.mjs'},
+        }),
+      );
+      // Valid JavaScript, so a stylesheet that ran would leave this mark.
+      fs.writeFileSync(
+        path.join(pkg, 'dist/Theme/brand.css'),
+        `globalThis.${STYLESHEET_RAN} = true;\n`,
+      );
+      fs.writeFileSync(
+        path.join(pkg, 'dist/Theme/brand-theme.mjs'),
+        "export const brandTheme = {name: 'brand', tokens: {}};\n",
+      );
+      fs.writeFileSync(
+        path.join(pkg, 'dist/themes/brand.mjs'),
+        "import '../Theme/brand.css';\nexport {brandTheme} from '../Theme/brand-theme.mjs';\n",
+      );
+      const themes = path.join(dir, 'themes');
+      // The barrel is not a member: the family loads it between the members,
+      // and it also re-exports the package's theme entry.
+      fs.writeFileSync(
+        path.join(themes, 'sea.mjs'),
+        "import {defineTheme} from '@astryxdesign/core/theme';\nexport const seaTheme = defineTheme({name: 'sea', tokens: {'--radius-element': '6px'}});\n",
+      );
+      fs.writeFileSync(
+        path.join(themes, 'barrel.mjs'),
+        "export {brandTheme} from '@acme/brand/themes/brand';\nexport {seaTheme} from './sea.mjs';\n",
+      );
+      fs.writeFileSync(
+        path.join(themes, 'harbor.mjs'),
+        "import {defineTheme} from '@astryxdesign/core/theme';\nimport {seaTheme} from './barrel.mjs';\nexport const harborTheme = defineTheme({name: 'harbor', extends: seaTheme, tokens: {'--color-accent': 'rgb(220 40 40)'}});\n",
+      );
+      try {
+        await build(dir, ['themes/sea.mjs', 'themes/harbor.mjs']);
+        const css = fs.readFileSync(
+          path.join(themes, `${FAMILY_KEY}.css`),
+          'utf8',
+        );
+        expect(css).toContain('--radius-element: 6px;');
+        expect(css).toContain('--color-accent: rgb(220 40 40);');
+        expect(Reflect.get(globalThis, STYLESHEET_RAN)).toBeUndefined();
+      } finally {
+        Reflect.deleteProperty(globalThis, STYLESHEET_RAN);
+      }
+    },
+  );
 });
 describe('theme build --family CLI', () => {
   it('requires the key exactly with family mode and closes incompatible flags', async () => {

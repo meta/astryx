@@ -14,9 +14,23 @@ affects_architecture: [architecture:cli-surface]
 affects_families: []
 affects_contributing: [contributing:cli-conventions]
 affects_consumer_docs: [cli/experimental]
+verified_by:
+  [
+    packages/cli/api/icon/use/use-variant.test.mjs,
+    packages/cli/api/icon/look-theme-maps.test.mjs,
+    packages/cli/foundation/discovery/template-icons-variant.test.mjs,
+  ]
 ---
 
 # Icon set integrations system spec
+
+<!-- path-applicability:v1 -->
+
+```json
+{
+  "paths": ["packages/cli/foundation/discovery/icon-set-theme-maps.mjs"]
+}
+```
 
 <!-- Describe the system, not the project: present tense, what it does. No proposals, history, pull requests, or research in the record; see docs/contributing/spec-writing.md and report its rubric results in the pull request. -->
 
@@ -31,8 +45,10 @@ may add definitions of its own. With a set installed:
 - an agent or engineer finds an icon by meaning with
   `astryx experimental icon <words>` and gets the exact import line;
 - a template copied into a project that opts in with `experimental.iconSet`
-  uses the set's icons for the definitions the template declares; and
-- a theme points the shared semantic icon names at the set's artwork.
+  uses the set's icons for the definitions the template declares, in the
+  one look (variant) the project picks with `experimental.iconVariant`; and
+- a theme points the shared semantic icon names at the set's artwork, in
+  that look.
 
 The CLI encodes no icon library: the author, or the author's agent, picks each
 icon, and the CLI verifies it, writes the files, and checks the set.
@@ -73,7 +89,8 @@ icon, and the CLI verifies it, writes the files, and checks the set.
     agents and tools act on, while the reasons behind experimental features
     are prose in their docs under `cli/experimental`;
   - configuration is `experimental.iconSet` in `astryx.config`, the project's
-    opt-in, and `experimental.iconSets` in the integration manifest;
+    opt-in, `experimental.iconVariant` beside it, the look its icons draw,
+    and `experimental.iconSets` in the integration manifest;
   - the guides and schemas live under `cli/experimental` (the guide, the
     `icon-set-files` reference of the descriptor, data file, and definition
     schemas, which the stable field reference never lists, and the
@@ -145,8 +162,8 @@ icon, and the CLI verifies it, writes the files, and checks the set.
     definitions;
   - optional `variants`, the lower-kebab variant names the set declares, and
     `default.variant`, the one each icon's own `export` draws. A variant is a
-    named look the set supplies (for example outline or solid); size comes
-    from CSS;
+    named look the set supplies (for example outline or filled); size comes
+    from CSS, and a project picks one look by its name (FR8);
   - optional `source` (the upstream library and version), `exclude` (library
     exports that are not icons, FR13), `generated` (FR13), `adapter` (FR13),
     and `themeMap` (FR12).
@@ -224,6 +241,22 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
   its backups in list order, then the integration load order. Only the main
   set's theme map feeds the theme (FR12).
 
+  `experimental.iconVariant` names the look every icon of the project draws:
+  one of the variants the main set declares. It needs `experimental.iconSet`,
+  and a config that sets it alone is refused. Each set in the list draws its
+  variant of that name, or its default look when it declares none.
+  `astryx experimental icon use <main> [--backup <set>]... --variant
+<variant>` writes it in the same write as `experimental.iconSet`, and
+  refuses, before it writes, a variant the main set does not declare
+  (`ERR_INVALID_ARGUMENT`, naming the main set's variants, each with the
+  command that picks it); `use` without `--variant` removes it. The receipt
+  adds `variant`, the value written or null, and `previousVariant`, the value
+  it replaced, and with a variant, `looks` (each set in the list with the look
+  it draws) and `themeMap` (the main set's theme map for that look, FR12, and
+  its module). `--list` adds the project's `variant`, null when it names
+  none, and, when it names one, each set's `look`: the look it draws, null for
+  a set the list leaves out or one with a single look.
+
 ### Templates and themes
 
 - **FR9 — Templates declare definitions.** A template or block descriptor
@@ -238,9 +271,13 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
   decides between two sets that both have it. An import from the library a
   set in the list wraps (the package its data names as `source`, or a
   subpath of it) is an icon the project chose: when the main set wraps it,
-  the icon keeps its import as written; when another set in the list wraps
-  it and no set in the list has an icon for its definition, it keeps its
-  import too. When no set in the list has an icon for a declared definition,
+  the icon keeps its import as written, unless the project names a variant;
+  then it maps to the main set's icon for its definition, so it draws that
+  look. When the main set maps no icon for that definition, the main set's
+  icon that re-exports the same library export takes its place in that look
+  (`by: 'variant'`), if it draws that look; otherwise the icon keeps its
+  import. When another set in the list wraps it and no set in the list has an icon for its
+  definition, it keeps its import too. When no set in the list has an icon for a declared definition,
   and no set in the list wraps its library, the template's import of that icon is
   removed and the file declares a local placeholder component once, above
   its first statement that is not an import: `MissingIcon`, or `MissingIcon2`
@@ -254,14 +291,19 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
   two modules (outline and solid `TrashIcon`); each keeps its variant when its
   module belongs to an installed set and the chosen set's icon has that
   variant, and otherwise draws the chosen set's default look; a missing look
-  never moves an icon to a backup. A mapped or placeholder icon's elements lose the
+  never moves an icon to a backup. When the project names a variant (FR8),
+  every mapped icon asks for that variant instead of the look its source
+  draws, and an icon the template imports from a set in the list, in another
+  look, moves to that icon's export for the variant when the icon has one. A mapped or placeholder icon's elements lose the
   library's sizing props (`size`, `strokeWidth`, `absoluteStrokeWidth`): size
   comes from CSS (FR14). Comments on a rewritten import line are kept.
 - **FR10 — The template reports every icon.** The result, and the copy
   receipt, gain `icons`: the set state, the list `order` when the project
-  lists backups, each icon `mapped` (source, target with the set used, the
-  rule, the sizing props `dropped`, and `variant: {asked, used}` when the
-  chosen set lacks the look), a `placeholder` (source, the placeholder's local name,
+  lists backups, the project's `variant` when it names one, each icon
+  `mapped` (source, target with the set used, the rule: `match`,
+  `definition`, or `variant` for an icon moved to the project's look within
+  its set; the sizing props `dropped`; and `variant: {asked, used}` when the
+  chosen set's icon lacks the look asked for), a `placeholder` (source, the placeholder's local name,
   its `definitions`, and `fixes`: `astryx experimental icon map <definition>
 <icon> --set <main>` and `astryx experimental icon use <main> --backup
 <set>`), or `kept` (with why, and a `likely` suggestion when one exists),
@@ -301,6 +343,12 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
   `icons: themeIcons`. Each entry is sized to the theme's icon box by CSS
   (`style` width and height `1em`) as well as by attributes, so an icon whose
   component writes its own size attributes still draws at the box's size.
+  When `themeMap` is `themeIcons` in a set with a generated module, the
+  module also exports, for each declared variant other than the default that
+  an icon draws, `themeIcons<Variant>` (the variant in PascalCase, as a
+  variant's export takes it: `themeIconsFilled`): the same keys, each the
+  icon's export for that variant, or its own export when it has none. A theme
+  whose project picks that look sets `icons: themeIconsFilled`.
 
 ### Authoring
 
@@ -499,21 +547,21 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
 - **FR15 — `integration check` proves the set matches the package.** For each
   set it reports, without running the package:
 
-  | Code                              | Severity | When                                                                           |
-  | --------------------------------- | -------- | ------------------------------------------------------------------------------ |
-  | `invalid_icon_set`                | error    | the descriptor, data file, or a definition file is invalid                     |
-  | `icon_builtin_definition_missing` | error    | a built-in definition is not in `map`                                          |
-  | `icon_definition_unused`          | warning  | a definition the set declares is not in `map`                                  |
-  | `icon_definition_shadowed`        | warning  | a definition the set declares has an Astryx definition's name                  |
-  | `icon_module_not_public`          | error    | an icon is read from outside the package's public entry                        |
-  | `icon_export_name`                | warning  | an export is not named `<Name>Icon`                                            |
-  | `icon_not_component`              | error    | an export is a literal, not a component or adapter call                        |
-  | `icon_export_missing`             | error    | an export, the generated module, or the adapter does not exist                 |
-  | `icon_module_invalid`             | error    | the set's module, a file it re-exports, or the generated module does not parse |
-  | `icon_generated_types_mismatch`   | error    | the generated declaration file is missing or stale                             |
-  | `icon_theme_map_mismatch`         | error    | the theme map disagrees with the built-in entries of `map`                     |
-  | `icon_source_version_drift`       | warning  | the data names another upstream version than the package depends on            |
-  | `icon_license_notice_missing`     | warning  | a set with an upstream ships no license notice                                 |
+  | Code                              | Severity | When                                                                               |
+  | --------------------------------- | -------- | ---------------------------------------------------------------------------------- |
+  | `invalid_icon_set`                | error    | the descriptor, data file, or a definition file is invalid                         |
+  | `icon_builtin_definition_missing` | error    | a built-in definition is not in `map`                                              |
+  | `icon_definition_unused`          | warning  | a definition the set declares is not in `map`                                      |
+  | `icon_definition_shadowed`        | warning  | a definition the set declares has an Astryx definition's name                      |
+  | `icon_module_not_public`          | error    | an icon is read from outside the package's public entry                            |
+  | `icon_export_name`                | warning  | an export is not named `<Name>Icon`                                                |
+  | `icon_not_component`              | error    | an export is a literal, not a component or adapter call                            |
+  | `icon_export_missing`             | error    | an export, the generated module, the adapter, or a look's theme map does not exist |
+  | `icon_module_invalid`             | error    | the set's module, a file it re-exports, or the generated module does not parse     |
+  | `icon_generated_types_mismatch`   | error    | the generated declaration file is missing or stale                                 |
+  | `icon_theme_map_mismatch`         | error    | the theme map or a look's theme map disagrees with the built-in entries of `map`   |
+  | `icon_source_version_drift`       | warning  | the data names another upstream version than the package depends on                |
+  | `icon_license_notice_missing`     | warning  | a set with an upstream ships no license notice                                     |
 
   A definition finding names the definition's description and words and the
   `icon map` command, with `--set`, that fixes it, and suggests icons by the rule `new-set`
@@ -522,7 +570,13 @@ icon use <main> [--backup <set>]...` writes it: with no `--backup` it writes
   names the same entry change the `new-set` receipt names (FR13), in place of
   a finding per icon: for a built entry, the source it is built from, never
   the built file. A CommonJS entry the reader cannot read is listed as not
-  checked instead. Errors fail the check; warnings fail under `--strict`.
+  checked instead. Each look's theme map (FR12) is held to `map` as the theme
+  map is, each entry against the icon's export for that variant, or its own
+  export when it has none. When the generated module lacks one, the
+  `icon_theme_map_mismatch` finding names the `experimental icon add --variant
+<variant> --from <module> --all --set <set>` run that writes it, `<module>`
+  being where most of that look's exports come from; when the module has it
+  and the package's entry does not export it, `icon_export_missing` says so. Errors fail the check; warnings fail under `--strict`.
   Re-exports are followed through relative files and installed packages for
   these checks only, and an export fails only when the reader proves it
   absent. Neither of these is an issue, never counted and
@@ -554,8 +608,9 @@ message}`) names each template or namespace doc that sets `stability`, and
   check (DEC-9). A CLI before 0.7.4 also refuses an astryx.config that sets
   `experimental.iconSet` ("Unrecognized key"), so commands that load the
   project configuration, such as `doctor` and `discover`, fail in that
-  project, and a CLI before 0.7.12 refuses `experimental.iconSet` written as
-  a list. `experimental icon use` adds `warning` to its receipt, printed as a
+  project, a CLI before 0.7.12 refuses `experimental.iconSet` written as
+  a list, and a CLI before 0.7.16 refuses an astryx.config that sets
+  `experimental.iconVariant`. `experimental icon use` adds `warning` to its receipt, printed as a
   `[warn]` line, when the project declares an `@astryxdesign/cli` range (in
   any dependency field) that admits a release that refuses the value it
   wrote; a project that declares no
@@ -570,9 +625,12 @@ message}`) names each template or namespace doc that sets `stability`, and
   name (`ambiguous`), or installed but withdrawn (`withdrawn`: invalid, or
   its module does not resolve, with that reason). Doctor's `icon-sets` check
   fails when the list names a set, main or backup, that is not valid, saying
-  which and why, and fails when more than one set is installed and the list
+  which and why; fails when `experimental.iconVariant` names a variant the
+  main set does not declare, naming its variants and the `use` command that
+  picks one (or, for a main set with one look, the `use` command that
+  removes it); and fails when more than one set is installed and the list
   leaves one out, with the `use` command that adds it; it warns when another
-  installed set is withdrawn. Doctor's `icon-placeholders` check reads the
+  installed set is withdrawn. Its pass message names the project's look. Doctor's `icon-placeholders` check reads the
   project's own source (not dependencies or build output) as syntax trees
   for the FR19 declaration in the exact shape the CLI writes, under any
   name, and for its uses; a commented-out or quoted copy never counts. It
@@ -654,12 +712,12 @@ message}`) names each template or namespace doc that sets `stability`, and
 | --------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | FR0, FR11 | experimental-isolation tests against the output of the CLI without the feature            | help; the manifest; every stable docs topic and tree node, the `cli` listings, and every stable `cli` docs node; search for `delete`, `close`, `icon`, `trash can`, `search`, `experimental`, and `icon set`, with no set and with a set opted in; template printed and copied; discover, Doctor, and `doctor integration validate <package>` with a set and no opt-in; stderr of every command that prints the integration-issue nudge, with a set and no opt-in. Goldens hold identities, structure, counts, every `stability`, and every sentence or link that names an experimental surface, an icon set, or an icon definition, not prose | a stable output gains a result, field, section, count, `stability`, or a sentence or link naming an experimental surface that the CLI without the feature lacks (apart from FR18's `stability` field); or a stable command gains an icon-set subcommand or kind |
 | FR1–FR5   | descriptor, data-file, and definition parser and discovery tests                          | valid set; invalid data; definitions Astryx and the set both have                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | an invalid set answers, or a definition file is not read                                                                                                                                                                                                        |
-| FR6–FR8   | `experimental icon` text and JSON tests                                                   | definition, name, and meaning matches; `<set>/<id>`; `--list` with an order and with two sets and none chosen; `use` with backups; two sets of one name; `--definitions` in an icon-set package, in a project with a main set, with `--set`, and with no set; the `use` fix with a set written as `<package>/<set>` and with a name two packages ship                                                                                                                                                                                                                                                                                          | ranking or tie order changes, or a bare ambiguous name answers                                                                                                                                                                                                  |
-| FR9–FR10  | template mapping tests; `integration check` tests; the bundled-template declarations test | mapped by match and by definition; a main set and a backup; one placeholder declaration shared by two meanings, under a free name when `MissingIcon` is taken; a missing look; kept with a suggestion; a set that wraps the template's library, as the main set and as a backup; an undeclared icon; two different icons in one bundled template with one definition; no opt-in                                                                                                                                                                                                                                                                | a name is guessed, an icon keeps a library import no set has or wraps, sets mix within one icon, or a project without the opt-in gets a rewrite                                                                                                                 |
-| FR12–FR14 | writer and command tests                                                                  | wrap and refresh; adapter; generated types and theme map; a receipt for a set that leaves template meanings unmapped and for one that maps them all; a dry run; the first wrap into a set with no icons; `--adapter` on a new set, on a set with no icons, and malformed or missing; `add --all` with more than ten missing; suggestions for an id with other words, a shared word, and `bank`                                                                                                                                                                                                                                                 | a write is left half done, or the theme map drifts from `map`                                                                                                                                                                                                   |
+| FR6–FR8   | `experimental icon` text and JSON tests; `use --variant` tests                            | definition, name, and meaning matches; `<set>/<id>`; `--list` with an order and with two sets and none chosen; `use` with backups; two sets of one name; `--definitions` in an icon-set package, in a project with a main set, with `--set`, and with no set; the `use` fix with a set written as `<package>/<set>` and with a name two packages ship; `use --variant` written beside the list in one write, removed without it, refused for a variant the main set lacks and for a main set with one look, and with a config it cannot write; a config that names a variant alone; `--list` with a variant                                    | ranking or tie order changes, or a bare ambiguous name answers; or a variant is written without the list, one the main set lacks is written, or a failed write leaves one key written                                                                           |
+| FR9–FR10  | template mapping tests; `integration check` tests; the bundled-template declarations test | mapped by match and by definition; a main set and a backup; one placeholder declaration shared by two meanings, under a free name when `MissingIcon` is taken; a missing look; kept with a suggestion; a set that wraps the template's library, as the main set and as a backup; an undeclared icon; two different icons in one bundled template with one definition; no opt-in; a project variant: a mapped icon with and without the look, an icon from the main set's own library, mapped or only re-exported, with and without the look, an icon imported from a listed set in another look, a backup without the look                     | a name is guessed, an icon keeps a library import no set has or wraps, sets mix within one icon, or a project without the opt-in gets a rewrite; or a missing look moves an icon to another set                                                                 |
+| FR12–FR14 | writer and command tests                                                                  | wrap and refresh; adapter; generated types and theme map; a receipt for a set that leaves template meanings unmapped and for one that maps them all; a dry run; the first wrap into a set with no icons; `--adapter` on a new set, on a set with no icons, and malformed or missing; `add --all` with more than ten missing; suggestions for an id with other words, a shared word, and `bank`; a look's theme map written once an icon draws the look, typed, an entry whose icon lacks the look, missing from an older module, other artwork, not exported by the entry                                                                      | a write is left half done, or the theme map drifts from `map`; or a look's theme map drifts from `map` and the icons' variants                                                                                                                                  |
 | FR15      | `integration check` tests, with and without `--strict`                                    | every code; unmapped optional definitions; unmapped template meanings under `--strict`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | an export the module lacks passes, or the optional list fails a check                                                                                                                                                                                           |
-| FR16      | validate tests; a scratch project on published CLI 0.7.3                                  | `stability` on a template and namespace doc; template `icons`; peer range from 0.7.4                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | a note fails a check, or a dropped descriptor goes unnoted                                                                                                                                                                                                      |
-| FR17      | Doctor and discover tests                                                                 | opted in; a placeholder in use, commented out, and quoted; installed set and no opt-in; invalid set and no opt-in                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | a project without the opt-in sees an icon-set check, issue, or kind                                                                                                                                                                                             |
+| FR16      | validate tests; a scratch project on published CLI 0.7.3                                  | `stability` on a template and namespace doc; template `icons`; peer range from 0.7.4; `experimental.iconVariant` with a range from 0.7.12                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | a note fails a check, or a dropped descriptor goes unnoted                                                                                                                                                                                                      |
+| FR17      | Doctor and discover tests                                                                 | opted in; a placeholder in use, commented out, and quoted; installed set and no opt-in; invalid set and no opt-in; a variant the main set does not declare, and one for a main set with one look                                                                                                                                                                                                                                                                                                                                                                                                                                               | a project without the opt-in sees an icon-set check, issue, or kind; or a variant the main set lacks passes                                                                                                                                                     |
 | FR19–FR20 | template mapping tests of the placeholder declaration; docs site loader and config tests  | the declaration's size, color, and labels; no data attributes; setting unset and set; a set that is not installed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | the placeholder is announced without a name, or an unset build changes                                                                                                                                                                                          |
 | FR18      | docs tree, help, and search tests                                                         | marked command; stable and experimental namespace with `packages: 'all'`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | a stable namespace adopts another package's doc, or a marked doc reaches search                                                                                                                                                                                 |
 
@@ -787,6 +845,23 @@ order, so a project that has not opted in keeps its output whatever sets are
 installed. After the opt-in, an installed set left out of the list is a
 Doctor failure, because which set a template uses would otherwise depend on
 install order.
+
+### DEC-12 — One project look, matched by name
+
+**Reference:** `spec:AST-084/DEC-12`
+**Decider:** `josephfarina`, `2026-11-13`
+
+A project picks one look for every icon: one of its main set's variants. Each
+set in the list draws its own variant of that name, the rule templates
+follow between sets, so sets that name their looks alike draw alike, and the main
+set's theme map for that look draws the built-in icons in it. An icon whose set
+lacks the look keeps the set's default look, because its meaning matters more
+than its look.
+
+Rejected: a look per set, which lets one project mix looks; an Astryx list of
+look names each set maps to, a second vocabulary beside the variant names a
+theme lists (`spec:AST-087/DEC-9`); a look chosen per icon at render time,
+which belongs to the Icon component.
 
 ## Open questions
 

@@ -8,7 +8,8 @@
  * @output At most one warm-up request to the search API (app/api/search) per
  *   tab every few minutes, and while it runs, a promise that settles when it
  *   answers (runningSearchWarmup).
- * @position Called by SharedTopNav.tsx.
+ * @position Called by SharedTopNav.tsx. The theme showcase warm-up
+ *   (components/themeShowcaseWarmup.ts) schedules with `whenIdle` too.
  *
  * The site's search runs the CLI's search on the server (spec:AST-033
  * DEC-8). A server that has not answered for a while starts cold: it loads the

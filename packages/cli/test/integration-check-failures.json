@@ -81,6 +81,8 @@
     "orphan_doc_overlay",
     "package_manager_command",
     "package_not_found",
+    "package_without_example",
+    "package_without_logo",
     "plain_command",
     "prop_drift_skipped",
     "prop_types_skipped",

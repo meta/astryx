@@ -18,6 +18,7 @@
 
 import {getCliInvocation} from '../../../../foundation/env/package-manager.mjs';
 import {jsonOut} from '../../../../foundation/response/json.mjs';
+import {levenshteinDistance} from '../../../../foundation/text/levenshtein.mjs';
 import {NO_RESULT_SET, resultSet} from '../../../../foundation/debug/index.mjs';
 import {ERROR_CODES} from '../../../../foundation/response/error-codes.mjs';
 import {
@@ -29,6 +30,12 @@ import {
   text,
 } from '../../formatters/index.mjs';
 import {cliError} from '../../lib/cli-error.mjs';
+import {
+  editorMissingArgument,
+  setEditorFreeName,
+  setEditorThemeList,
+  setUnknownOptionReader,
+} from '../../lib/json-shim.mjs';
 import {AstryxError} from '../../../../api/error.mjs';
 import {defineCommand} from '../../lib/define-command.mjs';
 import {
@@ -43,8 +50,30 @@ import {
   themeEditUndo,
 } from '../../../../api/theme-edit/theme-edit.mjs';
 import {
-  fileExists,
-  isHowPicture,
+  builtInThemes,
+  dialValueFits,
+  newFlagList,
+  editorCheckedLine,
+  editorCheckedNewLines,
+  booleanWord,
+  editorCompileProblem,
+  editorFollowCompile,
+  editorThemesAt,
+  editorFreeName,
+  typoNear,
+  typoOf,
+  editorAfterBuild,
+  editorFontHelp,
+  editorInstall,
+  editorSourcePath,
+  editorBuildExtra,
+  editorLoadedFonts,
+  editorColorModes,
+  editorThemeHold,
+  editorThemeRefusal,
+  editorMissingSource,
+  editorThemeTemplate,
+  showSections,
 } from '../../../../api/theme-edit/_adapter.mjs';
 import {registerThemeSubcommands} from '../theme.mjs';
 import {doc as groupDoc} from '../experimental-theme.doc.mjs';
@@ -76,6 +105,7 @@ import {doc as previewAppFn} from '../../../../api/theme-edit/themeEditPreviewAp
 import {doc as previewListFn} from '../../../../api/theme-edit/themeEditPreviewList.doc.mjs';
 import {doc as previewRemoveFn} from '../../../../api/theme-edit/themeEditPreviewRemove.doc.mjs';
 import {doc as howFn} from '../../../../api/theme-edit/themeEditHow.doc.mjs';
+import {quoteCommandArgument} from '../../../../foundation/env/package-manager.mjs';
 
 const PREFIX = 'astryx experimental theme';
 const EDITOR = `${PREFIX} editor`;
@@ -95,6 +125,7 @@ const cmd = line => {
     .map(part => part.split(PREFIX).join(stem))
     .join(stem);
 };
+/** The project's invocation of a command line (cmd, under a name an action's own `cmd` parameter does not hide). */
 
 /**
  * Print blocks, a blank line between them, with this project's run prefix
@@ -251,6 +282,18 @@ function notCheckedLine(result) {
 }
 
 /**
+ * Text with C0 control characters and DEL shown as escapes (\u001b), so
+ * text a person typed cannot move the cursor or recolor the terminal.
+ * @param {string} text
+ */
+const escapeControls = text =>
+  String(text).replace(
+    // eslint-disable-next-line no-control-regex
+    /[\u0000-\u0008\u000b-\u001f\u007f]/g,
+    c => `\\u${`000${c.charCodeAt(0).toString(16)}`.slice(-4)}`,
+  );
+
+/**
  * Run one API call: errors become the CLI error envelope, results go to
  * JSON or to `render`.
  * @template T
@@ -270,9 +313,13 @@ async function run(program, call, render, answer) {
       e
     );
     // Suggested commands start the way this project runs the CLI, in JSON
-    // as in text.
-    return cliError(err.message, {
-      suggestions: err.suggestions?.map(x => ({...x, name: cmd(x.name)})),
+    // as in text. Echoed user text never drives the terminal: control
+    // characters print as escapes.
+    return cliError(escapeControls(err.message), {
+      suggestions: err.suggestions?.map(x => ({
+        ...x,
+        name: escapeControls(cmd(x.name)),
+      })),
       code: err.code ?? ERROR_CODES.ERR_UNKNOWN,
     });
   }
@@ -283,7 +330,20 @@ async function run(program, call, render, answer) {
     jsonOut(/** @type {any} */ (result));
     return answered;
   }
-  print([...notCheckedLine(result), ...render(result)]);
+  // --detail compact|brief (and --dense) print a change's status line
+  // alone; an answer (how, show, list) is the answer, and prints whole.
+  const o = program.opts();
+  const change = ['themeEdit.set', 'themeEdit.undo', 'themeEdit.new'].includes(
+    /** @type {any} */ (result)?.type,
+  );
+  const short =
+    change &&
+    (o.detail === 'compact' ||
+      o.detail === 'brief' ||
+      o.dense ||
+      o.lang === 'dense');
+  const lines = [...notCheckedLine(result), ...render(result)];
+  print(short ? lines.slice(0, notCheckedLine(result).length + 1) : lines);
   return answered;
 }
 
@@ -315,27 +375,119 @@ const changeOptions = o => ({
  * @param {any} o
  * @returns {Record<string, string | string[]>}
  */
-function newSettings(o) {
+function newSettings(o, themeName = '<theme>') {
   /** @type {Record<string, string | string[]>} */
   const out = {};
+  // --like given two values is refused like a dial given two.
+  const likes = flagValues('like');
+  if (new Set(likes).size > 1) {
+    // The suggestion keeps the first built-in theme given, or drops --like.
+    const like = likes
+      .map(l => l.toLowerCase())
+      .find(l => builtInThemes().includes(l));
+    throw new AstryxError(
+      `--like was given twice (${likes.join(', ')}); give it once. Nothing was changed.`,
+      [
+        {
+          name: cmd(`${EDITOR} new ${themeName}${newFlagLine({...o, like})}`),
+          reason: like
+            ? 'do this instead: the first built-in theme given'
+            : 'do this instead: none of them is a built-in theme',
+        },
+      ],
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
+  }
   for (const opt of newDoc.options ?? []) {
     if (opt.param !== 'options.settings') continue;
-    const name = opt.flag.split(' ')[0].slice(2);
-    const value = o[name.replace(/-([a-z])/g, (_, c) => c.toUpperCase())];
+    const flag = opt.flag.split(' ')[0].slice(2);
+    const key = flag.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+    const value = o[key];
     if (value == null) continue;
     // A flag given twice: headings takes one value per axis (a weight and a
     // tracking); any other flag given two different values is refused.
-    const all = flagValues(name);
-    if (name === 'headings' && all.length > 1) out[name] = all;
-    else if (new Set(all).size > 1)
+    const all = flagValues(flag);
+    if (flag === 'headings' && all.length > 1) out[flag] = all;
+    else if (new Set(all).size > 1) {
+      // The suggestion keeps the first value the dial takes, or drops it.
+      const fits = all.find(v => dialValueFits(flag, v));
       throw new AstryxError(
-        `--${name} was given twice (${all.join(', ')}); give it once. Nothing was changed.`,
-        [],
+        `--${flag} was given twice (${all.join(', ')}); give it once. Nothing was changed.`,
+        [
+          {
+            name: cmd(
+              `${EDITOR} new ${themeName}${newFlagLine({...o, [key]: fits})}`,
+            ),
+            reason: fits
+              ? 'do this instead: the first value it takes'
+              : `do this instead: none of them is a value --${flag} takes`,
+          },
+        ],
         ERROR_CODES.ERR_INVALID_ARGUMENT,
       );
-    else out[name] = String(value);
+    } else out[flag] = String(value);
   }
   return out;
+}
+
+/**
+ * The settings flags of options as commander read them (camelCase keys),
+ * by the flag name `new` takes.
+ * @param {Record<string, any>} o
+ * @returns {Record<string, string | string[]>}
+ */
+function newSettingsGiven(o) {
+  /** @type {Record<string, string | string[]>} */
+  const settings = {};
+  for (const opt of newDoc.options ?? []) {
+    if (opt.param !== 'options.settings') continue;
+    const flag = opt.flag.split(' ')[0].slice(2);
+    const value = o[flag.replace(/-([a-z])/g, (_, c) => c.toUpperCase())];
+    if (value != null) settings[flag] = value;
+  }
+  return settings;
+}
+
+/**
+ * The options a `new` was given, as flags for a suggested command, so a
+ * corrected command makes the theme that was asked for.
+ * @param {any} o
+ * @returns {string}
+ */
+function newFlagLine(o) {
+  const settings = newSettingsGiven(o);
+  const parts = newFlagList(
+    o.like == null ? undefined : String(o.like),
+    settings,
+    Boolean(o.png),
+  );
+  return parts.length ? ` ${parts.join(' ')}` : '';
+}
+
+/**
+ * Refuse a preview flag given twice with different values: the command
+ * would keep only the last one without a word. Undefined when each is
+ * given once.
+ * @param {string} command the preview subcommand, for the suggestion
+ * @param {string[]} flags
+ * @returns {undefined}
+ */
+function previewFlagsOnce(command, flags) {
+  for (const flag of flags) {
+    const all = flagValues(flag);
+    if (new Set(all).size > 1)
+      throw new AstryxError(
+        `--${flag} was given twice (${all.join(', ')}); give it once. Nothing was changed.`,
+        [
+          {
+            name: cmd(`${PREFIX} preview ${command} --help`),
+            reason: 'every option it takes',
+          },
+        ],
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
+  }
+  return undefined;
 }
 
 /**
@@ -362,7 +514,16 @@ function flagValues(name) {
  */
 function changeBlocks(r) {
   const d = r.data;
-  const s = d.setting;
+  // The status line names the value as saved, with a quote or space mark
+  // the text output would fold written as its CSS escape (\201C), so the
+  // text and the JSON name the same value.
+  const s = {
+    ...d.setting,
+    value: String(d.setting.value).replace(
+      /[\u00A0\u00AB\u00BB\u2000-\u200B\u2018-\u201F\u2039\u203A\u202F\u3000\u300C-\u300F]/g,
+      c => `\\${c.codePointAt(0)?.toString(16).toUpperCase()} `,
+    ),
+  };
   const status =
     d.was != null
       ? `[ok] ${d.theme}: ${s.thing} ${d.was} -> ${s.value}`
@@ -436,53 +597,52 @@ function lookupBlocks(d) {
   /** @param {string[]} cmds @param {boolean} [sequence] */
   const commandLines = (cmds, sequence) =>
     sequence && cmds.length > 1
-      ? [`  ${cmds.join(' && ')}`, '  sequence: run as one line, in this order']
-      : cmds.map(c => `  ${c}`);
-  /** @param {Array<{command: string, why: string}>} list */
-  const refusedLines = list =>
-    list.flatMap(r => [`  x ${r.command}`, `    not run: ${r.why}`]);
+      ? [cmds.join(' && '), 'sequence: run as one line, in this order']
+      : cmds;
+  /** @param {Array<{command: string, why: string}>} refusedList */
+  const refusedLines = refusedList =>
+    refusedList.flatMap(r => [`x ${r.command}`, `  not run: ${r.why}`]);
   /** @type {Array<string | import('../../formatters/index.mjs').Block>} */
   const blocks = [...(hint ? [String(hint)] : []), ...project(rest)];
   if (Array.isArray(results) && results.length)
     blocks.push(
       section('results:'),
-      text(
-        results
-          .flatMap((/** @type {any} */ r) => [
-            String(r.text),
-            ...commandLines(r.commands ?? [], r.sequence),
-            ...refusedLines(r.refused ?? []),
-          ])
-          .join('\n'),
+      list(
+        results.map((/** @type {any} */ r) => [
+          String(r.text),
+          ...commandLines(r.commands ?? [], r.sequence),
+          ...refusedLines(r.refused ?? []),
+        ]),
       ),
     );
   if (Array.isArray(examples) && examples.length)
-    blocks.push(section('examples:'), text(commandLines(examples).join('\n')));
+    blocks.push(section('examples:'), list(commandLines(examples)));
   if (Array.isArray(refused) && refused.length)
-    blocks.push(section('refused:'), text(refusedLines(refused).join('\n')));
+    blocks.push(
+      section('refused:'),
+      list(refused.map((/** @type {any} */ r) => refusedLines([r]))),
+    );
   if (Array.isArray(points) && points.length)
     blocks.push(
       section('points:'),
-      text(
-        points
-          .map(
-            (/** @type {any} */ x) => `  ${x.at}  ${x.color}  alpha ${x.alpha}`,
-          )
-          .join('\n'),
+      records(
+        points.map((/** @type {any} */ x) => ({
+          at: x.at,
+          color: x.color,
+          alpha: x.alpha,
+        })),
       ),
     );
   if (Array.isArray(items) && items.length) {
     if (items.some((/** @type {any} */ x) => Array.isArray(x.examples)))
       blocks.push(
         section('items:'),
-        text(
-          items
-            .flatMap((/** @type {any} */ x) => [
-              `${x.name}  ${x.values}`,
-              `  help: ${x.help}`,
-              ...commandLines(x.examples),
-            ])
-            .join('\n'),
+        list(
+          items.map((/** @type {any} */ x) => [
+            `${x.name}  ${x.values}`,
+            `help: ${x.help}`,
+            ...commandLines(x.examples),
+          ]),
         ),
       );
     else blocks.push(...project({items}).slice(1));
@@ -497,10 +657,11 @@ function lookupBlocks(d) {
  * unknown options so a design token (`--color-accent`) can be the thing
  * they name; a `--` word anywhere else is a mistyped option.
  * @param {string} command the subcommand, for the suggestion
+ * @param {import('@astryxdesign/cli/authoring').CommandDoc} doc the command's doc, which lists its options
  * @param {Array<string | undefined>} rest the operands after the thing
  * @returns {ReturnType<typeof cliError> | null}
  */
-function strayOption(command, rest) {
+function strayOption(command, doc, rest) {
   // A scope flag given twice would keep only the last one without a word.
   for (const flag of ['on', 'when', 'state', 'mode']) {
     const all = flagValues(flag);
@@ -510,7 +671,7 @@ function strayOption(command, rest) {
         {
           suggestions: [
             {
-              name: `${EDITOR} ${command} --help`,
+              name: cmd(`${EDITOR} ${command} --help`),
               reason: 'every option it takes',
             },
           ],
@@ -518,33 +679,315 @@ function strayOption(command, rest) {
         },
       );
   }
-  const word = rest.find(w => typeof w === 'string' && w.startsWith('--'));
+  // A value pasted with a token's label (`'--color-accent: #e11d48'`) is
+  // a value, read by the label reader, not an option.
+  const word = rest.find(
+    w =>
+      typeof w === 'string' &&
+      w.startsWith('--') &&
+      !/^--[a-z0-9-]+\s*:\s*\S/i.test(w),
+  );
   if (word == null) return null;
-  return cliError(
-    `unknown option '${word}': only the thing a change names may start with -- (a design token such as --color-accent).`,
-    {
+  return strayRefusal(command, doc, `${EDITOR} ${command}`, {
+    option: word,
+    note: 'a design token (such as --color-accent) is the thing a change names, before its value',
+  });
+}
+
+/**
+ * What a theme command answers for an option it does not take, or for
+ * words past what it takes: the one stray reader every editor and preview
+ * command uses. It names the options the command takes; it offers the same
+ * command without the stray words only when that is safe to run
+ * (`safeLine`: show reads and changes nothing; a preview remove without its
+ * option would remove the whole preview), and always the command's help.
+ * @param {string} command the command's words after the group (`set`, `preview remove`)
+ * @param {import('@astryxdesign/cli/authoring').CommandDoc} doc the command's doc, which lists its options
+ * @param {string} head the command line's start, as the project runs it
+ * @param {{option?: string, extra?: string[], note?: string}} stray an option it does not take, or words past what it takes, and a sentence about them
+ * @param {string | null} [safeLine] the command without them, when it is safe to run
+ * @returns {{message: string, suggestions: Array<{name: string, reason: string}>, code: string}}
+ */
+function strayAnswer(command, doc, head, stray, safeLine = null) {
+  const takes = [
+    ...(doc.options ?? []).flatMap(o =>
+      String(o.flag)
+        .split(/[\s,]+/)
+        .filter(w => w.startsWith('--')),
+    ),
+    '--json',
+  ].filter((w, i, all) => all.indexOf(w) === i);
+  const list =
+    takes.length > 1
+      ? `${takes.slice(0, -1).join(', ')} and ${takes.at(-1)}`
+      : takes.join('');
+  const message = stray.option
+    ? `unknown option '${stray.option}': ${command} takes ${list}${stray.note ? `; ${stray.note}` : ''}.`
+    : `${command} does not take "${(stray.extra ?? []).join(' ')}"${stray.note ? `; ${stray.note}` : ''}.`;
+  return {
+    message,
+    suggestions: [
+      ...(safeLine ? [{name: cmd(safeLine), reason: 'do this instead'}] : []),
+      {
+        name: cmd(`${head} --help`),
+        reason: stray.option ? 'every option it takes' : 'what it takes',
+      },
+    ],
+    code: stray.option
+      ? ERROR_CODES.ERR_INVALID_OPTION
+      : ERROR_CODES.ERR_INVALID_ARGUMENT,
+  };
+}
+
+/**
+ * {@link strayAnswer} as the refusal the command prints.
+ * @param {string} command
+ * @param {import('@astryxdesign/cli/authoring').CommandDoc} doc
+ * @param {string} head
+ * @param {{option?: string, extra?: string[], note?: string}} stray
+ * @param {string | null} [safeLine]
+ */
+function strayRefusal(command, doc, head, stray, safeLine = null) {
+  const a = strayAnswer(command, doc, head, stray, safeLine);
+  return cliError(a.message, {suggestions: a.suggestions, code: a.code});
+}
+
+/**
+ * Read the options of an editor command as written, the one reading every
+ * editor command gives them: an option in other letters, with one dash or
+ * a typed dash (`--On`, `-only`, `\u2014only`) or within the one typo limit
+ * of an option the command takes (`--olny`) is that option; a boolean
+ * option written with a value (`--png=false`, `--only true`) takes none,
+ * and its value is read by the one yes/no reader (booleanWord). Null when
+ * every option is written as the command takes it; else the reason, and
+ * the command as meant (the option as the command takes it; a boolean as
+ * itself for yes, left out for no), or no command when a boolean's value
+ * reads as neither.
+ * @param {string} command the subcommand (`set`, `undo`, `new`, `show`, how's word; `add` under preview)
+ * @param {import('@astryxdesign/cli/authoring').CommandDoc} doc the command's doc, which lists its options
+ * @param {{group: string, head: string}} [where] the group word the subcommand follows (`editor`, `preview`) and the command line's start
+ * @returns {{why: string, line: string | null} | null}
+ */
+function optionsAsWritten(
+  command,
+  doc,
+  where = {group: 'editor', head: `${EDITOR} ${command}`},
+) {
+  const flags = (doc.options ?? []).map(opt => String(opt.flag));
+  const names = (/** @type {(f: string) => boolean} */ keep) =>
+    flags
+      .filter(keep)
+      .flatMap(f => f.split(/[\s,]+/).filter(w => w.startsWith('--')));
+  const booleans = ['--json', ...names(f => !/[<[]/.test(f))];
+  const all = [...booleans, ...names(f => /[<[]/.test(f))];
+  /** The option a word names, as the command takes it, or null. @param {string} word */
+  const meant = word => {
+    const w = word.toLowerCase();
+    if (all.includes(`--${w}`)) return `--${w}`;
+    const near = all.filter(o => typoNear(w, o.slice(2)));
+    return near.length === 1 ? near[0] : null;
+  };
+  const argv = process.argv;
+  const at = argv.indexOf(command, argv.indexOf(where.group) + 1);
+  if (at < 0) return null;
+  /** @type {string[]} */
+  const words = [];
+  /** @type {string | null} */
+  let why = null;
+  let unread = false;
+  for (let i = at + 1; i < argv.length; i += 1) {
+    const a = argv[i];
+    if (a === '--') {
+      words.push(...argv.slice(i));
+      break;
+    }
+    const m = /^(--?|[\u2013\u2014]-?)([A-Za-z][A-Za-z-]*)(?:=(.*))?$/.exec(a);
+    const flag = m ? meant(m[2]) : null;
+    if (!m || !flag) {
+      if (a !== '--json') words.push(a);
+      continue;
+    }
+    const written = m[3] == null ? `${m[1]}${m[2]}` : a.split('=')[0];
+    if (written !== flag)
+      why ??= `unknown option '${written}' (did you mean ${flag}?)`;
+    const next = argv[i + 1];
+    if (booleans.includes(flag)) {
+      // A value after a boolean option, joined by `=` or as the next word
+      // when that word is a yes or a no.
+      const value = m[3] ?? (booleanWord(next) != null ? String(next) : null);
+      if (value != null) {
+        if (m[3] == null) i += 1;
+        const read = booleanWord(value);
+        const shown = m[3] == null ? `${a} ${value}` : a;
+        if (read == null) unread = true;
+        why ??=
+          read == null
+            ? `${flag} takes no value ("${shown}"), and "${value}" reads as neither yes nor no: give ${flag} alone for yes, or leave it out`
+            : `${flag} takes no value ("${shown}"): give it alone for yes, or leave it out`;
+        if (read === true && flag !== '--json') words.push(flag);
+        continue;
+      }
+      if (flag !== '--json') words.push(flag);
+      continue;
+    }
+    // An option that takes a value, given none, is left out of the line.
+    if (m[3] == null && (next == null || /^-/.test(next))) continue;
+    words.push(flag);
+    if (m[3] != null) words.push(m[3]);
+  }
+  if (!why) return null;
+  return {
+    why,
+    line: unread
+      ? null
+      : `${where.head} ${words.map(w => (/^--[a-z]/.test(w) && all.includes(w) ? w : quoteCommandArgument(w))).join(' ')}`.trim(),
+  };
+}
+
+/**
+ * An option a theme command does not take, as the one option reader reads
+ * it (the json shim asks, for the options commander refuses: preview's
+ * subcommands): the option meant with the command that works, else what
+ * the command takes and its help. Undefined for any other command.
+ * @param {any} c the command commander refused
+ * @returns {{message: string, suggestions: Array<{name: string, reason: string}>} | undefined}
+ */
+function unknownThemeOption(c) {
+  const sub = c?.name?.();
+  const doc =
+    /** @type {Record<string, import('@astryxdesign/cli/authoring').CommandDoc>} */ ({
+      add: previewAddDoc,
+      app: previewAppDoc,
+      list: previewListDoc,
+      remove: previewRemoveDoc,
+    })[sub];
+  if (!doc || c.parent?.name?.() !== 'preview') return undefined;
+  const head = `${PREFIX} preview ${sub}`;
+  const help = {name: cmd(`${head} --help`), reason: 'every option it takes'};
+  const read = optionsAsWritten(sub, doc, {group: 'preview', head});
+  if (read)
+    return {
+      message: `${read.why}.`,
       suggestions: [
-        {name: `${EDITOR} ${command} --help`, reason: 'every option it takes'},
+        ...(read.line
+          ? [{name: cmd(read.line), reason: 'do this instead'}]
+          : []),
+        help,
       ],
-      code: ERROR_CODES.ERR_INVALID_OPTION,
+    };
+  const takes = (doc.options ?? []).flatMap(o =>
+    String(o.flag)
+      .split(/[\s,]+/)
+      .filter(w => w.startsWith('--')),
+  );
+  const argv = process.argv;
+  const from = argv.indexOf(sub, argv.indexOf('preview') + 1);
+  const stray = argv
+    .slice(from + 1)
+    .find(
+      (w, i, rest) =>
+        w.startsWith('-') &&
+        !rest.slice(0, i).includes('--') &&
+        ![...takes, '--json', '--help', '-h'].includes(w.split('=')[0]),
+    );
+  // A folder name that starts with "-" reads as an option: it goes after
+  // --, and that line is the safe one.
+  const folder =
+    sub === 'app' && stray && /^-[^-]/.test(stray) && stray.length > 2;
+  const a = strayAnswer(
+    `preview ${sub}`,
+    doc,
+    head,
+    {
+      option: stray ?? '',
+      ...(folder
+        ? {note: 'a folder name that starts with "-" goes after --'}
+        : {}),
     },
+    folder ? `${head} -- ${stray}` : null,
+  );
+  return {message: a.message, suggestions: a.suggestions};
+}
+
+/**
+ * The refusal of options not written as the command takes them, with the
+ * command as meant when there is one.
+ * @param {string} command
+ * @param {{why: string, line: string | null}} read
+ */
+function optionsRefusal(command, read) {
+  return cliError(`${read.why}.`, {
+    suggestions: [
+      ...(read.line ? [{name: cmd(read.line), reason: 'do this instead'}] : []),
+      {
+        name: cmd(`${EDITOR} ${command} --help`),
+        reason: 'every option it takes',
+      },
+    ],
+    code: ERROR_CODES.ERR_INVALID_OPTION,
+  });
+}
+
+/**
+ * {@link optionsAsWritten} as a refusal, or null.
+ * @param {string} command
+ * @param {import('@astryxdesign/cli/authoring').CommandDoc} doc
+ */
+function readOptions(command, doc) {
+  const read = optionsAsWritten(command, doc);
+  return read ? optionsRefusal(command, read) : null;
+}
+
+/**
+ * {@link readOptions} for `set` and `undo`, whose line is checked as every
+ * offered line is (the command's own check, a repair it offers folded in):
+ * a line set or undo refuses with no repair is not offered.
+ * @param {'set' | 'undo'} command
+ * @param {import('@astryxdesign/cli/authoring').CommandDoc} doc
+ */
+async function readOptionsChecked(command, doc) {
+  const read = optionsAsWritten(command, doc);
+  if (!read) return null;
+  const line = read.line
+    ? await editorCheckedLine(command, read.line, process.cwd())
+    : null;
+  return optionsRefusal(command, {...read, line});
+}
+
+/**
+ * Refuse an option `show` does not take with a show that works: the same
+ * show without it, and its help (an option the one reader names, and one
+ * written with a value, are read first by {@link readOptions}). Null when
+ * there is none.
+ * @param {string} name
+ * @param {unknown[]} rest the words after the theme
+ * @param {{png?: boolean, section?: string}} o the options read
+ */
+function showStray(name, rest, o) {
+  const stray = rest.map(String).find(w => w.startsWith('-'));
+  if (stray == null) return null;
+  // An option the one reader names never comes here (readOptions reads
+  // it first): this one is none show takes, so the show it offers leaves it
+  // out and names no guess.
+  return strayRefusal(
+    'show',
+    showDoc,
+    `${EDITOR} show`,
+    {option: stray},
+    `${EDITOR} show ${name}${o.section ? ` --section ${o.section}` : ''}${o.png ? ' --png' : ''}`,
   );
 }
 
 /**
  * A refusal for words after what a command takes, which would otherwise be
- * dropped without a word; null when there are none.
+ * dropped without a word (the one stray reader); null when there are none.
  * @param {string} command
+ * @param {import('@astryxdesign/cli/authoring').CommandDoc} doc
  * @param {string[]} extra
  */
-function extraWords(command, extra) {
+function extraWords(command, doc, extra) {
   if (!extra.length) return null;
-  return cliError(`${command} does not take "${extra.join(' ')}".`, {
-    suggestions: [
-      {name: `${EDITOR} ${command} --help`, reason: 'what it takes'},
-    ],
-    code: ERROR_CODES.ERR_INVALID_ARGUMENT,
-  });
+  return strayRefusal(command, doc, `${EDITOR} ${command}`, {extra});
 }
 
 /**
@@ -563,9 +1006,28 @@ function explained(c, doc, {tokens = false} = {}) {
   return c;
 }
 
+/** Old and sibling names, and where each now is. */
+const MOVED = /** @type {Record<string, Record<string, string>>} */ ({
+  theme: {
+    build: 'compile',
+    set: 'editor set',
+    undo: 'editor undo',
+    show: 'editor show',
+    new: 'editor new',
+    how: 'editor how',
+    explain: 'editor how',
+    reset: 'editor undo',
+    palette: 'editor set',
+    help: '--help',
+  },
+  editor: {explain: 'how', reset: 'undo', help: '--help', palette: 'set'},
+  preview: {help: '--help'},
+});
+
 /**
- * A command group: bare, it prints its help; with an unknown word, the
- * unknown-subcommand error with every subcommand as a suggestion.
+ * A command group: bare, it prints its help (in JSON too, as the root
+ * does); with an unknown word, the unknown-subcommand error, leading with
+ * where a moved name now is, then the nearest subcommands.
  * @param {import('commander').Command} parent
  * @param {import('@astryxdesign/cli/authoring').CommandDoc} doc
  * @returns {import('commander').Command}
@@ -578,17 +1040,60 @@ function defineGroup(parent, doc) {
       /** @type {import('commander').Command} */ c,
     ) => {
       const extras = c?.args ?? [];
+      const words = [];
+      for (let x = cmd; x && x.parent; x = x.parent) words.unshift(x.name());
+      const here = `${getCliInvocation()} ${words.join(' ')}`;
       if (extras.length > 0) {
+        const word = String(extras[0]).toLowerCase();
+        const group = doc.name.split(' ').at(-1) ?? '';
+        const ranked = (cmd.commands ?? [])
+          .map(command => command.name())
+          .sort(
+            (a, b) =>
+              levenshteinDistance(word, a) - levenshteinDistance(word, b),
+          );
+        // A typo of a subcommand (lst, remve) is that subcommand; any
+        // other word after `preview` that names an editor theme here asks
+        // for that theme's pages.
+        const typo = typoOf(word, ranked[0] ?? '') ? ranked[0] : null;
+        const moved =
+          MOVED[group]?.[word] ??
+          (typo
+            ? null
+            : group === 'preview' &&
+                editorThemesAt(process.cwd()).includes(word)
+              ? `add --theme ${word}`
+              : null);
         return cliError(
-          `unknown subcommand '${doc.name} ${String(extras[0])}'`,
+          `unknown subcommand '${doc.name} ${String(extras[0])}'${moved ? `; it is ${here} ${moved}` : ''}`,
           {
-            suggestions: (cmd.commands ?? []).map(command => ({
-              name: command.name(),
-              reason: 'available subcommand',
-            })),
+            suggestions: [
+              ...(moved
+                ? [{name: `${here} ${moved}`, reason: 'do this instead'}]
+                : []),
+              ...ranked.map(name => ({
+                name: `${here} ${name}`,
+                reason: 'available subcommand',
+              })),
+            ],
             code: ERROR_CODES.ERR_UNKNOWN_SUBCOMMAND,
           },
         );
+      }
+      if (c?.optsWithGlobals?.().json) {
+        jsonOut(
+          /** @type {any} */ ({
+            type: 'help',
+            data: {
+              command: words.join(' '),
+              commands: (cmd.commands ?? []).map(command => ({
+                name: command.name(),
+                summary: command.summary() || command.description(),
+              })),
+            },
+          }),
+        );
+        return NO_RESULT_SET;
       }
       cmd.help();
       return NO_RESULT_SET;
@@ -598,11 +1103,33 @@ function defineGroup(parent, doc) {
 }
 
 /**
+ * A preview command's result, once it is in: this client owns its process,
+ * so a stop that lands while the result is printed is held, and a printed
+ * ok never ends with exit 130. The API itself leaves no listener behind.
+ * @template T
+ * @param {Promise<T>} result
+ * @returns {Promise<T>}
+ */
+async function resultStands(result) {
+  const r = await result;
+  for (const sig of /** @type {const} */ (['SIGINT', 'SIGTERM']))
+    if (!process.listeners(sig).includes(heldStop)) process.on(sig, heldStop);
+  return r;
+}
+
+/** A stop after a preview command finished: its result stands. */
+function heldStop() {}
+
+/**
  * Register `theme` and its subcommands under the `experimental` group.
  * @param {import('commander').Command} group the `experimental` command
  * @param {import('commander').Command} program the root program
  */
 export function registerExperimentalTheme(group, program) {
+  // A command run with no theme names the app's only theme.
+  setEditorThemeList(editorThemesAt);
+  setEditorFreeName(editorFreeName);
+  setUnknownOptionReader(unknownThemeOption);
   const theme = defineGroup(group, groupDoc);
   explained(theme, groupDoc);
   theme.addHelpText(
@@ -616,7 +1143,7 @@ export function registerExperimentalTheme(group, program) {
   const editor = defineGroup(theme, editorDoc);
   explained(editor, editorDoc);
 
-  explained(
+  const newCli = explained(
     defineCommand(editor, newDoc, {
       fn: newFn,
       action: (
@@ -624,40 +1151,185 @@ export function registerExperimentalTheme(group, program) {
         /** @type {any} */ o,
         /** @type {any} */ cmd,
       ) =>
+        // An option given a value is refused before the run, as for every
+        // other editor command: a refusal inside run is thrown, never
+        // printed there.
+        readOptions('new', newDoc) ??
         run(
           program,
-          () => {
-            // A word after the name is never dropped without a word.
-            const extra = (cmd?.args ?? []).slice(1);
-            if (extra.length)
+          async () => {
+            // An option new does not take (--force, --dry-run, -t) is refused
+            // with new's help, as every editor command's unknown option is.
+            const takes = new Set(
+              (newDoc.options ?? []).flatMap(opt =>
+                String(opt.flag)
+                  .split(/[\s,]+/)
+                  .filter(w => w.startsWith('-'))
+                  .map(w => w.replace(/[<[].*$/, '')),
+              ),
+            );
+            const stray = (cmd?.args ?? [])
+              .slice(1)
+              .map(String)
+              .find(
+                (/** @type {string} */ w) =>
+                  /^-/.test(w) && !takes.has(w.split('=')[0]),
+              );
+            // `--base` is the dial new takes as --like.
+            if (stray && stray.split('=')[0] === '--base') {
+              const args = (cmd?.args ?? []).slice(1).map(String);
+              const at = args.indexOf(stray);
+              const value = stray.includes('=')
+                ? stray.slice(stray.indexOf('=') + 1)
+                : args[at + 1];
+              // Thrown, as every refusal inside run is: run prints it once
+              // (a refusal printed here and then caught again by run would
+              // print twice where exit does not end the process).
               throw new AstryxError(
-                `new takes one theme name; "${extra.join(' ')}" is extra. For a base theme, use --like. Nothing was changed.`,
-                /^[a-z][a-z0-9-]*$/.test(extra[0])
+                `new takes the base theme as --like, not --base.`,
+                value
                   ? [
                       {
-                        name: `${EDITOR} new ${name} --like ${extra[0]}`,
+                        name: `${EDITOR} new ${quoteCommandArgument(name)}${newFlagLine({...o, like: value})}`,
                         reason: 'do this instead',
                       },
                     ]
-                  : [],
+                  : [
+                      {
+                        name: `${EDITOR} new --help`,
+                        reason: 'every option it takes',
+                      },
+                    ],
+                ERROR_CODES.ERR_INVALID_OPTION,
+              );
+            }
+            if (stray)
+              throw new AstryxError(
+                `unknown option '${stray}'.`,
+                [
+                  {
+                    name: `${EDITOR} new --help`,
+                    reason: 'every option it takes',
+                  },
+                ],
+                ERROR_CODES.ERR_INVALID_OPTION,
+              );
+            // A word after the name is never dropped without a word.
+            const extra = (cmd?.args ?? []).slice(1);
+            if (extra.length) {
+              // Words after `--` that are `--<option> <value>` pairs new
+              // takes become options; the other words were most likely
+              // part of the name. The options given stay in the suggestion.
+              /** @type {Record<string, any>} */
+              const given = {...o};
+              /** @type {string[]} */
+              const words = [];
+              // Each word in the order typed: one that follows an option's
+              // value with no option between is more of that value, read as
+              // set reads it (`--font Open Sans` is the family Open Sans).
+              const valueFlags = new Set(
+                (newDoc.options ?? [])
+                  .filter(opt => /</.test(String(opt.flag)))
+                  .map(opt => String(opt.flag).split(' ')[0]),
+              );
+              const camel = (/** @type {string} */ f) =>
+                f.slice(2).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+              const argv = process.argv;
+              const from = argv.indexOf('new', argv.indexOf('editor') + 1);
+              /** @type {string | null} */
+              let open = null;
+              let named = false;
+              for (let i = from + 1; from >= 0 && i < argv.length; i++) {
+                const w = argv[i];
+                if (w === '--') {
+                  // After `--`, `--<option> <value>` pairs new takes.
+                  for (let j = i + 1; j < argv.length; j++) {
+                    const x = argv[j];
+                    if (x.startsWith('--')) {
+                      if (argv[j + 1] != null && given[camel(x)] == null)
+                        given[camel(x)] = argv[++j];
+                    } else words.push(x);
+                  }
+                  break;
+                }
+                if (w.startsWith('-')) {
+                  const flag = w.split('=')[0];
+                  open = valueFlags.has(flag) ? camel(flag) : null;
+                  if (open && !w.includes('=')) i += 1;
+                  continue;
+                }
+                // The name ends the value of an option typed before it: a
+                // word after the name is never more of that value.
+                if (!named) {
+                  named = true;
+                  open = null;
+                  continue;
+                }
+                if (open) {
+                  const had = given[open];
+                  given[open] = Array.isArray(had)
+                    ? [...had.slice(0, -1), `${had.at(-1)} ${w}`]
+                    : `${had} ${w}`;
+                  continue;
+                }
+                words.push(w);
+              }
+              // A built-in theme among the words (after a `like` word, or
+              // typed as the name with the real name after it) is the base,
+              // as --like; every other word is part of the name.
+              const all = [String(name), ...words];
+              const baseAt = all.findIndex(
+                (w, i) =>
+                  builtInThemes().includes(w.toLowerCase()) &&
+                  (i > 0 || all.length > 1),
+              );
+              if (baseAt >= 0 && given.like == null)
+                given.like = all[baseAt].toLowerCase();
+              const nameWords = all.filter(
+                (w, i) =>
+                  i !== baseAt &&
+                  !(baseAt >= 0 && /^like$/i.test(w) && i === baseAt - 1),
+              );
+              const fixed = nameWords
+                .join('-')
+                .toLowerCase()
+                .replace(/[^a-z0-9-]+/g, '-');
+              // The line is checked as every new line is offered.
+              const read = Object.keys(given).some(k => given[k] !== o[k]);
+              throw new AstryxError(
+                `new takes one theme name; "${extra.join(' ')}" is extra.${read ? ' A value of more than one word goes in quotes.' : ''} For a base theme, use --like. Nothing was changed.`,
+                await editorCheckedNewLines(
+                  `${EDITOR} new ${quoteCommandArgument(fixed)}${newFlagLine(given)}`,
+                  fixed,
+                  {
+                    cwd: process.cwd(),
+                    like: given.like,
+                    png: given.png ?? false,
+                    settings: newSettingsGiven(given),
+                  },
+                ),
                 ERROR_CODES.ERR_INVALID_ARGUMENT,
               );
+            }
             return themeEditNew(name, {
               cwd: process.cwd(),
               like: o.like,
               png: o.png ?? false,
-              settings: newSettings(o),
+              settings: newSettings(o, name),
             });
           },
           r => [
             `[ok] made theme "${r.data.theme}"${r.data.like ? ` on top of ${r.data.like}` : ''}`,
             ...project(/** @type {any} */ (r.data)),
             `Tip: ${EDITOR} set ${r.data.theme} <thing> <value>, or ${HOW} "<what you want>"`,
+            `Look at it after each change (this changes nothing in your app): ${EDITOR} show ${r.data.theme} --png writes themes/${r.data.theme}/preview.png and sheet.png from real components; open the PNGs and check them against the request`,
           ],
         ),
     }),
     newDoc,
   );
+  // new refuses an option it does not take itself, naming its help.
+  newCli.allowUnknownOption();
 
   explained(
     defineCommand(editor, setDoc, {
@@ -667,13 +1339,43 @@ export function registerExperimentalTheme(group, program) {
         /** @type {string} */ thing,
         /** @type {string[]} */ value,
         /** @type {any} */ o,
-      ) =>
-        strayOption('set', value) ??
-        run(
-          program,
-          () => themeEditSet(name, thing, value.join(' '), changeOptions(o)),
-          changeBlocks,
-        ),
+      ) => {
+        // A declaration pasted as one argument (`--color-accent: #e11d48`,
+        // or `--color-accent:#e11d48`) is the token and its value; with no
+        // value otherwise, the missing-argument error the parser gives.
+        // A pasted JSON object of settings goes to the editor whole, which
+        // gives one set line per entry.
+        if (!value.length && /^\s*\{/.test(thing)) value = [''];
+        if (!value.length) {
+          // Any thing, a token or a dial, with `:` or `=` (`accent: red`,
+          // `--color-accent=#e11d48`).
+          // A thing and its value in one word (`'corners pill'`) are the
+          // same as given apart.
+          const pasted =
+            /^(\S+?)\s*[:=]\s*(.+?);?\s*$/.exec(thing) ??
+            /^\s*(\S+)\s+(.+?)\s*$/.exec(thing);
+          if (!pasted)
+            return missingSetValue(
+              editor.commands.find(c => c.name() === 'set'),
+            );
+          thing = pasted[1];
+          value = [pasted[2]];
+        }
+        return (async () =>
+          (await readOptionsChecked('set', setDoc)) ??
+          // A token typed after its value (`set t 4px --radius-element`)
+          // is no option: the set reads the two in the other order.
+          (value.length === 1 &&
+          /^--[a-z0-9-]+$/i.test(value[0]) &&
+          !thing.startsWith('-')
+            ? null
+            : strayOption('set', setDoc, value)) ??
+          run(
+            program,
+            () => themeEditSet(name, thing, value.join(' '), changeOptions(o)),
+            changeBlocks,
+          ))();
+      },
     }),
     setDoc,
     {tokens: true},
@@ -687,7 +1389,29 @@ export function registerExperimentalTheme(group, program) {
         /** @type {any} */ o,
         /** @type {any} */ c,
       ) =>
-        extraWords('show', (c?.args ?? []).slice(1)) ??
+        readOptions('show', showDoc) ??
+        showStray(name, (c?.args ?? []).slice(1), o) ??
+        extraWords('show', showDoc, (c?.args ?? []).slice(1)) ??
+        // The sheet is limited to one section (the docs say so): a second
+        // --section is refused, never kept over the first in silence.
+        (new Set(flagValues('section')).size > 1
+          ? cliError(
+              `--section limits the sheet to one section, and was given ${flagValues('section').length} (${flagValues('section').join(', ')}); give one, or none for the whole sheet.`,
+              {
+                suggestions: [
+                  {
+                    // The first section given that `show` takes, else the
+                    // whole sheet.
+                    name: cmd(
+                      `${EDITOR} show ${name}${(sec => (sec ? ` --section ${sec}` : ''))(flagValues('section').find(v => showSections().includes(v)))}`,
+                    ),
+                    reason: 'do this instead',
+                  },
+                ],
+                code: ERROR_CODES.ERR_INVALID_ARGUMENT,
+              },
+            )
+          : null) ??
         run(
           program,
           () =>
@@ -700,6 +1424,8 @@ export function registerExperimentalTheme(group, program) {
         ),
     }),
     showDoc,
+    // An unknown option reaches the action, which names a show that works.
+    {tokens: true},
   );
 
   explained(
@@ -712,27 +1438,31 @@ export function registerExperimentalTheme(group, program) {
         /** @type {any} */ o,
         /** @type {import('commander').Command} */ c,
       ) =>
-        strayOption('undo', [which, ...(c?.args ?? []).slice(3)]) ??
-        extraWords('undo', (c?.args ?? []).slice(3)) ??
-        run(
-          program,
-          () =>
-            themeEditUndo(name, {
-              ...changeOptions(o),
-              ...(thing == null ? {} : {thing, value: which}),
-            }),
-          r =>
-            r.data.action === 'step'
-              ? [
-                  `[ok] ${r.data.theme}: undid the last change`,
-                  ...project(/** @type {any} */ (r.data)),
-                ]
-              : changeBlocks(
-                  /** @type {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditChangeResponse} */ (
-                    r
+        (async () =>
+          (await readOptionsChecked('undo', undoDoc)) ??
+          strayOption('undo', undoDoc, [which, ...(c?.args ?? []).slice(3)]) ??
+          extraWords('undo', undoDoc, (c?.args ?? []).slice(3)) ??
+          run(
+            program,
+            () =>
+              themeEditUndo(name, {
+                ...changeOptions(o),
+                ...(thing == null ? {} : {thing, value: which}),
+              }),
+            r =>
+              r.data.action === 'step'
+                ? [
+                    // What was undone is in the headline, so a tail of
+                    // the output keeps it.
+                    `[ok] ${r.data.theme}: undid ${/** @type {any} */ (r.data).undid ?? 'the last change'}${/** @type {any} */ (r.data).refusedBefore ? ` (${/** @type {any} */ (r.data).refusedBefore})` : ''}`,
+                    ...project(/** @type {any} */ (r.data)),
+                  ]
+                : changeBlocks(
+                    /** @type {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditChangeResponse} */ (
+                      r
+                    ),
                   ),
-                ),
-        ),
+          ))(),
     }),
     undoDoc,
     {tokens: true},
@@ -751,13 +1481,16 @@ export function registerExperimentalTheme(group, program) {
         run(
           program,
           () =>
-            themeEditPreviewAdd([words ?? []].flat().join(' ') || undefined, {
-              cwd: process.cwd(),
-              theme: o.theme,
-              template: o.template,
-              top: o.top,
-              path: o.path,
-            }),
+            previewFlagsOnce('add', ['theme', 'template', 'top', 'path']) ??
+            resultStands(
+              themeEditPreviewAdd([words ?? []].flat().join(' ') || undefined, {
+                cwd: process.cwd(),
+                theme: o.theme,
+                template: o.template,
+                top: o.top,
+                path: o.path,
+              }),
+            ),
           r => {
             const {matched, skipped, ...rest} = r.data;
             return [
@@ -797,10 +1530,13 @@ export function registerExperimentalTheme(group, program) {
         run(
           program,
           () =>
-            themeEditPreviewApp(dir, {
-              cwd: process.cwd(),
-              theme: o.theme,
-            }),
+            previewFlagsOnce('app', ['theme']) ??
+            resultStands(
+              themeEditPreviewApp(dir, {
+                cwd: process.cwd(),
+                theme: o.theme,
+              }),
+            ),
           r => [
             `[ok] new app in ${r.data.folder} with the theme preview`,
             ...project(/** @type {any} */ (r.data)),
@@ -816,13 +1552,32 @@ export function registerExperimentalTheme(group, program) {
       action: (/** @type {any} */ o) =>
         run(
           program,
-          () => themeEditPreviewList({cwd: process.cwd(), path: o.path}),
+          () =>
+            previewFlagsOnce('list', ['path']) ??
+            themeEditPreviewList({cwd: process.cwd(), path: o.path}),
           r =>
             r.data.folder
-              ? project(/** @type {any} */ (r.data))
+              ? project(
+                  /** @type {any} */ ({
+                    ...r.data,
+                    // A page whose file is gone says so in words.
+                    pages: r.data.pages.map(({missing, ...p}) =>
+                      missing ? {...p, file: 'missing'} : p,
+                    ),
+                  }),
+                )
               : [
                   ...project(/** @type {any} */ (r.data)),
-                  `Tip: ${PREFIX} preview add${o.path == null ? '' : ` --path '${String(o.path).replace(/'/g, `'\\''`)}'`}`,
+                  // A folder add refuses has a note that says why instead.
+                  ...(r.data.notes.some(
+                    n =>
+                      n.includes(' refuses this folder') ||
+                      n.startsWith('no preview here; '),
+                  )
+                    ? []
+                    : [
+                        `Tip: ${PREFIX} preview add${o.path == null ? '' : ` --path ${quoteCommandArgument(String(o.path))}`}`,
+                      ]),
                 ],
           r =>
             resultSet({
@@ -842,7 +1597,10 @@ export function registerExperimentalTheme(group, program) {
         run(
           program,
           () =>
-            themeEditPreviewRemove(page, {cwd: process.cwd(), path: o.path}),
+            previewFlagsOnce('remove', ['path']) ??
+            resultStands(
+              themeEditPreviewRemove(page, {cwd: process.cwd(), path: o.path}),
+            ),
           r => [
             r.data.pages.length
               ? `[ok] removed ${page} from the theme preview`
@@ -887,14 +1645,16 @@ export function registerExperimentalTheme(group, program) {
         );
         if (themeFlags.length > 1)
           return cliError('--theme is given twice; give it once.', {
-            suggestions: [{name: `${HOW} --help`, reason: 'give --theme once'}],
+            suggestions: [
+              {name: cmd(`${HOW} --help`), reason: 'give --theme once'},
+            ],
             code: ERROR_CODES.ERR_INVALID_ARGUMENT,
           });
         if (listFlags.length > 1)
           return cliError('--list is given twice; give it once.', {
             suggestions: [
               {
-                name: `${HOW} --list tokens accent`,
+                name: cmd(`${HOW} --list tokens accent`),
                 reason: 'one list, then the filter',
               },
             ],
@@ -935,46 +1695,22 @@ export function registerExperimentalTheme(group, program) {
             },
           );
         }
-        // A picture first: the only other word is how many colors to list.
-        const picture = isHowPicture(rest[0] ?? '');
-        if (picture && rest.length > 2)
-          return cliError(
-            `After a picture, give only how many colors to list, not "${rest.slice(1).join(' ')}".`,
-            {
-              suggestions: [
-                {name: `${HOW} ${rest[0]} 5`, reason: 'do this instead'},
-              ],
-              code: ERROR_CODES.ERR_INVALID_ARGUMENT,
-            },
-          );
-        // A missing picture is the first thing to say, before a bad count.
-        if (
-          picture &&
-          rest.length === 2 &&
-          !/^[1-9]\d*$/.test(rest[1]) &&
-          fileExists(rest[0])
-        )
-          return cliError(
-            `The count after a picture must be a positive whole number, not "${rest[1]}".`,
-            {
-              suggestions: [
-                {name: `${HOW} ${rest[0]} 5`, reason: 'do this instead'},
-              ],
-              code: ERROR_CODES.ERR_INVALID_ARGUMENT,
-            },
-          );
-        const stray = picture ? null : strayOption('how', rest.slice(1));
+        // The API decides what the words are (a picture and a count, or a
+        // question); a picture is told by its extension here only to keep
+        // option words after it for the count.
+        const picture = /\.png$/i.test(rest[0] ?? '');
+        const stray = picture
+          ? null
+          : (readOptions(howDoc.name.split(' ').pop() ?? 'how', howDoc) ??
+            strayOption('how', howDoc, rest.slice(1)));
         if (stray) return stray;
-        const count =
-          picture && rest.length === 2 ? Number(rest[1]) : undefined;
-        const subject = picture ? rest[0] : rest.join(' ');
         return run(
           program,
           () =>
-            themeEditHow(subject, {
+            themeEditHow(rest.join(' '), {
               cwd: process.cwd(),
               at: o.at ?? [],
-              count,
+              words: rest,
               theme: o.theme,
             }),
           r => lookupBlocks(/** @type {any} */ (r.data)),
@@ -1008,6 +1744,40 @@ export function registerExperimentalTheme(group, program) {
       template: templateDoc,
       targets: targetsDoc,
     },
-    {group: 'experimental theme', build: 'compile'},
+    {
+      group: 'experimental theme',
+      build: 'compile',
+      explain: editorThemeRefusal,
+      preflight: editorCompileProblem,
+      follow: editorFollowCompile,
+      missingSource: editorMissingSource,
+      template: editorThemeTemplate,
+      hold: editorThemeHold,
+      loadedFonts: editorLoadedFonts,
+      extraData: editorBuildExtra,
+      afterBuild: editorAfterBuild,
+      sourcePath: editorSourcePath,
+      fontHelp: editorFontHelp,
+      install: editorInstall,
+      colorModes: editorColorModes,
+    },
   );
+}
+
+/**
+ * The error for `set` given a theme and a thing but no value: the parser's
+ * missing-argument report, from the one builder it uses.
+ * @param {any} cmd the set command
+ * @returns {never}
+ */
+function missingSetValue(cmd) {
+  const {message, suggestions} = editorMissingArgument(
+    cmd,
+    ['theme', 'thing', 'value'],
+    'value',
+  );
+  return cliError(message, {
+    code: ERROR_CODES.ERR_MISSING_ARGUMENT,
+    suggestions,
+  });
 }

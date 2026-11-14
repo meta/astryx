@@ -328,6 +328,35 @@ export interface RichTextEditorLinkPopoverPluginProps {
 }
 
 /**
+ * Opens a link in a new tab on a Cmd-click (Ctrl-click off Apple platforms)
+ * in an editable editor, until the returned function detaches.
+ */
+function followLinkClicks(
+  editor: LexicalEditor,
+  root: HTMLElement,
+): () => void {
+  const follow = (event: MouseEvent) => {
+    if (!editor.isEditable() || !isPrimaryModifier(event)) {
+      return;
+    }
+    const anchor =
+      event.target instanceof Element ? event.target.closest('a[href]') : null;
+    if (anchor == null || !root.contains(anchor)) {
+      return;
+    }
+    const url = editor.read(
+      () => $linkOf($getNearestNodeFromDOMNode(anchor))?.getURL() ?? null,
+    );
+    if (url != null) {
+      event.preventDefault();
+      openLinkInNewTab(url);
+    }
+  };
+  root.addEventListener('click', follow);
+  return () => root.removeEventListener('click', follow);
+}
+
+/**
  * An opt-in plugin for `RichTextEditor`'s `plugins` prop. With the caret in a
  * link (a click on it, or arrowing into it) while the editor has focus, it
  * shows a popover under the link's line with the link's address (which opens
@@ -415,27 +444,7 @@ export function RichTextEditorLinkPopoverPlugin({
       if (root == null) {
         return;
       }
-      const follow = (event: MouseEvent) => {
-        if (!editor.isEditable() || !isPrimaryModifier(event)) {
-          return;
-        }
-        const anchor =
-          event.target instanceof Element
-            ? event.target.closest('a[href]')
-            : null;
-        if (anchor == null || !root.contains(anchor)) {
-          return;
-        }
-        const url = editor.read(
-          () => $linkOf($getNearestNodeFromDOMNode(anchor))?.getURL() ?? null,
-        );
-        if (url != null) {
-          event.preventDefault();
-          openLinkInNewTab(url);
-        }
-      };
-      root.addEventListener('click', follow);
-      detach = () => root.removeEventListener('click', follow);
+      detach = followLinkClicks(editor, root);
     });
     return () => {
       unregister();
@@ -484,6 +493,7 @@ export function RichTextEditorLinkPopoverPlugin({
   }, [editor, target]);
 
   const applyPlace = useCallback((next: Place | null) => {
+    // eslint-disable-next-line @eslint-react/set-state-in-effect -- the popover's place is measured from DOM layout before it paints
     setPlace(previous =>
       previous != null &&
       next != null &&

@@ -231,29 +231,35 @@ describe.each(Object.entries(WORKFLOWS))(
         expect(share.env.SCOPED).toBe(
           "${{ github.event_name == 'pull_request' && steps.scope.outputs.vitest_full_suite == 'false' }}",
         );
-        // The Node lane runs the same scoped share, guards included.
+        // The Node lane runs its scoped tests and guards in one run, so its
+        // duration legs balance both lists together.
         const node = workflow.jobs['test-node'].steps.find(
           step => step.name === 'Run this shard of the Node tests',
         );
         expect(node.run.trim()).toBe(
           [
+            "started=$(ps -o etimes= -C Runner.Worker 2>/dev/null | sort -n | tail -1 | tr -d ' ')",
+            'VITEST_SHARD_WATCHDOG_SECONDS=$(( 14 * 60 - ${started:-180} ))',
+            'export VITEST_SHARD_WATCHDOG_SECONDS',
+            'WATCHDOG=(--reporter=default --reporter=github-actions --reporter=./scripts/vitest-shard-watchdog.mjs)',
             'if [ "$SCOPED" = true ]; then',
-            `  .github/scripts/run-named.sh "Tests the change reaches" -- pnpm test:node --changed=HEAD^1 --passWithNoTests ${SHARD_ARG}`,
-            '  # Tests no module graph relates to the change run too: guards',
-            '  # that read sources, and tests that load a changed package from',
-            '  # its build (by name or its dist/).',
-            '  # The list goes through a file so a failing lister fails the step.',
-            '  # The guard run leaves out the tests the run above already ran, so',
-            '  # no test runs twice. Every leg splits the same reduced list, so a',
-            '  # leg that cannot list them fails rather than split a different one.',
-            '  .github/scripts/run-named.sh "List the tests the first run ran" -- pnpm exec vitest list --project node --changed=HEAD^1 --filesOnly --passWithNoTests --json="$RUNNER_TEMP/already-run.json"',
-            '  .github/scripts/run-named.sh "List the tests that read source files" --stdout "$RUNNER_TEMP/fs-guards.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --already-run "$RUNNER_TEMP/already-run.json"',
-            '  mapfile -t GUARDS < "$RUNNER_TEMP/fs-guards.txt"',
-            '  if [ "${#GUARDS[@]}" -gt 0 ]; then',
-            `    .github/scripts/run-named.sh "Tests that read source files" -- pnpm test:node --passWithNoTests ${SHARD_ARG} "\${GUARDS[@]}"`,
+            '  # One run covers the tests the change reaches and the tests no',
+            '  # module graph relates to it: guards that read sources, and tests',
+            '  # that load a changed package from its build (by name or its',
+            '  # dist/). In one run the legs balance both lists by recorded',
+            '  # time, so a slow changed test does not land on top of a full',
+            '  # share of guards.',
+            '  # The lists go through files so a failing lister fails the step.',
+            '  # Every leg splits the same list, so a leg that cannot list the',
+            '  # tests fails rather than split a different one.',
+            '  .github/scripts/run-named.sh "List the tests the change reaches" -- pnpm exec vitest list --project node --changed=HEAD^1 --filesOnly --passWithNoTests --json="$RUNNER_TEMP/reached.json"',
+            '  .github/scripts/run-named.sh "List the tests to run" --stdout "$RUNNER_TEMP/node-tests.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --reached "$RUNNER_TEMP/reached.json"',
+            '  mapfile -t TESTS < "$RUNNER_TEMP/node-tests.txt"',
+            '  if [ "${#TESTS[@]}" -gt 0 ]; then',
+            `    .github/scripts/run-named.sh "Tests the change reaches and tests that read source files" -- pnpm test:node --passWithNoTests ${SHARD_ARG} "\${WATCHDOG[@]}" "\${TESTS[@]}"`,
             '  fi',
             'else',
-            `  pnpm test:node ${SHARD_ARG}`,
+            `  pnpm test:node ${SHARD_ARG} "\${WATCHDOG[@]}"`,
             'fi',
           ].join('\n'),
         );
@@ -427,6 +433,7 @@ describe('Vitest scoping for shared infrastructure the module graph reaches (spe
 
 describe('ci.yml pr-a11y browser specs', () => {
   const steps = load('ci.yml').jobs['pr-a11y-specs'].steps;
+  const planSteps = load('ci.yml').jobs['pr-a11y-plan'].steps;
   const run = steps.find(
     step => step.name === 'Run browser accessibility specs',
   );
@@ -437,7 +444,7 @@ describe('ci.yml pr-a11y browser specs', () => {
   // Specs are discovered, never listed: a step naming one spec file is the
   // per-test workflow edit this lane exists to avoid.
   it('names no spec file in any step', () => {
-    for (const step of steps) {
+    for (const step of [...planSteps, ...steps]) {
       expect(step.run ?? '', step.name).not.toMatch(
         /\.spec\.(ts|tsx|js|mjs)\b/,
       );
@@ -445,15 +452,13 @@ describe('ci.yml pr-a11y browser specs', () => {
   });
 
   it("runs the merge commit's runner against the PR head", () => {
-    const count = steps.find(
+    const count = planSteps.find(
       step => step.name === "Count this run's accessibility legs",
     );
-    expect(run.if).toBe(
-      "(!cancelled()) && steps.scope.outputs.has_components == 'true' && steps.legs.outputs.runs == 'true'",
-    );
+    expect(run.if).toBe("(!cancelled()) && env.RUNS == 'true'");
     // The merge commit the steps come from, not the PR's recorded base, which
-    // can lag main and predate the runner. The count step selects; the run
-    // step runs that leg's share with the same runner.
+    // can lag main and predate the runner. The plan's count step selects; each
+    // leg's run step runs its share with the same runner.
     for (const step of [count, run]) {
       expect(step.env.WORKFLOW_SHA).toBe('${{ github.sha }}');
       expect(step.env.PR_TITLE).toBe('${{ github.event.pull_request.title }}');
@@ -464,9 +469,11 @@ describe('ci.yml pr-a11y browser specs', () => {
     expect(count.run).toContain(
       'git show "$WORKFLOW_SHA:.github/scripts/a11y-pr-contracts.mjs" > "$runner"',
     );
-    expect(count.run).toContain(
-      '--share-out "$RUNNER_TEMP/a11y-leg-share.json"',
-    );
+    // The plan hands each leg its share through its outputs.
+    expect(count.run).not.toContain('--share-out');
+    expect(
+      steps.find(step => step.name === "Write this leg's share").run,
+    ).toContain('"$RUNNER_TEMP/a11y-leg-share.json"');
     expect(run.run).toContain(
       'git show "$WORKFLOW_SHA:.github/scripts/a11y-pr-contracts.mjs" > "$runner"',
     );
@@ -479,9 +486,7 @@ describe('ci.yml pr-a11y browser specs', () => {
   });
 
   it('uploads every spec receipt in one head-bound artifact per leg', () => {
-    expect(upload.if).toBe(
-      "(!cancelled()) && steps.scope.outputs.has_components == 'true' && steps.legs.outputs.runs == 'true'",
-    );
+    expect(upload.if).toBe("(!cancelled()) && env.RUNS == 'true'");
     expect(upload.with.name).toBe(
       'pr-a11y-evidence-${{ needs.build-storybook.outputs.short_hash }}-${{ matrix.leg }}',
     );
@@ -519,7 +524,7 @@ describe('ci.yml RTL package sharding', () => {
       [
         'a11y-dependent-audits-plan',
         'pr-a11y-guards',
-        'pr-a11y-specs',
+        'pr-a11y-plan',
         'pr-component-a11y-contracts',
         'pr-interaction-webkit',
         'pr-rtl',
@@ -992,7 +997,9 @@ describe('heavy lanes outside their component scope (spec:AST-030 FR9)', () => {
     "(steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true')";
   const gates = {
     'pr-a11y-guards': "steps.scope.outputs.has_components == 'true'",
-    'pr-a11y-specs': "steps.scope.outputs.has_components == 'true'",
+    'pr-a11y-plan': "steps.scope.outputs.has_components == 'true'",
+    // A leg runs only with a share, and outside the scope the plan has none.
+    'pr-a11y-specs': "env.RUNS == 'true'",
     'pr-rtl-shard': RTL,
     'pr-visual': "steps.visual-scope.outputs.has_stable_visual == 'true'",
   };

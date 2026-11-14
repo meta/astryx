@@ -125,9 +125,6 @@ describe('release-specs (changed)', () => {
     expect(stepOf(plan, 'Plan the release specs').env.FILES_PATH).toBe(
       '${{ steps.scope.outputs.changed_files_path || steps.scope.outputs.lab_specs_path }}',
     );
-    expect(stepOf(plan, 'Require a complete changed-file list').if).toBe(
-      "steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == '' && steps.scope.outputs.lab_specs_path == ''",
-    );
   });
 
   it('plans on a slim runner, behind the same gate as the other contract jobs', () => {
@@ -303,18 +300,44 @@ describe('release-specs (changed)', () => {
     expect(result.status).not.toBe(0);
   });
 
-  it('says to split a pull request whose file list GitHub truncated', () => {
-    const check = stepOf(plan, 'Require a complete changed-file list');
-    const status = truncated =>
-      spawnSync('bash', ['-e', '-c', check.run], {
-        env: {...process.env, TRUNCATED: truncated},
+  it('plans every release spec when the change has no file list, never failing the run', () => {
+    expect(stepOf(plan, 'Require a complete changed-file list')).toBe(
+      undefined,
+    );
+    const step = stepOf(plan, 'Plan the release specs');
+    expect(step.env.TRUNCATED).toBe('${{ steps.scope.outputs.truncated }}');
+    const planned = env => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-plan-step-'));
+      const bin = path.join(dir, 'bin');
+      fs.mkdirSync(bin);
+      fs.writeFileSync(path.join(bin, 'git'), '#!/bin/sh\n', {mode: 0o755});
+      fs.writeFileSync(
+        path.join(bin, 'node'),
+        `#!/bin/sh\necho "$@" > "${path.join(dir, 'args')}"\n`,
+        {mode: 0o755},
+      );
+      const result = spawnSync('bash', ['-e', '-c', step.run], {
+        cwd: dir,
+        env: {
+          ...process.env,
+          PATH: `${bin}:${process.env.PATH}`,
+          RUNNER_TEMP: dir,
+          GITHUB_STEP_SUMMARY: path.join(dir, 'summary'),
+          FILES_PATH: '',
+          TRUNCATED: 'false',
+          ...env,
+        },
         encoding: 'utf8',
       });
-    const split = status('true');
-    expect(split.status).toBe(1);
-    expect(split.stdout).toContain('Split the pull request.');
-    const other = status('false');
-    expect(other.status).toBe(1);
-    expect(other.stdout).toContain('Re-run the job.');
+      expect(result.status).toBe(0);
+      return fs.readFileSync(path.join(dir, 'args'), 'utf8').trim();
+    };
+    expect(planned({FILES_PATH: 'changed.txt'})).toContain(
+      '--changed changed.txt',
+    );
+    expect(planned({TRUNCATED: 'true'})).toContain('--all --truncated');
+    const undecided = planned({});
+    expect(undecided).toContain('--all');
+    expect(undecided).not.toContain('--truncated');
   });
 });

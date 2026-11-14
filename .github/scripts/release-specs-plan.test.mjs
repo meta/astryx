@@ -67,7 +67,7 @@ function planIn(files, changed, map = MAP) {
 }
 
 const STORY = (title, component, folder) =>
-  `import {${component}} from '@astryxdesign/core/${folder}';\nimport {Button} from '@astryxdesign/core/Button';\nexport default {title: 'x'};\nconst meta = {\n  title: '${title}',\n  component: ${component},\n};\n`;
+  `import {${component}} from '@astryxdesign/core/${folder}';\nimport {Button} from '@astryxdesign/core/Button';\nconst meta = {\n  title: '${title}',\n  component: ${component},\n};\nexport default meta;\n`;
 
 const TREE = {
   [SPEC]:
@@ -174,6 +174,8 @@ describe('planReleaseSpecs', () => {
         "// @pr-a11y release-only\nconst id = 'core-nothing--default';\n",
       'a story id it never names':
         '// @pr-a11y release-only\nawait page.goto(`${storybook.origin}/iframe.html?id=${id}`);\n',
+      'a sandbox page':
+        "// @pr-a11y release-only\nconst id = 'core-link-navigation--destinations';\nawait page.goto(SANDBOX_URL + '/components/link');\n",
       'a @visits name no folder holds':
         "// @pr-a11y release-only\n// @visits Nothing\nconst id = 'core-link-navigation--destinations';\n",
     };
@@ -210,6 +212,21 @@ describe('planReleaseSpecs', () => {
     });
     expect(plan.specs).toEqual([OTHER, PATTERN, SPEC, TAGGED].sort());
     expect(plan.reasons[OTHER]).toContain('could not be followed');
+  });
+
+  it('runs every release spec, with the reason, when the change has no file list', () => {
+    const read = file => TREE[file];
+    const plan = planReleaseSpecs({
+      listed: Object.keys(TREE),
+      changed: [],
+      read,
+      importers: () => new Map(),
+      map: MAP,
+      everything:
+        'GitHub truncated the changed-file list, so every release spec runs',
+    });
+    expect(plan.specs).toEqual([OTHER, PATTERN, SPEC, TAGGED].sort());
+    expect(plan.reasons[SPEC]).toContain('truncated');
   });
 
   it('runs nothing for a deleted release spec', () => {

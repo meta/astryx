@@ -19,9 +19,9 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {parse} from '@babel/parser';
 import {findInstalledPackage} from '../fs/paths.mjs';
 import {inspectPackageExport} from './package-exports.mjs';
+import {babelParser} from '../runtime/lazy-dependencies.mjs';
 
 const MODULE_EXTENSIONS = [
   '.mjs',
@@ -108,7 +108,7 @@ function parseModule(file) {
   const stamp = fileStamp(file);
   const cached = parsedModules.get(file);
   if (cached?.stamp === stamp) return cached.ast;
-  const ast = parse(moduleText(file), PARSE_OPTIONS);
+  const ast = babelParser().parse(moduleText(file), PARSE_OPTIONS);
   parsedModules.set(file, {stamp, ast});
   return ast;
 }

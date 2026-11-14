@@ -22,7 +22,9 @@ export const doc = {
     'Read it, copy what you need into your own theme file, delete it. Use `theme add` to ' +
     'use an installed built theme, extend that theme for ordinary customization, or use ' +
     '`theme eject` for a complete source fork. This command starts a new blank theme. Refuses to overwrite without ' +
-    '`overwrite`, so it is safe to re-run.',
+    '`overwrite`, so it is safe to re-run. With no package.json at or above cwd, it writes in cwd ' +
+    'and the CLI warns; pass a cwd inside a project, or run `npm init -y` in that folder first, to ' +
+    'write it at a project root.',
   importPath: '@astryxdesign/cli/api',
   signature:
     'themeTemplate(options?: {targetPath?: string, overwrite?: boolean, cwd?: string}): ThemeTemplateResponse',
@@ -31,7 +33,8 @@ export const doc = {
     {
       name: 'options.targetPath',
       type: 'string',
-      description: 'Destination file. Must resolve within cwd.',
+      description:
+        'Destination file, read from cwd. Must resolve within the project root: the nearest folder at or above cwd with a package.json. Left out, the template is written at the project root.',
       default: "'theme.template.ts'",
     },
     {
@@ -51,14 +54,17 @@ export const doc = {
     {
       type: 'theme.template',
       description:
-        'Receipt: the path (relative to cwd), whether it was written, and the reason it was not. `exists` when a file was already there, which is a success, not a failure.',
+        'Receipt: the path (relative to cwd), whether it was written, and the reason it was not. `exists` when a file was already there, which is a success, not a failure; then `overwritable` says whether overwrite would replace that file, and `alternative` is a free path for the template when it would not.',
     },
   ],
   throws: [
-    {code: 'ERR_PATH_TRAVERSAL', when: 'the target path escapes cwd'},
+    {
+      code: 'ERR_PATH_TRAVERSAL',
+      when: 'the target path escapes the project root (the nearest folder at or above cwd with a package.json)',
+    },
     {
       code: 'ERR_INVALID_ARGUMENT',
-      when: 'the target path is blank, names a folder, or is not a .ts file',
+      when: 'the target path is blank, names a folder, or is not a .ts file (with or without overwrite)',
     },
     {
       code: 'ERR_FILE_EXISTS',

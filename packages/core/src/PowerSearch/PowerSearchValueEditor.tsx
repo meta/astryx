@@ -496,6 +496,7 @@ function TimeEditor({
     <TimeInput
       label={t('@astryx.powersearch.valueEditor.time')}
       isLabelHidden
+      entryErrorBehavior="complete"
       isDisabled={isDisabled}
       value={currentValue}
       onChange={value => {
@@ -566,6 +567,7 @@ function DateTimeEditor({
       <DateInput
         label={label}
         isLabelHidden
+        entryErrorBehavior="complete"
         isDisabled={isDisabled}
         value={date}
         onChange={value => {
@@ -577,6 +579,7 @@ function DateTimeEditor({
       <TimeInput
         label={t('@astryx.powersearch.valueEditor.time')}
         isLabelHidden
+        entryErrorBehavior="complete"
         isDisabled={isDisabled}
         value={time}
         onChange={value => {
@@ -629,6 +632,7 @@ function DateAbsoluteEditor({
     <DateInput
       label={label}
       isLabelHidden
+      entryErrorBehavior="complete"
       isDisabled={isDisabled}
       value={
         unixSeconds == null

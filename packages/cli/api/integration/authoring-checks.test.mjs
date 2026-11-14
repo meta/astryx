@@ -166,6 +166,12 @@ afterEach(() => {
   fs.rmSync(tmpDir, {recursive: true, force: true});
 });
 
+/** The listing notes a fixture with no logo draws; package-listing-check.test.mjs covers them. */
+const LISTING_CODES = new Set([
+  'package_without_logo',
+  'package_without_example',
+]);
+
 describe('integrationTemplateConflicts', () => {
   it('warns on an id shared with Core and gives the package-qualified command', async () => {
     const [core] = await discoverCoreTemplates();
@@ -1557,7 +1563,8 @@ describe('validateIntegration runner-command notes', () => {
 
     const {data} = await validateIntegration(undefined, {cwd: tmpDir});
     const notes = (data.notes ?? []).filter(
-      (/** @type {any} */ note) => note.code !== 'runner_command',
+      (/** @type {any} */ note) =>
+        note.code !== 'runner_command' && !LISTING_CODES.has(note.code),
     );
 
     expect(
@@ -1677,7 +1684,11 @@ describe('validateIntegration runner-command notes', () => {
     );
 
     const {data} = await validateIntegration(undefined, {cwd: tmpDir});
-    expect(data.notes ?? []).toEqual([]);
+    expect(
+      (data.notes ?? []).filter(
+        (/** @type {any} */ note) => !LISTING_CODES.has(note.code),
+      ),
+    ).toEqual([]);
   });
 
   it('lists nothing for bare commands and the scoped install step', async () => {

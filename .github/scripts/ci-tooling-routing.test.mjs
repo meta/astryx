@@ -396,13 +396,19 @@ describe('Node-tooling CI routing', () => {
         'Install Playwright for theme-family contract',
         'npx playwright install chromium',
       ],
-      ['Run the theme-family contract', 'pnpm test:theme-family'],
+      [
+        'Run the theme-family contract',
+        // Bounded by the time the job's limit leaves, less a minute.
+        'timeout "$left" pnpm test:theme-family',
+      ],
     ]);
     for (const [name, command] of familyCommands) {
-      const ownerStep = step(ci.jobs['test-node'], name);
-      // One leg of the sharded Node lane owns the theme-family contract.
-      expect(ownerStep.if).toBe(`matrix.shard == 1 && ${BROAD_ONLY}`);
-      expect(ownerStep.run).toBe(command);
+      const ownerStep = step(ci.jobs['node-browser-contracts'], name);
+      // The Node browser contracts job owns the theme-family contract.
+      expect(ownerStep.if).toBe(BROAD_ONLY);
+      if (command.startsWith('timeout'))
+        expect(ownerStep.run).toContain(command);
+      else expect(ownerStep.run).toBe(command);
       expect(step(ci.jobs['test-build'], name)).toBeUndefined();
     }
   });
@@ -459,6 +465,9 @@ describe('Node-tooling CI routing', () => {
       'release-bump',
       'test-ui',
       'test-node',
+      'node-browser-contracts',
+      'swizzle-proof-scope',
+      'swizzle-proof',
       'test-build',
       'test-native-swift',
       'pr-interaction',
@@ -492,6 +501,11 @@ describe('Node-tooling CI routing', () => {
       TOOLING_ONLY: '${{ steps.scope.outputs.tooling_only }}',
       TEST_UI_RESULT: '${{ needs.test-ui.result }}',
       TEST_NODE_RESULT: '${{ needs.test-node.result }}',
+      NODE_BROWSER_CONTRACTS_RESULT:
+        '${{ needs.node-browser-contracts.result }}',
+      SWIZZLE_PROOF_SCOPE_RESULT: '${{ needs.swizzle-proof-scope.result }}',
+      SWIZZLE_PROOF_MODE: '${{ needs.swizzle-proof-scope.outputs.mode }}',
+      SWIZZLE_PROOF_RESULT: '${{ needs.swizzle-proof.result }}',
       TEST_BUILD_RESULT: '${{ needs.test-build.result }}',
       TEST_NATIVE_SWIFT_RESULT: '${{ needs.test-native-swift.result }}',
       PR_INTERACTION_RESULT: '${{ needs.pr-interaction.result }}',
@@ -607,38 +621,41 @@ describe('Node-tooling CI routing', () => {
       true,
       '::warning title=Merge base not built::Building the merge base failed or timed out; the API changes are not compared.',
     ],
-  ])('collects a merge base that %s', (_label, marker, needSizes, kept, message) => {
-    const wait = step(
-      ci.jobs['build-storybook'],
-      "Wait for the merge base's sizes",
-    );
-    expect(wait.env.NEED_SIZES).toBe(
-      "${{ steps.component-download.outcome != 'success' }}",
-    );
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'base-build-'));
-    try {
-      fs.mkdirSync(path.join(root, '.component-size-base'));
-      fs.writeFileSync(
-        path.join(root, '.component-size-base/component-size.json'),
-        '{}',
+  ])(
+    'collects a merge base that %s',
+    (_label, marker, needSizes, kept, message) => {
+      const wait = step(
+        ci.jobs['build-storybook'],
+        "Wait for the merge base's sizes",
       );
-      fs.writeFileSync(path.join(root, 'base-build.log'), 'log\n');
-      fs.writeFileSync(path.join(root, marker), '');
-      const out = execFileSync('bash', ['-e', '-c', wait.run], {
-        cwd: root,
-        encoding: 'utf8',
-        env: {...process.env, NEED_SIZES: needSizes},
-      });
-      expect(out).toContain(message);
-      expect(
-        fs.existsSync(
+      expect(wait.env.NEED_SIZES).toBe(
+        "${{ steps.component-download.outcome != 'success' }}",
+      );
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'base-build-'));
+      try {
+        fs.mkdirSync(path.join(root, '.component-size-base'));
+        fs.writeFileSync(
           path.join(root, '.component-size-base/component-size.json'),
-        ),
-      ).toBe(kept);
-    } finally {
-      fs.rmSync(root, {recursive: true, force: true});
-    }
-  });
+          '{}',
+        );
+        fs.writeFileSync(path.join(root, 'base-build.log'), 'log\n');
+        fs.writeFileSync(path.join(root, marker), '');
+        const out = execFileSync('bash', ['-e', '-c', wait.run], {
+          cwd: root,
+          encoding: 'utf8',
+          env: {...process.env, NEED_SIZES: needSizes},
+        });
+        expect(out).toContain(message);
+        expect(
+          fs.existsSync(
+            path.join(root, '.component-size-base/component-size.json'),
+          ),
+        ).toBe(kept);
+      } finally {
+        fs.rmSync(root, {recursive: true, force: true});
+      }
+    },
+  );
 
   it("compares the merge base's API surface from main's kept record, or from a base built for its sizes", () => {
     const main = load('.github/workflows/deploy.yml');
@@ -860,12 +877,6 @@ if (args[0] === '--surface') {
       const root = fs.mkdtempSync(path.join(os.tmpdir(), 'api-changes-'));
       try {
         fs.mkdirSync(path.join(root, 'scripts/api-report'), {recursive: true});
-        fs.mkdirSync(path.join(root, '.github/scripts'), {recursive: true});
-        fs.writeFileSync(
-          path.join(root, '.github/scripts/merge-base.sh'),
-          'echo abc123\n',
-        );
-        fs.chmodSync(path.join(root, '.github/scripts/merge-base.sh'), 0o755);
         fs.writeFileSync(
           path.join(root, 'scripts/api-report/cli.mjs'),
           stubCli({supported, surfaceWrites}),
@@ -884,7 +895,8 @@ if (args[0] === '--surface') {
         const out = execFileSync('bash', ['-e', '-c', report.run], {
           cwd: root,
           encoding: 'utf8',
-          env: {...process.env, BASE_REF: 'main'},
+          // The merge base build-storybook's own step found.
+          env: {...process.env, BASE_SHA: 'abc123'},
         });
         expect(JSON.parse(out.trim().split('\n').at(-1))).toEqual([
           '--changes',

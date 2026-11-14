@@ -5,7 +5,6 @@
  */
 
 import * as fs from 'node:fs';
-import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {DOC_EXPORTS} from '../doc-compiler/read.mjs';
 import {
@@ -20,17 +19,18 @@ import {existsCaseExact} from '../fs/paths.mjs';
 import {CORE_PROVIDER_ID} from '../identity/providers.mjs';
 import {loadComponentDoc} from './component-loader.mjs';
 import {
+  checkedComponentList,
+  storedComponentList,
+} from './stored-component-list.mjs';
+import {
   HAS_COMPUTED,
   moduleExportSource,
   moduleExportsName,
   staticExportObject,
 } from './module-exports.mjs';
-import {
-  inspectPackageExport,
-  sourceExportTarget,
-} from './package-exports.mjs';
-
-const require = createRequire(import.meta.url);
+import {inspectPackageExport, sourceExportTarget} from './package-exports.mjs';
+import {babelParser} from '../runtime/lazy-dependencies.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 const SKIP_DIRS = new Set(['hooks', 'utils', '__tests__', 'node_modules']);
 
@@ -176,9 +176,6 @@ function readDocMeta(docPath) {
   }
 }
 
-/** @type {typeof import('@babel/parser') | undefined} */
-let babelParser;
-
 /**
  * A property of an object literal, by its plain key.
  * @param {any} object - an ObjectExpression node
@@ -211,13 +208,9 @@ function docMemberNames(source) {
   /** @type {any} */
   let ast;
   try {
-    babelParser ??= require('@babel/parser');
-    ast = /** @type {typeof import('@babel/parser')} */ (babelParser).parse(
-      source,
-      {
-        sourceType: 'module',
-      },
-    );
+    ast = babelParser().parse(source, {
+      sourceType: 'module',
+    });
   } catch {
     return [];
   }
@@ -383,20 +376,44 @@ export function familyMember(docs, name) {
 export function discoverComponents(coreDir) {
   // The component matcher calls this for each name it resolves, so one
   // operation reads the docs once. Each caller gets its own copy to change.
-  const found = oncePerListing(`components\0${coreDir}`, () =>
-    readComponentGroups(coreDir),
-  );
+  // The Core the CLI was published with, unchanged, has its list stored.
+  const found = oncePerListing(`components\0${coreDir}`, () => {
+    const stored = storedComponentList(coreDir)?.groups;
+    return stored
+      ? inGroupOrder(
+          Object.entries(stored).map(([key, values]) => ({key, values})),
+        )
+      : readComponentGroups(coreDir);
+  });
   return Object.fromEntries(
     Object.entries(found).map(([key, names]) => [key, [...names]]),
   );
 }
 
 /**
+ * The Core component names `keep` accepts, in discovery order. Each name is
+ * listed exactly when {@link discoverComponents} lists it, but no doc is read
+ * for a name `keep` rejects, so a check for one name is cheap.
+ * @param {string} coreDir
+ * @param {(name: string) => boolean} keep
+ * @param {Set<string>} [tops] the top folders of `src` that can hold a name
+ *   `keep` accepts; the others are not read
+ * @returns {string[]}
+ */
+export function discoverComponentNamesWhere(coreDir, keep, tops) {
+  return Object.values(readComponentGroups(coreDir, keep, tops)).flat();
+}
+
+/**
  * The component groups under `coreDir`, read from disk.
  * @param {string} coreDir
+ * @param {(name: string) => boolean} [keep] the names to read; the others
+ *   are left out
+ * @param {Set<string>} [tops] the top folders to read, when only these can
+ *   hold a name `keep` accepts
  * @returns {Record<string, string[]>}
  */
-function readComponentGroups(coreDir) {
+function readComponentGroups(coreDir, keep = () => true, tops) {
   const srcDir = path.join(coreDir, 'src');
   /** @type {Map<string, string|null>} componentName → group */
   const componentGroups = new Map();
@@ -413,7 +430,10 @@ function readComponentGroups(coreDir) {
     for (const entry of entries) {
       if (entry.isDirectory()) {
         results.push(...collectXDSFiles(path.join(dirPath, entry.name)));
-      } else if (isComponentSourceFile(entry.name, dirPath)) {
+      } else if (
+        keep(componentNameFromFile(entry.name)) &&
+        isComponentSourceFile(entry.name, dirPath)
+      ) {
         results.push(entry.name);
       }
     }
@@ -423,9 +443,11 @@ function readComponentGroups(coreDir) {
   const topEntries = listDirEntries(srcDir);
   for (const entry of topEntries) {
     if (!entry.isDirectory() || SKIP_DIRS.has(entry.name)) continue;
+    if (tops && !tops.has(entry.name)) continue;
 
     const dirPath = path.join(srcDir, entry.name);
     const xdsFiles = collectXDSFiles(dirPath);
+    if (xdsFiles.length === 0) continue;
 
     // Read the group from the directory's .doc.mjs file (if it exists)
     // Check both {Name}.doc.mjs and Astryx{Name}.doc.mjs naming conventions
@@ -473,7 +495,9 @@ function readComponentGroups(coreDir) {
   // (HStack and VStack in Stack's doc).
   for (const entry of topEntries) {
     if (!entry.isDirectory() || SKIP_DIRS.has(entry.name)) continue;
+    if (tops && !tops.has(entry.name)) continue;
     const name = entry.name;
+    if (!keep(name)) continue;
     if (componentGroups.has(name) || name.endsWith('Context')) continue;
     if (
       listDir(path.join(srcDir, name)).some(file => file.endsWith('.doc.mjs'))
@@ -517,14 +541,22 @@ function readComponentGroups(coreDir) {
   for (const name of ungrouped) {
     entries.push({key: name, values: [name]});
   }
-  entries.sort((a, b) => a.key.localeCompare(b.key));
+  return inGroupOrder(entries);
+}
 
+/**
+ * Groups as one record, keys in the fixed text order (`compareText`), so a
+ * live read and the list stored at publish print alike on every host.
+ * @param {Array<{key: string, values: string[]}>} entries
+ * @returns {Record<string, string[]>}
+ */
+function inGroupOrder(entries) {
+  entries.sort((a, b) => compareText(a.key, b.key));
   /** @type {Record<string, string[]>} */
   const ordered = {};
   for (const {key, values} of entries) {
     ordered[key] = values;
   }
-
   return ordered;
 }
 
@@ -693,11 +725,12 @@ function ownSourceFile(coreDir, name) {
     if (found) return found;
   }
 
-  // Search nested (component might be under a parent dir)
-  const entries = listDirEntries(srcDir);
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const nestedDir = path.join(srcDir, entry.name, name);
+  // Search nested (component might be under a parent dir): only the folders
+  // whose listing holds the name, in listing order.
+  const nested = foldersHolding(srcDir, listDirEntries(srcDir), [name]).map(
+    entry => path.join(srcDir, entry.name, name),
+  );
+  for (const nestedDir of nested) {
     if (existsCaseExact(nestedDir, srcDir)) {
       const found = searchDir(nestedDir);
       if (found) return found;
@@ -781,6 +814,10 @@ function caseSpelledComponentSource(srcDir, name) {
  * @returns {string}
  */
 export function resolveImportPath(coreDir, componentName) {
+  const stored = checkedComponentList(coreDir)?.imports;
+  if (stored && Object.hasOwn(stored, componentName)) {
+    return stored[componentName];
+  }
   const srcDir = path.join(coreDir, 'src');
   const exportKeys = exportKeysOf(coreDir);
 
@@ -999,7 +1036,7 @@ export function discoverExternalComponentsGrouped(docsDir) {
   for (const name of ungrouped) {
     entries.push({key: name, values: [name]});
   }
-  entries.sort((a, b) => a.key.localeCompare(b.key));
+  entries.sort((a, b) => compareText(a.key, b.key));
 
   /** @type {Record<string, string[]>} */
   const ordered = {};

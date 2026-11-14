@@ -193,6 +193,31 @@ export const WrappedLines: Story = {
 };
 
 /**
+ * A label with no break opportunity, such as a bare URL, in a narrow column:
+ * an anchor Link, a button Link and an external Link each stay inside the
+ * column, and the label wraps.
+ */
+export const LongUnbrokenLabel: Story = {
+  tags: ['!autodocs'],
+  render: () => (
+    // A block column, as a chat or comment column is: a grid or flex item
+    // would grow to the URL's length before the Link could wrap.
+    <div style={{width: 200}}>
+      {(['anchor', 'button', 'external'] as const).map(form => (
+        <p key={form} data-long-label={form} style={{margin: '0 0 16px'}}>
+          <Link
+            href={form === 'button' ? undefined : 'https://example.com/a'}
+            onClick={form === 'button' ? () => {} : undefined}
+            isExternalLink={form === 'external'}>
+            https://www.example.com/groups/1234567890/permalink/98765432101234
+          </Link>
+        </p>
+      ))}
+    </div>
+  ),
+};
+
+/**
  * A long Link inside `<Text maxLines={2}>` or `<Text maxLines={1}>` clamps
  * with the ancestor text and keeps an inset focus ring, while a composed Link
  * outside a clamp keeps its own box and focus ring.

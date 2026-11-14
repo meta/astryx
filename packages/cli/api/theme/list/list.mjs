@@ -16,6 +16,7 @@ import {
   listThemes,
   listUnmigratedThemeCopies,
   readThemeListState,
+  themeInPackage,
   themeRecordOwner,
 } from '../_adapter.mjs';
 
@@ -52,9 +53,7 @@ export async function themeListCopySources(options = {}) {
   return {
     type: 'theme.list',
     data: themes
-      .filter(
-        theme => options.package == null || theme.package === options.package,
-      )
+      .filter(theme => themeInPackage(theme, options.package))
       .map(theme => ({
         slug: theme.slug,
         displayName: theme.displayName,
@@ -75,9 +74,7 @@ export async function themeListAvailable(options = {}) {
   const state = readThemeListState(cwd);
   const {themes, skipped} = await listAvailableThemeState(cwd);
   const data = themes
-    .filter(
-      theme => options.package == null || theme.package === options.package,
-    )
+    .filter(theme => themeInPackage(theme, options.package))
     .map(theme => {
       const added = state.themes[theme.slug] === themeRecordOwner(theme);
       return {

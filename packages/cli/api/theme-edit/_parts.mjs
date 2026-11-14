@@ -17,63 +17,288 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {createRequire} from 'node:module';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
-import {importPathOf} from './_project.mjs';
-import {renderPage, RenderError} from '../../foundation/render/render-page.mjs';
+import {importPathOf, installLine, literals} from './_project.mjs';
+import {removeEmptyFolder} from './_palette.mjs';
+import {VOID} from '../../foundation/render/html-reader.mjs';
 import {
-  EXTRA,
-  OPEN_OVERLAYS,
-  SAMPLE_PAGE,
-  elementNames,
-  pageSource,
-} from './_catalog.mjs';
+  RENDER_TIMEOUT_MS,
+  renderPage,
+  RenderError,
+} from '../../foundation/render/render-page.mjs';
+import {SAMPLE_PAGE, elementNames, pageSource} from './_catalog.mjs';
+import {removeOnStop} from '../../foundation/fs/stop-cleanup.mjs';
 
 /** Bump when the shape of the cached part data changes. */
-const PART_DATA_VERSION = 3;
+const PART_DATA_VERSION = 12;
+
+/**
+ * Flags that change what a component does or whether it shows, not how it
+ * looks: the catalog never turns them on (disabled has its own entry).
+ */
+const LIFECYCLE_FLAGS = new Set([
+  'isDisabled',
+  'isOpen',
+  'isDefaultOpen',
+  'hasAutoFocus',
+  'isHidden',
+]);
 
 /**
  * @typedef {object} PartRecord
  * @property {Record<string, {tokens: Record<string, string[]>, values: string[]}>} own - property -> tokens (with conditions) and raw values
+ * @property {Record<string, Record<string, string>>} [at] - property -> the value under each condition, private variables resolved
  * @property {Record<string, string[]>} inside - tokens read by unnamed elements inside the part -> properties
  * @property {Record<string, string[]>} attrs - data attributes seen on the part
  * @property {string[]} contains - parts rendered inside it
+ * @property {string[]} [tags] - the elements it is rendered as (`tr` for a table row)
+ * @property {string[]} [innerCorners] - the radius tokens of the corners Core draws by place on the parts directly inside it (a button group's end buttons)
+ * @property {Record<string, Record<string, string>>} [inline] - state ('' for always) -> property -> the token Core paints it with as an inline style, which no theme rule can replace
  */
 
 /**
  * @typedef {{target: string | null, tokens: string[], raw: string | null}} PaintSide
- * @typedef {{text: string, fg: PaintSide, bg: PaintSide, sample: string}} TextPair
+ * @typedef {{text: string, fg: PaintSide, bg: PaintSide, sample: string, over?: PaintSide}} TextPair
+ *   `over`: the region the part sits in (a header), whose background shows
+ *   through a see-through background of the part's own, else the page
  * @typedef {{version: number, coreKey: string, map: Record<string, PartRecord>, pairs: TextPair[], rendered: number, items: number}} PartData
  */
 
 /**
- * The catalog: each component with playground defaults once per visual
- * variant value, the hand-made extras, and the sample page.
+ * A sample value for a required prop the doc declares, from its type: the
+ * component's name for text, false for a flag, the first value of a union.
+ * Undefined for a type with no plain sample, such as a function.
+ * @param {string} name
+ * @param {string} type
+ * @returns {unknown}
+ */
+function sampleOf(name, type) {
+  if (type.includes('=>')) return undefined;
+  // Null and undefined are the absence of a value, never a sample.
+  const t = type
+    .split('|')
+    .map(x => x.trim())
+    .filter(x => x !== 'null' && x !== 'undefined')
+    .join(' | ');
+  if (t === 'string' || /ReactNode$/.test(t)) return name;
+  if (t === 'boolean') return false;
+  if (t === 'number') return 1;
+  const words = literals(t);
+  if (words.length) return words[0];
+  if (/^\d+(\s*\|\s*\d+)*$/.test(t)) return Number(t.split('|')[0]);
+  return undefined;
+}
+
+/**
+ * Three items made from the element the doc suggests for a group's
+ * children, each with its own label and value; the first takes the group's
+ * value, so it shows selected.
+ * @param {{__element: string, props?: Record<string, unknown>, children?: unknown}} slot
+ * @param {unknown} selected
+ */
+function slotItems(slot, selected) {
+  return [1, 2, 3].map(i => {
+    const props = {...(slot.props ?? {})};
+    if (typeof props.label === 'string') props.label = `${props.label} ${i}`;
+    if ('value' in props || typeof selected === 'string')
+      props.value =
+        i === 1 && typeof selected === 'string'
+          ? selected
+          : `${String(props.value ?? 'item')}-${i}`;
+    return {...slot, props};
+  });
+}
+
+/**
+ * The props a component renders with: its doc's playground defaults, or,
+ * for a doc with none (an older Core), a sample for each required prop.
+ * A group with no children gets three of the items its doc suggests. Null
+ * for a doc with no defaults that has no theming targets (a hook or a
+ * helper), or that is a part its parent lists as an item: it works only
+ * inside the parent, whose own entry shows it.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} name
+ * @returns {Record<string, unknown> | null}
+ */
+export function demoProps(project, name) {
+  const info = project.components[name];
+  const given =
+    info.defaults && typeof info.defaults === 'object'
+      ? /** @type {Record<string, unknown>} */ ({...info.defaults})
+      : null;
+  if (
+    !given &&
+    // Only a component a theme styles: hooks, providers and helpers have
+    // docs too, and render nothing.
+    (!/^[A-Z]/.test(name) ||
+      !info.targets.length ||
+      // A doc that declares no props of its own name is a family page,
+      // not a component the Core exports.
+      !Object.keys(info.props ?? {}).length ||
+      needsParent(project, name))
+  )
+    return null;
+  const props = given ?? {};
+  if (!given)
+    for (const [p, d] of Object.entries(info.props ?? {})) {
+      if (!d.required || /^on[A-Z]/.test(p)) continue;
+      if (p === 'children' && d.slots.length) continue;
+      const v = sampleOf(name, d.type);
+      // A required prop with no plain sample, such as a render function:
+      // the component cannot be shown from its doc alone.
+      if (v === undefined) return null;
+      props[p] = v;
+    }
+  const kids = info.props?.children;
+  const slot = kids?.slots?.[0];
+  if (!('children' in props) && kids) {
+    if (slot?.__element && (kids.required || slot.__element.startsWith(name))) {
+      if (info.props.value && !('value' in props) && slot.props?.value != null)
+        props.value = `${String(slot.props.value)}-1`;
+      props.children = slotItems(slot, props.value);
+    }
+  }
+  return props;
+}
+
+/**
+ * Whether a part works only inside its parent: its parent lists it as an
+ * item, or it is a piece of its parent by name (TableBody of Table) and
+ * its doc gives no playground of its own.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} name
+ */
+export function needsParent(project, name) {
+  const info = project.components[name];
+  const parent = info?.subComponentOf;
+  if (!parent) return false;
+  if (isItemOf(project, name)) return true;
+  const own = info.defaults && typeof info.defaults === 'object';
+  return !own && name.startsWith(parent) && name !== parent;
+}
+
+/**
+ * Whether a part's parent lists it as an item of its children.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} name
+ */
+export function isItemOf(project, name) {
+  const parent = project.components[name]?.subComponentOf;
+  const slots = parent
+    ? (project.components[parent]?.props?.children?.slots ?? [])
+    : [];
+  return slots.some(s => s?.__element === name);
+}
+
+/**
+ * A component's catalog entries, all from its doc: its demo props
+ * ({@link demoProps}), then once per value of each visual prop with a
+ * closed set of values (`variant`, `status`, `color`, and a number union
+ * such as a heading's level), its checked and disabled states, and each look
+ * flag (`isStriped`) turned on. An
+ * overlay the playground shows in place renders open; on a page people
+ * see, once, as some of its variants size the window, not the card.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} name
+ * @param {number} cap at most this many
+ * @param {{shown?: boolean}} [opts] `shown`: for a page people see
+ * @returns {Array<{label: string, props: Record<string, unknown>}>}
+ */
+export function catalogVariants(project, name, cap, opts = {}) {
+  const info = project.components[name];
+  const own = demoProps(project, name);
+  if (!own) return [];
+  // No demo takes focus as it mounts: on a page of many, each would pull
+  // the page to itself.
+  /** @type {Record<string, unknown>} */
+  const demo = {
+    ...own,
+    ...(info.props?.hasAutoFocus ? {hasAutoFocus: false} : {}),
+    ...(info.props?.autoFocus && own.autoFocus ? {autoFocus: false} : {}),
+  };
+  // An overlay shown open, named, as a dialog must be.
+  /** @param {Record<string, unknown>} d @returns {Record<string, unknown>} */
+  const opened = d => ({
+    ...d,
+    ...('isOpen' in d ? {} : {isOpen: true}),
+    ...(info.props?.label && d.label == null ? {label: `${name} example`} : {}),
+  });
+  if (info.opens && opts.shown) return [{label: '', props: opened(demo)}];
+  const base = info.opens ? opened(demo) : demo;
+  const values = info.targets[0]?.values ?? {};
+  const variants = [{label: '', props: base}];
+  for (const p of ['variant', 'status', 'color'])
+    for (const v of values[p] ?? [])
+      variants.push({
+        label: v,
+        // A status like `{type: 'error', message?: string}` takes the
+        // value as its `type`; the bare string breaks the component.
+        props: {
+          ...base,
+          [p]: info.props?.[p]?.type.startsWith('{') ? {type: v} : v,
+        },
+      });
+  // The states the doc names that a prop sets: checked (a boolean value)
+  // and disabled. The label says the state shown.
+  const states = new Set(info.targets.flatMap(t => t.states ?? []));
+  // A value the doc lists beside true and false (a checkbox's
+  // 'indeterminate'): rendered too, so the look Core gives it is read.
+  if (states.has('checked'))
+    for (const word of literals(info.props?.value?.type ?? ''))
+      if (word !== 'true' && word !== 'false')
+        variants.push({label: word, props: {...base, value: word}});
+  if (states.has('checked') && info.props?.value?.type.startsWith('boolean')) {
+    const on = base.value !== true;
+    variants.push({
+      label: on ? 'on' : 'off',
+      props: {
+        ...base,
+        value: on,
+        ...(typeof base.label === 'string' ? {label: on ? 'On' : 'Off'} : {}),
+      },
+    });
+  }
+  if (states.has('disabled') && info.props?.isDisabled)
+    variants.push({label: 'disabled', props: {...base, isDisabled: true}});
+  for (const p of Object.keys(values)) {
+    const type = info.props?.[p]?.type ?? '';
+    if (!/^\s*\d+(\s*\|\s*\d+)*\s*$/.test(type)) continue;
+    for (const n of type.split('|').map(Number))
+      if (n !== base[p])
+        variants.push({label: `${p} ${n}`, props: {...base, [p]: n}});
+  }
+  // Each look flag the doc names (`isStriped`, `hasHover`), turned on, so
+  // the styles Core gives only under it are read too: a table row's hover
+  // and stripes come from its table's flags.
+  for (const [p, doc] of Object.entries(info.props ?? {}))
+    if (
+      /^(is|has)[A-Z]/.test(p) &&
+      !LIFECYCLE_FLAGS.has(p) &&
+      String(/** @type {any} */ (doc)?.type ?? '').trim() === 'boolean' &&
+      base[p] !== true
+    )
+      variants.push({label: p, props: {...base, [p]: true}});
+  return variants.slice(0, cap);
+}
+
+/**
+ * The catalog: each component with playground defaults, once per visual
+ * variant value ({@link catalogVariants}), and the sample page.
  * @param {import('./_project.mjs').ThemeProject} project
  * @returns {{items: import('./_catalog.mjs').CatalogItem[], imports: Record<string, string>}}
  */
 export function catalogItems(project) {
   /** @type {import('./_catalog.mjs').CatalogItem[]} */
   const items = [];
-  for (const [name, info] of Object.entries(project.components)) {
-    const defaults = /** @type {any} */ (info.defaults);
-    if (!defaults || typeof defaults !== 'object') continue;
-    const values = info.targets[0]?.values ?? {};
-    /** @type {Array<Record<string, string>>} */
-    const variants = [{}];
-    for (const p of ['variant', 'status', 'color'])
-      for (const v of values[p] ?? []) variants.push({[p]: v});
-    for (const v of variants.slice(0, 16)) {
-      const label = Object.values(v).join(' ');
+  for (const name of Object.keys(project.components))
+    for (const v of catalogVariants(project, name, 16))
       items.push({
         name,
-        label,
-        tree: {__element: name, props: {...defaults, ...v}},
+        label: v.label,
+        tree: {__element: name, props: v.props},
       });
-    }
-  }
-  for (const [name, list] of [...EXTRA, ...OPEN_OVERLAYS])
-    for (const [label, tree] of list) items.push({name, label, tree});
   /** @type {Record<string, string>} */
   const imports = {};
   for (const n of elementNames([items.map(i => i.tree), SAMPLE_PAGE])) {
@@ -82,6 +307,27 @@ export function catalogItems(project) {
   }
   return {items, imports};
 }
+
+/**
+ * What of React the project cannot resolve (react, react-dom/server), to
+ * render the editor's pages; empty when both resolve.
+ * @param {string} cwd
+ * @returns {string[]}
+ */
+export function reactMissing(cwd) {
+  const req = createRequire(path.join(cwd, 'package.json'));
+  return ['react', 'react-dom/server'].filter(m => {
+    try {
+      req.resolve(m);
+      return false;
+    } catch {
+      return true;
+    }
+  });
+}
+
+/** How long the editor's own pages may take to render. */
+const EDITOR_RENDER_MS = 3 * RENDER_TIMEOUT_MS;
 
 /** One name per process, so two commands at once never share a folder. */
 const RUN = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
@@ -95,6 +341,43 @@ const RUN = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
  */
 export const renderDir = project =>
   path.join(project.cwd, 'themes', `.astryx-render-${RUN}`);
+
+/**
+ * Remove render folders a stopped command left (killed, out of memory):
+ * only `.astryx-render-<pid>-<random>` folders more than ten minutes old.
+ * Links are never followed.
+ * @param {string} themes
+ */
+function sweepRenders(themes) {
+  let names;
+  try {
+    names = fs.readdirSync(themes);
+  } catch {
+    return;
+  }
+  for (const n of names) {
+    const m = /^\.astryx-render-(\d+)-[a-z0-9]+$/.exec(n);
+    if (!m || Number(m[1]) === process.pid) continue;
+    const p = path.join(themes, n);
+    // A process id from another process space may look gone or alive here,
+    // so age decides: a render takes at most three minutes, and a folder
+    // older than ten is a leftover.
+    /** @type {number} */
+    let age;
+    try {
+      age = Date.now() - fs.lstatSync(p).mtimeMs;
+    } catch {
+      continue;
+    }
+    if (age < 10 * 60_000) continue;
+    try {
+      if (fs.lstatSync(p).isDirectory())
+        fs.rmSync(p, {recursive: true, force: true});
+    } catch {
+      // Gone already.
+    }
+  }
+}
 
 /**
  * Render a generated page module and give its HTML and markup (the body,
@@ -111,6 +394,7 @@ export async function renderGenerated(project, file, source, extra = []) {
   const themes = path.dirname(dir);
   // A themes/ folder that holds only other renders was made by another
   // lookup running beside this one, so it is ours to remove too.
+  sweepRenders(themes);
   const madeThemes =
     !fs.existsSync(themes) ||
     (() => {
@@ -120,31 +404,51 @@ export async function renderGenerated(project, file, source, extra = []) {
       );
     })();
   fs.mkdirSync(dir, {recursive: true});
-  // Stopped by a signal, the render folder still goes.
-  const cleanup = () => fs.rmSync(dir, {recursive: true, force: true});
-  const onSignal = (/** @type {NodeJS.Signals} */ sig) => {
-    cleanup();
-    process.kill(process.pid, sig);
-  };
-  process.once('SIGINT', onSignal);
-  process.once('SIGTERM', onSignal);
+  // Stopped by a signal (the terminal closing too), the render folder
+  // still goes.
+  const untrack = removeOnStop(dir);
   const entry = path.join(dir, file);
-  fs.writeFileSync(entry, source);
+  // Demo images point at the docs site's own folder (`/template-assets/…`),
+  // which a page opened from disk cannot reach: the inline placeholder
+  // takes their place, as when a template is scaffolded.
+  const {stripTemplateAssetRefs} =
+    await import('../../foundation/discovery/template-adapter.mjs');
+  fs.writeFileSync(entry, stripTemplateAssetRefs(source));
   for (const x of extra) {
     fs.mkdirSync(path.dirname(path.join(dir, x.name)), {recursive: true});
     fs.copyFileSync(x.from, path.join(dir, x.name));
   }
   try {
-    const page = await renderPage(entry, {title: file.replace(/\.[^.]+$/, '')});
-    const body = page.html.slice(page.html.indexOf('<body>') + 6);
+    // The editor's pages render every component, and a busy machine slows
+    // them down: they get three times the page limit.
+    const page = await renderPage(entry, {
+      title: file.replace(/\.[^.]+$/, ''),
+      timeoutMs: EDITOR_RENDER_MS,
+    });
+    // The page is the same whichever command rendered it: the folder's
+    // per-process name never reaches the file.
+    const html = page.html.split(path.basename(dir)).join('.astryx-render');
+    const body = html.slice(html.indexOf('<body>') + 6);
     const end = body.indexOf('<script type=');
-    return {html: page.html, markup: end >= 0 ? body.slice(0, end) : body};
+    return {html, markup: end >= 0 ? body.slice(0, end) : body};
   } catch (e) {
     if (e instanceof RenderError) {
       const missing = e.code === 'ERR_RENDER_MISSING_DEPENDENCY';
+      // A render stopped by its time limit on the editor's own page is the
+      // machine being busy, not a loop in the page.
+      const slow = e.code === 'ERR_RENDER_TIMEOUT';
       throw new AstryxError(
-        `Could not render the components with this project's React: ${e.message}${missing ? ' The theme command renders components on the server, so react and react-dom must be installed.' : ''}`,
-        [],
+        slow
+          ? `The components did not finish rendering within ${EDITOR_RENDER_MS / 1000} seconds, so the render was stopped. The theme files are written; only its pages were not rendered. The machine may be busy: run show again when it is less loaded.`
+          : `Could not render the components with this project's React: ${e.message}${missing ? ' The theme command renders components on the server, so react and react-dom must be installed.' : ''}`,
+        missing
+          ? [
+              {
+                name: installLine(project.cwd, ['react', 'react-dom']),
+                reason: 'install them',
+              },
+            ]
+          : [],
         missing
           ? ERROR_CODES.ERR_RENDER_MISSING_DEPENDENCY
           : ERROR_CODES.ERR_RENDER_FAILED,
@@ -156,29 +460,14 @@ export async function renderGenerated(project, file, source, extra = []) {
     // it, so a render running beside this one keeps its own.
     for (const f of [entry, ...extra.map(x => path.join(dir, x.name))])
       fs.rmSync(f, {force: true});
-    removeEmpty(madeThemes ? themes : dir);
-    process.removeListener('SIGINT', onSignal);
-    process.removeListener('SIGTERM', onSignal);
+    // Another render may still use it: a folder with a file in it stays.
+    removeEmptyFolder(madeThemes ? themes : dir, {deep: true});
+    untrack();
   }
 }
 
 /** @param {unknown} v @returns {v is Record<string, unknown>} */
 const isRecord = v => typeof v === 'object' && v !== null && !Array.isArray(v);
-
-/**
- * Remove `dir` and the folders under it when no file is left in them.
- * @param {string} dir
- */
-function removeEmpty(dir) {
-  if (!fs.existsSync(dir)) return;
-  for (const e of fs.readdirSync(dir, {withFileTypes: true}))
-    if (e.isDirectory()) removeEmpty(path.join(dir, e.name));
-  try {
-    fs.rmdirSync(dir);
-  } catch {
-    // Not empty: another render is using it.
-  }
-}
 
 /**
  * The part data for the installed Core, from the cache or built now.
@@ -215,6 +504,141 @@ export async function partData(project) {
   return data;
 }
 
+/** The tokens Core's indicator focus ring is drawn from, per property. */
+const RING_TOKENS = {
+  'outline-width': '--focus-outline-width',
+  'outline-style': '--focus-outline-style',
+  'outline-color': '--focus-outline-color',
+};
+
+/**
+ * Add the focus ring a control draws on its indicator at focus time (Core's
+ * `useIndicatorFocusRing`, used by a control whose input is visually
+ * hidden): an inline style the server render never shows, read from the
+ * focus outline tokens. The tokens are read by the indicator always (it
+ * never takes focus itself, so no state reaches the ring), and the outline
+ * properties are painted inline, which no theme rule can replace. The
+ * indicator is the control's own `-indicator` target, or for a part of
+ * another component (a radio list's item), that component's.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {Record<string, PartRecord>} map
+ */
+function addIndicatorRings(project, map) {
+  for (const [name, info] of Object.entries(project.components)) {
+    const at = info.importPath?.split('/').pop();
+    let source;
+    try {
+      source = at
+        ? fs.readFileSync(
+            path.join(project.coreDir, 'dist', at, `${name}.js`),
+            'utf8',
+          )
+        : '';
+    } catch {
+      continue;
+    }
+    if (!source.includes('useIndicatorFocusRing')) continue;
+    /** @param {import('./_project.mjs').ComponentInfo | undefined} c */
+    const indicators = c =>
+      (c?.targets ?? [])
+        .map(t => t.className.replace(/^astryx-/, ''))
+        .filter(k => k.endsWith('-indicator'));
+    const own = indicators(info);
+    const keys = own.length
+      ? own
+      : indicators(
+          info.subComponentOf
+            ? project.components[info.subComponentOf]
+            : undefined,
+        );
+    for (const key of keys) {
+      const rec = (map[key] ??= {
+        own: {},
+        inside: {},
+        attrs: {},
+        contains: [],
+      });
+      for (const [prop, token] of Object.entries(RING_TOKENS)) {
+        rec.inside[token] = [...new Set([...(rec.inside[token] ?? []), prop])];
+        (rec.inline ??= {})[''] = {...rec.inline?.[''], [prop]: token};
+      }
+    }
+  }
+}
+
+/**
+ * Add the paint Core writes as an inline style when it sets a theme state
+ * at run time (a table row's selection wash, set by the selection plugin
+ * beside the row's `selected` state): something the server render never
+ * shows. A built module under a component's folder that writes a state's
+ * attribute (`themeDataAttributes({selected: 'selected'})`) and an inline
+ * property from a color token (`el.style.backgroundColor = …` with
+ * `colorVars['--color-accent-muted']`) paints that state with it, on each
+ * of the component's targets that lists the state.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {Record<string, PartRecord>} map
+ */
+function addInlineStatePaint(project, map) {
+  const dist = path.join(project.coreDir, 'dist');
+  /** @param {string} dir @returns {string[]} */
+  const modules = dir => {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, {withFileTypes: true});
+    } catch {
+      return [];
+    }
+    return entries.flatMap(e =>
+      e.isDirectory()
+        ? modules(path.join(dir, e.name))
+        : e.name.endsWith('.js')
+          ? [path.join(dir, e.name)]
+          : [],
+    );
+  };
+  for (const [name, info] of Object.entries(project.components)) {
+    const folder = info.importPath?.split('/').pop();
+    if (!folder || folder !== name) continue;
+    const withStates = info.targets.filter(t => t.states.length);
+    if (!withStates.length) continue;
+    for (const file of modules(path.join(dist, folder))) {
+      const source = fs.readFileSync(file, 'utf8');
+      const states = [
+        ...source.matchAll(
+          /themeDataAttributes\(\{\s*([\w-]+):\s*'\1'\s*\}\)/g,
+        ),
+      ].map(m => m[1]);
+      if (!states.length) continue;
+      const props = [
+        ...source.matchAll(/\.style\.([a-z][A-Za-z]*)\s*=(?!=)/g),
+      ].map(m => m[1].replace(/[A-Z]/g, c => `-${c.toLowerCase()}`));
+      const colorTokens = [
+        ...source.matchAll(/colorVars\[['"](--color-[\w-]+)['"]\]/g),
+      ].map(m => m[1]);
+      if (!props.length || colorTokens.length !== 1) continue;
+      for (const t of withStates) {
+        const key = t.className.replace(/^astryx-/, '');
+        const rec = map[key];
+        if (!rec) continue;
+        for (const state of states.filter(st => t.states.includes(st)))
+          for (const prop of props) {
+            (rec.inline ??= {})[state] = {
+              ...rec.inline?.[state],
+              [prop]: colorTokens[0],
+            };
+            const own = (rec.own[prop] ??= {tokens: {}, values: []});
+            own.tokens[colorTokens[0]] = [
+              ...new Set([
+                ...(own.tokens[colorTokens[0]] ?? []),
+                `${state}=${state}`,
+              ]),
+            ];
+          }
+      }
+    }
+  }
+}
+
 /**
  * Build the part data: render the catalog, then walk its markup.
  * @param {import('./_project.mjs').ThemeProject} project
@@ -238,7 +662,9 @@ async function buildPartData(project) {
     // No stylesheet: every part reads nothing.
   }
   const tokens = new Set(Object.keys(project.core.tokenDefaults ?? {}));
-  const result = walkMarkup(markup, declarations(css), tokens);
+  const result = walkMarkup(markup, declarations(css), tokens, project.target);
+  addInlineStatePaint(project, result.map);
+  addIndicatorRings(project, result.map);
   return {
     version: PART_DATA_VERSION,
     coreKey: project.coreKey,
@@ -246,6 +672,108 @@ async function buildPartData(project) {
     rendered: (markup.match(/<section data-cat=/g) ?? []).length,
     items: all.length,
   };
+}
+
+/**
+ * The value Core falls back to where its stylesheet reads a variable
+ * (`var(--astryx-card-padding, var(--spacing-4))` gives `var(--spacing-4)`),
+ * or null when it gives none.
+ * @param {any} project
+ * @param {string} name
+ * @returns {string | null}
+ */
+export function coreFallback(project, name) {
+  /** @type {string} */
+  let css;
+  try {
+    css = fs.readFileSync(
+      project.req.resolve('@astryxdesign/core/astryx.css'),
+      'utf8',
+    );
+  } catch {
+    return null;
+  }
+  const at = css.indexOf(`var(${name},`);
+  if (at < 0) return null;
+  let depth = 0;
+  const from = at + `var(${name},`.length;
+  for (let j = from; j < css.length; j++) {
+    if (css[j] === '(') depth++;
+    else if (css[j] === ')') {
+      if (depth === 0) return css.slice(from, j).trim();
+      depth--;
+    }
+  }
+  return null;
+}
+
+/** @type {Map<string, Set<string>>} */
+const calcCache = new Map();
+
+/**
+ * The variables Core's stylesheet reads inside a calc() (a composer's
+ * padding in its send button's radius): only one length works there.
+ * Empty with no stylesheet.
+ * @param {any} project
+ * @returns {Set<string>}
+ */
+export function calcVars(project) {
+  /** @type {string} */
+  let file;
+  try {
+    file = project.req.resolve('@astryxdesign/core/astryx.css');
+  } catch {
+    return new Set();
+  }
+  const cached = calcCache.get(file);
+  if (cached) return cached;
+  const css = fs.readFileSync(file, 'utf8');
+  /** @type {Set<string>} */
+  const out = new Set();
+  for (let i = css.indexOf('calc('); i >= 0; i = css.indexOf('calc(', i + 5)) {
+    let depth = 0;
+    let j = i + 4;
+    for (; j < css.length; j++) {
+      if (css[j] === '(') depth++;
+      else if (css[j] === ')' && --depth === 0) break;
+    }
+    for (const m of css.slice(i, j).matchAll(/var\((--[a-z0-9_-]+)/gi))
+      out.add(m[1].toLowerCase());
+  }
+  calcCache.set(file, out);
+  return out;
+}
+
+/** @type {Map<string, Set<string>>} */
+const multipliedCache = new Map();
+
+/**
+ * The tokens Core's stylesheet multiplies by another value inside calc()
+ * (`var(--text-body-size) * var(--text-body-leading)`): a unit there makes
+ * the declaration invalid. Empty with no stylesheet.
+ * @param {any} project
+ * @returns {Set<string>}
+ */
+export function multipliedTokens(project) {
+  /** @type {string} */
+  let file;
+  try {
+    file = project.req.resolve('@astryxdesign/core/astryx.css');
+  } catch {
+    return new Set();
+  }
+  const cached = multipliedCache.get(file);
+  if (cached) return cached;
+  const css = fs.readFileSync(file, 'utf8');
+  /** @type {Set<string>} */
+  const out = new Set();
+  // Each side of a `*` on its own, so `a * b * c` names all three.
+  for (const m of css.matchAll(/var\((--[a-z0-9-]+)\)(?=\s*\*)/gi))
+    out.add(m[1].toLowerCase());
+  for (const m of css.matchAll(/\*\s*var\((--[a-z0-9-]+)\)/gi))
+    out.add(m[1].toLowerCase());
+  multipliedCache.set(file, out);
+  return out;
 }
 
 /**
@@ -280,22 +808,6 @@ export function declarations(css) {
   return decls;
 }
 
-const VOID = new Set([
-  'area',
-  'base',
-  'br',
-  'col',
-  'embed',
-  'hr',
-  'img',
-  'input',
-  'link',
-  'meta',
-  'source',
-  'track',
-  'wbr',
-]);
-
 /** @param {string} v */
 const refs = v => [...v.matchAll(/var\((--[a-zA-Z0-9_-]+)/g)].map(m => m[1]);
 
@@ -323,21 +835,39 @@ function expand(v, env, tokens, seen = new Set(), depth = 0) {
 }
 
 /**
+ * A value with the private variables set on the element or its ancestors
+ * put in (a variable with no fallback only), so it reads public tokens and
+ * literal values alone where it can.
+ * @param {string} v
+ * @param {Record<string, string>} env
+ * @param {Set<string>} tokens
+ * @param {number} [depth]
+ * @returns {string}
+ */
+function resolvePrivate(v, env, tokens, depth = 0) {
+  if (depth > 8) return v;
+  const out = v.replace(/var\((--[a-zA-Z0-9_-]+)\)/g, (m, name) =>
+    !tokens.has(name) && env[name] != null ? env[name] : m,
+  );
+  return out === v ? v : resolvePrivate(out, env, tokens, depth + 1);
+}
+
+/**
  * Walk server-rendered markup: for each element, its classes' declarations
  * become what its part reads; text records the color pair it sits on.
  * @param {string} html
  * @param {ReturnType<typeof declarations>} decls
  * @param {Set<string>} tokens
+ * @param {Map<string, {props: string[], states: string[]}>} [targets] the theming targets by key: the visual props and runtime states each declares are the data attributes read as its conditions
  * @returns {{map: Record<string, PartRecord>, pairs: TextPair[]}}
  */
-export function walkMarkup(html, decls, tokens) {
-  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>}>} */
+export function walkMarkup(html, decls, tokens, targets = new Map()) {
+  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, tags: Set<string>, innerCorners: Set<string>}>} */
   const map = {};
   /** @type {Array<{env: Record<string, string>, target: string | null, fg: PaintSide | null, bg: PaintSide | null}>} */
   const stack = [{env: {}, target: null, fg: null, bg: null}];
   /** @type {Map<string, TextPair>} */
   const pairs = new Map();
-  let inSample = false;
   for (const m of html.matchAll(
     /([^<]+)|<(\/?)([a-zA-Z][a-zA-Z0-9-]*)([^>]*?)(\/?)>/g,
   )) {
@@ -356,24 +886,42 @@ export function walkMarkup(html, decls, tokens) {
       }
       continue;
     }
-    if (!close && tag === 'section')
-      inSample = /data-cat="sample-page"/.test(attrs);
     if (close) {
       if (stack.length > 1) stack.pop();
       continue;
     }
-    void inSample;
     const cls = (/class="([^"]*)"/.exec(attrs)?.[1] ?? '')
       .split(/\s+/)
       .filter(Boolean);
-    const dataAttrs = Object.fromEntries(
-      [
-        ...attrs.matchAll(
-          /data-(variant|status|size|selected|state|elevation|tone|color|level|weight)="([^"]*)"/g,
-        ),
-      ].map(x => [x[1], x[2]]),
-    );
     const parent = stack[stack.length - 1];
+    // The theming targets the element carries (else the one it sits in).
+    const keys = cls
+      .filter(c => c.startsWith('astryx-') && !c.startsWith('astryx-theme'))
+      .map(c => c.slice(7));
+    const declaredBy = (keys.length ? keys : [parent.target])
+      .map(k => (k ? targets.get(k) : undefined))
+      .filter(t => t != null);
+    const props = new Set(declaredBy.flatMap(t => t.props));
+    const states = new Set(declaredBy.flatMap(t => t.states));
+    // A data attribute the element's target declares (a visual prop or a
+    // runtime state, written by `themeProps` as `data-<name>`) is a
+    // condition of what the part reads.
+    const dataAttrs = Object.fromEntries(
+      [...attrs.matchAll(/\bdata-([a-z][\w-]*)="([^"]*)"/g)]
+        .filter(x => props.has(x[1]) || states.has(x[1]))
+        .map(x => [x[1], x[2]]),
+    );
+    // The place another component puts a part in (the current page's
+    // button in a pagination, a pressed toggle) is a condition of what that
+    // component styles it with there, never the part's look at rest. A part
+    // that marks the place with a runtime state of its own (a selected tab)
+    // is conditioned by that state already.
+    const ownState = Object.keys(dataAttrs).some(k => states.has(k));
+    const context = ownState
+      ? []
+      : [...attrs.matchAll(/\b(aria-(?:current|pressed))="([^"]*)"/g)]
+          .filter(x => x[2] !== 'false')
+          .map(x => `${x[1]}=${x[2]}`);
     const env = {...parent.env};
     const own = cls.flatMap(c => decls.get(c) ?? []);
     for (const d of own)
@@ -383,25 +931,39 @@ export function walkMarkup(html, decls, tokens) {
     );
     const target = named[0]?.slice(7) ?? parent.target;
     const ownsTarget = named.length > 0;
-    if (target) {
-      const T = (map[target] ??= {
+    // An element can carry several targets (a shell's side nav region is a
+    // layout panel too): its declarations are each one's own.
+    for (const t of ownsTarget ? named.map(c => c.slice(7)) : [target]) {
+      if (!t) continue;
+      const T = (map[t] ??= {
         own: {},
+        at: {},
         inside: {},
         attrs: {},
         contains: new Set(),
+        tags: new Set(),
+        innerCorners: new Set(),
       });
       if (ownsTarget)
         for (const [k, v] of Object.entries(dataAttrs))
           (T.attrs[k] ??= new Set()).add(v);
-      const cond0 = Object.entries(dataAttrs)
-        .map(([k, v]) => `${k}=${v}`)
-        .join(',');
+      const cond0 = [
+        ...Object.entries(dataAttrs).map(([k, v]) => `${k}=${v}`),
+        ...context,
+      ].join(',');
       for (const d of own) {
         if (d.prop.startsWith('--')) continue;
+        // (An inherited background paints nothing of its own: it reads no
+        // token, and what shows is its parent's.)
         const toks = expand(d.value, env, tokens);
         const cond = [cond0, d.cond].filter(Boolean).join(' ');
         if (ownsTarget) {
           const P = (T.own[d.prop] ??= {tokens: {}, values: new Set()});
+          (T.at[d.prop] ??= {})[cond || 'always'] ??= resolvePrivate(
+            d.value,
+            env,
+            tokens,
+          );
           P.values.add(
             d.value.length > 80 ? `${d.value.slice(0, 80)}...` : d.value,
           );
@@ -423,14 +985,25 @@ export function walkMarkup(html, decls, tokens) {
       }
       if (d.prop === 'background-color') {
         const t = [...expand(d.value, env, tokens)];
-        if (t.length || !/transparent/.test(d.value))
+        if (t.length || !/transparent|^\s*inherit\s*$/i.test(d.value))
           bg = {target, tokens: t, raw: t.length ? null : d.value};
       }
     }
-    if (ownsTarget && target)
+    for (const t of ownsTarget ? named.map(c => c.slice(7)) : [])
       for (const anc of stack)
-        if (anc.target && anc.target !== target)
-          map[anc.target].contains.add(target);
+        if (anc.target && anc.target !== t) map[anc.target].contains.add(t);
+    if (ownsTarget) {
+      for (const t of named) map[t.slice(7)].tags.add(tag.toLowerCase());
+      // Corners Core draws on a part by its place among its siblings (a
+      // button group's first and last buttons): the radius token they read
+      // is the enclosing part's corners.
+      if (parent.target && !named.includes(`astryx-${parent.target}`))
+        for (const d of own)
+          if (/^border-(start|end)-(start|end)-radius$/.test(d.prop))
+            for (const tok of expand(d.value, env, tokens))
+              if (/^--radius-/.test(tok))
+                map[parent.target].innerCorners.add(tok);
+    }
     if (!selfClose && !VOID.has(tag.toLowerCase()))
       stack.push({env, target, fg, bg});
   }
@@ -452,6 +1025,7 @@ export function walkMarkup(html, decls, tokens) {
           },
         ]),
       ),
+      at: v.at,
       inside: Object.fromEntries(
         Object.entries(v.inside).map(([k, s]) => [k, [...s]]),
       ),
@@ -459,6 +1033,8 @@ export function walkMarkup(html, decls, tokens) {
         Object.entries(v.attrs).map(([k, s]) => [k, [...s]]),
       ),
       contains: [...v.contains],
+      tags: [...v.tags],
+      innerCorners: [...v.innerCorners],
     };
   }
   return {map: out, pairs: [...pairs.values()]};

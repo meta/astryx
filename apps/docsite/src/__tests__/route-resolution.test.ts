@@ -127,7 +127,7 @@ describe('route resolution', () => {
     );
   });
 
-  it('shows Calendars as its own guide page, listed right after Internationalization', () => {
+  it('shows Calendars as its own guide page, under Internationalization in the sidebar', () => {
     const calendars = pageBySlug.get('calendars');
     expect(calendars?.category).toBe('guide');
     expect(calendars?.sections.map(section => section.id)).toContain(
@@ -140,13 +140,8 @@ describe('route resolution', () => {
     expect(docRedirects['internationalization-i18n-calendars']).toMatch(
       /^\/docs\/internationalization#/,
     );
-    // The sidebar lists guides by title (DocsShell).
-    const byTitle = docTopics
-      .filter(d => d.category === 'guide' && d.topic !== 'getting-started')
-      .sort((a, b) => a.title.localeCompare(b.title))
-      .map(d => d.topic);
-    expect(byTitle.indexOf('calendars')).toBe(
-      byTitle.indexOf('internationalization') + 1,
+    expect(docTopics.find(d => d.topic === 'calendars')?.parent).toBe(
+      'internationalization',
     );
   });
 

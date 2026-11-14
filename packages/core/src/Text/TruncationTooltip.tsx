@@ -28,6 +28,7 @@ import type {LayerPlacement} from '../Layer';
 import {createModuleLoader} from '../utils/moduleLoader';
 import type {Tooltip as TooltipType} from '../Tooltip/Tooltip';
 import {useTapRecognizer} from '../Layer/useTouchTrigger';
+import {isElement} from '../utils/nodeType';
 import {
   TooltipPresentInterestContext,
   type TooltipPresentInterestState,
@@ -140,7 +141,21 @@ export function useTruncationTooltipInterest(
     },
     [isEnabled, tapRecognizer, want, forget],
   );
-  const onFocus = useCallback(() => want('focus'), [want]);
+  const onFocus = useCallback(
+    (event: FocusEvent<HTMLElement>) => {
+      const target = event.target;
+      if (
+        isElement(target) &&
+        target.matches(':focus-visible') &&
+        // Chrome on Android focuses a tapped child before the tap's click.
+        // Skip that focus, so the click still opens the tooltip.
+        !tapRecognizer.isTouchPressCurrent()
+      ) {
+        want('focus');
+      }
+    },
+    [want, tapRecognizer],
+  );
   const onBlur = useCallback(() => forget('focus'), [forget]);
   return {
     isWanted,

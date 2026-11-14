@@ -1,7 +1,0 @@
----
-'@astryxdesign/cli': patch
----
-
-[experimental] `astryx experimental theme`: fixes from a fourth theming round. `preview add "<description>"` adds an app page when the description names one (an issue tracker, a board, a dashboard, an app screenshot) instead of a hero, takes the side hero for a left-aligned or split hero, says that no page has a top nav of its own, and always says why it picked a page. A base `preview add` says which pages were there already and are written again (`refreshed`). `how` gives each token a value of its own type (`--color-border "<color>"`, `--border-width 1px`; only the `border` property takes a whole border), keeps the fill for a named tint ("light blue tint with blue text"), and no longer reads "border color" as a fill. `undo <theme> <thing>` names the setting it removed (`removed`) instead of printing it as the value in effect. A light-only or dark-only theme lists only its own mode's shades and notes. `show` lists corners or spacing set on a part or group, with what its parts get beside the whole-theme value (`partValues`). `neutral` names the base theme's page background and the command for a white page. `type` says what it still sets when `headings` sets weight or tracking; `type` and `text-size` keep each other's part of the scale in any order. A token no part reads says which tokens are built from it instead of claiming it changes nothing. An installed font says it is installed. A color's text switching between white and near-black says why.
-
-@josephfarina

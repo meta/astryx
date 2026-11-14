@@ -399,6 +399,12 @@ export function useFocusRegionContainment(
       }
 
       if (event.key === 'Tab') {
+        if (event.ctrlKey || event.metaKey) {
+          // Ctrl+Tab and Meta+Tab switch tabs or apps. They do not move
+          // focus, so the region leaves them to the browser and the page.
+          // Alt+Tab stays: Safari moves focus to each item on Option+Tab.
+          return;
+        }
         if (event.defaultPrevented) {
           // A control that handles Tab itself (an editor that indents) keeps
           // focus where it is.

@@ -132,5 +132,13 @@ export interface AstryxConfig {
      * @experimental May change or be removed in a patch release.
      */
     iconSet?: string | string[];
+    /**
+     * Experimental icon variant: the look every icon of the project draws,
+     * by the name the sets declare (`"filled"`). Each set in `iconSet` that
+     * declares a variant of that name draws it; a set that does not draws
+     * its default look. The main set must declare it. Needs `iconSet`.
+     * @experimental May change or be removed in a patch release.
+     */
+    iconVariant?: string;
   };
 }

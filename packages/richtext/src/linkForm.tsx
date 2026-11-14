@@ -7,9 +7,8 @@
  * @input The address being entered, a refused-address message, and the
  *   caller's apply, remove, and cancel handlers
  * @output Exports LinkForm, the link URL form, and REMOVE_LINK_GLYPH
- * @position Internal to RichText. RichTextEditorToolbar's link popover and
- *   RichTextEditorLinkPopoverPlugin's Edit view both render this one form, so
- *   adding and editing a link look and work the same in both.
+ * @position Internal to RichText. RichTextEditorToolbar's link popover
+ *   renders this form, so adding and editing a link share one form.
  */
 
 import {useRef} from 'react';
