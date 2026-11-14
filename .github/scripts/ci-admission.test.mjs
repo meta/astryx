@@ -40,6 +40,7 @@ const preloaded = {
 };
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
 const STEP = 'Wait for room under the CI ceiling';
+const {WIDE_STEP, legWidth} = preloaded.count;
 const CEILING = Number(/const CI_CEILING = (\d+);/.exec(counter)[1]);
 const needsOf = job => [job.needs ?? []].flat();
 const stepOf = job => job.steps.find(step => step.name === STEP);
@@ -310,6 +311,7 @@ describe('where runs wait', () => {
     expect(admission.steps.filter(step => step !== wait)).toEqual([
       expect.objectContaining({name: 'Stop when CI is full'}),
       expect.objectContaining({uses: 'actions/checkout@v7'}),
+      expect.objectContaining({name: WIDE_STEP}),
       expect.objectContaining({
         name: 'Stop when CI is full at the longest wait',
       }),
@@ -585,8 +587,16 @@ describe('peaks', () => {
     // matrices add, never fewer.
     expect(startedAt('full') - startedAt('tight')).toBe(widen);
     expect(peak + widen).toBeGreaterThanOrEqual(startedAt('full'));
-    // Another run counts a just-admitted pull-request run at its full width.
-    expect(estimateOf('ci.yml')).toContain(`: ${peak + widen}),`);
+    // Another run counts a just-admitted pull-request run at the width its
+    // admission picked, read from the step it runs only at full width, and at
+    // full width while that is unknown.
+    expect(estimateOf('ci.yml')).toContain(
+      `legWidth(jobs) === 'tight' ? ${peak} : ${peak + widen}),`,
+    );
+    const marker = ci.jobs.admission.steps.find(
+      step => step.name === WIDE_STEP,
+    );
+    expect(marker.if).toBe("steps.rest.outputs.wide == 'true'");
   });
 
   it('adds the jobs each opt-in label brings to a pull request', () => {
@@ -1938,6 +1948,29 @@ describe('ci admission', () => {
         maxLooks: 2,
       });
       expect(atLimit.outputs).toMatchObject({fits: 'true', wide: 'false'});
+    });
+
+    it('counts another just-admitted run at the width its admission picked', async () => {
+      // A run admitted 30 s ago with 2 jobs so far, and its full-width step
+      // skipped (tight), run (full) or not reached yet (undecided).
+      const justAdmitted = marker => {
+        const run = admittedRun(60, 2, {admittedMinutesAgo: 0.5});
+        if (marker != null)
+          run.jobs.push({
+            status: 'completed',
+            steps: [{name: WIDE_STEP, status: 'completed', conclusion: marker}],
+          });
+        return run;
+      };
+      // 18 small + 20 + 52 = 90 fits; at 29, 99 does not.
+      const fitsBeside = async marker =>
+        (await admit({active: [justAdmitted(marker)], peak: 52})).looks === 1;
+      expect(await fitsBeside('skipped')).toBe(true);
+      expect(await fitsBeside('success')).toBe(false);
+      expect(await fitsBeside(undefined)).toBe(false);
+      expect(legWidth(justAdmitted('skipped').jobs)).toBe('tight');
+      expect(legWidth(justAdmitted('success').jobs)).toBe('full');
+      expect(legWidth(justAdmitted().jobs)).toBe(null);
     });
 
     it('leaves a run with no widening matrix as before', async () => {
