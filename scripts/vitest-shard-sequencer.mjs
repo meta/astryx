@@ -3,9 +3,10 @@
 /**
  * @file Which Node test files one `--shard <i>/<n>` leg runs.
  * @input The test specifications Vitest collected; `--shard`; recorded
- *   seconds per Node test file (scripts/vitest-node-durations.json).
+ *   seconds per Node test file (scripts/vitest-node-durations.json, or the
+ *   record `VITEST_DURATIONS_FILE` names, such as the minimum-Node legs').
  * @output The specifications this leg runs. With `record <log>…`, a fresh
- *   durations file from Node leg logs.
+ *   durations file (the same record) from Node leg logs.
  * @position `sequence.sequencer` in vitest.config.ts, so every `--shard` run,
  *   the Main workflow's legs and pull requests' alike, splits the `node` project
  *   this way. Vitest's own split deals files out by a hash of their path, by

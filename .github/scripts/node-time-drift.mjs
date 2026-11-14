@@ -19,8 +19,10 @@
  *
  * @input --times <file> (the shard watchdog's per-file seconds),
  *   --changed <base> (the merge commit's first parent)
- * @output exit 1 and one error line per drifted file; exit 0 otherwise
- * @position .github/scripts — run by ci.yml's Node legs after their tests
+ * @output exit 1 and one error line per drifted file; exit 0 otherwise.
+ *   `drifted` also judges every file, with a margin, for a scheduled run.
+ * @position .github/scripts — run by ci.yml's Node legs after their tests;
+ *   cli-minimum-node.mjs imports `drifted` for the minimum-Node legs
  */
 
 import {execFileSync} from 'node:child_process';

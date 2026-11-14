@@ -31,8 +31,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          # The script and every module it imports.
           sparse-checkout: |
             .github/scripts/cli-minimum-node.mjs
+            .github/scripts/node-time-drift.mjs
             packages/cli/package.json
           sparse-checkout-cone-mode: false
           persist-credentials: false
@@ -43,8 +45,9 @@ jobs:
           echo "The CLI declares Node $node as its minimum."
           echo "node=$node" >> "$GITHUB_OUTPUT"
 
-  # The CLI's tests, in four legs split by the Node legs' recorded times
-  # (scripts/vitest-shard-sequencer.mjs): in one job they outgrew its time
+  # The CLI's tests, in four legs split by this Node's own recorded times
+  # (scripts/vitest-node-durations.min-node.json, read by
+  # scripts/vitest-shard-sequencer.mjs): in one job they outgrew its time
   # limit on the minimum Node, where every gather is fresh.
   cli-tests:
     needs: version

@@ -91,6 +91,43 @@ describe('the workflow', () => {
     expect(workflow.permissions).toEqual({});
   });
 
+  it('checks out every module the version step and the report import, and the version step runs in that tree alone', () => {
+    const script = fs.readFileSync(
+      path.join(root, '.github/scripts/cli-minimum-node.mjs'),
+      'utf8',
+    );
+    const imports = [...script.matchAll(/from '\.\/([^']+)'/g)].map(
+      ([, file]) => `.github/scripts/${file}`,
+    );
+    expect(imports).toContain('.github/scripts/node-time-drift.mjs');
+    for (const job of ['version', 'report']) {
+      const listed = jobs[job].steps[0].with['sparse-checkout'];
+      for (const file of ['.github/scripts/cli-minimum-node.mjs', ...imports])
+        expect(listed, `${job}: ${file}`).toContain(file);
+    }
+    // The version job's checkout holds only what it lists: run its step there.
+    const tree = fs.mkdtempSync(path.join(os.tmpdir(), 'version-tree-'));
+    try {
+      const listed = jobs.version.steps[0].with['sparse-checkout']
+        .split('\n')
+        .map(line => line.trim())
+        .filter(Boolean);
+      for (const file of listed) {
+        fs.mkdirSync(path.dirname(path.join(tree, file)), {recursive: true});
+        fs.copyFileSync(path.join(root, file), path.join(tree, file));
+      }
+      const read = jobs.version.steps.find(step => step.id === 'minimum');
+      const line = /node=\$\((node [^)]+)\)/.exec(read.run)[1].split(' ');
+      const version = execFileSync(line[0], line.slice(1), {
+        cwd: tree,
+        encoding: 'utf8',
+      }).trim();
+      expect(version).toMatch(/^\d+\.\d+\.\d+$/);
+    } finally {
+      fs.rmSync(tree, {recursive: true, force: true});
+    }
+  });
+
   it('reads the version from packages/cli, not .nvmrc', () => {
     const read = jobs.version.steps.find(step => step.id === 'minimum');
     expect(read.run).toContain(
