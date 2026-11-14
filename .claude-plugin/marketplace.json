@@ -1,17 +1,33 @@
 {
   "name": "astryx",
-  "description": "The Astryx agent skill for Claude Code",
+  "description": "The Astryx agent skill",
   "owner": {
-    "name": "Astryx"
+    "name": "Astryx",
+    "url": "https://astryx.atmeta.com"
   },
   "plugins": [
     {
       "name": "astryx",
       "displayName": "Astryx",
       "source": "./plugins/astryx",
-      "description": "Tells coding agents that Astryx is available through the astryx command, when to use it, and where to start.",
+      "description": "Teaches coding agents that Astryx is available through the astryx command, when to use it, and where to start. Use when building or changing UI, choosing components, layout, styling or theming, or working with @astryxdesign packages.",
+      "author": {
+        "name": "Astryx",
+        "url": "https://astryx.atmeta.com"
+      },
+      "homepage": "https://astryx.atmeta.com",
+      "repository": "https://github.com/meta/astryx",
+      "license": "MIT",
       "category": "development",
-      "keywords": ["astryx", "design-system", "ui"]
+      "keywords": [
+        "astryx",
+        "design-system",
+        "ui",
+        "components",
+        "cli",
+        "stylex",
+        "coding-agents"
+      ]
     }
   ]
 }
