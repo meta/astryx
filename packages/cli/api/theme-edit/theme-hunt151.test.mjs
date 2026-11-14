@@ -101,7 +101,7 @@ describe('readers', () => {
   it("part words come from the part table's own words", () => {
     const w = partWords();
     expect(w.get('sidebar')).toBe('side-nav');
-    expect(w.get('checkbox')).toBe('checks');
+    expect(w.get('checkbox')).toBe('checkbox-indicator');
     expect(w.get('toggle')).toBe('switch');
   });
 });

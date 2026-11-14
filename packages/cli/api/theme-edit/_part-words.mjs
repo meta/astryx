@@ -86,7 +86,9 @@ export const OVERRIDES = [
     /\b(inputs?|text ?box(es)?|text ?fields?|form fields?|fields?)\b/,
     {on: 'inputs'},
   ],
-  [/\b(checkbox(es)?|check ?marks?)\b/, {on: 'checks'}],
+  // A checkbox is the box itself; the checks group (checkbox and radio)
+  // goes by its own name.
+  [/\b(checkbox(es)?|check ?marks?)\b/, {on: 'checkbox-indicator'}],
   // "switch off", "switch the buttons to" are the verb, not the part.
   [
     /\b(toggles?|switch(?:e?s)?(?! (off|on|to|the|out|it|them|over|back|from)\b))\b/,

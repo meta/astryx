@@ -32,7 +32,7 @@ import {SAMPLE_PAGE, elementNames, pageSource} from './_catalog.mjs';
 import {removeOnStop} from '../../foundation/fs/stop-cleanup.mjs';
 
 /** Bump when the shape of the cached part data changes. */
-const PART_DATA_VERSION = 14;
+const PART_DATA_VERSION = 15;
 
 /**
  * Flags that change what a component does or whether it shows, not how it
@@ -68,7 +68,8 @@ const LIFECYCLE_FLAGS = new Set([
 
 /**
  * A sample value for a required prop the doc declares, from its type: the
- * component's name for text, false for a flag, the first value of a union.
+ * component's name for text, false for a flag, the first value of a union,
+ * else null where the type allows it.
  * Undefined for a type with no plain sample, such as a function.
  * @param {string} name
  * @param {string} type
@@ -88,6 +89,9 @@ function sampleOf(name, type) {
   const words = literals(t);
   if (words.length) return words[0];
   if (/^\d+(\s*\|\s*\d+)*$/.test(t)) return Number(t.split('|')[0]);
+  // A value the type lets be null (a file input's chosen file): none
+  // chosen, when nothing plainer stands for it.
+  if (/(^|\|)\s*null\s*(\||$)/.test(type)) return null;
   return undefined;
 }
 

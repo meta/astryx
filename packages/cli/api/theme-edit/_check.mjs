@@ -5911,19 +5911,46 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
     // A text property on a part whose text is drawn by elements inside it
     // that set that property themselves from a token (a top nav heading's
     // title span) never reaches that text: the token, on the part, does.
+    // So does a part whose text is all in parts inside it that each set
+    // the property themselves (a dialog's title block: its title and
+    // subtitle).
     if (
       !unset &&
       !s.state &&
-      ['font-size', 'font-weight', 'line-height', 'letter-spacing'].includes(
-        prop,
-      )
+      [
+        'font-size',
+        'font-weight',
+        'line-height',
+        'letter-spacing',
+        'color',
+      ].includes(prop)
     ) {
       const inner = partsOf(ctx, s)
         .map(t => {
           const rec = ctx.C.MAP[t];
-          const toks = Object.entries(rec?.inside ?? {})
-            .filter(([, props]) => props.includes(prop))
-            .map(([tok]) => tok);
+          // (A color only through the parts inside it: elements inside a
+          // part that read a color token are answered with the tokens on
+          // the part by how.)
+          let toks =
+            prop === 'color'
+              ? []
+              : Object.entries(rec?.inside ?? {})
+                  .filter(([, props]) => props.includes(prop))
+                  .map(([tok]) => tok);
+          const held = (rec?.contains ?? []).map(x => ctx.C.MAP[x]);
+          if (
+            !toks.length &&
+            !Object.keys(rec?.inside ?? {}).length &&
+            held.length &&
+            held.every(x => x?.own?.[prop])
+          )
+            toks = [
+              ...new Set(
+                held.flatMap(x => Object.keys(x.own[prop].tokens ?? {})),
+              ),
+            ]
+              .filter(tok => !/disabled|placeholder|accent/.test(tok))
+              .slice(0, 4);
           return /** @type {const} */ ([
             t,
             rec && !rec.own?.[prop] ? toks : [],

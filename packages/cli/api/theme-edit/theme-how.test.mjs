@@ -246,8 +246,8 @@ const QUESTIONS = [
   [
     'checkbox checked color pink',
     {
-      parts: ['checks'],
-      top: /--on checks --state checked$/,
+      parts: ['checkbox-indicator'],
+      top: /--on checkbox-indicator --state checked --only$/,
       adds: /checkbox-indicator\.checked\.backgroundColor=#db2777/,
     },
   ],
@@ -2307,7 +2307,7 @@ const QUESTIONS_G = [
   ],
   [
     'checkbox accent-color #db2777',
-    {top: /^set q accent-color '#db2777' --on checks$/},
+    {top: /^set q accent-color '#db2777' --on checkbox-indicator --only$/},
   ],
   [
     'badges font-variant-numeric: tabular-nums',
@@ -2728,7 +2728,7 @@ const QUESTIONS_H = [
   ],
   [
     'unchecked checkboxes: thicker border',
-    {top: null, text: /checks has no unchecked state/},
+    {top: null, text: /checkbox-indicator has no unchecked state/},
   ],
   [
     'heading color red',
@@ -2882,7 +2882,9 @@ const QUESTIONS_I = [
   // a layer's opacity
   [
     'shadow opacity 0.2 on cards',
-    {top: /^set q box-shadow '0 1px 3px rgb\(0 0 0 \/ 0\.2\)' --on card$/},
+    // The shadow's colors at that alpha, in every layer (a card that shows
+    // none takes the shared shadow a card shadow ask gives).
+    {top: /^set q box-shadow '[^']*(?:\/ 20%\)|, 0\.2\))[^']*' --on card$/},
   ],
   [
     'card background opacity 0.5',
@@ -3060,7 +3062,7 @@ describe('how answers final-4 questions', () => {
       [
         'shadow opacity 0.2 on cards',
         [
-          /card[^{]*\{[^}]*box-shadow:\s*var\(--_card-ring,0 0 transparent\), var\(--_card-elevation,0 0 transparent\), 0 1px 3px rgb\(0 0 0 \/ 0\.2\)/,
+          /card[^{]*\{[^}]*box-shadow:\s*var\(--_card-ring,0 0 transparent\), var\(--_card-elevation,0 0 transparent\), [^;}]*(?:\/ 20%\)|, 0\.2\))/,
         ],
       ],
       [
@@ -3159,7 +3161,7 @@ const QUESTIONS_J = [
   [
     'after I check a checkbox it should be green',
     {
-      top: /^set q background-color '#16a34a' --on checks --state checked$/,
+      top: /^set q background-color '#16a34a' --on checkbox-indicator --state checked --only$/,
     },
   ],
   ['once a tab is picked make it bold', {top: null}],
@@ -3655,7 +3657,7 @@ const QUESTIONS_P = [
   ['dropdown shadow', /--on dropdown-menu$/],
   [
     'checkboxes green',
-    /^set q background-color '#16a34a' --on checks --state checked$/,
+    /^set q background-color '#16a34a' --on checkbox-indicator --state checked --only$/,
   ],
   ['is my theme valid', null, /show builds q/],
 ];
