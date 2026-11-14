@@ -1300,6 +1300,43 @@ describe('render(): every write stays inside the current folder', () => {
   });
 });
 
+describe('render(): imports with a query, as Vite gives them', () => {
+  it('gives ?raw the file text, ?inline a stylesheet text, ?url an image address, and gives the files back', async () => {
+    put('queries/notes.css', '.note { color: teal; }\n');
+    put('queries/dot.png', PNG);
+    put('queries/data.json', '{"a": 1}\n');
+    put(
+      'queries/page.tsx',
+      "import sheet from './notes.css?inline';\nimport text from './data.json?raw';\nimport dot from './dot.png?url';\nexport default function Page() {\n  return <main><pre>{sheet}</pre><pre>{text}</pre><img src={dot} alt=\"\" /></main>;\n}\n",
+    );
+    const result = /** @type {any} */ (await render('queries/page.tsx', {cwd: dir}));
+    const html = fs.readFileSync(path.join(dir, 'queries/page.html'), 'utf8');
+    expect(html).toContain('.note { color: teal; }');
+    expect(html).toContain('{&quot;a&quot;: 1}');
+    expect(html).toContain('src="data:image/png;base64,');
+    // A stylesheet imported with ?inline is text, not a sheet of the page.
+    expect(result.data.stylesheets).not.toContain('notes.css');
+    expect(result.data.files.sort()).toEqual(['data.json', 'dot.png', 'notes.css', 'page.tsx']);
+    const back = /** @type {any} */ (await render('queries/page.html', {cwd: dir, reverse: true, out: 'queries-back/page.tsx'}));
+    expect(back.data.exact).toBe(true);
+  }, 60_000);
+
+  it('refuses a query only a bundler plugin answers, naming it, instead of failing inside React', async () => {
+    put('queries/logo.svg', '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8"/></svg>\n');
+    put('queries/svgr.tsx', "import Logo from './logo.svg?react';\nexport default function Page() {\n  return <Logo />;\n}\n");
+    /** @type {any} */
+    let refused;
+    try {
+      await render('queries/svgr.tsx', {cwd: dir});
+    } catch (e) {
+      refused = e;
+    }
+    expect(refused?.code).toBe('ERR_RENDER_FAILED');
+    expect(refused.message).toContain('./logo.svg?react');
+    expect(refused.message).toContain('bundler plugin');
+  }, 60_000);
+});
+
 describe('render --reverse: a received file may carry only what a render embeds', () => {
   /** @param {string} name @param {{path: string, text: string}[]} files */
   const crafted = async (name, files) => {

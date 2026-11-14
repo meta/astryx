@@ -413,6 +413,36 @@ function pagePlugin(filename) {
         // (`@/styles/site.css`) resolves the way modules do.
         const bare =
           isAliased(raw) && (/\.(css|scss|sass|less|json)$/i.test(raw) || isAssetPath(raw)) ? resolveAlias(raw) : raw;
+        const query = spec.includes('?') ? spec.slice(spec.indexOf('?') + 1) : '';
+        const target = isAliased(raw) ? resolveAlias(raw) : raw;
+        if (query && (target.startsWith('.') || path.isAbsolute(target))) {
+          // A query asks for what Vite gives by itself: `?raw` the file's text,
+          // `?inline` a stylesheet's text (not injected) or an asset's data,
+          // `?url` an asset's address. Any other asks a bundler plugin.
+          const file = path.resolve(dir, target);
+          const local = p.node.specifiers.find((/** @type {any} */ s) => s.type === 'ImportDefaultSpecifier');
+          if (query === 'raw' || (query === 'inline' && /\.css$/i.test(target))) {
+            if (!fs.existsSync(file)) {
+              const err = new Error(`${path.basename(filename)} imports ${spec}, which does not exist.`);
+              /** @type {any} */ (err).renderCode = 'ERR_FILE_NOT_FOUND';
+              throw err;
+            }
+            if (!localFiles.includes(file)) localFiles.push(file);
+            if (local) {
+              p.replaceWith(t.variableDeclaration('const', [t.variableDeclarator(t.identifier(local.local.name), t.stringLiteral(fs.readFileSync(file, 'utf8')))]));
+            } else {
+              p.remove();
+            }
+            return;
+          }
+          if (!((query === 'url' || query === 'inline') && isAssetPath(target))) {
+            const err = new Error(
+              `${path.basename(filename)} imports ${spec}, which a bundler plugin makes and a render cannot: a render loads \`?raw\` imports, images, fonts and media with \`?url\` or \`?inline\`, and stylesheets with \`?inline\`, as Vite does by itself. Import the file without \`?${query}\`, as its address or its text.`,
+            );
+            /** @type {any} */ (err).renderCode = 'ERR_RENDER_FAILED';
+            throw err;
+          }
+        }
         if (!bare.startsWith('.') && !path.isAbsolute(bare) && !isAliased(bare)) {
           packages.add(
             bare.startsWith('@')
