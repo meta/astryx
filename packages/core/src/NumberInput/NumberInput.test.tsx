@@ -714,6 +714,40 @@ describe('NumberInput', () => {
       expect(onChange).not.toHaveBeenCalled();
     });
 
+    it('keeps a vi-VN draft with a typed decimal as typed after Backspace', () => {
+      const onChange = vi.fn();
+      render(<GroupedField locale="vi-VN" value={1500} onChange={onChange} />);
+      const input = screen.getByRole('spinbutton');
+      fireEvent.focus(input);
+      fireEvent.input(input, {target: {value: '1.500.'}});
+      fireEvent.input(input, {target: {value: '1.500.5'}});
+      fireEvent.input(input, {
+        target: {value: '1.500.', selectionStart: 6, selectionEnd: 6},
+      });
+      expect(input).toHaveValue('1.500.');
+      fireEvent.input(input, {
+        target: {value: '1.500.7', selectionStart: 7, selectionEnd: 7},
+      });
+      expect(input).toHaveValue('1.500.7');
+      fireEvent.blur(input);
+      expect(onChange).not.toHaveBeenCalledWith(15007);
+    });
+
+    it('keeps an en-US draft with a typed group character as typed after Backspace', () => {
+      const onChange = vi.fn();
+      render(<GroupedField locale="en-US" value={1500} onChange={onChange} />);
+      const input = screen.getByRole('spinbutton');
+      fireEvent.focus(input);
+      fireEvent.input(input, {target: {value: '1,500,'}});
+      fireEvent.input(input, {target: {value: '1,500,5'}});
+      fireEvent.input(input, {
+        target: {value: '1,500,', selectionStart: 6, selectionEnd: 6},
+      });
+      expect(input).toHaveValue('1,500,');
+      fireEvent.blur(input);
+      expect(onChange).not.toHaveBeenCalledWith(1500);
+    });
+
     it('deletes the digit beyond a separator on Backspace', () => {
       render(<GroupedField locale="en-US" />);
       const input = screen.getByRole<HTMLInputElement>('spinbutton');
