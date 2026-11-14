@@ -23,13 +23,11 @@ import {doc as upgradeFn} from '../../../api/upgrade/upgrade.doc.mjs';
 import {NO_RESULT_SET, resultSet} from '../../../foundation/debug/index.mjs';
 
 /**
- * @param {import('commander').Command} program
- */
-/**
  * The codemod list as text: a heading that says how many codemods there are
  * and names their package when they share one, then each version with one
  * line per codemod, its name and title, and `(optional)` on a codemod that
- * runs only on request. A codemod from another package names its package.
+ * runs only on request. When codemods come from more than one package, every
+ * line names its package.
  * @param {import('../../../api/upgrade/upgrade.type.mjs').UpgradeListResponse['data']} codemods
  * @returns {import('../formatters/index.mjs').Block[]}
  */
@@ -62,6 +60,9 @@ function codemodListBlocks(codemods) {
   ];
 }
 
+/**
+ * @param {import('commander').Command} program
+ */
 export function registerUpgrade(program) {
   const cmd = defineCommand(program, upgradeCommand, {
     fn: upgradeFn,
