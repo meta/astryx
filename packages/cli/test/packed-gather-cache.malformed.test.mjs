@@ -21,6 +21,8 @@ import {
   keptTmp,
   freshTmp,
   hasModuleHooks,
+  readKept,
+  writeKept,
 } from '../test-utils/packed-gather-cache-fixture.mjs';
 
 usePackedCli();
@@ -31,7 +33,7 @@ usePackedCli();
  * @returns {string}
  */
 function kindOf(file) {
-  const key = JSON.parse(JSON.parse(fs.readFileSync(file, 'utf8')).key);
+  const key = JSON.parse(readKept(file).key);
   const [first, second] = key.slice(5);
   if (first === 'derived') return String(second);
   return typeof first === 'string' &&
@@ -242,11 +244,9 @@ describe.skipIf(process.platform !== 'linux' || !hasModuleHooks)(
         const kept = [...keptInodes(tmp).keys()];
         expect(kept.length).toBeGreaterThan(0);
         for (const file of kept) {
-          const entry = JSON.parse(
-            fs.readFileSync(path.join(dir, file), 'utf8'),
-          );
+          const entry = readKept(path.join(dir, file));
           damage(entry);
-          fs.writeFileSync(path.join(dir, file), JSON.stringify(entry));
+          writeKept(path.join(dir, file), entry);
         }
         const answers = all(tmp);
         for (const [i, ask] of ASKS.entries()) {
@@ -256,9 +256,7 @@ describe.skipIf(process.platform !== 'linux' || !hasModuleHooks)(
         // Each bad entry was stored over with a value that reads back: the
         // next runs hit, writing nothing.
         for (const file of kept) {
-          const entry = JSON.parse(
-            fs.readFileSync(path.join(dir, file), 'utf8'),
-          );
+          const entry = readKept(path.join(dir, file));
           expect(entry.value, file).not.toEqual({unexpected: true});
           expect(entry.value ?? null, file).not.toBeNull();
         }

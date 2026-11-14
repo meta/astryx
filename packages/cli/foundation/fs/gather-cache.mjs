@@ -44,7 +44,10 @@
  *   each kept entry once, so entries that read the same files (the component
  *   list, its replacements, the project's issues) check those files once. An
  *   entry built on is marked as used after the entries built on it, so
- *   eviction removes it after them.
+ *   eviction removes it after them. A gather's entry file holds two lines:
+ *   what the entry is and stands for (its format, key, version, the entries
+ *   it builds on, its states and variables), then its value. Checking an
+ *   entry, or one an entry builds on, parses only the first line.
  *
  *   The folder is `catalogs` in the user's cache folder (userCacheDir):
  *   created 0700, used only while it is a real folder owned by the user and
@@ -714,9 +717,7 @@ function confirmedEntry(file, version, confirmed, reading) {
   if (reading.has(file)) return null;
   reading.add(file);
   try {
-    const stored = JSON.parse(
-      withoutRecording(() => fs.readFileSync(file, 'utf-8')),
-    );
+    const stored = readEntry(file).head;
     if (
       stored?.format !== FORMAT ||
       typeof stored.version !== 'string' ||
@@ -836,9 +837,7 @@ async function gatherAt(key, load, codec, keep) {
   const file = entryFile(dir, key, id);
   let reason = 'no entry';
   try {
-    const stored = JSON.parse(
-      withoutRecording(() => fs.readFileSync(file, 'utf-8')),
-    );
+    const {head: stored, value: storedValue} = readEntry(file);
     if (stored?.format !== FORMAT) {
       reason = 'another format';
     } else if (stored.key !== entryKey(key, id)) {
@@ -861,7 +860,7 @@ async function gatherAt(key, load, codec, keep) {
         (seen == null && base == null
           ? 'a kept entry it builds on changed'
           : null);
-      const value = stale == null ? readBack(stored, codec) : undefined;
+      const value = stale == null ? readBack(storedValue, codec) : undefined;
       if (stale == null && value === undefined) {
         // Gathered again below, and stored over the bad entry.
         reason = 'a malformed value';
@@ -967,7 +966,7 @@ export function persistedDerived(key, compute, codec, inputs = []) {
       stored?.format === FORMAT &&
       stored.derived === true &&
       stored.key === entry
-        ? readBack(stored, codec)
+        ? readBack(() => stored.value, codec)
         : undefined;
     if (value !== undefined) {
       try {
@@ -1100,17 +1099,34 @@ export function persistedSummary(key, make) {
 }
 
 /**
+ * A gather's entry file: its first line, parsed, and a reader of its value,
+ * the second line, parsed only when called. A file of one line, as an entry
+ * of another format, is all head and has no value.
+ * @param {string} file
+ * @returns {{head: any, value: () => unknown}}
+ */
+function readEntry(file) {
+  const text = withoutRecording(() => fs.readFileSync(file, 'utf-8'));
+  const cut = text.indexOf('\n');
+  return {
+    head: JSON.parse(cut < 0 ? text : text.slice(0, cut)),
+    value: () => (cut < 0 ? undefined : JSON.parse(text.slice(cut + 1))),
+  };
+}
+
+/**
  * A stored entry's value, decoded, or undefined when it has none, its decode
  * throws, or the decoded value fails the codec's shape check (`valid`): such
  * an entry is a miss, worked out again and stored over.
- * @param {any} stored
+ * @param {() => unknown} read - reads the entry's value
  * @param {{decode: (stored: any) => any, valid?: (value: any) => boolean}} codec
  * @returns {any}
  */
-function readBack(stored, codec) {
-  if (!Object.hasOwn(stored, 'value') || stored.value == null) return undefined;
+function readBack(read, codec) {
   try {
-    const value = codec.decode(stored.value);
+    const stored = read();
+    if (stored == null) return undefined;
+    const value = codec.decode(stored);
     if (value == null) return undefined;
     return !codec.valid || codec.valid(value) ? value : undefined;
   } catch {
@@ -1136,16 +1152,19 @@ function store(dir, file, entry, value, codec) {
     gatherCode = cliStates(stamps);
     const {deps, own, under} = chooseBase(file, stamps, run.confirmed);
     const version = randomBytes(12).toString('hex');
-    const text = JSON.stringify({
+    const head = JSON.stringify({
       format: FORMAT,
       key: entry,
       version,
       deps,
       stamps: own,
       env: [...run.env],
-      value: encoded,
     });
-    if (!isDeepStrictEqual(JSON.parse(text).value, encoded)) return;
+    const body = JSON.stringify(encoded);
+    if (body === undefined || !isDeepStrictEqual(JSON.parse(body), encoded))
+      return;
+    // JSON text holds no line break, so the first one ends the head.
+    const text = `${head}\n${body}`;
     const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
     fs.writeFileSync(temp, text, {mode: 0o600, flag: 'wx'});
     fs.renameSync(temp, file);

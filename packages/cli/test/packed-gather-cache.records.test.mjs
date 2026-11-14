@@ -33,6 +33,7 @@ import {
   themeEntries,
   QUERIES,
   hasModuleHooks,
+  readKept,
 } from '../test-utils/packed-gather-cache-fixture.mjs';
 
 usePackedCli();
@@ -142,7 +143,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
       for (const name of files) {
         const text = fs.readFileSync(path.join(dir, name), 'utf8');
         expect(text, name).not.toContain(secret);
-        for (const [, state] of JSON.parse(text).env ?? []) {
+        for (const [, state] of readKept(path.join(dir, name)).env ?? []) {
           states += 1;
           expect(state === null || /^[0-9a-f]{32}$/.test(state), name).toBe(
             true,
@@ -470,11 +471,7 @@ Module._resolveFilename = function (request, parent, isMain, options) {
             fs
               .readdirSync(path.join(tmp, CACHE_NAME))
               .map(name => path.join(tmp, CACHE_NAME, name))
-              .filter(
-                file =>
-                  JSON.parse(fs.readFileSync(file, 'utf8')).value?.type ===
-                  'component.list',
-              )
+              .filter(file => readKept(file).value?.type === 'component.list')
               .map(file => [file, fs.statSync(file).ino]),
           );
         for (const ask of [
@@ -588,9 +585,7 @@ Module._resolveFilename = function (request, parent, isMain, options) {
             .readdirSync(path.join(tmp, CACHE_NAME))
             .filter(name =>
               Array.isArray(
-                JSON.parse(
-                  fs.readFileSync(path.join(tmp, CACHE_NAME, name), 'utf8'),
-                ).value?.wired,
+                readKept(path.join(tmp, CACHE_NAME, name)).value?.wired,
               ),
             );
         // Nothing wired yet: kept, then read back, as a fresh run answers.

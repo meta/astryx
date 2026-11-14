@@ -20,6 +20,7 @@ import {
   keptTmp,
   freshTmp,
   hasModuleHooks,
+  readKept,
 } from '../test-utils/packed-gather-cache-fixture.mjs';
 import {REPO_ROOT} from '../test-utils/repo-root.mjs';
 import {COMPONENT_REPLACES_CLI} from '../foundation/integrations/cli-requirement.mjs';
@@ -126,7 +127,7 @@ function replacementEntries(tmp) {
   for (const name of fs.readdirSync(dir)) {
     const file = path.join(dir, name);
     try {
-      const {key} = JSON.parse(fs.readFileSync(file, 'utf8'));
+      const {key} = readKept(file);
       if (String(key).includes('"component-replacements"')) {
         out.set(name, fs.statSync(file).ino);
       }
@@ -150,9 +151,7 @@ function keptEntries(tmp) {
   for (const name of fs.readdirSync(dir)) {
     const file = path.join(dir, name);
     try {
-      const {key, version, deps, stamps} = JSON.parse(
-        fs.readFileSync(file, 'utf8'),
-      );
+      const {key, version, deps, stamps} = readKept(file);
       if (typeof key !== 'string' || !Array.isArray(deps)) continue;
       out.set(name, {ino: fs.statSync(file).ino, key, version, deps, stamps});
     } catch {

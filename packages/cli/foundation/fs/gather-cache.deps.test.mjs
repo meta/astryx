@@ -10,6 +10,7 @@
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
+import {readKept} from '../../test-utils/kept-entry.mjs';
 import * as fs from 'node:fs';
 import nodeModule from 'node:module';
 import * as path from 'node:path';
@@ -93,7 +94,7 @@ function entries() {
   for (const name of fs.readdirSync(STORE)) {
     if (!name.startsWith('gather-')) continue;
     const file = path.join(STORE, name);
-    const stored = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const stored = readKept(file);
     // The gather's key ends the entry's key, before what a host passed.
     const key = JSON.parse(stored.key);
     out.set(`${key.at(-3)}/${key.at(-2)}`, {...stored, file});

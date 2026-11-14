@@ -19,6 +19,9 @@ import {afterAll, beforeAll, expect} from 'vitest';
 import {REPO_ROOT} from './repo-root.mjs';
 import {packPublishedCli} from './pack-published-cli.mjs';
 import {runFolder} from './global-local-fixtures.mjs';
+import {readKept} from './kept-entry.mjs';
+
+export {readKept, writeKept} from './kept-entry.mjs';
 export const BUILD_ID = 'clients/cli/build-id.generated.json';
 
 /** @type {string} */
@@ -204,7 +207,7 @@ export const freshTmp = () => path.join(work, 'tmp', `fresh-${fresh++}`);
  */
 export function derivedEntry(file) {
   try {
-    return JSON.parse(fs.readFileSync(file, 'utf8')).derived === true;
+    return readKept(file).derived === true;
   } catch {
     return false;
   }
@@ -218,7 +221,7 @@ export function derivedEntry(file) {
  */
 export function issuesEntry(file) {
   try {
-    const entry = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const entry = readKept(file);
     return entry.derived !== true && Array.isArray(entry.value);
   } catch {
     return false;
@@ -238,7 +241,7 @@ export function doctorEntries(tmp) {
   for (const name of fs.readdirSync(dir)) {
     const file = path.join(dir, name);
     try {
-      const {value} = JSON.parse(fs.readFileSync(file, 'utf8'));
+      const {value} = readKept(file);
       if (value && typeof value.id === 'string' && 'label' in value) {
         out.set(value.id, fs.statSync(file).ino);
       }
@@ -285,7 +288,7 @@ export function derivedEntries(tmp) {
  */
 export function templatesEntry(file) {
   try {
-    const {value} = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const {value} = readKept(file);
     return (
       value != null &&
       !Array.isArray(value) &&
@@ -384,7 +387,7 @@ export function themeEntries(tmp) {
   for (const name of fs.readdirSync(dir)) {
     const file = path.join(dir, name);
     try {
-      const {value} = JSON.parse(fs.readFileSync(file, 'utf8'));
+      const {value} = readKept(file);
       if (
         Array.isArray(value) &&
         value.length > 0 &&
