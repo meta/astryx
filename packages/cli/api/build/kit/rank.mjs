@@ -29,8 +29,10 @@
  *   the page is ("audit dashboard: dense table with …"); a family word there
  *   outweighs the same word among the parts.
  * - The container. In "draft history in a modal", the modal is the page's
- *   frame, and a template is its frame; container words count double, and a
- *   container match is evidence enough to start from. Only an overlay frame
+ *   frame, and a template is its frame; container words count double. A
+ *   container match is evidence enough to start from only when the frame holds
+ *   a word of the template's own family ("settings in a modal"); a frame that
+ *   holds a part ("saved drafts in a modal") is not. Only an overlay frame
  *   counts: "inside a data card" names a component the part lives in, and "in
  *   an existing dashboard" names the page being changed.
  * - Phrase heads. In "side-by-side product response", "product" describes the
@@ -58,6 +60,7 @@ import {
   familyWordsOf,
   keywordUnits,
   keywordWordsFor,
+  framesOf,
 } from './words.mjs';
 
 /**
@@ -210,6 +213,7 @@ export function rankPages(query, pages) {
   const namedFamilies = familiesIn(queryTerms);
   const modifiers = modifiersOf(query);
   const containers = containersOf(query);
+  const frames = framesOf(query);
 
   const ranked = docs
     .map(({page, family, bag, phrases, pairs}) => {
@@ -251,7 +255,12 @@ export function rankPages(query, pages) {
           score += value;
           hits++;
           matched.add(t);
-          if (containers.has(t)) containerMatched = true;
+          // A frame is start evidence only when it holds the template's
+          // family itself, not a part placed on some page.
+          if (
+            [...(frames.get(t) ?? [])].some(h => familyOfWord.get(h) === family)
+          )
+            containerMatched = true;
         }
       }
       const familyNamed = namedFamilies.has(family);
