@@ -728,6 +728,64 @@ describe('useOverflow when the observer reports a resize (component:OverflowList
     expect(result.current.visibleCount).toBe(1);
   });
 
+  it("measures again when an observed parent's content box changes and its border box does not", async () => {
+    let reads = 0;
+    const parent = document.createElement('div');
+    let contentWidth = 160;
+    Object.defineProperty(parent, 'clientWidth', {
+      get: () => {
+        reads++;
+        return contentWidth;
+      },
+    });
+    // The parent's border box stays 160 by 30 throughout.
+    parent.getBoundingClientRect = () => ({width: 160, height: 30}) as DOMRect;
+    const box = document.createElement('div');
+    parent.appendChild(box);
+    document.body.appendChild(parent);
+    vi.stubGlobal('getComputedStyle', () => ({
+      paddingLeft: '0px',
+      paddingRight: '0px',
+    }));
+    try {
+      const {result} = renderHook(() =>
+        useOverflow(4, {gap: 10, behavior: 'observeParent'}),
+      );
+      await act(async () => {
+        result.current.measureRef(mockMeasure([50, 50, 50, 50], 30));
+        result.current.containerRef(box);
+      });
+      expect(result.current.visibleCount).toBe(2);
+      const settledReads = reads;
+
+      // More padding: the content box narrows inside the same border box.
+      contentWidth = 100;
+      const actGlobal = globalThis as {IS_REACT_ACT_ENVIRONMENT?: boolean};
+      const wasActEnvironment = actGlobal.IS_REACT_ACT_ENVIRONMENT;
+      actGlobal.IS_REACT_ACT_ENVIRONMENT = false;
+      try {
+        latestObserverCallback?.(
+          [
+            {
+              target: parent,
+              borderBoxSize: [{inlineSize: 160, blockSize: 30}],
+              contentBoxSize: [{inlineSize: 100, blockSize: 30}],
+            } as unknown as ResizeObserverEntry,
+          ],
+          {} as ResizeObserver,
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+      } finally {
+        actGlobal.IS_REACT_ACT_ENVIRONMENT = wasActEnvironment;
+      }
+      expect(reads).toBeGreaterThan(settledReads);
+      expect(result.current.visibleCount).toBe(1);
+    } finally {
+      parent.remove();
+    }
+  });
+
   it('renders after paint when a multi-row fold changes the rows the list fills', async () => {
     const {result} = renderHook(() => useOverflow(6, {gap: 10, maxRows: 2}));
     const box = resizableBox(120);

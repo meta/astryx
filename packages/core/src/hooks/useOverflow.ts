@@ -19,6 +19,7 @@
 import {useState, useCallback, useRef} from 'react';
 import {flushSync} from 'react-dom';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
+import {useCommittedRef} from './useCommittedRef';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {computeOverflow, countRows} from './computeOverflow';
 import {useDevWarning} from './useDevWarning';
@@ -139,20 +140,30 @@ function measurePending(): void {
   }
 }
 
-// The border-box size of each observed element when its list last measured.
-const measuredSizes = new WeakMap<Element, {width: number; height: number}>();
+/**
+ * The size of each observed element that its list last measured from:
+ * - `'border'`: the element's border box, for the list's own box and its
+ *   measure copy.
+ * - `'content'`: the width of the parent's content box, for a list that
+ *   observes its parent. Only that width enters the measurement.
+ */
+type MeasuredSize =
+  | {box: 'border'; width: number; height: number}
+  | {box: 'content'; width: number};
+
+const measuredSizes = new WeakMap<Element, MeasuredSize>();
 
 /**
- * Records the size of an element that a list observes, as the list measures.
- * The list reads its layout at the same time, so the layout is current and
- * the read costs no extra layout.
+ * Records the border box of an element that a list observes, as the list
+ * measures. The list reads its layout at the same time, so the layout is
+ * current and the read costs no extra layout.
  */
-function recordMeasuredSize(element: Element | null): void {
+function recordBorderBox(element: Element | null): void {
   if (element == null || typeof element.getBoundingClientRect !== 'function') {
     return;
   }
   const {width, height} = element.getBoundingClientRect();
-  measuredSizes.set(element, {width, height});
+  measuredSizes.set(element, {box: 'border', width, height});
 }
 
 /**
@@ -163,12 +174,19 @@ function recordMeasuredSize(element: Element | null): void {
  */
 function isMeasuredSize(entry: ResizeObserverEntry): boolean {
   const recorded = measuredSizes.get(entry.target);
+  if (recorded == null) {
+    return false;
+  }
+  const isSame = (a: number, b: number) => Math.abs(a - b) < 0.01;
+  if (recorded.box === 'content') {
+    const content = entry.contentBoxSize?.[0];
+    return content != null && isSame(content.inlineSize, recorded.width);
+  }
   const box = entry.borderBoxSize?.[0];
-  if (recorded == null || box == null) {
+  if (box == null) {
     return false;
   }
   // The report gives logical sizes; the record gives physical ones.
-  const isSame = (a: number, b: number) => Math.abs(a - b) < 0.01;
   return (
     (isSame(box.inlineSize, recorded.width) &&
       isSame(box.blockSize, recorded.height)) ||
@@ -418,12 +436,12 @@ export function useOverflowInternal(
           parent.clientWidth -
           parseFloat(parentStyle.paddingLeft) -
           parseFloat(parentStyle.paddingRight);
+        measuredSizes.set(parent, {box: 'content', width: availableWidth});
       } else {
         availableWidth = container.offsetWidth;
+        recordBorderBox(container);
       }
-
-      recordMeasuredSize(observedElRef.current);
-      recordMeasuredSize(measure);
+      recordBorderBox(measure);
 
       const allChildren = Array.from(measure.children) as HTMLElement[];
 
@@ -530,13 +548,16 @@ export function useOverflowInternal(
 
   // The latest measurement, under one identity. A list stays pending once,
   // and a pending measurement never runs with an earlier render's options.
-  const calculateRef = useRef(calculate);
-  const onMeasureRef = useRef(onMeasure);
-  const measureLatest: Measure = useCallback(reason => {
-    const deferred = calculateRef.current(reason);
-    onMeasureRef.current?.();
-    return deferred;
-  }, []);
+  const calculateRef = useCommittedRef(calculate);
+  const onMeasureRef = useCommittedRef(onMeasure);
+  const measureLatest: Measure = useCallback(
+    reason => {
+      const deferred = calculateRef.current(reason);
+      onMeasureRef.current?.();
+      return deferred;
+    },
+    [calculateRef, onMeasureRef],
+  );
 
   const containerRef = useCallback(
     (el: HTMLElement | null) => {
@@ -579,15 +600,10 @@ export function useOverflowInternal(
 
   // Syncs the visible count with the rendered layout. It measures again after
   // the items change, with the other lists in this commit.
+  // A new calculation (new options or a new item count) measures again.
   useIsomorphicLayoutEffect(() => {
-    calculateRef.current = calculate;
     scheduleMeasure(measureLatest, 'commit');
   }, [calculate, measureLatest]);
-
-  // The host passes a new `onMeasure` each render. The latest one runs.
-  useIsomorphicLayoutEffect(() => {
-    onMeasureRef.current = onMeasure;
-  });
 
   const remeasure = useCallback(
     () => scheduleMeasure(measureLatest, 'commit'),
