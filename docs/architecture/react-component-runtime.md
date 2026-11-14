@@ -374,7 +374,7 @@ those contracts.
   target helpers apart from the tracking runtime, so a group's static code
   finds its neighbours without loading gesture code. Gap: these modules still
   import the shared touch modules statically, so a page that renders them
-  carries the touch runtime in its first load: Slider
+  carries the touch runtime in its first load: AlertDialog (`useAlertMotion`), Slider
   (`sliderTouchController`) and Chat (`useChatKeyboard`).
   `@astryx/no-static-touch-runtime` reports any other static path from a
   component into these modules; its allowlist names exactly these imports and
