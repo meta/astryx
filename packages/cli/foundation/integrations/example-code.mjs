@@ -26,6 +26,7 @@ import {
 } from '../discovery/component-discovery.mjs';
 import {discoverHooks} from '../discovery/hook-discovery.mjs';
 import {loadComponentDoc} from '../discovery/component-loader.mjs';
+import {babelParse} from '../runtime/lazy-dependencies.mjs';
 import {
   declaredTargets,
   readImports,
@@ -141,6 +142,73 @@ function ownServerModules(packageDir, packageName, exportsField) {
 }
 
 /**
+ * The documented components whose source declares them as async functions:
+ * server components, which only a server can render. A source that cannot be
+ * read or parsed names none.
+ * @param {Array<{name: string, sourcePath: string | null}>} records
+ * @returns {string[]}
+ */
+function asyncComponents(records) {
+  /** @type {Map<string, Set<string>>} source file → its async function names */
+  const bySource = new Map();
+  /** @type {string[]} */
+  const found = [];
+  for (const {name, sourcePath} of records) {
+    if (!sourcePath) continue;
+    let names = bySource.get(sourcePath);
+    if (!names) {
+      names = asyncFunctionNames(sourcePath);
+      bySource.set(sourcePath, names);
+    }
+    if (names.has(name)) found.push(name);
+  }
+  return found;
+}
+
+/**
+ * The top-level async functions a module declares, exported or not.
+ * @param {string} file
+ * @returns {Set<string>}
+ */
+function asyncFunctionNames(file) {
+  /** @type {Set<string>} */
+  const names = new Set();
+  /** @type {any} */
+  let ast;
+  try {
+    ast = babelParse(fs.readFileSync(file, 'utf8'), {
+      sourceType: 'module',
+      plugins: ['jsx', 'typescript'],
+    });
+  } catch {
+    return names; // an unreadable source names no server component
+  }
+  for (const statement of ast.program.body) {
+    const node =
+      statement.type === 'ExportNamedDeclaration' ||
+      statement.type === 'ExportDefaultDeclaration'
+        ? statement.declaration
+        : statement;
+    if (node?.type === 'FunctionDeclaration' && node.async && node.id) {
+      names.add(node.id.name);
+    }
+    if (node?.type !== 'VariableDeclaration') continue;
+    for (const declarator of node.declarations) {
+      const init = declarator.init;
+      if (
+        declarator.id.type === 'Identifier' &&
+        (init?.type === 'ArrowFunctionExpression' ||
+          init?.type === 'FunctionExpression') &&
+        init.async
+      ) {
+        names.add(declarator.id.name);
+      }
+    }
+  }
+  return names;
+}
+
+/**
  * Check every example of every component doc the package ships.
  * @param {any} integration a loaded integration
  * @returns {Promise<{notes: ExampleCodeNote[], unchecked: ExampleCodeUnchecked[]}>}
@@ -197,6 +265,7 @@ export async function exampleCodeCheck(integration) {
     reactNames: react ?? [],
     dependencies: declaredPackages(manifest),
     isServerOnly: ownServerModules(packageDir, packageName, exportsField),
+    serverComponents: asyncComponents(records),
   };
   // Without Core or React, a name either provides cannot be told from an
   // undefined one.

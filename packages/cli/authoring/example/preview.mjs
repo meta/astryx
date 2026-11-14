@@ -406,10 +406,11 @@ function valueImports(ast) {
 
 /**
  * The names a module uses but never binds, in order of first use, once its
- * types are stripped (a type is not a runtime name), and whether it reads
- * `process.env` past `NODE_ENV`.
+ * types are stripped (a type is not a runtime name); the imported names it
+ * uses, with the module each comes from; and whether it reads `process.env`
+ * past `NODE_ENV`.
  * @param {string} module
- * @returns {{free: string[], readsEnvironment: boolean} | {error: any}}
+ * @returns {{free: string[], imported: Array<{source: string, name: string}>, readsEnvironment: boolean} | {error: any}}
  */
 function unboundNames(module) {
   /** @type {any} */
@@ -436,6 +437,8 @@ function unboundNames(module) {
   }
   /** @type {string[]} */
   const free = [];
+  /** @type {Array<{source: string, name: string}>} */
+  const imported = [];
   let readsEnvironment = false;
   babel().traverse(ast, {
     MemberExpression(/** @type {any} */ path) {
@@ -462,11 +465,32 @@ function unboundNames(module) {
       // `process.env` is its own finding; `process.env.NODE_ENV` is replaced.
       const parent = /** @type {any} */ (path.parent);
       if (name === 'process' && isProcessEnv(parent)) return;
-      if (path.scope.hasBinding(name, true)) return;
+      const binding = path.scope.getBinding(name);
+      if (binding?.kind === 'module') {
+        const specifier = /** @type {any} */ (binding.path.node);
+        const source = String(
+          /** @type {any} */ (binding.path.parent)?.source?.value,
+        );
+        const importedName =
+          specifier.type === 'ImportSpecifier'
+            ? (specifier.imported.name ?? specifier.imported.value)
+            : specifier.type === 'ImportDefaultSpecifier'
+              ? 'default'
+              : '*';
+        if (
+          !imported.some(
+            use => use.source === source && use.name === importedName,
+          )
+        ) {
+          imported.push({source, name: importedName});
+        }
+        return;
+      }
+      if (binding || path.scope.hasBinding(name, true)) return;
       if (!free.includes(name)) free.push(name);
     },
   });
-  return {free, readsEnvironment};
+  return {free, imported, readsEnvironment};
 }
 
 /**
@@ -551,6 +575,30 @@ export function previewableExample(example, scope) {
       message:
         'reads process.env, which only a server has, so a live preview in a browser cannot run it',
       fix: "Pass the value in as a prop or a constant, or set `kind: 'setup'` to show it as code only.",
+    });
+  }
+  const serverComponents = new Set(scope.serverComponents ?? []);
+  const rendered = [
+    ...unbound.free.filter(
+      name =>
+        serverComponents.has(name) &&
+        packageOf(table.names.get(name) ?? '') === scope.packageName,
+    ),
+    ...unbound.imported
+      .filter(
+        use =>
+          isBare(use.source) &&
+          packageOf(use.source) === scope.packageName &&
+          serverComponents.has(use.name),
+      )
+      .map(use => use.name),
+  ];
+  for (const name of new Set(rendered)) {
+    problems.push({
+      code: 'example_server_only',
+      message: `renders \`${name}\`, an async component that only a server can render, so a live preview in a browser cannot show it`,
+      fix: "Set `kind: 'setup'` to show it as code only, or show a component that renders in a browser instead.",
+      names: [name],
     });
   }
   const globals = globalNames();

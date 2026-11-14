@@ -218,6 +218,27 @@ describe('previewableExample', () => {
     ]);
   });
 
+  it('reports an async server component the example renders, by scope or by import', () => {
+    const serverScope = {...scope, serverComponents: ['AcmeCard']};
+    /** @param {string} code */
+    const problems = code => {
+      const result = previewableExample({code}, serverScope);
+      return result.previewable || result.setup ? [] : result.problems;
+    };
+    const [byScope] = problems('<AcmeCard />');
+    expect(byScope.code).toBe('example_server_only');
+    expect(byScope.names).toEqual(['AcmeCard']);
+    expect(byScope.message).toBe(
+      'renders `AcmeCard`, an async component that only a server can render, so a live preview in a browser cannot show it',
+    );
+    expect(
+      problems(
+        "import {AcmeCard as Card} from '@acme/widgets/Card';\n<Card />",
+      ).map(problem => problem.code),
+    ).toEqual(['example_server_only']);
+    expect(problems('<Text>No server component here</Text>')).toEqual([]);
+  });
+
   it('reports a relative import and an undeclared package, never a type-only import', () => {
     const problems = problemsOf(
       [

@@ -146,6 +146,25 @@ describe('component examples that cannot run on their own', () => {
     );
   });
 
+  it('reports an example that renders an async server component of the package', async () => {
+    write({
+      'components/AcmeTheme.tsx':
+        'export async function AcmeTheme({children}) { return children; }\n',
+      'components/AcmeTheme.doc.mjs': componentDoc('AcmeTheme', [
+        {label: 'Wrap a card', code: '<AcmeTheme><AcmeCard /></AcmeTheme>'},
+      ]),
+      'components/AcmeCard.doc.mjs': componentDoc('AcmeCard', [
+        {label: 'Plain', code: '<AcmeCard />'},
+      ]),
+    });
+
+    const {notes} = await exampleNotes();
+    expect(notes.map(note => note.code)).toEqual(['example_server_only']);
+    expect(notes[0].message).toContain(
+      'Component doc "components/AcmeTheme.doc.mjs" example "Wrap a card" renders `AcmeTheme`, an async component that only a server can render',
+    );
+  });
+
   it('lists names as not checked, never as notes, when Core is not installed', async () => {
     removeLinkedFixture(dir);
     dir = makeLinkedFixture('astryx-example-code-', ['react']);

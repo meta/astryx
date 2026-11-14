@@ -17,8 +17,8 @@
  *   at the end.
  * - `example_undefined_name`: a name the example never defines or imports
  *   and its scope does not provide.
- * - `example_server_only`: it imports code that runs only on a server, or
- *   reads `process.env`.
+ * - `example_server_only`: it imports code that runs only on a server,
+ *   renders an async server component, or reads `process.env`.
  * - `example_import_unresolvable`: it imports a relative path, or a package
  *   its package does not declare.
  */
@@ -36,7 +36,10 @@ export interface ExampleProblem {
   message: string;
   /** What to change, as one or two sentences. */
   fix: string;
-  /** The names a `example_undefined_name` problem found, in order of use. */
+  /**
+   * The names an `example_undefined_name` problem found, in order of use, or
+   * the server component an `example_server_only` problem found.
+   */
   names?: string[];
   /** The import an import problem is about. */
   specifier?: string;
@@ -80,6 +83,11 @@ export interface ExampleScope {
    * such as one that imports `server-only`.
    */
   isServerOnly?: (specifier: string) => boolean;
+  /**
+   * The package's documented components that only a server renders: async
+   * function components. An example that renders one is server-only.
+   */
+  serverComponents?: ReadonlyArray<string>;
 }
 
 /**

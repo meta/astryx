@@ -60,6 +60,12 @@ export const doc = {
         'Whether an import names a module that runs only on a server, beyond the ones every scope knows (`server-only`, `next/headers`, `next/server`, `next/cache`, a Node built-in the package does not install). Answer true for a module of the package that imports `server-only`.',
     },
     {
+      name: 'serverComponents',
+      type: 'string[]',
+      description:
+        "The package's documented components that only a server renders: async function components. An example that renders one, without importing it or through an import of the package, cannot preview.",
+    },
+    {
       name: 'returns',
       type: 'PreviewableExample',
       description:
