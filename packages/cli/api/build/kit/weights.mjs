@@ -181,7 +181,7 @@ export function weightWords(idea) {
 const hasPickModel = weights => {
   const pick = weights.pick;
   return (
-    pick !== undefined &&
+    pick != null &&
     isWordModel(
       {...pick, tables: pick.tables ?? weights.tables},
       weights.candidates.length,
