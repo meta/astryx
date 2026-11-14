@@ -87,7 +87,7 @@ Options:
 
 - `--type <component|hook|doc|template|theme>`: restrict to a single domain (`doc` and `theme` work outside an app too)
 - `--limit <n>`: cap the number of results (default 20)
-- `--verbose`: also print each result's match score and reason
+- `--verbose`: also print each result's match score and reason, and its whole description
 - `--json`: typed `{ apiVersion, type: 'search', data: { query, matchCount, results } }` envelope — `matchCount` is how many candidates matched in total, `results` the slice `--limit` allowed
 
 ## Commands
@@ -112,7 +112,7 @@ Each command declares what it does in a folder outside any project, and `astryx 
 | `search`       | Search components, hooks, docs, templates, and themes in one ranked list                                         | `same`            |
 | `swizzle`      | Copy component source for customization                                                                          | `refuse`          |
 | `template`     | List, show, or scaffold page and block templates                                                                 | `same`            |
-| `theme`        | Add, switch, build, and author themes                                                                            | by subcommand     |
+| `theme`        | Add, switch, build, and author themes (to make or change one, use experimental theme editor)                     | by subcommand     |
 | `upgrade`      | Update your code after upgrading Astryx, and refresh ShadCN-copied components                                    | `own`             |
 
 <!-- END GENERATED: commands -->
@@ -298,7 +298,7 @@ Shape:
           {
             "flag": "--props",
             "type": "boolean",
-            "description": "Print only the props table",
+            "description": "Print only the props list",
           },
         ],
         "json": true,
@@ -543,7 +543,7 @@ Every response has a `type` discriminant. The full set is below (generated from 
 
 `astryx doctor` runs health checks against your project and environment. It
 changes nothing in the project; once the per-user cache folder exists, it
-keeps its docs checks and integration check results there. Each record uses `[ok]`, `[warn]`, `[fail]`, or `[info]`, and
+keeps its docs checks, its theme-wiring scan and integration check results there. Each record uses `[ok]`, `[warn]`, `[fail]`, or `[info]`, and
 includes an actionable `fix` when one is available. Field names match the
 `--json` keys. The exact checks and values depend on the project; the output
 shape is stable:

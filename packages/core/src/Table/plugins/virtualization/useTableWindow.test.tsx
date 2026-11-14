@@ -863,6 +863,90 @@ describe('private Table shared-geometry controller', () => {
     viewport.remove();
     vi.unstubAllGlobals();
   });
+  it('sizes a row-number column for a grown row count while columns window it out', () => {
+    const measureText = vi.fn((text: string) => ({width: text.length * 7}));
+    vi.stubGlobal(
+      'OffscreenCanvas',
+      class {
+        getContext() {
+          return {font: '', measureText};
+        }
+      },
+    );
+    const viewport = document.createElement('div');
+    const table = document.createElement('table');
+    const body = document.createElement('tbody');
+    const row = document.createElement('tr');
+    // A windowed row: cells carry full-table positions.
+    const numberCell = document.createElement('td');
+    numberCell.setAttribute('aria-colindex', '1');
+    const number = document.createElement('span');
+    number.textContent = '1';
+    number.style.fontSize = '12px';
+    number.style.fontFamily = 'monospace';
+    numberCell.style.paddingLeft = '12px';
+    numberCell.style.paddingRight = '12px';
+    numberCell.append(number);
+    const otherCell = document.createElement('td');
+    otherCell.setAttribute('aria-colindex', '40');
+    otherCell.textContent = 'x';
+    row.append(numberCell, otherCell);
+    body.append(row);
+    table.append(body);
+    viewport.append(table);
+    document.body.append(viewport);
+    Object.defineProperty(viewport, 'clientHeight', {value: 100});
+    let rowCount = data.length;
+    vi.spyOn(body, 'getBoundingClientRect').mockImplementation(
+      () => ({height: rowCount * 20}) as DOMRect,
+    );
+    vi.spyOn(row, 'getBoundingClientRect').mockImplementation(
+      () => ({height: 20}) as DOMRect,
+    );
+    const positions = new Set([0]);
+    const geometry = source({
+      viewportHeight: 100,
+      startOffset: 0,
+      isMeasured: true,
+      scrollTop: 0,
+      revision: 1,
+      layoutRevision: 1,
+    });
+    const grown: Item[] = Array.from({length: 10000}, (_, i) => ({
+      id: `g${i}`,
+      label: `Item ${i}`,
+    }));
+    const {result, rerender, unmount} = renderHook(
+      ({items}: {items: Item[]}) =>
+        useTableWindow({
+          capability: useTableRowsVirtualization({
+            rowHeight: 20,
+            initialViewportHeight: 100,
+          }),
+          data: items,
+          keys: useMemo(() => items.map(item => item.id), [items]),
+          isAdmitted: true,
+          logicalPositionColumns: positions,
+          viewport: {current: viewport},
+          body: {current: body},
+          table: {current: table},
+          geometry: geometry.store,
+        }),
+      {initialProps: {items: data}},
+    );
+    // '100' at 7px per digit, 24px of padding and 1px of slack.
+    expect(result.current.logicalPositionWidths.get(0)).toBe(46);
+    // The row-number column scrolls out of the column window, then rows are
+    // appended past 9,999.
+    numberCell.remove();
+    rowCount = grown.length;
+    rerender({items: grown});
+    // '10000' needs two more digits.
+    expect(result.current.logicalPositionWidths.get(0)).toBe(60);
+    unmount();
+    viewport.remove();
+    vi.unstubAllGlobals();
+  });
   it('checks the body extent after a row-number width changes at mount', () => {
     vi.stubGlobal(
       'OffscreenCanvas',

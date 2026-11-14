@@ -101,6 +101,7 @@ import {
 } from '../../foundation/agent-docs/computer-agent-text.mjs';
 import {
   keptFileCheck,
+  THEME_WIRING_CODEC,
   alignCommand,
   addCliCommandFor,
   computerAgentTextState,
@@ -110,6 +111,7 @@ import {
   projectHasOwnCli,
   computerIntegrationsOutside,
   findIconPlaceholders,
+  iconUseCommand,
   placeholderFixes,
   unlistedIconSets,
   computerIntegrationsToAdd,
@@ -118,6 +120,9 @@ import {
   releaseFacts,
   builtIntegrationPackages,
   authoringAudit,
+  corePeerRange,
+  isLocalThemeOwner,
+  readThemeState,
 } from './_adapter.mjs';
 import {checkBuilt} from './built-checks.mjs';
 
@@ -141,6 +146,8 @@ import {checkBuilt} from './built-checks.mjs';
  * @property {string|null} coreDir - Resolved core package directory, or null.
  * @property {boolean} [ownCli] - Whether the project installs its own CLI;
  *   false means the copy that started the run answered it (spec AST-081 FR2).
+ * @property {string[]} [addedThemePackages] - Packages of the project's added
+ *   themes, which `theme-core-peers` checks against Core
  * @property {string|null} [projectCore] - The Core release the project names
  *   (installed, else locked, else declared), as the daily hint reads it.
  * @property {string|null} configPath - Resolved astryx.config.mjs path, or null.
@@ -163,7 +170,7 @@ import {checkBuilt} from './built-checks.mjs';
  *   Combined project-level integration issues, including cross-package template replacement warnings.
  * @property {Error|null} [configError] - Error thrown while resolving the config
  *   path (e.g. multiple config files present), surfaced by checkConfig as a FAIL.
- * @property {{sets: Array<{name: string, package: string}>, withdrawn: Array<{name: string, package: string, reason: string}>, choice: {status: 'selected'|'none'|'ambiguous'|'missing'|'withdrawn', reason: string, configured?: string, backups?: Array<{selector: string, status: 'selected'|'ambiguous'|'missing'|'withdrawn', reason: string}>, order?: Array<{name: string, package: string}>}}|null} [iconSets]
+ * @property {{sets: Array<{name: string, package: string}>, withdrawn: Array<{name: string, package: string, reason: string}>, choice: {status: 'selected'|'none'|'ambiguous'|'missing'|'withdrawn', reason: string, configured?: string, set?: {name: string, package: string, data: {variants?: string[]}}, variant?: string, backups?: Array<{selector: string, status: 'selected'|'ambiguous'|'missing'|'withdrawn', reason: string}>, order?: Array<{name: string, package: string}>}}|null} [iconSets]
  *   The project's icon sets (AST-084 FR17), or null when they could not be read.
  *   Experimental: may change or be removed in a patch release.
  * @property {Array<{file: string, local: string, meanings: string[] | null, uses: number}>|null} [iconPlaceholders]
@@ -188,6 +195,22 @@ function readPkg(pkgPath) {
     return JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
   } catch {
     return null;
+  }
+}
+
+/**
+ * Packages that own the project's added themes (local themes excluded); empty
+ * when the project manages no themes or its theme state cannot be read.
+ * @param {string} cwd
+ * @returns {string[]}
+ */
+function addedThemePackages(cwd) {
+  try {
+    return Object.values(readThemeState(cwd).themes ?? {}).filter(
+      owner => typeof owner === 'string' && !isLocalThemeOwner(owner),
+    );
+  } catch {
+    return [];
   }
 }
 
@@ -631,9 +654,11 @@ export function checkImplicitIntegrations(ctx) {
 
 /**
  * The sentence `implicit-integrations` adds for dependencies whose manifest
- * could not be loaded, or '' when there are none. Still informational: the
- * package is a dependency's own bug, which `doctor integration validate`
- * diagnoses, but doctor must not report it as absent.
+ * could not be loaded, or '' when there are none. Still informational: a
+ * broken install (a package the dependency requires is missing) is also that
+ * package's integration issue (INV14), and anything else is the dependency's
+ * own bug, which `doctor integration validate` diagnoses; either way doctor
+ * must not report it as absent.
  * @param {Array<{spec: string, error: string}>} failures
  * @returns {string}
  */
@@ -1007,6 +1032,69 @@ export function checkIntegrationIssues(ctx) {
 }
 
 /**
+ * Every loaded integration's `@astryxdesign/core` peer range admits the
+ * installed Core: a package's declared peer ranges define the Core versions it
+ * supports (spec:AST-017 FR12). A package made for another Core installs with
+ * only a package manager warning, and its components, themes and docs may not
+ * work. New, so it warns: a project that passed before keeps passing.
+ * Packages of added themes are left to `theme-core-peers` (spec:AST-050 FR11),
+ * which applies the same rule. Null when Core is not installed or no other
+ * loaded integration declares a Core range.
+ * @param {DoctorContext} ctx
+ * @returns {DoctorCheck | null}
+ */
+export function checkIntegrationCoreRange(ctx) {
+  const core = pkgVersion(ctx.coreDir);
+  if (!core || ctx.integrations == null) return null;
+  // `theme-core-peers` already judges each added theme package by the same
+  // rule (`corePeerRange`), with a fix that keeps the theme setup working.
+  const reportedByThemeChecks = new Set(ctx.addedThemePackages ?? []);
+  /** @type {Array<{name: string, version: string | null, range: string, accepts: boolean}>} */
+  const declared = [];
+  for (const integration of ctx.integrations) {
+    if (integration.__loadError != null || !integration.__packageDir) continue;
+    const pkg = readPkg(path.join(integration.__packageDir, 'package.json'));
+    const name = typeof pkg?.name === 'string' ? pkg.name : integration.name;
+    if (reportedByThemeChecks.has(name)) continue;
+    const {range, accepts} = corePeerRange(pkg, core);
+    // An integration need not depend on Core; only a declared, non-empty range
+    // is a claim about which Core it supports.
+    if (range == null || range === '') continue;
+    declared.push({
+      name,
+      version: typeof pkg?.version === 'string' ? pkg.version : null,
+      range,
+      accepts,
+    });
+  }
+  if (declared.length === 0) return null;
+  const excluded = declared.filter(d => !d.accepts);
+  const label = 'Integrations support the installed Core';
+  if (excluded.length === 0) {
+    return {
+      id: 'integration-core-range',
+      label,
+      status: 'pass',
+      message: `${declared.length} loaded integration${declared.length === 1 ? ' supports' : 's support'} @astryxdesign/core ${core} (${nameIntegrations(declared)}).`,
+    };
+  }
+  return {
+    id: 'integration-core-range',
+    label,
+    status: 'warn',
+    message: `${excluded
+      .map(
+        d =>
+          `${d.name}${d.version ? `@${d.version}` : ''} supports @astryxdesign/core ${d.range}`,
+      )
+      .join(
+        '; ',
+      )}, but the project has ${core}. ${excluded.length === 1 ? 'Its' : 'Their'} components, themes and docs were made for another Core and may not work.`,
+    fix: `Install a release of ${excluded.length === 1 ? 'that package' : 'each package'} whose @astryxdesign/core range includes ${core}, or move the project to a Core in that range. When no such release exists, ask the package's owner for one.`,
+  };
+}
+
+/**
  * The project's icon sets (AST-084 FR17). Fails when `experimental.iconSet`
  * names a set, main or backup, that is not installed, that is installed but
  * withdrawn (with why), or that two packages ship under one name; and when
@@ -1061,11 +1149,34 @@ export function checkIconSets(ctx) {
       fix: 'Write each name in experimental.iconSet as "<package>/<set>" (`astryx experimental icon --list` names them).',
     };
   }
+  // The look a project picks is one of its main set's variants.
+  const declared = choice.set?.data.variants ?? [];
+  if (choice.set && choice.variant && !declared.includes(choice.variant)) {
+    return {
+      id,
+      label,
+      status: 'fail',
+      message:
+        declared.length === 0
+          ? `experimental.iconVariant names "${choice.variant}", but the main set ${choice.configured} declares no variants: it draws one look.`
+          : `experimental.iconVariant names "${choice.variant}", but the main set ${choice.configured} declares no such variant. Its variants: ${declared.join(', ')}.`,
+      fix:
+        declared.length === 0
+          ? `Remove experimental.iconVariant: run \`${iconUseCommandOf(choice)}\`.`
+          : `Pick one of its variants: \`${iconUseCommandOf(choice, '<variant>')}\`.`,
+    };
+  }
   const order = choice.order ?? [];
   const unlisted = sets.filter(set => !order.includes(set));
   if (sets.length > 1 && unlisted.length > 0 && order.length > 0) {
     const [main, ...backups] = order;
-    const {problem, fix} = unlistedIconSets(sets, main, backups, unlisted);
+    const {problem, fix} = unlistedIconSets(
+      sets,
+      main,
+      backups,
+      unlisted,
+      choice.variant,
+    );
     return {
       id,
       label,
@@ -1087,8 +1198,22 @@ export function checkIconSets(ctx) {
     id,
     label,
     status: 'pass',
-    message: `${sets.length} icon set${sets.length === 1 ? '' : 's'} installed. ${choice.reason}`,
+    message: `${sets.length} icon set${sets.length === 1 ? '' : 's'} installed. ${choice.reason}${choice.variant ? ` Each icon draws its "${choice.variant}" look where its set has one.` : ''}`,
   };
+}
+
+/**
+ * The `experimental icon use` command that writes the project's list again,
+ * as astryx.config names it, with a variant when one is given.
+ * @param {NonNullable<DoctorContext['iconSets']>['choice']} choice
+ * @param {string} [variant]
+ */
+function iconUseCommandOf(choice, variant) {
+  return iconUseCommand(
+    /** @type {string} */ (choice.configured),
+    (choice.backups ?? []).map(each => each.selector),
+    variant,
+  );
 }
 
 /**
@@ -1123,7 +1248,12 @@ export function checkIconPlaceholders(ctx) {
     )
     .join(', ');
   const uses = found.reduce((total, each) => total + each.uses, 0);
-  const [mapFix, backupFix] = placeholderFixes(meanings, main);
+  const [mapFix, backupFix] = placeholderFixes(
+    meanings,
+    main,
+    (choice.backups ?? []).map(each => each.selector),
+    choice.variant,
+  );
   return {
     id,
     label,
@@ -2193,7 +2323,7 @@ export function checkGatherCache() {
     id: 'gather-cache',
     label: 'Kept catalog cache',
     status: 'info',
-    message: `search, build, component, template, theme, discover and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, and doctor's docs checks) in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, and deleting the folder clears it.`,
+    message: `search, build, component, template, theme, discover, docs and doctor keep what they gather (search's catalogs, each integration's check results, template discovery's records, the component list, integrations' theme records, the docs not-found hint's name summaries, and doctor's docs checks and theme-wiring scan) in ${summary.dir} (${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}, ${size})${summary.pnp ? ", but not in a run under Yarn Plug'n'Play's loader, such as `yarn astryx`, which gathers every time" : ''}; each is used only while nothing it read has changed, and deleting the folder clears it.`,
   };
 }
 
@@ -2211,6 +2341,7 @@ export const SYNC_CHECKS = [
   checkConfiguredIntegrations,
   checkProviderIdentity,
   checkIntegrationIssues,
+  checkIntegrationCoreRange,
   checkIconSets,
   checkIconPlaceholders,
   checkAgentDocs,
@@ -2401,6 +2532,7 @@ export async function runChecks(options = {}) {
     coreDir,
     ownCli: projectHasOwnCli(cwd),
     projectCore: projectCoreVersion(cwd),
+    addedThemePackages: addedThemePackages(cwd),
     configPath,
     integrations,
     docsCatalog,
@@ -2424,10 +2556,15 @@ export async function runChecks(options = {}) {
     if (check) checks.push(check);
     if (fn === checkVersionAlignment) {
       const appThemeChecks = await checkAppThemes(cwd);
-      checks.push(
-        checkThemes(cwd, appThemeChecks, await themeImportWiring(cwd)),
-        ...appThemeChecks,
+      // The wiring scan reads only files and modules (the app's source, the
+      // themes and the packages that declare them) and runs nothing, so it is
+      // kept like the docs checks.
+      const wiring = await keptFileCheck(
+        {name: 'theme-wiring', cwd, coreDir: coreDir ?? null},
+        () => themeImportWiring(cwd),
+        THEME_WIRING_CODEC,
       );
+      checks.push(checkThemes(cwd, appThemeChecks, wiring), ...appThemeChecks);
       checks.push(await checkConfig(ctx));
     }
   }

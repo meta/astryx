@@ -14,6 +14,7 @@
 
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {spawnSync} from 'node:child_process';
+import nodeModule from 'node:module';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -25,6 +26,13 @@ const BIN = fileURLToPath(
 
 /** The key the hook records when Core's root entry runs. */
 const ROOT_RAN = '(root entry ran)';
+
+// The build loads a theme's imports through jiti's synchronous loader. Node
+// runs loader hooks for those loads from the release that has
+// module.registerHooks (22.15); before it, the hook cannot see Core's root
+// run, though the theme still gets the root's exports.
+const hooksSeeThemeImports =
+  typeof (/** @type {any} */ (nodeModule).registerHooks) === 'function';
 
 /** @type {string} */
 let dir;
@@ -151,7 +159,7 @@ describe('theme build imports Core on demand', () => {
   it("a theme that imports the root gets the root's own exports", () => {
     const {status, requested} = run(['theme', 'build', 'reef.ts']);
     expect(status).toBe(0);
-    expect(requested).toHaveProperty(ROOT_RAN);
+    if (hooksSeeThemeImports) expect(requested).toHaveProperty(ROOT_RAN);
     expect(fs.readFileSync(path.join(dir, 'reef.css'), 'utf-8')).toContain(
       '--color-bg: #0a0a0a',
     );

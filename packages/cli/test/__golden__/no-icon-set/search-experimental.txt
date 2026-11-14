@@ -1,4 +1,9 @@
-Results for "experimental" (4)
+Results for "experimental" (7)
+name:        author-a-theme
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs author-a-theme --index
+parent:      pnpm exec astryx docs guides
 name:        authoring/field-reference
 section:     config
 domain:      doc
@@ -17,9 +22,19 @@ domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs authoring/field-reference template-doc
 parent:      pnpm exec astryx docs authoring/field-reference --index
+name:        cli/commands/theme
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs cli/commands/theme
+parent:      pnpm exec astryx docs cli/commands
 name:        styling/tokens-and-setup
 section:     nextjs-webpack
 domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs styling/tokens-and-setup nextjs-webpack
 parent:      pnpm exec astryx docs styling/tokens-and-setup --index
+name:        theme
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs theme --index
+parent:      pnpm exec astryx docs guides
