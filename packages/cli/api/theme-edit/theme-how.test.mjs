@@ -194,8 +194,9 @@ const QUESTIONS = [
     {
       parts: ['app-shell-header'],
       aspects: ['text'],
-      top: /^set q color '#ffffff' --on app-shell-header$/,
-      adds: /app-shell-header\.base\.color=#ffffff/,
+      // The title and items inside read the text tokens themselves.
+      top: /^set q --color-text-primary '#ffffff' --on app-shell-header/,
+      adds: /app-shell-header\.base\.--color-text-primary=#ffffff/,
     },
   ],
   [
@@ -268,8 +269,9 @@ const QUESTIONS = [
     'in dark mode make cards slightly lighter',
     {
       parts: ['card'],
-      top: /--on card --mode dark$/,
-      adds: /card\.variant:default\.backgroundColor=light-dark\(/,
+      // Each card variant from its own fill, dark mode only.
+      top: /--on card( --when variant:default)? --mode dark( && |$)/,
+      adds: /card\.variant:default\.background(Color)?=/,
     },
   ],
   [
@@ -392,8 +394,10 @@ const QUESTIONS = [
   [
     'stronger shadow on dialogs',
     {
-      top: /^set q box-shadow 'var\(--shadow-high\)' --on dialog$/,
-      adds: /dialog\.base\.boxShadow=var\(--shadow-high\)/,
+      // The dialog already reads the strongest shared shadow: that shadow,
+      // its colors stronger (never the same shadow again).
+      top: /^set q box-shadow '(?!var\(--shadow-high\)).+' --on dialog$/,
+      adds: /dialog\.base\.boxShadow=/,
     },
   ],
   [
@@ -496,8 +500,10 @@ const QUESTIONS = [
   [
     'rounder corners but not on inputs',
     {
-      top: /^set q corners more && set q border-radius \S+ --on inputs$/,
-      adds: /text-input\.base\.borderRadius=/,
+      // Each member that shows a radius of its own keeps the corner token
+      // it reads; a member that takes its corners from a part inside it
+      // gets no invented one.
+      top: /^set q corners more( && set q --radius-[a-z]+ \S+ --on [a-z-]+ --only)+$/,
     },
   ],
   [
@@ -616,7 +622,15 @@ const QUESTIONS = [
       adds: /:active\.transform=scale/,
     },
   ],
-  ['selected table row light blue', {parts: ['table-row'], top: null}],
+  [
+    'selected table row light blue',
+    {
+      parts: ['table-row'],
+      // Core paints the selected wash inline from this token.
+      top: /^set q --color-accent-muted '#[0-9a-f]{6}' --on table-row --state selected$/,
+      adds: /table-row\.selected\.--color-accent-muted=#/,
+    },
+  ],
   ['dark mode only', {top: /^set q mode dark-only$/, adds: /mode=dark-only/}],
   [
     'make dark mode text less bright',
@@ -653,7 +667,7 @@ const QUESTIONS = [
   [
     'make the header dark with white text and a bottom border',
     {
-      top: /background '#1f2937' --on app-shell-header && set q color '#ffffff'/,
+      top: /background '#1f2937' --on app-shell-header && set q --color-text-primary '#ffffff'/,
       adds: /borderBottom=/,
     },
   ],
@@ -1031,8 +1045,10 @@ const QUESTIONS_2 = [
   [
     'all buttons blue except the danger one',
     {
-      top: /--on button && set q background 'var\(--color-error\)' --on button --when variant:destructive$/,
-      adds: /variant:destructive\.background=var\(--color-error\)/,
+      // The danger variant keeps the fill (and the text on it) the base
+      // theme gives it.
+      top: /--on button && set q background 'var\(--color-error(-muted)?\)' --on button --when variant:destructive( && set q color 'var\(--color-on-error(-muted)?\)' --on button --when variant:destructive)?$/,
+      adds: /variant:destructive\.background=var\(--color-error(-muted)?\)/,
     },
   ],
   [
@@ -1308,7 +1324,7 @@ const QUESTIONS_2 = [
   [
     'dialgo shadow stronger',
     {
-      top: /^set q box-shadow 'var\(--shadow-high\)' --on dialog$/,
+      top: /^set q box-shadow '(?!var\(--shadow-high\)).+' --on dialog$/,
       adds: /dialog\.base\.boxShadow/,
     },
   ],
@@ -1882,11 +1898,14 @@ const QUESTIONS_F = [
   ['buttons are not rounded enough', {top: /^set q corners more --on button$/}],
   [
     'nothing should be rounded except avatars',
-    {top: /^set q corners square && set q border-radius 9999px --on avatar$/},
+    // The avatar keeps the corner token it reads, so its own corners stay.
+    {top: /^set q corners square && set q --radius-full 9999px --on avatar$/},
   ],
   [
     'the shadows are too strong',
-    {top: /^set q --shadow-low '0 1px 2px rgb\(0 0 0 \/ 0\.05\)'/},
+    // Each shared shadow from its own layers, its colors fainter (both
+    // modes kept), never a stock light-mode set.
+    {top: /^set q --shadow-low '.*light-dark\(/},
   ],
   [
     'card shadows too strong',
@@ -3203,7 +3222,9 @@ const QUESTIONS_K = [
   ],
   [
     'only in dark mode and only on cards, darker background',
-    {top: /^set q background '#[0-9a-f]{6}' --on card --mode dark$/},
+    {
+      top: /^set q background '#[0-9a-f]{6}' --on card( --when variant:default)? --mode dark( && .*)?$/,
+    },
   ],
   [
     'in daytime mode use a cream background',
@@ -4285,7 +4306,9 @@ describe('how lookups', () => {
     const {data} = await themeEditHow('make it look like Apple', {cwd});
     expect(data.results).toEqual([]);
     expect(data.hint).toMatch(/No match/);
-    expect(data.run[0]).toContain('--list parts');
+    // The help that lists the asks it understands comes first.
+    expect(data.run[0]).toMatch(/ how --help$/);
+    expect(data.run[1]).toContain('--list parts');
   });
 });
 
