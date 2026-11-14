@@ -368,6 +368,8 @@ function buildVisualDeltas({verdict, frames = null}) {
     // inherited-shots.mjs proves a change came from main, or says the
     // reports it read do not show it: unknown, never "made here".
     if (row.inherited?.from === 'main') return `${shown} · inherited from main`;
+    if (row.inherited?.found === true)
+      return `${shown} · same image also changed on another pull request, not proven from main`;
     if (row.inherited?.found === false)
       return `${shown} · inheritance unknown: not found in the ${num(verdict?.inheritedChecked)} newest reports of other pull requests`;
     return shown;

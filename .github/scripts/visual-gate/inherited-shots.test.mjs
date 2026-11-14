@@ -129,7 +129,8 @@ describe('inherited visual changes', () => {
       headSha: HEAD,
       ...gh,
     });
-    expect(verdict.changes[0].inherited).toEqual({found: false});
+    // Found with the same image, but not proven from main.
+    expect(verdict.changes[0].inherited).toEqual({found: true});
   });
 
   it('does not count an unmerged pull request', async () => {
@@ -147,7 +148,7 @@ describe('inherited visual changes', () => {
       headSha: HEAD,
       ...gh,
     });
-    expect(verdict.changes[0].inherited).toEqual({found: false});
+    expect(verdict.changes[0].inherited).toEqual({found: true});
     expect(gh.calls.compare).toBe(0);
   });
 
@@ -166,7 +167,7 @@ describe('inherited visual changes', () => {
       headSha: HEAD,
       ...gh,
     });
-    expect(verdict.changes[0].inherited).toEqual({found: false});
+    expect(verdict.changes[0].inherited).toEqual({found: true});
   });
 
   it('says not found, never introduced here, when no report shows the same image, and does not count this pull request’s own runs', async () => {
@@ -228,7 +229,7 @@ describe('inherited visual changes', () => {
     });
     expect(gh.total()).toBeLessThanOrEqual(MAX_CALLS);
     expect(verdict.inheritedChecked).toBe(gh.calls.read);
-    expect(verdict.changes[0].inherited).toEqual({found: false});
+    expect(verdict.changes[0].inherited).toEqual({found: true});
   });
 
   it('makes a failed lookup visible: it marks nothing and records the reason for the comment and the step summary', async () => {
@@ -278,6 +279,47 @@ describe('inherited visual changes', () => {
     });
     expect(noBase.verdict.inheritedLookupFailed).toBe(
       'the report records no base commit',
+    );
+  });
+
+  it('treats a head it cannot compare as containing this one, so it never proves the shot', async () => {
+    const gh = fakeGitHub({
+      reports: [one],
+      contents: {1: report({[KEY]: H('a')}, [KEY])},
+      pulls: {[S('1')]: merged(S('c'))},
+      ancestry: [`${S('c')}>${BASE}`],
+    });
+    const contains = async (ancestor, descendant) =>
+      ancestor === HEAD ? null : gh.contains(ancestor, descendant);
+    const {verdict, manifest} = mine();
+    await markInherited({
+      verdict,
+      manifest,
+      headRef: 'this',
+      headSha: HEAD,
+      ...gh,
+      contains,
+    });
+    expect(verdict.changes[0].inherited).toEqual({found: true});
+  });
+
+  it('reads past one unreadable report, and fails visibly only when none could be opened', async () => {
+    const two = {...one, id: 2, headRef: 'two', headSha: S('2')};
+    const some = fakeGitHub({
+      reports: [two, one],
+      contents: {1: report({[KEY]: H('a')}, [KEY])},
+      pulls: {[S('1')]: merged(S('c'))},
+      ancestry: [`${S('c')}>${BASE}`],
+    });
+    const first = mine();
+    await markInherited({...first, headRef: 'this', headSha: HEAD, ...some});
+    expect(first.verdict.inheritedLookupFailed).toBeUndefined();
+    expect(first.verdict.changes[0].inherited).toEqual({from: 'main'});
+    const none = fakeGitHub({reports: [two, one]});
+    const second = mine();
+    await markInherited({...second, headRef: 'this', headSha: HEAD, ...none});
+    expect(second.verdict.inheritedLookupFailed).toBe(
+      'none of the 2 reports read could be opened',
     );
   });
 

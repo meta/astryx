@@ -301,12 +301,13 @@ describe('buildVisualDeltas', () => {
     diffPixels,
   });
 
-  it('marks a change that came from main as inherited, says the rest were not found in the reports read, and counts them', () => {
+  it('marks a change that came from main as inherited, keeps an unproven match apart from one not found, and counts the reports read', () => {
     const verdict = {
       status: 'changed',
       changes: [
         {...change('a', 30), inherited: {from: 'main'}},
         {...change('b', 20), inherited: {found: false}},
+        {...change('d', 15), inherited: {found: true}},
         change('c', 10),
       ],
       inheritedChecked: 11,
@@ -317,6 +318,9 @@ describe('buildVisualDeltas', () => {
     );
     expect(section).toContain(
       '| Card · b (neutral, light) · inheritance unknown: not found in the 11 newest reports of other pull requests |',
+    );
+    expect(section).toContain(
+      '| Card · d (neutral, light) · same image also changed on another pull request, not proven from main |',
     );
     expect(section).toContain('| Card · c (neutral, light) | changed');
     expect(section).toContain(

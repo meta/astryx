@@ -8,7 +8,8 @@
  *   and other pull requests' `visual-pr-report` artifacts through the API.
  * @output Each changed shot gets `inherited`: `{from: 'main'}` when a merged
  *   pull request's run showed the same shot changed with the same image and
- *   its merge commit is in the tested base, else `{found: false}` (unknown).
+ *   its merge commit is in the tested base; `{found: true}` when a report read
+ *   shows the same image but that is not proven; else `{found: false}`.
  *   `inheritedChecked` counts the reports read. A failed lookup marks nothing
  *   and sets `inheritedLookupFailed`, which the comment and the step summary
  *   show, so a broken lookup is never silent.
@@ -71,8 +72,9 @@ export function changedImages({verdict, manifest}) {
  * commit is in the base this run tested, and its head does not contain this
  * pull request's head. A stack's later entry or a superseding branch shows
  * this pull request's own change, and an unmerged pull request proves
- * nothing, so neither counts. Every other changed shot says it was not found
- * in the reports read: unknown, never "introduced here".
+ * nothing, so neither counts. A shot a report read shows with the same image,
+ * unproven, says so; a shot no report read shows says it was not found. Both
+ * are unknown, never "introduced here".
  *
  * @param {object} options
  * @param {any} options.verdict this run's verdict; changed in place
@@ -82,11 +84,12 @@ export function changedImages({verdict, manifest}) {
  * @param {() => Promise<Array<{id: number, createdAt: string, headRef: string, headSha: string}>>} options.listReports
  *   other runs' `visual-pr-report` artifacts, newest first (one call)
  * @param {(id: number) => Promise<{verdict: any, manifest: any} | null>} options.readReport
- *   one artifact's verdict and manifest; null when it is gone (one call)
+ *   one artifact's verdict and manifest; null when it is gone or unreadable
+ *   (one call)
  * @param {(sha: string) => Promise<{number: number, mergedAt: string | null, mergeSha: string | null} | null>} options.pullFor
  *   the pull request a head commit belongs to (one call)
- * @param {(ancestor: string, descendant: string) => Promise<boolean>} options.contains
- *   whether `descendant` contains `ancestor` (one call)
+ * @param {(ancestor: string, descendant: string) => Promise<boolean | null>} options.contains
+ *   whether `descendant` contains `ancestor`; null when a commit is gone (one call)
  * @param {number} [options.maxCalls]
  */
 export async function markInherited({
@@ -148,12 +151,16 @@ async function lookUp({
   /** Heads whose report showed the shot changed with this image. @type {Map<string, string[]>} */
   const candidates = new Map();
   let read = 0;
+  let unreadable = 0;
   for (const report of reports) {
     if (calls >= maxCalls - PROOF_CALLS) break;
     calls += 1;
     const content = await readReport(report.id);
     read += 1;
-    if (!content) continue;
+    if (!content) {
+      unreadable += 1;
+      continue;
+    }
     for (const [key, hash] of changedImages(content))
       if (mine.get(key) === hash && SHA.test(report.headSha)) {
         const heads = candidates.get(key) ?? [];
@@ -161,6 +168,9 @@ async function lookUp({
         candidates.set(key, heads);
       }
   }
+  // One unreadable report is no data; none readable means the lookup broke.
+  if (read > 0 && unreadable === read)
+    throw new Error(`none of the ${read} reports read could be opened`);
   /** @type {Map<string, boolean>} */
   const proven = new Map();
   const fromMain = async head => {
@@ -171,10 +181,11 @@ async function lookUp({
     let result = false;
     if (pull?.mergedAt && pull.mergeSha && SHA.test(pull.mergeSha)) {
       calls += 1;
-      if (await contains(pull.mergeSha, baseSha)) {
+      if ((await contains(pull.mergeSha, baseSha)) === true) {
         calls += 1;
-        // A head that contains this one carries this pull request's change.
-        result = !(await contains(headSha, head));
+        // A head that contains this one carries this pull request's change;
+        // one that cannot be compared counts as containing it.
+        result = (await contains(headSha, head)) === false;
       }
     }
     proven.set(head, result);
@@ -188,7 +199,9 @@ async function lookUp({
         inherited = true;
         break;
       }
-    change.inherited = inherited ? {from: 'main'} : {found: false};
+    change.inherited = inherited
+      ? {from: 'main'}
+      : {found: candidates.has(change.key)};
   }
   verdict.inheritedChecked = read;
 }
@@ -245,10 +258,15 @@ function githubReads({token, repository}) {
               maxBuffer: 1 << 26,
             }),
           );
-        return {
-          verdict: read('verdict.json'),
-          manifest: read('manifest.json'),
-        };
+        try {
+          return {
+            verdict: read('verdict.json'),
+            manifest: read('manifest.json'),
+          };
+        } catch {
+          // A broken report is no data; markInherited fails when none open.
+          return null;
+        }
       } finally {
         fs.rmSync(dir, {recursive: true, force: true});
       }
@@ -267,7 +285,7 @@ function githubReads({token, repository}) {
     },
     contains: async (ancestor, descendant) => {
       const response = await get(`${base}/compare/${ancestor}...${descendant}`);
-      if (!response) return false;
+      if (!response) return null;
       const {status} = await response.json();
       return status === 'ahead' || status === 'identical';
     },
