@@ -21,7 +21,7 @@ import {
   themeFiles,
 } from './_settings.mjs';
 import {FAMILIES, GROUPS, LIKE, P} from './_tables.mjs';
-import {parseColor} from './_color.mjs';
+import {alphaOf, parseColor} from './_color.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
 /** The theme name commands use when the app has no theme yet. */
@@ -369,16 +369,6 @@ function shadowStrength(v) {
   return sum;
 }
 
-/** The alpha of a color (1 when it has none), or null. @param {string} v */
-function alphaIn(v) {
-  const s = String(v).trim();
-  const h = /^#[0-9a-f]{6}([0-9a-f]{2})$/i.exec(s);
-  if (h) return parseInt(h[1], 16) / 255;
-  const f = /\/\s*([\d.]+)(%?)\s*\)$/.exec(s);
-  if (f) return Number(f[1]) / (f[2] ? 100 : 1);
-  return parseColor(s) ? 1 : null;
-}
-
 /** @param {number[]} c */
 const luminance = c => c[0] * 0.299 + c[1] * 0.587 + c[2] * 0.114;
 
@@ -577,8 +567,8 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
         }
         // "more transparent": the color's alpha goes down, "more opaque" up.
         if (fam === 'color' && intent.opacityDir) {
-          const x = alphaIn(after);
-          const y = alphaIn(before);
+          const x = parseColor(after) ? alphaOf(after) : null;
+          const y = parseColor(before) ? alphaOf(before) : null;
           if (
             x != null &&
             y != null &&
@@ -686,8 +676,8 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
         continue;
       }
       if (fam === 'color' && intent.opacityDir) {
-        const x = alphaIn(after);
-        const y = alphaIn(before);
+        const x = parseColor(after) ? alphaOf(after) : null;
+        const y = parseColor(before) ? alphaOf(before) : null;
         if (
           x != null &&
           y != null &&

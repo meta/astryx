@@ -294,6 +294,11 @@ describe('parts named once for two removals, the page, steps', () => {
         'no shadows and borders on cards',
         ['set q box-shadow none --on card', 'set q border none --on card'],
       ],
+      // A noun with an adjective is an ask of its own, never a removal.
+      [
+        'no shadow and rounded corners on cards',
+        ['set q box-shadow none --on card', 'set q corners round --on card'],
+      ],
       [
         'no border and bigger padding on cards',
         ['set q border none --on card', 'set q spacing more --on card'],
@@ -430,6 +435,34 @@ describe('value questions', () => {
       const r = await answer(q);
       expect(r.commands).toEqual([]);
       expect(r.text).toMatch(want);
+    },
+    T,
+  );
+});
+
+describe('a see-through overlay', () => {
+  it(
+    'more transparent lowers its alpha and more opaque raises it, rgba() included',
+    async () => {
+      await themeEditSet('q', '--color-overlay', 'rgba(0,0,0,0.5)', {cwd});
+      try {
+        /** @param {string} q */
+        const alphas = async q =>
+          (await answer(q)).first.map(c =>
+            Number.parseInt(
+              /'#[0-9a-f]{6}([0-9a-f]{2})'/.exec(c)?.[1] ?? 'zz',
+              16,
+            ),
+          );
+        const clearer = await alphas('make the backdrop more transparent');
+        const denser = await alphas('make the backdrop more opaque');
+        expect(clearer.length).toBeGreaterThan(0);
+        expect(denser.length).toBeGreaterThan(0);
+        expect(clearer.every(a => a < 0x80)).toBe(true);
+        expect(denser.every(a => a > 0x80)).toBe(true);
+      } finally {
+        await themeEditUndo('q', {cwd, thing: '--color-overlay'});
+      }
     },
     T,
   );

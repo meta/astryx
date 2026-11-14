@@ -9,7 +9,7 @@
  * @position api/theme-edit — imported only by _how.mjs
  */
 
-import {COLOR_NAMES, hex, parseColor, ratio} from './_color.mjs';
+import {COLOR_NAMES, alphaOf, hex, parseColor, ratio} from './_color.mjs';
 import {
   DESIGN,
   DIALS,
@@ -552,15 +552,7 @@ export function tempShift(color, way, amount) {
 function overlayAlpha(now, c) {
   const rgb = parseColor(now);
   if (!rgb) return null;
-  const m = /^#[0-9a-f]{6}([0-9a-f]{2})$/i.exec(String(now).trim());
-  const fn = /\/\s*([\d.]+%?)\s*\)$/.exec(String(now).trim())?.[1];
-  const a = m
-    ? parseInt(m[1], 16) / 255
-    : fn
-      ? fn.endsWith('%')
-        ? Number.parseFloat(fn) / 100
-        : Number(fn)
-      : 1;
+  const a = alphaOf(now);
   // "more transparent / see-through", "fainter": a lower alpha, whatever
   // "more" says; "more opaque", "less transparent": a higher one.
   const seeThrough =
@@ -3171,7 +3163,8 @@ export function draftAnswer(ctx, env, question) {
     // "no shadow and no border on dialogs", "remove the border and the
     // shadow from cards": both removals on that part. The second item is a
     // removal only when it carries its own removal lead, or is a plain
-    // removable thing the first lead governs ("no shadows and borders").
+    // removable noun the first lead governs ("no shadows and borders"); a
+    // noun with an adjective ("rounded corners") is an ask of its own.
     .replace(
       new RegExp(
         `\\b${REMOVAL_LEAD} ([a-z]+(?: [a-z]+)?) and ${REMOVAL_LEAD} ([a-z]+(?: [a-z]+)?) (?:on|from|for) (?:the |my |all )?([a-z][a-z-]*s?)\\b`,
@@ -3181,7 +3174,7 @@ export function draftAnswer(ctx, env, question) {
     )
     .replace(
       new RegExp(
-        `\\b${REMOVAL_LEAD} ([a-z]+(?: [a-z]+)?) and (?:the )?((?:rounded )?${REMOVABLE}) (?:on|from|for) (?:the |my |all )?([a-z][a-z-]*s?)\\b`,
+        `\\b${REMOVAL_LEAD} ([a-z]+(?: [a-z]+)?) and (?:the )?(${REMOVABLE}) (?:on|from|for) (?:the |my |all )?([a-z][a-z-]*s?)\\b`,
         'gi',
       ),
       'no $1 on $3 and no $2 on $3',
