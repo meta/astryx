@@ -177,9 +177,9 @@ one pending load per module, caches a success, and resets after a failure.
   List, CheckboxList, Selector, DropdownMenu, and each entry an owner adds)
   and walks its eager graph. For Text, Heading, Button, IconButton, Link and
   Table, it finds every crossing the entry reaches and names the import chain
-  that brings each one. List, CheckboxList, Selector and DropdownMenu are held
-  by the "Must not reach" table below; their crossings are held once the
-  allowlist lists them.
+  that brings each one. The crossings of List, CheckboxList, Selector and
+  DropdownMenu are not checked against the allowlist; the "Must not reach"
+  table below holds them.
   A crossing listed in the allowlist below passes, with its gzip cost
   printed. A crossing not listed fails (DEC-3). A listed crossing that no
   longer occurs fails until its row is removed. The check also prints each
