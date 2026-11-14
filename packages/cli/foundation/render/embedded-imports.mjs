@@ -15,7 +15,7 @@
 
 import * as path from 'node:path';
 import {babelParse as parse} from '../runtime/lazy-dependencies.mjs';
-import {PAGE_EXTENSIONS} from './embedded-files.mjs';
+import {MODULE_EXTENSIONS} from './embedded-files.mjs';
 import postcss from 'postcss';
 import {matchPath, pathsFor} from './ts-paths.mjs';
 import {isAssetPath} from './assets.mjs';
@@ -42,7 +42,7 @@ export function cssImports(css) {
 }
 
 /** Extensions an extensionless import may stand for, in resolution order. */
-const RESOLVE_EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js', '.mjs', '.json'];
+const RESOLVE_EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js', '.mjs', '.mts', '.cts', '.cjs', '.json'];
 
 /**
  * The string specifiers one module imports.
@@ -208,7 +208,7 @@ export function reachableFiles(files, {aliases = []} = {}) {
   while (queue.length > 0) {
     const current = /** @type {string} */ (queue.shift());
     const ext = path.posix.extname(current).toLowerCase();
-    const isModule = PAGE_EXTENSIONS.includes(ext);
+    const isModule = MODULE_EXTENSIONS.includes(ext);
     if (!isModule && ext !== '.css') continue;
     const entry = byPath.get(current);
     if (!entry) continue;

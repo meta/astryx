@@ -25,7 +25,7 @@ import {fileURLToPath} from 'node:url';
 import postcss from 'postcss';
 import {assetDataUri, isAssetBytes, isAssetPath, RenderAssetError} from './assets.mjs';
 import {classesIn, cutCss, layerOrderOf} from './css-cut.mjs';
-import {RENDER_FORMAT, asParsed, sha256, sourceBlock} from './source-block.mjs';
+import {asParsed, formatFor, sha256, sourceBlock} from './source-block.mjs';
 import {embeddedPathProblem} from './embedded-files.mjs';
 import {isServedPackage, resolveServed} from './served-packages.mjs';
 import {CHART_CSS} from './charts.mjs';
@@ -37,7 +37,7 @@ import {findNodeModulesPackage} from '../fs/paths.mjs';
 /** How long one page may take to render before it is stopped. */
 export const RENDER_TIMEOUT_MS = 60_000;
 
-export {PAGE_EXTENSIONS} from './embedded-files.mjs';
+export {MODULE_EXTENSIONS, PAGE_EXTENSIONS} from './embedded-files.mjs';
 
 /**
  * @typedef {object} RenderWarning
@@ -892,7 +892,7 @@ export async function renderPage(entry, options = {}) {
     const file = path.basename(options.output);
     const facts = {
       cli: options.version ?? null,
-      format: RENDER_FORMAT,
+      format: formatFor(embedded),
       file,
       page: path.relative(root, entry).split(path.sep).join('/'),
       restored: `${file.replace(/\.[^.]+$/, '')}-restored/${embedded[0].path}`,
