@@ -58,21 +58,29 @@ const shown = (cwd, file) => {
     : file;
 };
 
+/** Why a file cannot be read, in a few words, by its errno. */
+const READ_FAILURES = {EACCES: 'no permission', EPERM: 'no permission', EISDIR: 'it is a folder'};
+
 /**
- * Read a file the caller named, or throw ERR_FILE_NOT_FOUND.
+ * Read a file the caller named: ERR_FILE_NOT_FOUND when nothing is there,
+ * ERR_READ_FAILED, with the reason, when it is there but cannot be read.
  * @param {string} file absolute
  * @param {string} cwd
  * @returns {Buffer}
  */
 function readInput(file, cwd) {
   try {
-    if (!fs.statSync(file).isFile()) throw new Error('not a file');
     return fs.readFileSync(file);
-  } catch {
+  } catch (e) {
+    const errno = /** @type {NodeJS.ErrnoException} */ (e).code;
+    if (errno === 'ENOENT' || errno === 'ENOTDIR') {
+      throw new AstryxError(`${shown(cwd, file)} does not exist`, [], ERROR_CODES.ERR_FILE_NOT_FOUND);
+    }
+    const why = READ_FAILURES[/** @type {keyof typeof READ_FAILURES} */ (errno)];
     throw new AstryxError(
-      `${shown(cwd, file)} does not exist`,
+      `${shown(cwd, file)} cannot be read${errno ? ` (${errno}${why ? `: ${why}` : ''})` : ''}; nothing was written.`,
       [],
-      ERROR_CODES.ERR_FILE_NOT_FOUND,
+      ERROR_CODES.ERR_READ_FAILED,
     );
   }
 }

@@ -207,6 +207,11 @@ export const doc = {
       value: 'ERR_WRITE_FAILED',
       description: 'Writing output files failed (and was rolled back).',
     },
+    {
+      value: 'ERR_READ_FAILED',
+      description:
+        'Reading an input file failed: no permission, or a folder on its path may not be searched.',
+    },
 
     // Theme build
     {
