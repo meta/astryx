@@ -75,6 +75,7 @@
  *   | 'ERR_FILE_EXISTS'
  *   | 'ERR_PATH_TRAVERSAL'
  *   | 'ERR_WRITE_FAILED'
+ *   | 'ERR_READ_FAILED'
  *   | 'ERR_THEME_INVALID'
  *   | 'ERR_THEME_LOAD'
  *   | 'ERR_THEME_STALE'
@@ -215,6 +216,8 @@ export const ERROR_CODES = Object.freeze({
   ERR_PATH_TRAVERSAL: 'ERR_PATH_TRAVERSAL',
   /** Writing output files failed (and was rolled back). */
   ERR_WRITE_FAILED: 'ERR_WRITE_FAILED',
+  /** An input file cannot be read: no permission on it or on a folder on its path, a folder or other entry that is not a regular file, or another error from the file system. */
+  ERR_READ_FAILED: 'ERR_READ_FAILED',
 
   // ── Theme build ──────────────────────────────────────────────────
   /** A theme definition or contributed theme descriptor is invalid. */

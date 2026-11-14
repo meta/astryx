@@ -154,7 +154,7 @@ fix:      Remove \`summary\`: SingleComponentDoc has no field \`summary\`.`,
         {
           type: 'code',
           lang: 'text',
-          code: 'id:      docs-progressive-disclosure\nstatus:  [warn]\nlabel:   Documentation navigation and size\nmessage: acme/deploying build-before-you-ship: 46 KB, over the 32 KB one read may return',
+          code: '[warn]  docs-progressive-disclosure - Documentation navigation and size - acme/deploying build-before-you-ship: 46 KB,\n        over the 32 KB one read may return',
         },
         {
           type: 'prose',
