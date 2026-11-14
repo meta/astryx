@@ -27,7 +27,11 @@
  * request's vector through the request matrix, against the docs' vector
  * through the doc matrix, plus the lexical weight times their plain overlap
  * (cosine), so a block the weights were never fitted with, such as a new one,
- * is scored from its docs the same way. The candidates are the best matches,
+ * is scored from its docs the same way. The plain overlap also counts single
+ * words outside the vocabulary the matrices were fitted with (such a word
+ * weighs as much as the vocabulary's rarest word), so a newer block's own
+ * words still tie it to a request that uses them. The
+ * candidates are the best matches,
  * build's own blocks, search's first results, and the best plain overlaps.
  * Each candidate's final score adds the ranking coefficients times: its match
  * relative to the best, its place among the matches, its lead over the
@@ -198,9 +202,41 @@ function vectorOf(terms, d) {
 }
 
 /**
+ * A text's sparse unit vector over its words, for the plain overlap:
+ * (1 + ln count) x idf. A single word outside the vocabulary weighs as much
+ * as the vocabulary's rarest word (no fitted text used it often enough to
+ * keep). It counts only when `known` has it: a request word no block's docs
+ * use cannot tie the request to any block. A word pair counts only when the
+ * vocabulary has it.
+ * @param {string[]} terms
+ * @param {{index: Map<string, number>, idf: Float64Array, rarest: number}} d
+ * @param {Set<string>} [known] the words outside the vocabulary that count; all when absent
+ * @returns {Map<string, number>}
+ */
+function wordVectorOf(terms, d, known) {
+  /** @type {Map<string, number>} */
+  const counts = new Map();
+  for (const t of terms) counts.set(t, (counts.get(t) ?? 0) + 1);
+  /** @type {Map<string, number>} */
+  const v = new Map();
+  let sq = 0;
+  for (const [t, c] of counts) {
+    const i = d.index.get(t);
+    if (i === undefined && (t.includes('_') || (known && !known.has(t))))
+      continue;
+    const x = (1 + Math.log(c)) * (i === undefined ? d.rarest : d.idf[i]);
+    v.set(t, x);
+    sq += x * x;
+  }
+  const norm = Math.sqrt(sq) || 1;
+  for (const [t, x] of v) v.set(t, x / norm);
+  return v;
+}
+
+/**
  * The vocabulary index and idf, read once per weights object, and each matrix
  * row decoded when a side first uses it.
- * @type {WeakMap<BlockPickerWeights, {index: Map<string, number>, idf: Float64Array, rows: Map<string, Int8Array>}>}
+ * @type {WeakMap<BlockPickerWeights, {index: Map<string, number>, idf: Float64Array, rarest: number, rows: Map<string, Int8Array>}>}
  */
 const vocabularies = new WeakMap();
 
@@ -208,9 +244,11 @@ const vocabularies = new WeakMap();
 function vocabularyOf(weights) {
   let v = vocabularies.get(weights);
   if (!v) {
+    const idf = Float64Array.from(weights.idf, x => x / 1024);
     v = {
       index: new Map(weights.vocab.map((w, i) => [w, i])),
-      idf: Float64Array.from(weights.idf, x => x / 1024),
+      idf,
+      rarest: idf.reduce((a, x) => Math.max(a, x), 0),
       rows: new Map(),
     };
     vocabularies.set(weights, v);
@@ -292,9 +330,11 @@ export function requestSideOf(request, weights) {
 /**
  * The picker's match of a request to a docs text: their projections' dot
  * product plus the lexical weight times their plain overlap (the cosine of
- * their word vectors). Build's ranking also reads the overlap alone.
- * @param {{vector: Map<number, number>, projected: Float64Array}} request
- * @param {{vector: Map<number, number>, projected: Float64Array}} doc
+ * their word vectors). The vectors are keyed by vocabulary index (search's
+ * fit) or by word (the block picker's overlap, which also counts single
+ * words outside the vocabulary).
+ * @param {{vector: Map<number | string, number>, projected: Float64Array}} request
+ * @param {{vector: Map<number | string, number>, projected: Float64Array}} doc
  * @param {BlockPickerWeights} weights
  * @returns {{match: number, overlap: number}}
  */
@@ -325,7 +365,7 @@ function componentOf(block, componentNames) {
 /**
  * The catalog, read once per weights and catalog contents: each block's
  * component, docs vector and projection, and each component's name phrases.
- * @type {WeakMap<BlockPickerWeights, {key: string, blocks: Map<string, {component: string, vector: Map<number, number>, projected: Float64Array}>, phrases: Map<string, [string[], number][]>}>}
+ * @type {WeakMap<BlockPickerWeights, {key: string, blocks: Map<string, {component: string, vector: Map<number, number>, projected: Float64Array, words: Map<string, number>}>, phrases: Map<string, [string[], number][]>}>}
  */
 const catalogs = new WeakMap();
 
@@ -358,18 +398,40 @@ function readCatalog(catalog, components, weights, keep) {
 }
 
 /**
+ * Every word the catalog's block docs use, per read catalog.
+ * @type {WeakMap<object, Set<string>>}
+ */
+const docWords = new WeakMap();
+
+/**
+ * @param {{blocks: Map<string, {words: Map<string, number>}>}} cat
+ * @returns {Set<string>}
+ */
+function docWordsOf(cat) {
+  let words = docWords.get(cat);
+  if (!words) {
+    words = new Set();
+    for (const b of cat.blocks.values())
+      for (const t of b.words.keys()) words.add(t);
+    docWords.set(cat, words);
+  }
+  return words;
+}
+
+/**
  * readCatalog's value, worked out.
  * @param {string} key
  * @param {CatalogBlock[]} catalog
  * @param {CatalogComponent[]} components
  * @param {BlockPickerWeights} weights
- * @returns {{key: string, blocks: Map<string, {component: string, vector: Map<number, number>, projected: Float64Array}>, phrases: Map<string, [string[], number][]>}}
+ * @returns {{key: string, blocks: Map<string, {component: string, vector: Map<number, number>, projected: Float64Array, words: Map<string, number>}>, phrases: Map<string, [string[], number][]>}}
  */
 function computeCatalog(key, catalog, components, weights) {
   const names = components.map(c => c.name).sort((a, b) => b.length - a.length);
   const keywords = new Map(components.map(c => [c.name, c.keywords ?? []]));
-  /** @type {Map<string, {component: string, vector: Map<number, number>, projected: Float64Array}>} */
+  /** @type {Map<string, {component: string, vector: Map<number, number>, projected: Float64Array, words: Map<string, number>}>} */
   const blocks = new Map();
+  const vocabulary = vocabularyOf(weights);
   for (const b of catalog) {
     if (blocks.has(b.name)) continue;
     const component = componentOf(b, names);
@@ -380,7 +442,11 @@ function computeCatalog(key, catalog, components, weights) {
       wordsOf(component).join(' '),
       (keywords.get(component) ?? []).join(' '),
     ].join(' ');
-    blocks.set(b.name, {component, ...docSideOf(text, weights)});
+    blocks.set(b.name, {
+      component,
+      ...docSideOf(text, weights),
+      words: wordVectorOf(termsOf(text), vocabulary),
+    });
   }
   // A component is named by its own words, or by a keyword at most three
   // components share (weighted by how few share it).
@@ -412,7 +478,8 @@ function computeCatalog(key, catalog, components, weights) {
 const CATALOG_CODEC = {
   /**
    * What decode can get wrong in a read-back catalog: its key, each block's
-   * component, and projections of one width with finite numbers.
+   * component and word vector, and projections of one width with finite
+   * numbers.
    * @param {any} read
    */
   valid: read => {
@@ -422,6 +489,7 @@ const CATALOG_CODEC = {
     return blocks.every(
       (/** @type {any} */ b) =>
         typeof b.component === 'string' &&
+        b.words instanceof Map &&
         b.projected.length > 0 &&
         b.projected.length === width &&
         [...b.projected].every(Number.isFinite),
@@ -435,6 +503,7 @@ const CATALOG_CODEC = {
       b.component,
       [...b.vector],
       [...b.projected],
+      [...b.words],
     ]),
     phrases: [...read.phrases],
   }),
@@ -447,11 +516,12 @@ const CATALOG_CODEC = {
     blocks: new Map(
       stored.blocks.map(
         (
-          /** @type {[string, string, [number, number][], number[]]} */ [
+          /** @type {[string, string, [number, number][], number[], [string, number][]]} */ [
             name,
             component,
             vector,
             projected,
+            words,
           ],
         ) => [
           name,
@@ -459,6 +529,7 @@ const CATALOG_CODEC = {
             component,
             vector: new Map(vector),
             projected: Float64Array.from(projected),
+            words: new Map(words),
           },
         ],
       ),
@@ -540,10 +611,22 @@ export function pickBlocks(request, signals, weights, keep) {
   if (own.length === 0) return {names: [], entries};
   const cat = readCatalog(signals.catalog, signals.components, weights, keep);
   const side = requestSideOf(request, weights);
+  const words = wordVectorOf(
+    termsOf(request),
+    vocabularyOf(weights),
+    docWordsOf(cat),
+  );
   /** @type {Map<string, {match: number, overlap: number}>} */
   const scored = new Map();
   for (const [name, b] of cat.blocks)
-    scored.set(name, matchOf(side, b, weights));
+    scored.set(
+      name,
+      matchOf(
+        {vector: words, projected: side.projected},
+        {vector: b.words, projected: b.projected},
+        weights,
+      ),
+    );
   const get = (/** @type {string} */ b) =>
     scored.get(b) ?? {match: -Infinity, overlap: 0};
   const ranked = [...scored.keys()].sort((a, b) => get(b).match - get(a).match);
@@ -593,8 +676,8 @@ export function pickBlocks(request, signals, weights, keep) {
   });
   final.sort((a, b) => b.score - a.score || a.pos - b.pos);
   const foreign = new Set(signals.foreign);
-  const words = wordsOf(request);
-  const keeps = own.map(b => foreign.has(b) || writesName(words, b));
+  const requestWords = wordsOf(request);
+  const keeps = own.map(b => foreign.has(b) || writesName(requestWords, b));
   const kept = new Set(own.filter((_, k) => keeps[k]));
   const order = [
     ...final.map(x => x.b).filter(b => !kept.has(b) && !foreign.has(b)),
