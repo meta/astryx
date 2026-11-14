@@ -3,8 +3,9 @@
 
 /**
  * @file CodeBlockSyntaxLayer.a11y.chromium.spec.ts
- * @input Storybook story core-codeblock--default, with a page stylesheet that
- *   sets one syntax colour in the astryx-theme layer and one unlayered
+ * @input Storybook story core-codeblock--default with no Storybook Theme, and a
+ *   page stylesheet that sets one syntax colour in the astryx-theme layer and
+ *   one unlayered
  * @output Browser evidence that CodeBlock's injected highlight rules sit in the
  *   astryx-base layer: a theme's syntax colour and an app's syntax colour both
  *   win over the injected defaults
@@ -51,7 +52,7 @@ test('a theme layer and unlayered app CSS set the syntax colours over the inject
     {keyword: THEME_KEYWORD, string: APP_STRING},
   );
   await page.goto(
-    `${storybook.origin}/iframe.html?id=core-codeblock--default&viewMode=story`,
+    `${storybook.origin}/iframe.html?id=core-codeblock--default&viewMode=story&globals=astryxTheme:none`,
   );
   await expect(page.locator('style[data-astryx-highlight-styles]')).toHaveCount(
     1,

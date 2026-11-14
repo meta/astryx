@@ -65,8 +65,11 @@ describe('CodeBlock ::highlight() rules', () => {
       <CodeBlock code="const a = 1;" language="ts" highlightMode="ranges" />,
     );
     const text = document.head.querySelector(STYLE_SELECTOR)?.textContent ?? '';
-    // One layer block holds every injected rule, the :root fallbacks included.
-    expect(text.trim()).toMatch(/^@layer astryx-base \{[\s\S]*\}$/);
+    // The layer order comes first; then one layer block holds every injected
+    // rule, the :root fallbacks included.
+    expect(text.trim()).toMatch(
+      /^@layer reset, astryx-base, astryx-theme;\n@layer astryx-base \{[\s\S]*\}$/,
+    );
     expect(text.indexOf(':root')).toBeGreaterThan(text.indexOf('@layer'));
     expect(text.indexOf('::highlight(')).toBeGreaterThan(
       text.indexOf('@layer'),

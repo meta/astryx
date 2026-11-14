@@ -93,8 +93,10 @@ export function ensureHighlightStyles(): void {
   const style = document.createElement('style');
   style.setAttribute('data-astryx-highlight-styles', '');
   // An unlayered rule beats every layered rule, so the injected rules go in
-  // the astryx-base layer like the rest of Core's CSS.
-  style.textContent = `@layer astryx-base {\n${HIGHLIGHT_STYLES}\n}`;
+  // the astryx-base layer like the rest of Core's CSS. The order statement
+  // comes first, so this sheet cannot declare astryx-base before reset when
+  // it loads before Core's stylesheet.
+  style.textContent = `@layer reset, astryx-base, astryx-theme;\n@layer astryx-base {\n${HIGHLIGHT_STYLES}\n}`;
   document.head.appendChild(style);
   inserted = true;
 }
