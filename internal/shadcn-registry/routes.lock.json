@@ -498,6 +498,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-audio-player",
+      "path": "components/lab/audio-player",
+      "aliases": []
+    },
+    {
       "name": "component-lab-chart-area",
       "path": "components/lab/chart-area",
       "aliases": []
@@ -638,6 +643,56 @@
       "aliases": []
     },
     {
+      "name": "component-lab-media-captions-button",
+      "path": "components/lab/media-captions-button",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-media-fullscreen-button",
+      "path": "components/lab/media-fullscreen-button",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-media-play-button",
+      "path": "components/lab/media-play-button",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-media-playback-rate",
+      "path": "components/lab/media-playback-rate",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-media-player",
+      "path": "components/lab/media-player",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-media-player-element",
+      "path": "components/lab/media-player-element",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-media-seek-button",
+      "path": "components/lab/media-seek-button",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-media-time",
+      "path": "components/lab/media-time",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-media-time-slider",
+      "path": "components/lab/media-time-slider",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-media-volume",
+      "path": "components/lab/media-volume",
+      "aliases": []
+    },
+    {
       "name": "component-lab-navigation-screen",
       "path": "components/lab/navigation-screen",
       "aliases": []
@@ -740,6 +795,11 @@
     {
       "name": "component-lab-transfer-list-selector",
       "path": "components/lab/transfer-list-selector",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-video-player",
+      "path": "components/lab/video-player",
       "aliases": []
     },
     {
@@ -1290,6 +1350,11 @@
     {
       "name": "example-aspect-ratio-square-image",
       "path": "examples/aspect-ratio/square-image",
+      "aliases": []
+    },
+    {
+      "name": "example-audio-player-voice-memo",
+      "path": "examples/audio-player/voice-memo",
       "aliases": []
     },
     {
@@ -2594,6 +2659,11 @@
     {
       "name": "example-markdown-rich-content",
       "path": "examples/markdown/rich-content",
+      "aliases": []
+    },
+    {
+      "name": "example-media-player-inline-voice-note",
+      "path": "examples/media-player/inline-voice-note",
       "aliases": []
     },
     {
@@ -4087,6 +4157,11 @@
       "aliases": []
     },
     {
+      "name": "example-video-player-muted-autoplay-loop",
+      "path": "examples/video-player/muted-autoplay-loop",
+      "aliases": []
+    },
+    {
       "name": "example-visually-hidden-live-region",
       "path": "examples/visually-hidden/live-region",
       "aliases": []
@@ -4119,6 +4194,16 @@
     {
       "name": "hook-create-reorderable",
       "path": "hooks/create-reorderable",
+      "aliases": []
+    },
+    {
+      "name": "hook-lab-use-media-playback-time",
+      "path": "hooks/lab/use-media-playback-time",
+      "aliases": []
+    },
+    {
+      "name": "hook-lab-use-media-player",
+      "path": "hooks/lab/use-media-player",
       "aliases": []
     },
     {
@@ -4559,6 +4644,11 @@
     {
       "name": "showcase-aspect-ratio-default",
       "path": "showcases/aspect-ratio/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-audio-player-podcast-episode",
+      "path": "showcases/audio-player/podcast-episode",
       "aliases": []
     },
     {
@@ -5052,6 +5142,11 @@
       "aliases": []
     },
     {
+      "name": "showcase-media-player-custom-layout",
+      "path": "showcases/media-player/custom-layout",
+      "aliases": []
+    },
+    {
       "name": "showcase-media-theme-media-overlay",
       "path": "showcases/media-theme/media-overlay",
       "aliases": []
@@ -5414,6 +5509,11 @@
     {
       "name": "showcase-v-stack-default",
       "path": "showcases/v-stack/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-video-player-default",
+      "path": "showcases/video-player/default",
       "aliases": []
     },
     {
