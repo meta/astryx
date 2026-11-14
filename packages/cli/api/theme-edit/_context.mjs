@@ -58,6 +58,7 @@ import {
   themeFiles,
   refuseThemesNotFolder,
   shown,
+  OPEN_SECTION,
 } from './_settings.mjs';
 import {
   SHOWCASE_GROUPS,
@@ -66,6 +67,7 @@ import {
   baseFontsSheet,
   newPictureRun,
   renderPreview,
+  renderSheet,
   screenshot,
 } from './_preview.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
@@ -955,7 +957,27 @@ export function styledChanges(before, after, base) {
 }
 
 /**
- * Previews after a change: the sample page always, pictures on request.
+ * The page of the theme's open states (every menu, tooltip, popover and
+ * list drawn open: the overlays section of the sheet), made and stamped
+ * with the build it shows, and where its picture goes. The sample page
+ * (preview.png) has no overlay open, and the full sheet is too tall to
+ * read whole, so `--png` takes this picture beside the sample page's.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {Promise<{html: string, png: string}>}
+ */
+export async function openStatesPage(ctx, slug, data) {
+  const f = themeFiles(ctx.project.cwd, slug);
+  const html = path.join(f.dir, `sheet-${OPEN_SECTION}.html`);
+  await renderSheet(ctx, slug, data, {group: OPEN_SECTION});
+  stampSheet(html, slug, ctx.project.cwd);
+  return {html, png: path.join(f.dir, `sheet-${OPEN_SECTION}.png`)};
+}
+
+/**
+ * Previews after a change: the sample page always; on request, pictures of
+ * it and of the open states ({@link openStatesPage}).
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
@@ -983,6 +1005,16 @@ export async function previewAfter(ctx, slug, data, png) {
           : `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
   }
   const f = themeFiles(ctx.project.cwd, slug);
+  /** The pages photographed: the sample page, and with it the open states. */
+  const shotPages = [{html: f.preview, png: f.previewPng}];
+  // Made before the sections are judged, so it is current, never marked.
+  if (png && preview)
+    try {
+      shotPages.push(await openStatesPage(ctx, slug, data));
+    } catch (e) {
+      if (/** @type {any} */ (e)?.lockLost) throw e;
+      // It could not be rendered: the sample page's picture is taken alone.
+    }
   // The sheet of every component is made by show only: after a change it
   // says, at its top, that it shows the theme as it was.
   const sheetStale = markSheetStale(f.sheet, slug, ctx.project.cwd);
@@ -1002,11 +1034,7 @@ export async function previewAfter(ctx, slug, data, png) {
   });
   const shots =
     png && preview
-      ? await pictures(
-          ctx.project,
-          [{html: f.preview, png: f.previewPng}],
-          modesOf(data),
-        )
+      ? await pictures(ctx.project, shotPages, modesOf(data))
       : {files: [], problem: null};
   return {
     preview,

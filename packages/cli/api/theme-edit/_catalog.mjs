@@ -222,6 +222,21 @@ export function elementNames(v, out = new Set()) {
 export const bindingFrom = b => (typeof b === 'string' ? b : b.from);
 
 /**
+ * The few fixed items of the sample search source a page hands a part that
+ * requires one (a typeahead): the editor's pages and the catalog the part
+ * data is read from use these same items.
+ */
+export const SAMPLE_SEARCH_ITEMS = Object.freeze([
+  {id: 'design', label: 'Design'},
+  {id: 'engineering', label: 'Engineering'},
+  {id: 'research', label: 'Research'},
+  {id: 'marketing', label: 'Marketing'},
+]);
+
+/** The prop value that stands for the page's sample search source. */
+export const SAMPLE_SOURCE = Object.freeze({__code: 'SAMPLE_SOURCE'});
+
+/**
  * The page module source for a list of items. Each item renders on its own,
  * so one component that throws leaves the rest of the page. With a theme,
  * each item renders inside `<Theme>`; a theme with both modes follows the
@@ -276,8 +291,14 @@ export function pageSource({items, imports, theme, layout, title = ''}) {
   lines.push(
     'function el(v) { if (Array.isArray(v)) return v.map(el); if (v && typeof v === "object" && v.__element) { const T = C[v.__element]; if (!T) return null; return React.createElement(T, fix(v.props ?? {}), ...[].concat(v.children ?? []).map(el)); } return v; }',
   );
+  // The sample search source a part that requires one gets (a typeahead):
+  // the prop names it, the page defines it.
+  lines.push(`const SAMPLE_ITEMS = ${JSON.stringify(SAMPLE_SEARCH_ITEMS)};`);
   lines.push(
-    'function fix(p) { const o = {}; for (const [k, v] of Object.entries(p)) o[k] = isEl(v) || (Array.isArray(v) && v.some(isEl)) ? el(v) : v; for (const k of HANDLERS) if (!(k in o)) o[k] = noop; return o; }',
+    'const SAMPLE_SOURCE = {search: q => SAMPLE_ITEMS.filter(i => i.label.toLowerCase().includes(String(q).toLowerCase())), bootstrap: () => SAMPLE_ITEMS, cancel: () => {}};',
+  );
+  lines.push(
+    'function fix(p) { const o = {}; for (const [k, v] of Object.entries(p)) o[k] = v && typeof v === "object" && v.__code === "SAMPLE_SOURCE" ? SAMPLE_SOURCE : isEl(v) || (Array.isArray(v) && v.some(isEl)) ? el(v) : v; for (const k of HANDLERS) if (!(k in o)) o[k] = noop; return o; }',
   );
   lines.push(`const ITEMS = ${JSON.stringify(items)};`);
   lines.push(

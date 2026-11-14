@@ -28,11 +28,16 @@ import {
   renderPage,
   RenderError,
 } from '../../foundation/render/render-page.mjs';
-import {SAMPLE_PAGE, elementNames, pageSource} from './_catalog.mjs';
+import {
+  SAMPLE_PAGE,
+  SAMPLE_SOURCE,
+  elementNames,
+  pageSource,
+} from './_catalog.mjs';
 import {removeOnStop} from '../../foundation/fs/stop-cleanup.mjs';
 
-/** Bump when the shape of the cached part data changes. */
-const PART_DATA_VERSION = 15;
+/** Bump when the shape of the cached part data, or which parts it reaches, changes. */
+const PART_DATA_VERSION = 16;
 
 /**
  * Flags that change what a component does or whether it shows, not how it
@@ -86,6 +91,8 @@ function sampleOf(name, type) {
   if (t === 'string' || /ReactNode$/.test(t)) return name;
   if (t === 'boolean') return false;
   if (t === 'number') return 1;
+  // A search source: the page's sample one, a few fixed items.
+  if (/^SearchSource\b/.test(t)) return SAMPLE_SOURCE;
   const words = literals(t);
   if (words.length) return words[0];
   if (/^\d+(\s*\|\s*\d+)*$/.test(t)) return Number(t.split('|')[0]);
@@ -149,7 +156,11 @@ export function demoProps(project, name) {
     for (const [p, d] of Object.entries(info.props ?? {})) {
       if (!d.required || /^on[A-Z]/.test(p)) continue;
       if (p === 'children' && d.slots.length) continue;
-      const v = sampleOf(name, d.type);
+      // A value the type allows to be null (`T | null`, nothing chosen yet)
+      // with no plain sample is null.
+      const v =
+        sampleOf(name, d.type) ??
+        (/(^|\|)\s*null\s*($|\|)/.test(d.type) ? null : undefined);
       // A required prop with no plain sample, such as a render function:
       // the component cannot be shown from its doc alone.
       if (v === undefined) return null;

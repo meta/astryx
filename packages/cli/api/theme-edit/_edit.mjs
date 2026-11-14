@@ -173,6 +173,7 @@ import {
   requireProject,
   context,
   pictures,
+  openStatesPage,
   fontNotes,
   themeImageNotes,
   styledChanges,
@@ -5767,12 +5768,33 @@ export async function themeEditShow(theme, options = {}) {
       cwd,
     );
   const modes = modesOf(data);
+  // The open states (every overlay drawn open) beside the sample page: the
+  // full sheet holds them too, but is too tall to read whole.
+  const open =
+    png && !noPages && !section
+      ? await rendering(async () => {
+          try {
+            return await openStatesPage(ctx, theme, data);
+          } catch (e) {
+            // A theme folder it cannot write is the pictures' problem: the
+            // picture run names the folder, and show stands.
+            if (
+              ['EACCES', 'EPERM', 'EROFS', 'ENOSPC'].includes(
+                /** @type {any} */ (e)?.code,
+              )
+            )
+              return null;
+            throw e;
+          }
+        })
+      : null;
   const shots =
     png && !noPages
       ? await pictures(
           ctx.project,
           [
             {html: f.preview, png: f.previewPng},
+            ...(open ? [open] : []),
             // A section is photographed from its own sheet.
             section
               ? {

@@ -24,6 +24,8 @@ import {
   elementNames,
   pageSource,
   bindingFrom,
+  SAMPLE_SEARCH_ITEMS,
+  SAMPLE_SOURCE,
 } from './_catalog.mjs';
 import {
   catalogVariants,
@@ -875,12 +877,11 @@ const SAFE = [
 ];
 
 /** The search source the page hands a part that needs one: a few fixed items. */
-const SAMPLE_SOURCE = [
+const SAMPLE_SOURCE_LINES = [
   'const SAMPLE_ITEMS = [',
-  "  {id: 'design', label: 'Design'},",
-  "  {id: 'engineering', label: 'Engineering'},",
-  "  {id: 'research', label: 'Research'},",
-  "  {id: 'marketing', label: 'Marketing'},",
+  ...SAMPLE_SEARCH_ITEMS.map(
+    i => `  {id: ${JSON.stringify(i.id)}, label: ${JSON.stringify(i.label)}},`,
+  ),
   '];',
   'const SAMPLE_SOURCE = {',
   '  search: (query: string) => SAMPLE_ITEMS.filter(item => item.label.toLowerCase().includes(query.toLowerCase())),',
@@ -911,7 +912,7 @@ function withSources(project, v) {
       project.components[v.__element]?.props ?? {},
     ))
       if (p.required && p.type.startsWith('SearchSource') && !(k in props))
-        props[k] = {__code: 'SAMPLE_SOURCE'};
+        props[k] = SAMPLE_SOURCE;
     return {
       ...v,
       props,
@@ -966,7 +967,7 @@ function withHandlers(v) {
  */
 const usesSource = v =>
   isCode(v)
-    ? v.__code === 'SAMPLE_SOURCE'
+    ? v.__code === SAMPLE_SOURCE.__code
     : Boolean(v && typeof v === 'object') &&
       Object.values(/** @type {object} */ (v)).some(usesSource);
 
@@ -1124,7 +1125,7 @@ function componentsPage(project, {theme = null, C}) {
     '',
     ...CELL,
     '',
-    ...(usesSource(items) ? [...SAMPLE_SOURCE, ''] : []),
+    ...(usesSource(items) ? [...SAMPLE_SOURCE_LINES, ''] : []),
     'export default function ComponentsPage() {',
     '  return (',
     '    <div>',

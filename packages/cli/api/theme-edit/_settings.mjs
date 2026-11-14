@@ -6730,6 +6730,12 @@ export function holdAfterBuild(ctx) {
 }
 
 /**
+ * The section sheet whose picture shows every overlay open: `--png` takes
+ * it beside the sample page's, so plain `show --png` takes it again.
+ */
+export const OPEN_SECTION = 'overlays';
+
+/**
  * Generate the theme source, build it with the theme build, then repeat any
  * part setting a more specific rule would beat and build again.
  * @param {Ctx} ctx
@@ -6985,7 +6991,8 @@ async function buildThemeSteps(ctx, slug, data) {
               /\/sheet-(?!dark\.png$)([a-z][a-z-]*?)(-dark)?\.png$/.exec(
                 p,
               )?.[1];
-            return `${P} show ${slug} --png${section ? ` --section ${section}` : ''}`;
+            // The open states are taken by every --png: no section named.
+            return `${P} show ${slug} --png${section && section !== OPEN_SECTION ? ` --section ${section}` : ''}`;
           }),
         ),
       ].join(
