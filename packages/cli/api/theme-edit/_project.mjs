@@ -48,6 +48,7 @@ import {
  * @typedef {object} ComponentInfo
  * @property {string} importPath
  * @property {string} category - The doc's category, such as Action or Overlay.
+ * @property {string} description - What the doc says the component is.
  * @property {unknown} defaults - Playground defaults, or null.
  * @property {{component: string, props: Record<string, unknown>} | null} wrapper - The parent the playground renders it in, or null.
  * @property {boolean} opens - An overlay its playground shows in place: the pages render it open.
@@ -62,7 +63,7 @@ import {
 const projects = new Map();
 
 /** Bump when the shape of the cached component docs changes. */
-const DOCS_VERSION = 5;
+const DOCS_VERSION = 6;
 
 /**
  * The theme editor's cache folder for a project: the `.cache/astryx-theme`
@@ -160,6 +161,7 @@ async function readComponents(coreDir) {
       out[doc.name] = {
         importPath: resolveImportPath(coreDir, doc.name),
         category: typeof doc.category === 'string' ? doc.category : '',
+        description: typeof doc.description === 'string' ? doc.description : '',
         defaults: pg?.defaults ?? null,
         wrapper:
           typeof pg?.wrapper?.component === 'string'

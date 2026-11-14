@@ -30,7 +30,11 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
-import {projectFiles, refusal} from '../../test-utils/theme-edit-fixture.mjs';
+import {
+  modeValue,
+  projectFiles,
+  refusal,
+} from '../../test-utils/theme-edit-fixture.mjs';
 
 // The page renders cost seconds and these tests read settings, builds and
 // files: a stand-in renders unless a test asks for the real thing.
@@ -748,9 +752,14 @@ describe('hunt2: order and scope', () => {
       on: 'button',
       mode: 'light',
     });
-    expect(read('themes/o2/o2.css')).toMatch(
-      /\.astryx-button\[data-variant="[a-z]+"\] \{[^}]*background-color: light-dark\(#00ff00, /,
-    );
+    expect(
+      modeValue(
+        read('themes/o2/o2.css'),
+        '.astryx-button[data-variant="primary"]',
+        'background-color',
+        'light',
+      ),
+    ).toBe('#00ff00');
     fs.rmSync(path.join(cwd, 'themes/o2'), {recursive: true, force: true});
   }, 240_000);
 

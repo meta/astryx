@@ -160,6 +160,19 @@ export async function resolveIconImports(
   const defaultName = staticSlots ? 'themeComponentIcons' : 'themeIcons';
   /** @param {string} [name] @param {string} [reason] @returns {never} */
   const invalidRegistry = (name, reason) => registryError(name, reason, field);
+  /**
+   * A theme written as an expression the build does not follow (a call to
+   * a helper, a conditional): where its icons come from cannot be read.
+   * @param {any} node
+   * @returns {never}
+   */
+  const untraceableTheme = node => {
+    throw new AstryxError(
+      `The build carries a theme's ${field === 'icons' ? 'icon registry' : 'componentIcons'} from the source that writes it, and follows a theme only through its name, an import of it, or defineTheme({...}); here a theme is written as ${node?.type === 'CallExpression' ? 'a call to a helper' : node?.type === 'ConditionalExpression' ? 'a conditional' : 'an expression'}, which it cannot follow. Write each theme as defineTheme({...}), and the theme it extends by its name (extends: neutralTheme).`,
+      undefined,
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
+  };
 
   if (exportName === undefined) {
     if (!hasIcons) return null;
@@ -797,10 +810,20 @@ export async function resolveIconImports(
       if (ref) return themeReference(ref, rejectOpaque);
     }
     if (node?.type === 'CallExpression') {
-      if (!isDefineTheme(module, node.callee) || node.arguments.length !== 1)
-        invalidRegistry();
+      if (!isDefineTheme(module, node.callee)) untraceableTheme(node);
+      if (node.arguments.length !== 1) invalidRegistry();
       node = unwrap(node.arguments[0]);
     }
+    // Any other expression (a helper's call, a conditional) is a theme the
+    // build cannot read from the source: it does not say the theme sets a
+    // registry, only that it cannot be followed.
+    if (
+      node &&
+      node.type !== 'ObjectExpression' &&
+      node.type !== 'Identifier' &&
+      node.type !== 'MemberExpression'
+    )
+      untraceableTheme(node);
     const config = await fields(module, node);
     const baseField = config.get('extends');
     // A built module keeps its functions in `__icons` (or `__componentIcons`)

@@ -1081,7 +1081,7 @@ function checkPlacement(cwd, dir, where, retry) {
         fix: 'add "tsx" to pageExtensions to use the preview in this app',
         run: [
           `${retry(shown(cwd, dir))}  # once "tsx" is in pageExtensions`,
-          `${PREVIEW} app ${free}  # or a new app of its own, with the preview`,
+          `${appCommand(free)}  # or a new app of its own, with the preview`,
         ],
       },
     );
@@ -1099,7 +1099,7 @@ function checkPlacement(cwd, dir, where, retry) {
       {
         fix: `add a root layout to ${shown(cwd, served ?? app)}/ to use the preview in this app`,
         run: [
-          `${PREVIEW} app ${free}  # a new app with its own root layout and the preview`,
+          `${appCommand(free)}  # a new app with its own root layout and the preview`,
         ],
       },
     );
@@ -1290,8 +1290,22 @@ function previewDir(cwd, where, opts = {}) {
     const apps = nextAppsUnder(cwd);
     const rootIsProject = coreApp(cwd) === path.resolve(cwd);
     const themesHere = editedThemes(cwd);
+    // The starter carries a theme this folder holds; a theme a workspace
+    // app holds is reached from that app, as `preview app` itself says.
     const starterTheme =
-      opts.theme ?? (themesHere.length === 1 ? themesHere[0] : null);
+      opts.theme != null
+        ? themesHere.includes(opts.theme)
+          ? opts.theme
+          : null
+        : themesHere.length === 1
+          ? themesHere[0]
+          : null;
+    const themeOwner =
+      opts.theme != null && !starterTheme
+        ? apps.find(a =>
+            fs.existsSync(themeFiles(a.root, opts.theme ?? '').settings),
+          )
+        : undefined;
     refuse(
       E.ERR_NOT_FOUND,
       apps.length
@@ -1309,7 +1323,9 @@ function previewDir(cwd, where, opts = {}) {
                 ? retry(shown(cwd, path.join(a.routes, 'theme-preview')))
                 : `${cdTo(shown(cwd, a.root))} && ${retry(null)}`,
             ),
-          `${PREVIEW} app ${quoteCommandArgument(freeAppFolder(cwd))}${starterTheme ? ` --theme ${quoteCommandArgument(starterTheme)}` : ''}  # a new starter app with the preview in it`,
+          themeOwner
+            ? `${cdTo(shown(cwd, themeOwner.root))} && ${appCommand(freeAppFolder(themeOwner.root), opts.theme)}  # a new starter app with the preview in it`
+            : `${appCommand(freeAppFolder(cwd), starterTheme)}  # a new starter app with the preview in it`,
         ],
       },
     );
@@ -1333,6 +1349,21 @@ function addTakes(cwd, where) {
   } catch {
     return false;
   }
+}
+
+/**
+ * `preview app` for a folder, as a shell runs it: flags first, and a name
+ * that starts with `-` after `--`, which the command would read as an
+ * option. The one way every pointer to `preview app` is written; the
+ * adapter rebases its folder onto the folder the command ran in.
+ * @param {string} folder
+ * @param {string | null} [theme]
+ */
+function appCommand(folder, theme = null) {
+  const flags = theme == null ? '' : ` --theme ${quoteCommandArgument(theme)}`;
+  return folder.startsWith('-')
+    ? `${PREVIEW} app${flags} -- ${quoteCommandArgument(folder)}`
+    : `${PREVIEW} app ${quoteCommandArgument(folder)}${flags}`;
 }
 
 /**
@@ -1545,7 +1576,7 @@ function inProjectOrRefuse(cwd, dir, retry) {
       run: [
         within(path.dirname(dir))
           ? retry(shown(cwd, free))
-          : `${PREVIEW} app theme-app  # a new app of its own, inside this folder`,
+          : `${appCommand(freeAppFolder(cwd))}  # a new app of its own, inside this folder`,
       ],
     },
   );
@@ -1642,8 +1673,16 @@ export default function Home() {
  */
 function planStarterApp(cwd, where, extra, dependencies, slug = null) {
   const again = (/** @type {string | null} */ p) =>
-    `${PREVIEW} app ${quoteCommandArgument(p ?? freeAppFolder(cwd))}${slug == null ? '' : ` --theme ${quoteCommandArgument(slug)}`}`;
-  checkFolderName(where, 'The app folder', again);
+    appCommand(p ?? freeAppFolder(cwd), slug);
+  // A repaired name (trimmed, with "/" for "\\") is offered only free: the
+  // first free folder from it, as every other suggested folder is.
+  checkFolderName(where, 'The app folder', p => {
+    if (p == null) return again(null);
+    const at = path.resolve(cwd, p);
+    return again(
+      shown(cwd, freeFolder(cwd, path.dirname(at), path.basename(at))),
+    );
+  });
   /** @type {string} */
   let root;
   try {
@@ -1881,7 +1920,16 @@ function writeStarterApp(cwd, plan, again) {
       refuse(
         E.ERR_FILE_EXISTS,
         `${shownDir(cwd, root)} was filled by something else while the app was written, so the app was not put there.`,
-        {run: [again(`${shownDir(cwd, root)}-2`)]},
+        {
+          run: [
+            again(
+              shown(
+                cwd,
+                freeFolder(cwd, path.dirname(root), path.basename(root)),
+              ),
+            ),
+          ],
+        },
       );
     refuse(
       E.ERR_WRITE_FAILED,
@@ -3720,7 +3768,7 @@ export function seeLine(cwd, slug, focus, notChecked = null, extra = {}) {
   // An add this app takes; else a new app of its own, with the preview.
   return addTakes(cwd, null)
     ? `${own}; to see it inside your app, ${PREVIEW} add${many ? ` --theme ${slug}` : ''} puts the preview pages there, each at its own URL`
-    : `${own}; this app has no routes folder for the preview pages, so ${PREVIEW} app ${quoteCommandArgument(freeAppFolder(cwd))} --theme ${slug} makes a new app with them`;
+    : `${own}; this app has no routes folder for the preview pages, so ${appCommand(freeAppFolder(cwd), slug)} makes a new app with them`;
 }
 
 /**
@@ -4947,7 +4995,7 @@ export async function themeEditPreviewApp(dir, options = {}) {
     refuse(
       E.ERR_INVALID_ARGUMENT,
       'Name the folder for the new app: a new or empty folder inside the current one.',
-      {run: [`${PREVIEW} app theme-app`]},
+      {run: [appCommand(freeAppFolder(cwd))]},
     );
   options = {...options, theme: themeArg(options.theme)};
   const slug = options.theme ?? null;
@@ -4957,8 +5005,7 @@ export async function themeEditPreviewApp(dir, options = {}) {
       : wornTheme(
           cwd,
           slug,
-          t =>
-            `${PREVIEW} app ${quoteCommandArgument(dir)}${t == null ? '' : ` --theme ${t}`}`,
+          t => appCommand(dir, t),
           'leave out --theme and the app wears the neutral theme',
         );
   // A new app has no Core installed yet: its pages come from this CLI's own
@@ -5041,6 +5088,30 @@ export async function themeEditPreviewApp(dir, options = {}) {
       }
     };
     copyDir('');
+    // A source file of the theme that imports a file outside its folder
+    // would not build in the new app, where that file is not: refused,
+    // naming the import, before anything is written.
+    const outside = themeCopy.flatMap(c => {
+      const rel = path.relative(to.dir, c.rel);
+      if (!/\.(mjs|cjs|js|mts|cts|ts|tsx|jsx)$/.test(rel)) return [];
+      const file = path.join(from.dir, rel);
+      return importSpecifiers(file, String(c.text))
+        .filter(spec => spec.startsWith('.'))
+        .filter(spec => {
+          const at = path.resolve(path.dirname(file), spec);
+          return at !== from.dir && !at.startsWith(from.dir + path.sep);
+        })
+        .map(spec => `${shown(cwd, file)} imports '${spec}'`);
+    });
+    if (outside.length)
+      refuse(
+        E.ERR_INVALID_ARGUMENT,
+        `${slug} cannot be copied into a new app: ${outside.slice(0, 3).join('; ')}, a file outside ${shown(cwd, from.dir)}/, which the new app does not have, so its theme would not build there.`,
+        {
+          fix: `move what it imports into ${shown(cwd, from.dir)}/ (and import it from there), then run the command again`,
+          run: [appCommand(dir, slug)],
+        },
+      );
     if (theme.like && theme.like !== 'neutral')
       dependencies[`@astryxdesign/theme-${theme.like}`] = cliVersion();
     // The copied build was made on this project's Core and base theme: the
@@ -5071,7 +5142,7 @@ export async function themeEditPreviewApp(dir, options = {}) {
     };
     // The new app installs its own packages, so every open font the theme
     // names is added, at the version this project has, else a known one.
-    const fonts = fontPackages(ctx, theme);
+    const fonts = fontPackages(ctx, theme, {forNewApp: true});
     for (const font of fonts)
       dependencies[font.pkg] =
         readVersion(project, font.pkg) ?? OPEN_FONT_RANGE;
@@ -5147,12 +5218,7 @@ export async function themeEditPreviewApp(dir, options = {}) {
     dependencies,
     slug,
   );
-  const files = writeStarterApp(
-    cwd,
-    plan,
-    d =>
-      `${PREVIEW} app ${quoteCommandArgument(d)}${slug == null ? '' : ` --theme ${quoteCommandArgument(slug)}`}`,
-  );
+  const files = writeStarterApp(cwd, plan, d => appCommand(d, slug));
   const folder = shownDir(cwd, plan.root);
   if (
     plan.root !== cwd &&

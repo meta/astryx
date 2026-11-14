@@ -31,7 +31,10 @@ import {
   oneColorMode,
   themeBuildForReport,
 } from '../theme/build/build.mjs';
-import {namedFontFamilies} from '../theme/build/font-warning.mjs';
+import {
+  fontShorthandFamilyList,
+  namedFontFamilies,
+} from '../theme/build/font-warning.mjs';
 import {declarationValues} from '../../foundation/fonts/font-stylesheet.mjs';
 import {
   MODE_WORDS,
@@ -54,7 +57,7 @@ import {
   WRAPPED_PARTS,
   CARD_LIKE,
 } from './_tables.mjs';
-import {cleanDialValue, typoLimit, typoNear} from './_normal.mjs';
+import {booleanWord, cleanDialValue, typoLimit, typoNear} from './_normal.mjs';
 import {
   alphaOf,
   colorProblem,
@@ -701,7 +704,9 @@ export function fieldsMeant(data) {
   const likeTyped = String(data?.like ?? '')
     .trim()
     .toLowerCase()
-    .replace(/^@astryxdesign\/theme-/, '');
+    // The package's name or the name with `theme` (theme-neutral,
+    // neutral-theme) is the base.
+    .replace(/^(@astryxdesign\/)?theme-|-theme$/g, '');
   const like = LIKE.includes(likeTyped)
     ? likeTyped
     : ((likeTyped ? near(likeTyped, LIKE) : null) ?? likeTyped);
@@ -829,7 +834,7 @@ export function loadTheme(
     // none): the settings were lost after.
     const stopped =
       fs.existsSync(path.join(f.dir, NEW_MARKER)) && !fs.existsSync(f.history);
-    if (!same && (stopped || madeByEditor(f.settingsTs))) {
+    if (!same && editorMadeFolder(cwd, slug)) {
       const remake = remakeLines(cwd, slug);
       refuse(
         ERROR_CODES.ERR_UNKNOWN_THEME,
@@ -1130,24 +1135,32 @@ export function loadTheme(
       )
         ? null
         : meant;
-    throw new AstryxError(
-      `themes/${slug}/${slug}.settings.json: ${problem}, a value the editor no longer accepts. Remove or change that setting; nothing else needs to change. Nothing was changed.`,
-      [
-        {name: `${P} undo ${slug} ${undoArgs(bad)}`, reason: 'do this instead'},
-        // Only a set that replaces this very entry: `mode` and `base` set
-        // the theme's own fields, not an entry in the list.
-        ...(example && !['mode', 'base'].includes(bad.thing)
-          ? [
-              {
-                name: `${P} set ${slug} ${setArgs(bad, example)}`,
-                reason: meant
-                  ? 'or set the value it holds, cleaned'
-                  : 'or give it a value it takes',
-              },
-            ]
-          : []),
-      ],
-      ERROR_CODES.ERR_THEME_INVALID,
+    // The entry rides on the refusal: a change reads its value as set reads
+    // a typed one, and offers that repair beside the undo (see _edit).
+    throw Object.assign(
+      new AstryxError(
+        `themes/${slug}/${slug}.settings.json: ${problem}, a value the editor no longer accepts. Remove or change that setting; nothing else needs to change. Nothing was changed.`,
+        [
+          {
+            name: `${P} undo ${slug} ${undoArgs(bad)}`,
+            reason: 'do this instead',
+          },
+          // Only a set that replaces this very entry: `mode` and `base` set
+          // the theme's own fields, not an entry in the list.
+          ...(example && !['mode', 'base'].includes(bad.thing)
+            ? [
+                {
+                  name: `${P} set ${slug} ${setArgs(bad, example)}`,
+                  reason: meant
+                    ? 'or set the value it holds, cleaned'
+                    : 'or give it a value it takes',
+                },
+              ]
+            : []),
+        ],
+        ERROR_CODES.ERR_THEME_INVALID,
+      ),
+      {damaged: bad, aboutSaved: true},
     );
   }
   // A bad mode or base is fixed by setting it.
@@ -1156,7 +1169,7 @@ export function loadTheme(
   const fieldFix = /^(it has no mode|mode ")/.test(problem ?? '')
     ? `${P} set ${slug} mode ${['both', 'light-only', 'dark-only'].includes(modeMeant) ? modeMeant : 'both'}`
     : /^base "/.test(problem ?? '')
-      ? `${P} set ${slug} base ${LIKE.includes(likeMeant) && baseInstalled(cwd, likeMeant) ? likeMeant : 'none'}`
+      ? `${P} set ${slug} base ${LIKE.includes(likeMeant) && baseInstalled(cwd, likeMeant) ? likeMeant : (builtOnBase(cwd, slug) ?? 'none')}`
       : null;
   // A damaged mode or base and a bad value in the list: setting the field
   // is refused while the list holds the bad value, but fixing that entry
@@ -1343,6 +1356,37 @@ export function settingsProblem(
 }
 
 /**
+ * The built-in base the editor last built a theme on, read from the
+ * generated module's header (`// Built on @astryxdesign/theme-neutral …`),
+ * else from the newest undo step, or null when neither can be read. What a damaged base in
+ * the settings file is put back to, and what a theme made again keeps.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {string | null}
+ */
+export function builtOnBase(cwd, slug) {
+  const f = themeFiles(cwd, slug);
+  /** @type {string | null | undefined} */
+  let header;
+  try {
+    header = /\/\/ Built on @astryxdesign\/theme-([a-z0-9-]+) /.exec(
+      fs.readFileSync(f.settingsTs, 'utf8'),
+    )?.[1];
+  } catch {
+    header = null;
+  }
+  // With the module gone too, the newest undo step names the base.
+  const steps = readHistory(f.history).steps;
+  const stepped = steps.length
+    ? settingsJson(steps[steps.length - 1])?.like
+    : null;
+  return (
+    [header, stepped].find(b => typeof b === 'string' && LIKE.includes(b)) ??
+    null
+  );
+}
+
+/**
  * The `new` that makes a theme again in place, on the base it was built on
  * as far as can still be read: the settings file's base (in any case), else
  * the base the generated module was built on. With none, it says the theme
@@ -1365,11 +1409,8 @@ export function remakeLines(cwd, slug) {
     saved && typeof saved.like === 'string'
       ? dialWordOf('base', saved.like)
       : null;
-  const built =
-    /\/\/ Built on @astryxdesign\/theme-([a-z0-9-]+) /.exec(
-      read(f.settingsTs),
-    )?.[1] ?? null;
-  const base = [typed, built].find(b => b && LIKE.includes(b)) ?? null;
+  const base =
+    [typed, builtOnBase(cwd, slug)].find(b => b && LIKE.includes(b)) ?? null;
   return {
     base,
     lines: base
@@ -1423,6 +1464,25 @@ function readEntryWords(data) {
         s.mode = read;
       }
     }
+    // A part saved in other letters, with spaces around it, or as a list
+    // of that one part (`Card`, ` card`, `["card"]`) is that part: part
+    // names are lower case, so every reader matches it as one scope.
+    {
+      const one =
+        Array.isArray(s.on) && s.on.length === 1 && typeof s.on[0] === 'string'
+          ? s.on[0]
+          : s.on;
+      const part =
+        typeof one === 'string' && /^\s*[a-z][a-z0-9-]*\s*$/i.test(one)
+          ? one.trim().toLowerCase()
+          : null;
+      if (part && part !== s.on) {
+        notes.push(
+          `${s.thing} was saved on ${JSON.stringify(s.on)}, read as ${part}`,
+        );
+        s.on = part;
+      }
+    }
     // A dial's word saved in other letters (`Pill`) is that word.
     if (
       ['dial', undefined, null, ''].includes(s.source) ||
@@ -1457,10 +1517,11 @@ function readEntryWords(data) {
         else delete s.axis;
       }
     }
-    // `only` is true or absent; `"true"` and `"false"` written as text are
-    // read as what they say, since the build reads any other value as true.
-    if (typeof s.only === 'string' && /^\s*(true|false)\s*$/i.test(s.only)) {
-      const read = s.only.trim().toLowerCase() === 'true';
+    // `only` is true or absent; a yes or no written as text (`"true"`,
+    // `"yes"`, `"off"`) is read as what it says by the one yes/no reader,
+    // since the build reads any other value as true.
+    if (typeof s.only === 'string' && booleanWord(s.only) != null) {
+      const read = booleanWord(s.only) === true;
       notes.push(
         `${s.thing} was saved with only ${JSON.stringify(s.only)}, read as ${read}`,
       );
@@ -2487,27 +2548,6 @@ export function partRuleTokens(cwd, slug, like, part) {
 }
 
 /**
- * Whether the base theme's own source gives a part's rule a property, in a
- * state (`:hover`) or at rest, read from its module as written.
- * @param {string} cwd
- * @param {string | undefined} like
- * @param {string} part
- * @param {string} scope `base` or a variant such as `variant:secondary`
- * @param {string | null} state a state block (`:hover`), or null
- * @param {string} prop camelCase
- */
-export function baseRuleHas(cwd, like, part, scope, state, prop) {
-  const file = like ? baseModule(cwd, like) : null;
-  if (!file) return false;
-  try {
-    const at = ['components', part, scope, ...(state ? [state] : [])];
-    return blockOf(file, at).has(prop);
-  } catch {
-    return false;
-  }
-}
-
-/**
  * The tokens and properties a theme's own source sets on a part's plain
  * rule, read from the build as ownTokens reads page-wide ones: what the
  * built rule holds that the settings module and the base theme do not give
@@ -2906,8 +2946,7 @@ export function cssFamily(name, spaced = false) {
 }
 
 /**
- * What a part reads for a property when the theme does not set it, so a
- * one-mode component setting keeps the other mode as it was.
+ * What a part reads for a property when the theme does not set it.
  * @param {Ctx} ctx
  * @param {string} target
  * @param {string} prop camelCase or kebab-case
@@ -3369,8 +3408,6 @@ export function compileTheme(ctx, data, base) {
   /** @param {string | null} t */
   const keptSizes = t =>
     [...keptTokens(t)].filter(([k]) => /^--size-element-/.test(k));
-  /** The one-mode gradient layers each block holds, by mode. @type {WeakMap<object, {light: string[], dark: string[]}>} */
-  const modeLayers = new WeakMap();
   /** @type {Record<string, {light?: string, dark?: string}>} */
   const tok = {};
   /** @param {string} name @param {string | [string, string]} v @param {string} [mode] */
@@ -3413,6 +3450,29 @@ export function compileTheme(ctx, data, base) {
       else b = b[stateKey(s.state, wrapsOneControl(ctx, target))] ??= {};
     }
     return b;
+  };
+  /**
+   * A setting's rule block for one color mode: the style key's `@light` or
+   * `@dark` block, with the state inside it for a state Core writes as a
+   * pseudo-class.
+   * @param {Setting} s @param {string} target @param {'light' | 'dark'} mode
+   * @returns {Record<string, any>}
+   */
+  const modeBlock = (s, target, mode) => {
+    const t = (theme.components[target] ??= {});
+    const tg = ctx.project.target.get(target);
+    const state = s.state;
+    const ownState = !!state && !!tg?.states.includes(state);
+    const key =
+      state && ownState
+        ? s.when == null
+          ? state
+          : `${s.when}+${state}`
+        : (s.when ?? 'base');
+    const rule = (t[key] ??= {});
+    const mb = (rule[`@${mode}`] ??= {});
+    if (!state || ownState) return mb;
+    return (mb[stateKey(state, wrapsOneControl(ctx, target))] ??= {});
   };
   /**
    * A padding on a part whose padding Core writes one variable per side
@@ -4179,79 +4239,19 @@ export function compileTheme(ctx, data, base) {
     const k = kebab(p);
     return k === 'background' ? 'background-color' : k;
   };
-  /** One-mode colors in a variant or a state, written after every other setting. @type {Array<() => void>} */
-  const scopedQueue = [];
-  let drainingScoped = false;
-  /**
-   * A part's rule for a scope as the theme has it, without making one.
-   * @param {Setting} s @param {string} target
-   * @returns {Record<string, any> | undefined}
-   */
-  const peekBlock = (s, target) => {
-    const t = theme.components[target];
-    if (!t) return undefined;
-    const rule = t[s.when ?? 'base'];
-    if (!s.state) return rule;
-    const tg = ctx.project.target.get(target);
-    if (tg?.states.includes(s.state))
-      return s.when == null ? t[s.state] : t[`${s.when}+${s.state}`];
-    return rule?.[stateKey(s.state, wrapsOneControl(ctx, target))];
-  };
-  /**
-   * The theme's own value of a property in one mode for the scope around a
-   * setting's scope: the variant's resting rule for a state, then the
-   * part's plain rule, then, for a token, the whole theme's value; null
-   * when the theme gives none, so the base theme's and Core's values apply.
-   * @param {Setting} s @param {string} target @param {string} prop
-   * @param {'light' | 'dark'} side
-   * @returns {string | null}
-   */
-  const enclosingValue = (s, target, prop, side) => {
-    const family = /^background(-color)?$/.test(kebab(prop))
-      ? ['backgroundColor', 'background']
-      : [prop];
-    /** @type {Setting[]} */
-    const scopes = [];
-    if (s.state) scopes.push({...s, state: undefined, mode: undefined});
-    if (s.when || s.state)
-      scopes.push({...s, when: undefined, state: undefined, mode: undefined});
-    for (const sc of scopes) {
-      const rule = peekBlock(sc, target);
-      for (const k of family) {
-        const x = rule?.[k];
-        if (typeof x === 'string' && !/gradient\(|url\(/i.test(x))
-          return halfOf(x, side === 'light' ? 1 : 2);
-      }
-    }
-    if (prop.startsWith('--')) return tok[prop]?.[side] ?? null;
-    return null;
-  };
   /** @param {Setting} s @param {string} target @param {string} prop @param {string} v */
   const putComp = (s, target, prop, v) => {
     const b = block(s, target);
-    // A gradient background for one mode: each layer's colors are painted
-    // in that mode only (transparent in the other), as background images
-    // beside the other mode's, so each mode keeps its own background color;
-    // a gradient for both modes held before keeps showing in the other
-    // mode. Which layers belong to which mode is recorded as they are
-    // written, never read back from their stops.
+    // A gradient background for one mode goes into the rule's block for
+    // that mode as its image layers (with their positions, sizes and
+    // repeats), and a layer that is a color alone as that mode's color: the
+    // other mode keeps every image and color it had, Core's own included.
     if (
       s.mode &&
       /^background(-image)?$/.test(kebab(prop)) &&
       /gradient\(/i.test(v)
     ) {
-      let rec = modeLayers.get(b);
-      if (!rec) {
-        rec = {light: [], dark: []};
-        for (const k of ['background', 'backgroundImage']) {
-          const held = b[k];
-          if (typeof held !== 'string' || !/gradient\(/i.test(held)) continue;
-          rec.light.push(...maskLayers(held, 'light'));
-          rec.dark.push(...maskLayers(held, 'dark'));
-          if (k === 'backgroundImage') delete b[k];
-        }
-        modeLayers.set(b, rec);
-      }
+      const mb = modeBlock(s, target, s.mode);
       // The background shorthand's last layer may carry the color under
       // the images: that color is this mode's background color, and the
       // rest are the images.
@@ -4259,23 +4259,28 @@ export function compileTheme(ctx, data, base) {
         kebab(prop) === 'background'
           ? backgroundColorLayer(v)
           : {images: v, color: null};
-      rec[s.mode] = images ? maskLayers(images, s.mode) : [];
-      const parts = [...rec.light, ...rec.dark].map(layerParts);
+      const parts = splitTop(images ?? '', ',')
+        .map(x => x.trim())
+        .filter(Boolean)
+        .map(layerParts);
       for (const k of [
+        'background',
         'backgroundImage',
         'backgroundPosition',
         'backgroundSize',
         'backgroundRepeat',
       ])
-        delete b[k];
-      b.backgroundImage = parts.map(x => x.image).join(', ');
+        delete mb[k];
+      mb.backgroundImage = parts.map(x => x.image).join(', ');
       if (parts.some(x => x.position || x.size || x.repeat)) {
-        b.backgroundPosition = parts.map(x => x.position || '0% 0%').join(', ');
-        b.backgroundSize = parts.map(x => x.size || 'auto').join(', ');
-        b.backgroundRepeat = parts.map(x => x.repeat || 'repeat').join(', ');
+        mb.backgroundPosition = parts
+          .map(x => x.position || '0% 0%')
+          .join(', ');
+        mb.backgroundSize = parts.map(x => x.size || 'auto').join(', ');
+        mb.backgroundRepeat = parts.map(x => x.repeat || 'repeat').join(', ');
       }
-      if (!parts.length) delete b.backgroundImage;
-      if (color) putComp(s, target, 'backgroundColor', color);
+      if (!parts.length) delete mb.backgroundImage;
+      if (color) mb.backgroundColor = color;
       return;
     }
     // A color set in a one-mode theme fills its mode's half only (as a
@@ -4284,34 +4289,14 @@ export function compileTheme(ctx, data, base) {
     const mode =
       s.mode ??
       (modeOnly && parseColor(String(v).trim()) ? modeOnly : undefined);
-    // A color for one mode on a part rule also gives the other mode a
-    // value in that rule, which outranks the rules the base theme and Core
-    // give the part in context there (a selected or current item, a status
-    // border): the result says so.
-    if (mode && !prop.startsWith('--')) {
-      const note = `a ${mode}-only color on ${target} gives the other mode ${target}'s own value, so in that mode it overrides what Core or the base theme gives ${target} in context (a selected or current item, a status border)`;
-      if (!(ctx.compileNotes ?? []).includes(note))
-        (ctx.compileNotes ??= []).push(note);
-    }
     if (mode && !s.when && variantsReading(ctx, target, prop, s.state).length) {
       // A color for one mode on a part whose variants each have their own:
       // each variant's rule (in the state, for a state setting) gets the
-      // color in that mode and, in the other, exactly the value it shows
-      // unset there (the base theme's, else Core's), so no variant takes
-      // another's and the other mode stays as it was. The part's own rule
-      // is left alone.
+      // color in its block for that mode, so no variant takes another's and
+      // the other mode stays as it was. The part's own rule is left alone.
       // The property itself (a border color stays a border color); the
       // background shorthand is written as its color.
       const css = colorFamily(prop);
-      const other = mode === 'light' ? 2 : 1;
-      // What the part's own rule holds of it (an earlier setting for both
-      // modes): the other half each variant keeps, before its unset value.
-      const plainHeld = [
-        css,
-        ...(css === 'background-color' ? ['background'] : []),
-      ]
-        .map(k => b[camel(k)])
-        .find(y => typeof y === 'string' && !/gradient\(|url\(/i.test(y));
       // The part's own background being an image (a gradient) covers any
       // color under it: the color is written, and the result says it does
       // not show.
@@ -4334,12 +4319,8 @@ export function compileTheme(ctx, data, base) {
       ]);
       for (const name of names) {
         const x = exactVariantValue(target, css, name, s.state);
-        const vb = block({...s, when: `variant:${name}`}, target);
-        // What the variant's rule already holds (a setting for the other
-        // mode, or one for both) keeps its other half; else the value the
-        // variant shows unset.
-        // The background shorthand is the same property: its color counts,
-        // and it is taken out so the color written here is in effect.
+        const variant = {...s, when: `variant:${name}`};
+        const vb = block({...variant, mode: undefined}, target);
         const family = [
           css,
           ...(css === 'background-color' ? ['background'] : []),
@@ -4355,36 +4336,13 @@ export function compileTheme(ctx, data, base) {
           );
           continue;
         }
-        const prev = family
-          .map(k => vb[camel(k)])
-          .find(y => typeof y === 'string');
-        // In a state, what the state shows now in the other mode: its own
-        // value there, else the resting color a setting gives the variant
-        // or the part (a state that does not change the color shows the
-        // resting one), else the unset value.
-        /** @param {Record<string, any> | undefined} rule */
-        const restOf = rule =>
-          family
-            .map(k => rule?.[camel(k)])
-            .find(y => typeof y === 'string' && !/gradient\(|url\(/i.test(y));
-        const rest = s.state
-          ? (exactVariantValue(target, css, name, s.state, true) ??
-            restOf(theme.components[target]?.[`variant:${name}`]) ??
-            plainHeld ??
-            restOf(theme.components[target]?.base))
-          : plainHeld;
-        const from = prev ?? rest ?? x;
-        if (from == null) continue;
-        for (const k of family) delete vb[camel(k)];
-        const half = halfOf(from, other);
-        vb[camel(css)] =
-          mode === 'light'
-            ? `light-dark(${v}, ${half})`
-            : `light-dark(${half}, ${v})`;
-        // A resting color written on the variant's rule would also hide the
-        // hover the variant shows unset: that hover is written back as it
-        // was, in both modes, unless a hover setting of the theme's own
-        // gives it one.
+        const mb = modeBlock(variant, target, mode);
+        for (const k of family) delete mb[camel(k)];
+        mb[camel(css)] = v;
+        // A resting color on the variant's rule in this mode would also hide
+        // the hover the variant shows unset in this mode: that hover is
+        // written back there as it was, unless a hover setting of the
+        // theme's own gives it one.
         if (
           !s.state &&
           !data.settings.some(
@@ -4395,36 +4353,13 @@ export function compileTheme(ctx, data, base) {
           )
         ) {
           const hover = exactVariantValue(target, css, name, 'hover', true);
-          if (hover != null && hover !== x) {
-            const hb = block(
-              {...s, when: `variant:${name}`, state: 'hover', mode: undefined},
-              target,
-            );
-            hb[camel(css)] ??= hover;
-          }
+          if (hover != null && hover !== x)
+            modeBlock({...variant, state: 'hover'}, target, mode)[
+              camel(css)
+            ] ??= halfOf(hover, mode === 'light' ? 1 : 2);
         }
       }
       return;
-    }
-    // A color for one mode in a variant or a state is written once every
-    // other setting is in, so its other half is the theme's own value for
-    // the scope around it as the theme finally has it (below).
-    if (mode && (s.when || s.state) && !drainingScoped) {
-      scopedQueue.push(() => putComp(s, target, prop, v));
-      return;
-    }
-    if (mode && colorFamily(prop) === 'background-color') {
-      // The background shorthand and its color are one property: the one
-      // the rule holds (as a color) gives the other half and is replaced, so
-      // one key carries both modes.
-      const held = ['backgroundColor', 'background'].find(
-        k => typeof b[k] === 'string' && !/gradient\(|url\(/i.test(b[k]),
-      );
-      if (held && held !== camel(prop)) {
-        const was = b[held];
-        delete b[held];
-        b[camel(prop)] ??= was;
-      }
     }
     // A color for one mode under the part's own gradient does not show:
     // the result says so.
@@ -4439,40 +4374,19 @@ export function compileTheme(ctx, data, base) {
       (ctx.compileNotes ??= []).push(
         `${target}${s.when ? ` ${s.when}` : ''}${s.state ? ` :${s.state}` : ''} has a background image (a gradient) over its color, so the ${mode} color does not show until that background is a color`,
       );
+    // A color for one mode goes into the rule's block for that mode, which
+    // applies only where the element's color mode is that mode: in the other
+    // mode the rule, and every rule the base theme and Core give the part in
+    // context, apply as they would without it.
+    // The background shorthand and its color are one property there: the
+    // later setting replaces the earlier.
     if (mode) {
-      const prev = b[prop];
-      // The other mode keeps exactly what it had: the value set for it, the
-      // part's own, else what the property shows unset (light-dark() takes
-      // colors only, so never inherit).
-      // A token on the part: its own value in the other mode (the base
-      // theme's, else Core's), never another color.
-      const otherSide = mode === 'light' ? 'dark' : 'light';
-      const tokenOther = prop.startsWith('--')
-        ? (base[otherSide]?.[prop] ??
-          /** @type {Record<string, string>} */ (TOKENS)[prop] ??
-          null)
-        : null;
-      const other =
-        prev ??
-        enclosingValue(s, target, prop, otherSide) ??
-        tokenOther ??
-        baseComponent(base, ctx, target, prop, s) ??
-        partDefault(ctx, target, prop, s.when, s.state) ??
-        (s.state
-          ? baseComponent(base, ctx, target, prop, {...s, state: undefined})
-          : null) ??
-        partDefault(ctx, target, prop, s.when) ??
-        (/^background/.test(kebab(prop)) ? 'transparent' : 'currentcolor');
-      // At the top-level comma: a mode's color may hold commas itself.
-      const split = (/** @type {string} */ x, /** @type {1 | 2} */ side) => {
-        const inner = /^light-dark\((.*)\)$/s.exec(x.trim())?.[1];
-        const halves = inner == null ? [] : splitTop(inner, ',');
-        return halves.length === 2 ? halves[side - 1].trim() : x;
-      };
-      b[prop] =
-        mode === 'light'
-          ? `light-dark(${v}, ${prev ? split(prev, 2) : other})`
-          : `light-dark(${prev ? split(prev, 1) : other}, ${v})`;
+      const mb = modeBlock(s, target, mode);
+      if (colorFamily(prop) === 'background-color')
+        for (const k of ['background', 'backgroundColor'])
+          if (typeof mb[k] === 'string' && !/gradient\(|url\(/i.test(mb[k]))
+            delete mb[k];
+      mb[prop] = v;
     } else b[prop] = v;
   };
   // Palette stops go first, so an exact token setting always wins over them.
@@ -4560,11 +4474,14 @@ export function compileTheme(ctx, data, base) {
   ];
   // The shell regions a setting gives a background of their own keep it
   // when the page background paints the rest of the shell.
+  // A background for one mode is that region's in its mode block only:
+  // the page background still paints the region in the other mode.
   const regionsWithOwnBackground = new Set(
     data.settings
       .filter(
         x =>
           x.source === 'property' &&
+          !x.mode &&
           /^background(-color|-image)?$/.test(kebab(x.thing)),
       )
       .flatMap(x => partsOf(ctx, x)),
@@ -5052,8 +4969,6 @@ export function compileTheme(ctx, data, base) {
       }
     }
   }
-  drainingScoped = true;
-  for (const write of scopedQueue) write();
   emitPadding();
   for (const r of fixedToViewport) {
     delete r.backgroundAttachment;
@@ -5183,56 +5098,6 @@ function coversSide(a, b) {
   if (coversProperty(a, b)) return true;
   const root = b.replace(/-(inline|block)(-start|-end)?(?=-|$)/, '');
   return root !== b && (a === root || coversProperty(a, root));
-}
-
-/**
- * A background's layers with each color painted in one mode only: a color
- * stop becomes light-dark(<color>, transparent) for light (the reverse for
- * dark), and a layer that is a color alone becomes a gradient of it, so
- * every layer is an image the other mode does not show.
- * @param {string} value
- * @param {'light' | 'dark'} mode
- * @returns {string[]}
- */
-export function maskLayers(value, mode) {
-  /** @param {string} c */
-  const wrap = c =>
-    mode === 'light'
-      ? `light-dark(${c}, transparent)`
-      : `light-dark(transparent, ${c})`;
-  /** @param {string} w */
-  const isColor = w =>
-    !/^light-dark\(/i.test(w) &&
-    (isColorValue(w) || /^var\(\s*--color-/i.test(w));
-  return splitTop(value, ',')
-    .map(x => x.trim())
-    .filter(Boolean)
-    .map(layer => {
-      const fn = /^((?:repeating-)?(?:linear|radial|conic)-gradient)\(/i.exec(
-        layer,
-      );
-      if (!fn)
-        return isColor(layer)
-          ? `linear-gradient(${wrap(layer)}, ${wrap(layer)})`
-          : layer;
-      // The gradient's own arguments, up to its closing bracket; what
-      // follows (position, size, repeat) stays as it is.
-      let depth = 0;
-      let end = fn[0].length - 1;
-      for (let i = end; i < layer.length; i++) {
-        if (layer[i] === '(') depth++;
-        if (layer[i] === ')' && --depth === 0) {
-          end = i;
-          break;
-        }
-      }
-      const args = splitTop(layer.slice(fn[0].length, end), ',').map(arg =>
-        splitTop(arg.trim(), ' ')
-          .map(w => (isColor(w.trim()) ? wrap(w.trim()) : w.trim()))
-          .join(' '),
-      );
-      return `${fn[1]}(${args.join(', ')})${layer.slice(end + 1)}`;
-    });
 }
 
 /**
@@ -5521,7 +5386,7 @@ export function findOverrides(cssText, theme) {
     /** @type {Record<string, any>} */ (theme.components ?? {}),
   )) {
     const props = Object.keys(keys.base ?? {}).filter(
-      p => !p.startsWith('--') && !p.startsWith(':'),
+      p => !p.startsWith('--') && !p.startsWith(':') && !p.startsWith('@'),
     );
     if (!props.length) continue;
     const re = new RegExp(
@@ -5924,10 +5789,11 @@ export const settingsThemeName = slug => `${slug}-settings`;
  * Why a theme's source cannot carry its settings, with the step that puts
  * it right; null when it carries them. The theme is the export a build of
  * the source reads, loaded as the build loads it: it must be named for the
- * theme, and the theme it extends (after every spread and repeated key)
- * must be the settings theme. Null for a source that does not parse (its
+ * theme, and the settings module's own export must be in the chain of
+ * themes it extends (after every spread and repeated key), the very object,
+ * not a theme named like it. Null for a source that does not parse (its
  * parse error is its own finding), and for one that imports the settings
- * but does not load (the build names that failure).
+ * but does not load (outputsDrift and the build report that).
  * @param {string} cwd
  * @param {string} slug
  * @returns {Promise<{problem: string, fix: string} | null>}
@@ -5959,11 +5825,23 @@ export async function themeSourceProblem(cwd, slug) {
     problem: `${slug}.theme.ts does not import ./${slug}.settings`,
     fix: putBack,
   };
-  /** @type {{theme: any, exportName: string, parent: any}} */
+  /** @type {{theme: any, exportName: string, extendsBase?: boolean}} */
   let loaded;
   try {
-    loaded = await loadThemeExport(f.ts, {cwd});
+    loaded = await loadThemeExport(f.ts, {
+      cwd,
+      // The settings module's own export, by identity: a theme merely
+      // named like it is not it.
+      base: {
+        file: path.join(f.dir, `${slug}.settings.ts`),
+        exportName: settings,
+        specifiers: ['', '.ts', '.js'].map(x => `./${slug}.settings${x}`),
+      },
+    });
   } catch {
+    // A source that does not load is the build's own finding
+    // (outputsDrift and every build report it); one that does not import
+    // the settings says that first.
     return importsSettings ? null : notImported;
   }
   if (loaded.theme?.name !== slug) {
@@ -5993,7 +5871,7 @@ export async function themeSourceProblem(cwd, slug) {
           fix: putBack,
         };
   }
-  if (loaded.parent?.name !== settingsThemeName(slug))
+  if (!loaded.extendsBase)
     return importsSettings
       ? {
           problem: `${slug}.theme.ts no longer extends ${settings}`,
@@ -6278,7 +6156,7 @@ export function holdAfterBuild(ctx) {
  * @param {Ctx} ctx
  * @param {string} slug
  * @param {ThemeData} data
- * @returns {Promise<{warnings: string[], lifted: string[], notes: string[]}>} `notes`: what the color config kept or replaced of a hand edit
+ * @returns {Promise<{warnings: string[], lifted: string[], notes: string[], removedPictures: string[]}>} `notes`: what the color config kept or replaced of a hand edit; `removedPictures`: the editor's pictures of the look before, removed
  */
 export async function buildTheme(ctx, slug, data) {
   const {cwd} = ctx.project;
@@ -6344,16 +6222,23 @@ export async function buildTheme(ctx, slug, data) {
   // Only a picture the editor recorded writing, unchanged since, goes: a
   // file of the user's is never touched. Section sheets stay, marked as
   // out of date like sheet.html.
+  /** The pictures removed: named in the result. @type {string[]} */
+  let removedPictures = [];
   await step(() => {
+    // The full sheet's and the preview's pictures, in each mode; a section
+    // sheet's (`sheet-inputs.png`) is not one of them.
     const pictures = fs.existsSync(f.dir)
       ? fs
           .readdirSync(f.dir)
           .filter(
             n =>
-              /^(sheet|preview)(-[a-z-]+)?\.png$/.test(n) &&
+              /^(sheet|preview)(-dark)?\.png$/.test(n) &&
               editorRecorded(cwd, slug, path.join(f.dir, n)),
           )
       : [];
+    removedPictures = pictures.map(n =>
+      path.relative(cwd, path.join(f.dir, n)).split(path.sep).join('/'),
+    );
     for (const file of [
       path.join(f.dir, `${slug}.variants.d.ts`),
       ...pictures.map(n => path.join(f.dir, n)),
@@ -6465,7 +6350,7 @@ export async function buildTheme(ctx, slug, data) {
     await step(() => {
       afterBuild?.(ctx, slug, data);
     });
-  return {warnings, lifted, notes};
+  return {warnings, lifted, notes, removedPictures};
 }
 
 /**
@@ -6549,11 +6434,10 @@ export async function outputsDrift(ctx, slug) {
       ? `${name} was missing`
       : `${name} differs from what the settings build, after an edit by hand or by another tool`;
   } catch (e) {
-    // A theme source that does not load is named by its own checks; any
-    // other failure means the outputs could not be compared: built again.
+    // The outputs could not be compared (the source does not load, or
+    // anything else): the theme is built again, and a build that fails
+    // says why. Nothing records the source as built.
     const err = /** @type {any} */ (e);
-    if (err instanceof AstryxError && err.code === ERROR_CODES.ERR_THEME_LOAD)
-      return null;
     return `the outputs could not be checked (${String(err?.message ?? e)
       .split('\n')[0]
       .slice(0, 160)})`;
@@ -7017,12 +6901,27 @@ export function readFields(data, cwd, fixing, slug) {
   const meant = fieldsMeant(data);
   // A field written as no value the reader can read: for a change (slug
   // given), refused with the line that sets it, never dropped on the way.
-  const damaged = (/** @type {string} */ field, /** @type {string} */ fix) =>
-    refuse(
-      ERROR_CODES.ERR_THEME_INVALID,
-      `themes/${slug}/${slug}.settings.json: ${field === 'mode' ? 'mode' : 'base'} "${field === 'mode' ? data.mode : data.like}" is no value the editor reads, and a change never drops it. Set it again.`,
-      {run: [`${P} set ${slug} ${field} ${fix}`]},
+  // The lines offered set it again: the value it reads as when there is
+  // one, else each value it can be (each installed base, each mode), never
+  // a default that would drop what the file held.
+  // A refusal about what the file holds, not what was typed: its lines
+  // set the field again, and are not read against the typed value.
+  const damaged = (
+    /** @type {string} */ field,
+    /** @type {string[]} */ fixes,
+  ) => {
+    throw Object.assign(
+      new AstryxError(
+        `themes/${slug}/${slug}.settings.json: ${field === 'mode' ? 'mode' : 'base'} "${field === 'mode' ? data.mode : data.like}" is no value the editor reads, and a change never drops it. Set it again. Nothing was changed.`,
+        (fixes.length
+          ? fixes.map(fix => `${P} set ${slug} ${field} ${fix}`)
+          : [`${P} how ${field}`]
+        ).map(name => ({name, reason: 'do this instead'})),
+        ERROR_CODES.ERR_THEME_INVALID,
+      ),
+      {aboutSaved: true},
     );
+  };
   if (
     fixing !== 'mode' &&
     !['both', 'light-only', 'dark-only'].includes(data.mode)
@@ -7033,7 +6932,7 @@ export function readFields(data, cwd, fixing, slug) {
       );
       data.mode = meant.mode;
     } else if (slug && data.mode != null && String(data.mode).trim()) {
-      damaged('mode', 'both');
+      damaged('mode', ['both', 'light-only', 'dark-only']);
     } else {
       data.mode = 'both';
       notes.push('mode was missing or damaged, so it is both again');
@@ -7047,7 +6946,16 @@ export function readFields(data, cwd, fixing, slug) {
       );
       data.like = meant.like;
     } else if (slug) {
-      damaged('base', LIKE.includes(meant.like) ? meant.like : 'none');
+      // The base the theme was built on, when its module or history still
+      // says it; else each installed base.
+      damaged(
+        'base',
+        LIKE.includes(meant.like)
+          ? [meant.like]
+          : (b => (b ? [b] : LIKE.filter(x => baseInstalled(cwd, x))))(
+              builtOnBase(cwd, slug),
+            ),
+      );
     } else {
       delete data.like;
       notes.push('base was not a built-in theme, so it is none again');
@@ -7195,7 +7103,8 @@ export function focusStateOf(ctx, part) {
 /**
  * The radius token a part's corners follow when Core draws its corners one
  * by one from that token by position (a button squares the joins inside a
- * button group), or null. A radius for such a part is written as that
+ * button group; a button group's outer corners are its end buttons'), or
+ * null. A radius for such a part is written as that
  * token on the part, so every position keeps its own corner; a radius
  * written on the part would override Core's per-corner rules.
  * @param {Ctx} ctx
@@ -7215,6 +7124,15 @@ export function positionalCornerToken(ctx, part) {
     if (token && (e.values ?? []).some((/** @type {string} */ v) => v === '0'))
       return token;
   }
+  // A part with no corners of its own whose outer corners are the corners
+  // Core draws by place on the parts inside it (a button group's first and
+  // last buttons): the one token those read, set on the part.
+  const inner = ctx.C.MAP[part]?.innerCorners ?? [];
+  if (
+    inner.length === 1 &&
+    !Object.keys(own).some(k => /^border-.*radius$/.test(k))
+  )
+    return inner[0];
   return null;
 }
 
@@ -7242,6 +7160,42 @@ export function cornerParts(ctx, part) {
       ctx.C.MAP[t]?.own?.['border-radius'] &&
       t.startsWith(`${part}-`) &&
       ctx.project.target.has(t),
+  );
+  return inner.length ? inner : [part];
+}
+
+/** The table boxes CSS draws no padding on: rows, row groups and columns. */
+const UNPADDED_BOXES = new Set([
+  'tr',
+  'thead',
+  'tbody',
+  'tfoot',
+  'col',
+  'colgroup',
+]);
+
+/**
+ * The parts that take a part's padding: the part itself, or, when Core
+ * renders it as a box CSS draws no padding on (a table row) and gives it no
+ * other display, the parts inside it with padding of their own (its cells).
+ * @param {Ctx} ctx
+ * @param {string} part
+ * @returns {string[]}
+ */
+export function paddedParts(ctx, part) {
+  const rec = ctx.C.MAP[part];
+  const tags = rec?.tags ?? [];
+  if (
+    !rec ||
+    !tags.length ||
+    !tags.every(t => UNPADDED_BOXES.has(t)) ||
+    rec.own?.display
+  )
+    return [part];
+  const inner = (rec.contains ?? []).filter(
+    (/** @type {string} */ t) =>
+      ctx.project.target.has(t) &&
+      Object.keys(ctx.C.MAP[t]?.own ?? {}).some(k => /^padding/.test(k)),
   );
   return inner.length ? inner : [part];
 }
@@ -7470,6 +7424,37 @@ export function radiusAt(base, value, token) {
 /**
  * Whether a file is a module the editor generated (its first line is the
  * editor's header).
+ * @param {string} file
+ */
+/**
+ * Whether the editor made a theme's folder, though its settings may be
+ * gone: a stopped `new` left its marker, or the folder holds what only the
+ * editor writes (the generated settings module, an undo history, the theme
+ * source with the header the editor wrote it with).
+ * @param {string} cwd
+ * @param {string} slug
+ */
+export function editorMadeFolder(cwd, slug) {
+  const f = themeFiles(cwd, slug);
+  const firstLine = (/** @type {string} */ file) => {
+    try {
+      return fs.readFileSync(file, 'utf8').split('\n', 1)[0];
+    } catch {
+      return '';
+    }
+  };
+  return (
+    fs.existsSync(path.join(f.dir, NEW_MARKER)) ||
+    madeByEditor(f.settingsTs) ||
+    // Only editor commands write the undo history.
+    readHistory(f.history).steps.length > 0 ||
+    firstLine(f.ts) ===
+      `// The ${slug} theme. \`${P}\` wrote this file once and never changes it again.`
+  );
+}
+
+/**
+ * Whether a file carries the editor's generated header.
  * @param {string} file
  */
 export function madeByEditor(file) {
@@ -8103,7 +8088,7 @@ export async function commitTheme(
   const wrote = new Map();
   ctx.wrote = wrote;
   fs.mkdirSync(f.dir, {recursive: true});
-  /** @type {{warnings: string[], lifted: string[], notes: string[]}} */
+  /** @type {{warnings: string[], lifted: string[], notes: string[], removedPictures: string[]}} */
   let built;
   // The token loops the last build had, so a change that adds one (through
   // tokens the own source sets in a way no read of the file follows) is
@@ -8252,6 +8237,10 @@ export async function commitTheme(
     );
   }
   notes.push(...built.notes);
+  if (built.removedPictures.length)
+    notes.push(
+      `removed ${built.removedPictures.join(', ')}: ${built.removedPictures.length === 1 ? 'a picture' : 'pictures'} of the look before this change; ${P} show ${slug} --png takes new ones`,
+    );
   // The change is saved from here on: a failure to check it is reported
   // as "saved, not checked", never as a failed change.
   /** @type {Record<'light' | 'dark', Record<string, string>>} */
@@ -8336,7 +8325,7 @@ export function fontsourcePackageOf(family) {
 
 /**
  * The font families the theme's last build names (its `--font-family-*`
- * tokens and every part's `font-family`), by lowercase name; null before the
+ * tokens, every part's `font-family`, and a `font` shorthand's families), by lowercase name; null before the
  * theme has been built.
  * @param {Ctx} ctx
  * @param {string} slug
@@ -8352,12 +8341,13 @@ export function builtFontFamilies(ctx, slug) {
   }
   /** @type {Map<string, string>} */
   const out = new Map();
-  // Every family the build writes: the font tokens, and a part's own
-  // font-family.
-  for (const value of declarationValues(
-    css,
-    /^(--font-family-.*|font-family)$/,
-  ))
+  // Every family the build writes: the font tokens, a part's own
+  // font-family, and the families a `font` shorthand names last.
+  const lists = [
+    ...declarationValues(css, /^(--font-family-.*|font-family)$/),
+    ...declarationValues(css, /^font$/).map(fontShorthandFamilyList),
+  ];
+  for (const value of lists)
     for (const family of namedFontFamilies(value))
       if (!out.has(family.toLowerCase())) out.set(family.toLowerCase(), family);
   return out;
@@ -8368,10 +8358,13 @@ export function builtFontFamilies(ctx, slug) {
  * setting's package while the build still uses its family, and the
  * installed @fontsource package of a family the theme's own source sets.
  * Font notes, the previews and the app copy all load fonts from this list.
+ * For a new app that installs its own packages (`forNewApp`), every built
+ * family that is an open font comes too, installed here or not.
  * @param {Ctx} ctx
  * @param {ThemeData} data
+ * @param {{forNewApp?: boolean}} [opts]
  */
-export function fontPackages(ctx, data) {
+export function fontPackages(ctx, data, {forNewApp = false} = {}) {
   /** @type {Array<{pkg: string, family: string, installed: boolean, of: Setting | null}>} */
   const out = [];
   /** @param {string} pkg */
@@ -8383,6 +8376,10 @@ export function fontPackages(ctx, data) {
       return false;
     }
   };
+  /** An open font's package, which a new app installs. @param {string} pkg */
+  const isOpen = pkg => Object.values(OPEN_FONTS).some(f => f.pkg === pkg);
+  /** Whether a package loads its family where the fonts go. @param {string} pkg */
+  const loads = pkg => isInstalled(pkg) || (forNewApp && isOpen(pkg));
   const built = builtFontFamilies(ctx, data.name);
   for (const s of data.settings) {
     if (s.thing !== 'font') continue;
@@ -8394,16 +8391,14 @@ export function fontPackages(ctx, data) {
     // An installed @fontsource package of the family always loads it, even
     // for a family some systems ship.
     const own = fontsourcePackageOf(name);
-    const pkg = known ?? (isInstalled(own) ? own : null);
+    const pkg = known ?? (loads(own) ? own : null);
     if (!pkg || out.some(x => x.pkg === pkg)) continue;
     out.push({pkg, family: name, installed: isInstalled(pkg), of: s});
   }
   for (const family of built?.values() ?? []) {
     const pkg = fontsourcePackageOf(family);
-    if (out.some(x => x.pkg === pkg) || !isInstalled(pkg)) continue;
-    out.push({pkg, family, installed: true, of: null});
+    if (out.some(x => x.pkg === pkg) || !loads(pkg)) continue;
+    out.push({pkg, family, installed: isInstalled(pkg), of: null});
   }
   return out;
 }
-
-export {partDefault};
