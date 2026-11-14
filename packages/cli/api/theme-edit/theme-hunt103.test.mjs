@@ -180,11 +180,13 @@ describe('only written by hand', () => {
     'any other value is refused, nothing written, with the undo of that entry, which works',
     async () => {
       edit('t', s => {
-        s.find(x => x.thing === 'border').only = 'no';
+        // A yes or no word is read by the one yes/no reader; a word that
+        // is neither is refused.
+        s.find(x => x.thing === 'border').only = 'maybe';
       });
       const before = fs.readFileSync(file('t'), 'utf8');
       const r = await cli([...ED, 'set', 't', 'spacing', 'roomy']);
-      expect(r.error).toContain('border has only "no", not true or false');
+      expect(r.error).toContain('border has only "maybe", not true or false');
       expect(fs.readFileSync(file('t'), 'utf8')).toBe(before);
       expect(r.suggestions[0].name).toMatch(
         / editor undo t border --on text-input$/,

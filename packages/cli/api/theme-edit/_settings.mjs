@@ -57,7 +57,7 @@ import {
   WRAPPED_PARTS,
   CARD_LIKE,
 } from './_tables.mjs';
-import {cleanDialValue, typoLimit, typoNear} from './_normal.mjs';
+import {booleanWord, cleanDialValue, typoLimit, typoNear} from './_normal.mjs';
 import {
   alphaOf,
   colorProblem,
@@ -704,7 +704,9 @@ export function fieldsMeant(data) {
   const likeTyped = String(data?.like ?? '')
     .trim()
     .toLowerCase()
-    .replace(/^@astryxdesign\/theme-/, '');
+    // The package's name or the name with `theme` (theme-neutral,
+    // neutral-theme) is the base.
+    .replace(/^(@astryxdesign\/)?theme-|-theme$/g, '');
   const like = LIKE.includes(likeTyped)
     ? likeTyped
     : ((likeTyped ? near(likeTyped, LIKE) : null) ?? likeTyped);
@@ -1133,24 +1135,32 @@ export function loadTheme(
       )
         ? null
         : meant;
-    throw new AstryxError(
-      `themes/${slug}/${slug}.settings.json: ${problem}, a value the editor no longer accepts. Remove or change that setting; nothing else needs to change. Nothing was changed.`,
-      [
-        {name: `${P} undo ${slug} ${undoArgs(bad)}`, reason: 'do this instead'},
-        // Only a set that replaces this very entry: `mode` and `base` set
-        // the theme's own fields, not an entry in the list.
-        ...(example && !['mode', 'base'].includes(bad.thing)
-          ? [
-              {
-                name: `${P} set ${slug} ${setArgs(bad, example)}`,
-                reason: meant
-                  ? 'or set the value it holds, cleaned'
-                  : 'or give it a value it takes',
-              },
-            ]
-          : []),
-      ],
-      ERROR_CODES.ERR_THEME_INVALID,
+    // The entry rides on the refusal: a change reads its value as set reads
+    // a typed one, and offers that repair beside the undo (see _edit).
+    throw Object.assign(
+      new AstryxError(
+        `themes/${slug}/${slug}.settings.json: ${problem}, a value the editor no longer accepts. Remove or change that setting; nothing else needs to change. Nothing was changed.`,
+        [
+          {
+            name: `${P} undo ${slug} ${undoArgs(bad)}`,
+            reason: 'do this instead',
+          },
+          // Only a set that replaces this very entry: `mode` and `base` set
+          // the theme's own fields, not an entry in the list.
+          ...(example && !['mode', 'base'].includes(bad.thing)
+            ? [
+                {
+                  name: `${P} set ${slug} ${setArgs(bad, example)}`,
+                  reason: meant
+                    ? 'or set the value it holds, cleaned'
+                    : 'or give it a value it takes',
+                },
+              ]
+            : []),
+        ],
+        ERROR_CODES.ERR_THEME_INVALID,
+      ),
+      {damaged: bad, aboutSaved: true},
     );
   }
   // A bad mode or base is fixed by setting it.
@@ -1460,10 +1470,11 @@ function readEntryWords(data) {
         else delete s.axis;
       }
     }
-    // `only` is true or absent; `"true"` and `"false"` written as text are
-    // read as what they say, since the build reads any other value as true.
-    if (typeof s.only === 'string' && /^\s*(true|false)\s*$/i.test(s.only)) {
-      const read = s.only.trim().toLowerCase() === 'true';
+    // `only` is true or absent; a yes or no written as text (`"true"`,
+    // `"yes"`, `"off"`) is read as what it says by the one yes/no reader,
+    // since the build reads any other value as true.
+    if (typeof s.only === 'string' && booleanWord(s.only) != null) {
+      const read = booleanWord(s.only) === true;
       notes.push(
         `${s.thing} was saved with only ${JSON.stringify(s.only)}, read as ${read}`,
       );
@@ -6836,12 +6847,27 @@ export function readFields(data, cwd, fixing, slug) {
   const meant = fieldsMeant(data);
   // A field written as no value the reader can read: for a change (slug
   // given), refused with the line that sets it, never dropped on the way.
-  const damaged = (/** @type {string} */ field, /** @type {string} */ fix) =>
-    refuse(
-      ERROR_CODES.ERR_THEME_INVALID,
-      `themes/${slug}/${slug}.settings.json: ${field === 'mode' ? 'mode' : 'base'} "${field === 'mode' ? data.mode : data.like}" is no value the editor reads, and a change never drops it. Set it again.`,
-      {run: [`${P} set ${slug} ${field} ${fix}`]},
+  // The lines offered set it again: the value it reads as when there is
+  // one, else each value it can be (each installed base, each mode), never
+  // a default that would drop what the file held.
+  // A refusal about what the file holds, not what was typed: its lines
+  // set the field again, and are not read against the typed value.
+  const damaged = (
+    /** @type {string} */ field,
+    /** @type {string[]} */ fixes,
+  ) => {
+    throw Object.assign(
+      new AstryxError(
+        `themes/${slug}/${slug}.settings.json: ${field === 'mode' ? 'mode' : 'base'} "${field === 'mode' ? data.mode : data.like}" is no value the editor reads, and a change never drops it. Set it again. Nothing was changed.`,
+        (fixes.length
+          ? fixes.map(fix => `${P} set ${slug} ${field} ${fix}`)
+          : [`${P} how ${field}`]
+        ).map(name => ({name, reason: 'do this instead'})),
+        ERROR_CODES.ERR_THEME_INVALID,
+      ),
+      {aboutSaved: true},
     );
+  };
   if (
     fixing !== 'mode' &&
     !['both', 'light-only', 'dark-only'].includes(data.mode)
@@ -6852,7 +6878,7 @@ export function readFields(data, cwd, fixing, slug) {
       );
       data.mode = meant.mode;
     } else if (slug && data.mode != null && String(data.mode).trim()) {
-      damaged('mode', 'both');
+      damaged('mode', ['both', 'light-only', 'dark-only']);
     } else {
       data.mode = 'both';
       notes.push('mode was missing or damaged, so it is both again');
@@ -6866,7 +6892,12 @@ export function readFields(data, cwd, fixing, slug) {
       );
       data.like = meant.like;
     } else if (slug) {
-      damaged('base', LIKE.includes(meant.like) ? meant.like : 'none');
+      damaged(
+        'base',
+        LIKE.includes(meant.like)
+          ? [meant.like]
+          : LIKE.filter(x => baseInstalled(cwd, x)),
+      );
     } else {
       delete data.like;
       notes.push('base was not a built-in theme, so it is none again');

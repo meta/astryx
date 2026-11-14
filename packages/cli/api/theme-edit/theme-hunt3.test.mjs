@@ -228,11 +228,13 @@ describe('set', () => {
     ).toBe('ERR_MISSING_ARGUMENT');
   });
 
-  it('points a property written another way at the property', async () => {
-    const r = await refusal(() =>
-      themeEditSet('h', 'background_color', '#ff0000', {cwd, on: 'card'}),
-    );
-    expect(r.run[0]).toMatch(/set h background-color '#ff0000' --on card$/);
+  it('reads a property written another way as the property', async () => {
+    // `_` or spaces for its dashes read as camel case does: the property.
+    const r = await themeEditSet('h', 'background_color', '#ff0000', {
+      cwd,
+      on: 'card',
+    });
+    expect(JSON.stringify(r.data)).toContain('background-color');
   });
 
   it('quotes every suggested value so a shell passes it unchanged', async () => {

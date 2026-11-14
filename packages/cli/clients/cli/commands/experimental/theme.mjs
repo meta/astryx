@@ -51,6 +51,8 @@ import {
   builtInThemes,
   dialValueFits,
   newFlagList,
+  editorCheckedLine,
+  booleanWord,
   editorCompileProblem,
   editorFollowCompile,
   editorThemesAt,
@@ -693,6 +695,38 @@ function strayOption(command, rest) {
  * @returns {ReturnType<typeof cliError> | null}
  */
 function booleanWithValue(command, doc) {
+  const r = booleanFlags(command, doc);
+  return r
+    ? booleanRefusal(command, r.found, r.found.read == null ? null : r.line)
+    : null;
+}
+
+/**
+ * {@link booleanWithValue} for `set` and `undo`, whose line is checked as
+ * every offered line is (set's own check, a repair it offers folded in): a
+ * line set or undo refuses with no repair is not offered.
+ * @param {'set' | 'undo'} command
+ * @param {import('@astryxdesign/cli/authoring').CommandDoc} doc
+ */
+async function booleanWithValueChecked(command, doc) {
+  const r = booleanFlags(command, doc);
+  if (!r) return null;
+  const line =
+    r.found.read == null
+      ? null
+      : await editorCheckedLine(command, r.line, process.cwd());
+  return booleanRefusal(command, r.found, line);
+}
+
+/**
+ * The boolean options of a command given a value, read by the one yes/no
+ * reader, and the command as it reads with each one bare (yes) or left out
+ * (no); null when none is given a value.
+ * @param {string} command
+ * @param {import('@astryxdesign/cli/authoring').CommandDoc} doc
+ * @returns {{found: {written: string, flag: string, read: boolean | null}, line: string} | null}
+ */
+function booleanFlags(command, doc) {
   const booleans = [
     '--json',
     ...(doc.options ?? [])
@@ -705,7 +739,7 @@ function booleanWithValue(command, doc) {
   if (at < 0) return null;
   /** @type {string[]} */
   const words = [];
-  /** @type {{written: string, flag: string} | null} */
+  /** @type {{written: string, flag: string, read: boolean | null} | null} */
   let found = null;
   for (let i = at + 1; i < argv.length; i += 1) {
     const a = argv[i];
@@ -721,23 +755,37 @@ function booleanWithValue(command, doc) {
     if (booleans.includes(flag) && (eq || spaced)) {
       const value = eq ? eq[2] : String(next);
       if (spaced) i += 1;
-      found ??= {written: eq ? a : `${a} ${value}`, flag};
-      if (/^(true|yes|1)$/i.test(value) && flag !== '--json') words.push(flag);
+      // The one yes/no reader: a documented spelling or a typo of one;
+      // any other word is neither, and no line guesses it.
+      const read = booleanWord(value);
+      found ??= {written: eq ? a : `${a} ${value}`, flag, read};
+      if (read === true && flag !== '--json') words.push(flag);
       continue;
     }
     if (a !== '--json') words.push(a);
   }
   if (!found) return null;
+  return {
+    found,
+    line: `${EDITOR} ${command} ${words.map(w => (w.startsWith('--') ? w : quoteCommandArgument(w))).join(' ')}`.trim(),
+  };
+}
+
+/**
+ * The refusal of a boolean option given a value, with the line that works
+ * (null: none is offered).
+ * @param {string} command
+ * @param {{written: string, flag: string, read: boolean | null}} found
+ * @param {string | null} line
+ */
+function booleanRefusal(command, found, line) {
   return cliError(
-    `${found.flag} takes no value ("${found.written}"): give it alone for yes, or leave it out.`,
+    found.read == null
+      ? `${found.flag} takes no value ("${found.written}"), and "${found.written.replace(/^[^=\s]+[=\s]/, '')}" reads as neither yes nor no: give ${found.flag} alone for yes, or leave it out.`
+      : `${found.flag} takes no value ("${found.written}"): give it alone for yes, or leave it out.`,
     {
       suggestions: [
-        {
-          name: cmd(
-            `${EDITOR} ${command} ${words.map(w => (w.startsWith('--') ? w : quoteCommandArgument(w))).join(' ')}`.trim(),
-          ),
-          reason: 'do this instead',
-        },
+        ...(line ? [{name: cmd(line), reason: 'do this instead'}] : []),
         {
           name: cmd(`${EDITOR} ${command} --help`),
           reason: 'every option it takes',
@@ -1106,15 +1154,14 @@ export function registerExperimentalTheme(group, program) {
           thing = pasted[1];
           value = [pasted[2]];
         }
-        return (
-          booleanWithValue('set', setDoc) ??
+        return (async () =>
+          (await booleanWithValueChecked('set', setDoc)) ??
           strayOption('set', value) ??
           run(
             program,
             () => themeEditSet(name, thing, value.join(' '), changeOptions(o)),
             changeBlocks,
-          )
-        );
+          ))();
       },
     }),
     setDoc,
@@ -1178,28 +1225,29 @@ export function registerExperimentalTheme(group, program) {
         /** @type {any} */ o,
         /** @type {import('commander').Command} */ c,
       ) =>
-        booleanWithValue('undo', undoDoc) ??
-        strayOption('undo', [which, ...(c?.args ?? []).slice(3)]) ??
-        extraWords('undo', (c?.args ?? []).slice(3)) ??
-        run(
-          program,
-          () =>
-            themeEditUndo(name, {
-              ...changeOptions(o),
-              ...(thing == null ? {} : {thing, value: which}),
-            }),
-          r =>
-            r.data.action === 'step'
-              ? [
-                  `[ok] ${r.data.theme}: undid the last change`,
-                  ...project(/** @type {any} */ (r.data)),
-                ]
-              : changeBlocks(
-                  /** @type {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditChangeResponse} */ (
-                    r
+        (async () =>
+          (await booleanWithValueChecked('undo', undoDoc)) ??
+          strayOption('undo', [which, ...(c?.args ?? []).slice(3)]) ??
+          extraWords('undo', (c?.args ?? []).slice(3)) ??
+          run(
+            program,
+            () =>
+              themeEditUndo(name, {
+                ...changeOptions(o),
+                ...(thing == null ? {} : {thing, value: which}),
+              }),
+            r =>
+              r.data.action === 'step'
+                ? [
+                    `[ok] ${r.data.theme}: undid the last change`,
+                    ...project(/** @type {any} */ (r.data)),
+                  ]
+                : changeBlocks(
+                    /** @type {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditChangeResponse} */ (
+                      r
+                    ),
                   ),
-                ),
-        ),
+          ))(),
     }),
     undoDoc,
     {tokens: true},
