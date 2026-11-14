@@ -96,7 +96,9 @@ jobs:
           OUTCOME: ${{ steps.tests.outcome }}
           SHARD: ${{ matrix.shard }}
         run: |
-          log="$RUNNER_TEMP/cli-tests.log"
+          # Vitest colours its lines on CI: read the log without the colour codes.
+          log="$RUNNER_TEMP/cli-tests.plain.log"
+          sed $'s/\x1b\\[[0-9;]*m//g' "$RUNNER_TEMP/cli-tests.log" > "$log" 2>/dev/null || : > "$log"
           if [ "$OUTCOME" = success ]; then verdict=pass
           elif grep -qE '^ *(FAIL |×)' "$log" 2>/dev/null; then verdict=fail
           elif grep -q 'Node shard stuck' "$log" 2>/dev/null; then verdict=none
@@ -194,10 +196,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          # The CLI's test files too, so the refreshed record drops a deleted one.
           sparse-checkout: |
             .github/scripts/cli-minimum-node.mjs
             .github/scripts/node-time-drift.mjs
             scripts/vitest-node-durations.min-node.json
+            packages/cli/**/*.test.*
           sparse-checkout-cone-mode: false
           persist-credentials: false
       - name: Read the legs' times
@@ -235,7 +239,7 @@ jobs:
             const record = JSON.parse(fs.readFileSync(recordFile, 'utf8'));
             const times = readLegTimes(process.env.TIMES);
             fs.mkdirSync(`${process.env.GITHUB_WORKSPACE}/refreshed`, {recursive: true});
-            fs.writeFileSync(`${process.env.GITHUB_WORKSPACE}/refreshed/vitest-node-durations.min-node.json`, `${JSON.stringify(refreshRecord(record, times), null, 2)}\n`);
+            fs.writeFileSync(`${process.env.GITHUB_WORKSPACE}/refreshed/vitest-node-durations.min-node.json`, `${JSON.stringify(refreshRecord(record, times, {source: `CLI on minimum Node run ${context.runId} (Node ${process.env.NODE_VERSION})`, exists: file => fs.existsSync(`${process.env.GITHUB_WORKSPACE}/${file}`)}), null, 2)}\n`);
             const slow = slowFiles(times, record.seconds ?? {});
             core.summary.addHeading('Files past their minimum-Node time', 3);
             core.summary.addRaw(slow.length ? slow.map(({file, recorded, measured}) => `- \`${file}\`: ${measured} s (recorded ${recorded} s)`).join('\n') : `None of the ${Object.keys(times).length} timed files.`, true);

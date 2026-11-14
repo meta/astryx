@@ -194,6 +194,14 @@ describe('the workflow', () => {
     expect(checkout.with['sparse-checkout']).toContain(
       '.github/scripts/node-time-drift.mjs',
     );
+    // The CLI's test files, so the refreshed record can drop a deleted one.
+    expect(checkout.with['sparse-checkout']).toContain(
+      'packages/cli/**/*.test.*',
+    );
+    expect(checkout.with['sparse-checkout-cone-mode']).toBe(false);
+    expect(reportStep().with.script).toContain(
+      'exists: file => fs.existsSync(',
+    );
     const keepRecord = jobs.report.steps.at(-1);
     expect(keepRecord.with.name).toBe('min-node-record');
     expect(keepRecord.if).toBe('always()');
@@ -226,8 +234,11 @@ describe("a leg's verdict, as its step decides it", () => {
   }
   const stuck =
     '::error title=Node shard stuck::shard stuck in a.test.mjs (300 s)\n';
+  // As Vitest writes it on CI: coloured, and with no FAIL summary when the
+  // watchdog stops the leg.
   const failed =
-    ' FAIL  |node| packages/cli/b.test.mjs > reads b\n   × reads b 20ms\n';
+    ' \u001b[31m❯\u001b[39m \u001b[30m\u001b[46m node \u001b[49m\u001b[39m packages/cli/b.test.mjs (2 tests | 1 failed) 20ms\n' +
+    '   \u001b[31m×\u001b[39m reads b\u001b[90m 20ms\u001b[39m\n';
 
   it('passes when the tests passed', () => {
     expect(verdictFor('success', '')).toEqual({shard: 2, verdict: 'pass'});
@@ -274,10 +285,19 @@ describe('the minimum-Node times', () => {
     ]);
   });
 
-  it('refreshes the record with this run’s times and keeps every other entry', () => {
-    const record = {source: 's', seconds: {'b.test.mjs': 3, 'a.test.mjs': 1}};
-    expect(refreshRecord(record, {'b.test.mjs': 4, 'c.test.mjs': 5})).toEqual({
-      source: 's',
+  it('refreshes the record with this run’s times, names the run, and drops a file that is gone', () => {
+    const record = {
+      source: 'seed',
+      seconds: {'b.test.mjs': 3, 'a.test.mjs': 1, 'gone.test.mjs': 2},
+    };
+    expect(
+      refreshRecord(
+        record,
+        {'b.test.mjs': 4, 'c.test.mjs': 5},
+        {source: 'run 7', exists: file => file !== 'gone.test.mjs'},
+      ),
+    ).toEqual({
+      source: 'run 7',
       seconds: {'a.test.mjs': 1, 'b.test.mjs': 4, 'c.test.mjs': 5},
     });
   });
@@ -524,6 +544,9 @@ describe('the report step, run as the workflow runs it', () => {
       path.join(workspace, 'scripts/vitest-node-durations.min-node.json'),
       JSON.stringify({seconds: {'slow.test.mjs': 10, 'same.test.mjs': 5}}),
     );
+    // The test files the record names exist in the checkout.
+    for (const file of ['slow.test.mjs', 'same.test.mjs'])
+      fs.writeFileSync(path.join(workspace, file), '');
     const times = path.join(workspace, 'times');
     fs.mkdirSync(path.join(times, 'min-node-times-1'), {recursive: true});
     fs.writeFileSync(

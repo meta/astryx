@@ -4,11 +4,13 @@
  * @file The CLI's declared minimum Node, and the one issue that reports a run
  *   on it.
  * @input `minimum --package <package.json>` prints the lowest Node version its
- *   `engines.node` range allows. `reportIssue` takes actions/github-script's
- *   `github` and `context`, whether the run passed, the version and the run
- *   link.
+ *   `engines.node` range allows; `slow --times <file> --record <file>` names
+ *   one leg's files past their minimum-Node record. `reportIssue` takes
+ *   actions/github-script's `github` and `context`, the run's verdict (pass,
+ *   fail or none), the version and the run link.
  * @output The version on stdout (exit 1 when the range has no lower bound this
- *   reads); an issue opened, commented on or closed.
+ *   reads); warning lines and a step summary for slow files; an issue opened,
+ *   commented on or closed.
  * @position .github/workflows/cli-minimum-node.yml: the daily main-only run of
  *   the CLI's tests and global-mode smoke on that version. The version comes
  *   from the CLI's own `engines.node`, not from .nvmrc, which names the
@@ -153,16 +155,25 @@ export function slowFiles(times, recorded) {
 
 /**
  * The record with this run's times in it: each measured file takes its new
- * time, and every other file keeps its own.
+ * time, every other file keeps its own, and a file `exists` no longer finds
+ * leaves it. `source` names the run the times came from.
  * @param {{seconds?: Record<string, number>}} record
  * @param {Record<string, number>} times
+ * @param {{source?: string, exists?: (file: string) => boolean}} [options]
  */
-export function refreshRecord(record, times) {
+export function refreshRecord(
+  record,
+  times,
+  {source, exists = () => true} = {},
+) {
   const seconds = {...record.seconds, ...times};
   return {
     ...record,
+    ...(source ? {source} : {}),
     seconds: Object.fromEntries(
-      Object.entries(seconds).sort(([a], [b]) => a.localeCompare(b)),
+      Object.entries(seconds)
+        .filter(([file]) => exists(file))
+        .sort(([a], [b]) => a.localeCompare(b)),
     ),
   };
 }
