@@ -296,7 +296,8 @@ export function rankPages(query, pages) {
 
 /**
  * Put a named family's base template ahead of the variant that outranks it,
- * unless the variant matched START_TERMS terms the base did not, or the base
+ * unless the variant matched START_TERMS terms the base did not, the idea
+ * places the page in the variant's frame and not the base's, or the base
  * cannot start on its own: too little score, or too few matched terms. The
  * head names the exception: a family word in the idea's head is start
  * evidence on its own — the same evidence pickStart accepts in place of a
@@ -319,8 +320,9 @@ function baseFirst(ranked) {
   ) {
     return ranked;
   }
+  // The frame is what a template is, and pickStart takes it as evidence.
   const own = [...top.matched].filter(t => !base.matched.has(t)).length;
-  return own >= START_TERMS
+  return own >= START_TERMS || (top.containerMatched && !base.containerMatched)
     ? ranked
     : [base, ...ranked.filter(r => r !== base)];
 }
