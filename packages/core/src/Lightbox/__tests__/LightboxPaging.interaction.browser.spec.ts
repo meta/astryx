@@ -1759,8 +1759,9 @@ for (const {name, story} of TAP_CASES) {
     browserName,
   }) => {
     test.skip(browserName !== 'chromium', 'rendering traces are Chromium-only');
-    await page.route('https://picsum.photos/**', async route => {
-      const id = /\/id\/(\d+)\//.exec(route.request().url())?.[1] ?? '10';
+    await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route => {
+      const id =
+        /\/sample-([a-z]+)-/.exec(route.request().url())?.[1] ?? 'forest';
       await route.fulfill({
         contentType: 'image/svg+xml',
         body: photoSvg(COLORS[id] ?? '#888'),
@@ -2166,8 +2167,9 @@ for (const {name, story, expectedReads} of SHRINK_CASES) {
         return rect.call(this);
       };
     });
-    await page.route('https://picsum.photos/**', async route => {
-      const id = /\/id\/(\d+)\//.exec(route.request().url())?.[1] ?? '10';
+    await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route => {
+      const id =
+        /\/sample-([a-z]+)-/.exec(route.request().url())?.[1] ?? 'forest';
       await route.fulfill({
         contentType: 'image/svg+xml',
         body: photoSvg(COLORS[id] ?? '#888'),
@@ -2321,8 +2323,9 @@ for (const {name, story, isInFrame = false, isRtl = false} of FIT_CASES) {
   test(`an open caption that widens to one line fewer gives "less" a line of its own only where it does not fit beside the last line (${name})`, async ({
     page,
   }) => {
-    await page.route('https://picsum.photos/**', async route => {
-      const id = /\/id\/(\d+)\//.exec(route.request().url())?.[1] ?? '10';
+    await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route => {
+      const id =
+        /\/sample-([a-z]+)-/.exec(route.request().url())?.[1] ?? 'forest';
       await route.fulfill({
         contentType: 'image/svg+xml',
         body: photoSvg(COLORS[id] ?? '#888'),
