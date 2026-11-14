@@ -289,6 +289,26 @@ describe('generateThemeRules', () => {
     expect(defined.components?.text).toBeUndefined();
   });
 
+  it('replaces an inherited pseudo-class block with a restated one whose every value is left undefined', () => {
+    const base = defineTheme({
+      name: 'hover-base',
+      components: {
+        button: {base: {':hover': {color: 'red', borderColor: 'blue'}}},
+      },
+    });
+    const child = defineTheme({
+      extends: base,
+      name: 'hover-child',
+      components: {
+        button: {base: {':hover': {color: undefined as unknown as string}}},
+      },
+    });
+    expect(child.components?.button?.base?.[':hover']).toStrictEqual({});
+    const css = generateThemeRules(child).join('\n');
+    expect(css).not.toMatch(/border-color: blue/);
+    expect(css).not.toMatch(/:hover[^{]*\{\s*\}/);
+  });
+
   it('keeps null as it was: it replaces an inherited value and is written as it is', () => {
     const base = defineTheme({
       name: 'null-base',

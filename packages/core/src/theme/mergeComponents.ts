@@ -3,15 +3,10 @@
 /**
  * @file Component style-map merging
  *
- * One merge rule for component overrides, shared by every layer that composes
- * them: `extends` inheritance, generated type-scale rules, and the on-media
- * (`onDark`/`onLight`) surfaces. Merging is per style key, so a child that
- * restates one property of `button.base` keeps the rest of the base's; a
- * color-mode block (`@light`, `@dark`) merges per property the same way. A
- * component, style key, or property left `undefined` is not set: in a style
- * key or a color-mode block, the base's value for that property stays. A
- * restated pseudo-class block (`:hover`) replaces the base's block whole; a
- * property left `undefined` inside it is not set either.
+ * One merge rule for component overrides, shared by `extends` inheritance,
+ * generated type-scale rules, and the `onDark`/`onLight` surfaces. Merging
+ * is per style key and per property; a restated pseudo-class block replaces
+ * the base's whole.
  *
  * @input two ComponentStyleMaps — the base and the overrides that win
  * @output a merged ComponentStyleMap
@@ -24,48 +19,60 @@ import type {ComponentStyleMap} from './defineTheme';
 const COLOR_MODE_KEYS = ['@light', '@dark'] as const;
 
 /**
- * A value without what it leaves undefined: each property of a plain
- * object, at every depth (a style key's nested pseudo-class and color-mode
- * blocks). A block whose every value is left undefined is not set either,
- * so it is undefined too; a block written empty stays. A null is kept: it
- * is a value. A value with nothing undefined is returned as it is.
+ * An object's entries, each read through `read`: an entry `read` gives as
+ * undefined is dropped, and an object that held entries and keeps none is
+ * undefined itself. Anything that is not a plain object is returned as it
+ * is (a null is a value). An object with nothing dropped or changed is
+ * returned as it is.
  */
-function withoutUndefined<T>(value: T): T | undefined {
+function readEntries<T>(
+  value: T,
+  read: (entry: unknown) => unknown,
+): T | undefined {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     return value;
   }
   const entries = Object.entries(value);
-  if (entries.length === 0) {
-    return value;
-  }
   let changed = false;
   const kept: [string, unknown][] = [];
-  for (const [key, nested] of entries) {
-    const set = nested === undefined ? undefined : withoutUndefined(nested);
+  for (const [key, entry] of entries) {
+    const set = entry === undefined ? undefined : read(entry);
     if (set === undefined) {
       changed = true;
       continue;
     }
-    changed ||= set !== nested;
+    changed ||= set !== entry;
     kept.push([key, set]);
   }
-  if (kept.length === 0) {
+  if (entries.length > 0 && kept.length === 0) {
     return undefined;
   }
   return changed ? (Object.fromEntries(kept) as T) : value;
 }
 
 /**
+ * A block without the properties it leaves undefined, at every depth. A
+ * nested block (a pseudo-class or color-mode block) stays even when that
+ * empties it: a restated pseudo-class block still replaces the base's.
+ */
+function withoutUndefined(value: unknown): unknown {
+  const set = readEntries(value, withoutUndefined);
+  return set === undefined ? {} : set;
+}
+
+/**
  * A component style map without what it leaves undefined: a component, a
- * style key, a block, or a property at any depth is not set, and so is a
- * component or block whose every value is left undefined. Every layer that
- * reads a theme's component map (the merge, each resolved layer, the
- * stylesheet) reads it through this.
+ * style key, or a property at any depth is not set, and so is a component
+ * or style key whose every value is. Every layer that reads a theme's
+ * component map (the merge, each resolved layer, the stylesheet) reads it
+ * through this.
  */
 export function withoutUnsetComponents(
   map: ComponentStyleMap | undefined,
 ): ComponentStyleMap | undefined {
-  return map === undefined ? undefined : withoutUndefined(map);
+  return readEntries(map, rules =>
+    readEntries(rules, styles => readEntries(styles, withoutUndefined)),
+  );
 }
 
 /**
