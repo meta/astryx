@@ -41,6 +41,13 @@ import type {UsePopoverReturn} from './usePopover';
 import {Dialog} from '../Dialog';
 import {SegmentedControl, SegmentedControlItem} from '../SegmentedControl';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {__loadTouchRuntimeForTest} from '../utils/touchRuntime';
+
+// These cases drive touch motion, which comes with the shared touch runtime
+// once the page has loaded it.
+beforeAll(async () => {
+  await __loadTouchRuntimeForTest();
+});
 
 // Store original matches to restore later
 const originalMatches = HTMLElement.prototype.matches;

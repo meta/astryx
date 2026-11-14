@@ -386,7 +386,11 @@ export function ToastSurface({
   const dismissFromGesture = useCallback(() => {
     onDismissRef.current('manual');
   }, []);
-  const {rootRef, bindings: gestureBindings} = useToastGesture({
+  const {
+    rootRef,
+    bindings: gestureBindings,
+    swipeClaim,
+  } = useToastGesture({
     direction: gestureDirection,
     enabled: !isExiting,
     canPauseTimer: isAutoHide,
@@ -425,58 +429,65 @@ export function ToastSurface({
   const {mode} = useTheme();
   const fallbackMediaMode = isError || mode === 'light' ? 'dark' : 'light';
 
+  // The swipe claim follows the card, so the card's node is attached when
+  // the claim attaches to it.
   return (
-    <div
-      {...pickDataAttributes(rest)}
-      ref={rootRef}
-      role={isLiveRegion ? (isError ? 'alert' : 'status') : undefined}
-      aria-live={isLiveRegion ? (isError ? 'assertive' : 'polite') : undefined}
-      aria-atomic={isLiveRegion ? 'true' : undefined}
-      onMouseEnter={pauseForPointer}
-      onMouseLeave={resumeForPointer}
-      onFocusCapture={pauseForFocus}
-      onBlurCapture={resumeForFocus}
-      {...gestureBindings}
-      {...mergeProps(
-        themeProps('toast', {type}),
-        stylex.props(
-          styles.root,
-          !hasEntryStarted && styles.entering,
-          isError ? styles.variantError : styles.variantDefault,
-          isExiting && styles.exiting,
-        ),
-      )}>
-      <MediaTheme mode="auto" fallback={fallbackMediaMode}>
-        {renderContent ? (
-          renderContent({
-            body,
-            endContent,
-            type,
-            isAutoHide,
-            autoHideDuration,
-            dismiss: handleDismiss,
-          })
-        ) : (
-          <div {...stylex.props(styles.inner)}>
-            <div ref={bodyRef} {...stylex.props(styles.content)}>
-              {body}
-            </div>
+    <>
+      <div
+        {...pickDataAttributes(rest)}
+        ref={rootRef}
+        role={isLiveRegion ? (isError ? 'alert' : 'status') : undefined}
+        aria-live={
+          isLiveRegion ? (isError ? 'assertive' : 'polite') : undefined
+        }
+        aria-atomic={isLiveRegion ? 'true' : undefined}
+        onMouseEnter={pauseForPointer}
+        onMouseLeave={resumeForPointer}
+        onFocusCapture={pauseForFocus}
+        onBlurCapture={resumeForFocus}
+        {...gestureBindings}
+        {...mergeProps(
+          themeProps('toast', {type}),
+          stylex.props(
+            styles.root,
+            !hasEntryStarted && styles.entering,
+            isError ? styles.variantError : styles.variantDefault,
+            isExiting && styles.exiting,
+          ),
+        )}>
+        <MediaTheme mode="auto" fallback={fallbackMediaMode}>
+          {renderContent ? (
+            renderContent({
+              body,
+              endContent,
+              type,
+              isAutoHide,
+              autoHideDuration,
+              dismiss: handleDismiss,
+            })
+          ) : (
+            <div {...stylex.props(styles.inner)}>
+              <div ref={bodyRef} {...stylex.props(styles.content)}>
+                {body}
+              </div>
 
-            <div {...stylex.props(styles.endContent)}>
-              {endContent}
-              <Button
-                variant="ghost"
-                size="sm"
-                icon={<Icon icon="close" size="sm" color="inherit" />}
-                label={t('@astryx.toast.dismiss')}
-                onClick={handleDismiss}
-                isIconOnly
-              />
+              <div {...stylex.props(styles.endContent)}>
+                {endContent}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={<Icon icon="close" size="sm" color="inherit" />}
+                  label={t('@astryx.toast.dismiss')}
+                  onClick={handleDismiss}
+                  isIconOnly
+                />
+              </div>
             </div>
-          </div>
-        )}
-      </MediaTheme>
-    </div>
+          )}
+        </MediaTheme>
+      </div>
+      {swipeClaim}
+    </>
   );
 }
 
