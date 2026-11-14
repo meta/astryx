@@ -209,7 +209,14 @@ export async function howTheme(ctx, cwd, name) {
       }
       const was = beforeCompiled();
       const now = compileTheme(ctx, d, base);
-      return measureFit(ctx, base, was, now, intent, steps);
+      // A one-mode theme shows only that mode: only it is measured.
+      const visible =
+        d.mode === 'light-only'
+          ? 'light'
+          : d.mode === 'dark-only'
+            ? 'dark'
+            : null;
+      return measureFit(ctx, base, was, now, intent, steps, visible);
     },
     check(steps) {
       /** @type {import('./_settings.mjs').ThemeData} */
@@ -249,6 +256,8 @@ export async function howTheme(ctx, cwd, name) {
  * @property {string[]} typed values the question gives (taken as given)
  * @property {'light' | 'dark' | null} [mode] the mode the question names
  * @property {boolean} [bound] the question gives a bound ("smaller than 24px"): a space is checked against it too
+ * @property {boolean} [contrast] the words ask about contrast ("too light to read"): text in dark mode moves the other way
+ * @property {'more' | 'less' | null} [shadowDir] the way a shadow's strength moves ("darker shadows": more)
  */
 
 /** A camelCase property as CSS writes it. @param {string} k */
@@ -268,6 +277,12 @@ function partValues(comp) {
         for (const [k2, v2] of Object.entries(v))
           out.set(`${when}|${k}|${kebab(k2)}`, String(v2));
       else out.set(`${when}||${kebab(k)}`, String(v));
+  // A plain color written as `background` paints the background color.
+  for (const [k, v] of [...out])
+    if (/\|background$/.test(k) && !/gradient|url\(/.test(v)) {
+      const bc = k.replace(/background$/, 'background-color');
+      if (!out.has(bc)) out.set(bc, v);
+    }
   return out;
 }
 
@@ -329,14 +344,16 @@ function measureNumber(v) {
 }
 
 /**
- * Whether a color is a foreground (text or a border): in dark mode "darker" asks it for more contrast, so it
- * moves lighter there, and "lighter" darker; a fill moves the same way in
- * both modes.
+ * Whether a color steps for contrast in dark mode (a border; text when the
+ * words ask about contrast): there "darker" asks for more contrast, so it
+ * moves lighter, and "lighter" darker; a fill moves the same way in both
+ * modes.
  * @param {string} name a token or a property
+ * @param {boolean} [contrast] the words ask about contrast
  */
-const isForeground = name =>
+const isForeground = (name, contrast = false) =>
   !/background|surface|fill|accent|overlay/.test(name) &&
-  /text|border|outline|^color$|on-/.test(name);
+  (/border|outline/.test(name) || (contrast && /text|^color$|on-/.test(name)));
 
 /** @param {number[]} c */
 const luminance = c => c[0] * 0.299 + c[1] * 0.587 + c[2] * 0.114;
@@ -349,8 +366,9 @@ const luminance = c => c[0] * 0.299 + c[1] * 0.587 + c[2] * 0.114;
  * @param {any} now
  * @param {MeasureIntent} intent
  * @param {Step[]} steps
+ * @param {'light' | 'dark' | null} [visible] the one mode a one-mode theme shows
  */
-function measureFit(ctx, base, was, now, intent, steps) {
+function measureFit(ctx, base, was, now, intent, steps, visible = null) {
   const tw = ownTokens(was, base);
   const tn = ownTokens(now, base);
   const C = ctx.C;
@@ -420,11 +438,40 @@ function measureFit(ctx, base, was, now, intent, steps) {
     for (const [k, v] of b) {
       // A whole kept part: its plain look (base); a state or variant: that.
       if (prefix ? !k.startsWith(prefix) : !k.startsWith('base|')) continue;
-      const o = a.get(k);
+      // A plain color written as `background` is the background color the
+      // part painted before.
+      const prop0 = k.split('|')[2] ?? '';
+      const o =
+        a.get(k) ??
+        (/\|background$/.test(k) ? a.get(`${k}-color`) : undefined) ??
+        // A custom property set on the part: what that token was before.
+        (/^--/.test(prop0)
+          ? {
+              light: resolveIn(`var(${prop0})`, tw.light, 'light'),
+              dark: resolveIn(`var(${prop0})`, tw.dark, 'dark'),
+              raw: `var(${prop0})`,
+            }
+          : undefined);
+      // (A state rule the part did not list before is not measured: what
+      // it showed in that state is not known here.)
+      if (!o && k.split('|')[1]) continue;
       // A value the part did not show before (a keep rule on a member that
-      // reads none of it) is not a change it shows; a corner longhand under
+      // reads none of it) is not a change it shows; a kept variant is held
+      // exactly: a rule it did not have, other than none, is a change,
+      // unless it is what the part showed at rest; a corner longhand under
       // a kept shorthand follows the shorthand.
-      if (!o) continue;
+      if (!o && (!prefix || /^(none|transparent|initial|unset)$/.test(v.raw)))
+        continue;
+      const inherited = a.get(`base||${k.split('|')[2]}`);
+      if (
+        !o &&
+        inherited &&
+        inherited.light === v.light &&
+        inherited.dark === v.dark
+      )
+        continue;
+      if (!o)
+        return `it would change ${part} (${k.split('|').filter(Boolean).join(' ')}), which the question keeps as it is`;
       if (
         /radius$/.test(k) &&
         /-(start|end)-(start|end)-radius$/.test(k) &&
@@ -475,6 +522,7 @@ function measureFit(ctx, base, was, now, intent, steps) {
       if (intent.families.length && !intent.families.includes(fam))
         return `it would also change ${part}'s ${prop}, which is not what the question asks to change`;
       for (const mode of /** @type {const} */ (['light', 'dark'])) {
+        if (visible && mode !== visible) continue;
         const after = v[mode];
         const before = o?.[mode] ?? null;
         if (
@@ -488,19 +536,26 @@ function measureFit(ctx, base, was, now, intent, steps) {
         }
         if (before == null) continue;
         if (fam === 'color' && intent.lighter != null) {
-          // A part's color, per variant: only the rule a step writes (its
-          // own --when, else the plain rule), in the mode the question
-          // names (else light), never an overlay layer over the fill.
+          // A part's color, in every variant and state it shows (a step on
+          // the plain rule reaches the variants that take it), in each mode
+          // (or the one the question names), never an overlay layer over
+          // the fill; only the kind of color the steps write (a new fill
+          // may bring a text color that reads on it).
           if (intent.mode && mode !== intent.mode) continue;
-          const [when, state] = k.split('|');
-          const written = steps.some(
-            st =>
-              st.on &&
-              members(String(st.on)).includes(part) &&
-              (st.when ?? 'base') === when &&
-              (st.state ? `:${st.state}` : '') === state,
-          );
-          if (!written || !exact) continue;
+          const [when] = k.split('|');
+          if (!exact) continue;
+          const kindOf = (/** @type {string} */ x) =>
+            /^background/.test(x)
+              ? 'fill'
+              : /border|outline/.test(x)
+                ? 'line'
+                : 'ink';
+          if (
+            !steps.some(
+              st => !/^--/.test(st.thing) && kindOf(st.thing) === kindOf(prop),
+            )
+          )
+            continue;
           if (
             /overlay|tint/.test(String(o?.raw ?? '')) ||
             /overlay|tint/.test(v.raw)
@@ -509,7 +564,7 @@ function measureFit(ctx, base, was, now, intent, steps) {
           const x = parseColor(after);
           const y = parseColor(before);
           const want =
-            mode === 'dark' && isForeground(prop)
+            mode === 'dark' && isForeground(prop, intent.contrast)
               ? !intent.lighter
               : intent.lighter;
           if (x && y && Math.abs(luminance(x) - luminance(y)) >= 0.5)
@@ -558,6 +613,7 @@ function measureFit(ctx, base, was, now, intent, steps) {
     if (intent.families.length && !intent.families.includes(fam))
       return `${tok} is not what the question asks to change`;
     for (const mode of /** @type {const} */ (['light', 'dark'])) {
+      if (visible && mode !== visible) continue;
       const after = resolveIn(`var(${tok})`, tn[mode], mode);
       const before = resolveIn(`var(${tok})`, tw[mode], mode);
       if (after === before) continue;
@@ -575,7 +631,7 @@ function measureFit(ctx, base, was, now, intent, steps) {
         const x = parseColor(after);
         const y = parseColor(before);
         const want =
-          mode === 'dark' && isForeground(tok)
+          mode === 'dark' && isForeground(tok, intent.contrast)
             ? !intent.lighter
             : intent.lighter;
         if (x && y && Math.abs(luminance(x) - luminance(y)) >= 0.5)
