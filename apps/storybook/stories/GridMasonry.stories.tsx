@@ -12,6 +12,7 @@ import {
   spacingVars,
   radiusVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
+import {SAMPLE_IMAGES} from './assets/samples/samples';
 
 const meta: Meta = {
   title: 'Core/GridMasonry',
@@ -88,27 +89,27 @@ interface GalleryImage {
 
 const IMAGES: GalleryImage[] = [
   {
-    src: 'https://picsum.photos/seed/astryx-travel/600/800',
+    src: SAMPLE_IMAGES.canyon600x800,
     title: 'Going places',
     category: 'Travel',
   },
   {
-    src: 'https://picsum.photos/seed/astryx-home/600/400',
+    src: SAMPLE_IMAGES.beach600x400,
     title: 'Making memories',
     category: 'Home',
   },
   {
-    src: 'https://picsum.photos/seed/astryx-lifestyle/600/600',
+    src: SAMPLE_IMAGES.city600x600,
     title: 'Seeing things',
     category: 'Lifestyle',
   },
   {
-    src: 'https://picsum.photos/seed/astryx-ideas/600/900',
+    src: SAMPLE_IMAGES.forest600x900,
     title: 'Sharing ideas',
     category: 'Lifestyle',
   },
   {
-    src: 'https://picsum.photos/seed/astryx-nature/600/700',
+    src: SAMPLE_IMAGES.meadow600x700,
     title: 'Being free',
     category: 'Nature',
   },

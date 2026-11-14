@@ -20,7 +20,8 @@ import {
   readHistory,
   themeFiles,
 } from './_settings.mjs';
-import {LIKE, P} from './_tables.mjs';
+import {FAMILIES, GROUPS, LIKE, P} from './_tables.mjs';
+import {parseColor} from './_color.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
 /** The theme name commands use when the app has no theme yet. */
@@ -54,6 +55,7 @@ export const EXAMPLE_THEME = 'my-theme';
  * @property {{light: Record<string, string>, dark: Record<string, string>}} base
  * @property {{light: Record<string, string>, dark: Record<string, string>}} [own] - The theme's own values: the base's with its settings applied.
  * @property {(steps: Step[]) => {ok: true} | {ok: false, why: string}} check
+ * @property {(steps: Step[], intent: MeasureIntent) => string | null} measure the measured check: why the built result does not do what the question asks, or null
  */
 
 /**
@@ -120,6 +122,9 @@ export async function howTheme(ctx, cwd, name) {
   const compiled = (/** @type {import('./_settings.mjs').ThemeData} */ d) =>
     JSON.stringify([d.mode, compileTheme(ctx, d, base)]);
   const before = compiled(theme);
+  /** @type {any} */
+  let beforeCache = null;
+  const beforeCompiled = () => (beforeCache ??= compileTheme(ctx, theme, base));
   // Whether a body font setting also moves the heading font: Core gives
   // headings the body family when a theme names no heading family, so it is
   // read from Core, and stays right when that changes.
@@ -184,6 +189,28 @@ export async function howTheme(ctx, cwd, name) {
       ? readHistory(themeFiles(cwd, slug).history).steps.length
       : 0,
     bodyFontReachesHeadings,
+    /**
+     * The measured check: build the theme with the steps in memory (the
+     * same compile `set` builds from; nothing is written), resolve every
+     * value the touched parts show at rest and in the named state or
+     * variant, in light and dark, before and after, and hold them to what
+     * the question asks. Returns why it does not fit, or null.
+     * @param {Step[]} steps
+     * @param {MeasureIntent} intent
+     * @returns {string | null}
+     */
+    measure(steps, intent) {
+      const d = JSON.parse(JSON.stringify(theme));
+      const checkCtx = /** @type {any} */ ({...ctx, base});
+      try {
+        for (const st of steps) apply(checkCtx, slug, d, st);
+      } catch {
+        return null; // check() says why
+      }
+      const was = beforeCompiled();
+      const now = compileTheme(ctx, d, base);
+      return measureFit(ctx, base, was, now, intent, steps);
+    },
     check(steps) {
       /** @type {import('./_settings.mjs').ThemeData} */
       const d = JSON.parse(JSON.stringify(theme));
@@ -207,6 +234,364 @@ export async function howTheme(ctx, cwd, name) {
       }
     },
   };
+}
+
+/**
+ * What the measured check holds a command to.
+ * @typedef {object} MeasureIntent
+ * @property {string[]} families the kinds of change asked for (color, radius, space, border, weight, opacity, shadow, fontsize); empty: any
+ * @property {'more' | 'less' | null} dir the way a size moves
+ * @property {boolean | null} lighter the way a color moves
+ * @property {'more' | 'less' | null} opacityDir the way an opacity moves
+ * @property {boolean} zero a removal: the changed values reach none or 0
+ * @property {string[]} subjects the parts the question changes
+ * @property {string[]} keep the parts it excepts, compares against or forbids changing
+ * @property {string[]} typed values the question gives (taken as given)
+ * @property {'light' | 'dark' | null} [mode] the mode the question names
+ * @property {boolean} [bound] the question gives a bound ("smaller than 24px"): a space is checked against it too
+ */
+
+/** A camelCase property as CSS writes it. @param {string} k */
+const kebab = k => k.replace(/[A-Z]/g, m => `-${m.toLowerCase()}`);
+
+/**
+ * Every value of a compiled part, by `when|state|prop`.
+ * @param {any} comp the part's compiled styles
+ * @returns {Map<string, string>}
+ */
+function partValues(comp) {
+  /** @type {Map<string, string>} */
+  const out = new Map();
+  for (const [when, rules] of Object.entries(comp ?? {}))
+    for (const [k, v] of Object.entries(/** @type {any} */ (rules) ?? {}))
+      if (v && typeof v === 'object')
+        for (const [k2, v2] of Object.entries(v))
+          out.set(`${when}|${k}|${kebab(k2)}`, String(v2));
+      else out.set(`${when}||${kebab(k)}`, String(v));
+  return out;
+}
+
+/**
+ * A value with every var() written out from a mode's tokens, and
+ * light-dark() taken for that mode.
+ * @param {string} v
+ * @param {Record<string, string>} map
+ * @param {'light' | 'dark'} mode
+ */
+function resolveIn(v, map, mode) {
+  let out = String(v ?? '');
+  for (let i = 0; i < 8; i++) {
+    const next = out
+      .replace(/var\(\s*(--[a-z0-9-]+)\s*(?:,\s*([^()]*))?\)/gi, (_, t, fb) =>
+        String(map[t] ?? fb ?? ''),
+      )
+      .replace(
+        /light-dark\(\s*([^,()]+(?:\([^()]*\))?)\s*,\s*([^()]+(?:\([^()]*\))?)\s*\)/gi,
+        (_, a, b) => (mode === 'light' ? a : b),
+      );
+    if (next === out) break;
+    out = next;
+  }
+  return out.trim().toLowerCase();
+}
+
+/** The family of a CSS property or token, as the step check names them. @param {string} prop */
+function familyOf(prop) {
+  if (/radius/.test(prop)) return 'radius';
+  if (/^--shadow-|^box-shadow$/.test(prop)) return 'shadow';
+  if (/^opacity$/.test(prop)) return 'opacity';
+  if (/weight/.test(prop)) return 'weight';
+  if (/^(font-size|--font-size-[a-z0-9]+|--text-[a-z0-9-]+-size)$/.test(prop))
+    return 'fontsize';
+  if (
+    /^(border(-[a-z]+)?-width|border(-(top|bottom|left|right|block|inline))?$|--border-width|--focus-outline-width|outline-width)$/.test(
+      prop,
+    )
+  )
+    return 'border';
+  if (/colou?r|^background(-image)?$|^fill$|^stroke$|^filter$/.test(prop))
+    return 'color';
+  if (
+    /^(padding|gap|margin|min-height|height|width|max-width|min-width|--spacing-|--size-)/.test(
+      prop,
+    )
+  )
+    return 'space';
+  return null;
+}
+
+/** A length as px (rem/em at 16), or a plain number, or null. @param {string} v */
+function measureNumber(v) {
+  const m = /^(-?\d*\.?\d+)(px|rem|em)?$/.exec(
+    String(v).trim().split(/\s+/)[0],
+  );
+  return m ? Number(m[1]) * (m[2] === 'rem' || m[2] === 'em' ? 16 : 1) : null;
+}
+
+/**
+ * Whether a color is a foreground (text or a border): in dark mode "darker" asks it for more contrast, so it
+ * moves lighter there, and "lighter" darker; a fill moves the same way in
+ * both modes.
+ * @param {string} name a token or a property
+ */
+const isForeground = name =>
+  !/background|surface|fill|accent|overlay/.test(name) &&
+  /text|border|outline|^color$|on-/.test(name);
+
+/** @param {number[]} c */
+const luminance = c => c[0] * 0.299 + c[1] * 0.587 + c[2] * 0.114;
+
+/**
+ * Hold the after build to the intent; why it does not fit, or null.
+ * @param {any} ctx
+ * @param {any} base
+ * @param {any} was
+ * @param {any} now
+ * @param {MeasureIntent} intent
+ * @param {Step[]} steps
+ */
+function measureFit(ctx, base, was, now, intent, steps) {
+  const tw = ownTokens(was, base);
+  const tn = ownTokens(now, base);
+  const C = ctx.C;
+  /** @param {string} part */
+  const members = part => FAMILIES[part] ?? [part];
+  // A kept part, or one state or variant of it (`part@when|state|`).
+  /** @type {Array<{part: string, prefix: string}>} */
+  const keeps = intent.keep.flatMap(k => {
+    const [part, prefix = ''] = k.split('@');
+    return members(part).map(m => ({part: m, prefix}));
+  });
+  const subjects = new Set(intent.subjects.flatMap(members));
+  /**
+   * The values a part shows, by `when|state|prop` and mode: its own
+   * compiled rules, then each token it reads for a property.
+   * @param {any} compiled
+   * @param {{light: Record<string, string>, dark: Record<string, string>}} toks
+   * @param {string} part
+   */
+  const shown = (compiled, toks, part) => {
+    const own = partValues({
+      ...(base.components?.[part] ?? {}),
+      ...(compiled.components?.[part] ?? {}),
+    });
+    /** @type {Map<string, string>} */
+    const raw = new Map(own);
+    // The part at rest in its main variant is its `base` too (a set with no
+    // --when writes base).
+    const mainWhen = (/** @type {string[]} */ ws) =>
+      ws.some(
+        w =>
+          w === '' ||
+          /^variant=(default|primary|accent|neutral)$|^size=md$/.test(w),
+      );
+    for (const g of Object.keys(GROUPS))
+      for (const r of C.partReads(part, g) ?? [])
+        if (mainWhen(r.when?.length ? r.when : ['']))
+          for (const prop of r.props ?? []) {
+            const key = `base||${prop}`;
+            if (!raw.has(key)) raw.set(key, `var(${r.token})`);
+          }
+    for (const g of Object.keys(GROUPS))
+      for (const r of C.partReads(part, g) ?? [])
+        for (const prop of r.props ?? [])
+          for (const w of r.when?.length ? r.when : [''])
+            if (!/::|:active|:hover|:focus|:checked|:disabled/.test(w)) {
+              const key = `${w ? w.replace('=', ':') : 'base'}||${prop}`;
+              // A variant with no rule of its own takes the part's own base
+              // rule over the token it reads.
+              if (!raw.has(key))
+                raw.set(key, own.get(`base||${prop}`) ?? `var(${r.token})`);
+            }
+    /** @type {Map<string, {light: string, dark: string, raw: string}>} */
+    const out = new Map();
+    for (const [k, v] of raw)
+      out.set(k, {
+        light: resolveIn(v, toks.light, 'light'),
+        dark: resolveIn(v, toks.dark, 'dark'),
+        raw: v,
+      });
+    return out;
+  };
+  // Parts the question keeps: every value they show is the same after.
+  for (const {part, prefix} of keeps) {
+    const a = shown(was, tw, part);
+    const b = shown(now, tn, part);
+    for (const [k, v] of b) {
+      // A whole kept part: its plain look (base); a state or variant: that.
+      if (prefix ? !k.startsWith(prefix) : !k.startsWith('base|')) continue;
+      const o = a.get(k);
+      // A value the part did not show before (a keep rule on a member that
+      // reads none of it) is not a change it shows; a corner longhand under
+      // a kept shorthand follows the shorthand.
+      if (!o) continue;
+      if (
+        /radius$/.test(k) &&
+        /-(start|end)-(start|end)-radius$/.test(k) &&
+        b.has('base||border-radius')
+      )
+        continue;
+      if (o.light !== v.light || o.dark !== v.dark)
+        return `it would change ${part} (${k.split('|').filter(Boolean).join(' ')}), which the question keeps as it is`;
+    }
+  }
+  const typed = new Set(intent.typed.map(x => x.toLowerCase()));
+  if (steps.some(st => typed.has(String(st.value ?? '').toLowerCase())))
+    return null;
+  // The subject's changed values: family, direction, removal.
+  const touched = new Set([
+    ...subjects,
+    ...steps
+      .map(st => st.on)
+      .filter(Boolean)
+      .flatMap(x => members(String(x))),
+  ]);
+  for (const part of touched) {
+    // A whole kept part is checked above, not as a subject.
+    if (keeps.some(k => k.part === part && !k.prefix)) continue;
+    const a = shown(was, tw, part);
+    const b = shown(now, tn, part);
+    for (const [k, v] of b) {
+      // A kept state or variant of the part is checked above.
+      if (
+        keeps.some(x => x.part === part && x.prefix && k.startsWith(x.prefix))
+      )
+        continue;
+      const prop = k.split('|')[2];
+      // A shorthand written where the part read longhands: its first side.
+      // (Whether the value before is the same rule's, not a stand-in.)
+      const exact = a.has(k);
+      const o =
+        a.get(k) ??
+        (prop === 'padding'
+          ? (a.get(`${k.split('|')[0]}||padding-top`) ??
+            a.get('base||padding-top'))
+          : prop === 'border'
+            ? a.get('base||border-width')
+            : a.get(`base||${prop}`));
+      if (o && o.light === v.light && o.dark === v.dark) continue;
+      const fam = familyOf(prop);
+      if (!fam) continue;
+      if (intent.families.length && !intent.families.includes(fam))
+        return `it would also change ${part}'s ${prop}, which is not what the question asks to change`;
+      for (const mode of /** @type {const} */ (['light', 'dark'])) {
+        const after = v[mode];
+        const before = o?.[mode] ?? null;
+        if (
+          intent.zero &&
+          ['radius', 'space', 'border', 'shadow'].includes(fam)
+        ) {
+          const n = measureNumber(after);
+          if (!/^(none|transparent|0)$/.test(after) && n !== 0)
+            return `${part}'s ${prop} would be ${after} in ${mode} mode, not none`;
+          continue;
+        }
+        if (before == null) continue;
+        if (fam === 'color' && intent.lighter != null) {
+          // A part's color, per variant: only the rule a step writes (its
+          // own --when, else the plain rule), in the mode the question
+          // names (else light), never an overlay layer over the fill.
+          if (intent.mode && mode !== intent.mode) continue;
+          const [when, state] = k.split('|');
+          const written = steps.some(
+            st =>
+              st.on &&
+              members(String(st.on)).includes(part) &&
+              (st.when ?? 'base') === when &&
+              (st.state ? `:${st.state}` : '') === state,
+          );
+          if (!written || !exact) continue;
+          if (
+            /overlay|tint/.test(String(o?.raw ?? '')) ||
+            /overlay|tint/.test(v.raw)
+          )
+            continue;
+          const x = parseColor(after);
+          const y = parseColor(before);
+          const want =
+            mode === 'dark' && isForeground(prop)
+              ? !intent.lighter
+              : intent.lighter;
+          if (x && y && Math.abs(luminance(x) - luminance(y)) >= 0.5)
+            if (want !== luminance(x) > luminance(y))
+              return `${part}'s ${prop}${when !== 'base' ? ` (${when})` : ''} would get ${want ? 'darker' : 'lighter'} in ${mode} mode (${before} to ${after})`;
+          continue;
+        }
+        const dir = fam === 'opacity' ? intent.opacityDir : intent.dir;
+        if (
+          !dir ||
+          !(
+            ['radius', 'border', 'weight', 'opacity', 'fontsize'].includes(
+              fam,
+            ) ||
+            // A space: one length written over one read (never a shorthand).
+            (fam === 'space' &&
+              (intent.bound ||
+                (exact &&
+                  steps.some(st => st.thing === prop) &&
+                  !/\s/.test(after) &&
+                  !/\s/.test(String(before)))))
+          )
+        )
+          continue;
+        const x = measureNumber(after);
+        const y = measureNumber(before);
+        if (x != null && y != null && x !== y && (dir === 'more') !== x > y)
+          return `${part}'s ${prop} would move the other way in ${mode} mode (${before} to ${after})`;
+      }
+    }
+  }
+  // Tokens the steps name (a dial: its main token): the same checks.
+  const DIAL_TOKEN = /** @type {Record<string, string>} */ ({
+    accent: '--color-accent',
+    danger: '--color-error',
+    success: '--color-success',
+    warning: '--color-warning',
+    info: '--color-info',
+    neutral: '--color-neutral',
+  });
+  for (const st of steps) {
+    const tok = /^--/.test(st.thing) ? st.thing : DIAL_TOKEN[st.thing];
+    if (!tok || st.on) continue;
+    const fam = familyOf(tok);
+    if (!fam) continue;
+    if (intent.families.length && !intent.families.includes(fam))
+      return `${tok} is not what the question asks to change`;
+    for (const mode of /** @type {const} */ (['light', 'dark'])) {
+      const after = resolveIn(`var(${tok})`, tn[mode], mode);
+      const before = resolveIn(`var(${tok})`, tw[mode], mode);
+      if (after === before) continue;
+      if (
+        intent.zero &&
+        ['radius', 'space', 'border', 'shadow'].includes(fam)
+      ) {
+        const n = measureNumber(after);
+        if (!/^(none|transparent|0)$/.test(after) && n !== 0)
+          return `${tok} would be ${after} in ${mode} mode, not none`;
+        continue;
+      }
+      if (fam === 'color' && intent.lighter != null) {
+        if (intent.mode && mode !== intent.mode) continue;
+        const x = parseColor(after);
+        const y = parseColor(before);
+        const want =
+          mode === 'dark' && isForeground(tok)
+            ? !intent.lighter
+            : intent.lighter;
+        if (x && y && Math.abs(luminance(x) - luminance(y)) >= 0.5)
+          if (want !== luminance(x) > luminance(y))
+            return `${tok} would get ${want ? 'darker' : 'lighter'} in ${mode} mode (${before} to ${after})`;
+        continue;
+      }
+      const dir = fam === 'opacity' ? intent.opacityDir : intent.dir;
+      if (!dir) continue;
+      const x = measureNumber(after);
+      const y = measureNumber(before);
+      if (x != null && y != null && x !== y && (dir === 'more') !== x > y)
+        return `${tok} would move the other way in ${mode} mode (${before} to ${after})`;
+    }
+  }
+  return null;
 }
 
 /**
