@@ -2486,29 +2486,6 @@
     "FR18",
     "FR18"
   ],
-  "packages/richtext/src/CodeBlockHeaderPlugin.tsx": [
-    "DEC-4",
-    "FR8",
-    "spec quote",
-    "spec:AST-061",
-    "spec:AST-061"
-  ],
-  "packages/richtext/src/CodeSyntaxPlugin.tsx": [
-    "FR1",
-    "FR30",
-    "component:Markdown",
-    "spec quote",
-    "spec:AST-061"
-  ],
-  "packages/richtext/src/MarkdownExtensionsPlugin.tsx": [
-    "FR11",
-    "FR2",
-    "FR6",
-    "FR8",
-    "FR9",
-    "spec quote",
-    "spec:AST-064"
-  ],
   "packages/richtext/src/RichTextEditor.tsx": [
     "#5335",
     "spec:AST-061",
@@ -2524,16 +2501,6 @@
     "spec:AST-061",
     "spec:AST-061",
     "spec:AST-064"
-  ],
-  "packages/richtext/src/TableColumnFloorPlugin.tsx": [
-    "FR4",
-    "spec quote",
-    "spec:AST-061"
-  ],
-  "packages/richtext/src/TaskCheckboxPlugin.tsx": [
-    "FR5",
-    "spec quote",
-    "spec:AST-061"
   ],
   "packages/richtext/src/codeLanguages.ts": ["FR30", "component:Markdown"],
   "packages/richtext/src/editorNodes.ts": ["spec:AST-064"],
@@ -2558,6 +2525,39 @@
     "spec:AST-061"
   ],
   "packages/richtext/src/index.ts": ["spec quote", "spec:AST-061/DEC-8"],
+  "packages/richtext/src/internal/CodeBlockHeaderPlugin.tsx": [
+    "DEC-4",
+    "FR8",
+    "spec quote",
+    "spec:AST-061",
+    "spec:AST-061"
+  ],
+  "packages/richtext/src/internal/CodeSyntaxPlugin.tsx": [
+    "FR1",
+    "FR30",
+    "component:Markdown",
+    "spec quote",
+    "spec:AST-061"
+  ],
+  "packages/richtext/src/internal/MarkdownExtensionsPlugin.tsx": [
+    "FR11",
+    "FR2",
+    "FR6",
+    "FR8",
+    "FR9",
+    "spec quote",
+    "spec:AST-064"
+  ],
+  "packages/richtext/src/internal/TableColumnFloorPlugin.tsx": [
+    "FR4",
+    "spec quote",
+    "spec:AST-061"
+  ],
+  "packages/richtext/src/internal/TaskCheckboxPlugin.tsx": [
+    "FR5",
+    "spec quote",
+    "spec:AST-061"
+  ],
   "packages/richtext/src/markdown.ts": [
     "FR12",
     "FR3",

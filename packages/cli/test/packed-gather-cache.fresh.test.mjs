@@ -86,16 +86,68 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
   );
 
   it.skipIf(!hasModuleHooks)(
-    'is not kept by the first run, which only makes its folder',
+    'is kept by the first run, which makes its folder, and used by the next',
     () => {
+      const fresh = run(QUERIES[0], {tmp: freshTmp()});
       const tmp = path.join(work, 'tmp', 'first');
-      const first = run(QUERIES[0], {tmp});
+      // The release cache, as keptTmp() leaves it: this packed copy, with no
+      // Core beside it, starts a background Core install that makes the
+      // folder, and the gather looks it up.
+      fs.mkdirSync(path.join(tmp, 'astryx', 'releases'), {recursive: true});
+      expect(run(QUERIES[0], {tmp})).toEqual(fresh);
       expect(fs.readdirSync(path.join(tmp, 'astryx'))).toContain('catalogs');
       expect(fs.statSync(path.join(tmp, CACHE_NAME)).mode & 0o777).toBe(0o700);
-      expect(fs.readdirSync(path.join(tmp, CACHE_NAME))).toEqual([]);
-      expect(first).toEqual(run(QUERIES[0], {tmp: freshTmp()}));
-      run(QUERIES[0], {tmp});
-      expect(entries(tmp).size).toBe(1);
+      const kept = entries(tmp);
+      expect(kept.size).toBe(1);
+      expect(run(QUERIES[0], {tmp})).toEqual(fresh);
+      const [name] = [...kept.keys()];
+      // The second run read the entry back: it did not write it again.
+      expect(entries(tmp).get(name)?.ino).toBe(kept.get(name)?.ino);
+    },
+    120_000,
+  );
+
+  it.skipIf(!hasModuleHooks || process.getuid?.() === 0)(
+    'lets the first run answer the same, silently, when it cannot make or write its folder',
+    () => {
+      const fresh = run(QUERIES[0], {tmp: freshTmp()});
+      expect(fresh.status).toBe(0);
+      /**
+       * Run the query on a new machine whose cache folder is set up by
+       * `prepare`, then make every folder writable again.
+       * @param {string} name
+       * @param {(tmp: string) => string[]} prepare - returns the folders it
+       *   made read only
+       */
+      const firstRun = (name, prepare) => {
+        const tmp = path.join(work, 'tmp', name);
+        fs.mkdirSync(tmp, {recursive: true});
+        const locked = prepare(tmp);
+        try {
+          return {result: run(QUERIES[0], {tmp}), kept: entries(tmp).size};
+        } finally {
+          for (const dir of locked) fs.chmodSync(dir, 0o700);
+        }
+      };
+      // The user cache folder is read only: the catalogs folder cannot be
+      // made.
+      const noFolder = firstRun('first-locked-home', tmp => {
+        fs.mkdirSync(path.join(tmp, 'astryx', 'releases'), {recursive: true});
+        fs.chmodSync(path.join(tmp, 'astryx'), 0o500);
+        return [path.join(tmp, 'astryx')];
+      });
+      // The catalogs folder exists but nothing can be written in it.
+      const noWrite = firstRun('first-locked-folder', tmp => {
+        const catalogs = path.join(tmp, CACHE_NAME);
+        fs.mkdirSync(catalogs, {recursive: true, mode: 0o700});
+        fs.mkdirSync(path.join(tmp, 'astryx', 'releases'), {recursive: true});
+        fs.chmodSync(catalogs, 0o500);
+        return [catalogs];
+      });
+      for (const {result, kept} of [noFolder, noWrite]) {
+        expect(result).toEqual(fresh);
+        expect(kept).toBe(0);
+      }
     },
     120_000,
   );
@@ -129,7 +181,13 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
             before.get(name)?.ino === after.get(name)?.ino ? 'hit' : 'miss',
           );
         }
-        expect(fs.readdirSync(path.join(tmp, 'astryx', 'jiti')).length).toBe(2);
+        // The manifest's and the helper's transpiled copies, beside the
+        // folder's own record of its last size check (a dot file).
+        expect(
+          fs
+            .readdirSync(path.join(tmp, 'astryx', 'jiti'))
+            .filter(name => !name.startsWith('.')).length,
+        ).toBe(2);
         expect(outcomes).toEqual(['miss', 'hit', 'hit']);
       } finally {
         fs.rmSync(other.dir, {recursive: true, force: true});

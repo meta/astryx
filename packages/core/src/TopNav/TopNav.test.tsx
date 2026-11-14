@@ -83,6 +83,29 @@ describe('TopNav', () => {
     ).toBeInTheDocument();
   });
 
+  it('keeps a plain-text heading in its own one-line box in mobile-bar mode', () => {
+    render(
+      <TopNavRenderContext value="mobile-bar">
+        <TopNav heading="Northwind Internal Usage Analytics" />
+      </TopNavRenderContext>,
+    );
+    const text = screen.getByText('Northwind Internal Usage Analytics');
+    expect(text.tagName).toBe('SPAN');
+    expect(text.className).toContain('mobileBarHeadingText');
+  });
+
+  it('passes an element heading through unwrapped in mobile-bar mode', () => {
+    render(
+      <TopNavRenderContext value="mobile-bar">
+        <TopNav heading={<span data-testid="title-content">Logo</span>} />
+      </TopNavRenderContext>,
+    );
+    expect(screen.getByTestId('title-content')).toBeInTheDocument();
+    expect(
+      document.querySelector('[class*="mobileBarHeadingText"]'),
+    ).toBeNull();
+  });
+
   it('renders heading slot content', () => {
     render(<TopNav heading={<span data-testid="title-content">Logo</span>} />);
     expect(screen.getByTestId('title-content')).toBeInTheDocument();
