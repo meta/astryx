@@ -37,7 +37,7 @@ import {assetDataUri, isAssetPath} from './assets.mjs';
 import {SINGLE_COPY, isServedPackage, packageOf, resolveServed} from './served-packages.mjs';
 import {findNodeModulesPackage} from '../fs/paths.mjs';
 import {importSpecifiers} from './embedded-imports.mjs';
-import {CHART_GLOBAL, CHART_ROOTS, chartDocument, chartSize, markLegends} from './charts.mjs';
+import {CHART_GLOBAL, CHART_ROOTS, FOLLOWS_WIDTH, boxHeights, chartDocument, chartDrawings, foldLegends, roundCoordinates} from './charts.mjs';
 
 /** @typedef {{level: string, text: string}} PageLog */
 
@@ -205,11 +205,15 @@ let InChart = null;
  * @type {'aside' | 'page' | 'alone'}
  */
 let mode = 'aside';
+/** The height each chart's box states, by the chart's place. @type {(number | null)[]} */
+let boxes = [];
+/** The place of the chart drawn by itself. */
+let alonePlace = 0;
 
 /**
  * Wrap a recharts chart, or a ResponsiveContainer, so the server render sets
- * it aside and the drawing pass draws it: a container at the size it starts
- * at, in a box that lets the drawing fit the page's width.
+ * it aside and the drawing pass draws it: a container at each size
+ * chartDrawings gives it, in the box a browser gives it.
  * @param {any} Chart
  * @param {boolean} container
  */
@@ -232,9 +236,16 @@ let mode = 'aside';
       pageCharts[place.current] = props;
       if (committed.current) renderedAfterCommit = true;
     }
-    const drawn = container
-      ? createElement('div', {className: 'recharts-responsive-container'}, createElement(Chart, {...props, ...chartSize(props)}))
-      : createElement(Chart, props);
+    let drawn = createElement(Chart, props);
+    if (container) {
+      const at = mode === 'alone' ? alonePlace : inside ? null : place.current;
+      const {sizes, style, follows} = chartDrawings(props, at === null ? null : boxes[at]);
+      drawn = createElement(
+        'div',
+        {className: 'recharts-responsive-container', style, [FOLLOWS_WIDTH]: follows ? '' : undefined},
+        ...sizes.map((size, k) => createElement(Chart, {...props, ...size, key: k})),
+      );
+    }
     if (mode === 'alone' || inside) return drawn;
     return createElement('astryx-chart', null, createElement(InChart.Provider, {value: true}, drawn));
   }
@@ -323,11 +334,15 @@ async function drawCharts(markup, Page) {
     } catch (e) {
       error = e;
     }
-    if (!error) markLegends(host);
+    if (!error) {
+      foldLegends(host);
+      roundCoordinates(host);
+    }
     const out = error ? null : read(host);
     root.unmount();
     return out;
   };
+  boxes = await boxHeights(markup);
   mode = 'page';
   let drawn = drawIn(createElement(Page), host => [...host.querySelectorAll('astryx-chart')].map(el => el.innerHTML));
   /** @type {false | 'error' | 'changed' | 'rerendered'} */
@@ -347,7 +362,10 @@ async function drawCharts(markup, Page) {
   }
   if (alone) {
     mode = 'alone';
-    drawn = charts.map(chart => drawIn(chart, host => [host.innerHTML])?.[0] ?? '');
+    drawn = charts.map((chart, i) => {
+      alonePlace = i;
+      return drawIn(chart, host => [host.innerHTML])?.[0] ?? '';
+    });
   }
   let failed = 0;
   // A chart that drew no picture counts as failed, once.
