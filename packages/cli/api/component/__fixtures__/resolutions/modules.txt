@@ -293,7 +293,7 @@ useSelectorPresentation useSelectorPresentation Selector/Selector.doc.mjs Select
 useSettledOpen useSettledOpen hooks/useAnimatedLayout.doc.mjs hooks/useSettledOpen.ts
 useSheetGestures useSheetGestures BottomSheet/BottomSheet.doc.mjs BottomSheet/useSheetGestures.ts
 useSliderTouch useSliderTouch Slider/Slider.doc.mjs Slider/useSliderTouch.ts
-useSpeechRecognition useSpeechRecognition Chat/Chat.doc.mjs Chat/useSpeechRecognition.ts
+useSpeechRecognition useSpeechRecognition Chat/useSpeechRecognition.doc.mjs Chat/useSpeechRecognition.ts
 useSwipeAction useSwipeAction Swipe/createSwipe.doc.mjs Swipe/useSwipeAction.ts
 useSwitchTouch useSwitchTouch Switch/Switch.doc.mjs Switch/useSwitchTouch.ts
 useTableCellStyles useTableCellStyles Table/Table.doc.mjs Table/useTableCellStyles.ts
