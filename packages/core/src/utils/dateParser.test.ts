@@ -351,6 +351,46 @@ describe('parseDateInput', () => {
       expect(parseDateInput('abc xyz')).toBeNull();
     });
 
+    it('returns null when native Date fills in a missing year', () => {
+      for (const text of [
+        'meeting 3',
+        'hello 5',
+        'Tuesday 5',
+        'Jan. 5',
+        '9 Nov 10:00',
+        'Nov 9 10:00 GMT',
+      ]) {
+        expect(parseDateInput(text)).toBeNull();
+      }
+      for (const [text, year, month, day] of [
+        ['Jan 5, 26', 2026, 1, 5],
+        ['9-Nov-26', 2026, 11, 9],
+        ['5 Jan 90', 1990, 1, 5],
+        ['Nov 9, 26 10:00', 2026, 11, 9],
+        ['11/9/26 10:00 AM', 2026, 11, 9],
+        ['Jan 5, 01', 2001, 1, 5],
+        ['Jan 5, 1', 2001, 1, 5],
+        ['1/1/1', 2001, 1, 1],
+      ] as const) {
+        expect(parseDateInput(text)).toEqual({year, month, day});
+      }
+      const originalTZ = process.env.TZ;
+      process.env.TZ = 'Asia/Tokyo';
+      try {
+        expect(parseDateInput('Dec 31, 2000 20:00 GMT')).toEqual({
+          year: 2001,
+          month: 1,
+          day: 1,
+        });
+      } finally {
+        if (originalTZ === undefined) {
+          delete process.env.TZ;
+        } else {
+          process.env.TZ = originalTZ;
+        }
+      }
+    });
+
     it('validates February dates', () => {
       expect(parseDateInput('February 29, 2024')).toEqual({
         year: 2024,
