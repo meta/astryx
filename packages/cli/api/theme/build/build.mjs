@@ -90,7 +90,7 @@ import {validatePrivateVars} from '../../../foundation/config/theme-private-vars
 import {AstryxError} from '../../error.mjs';
 import {applyWrites} from '../../integration/add-helpers.mjs';
 import {logger} from '../../logger.mjs';
-import {loadComponentDoc} from '../../../foundation/discovery/component-loader.mjs';
+import {coreComponentDocs} from '../../../foundation/discovery/core-component-docs.mjs';
 import {THEME_SOURCE_EXTENSIONS} from '../../../foundation/discovery/theme-module-extensions.mjs';
 import {
   createJiti,
@@ -1697,27 +1697,10 @@ async function loadKnownValuesIndex() {
   const coreSrc = coreRoot ? path.join(coreRoot, 'src') : null;
   if (!coreSrc || !fs.existsSync(coreSrc)) return {};
 
-  /** @type {any[]} */
-  const docs = [];
-  /** @param {string} dir */
-  async function scan(dir) {
-    for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        if (entry.name !== 'node_modules' && entry.name !== '__tests__') {
-          await scan(full);
-        }
-        continue;
-      }
-      if (!entry.name.endsWith('.doc.mjs')) continue;
-      try {
-        docs.push(await loadComponentDoc(full));
-      } catch {
-        // One malformed or optional doc must not erase validation for the rest.
-      }
-    }
-  }
-  await scan(coreSrc);
+  // One malformed or optional doc must not erase validation for the rest.
+  const docs = (await coreComponentDocs(coreSrc)).flatMap(read =>
+    'error' in read ? [] : [read.doc],
+  );
 
   /** @param {string} value */
   const targetName = value =>
@@ -1941,55 +1924,34 @@ async function resolveAugmentationTargetCandidates(componentName) {
     matches.push({moduleName, interfacePrefix});
   }
 
-  /** @param {string} dir */
-  async function scan(dir) {
-    const entries = fs.readdirSync(dir, {withFileTypes: true});
-    for (const entry of entries) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        if (entry.name === 'node_modules' || entry.name === '__tests__')
-          continue;
-        await scan(full);
-        continue;
-      }
-      if (!entry.name.endsWith('.doc.mjs')) continue;
+  for (const read of await coreComponentDocs(coreSrc)) {
+    if ('error' in read) continue;
+    const {file, doc} = read;
+    const matchesTarget = (doc?.theming?.targets || []).some(
+      (/** @type {any} */ target) =>
+        typeof target?.className === 'string' &&
+        target.className.replace(/^astryx-/, '') === componentName,
+    );
+    if (!matchesTarget) continue;
 
-      /** @type {any} */
-      let doc;
-      try {
-        doc = await loadComponentDoc(full);
-      } catch {
-        continue;
-      }
+    const moduleName =
+      typeof doc?.name === 'string' && doc.name
+        ? doc.name
+        : path.basename(path.dirname(file));
 
-      const matchesTarget = (doc?.theming?.targets || []).some(
-        (/** @type {any} */ target) =>
-          typeof target?.className === 'string' &&
-          target.className.replace(/^astryx-/, '') === componentName,
-      );
-      if (!matchesTarget) continue;
-
-      const moduleName =
-        typeof doc?.name === 'string' && doc.name
-          ? doc.name
-          : path.basename(path.dirname(full));
-
-      // Try the exact rendered token first for documented subtargets such as
-      // avatar-status-dot → AvatarStatusDotVariantMap, then the owning public
-      // component name (for example, ProgressBar for progress-bar-fill).
-      addCandidate(moduleName, toPascalCase(componentName));
-      addCandidate(moduleName, moduleName);
-      if (Array.isArray(doc?.components)) {
-        for (const comp of doc.components) {
-          if (typeof comp?.name === 'string') {
-            addCandidate(moduleName, comp.name);
-          }
+    // Try the exact rendered token first for documented subtargets such as
+    // avatar-status-dot → AvatarStatusDotVariantMap, then the owning public
+    // component name (for example, ProgressBar for progress-bar-fill).
+    addCandidate(moduleName, toPascalCase(componentName));
+    addCandidate(moduleName, moduleName);
+    if (Array.isArray(doc?.components)) {
+      for (const comp of doc.components) {
+        if (typeof comp?.name === 'string') {
+          addCandidate(moduleName, comp.name);
         }
       }
     }
   }
-
-  await scan(coreSrc);
   // A target documented by a parent component may also have its own public
   // subpath and augmentation interface (Heading is documented under Text but
   // owns @astryxdesign/core/Heading). Keep the direct-name candidate after
