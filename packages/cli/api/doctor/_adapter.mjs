@@ -39,6 +39,7 @@ import {
 } from '../../foundation/agent-docs/computer-agent-text.mjs';
 import {computerAgentTextSettings} from '../../foundation/env/user-settings.mjs';
 import * as fs from 'node:fs';
+import {createRequire} from 'node:module';
 import {placeholderUses} from '../../foundation/discovery/template-icons.mjs';
 export {placeholderFixes} from '../../foundation/discovery/template-icons.mjs';
 export {
@@ -76,15 +77,16 @@ export {
   resolveThemeModule,
 } from '../../foundation/config/theme-state.mjs';
 export {
-  GENERATED_MARKER,
+  fileMark,
+  generatedSourceCommand,
   isPrivateVarRefusal,
   missingThemePackage,
   themeBuild,
   validateThemePrivateInputs,
 } from '../theme/build/build.mjs';
-export {APP_COPY_MARK, EDITOR_GENERATED_MARK} from '../theme-edit/_marks.mjs';
 export {installCommandFor as packageInstallCommand} from '../../foundation/discovery/template-needs.mjs';
 export {resolveRecordedTheme} from '../theme/theme.mjs';
+export {themeIdentifier} from '../theme/_fork.mjs';
 export {collectUnloadedFonts} from '../theme/build/font-warning.mjs';
 
 // What the authoring-docs check reads (./_authoring-audit.mjs), reached only
@@ -113,15 +115,22 @@ const CHECK_CODEC = {
  * A doctor check that reads only files, kept between runs through the kept
  * gather (foundation/fs/gather-cache.mjs): a later `doctor` with every file,
  * folder, module and environment variable it read unchanged reads the check
- * back. Only the docs checks go through here; a check that depends on the
- * time, the network or anything else the stamps do not see never does.
+ * back. Only the docs checks and the theme-wiring scan go through here; a
+ * check that depends on the time, the network or anything else the stamps do
+ * not see never does.
  * @template T
  * @param {{name: string, cwd: string, coreDir: string | null}} where - The
  *   check, the project folder, and the Core folder the project loads.
  * @param {() => Promise<T>} check
+ * @param {{encode: (value: any) => any, decode: (stored: any) => any, valid?: (value: any) => boolean}} [codec]
+ *   How the value is kept: a check record unless given.
  * @returns {Promise<T>}
  */
-export function keptFileCheck({name, cwd, coreDir}, check) {
+export function keptFileCheck(
+  {name, cwd, coreDir},
+  check,
+  codec = CHECK_CODEC,
+) {
   // Only a recorded run (a plain `doctor` from the bin) reads or keeps one: a
   // hosted run names its commands its own way, so it always checks.
   if (!recordedRun()) return check();
@@ -129,9 +138,32 @@ export function keptFileCheck({name, cwd, coreDir}, check) {
     // With the command name the checks print commands with.
     ['doctor-check', name, cwd, coreDir, getCliInvocation(cwd)],
     check,
-    CHECK_CODEC,
+    codec,
   );
 }
+
+/**
+ * The theme-wiring scan's result ({@link themeImportWiring}), kept exactly,
+ * with its shape.
+ */
+export const THEME_WIRING_CODEC = {
+  encode: (/** @type {any} */ value) => value,
+  decode: (/** @type {any} */ value) => value,
+  valid: (/** @type {any} */ value) =>
+    value != null &&
+    Array.isArray(value.wired) &&
+    Array.isArray(value.unconfirmed) &&
+    value.wired.every(
+      (/** @type {any} */ w) =>
+        w != null &&
+        typeof w.slug === 'string' &&
+        typeof w.owner === 'string' &&
+        typeof w.file === 'string',
+    ) &&
+    value.unconfirmed.every(
+      (/** @type {any} */ u) => u != null && typeof u.file === 'string',
+    ),
+};
 
 /**
  * Package written to the generated app record for one discovered theme.
@@ -304,6 +336,45 @@ export function doctorElementPropOrigins(file, element) {
  */
 export function doctorStylesheetImports(css) {
   return new Set(cssImports(css));
+}
+
+/**
+ * The file a local stylesheet `@import` names, from the stylesheet that
+ * imports it: a relative path, or a package's file as Node resolves it
+ * (`@fontsource/inter/index.css`). Null for a URL (http, https, `//`) or an
+ * import that does not resolve.
+ * @param {string} specifier
+ * @param {string} fromFile
+ * @returns {string | null}
+ */
+export function doctorStylesheetImportFile(specifier, fromFile) {
+  if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(specifier)) return null;
+  const isFile = (/** @type {string} */ f) => {
+    try {
+      return fs.statSync(f).isFile();
+    } catch {
+      return false;
+    }
+  };
+  // A bare name is a file beside the stylesheet first (`@import
+  // "faces.css"`, as a browser reads it), then a package.
+  const beside = path.resolve(path.dirname(fromFile), specifier);
+  if (isFile(beside)) return beside;
+  if (/^\.{1,2}\//.test(specifier)) return null;
+  try {
+    // Packages resolve from where the stylesheet really is (a linked
+    // install, as pnpm makes, keeps its own dependencies there).
+    let real = fromFile;
+    try {
+      real = fs.realpathSync(fromFile);
+    } catch {
+      real = fromFile;
+    }
+    const file = createRequire(real).resolve(specifier);
+    return isFile(file) ? file : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

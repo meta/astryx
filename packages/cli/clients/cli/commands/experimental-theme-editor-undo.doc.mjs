@@ -54,7 +54,7 @@ export const doc = {
       flag: '--mode <mode>',
       param: 'options.mode',
       description:
-        'light or dark: only that color mode. Colors only; sizes, numbers, fonts and shadows are the same in both modes, and a light-only or dark-only theme takes no --mode',
+        'light or dark: only that color mode. Colors only; sizes, numbers, fonts and shadows are the same in both modes. In a light-only or dark-only theme, it removes a setting saved for one mode (one made before the theme became one-mode)',
     },
     {
       flag: '--only',

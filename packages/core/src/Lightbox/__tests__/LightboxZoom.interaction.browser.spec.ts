@@ -194,7 +194,7 @@ async function openViewer(
   photo: {width: number; height: number} = {width: 3000, height: 2000},
 ): Promise<OpenViewer> {
   await installLongTaskLog(page);
-  await page.route('https://picsum.photos/**', async route =>
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
     route.fulfill({
       contentType: 'image/svg+xml',
       body: photoSvg(photo.width, photo.height),
@@ -351,7 +351,7 @@ for (const theme of SHIPPED_THEMES) {
   test(`over a zoomed light photo, Close, Previous, Next and the counter keep their contrast (${theme})`, async ({
     page,
   }) => {
-    await page.route('https://picsum.photos/**', async route =>
+    await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
       route.fulfill({
         contentType: 'image/svg+xml',
         body: '<svg xmlns="http://www.w3.org/2000/svg" width="3000" height="2000"><rect width="3000" height="2000" fill="#fff"/></svg>',
@@ -530,7 +530,7 @@ for (const [photo, fill] of [
   test(`the caption keeps 4.5:1 on its backing, in its band and open, over a ${photo} photo`, async ({
     page,
   }) => {
-    await page.route('https://picsum.photos/**', async route =>
+    await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
       route.fulfill({
         contentType: 'image/svg+xml',
         // A tall photo fills the stage, so an open caption lies over it.
@@ -588,7 +588,7 @@ for (const [story, trigger] of [
     test(`in light mode, a single photo's caption keeps 4.5:1 on its backing over a white page and photo (${story}, ${theme})`, async ({
       page,
     }) => {
-      await page.route('https://picsum.photos/**', async route =>
+      await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
         route.fulfill({
           contentType: 'image/svg+xml',
           body: '<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800"><rect width="1200" height="800" fill="#ffffff"/></svg>',
@@ -640,7 +640,7 @@ for (const theme of SHIPPED_THEMES) {
   test(`in light mode, a gallery's caption keeps 4.5:1 in its band (${theme})`, async ({
     page,
   }) => {
-    await page.route('https://picsum.photos/**', async route =>
+    await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
       route.fulfill({
         contentType: 'image/svg+xml',
         body: '<svg xmlns="http://www.w3.org/2000/svg" width="3000" height="2000"><rect width="3000" height="2000" fill="#fff"/></svg>',

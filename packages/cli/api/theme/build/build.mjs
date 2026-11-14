@@ -92,6 +92,7 @@ import {applyWrites} from '../../integration/add-helpers.mjs';
 import {logger} from '../../logger.mjs';
 import {loadComponentDoc} from '../../../foundation/discovery/component-loader.mjs';
 import {THEME_SOURCE_EXTENSIONS} from '../../../foundation/discovery/theme-module-extensions.mjs';
+import {withEmptyStylesheets} from '../../../foundation/fs/module-loader.mjs';
 import {
   collectThemingTargets,
   targetsByKey,
@@ -108,6 +109,7 @@ import {
 } from '../../../foundation/discovery/template-needs.mjs';
 import {generateFamilyCSS, resolveThemeFamily} from './family.mjs';
 import {resolveIconImports} from './icon-imports.mjs';
+import {generatedMark} from '../../theme-edit/_marks.mjs';
 
 // Import shared theme processing from core. `astryx theme build` MUST produce the
 // exact same CSS as the `<Theme>` runtime, so it has exactly one generation
@@ -925,6 +927,82 @@ function isDirectorySync(file) {
   }
 }
 
+/**
+ * The marks a file's leading comment carries (see `generatedMark`): a theme
+ * build's output, or a file the theme editor writes, with the command it
+ * names. The one reader build and doctor share.
+ * @param {string} source the start of the file
+ * @param {string} [file] its path, for a mark that names no exact command
+ */
+export function fileMark(source, file) {
+  return generatedMark(source, GENERATED_MARKER, file);
+}
+
+/**
+ * The command a file's leading comment says writes it, when another CLI
+ * command generates it (the theme editor's settings module or app copy):
+ * the exact command its mark names. Null for a theme build's own output and
+ * a file without a mark, such as a theme source of one's own.
+ * @param {string} file
+ * @returns {string | null}
+ */
+export function generatedFileCommand(file) {
+  const mark = fileMark(fileHead(file), file);
+  return mark?.kind === 'editor' ? mark.command : null;
+}
+
+/**
+ * The command that writes a missing `file`: a file beside it carries
+ * another command's mark, and a file there names `file` (a build output's
+ * header names its source), so it is one that command writes. Null for any
+ * other name, such as a typo.
+ * @param {string} file
+ * @returns {string | null}
+ */
+function missingGeneratedCommand(file) {
+  const dir = path.dirname(file);
+  const base = path.basename(file);
+  let names;
+  try {
+    names = fs.readdirSync(dir).sort();
+  } catch {
+    return null;
+  }
+  /** @type {string | null} */
+  let by = null;
+  let named = false;
+  for (const n of names) {
+    const f = path.join(dir, n);
+    try {
+      if (!fs.statSync(f).isFile()) continue;
+    } catch {
+      continue;
+    }
+    by ??= generatedFileCommand(f);
+    if (!named)
+      try {
+        named = fs.readFileSync(f, 'utf8').slice(0, 4000).includes(base);
+      } catch {
+        // A file that does not read names nothing.
+      }
+    if (by && named) return by;
+  }
+  return null;
+}
+
+/**
+ * The command that writes `file`: from its own mark, or, when it is
+ * missing, from the files beside it (see `missingGeneratedCommand`); null
+ * otherwise.
+ * @param {string} file
+ * @returns {string | null}
+ */
+export function generatedSourceCommand(file) {
+  return fs.existsSync(file)
+    ? generatedFileCommand(file)
+    : missingGeneratedCommand(file);
+}
+
 /** @param {string} file @returns {string} the start of a file, or '' when it cannot be read */
 function fileHead(file) {
   try {
@@ -1121,7 +1199,9 @@ function assertThemeSourceFile(filePath, cwd, mode = {}) {
  * output must stay inside, for a scratch build; `commandWords` names the
  * command in the rebuild hint; `prepareFamily`, `familyLoader`, and
  * `familyInterception` make the build a family member's plan.
- * @typedef {{prepareFamily?: boolean, familyLoader?: any, familyInterception?: any, writeRoot?: string, claimedOutputs?: Map<string, string>, deferredWrites?: Array<Array<{dest: string, content: string}>>, commandWords?: {group: string, build: string}}} ThemeBuildHandOff
+ * `colorModes` is the one color mode a calling command knows the theme has
+ * (the theme editor, from its settings), written into the built module.
+ * @typedef {{prepareFamily?: boolean, familyLoader?: any, familyInterception?: any, writeRoot?: string, claimedOutputs?: Map<string, string>, deferredWrites?: Array<Array<{dest: string, content: string}>>, commandWords?: {group: string, build: string}, colorModes?: ['light'] | ['dark'] | null}} ThemeBuildHandOff
  */
 
 /**
@@ -2630,9 +2710,13 @@ function isSyncLoaderLimitation(error) {
  * source export and old-Core adaptation checks keep treating that path as
  * degraded/fail-closed.
  *
+ * On Node 22.15 and later, on every path, a stylesheet that a module in the
+ * theme's graph imports loads as an empty module (`withEmptyStylesheets`): a
+ * base theme's module can import its own stylesheet for the app's bundler.
+ *
  * @param {string} filePath
  * @param {import('./core-interception.mjs').CoreInterception} [interception]
- * @returns {Promise<{theme: any, exportName: string, degraded: {topLevelAwait: boolean, commonJs: boolean}}>}
+ * @returns {Promise<{theme: any, exportName: string, degraded: {topLevelAwait: boolean, commonJs: boolean}, colorModes: ["light"] | ["dark"] | null}>}
  */
 // prettier-ignore
 async function importThemeModule(filePath, interception, /** @type {any} */ loader = undefined) {
@@ -2659,7 +2743,7 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
     const commonJsPatch = interception.patchCommonJs(filePath);
     try {
       try {
-        mod = jiti(filePath);
+        mod = await withEmptyStylesheets(async () => jiti(filePath));
       } catch (error) {
         // Only a sync-loader limitation may fall back. Anything else is the
         // theme's own failure and belongs to the caller unchanged.
@@ -2668,14 +2752,16 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
         // Force asynchronous transformation instead of native import: this
         // keeps virtual Core interception active even when the module uses
         // top-level await.
-        mod = await jiti.evalModule(fs.readFileSync(filePath, 'utf8'), {
-          id: filePath,
-          filename: filePath,
-          ext: path.extname(filePath),
-          cache: jiti.cache,
-          async: true,
-          forceTranspile: true,
-        });
+        mod = await withEmptyStylesheets(() =>
+          jiti.evalModule(fs.readFileSync(filePath, 'utf8'), {
+            id: filePath,
+            filename: filePath,
+            ext: path.extname(filePath),
+            cache: jiti.cache,
+            async: true,
+            forceTranspile: true,
+          }),
+        );
       }
     } finally {
       // Read after the load: the root is wrapped when the load requires it.
@@ -2683,7 +2769,7 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
       commonJsPatch.undo();
     }
   } else {
-    mod = await jiti.import(filePath);
+    mod = await withEmptyStylesheets(() => jiti.import(filePath));
   }
 
   // Both loads hand back the module. The theme is read from the module's own
@@ -2692,15 +2778,22 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
   // `default` with the module), so the module can pass for the theme while
   // its own keys hide the theme's fields.
   const isModule = mod != null && typeof mod === 'object';
+  // A theme with one color mode says so with a `colorModes` export beside
+  // the theme (`['light']` or `['dark']`); the build carries it into the
+  // built module.
+  const colorModes = oneColorMode(
+    isModule && Object.hasOwn(mod, 'colorModes') ? mod.colorModes : undefined,
+  );
   const hasDefault = isModule && Object.hasOwn(mod, 'default');
   const defaultExport = hasDefault ? mod.default : undefined;
   if (isThemeObject(defaultExport)) {
-    return {theme: defaultExport, exportName: 'default', degraded};
+    return {theme: defaultExport, exportName: 'default', degraded, colorModes};
   }
   if (isModule) {
     for (const [exportName, value] of Object.entries(mod)) {
       if (exportName === 'default' || exportName === 'module.exports') continue;
-      if (isThemeObject(value)) return {theme: value, exportName, degraded};
+      if (isThemeObject(value))
+        return {theme: value, exportName, degraded, colorModes};
     }
   }
   // The loader's interop answers a null default with the module itself, so
@@ -2722,7 +2815,7 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
   // be all it defines), or no name: the build's validation says what it
   // lacks.
   if (isPlainObject(defaultExport)) {
-    return {theme: defaultExport, exportName: 'default', degraded};
+    return {theme: defaultExport, exportName: 'default', degraded, colorModes};
   }
   // A CommonJS module whose exports are the theme (`module.exports =
   // theme`) has no default of its own: interop answers `default` with
@@ -2731,7 +2824,7 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
   if (isModule && !hasDefault) {
     const exportsObject = mod.default ?? mod;
     if (isThemeObject(exportsObject)) {
-      return {theme: exportsObject, exportName: 'default', degraded};
+      return {theme: exportsObject, exportName: 'default', degraded, colorModes};
     }
   }
 
@@ -2800,7 +2893,7 @@ function isThemeObject(value) {
  *
  * @param {string} filePath
  * @param {import('./core-interception.mjs').CoreInterception} [interception]
- * @returns {Promise<{theme: any, exportName?: string, degraded: {topLevelAwait: boolean, commonJs: boolean}}>}
+ * @returns {Promise<{theme: any, exportName?: string, degraded: {topLevelAwait: boolean, commonJs: boolean}, colorModes?: ['light'] | ['dark'] | null}>}
  */
 // prettier-ignore
 async function extractThemeDefinition(filePath, interception, /** @type {any} */ loader = undefined) {
@@ -2813,6 +2906,20 @@ async function extractThemeDefinition(filePath, interception, /** @type {any} */
       {cause: jitiError},
     );
   }
+}
+
+/**
+ * A one-mode `colorModes` value (`['light']` or `['dark']`), or null for
+ * anything else: a theme with both modes needs no export.
+ * @param {unknown} value
+ * @returns {['light'] | ['dark'] | null}
+ */
+export function oneColorMode(value) {
+  return Array.isArray(value) &&
+    value.length === 1 &&
+    (value[0] === 'light' || value[0] === 'dark')
+    ? /** @type {['light'] | ['dark']} */ ([value[0]])
+    : null;
 }
 
 /** Names a theme module's exports must take; ends a shape failure. */
@@ -3825,6 +3932,9 @@ async function themeBuildInternal(
   let themeExportName;
   /** Paths through the load that interception could not fully observe. */
   let loadDegradation;
+  /** The one color mode the theme module exports, or null for both. */
+  /** @type {['light'] | ['dark'] | null} */
+  let colorModes;
   /**
    * The theme file's bytes as loaded: read before and after the load, and the
    * registry scan below reads these rather than the file again. An editor's
@@ -3851,6 +3961,7 @@ async function themeBuildInternal(
     themeDef = loaded.theme;
     themeExportName = loaded.exportName;
     loadDegradation = loaded.degraded;
+    colorModes = handOff.colorModes ?? loaded.colorModes ?? null;
   } catch (e) {
     const err = /** @type {Error} */ (e);
     const shown = path.relative(cwd, filePath) || filePath;
@@ -4482,10 +4593,18 @@ async function themeBuildInternal(
             ? {}
             : {cssFileName: path.basename(outPath)}),
         },
-      );
+      ) +
+      // The one color mode, beside the theme export (a two-mode theme
+      // exports none, so its module is unchanged).
+      (colorModes
+        ? `export const colorModes = [${JSON.stringify(colorModes[0])}];\n`
+        : '');
   const dtsContent =
     generatedHeader(headerSource, 'ts', buildCommand, versions) +
-    generateBuiltTypes(resolvedTheme || themeDef, iconInfo, variantsFileName);
+    generateBuiltTypes(resolvedTheme || themeDef, iconInfo, variantsFileName) +
+    (colorModes
+      ? `export declare const colorModes: readonly [${JSON.stringify(colorModes[0])}];\n`
+      : '');
 
   const unloadedFonts = [
     ...new Set([
@@ -4998,7 +5117,7 @@ function planFamilySources(files, cwd) {
 // prettier-ignore
 async function preloadFamilySource(filePath, loader, interception) {
   const patch = interception.patchCommonJs(filePath);
-  try { try { loader(filePath); } catch (error) { if (!isSyncLoaderLimitation(error)) throw error; await loader.evalModule(fs.readFileSync(filePath, 'utf8'), {id: filePath, filename: filePath, ext: path.extname(filePath), cache: loader.cache, async: true, forceTranspile: true}); } }
+  try { try { await withEmptyStylesheets(async () => loader(filePath)); } catch (error) { if (!isSyncLoaderLimitation(error)) throw error; await withEmptyStylesheets(() => loader.evalModule(fs.readFileSync(filePath, 'utf8'), {id: filePath, filename: filePath, ext: path.extname(filePath), cache: loader.cache, async: true, forceTranspile: true})); } }
   finally { patch.undo(); }
 }
 
