@@ -100,7 +100,10 @@ async function focusField(page: Page, which: 'first' | 'last') {
 }
 
 /** Shrinks the layout viewport by the keyboard, as resizes-content does. */
-async function resizeForKeyboard(page: Page): Promise<number> {
+async function resizeForKeyboard(
+  page: Page,
+  keyboard = KEYBOARD,
+): Promise<number> {
   const size = page.viewportSize();
   if (size == null) {
     throw new Error('no viewport size');
@@ -118,7 +121,7 @@ async function resizeForKeyboard(page: Page): Promise<number> {
       `${content}${content === '' ? '' : ', '}interactive-widget=resizes-content`,
     );
   });
-  const height = size.height - KEYBOARD;
+  const height = size.height - keyboard;
   await page.setViewportSize({width: size.width, height});
   await frames(page, 30);
   return height;
@@ -153,8 +156,15 @@ test.describe('Chrome on Android under interactive-widget=resizes-content (spec:
     page,
   }) => {
     const field = await focusField(page, 'first');
+    // The keyboard is sized from where the field rests, so the field is 12 px
+    // clear of the keyboard's top before any move.
+    const room = await field.evaluate(
+      element => window.innerHeight - element.getBoundingClientRect().bottom,
+    );
+    const keyboard = Math.floor(room - 12);
+    expect(keyboard).toBeGreaterThan(0);
     await startSampling(field);
-    const keyboardTop = await resizeForKeyboard(page);
+    const keyboardTop = await resizeForKeyboard(page, keyboard);
     const samples = await stopSampling(page);
     const before = samples.filter(s => s.innerHeight !== keyboardTop);
     const after = samples.filter(s => s.innerHeight === keyboardTop);
@@ -162,8 +172,9 @@ test.describe('Chrome on Android under interactive-widget=resizes-content (spec:
     const scrollBefore = before.at(-1)?.scrollTop;
     expect(after.length).toBeGreaterThan(20);
     expect(scrollBefore).toBeDefined();
+    // Rounded to the pixel, as in the case above.
     expect(
-      keyboardTop - (last?.fieldBottom ?? Infinity),
+      Math.round(keyboardTop - (last?.fieldBottom ?? Infinity)),
     ).toBeGreaterThanOrEqual(10);
     for (const s of after) {
       expect(s.scrollTop).toBe(scrollBefore);
