@@ -22,7 +22,6 @@
   "src/FieldStatus/FieldStatus.doc.mjs FieldStatus.variant type_mismatch",
   "src/HoverCard/HoverCard.doc.mjs HoverCard.children required_mismatch",
   "src/List/List.doc.mjs List.children required_mismatch",
-  "src/MobileNav/MobileNav.doc.mjs MobileNav.label not_in_doc",
   "src/MoreMenu/MoreMenu.doc.mjs MoreMenu.isMenuOpen not_in_doc",
   "src/MultiSelector/MultiSelector.doc.mjs MultiSelector.labelTooltip not_in_doc",
   "src/PowerSearch/PowerSearch.doc.mjs PowerSearch.components not_in_doc",

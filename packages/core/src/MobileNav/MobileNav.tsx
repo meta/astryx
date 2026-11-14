@@ -498,6 +498,7 @@ export function MobileNav({
   className,
   style,
   onClick: onClickProp,
+  id: idProp,
   ref,
   ...rest
 }: MobileNavProps) {
@@ -572,7 +573,7 @@ export function MobileNav({
         active !== null &&
         active !== document.body &&
         !dialogRef.current?.contains(active);
-      const dialogIds = [dialogId, dialogRef.current?.id, rest.id];
+      const dialogIds = [dialogId, dialogRef.current?.id, idProp];
       const trigger =
         hasOpenerFocus && active
           ? active
@@ -727,7 +728,7 @@ export function MobileNav({
   return (
     <dialog
       ref={useMergedRefs(ref, dialogRef)}
-      id={dialogId}
+      id={idProp ?? dialogId}
       {...mergeProps(
         themeProps('mobile-nav', {side: resolvedSide}),
         stylex.props(
