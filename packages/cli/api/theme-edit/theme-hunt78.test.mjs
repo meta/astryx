@@ -157,7 +157,9 @@ describe('except keeps every excepted part, variant and state', () => {
         'double the corner radius of everything except cards',
       );
       expect(
-        r.commands.some(c => /^set q border-radius \S+ --on card$/.test(c)),
+        r.commands.some(c =>
+          /^set q (border-radius|--radius-[a-z]+) \S+ --on card$/.test(c),
+        ),
       ).toBe(true);
     },
     T,

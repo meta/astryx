@@ -51,10 +51,13 @@ describe.skipIf(process.platform !== 'linux')('a browser for --png', () => {
       );
       expect(r.ok).toBe(false);
       const reason = /** @type {any} */ (r).reason;
+      // The browser found is named as the one that could not take it,
+      // with its own error, not the closed pipe it left behind.
       expect(reason).toContain(
-        'A browser was found, but it could not take the picture',
+        `${path.join(bin, 'chromium')} could not take it`,
       );
       expect(reason).toContain('cannot open display');
+      expect(reason).not.toContain('EPIPE');
       expect(reason).toContain('npx playwright install chromium');
       expect(reason).not.toContain('No browser was found');
     } finally {

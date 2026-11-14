@@ -2953,6 +2953,38 @@ async function extractThemeDefinition(filePath, interception, /** @type {any} */
 }
 
 /**
+ * The Core interception a standalone build loads a theme module with: none
+ * when the selected Core generates adaptations itself and the theme's folder
+ * resolves a Core of its own; else imports of Core are handed the selected
+ * Core.
+ * @param {string} filePath
+ */
+function standaloneInterception(filePath) {
+  return _generateAdaptationCSS && themeFolderResolvesCore(filePath)
+    ? undefined
+    : interceptCore(_coreThemeModule, _coreRootModule);
+}
+
+/**
+ * Load a theme module as a standalone build of it loads it (the Core the
+ * build selects, the same loader and interception) and name the export the
+ * build reads. Callers that must agree with the build on which theme a
+ * module defines read it here, never from the module's text.
+ * @param {string} file
+ * @param {{cwd?: string}} [ctx]
+ * @returns {Promise<{theme: any, exportName: string}>}
+ */
+export async function loadThemeExport(file, {cwd = process.cwd()} = {}) {
+  const filePath = path.resolve(cwd, file);
+  await selectCore(cwd, {projectOnly: false});
+  const {theme, exportName} = await extractThemeDefinition(
+    filePath,
+    standaloneInterception(filePath),
+  );
+  return {theme, exportName: exportName ?? 'default'};
+}
+
+/**
  * A one-mode `colorModes` value (`['light']` or `['dark']`), or null for
  * anything else: a theme with both modes needs no export.
  * @param {unknown} value
@@ -3958,10 +3990,7 @@ async function themeBuildInternal(
   // shared loader so exact authored parent identity stays CLI-private instead
   // of becoming a public DefinedTheme field.
   const interception =
-    handOff.familyInterception ??
-    (_generateAdaptationCSS && themeFolderResolvesCore(filePath)
-      ? undefined
-      : interceptCore(_coreThemeModule, _coreRootModule));
+    handOff.familyInterception ?? standaloneInterception(filePath);
 
   // Extract theme definition
   let themeDef;
