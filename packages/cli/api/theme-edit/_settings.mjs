@@ -6109,7 +6109,7 @@ export function holdAfterBuild(ctx) {
  * @param {Ctx} ctx
  * @param {string} slug
  * @param {ThemeData} data
- * @returns {Promise<{warnings: string[], lifted: string[], notes: string[]}>} `notes`: what the color config kept or replaced of a hand edit
+ * @returns {Promise<{warnings: string[], lifted: string[], notes: string[], removedPictures: string[]}>} `notes`: what the color config kept or replaced of a hand edit; `removedPictures`: the editor's pictures of the look before, removed
  */
 export async function buildTheme(ctx, slug, data) {
   const {cwd} = ctx.project;
@@ -6175,16 +6175,23 @@ export async function buildTheme(ctx, slug, data) {
   // Only a picture the editor recorded writing, unchanged since, goes: a
   // file of the user's is never touched. Section sheets stay, marked as
   // out of date like sheet.html.
+  /** The pictures removed: named in the result. @type {string[]} */
+  let removedPictures = [];
   await step(() => {
+    // The full sheet's and the preview's pictures, in each mode; a section
+    // sheet's (`sheet-inputs.png`) is not one of them.
     const pictures = fs.existsSync(f.dir)
       ? fs
           .readdirSync(f.dir)
           .filter(
             n =>
-              /^(sheet|preview)(-[a-z-]+)?\.png$/.test(n) &&
+              /^(sheet|preview)(-dark)?\.png$/.test(n) &&
               editorRecorded(cwd, slug, path.join(f.dir, n)),
           )
       : [];
+    removedPictures = pictures.map(n =>
+      path.relative(cwd, path.join(f.dir, n)).split(path.sep).join('/'),
+    );
     for (const file of [
       path.join(f.dir, `${slug}.variants.d.ts`),
       ...pictures.map(n => path.join(f.dir, n)),
@@ -6296,7 +6303,7 @@ export async function buildTheme(ctx, slug, data) {
     await step(() => {
       afterBuild?.(ctx, slug, data);
     });
-  return {warnings, lifted, notes};
+  return {warnings, lifted, notes, removedPictures};
 }
 
 /**
@@ -7953,7 +7960,7 @@ export async function commitTheme(
   const wrote = new Map();
   ctx.wrote = wrote;
   fs.mkdirSync(f.dir, {recursive: true});
-  /** @type {{warnings: string[], lifted: string[], notes: string[]}} */
+  /** @type {{warnings: string[], lifted: string[], notes: string[], removedPictures: string[]}} */
   let built;
   // The token loops the last build had, so a change that adds one (through
   // tokens the own source sets in a way no read of the file follows) is
@@ -8102,6 +8109,10 @@ export async function commitTheme(
     );
   }
   notes.push(...built.notes);
+  if (built.removedPictures.length)
+    notes.push(
+      `removed ${built.removedPictures.join(', ')}: ${built.removedPictures.length === 1 ? 'a picture' : 'pictures'} of the look before this change; ${P} show ${slug} --png takes new ones`,
+    );
   // The change is saved from here on: a failure to check it is reported
   // as "saved, not checked", never as a failed change.
   /** @type {Record<'light' | 'dark', Record<string, string>>} */
@@ -8219,10 +8230,13 @@ export function builtFontFamilies(ctx, slug) {
  * setting's package while the build still uses its family, and the
  * installed @fontsource package of a family the theme's own source sets.
  * Font notes, the previews and the app copy all load fonts from this list.
+ * For a new app that installs its own packages (`forNewApp`), every built
+ * family that is an open font comes too, installed here or not.
  * @param {Ctx} ctx
  * @param {ThemeData} data
+ * @param {{forNewApp?: boolean}} [opts]
  */
-export function fontPackages(ctx, data) {
+export function fontPackages(ctx, data, {forNewApp = false} = {}) {
   /** @type {Array<{pkg: string, family: string, installed: boolean, of: Setting | null}>} */
   const out = [];
   /** @param {string} pkg */
@@ -8234,6 +8248,10 @@ export function fontPackages(ctx, data) {
       return false;
     }
   };
+  /** An open font's package, which a new app installs. @param {string} pkg */
+  const isOpen = pkg => Object.values(OPEN_FONTS).some(f => f.pkg === pkg);
+  /** Whether a package loads its family where the fonts go. @param {string} pkg */
+  const loads = pkg => isInstalled(pkg) || (forNewApp && isOpen(pkg));
   const built = builtFontFamilies(ctx, data.name);
   for (const s of data.settings) {
     if (s.thing !== 'font') continue;
@@ -8245,14 +8263,14 @@ export function fontPackages(ctx, data) {
     // An installed @fontsource package of the family always loads it, even
     // for a family some systems ship.
     const own = fontsourcePackageOf(name);
-    const pkg = known ?? (isInstalled(own) ? own : null);
+    const pkg = known ?? (loads(own) ? own : null);
     if (!pkg || out.some(x => x.pkg === pkg)) continue;
     out.push({pkg, family: name, installed: isInstalled(pkg), of: s});
   }
   for (const family of built?.values() ?? []) {
     const pkg = fontsourcePackageOf(family);
-    if (out.some(x => x.pkg === pkg) || !isInstalled(pkg)) continue;
-    out.push({pkg, family, installed: true, of: null});
+    if (out.some(x => x.pkg === pkg) || !loads(pkg)) continue;
+    out.push({pkg, family, installed: isInstalled(pkg), of: null});
   }
   return out;
 }

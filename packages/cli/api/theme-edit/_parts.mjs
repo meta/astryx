@@ -29,6 +29,7 @@ import {
   RenderError,
 } from '../../foundation/render/render-page.mjs';
 import {SAMPLE_PAGE, elementNames, pageSource} from './_catalog.mjs';
+import {removeOnStop} from '../../foundation/fs/stop-cleanup.mjs';
 
 /** Bump when the shape of the cached part data changes. */
 const PART_DATA_VERSION = 10;
@@ -399,14 +400,9 @@ export async function renderGenerated(project, file, source, extra = []) {
       );
     })();
   fs.mkdirSync(dir, {recursive: true});
-  // Stopped by a signal, the render folder still goes.
-  const cleanup = () => fs.rmSync(dir, {recursive: true, force: true});
-  const onSignal = (/** @type {NodeJS.Signals} */ sig) => {
-    cleanup();
-    process.kill(process.pid, sig);
-  };
-  process.once('SIGINT', onSignal);
-  process.once('SIGTERM', onSignal);
+  // Stopped by a signal (the terminal closing too), the render folder
+  // still goes.
+  const untrack = removeOnStop(dir);
   const entry = path.join(dir, file);
   // Demo images point at the docs site's own folder (`/template-assets/…`),
   // which a page opened from disk cannot reach: the inline placeholder
@@ -462,8 +458,7 @@ export async function renderGenerated(project, file, source, extra = []) {
       fs.rmSync(f, {force: true});
     // Another render may still use it: a folder with a file in it stays.
     removeEmptyFolder(madeThemes ? themes : dir, {deep: true});
-    process.removeListener('SIGINT', onSignal);
-    process.removeListener('SIGTERM', onSignal);
+    untrack();
   }
 }
 
