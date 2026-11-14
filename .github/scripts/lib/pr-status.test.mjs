@@ -217,7 +217,11 @@ describe('buildComponentTable', () => {
           results: {visual: 'not-run', a11y: 'pass', rtl: 'pass'},
         },
       ]),
-      visualVerdict: {status: 'ok', changes: [], context: {scope: 'touched'}},
+      visualVerdict: {
+        status: 'ok',
+        changes: [],
+        context: {scope: 'touched'},
+      },
     });
     expect(table).toMatch(/^\| \[New\][^\n]* \| — · ✓ · ✓ \|$/m);
     expect(table).not.toMatch(/^\| \[lab\/Sketch\][^\n]* \| ✓/m);
@@ -247,7 +251,9 @@ describe('buildComponentTable', () => {
       analysis: {
         baseSha: 'a'.repeat(40),
         modifiedComponents: ['Card'],
-        componentStats: {Card: {package: '@astryxdesign/lab', linesOfCode: 9}},
+        componentStats: {
+          Card: {package: '@astryxdesign/lab', linesOfCode: 9},
+        },
       },
       origin: '',
     });
@@ -301,25 +307,28 @@ describe('buildVisualDeltas', () => {
     diffPixels,
   });
 
-  it('marks a change another pull request showed as inherited, naming the introducer only when known, and counts unchecked shots', () => {
+  it('marks a change that came from main as inherited, says the rest were not found in the reports read, and counts them', () => {
     const verdict = {
       status: 'changed',
       changes: [
-        {...change('a', 30), inherited: {pr: 8558}},
-        {...change('b', 20), inherited: {pr: null}},
+        {...change('a', 30), inherited: {from: 'main'}},
+        {...change('b', 20), inherited: {found: false}},
         change('c', 10),
       ],
-      inheritedNotChecked: 2,
+      inheritedChecked: 11,
     };
     const section = buildVisualDeltas({verdict});
     expect(section).toContain(
-      '| Card · a (neutral, light) · inherited from #8558 |',
+      '| Card · a (neutral, light) · inherited from main |',
     );
     expect(section).toContain(
-      '| Card · b (neutral, light) · inherited (introducer not recorded) |',
+      '| Card · b (neutral, light) · inheritance unknown: not found in the 11 newest reports of other pull requests |',
     );
     expect(section).toContain('| Card · c (neutral, light) | changed');
-    expect(section).toContain('Inherited status not checked: 2 shots.');
+    expect(section).toContain(
+      'Inheritance checked against the 11 newest reports of other pull requests.',
+    );
+    expect(section).not.toMatch(/introduc/);
   });
 
   it('says when the inheritance lookup failed, so a broken lookup is never silent', () => {
@@ -608,7 +617,10 @@ describe('apiChangesLine', () => {
 
   it('is absent when no package has a change, or without a file', () => {
     expect(
-      apiChangesLine({version: 1, packages: [pkg('core', []), pkg('lab', [])]}),
+      apiChangesLine({
+        version: 1,
+        packages: [pkg('core', []), pkg('lab', [])],
+      }),
     ).toBe('');
     expect(apiChangesLine(null)).toBe('');
   });

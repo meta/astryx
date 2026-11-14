@@ -1,17 +1,17 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Marks a pull request's changed visual shots that it did not make.
- * @input This run's verdict (the re-encoded report's `verdict.json`) and its
- *   raw `manifest.json` (each shot's sha256), and other pull requests'
- *   `visual-pr-report` artifacts, read through the GitHub API.
- * @output Each changed shot that another pull request's run also showed
- *   changed, with the same image, gets `inherited: {pr}`: the pull request
- *   that introduced it when the record shows one, else `pr: null`. With more
- *   changed shots than the API budget covers, `inheritedNotChecked` counts
- *   the shots left unchecked. A failed lookup marks nothing and sets
- *   `inheritedLookupFailed` to its reason, which the comment and the step
- *   summary show, so a broken lookup is never silent.
+ * @file Marks a pull request's changed visual shots that came from `main`.
+ * @input This run's verdict (the re-encoded report's `verdict.json`, whose
+ *   `context.baseSha` is the base commit the run tested), its raw
+ *   `manifest.json` (each shot's sha256), this pull request's head commit,
+ *   and other pull requests' `visual-pr-report` artifacts through the API.
+ * @output Each changed shot gets `inherited`: `{from: 'main'}` when a merged
+ *   pull request's run showed the same shot changed with the same image and
+ *   its merge commit is in the tested base, else `{found: false}` (unknown).
+ *   `inheritedChecked` counts the reports read. A failed lookup marks nothing
+ *   and sets `inheritedLookupFailed`, which the comment and the step summary
+ *   show, so a broken lookup is never silent.
  * @position The pull-request comment job, after `publish-pr-report.mjs`. The
  *   label is report text only: no check, status or baseline reads it.
  */
@@ -24,9 +24,10 @@ import {fileURLToPath} from 'node:url';
 
 /** GitHub API calls one comment may spend on this, at most. */
 export const MAX_CALLS = 20;
-/** Other pull requests' reports examined, newest first. */
-export const MAX_REPORTS = 100;
+/** Calls kept for proving candidates: three each (pull request, base, stack). */
+const PROOF_CALLS = 9;
 const SHA256 = /^[0-9a-f]{64}$/;
+const SHA = /^[0-9a-f]{40}$/;
 
 /** A lookup error as one short line of report text. */
 export function failureReason(error) {
@@ -63,140 +64,136 @@ export function changedImages({verdict, manifest}) {
 }
 
 /**
- * Marks the verdict's changed shots that other pull requests' runs showed
- * changed with the same image.
+ * Marks the verdict's changed shots that came from `main`.
  *
- * A shot is inherited when another pull request's report shows it changed
- * with the same image: two pull requests do not make the same change, so it
- * came from `main`. It names the introducer only when the record proves it:
- * every retained report was read; the earliest report showing the change is
- * a merged pull request's, merged before every other report showing it was
- * made; and a run between that report and its merge planned the shot
- * unchanged, so `main` did not have the change until that merge. Anything
- * less (a change merged without a visual report of its own, as a skipped
- * wide change is) says the introducer is not recorded rather than naming a
- * pull request that only inherited the change.
+ * A shot came from `main` only when the record proves it: a merged pull
+ * request's run showed the same shot changed with the same image, its merge
+ * commit is in the base this run tested, and its head does not contain this
+ * pull request's head. A stack's later entry or a superseding branch shows
+ * this pull request's own change, and an unmerged pull request proves
+ * nothing, so neither counts. Every other changed shot says it was not found
+ * in the reports read: unknown, never "introduced here".
  *
  * @param {object} options
  * @param {any} options.verdict this run's verdict; changed in place
  * @param {any} options.manifest this run's raw manifest
  * @param {string} options.headRef this pull request's head branch
+ * @param {string} options.headSha this pull request's head commit
  * @param {() => Promise<Array<{id: number, createdAt: string, headRef: string, headSha: string}>>} options.listReports
  *   other runs' `visual-pr-report` artifacts, newest first (one call)
  * @param {(id: number) => Promise<{verdict: any, manifest: any} | null>} options.readReport
- *   one artifact's verdict and manifest (one call)
- * @param {(sha: string) => Promise<{number: number, mergedAt: string | null} | null>} options.pullFor
+ *   one artifact's verdict and manifest; null when it is gone (one call)
+ * @param {(sha: string) => Promise<{number: number, mergedAt: string | null, mergeSha: string | null} | null>} options.pullFor
  *   the pull request a head commit belongs to (one call)
+ * @param {(ancestor: string, descendant: string) => Promise<boolean>} options.contains
+ *   whether `descendant` contains `ancestor` (one call)
  * @param {number} [options.maxCalls]
  */
 export async function markInherited({
   verdict,
   manifest,
   headRef,
+  headSha,
   listReports,
   readReport,
   pullFor,
+  contains,
   maxCalls = MAX_CALLS,
 }) {
   const mine = changedImages({verdict, manifest});
   if (mine.size === 0) return verdict;
   try {
-    return await lookUp({
+    const baseSha = verdict.context?.baseSha;
+    if (typeof baseSha !== 'string' || !SHA.test(baseSha))
+      throw new Error('the report records no base commit');
+    if (typeof headSha !== 'string' || !SHA.test(headSha))
+      throw new Error('no head commit given');
+    await lookUp({
       verdict,
       mine,
       headRef,
+      headSha,
+      baseSha,
       listReports,
       readReport,
       pullFor,
+      contains,
       maxCalls,
     });
   } catch (error) {
-    // Partial results could name the wrong pull request: mark nothing.
+    // Partial results could mark a shot wrongly: mark nothing.
     for (const change of verdict.changes ?? []) delete change.inherited;
-    delete verdict.inheritedNotChecked;
+    delete verdict.inheritedChecked;
     verdict.inheritedLookupFailed = failureReason(error);
-    return verdict;
   }
+  return verdict;
 }
 
 async function lookUp({
   verdict,
   mine,
   headRef,
+  headSha,
+  baseSha,
   listReports,
   readReport,
   pullFor,
+  contains,
   maxCalls,
 }) {
-  let calls = 0;
-  const spend = () => (calls < maxCalls ? ((calls += 1), true) : false);
-  /** @type {Map<string, Array<{createdAt: string, headSha: string}>>} */
-  const seen = new Map();
-  /** Times a run planned the shot and left it unchanged. @type {Map<string, string[]>} */
-  const unchangedAt = new Map();
-  let complete = false;
-  if (spend()) {
-    const reports = (await listReports())
-      .filter(report => report.headRef && report.headRef !== headRef)
-      .slice(0, MAX_REPORTS);
-    complete = true;
-    for (const report of reports) {
-      // Keep a call for each introducer lookup the matches may need.
-      if (calls >= maxCalls - Math.min(mine.size, 3)) {
-        complete = false;
+  let calls = 1;
+  const reports = (await listReports()).filter(
+    report => report.headRef && report.headRef !== headRef,
+  );
+  /** Heads whose report showed the shot changed with this image. @type {Map<string, string[]>} */
+  const candidates = new Map();
+  let read = 0;
+  for (const report of reports) {
+    if (calls >= maxCalls - PROOF_CALLS) break;
+    calls += 1;
+    const content = await readReport(report.id);
+    read += 1;
+    if (!content) continue;
+    for (const [key, hash] of changedImages(content))
+      if (mine.get(key) === hash && SHA.test(report.headSha)) {
+        const heads = candidates.get(key) ?? [];
+        if (!heads.includes(report.headSha)) heads.push(report.headSha);
+        candidates.set(key, heads);
+      }
+  }
+  /** @type {Map<string, boolean>} */
+  const proven = new Map();
+  const fromMain = async head => {
+    if (proven.has(head)) return proven.get(head);
+    if (calls + 3 > maxCalls) return false;
+    calls += 1;
+    const pull = await pullFor(head);
+    let result = false;
+    if (pull?.mergedAt && pull.mergeSha && SHA.test(pull.mergeSha)) {
+      calls += 1;
+      if (await contains(pull.mergeSha, baseSha)) {
+        calls += 1;
+        // A head that contains this one carries this pull request's change.
+        result = !(await contains(headSha, head));
+      }
+    }
+    proven.set(head, result);
+    return result;
+  };
+  for (const change of verdict.changes ?? []) {
+    if (!mine.has(change.key)) continue;
+    let inherited = false;
+    for (const head of candidates.get(change.key) ?? [])
+      if (await fromMain(head)) {
+        inherited = true;
         break;
       }
-      spend();
-      const read = await readReport(report.id);
-      if (!read) continue;
-      const theirs = changedImages(read);
-      for (const [key, hash] of theirs)
-        if (mine.get(key) === hash) {
-          const list = seen.get(key) ?? [];
-          list.push({createdAt: report.createdAt, headSha: report.headSha});
-          seen.set(key, list);
-        }
-      for (const key of mine.keys())
-        if (read.manifest?.shots?.[key] && !theirs.has(key))
-          unchangedAt.set(key, [
-            ...(unchangedAt.get(key) ?? []),
-            report.createdAt,
-          ]);
-    }
+    change.inherited = inherited ? {from: 'main'} : {found: false};
   }
-  /** @type {Map<string, {number: number, mergedAt: string | null} | null>} */
-  const pulls = new Map();
-  let unchecked = 0;
-  for (const change of verdict.changes ?? []) {
-    const matches = seen.get(change.key);
-    if (!matches) {
-      if (!complete && mine.has(change.key)) unchecked += 1;
-      continue;
-    }
-    const sorted = [...matches].sort((a, b) =>
-      a.createdAt.localeCompare(b.createdAt),
-    );
-    const earliest = sorted[0];
-    if (!pulls.has(earliest.headSha))
-      pulls.set(
-        earliest.headSha,
-        spend() ? await pullFor(earliest.headSha) : null,
-      );
-    const pull = pulls.get(earliest.headSha);
-    const introduced =
-      complete &&
-      pull?.mergedAt != null &&
-      sorted.slice(1).every(other => other.createdAt > pull.mergedAt) &&
-      (unchangedAt.get(change.key) ?? []).some(
-        at => at >= earliest.createdAt && at < pull.mergedAt,
-      );
-    change.inherited = {pr: introduced ? pull.number : null};
-  }
-  if (unchecked > 0) verdict.inheritedNotChecked = unchecked;
-  return verdict;
+  verdict.inheritedChecked = read;
 }
 
-/** The three GitHub reads, without Octokit. */
+/** The four GitHub reads, without Octokit. */
 function githubReads({token, repository}) {
   const base = `https://api.github.com/repos/${repository}`;
   const get = async url => {
@@ -206,7 +203,7 @@ function githubReads({token, repository}) {
         accept: 'application/vnd.github+json',
       },
     });
-    // An artifact that expired after the list is gone, not a failure.
+    // An artifact or commit that is gone is no data, not a failure.
     if (response.status === 404 || response.status === 410) return null;
     if (!response.ok)
       throw new Error(`${url.replace(base, '')}: HTTP ${response.status}`);
@@ -214,11 +211,10 @@ function githubReads({token, repository}) {
   };
   return {
     listReports: async () => {
-      const {artifacts} = await (
-        await get(
-          `${base}/actions/artifacts?name=visual-pr-report&per_page=100`,
-        )
-      ).json();
+      const response = await get(
+        `${base}/actions/artifacts?name=visual-pr-report&per_page=100`,
+      );
+      const {artifacts} = response ? await response.json() : {artifacts: []};
       return (artifacts ?? [])
         .filter(artifact => !artifact.expired)
         .map(artifact => ({
@@ -249,7 +245,10 @@ function githubReads({token, repository}) {
               maxBuffer: 1 << 26,
             }),
           );
-        return {verdict: read('verdict.json'), manifest: read('manifest.json')};
+        return {
+          verdict: read('verdict.json'),
+          manifest: read('manifest.json'),
+        };
       } finally {
         fs.rmSync(dir, {recursive: true, force: true});
       }
@@ -259,8 +258,18 @@ function githubReads({token, repository}) {
       const pulls = response ? await response.json() : [];
       const pull = (pulls ?? []).find(each => each.merged_at) ?? pulls?.[0];
       return pull
-        ? {number: pull.number, mergedAt: pull.merged_at ?? null}
+        ? {
+            number: pull.number,
+            mergedAt: pull.merged_at ?? null,
+            mergeSha: pull.merge_commit_sha ?? null,
+          }
         : null;
+    },
+    contains: async (ancestor, descendant) => {
+      const response = await get(`${base}/compare/${ancestor}...${descendant}`);
+      if (!response) return false;
+      const {status} = await response.json();
+      return status === 'ahead' || status === 'identical';
     },
   };
 }
@@ -290,6 +299,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
         verdict,
         manifest,
         headRef: flag('head-ref') ?? '',
+        headSha: flag('head-sha') ?? '',
         ...githubReads({
           token: process.env.GITHUB_TOKEN,
           repository: process.env.GITHUB_REPOSITORY,

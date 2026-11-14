@@ -493,8 +493,9 @@ jobs:
             --run-id "$RUN_ID" \
             --run-attempt "$RUN_ATTEMPT"
 
-      # Marks a changed shot another pull request's run also showed changed,
-      # with the same image, as inherited from main (at most 20 API calls).
+      # Marks a changed shot that a merged pull request in the tested base also
+      # changed, with the same image, as inherited from main (at most 20 API
+      # calls).
       # Report text only: no check or status reads it.
       - name: Mark inherited visual changes
         id: inherited
@@ -503,11 +504,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           HEAD_REF: ${{ steps.identity.outputs.head_ref }}
+          HEAD_SHA: ${{ steps.identity.outputs.head_sha }}
         run: |
           node .github/scripts/visual-gate/inherited-shots.mjs \
             --verdict trusted-visual/verdict.json \
             --manifest visual-pr-report/manifest.json \
-            --head-ref "$HEAD_REF"
+            --head-ref "$HEAD_REF" \
+            --head-sha "$HEAD_SHA"
 
       # The CI-impact baseline (recent pull-request runs) is read once a day
       # and kept as an artifact, so later CI-changing PRs that day reuse it.

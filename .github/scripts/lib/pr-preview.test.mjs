@@ -593,6 +593,7 @@ describe('the comment job marks inherited visual changes', () => {
     );
     expect(mark.run).toContain('--verdict trusted-visual/verdict.json');
     expect(mark.run).toContain('--manifest visual-pr-report/manifest.json');
+    expect(mark.run).toContain('--head-sha "$HEAD_SHA"');
     expect(PR_COMMENT_WORKFLOW.jobs.comment.permissions.actions).toBe('read');
   });
 });
@@ -1236,7 +1237,10 @@ describe('PR comment preview reconciliation', () => {
   });
 
   it('stands down when an earlier attempt reports after a newer attempt exists', async () => {
-    const first = identity({sourceRunAttempt: 1, sourceConclusion: 'failure'});
+    const first = identity({
+      sourceRunAttempt: 1,
+      sourceConclusion: 'failure',
+    });
     const harness = githubFixture({value: first});
     const firstPaths = fixture(first);
     const core = {info: vi.fn(), warning: vi.fn()};
@@ -1514,7 +1518,10 @@ describe('visual frames', () => {
     const checkout = jobs.frames.steps.find(step =>
       String(step.uses).startsWith('actions/checkout@'),
     );
-    expect(checkout.with).toEqual({ref: 'main', 'persist-credentials': false});
+    expect(checkout.with).toEqual({
+      ref: 'main',
+      'persist-credentials': false,
+    });
     expect(jobs.comment.needs).toEqual(['resolve', 'frames']);
   });
 });
@@ -1522,7 +1529,9 @@ describe('visual frames', () => {
 describe('CI impact in the report', () => {
   const at = minute =>
     new Date(Date.UTC(2026, 9, 31, 12, minute)).toISOString();
-  const workflow = text => ({content: Buffer.from(text).toString('base64')});
+  const workflow = text => ({
+    content: Buffer.from(text).toString('base64'),
+  });
   const BASE_CI =
     'on: pull_request\njobs:\n  lint:\n    runs-on: ubuntu-latest\n    steps: [{run: a}]\n';
   const HEAD_CI = `${BASE_CI}  extra:\n    runs-on: 4-core-ubuntu\n    steps: [{run: b}]\n`;
