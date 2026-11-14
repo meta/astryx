@@ -20,6 +20,7 @@
 import type {RefObject} from 'react';
 import type {GestureTouch} from '../gestures/types';
 import {isPressGroupItem} from '../privateAttributes/pressGroupItem.stylex';
+import {targetUnderFinger} from '../utils/touchHitArea';
 import {
   DISABLED_SELECTOR,
   measureActions,
@@ -59,7 +60,8 @@ function trackedTargets(group: HTMLElement): ActionGroupTarget[] {
 
 /**
  * Whether the group takes `touch`'s press. It takes one on an enabled tracked
- * member. A press on a disabled member keeps its click, so its tooltip can
+ * member, unless the finger is on the member's band over a control outside
+ * the group. A press on a disabled member keeps its click, so its tooltip can
  * open. It takes a finger's press on its own box only where a
  * member's grown target holds it. Any other press keeps its own click, so a
  * tap beside the members of a wide group reaches the page. A member the group
@@ -78,7 +80,14 @@ function takesPress(group: HTMLElement | null, touch: GestureTouch): boolean {
   }
   if (target !== group) {
     const member = (target as Element).closest(MEMBER_ELEMENTS);
-    return member != null && group.contains(member) && isTrackedMember(member);
+    if (member == null || !group.contains(member) || !isTrackedMember(member)) {
+      return false;
+    }
+    // A press on a member's band that lies over a control outside the group,
+    // or nearer one, is that control's tap: the group leaves it, and the
+    // member's press check gives it on.
+    const other = targetUnderFinger(member, touch.startX, touch.startY);
+    return other == null || group.contains(other);
   }
   return (
     touch.pointerType === 'touch' &&

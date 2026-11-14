@@ -584,9 +584,11 @@ describe('ToggleButtonGroup tracks a held pointer across its toggles (family:act
       );
       const counts = () => reads.map(read => read.mock.calls.length);
       const [onGroup, onEachToggle, onLink] = atStart;
+      // A press that lands on a toggle reads that toggle once more, to check
+      // that its band lies over no control outside the group.
       const expected = [
         onGroup,
-        onEachToggle,
+        landsOn === 'toggle' ? onEachToggle + 1 : onEachToggle,
         onEachToggle,
         onEachToggle,
         onLink,

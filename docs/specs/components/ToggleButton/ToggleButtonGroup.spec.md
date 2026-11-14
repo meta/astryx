@@ -146,7 +146,11 @@ Consumer migration instructions belong in consumer docs and release notes.
   group under the touch presentation tracks presses.
   Any other group reads no box. When a press begins, the tracker reads the
   group's box once. It reads each enabled toggle's box three times for a
-  finger, which picks the nearest target, and twice for a pen. A finger's
+  finger, which picks the nearest target, and twice for a pen. A press that
+  lands on a toggle reads that toggle's box once more; only when the press is
+  on the toggle's band outside its box does it also read the controls under
+  the pointer, so the band takes no tap on a control outside the group
+  (`spec:AST-094` DEC-33). A finger's
   press also reads each disabled toggle's box once. It also reads, once, the
   box of each member the group does not track, such as a toggle without a
   value. A finger's press on the group's own box first reads each

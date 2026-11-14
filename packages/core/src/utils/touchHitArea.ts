@@ -7,7 +7,8 @@
  * @input Whether an element takes taps, the window's input stream and the
  *   geometry of utils/hitArea.ts
  * @output `useTouchHitArea`: at a tap's click, it gives a tap on the band to
- *   a target whose box is under or nearer the finger
+ *   a target whose box is under or nearer the finger; `targetUnderFinger`,
+ *   that choice, for a group that takes its members' presses
  * @position Core-internal hook for the coarse-only 44 px target, whose band
  *   is CSS (internal/touchHitArea.stylex.ts). It reads layout only at a click
  *   and keeps no module state, so copies of Core share nothing here.
@@ -88,9 +89,9 @@ function entryOf(frame: Element, x: number, y: number): Element {
  * box under the finger, else the nearest box in empty space. It reads boxes
  * only when the finger is outside the host's, up to the host's own container
  * (what paints below, such as the page under a layer, is not beside it), in
- * one layout flush.
+ * one layout flush. A group that takes its members' presses asks it first.
  */
-function targetUnderFinger(
+export function targetUnderFinger(
   host: Element,
   x: number,
   y: number,
