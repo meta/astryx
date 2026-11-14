@@ -161,7 +161,53 @@ export function weightWords(idea) {
  * @property {WeightTable[]} tables
  * @property {number[]} blend three numbers per member (the tables, in order,
  *   with the ranker second), then one for `SHELL`
+ * @property {{tables: WeightTable[], blend: number[]}} [pick] the pick
+ *   model: its own tables and blend numbers, used only to choose which page
+ *   starts once the call model (the top-level tables and blend) has called a
+ *   page. Without it, one model does both.
  */
+
+/**
+ * The pick model of a weights file: its `pick` tables and blend when present,
+ * else the file's own.
+ * @param {WeightsFile} weights
+ * @returns {WeightsFile}
+ */
+const pickModel = weights =>
+  isPickModel(weights.pick, weights.candidates.length)
+    ? {...weights, tables: weights.pick.tables, blend: weights.pick.blend}
+    : weights;
+
+/**
+ * Whether a `pick` block has the weights file's own shape: tables over the
+ * same candidates, and three blend numbers per member plus one for `SHELL`.
+ * A malformed block is ignored, so one model then does both decisions.
+ * @param {any} pick
+ * @param {number} n the candidate count
+ * @returns {boolean}
+ */
+function isPickModel(pick, n) {
+  return (
+    Array.isArray(pick?.tables) &&
+    pick.tables.length > 0 &&
+    pick.tables.every(
+      (/** @type {any} */ t) =>
+        Array.isArray(t?.words) &&
+        Array.isArray(t.rows) &&
+        t.rows.length === t.words.length &&
+        t.rows.every(
+          (/** @type {any} */ r) => typeof r === 'string' && r.length === n,
+        ) &&
+        Array.isArray(t.bias) &&
+        t.bias.length === n &&
+        Number.isFinite(t.clip) &&
+        Number.isFinite(t.step),
+    ) &&
+    Array.isArray(pick.blend) &&
+    pick.blend.length === 3 * (pick.tables.length + 1) + 1 &&
+    pick.blend.every((/** @type {any} */ x) => Number.isFinite(x))
+  );
+}
 
 /**
  * A table's score for every candidate.
@@ -470,6 +516,30 @@ function fullerOfTie(name, idea, ranked, cands, catalog) {
 }
 
 /**
+ * The pick model's best ready, non-shell template, or null when it has none.
+ * @param {string} idea
+ * @param {import('./rank.mjs').RankedPage[]} ranked
+ * @param {import('./rank.mjs').RankedPage | null} pick
+ * @param {DescribedTemplate[]} catalog
+ * @param {WeightsFile} weights
+ * @returns {string | null}
+ */
+function bestPage(idea, ranked, pick, catalog, weights) {
+  const {cands, scores} = blend(
+    idea,
+    ranked,
+    pick,
+    catalog,
+    pickModel(weights),
+  );
+  let at = -1;
+  for (let c = 0; c < cands.length; c++) {
+    if (cands[c] !== SHELL && (at < 0 || scores[c] > scores[at])) at = c;
+  }
+  return at < 0 ? null : cands[at];
+}
+
+/**
  * Every ready, non-shell template in the blend's own order, best first: the
  * order the page start is chosen from, so the alternatives build names beside
  * the start come from the same ranking. Null without weights.
@@ -482,7 +552,13 @@ function fullerOfTie(name, idea, ranked, cands, catalog) {
  */
 export function blendOrder(idea, ranked, pick, catalog, weights) {
   if (!weights) return null;
-  const {cands, scores} = blend(idea, ranked, pick, catalog, weights);
+  const {cands, scores} = blend(
+    idea,
+    ranked,
+    pick,
+    catalog,
+    pickModel(weights),
+  );
   return cands
     .map((c, i) => ({c, s: scores[i], i}))
     .filter(x => x.c !== SHELL)
@@ -556,7 +632,8 @@ export function weighStart(
     return fullerOfTie(kept, idea, ranked, cands, catalog);
   }
   const top = best(() => true);
-  if (top !== SHELL) return top;
+  if (top !== SHELL)
+    return bestPage(idea, ranked, pick, catalog, weights) ?? top;
   // An idea that asks for a new page keeps the ranker's template rather than
   // the shell.
   if (newPage && kept) return kept;
@@ -584,7 +661,9 @@ export function blendSummary(idea, ranked, pick, catalog, weights) {
   rest.sort((x, y) => y.score - x.score || x.i - y.i);
   return {
     shell,
-    best: rest[0]?.name ?? null,
+    best: isPickModel(weights.pick, weights.candidates.length)
+      ? bestPage(idea, ranked, pick, catalog, weights)
+      : (rest[0]?.name ?? null),
     bestScore: rest[0]?.score ?? 0,
     secondScore: rest[1]?.score ?? 0,
   };
