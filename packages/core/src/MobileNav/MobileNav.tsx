@@ -573,7 +573,7 @@ export function MobileNav({
         active !== null &&
         active !== document.body &&
         !dialogRef.current?.contains(active);
-      const dialogIds = [dialogId, dialogRef.current?.id, rest.id];
+      const dialogIds = [dialogId, dialogRef.current?.id, idProp];
       const trigger =
         hasOpenerFocus && active
           ? active

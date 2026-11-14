@@ -46,7 +46,7 @@ type AuditCase = {
 const PHONE = {width: 390, height: 844};
 const NARROW = {width: 320, height: 700};
 
-/** The close lands within the slide-out and no later than 250 ms (FR5). */
+/** Waits past the drawer's slide-out and its 250 ms close bound. */
 const CLOSE_WAIT_MS = 600;
 const MIN_TARGET_PX = 24;
 
@@ -256,7 +256,7 @@ function checkEdge(check: Check, state: Drawer, direction: Direction) {
   );
 }
 
-function checkOpen(check: Check, state: Drawer | null, name: string) {
+function checkOpen(check: Check, state: Drawer | null, direction: Direction) {
   check(state != null, 'no MobileNav dialog');
   if (state == null) {
     return;
@@ -278,7 +278,7 @@ function checkOpen(check: Check, state: Drawer | null, name: string) {
     `backdrop ${state.backdropColor} at opacity ${state.backdropOpacity} is not a dim`,
   );
   check(state.drawer != null, 'no drawer panel');
-  check(name.length > 0, 'no dialog name');
+  checkEdge(check, state, direction);
 }
 
 function checkAx(
@@ -313,9 +313,8 @@ for (const mode of ['light', 'dark'] as const) {
     run: async (page, check, frame) => {
       await open(page, 'Open Navigation');
       const state = await drawerState(page);
-      checkOpen(check, state, 'Navigation');
+      checkOpen(check, state, 'ltr');
       if (state != null) {
-        checkEdge(check, state, 'ltr');
         check(
           state.drawer?.width === 320,
           `drawer width ${state.drawer?.width}, not 320`,
@@ -396,7 +395,7 @@ for (const mode of ['light', 'dark'] as const) {
     run: async (page, check, frame) => {
       await open(page, 'Open Navigation');
       const state = await drawerState(page);
-      checkOpen(check, state, 'Navigation');
+      checkOpen(check, state, 'ltr');
       const drawer = state?.drawer;
       if (state == null || drawer == null) {
         return;
@@ -431,10 +430,9 @@ for (const mode of ['light', 'dark'] as const) {
       run: async (page, check, frame) => {
         await open(page, 'Open from Right');
         const state = await drawerState(page);
-        checkOpen(check, state, 'Settings');
+        checkOpen(check, state, direction);
         if (state != null) {
           check(state.side === 'end', `side ${state.side}`);
-          checkEdge(check, state, direction);
         }
         checkAx(check, await axTree(page), 'Settings');
         await frame('open', {state});
@@ -453,7 +451,7 @@ for (const mode of ['light', 'dark'] as const) {
     run: async (page, check, frame) => {
       await open(page, 'Open Navigation');
       const state = await drawerState(page);
-      checkOpen(check, state, 'Navigation');
+      checkOpen(check, state, 'ltr');
       const nodes = await axTree(page);
       checkAx(check, nodes, 'Navigation');
       check(
@@ -476,7 +474,8 @@ for (const mode of ['light', 'dark'] as const) {
       run: async (page, check, frame) => {
         await open(page, 'Open Wide Drawer');
         const state = await drawerState(page);
-        checkOpen(check, state, 'Wide Navigation');
+        checkOpen(check, state, 'ltr');
+        checkAx(check, await axTree(page), 'Wide Navigation');
         const expected = Math.min(360, viewport.width * 0.85);
         check(
           state?.drawer != null &&
