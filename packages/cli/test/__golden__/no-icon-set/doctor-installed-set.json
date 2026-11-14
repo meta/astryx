@@ -103,13 +103,13 @@
         "id": "authoring-docs",
         "label": "<text>",
         "status": "pass",
-        "message": "<text> 19"
+        "message": "<text> 20"
       },
       {
         "id": "cli-docs",
         "label": "<text>",
         "status": "pass",
-        "message": "<text> 101 82 19"
+        "message": "<text> 102 82 20"
       },
       {
         "id": "docs-tree",
