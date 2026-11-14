@@ -5,7 +5,8 @@
 /**
  * @file ListReorderHandle.tsx
  * @input The List's reorder session (List/listReorderEngine.tsx, through
- *   ListContext's `reorder`), the translator and theme tokens
+ *   ListContext's `reorder`), the translator, theme tokens and the theme's
+ *   `list-reorder-handle` icon slot
  * @output `ListReorderHandle`, `ListReorderRowName`, `reorderRowStyle` and
  *   `UNREAD_HANDLE_NAME`. The handle ends a reorderable List row. A finger
  *   held still on it drags it, and so does a pen where the primary pointer is
@@ -17,16 +18,17 @@
  *   ListItem renders it, from the List's context, at the end of each row
  *   that can move
  *
- * UIKit's reorder control (iOS 26.2, measured) is three gray lines at the
- * trailing edge of a row in edit mode. A finger held still on it for the
- * scroll view's content-touch delay (150 ms) claims the drag. A flick that
- * starts on it scrolls the table instead. So until the claim, the handle
+ * On iOS 26.2 (measured), a finger held still on a table's reorder control
+ * for the scroll view's content-touch delay (150 ms) claims the drag. A flick
+ * that starts on it scrolls the table instead. So until the claim, the handle
  * leaves the browser everything but double-tap zoom (`manipulation`). That
  * `touch-action` applies only where the primary pointer is coarse. Elsewhere
- * a finger gets the browser's defaults until the hold claims it. The handle is the one element the reorder
- * adds to a row. Its lines are a pseudo-element, and it listens to nothing
- * itself. The session's listeners take its drags. Its keys go through
- * React's.
+ * a finger gets the browser's defaults until the hold claims it. The handle
+ * is the one element the reorder adds to a row. Its grip is the theme's
+ * `list-reorder-handle` icon, by default the `drag` icon. It is hidden from
+ * assistive technology. The handle listens to
+ * nothing itself. The session's listeners take its drags. Its keys go
+ * through React's.
  *
  * SYNC: When modified, update List/listReorderEngine.tsx and
  * List/ListItem.tsx.
@@ -58,6 +60,9 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/List/ListReorderHandle.generated';
+import {Icon} from '../Icon/Icon';
+import type {IconVariant} from '../Icon/index';
+import {useComponentIcon} from '../Icon/useIcon';
 import {getNodeText} from '../utils/getNodeText';
 import {ItemLabelContext} from '../Item/ItemLabelContext';
 import {ListContext} from './ListContext';
@@ -78,17 +83,16 @@ registerEnglishFallback(english);
  * takes from a neighbour (utils/hitArea.ts), not a bigger handle.
  */
 const HANDLE_SIZE = 28;
-/** The three lines' height: the handle's share of its row's height. */
-const LINES_HEIGHT = 14;
-/** The lines' length and thickness, and the distance between them. */
-const LINE_WIDTH = 20;
-const LINE_THICKNESS = 2;
-const LINE_GAP = (LINES_HEIGHT - LINE_THICKNESS) / 2;
+/** The grip's side, the `sm` icon size: the handle's share of its row's height. */
+const GRIP_SIZE = '1rem';
+
+/** The grip when the theme maps nothing to `list-reorder-handle`. */
+const GRIP_FALLBACK = {icon: 'drag', size: 'sm'} as const;
 
 const styles = stylex.create({
   handle: {
-    // Centred on its row, with the lines in its middle. It takes only the
-    // lines' height in the row's layout (the negative block margins). So a
+    // Centred on its row, with the grip in its middle. It takes only the
+    // grip's height in the row's layout (the negative block margins). So a
     // compact row stays compact. The handle and its focus ring reach past
     // that into the row's padding, never past it. They go no further than the
     // row's own inline inset, so a flush row's handle stays inside the clip.
@@ -100,7 +104,7 @@ const styles = stylex.create({
     flexShrink: 0,
     width: HANDLE_SIZE,
     height: HANDLE_SIZE,
-    marginBlock: (LINES_HEIGHT - HANDLE_SIZE) / 2,
+    marginBlock: `calc((${GRIP_SIZE} - ${HANDLE_SIZE}px) / 2)`,
     marginInlineEnd: 'calc(-1 * min(8px, var(--_item-inset-inline, 8px)))',
     padding: 0,
     borderWidth: 0,
@@ -111,8 +115,9 @@ const styles = stylex.create({
       default: '0',
       ':focus-visible': `calc(-1 * ${focusVars['--focus-outline-width']})`,
     },
-    // Pressed while its row is in reorder mode, as a pressed toggle button
-    // is; in forced colors, the system's highlight.
+    // A bare glyph: no hover or press fill of its own. Only reorder mode
+    // fills it, as a pressed toggle button; in forced colors, the system's
+    // highlight.
     backgroundColor: {
       default: 'transparent',
       ':is([aria-pressed="true"])': {
@@ -146,20 +151,10 @@ const styles = stylex.create({
       default: null,
       '@media (pointer: coarse)': 'transparent',
     },
-    // The three lines: one bar and its two shadows, in the handle's color.
-    // Forced colors keep them (shadows and backgrounds go there otherwise),
-    // drawn in the system's button text.
-    '::before': {
-      content: '""',
-      display: 'block',
-      width: LINE_WIDTH,
-      height: LINE_THICKNESS,
-      borderRadius: LINE_THICKNESS / 2,
-      backgroundColor: 'currentColor',
-      boxShadow: `0 -${LINE_GAP}px currentColor, 0 ${LINE_GAP}px currentColor`,
-      forcedColorAdjust: 'none',
-      pointerEvents: 'none',
-    },
+  },
+  // Presses on the grip land on the handle.
+  grip: {
+    pointerEvents: 'none',
   },
   // The row's own child, in a row without end content. It ends the row, as
   // the end slot would. It aligns as the row's `align` would align that slot.
@@ -172,7 +167,7 @@ const styles = stylex.create({
   },
   // `first-line`: centred on the label's first line, a line of body text at
   // the top of the row's content. Item's first-line slots centre on it too.
-  // Its layout height stays the lines' height (the end margin).
+  // Its layout height stays the grip's height (the end margin).
   inRowFirstLine: {
     alignSelf: 'flex-start',
     marginBlockStart: `calc((${typeScaleVars['--text-body-leading']} - ${HANDLE_SIZE}px) / 2)`,
@@ -241,6 +236,11 @@ export function ListReorderHandle({
 }: ListReorderHandleProps) {
   const ref = useRef<HTMLButtonElement>(null);
   const t = useComponentTranslator();
+  const grip = useComponentIcon(
+    'list-reorder-handle',
+    undefined,
+    GRIP_FALLBACK,
+  );
   const controller = use(ListContext)?.reorder?.session as
     ListReorderController | undefined;
   // The row's label element, when the handle sits in an Item's slot.
@@ -386,8 +386,18 @@ export function ListReorderHandle({
         rowAlign != null && styles.inRow,
         rowAlign === 'start' && styles.inRowStart,
         rowAlign === 'first-line' && styles.inRowFirstLine,
+      )}>
+      {grip.icon == null ? null : (
+        <Icon
+          icon={grip.icon}
+          // Resolution keeps only a variant the active theme lists.
+          variant={grip.variant as IconVariant | undefined}
+          size={grip.size}
+          color="inherit"
+          xstyle={styles.grip}
+        />
       )}
-    />
+    </button>
   );
 }
 

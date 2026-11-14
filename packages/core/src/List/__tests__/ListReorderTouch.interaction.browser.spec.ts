@@ -940,7 +940,7 @@ test.describe('the preview, the drop and the handle under a finger', () => {
     expect(ring.right).toBeGreaterThanOrEqual(-0.5);
   });
 
-  test("the handle keeps a small control's size; a finger's target grows toward 44 pt and meets the next handle's halfway, its ring clears its lines, and its row is no taller for it", async ({
+  test("the handle keeps a small control's size; a finger's target grows toward 44 pt and meets the next handle's halfway, its ring clears its grip, and its row is no taller for it", async ({
     page,
   }) => {
     const handle = page.getByRole('button', {name: 'Reorder Inbox'});
@@ -994,17 +994,10 @@ test.describe('the preview, the drop and the handle under a finger', () => {
         box.left + box.width / 2,
         box.top - (box.top - hit.top) / 2,
       );
-      // The lines are the handle's ::before: one bar centred in it, and a
-      // shadow of it on each side.
-      const lines = getComputedStyle(element, '::before');
-      const bar = parseFloat(lines.height);
-      const shadows = Array.from(
-        lines.boxShadow.matchAll(/(-?[\d.]+)px\s+(-?[\d.]+)px/g),
-        ([, , y]) => Math.abs(parseFloat(y)),
-      );
-      const reach = Math.max(0, ...shadows) + bar / 2;
-      const centre = box.top + box.height / 2;
-      const glyph = {top: centre - reach, bottom: centre + reach};
+      // The grip is the handle's drag icon, centred in it.
+      const glyph = (
+        element.firstElementChild ?? element
+      ).getBoundingClientRect();
       const withHandle = row.getBoundingClientRect().height;
       // The same row without its handle.
       element.style.display = 'none';
@@ -1041,12 +1034,12 @@ test.describe('the preview, the drop and the handle under a finger', () => {
       expect(geometry.gapToNext).toBeLessThanOrEqual(0.5);
     }
     expect(geometry.probeHits).toBe(true);
-    // The ring clears the lines above and below. It shows, so the band
+    // The ring clears the grip above and below. It shows, so the band
     // judged is the ring's.
     expect(geometry.ring).not.toBe('none');
     expect(geometry.above).toBeGreaterThan(0);
     expect(geometry.below).toBeGreaterThan(0);
-    // The handle takes only its lines' height in the row's layout.
+    // The handle takes only its grip's height in the row's layout.
     expect(geometry.withHandle).toBeCloseTo(geometry.withoutHandle, 1);
   });
 });

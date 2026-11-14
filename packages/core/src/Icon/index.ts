@@ -70,6 +70,8 @@ export interface ComponentIconSlotMap {
   };
   /** A Table row's expansion toggle (`useTableRowExpansion`), by whether the row is expanded. */
   'table-row-expand': {readonly expanded: boolean};
+  /** The grip on a reorderable List row's reorder handle. */
+  'list-reorder-handle': true;
 }
 
 /** A slot name from the augmentable {@link ComponentIconSlotMap}. */

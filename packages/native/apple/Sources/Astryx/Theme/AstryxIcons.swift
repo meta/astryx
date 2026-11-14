@@ -105,4 +105,5 @@ let astryxDefaultIcons: [String: String] = [
   "wrench": "wrench.adjustable",
   "stop": "stop.fill",
   "microphone": "mic",
+  "drag": "line.3.horizontal",
 ]
