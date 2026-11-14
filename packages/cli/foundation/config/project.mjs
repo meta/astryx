@@ -134,6 +134,13 @@ const ISSUES_CODEC = {
 export {CONFIG_BASENAMES, findConfigPath} from './config-path.mjs';
 
 /**
+ * The project each folder last loaded in this process, with the hosted run
+ * it loaded in (null outside one).
+ * @type {Map<string, {project: Project, run: unknown}>}
+ */
+const LAST_LOADED = new Map();
+
+/**
  * Extract a human-readable message from an unknown thrown value.
  * Reproduces the historical `err?.message ?? String(err)` behavior in a
  * strict-checkJs-safe way: prefer a non-nullish `.message` (covers Error
@@ -642,7 +649,20 @@ export class Project {
       core,
     });
     PROVIDER_LEDGERS.set(project, resolution.ledger);
+    LAST_LOADED.set(path.resolve(cwd), {project, run: hostedRun()});
     return project;
+  }
+
+  /**
+   * The project this process last loaded for `cwd` in the current hosted run
+   * (or outside any), or undefined: a reader that only needs what the run
+   * already loaded does not load it again.
+   * @param {string} [cwd]
+   * @returns {Project | undefined}
+   */
+  static lastLoaded(cwd = process.cwd()) {
+    const last = LAST_LOADED.get(path.resolve(cwd));
+    return last && last.run === hostedRun() ? last.project : undefined;
   }
 
   /**

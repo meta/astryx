@@ -904,6 +904,56 @@ export async function withExampleBlockPointer(error, dirName, {coreDir, cwd}) {
 }
 
 /**
+ * When `error` is the unknown-component error for a name that matches a hook,
+ * template or docs topic (exact, folded or last segment, as
+ * foundation/suggest/other-command.mjs ranks it), returns the same error with the command that
+ * reads that entry among its suggestions, in the place
+ * foundation/suggest/other-command.mjs gives it. Returns `error` unchanged
+ * otherwise, and when the check fails.
+ * @param {unknown} error
+ * @param {string} dirName
+ * @param {{coreDir: string, cwd: string, loadedIntegrations: import('../../foundation/integrations/integrations.mjs').LoadedIntegration[]}} context
+ * @returns {Promise<unknown>}
+ */
+export async function withOtherCommandHint(
+  error,
+  dirName,
+  {coreDir, cwd, loadedIntegrations},
+) {
+  if (
+    !(error instanceof AstryxError) ||
+    error.code !== ERROR_CODES.ERR_UNKNOWN_COMPONENT
+  ) {
+    return error;
+  }
+  try {
+    // The hint's modules load only on this path.
+    const [{findOtherCommand, withOtherCommand}, {docsRoutesLazily}] =
+      await Promise.all([
+        import('../../foundation/suggest/other-command.mjs'),
+        import('../docs/_entry-names-lazily.mjs'),
+      ]);
+    const hint = await findOtherCommand(dirName, {
+      from: 'component',
+      cwd,
+      coreDir,
+      integrations: loadedIntegrations,
+      docsRoutes: docsRoutesLazily,
+    });
+    if (!hint) return error;
+    return new AstryxError(
+      error.message,
+      withOtherCommand(error.suggestions, hint, dirName, {
+        from: 'component',
+      }),
+      ERROR_CODES.ERR_UNKNOWN_COMPONENT,
+    );
+  } catch {
+    return error;
+  }
+}
+
+/**
  * A component whose `component <Name> --blocks` listing holds `block`: one of
  * the components the block uses, its own folder's component first, that
  * resolves as a component and whose related blocks include the block.

@@ -12,6 +12,8 @@
  *   always audits.
  * @position Read by api/doctor/doctor.mjs. These audits read only the
  *   package's own files, so their answer is fixed until one of them changes.
+ *   The CLI's docs routes stored at publish (api/docs/_entry-names.mjs) are
+ *   checked by the same input states.
  */
 
 import * as fs from 'node:fs';

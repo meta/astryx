@@ -50,6 +50,10 @@ export const PREPACK_FILES = [
     script: 'scripts/generate-self-audit.mjs',
   },
   {
+    file: 'assets/docs-routes.generated.json',
+    script: 'scripts/generate-docs-routes.mjs',
+  },
+  {
     file: 'clients/cli/manifest.generated.json',
     script: 'scripts/generate-manifest.mjs',
   },
@@ -73,11 +77,12 @@ const PREPACK_STAGES = [
     'scripts/generate-stored-docs.mjs',
     'scripts/generate-command-list.mjs',
   ],
-  // The two that copy a package's published files run side by side, each
+  // The ones that copy a package's published files run side by side, each
   // waiting mostly on `npm pack --dry-run`.
   [
     'scripts/generate-self-audit.mjs',
     'scripts/generate-component-list.mjs',
+    'scripts/generate-docs-routes.mjs',
     'scripts/generate-manifest.mjs',
   ],
   // Search's catalog reads every store above.

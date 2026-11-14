@@ -31,10 +31,10 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {CLI_ROOT} from '../fs/paths.mjs';
 import {listDir, listDirEntries} from '../fs/listing-cache.mjs';
 import {importDocModule} from '../doc-compiler/import.mjs';
 import {CLI_PROVIDER_ID} from '../identity/providers.mjs';
+import {BUILTIN_DOCS_DIR, BUILTIN_TOPIC_FILE_RE} from './name-roots.mjs';
 import {parseReadableDoc} from '../doc-compiler/parse-readable.mjs';
 import {
   sectionKey,
@@ -45,22 +45,12 @@ import {
 
 export {withSourceTitle};
 
-/** Where the CLI's own topics live. */
-const BUILTIN_DOCS_DIR = path.join(CLI_ROOT, 'assets', 'docs');
-
 /**
  * Owner package recorded for the built-in topics. They ship inside the CLI
  * (assets/docs), not in @astryxdesign/core, so this is the CLI's own name —
  * unlike component discovery, whose built-ins belong to core.
  */
 export const BUILTIN_DOCS_PACKAGE = CLI_PROVIDER_ID;
-
-/**
- * A built-in topic file: `{topic}.doc.mjs`. Anchored at both ends so a
- * localization overlay (`{topic}.doc.zh.mjs`) is not read as a topic of its
- * own — it is loaded by the topic it overlays.
- */
-const BUILTIN_TOPIC_FILE_RE = /^([\w-]+)\.doc\.mjs$/;
 
 /** Conventional doc-file suffixes for an integration's topics. */
 const INTEGRATION_DOC_SUFFIXES = ['.doc.ts', '.doc.mjs', '.doc.js'];
@@ -141,6 +131,27 @@ export function discoverBuiltinTopics() {
     if (match) topics[match[1]] = path.join(BUILTIN_DOCS_DIR, file);
   }
   return topics;
+}
+
+/**
+ * The name an integration doc declares, and whether it is placed (has
+ * `placement`, so it is no topic or root namespace), as docs discovery reads
+ * the doc; null when the doc does not load or parse, or names nothing.
+ *
+ * @param {string} file an integration doc file
+ * @returns {Promise<{name: string, placed: boolean} | null>}
+ */
+export async function integrationDocDeclaration(file) {
+  let doc;
+  try {
+    doc = /** @type {any} */ (
+      parseReadableDoc(await loadTopicModule(file), path.basename(file))
+    );
+  } catch {
+    return null;
+  }
+  if (typeof doc?.name !== 'string') return null;
+  return {name: doc.name, placed: doc.placement != null};
 }
 
 /**

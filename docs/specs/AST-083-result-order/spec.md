@@ -28,9 +28,9 @@ their counts. The order of matches that are equally strong is not. That order
 is a measured quality, and it may change whenever a measurement shows the new
 order is at least as good as the old one.
 
-The not-found errors of `astryx component`, `astryx template` and
-`astryx docs` work the same way: the facts of a suggestion list hold, and the
-order inside it is a measured quality (FR7).
+The not-found errors of `astryx component`, `astryx hook`,
+`astryx template` and `astryx docs` work the same way: the facts of a
+suggestion list hold, and the order inside it is a measured quality (FR7).
 
 This record owns that split: the facts every answer must keep, and the rule
 for changing the order inside them. Search owns its own matching.
@@ -85,23 +85,37 @@ owns response fields and compatibility.
   worse when the paired 95% confidence interval of its change lies entirely
   below zero. FR1–FR5 hold for every change.
 - **FR7 — not-found suggestions keep their facts.** When `astryx component`,
-  `astryx template` or `astryx docs` names nothing, it suggests at most as
-  many entries as its candidate set gives: for a component, the near-top
-  matches of the component matcher (at most five, and at least two when two
-  exist); for a template, every template; for docs, the routes its error
-  gives (for an unknown route, the set `spec:AST-046` FR6 names). Every suggestion is a real catalog entry for that command, with one
-  exception: when the docs argument is, in any case and without spaces and
-  hyphens, the exact name of a component, hook (with or without `use`) or
-  template, the first docs suggestion is the command that reads that entry
-  (`astryx component Button`), and the last route drops; when no route it
-  suggests shares a word with the argument, that command is the only
-  suggestion. A
-  name that resolves keeps resolving to the same entry. A component's exact
-  name in another case is that component's: a module that only shares its
-  spelling never resolves for it. Which candidates fill
-  a component list and the order of every list change only under FR6,
-  measured on the held-out and fresh failed-lookup evaluation sets. FR5 holds
-  for this order.
+  `astryx hook`, `astryx template` or `astryx docs` names nothing, it suggests
+  at most as many entries as its candidate set gives: for a component, the
+  near-top matches of the component matcher (at most five, and at least two
+  when two exist); for a hook, the hooks whose names are within five edits (at
+  most five); for a template, every template; for docs, the routes its error
+  gives (for an unknown route, the set `spec:AST-046` FR6 names). Every
+  suggestion is a real catalog entry for that command, with one exception, one
+  rule shared by the four commands. An entry's name is its full id: a
+  component, hook or template id, or a docs route; a template the command
+  suggests also matches by its human name, as the template matcher ranks it. A
+  name matches the argument at one of four tiers, best first: exact (the whole
+  name, in any case); folded (the whole name without spaces and hyphens, and a
+  hook with or without `use`); segment (only the last segment of a path name,
+  exact or folded); word cover (the name carries every word of the argument).
+  When the argument matches an entry another of the four commands reads at one
+  of the first three tiers, the command that reads that entry, by its full id
+  (`astryx hook useHotkeys`), joins the list. A better tier wins; inside a
+  tier, a component wins over a hook, a hook over a template, and a template
+  over a docs topic; among docs routes, the route with the fewest segments
+  wins, then the first in tree order. That command goes right after the last
+  suggestion that matches at its tier or a better one, so it goes first when
+  none does. The list never grows: the last suggestion drops, and a command
+  that would come last is left out. That command is the only suggestion when
+  the list is otherwise empty, and, for docs, when no route it suggests shares
+  a word with the argument. A component error for an example block keeps its
+  suggestions, since its message already names `astryx template`. A name that
+  resolves keeps resolving to the same entry. A component's exact name in
+  another case is that component's: a module that only shares its spelling
+  never resolves for it. Which candidates fill a component list and the order
+  of every list change only under FR6, measured on the held-out and fresh
+  failed-lookup evaluation sets. FR5 holds for this order.
 
 ## Current-state impact
 

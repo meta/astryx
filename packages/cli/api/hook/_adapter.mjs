@@ -39,17 +39,18 @@ export function resolveCoreDir(cwd) {
 
 /**
  * Resolve a single hook's authored doc by name, or throw ERR_UNKNOWN_HOOK with
- * fuzzy (levenshtein) suggestions. Shared by the detail and detail.params
+ * fuzzy (levenshtein) suggestions, led by the command that reads a component,
+ * template or docs topic of exactly that name when one exists. Shared by the detail and detail.params
  * leaves, which both start from a resolved hook doc.
  * @param {string} coreDir
  * @param {string} name
- * @param {{zh?: boolean, lang?: string|null}} [opts]
+ * @param {{zh?: boolean, lang?: string|null, cwd?: string}} [opts]
  * @returns {Promise<import('./hook.type.mjs').HookDoc>}
  */
 export async function resolveHookDoc(
   coreDir,
   name,
-  {zh = false, lang = null} = {},
+  {zh = false, lang = null, cwd = process.cwd()} = {},
 ) {
   const docPath = findHookDoc(coreDir, name);
 
@@ -72,10 +73,41 @@ export async function resolveHookDoc(
 
     throw new AstryxError(
       `No hook named "${name}"`,
-      suggestions,
+      await withOtherCommandHint(name, suggestions, {coreDir, cwd}),
       ERROR_CODES.ERR_UNKNOWN_HOOK,
     );
   }
 
   return loadDocs(docPath, {zh, lang, root: 'hooks'});
+}
+
+/**
+ * The unknown-hook suggestions with the command that reads a component,
+ * template or docs topic matching that name (exact, folded or last segment)
+ * in them, the list keeping its length, in the place
+ * foundation/suggest/other-command.mjs gives it. The suggestions stay as they
+ * are when no such entry exists or the check fails. The hint's modules load
+ * only on this path.
+ * @param {string} name
+ * @param {import('../../foundation/response/base').Suggestion[]} suggestions
+ * @param {{coreDir: string, cwd: string}} context
+ * @returns {Promise<import('../../foundation/response/base').Suggestion[] | undefined>}
+ */
+async function withOtherCommandHint(name, suggestions, {coreDir, cwd}) {
+  try {
+    const [{findOtherCommand, withOtherCommand}, {docsRoutesLazily}] =
+      await Promise.all([
+        import('../../foundation/suggest/other-command.mjs'),
+        import('../docs/_entry-names-lazily.mjs'),
+      ]);
+    const hint = await findOtherCommand(name, {
+      from: 'hook',
+      cwd,
+      coreDir,
+      docsRoutes: docsRoutesLazily,
+    });
+    return withOtherCommand(suggestions, hint, name, {from: 'hook'});
+  } catch {
+    return suggestions;
+  }
 }
