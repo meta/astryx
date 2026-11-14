@@ -7,11 +7,8 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {describe, expect, it} from 'vitest';
 import {configDefaults} from 'vitest/config';
-import {
-  VITEST_DEFAULT_EXCLUDE,
-  globToRegExp,
-  nodeTestFiles,
-} from './vitest-node-files.mjs';
+import {globToRegExp} from '../.github/scripts/lib/a11y-spec-files.mjs';
+import {VITEST_DEFAULT_EXCLUDE, nodeTestFiles} from './vitest-node-files.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const tracked = execFileSync('git', ['ls-files', '-z'], {

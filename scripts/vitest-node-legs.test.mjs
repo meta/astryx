@@ -134,7 +134,9 @@ describe('the Node leg plan', () => {
     // Room's sparse checkout holds the planner and what it reads.
     const sparse = room.steps.find(each => each.with?.path === '.ci-admission')
       .with['sparse-checkout'];
-    expect(sparse.split('\n')).toContain('scripts/lib');
+    expect(sparse.split('\n')).toEqual(
+      expect.arrayContaining(['scripts/lib', '.github/scripts/lib']),
+    );
     const names = room.steps.map(each => each.name);
     expect(names.indexOf(step.name)).toBeLessThan(
       names.indexOf('Wait for room under the CI ceiling'),

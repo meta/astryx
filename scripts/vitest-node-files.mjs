@@ -7,9 +7,12 @@
  *   project, and the paths among a list that the project collects.
  * @position vitest.config.ts reads the globs from here, and the Node leg
  *   planner (scripts/vitest-node-legs.mjs) lists the project's files with
- *   them where Vitest is not installed, so both see the same files. Node
- *   built-ins only.
+ *   them where Vitest is not installed, so both see the same files. It
+ *   matches them with the repository's one glob matcher
+ *   (.github/scripts/lib/a11y-spec-files.mjs); no dependencies.
  */
+
+import {globToRegExp} from '../.github/scripts/lib/a11y-spec-files.mjs';
 
 export const NODE_TEST_INCLUDE = [
   'packages/**/src/**/*.test.{ts,tsx,mjs}',
@@ -44,31 +47,6 @@ export const SWIZZLE_PROOF_SLICES =
 // Vitest's default excludes (configDefaults.exclude), for a reader without
 // Vitest.
 export const VITEST_DEFAULT_EXCLUDE = ['**/node_modules/**', '**/.git/**'];
-
-/**
- * A matcher for the glob forms these lists use: `**` for any number of
- * folders, `*` within one name, and `{a,b}` alternatives.
- * @param {string} glob
- * @returns {RegExp}
- */
-export function globToRegExp(glob) {
-  let source = '';
-  for (let i = 0; i < glob.length; i += 1) {
-    const char = glob[i];
-    if (glob.startsWith('**/', i)) {
-      source += '(?:.*/)?';
-      i += 2;
-    } else if (glob.startsWith('/**', i) && i + 3 === glob.length) {
-      source += '/.*';
-      i += 2;
-    } else if (char === '*') source += '[^/]*';
-    else if (char === '{') source += '(?:';
-    else if (char === '}') source += ')';
-    else if (char === ',') source += '|';
-    else source += char.replace(/[.+?^$()[\]\\|]/g, '\\$&');
-  }
-  return new RegExp(`^${source}$`);
-}
 
 /**
  * The paths among `paths` that the `node` project collects.

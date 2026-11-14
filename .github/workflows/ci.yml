@@ -166,10 +166,12 @@ jobs:
         timeout-minutes: 8
         with:
           # scripts/lib brings the scripts/ files beside it too: the Node leg
-          # planner, the modules it imports and the recorded Node times.
+          # planner, the modules it imports and the recorded Node times;
+          # .github/scripts/lib holds the glob matcher it shares.
           sparse-checkout: |
             .github/actions/ci-admission
             .github/actions/superseded-runs
+            .github/scripts/lib
             scripts/lib
           path: .ci-admission
           persist-credentials: false

@@ -523,19 +523,18 @@ they are separately named.
   the slowest files never share a leg and the slowest single file sets the
   floor. In the Node legs, a file with no recorded time counts as the ninetieth
   percentile of the recorded times, and which files run never depends on the
-  times. A pull
+  times. A dispatch may name `sha`, a commit in `main`'s history that has the
+  size records the build lane keeps, and every lane checks that commit out;
+  without it the run validates `main`'s tip. A person's `sha` run waits for no
+  other validation and replaces nothing; like every Main run, it waits for room
+  under CI's ceiling (FR16). One full unit run of `main` runs at a time and a
+  newer one waits (FR21); a push's fast checks run beside it. Only a release
+  re-check, which the workflow token sends with `recheck` and `main`'s tip as
+  `sha`, cancels the running unit run, because the re-check validates that
+  commit in full itself. Pull-request legs never grow to finish sooner: a pull
   request runs as many Node legs as the recorded times need for every leg to
-  end inside its job budget, at most eight; a suite that needs more fails every
-  Node leg with the reason. A dispatch may name `sha`, a commit in `main`'s
-  history that has the size records the build lane keeps, and every lane checks
-  that commit out; without it the run validates `main`'s tip. A person's `sha` run
-  waits for no other validation and replaces nothing; like every Main run, it
-  waits for room under CI's ceiling (FR16). One full unit run of `main` runs at
-  a time and a newer one waits (FR21); a push's fast checks run beside it. Only
-  a release re-check, which the workflow token sends with `recheck` and `main`'s
-  tip as `sha`, cancels the running unit run, because the re-check validates
-  that commit in full itself. Pull-request legs keep their
-  shape.
+  end inside its job budget, at most eight, at the widths admission picks
+  (FR16); a suite that needs more fails every Node leg with the reason.
 
 - **FR23 — A release-check finishes in minutes, and the release owner can
   re-check `main`'s tip at once.** A release-check runs its browser owners in
@@ -1072,8 +1071,9 @@ release train can then fix and re-check within minutes, and pull requests, which
 run far more often, carry the per-update cost. A full run starts every
 leg at once, with no `max-parallel` hold, on standard runners, and gets as many
 legs as shorten its slowest lane. Legs stop growing where one indivisible piece
-of work sets the floor, such as the longest test file. Pull requests keep their
-shape, which bounds the spend of each update.
+of work sets the floor, such as the longest test file. Pull requests never add
+legs to finish sooner, which bounds the spend of each update: their Node legs
+grow only as far as every leg needs to end inside its job budget (FR22).
 
 Rejected: larger runners for these lanes (measured no faster than the standard
 four-core runners); keeping four unit legs, whose slowest leg took about eight
