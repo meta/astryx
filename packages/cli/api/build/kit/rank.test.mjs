@@ -380,9 +380,7 @@ describe('ideaKind: a part of a page, told by the components the system ships', 
     const own = [page('table', 'Table - Basic', 'Rows.')];
     const parts = [component('ChatToolCalls', ['tool']), component('Banner')];
     expect(ideaKind('add a task board to my tool', own, parts)).toBe('page');
-    expect(ideaKind('add a banner to the tool calls', own, parts)).toBe(
-      'edit',
-    );
+    expect(ideaKind('add a banner to the tool calls', own, parts)).toBe('edit');
   });
 
   it('names a template in an "add" place only by its whole name', () => {
