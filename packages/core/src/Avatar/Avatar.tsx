@@ -74,15 +74,23 @@ registerEnglishFallback(english);
 const CIRCLE_EDGE_OFFSET_RATIO = (1 - 1 / Math.SQRT2) / 2;
 
 /**
- * The ratio of font size to avatar size for initials.
+ * The ratio of font size to the rendered avatar box for initials.
  *
  * At 40%, two-letter initials fit comfortably within the circle with adequate
- * padding. This ratio provides good legibility across all avatar sizes:
- *   - 24px avatar → 9.6px font
- *   - 48px avatar → 19.2px font
- *   - 128px avatar → 51.2px font
+ * padding. It is read from the box the avatar actually draws (container query
+ * units on the content), so a theme that resizes an avatar keeps the initials
+ * in proportion:
+ *   - 24px box → 9.6px font
+ *   - 48px box → 19.2px font
+ *   - 128px box → 51.2px font
  */
 const INITIALS_FONT_SIZE_RATIO = 0.4;
+
+/**
+ * The smallest initials font size at `xsm`, whose 20px box would otherwise
+ * give 8px, below the smallest text step in the type scale.
+ */
+const XSM_INITIALS_MIN_PX = 10;
 
 /**
  * Named size options.
@@ -177,6 +185,9 @@ const styles = stylex.create({
     // properties cascade to descendants even though border-radius itself
     // does not.
     borderRadius: 'var(--_avatar-radius)',
+    // The initials size themselves from this box (container query units), so
+    // they follow the rendered size rather than the `size` prop.
+    containerType: 'inline-size',
   },
   image: {
     width: '100%',
@@ -242,6 +253,20 @@ const styles = stylex.create({
 });
 
 /**
+ * Initials font size: a share of the rendered box (`cqw` is 1% of the content's
+ * width). A theme's `.astryx-avatar-fallback.<size>` rule overrides it per
+ * size, because StyleX applies it through a class.
+ */
+const initialsSizeStyles = stylex.create({
+  proportional: {
+    fontSize: `${INITIALS_FONT_SIZE_RATIO * 100}cqw`,
+  },
+  proportionalWithMinimum: {
+    fontSize: `max(${XSM_INITIALS_MIN_PX}px, ${INITIALS_FONT_SIZE_RATIO * 100}cqw)`,
+  },
+});
+
+/**
  * Dynamic styles that depend on the avatar size
  */
 const dynamicStyles = stylex.create({
@@ -261,13 +286,6 @@ const dynamicStyles = stylex.create({
   size: (size: number) => ({
     width: size,
     height: size,
-  }),
-  // Initials font size defaults to the proportional `size × ratio` scale. It's
-  // a StyleX dynamic style, so the value lands via a class (not an inline
-  // property) — a theme's `.astryx-avatar-fallback.<size>` rule in the theme
-  // layer overrides it per size tier, no internal var needed.
-  fontSize: (size: number) => ({
-    fontSize: `${size * INITIALS_FONT_SIZE_RATIO}px`,
   }),
   statusPositionCircle: (size: number) => ({
     bottom: size * CIRCLE_EDGE_OFFSET_RATIO,
@@ -825,7 +843,9 @@ export function Avatar({
               stylex.props(
                 styles.fallback,
                 avatarGroup == null && styles.loneFallback,
-                dynamicStyles.fontSize(numericSize),
+                resolvedSize === 'xsm'
+                  ? initialsSizeStyles.proportionalWithMinimum
+                  : initialsSizeStyles.proportional,
                 dynamicStyles.initials(cssString(initials)),
               ),
             )}
