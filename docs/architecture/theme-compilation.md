@@ -257,6 +257,13 @@ Platform-specific details stay inside that compiler.
   key. On a media surface only the block of the surface's mode is written. A
   theme without color-mode blocks has no mode rules in its CSS.
 
+- **INV19 — Astryx CSS keeps its order inside any app.** Astryx's built and
+  precompiled CSS declares its layers nested under one `astryx` layer, so its
+  internal order holds whatever layer statement the app writes, and the app
+  places that one layer where it wants. Precompiled CSS uses an Astryx-only
+  atomic class prefix, so its classes never share a name with another StyleX
+  build on the same page (DEC-1).
+
 This record does not own:
 
 - token names and defaults, including the meanings of theme-local names;
@@ -354,6 +361,20 @@ theme-level variant list that built resolution and icon-artwork tooling use. The
 outputs and the guaranteed, best-effort, public-semantic, and private implementation
 tiers.
 
+### DEC-1 — One Astryx layer and its own class prefix
+
+**Decider:** pending
+
+Teams migrating page by page load Astryx next to another StyleX library. Their
+focus and hover styles lose, because both builds emit the same atomic class
+names, and appending Astryx's imports to an existing stylesheet silently flips
+the layer order. One nested layer and a unique class prefix make the order and
+the class names independent of what else the app loads.
+
+Rejected: documenting the layer statement more loudly, which still breaks
+silently when an app registers its layers first. Rejected: asking apps to
+rebuild Astryx with their own prefix.
+
 ## Verification
 
 | Invariant        | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                               | Failure signal                                                                                                                                                                                                                                                                                    |
@@ -372,6 +393,7 @@ tiers.
 | INV15            | CLI build fixtures with function entries, slot functions, a variant list, and an inherited entry under a replaced list, compared with runtime resolution                                                                                                                                                                                                                                                                                               | Built and runtime icons differ, a function is dropped silently, or tooling enumerates a variant an entry cannot receive                                                                                                                                                                           |
 | INV16            | Root, adaptation, media, nested-theme, and CLI-built status-alias fixtures                                                                                                                                                                                                                                                                                                                                                                             | A generated role escapes its source scope, overrides an authored role, changes cascade meaning, cycles, or differs by output path                                                                                                                                                                 |
 | INV17            | A minimal custom theme that sets only its four status fills, compiled at runtime and through the CLI build, plus themes that set a light fill, a grey fill, an unresolved fill, an unresolved card surface, only a surface, only a hue text token, a fill only inside an adaptation rule, and one that `extends` a theme setting a status role, each also read through non-CSS resolution                                                              | A content or text role is missing, misses an INV11 floor in light or dark mode, is grey, ignores a value the theme set, or differs between runtime, build, and non-CSS resolution; an icon or border role does not follow the text role; a fill is derived; or an inherited role is derived again |
+| INV19            | Real-browser fixtures: Astryx CSS appended after an app's Tailwind imports, and loaded next to another StyleX build                                                                                                                                                                                                                                                                                                                                    | An Astryx focus or hover rule that loses, or two builds that share an atomic class name                                                                                                                                                                                                           |
 
 ## Known conformance and verification gaps
 

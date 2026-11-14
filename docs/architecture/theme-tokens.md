@@ -219,6 +219,14 @@ then have contradictory winners.
   (`spec:AST-020` FR1; WCAG 2.2 SC 1.4.11). Other borders keep their own
   lighter roles (`--color-border` or `--color-border-emphasized`) (DEC-2).
 
+- **INV14 — The Tailwind projection never takes an app's names.** Astryx's
+  Tailwind projection ships in two forms. The default form keeps today's keys
+  for a new app. The coexistence form prefixes every key Astryx adds, such as
+  `astryx-card` and `astryx-radius-md`, so an app that already defines
+  `--color-card`, `--radius-*`, `--shadow-*`, `--text-*`, `--font-*`, or
+  `--spacing` keeps its own values. Neither form changes Astryx's CSS
+  variables; only the Tailwind keys differ (INV10) (DEC-4).
+
 This record does not own:
 
 - the `defineTheme` input shape, generated scales, or precedence;
@@ -329,10 +337,24 @@ surfaces would darken with it.
 Rejected: pointing fields at `--color-border-gray`, because it fails 3:1 in some
 themes and ties fields to badge theming.
 
+### DEC-4 — Coexisting with an app's Tailwind names
+
+**Decider:** pending
+
+A team adding Astryx to an app that already uses Tailwind finds 13 of its own
+theme names repainted, such as its card colour, radius ladder, and text scale,
+with no error. A prefixed projection lets that app keep its names while new
+apps keep the short keys.
+
+Rejected: prefixing every key for everyone, which breaks every current
+Tailwind user. Rejected: documentation only, which leaves the repaint
+silent.
+
 ## Verification
 
 | Invariant                    | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Failure signal                                                                                                                                                                                                                                                                 |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| INV14                        | Build checks of both projection forms against Tailwind v4's theme and a shadcn-style app theme                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | A coexistence-form key that matches an app's existing name, or a projection that changes an Astryx CSS variable                                                                                                                                                                |
 | INV1, INV2, INV7             | `scripts/check-theme-template.test.mjs` and token-doc generation check                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | A token family exists without a matching author-facing inventory or generated documentation                                                                                                                                                                                    |
 | INV5                         | Domain-token exports and theme-generation tests                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Domain names disappear from validation or require importing unused domain implementation                                                                                                                                                                                       |
 | INV6                         | `packages/core/src/theme/tokens.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | JavaScript resolution disagrees with defaults, mode selection, references, or supported color expressions                                                                                                                                                                      |
