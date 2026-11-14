@@ -170,11 +170,13 @@ let gatherDepth = 0;
 /**
  * The kept entries a recorded run has read back or stored, by file: the
  * version each holds, every state it stands for (its own and those of the
- * entries it builds on), and every entry it builds on, directly or not. A
- * later entry stores only the states none of them holds and names the ones it
- * builds on, so a run checks each state once. A kept entry is checked before
- * the run's command writes anything; the record ends with the run.
- * @typedef {Map<string, {version: string, stamps: [string, string][], under: Set<string>, deps: string[]}>} Confirmed
+ * entries it builds on, as the lists each stores, once each), and every entry
+ * it builds on, directly or not. A later entry stores only the states none of
+ * them holds and names the ones it builds on, so a run checks each state
+ * once. A kept entry is checked before the run's command writes anything; the
+ * record ends with the run.
+ * @typedef {{version: string, lists: [string, string][][], under: Set<string>, deps: string[], merged?: [string, string][]}} ConfirmedEntry
+ * @typedef {Map<string, ConfirmedEntry>} Confirmed
  */
 
 /**
@@ -620,12 +622,15 @@ function staleReason(stamps, env) {
  * @param {Confirmed} confirmed - the entries already found unchanged
  * @param {Set<string>} [reading] - entries being checked, so a loop of
  *   entries that name each other is a miss
- * @returns {{stamps: [string, string][], under: Set<string>, direct: string[]} | null}
+ * @returns {{lists: [string, string][][], under: Set<string>, direct: string[]} | null}
  */
 function builtOn(dir, deps, confirmed, reading = new Set()) {
   if (!Array.isArray(deps)) return null;
   /** @type {[string, string][][]} */
   const lists = [];
+  // Two entries this one names may build on one entry: its list counts once.
+  /** @type {Set<[string, string][]>} */
+  const listed = new Set();
   /** @type {Set<string>} */
   const under = new Set();
   /** @type {string[]} */
@@ -635,12 +640,28 @@ function builtOn(dir, deps, confirmed, reading = new Set()) {
     const file = path.join(dir, path.basename(dep[0]));
     const entry = confirmedEntry(file, dep[1], confirmed, reading);
     if (entry == null) return null;
-    lists.push(entry.stamps);
+    for (const list of entry.lists) {
+      if (listed.has(list)) continue;
+      listed.add(list);
+      lists.push(list);
+    }
     direct.push(file);
     under.add(file);
     for (const below of entry.under) under.add(below);
   }
-  return {stamps: mergeStates(...lists), under, direct};
+  return {lists, under, direct};
+}
+
+/**
+ * Every state a confirmed entry stands for, one per path: its lists, merged
+ * the first time something needs them as one (choosing what a new entry
+ * builds on).
+ * @param {ConfirmedEntry} entry
+ * @returns {[string, string][]}
+ */
+function statesOf(entry) {
+  entry.merged ??= mergeStates(...entry.lists);
+  return entry.merged;
 }
 
 /**
@@ -709,7 +730,7 @@ function markUsed(file, confirmed) {
  * @param {unknown} version
  * @param {Confirmed} confirmed
  * @param {Set<string>} reading
- * @returns {{version: string, stamps: [string, string][], under: Set<string>} | null}
+ * @returns {ConfirmedEntry | null}
  */
 function confirmedEntry(file, version, confirmed, reading) {
   const known = confirmed.get(file);
@@ -728,9 +749,10 @@ function confirmedEntry(file, version, confirmed, reading) {
     }
     const base = builtOn(path.dirname(file), stored.deps, confirmed, reading);
     if (base == null) return null;
+    /** @type {ConfirmedEntry} */
     const entry = {
       version: stored.version,
-      stamps: mergeStates(base.stamps, stored.stamps),
+      lists: [...base.lists, stored.stamps],
       under: base.under,
       deps: base.direct,
     };
@@ -764,17 +786,16 @@ function chooseBase(file, stamps, confirmed) {
   const under = new Set();
   const candidates = [...confirmed]
     .filter(([other, entry]) => other !== file && !entry.under.has(file))
-    .sort(([, a], [, b]) => b.stamps.length - a.stamps.length);
-  for (const [other, entry] of candidates) {
-    if (entry.stamps.length === 0) continue;
-    if (!entry.stamps.every(([at, state]) => states.get(at) === state)) {
-      continue;
-    }
-    if (entry.stamps.every(([at]) => covered.has(at))) continue;
+    .map(([other, entry]) => ({other, entry, held: statesOf(entry)}))
+    .sort((a, b) => b.held.length - a.held.length);
+  for (const {other, entry, held} of candidates) {
+    if (held.length === 0) continue;
+    if (!held.every(([at, state]) => states.get(at) === state)) continue;
+    if (held.every(([at]) => covered.has(at))) continue;
     deps.push([path.basename(other), entry.version]);
     under.add(other);
     for (const below of entry.under) under.add(below);
-    for (const [at] of entry.stamps) covered.add(at);
+    for (const [at] of held) covered.add(at);
   }
   return {deps, own: stamps.filter(([at]) => !covered.has(at)), under};
 }
@@ -865,15 +886,17 @@ async function gatherAt(key, load, codec, keep) {
         // Gathered again below, and stored over the bad entry.
         reason = 'a malformed value';
       } else if (stale == null) {
+        /** @type {ConfirmedEntry} */
         const entry = seen ?? {
           version: stored.version,
-          stamps: mergeStates(base?.stamps ?? [], stored.stamps),
+          lists: [...(base?.lists ?? []), stored.stamps],
           under: base?.under ?? new Set(),
           deps: base?.direct ?? [],
         };
         confirmed.set(file, entry);
-        const {stamps} = entry;
-        recordStates(stamps);
+        // Recorded list by list, which keeps one state per path as a merge
+        // would (recordStates).
+        for (const list of entry.lists) recordStates(list);
         // A gather around this one depends on what this one read, the
         // environment included: a hit hands its variables on, as a fresh
         // gather's reads would be.
@@ -882,7 +905,10 @@ async function gatherAt(key, load, codec, keep) {
             if (!run.env.has(name)) run.env.set(name, value);
           }
         }
-        gatherCode = cliStates(stamps);
+        // The CLI's own files, one state per path, in the order a fresh
+        // gather reads them: merging only those is merging all, then picking
+        // them out.
+        gatherCode = mergeStates(...entry.lists.map(cliStates));
         lastOutcome = {hit: true, reason: 'unchanged'};
         markUsed(file, confirmed);
         return value;
@@ -1170,7 +1196,7 @@ function store(dir, file, entry, value, codec) {
     fs.renameSync(temp, file);
     run.confirmed.set(file, {
       version,
-      stamps,
+      lists: [stamps],
       under,
       deps: deps.map(([name]) => path.join(dir, name)),
     });
