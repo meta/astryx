@@ -151,8 +151,27 @@ export function suggestionTier(command, names, typed) {
 }
 
 /**
- * The entry of `command` that `typed` names at the best tier, the first such
- * entry in catalog order, or null when none matches by name.
+ * Whether `match`, an entry of `command`, beats `best`: a better tier, or,
+ * for docs routes in one tier, fewer path segments.
+ * @param {LookupCommand} command
+ * @param {{name: string, tier: number}} match
+ * @param {{name: string, tier: number} | null} best
+ * @returns {boolean}
+ */
+function beats(command, match, best) {
+  if (!best) return match.tier < MATCH_TIER.words;
+  if (match.tier !== best.tier) return match.tier < best.tier;
+  return (
+    command === 'docs' &&
+    match.name.split('/').length < best.name.split('/').length
+  );
+}
+
+/**
+ * The entry of `command` that `typed` names at the best tier, or null when
+ * none matches by name. Inside a tier, the docs route with the fewest
+ * segments wins, since it is closest to the root of the docs tree; then the
+ * first entry in catalog order.
  * @param {LookupCommand} command
  * @param {string[] | undefined} names
  * @param {string} typed
@@ -162,9 +181,9 @@ function bestMatch(command, names, typed) {
   /** @type {{name: string, tier: number} | null} */
   let best = null;
   for (const name of names ?? []) {
-    const tier = nameTier(command, name, typed);
-    if (tier < (best?.tier ?? MATCH_TIER.words)) best = {name, tier};
-    if (tier === MATCH_TIER.exact) break;
+    const match = {name, tier: nameTier(command, name, typed)};
+    if (beats(command, match, best)) best = match;
+    if (match.tier === MATCH_TIER.exact) break;
   }
   return best;
 }
@@ -192,7 +211,8 @@ function hintFor(command, name, from, tier) {
  * `entries`, with the tier it matches at, or null. The entry must match by
  * name: exact, folded, or by the last segment of a path id
  * ({@link MATCH_TIER}). A better tier wins. Inside a tier, a component wins
- * over a hook, a hook over a template, and a template over a docs topic.
+ * over a hook, a hook over a template, and a template over a docs topic;
+ * among docs routes, the one with the fewest segments wins.
  * @param {string} typed
  * @param {LookupNames} entries
  * @param {LookupCommand} from the command that did not find `typed`

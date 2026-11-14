@@ -150,6 +150,33 @@ describe('otherCommand', () => {
     );
   });
 
+  it('prefers the docs route closest to the root inside a tier, then tree order', () => {
+    const docs = [
+      'quiv/api/functions/brindle',
+      'quiv/commands/brindle',
+      'zell/commands/brindle',
+      'quiv/api/functions/sproket-kit',
+      'quiv/sproket-kit',
+    ];
+    expect(named('brindle', {docs}, 'hook')?.name).toBe(
+      'astryx docs quiv/commands/brindle',
+    );
+    expect(named('sproket kit', {docs}, 'component')?.name).toBe(
+      'astryx docs quiv/sproket-kit',
+    );
+    expect(
+      named('brindle', {docs: ['brindle-zone', ...docs, 'brindle']}, 'hook')
+        ?.name,
+    ).toBe('astryx docs brindle');
+    expect(
+      named(
+        'brindle',
+        {docs: ['quiv/a/brindle'], templates: ['parts/x/y/brindle']},
+        'hook',
+      )?.name,
+    ).toBe('astryx template parts/x/y/brindle');
+  });
+
   it('prefers a better tier over the command order', () => {
     const entries = {components: ['MosselKit'], docs: ['mossel-kit']};
     expect(named('mossel-kit', entries, 'hook')?.name).toBe(

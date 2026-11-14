@@ -101,18 +101,19 @@ owns response fields and compatibility.
   of the first three tiers, the command that reads that entry, by its full id
   (`astryx hook useHotkeys`), joins the list. A better tier wins; inside a
   tier, a component wins over a hook, a hook over a template, and a template
-  over a docs topic. That command goes right after the last suggestion that
-  matches at its tier or a better one, so it goes first when none does. The
-  list never grows: the last suggestion drops, and a command that would come
-  last is left out. That command is the only suggestion when the list is
-  otherwise empty, and, for docs, when no route it suggests shares a word with
-  the argument. A component error for an example block keeps its suggestions,
-  since its message already names `astryx template`. A name that resolves
-  keeps resolving to the same entry. A component's exact name in another case
-  is that component's: a module that only shares its spelling never resolves
-  for it. Which candidates fill a component list and the order of every list
-  change only under FR6, measured on the held-out and fresh failed-lookup
-  evaluation sets. FR5 holds for this order.
+  over a docs topic; among docs routes, the route with the fewest segments
+  wins, then the first in tree order. That command goes right after the last
+  suggestion that matches at its tier or a better one, so it goes first when
+  none does. The list never grows: the last suggestion drops, and a command
+  that would come last is left out. That command is the only suggestion when
+  the list is otherwise empty, and, for docs, when no route it suggests shares
+  a word with the argument. A component error for an example block keeps its
+  suggestions, since its message already names `astryx template`. A name that
+  resolves keeps resolving to the same entry. A component's exact name in
+  another case is that component's: a module that only shares its spelling
+  never resolves for it. Which candidates fill a component list and the order
+  of every list change only under FR6, measured on the held-out and fresh
+  failed-lookup evaluation sets. FR5 holds for this order.
 
 ## Current-state impact
 
