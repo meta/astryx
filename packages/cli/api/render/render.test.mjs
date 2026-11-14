@@ -2409,6 +2409,25 @@ export default function Page() {
     expect(warning?.message).toContain("The page asks useMediaQuery('(min-width: 1024px)'), matchMedia('(prefers-reduced-motion: reduce)') in JavaScript");
   }, 60_000);
 
+  it("names the hook called through a namespace import of Core, and a call with no query, without failing the render", async () => {
+    put(
+      'screen-query-namespace.tsx',
+      `import * as core from '@astryxdesign/core';
+function never() {
+  return [window.matchMedia?.(), matchMedia(), core.useMediaQuery()];
+}
+export default function Page() {
+  const narrow = core.useMediaQuery('(max-width: 600px)');
+  return <main>{narrow ? 'Narrow' : 'Wide'}{typeof never}</main>;
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('screen-query-namespace.tsx', {cwd: dir}));
+    expect(result.type).toBe('render.page');
+    const warning = result.data.warnings.find((/** @type {any} */ w) => w.code === 'screen-query');
+    expect(warning?.message).toContain("The page asks matchMedia(), useMediaQuery(), useMediaQuery('(max-width: 600px)') in JavaScript");
+  }, 60_000);
+
   it('says nothing for a page that asks no media query, or calls a function of its own named like the hook', async () => {
     put(
       'no-screen-query.tsx',

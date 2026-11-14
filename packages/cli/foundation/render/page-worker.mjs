@@ -109,33 +109,38 @@ const MEDIA_QUERY_HOOK = {sources: new Set(['@astryxdesign/core', '@astryxdesign
  */
 function screenQuery(p) {
   const callee = p.node.callee;
+  /** @param {any} spec the binding's path @param {boolean} namespace */
+  const fromCore = (spec, namespace) =>
+    (namespace ? spec?.isImportNamespaceSpecifier() : spec?.isImportSpecifier()) &&
+    MEDIA_QUERY_HOOK.sources.has(spec.parentPath.node.source.value);
   let name = null;
   if (callee.type === 'Identifier') {
     const binding = p.scope.getBinding(callee.name);
     const spec = binding?.path;
     if (!binding && callee.name === 'matchMedia') name = 'matchMedia';
+    else if (fromCore(spec, false) && (spec.node.imported.name ?? spec.node.imported.value) === MEDIA_QUERY_HOOK.name) {
+      name = MEDIA_QUERY_HOOK.name;
+    }
+  } else if ((callee.type === 'MemberExpression' || callee.type === 'OptionalMemberExpression') && !callee.computed) {
+    if (callee.property.name === 'matchMedia') name = 'matchMedia';
+    // `core.useMediaQuery(…)` through `import * as core from '@astryxdesign/core'`.
     else if (
-      spec?.isImportSpecifier() &&
-      MEDIA_QUERY_HOOK.sources.has(spec.parentPath.node.source.value) &&
-      (spec.node.imported.name ?? spec.node.imported.value) === MEDIA_QUERY_HOOK.name
+      callee.property.name === MEDIA_QUERY_HOOK.name &&
+      callee.object.type === 'Identifier' &&
+      fromCore(p.scope.getBinding(callee.object.name)?.path, true)
     ) {
       name = MEDIA_QUERY_HOOK.name;
     }
-  } else if (
-    (callee.type === 'MemberExpression' || callee.type === 'OptionalMemberExpression') &&
-    !callee.computed &&
-    callee.property.name === 'matchMedia'
-  ) {
-    name = 'matchMedia';
   }
   if (!name) return null;
   const arg = p.node.arguments[0];
-  const query =
-    arg?.type === 'StringLiteral'
+  const query = !arg
+    ? ''
+    : arg.type === 'StringLiteral'
       ? JSON.stringify(arg.value).replace(/^"|"$/g, "'")
-      : arg?.type === 'TemplateLiteral' && arg.expressions.length === 0
+      : arg.type === 'TemplateLiteral' && arg.expressions.length === 0
         ? `'${arg.quasis[0].value.cooked}'`
-        : (p.get('arguments.0').getSource?.() ?? '');
+        : (p.get('arguments.0')?.getSource?.() ?? '');
   return `${name}(${query})`;
 }
 
