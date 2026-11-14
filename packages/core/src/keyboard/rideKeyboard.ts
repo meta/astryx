@@ -22,13 +22,18 @@ import type {
 import {cubicBezier} from '../motion/bezier';
 import type {KeyboardTransition} from './keyboardModel';
 
-/** How a ride treats Reduce Motion. */
+/** How a ride treats Reduce Motion and a curve already on screen. */
 export interface RideOptions {
   /**
    * Under Reduce Motion, lands the element at once and fades it in. Without
    * it, the animator's own Reduce Motion plan applies.
    */
   readonly entrance?: boolean;
+  /**
+   * Adds the ride to a curve the element plays, such as a bounce, instead of
+   * replacing it (the animator's `additive`).
+   */
+  readonly additive?: boolean;
 }
 
 /**
@@ -54,7 +59,7 @@ export function rideKeyboard(
   animator: Animator,
   to: MotionValues,
   transition: KeyboardTransition,
-  {entrance = false}: RideOptions = {},
+  {entrance = false, additive = false}: RideOptions = {},
 ): MotionHandle | null {
   // A frame after a busy task still draws an animation at that task's
   // start. The ride sets a slide that has already ended, so no frame shows the
@@ -70,9 +75,12 @@ export function rideKeyboard(
   // Under Reduce Motion nothing travels. The animator's default cross-fades
   // the element to its new place on a touch screen, and elsewhere moves it at
   // once. An entrance lands it at once and fades it in.
-  const options = entrance
-    ? {at: transition.start, crossfadeAs: 'entrance' as const}
+  const timing = additive
+    ? {at: transition.start, additive}
     : {at: transition.start};
+  const options = entrance
+    ? {...timing, crossfadeAs: 'entrance' as const}
+    : timing;
   const span = transition.curve.durationMs / 1000;
   const ease = cubicBezier(transition.curve.points);
   const curves: Partial<Record<MotionProperty, MotionCurve>> = {};

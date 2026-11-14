@@ -12,7 +12,11 @@
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {LongPressGestureRecognizer} from '../LongPressGestureRecognizer';
-import {createNativeScrollProbe, parseTouchAction} from '../nativeScroll';
+import {
+  createNativeScrollProbe,
+  dragAxes,
+  parseTouchAction,
+} from '../nativeScroll';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
 import {PinchGestureRecognizer} from '../PinchGestureRecognizer';
 import {ScreenEdgePanGestureRecognizer} from '../ScreenEdgePanGestureRecognizer';
@@ -162,6 +166,20 @@ function withTouchActionFromData(): () => void {
     });
   return () => spy.mockRestore();
 }
+
+describe('dragAxes', () => {
+  it('counts an axis only at half the other one’s travel or more', () => {
+    expect(dragAxes(10, 20)).toEqual({x: true, y: true});
+    expect(dragAxes(9, 20)).toEqual({x: false, y: true});
+    expect(dragAxes(-20, 9)).toEqual({x: true, y: false});
+    expect(dragAxes(-20, -10)).toEqual({x: true, y: true});
+  });
+
+  it('counts no axis for a drag that has not moved', () => {
+    expect(dragAxes(0, 0)).toEqual({x: false, y: false});
+    expect(dragAxes(0, 4)).toEqual({x: false, y: true});
+  });
+});
 
 describe('createNativeScrollProbe', () => {
   let restore: () => void = () => {};
