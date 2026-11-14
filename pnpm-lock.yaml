@@ -760,7 +760,7 @@ importers:
   packages/charts:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.16
+        specifier: 0.7.17
         version: link:../core
       '@stylexjs/stylex':
         specifier: '>=0.10.0'
@@ -838,6 +838,9 @@ importers:
       css-tree:
         specifier: 3.2.1
         version: 3.2.1
+      globals:
+        specifier: 17.14.0
+        version: 17.14.0
       ignore:
         specifier: ^7.0.14
         version: 7.0.14
@@ -958,7 +961,7 @@ importers:
   packages/lab:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.16
+        specifier: 0.7.17
         version: link:../core
       '@stylexjs/stylex':
         specifier: '>=0.10.0'
@@ -1031,7 +1034,7 @@ importers:
   packages/richtext:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.16
+        specifier: 0.7.17
         version: link:../core
       '@stylexjs/stylex':
         specifier: '>=0.10.0'
@@ -1110,7 +1113,7 @@ importers:
   packages/themes/butter:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.16
+        specifier: 0.7.17
         version: link:../../core
       lucide-react:
         specifier: ^1.66.0
@@ -1120,13 +1123,13 @@ importers:
         version: 19.3.1
     devDependencies:
       '@astryxdesign/cli':
-        specifier: 0.7.16
+        specifier: 0.7.17
         version: link:../../cli
 
   packages/themes/chocolate:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.16
+        specifier: 0.7.17
         version: link:../../core
       lucide-react:
         specifier: ^1.66.0
@@ -1136,13 +1139,13 @@ importers:
         version: 19.3.1
     devDependencies:
       '@astryxdesign/cli':
-        specifier: 0.7.16
+        specifier: 0.7.17
         version: link:../../cli
 
   packages/themes/gothic:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.16
+        specifier: 0.7.17
         version: link:../../core
       lucide-react:
         specifier: ^1.66.0
@@ -1152,13 +1155,13 @@ importers:
         version: 19.3.1
     devDependencies:
       '@astryxdesign/cli':
-        specifier: 0.7.16
+        specifier: 0.7.17
         version: link:../../cli
 
   packages/themes/matcha:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.16
+        specifier: 0.7.17
         version: link:../../core
       lucide-react:
         specifier: ^1.66.0
@@ -1168,13 +1171,13 @@ importers:
         version: 19.3.1
     devDependencies:
       '@astryxdesign/cli':
-        specifier: 0.7.16
+        specifier: 0.7.17
         version: link:../../cli
 
   packages/themes/neutral:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.16
+        specifier: 0.7.17
         version: link:../../core
       lucide-react:
         specifier: ^1.66.0
@@ -1184,20 +1187,20 @@ importers:
         version: 19.3.1
     devDependencies:
       '@astryxdesign/cli':
-        specifier: 0.7.16
+        specifier: 0.7.17
         version: link:../../cli
 
   packages/themes/probe:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.16
+        specifier: 0.7.17
         version: link:../../core
       react:
         specifier: '>=19'
         version: 19.3.1
     devDependencies:
       '@astryxdesign/cli':
-        specifier: 0.7.16
+        specifier: 0.7.17
         version: link:../../cli
       tsup:
         specifier: ^8.3.0
@@ -1206,7 +1209,7 @@ importers:
   packages/themes/stone:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.16
+        specifier: 0.7.17
         version: link:../../core
       lucide-react:
         specifier: ^1.66.0
@@ -1216,13 +1219,13 @@ importers:
         version: 19.3.1
     devDependencies:
       '@astryxdesign/cli':
-        specifier: 0.7.16
+        specifier: 0.7.17
         version: link:../../cli
 
   packages/themes/y2k:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.16
+        specifier: 0.7.17
         version: link:../../core
       lucide-react:
         specifier: ^1.66.0
@@ -1232,7 +1235,7 @@ importers:
         version: 19.3.1
     devDependencies:
       '@astryxdesign/cli':
-        specifier: 0.7.16
+        specifier: 0.7.17
         version: link:../../cli
 
   packages/vega:
@@ -5101,6 +5104,10 @@ packages:
   glob@7.2.3:
     resolution: {integrity: sha512-nFR0zLpU2YCaRxwoCJvL6UvCH2JFyFVIvwTLsIf21AuHlMskA1hhTdk+LlYJtOlYt9v6dvszD2BGRqBL+iQK9Q==}
     deprecated: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+
+  globals@17.14.0:
+    resolution: {integrity: sha512-UtdkTVyAJePQv0J2M9Xe4L0ruNSDV314XiIJsADI2Zf40bcdAonE/D/OhAU8AT99oij9mhLByb+NvA3QWZYgCg==}
+    engines: {node: '>=18'}
 
   globby@11.1.0:
     resolution: {integrity: sha512-jhIXaOzy1sb8IyocaruWSn1TjmnBVs8Ayhcy83rmxNJ8q2uWKCAj3CnJY+KpGSXCueAPc0i05kVvVKtP1t9S3g==}
@@ -11114,6 +11121,8 @@ snapshots:
       minimatch: 3.1.5
       once: 1.4.0
       path-is-absolute: 1.0.1
+
+  globals@17.14.0: {}
 
   globby@11.1.0:
     dependencies:

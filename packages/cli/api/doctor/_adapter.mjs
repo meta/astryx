@@ -70,6 +70,7 @@ import {
   findProjectCoreDir,
   findInstalledPackage,
 } from '../../foundation/fs/paths.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
 export {
   isLocalThemeOwner,
   planThemeAppWrite,
@@ -131,8 +132,9 @@ export function keptFileCheck(
   check,
   codec = CHECK_CODEC,
 ) {
-  // Only a recorded run (a plain `doctor` from the bin) reads or keeps one: a
-  // hosted run names its commands its own way, so it always checks.
+  // Only a recorded run (`doctor` from the bin, with or without `--built`)
+  // reads or keeps one: a hosted run names its commands its own way, so it
+  // always checks.
   if (!recordedRun()) return check();
   return persistedGather(
     // With the command name the checks print commands with.
@@ -282,7 +284,7 @@ export function findIconPlaceholders(projectDir) {
       uses: uses.length,
     });
   }
-  return found.sort((a, b) => a.file.localeCompare(b.file));
+  return found.sort((a, b) => compareText(a.file, b.file));
 }
 
 /** @param {string} projectDir */
@@ -796,7 +798,7 @@ export function readBuiltPath(target, {fileLimit = BUILT_FILE_LIMIT} = {}) {
     } catch {
       continue;
     }
-    entries.sort((a, b) => a.name.localeCompare(b.name));
+    entries.sort((a, b) => compareText(a.name, b.name));
     for (const entry of entries) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
