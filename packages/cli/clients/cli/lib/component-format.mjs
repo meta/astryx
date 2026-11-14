@@ -11,6 +11,7 @@ import {
 } from '../../../foundation/discovery/component-discovery.mjs';
 import {loadDocs} from '../../../foundation/discovery/component-loader.mjs';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
+import {firstSentence} from '../../../foundation/text/string-utils.mjs';
 
 /**
  * Derive the `defineTheme` component-override key from a theming target.
@@ -79,11 +80,14 @@ export function mdCell(value) {
 /**
  * Render props as a list, one prop per line: name, type, default, the
  * required and experimental markers, then the description. A list item needs
- * no cell escaping, so a union type keeps its pipes as written.
+ * no cell escaping, so a union type keeps its pipes as written. A component
+ * read prints each description's first sentence; the `--props` view prints it
+ * whole.
  * @param {import('@astryxdesign/cli/authoring').ComponentPropDoc[]} [props]
+ * @param {{whole?: boolean}} [options]
  * @returns {string}
  */
-function formatPropsList(props) {
+function formatPropsList(props, {whole = false} = {}) {
   if (!props || props.length === 0) return '';
   return props
     .map(p => {
@@ -93,10 +97,39 @@ function formatPropsList(props) {
       // experimental prop is outside the stable compatibility promise.
       const stability =
         p.stability === 'experimental' ? ' **(experimental)**' : '';
-      const description = p.description ?? '';
+      const full = p.description ?? '';
+      const description = whole ? full : firstSentence(full);
       return `- \`${p.name}\`: \`${p.type ?? ''}\`${def}${req}${stability}${description ? ` - ${description}` : ''}`;
     })
     .join('\n');
+}
+
+/**
+ * How a read prints prop descriptions: each one's first sentence, under one
+ * line that names the command printing them whole, or every one whole. A read
+ * prints them whole when it has no such command, or when the cut would save
+ * fewer characters than that line costs.
+ * @param {any} docs
+ * @param {string | null | undefined} propsCommand - The `component … --props`
+ *   command that prints this read's props whole, without the CLI prefix.
+ * @returns {{whole: boolean, pointer: string[]}}
+ */
+function propsPlan(docs, propsCommand) {
+  if (!propsCommand) return {whole: true, pointer: []};
+  /** @type {import('@astryxdesign/cli/authoring').ComponentPropDoc[]} */
+  const props = [
+    ...(docs.props ?? []),
+    ...(docs.components ?? []).flatMap((/** @type {any} */ c) => c.props ?? []),
+  ];
+  let saved = 0;
+  for (const p of props) {
+    const flat = (p.description ?? '').replace(/\s+/g, ' ').trim();
+    saved += flat.length - firstSentence(flat).length;
+  }
+  const pointer = `Each prop description's first sentence; \`${getCliInvocation()} ${propsCommand}\` prints them whole.\n`;
+  return saved > pointer.length
+    ? {whole: false, pointer: [pointer]}
+    : {whole: true, pointer: []};
 }
 
 /**
@@ -150,15 +183,16 @@ export function formatAccessibility(accessibility, heading = '##') {
  * description only when present, and when there are no inline props point the
  * reader at the sub-component's own docs instead of a blank/`undefined` block.
  * @param {any} comp
+ * @param {boolean} [whole] - print prop descriptions whole
  * @returns {string[]}
  */
-function formatSubComponent(comp) {
+function formatSubComponent(comp, whole = true) {
   const out = [`### ${comp.name}\n`];
   if (comp.description) {
     out.push(comp.description + '\n');
   }
   out.push(...formatAccessibility(comp.usage?.accessibility, '####'));
-  const list = formatPropsList(comp.props);
+  const list = formatPropsList(comp.props, {whole});
   if (list) {
     out.push(list + '\n');
   } else {
@@ -190,9 +224,10 @@ function isBareReference(comp) {
  * of twenty parts costs one line instead of twenty headings.
  * @param {any[]} components
  * @param {string} [exampleHashes] - heading level for inline examples; none when omitted
+ * @param {boolean} [whole] - print prop descriptions whole
  * @returns {string[]}
  */
-function formatSubComponents(components, exampleHashes) {
+function formatSubComponents(components, exampleHashes, whole = true) {
   /** @type {string[]} */
   const out = [];
   /** @type {string[]} */
@@ -215,7 +250,7 @@ function formatSubComponents(components, exampleHashes) {
       continue;
     }
     flush();
-    out.push(...formatSubComponent(comp));
+    out.push(...formatSubComponent(comp, whole));
     if (exampleHashes && comp.examples?.length) {
       for (const ex of comp.examples) {
         out.push(...formatExample(ex, exampleHashes));
@@ -350,6 +385,8 @@ function formatTargetsTable(docs, themeData) {
  * @param {object} [options] - Options
  * @param {any} [options.themeData] - Resolved theme data
  * @param {string|null} [options.importHint] - Import path hint (e.g. '@astryxdesign/core/Button')
+ * @param {string|null} [options.propsCommand] - The `component … --props` command
+ *   that prints this read's props whole; without it, descriptions print whole
  */
 export function formatFull(docs, options = {}) {
   /** @type {string[]} */
@@ -387,16 +424,25 @@ export function formatFull(docs, options = {}) {
 
   sections.push(...formatAccessibility(docs.usage?.accessibility));
 
+  const plan = propsPlan(docs, options.propsCommand);
+  // The pointer prints once, above the first props list.
+  let pointer = plan.pointer;
+
   // Single component props
   if ('props' in docs) {
     sections.push('## Props\n');
-    sections.push(formatPropsList(docs.props) + '\n');
+    sections.push(...pointer);
+    pointer = [];
+    sections.push(formatPropsList(docs.props, {whole: plan.whole}) + '\n');
   }
 
   // Multi-component
   if ('components' in docs) {
     sections.push('## Components\n');
-    sections.push(...formatSubComponents(docs.components, '####'));
+    if (docs.components.some((/** @type {any} */ c) => c.props?.length)) {
+      sections.push(...pointer);
+    }
+    sections.push(...formatSubComponents(docs.components, '####', plan.whole));
   }
 
   if (docs.examples?.length) {
@@ -524,9 +570,11 @@ export function formatFull(docs, options = {}) {
  * @param {any} docs
  * @param {string} componentName
  * @param {string} [importHint]
+ * @param {{propsCommand?: string|null}} [options] - `propsCommand` is the
+ *   `component … --props` command that prints this read's props whole
  * @returns {string}
  */
-export function formatCompact(docs, componentName, importHint) {
+export function formatCompact(docs, componentName, importHint, options = {}) {
   // Bare name (un-prefix migration P5a): the CLI now presents component names
   // without the Astryx prefix. componentName is already bare post-P4.
   const displayName = componentName.startsWith('XDS')
@@ -564,14 +612,25 @@ export function formatCompact(docs, componentName, importHint) {
 
   sections.push(...formatAccessibility(docs.usage?.accessibility));
 
+  const plan = propsPlan(docs, options.propsCommand);
+  // The pointer prints once, above the first props list.
+  let pointer = plan.pointer;
+
   // Props
   if ('props' in docs) {
     sections.push('## Props\n');
-    sections.push(formatPropsList(docs.props) + '\n');
+    sections.push(...pointer);
+    pointer = [];
+    sections.push(formatPropsList(docs.props, {whole: plan.whole}) + '\n');
   }
 
   if ('components' in docs) {
-    sections.push(...formatSubComponents(docs.components));
+    if (docs.components.some((/** @type {any} */ c) => c.props?.length)) {
+      sections.push(...pointer);
+    }
+    sections.push(
+      ...formatSubComponents(docs.components, undefined, plan.whole),
+    );
   }
 
   // Limited examples (max 3)
@@ -791,7 +850,7 @@ export function formatBrief(docs, componentName, importHint, options = {}) {
  */
 export function formatProps(docs, componentName) {
   if ('props' in docs) {
-    return `## Props\n\n${formatPropsList(docs.props)}\n`;
+    return `## Props\n\n${formatPropsList(docs.props, {whole: true})}\n`;
   }
 
   if ('components' in docs) {
@@ -799,7 +858,7 @@ export function formatProps(docs, componentName) {
     const sections = [];
     for (const comp of docs.components) {
       sections.push(`### ${comp.name} Props\n`);
-      sections.push(formatPropsList(comp.props) + '\n');
+      sections.push(formatPropsList(comp.props, {whole: true}) + '\n');
     }
     return sections.join('\n');
   }

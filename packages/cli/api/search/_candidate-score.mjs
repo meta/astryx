@@ -130,25 +130,50 @@ function mentionPattern(term, t) {
 }
 
 /**
- * Each prose text lowercased once per process: a search reads every
- * candidate's description for every term.
- * @type {Map<string, string>}
+ * Each candidate's names and keywords lowercased once, and its description,
+ * prose and guidance lowercased on first use: a search scores every candidate
+ * for every term and synonym. Keyed by the candidate object, so it goes when
+ * the catalog does. A candidate's name, aliases, keywords, description, prose
+ * and guidance must not change after its first score, as no catalog changes
+ * them: an edited candidate, including one in a stored index passed to
+ * `rankSearchIndex()` again, would still be scored on its first text.
+ * @type {WeakMap<object, {names: {name: string, lower: string, leaf: string}[], keywords: {kw: string, text: string, lower: string}[], description?: string, prose: (string | undefined)[], guidance: (string | undefined)[]}>}
  */
-const lowered = new Map();
+const prepared = new WeakMap();
 
-/** How many texts are kept lowercased before the cache starts over. */
-const CACHE_LIMIT = 100_000;
+/** @param {any} candidate */
+function prepare(candidate) {
+  let p = prepared.get(candidate);
+  if (p === undefined) {
+    const {name, aliases = [], keywords = []} = candidate;
+    p = {
+      names: [name, ...aliases.filter(Boolean)].map(n => {
+        const l = n.toLowerCase();
+        return {name: n, lower: l, leaf: l.slice(l.lastIndexOf('/') + 1)};
+      }),
+      keywords: keywords.map((/** @type {string} */ kw) => {
+        const text = String(kw);
+        return {kw, text, lower: text.toLowerCase()};
+      }),
+      description: undefined,
+      prose: [],
+      guidance: [],
+    };
+    prepared.set(candidate, p);
+  }
+  return p;
+}
 
 /**
- * @param {string} text
- * @returns {string}
+ * @param {(string | undefined)[]} memo
+ * @param {unknown[]} blobs
+ * @param {number} i
  */
-function lower(text) {
-  let out = lowered.get(text);
+function loweredAt(memo, blobs, i) {
+  let out = memo[i];
   if (out === undefined) {
-    if (lowered.size >= CACHE_LIMIT) lowered.clear();
-    out = text.toLowerCase();
-    lowered.set(text, out);
+    out = String(blobs[i]).toLowerCase();
+    memo[i] = out;
   }
   return out;
 }
@@ -196,10 +221,7 @@ export function scoreCandidate(
   {fuzzy = true, joins = true, part = false, synonym = false} = {},
 ) {
   const {
-    name,
-    aliases = [],
     domain,
-    keywords = [],
     description = '',
     prose = [],
     guidance = [],
@@ -208,6 +230,7 @@ export function scoreCandidate(
   } = candidate;
   // The term's forms, worked out once for every word below.
   const t = termWords(term);
+  const p = prepare(candidate);
   let best = 0;
   let reason = '';
   /** @type {'partial' | 'keyword' | false} */
@@ -229,11 +252,13 @@ export function scoreCandidate(
   // ── Name signals ────────────────────────────────────────────────
   // An alias is a name too: a theme answers to its display name as well as
   // its slug.
-  for (const candidateName of [name, ...aliases.filter(Boolean)]) {
-    const nameLower = candidateName.toLowerCase();
+  for (const {
+    name: candidateName,
+    lower: nameLower,
+    leaf: leafLower,
+  } of p.names) {
     // A placed guide's name is its route, and the route's last segment is its
     // name too, as a flat topic's is: `codemods` is authoring/building-blocks/codemods.
-    const leafLower = nameLower.slice(nameLower.lastIndexOf('/') + 1);
 
     // A plural of the name is the name: `integration` is the `integrations`
     // guides, `tab` the `tabs` doc.
@@ -315,8 +340,7 @@ export function scoreCandidate(
 
   // ── Keyword signals ─────────────────────────────────────────────
   const termJoined = joined(term);
-  for (const kw of keywords) {
-    const kwLower = String(kw).toLowerCase();
+  for (const {kw, text: kwText, lower: kwLower} of p.keywords) {
     // A one-word keyword typed as separate words is the keyword: `number
     // field` is `numberfield`. Only a
     // lowercase keyword, one an author declares for a reader to type: a
@@ -326,12 +350,7 @@ export function scoreCandidate(
       consider(90, `keyword "${kw}"`);
       continue;
     }
-    if (
-      joins &&
-      domain !== 'doc' &&
-      /\s/.test(term) &&
-      String(kw) === termJoined
-    ) {
+    if (joins && domain !== 'doc' && /\s/.test(term) && kwText === termJoined) {
       consider(90, `keyword "${kw}"`, 'keyword');
       continue;
     }
@@ -368,12 +387,12 @@ export function scoreCandidate(
   // so "chart" matches "charts" and "filter" matches "filtering".
   if (term.length >= 3) {
     const re = mentionPattern(term, t);
-    if (description && re.test(lower(description))) {
+    if (description && re.test((p.description ??= description.toLowerCase()))) {
       consider(50, `description mentions "${term}"`);
     } else {
       let matchedProse = false;
-      for (const blob of prose) {
-        if (blob && re.test(lower(String(blob)))) {
+      for (let i = 0; i < prose.length; i++) {
+        if (prose[i] && re.test(loweredAt(p.prose, prose, i))) {
           consider(50, `docs mention "${term}"`);
           matchedProse = true;
           break;
@@ -383,8 +402,8 @@ export function scoreCandidate(
       // so the term appearing there is weaker evidence than the component's own
       // summary. Only consulted when nothing stronger matched.
       if (!matchedProse) {
-        for (const blob of guidance) {
-          if (blob && re.test(lower(String(blob)))) {
+        for (let i = 0; i < guidance.length; i++) {
+          if (guidance[i] && re.test(loweredAt(p.guidance, guidance, i))) {
             consider(45, `guidance mentions "${term}"`);
             break;
           }
