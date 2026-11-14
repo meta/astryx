@@ -942,6 +942,27 @@ describe('render(): every write stays inside the current folder', () => {
     expect(again.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('missing-asset');
   }, 60_000);
 
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'leaves out a named image it cannot read, and says so, instead of ending the render',
+    async () => {
+      put('locked-name/locked.png', PNG);
+      put('locked-name/names.ts', "export const locked = './locked.png';\n");
+      put('locked-name/page.tsx', "import {locked} from './names';\nexport default function Page() {\n  return <p>{locked.length}</p>;\n}\n");
+      fs.chmodSync(path.join(dir, 'locked-name/locked.png'), 0o000);
+      try {
+        const result = /** @type {any} */ (await render('locked-name/page.tsx', {cwd: dir}));
+        expect(result.data.files).toEqual(['page.tsx', 'names.ts']);
+        expect(result.data.warnings).toContainEqual({
+          code: 'not-embedded',
+          message: 'locked.png is named in names.ts but not carried in the file: it cannot be read (EACCES), so --reverse cannot give it back.',
+        });
+      } finally {
+        fs.chmodSync(path.join(dir, 'locked-name/locked.png'), 0o644);
+      }
+    },
+    60_000,
+  );
+
   it('renders a page whose module names a path the system cannot look up', async () => {
     put('long-name/names.ts', `export const far = './${'a'.repeat(300)}.png';\n`);
     put('long-name/page.tsx', "import {far} from './names';\nexport default function Page() {\n  return <p>{far.length}</p>;\n}\n");
