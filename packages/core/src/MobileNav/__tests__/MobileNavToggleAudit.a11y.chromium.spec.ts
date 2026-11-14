@@ -12,6 +12,7 @@ import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import AxeBuilder from '@axe-core/playwright';
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {holdMotionStill} from '@astryxdesign/a11y-spec/chromium';
 import {
@@ -220,6 +221,20 @@ async function axButtons(page: Page, name: string) {
   }
 }
 
+/** Axe on the toggle alone, WCAG 2.2 A and AA rules. */
+async function axeToggle(page: Page) {
+  const results = await new AxeBuilder({page})
+    .include(TOGGLE)
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+    .analyze();
+  return {
+    violations: results.violations.flatMap(violation =>
+      violation.nodes.map(node => `${violation.id}: ${node.failureSummary}`),
+    ),
+    passes: results.passes.map(pass => pass.id),
+  };
+}
+
 type Toggle = Awaited<ReturnType<typeof toggles>>[number];
 
 /** FR11 and AR3 wiring, the 24 px target, and the icon's non-text contrast. */
@@ -383,7 +398,16 @@ for (const story of AUTO_STORIES) {
             ax.length === 1 && ax[0].expanded === false,
             `accessibility tree: ${JSON.stringify(ax)}`,
           );
-          await frame('rest', {list, ax});
+          const axe = await axeToggle(page);
+          check(
+            axe.violations.length === 0,
+            `axe: ${axe.violations.join(' | ')}`,
+          );
+          check(
+            axe.passes.includes('button-name'),
+            'axe did not check the name',
+          );
+          await frame('rest', {list, ax, axe});
           await driveStates(page, check, frame, DEFAULT_NAME);
         },
       });
@@ -453,7 +477,13 @@ for (const mode of ['light', 'dark'] as const) {
           ax.length === 1 && ax[0].expanded === false,
           `accessibility tree: ${JSON.stringify(ax)}`,
         );
-        await frame('rest', {list, ax});
+        const axe = await axeToggle(page);
+        check(
+          axe.violations.length === 0,
+          `axe: ${axe.violations.join(' | ')}`,
+        );
+        check(axe.passes.includes('button-name'), 'axe did not check the name');
+        await frame('rest', {list, ax, axe});
         await driveStates(page, check, frame, PLACED_NAME);
       },
     });
