@@ -42,7 +42,6 @@ import {
   declarationValues,
 } from '../../foundation/fonts/font-stylesheet.mjs';
 import {
-  MODE_WORDS,
   AUTO_SPREAD,
   CORNERS,
   DIALS,
@@ -67,6 +66,7 @@ import {
   baseWord,
   booleanWord,
   cleanDialValue,
+  modeWord,
   typoLimit,
   typoNear,
 } from './_normal.mjs';
@@ -699,14 +699,10 @@ export function fieldsMeant(data) {
     .trim()
     .toLowerCase()
     .replace(/[\s_]+/g, '-');
-  // A mode word (light, night) is that one mode, as `set` reads it; a typo
-  // of a mode is that mode.
-  const word = /** @type {Record<string, string>} */ ({
-    light: 'light-only',
-    day: 'light-only',
-    dark: 'dark-only',
-    night: 'dark-only',
-  })[typed];
+  // A word for one mode (light, night, darkmode) is that one mode, by the
+  // one mode reader; a typo of a mode is that mode.
+  const one = modeWord(typed);
+  const word = one ? `${one}-only` : undefined;
   const near = (/** @type {string} */ t, /** @type {string[]} */ list) => {
     const hits = list.filter(x => typoNear(t, x));
     return hits.length === 1 ? hits[0] : null;
@@ -1436,10 +1432,9 @@ export function remakeLines(cwd, slug) {
     }
   };
   const saved = settingsJson(read(f.settings));
+  // The base the file names, read as every reader reads it.
   const typed =
-    saved && typeof saved.like === 'string'
-      ? dialWordOf('base', saved.like)
-      : null;
+    saved && typeof saved.like === 'string' ? fieldsMeant(saved).like : null;
   const base =
     [typed, builtOnBase(cwd, slug)].find(b => b && LIKE.includes(b)) ?? null;
   return {
@@ -1500,7 +1495,7 @@ function readEntryWords(data) {
   for (const s of Array.isArray(data?.settings) ? data.settings : []) {
     if (!s || typeof s !== 'object' || typeof s.thing !== 'string') continue;
     if (typeof s.mode === 'string' && s.mode !== 'light' && s.mode !== 'dark') {
-      const read = MODE_WORDS[s.mode.trim().toLowerCase()];
+      const read = modeWord(s.mode);
       if (read) {
         notes.push(
           `${s.thing} was saved with mode ${JSON.stringify(s.mode)}, read as ${read}`,

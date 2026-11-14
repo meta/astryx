@@ -806,17 +806,15 @@ export const COMMON_STATES = [
 ];
 
 /**
- * Mode words a value or a saved entry may be labeled with, and the mode
- * each means: `set` reads a typed label by it, and loading reads a saved
- * entry's mode by it.
+ * Words for a mode, and the mode each means, beside the mode's own name in
+ * its written forms (dark-only, darkmode, mode dark), which modeWord reads:
+ * the table of the one mode reader.
  */
 export const MODE_WORDS = /** @type {Record<string, 'light' | 'dark'>} */ ({
-  light: 'light',
-  'light-mode': 'light',
   day: 'light',
-  dark: 'dark',
-  'dark-mode': 'dark',
+  daytime: 'light',
   night: 'dark',
+  nighttime: 'dark',
 });
 
 // These tables are looked up by words people type: with no prototype,

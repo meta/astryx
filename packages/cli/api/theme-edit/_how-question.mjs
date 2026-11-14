@@ -1235,25 +1235,15 @@ function keepsAsExcept(question) {
 }
 
 /**
- * The state a clause's words name, as one word (hover, focus, active,
- * disabled), or null: "hovered", "on hover", "when focused", "pressed",
- * "clicked", "disabled ones".
+ * The state a clause's words name, as one word, or null: the first of
+ * STATE_WORDS, the one table of state words ("hovered", "on hover", "when
+ * focused", "pressed", "clicked", "disabled ones", "checked").
  * @param {string} t
  * @returns {string | null}
  */
 function stateWord(t) {
-  const m =
-    /\b(hover(?:ed|ing)?|focus(?:ed)?|pressed|active|clicked|disabled)\b/.exec(
-      t,
-    )?.[1];
-  if (!m) return null;
-  return /^hover/.test(m)
-    ? 'hover'
-    : /^focus/.test(m)
-      ? 'focus'
-      : /^(pressed|active|clicked)$/.test(m)
-        ? 'active'
-        : 'disabled';
+  for (const [re, s] of STATE_WORDS) if (re.test(t)) return s;
+  return null;
 }
 
 /**
@@ -1590,7 +1580,7 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
     'selected',
   ],
   [
-    /\b(press(ed|es)?|click(ed|s)?|tap(ped|s)?(?! targets?)|on press|on click|when i click)\b/,
+    /\b(press(ed|es)?|click(ed|s)?|tap(ped|s)?(?! targets?)|on press|on click|when i click|active)\b/,
     'active',
   ],
   [/\b(typing|type in|tab to|tabbing|keyboard focus)\b/, 'focus'],
@@ -1974,7 +1964,6 @@ function clausesOf(q, partWords) {
         // A mode phrase in the value ("background: light mode #eee") is the
         // clause's mode, never part of the value.
         decl[m[1]] = noMode(m[2]).replace(/\s+/g, ' ').trim();
-    let state = null;
     // A part whose name has a state word ("hover card") is the part, not
     // the state: read the state from the words left once parts are taken.
     const stateText = parts
@@ -1987,11 +1976,7 @@ function clausesOf(q, partWords) {
           ),
         text,
       );
-    for (const [re, s] of STATE_WORDS)
-      if (re.test(stateText)) {
-        state = s;
-        break;
-      }
+    const state = stateWord(stateText);
     const mode =
       (/\bdark( mode| theme)?\b/.test(text) &&
         /\b(mode|theme|in dark)\b/.test(text)) ||

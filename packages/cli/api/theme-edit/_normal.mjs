@@ -9,7 +9,14 @@
  * @position packages/cli/api/theme-edit — pure helpers, no environment access
  */
 
-import {DIALS, FONTS, OPEN_FONTS, fontStack, wordTable} from './_tables.mjs';
+import {
+  DIALS,
+  FONTS,
+  MODE_WORDS,
+  OPEN_FONTS,
+  fontStack,
+  wordTable,
+} from './_tables.mjs';
 import {colorProblem, hex, parseColor} from './_color.mjs';
 import {sameKindValues} from './_css.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
@@ -843,8 +850,9 @@ export const weightSetting = thing =>
 /**
  * The one mode a word names, or null: light or dark, written as a mode
  * value names one (`dark-only`), with the word mode (`darkmode`, `dark
- * mode`, `mode dark`), or as a word for it (night, day). The `--mode` flag
- * of set and undo reads it.
+ * mode`, `mode dark`), or as a word for it (MODE_WORDS: night, day). The
+ * one mode reader: the `--mode` flag, a mode label in a value, a saved
+ * entry's mode and the settings file's mode all read it.
  * @param {unknown} text
  * @returns {'light' | 'dark' | null}
  */
@@ -855,18 +863,7 @@ export function modeWord(text) {
     .replace(/[\s_]+/g, '-');
   const m = /^(?:(light|dark)(?:-?only|-?mode)?|mode-?(light|dark))$/.exec(w);
   if (m) return /** @type {'light' | 'dark'} */ (m[1] ?? m[2]);
-  return (
-    /** @type {Record<string, 'light' | 'dark'>} */ ({
-      night: 'dark',
-      nighttime: 'dark',
-      dim: 'dark',
-      black: 'dark',
-      day: 'light',
-      daytime: 'light',
-      bright: 'light',
-      white: 'light',
-    })[w] ?? null
-  );
+  return MODE_WORDS[w] ?? null;
 }
 
 /**
@@ -1450,30 +1447,6 @@ export function coversTyped(reads, typed, thing = '') {
     }
   return [...typedCount].every(([w, n]) => (carried.get(w) ?? 0) >= n);
 }
-
-/**
- * Whether a repair may offer `offered` as the whole typed value (the gate,
- * with no setting named).
- * @param {string} offered
- * @param {string} typed
- */
-export const offersTyped = (offered, typed) =>
-  readsTyped({offered, typed}) === true;
-
-/**
- * Whether the values a refusal offers for one setting carry what was typed
- * (see readsTyped and coversTyped).
- * @param {string[]} offered
- * @param {string} typed
- */
-export function offersAllTyped(offered, typed) {
-  const reads = offered.map(o => readsTyped({offered: o, typed}));
-  if (reads.includes(false)) return false;
-  return reads.every(r => r === true) || coversTyped(reads, typed);
-}
-
-/** The gate's word for the whole typed value (tests and old callers). */
-export const carriesTyped = offersTyped;
 
 documentReadings([
   ['more', 'less'],

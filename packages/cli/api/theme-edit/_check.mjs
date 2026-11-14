@@ -36,7 +36,6 @@ import {
 } from './_css.mjs';
 import {calcVars, coreFallback, multipliedTokens} from './_parts.mjs';
 import {
-  MODE_WORDS,
   AUTO_SPREAD,
   COLOR_PROP_PARTS,
   COLOR_PROPS,
@@ -2749,7 +2748,7 @@ export function checkSetting(
             ],
           },
         );
-      const mode = MODE_WORDS[label.word];
+      const mode = modeWord(label.word);
       const colorful =
         PALETTE_DIALS.includes(thing) ||
         (thing.startsWith('--') && isColorToken(thing)) ||
@@ -2874,7 +2873,7 @@ export function checkSetting(
       if (
         flagWord &&
         (flagWord === 'mode'
-          ? Boolean(MODE_WORDS[rest.trim().toLowerCase()])
+          ? Boolean(modeWord(rest))
           : !otherSettingLabel(thing, value))
       ) {
         const r = rest.trim().toLowerCase();
@@ -2901,7 +2900,7 @@ export function checkSetting(
             },
           );
         }
-        const m = flagWord === 'mode' ? MODE_WORDS[r] : null;
+        const m = flagWord === 'mode' ? modeWord(r) : null;
         const when =
           flagWord === 'when'
             ? label.word === 'when' || label.word === 'prop'
@@ -6097,9 +6096,11 @@ export function unknownVarRef(v, TOKENS, thing, reads) {
 export function fontFileReason(value) {
   // Each family as CSS reads it: an escape (`Gill\ Sans`, `\5FAE`) is part
   // of the name, never a path separator.
-  const families = String(value)
-    .split(',')
-    .map(f => cssUnescape(f.trim().replace(/^["']|["']$/g, '')));
+  // The families as the one family-list reader splits them (a quoted name
+  // with a comma is one family).
+  const families = (familiesOf(value) ?? String(value).split(',')).map(f =>
+    cssUnescape(f.trim().replace(/^["']|["']$/g, '')),
+  );
   const hit = families.find(
     f =>
       /^url\(/i.test(f) ||

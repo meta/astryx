@@ -87,8 +87,8 @@ import {
   readAsMeant,
   editorMadeFolder,
   builtOnBase,
-  dialWordOf,
   onBuiltIn,
+  onBuiltInSteps,
   readFields,
   settingsJson,
   slugFor,
@@ -531,7 +531,7 @@ async function newTheme(name, options) {
   // base, as `set <theme> base none` does.
   const likeWord =
     typeof options.like === 'string'
-      ? (dialWordOf('base', options.like) ?? options.like)
+      ? baseWord(options.like) || options.like
       : options.like;
   const like = likeWord === 'none' ? undefined : likeWord;
   requireProject(cwd);
@@ -545,16 +545,15 @@ async function newTheme(name, options) {
   // offers the install, or the same new on no base).
   const have = LIKE.filter(b => baseInstalled(cwd, b));
   // `@astryxdesign/theme-butter`, `butterTheme`, `Butter`: butter (the one
-  // base reader, shared with set and the settings file).
-  const baseName = (/** @type {unknown} */ v) => baseWord(v);
+  // base reader, baseWord, shared with set and the settings file).
   const likeFixed =
     like == null
       ? likeWord === 'none'
         ? 'none'
         : undefined
-      : LIKE.includes(baseName(like))
-        ? baseName(like)
-        : (nearest(baseName(like), have)[0] ?? null);
+      : LIKE.includes(like)
+        ? like
+        : (nearest(like, have)[0] ?? null);
   // A dial value the dial does not take is left out of a suggested `new`
   // (a corrected name must not repeat it), and the refusal says so.
   /** @type {Array<[string, string]>} */
@@ -759,10 +758,11 @@ async function newTheme(name, options) {
     /** @type {import('./_settings.mjs').Ctx} */ (ctx).base =
       await baseResolved(ctx.project, data.like);
   } catch (e) {
-    // A base that is not installed: install it, or the same new on no base.
-    if (e instanceof AstryxError && e.code === E.ERR_UNKNOWN_THEME)
+    // A base that is not installed: install it, then the same new on it
+    // (the one helper set's refusal uses too); or the same new on no base.
+    if (e instanceof AstryxError && e.code === E.ERR_UNKNOWN_THEME && like)
       e.suggestions = [
-        ...(e.suggestions ?? []),
+        ...onBuiltInSteps(cwd, like, again(name, like)),
         {name: again(name, null), reason: 'build on no theme'},
       ];
     throw e;
@@ -2640,8 +2640,6 @@ function extremeSteps(res) {
       ]
     : [];
 }
-
-export {carriesTyped, offersTyped} from './_normal.mjs';
 
 /**
  * An object of settings written as JSON, with single quotes, or as its

@@ -357,6 +357,22 @@ export function setUnknownOptionReader(read) {
 }
 
 /**
+ * The theme name the editor offers `new` here, the one its own refusals
+ * offer: the name asked for when its folder is free, else name-2, name-3…
+ * The editor registers it, so this module reads no theme files.
+ * @type {(cwd: string, name: string) => string}
+ */
+let editorFreeName = (_cwd, name) => name;
+
+/**
+ * Register the theme name the editor offers `new` here.
+ * @param {(cwd: string, name: string) => string} free
+ */
+export function setEditorFreeName(free) {
+  editorFreeName = free;
+}
+
+/**
  * Register how the theme editor lists the themes of the app a command runs
  * in, for the missing-theme suggestions.
  * @param {(cwd: string) => string[]} list
@@ -403,9 +419,7 @@ function editorMissingSuggestions(cmd) {
   }
   // `new` with no name: a name no theme here has.
   if (!(cmd?.args ?? []).length && cmd.name() === 'new') {
-    const taken = new Set(editorThemesHere(process.cwd()));
-    let free = 'my-theme';
-    for (let n = 2; taken.has(free); n += 1) free = `my-theme-${n}`;
+    const free = editorFreeName(process.cwd(), 'my-theme');
     return [
       {
         name: `${invocation} ${words} ${free}`,

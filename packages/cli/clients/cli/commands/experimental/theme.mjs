@@ -32,6 +32,7 @@ import {
 import {cliError} from '../../lib/cli-error.mjs';
 import {
   editorMissingArgument,
+  setEditorFreeName,
   setEditorThemeList,
   setUnknownOptionReader,
 } from '../../lib/json-shim.mjs';
@@ -58,6 +59,7 @@ import {
   editorCompileProblem,
   editorFollowCompile,
   editorThemesAt,
+  editorFreeName,
   typoNear,
   typoOf,
   editorAfterBuild,
@@ -1079,6 +1081,7 @@ function heldStop() {}
 export function registerExperimentalTheme(group, program) {
   // A command run with no theme names the app's only theme.
   setEditorThemeList(editorThemesAt);
+  setEditorFreeName(editorFreeName);
   setUnknownOptionReader(unknownThemeOption);
   const theme = defineGroup(group, groupDoc);
   explained(theme, groupDoc);
