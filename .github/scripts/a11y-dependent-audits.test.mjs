@@ -34,7 +34,6 @@ import {
   UNDECIDED,
   undecidedMessage,
 } from './a11y-dependent-audits.mjs';
-import {matrixFor} from './ci-matrix.mjs';
 import {
   fileSeconds,
   importerGraph,
@@ -410,13 +409,25 @@ describe('the dependent-audits jobs', () => {
   });
 
   it('run up to six legs, on a full runner only when a leg has a share', () => {
-    // Only the planned legs start; without a plan, all six start and stop.
+    // Only the planned legs start; a plan that did not succeed starts one.
     expect(legs.strategy.matrix.leg).toBe(
-      "${{ fromJSON(needs.a11y-dependent-audits-plan.outputs.legs || '[1, 2, 3, 4, 5, 6]') }}",
+      "${{ fromJSON(needs.a11y-dependent-audits-plan.result == 'success' && needs.a11y-dependent-audits-plan.outputs.legs || '[1]') }}",
     );
-    expect(matrixFor(legs.strategy.matrix.leg, 'pull_request')).toEqual([
-      1, 2, 3, 4, 5, 6,
-    ]);
+    // A plan that owes no audit starts no leg at all.
+    expect(legs.if).toContain(
+      "(needs.a11y-dependent-audits-plan.result != 'success' || needs.a11y-dependent-audits-plan.outputs.count != '0')",
+    );
+    // The leg a failed plan starts says what to do; planned legs keep the
+    // "Dependent audits (n/N)" names merge-guard reads.
+    expect(legs.name).toBe(
+      "${{ needs.a11y-dependent-audits-plan.result == 'success' && format('Dependent audits ({0}/{1})', matrix.leg, strategy.job-total) || 'Dependent audits (plan did not run: re-run)' }}",
+    );
+    expect(step(legs, 'Require the dependent-audit plan').run).toContain(
+      'Re-run all jobs.',
+    );
+    expect(step(legs, 'Require the dependent-audit plan').run).toContain(
+      'exit 1',
+    );
     expect(planJob.outputs.legs).toBe(
       "${{ steps.plan.outputs.legs || '[1]' }}",
     );
@@ -446,6 +457,16 @@ describe('the dependent-audits jobs', () => {
 
   it('block the merge through the test join', () => {
     expect(ci.jobs.test.needs).toContain('pr-a11y-dependent-audits');
+    expect(ci.jobs.test.needs).toContain('a11y-dependent-audits-plan');
+    const joinEnv = ci.jobs.test.steps.find(
+      s => s.name === 'Require expected test-owner outcomes',
+    ).env;
+    expect(joinEnv.A11Y_DEPENDENT_AUDITS_PLAN_RESULT).toBe(
+      '${{ needs.a11y-dependent-audits-plan.result }}',
+    );
+    expect(joinEnv.A11Y_DEPENDENT_AUDITS_COUNT).toBe(
+      '${{ needs.a11y-dependent-audits-plan.outputs.count }}',
+    );
     expect(
       ci.jobs.test.steps.find(
         s => s.name === 'Require expected test-owner outcomes',
@@ -456,8 +477,6 @@ describe('the dependent-audits jobs', () => {
         path.join(root, '.github/scripts/ci-test-join.mjs'),
         'utf8',
       ),
-    ).toContain(
-      "['pr-a11y-dependent-audits', process.env.PR_A11Y_DEPENDENT_AUDITS_RESULT]",
-    );
+    ).toContain('process.env.PR_A11Y_DEPENDENT_AUDITS_RESULT');
   });
 });
