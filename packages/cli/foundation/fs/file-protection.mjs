@@ -11,6 +11,7 @@
 import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
 import * as path from 'node:path';
+import {compareText} from '../text/compare-text.mjs';
 
 /**
  * The `ignore` matcher factory, loaded on first use: this module is reached
@@ -622,7 +623,7 @@ export function createFileProtectionResolver(
     }
   }
   rawAttributeSources.sort(
-    (a, b) => a.dir.length - b.dir.length || a.file.localeCompare(b.file),
+    (a, b) => a.dir.length - b.dir.length || compareText(a.file, b.file),
   );
   for (const source of rawAttributeSources) {
     attributeSources.push({
@@ -637,10 +638,10 @@ export function createFileProtectionResolver(
     });
   }
   attributeSources.sort(
-    (a, b) => a.dir.length - b.dir.length || a.file.localeCompare(b.file),
+    (a, b) => a.dir.length - b.dir.length || compareText(a.file, b.file),
   );
   gitIgnoreSources.sort(
-    (a, b) => a.dir.length - b.dir.length || a.file.localeCompare(b.file),
+    (a, b) => a.dir.length - b.dir.length || compareText(a.file, b.file),
   );
 
   /** @param {string} target @param {number} end @param {boolean} directory */

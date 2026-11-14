@@ -3,10 +3,12 @@
 /**
  * @file build.kit leaf — the page template to start from, and the kit around it.
  *
- * Every kit names a page template to START from: the page the page ranker
- * (rank.mjs) puts first when it has the evidence to lead, else the app shell.
- * The ranker is the only thing that picks the start, so one noisy signal —
- * search matching "site" to a gallery's "side" — cannot choose the page. A
+ * Every kit names a page template to START from, else the app shell. The page
+ * ranker (rank.mjs) orders the page templates; for a whole page the word
+ * weights (weights.mjs) decide page or shell and the page-pick model chooses
+ * the page from that list (start.mjs). Search's own matches never choose the
+ * start, so one noisy signal — search matching "site" to a gallery's "side" —
+ * cannot choose the page. A
  * template carries the page frame, the spacing, and the section rhythm; a page
  * composed from components carries none of that, so the kit never recommends
  * composing from scratch while a template exists. Next to the start it names

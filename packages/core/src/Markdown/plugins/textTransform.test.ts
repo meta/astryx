@@ -193,6 +193,37 @@ describe('createMarkdownTextTransform', () => {
     ]);
   });
 
+  it('finds required substrings in source time linear in its length', () => {
+    const paragraphs = Array.from(
+      {length: 2000},
+      (_, index) => `Plain paragraph number ${index} with no marker.`,
+    );
+    const source = ['TODO first', ...paragraphs].join('\n\n');
+    const indexOf = String.prototype.indexOf;
+    let scanned = 0;
+    const spy = vi
+      .spyOn(String.prototype, 'indexOf')
+      .mockImplementation(function (
+        this: string,
+        search: string,
+        position?: number,
+      ) {
+        const found = indexOf.call(this, search, position);
+        if (search === 'TODO' && this.valueOf() === source) {
+          scanned += (found < 0 ? source.length : found) - (position ?? 0);
+        }
+        return found;
+      });
+    try {
+      parseMarkdown(source, {plugins: [todoPlugin()]});
+    } finally {
+      spy.mockRestore();
+    }
+
+    expect(scanned).toBeGreaterThan(0);
+    expect(scanned).toBeLessThanOrEqual(2 * source.length);
+  });
+
   it('does not invoke callbacks for absent or protected-only matches', () => {
     let replacements = 0;
     const plugin = todoPlugin(() => replacements++);

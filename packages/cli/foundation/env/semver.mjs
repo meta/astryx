@@ -8,6 +8,8 @@
  * sandboxes where a smaller dependency surface is preferred.
  */
 
+import {compareText} from '../text/compare-text.mjs';
+
 const SEMVER_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
 /**
@@ -42,7 +44,7 @@ export function semverCompare(a, b) {
     if (Number.isNaN(na) || Number.isNaN(nb)) {
       // Fall back to lexicographic compare on garbage input rather than
       // returning NaN, which would silently break sort/filter callers.
-      return String(a).localeCompare(String(b));
+      return compareText(String(a), String(b));
     }
     if (na !== nb) return na - nb;
   }

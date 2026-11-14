@@ -6,14 +6,8 @@ export const doc = {
   name: 'Page Editor',
   displayName: 'Page Editor',
   description:
-    'Three-pane authoring workspace: a source palette on one flank, a live canvas in the middle, and an inspector that retargets to whatever is selected. Drag and drop to reorder, edit to see it render immediately.',
-  keywords: [
-    'builder',
-    'composer',
-    'drag and drop',
-    'page builder',
-    'wysiwyg editor',
-  ],
+    'Two-pane authoring workspace: a side panel with Blocks and Properties tabs beside a live canvas. Add blocks from the Blocks tab, select one to edit it in Properties and see it render immediately, and reorder blocks with move up and move down.',
+  keywords: ['builder', 'composer', 'wysiwyg', 'editor'],
   isReady: true,
   category: 'Tools - Page Editor',
   icons: {

@@ -34,7 +34,7 @@ import {
   type MultiSelectorHandle,
   type MultiSelectorChange,
 } from './MultiSelector';
-import {useRef, useState} from 'react';
+import {Suspense, startTransition, use, useRef, useState} from 'react';
 import {createPortal} from 'react-dom';
 import {Dialog} from '../Dialog/Dialog';
 import {Icon} from '../Icon';
@@ -2479,6 +2479,69 @@ describe('MultiSelector', () => {
       expect(trigger).toHaveAttribute('tabIndex', '0');
     });
   });
+  describe('isDefaultOpen', () => {
+    it('opens on mount when enabled', () => {
+      render(
+        <MultiSelector
+          label="Fruit"
+          options={defaultOptions}
+          value={[]}
+          onChange={() => {}}
+          isDefaultOpen
+        />,
+      );
+
+      expect(screen.getByRole('combobox')).toHaveAttribute(
+        'aria-expanded',
+        'true',
+      );
+    });
+
+    it('stays closed without an open callback when disabled and read-only', () => {
+      const onOpenChange = vi.fn();
+      render(
+        <MultiSelector
+          label="Fruit"
+          options={defaultOptions}
+          value={[]}
+          onChange={() => {}}
+          onOpenChange={onOpenChange}
+          isDefaultOpen
+          isDisabled
+          isReadOnly
+        />,
+      );
+
+      expect(screen.getByRole('combobox')).toHaveAttribute(
+        'aria-expanded',
+        'false',
+      );
+      expect(onOpenChange).not.toHaveBeenCalled();
+    });
+
+    it('does not retry a group-disabled default opening when enabled later', () => {
+      const field = (isDisabled: boolean) => (
+        <InputGroup label="Fruit" isDisabled={isDisabled}>
+          <MultiSelector
+            label="Fruit"
+            options={defaultOptions}
+            value={[]}
+            onChange={() => {}}
+            isDefaultOpen
+          />
+        </InputGroup>
+      );
+      const {rerender} = render(field(true));
+      const trigger = screen.getByRole('combobox');
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+      rerender(field(false));
+
+      expect(trigger).not.toHaveAttribute('aria-disabled');
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    });
+  });
+
   describe('isReadOnly', () => {
     const readOnlyCases = [
       {presentation: 'popover', hasSearch: false},
@@ -3938,6 +4001,48 @@ describe('MultiSelector trigger render prop', () => {
     });
     expect(onOpenChange).toHaveBeenLastCalledWith(false);
     expect(onOpenChange).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports the close to the committed onOpenChange after React discards a render with another', async () => {
+    // A transition that suspends for good: React renders it, then keeps the
+    // committed tree and never commits that render.
+    const forever = new Promise<never>(() => {});
+    function Forever(): null {
+      use(forever);
+      return null;
+    }
+    const handleRef = {current: null as MultiSelectorHandle | null};
+    const field = (
+      onOpenChange: (isOpen: boolean) => void,
+      isPending = false,
+    ) => (
+      <Suspense fallback={null}>
+        <MultiSelector
+          label="Labels"
+          options={OPTIONS}
+          value={[]}
+          onChange={() => {}}
+          handleRef={handleRef}
+          onOpenChange={onOpenChange}
+        />
+        {isPending ? <Forever /> : null}
+      </Suspense>
+    );
+    const onOpenChange = vi.fn();
+    const discardedOnOpenChange = vi.fn();
+    const {rerender} = render(field(onOpenChange));
+    act(() => handleRef.current?.open());
+    expect(onOpenChange).toHaveBeenLastCalledWith(true);
+    await act(async () => {
+      startTransition(() => {
+        rerender(field(discardedOnOpenChange, true));
+      });
+    });
+
+    act(() => handleRef.current?.close());
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenLastCalledWith(false));
+    expect(discardedOnOpenChange).not.toHaveBeenCalled();
   });
 
   it('the handle does not open a disabled selector', () => {

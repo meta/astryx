@@ -28,7 +28,7 @@ export const doc = {
     {
       name: 'value',
       param: 'value',
-      required: true,
+      required: false,
       variadic: true,
     },
   ],
@@ -67,7 +67,7 @@ export const doc = {
       flag: '--png',
       param: 'options.png',
       description:
-        'Also take PNG pictures of the previews (light and dark), with a Playwright installed in the project or a Chrome or Chromium found on the machine; without one, the result says how to get it. Nothing else changes',
+        'Also take PNG pictures of the previews (light and dark), with no dev server running: it needs a Playwright installed in the project or a Chrome or Chromium found on the machine, and adds a few seconds while the browser starts (a browser that takes longer than 60 seconds is stopped, and the result says so); without one, the result says how to get it. Each picture carries the editor stamp and is recorded, by name and content, in themes/<theme>/<theme>.pictures.json; a file of yours named like a picture (preview.png, sheet.png) is never written over: no picture is taken, and the result names the file',
     },
   ],
   examples: [
@@ -126,9 +126,8 @@ export const doc = {
     },
     {
       code: 1,
-      when: 'an unknown option, a refused change (an unknown part, variant, state, token or thing; a value of the wrong type; --mode on something that has no mode; a token the part never reads for that; corners on a part that shows no edge), a theme that does not exist, or a build failure; nothing is written',
+      when: 'an unknown option, a refused change (an unknown part, variant, state, token or thing; a value of the wrong type; --mode on something that has no mode; a token the part never reads for that; corners on a part that shows no edge), a theme that does not exist, or a build failure, or a folder outside a project with Core installed (ERR_PROJECT_REQUIRED); nothing is written',
     },
   ],
   related: ['experimental theme editor', 'experimental theme compile'],
-  replaces: ['theme palette generate'],
 };

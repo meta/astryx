@@ -331,13 +331,40 @@ function transformPhrasing<Node extends MarkdownExtensionNode>(
   return next ?? children;
 }
 
-function blockMayContainRequiredSource<Node extends MarkdownExtensionNode>(
+interface RequiredSource {
+  readonly text: string;
+  readonly searches: RequiredSearch[];
+}
+
+/**
+ * `found` is the first index of `hint` at or after `from`, or -1. A new search
+ * starts at `Infinity`, so the first block runs it. Blocks come in source
+ * order, so each search continues where the last one stopped and reads the
+ * source once per hint.
+ */
+interface RequiredSearch {
+  readonly hint: string;
+  from: number;
+  found: number;
+}
+
+function nextRequiredIndex(
+  search: RequiredSearch,
+  text: string,
+  start: number,
+): number {
+  if (start < search.from || (search.found >= 0 && search.found < start)) {
+    search.from = start;
+    search.found = text.indexOf(search.hint, start);
+  }
+  return search.found;
+}
+
+function blockMayContainRequiredSource(
   block: Block,
-  source: string | undefined,
-  options: MarkdownTextTransformOptions<Node>,
+  required: RequiredSource | undefined,
 ): boolean {
-  const required = options.requiredSubstrings;
-  if (source === undefined || required === undefined) {
+  if (required === undefined) {
     return true;
   }
   const start = block.position?.start.offset;
@@ -345,8 +372,8 @@ function blockMayContainRequiredSource<Node extends MarkdownExtensionNode>(
   if (typeof start !== 'number' || typeof end !== 'number') {
     return true;
   }
-  for (const hint of required) {
-    const match = source.indexOf(hint, start);
+  for (const search of required.searches) {
+    const match = nextRequiredIndex(search, required.text, start);
     if (match >= 0 && match < end) {
       return true;
     }
@@ -359,14 +386,14 @@ function transformBlocks<Node extends MarkdownExtensionNode>(
   options: MarkdownTextTransformOptions<Node>,
   ownership: MarkdownHelperOwnership,
   scanner: Scanner,
-  source: string | undefined,
+  required: RequiredSource | undefined,
 ): ReadonlyArray<Block> {
   // Lazy rebuild, matching transformPhrasing: a block list with no match is
   // returned unchanged and allocates nothing.
   let next: Block[] | undefined;
   for (let index = 0; index < blocks.length; index++) {
     const block = blocks[index];
-    if (!blockMayContainRequiredSource(block, source, options)) {
+    if (!blockMayContainRequiredSource(block, required)) {
       next?.push(block);
       continue;
     }
@@ -391,7 +418,7 @@ function transformBlocks<Node extends MarkdownExtensionNode>(
           options,
           ownership,
           scanner,
-          source,
+          required,
         );
         replacement =
           children === block.children ? block : {...block, children};
@@ -410,7 +437,7 @@ function transformBlocks<Node extends MarkdownExtensionNode>(
             options,
             ownership,
             scanner,
-            source,
+            required,
           );
           if (itemChildren === item.children) {
             items?.push(item);
@@ -536,7 +563,14 @@ export function createMarkdownTextTransform(
       ownership.sourceUnchanged &&
         requiredSubstrings != null &&
         !normalizedOptions.pattern.ignoreCase
-        ? context.source
+        ? {
+            text: context.source,
+            searches: requiredSubstrings.map(hint => ({
+              hint,
+              from: Number.POSITIVE_INFINITY,
+              found: -1,
+            })),
+          }
         : undefined,
     );
     return children === root.children ? root : {...root, children};

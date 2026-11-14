@@ -3,11 +3,15 @@
 
 /**
  * @file RichTextEditorToolbar.a11y.chromium.spec.ts
- * @input The built Storybook's "With toolbar" RichTextEditor story.
+ * @input The built Storybook's "With toolbar" and "With links" RichTextEditor
+ *   stories.
  * @output Real-browser proof that the toolbar's action row scrolls at phone
  *   widths instead of squeezing a control: the block-format selector keeps its
  *   whole label, no control overlaps its neighbour, and every control keeps a
- *   24px target.
+ *   24px target. And that the Link button's popover keeps the editor's
+ *   selection through the keyboard: Escape returns focus and the selection to
+ *   the editor, a refused URL keeps focus in the field, and Enter applies the
+ *   link without the key reaching the editor as a new line.
  *
  * Run after building Storybook:
  *   pnpm storybook:build
@@ -24,6 +28,7 @@ import {
 
 const STORYBOOK_DIR = process.env.ASTRYX_STORYBOOK_DIR ?? DEFAULT_STORYBOOK_DIR;
 const STORY = 'richtext-richtexteditor--with-toolbar';
+const LINK_STORY = 'richtext-richtexteditor--with-links';
 
 let storybook: StaticServer;
 
@@ -111,3 +116,61 @@ for (const width of [320, 390, 1240]) {
     });
   }
 }
+
+test('the link popover keeps the selection through the keyboard', async ({
+  page,
+}) => {
+  await page.setViewportSize({width: 900, height: 600});
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=${LINK_STORY}&viewMode=story&globals=astryxTheme:neutral;colorMode:light;direction:ltr`,
+    {waitUntil: 'load'},
+  );
+  const editor = page.getByRole('textbox', {name: 'Notes'});
+  await editor.click();
+  await page.keyboard.type('Ship the launch notes today.');
+  await page.keyboard.press('Home');
+  for (let press = 0; press < 'Ship the '.length; press += 1) {
+    await page.keyboard.press('ArrowRight');
+  }
+  for (let press = 0; press < 'launch notes'.length; press += 1) {
+    await page.keyboard.press('Shift+ArrowRight');
+  }
+  const selected = () => page.evaluate(() => String(document.getSelection()));
+  expect(await selected()).toBe('launch notes');
+
+  const linkButton = page.getByRole('button', {name: 'Link', exact: true});
+  const popover = page.getByRole('dialog', {name: 'Insert link'});
+  const field = popover.getByRole('textbox', {name: 'URL'});
+  await linkButton.click();
+  await expect(popover).toBeVisible();
+  await expect(popover).not.toHaveAttribute('aria-modal', 'true');
+  await expect(linkButton).toHaveAttribute('aria-expanded', 'true');
+  await expect(field).toBeFocused();
+  const axe = await new AxeBuilder({page}).include('[role="dialog"]').analyze();
+  expect(axe.violations).toEqual([]);
+
+  await page.keyboard.press('Escape');
+  await expect(popover).toBeHidden();
+  await expect(editor).toBeFocused();
+  expect(await selected()).toBe('launch notes');
+
+  await linkButton.click();
+  await expect(field).toBeFocused();
+  await field.fill('javascript:alert(1)');
+  await page.keyboard.press('Enter');
+  await expect(
+    popover.getByText('Enter a valid http, https, mailto, or tel URL.'),
+  ).toBeVisible();
+  await expect(field).toHaveAttribute('aria-invalid', 'true');
+  await expect(field).toBeFocused();
+
+  await field.fill('example.com/launch');
+  await page.keyboard.press('Enter');
+  await expect(popover).toBeHidden();
+  await expect(editor).toBeFocused();
+  await expect(
+    editor.getByRole('link', {name: 'launch notes'}),
+  ).toHaveAttribute('href', 'https://example.com/launch');
+  await expect(editor.locator('p')).toHaveCount(1);
+  await expect(editor).toHaveText('Ship the launch notes today.');
+});
