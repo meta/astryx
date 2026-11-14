@@ -41,7 +41,7 @@ import {
   lengthPx,
   partRuleTokens,
 } from './_settings.mjs';
-import {settableStates} from './_check.mjs';
+import {inheritedReach, settableStates} from './_check.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {cssProperties, keywordsOf, matchValue, splitTop} from './_css.mjs';
 
@@ -3636,12 +3636,25 @@ export function draftAnswer(ctx, env, question) {
       .sort((x, y) => x.start - y.start);
     for (let i = 0; i + 1 < at.length; i++) {
       const [a, b] = [at[i], at[i + 1]];
-      if (c.text.slice(a.end, b.start).trim()) continue;
+      const between = c.text.slice(a.end, b.start).trim();
       const segs = a.p.on.split('-');
+      /** @param {string} name */
+      const isPart = name =>
+        Boolean(C.MAP[name]) && ctx.project.target.has(name);
       let sub = null;
-      for (let n = segs.length; n > 0 && !sub; n--) {
-        const name = `${segs.slice(0, n).join('-')}-${b.p.on}`;
-        if (C.MAP[name] && ctx.project.target.has(name)) sub = name;
+      if (!between)
+        for (let n = segs.length; n > 0 && !sub; n--) {
+          const name = `${segs.slice(0, n).join('-')}-${b.p.on}`;
+          if (isPart(name)) sub = name;
+        }
+      else if (/^[a-z]+$/.test(between)) {
+        // "side nav section headings": a word between that names a piece of
+        // the first part (side-nav-section) is that piece, and the second
+        // part is what it holds; with no part of its own by both names
+        // (Core draws a section's title with no target), the piece itself.
+        const piece = `${a.p.on}-${singular(between)}`;
+        if (isPart(piece))
+          sub = isPart(`${piece}-${b.p.on}`) ? `${piece}-${b.p.on}` : piece;
       }
       if (!sub) continue;
       c.parts = c.parts.filter(x => x !== a.p && x !== b.p);
@@ -4838,6 +4851,21 @@ export function draftAnswer(ctx, env, question) {
             if (value !== st.state && !st.when)
               o.push({...st, state: undefined, when: `${st.state}:${value}`});
         }
+    // A text property CSS inherits on a part holding other parts says
+    // which of them take it too.
+    const reach = [
+      ...new Set(
+        options
+          .flat()
+          .map(st =>
+            st.verb === 'set' && st.on && !st.thing.startsWith('--')
+              ? inheritedReach(ctx, st, st.thing)
+              : null,
+          )
+          .filter(Boolean),
+      ),
+    ];
+    if (reach.length) d.text = `${d.text} (${reach.join('; ')})`;
     input.text = d.text;
     input.options = options;
     const pushed = {

@@ -2389,6 +2389,37 @@ function oneModeOfTheme(data) {
 }
 
 /**
+ * What a text property CSS inherits, set on a part, also reaches: the parts
+ * inside it that set no such property of their own, said in one line; null
+ * for any other property or when none does.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {{on?: string, only?: boolean, thing?: string}} s
+ * @param {string} prop kebab-case
+ * @returns {string | null}
+ */
+export function inheritedReach(ctx, s, prop) {
+  if (
+    !/^(font-(size|weight|style|family|variant)|text-(transform|align)|letter-spacing|line-height|white-space|word-spacing)$/.test(
+      prop,
+    )
+  )
+    return null;
+  const reached = [
+    ...new Set(
+      partsOf(ctx, /** @type {any} */ (s)).flatMap(t =>
+        /** @type {string[]} */ (ctx.C.MAP[t]?.contains ?? []).filter(
+          inner =>
+            ctx.project.target.has(inner) && !ctx.C.MAP[inner]?.own?.[prop],
+        ),
+      ),
+    ),
+  ];
+  return reached.length
+    ? `${prop} is inherited, so it also reaches ${reached.slice(0, 4).join(', ')}${reached.length > 4 ? ' and more' : ''} inside ${s.on}, which set no ${prop} of their own`
+    : null;
+}
+
+/**
  * The states `set` takes on a part: the ones its doc lists and the ones
  * every part takes, less any a change in it is refused for while the same
  * change without it passes (a state that never applies there). `how` lists
@@ -5497,24 +5528,9 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
     // A text property CSS inherits reaches the parts inside the part that
     // do not set it themselves (a side nav section's items): the result
     // says which.
-    if (
-      !unset &&
-      /^(font-(size|weight|style|family|variant)|text-(transform|align)|letter-spacing|line-height|white-space|word-spacing)$/.test(
-        prop,
-      )
-    ) {
-      const reached = [
-        ...new Set(
-          partsOf(ctx, s).flatMap(t =>
-            /** @type {string[]} */ (ctx.C.MAP[t]?.contains ?? []).filter(
-              inner =>
-                ctx.project.target.has(inner) && !ctx.C.MAP[inner]?.own?.[prop],
-            ),
-          ),
-        ),
-      ];
-      if (reached.length)
-        s.note = `${prop} is inherited, so it also reaches ${reached.slice(0, 4).join(', ')}${reached.length > 4 ? ' and more' : ''} inside ${s.on}, which set no ${prop} of their own`;
+    if (!unset) {
+      const reach = inheritedReach(ctx, s, prop);
+      if (reach) s.note = reach;
     }
     // Text, headings and links take their color from the color prop.
     const textParts = COLOR_PROP_PARTS;
