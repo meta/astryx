@@ -32,11 +32,11 @@ import {
   RichTextEditor,
   type RichTextEditorProps,
   type RichTextEditorRef,
-} from './RichTextEditor';
+} from '../RichTextEditor';
 import {
   editorStateJSONToMarkdown,
   markdownToEditorStateJSON,
-} from './markdownSerializers';
+} from '../markdownSerializers';
 
 interface Typed {
   readonly editor: LexicalEditor;

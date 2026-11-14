@@ -8,13 +8,13 @@ import {
   createMarkdownPlugin,
   type MarkdownExtensionNode,
 } from '@astryxdesign/core/Markdown/plugins';
-import {RichTextEditor, type RichTextEditorRef} from './RichTextEditor';
-import {RichTextView} from './RichTextView';
+import {RichTextEditor, type RichTextEditorRef} from '../RichTextEditor';
+import {RichTextView} from '../RichTextView';
 import {
   createRichTextExtension,
   markdownToEditorStateJSON,
   RichTextExtensionError,
-} from './markdown';
+} from '../markdown';
 
 type MentionNode = MarkdownExtensionNode<
   'demo-mentions',

@@ -51,14 +51,14 @@ import type {
   MarkdownExtensionNode,
   MarkdownPluginEntry,
 } from '@astryxdesign/core/Markdown/plugins';
-import {pluginsOf, type RichTextMarkdownExtension} from './markdownExtensions';
+import {pluginsOf, type RichTextMarkdownExtension} from '../markdownExtensions';
 import {
   $firstSelectedText,
   $isRichTextExtensionNode,
   setRichTextExtensionNodeDecorator,
   type RichTextExtensionNode,
   type RichTextExtensionNodeFacts,
-} from './markdownExtensionNode';
+} from '../markdownExtensionNode';
 
 /**
  * The node core derives from a stored node's source with `plugins`, or null

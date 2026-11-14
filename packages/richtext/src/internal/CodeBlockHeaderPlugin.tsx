@@ -26,7 +26,7 @@ import {IconButton} from '@astryxdesign/core/IconButton';
 import {useClipboard} from '@astryxdesign/core/hooks';
 import {useTranslator} from '@astryxdesign/core/i18n';
 import type {CodeLanguage} from '@astryxdesign/core/CodeBlock';
-import {listedLanguage} from './codeLanguages';
+import {listedLanguage} from '../codeLanguages';
 import {
   fontWeightVars,
   spacingVars,

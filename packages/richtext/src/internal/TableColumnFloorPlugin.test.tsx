@@ -2,9 +2,9 @@
 
 import {describe, it, expect} from 'vitest';
 import {render, waitFor} from '@testing-library/react';
-import {RichTextEditor} from './RichTextEditor';
-import {RichTextView} from './RichTextView';
-import {markdownToEditorStateJSON} from './markdownSerializers';
+import {RichTextEditor} from '../RichTextEditor';
+import {RichTextView} from '../RichTextView';
+import {markdownToEditorStateJSON} from '../markdownSerializers';
 import {tableColumnFloors} from './TableColumnFloorPlugin';
 
 describe('table column floors (spec:AST-061 FR4)', () => {

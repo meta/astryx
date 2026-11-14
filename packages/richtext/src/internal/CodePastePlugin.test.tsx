@@ -18,8 +18,8 @@ import {
   createMarkdownPlugin,
   type MarkdownExtensionNode,
 } from '@astryxdesign/core/Markdown/plugins';
-import {RichTextEditor} from './RichTextEditor';
-import {createRichTextExtension, markdownToEditorStateJSON} from './markdown';
+import {RichTextEditor} from '../RichTextEditor';
+import {createRichTextExtension, markdownToEditorStateJSON} from '../markdown';
 
 // jsdom has no clipboard or drag events; Lexical tells a paste from a drop
 // by these classes.

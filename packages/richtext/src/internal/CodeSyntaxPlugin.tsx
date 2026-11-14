@@ -40,8 +40,8 @@ import {
   TOKEN_TYPES,
   type CodeLanguage,
 } from '@astryxdesign/core/CodeBlock';
-import {listedLanguage, sameLanguages} from './codeLanguages';
-import {CodeLineTokens} from './codeLineTokens';
+import {listedLanguage, sameLanguages} from '../codeLanguages';
+import {CodeLineTokens} from '../codeLineTokens';
 
 /** The class the theme adds to every code block (editorTheme.ts). */
 export const CODE_SYNTAX_CLASS = 'astryx-richtext-code';
