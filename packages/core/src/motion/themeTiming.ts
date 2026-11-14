@@ -8,8 +8,7 @@
  *   tokens where the element is. It plays an easing that is not a cubic
  *   Bézier as the browser plays it. readThemeTokens and resolveTiming: that
  *   duration and easing as values. readThemeTokenText: a token's text where
- *   the element is. easedProgress: the curve for a length and an easing
- *   already read.
+ *   the element is.
  * @position Motion foundation, internal to core. Motion that a tap, a key or
  *   the program starts reads its duration and easing from the theme with it.
  *
@@ -19,6 +18,7 @@
 
 import type {MotionCurve} from './animator';
 import {cubicBezier} from './bezier';
+import {easedProgress} from './progress';
 import {parseCssEasing, parseMotionRoleValue} from './roles';
 import type {MotionCurvePoints} from './roleValue';
 import {resolveTokenReferences} from '../theme/tokenReferences';
@@ -59,46 +59,6 @@ export interface ResolvedTiming {
   /** The duration in ms, zero or more. */
   readonly ms: number | null;
   readonly points: MotionCurvePoints | null;
-}
-
-/**
- * The eased progress from 0 to 1 over `seconds`, as a MotionCurve whose
- * velocity is in progress per second. A curve of no length is at its end.
- * With `jumps`, a jump in the easing, as in `steps()`, carries no speed. The
- * gentler of the slopes just before and just after counts.
- */
-export function easedProgress(
-  seconds: number,
-  ease: (x: number) => number,
-  {jumps = false}: {readonly jumps?: boolean} = {},
-): MotionCurve {
-  const at = (t: number) =>
-    seconds <= 0 || t >= seconds ? 1 : ease(Math.max(0, t) / seconds);
-  // A central difference, one step inside the curve at either end.
-  const step = Math.min(1e-3, seconds / 100);
-  return {
-    duration: seconds,
-    at,
-    velocity: t => {
-      if (seconds <= 0 || t >= seconds) {
-        return 0;
-      }
-      const before = Math.max(0, t - step);
-      const after = Math.min(seconds, t + step);
-      if (!jumps) {
-        return (at(after) - at(before)) / (after - before);
-      }
-      const here = at(t);
-      const slopes: number[] = [];
-      if (t > before) {
-        slopes.push((here - at(before)) / (t - before));
-      }
-      if (after > t) {
-        slopes.push((at(after) - here) / (after - t));
-      }
-      return slopes.reduce((a, b) => (Math.abs(b) < Math.abs(a) ? b : a));
-    },
-  };
 }
 
 function firstDurationMs(style: CSSStyleDeclaration): number | null {
