@@ -6,7 +6,7 @@ export const doc = {
   name: 'Theme Showcase',
   displayName: 'Theme Showcase',
   description:
-    'Multi-surface comparison shell: preview palettes, typography, icons and control states across a storefront, checkout, chat and inventory on one responsive canvas. A theme preview and design-system showcase, with an embeddable content view for an existing app shell.',
+    'Multi-surface comparison shell: sample product screens (a storefront with sign-in, checkout, chat, activity and inventory) rendered in the active theme on one responsive canvas. A theme preview and design-system showcase, with an embeddable content view for an existing app shell.',
   category: 'Shell - Top Nav',
   keywords: ['theme', 'styling', 'design system', 'preview'],
   isReady: true,
