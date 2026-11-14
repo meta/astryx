@@ -621,6 +621,21 @@ function themeNextSteps(run, words = THEME_WORDS) {
 }
 
 /**
+ * A theme as the list's text shows it: one its package's provider wires
+ * says so where `added` and `default` stand, which are about the generated
+ * theme module and read as "not in use" for it. The JSON keeps the fields.
+ * @param {import('../../../api/theme/theme.type.mjs').ThemeListEntry} theme
+ */
+function providerWiredText(theme) {
+  if (!theme.wiredBy || theme.added) return theme;
+  return {
+    ...theme,
+    added: `in use through ${theme.wiredBy.export} wherever the app renders it (theme add does not manage it)`,
+    default: `the app's ${theme.wiredBy.export} picks it, not the generated theme module`,
+  };
+}
+
+/**
  * Print every field in the `theme.list` entries. Duplicate slugs stay separate
  * because each record names its owner.
  * @param {import('../../../api/theme/theme.type.mjs').ThemeListEntry[]} themes
@@ -643,7 +658,7 @@ function printThemeList(
   } else {
     emit(
       section('Themes', `${themes.length} available`),
-      records(themes, {
+      records(themes.map(providerWiredText), {
         fields: [
           'slug',
           'displayName',
@@ -660,8 +675,10 @@ function printThemeList(
           wiredBy: (/** @type {{export: string, from: string}} */ value) =>
             `${value.export} from ${value.from}`,
           maintained: (/** @type {boolean} */ value) => (value ? 'yes' : 'no'),
-          added: (/** @type {boolean} */ value) => (value ? 'yes' : 'no'),
-          default: (/** @type {boolean} */ value) => (value ? 'yes' : 'no'),
+          added: (/** @type {boolean | string} */ value) =>
+            typeof value === 'string' ? value : value ? 'yes' : 'no',
+          default: (/** @type {boolean | string} */ value) =>
+            typeof value === 'string' ? value : value ? 'yes' : 'no',
         },
       }),
       text(themeNextSteps(run, words)),

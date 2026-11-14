@@ -260,9 +260,12 @@ described.
   In a project without a theme module, doctor counts a package theme as wired
   when project source imports the provider its package names
   (`spec:AST-039/FR15`) by name from the named module and renders it as an
-  element. That theme is the one whose stylesheet the app imports, or the
-  package's only theme; with several and no imported stylesheet, doctor
-  reports that one of them is wired and that it cannot tell which. An import
+  element. That theme is the one whose stylesheet the app imports (its
+  export, or any stylesheet of the package that is that theme's file), or the
+  package's only theme. With several, doctor reports that one of them is
+  wired and that it cannot tell which, naming each stylesheet of the package
+  the app imports; it never calls a stylesheet missing when the app imports
+  one from the package. An import
   that is never rendered does not count. The `theme-management` check then
   names the theme and its provider and offers no `theme add`.
 
@@ -306,8 +309,10 @@ described.
      root only, this replaces the rule that such a folder fails discovery
      (`architecture:cli-surface` INV19).
   4. A project with no theme module keeps working as it is. Doctor reports that
-     the CLI manages none of its themes and names the import command; the FR11
-     checks apply once a theme module exists.
+     the CLI manages none of its themes and names the import command, except
+     for a theme its package's provider wires (FR11), which doctor names with
+     that provider and no import command; the FR11 checks apply once a theme
+     module exists.
   5. A caller that sets `ASTRYX_THEME` chooses the default with `theme use`, or
      with `astryx.theme` in a project with no theme module.
 

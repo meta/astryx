@@ -94,7 +94,8 @@ export const integrationBaseSchema = z.object({
   docs: z.string().optional(),
   themes: z.string().optional(),
   // One provider component that wires every theme under `themes` into an
-  // app. Each theme's stylesheet stays the one its package exports.
+  // app. Each theme's stylesheet stays the one its package exports. An
+  // unknown key inside is stripped, as unknown top-level keys are.
   themeProvider: z
     .object({
       export: z
@@ -105,7 +106,6 @@ export const integrationBaseSchema = z.object({
         ),
       from: z.string().min(1, 'themeProvider.from must not be blank'),
     })
-    .strict()
     .optional(),
   // Experimental roots (spec:AST-017 FR27). An unknown key inside is
   // stripped, as unknown top-level keys are, so a newer CLI's experiment
@@ -189,7 +189,24 @@ export function parseCliCommandField(input, label) {
 export const KNOWN_INTEGRATION_KEYS = Object.keys(integrationSchema.shape);
 
 /**
- * The manifest keys this CLI does not know, in the order they were authored.
+ * The object schema a known key holds, or null when it holds no object.
+ * @param {string} key
+ * @returns {Record<string, unknown> | null}
+ */
+function objectShape(key) {
+  /** @type {any} */
+  let type =
+    integrationSchema.shape[
+      /** @type {keyof typeof integrationSchema.shape} */ (key)
+    ];
+  while (type && !type.shape && typeof type.unwrap === 'function')
+    type = type.unwrap();
+  return type?.shape ?? null;
+}
+
+/**
+ * The manifest keys this CLI does not know, in the order they were authored,
+ * a key inside a known object named `<key>.<inner>`.
  *
  * Separate from `parseIntegration` because the two answer different questions:
  * the parser says whether the manifest is usable, and this says how much of it
@@ -203,7 +220,12 @@ export function unknownIntegrationKeys(input) {
   if (input == null || typeof input !== 'object' || Array.isArray(input)) {
     return [];
   }
-  return Object.keys(input).filter(
-    key => !KNOWN_INTEGRATION_KEYS.includes(key),
-  );
+  return Object.entries(input).flatMap(([key, value]) => {
+    if (!KNOWN_INTEGRATION_KEYS.includes(key)) return [key];
+    const inner = objectShape(key);
+    if (!inner || value == null || typeof value !== 'object') return [];
+    return Object.keys(value)
+      .filter(name => !Object.hasOwn(inner, name))
+      .map(name => `${key}.${name}`);
+  });
 }

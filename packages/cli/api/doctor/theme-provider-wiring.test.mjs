@@ -13,6 +13,7 @@ import {checkThemes, themeImportWiring} from './theme-checks.mjs';
 import {runChecks} from './doctor.mjs';
 import {themeListAvailable} from '../theme/list/list.mjs';
 import {CLI_VERSION} from '../../test-utils/release-fixtures.mjs';
+import {runCli} from '../../test-utils/run-cli.mjs';
 
 /** @type {string[]} */
 const dirs = [];
@@ -36,8 +37,9 @@ const PROVIDER = {export: 'AcmeThemeProvider', from: '@acme/ui/theme'};
  * An app that depends on `@acme/ui`, an integration whose themes its own
  * provider wires, and on `@astryxdesign/theme-neutral`.
  * @param {string[]} slugs the integration's themes
+ * @param {Record<string, string>} [extraExports] more exports of the package
  */
-function app(slugs = ['brand']) {
+function app(slugs = ['brand'], extraExports = {}) {
   const dir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-theme-provider-'));
   dirs.push(dir);
   write(path.join(dir, 'tsconfig.json'), '{}\n');
@@ -66,7 +68,7 @@ function app(slugs = ['brand']) {
   );
   const packageDir = path.join(dir, 'node_modules/@acme/ui');
   /** @type {Record<string, string>} */
-  const exportsMap = {'./theme': './dist/theme.js'};
+  const exportsMap = {'./theme': './dist/theme.js', ...extraExports};
   for (const slug of slugs) {
     exportsMap[`./themes/${slug}`] = `./dist/${slug}.js`;
     exportsMap[`./themes/${slug}.css`] = `./dist/${slug}.css`;
@@ -199,6 +201,7 @@ describe('a theme its integration wires with its own provider', () => {
           file: 'app/layout.tsx',
           wiredBy: 'AcmeThemeProvider from @acme/ui/theme',
           themes: ['brand', 'night'],
+          stylesheets: [],
         },
       ],
     });
@@ -207,6 +210,39 @@ describe('a theme its integration wires with its own provider', () => {
       message:
         'app/layout.tsx renders AcmeThemeProvider from @acme/ui/theme, which wires one of brand, night; doctor could not tell which, because the app imports none of their stylesheets.',
     });
+  });
+
+  it('counts a stylesheet of the package at another path as the theme it is', async () => {
+    // The package keeps the night stylesheet at a path of its own too.
+    const dir = app(['brand', 'night'], {
+      './Theme/Night/nightTheme.css': './dist/night.css',
+      './xds.css': './dist/xds.css',
+    });
+    write(path.join(dir, 'node_modules/@acme/ui/dist/xds.css'), 'x {}\n');
+    write(
+      path.join(dir, 'app/layout.tsx'),
+      `import '@acme/ui/Theme/Night/nightTheme.css';\n${RENDERS}`,
+    );
+    expect((await themeImportWiring(dir)).wired).toEqual([
+      {
+        slug: 'night',
+        owner: '@acme/ui',
+        file: 'app/layout.tsx',
+        wiredBy: 'AcmeThemeProvider from @acme/ui/theme',
+      },
+    ]);
+
+    // A stylesheet of the package that is no theme's: named, never missing.
+    write(
+      path.join(dir, 'app/layout.tsx'),
+      `import '@acme/ui/xds.css';\n${RENDERS}`,
+    );
+    const check = await themesCheck(dir);
+    expect(check).toMatchObject({status: 'info'});
+    expect(check.message).toBe(
+      'app/layout.tsx renders AcmeThemeProvider from @acme/ui/theme, which wires one of brand, night, and the app imports @acme/ui/xds.css from that package; doctor could not tell which of those themes it is.',
+    );
+    expect(check.message).not.toContain('imports none');
   });
 
   it('theme list names the provider beside each of its themes', async () => {
@@ -219,5 +255,15 @@ describe('a theme its integration wires with its own provider', () => {
         wiredBy: PROVIDER,
       }),
     ]);
+    // The JSON keeps added and default as they are.
+    expect(data[0]).toMatchObject({added: false, default: false});
+    // The text says the theme is in use through the provider, where it
+    // would say "added: no".
+    const text = (await runCli(['theme', 'list', '--package', '@acme/ui'], dir))
+      .stdout;
+    expect(text).toContain(
+      'added:       in use through AcmeThemeProvider wherever the app renders it (theme add does not manage it)',
+    );
+    expect(text).not.toMatch(/added:\s+no/);
   });
 });

@@ -18,6 +18,7 @@ import {
   corePeerRange,
   findDoctorCoreDir,
   doctorElementPropOrigins,
+  doctorRendersElement,
   doctorStylesheetImports,
   findDoctorInstalledPackage,
   realDoctorFile,
@@ -151,55 +152,6 @@ function walkAst(value, visit) {
     if (['loc', 'start', 'end', 'extra'].includes(key)) continue;
     walkAst(child, visit);
   }
-}
-
-/**
- * Whether a module renders a provider component: it imports `provider.export`
- * from `provider.from` by name and uses that binding as a JSX element. An
- * import alone, or a type-only one, renders nothing.
- * @param {string} source
- * @param {{export: string, from: string}} provider
- */
-function rendersProvider(source, provider) {
-  if (!source.includes(provider.export) || !source.includes(provider.from))
-    return false;
-  let ast;
-  try {
-    ast = parseModule(source);
-  } catch {
-    return false;
-  }
-  /** @type {Set<string>} */
-  const locals = new Set();
-  walkAst(ast, node => {
-    if (
-      node.type !== 'ImportDeclaration' ||
-      node.importKind === 'type' ||
-      node.source?.value !== provider.from
-    )
-      return;
-    for (const specifier of node.specifiers ?? []) {
-      const imported =
-        specifier.imported?.name ?? specifier.imported?.value ?? null;
-      if (
-        specifier.type === 'ImportSpecifier' &&
-        specifier.importKind !== 'type' &&
-        imported === provider.export
-      )
-        locals.add(specifier.local.name);
-    }
-  });
-  if (locals.size === 0) return false;
-  let rendered = false;
-  walkAst(ast, node => {
-    if (
-      node.type === 'JSXOpeningElement' &&
-      node.name?.type === 'JSXIdentifier' &&
-      locals.has(node.name.name)
-    )
-      rendered = true;
-  });
-  return rendered;
 }
 
 /**
@@ -707,14 +659,15 @@ function definedThemeBase(init) {
  *
  * A package theme whose integration names the provider component that wires
  * its themes (its manifest's `themeProvider`) is wired when the app renders
- * that component (`wiredBy`): the theme whose stylesheet the app imports, or
- * the integration's only theme. A rendered provider with several themes and
- * no stylesheet to tell them apart is unconfirmed, with the themes it may
- * wire.
+ * that component (`wiredBy`): the theme whose stylesheet the app imports
+ * (its export, or a stylesheet of the package that is that theme's file),
+ * or the integration's only theme. A rendered provider with several themes
+ * and no stylesheet to tell them apart is unconfirmed, with the themes it
+ * may wire and the package's stylesheets the app imports.
  * @param {string} cwd
  * @returns {Promise<{
  *   wired: Array<{slug: string, owner: string, file: string, wiredBy?: string}>,
- *   unconfirmed: Array<{file: string, wiredBy?: string, themes?: string[]}>,
+ *   unconfirmed: Array<{file: string, wiredBy?: string, themes?: string[], stylesheets?: string[]}>,
  * }>}
  */
 export async function themeImportWiring(cwd) {
@@ -777,11 +730,16 @@ export async function themeImportWiring(cwd) {
   }
   if (themes.length === 0) return none;
   /** The providers the themes name, once each, with the themes each wires. */
-  /** @type {Map<string, {provider: {export: string, from: string}, themes: ResolvedAppTheme[], file: string | null}>} */
+  /** @type {Map<string, {provider: {export: string, from: string}, themes: ResolvedAppTheme[], file: string | null, stylesheets: Array<{spec: string, target: string | null}>}>} */
   const providers = new Map();
   for (const [theme, provider] of providerOf) {
     const key = `${provider.export}\u0000${provider.from}`;
-    const entry = providers.get(key) ?? {provider, themes: [], file: null};
+    const entry = providers.get(key) ?? {
+      provider,
+      themes: [],
+      file: null,
+      stylesheets: [],
+    };
     entry.themes.push(theme);
     providers.set(key, entry);
   }
@@ -811,7 +769,7 @@ export async function themeImportWiring(cwd) {
     `${theme.owner}\u0000${theme.slug}`;
   /** @type {Set<string>} */
   const unconfirmed = new Set();
-  /** @type {Array<{file: string, wiredBy: string, themes: string[]}>} */
+  /** @type {Array<{file: string, wiredBy: string, themes: string[], stylesheets: string[]}>} */
   const unconfirmedProviders = [];
   for (const file of listProjectSourceFiles(projectDir, '', {
     stylesheets: true,
@@ -826,10 +784,39 @@ export async function themeImportWiring(cwd) {
     // its base to extend it, never to render it: it wires nothing.
     if (generatedThemeFile(source)) continue;
     const shown = relative(projectDir, file);
-    if (path.extname(file) !== '.css')
-      for (const entry of providers.values())
-        if (entry.file == null && rendersProvider(source, entry.provider))
-          entry.file = shown;
+    for (const entry of providers.values()) {
+      if (
+        entry.file == null &&
+        path.extname(file) !== '.css' &&
+        source.includes(entry.provider.export) &&
+        source.includes(entry.provider.from) &&
+        doctorRendersElement(file, {
+          sources: new Set([entry.provider.from]),
+          name: entry.provider.export,
+        })
+      )
+        entry.file = shown;
+      // A stylesheet the app imports from the provider's package: the
+      // package's theme stylesheet, wherever the package keeps it.
+      for (const owner of new Set(entry.themes.map(theme => theme.owner))) {
+        if (!source.includes(`${owner}/`)) continue;
+        let specifiers;
+        try {
+          specifiers =
+            path.extname(file) === '.css'
+              ? doctorStylesheetImports(source)
+              : moduleSpecifiers(source, {runtimeOnly: true});
+        } catch {
+          continue;
+        }
+        for (const spec of specifiers)
+          if (spec.startsWith(`${owner}/`) && /\.css$/u.test(spec))
+            entry.stylesheets.push({
+              spec,
+              target: doctorStylesheetImportFile(spec, file),
+            });
+      }
+    }
     const candidates = themes.filter(
       theme =>
         !wired.has(keyOf(theme)) &&
@@ -883,20 +870,36 @@ export async function themeImportWiring(cwd) {
     }
   }
   // A rendered provider wires its integration's theme: the one whose
-  // stylesheet the app imports, or the only one it has. With several and no
-  // stylesheet to tell them apart, which one it wires is not known.
-  for (const {provider, themes: owned, file} of providers.values()) {
+  // stylesheet the app imports (its export, or any stylesheet of the
+  // package that is that theme's file), or the only one it has. With
+  // several and no stylesheet to tell them apart, which one it wires is not
+  // known.
+  for (const {
+    provider,
+    themes: owned,
+    file,
+    stylesheets,
+  } of providers.values()) {
     if (file == null) continue;
     const wiredBy = `${provider.export} from ${provider.from}`;
-    const imported = owned.filter(theme => wired.has(keyOf(theme)));
+    const files = new Set(
+      stylesheets.flatMap(x =>
+        x.target ? [realDoctorFile(x.target) ?? x.target] : [],
+      ),
+    );
+    const imported = owned.filter(
+      theme =>
+        wired.has(keyOf(theme)) ||
+        files.has(realDoctorFile(theme.stylesheetFile) ?? theme.stylesheetFile),
+    );
     if (imported.length > 0) {
-      for (const theme of imported) {
-        const found =
-          /** @type {{slug: string, owner: string, file: string}} */ (
-            wired.get(keyOf(theme))
-          );
-        wired.set(keyOf(theme), {...found, wiredBy, file});
-      }
+      for (const theme of imported)
+        wired.set(keyOf(theme), {
+          slug: theme.slug,
+          owner: theme.owner,
+          file,
+          wiredBy,
+        });
     } else if (owned.length === 1) {
       wired.set(keyOf(owned[0]), {
         slug: owned[0].slug,
@@ -909,6 +912,7 @@ export async function themeImportWiring(cwd) {
         file,
         wiredBy,
         themes: owned.map(theme => theme.slug),
+        stylesheets: [...new Set(stylesheets.map(x => x.spec))],
       });
     }
   }
@@ -952,7 +956,7 @@ function wiredByImportList(wired) {
  * reports the overall result of the app-theme checks.
  * @param {string} cwd
  * @param {DoctorCheck[]} appChecks - the checks {@link checkAppThemes} returned
- * @param {{wired: Array<{slug: string, file: string, wiredBy?: string}>, unconfirmed: Array<{file: string, wiredBy?: string, themes?: string[]}>}} [wiring] -
+ * @param {{wired: Array<{slug: string, file: string, wiredBy?: string}>, unconfirmed: Array<{file: string, wiredBy?: string, themes?: string[], stylesheets?: string[]}>}} [wiring] -
  *   what {@link themeImportWiring} returned
  * @returns {DoctorCheck}
  */
@@ -1029,17 +1033,20 @@ export function checkThemes(
     providerUnknown.length > 0 &&
     !appPackageNamesTheme(cwd)
   ) {
+    // Which stylesheet of the package the app imports is named, never
+    // called missing: doctor only cannot match it to one theme.
     const shown = providerUnknown
-      .map(
-        entry =>
-          `${entry.file} renders ${entry.wiredBy}, which wires one of ${(entry.themes ?? []).join(', ')}`,
+      .map(entry =>
+        entry.stylesheets?.length
+          ? `${entry.file} renders ${entry.wiredBy}, which wires one of ${(entry.themes ?? []).join(', ')}, and the app imports ${entry.stylesheets.join(', ')} from that package; doctor could not tell which of those themes ${entry.stylesheets.length > 1 ? 'they are' : 'it is'}`
+          : `${entry.file} renders ${entry.wiredBy}, which wires one of ${(entry.themes ?? []).join(', ')}; doctor could not tell which, because the app imports none of their stylesheets`,
       )
       .join('; ');
     return {
       id: 'themes',
       label,
       status: 'info',
-      message: `${shown}; doctor could not tell which, because the app imports none of their stylesheets.`,
+      message: `${shown}.`,
     };
   }
   if (packages.length === 0 && wiredByImport.length > 0) {
