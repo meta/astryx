@@ -52,6 +52,20 @@ function runCli(args, cwd) {
 }
 
 /**
+ * Writes a theme source whole: to a new file in the same folder, then renamed
+ * over it. A rebuild that reads the source while the test writes it then sees
+ * the old or the new content, never a part of it. fs.writeFileSync empties the
+ * file before it writes, so a rebuild reading in that gap ends at once on a
+ * part of a file and a second rebuild follows.
+ * @param {string} file
+ * @param {string} content
+ */
+function saveWhole(file, content) {
+  const part = `${file}.${process.pid}.part`;
+  fs.writeFileSync(part, content);
+  fs.renameSync(part, file);
+}
+/**
  * Resolves once the child's output holds `count` matches of `pattern`, and
  * rejects if the child exits first. It waits on the watcher's own output, not
  * on a clock: only the test's timeout bounds it. `onPoll`, if given, runs
@@ -109,14 +123,19 @@ function waitForOutput(
  * a fault to report, not to wait out.
  * @param {import('node:child_process').ChildProcess} child
  * @param {() => string} read
- * @param {{file: string, source: string, content: string, color: string}} edit
+ * @param {{file: string, source: string, content: string, color: string, saved?: boolean}} edit
+ *   `saved`: the caller has just written `content` itself; wait without saving.
  */
-function saveAndWaitForColor(child, read, {file, source, content, color}) {
+function saveAndWaitForColor(
+  child,
+  read,
+  {file, source, content, color, saved = false},
+) {
   const count = (/** @type {RegExp} */ pattern) =>
     (read().match(pattern) ?? []).length;
   // Each started rebuild ends with one more "Watching" line after the first.
   const startedBefore = count(/rebuilding /g);
-  fs.writeFileSync(source, content);
+  if (!saved) saveWhole(source, content);
   let savedAt = Date.now();
   let missed = 0;
   const built = () => {
@@ -147,7 +166,7 @@ function saveAndWaitForColor(child, read, {file, source, content, color}) {
           );
           return;
         }
-        fs.writeFileSync(source, content);
+        saveWhole(source, content);
         savedAt = Date.now();
       }
       const firstAfterSaveEnded =
@@ -342,11 +361,11 @@ describe('theme build --watch', () => {
       // fs.watch can drop an event under load, so the write repeats until the
       // watcher reports the change (an idempotent write).
       const changed = `export default { name: 'wt', tokens: { '--color-bg': '#010203' } };\n`;
-      fs.writeFileSync(themeFile, changed);
+      saveWhole(themeFile, changed);
       await waitForOutput(child, read, 'rebuilding wt\\.mjs', {
         onPoll: () => {
           try {
-            fs.writeFileSync(themeFile, changed);
+            saveWhole(themeFile, changed);
           } catch {
             // The temporary folder is gone at teardown.
           }
@@ -406,6 +425,54 @@ describe('theme build --watch', () => {
     await waitForExit(child);
   }, 30_000);
 
+  it('ends on the full content after a rebuild reads a source written in place, and keeps watching', async () => {
+    // Some editors write a file in place (vim with backupcopy=yes, VS Code on
+    // some file systems): the file is empty, then full. A rebuild that reads it
+    // in between ends on part of a file; the change that fills it must still
+    // rebuild the theme from the full content.
+    const themeFile = path.join(tmpDir, 'ip.mjs');
+    const cssFile = path.join(tmpDir, 'ip.css');
+    const version = (/** @type {string} */ color) =>
+      `export default { name: 'ip', tokens: { '--color-bg': '${color}' } };\n`;
+    fs.writeFileSync(themeFile, version('#ffffff'));
+    const child = spawn(
+      process.execPath,
+      [CLI_BIN, 'theme', 'build', 'ip.mjs', '--watch'],
+      {cwd: tmpDir, env: {...process.env, FORCE_COLOR: '0'}},
+    );
+    onTestFinished(() => {
+      child.kill('SIGKILL');
+    });
+    let stdout = '';
+    const read = () => stdout;
+    child.stdout.on('data', d => (stdout += d.toString()));
+    child.stderr.on('data', d => (stdout += d.toString()));
+    try {
+      await waitForOutput(child, read, 'Watching');
+      // Empty the source in place, and fill it 1.5 s later: the debounce
+      // starts a rebuild of the empty file in between.
+      const fd = fs.openSync(themeFile, 'w');
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      fs.writeSync(fd, version('#0a0b0c'));
+      fs.closeSync(fd);
+      await saveAndWaitForColor(child, read, {
+        file: cssFile,
+        source: themeFile,
+        content: version('#0a0b0c'),
+        color: '#0a0b0c',
+        saved: true,
+      });
+      // A rebuild of part of a file may add a "rebuilding" line; the watcher
+      // stays alive and ends on the full content.
+      expect(child.exitCode).toBe(null);
+      expect(fs.readFileSync(cssFile, 'utf-8')).toMatch(/#0a0b0c/);
+    } finally {
+      child.kill('SIGINT');
+    }
+    await waitForExit(child);
+    expect(stdout.trimEnd().endsWith('Stopped watching.')).toBe(true);
+  }, 60_000);
+
   it('stops at once when interrupted mid-rebuild, and drops a queued change', async () => {
     const themeFile = path.join(tmpDir, 'ws.mjs');
     fs.writeFileSync(
@@ -441,14 +508,14 @@ describe('theme build --watch', () => {
       await waitForOutput(child, read, 'rebuilding ws\\.mjs', {
         onPoll: () => {
           try {
-            fs.writeFileSync(themeFile, slow);
+            saveWhole(themeFile, slow);
           } catch {
             // The temporary folder is gone at teardown.
           }
         },
       });
       // Queue a change behind the rebuild in progress (debounce is 100 ms).
-      fs.writeFileSync(themeFile, `${slow}// queued\n`);
+      saveWhole(themeFile, `${slow}// queued\n`);
       // Let the 100 ms debounce queue the change. This is not a deadline: a slow
       // runner can only leave the change unqueued, never fail the test.
       await new Promise(resolve => setTimeout(resolve, 500));
