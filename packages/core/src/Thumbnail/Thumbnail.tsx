@@ -46,6 +46,10 @@ import type {BaseProps} from '../BaseProps';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
+import {
+  focusOwnerProps,
+  focusWithinOwner,
+} from '../privateAttributes/focusOwner.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {
@@ -505,13 +509,15 @@ export function Thumbnail({
       <div
         {...(isInteractive ? pressable : undefined)}
         {...mergeProps(
-          focusOutlineProps.focusWithin(
+          stylex.props(
             styles.imageContainer,
             isInteractive && styles.interactive,
             isInteractive && styles.overlay,
             // The touch press's strength and release, on the element the
             // controller writes to; the `::after` above paints off it.
             isInteractive && interactionOverlayStyles.pressedAlpha,
+            // Rings for Open only. The remove button rings itself.
+            focusWithinOwner,
           ),
           isHoverReveal ? getContainerProps() : {},
         )}>
@@ -522,7 +528,8 @@ export function Thumbnail({
             onKeyDown={isInteractive ? undefined : suppressActivationKeys}
             aria-label={t('@astryx.thumbnail.open', {accessibleName})}
             aria-disabled={isInteractive ? undefined : 'true'}
-            {...stylex.props(styles.interactiveButton)}>
+            {...focusOwnerProps}
+            {...focusOutlineProps.suppressed(styles.interactiveButton)}>
             {imageContent}
           </button>
         ) : (

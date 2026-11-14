@@ -151,6 +151,16 @@ export const Clickable: Story = {
   },
 };
 
+export const ClickableWithRemove: Story = {
+  args: {
+    src: DARK_IMAGE,
+    alt: 'Dark landscape',
+    onClick: () => {},
+    onRemove: () => {},
+    showRemoveOn: 'always',
+  },
+};
+
 export const Loading: Story = {
   name: 'Loading (no preview)',
   args: {

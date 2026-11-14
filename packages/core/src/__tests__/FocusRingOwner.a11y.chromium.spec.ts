@@ -1,5 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope ^packages/core/src/Selector/ ^packages/core/src/privateAttributes/focusOwner ^packages/core/src/utils/focusOutline ^apps/storybook/stories/Selector
+// @pr-a11y scope ^packages/core/src/Selector/ ^packages/core/src/privateAttributes/focusOwner ^packages/core/src/utils/focusOutline ^apps/storybook/stories/Selector ^packages/core/src/Thumbnail/ ^apps/storybook/stories/Thumbnail
 
 /**
  * @file FocusRingOwner.a11y.chromium.spec.ts
@@ -9,7 +9,7 @@
  *   tab stop in a Selector trigger shows exactly one focus ring. The trigger
  *   box rings for the trigger button only; the clear button rings itself, and
  *   the box stays unringed
- * @position Regression proof for focusWithinOwner in Selector
+ * @position Regression proof for focusWithinOwner in Selector and Thumbnail
  */
 
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
@@ -76,4 +76,16 @@ for (const width of [1280, 390]) {
       });
     }
   }
+}
+
+for (const width of [1280, 390]) {
+  test(`at ${width} px, each tab stop in a Thumbnail with Open and Remove shows one ring`, async ({
+    page,
+  }) => {
+    await open(page, 'core-thumbnail--clickable-with-remove', width);
+    // Open, then Remove.
+    for (const {focused, rings} of await ringsAtEachStop(page, 2)) {
+      expect(rings, `rings while "${focused}" is focused`).toHaveLength(1);
+    }
+  });
 }
