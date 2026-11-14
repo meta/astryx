@@ -337,8 +337,9 @@ describe('Thumbnail', () => {
     );
     expect(ringRules.length).toBeGreaterThan(0);
     for (const selector of ringRules) {
-      expect(selector).toContain(':first-child:focus-visible');
+      expect(selector).toContain('[data-astryx-focus-owner]:focus-visible');
     }
+    expect(open).toHaveAttribute('data-astryx-focus-owner');
     // Open draws no ring of its own inside the container's.
     expect(
       outlineStylesAtRest(open).length > 0 &&
