@@ -55,7 +55,7 @@ const DOCTYPE = /<!doctype/iy;
  *   'text' when the name is not a tag name, so the `<` is text; 'open' when
  *   no `>` ends the tag, so the rest of the document is text
  */
-function readTag(html, i) {
+export function readTag(html, i) {
   const n = html.length;
   const nameStart = i;
   while (i < n && NAME_CHAR.test(html[i])) i++;
