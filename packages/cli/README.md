@@ -551,7 +551,7 @@ checks and values depend on the project; the output shape is stable:
 ```
 $ astryx doctor
 astryx doctor
-One line per check: status, id, label, message, fix
+Each check: status, id, label, message, fix
 
 [ok]    node-version - Node.js version - Node v24.18.1 meets the minimum (>=22.13.0).
 [warn]  themes - Theme packages - No @astryxdesign/theme-* packages are installed. - fix: Install a theme, e.g. `npm

@@ -87,7 +87,7 @@ function printHuman(report) {
   // to one.
   const summaryFields = /** @type {const} */ (['pass', 'warn', 'fail', 'info']);
   emit(
-    section('astryx doctor', `One line per check: ${CHECK_FIELDS.join(', ')}`),
+    section('astryx doctor', `Each check: ${CHECK_FIELDS.join(', ')}`),
     records(report.checks, {
       fields: [...CHECK_FIELDS],
       layout: 'inline',
