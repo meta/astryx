@@ -2985,6 +2985,33 @@ export async function loadThemeExport(file, {cwd = process.cwd()} = {}) {
 }
 
 /**
+ * The input a theme module gives `defineTheme()` for the theme a build of
+ * it reads, evaluated as the build evaluates the module (an import, an
+ * expression, a spread or a computed key is its value), with the theme Core
+ * made of it. When Core refuses the input, the input the module gave for
+ * the named theme (else its last) and Core's error; null when the module
+ * does not load at all.
+ * @param {string} file
+ * @param {{cwd?: string, name?: string}} [ctx]
+ * @returns {Promise<{input: any, theme: any, error: Error | null} | null>}
+ */
+export async function loadThemeInput(file, {cwd = process.cwd(), name} = {}) {
+  const filePath = path.resolve(cwd, file);
+  await selectCore(cwd, {projectOnly: false});
+  const interception = interceptCore(_coreThemeModule, _coreRootModule);
+  try {
+    const {theme} = await extractThemeDefinition(filePath, interception);
+    return {input: interception.inputOf(theme) ?? null, theme, error: null};
+  } catch (e) {
+    const given = interception.inputs;
+    const input =
+      given.filter(x => x && typeof x === 'object' && x.name === name).at(-1) ??
+      given.at(-1);
+    return input ? {input, theme: null, error: /** @type {Error} */ (e)} : null;
+  }
+}
+
+/**
  * A one-mode `colorModes` value (`['light']` or `['dark']`), or null for
  * anything else: a theme with both modes needs no export.
  * @param {unknown} value

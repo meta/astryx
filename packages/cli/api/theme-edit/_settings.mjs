@@ -27,6 +27,7 @@ import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {
   loadThemeExport,
+  loadThemeInput,
   oneColorMode,
   themeBuildForReport,
 } from '../theme/build/build.mjs';
@@ -1618,10 +1619,13 @@ export function valueProblem(s) {
  * One entry of the top-level `tokens` map in a theme's own source, as
  * written: its token (null for a computed key no read of the file can
  * resolve), the key as typed, the line that sets it, and its value's shape.
- * A `duplicate` entry names a second `tokens` key (with every line); a
+ * A `scope` entry names where a scope (`components`, `onDark`, `onLight`,
+ * `adaptations`) starts; a `scoped` entry is a token one sets, with its
+ * scope path (`components.button.base`). A `duplicate` entry names a
+ * second `tokens` key (with every line); a
  * `typography` entry is one typography field (its dotted key and value);
  * an `unresolved` entry says the map holds something only a build reads.
- * @typedef {{token: string | null, key: string, line: number | null, kind: 'text' | 'number' | 'pair' | 'object' | 'other' | 'duplicate' | 'typography' | 'unresolved', value?: any, halves?: Array<string | number | undefined>, lines?: Array<number | null>, file?: string, overridden?: boolean, expression?: boolean, notToken?: boolean}} OwnTokenEntry
+ * @typedef {{token: string | null, key: string, line: number | null, kind: 'text' | 'number' | 'pair' | 'object' | 'other' | 'duplicate' | 'typography' | 'unresolved' | 'scope' | 'scoped', scope?: string, value?: any, halves?: Array<string | number | undefined>, lines?: Array<number | null>, file?: string, overridden?: boolean, expression?: boolean, notToken?: boolean}} OwnTokenEntry
  */
 
 /**
@@ -1766,6 +1770,52 @@ function ownPageTokens(
       line: tokensProps[0].loc?.start?.line ?? null,
       lines: tokensProps.map((/** @type {any} */ p) => p.loc?.start?.line),
     });
+  // Tokens a scope sets (a part's blocks in `components`, `onDark`,
+  // `onLight`, an adaptation rule), each with its scope path and line.
+  if (detail)
+    for (const p of def.properties) {
+      const scope =
+        p.type === 'ObjectProperty' && !p.computed ? keyOf(p.key) : null;
+      if (
+        !scope ||
+        !['components', 'onDark', 'onLight', 'adaptations'].includes(scope)
+      )
+        continue;
+      detail.push({
+        token: null,
+        key: scope,
+        kind: 'scope',
+        line: p.loc?.start?.line ?? null,
+      });
+      /** @param {any} node @param {string[]} at @param {number} depth */
+      const walk = (node, at, depth) => {
+        const obj = unwrap(node);
+        if (depth > 12) return;
+        if (obj?.type === 'ArrayExpression') {
+          obj.elements.forEach(
+            (/** @type {any} */ el, /** @type {number} */ i) =>
+              walk(el, [...at, String(i)], depth + 1),
+          );
+          return;
+        }
+        if (obj?.type !== 'ObjectExpression') return;
+        for (const q of obj.properties) {
+          if (q.type !== 'ObjectProperty') continue;
+          const k = q.computed ? textOf(unwrap(q.key)) : keyOf(q.key);
+          if (!k) continue;
+          if (k.startsWith('--'))
+            detail.push({
+              token: k,
+              key: k,
+              kind: 'scoped',
+              scope: at.join('.'),
+              line: q.loc?.start?.line ?? null,
+            });
+          else walk(q.value, [...at, k], depth + 1);
+        }
+      };
+      walk(p.value, [scope], 0);
+    }
   // The typography fields, as written, for their own checks.
   const typo = def.properties.find(
     (/** @type {any} */ p) =>
@@ -2393,7 +2443,7 @@ function ownTokens(cwd, slug) {
  * @param {string} slug
  * @returns {Map<string, string | null> | null}
  */
-function builtOwnTokens(cwd, slug, js = /** @type {string | null} */ (null)) {
+function builtOwnTokens(cwd, slug) {
   const f = themeFiles(cwd, slug);
   /** @type {string} */
   let module;
@@ -2405,10 +2455,7 @@ function builtOwnTokens(cwd, slug, js = /** @type {string | null} */ (null)) {
   const built = /\/\/ Built with \S+\.theme\.ts ([0-9a-f]{16})\./.exec(
     module,
   )?.[1];
-  if (
-    !js &&
-    (!built || !fs.existsSync(f.js) || built !== themeSourceHash(cwd, slug))
-  )
+  if (!built || !fs.existsSync(f.js) || built !== themeSourceHash(cwd, slug))
     return null;
   // What the settings module gives each top-level token: a text value as
   // it is, a [light, dark] pair as a pair.
@@ -2463,7 +2510,7 @@ function builtOwnTokens(cwd, slug, js = /** @type {string | null} */ (null)) {
   const named = namedInOwnSource(cwd, slug);
   /** @type {Map<string, string | null>} */
   const out = new Map();
-  for (const [k, v] of js ? topTokensOf(js) : builtTopTokens(cwd, slug)) {
+  for (const [k, v] of builtTopTokens(cwd, slug)) {
     const given = settings.get(k);
     const own =
       given === undefined
@@ -5939,153 +5986,27 @@ export async function themeSourceRefusal(cwd, slug) {
 }
 
 /**
- * What a build made now writes for a theme: its own page-wide tokens (see
- * builtOwnTokens), every top-level token, and the typography it was given
- * (evaluated: an import or an expression is its value). Null when it does
- * not build in the project's cache folder.
+ * The input the theme's own source gives `defineTheme()`, evaluated as a
+ * build evaluates it, with the theme Core made of it (or Core's error when
+ * it refuses the input); null when the source does not load.
  * @param {Ctx} ctx
  * @param {string} slug
  * @param {string | null} like the base theme, whose built tokens are `base`
- * @returns {Promise<{own: Map<string, string | null>, tops: Map<string, string | null>, base: Map<string, string | null>, shapes: Map<string, BuiltShape>, typography: any} | null>}
+ * @returns {Promise<{input: any, theme: any, error: Error | null, base: Map<string, string | null>} | null>}
  */
-export async function evaluatedTheme(ctx, slug, like) {
-  const baseFile = like ? baseModule(ctx.project.cwd, like) : null;
-  return cacheBuild(ctx, slug, js => {
-    const read = builtModule(js);
-    return {
-      own: builtOwnTokens(ctx.project.cwd, slug, js) ?? new Map(),
-      tops: topTokensOf(js),
-      base: baseFile ? topTokensOf(baseFile) : new Map(),
-      shapes: read.shapes,
-      typography: read.axes?.typography ?? null,
-    };
-  });
-}
-
-/**
- * What a built module writes for a top-level token: text, a number, an
- * object, a pair (each half), or something else.
- * @typedef {{kind: 'text' | 'number' | 'object' | 'pair' | 'other', value?: any, halves?: unknown[]}} BuiltShape
- */
-
-/**
- * What a built theme module holds: the shape of each top-level token, and
- * its `__axes` (the typography and motion it was given, evaluated).
- * @param {string} js
- * @returns {{shapes: Map<string, BuiltShape>, axes: any}}
- */
-function builtModule(js) {
-  /** @type {Map<string, BuiltShape>} */
-  const shapes = new Map();
-  try {
-    const ast = /** @type {any} */ (
-      parseModule(fs.readFileSync(js, 'utf8'), {
-        sourceType: 'module',
-        plugins: ['typescript'],
-      })
-    );
-    /** @param {any} n @returns {any} */
-    const plain = n =>
-      n?.type === 'StringLiteral' || n?.type === 'NumericLiteral'
-        ? n.value
-        : n?.type === 'UnaryExpression' && n.operator === '-'
-          ? -plain(n.argument)
-          : n?.type === 'NullLiteral'
-            ? null
-            : n?.type === 'ObjectExpression'
-              ? Object.fromEntries(
-                  n.properties.map((/** @type {any} */ p) => [
-                    p.key?.value ?? p.key?.name,
-                    plain(p.value),
-                  ]),
-                )
-              : n?.type === 'ArrayExpression'
-                ? n.elements.map(plain)
-                : undefined;
-    /** @type {any} */
-    let axes = null;
-    /** @type {any} */
-    let tokens = null;
-    /** @param {any} node @param {number} depth */
-    const visit = (node, depth) => {
-      if (!node || typeof node !== 'object') return;
-      if (node.type === 'ObjectProperty') {
-        const k = node.key?.name ?? node.key?.value;
-        if (k === '__axes' && !axes) axes = plain(node.value);
-        // The theme's own top-level tokens: the first `tokens` object.
-        if (
-          k === 'tokens' &&
-          !tokens &&
-          node.value?.type === 'ObjectExpression'
-        )
-          tokens = node.value;
-      }
-      for (const v of Object.values(node))
-        if (Array.isArray(v)) v.forEach(c => visit(c, depth + 1));
-        else if (v && typeof v === 'object' && v.type) visit(v, depth + 1);
-    };
-    visit(ast.program, 0);
-    for (const p of tokens?.properties ?? []) {
-      const k = p.key?.value ?? p.key?.name;
-      if (typeof k !== 'string') continue;
-      const v = p.value;
-      shapes.set(
-        k,
-        v?.type === 'StringLiteral'
-          ? {kind: 'text', value: v.value}
-          : v?.type === 'NumericLiteral'
-            ? {kind: 'number', value: v.value}
-            : v?.type === 'ObjectExpression'
-              ? {kind: 'object', value: plain(v)}
-              : v?.type === 'ArrayExpression'
-                ? {kind: 'pair', halves: plain(v)}
-                : {kind: 'other'},
-      );
-    }
-    return {shapes, axes};
-  } catch {
-    return {shapes, axes: null};
-  }
-}
-
-/**
- * Build the theme into the project's cache folder and read the built
- * module with `read` before the folder is removed; null when it does not
- * build there.
- * @template T
- * @param {Ctx} ctx
- * @param {string} slug
- * @param {(js: string) => T} read
- * @returns {Promise<T | null>}
- */
-async function cacheBuild(ctx, slug, read) {
+export async function ownThemeInput(ctx, slug, like) {
   const {cwd} = ctx.project;
-  const f = themeFiles(cwd, slug);
-  // The build writes only inside the project: the cache folder when it is
-  // there, else a hidden folder in the theme's (removed after).
-  const name = `.${slug}.pairs-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
-  const inside = !path.relative(cwd, ctx.project.cacheDir).startsWith('..');
-  const dir = path.join(inside ? ctx.project.cacheDir : f.dir, name);
-  const silent = logger.silent;
-  logger.setSilent(true);
+  const baseFile = like ? baseModule(cwd, like) : null;
   try {
-    fs.mkdirSync(dir, {recursive: true});
-    await themeBuildForReport(
-      shown(cwd, f.ts),
-      {out: path.relative(cwd, path.join(dir, `${slug}.css`))},
-      {cwd},
-      {compact: true},
+    const loaded = await loadThemeInput(themeFiles(cwd, slug).ts, {
+      cwd,
+      name: slug,
+    });
+    return (
+      loaded && {...loaded, base: baseFile ? topTokensOf(baseFile) : new Map()}
     );
-    const js = fs
-      .readdirSync(dir)
-      .find(n => n.endsWith('.js') && !n.endsWith('.d.js'));
-    if (!js) return null;
-    return read(path.join(dir, js));
   } catch {
     return null;
-  } finally {
-    logger.setSilent(silent);
-    fs.rmSync(dir, {recursive: true, force: true});
   }
 }
 

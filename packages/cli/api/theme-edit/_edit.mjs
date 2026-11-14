@@ -96,7 +96,7 @@ import {
   ownSourceTokens,
   ownSourceTokenValues,
   ownTokenEntries,
-  evaluatedTheme,
+  ownThemeInput,
   nonTextMessage,
   ownPartTokens,
   PHONE_TYPE,
@@ -1430,19 +1430,29 @@ async function ownTokenProblems(ctx, slug, data) {
   const fileOf = e => (e.file ? path.relative(cwd, e.file) : null);
   /** @param {{line: number | null, file?: string}} e */
   const atOf = e => ({line: e.line, file: fileOf(e)});
-  // Every value is judged as a build made now writes it (an import, an
-  // expression, a spread or a computed key is its evaluated value). The
-  // source is read to name the file and line that hold each value, and for
-  // what a build erases or refuses outright: a `tokens` key given twice
-  // (JavaScript keeps the last), a [light, dark] pair with other than two
-  // values (the build drops the rest), a private variable (the build
-  // refuses it), and a key that is no token name.
+  // Every value is judged as the source gives it to defineTheme(), the
+  // module evaluated as a build evaluates it (an import, an expression, a
+  // spread or a computed key is its value), in every place a build writes
+  // tokens from: the page's tokens, a part's blocks, onDark and onLight,
+  // adaptation rules, and the typography. The source's syntax is read to
+  // name the file and line that hold each value, and for what evaluation
+  // erases: a `tokens` key given twice (JavaScript keeps the last) and a
+  // [light, dark] pair with other than two values written in the file.
   const entries = ownTokenEntries(cwd, slug).filter(e => !e.overridden);
   const tokensLine = entries.find(e => e.kind === 'unresolved')?.line ?? null;
-  /** Where the build's value for a token comes from. @param {string} token */
+  /** Where a page token's value comes from. @param {string} token */
   const whereOf = token => {
-    const e = entries.find(x => x.token === token);
+    const e = entries.find(x => x.token === token && x.kind !== 'scoped');
     return e ? atOf(e) : {line: tokensLine, file: null};
+  };
+  /** Where a scoped token's value comes from. @param {string} scope @param {string} token */
+  const whereIn = (scope, token) => {
+    const e =
+      entries.find(
+        x => x.kind === 'scoped' && x.scope === scope && x.token === token,
+      ) ??
+      entries.find(x => x.kind === 'scope' && x.key === scope.split('.')[0]);
+    return e ? atOf(e) : {line: null, file: null};
   };
   for (const e of entries) {
     if (e.kind === 'duplicate')
@@ -1460,7 +1470,7 @@ async function ownTokenProblems(ctx, slug, data) {
         why: `${key} is no token: a token name starts with -- (such as --color-accent), and the build writes any other key as a CSS declaration on the theme's root, which styles every element; for one part, set it as a property on that part (\`${P} set ${slug} ${key} <value> --on <part>\`)`,
         ...atOf(e),
       });
-    } else if (e.token?.startsWith('--_'))
+    } else if (e.token?.startsWith('--_') && e.kind !== 'scoped')
       out.push({
         token: e.token,
         value: '',
@@ -1484,148 +1494,186 @@ async function ownTokenProblems(ctx, slug, data) {
   }
   // A private variable stops the build itself: nothing more to judge.
   if (out.some(b => b.token.startsWith('--_'))) return out;
-  const built = await evaluatedTheme(ctx, slug, data.like ?? null);
-  if (!built) return out;
+  const loaded = await ownThemeInput(ctx, slug, data.like ?? null);
+  const input = loaded?.input;
+  if (!input || typeof input !== 'object') return out;
   const named = new Set(out.map(b => b.token));
-  // Typography: each token the build writes from it is judged like any
-  // other, and named by the typography field that gives it.
-  const typo = entries.filter(e => e.kind === 'typography');
-  /** @param {string} role */
-  const roleEntry = role =>
-    typo.find(e => e.key.startsWith(`${role}.`)) ??
-    (role === 'heading'
-      ? typo.find(e => e.key.startsWith('body.'))
-      : undefined);
   /**
-   * The typography field that gives a token the build writes, or null when
-   * the token is no typography token or the source sets no typography.
+   * Why a token's value is refused, or null: text is checked as `set`
+   * checks it; a pair holds two texts and only a color takes one; any other
+   * value (null, a boolean, a number, an object) is no text.
    * @param {string} token
+   * @param {unknown} value
+   * @param {string} file the file named in a pair's refusal
+   * @returns {string | null}
    */
-  const typographyOf = token => {
-    if (!typo.length) return null;
-    const family = /^--font-family-([a-z]+)$/.exec(token)?.[1];
-    if (family) return roleEntry(family) ?? null;
-    if (!/^--(font-size|text|heading)-/.test(token)) return null;
-    if (/-weight$/.test(token))
-      return (
-        roleEntry(
-          /heading/.test(token)
-            ? 'heading'
-            : /code/.test(token)
-              ? 'code'
-              : 'body',
-        ) ??
-        typo.find(e => /weight/.test(e.key)) ??
-        typo[0]
-      );
-    return typo.find(e => e.key.startsWith('scale.')) ?? typo[0];
-  };
-  // The fields the typography is given, as the build was given them
-  // (evaluated): what Core reads them as, with the working form.
-  /** @type {Set<any>} */
-  const flagged = new Set();
-  for (const e of typo) {
-    const value = e.key
-      .split('.')
-      .reduce(
-        (/** @type {any} */ o, /** @type {string} */ k) => o?.[k],
-        built.typography,
-      );
-    const why = typographyProblem(e.key, value);
-    if (why) {
-      flagged.add(e);
-      out.push({
-        token: `typography.${e.key}`,
-        value: value == null ? '' : String(value),
-        why,
-        ...atOf(e),
-      });
+  const judge = (token, value, file) => {
+    if (Array.isArray(value)) {
+      if (value.length !== 2 || value.some(h => typeof h !== 'string'))
+        return nonTextMessage(ctx, slug, [token, value]);
+      if (!isColorToken(token)) {
+        const unitless =
+          ctx.C.typeOf(token) === 'size' &&
+          value.every(h => /^\d*\.?\d+$/.test(String(h).trim()));
+        return unitless
+          ? nonTextMessage(ctx, slug, [token, value.map(Number), 'unit'])
+          : `${file} gives ${token} a [light, dark] pair, but only colors differ by mode: the build would write light-dark(), which browsers take only for colors; give it one value`;
+      }
+      for (const [i, h] of value.entries()) {
+        const why = refused(token, String(h));
+        if (why) return `its ${i === 0 ? 'light' : 'dark'} half: ${why}`;
+      }
+      return null;
     }
+    if (typeof value !== 'string')
+      return nonTextMessage(
+        ctx,
+        slug,
+        value && typeof value === 'object'
+          ? [token, value, 'object']
+          : [token, value],
+      );
+    if (/^light-dark\(/i.test(value) && !isColorToken(token))
+      return `${file} gives ${token} a [light, dark] pair, but only colors differ by mode: the build would write light-dark(), which browsers take only for colors; give it one value`;
+    return refused(token, value);
+  };
+  /** @param {{line: number | null, file: string | null}} at */
+  const fileName = at => at.file ?? `${slug}.theme.ts`;
+  /** A value as the build writes it, when it is text. @param {unknown} v */
+  const asWritten = v =>
+    typeof v === 'string'
+      ? v
+      : Array.isArray(v) &&
+          v.length === 2 &&
+          v.every(h => typeof h === 'string')
+        ? `light-dark(${v.join(', ')})`
+        : '';
+  // The page's own tokens.
+  for (const [token, value] of Object.entries(input.tokens ?? {})) {
+    if (!(token in known) || named.has(token)) continue;
+    const at = whereOf(token);
+    const why = judge(token, value, fileName(at));
+    if (why)
+      out.push({
+        token,
+        value: asWritten(value),
+        why,
+        ...at,
+      });
   }
-  const scale = built.typography?.scale;
-  const scaleEntry = typo.find(e => e.key.startsWith('scale.'));
+  // The tokens each scope sets, wherever in it.
+  /** @param {any} node @param {string[]} path @param {number} depth */
+  const scoped = (node, path, depth) => {
+    if (!node || typeof node !== 'object' || depth > 12) return;
+    for (const [k, v] of Object.entries(node)) {
+      if (k.startsWith('--')) {
+        if (k.startsWith('--_') || !(k in known)) continue;
+        const scope = path.join('.');
+        const at = whereIn(scope, k);
+        const why = judge(k, v, fileName(at));
+        if (why)
+          out.push({
+            token: `${scope} ${k}`,
+            value: asWritten(v),
+            why,
+            ...at,
+          });
+      } else scoped(v, [...path, k], depth + 1);
+    }
+  };
+  for (const scope of ['components', 'onDark', 'onLight', 'adaptations'])
+    scoped(input[scope], [scope], 0);
+  // Typography: each field the source gives, as given, then each token
+  // Core builds from it, named by the field that gives it.
+  const typo = entries.filter(e => e.kind === 'typography');
+  /** @type {Set<string>} */
+  const flagged = new Set();
+  /** @param {any} node @param {string[]} path */
+  const fields = (node, path) => {
+    if (!node || typeof node !== 'object') return;
+    for (const [k, v] of Object.entries(node)) {
+      const key = [...path, k].join('.');
+      if (v && typeof v === 'object' && !Array.isArray(v))
+        fields(v, [...path, k]);
+      else {
+        const why = typographyProblem(key, v);
+        if (!why) continue;
+        const e = typo.find(x => x.key === key) ?? typo[0];
+        flagged.add(key.split('.')[0]);
+        out.push({
+          token: `typography.${key}`,
+          value: typeof v === 'string' ? v : '',
+          why,
+          ...(e ? atOf(e) : {line: null, file: null}),
+        });
+      }
+    }
+  };
+  fields(input.typography, []);
+  const scale = input.typography?.scale;
   if (
-    scaleEntry &&
     scale &&
+    typeof scale === 'object' &&
     scale.base === undefined &&
-    !flagged.has(scaleEntry)
+    !flagged.has('scale')
   ) {
-    flagged.add(scaleEntry);
+    flagged.add('scale');
+    const e = typo.find(x => x.key.startsWith('scale.')) ?? typo[0];
     out.push({
       token: 'typography.scale',
       value: '',
       why: 'the type scale is given no base, and Core reads the sizes from the base and the ratio together: add the body size in pixels, such as scale: {base: 16, ratio: …}',
-      ...atOf(scaleEntry),
+      ...(e ? atOf(e) : {line: null, file: null}),
     });
   }
-  for (const [token, value] of built.tops) {
-    if (!(token in known) || named.has(token)) continue;
-    const shape = built.shapes.get(token) ?? {kind: 'other'};
-    if (
-      value == null &&
-      shape.kind !== 'number' &&
-      shape.kind !== 'object' &&
-      shape.kind !== 'pair'
-    )
-      continue;
-    const owner = typographyOf(token);
-    const own = built.own.has(token);
-    if (!own && !owner) continue;
-    // A typography token the build leaves as the base theme writes it is
-    // the base theme's.
-    if (owner && !own && built.base.get(token) === value) continue;
-    // One problem per typography field: the first token it builds wrong.
-    if (owner && flagged.has(owner)) continue;
-    const at = owner ? atOf(owner) : whereOf(token);
-    const label = owner ? `typography.${owner.key} (builds ${token})` : token;
-    // A number, an object or a pair that is not two texts is no text.
-    if (
-      shape.kind === 'number' ||
-      shape.kind === 'object' ||
-      (shape.kind === 'pair' &&
-        !(shape.halves ?? []).every(h => typeof h === 'string'))
-    ) {
-      out.push({
-        token: label,
-        value: '',
-        why: nonTextMessage(
-          ctx,
-          slug,
-          shape.kind === 'object'
-            ? [token, shape.value, 'object']
-            : [token, shape.kind === 'pair' ? shape.halves : shape.value],
-        ),
-        ...at,
-      });
-      if (owner) flagged.add(owner);
-      continue;
-    }
-    if (value == null) continue;
-    // Only a color differs by mode: a pair on any other token builds a
-    // light-dark() no browser reads there. A size whose halves are bare
-    // numbers is named with the unit it needs too.
-    if (/^light-dark\(/i.test(value) && !isColorToken(token)) {
-      const halves = value
-        .replace(/^light-dark\(\s*|\s*\)$/gi, '')
-        .split(/\s*,\s*/);
-      const unitless =
-        ctx.C.typeOf(token) === 'size' &&
-        halves.every(h => /^\d*\.?\d+$/.test(h));
-      out.push({
-        token: label,
-        value,
-        why: unitless
-          ? nonTextMessage(ctx, slug, [token, halves.map(Number), 'unit'])
-          : `${at.file ?? `${slug}.theme.ts`} gives ${token} a [light, dark] pair, but only colors differ by mode: the build would write light-dark(), which browsers take only for colors; give it one value`,
-        ...at,
-      });
-      if (owner) flagged.add(owner);
-      continue;
-    }
-    const why = refused(token, value);
-    if (why) {
-      out.push({token: label, value, why, ...at});
-      if (owner) flagged.add(owner);
+  const tokens = loaded?.theme?.tokens;
+  if (input.typography && tokens && typeof tokens === 'object') {
+    /** @param {string} role */
+    const roleEntry = role =>
+      typo.find(e => e.key.startsWith(`${role}.`)) ??
+      (role === 'heading'
+        ? typo.find(e => e.key.startsWith('body.'))
+        : undefined);
+    /** The typography field that gives a token Core builds. @param {string} token */
+    const typographyOf = token => {
+      const family = /^--font-family-([a-z]+)$/.exec(token)?.[1];
+      if (family) return roleEntry(family) ?? null;
+      if (!/^--(font-size|text|heading)-/.test(token)) return null;
+      if (/-weight$/.test(token))
+        return (
+          roleEntry(
+            /heading/.test(token)
+              ? 'heading'
+              : /code/.test(token)
+                ? 'code'
+                : 'body',
+          ) ??
+          typo.find(e => /weight/.test(e.key)) ??
+          typo[0] ??
+          null
+        );
+      return typo.find(e => e.key.startsWith('scale.')) ?? typo[0] ?? null;
+    };
+    /** @type {Set<any>} */
+    const reported = new Set();
+    for (const [token, value] of Object.entries(tokens)) {
+      if (!(token in known) || token in (input.tokens ?? {})) continue;
+      const owner = typographyOf(token);
+      if (!owner || reported.has(owner) || flagged.has(owner.key.split('.')[0]))
+        continue;
+      // A token Core leaves as the base theme writes it is the base's.
+      if (loaded?.base.get(token) === value) continue;
+      const at = atOf(owner);
+      const why = judge(token, value, fileName(at));
+      if (why) {
+        reported.add(owner);
+        out.push({
+          token: `typography.${owner.key} (builds ${token})`,
+          value: asWritten(value),
+          why,
+          ...at,
+        });
+      }
     }
   }
   return out;
@@ -1642,6 +1690,12 @@ async function ownTokenProblems(ctx, slug, data) {
  */
 function typographyProblem(key, value) {
   const field = key.split('.').pop();
+  // A weight is a CSS value Core writes as it is: text, never a number.
+  if (
+    (field === 'weight' || key.split('.').includes('weights')) &&
+    typeof value !== 'string'
+  )
+    return `a typography weight is a CSS value in quotes, which Core writes as it is; ${JSON.stringify(value)} is not text: write ${typeof value === 'number' ? `'${value}'` : "'600'"} (or a weight token, such as 'var(--font-weight-bold)')`;
   if (field === 'family') {
     if (typeof value !== 'string')
       return 'a typography family is a family name in quotes, such as "Inter"';
