@@ -17,16 +17,21 @@
  *   integration's contribution-check results and the whole list (with the
  *   template and component replacement passes), which `component`,
  *   `template`, `theme`, `discover` and `search` report, by template
- *   discovery (foundation/discovery/template-adapter.mjs) for its records, by theme discovery
- *   (foundation/discovery/theme-discovery.mjs) for each integration's themes,
- *   by `doctor` (api/doctor/_adapter.mjs) for its file-only docs checks,
+ *   discovery (foundation/discovery/template-adapter.mjs) for its records, by
+ *   the component list (api/component/list/list.mjs) and component
+ *   replacement (foundation/discovery/component-replacement.mjs), by theme
+ *   discovery (foundation/discovery/theme-discovery.mjs) for each
+ *   integration's themes,
+ *   by `doctor` (api/doctor/_adapter.mjs) for its file-only docs checks and
+ *   its theme-wiring scan,
  *   in a run that records modules and variables to its end, and, through
  *   `persistedSummary`, by kept-tree.mjs for the docs not-found hint's
  *   summaries of folder trees, each kept while every path it stamped is
  *   unchanged, in any command. The commands whose runs keep the other
  *   entries are `search`, `build`, `component`, `template`, `theme`,
- *   `discover`, `docs` and `doctor`. Gathers are kept only once the folder exists: the first such run
- *   on a machine just makes it, so a one-off run pays nothing to store one. Only a published CLI stores anything:
+ *   `discover`, `docs` and `doctor`. The first such run on a machine makes the
+ *   folder and keeps its gathers at once, so the next run (most often the same
+ *   session's next command) uses them; doctor never makes it. Only a published CLI stores anything:
  *   its build id (clients/cli/build-id.generated.json, written at `prepack`)
  *   names its exact code, so a checkout, whose code may change between runs
  *   under the same version, always gathers.
@@ -81,7 +86,8 @@ const KEPT_COMMANDS = new Set([
   'theme',
   'discover',
   'docs',
-  // The project check alone (no subcommand): its docs checks are kept.
+  // The project check alone (no subcommand): its docs checks and theme-wiring
+  // scan are kept.
   'doctor',
 ]);
 
@@ -257,9 +263,8 @@ export async function recordRunFor(argv, fn) {
   ) {
     return fn();
   }
-  // Gathers are kept only once the folder exists: the first recorded run on a
-  // machine (search, build, component, template, theme, discover or docs) just makes
-  // it, so a one-off run never pays to store one.
+  // The first recorded run on a machine (search, build, component, template,
+  // theme, discover or docs) makes the folder and keeps its gathers at once.
   const dir = cacheDirPath();
   if (!withoutRecording(() => fs.existsSync(dir))) {
     // Once the per-user cache folder exists doctor uses it; it never makes
@@ -270,8 +275,8 @@ export async function recordRunFor(argv, fn) {
       withoutRecording(() => fs.mkdirSync(dir, {recursive: true, mode: 0o700}));
     } catch {
       // A folder that cannot be made keeps no catalogs; nothing more.
+      return fn();
     }
-    return fn();
   }
   // A folder the cache would refuse (not the user's own, open to others, a
   // link) leaves the run exactly as without the cache: no hook is installed.

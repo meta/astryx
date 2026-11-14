@@ -187,7 +187,9 @@ describe('N66/N67/N62/N69: entry repair', () => {
       ['text-size', '18'],
     ],
   ])('%j is %j', ([thing, value], [t, v]) => {
-    expect(normalizeEntry(thing, value)).toEqual({thing: t, value: v});
+    // A second declaration it drops is named apart (`dropped`).
+    const {thing: gotThing, value: gotValue} = normalizeEntry(thing, value);
+    expect({thing: gotThing, value: gotValue}).toEqual({thing: t, value: v});
   });
 
   it('keeps a value with no debris as typed', () => {
@@ -415,6 +417,32 @@ describe('#11527: quotes and declarations, set end to end', () => {
       await themeEditSet('b', '--font-family-body', value, {cwd});
       expect(saved('--font-family-body')).not.toMatch(/[\u2018-\u201F]/);
       expect(saved('--font-family-body')).toContain('Inter');
+    },
+    240_000,
+  );
+});
+
+describe('hunt74: a saved font family in French quotes', () => {
+  it.each(['\u00AB Inter \u00BB', '\u00AB\u00A0Inter\u202F\u00BB'])(
+    '%j offers the trimmed family',
+    async raw => {
+      const kept = fs.readFileSync(file(), 'utf8');
+      const data = JSON.parse(kept);
+      data.settings.push({
+        thing: '--font-family-body',
+        value: raw,
+        source: 'token',
+      });
+      fs.writeFileSync(file(), JSON.stringify(data));
+      try {
+        const err = await refusal(() => themeEditShow('b', {cwd}));
+        const line = names(err).find((/** @type {string} */ n) =>
+          / set b --font-family-body /.test(n),
+        );
+        expect(line).toMatch(/ set b --font-family-body '"Inter"'$/);
+      } finally {
+        fs.writeFileSync(file(), kept);
+      }
     },
     240_000,
   );
