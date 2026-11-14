@@ -36,6 +36,12 @@
  *   names its exact code, so a checkout, whose code may change between runs
  *   under the same version, always gathers.
  *
+ *   An entry stores only the states that the kept entries it builds on do
+ *   not hold: it names each of them, at the version it read, and is used
+ *   only while each is too. A run checks each kept entry once, so entries
+ *   that read the same files (the component list, its replacements, the
+ *   project's issues) check those files once.
+ *
  *   The folder is `catalogs` in the user's cache folder (userCacheDir):
  *   created 0700, used only while it is a real folder owned by the user and
  *   closed to others (isPrivateDir; never on a system with no user ids), each file written 0600 by a rename, oldest first evicted past
@@ -43,7 +49,7 @@
  *   and the run gathers fresh, as it would with no cache.
  */
 
-import {createHash} from 'node:crypto';
+import {createHash, randomBytes} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as nodeModule from 'node:module';
 import * as os from 'node:os';
@@ -108,7 +114,7 @@ export const BUILD_ID_FILE = path.join(
 const isEntry = name => name.startsWith('gather-');
 
 /** The stored format; a different one is a miss. */
-const FORMAT = 1;
+const FORMAT = 2;
 
 /** A variable the run read that was unset, as stored. */
 const UNSET = null;
@@ -150,6 +156,17 @@ let gatherCode = null;
 
 /** How many persistedGather calls are running, nested inside one another. */
 let gatherDepth = 0;
+
+/**
+ * The kept entries this process has read back or stored, by file: the
+ * version each holds, every state it stands for (its own and those of the
+ * entries it builds on), and every entry it builds on, directly or not. A
+ * later entry stores only the states none of them holds and names the ones it
+ * builds on, so a run checks each state once. A kept entry is checked before
+ * the run's command writes anything.
+ * @type {Map<string, {version: string, stamps: [string, string][], under: Set<string>}>}
+ */
+const confirmed = new Map();
 
 /**
  * The outcome of the last kept gather in this process: whether it was a hit,
@@ -560,6 +577,116 @@ function staleReason(stamps, env) {
 }
 
 /**
+ * The states of the kept entries an entry builds on, each found unchanged
+ * once per process, or null when one is gone, holds another version, or
+ * changed.
+ * @param {string} dir
+ * @param {unknown} deps - [entry file name, version] pairs, as stored
+ * @param {Set<string>} [reading] - entries being checked, so a loop of
+ *   entries that name each other is a miss
+ * @returns {{stamps: [string, string][], under: Set<string>} | null}
+ */
+function builtOn(dir, deps, reading = new Set()) {
+  if (!Array.isArray(deps)) return null;
+  /** @type {[string, string][]} */
+  const stamps = [];
+  /** @type {Set<string>} */
+  const under = new Set();
+  for (const dep of deps) {
+    if (!Array.isArray(dep) || typeof dep[0] !== 'string') return null;
+    const file = path.join(dir, path.basename(dep[0]));
+    const entry = confirmedEntry(file, dep[1], reading);
+    if (entry == null) return null;
+    stamps.push(...entry.stamps);
+    under.add(file);
+    for (const below of entry.under) under.add(below);
+  }
+  return {stamps, under};
+}
+
+/**
+ * A kept entry at `version`, found unchanged as a hit finds it: read and
+ * checked the first time this process meets it, after that from `confirmed`.
+ * @param {string} file
+ * @param {unknown} version
+ * @param {Set<string>} reading
+ * @returns {{version: string, stamps: [string, string][], under: Set<string>} | null}
+ */
+function confirmedEntry(file, version, reading) {
+  const known = confirmed.get(file);
+  if (known) return known.version === version ? known : null;
+  if (reading.has(file)) return null;
+  reading.add(file);
+  try {
+    const stored = JSON.parse(
+      withoutRecording(() => fs.readFileSync(file, 'utf-8')),
+    );
+    if (
+      stored?.format !== FORMAT ||
+      typeof stored.version !== 'string' ||
+      stored.version !== version ||
+      staleReason(stored.stamps, stored.env) != null
+    ) {
+      return null;
+    }
+    const base = builtOn(path.dirname(file), stored.deps, reading);
+    if (base == null) return null;
+    const entry = {
+      version: stored.version,
+      stamps: [...base.stamps, ...stored.stamps],
+      under: base.under,
+    };
+    confirmed.set(file, entry);
+    try {
+      const now = new Date();
+      withoutRecording(() => fs.utimesSync(file, now, now));
+    } catch {
+      // An entry that cannot be touched is evicted sooner; nothing more.
+    }
+    return entry;
+  } catch {
+    return null;
+  } finally {
+    reading.delete(file);
+  }
+}
+
+/**
+ * The kept entries a new entry builds on: those this process has read back
+ * or stored whose every state the run read too, as it holds them, largest
+ * first, each only when it holds a state the others do not. Never one that
+ * builds on the new entry's own file. The new entry stores the rest of its
+ * states itself.
+ * @param {string} file - the new entry's file
+ * @param {[string, string][]} stamps - every state the run read
+ * @returns {{deps: [string, string][], own: [string, string][], under: Set<string>}}
+ */
+function chooseBase(file, stamps) {
+  const states = new Map(stamps);
+  /** @type {Set<string>} */
+  const covered = new Set();
+  /** @type {[string, string][]} */
+  const deps = [];
+  /** @type {Set<string>} */
+  const under = new Set();
+  const candidates = [...confirmed]
+    .filter(([other, entry]) => other !== file && !entry.under.has(file))
+    .sort(([, a], [, b]) => b.stamps.length - a.stamps.length);
+  for (const [other, entry] of candidates) {
+    if (entry.stamps.length === 0) continue;
+    if (!entry.stamps.every(([at, state]) => states.get(at) === state)) {
+      continue;
+    }
+    if (entry.stamps.every(([at]) => covered.has(at))) continue;
+    deps.push([path.basename(other), entry.version]);
+    under.add(other);
+    for (const below of entry.under) under.add(below);
+    for (const [at] of entry.stamps) covered.add(at);
+  }
+  return {deps, own: stamps.filter(([at]) => !covered.has(at)), under};
+}
+
+/**
  * The gather `load` returns, or the one a run with the same key stored while
  * every input it read is unchanged (see the file header).
  * @template T, E
@@ -625,13 +752,33 @@ async function gatherAt(key, load, codec, keep) {
     } else if (stored.key !== entryKey(key, id)) {
       reason = 'an entry for other inputs';
     } else {
-      const stale = staleReason(stored.stamps, stored.env);
+      // An entry this process already found unchanged, as one an earlier
+      // entry builds on, is not checked again.
+      const known = confirmed.get(file);
+      const seen =
+        typeof stored.version === 'string' && known?.version === stored.version
+          ? known
+          : null;
+      const own = seen ? null : staleReason(stored.stamps, stored.env);
+      const base = seen || own != null ? null : builtOn(dir, stored.deps);
+      const stale =
+        own ??
+        (seen == null && base == null
+          ? 'a kept entry it builds on changed'
+          : null);
       const value = stale == null ? readBack(stored, codec) : undefined;
       if (stale == null && value === undefined) {
         // Gathered again below, and stored over the bad entry.
         reason = 'a malformed value';
       } else if (stale == null) {
-        recordStates(stored.stamps);
+        const entry = seen ?? {
+          version: stored.version,
+          stamps: [...(base?.stamps ?? []), ...stored.stamps],
+          under: base?.under ?? new Set(),
+        };
+        confirmed.set(file, entry);
+        const {stamps} = entry;
+        recordStates(stamps);
         // A gather around this one depends on what this one read, the
         // environment included: a hit hands its variables on, as a fresh
         // gather's reads would be.
@@ -640,7 +787,7 @@ async function gatherAt(key, load, codec, keep) {
             if (!run.env.has(name)) run.env.set(name, value);
           }
         }
-        gatherCode = cliStates(stored.stamps);
+        gatherCode = cliStates(stamps);
         lastOutcome = {hit: true, reason: 'unchanged'};
         try {
           const now = new Date();
@@ -649,7 +796,7 @@ async function gatherAt(key, load, codec, keep) {
           // An entry that cannot be touched is evicted sooner; nothing more.
         }
         return value;
-      } else {
+      } else if (stale != null) {
         reason = stale;
       }
     }
@@ -896,10 +1043,14 @@ function store(dir, file, entry, value, codec) {
     const encoded = codec.encode(value);
     const stamps = [...run.reads].filter(([file]) => !inJitiCache(file));
     gatherCode = cliStates(stamps);
+    const {deps, own, under} = chooseBase(file, stamps);
+    const version = randomBytes(12).toString('hex');
     const text = JSON.stringify({
       format: FORMAT,
       key: entry,
-      stamps,
+      version,
+      deps,
+      stamps: own,
       env: [...run.env],
       value: encoded,
     });
@@ -907,6 +1058,7 @@ function store(dir, file, entry, value, codec) {
     const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
     fs.writeFileSync(temp, text, {mode: 0o600, flag: 'wx'});
     fs.renameSync(temp, file);
+    confirmed.set(file, {version, stamps, under});
     evictOldest(dir, isEntry);
   } catch {
     // A gather that cannot be stored is gathered again next time.
