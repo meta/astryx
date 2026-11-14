@@ -60,6 +60,11 @@ const SYSTEM_FAMILIES = new Set([
   'segoe ui',
   'segoe ui emoji',
   'segoe ui symbol',
+  // The weights Windows ships as families of their own.
+  'segoe ui light',
+  'segoe ui semilight',
+  'segoe ui semibold',
+  'segoe ui black',
   'roboto',
   'helvetica',
   'helvetica neue',

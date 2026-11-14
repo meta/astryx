@@ -61,6 +61,7 @@ import {
   wordTable,
   WRAPPED_PARTS,
   CARD_LIKE,
+  isSystemFamily,
 } from './_tables.mjs';
 import {
   COLOR_NAMES,
@@ -104,6 +105,7 @@ import {
   partRuleTokens,
   cssFamily,
   familySpaces,
+  fontsourcePackageOf,
 } from './_settings.mjs';
 import {isColorToken} from './_compiler.mjs';
 import {
@@ -2016,6 +2018,32 @@ const ownLabel = (thing, word) =>
   (thing === 'text-size' && word === 'font-size');
 
 /**
+ * Whether a family is one the editor knows: a system family on the theme
+ * build's list, an open font in its table or a preset's family, or one
+ * whose @fontsource package the project has installed.
+ * @param {any} ctx
+ * @param {string} family without quotes
+ */
+function knownFamily(ctx, family) {
+  const name = family.trim().toLowerCase();
+  if (!name) return false;
+  if (isSystemFamily(family)) return true;
+  if (
+    [
+      ...Object.values(OPEN_FONTS).map(f => f.family),
+      ...Object.values(FONTS).map(f => f[0]),
+    ].some(f => f.toLowerCase() === name)
+  )
+    return true;
+  try {
+    ctx?.project?.req?.resolve(`${fontsourcePackageOf(family)}/package.json`);
+    return Boolean(ctx?.project?.req);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The one mode a light-only or dark-only theme shows, or null.
  * @param {{mode?: string} | null | undefined} data
  * @returns {'light' | 'dark' | null}
@@ -2106,8 +2134,20 @@ export function checkSetting(
           value,
         )
       : null;
+  // A weight word after a family is part of the family's name (Arial
+  // Black, Archivo Black, Segoe UI Semibold) unless the whole name is no
+  // family the editor knows and the name without it is; a weight number
+  // (`Inter 600`) is never part of a name.
+  const weightIsName =
+    familyWeight != null &&
+    !/^\d+$/.test(familyWeight[2]) &&
+    !(
+      !knownFamily(ctx, `${familyWeight[1].trim()} ${familyWeight[2]}`) &&
+      knownFamily(ctx, familyWeight[1].trim())
+    );
   if (
     familyWeight &&
+    !weightIsName &&
     typeof value === 'string' &&
     !value.includes(',') &&
     // `bold bold` is a weight twice and `italic bold` a style and a

@@ -223,6 +223,33 @@ describe('hunt98', () => {
     120_000,
   );
 
+  it('a weight word that is part of a family name is kept; a weight number never is', async () => {
+    // The whole name is a family the editor knows, or the name without the
+    // word is none: the word is part of the name.
+    for (const family of [
+      'Arial Black',
+      'Archivo Black',
+      'Segoe UI Semibold',
+    ]) {
+      const r = await themeEditSet('b', 'font', family, {cwd});
+      expect(JSON.stringify(r.data), family).toContain(family);
+    }
+    // The name without the word is a known family and the whole is not:
+    // the word is a weight.
+    const word = await refusal(() =>
+      themeEditSet('b', 'font', 'Inter ExtraBold', {cwd}),
+    );
+    expect(word.run).toContainEqual(
+      expect.stringMatching(/ set b font Inter$/),
+    );
+    const number = await refusal(() =>
+      themeEditSet('b', 'font', 'Inter 600', {cwd}),
+    );
+    expect(number.run).toContainEqual(
+      expect.stringMatching(/ set b headings semibold$/),
+    );
+  }, 240_000);
+
   it('a saved light and dark pair for one mode is refused, with the half for that mode', async () => {
     await themeEditNew('sp', {cwd, like: 'neutral'});
     const file = path.join(cwd, 'themes/sp/sp.settings.json');
