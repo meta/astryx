@@ -20,6 +20,8 @@ export const doc = {
     'feed',
     'tags',
     'previews',
+    'collection',
+    'categories',
   ],
   isReady: true,
   category: 'Content - Card Grid',
