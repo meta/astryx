@@ -1822,13 +1822,15 @@ export function valueProblem(s) {
  * One entry of the top-level `tokens` map in a theme's own source, as
  * written: its token (null for a computed key no read of the file can
  * resolve), the key as typed, the line that sets it, and its value's shape.
- * A `scope` entry names where a scope (`components`, `onDark`, `onLight`,
- * `adaptations`) starts; a `scoped` entry is a token one sets, with its
+ * A `chain` entry is another theme the file defines (`theme`, its name):
+ * its call, or a token its literal tokens map sets. A `scope` entry names
+ * where a scope (`components`, `onDark`, `onLight`, `adaptations`,
+ * `localTokens`) starts; a `scoped` entry is a token one sets, with its
  * scope path (`components.button.base`). A `duplicate` entry names a
  * second `tokens` key (with every line); a
  * `typography` entry is one typography field (its dotted key and value);
  * an `unresolved` entry says the map holds something only a build reads.
- * @typedef {{token: string | null, key: string, line: number | null, kind: 'text' | 'number' | 'pair' | 'object' | 'other' | 'duplicate' | 'typography' | 'unresolved' | 'scope' | 'scoped', scope?: string, value?: any, halves?: Array<string | number | undefined>, lines?: Array<number | null>, file?: string, overridden?: boolean, expression?: boolean, notToken?: boolean}} OwnTokenEntry
+ * @typedef {{token: string | null, key: string, line: number | null, kind: 'text' | 'number' | 'pair' | 'object' | 'other' | 'duplicate' | 'typography' | 'unresolved' | 'scope' | 'scoped' | 'chain', scope?: string, theme?: string, value?: any, halves?: Array<string | number | undefined>, lines?: Array<number | null>, file?: string, overridden?: boolean, expression?: boolean, notToken?: boolean}} OwnTokenEntry
  */
 
 /**
@@ -1957,6 +1959,47 @@ function ownPageTokens(
     ) ??
     (calls.length === 1 ? calls[0] : null);
   if (!chosen) return out;
+  // Every other theme the file defines (one the exported theme extends),
+  // by its name: the line of its call and of each token its literal
+  // tokens map sets.
+  if (detail)
+    for (const {call} of calls) {
+      if (call === chosen.call) continue;
+      const other = unwrap(call.arguments[0]);
+      if (other?.type !== 'ObjectExpression') continue;
+      /** @param {string} key */
+      const prop = key =>
+        other.properties.find(
+          (/** @type {any} */ p) =>
+            p.type === 'ObjectProperty' && !p.computed && keyOf(p.key) === key,
+        );
+      const theme = textOf(unwrap(prop('name')?.value));
+      if (!theme) continue;
+      detail.push({
+        token: null,
+        key: theme,
+        kind: 'chain',
+        theme,
+        line: call.loc?.start?.line ?? null,
+      });
+      const map = unwrap(prop('tokens')?.value);
+      for (const p of map?.type === 'ObjectExpression' ? map.properties : []) {
+        const k =
+          p.type !== 'ObjectProperty'
+            ? null
+            : p.computed
+              ? textOf(unwrap(p.key))
+              : keyOf(p.key);
+        if (k?.startsWith('--'))
+          detail.push({
+            token: k,
+            key: k,
+            kind: 'chain',
+            theme,
+            line: p.loc?.start?.line ?? null,
+          });
+      }
+    }
   const def = unwrap(chosen.call.arguments[0]);
   if (def?.type !== 'ObjectExpression') return out;
   // JavaScript keeps the last of two `tokens` keys: that one is read, and
@@ -1981,7 +2024,13 @@ function ownPageTokens(
         p.type === 'ObjectProperty' && !p.computed ? keyOf(p.key) : null;
       if (
         !scope ||
-        !['components', 'onDark', 'onLight', 'adaptations'].includes(scope)
+        ![
+          'components',
+          'onDark',
+          'onLight',
+          'adaptations',
+          'localTokens',
+        ].includes(scope)
       )
         continue;
       detail.push({
@@ -2264,11 +2313,14 @@ function ownPageTokens(
   if (detail) {
     /** @type {Map<string, number>} */
     const last = new Map();
+    /** A page token's entry, from the tokens map the build reads. @param {OwnTokenEntry} e */
+    const page = e => e.token && e.kind !== 'scoped' && e.kind !== 'chain';
     detail.forEach((e, i) => {
-      if (e.token) last.set(e.token, i);
+      if (page(e)) last.set(/** @type {string} */ (e.token), i);
     });
     detail.forEach((e, i) => {
-      if (e.token && last.get(e.token) !== i) e.overridden = true;
+      if (page(e) && last.get(/** @type {string} */ (e.token)) !== i)
+        e.overridden = true;
     });
   }
   // A value no read of the file can resolve (a call, an import) is read
@@ -6112,7 +6164,7 @@ export async function themeSourceRefusal(cwd, slug) {
  * @param {Ctx} ctx
  * @param {string} slug
  * @param {string | null} like the base theme, whose built tokens are `base`
- * @returns {Promise<{input: any, theme: any, error: Error | null, base: Map<string, string | null>} | null>}
+ * @returns {Promise<{input: any, theme: any, error: Error | null, chain: any[], base: Map<string, string | null>} | null>}
  */
 export async function ownThemeInput(ctx, slug, like) {
   const {cwd} = ctx.project;
@@ -6644,6 +6696,8 @@ function nonTextToken(t, typeOf = (/** @type {string} */ _k) => 'other') {
  */
 export function describeValue(value) {
   if (typeof value === 'bigint') return `${value}n`;
+  if (typeof value === 'number' && !Number.isFinite(value))
+    return String(value);
   if (typeof value === 'symbol') return String(value);
   if (typeof value === 'function') return 'a function';
   if (value === undefined) return 'undefined';

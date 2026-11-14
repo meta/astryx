@@ -5295,30 +5295,28 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
     s.source = 'property';
     s.thing = prop;
     if (unset) return s;
-    // A length property (padding, a corner radius, a gap) that reads a
-    // design token of another kind (a color, a font, a duration) gets
+    // A property that reads a design token of a kind it does not take (a
+    // color property reading a size, a length reading a color) gets
     // nothing the browser keeps: refused like the token form.
-    if (matchValue(prop, '1px') && !matchValue(prop, 'red'))
-      for (const m of v.matchAll(/var\(\s*(--[a-z0-9-]+)/gi)) {
-        const kind = ctx.C.isToken(m[1]) ? ctx.C.typeOf(m[1]) : null;
-        if (kind && !['size', 'number', 'other'].includes(kind)) {
-          const like = /radius/.test(prop)
-            ? 'var(--radius-container)'
-            : /^(padding|margin|gap|row-gap|column-gap|inset)/.test(prop)
-              ? 'var(--spacing-4)'
-              : exampleOf('size', prop);
-          refuse(
-            E.ERR_THEME_BAD_VALUE,
-            `${prop} takes a length; ${m[1]} is a ${kind}, so the browser would drop it.`,
-            {
-              run: [
-                `${P} set ${slug} ${prop} ${quoteCommandArgument(v.replace(new RegExp(`var\\(\\s*${m[1]}\\s*(,[^)]*)?\\)`, 'i'), like))} --on ${quoteCommandArgument(String(s.on))}${s.state ? ` --state ${s.state}` : ''}${s.when ? ` --when ${quoteCommandArgument(s.when)}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}`,
-                `${HOW} --list tokens ${/radius/.test(prop) ? 'radius' : 'spacing'}`,
-              ],
-            },
-          );
-        }
-      }
+    const mismatch = tokenKindMismatch(ctx, prop, v);
+    if (mismatch) {
+      const length = mismatch.takes === 'a length';
+      const like = /radius/.test(prop)
+        ? 'var(--radius-container)'
+        : /^(padding|margin|gap|row-gap|column-gap|inset)/.test(prop)
+          ? 'var(--spacing-4)'
+          : null;
+      refuse(E.ERR_THEME_BAD_VALUE, `${mismatch.message}.`, {
+        run: [
+          ...(length && like
+            ? [
+                `${P} set ${slug} ${prop} ${quoteCommandArgument(v.replace(new RegExp(`var\\(\\s*${mismatch.token}\\s*(,[^)]*)?\\)`, 'i'), like))} --on ${quoteCommandArgument(String(s.on))}${s.state ? ` --state ${s.state}` : ''}${s.when ? ` --when ${quoteCommandArgument(s.when)}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}`,
+              ]
+            : []),
+          `${HOW} --list tokens ${length ? (/radius/.test(prop) ? 'radius' : 'spacing') : mismatch.takes === 'a color' ? 'color' : ''}`.trimEnd(),
+        ],
+      });
+    }
     // initial and unset leave a part's padding variables without a value:
     // the part takes Core's own default, which the result names.
     if (
@@ -5908,6 +5906,68 @@ export function normalValue(thing, value) {
 
 /** @see familySpaces in _settings.mjs, re-exported for the checks. */
 export {familySpaces};
+
+/**
+ * The first design token a property's value reads through var() whose kind
+ * the property does not take, or null: the value with the var() replaced by
+ * a value of the token's kind (the example each kind's refusals give) is
+ * one the property's grammar does not take, so the browser drops it.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} prop the property, as CSS names it
+ * @param {string} v
+ * @returns {{token: string, kind: string, takes: string, message: string} | null}
+ */
+function tokenKindMismatch(ctx, prop, v) {
+  for (const m of v.matchAll(/var\(\s*(--[a-z0-9-]+)\s*(?:,[^()]*)?\)/gi)) {
+    const token = m[1];
+    if (!ctx.C.isToken(token)) continue;
+    const kind = ctx.C.typeOf(token);
+    if (kind === 'other') continue;
+    const sample = v.replace(m[0], exampleOf(kind, token));
+    if (matchValue(prop, sample)) continue;
+    const takes =
+      matchValue(prop, '1px') && !matchValue(prop, 'red')
+        ? 'a length'
+        : matchValue(prop, 'red') && !matchValue(prop, '1px')
+          ? 'a color'
+          : null;
+    return {
+      token,
+      kind,
+      takes: takes ?? `no ${kind}`,
+      message: takes
+        ? `${prop} takes ${takes}; ${token} is a ${kind}, so the browser would drop it`
+        : `${prop} takes no ${kind}; ${token} is a ${kind}, so the browser would drop it`,
+    };
+  }
+  return null;
+}
+
+/**
+ * Why a part's CSS property value is refused, as `set` refuses it, or
+ * null: a var() that reads nothing, a color property's value that is no
+ * color, or a value the property's grammar does not take.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} prop the property, as CSS names it
+ * @param {string} value
+ * @param {Record<string, unknown>} TOKENS
+ * @param {ReadonlySet<string>} [reads] custom properties the theme sets where the value is read
+ * @returns {string | null}
+ */
+export function propertyValueProblem(ctx, prop, value, TOKENS, reads) {
+  const v = value.trim();
+  const ref = unknownVarRef(v, TOKENS, prop, reads);
+  if (ref) return ref.message;
+  const mismatch = tokenKindMismatch(ctx, prop, v);
+  if (mismatch) return mismatch.message;
+  if (CSS_WIDE.includes(v.toLowerCase())) return null;
+  if (COLOR_PROPS.test(prop))
+    return /\bvar\(/i.test(v) || isColorValue(v)
+      ? null
+      : `${prop} takes a color; "${v}" is not one.`;
+  const grammar = propertyProblem(prop, v);
+  return grammar ? `${prop} takes ${grammar.takes}; "${v}" is not one.` : null;
+}
 
 /**
  * The first var() in a value that names no design token and would read
