@@ -367,6 +367,9 @@ describe('ideaKind: a part of a page, told by the components the system ships', 
 
   it('takes an "add" idea that says nowhere the piece goes as before', () => {
     expect(kind('add a settings page to the app')).toBe('page');
+    expect(kind('add a settings page')).toBe('page');
+    expect(kind('add a data table to my app')).toBe('page');
+    expect(kind('add a tooltip to my app')).toBe('part');
     expect(kind('add a data table with filters')).toBe('page');
     expect(kind('add a tooltip')).toBe('part');
   });

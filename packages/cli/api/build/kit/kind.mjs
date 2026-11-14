@@ -21,9 +21,9 @@
  * bare "existing" phrase that names a page ("existing reports dashboard with a
  * date filter") reads as the builder's own page. An idea that opens with "add"
  * and says where the piece goes ("add a filter row above the table") puts it
- * into a page the builder already has, so it is a change too, unless its head
- * names a page ("add a settings page to the app") or it asks for a new page
- * ("add a new dashboard").
+ * into a page the builder already has, so it is a change too, unless the piece
+ * is a page ("add a dashboard to the app") or it asks for a new page ("add a
+ * new dashboard").
  */
 
 import {stem} from '../../search/search.mjs';
@@ -82,13 +82,7 @@ export function ideaKind(query, pages, components) {
   const text = String(query);
   const familyWords = familyWordsOf(pages);
   if (changesExistingPage(text, familyWords, components)) return 'edit';
-  if (
-    ADDS.test(text) &&
-    PLACE_PHRASE.test(text) &&
-    !namesPage(text.split(HEAD_END)[0] ?? '', familyWords) &&
-    !asksNewPage(text.toLowerCase().split(PHRASE_END), familyWords)
-  )
-    return 'edit';
+  if (addsToPage(text, familyWords)) return 'edit';
   // The head's last word, page words included: "calendar" is the noun of "a
   // calendar", "page" the noun of "a calendar page". An overlay frame names
   // where the thing lives, not the thing: "drafts" is the noun of "drafts in
@@ -109,17 +103,41 @@ export function ideaKind(query, pages, components) {
 }
 
 /**
- * Whether a head names a page: it ends on a page family word ("add a
- * dashboard") or on a word search drops, such as "page" ("add a settings
- * page").
- * @param {string} head
+ * Whether an idea adds a piece to a page the builder already has: it opens
+ * with "add", says where the piece goes with a place phrase that names
+ * something ("above the table", "to the settings page"; not "to my app"),
+ * the piece before that phrase names no page ("add a dashboard to the app"
+ * is a new page), and it asks for no new page.
+ * @param {string} text
  * @param {Map<string, string>} familyWords
  * @returns {boolean}
  */
-function namesPage(head, familyWords) {
-  const words = head.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+function addsToPage(text, familyWords) {
+  if (!ADDS.test(text)) return false;
+  const place = text.match(PLACE_PHRASE);
+  if (!place || place.index === undefined) return false;
+  const piece = text.slice(0, place.index);
+  const target =
+    text.slice(place.index + place[0].length).split(HEAD_END)[0] ?? '';
+  return (
+    terms(target).length > 0 &&
+    !namesPage(piece, familyWords) &&
+    !asksNewPage(text.toLowerCase().split(PHRASE_END), familyWords)
+  );
+}
+
+/**
+ * Whether a phrase names a page: it ends on a page family word ("add a
+ * dashboard") or on a word search drops, such as "page" ("add a settings
+ * page").
+ * @param {string} phrase
+ * @param {Map<string, string>} familyWords
+ * @returns {boolean}
+ */
+function namesPage(phrase, familyWords) {
+  const words = phrase.toLowerCase().match(/[a-z0-9]+/g) ?? [];
   const last = words[words.length - 1] ?? '';
-  return terms(last).length === 0 && terms(head).some(t => familyWords.has(t));
+  return familyWords.has(stem(last)) || terms(last).length === 0;
 }
 
 /**
