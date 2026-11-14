@@ -170,6 +170,7 @@ ruleTester.run('no-static-touch-runtime', rule, {
 describe('the touch-runtime allowlist (architecture:react-component-runtime INV13)', () => {
   const found = touchRuntimeImports(path.join(repoRoot, 'packages/core/src'), [
     'SnapPaging',
+    'Swipe',
   ]).map(({from, to}) => `${from} -> ${to}`);
 
   it('lists every import that reaches the runtime', () => {

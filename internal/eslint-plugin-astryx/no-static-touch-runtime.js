@@ -24,7 +24,8 @@
  * - `root`: the repository root; `srcRoot` is relative to it
  *   (default `packages/core/src`).
  * - `optInFolders`: folders whose entry a caller opts into, such as
- *   `SnapPaging`; they count as shared modules, not as component entries.
+ *   `SnapPaging` or `Swipe`; they count as shared modules, not as component
+ *   entries.
  */
 
 import fs from 'node:fs';
