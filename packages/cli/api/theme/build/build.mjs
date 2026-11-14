@@ -90,16 +90,16 @@ import {validatePrivateVars} from '../../../foundation/config/theme-private-vars
 import {AstryxError} from '../../error.mjs';
 import {applyWrites} from '../../integration/add-helpers.mjs';
 import {logger} from '../../logger.mjs';
-import {coreComponentDocs} from '../../../foundation/discovery/core-component-docs.mjs';
+import {
+  coreThemeTargets,
+  coreThemeValues,
+} from '../../../foundation/discovery/core-theme-facts.mjs';
 import {THEME_SOURCE_EXTENSIONS} from '../../../foundation/discovery/theme-module-extensions.mjs';
 import {
   createJiti,
   withEmptyStylesheets,
 } from '../../../foundation/fs/module-loader.mjs';
-import {
-  collectThemingTargets,
-  targetsByKey,
-} from '../../../foundation/discovery/theming-targets.mjs';
+import {targetsByKey} from '../../../foundation/discovery/theming-targets.mjs';
 import {
   collectUnloadedFonts,
   formatBatchFontLoadingHelp,
@@ -1696,106 +1696,7 @@ async function loadKnownValuesIndex() {
   const coreRoot = resolveCoreRoot();
   const coreSrc = coreRoot ? path.join(coreRoot, 'src') : null;
   if (!coreSrc || !fs.existsSync(coreSrc)) return {};
-
-  // One malformed or optional doc must not erase validation for the rest.
-  const docs = (await coreComponentDocs(coreSrc)).flatMap(read =>
-    'error' in read ? [] : [read.doc],
-  );
-
-  /** @param {string} value */
-  const targetName = value =>
-    value
-      .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
-      .replace(/\s+/g, '-')
-      .toLowerCase();
-  /**
-   * @param {any[]} props
-   * @returns {Record<string, Set<string>>}
-   */
-  const valuesFromProps = props => {
-    /** @type {Record<string, Set<string>>} */
-    const result = {};
-    for (const prop of props ?? []) {
-      if (typeof prop?.name !== 'string' || typeof prop?.type !== 'string') {
-        continue;
-      }
-      /** @type {Set<string>} */
-      const values = new Set();
-      for (const match of prop.type.match(/'([^']+)'/g) ?? []) {
-        values.add(match.slice(1, -1));
-      }
-      for (const part of prop.type
-        .split('|')
-        .map((/** @type {string} */ value) => value.trim())) {
-        if (/^-?\d+(?:\.\d+)?$/.test(part)) values.add(part);
-      }
-      if (values.size > 0) result[prop.name] = values;
-    }
-    return result;
-  };
-
-  // A component can appear in more than one doc: its own doc declares its
-  // props, and a parent doc can list it by name only. Merge every entry, so
-  // the result does not depend on the order the docs load in.
-  /** @type {Record<string, Record<string, Set<string>>>} */
-  const valuesByOwner = {};
-  /**
-   * @param {string} name
-   * @param {any[]} props
-   */
-  const addOwnerValues = (name, props) => {
-    const owner = (valuesByOwner[targetName(name)] ??= {});
-    for (const [prop, values] of Object.entries(valuesFromProps(props))) {
-      owner[prop] = new Set([...(owner[prop] ?? []), ...values]);
-    }
-  };
-  for (const doc of docs) {
-    if (typeof doc?.name === 'string') {
-      addOwnerValues(doc.name, doc.props);
-    }
-    for (const component of /** @type {any[]} */ (doc?.components ?? [])) {
-      if (typeof component?.name === 'string') {
-        addOwnerValues(component.name, component.props);
-      }
-    }
-  }
-
-  /** @type {Record<string, Record<string, Set<string>>>} */
-  const collected = {};
-  for (const doc of docs) {
-    const localValues = valuesFromProps([
-      ...(doc?.props ?? []),
-      ...(doc?.components ?? []).flatMap(
-        (/** @type {any} */ component) => component?.props ?? [],
-      ),
-    ]);
-    for (const target of doc?.theming?.targets ?? []) {
-      if (typeof target?.className !== 'string') continue;
-      const componentName = target.className.replace(/^astryx-/, '');
-      const ownerValues = valuesByOwner[componentName] ?? {};
-      if (!collected[componentName]) collected[componentName] = {};
-      for (const prop of target.visualProps ?? []) {
-        if (!collected[componentName][prop]) {
-          collected[componentName][prop] = new Set();
-        }
-        for (const value of [
-          ...(localValues[prop] ?? []),
-          ...(ownerValues[prop] ?? []),
-        ]) {
-          collected[componentName][prop].add(value);
-        }
-      }
-    }
-  }
-
-  return Object.fromEntries(
-    Object.entries(collected).map(([component, props]) => [
-      component,
-      Object.fromEntries(
-        Object.entries(props).map(([prop, values]) => [prop, [...values]]),
-      ),
-    ]),
-  );
+  return (await coreThemeValues(coreSrc)).knownValues;
 }
 
 /**
@@ -1924,33 +1825,16 @@ async function resolveAugmentationTargetCandidates(componentName) {
     matches.push({moduleName, interfacePrefix});
   }
 
-  for (const read of await coreComponentDocs(coreSrc)) {
-    if ('error' in read) continue;
-    const {file, doc} = read;
-    const matchesTarget = (doc?.theming?.targets || []).some(
-      (/** @type {any} */ target) =>
-        typeof target?.className === 'string' &&
-        target.className.replace(/^astryx-/, '') === componentName,
-    );
-    if (!matchesTarget) continue;
-
-    const moduleName =
-      typeof doc?.name === 'string' && doc.name
-        ? doc.name
-        : path.basename(path.dirname(file));
-
+  const {owners} = await coreThemeValues(coreSrc);
+  for (const {moduleName, components} of Object.hasOwn(owners, componentName)
+    ? owners[componentName]
+    : []) {
     // Try the exact rendered token first for documented subtargets such as
     // avatar-status-dot → AvatarStatusDotVariantMap, then the owning public
     // component name (for example, ProgressBar for progress-bar-fill).
     addCandidate(moduleName, toPascalCase(componentName));
     addCandidate(moduleName, moduleName);
-    if (Array.isArray(doc?.components)) {
-      for (const comp of doc.components) {
-        if (typeof comp?.name === 'string') {
-          addCandidate(moduleName, comp.name);
-        }
-      }
-    }
+    for (const name of components) addCandidate(moduleName, name);
   }
   // A target documented by a parent component may also have its own public
   // subpath and augmentation interface (Heading is documented under Text but
@@ -3684,7 +3568,7 @@ async function loadKnownComponents() {
   const coreSrc = coreRoot ? path.join(coreRoot, 'src') : null;
   if (!coreSrc || !fs.existsSync(coreSrc)) return null;
 
-  const propsByKey = targetsByKey(await collectThemingTargets(coreSrc));
+  const propsByKey = targetsByKey(await coreThemeTargets(coreSrc));
   return Object.keys(propsByKey).length > 0 ? {propsByKey} : null;
 }
 

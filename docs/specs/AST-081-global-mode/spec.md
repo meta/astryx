@@ -392,9 +392,10 @@ works on is `spec:AST-040` FR9's.
     `docs` and `doctor` keep in `astryx/catalogs` (search's catalogs, each
     integration's contribution-check results, template discovery's records,
     the component list (with each integration's component replacements),
-    integrations' theme records, the docs not-found hint's name summaries of
-    folder trees, the CLI's own docs tree, and doctor's file-only docs checks
-    and theme-wiring scan, which doctor keeps only while the folder exists), a
+    integrations' theme records, what `theme build` checks a theme against in
+    Core's component docs, the docs not-found hint's name summaries of folder
+    trees, the CLI's own docs tree, and doctor's file-only docs checks and
+    theme-wiring scan, which doctor keeps only while the folder exists), a
     folder only the user can
     reach (made `0700` by the first run that keeps a gather: `search` or
     `build`, or another of those commands where an integration can load,
