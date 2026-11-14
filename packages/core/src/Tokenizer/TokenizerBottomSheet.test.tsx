@@ -2114,7 +2114,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     const forced = stylex.create({
       trigger: {
         borderColor: {
-          default: colorVars['--color-border-emphasized'],
+          default: colorVars['--color-border-control'],
           '@media (forced-colors: active)': 'GrayText',
         },
         color: {default: null, '@media (forced-colors: active)': 'GrayText'},

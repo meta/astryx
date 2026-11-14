@@ -269,9 +269,9 @@ export function expandColorScale(config: ColorScaleConfig): ColorScaleTokens {
   );
 
   // A form control's edge holds 3:1 against both the surface and the page
-  // body. The body is the darker of the two in each scheme, so the light edge
-  // (darker than both) is checked against the body and the dark edge (lighter
-  // than both) against the surface.
+  // body. The body is darker than the surface in both schemes. The light edge
+  // is darker than both, so the body is its nearest match. The dark edge is
+  // lighter than both, so the surface is its nearest match.
   const borderControl = ld(
     ensureContrastTone(
       lightSeed.hue,

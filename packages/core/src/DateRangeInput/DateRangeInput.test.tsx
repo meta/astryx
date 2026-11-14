@@ -171,7 +171,7 @@ describe('DateRangeInput', () => {
         stylex.create({
           ring: {
             borderColor: {
-              default: colorVars['--color-border-emphasized'],
+              default: colorVars['--color-border-control'],
               ':focus-within': colorVars['--color-accent'],
             },
             boxShadow: {
