@@ -2407,7 +2407,6 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
             const itemKey = getKey(item.id, index);
             const isSelected = itemKey === selectedKey;
             const itemId = getItemId(index);
-            const select = () => handleSelect(item);
             const optionContent = (
               <>
                 <span {...stylex.props(styles.itemContent)}>
@@ -2433,7 +2432,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
                 aria-labelledby={isGrid ? `${itemId}-option` : undefined}
                 tabIndex={-1}
                 onMouseDown={canKeepFocusList ? preventOptionFocus : undefined}
-                onClick={isGrid ? undefined : select}
+                onClick={isGrid ? undefined : () => handleSelect(item)}
                 // Highlight follows pointer movement, not pointer
                 // presence: a menu that opens or reflows under a resting
                 // pointer keeps its keyboard highlight, so Enter acts on
@@ -2451,7 +2450,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
                     <div
                       role="gridcell"
                       id={`${itemId}-option`}
-                      onClick={select}
+                      onClick={() => handleSelect(item)}
                       {...stylex.props(styles.optionCell)}>
                       {optionContent}
                     </div>
