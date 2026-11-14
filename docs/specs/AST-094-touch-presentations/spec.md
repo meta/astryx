@@ -1564,16 +1564,16 @@ with the pull request's own files is generated files (route manifests, registry
 lockfiles, CLI fixtures) keeps the evidence when CI proves each of those files
 regenerates identically at the new head. A merge that changes one of the pull
 request's hand-edited source files, a file its changes import directly, or a
-shared motion or layer module still requires a new take.
+shared motion or layer module still requires a new take. The owner's words:
+"Yes, when CI proves they regenerate identically."
 
 Amended by the owner (`cixzhang`, 2026-11-12): evidence also carries over a
 commit, or a merge's change to the pull request's own files, that touches only
-test files (`__tests__/` folders and `*.test.*` or `*.spec.*` code that no
-rendered or shipped code imports) or knowledge records (Markdown under
-`docs/specs/`, `docs/architecture/`, `docs/families/` or `docs/design/`),
-classified by path. Any other path requires a new take. The owner's choice:
-"Test and spec-only". The
-owner's words: "Yes, when CI proves they regenerate identically."
+test-only files or knowledge records. A test-only file is one under a
+`__tests__/` folder or named `*.test.*` or `*.spec.*` that no rendered or
+shipped code imports, a story included; a knowledge record is Markdown under
+`docs/specs/`, `docs/architecture/`, `docs/families/` or `docs/design/`. Any
+other file requires a new take. The owner's choice: "Test and spec-only".
 
 ### DEC-28 — Sheet stretch at the tallest detent
 
