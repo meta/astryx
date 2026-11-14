@@ -3152,9 +3152,23 @@ export function draftAnswer(ctx, env, question) {
       /\b(\d*\.?\d+(?:px|rem|em)?)\s+by\s+(\d*\.?\d+(?:px|rem|em)?)\b/gi,
       '$1x$2',
     )
-    // "no shadow and no border on dialogs": both removals on that part.
+    // "no shadow and no border on dialogs", "remove the border and the
+    // shadow from cards": both removals on that part. The second item is a
+    // removal only when it carries its own removal word, or the leading
+    // "remove"/"without" governs a plain thing to remove; "no shadow and
+    // rounder corners on cards" keeps its second ask as it is.
     .replace(
-      /\b(?:no|remove the|remove|without) ([a-z]+(?: [a-z]+)?) and (?:no |the )?([a-z]+(?: [a-z]+)?) (?:on|from|for) (?:the |my |all )?([a-z][a-z-]*s?)\b/gi,
+      /\bno ([a-z]+(?: [a-z]+)?) and (?:no|zero|without) ([a-z]+(?: [a-z]+)?) (?:on|from|for) (?:the |my |all )?([a-z][a-z-]*s?)\b/gi,
+      'no $1 on $3 and no $2 on $3',
+    )
+    // "no shadow and rounder corners on cards": the removal is on that part
+    // too (never the whole theme); the second ask stays as it is.
+    .replace(
+      /\bno ((?:shadows?|borders?|outlines?|padding|gaps?|backgrounds?|underlines?|gradients?|blur|margins?)) and (?!no |zero |without )((?:[a-z#0-9]+ ){0,3}[a-z#0-9]+) (on|for) (?:the |my |all )?([a-z][a-z-]*s?)\b/gi,
+      'no $1 on $4 and $2 $3 $4',
+    )
+    .replace(
+      /\b(?:remove the|remove|without) ([a-z]+(?: [a-z]+)?) and (?:no |the )?((?:rounded )?(?:shadows?|borders?|outlines?|padding|gaps?|backgrounds?|corners|radius|rounding|underlines?|gradients?|blur|margins?|spacing|focus rings?)) (?:on|from|for) (?:the |my |all )?([a-z][a-z-]*s?)\b/gi,
       'no $1 on $3 and no $2 on $3',
     )
     // "slightly lighter than #000000", "lighter than black": a color that

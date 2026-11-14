@@ -263,6 +263,45 @@ describe('parts named once for two removals, the page, steps', () => {
     },
     T,
   );
+  it.each(
+    /** @type {Array<[string, string[]]>} */ ([
+      // A removal, then a positive ask: the ask keeps its own direction.
+      [
+        'no shadow and rounder corners on cards',
+        ['set q box-shadow none --on card', 'set q corners more --on card'],
+      ],
+      [
+        'no border and bigger padding on cards',
+        ['set q border none --on card', 'set q spacing more --on card'],
+      ],
+      [
+        'no shadow and a red background on buttons',
+        [
+          'set q box-shadow none --on button',
+          "set q background '#dc2626' --on button",
+        ],
+      ],
+      [
+        'no border and bolder text on badges',
+        ['set q border none --on badge', 'set q font-weight 700 --on badge'],
+      ],
+      // Two removals, each with its own removal word.
+      [
+        'no border and zero padding on cards',
+        ['set q border none --on card', 'set q padding 0px --on card'],
+      ],
+      [
+        'remove the border and the shadow from cards',
+        ['set q border none --on card', 'set q box-shadow none --on card'],
+      ],
+    ]),
+  )(
+    '%s',
+    async (q, want) => {
+      expect((await answer(q)).first).toEqual(want);
+    },
+    T,
+  );
   it(
     'the dialog the same color as the page takes the page color',
     async () => {
