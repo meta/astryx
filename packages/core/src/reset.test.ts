@@ -202,4 +202,23 @@ describe('reset.css pseudo-element rules', () => {
       `color: var(--color-text-secondary, ${tokenDefault});`,
     );
   });
+
+  it('gives the body the --font-family-body token, with its default', () => {
+    // Libraries add text straight to the body: hidden spans that measure
+    // labels, and portals without a Theme wrapper. That text must get the
+    // theme's body font, not the browser default serif. A page that loads
+    // only the reset gets the token's own default stack.
+    const tokens = fs.readFileSync(
+      path.resolve(__dirname, './theme/tokens.stylex.ts'),
+      'utf-8',
+    );
+    const tokenDefault = tokens.match(/'--font-family-body':\s*'([^']+)'/)?.[1];
+    expect(tokenDefault).toMatch(/sans-serif$/);
+    const body = ruleBlocks.find(({selector}) => selector === ':where(body)');
+    const fontFamily = body?.body
+      .match(/font-family:\s*([^;]+);/)?.[1]
+      .replace(/\s+/g, ' ')
+      .replaceAll("'", '"');
+    expect(fontFamily).toBe(`var(--font-family-body, ${tokenDefault})`);
+  });
 });

@@ -87,9 +87,16 @@
   /*
    * Remove default body margin and set font smoothing for sharper text
    * rendering on macOS/iOS.
+   *
+   * The body takes the theme's body font. Libraries add text straight to the
+   * body (hidden spans that measure labels, portals without a Theme wrapper).
+   * Without this rule that text gets the browser default serif. The fallback
+   * repeats the token's own default for a page that loads only the reset.
    */
   :where(body) {
     margin: 0;
+    font-family: var(--font-family-body, -apple-system, BlinkMacSystemFont,
+      'Segoe UI', Roboto, Helvetica, Arial, sans-serif);
     line-height: inherit;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
