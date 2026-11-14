@@ -184,18 +184,15 @@ describe('set and undo', () => {
     await themeEditUndo('t', {cwd, thing: 'padding', on: 'card'});
   }, 240_000);
 
-  it('a saved state in other letters and a dial saved for one mode are read, so a change goes through', async () => {
+  it('a saved state in other letters is read, so a change goes through', async () => {
     editSaved(d => {
-      d.settings.push(
-        {
-          thing: 'background-color',
-          value: 'red',
-          source: 'property',
-          on: 'card',
-          state: 'Hover',
-        },
-        {thing: 'corners', value: 'pill', source: 'dial', mode: 'dark'},
-      );
+      d.settings.push({
+        thing: 'background-color',
+        value: 'red',
+        source: 'property',
+        on: 'card',
+        state: 'Hover',
+      });
     });
     await themeEditSet('t', '--spacing-4', '12px', {cwd});
     const saved = JSON.parse(fs.readFileSync(settingsFile(), 'utf8')).settings;
@@ -203,12 +200,34 @@ describe('set and undo', () => {
       saved.find((/** @type {any} */ s) => s.thing === 'background-color')
         .state,
     ).toBe('hover');
-    expect(
-      saved.find((/** @type {any} */ s) => s.thing === 'corners').mode,
-    ).toBeUndefined();
     editSaved(d => {
       d.settings = [];
     });
+  }, 240_000);
+
+  it('a dial saved for one mode is refused as set refuses --mode, never built for both', async () => {
+    editSaved(d => {
+      d.settings.push({
+        thing: 'corners',
+        value: 'pill',
+        source: 'dial',
+        mode: 'dark',
+      });
+    });
+    try {
+      const err = await refusal(() =>
+        themeEditSet('t', '--spacing-4', '12px', {cwd}),
+      );
+      expect(names(err)).toEqual([
+        expect.stringMatching(/ undo t corners$/),
+        expect.stringMatching(/ set t corners pill$/),
+        expect.stringMatching(/ undo t$/),
+      ]);
+    } finally {
+      editSaved(d => {
+        d.settings = [];
+      });
+    }
   }, 240_000);
 
   it('a saved base typo gets the same repair from show as from a change', async () => {

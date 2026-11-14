@@ -221,7 +221,7 @@ export function escapesMeant(thing, value) {
  * Unicode spaces. A thing it cannot read is left as typed.
  * @param {string} thing
  * @param {string | undefined} value
- * @returns {{thing: string, value: string | undefined, dropped?: string}} `dropped`: a second declaration pasted after the first, which is not set
+ * @returns {{thing: string, value: string | undefined, dropped?: string, scope?: EntryScope}} `dropped`: a second declaration pasted after the first, which is not set; `scope`: the scope the editor's own printed line names
  */
 export function normalizeEntry(thing, value) {
   let t = normalValueText(String(thing ?? '')).trim();
@@ -237,12 +237,24 @@ export function normalizeEntry(thing, value) {
     t = t.slice(1).trim();
     v = v.replace(/\s*\}\s*$/, '');
   }
+  /** The scope the editor's own printed line names after its value. @type {EntryScope | undefined} */
+  let scope;
   if (v == null || v.trim() === '') {
-    const m = /^(\S+?)\s*[:=]\s*(.+?)\s*;?\s*$/.exec(t);
+    const m = /^(\S+?)\s*([:=])\s*(.+?)\s*;?\s*$/.exec(t);
     if (m && !/^https?$/i.test(m[1])) {
       t = m[1];
-      v = m[2];
+      v = m[3];
       pasted = true;
+      // The editor's own printed line (`corners = pill (whole theme)`,
+      // `opacity = 0.5 on card [dark only]`) pasted back: its scope goes
+      // with the setting, not into the value.
+      if (m[2] === '=') {
+        const printed = printedScope(v);
+        if (printed) {
+          v = printed.value;
+          scope = printed.scope;
+        }
+      }
     }
   }
   // A thing ending in its colon or equals sign, the value given next.
@@ -334,7 +346,39 @@ export function normalizeEntry(thing, value) {
   // A font family's name never starts or ends with a space: French quotes
   // (« Inter », with a no-break or narrow no-break space) hold the name.
   if (typeof v === 'string' && /font/i.test(t)) v = trimInsideQuotes(v);
-  return {thing: t, value: v, ...(dropped ? {dropped} : {})};
+  return {
+    thing: t,
+    value: v,
+    ...(dropped ? {dropped} : {}),
+    ...(scope ? {scope} : {}),
+  };
+}
+
+/**
+ * @typedef {{on?: string, only?: boolean, when?: string, state?: string, mode?: 'light' | 'dark'}} EntryScope
+ */
+
+/**
+ * The value and scope of the editor's own printed setting line after its
+ * `=` (`pill (whole theme)`, `0.5 on card only when sm :hover [dark only]`),
+ * as `describe` writes them; null when the text does not end in that form.
+ * @param {string} text
+ * @returns {{value: string, scope: EntryScope} | null}
+ */
+function printedScope(text) {
+  const m =
+    /^(.+?)\s+(?:\(whole theme\)|on ([a-z][a-z0-9-]*)( only)?(?: when (\S+))?(?: :([a-z-]+))?)(?:\s+\[(light|dark) only\])?\s*$/.exec(
+      text,
+    );
+  if (!m) return null;
+  /** @type {EntryScope} */
+  const scope = {};
+  if (m[2]) scope.on = m[2];
+  if (m[3]) scope.only = true;
+  if (m[4]) scope.when = m[4];
+  if (m[5]) scope.state = m[5];
+  if (m[6] === 'light' || m[6] === 'dark') scope.mode = m[6];
+  return {value: m[1], scope};
 }
 
 /**
@@ -1193,7 +1237,9 @@ export function readsTyped({
     .toLowerCase();
   const key = String(thing).toLowerCase();
   const typedKey = String(typedThing || thing).toLowerCase();
-  const t = typedReading(typed, {thousands: thousandsSetting(typedKey)});
+  const t = typedReading(listWords(typedKey, typed), {
+    thousands: thousandsSetting(typedKey),
+  });
   const T = tokensOf(t);
   const O = tokensOf(o);
   // (1) The value typed.
@@ -1470,7 +1516,11 @@ export function readsTyped({
  * @param {string} [thing] the setting typed (its numbers' reading)
  */
 export function coversTyped(reads, typed, thing = '') {
-  const T = tokensOf(typedReading(typed, {thousands: thousandsSetting(thing)}));
+  const T = tokensOf(
+    typedReading(listWords(thing, typed), {
+      thousands: thousandsSetting(thing),
+    }),
+  );
   // By token, counted: two lines may each carry one of two equal words
   // (`normal normal 16px serif`).
   /** @type {Map<string, number>} */
@@ -1491,6 +1541,18 @@ export function coversTyped(reads, typed, thing = '') {
       carry(left ?? r.oneOf[0]);
     }
   return [...typedCount].every(([w, n]) => (carried.get(w) ?? 0) >= n);
+}
+
+/**
+ * A headings value with `and` or `&` between its words (`bold and wide`):
+ * the list it names, as the headings reader splits it.
+ * @param {string} thing
+ * @param {string} typed
+ */
+function listWords(thing, typed) {
+  return thing === 'headings'
+    ? String(typed).replace(/\s+(?:and|&)\s+/gi, ', ')
+    : typed;
 }
 
 documentReadings([

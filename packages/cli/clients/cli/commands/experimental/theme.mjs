@@ -1647,15 +1647,19 @@ export function registerExperimentalTheme(group, program) {
           // `--color-accent=#e11d48`).
           // A thing and its value in one word (`'corners pill'`) are the
           // same as given apart.
-          const pasted =
-            /^(\S+?)\s*[:=]\s*(.+?);?\s*$/.exec(thing) ??
-            /^\s*(\S+)\s+(.+?)\s*$/.exec(thing);
-          if (!pasted)
-            return missingSetValue(
-              editor.commands.find(c => c.name() === 'set'),
-            );
-          thing = pasted[1];
-          value = [pasted[2]];
+          // A declaration goes to the editor whole: its one reader splits
+          // it, and reads the scope of the editor's own printed line
+          // (`corners = pill (whole theme)`).
+          if (/^(\S+?)\s*[:=]\s*(.+?);?\s*$/.test(thing)) value = [''];
+          else {
+            const pasted = /^\s*(\S+)\s+(.+?)\s*$/.exec(thing);
+            if (!pasted)
+              return missingSetValue(
+                editor.commands.find(c => c.name() === 'set'),
+              );
+            thing = pasted[1];
+            value = [pasted[2]];
+          }
         }
         return (async () =>
           (await readOptionsChecked('set', setDoc)) ??

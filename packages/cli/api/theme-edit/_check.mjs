@@ -15,6 +15,7 @@ import * as path from 'node:path';
 import {partForWord, partWords} from './_part-words.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {cssUnescape} from '../../foundation/text/css-escape.mjs';
+import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {baseInstalled, baseThemeFile} from './_project.mjs';
 import {
   withFallbacks,
@@ -1014,6 +1015,9 @@ const GENERIC_FAMILIES = [
 ];
 documentTypoWords(GENERIC_FAMILIES);
 documentTypoWords([...Object.keys(FONTS), ...Object.keys(OPEN_FONTS)]);
+// The system families the font readers compare a typo with: the gate
+// takes the family they offer.
+documentTypoWords(systemFontFamilies());
 
 /** The theme-wide dial or token for a CSS property typed with no part. */
 const WHOLE_THEME_EQUIVALENT = /** @type {Record<string, string>} */ ({
@@ -1077,6 +1081,16 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
   const STYLE = /^(italic|oblique)$/i;
   const bare = (/** @type {string} */ w) =>
     w.toLowerCase().replace(/[\s_-]+/g, '');
+  /** The family a preset key or a system family names, by lowercase name. */
+  const familyOfKnown = (/** @type {string} */ k) => {
+    const lower = k.toLowerCase();
+    const named =
+      FONTS[lower]?.[0] ??
+      /** @type {Record<string, {family: string}>} */ (OPEN_FONTS)[lower]
+        ?.family ??
+      k;
+    return bare(named.replace(/["']/g, ''));
+  };
   /** The generic a family the editor does not know is a typo of. */
   const genericOf = (/** @type {string} */ name) => {
     // Written with no dash or a space (sansserif, system ui): that generic.
@@ -1202,26 +1216,38 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
         ...(presets && pieces.length === 1 ? PRESETS : []),
         ...systemFontFamilies(),
       ];
-      /** The one name a typo is near, a name listed twice counted once. @param {string[]} names */
-      const oneNear = names => {
-        const hits = [
-          ...new Set(
-            names
-              .filter(k => typoNear(bare(name), bare(k)))
-              .map(k => k.toLowerCase()),
-          ),
-        ];
-        return hits.length === 1 ? hits[0] : null;
-      };
       const unknown = !generic && !isSystemFamily(cssUnescape(name));
-      // The presets are read first: a typo of one (Corier is courier,
-      // even beside Corbel) is that preset, refused with its line. Only a
+      /** The known names a typo is near. @param {string[]} names */
+      const hitsIn = names =>
+        unknown ? names.filter(k => typoNear(bare(name), bare(k))) : [];
+      /** @param {string} k */
+      const distance = k =>
+        levenshteinDistance(bare(name), bare(k), 99, {swaps: true});
+      /** The nearest spelling among names of one family, else null. @param {string[]} hits */
+      const oneReading = hits =>
+        hits.length && new Set(hits.map(familyOfKnown)).size === 1
+          ? hits.reduce((best, hit) =>
+              distance(hit) < distance(best) ? hit : best,
+            )
+          : null;
+      // The presets are read first: a typo of one (Corier is courier, even
+      // beside Corbel) is that preset, refused with its line, offered at
+      // the nearest spelling of the family it names (Segoe IU is Segoe
+      // UI). A preset and the family it names are one reading. Only a
       // generic or a preset the editor offers is read as a typo: a family
       // it does not know near a font a system ships may be a real family
       // (Corben, Gabriela), so it is kept as typed, with a note.
-      const editorWord =
-        unknown && presets && pieces.length === 1 ? oneNear(PRESETS) : null;
-      const preset = editorWord ?? (unknown ? oneNear(known) : null);
+      const presetHit = oneReading(
+        presets && pieces.length === 1 ? hitsIn(PRESETS) : [],
+      );
+      const editorWord = presetHit
+        ? oneReading(
+            hitsIn(known).filter(
+              h => familyOfKnown(h) === familyOfKnown(presetHit),
+            ),
+          )
+        : null;
+      const preset = editorWord ?? oneReading(hitsIn(known));
       if (generic || editorWord) {
         misspelled = true;
         kept.push(/** @type {string} */ (generic ?? preset));
@@ -4253,7 +4279,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
           .trim()
           .toLowerCase()
           .split(/[\s,]+/)
-          .filter(Boolean)
+          .filter(w => w && w !== 'and' && w !== '&')
           .map(w => MORE[w] ?? w);
         const known = (/** @type {string} */ w) =>
           HEADING_WEIGHTS[w] !== undefined || HEADING_TRACKING[w] !== undefined;
@@ -4266,7 +4292,18 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
             words.length > 1
               ? `"${v}" is ${words.length} headings values; headings takes one at a time (a weight and a tracking are two settings).`
               : `"${v}" is the weight ${words[0]}.`,
-            {run: words.map(w => `${P} set ${slug} headings ${w}`)},
+            // Both are wanted: the second line is the next step, not
+            // another choice.
+            {
+              run: words.map((w, i) =>
+                i === 0
+                  ? `${P} set ${slug} headings ${w}`
+                  : {
+                      name: `${P} set ${slug} headings ${w}`,
+                      reason: 'then this: headings takes one value at a time',
+                    },
+              ),
+            },
           );
       }
       if (s.mode)
@@ -5363,9 +5400,16 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
         );
       if (!['both', 'light-only', 'dark-only'].includes(v)) {
         const lower = v.toLowerCase().replace(/^mode\s*[=:]\s*/, '');
+        // The one mode reader: a word that means one mode (night, dark
+        // mode) is that mode only.
+        const oneMode = modeWord(lower);
         const meant =
           DIAL_WORDS.mode[lower] ??
-          (['both', 'light-only', 'dark-only'].includes(lower) ? lower : null);
+          (['both', 'light-only', 'dark-only'].includes(lower)
+            ? lower
+            : oneMode
+              ? `${oneMode}-only`
+              : null);
         const near = meant
           ? [meant]
           : nearest(lower, ['both', 'light-only', 'dark-only']);
@@ -5433,15 +5477,29 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
         word && Object.keys(TOKENS).some(k => k.includes(word))
           ? `${HOW} --list tokens ${word}`
           : `${HOW} --list tokens`;
+      // The token written in another style (`--color_accent`,
+      // `--colorAccent`, `--color accent`), as a dial or a property is read
+      // in any style; else the one token a typo is near.
+      const styled = `--${thing
+        .replace(/^-+/, '')
+        .trim()
+        .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+        .replace(/[_\s]+/g, '-')
+        .toLowerCase()}`;
+      const near = nearest(thing, Object.keys(TOKENS));
+      const meant =
+        aliased ??
+        (styled !== thing && styled in TOKENS
+          ? styled
+          : near.length === 1
+            ? near[0]
+            : null);
       refuse(
         E.ERR_THEME_UNKNOWN_TOKEN,
-        `"${thing}" is not a design token.${aliased ? ` The token for that role is ${aliased}.` : ''}`,
+        `"${thing}" is not a design token.${aliased ? ` The token for that role is ${aliased}.` : meant === styled ? ` It reads as ${styled}.` : ''}`,
         {
-          didYouMean: aliased ? [aliased] : nearest(thing, Object.keys(TOKENS)),
-          run: [
-            ...(aliased ? [setLine(slug, aliased, v, s, unset)] : []),
-            listed,
-          ],
+          didYouMean: meant ? [meant] : near,
+          run: [...(meant ? [setLine(slug, meant, v, s, unset)] : []), listed],
         },
       );
     }

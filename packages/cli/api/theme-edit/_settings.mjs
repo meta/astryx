@@ -1092,6 +1092,19 @@ export function loadTheme(
           name: `${P} undo ${slug} ${undoArgs(damagedUndo(damaged))}`,
           reason: 'do this instead: removes only that setting',
         },
+        // A dial saved for one mode: the dial as set takes it, for both
+        // modes, once that entry is removed.
+        ...(damaged.source === 'dial' &&
+        (damaged.mode === 'light' || damaged.mode === 'dark') &&
+        (typeof damaged.value === 'string' || typeof damaged.value === 'number')
+          ? [
+              {
+                name: `${P} set ${slug} ${setArgs({...damaged, mode: undefined}, String(damaged.value))}`,
+                reason:
+                  'then this, once the undo above has removed that setting: a dial is the same in light and dark',
+              },
+            ]
+          : []),
         ...(steps
           ? [
               {
@@ -1417,6 +1430,11 @@ export function settingsProblem(
         : `${s.thing} has source ${JSON.stringify(s.source)}, not dial, token or property`;
     if (s.mode != null && s.mode !== 'light' && s.mode !== 'dark')
       return `${s.thing} has mode ${JSON.stringify(s.mode)}, not light or dark`;
+    // A dial is the same in light and dark (set refuses --mode on every
+    // one): a saved mode on it would be listed but applied as set never
+    // applies it.
+    if (s.mode != null && s.source === 'dial')
+      return `${s.thing} has mode ${s.mode}, but a dial is the same in light and dark, so set takes no --mode for it`;
     if (s.only != null && s.only !== true)
       return `${s.thing} has only ${JSON.stringify(s.only)}, not true or false`;
     if (s.only === true && !onlyFits(s))
@@ -1608,20 +1626,8 @@ function readEntryWords(data) {
       );
       s.state = read;
     }
-    // A dial other than a color is the same in light and dark: one saved
-    // for one mode applies to both, and is read that way, so setting it
-    // replaces that entry.
-    if (
-      s.source === 'dial' &&
-      (s.mode === 'light' || s.mode === 'dark') &&
-      DIALS[s.thing] &&
-      !PALETTE_DIALS.includes(s.thing)
-    ) {
-      notes.push(
-        `${s.thing} was saved for ${s.mode} only, read as both modes: it is the same in light and dark`,
-      );
-      delete s.mode;
-    }
+    // A dial saved for one mode is refused as set refuses --mode on it
+    // (settingsProblem): it is never built for a mode it does not name.
     // A part saved in other letters, with spaces around it, or as a list
     // of that one part (`Card`, ` card`, `["card"]`) is that part: part
     // names are lower case, so every reader matches it as one scope.
@@ -1742,6 +1748,8 @@ export function entryDamage(s) {
   if (!s || typeof s.thing !== 'string') return null;
   if (!['dial', 'token', 'property'].includes(s.source)) return 'source';
   if (s.mode != null && s.mode !== 'light' && s.mode !== 'dark') return 'mode';
+  // A dial is the same in light and dark: a mode on it means nothing.
+  if (s.mode != null && s.source === 'dial') return 'mode';
   if (s.only != null && (s.only !== true || !onlyFits(s))) return 'only';
   return null;
 }

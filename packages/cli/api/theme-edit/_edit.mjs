@@ -131,7 +131,7 @@ import {
 } from './_check.mjs';
 import {MODAL, isColorToken} from './_compiler.mjs';
 import {fontShorthandFamilyList} from '../theme/build/font-warning.mjs';
-import {colorProblem} from './_color.mjs';
+import {colorProblem, hex, parseColor} from './_color.mjs';
 import {
   PALETTE_DIALS,
   VIBRANCY_DEFAULT,
@@ -1337,6 +1337,37 @@ function asNewRefusal(e, slug, settings, like, png = false, at = null) {
       name: `${P} new ${slug}${newFlags(like, {...settings, [thing]: next}, png)}`,
     };
   });
+  // Lines that set one dial in steps (a headings weight, then its
+  // tracking) are one new line: new takes the dial's values together.
+  /** @type {Map<string, string[]>} */
+  const steps = new Map();
+  (e.suggestions ?? []).forEach(s => {
+    if (!s.name.startsWith(setPrefix)) return;
+    const words = splitCommand(s.name.slice(setPrefix.length)) ?? [];
+    if (words.length !== 2 || !DIALS[words[0]]) return;
+    steps.set(words[0], [...(steps.get(words[0]) ?? []), words[1]]);
+  });
+  for (const [thing, values] of steps) {
+    const stepped = (e.suggestions ?? []).some(
+      s =>
+        s.name.startsWith(`${setPrefix}${thing} `) &&
+        /^then this/.test(s.reason ?? ''),
+    );
+    if (!stepped || values.length < 2) continue;
+    const first = mapped.findIndex(
+      (x, i) =>
+        x != null &&
+        (e.suggestions ?? [])[i]?.name.startsWith(`${setPrefix}${thing} `),
+    );
+    (e.suggestions ?? []).forEach((s, i) => {
+      if (s.name.startsWith(`${setPrefix}${thing} `)) mapped[i] = null;
+    });
+    if (first >= 0)
+      mapped[first] = {
+        name: `${P} new ${slug}${newFlags(like, {...settings, [thing]: values}, png)}`,
+        reason: 'do this instead',
+      };
+  }
   e.suggestions = mapped.filter(x => x != null);
   if (after.length)
     e.message = e.message.replace(
@@ -1796,6 +1827,38 @@ async function loadedForCheck(cwd, slug, skip) {
 }
 
 /**
+ * A saved entry's thing and value as set reads them typed: the thing put
+ * right (normalizeEntry), a value saved inside the thing (`corners: pill`,
+ * or `corners pill` with an empty value, as set takes one argument), and
+ * the flags saved inside the value (`red --on card`), which name the
+ * entry's scope when it has none of its own.
+ * @param {string} thing
+ * @param {string} value
+ * @returns {{thing: string, value: string, scope: {on?: string, when?: string, state?: string, mode?: string}}}
+ */
+function savedEntryRead(thing, value) {
+  const entry = normalizeEntry(thing, value);
+  let t = String(entry.thing);
+  let v = String(entry.value ?? '');
+  if (!v.trim()) {
+    const pair = /^\s*(\S+)\s+(.+?)\s*$/.exec(t);
+    if (pair) {
+      t = pair[1];
+      v = pair[2];
+    }
+  }
+  /** @type {{on?: string, when?: string, state?: string, mode?: string}} */
+  const scope = {};
+  v = v
+    .replace(/\s+--(on|when|state|mode)(?:\s+|=)(\S+)/g, (_, flag, word) => {
+      scope[/** @type {'on' | 'when' | 'state' | 'mode'} */ (flag)] = word;
+      return '';
+    })
+    .trim();
+  return {thing: t, value: v, scope};
+}
+
+/**
  * A refusal of a saved entry whose value the editor no longer accepts,
  * with the repair `set` offers for that value as typed (a typo, a unit, a
  * label read as set reads them) beside the undo: the line is followed as
@@ -1809,7 +1872,7 @@ async function withSavedRepair(e, slug, cwd) {
   const bad = /** @type {any} */ (e)?.damaged;
   // The value as set reads a typed one: text, or a number written as JSON
   // (`8` on corners is the 8 typed).
-  const saved =
+  let saved =
     typeof bad?.value === 'string'
       ? bad.value
       : typeof bad?.value === 'number' && Number.isFinite(bad.value)
@@ -1822,9 +1885,18 @@ async function withSavedRepair(e, slug, cwd) {
     ['mode', 'base'].includes(bad.thing)
   )
     return e;
-  // The thing as set reads it (`CORNERS`, `corners ` are corners).
-  const thing = String(normalizeEntry(String(bad.thing), saved).thing);
-  const line = `${P} set ${slug} ${setArgs({...bad, thing}, saved)}`;
+  // The entry as set reads a typed one: the thing (`CORNERS`, `corners `
+  // are corners), a value saved inside the thing (`corners: pill`,
+  // `corners pill`), and flags saved inside the value (`red --on card`),
+  // which go with the entry's own scope.
+  const read = savedEntryRead(String(bad.thing), saved);
+  const thing = read.thing;
+  saved = read.value;
+  // The scope the saved value names, where the entry has none of its own.
+  /** @type {any} */
+  const scoped = {...bad};
+  for (const [k, v] of Object.entries(read.scope)) scoped[k] ??= v;
+  const line = `${P} set ${slug} ${setArgs({...scoped, thing}, saved)}`;
   // The lines set offers for the value, as for a typed one: each checked
   // as set checks it, and offered only when they carry the saved value
   // (the one gate; a family and its size may take two lines).
@@ -1839,7 +1911,12 @@ async function withSavedRepair(e, slug, cwd) {
       structuredClone(loaded.data),
       thing,
       saved,
-      {on: bad.on, when: bad.when, state: bad.state, mode: bad.mode},
+      {
+        on: scoped.on,
+        when: scoped.when,
+        state: scoped.state,
+        mode: scoped.mode,
+      },
       false,
     );
     lines = [line];
@@ -2212,7 +2289,12 @@ export async function editorStoredRefusal(root, slug) {
     refuseStoredTokens(ctx, slug, loadTheme(root, slug));
     return null;
   } catch (e) {
-    if (e instanceof AstryxError) return e;
+    // With set's repair for a damaged saved value beside its undo, as
+    // show and every change give it.
+    if (e instanceof AstryxError) {
+      const repaired = await withSavedRepair(e, slug, root);
+      return repaired instanceof AstryxError ? repaired : e;
+    }
     throw e;
   }
 }
@@ -3779,6 +3861,19 @@ async function change(sub, slug, thing, value, options) {
     thing = entry.thing;
     value = entry.value;
     dropped = entry.dropped;
+    // The scope the editor's own printed line names, where no flag gives
+    // one.
+    if (entry.scope) {
+      const s = entry.scope;
+      options = {
+        ...options,
+        ...(s.on && !options.on ? {on: s.on} : {}),
+        ...(s.only && !options.only ? {only: true} : {}),
+        ...(s.when && !options.when ? {when: s.when} : {}),
+        ...(s.state && !options.state ? {state: s.state} : {}),
+        ...(s.mode && !options.mode ? {mode: s.mode} : {}),
+      };
+    }
   }
   /** @type {{ctx?: import('./_settings.mjs').Ctx, data?: import('./_settings.mjs').ThemeData}} */
   const seen = {};
@@ -4306,11 +4401,19 @@ async function changeOnce(
         );
       }
     }
+    // A color is compared as the color it names: a short hex, another
+    // letter case or its name is the saved color.
+    const sameColor = (/** @type {string} */ a, /** @type {string} */ b) => {
+      const ca = parseColor(String(a).trim());
+      const cb = parseColor(String(b).trim());
+      return Boolean(ca && cb && hex(ca) === hex(cb));
+    };
     if (
       held &&
       !half &&
       norm(held.value) !== norm(value) &&
-      norm(held.value) !== norm(s.value ?? '')
+      norm(held.value) !== norm(s.value ?? '') &&
+      !sameColor(String(held.value), value)
     ) {
       // A value word that names another saved setting (`undo t corners
       // padding`): one undo for each setting named.
@@ -5467,7 +5570,13 @@ export async function themeEditShow(theme, options = {}) {
   // The app copy is written once show succeeds (at its end), never by a
   // build a later refusal puts back.
   holdAfterBuild(ctx);
-  refuseStoredTokens(ctx, theme, data);
+  // A damaged saved value gets set's repair beside its undo, as on every
+  // change.
+  try {
+    refuseStoredTokens(ctx, theme, data);
+  } catch (x) {
+    throw await withSavedRepair(x, theme, cwd);
+  }
   await refuseOwnTokenValues(ctx, theme, data);
   // Without React, show still lists the settings and builds the theme, as
   // set does; only the pages, pictures and the checks that render are
