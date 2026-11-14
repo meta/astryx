@@ -109,7 +109,10 @@ import {
 } from '../theme/tokens.stylex';
 import {groupStyles} from '../InputGroup/groupStyles';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
-import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
+import {
+  InputGroupInternalContext,
+  useIsMemberInvalid,
+} from '../InputGroup/InputGroupInternalContext';
 import type {
   SearchContext,
   SearchableItem,
@@ -1867,6 +1870,9 @@ export function Tokenizer<T extends SearchableItem>({
   // the group's are the ones shown — so neither is referenced or painted; the
   // disabled reason is input-local and stays.
   const localStatus = inputGroup ? undefined : status;
+  // A grouped Tokenizer has no local status, so a group error marks it invalid
+  // whatever `status` it was given.
+  const isMemberInvalid = useIsMemberInvalid(localStatus);
 
   const {ariaLabelledBy: groupLabelledBy, ariaDescribedBy} = getInputARIA(
     inputLabelId,
@@ -2072,12 +2078,10 @@ export function Tokenizer<T extends SearchableItem>({
                   // FormLayout default hides the visible marker (component:FormLayout
                   // FR5, AR2).
                   aria-required={isEffectivelyRequired || rest['aria-required']}
-                  // An error status is exposed on the combobox as on every other field
-                  // (WCAG 4.1.2; spec:AST-020 FR9). Without one, a caller's own
-                  // aria-required / aria-invalid still applies.
-                  aria-invalid={
-                    localStatus?.type === 'error' || rest['aria-invalid']
-                  }
+                  // The field's own status decides (WCAG 4.1.2; spec:AST-020 FR9).
+                  // Without one, a group error marks the combobox invalid.
+                  // Otherwise a caller's own aria-invalid applies.
+                  aria-invalid={isMemberInvalid || rest['aria-invalid']}
                   __queryEntries={createEntries}
                   debounceMs={debounceMs}
                   onKeyDown={handleKeyDown}
