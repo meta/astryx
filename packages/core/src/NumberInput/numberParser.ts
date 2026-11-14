@@ -540,10 +540,6 @@ function findIntegerRun(
   return {runStart, runEnd};
 }
 
-/**
- * True when the edit from `previous` to `next` only inserted digits, only
- * deleted text, or replaced a selection with digits.
- */
 /** The text an edit inserted between the unchanged prefix and suffix. */
 function insertedByEdit(previous: string, next: string): string {
   const maxPrefix = Math.min(previous.length, next.length);
@@ -562,6 +558,10 @@ function insertedByEdit(previous: string, next: string): string {
   return next.slice(prefix, next.length - suffix);
 }
 
+/**
+ * True when the edit from `previous` to `next` only inserted digits, only
+ * deleted text, or replaced a selection with digits.
+ */
 function isDigitOrDeletionEdit(previous: string, next: string): boolean {
   return /^[0-9]*$/.test(insertedByEdit(previous, next));
 }
@@ -633,15 +633,25 @@ export function groupEditableDraft(
     return {text, caret: clampedCaret};
   }
 
-  const isEditOfFieldGrouping =
+  const isDigitOrDeletion =
+    previousText !== undefined && isDigitOrDeletionEdit(previousText, text);
+  const previousIsFieldGrouping =
     previousText !== undefined &&
-    isDigitOrDeletionEdit(previousText, text) &&
     hasOnlyFieldGrouping(
       previousText,
       group,
       primaryGroupSize,
       secondaryGroupSize,
     );
+
+  // A digit or deletion edit to a draft that holds a group character the
+  // person typed (vi-VN `1.500.5`, then Backspace) stays as typed too, so a
+  // typed decimal is never folded into the digits a keystroke later.
+  if (isDigitOrDeletion && !previousIsFieldGrouping) {
+    return {text, caret: clampedCaret};
+  }
+
+  const isEditOfFieldGrouping = isDigitOrDeletion && previousIsFieldGrouping;
 
   // Otherwise strip group characters only when at least one of them is
   // already in a valid grouping position, and leave the typed text alone so
