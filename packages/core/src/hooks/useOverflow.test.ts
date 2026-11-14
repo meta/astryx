@@ -683,6 +683,51 @@ describe('useOverflow when the observer reports a resize (component:OverflowList
     },
   );
 
+  it('measures nothing for a report of the size the list measured', async () => {
+    let reads = 0;
+    let width = 200;
+    const box = {
+      get offsetWidth() {
+        reads++;
+        return width;
+      },
+      getBoundingClientRect: () => ({width, height: 30}),
+    } as unknown as HTMLElement;
+    const {result} = renderHook(() => useOverflow(3, {gap: 10}));
+    await act(async () => {
+      result.current.measureRef(mockMeasure([50, 50, 50], 30));
+      result.current.containerRef(box);
+    });
+    expect(result.current.visibleCount).toBe(3);
+    const settledReads = reads;
+
+    const report = (inlineSize: number) =>
+      ({
+        target: box,
+        borderBoxSize: [{inlineSize, blockSize: 30}],
+      }) as unknown as ResizeObserverEntry;
+    const actGlobal = globalThis as {IS_REACT_ACT_ENVIRONMENT?: boolean};
+    const wasActEnvironment = actGlobal.IS_REACT_ACT_ENVIRONMENT;
+    actGlobal.IS_REACT_ACT_ENVIRONMENT = false;
+    try {
+      // The browser's first report after registration gives the same size.
+      latestObserverCallback?.([report(200)], {} as ResizeObserver);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(reads).toBe(settledReads);
+
+      // A real resize still measures.
+      width = 100;
+      latestObserverCallback?.([report(100)], {} as ResizeObserver);
+      await Promise.resolve();
+      await Promise.resolve();
+    } finally {
+      actGlobal.IS_REACT_ACT_ENVIRONMENT = wasActEnvironment;
+    }
+    expect(reads).toBeGreaterThan(settledReads);
+    expect(result.current.visibleCount).toBe(1);
+  });
+
   it('renders after paint when a multi-row fold changes the rows the list fills', async () => {
     const {result} = renderHook(() => useOverflow(6, {gap: 10, maxRows: 2}));
     const box = resizableBox(120);

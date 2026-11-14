@@ -139,13 +139,55 @@ function measurePending(): void {
   }
 }
 
+// The border-box size of each observed element when its list last measured.
+const measuredSizes = new WeakMap<Element, {width: number; height: number}>();
+
+/**
+ * Records the size of an element that a list observes, as the list measures.
+ * The list reads its layout at the same time, so the layout is current and
+ * the read costs no extra layout.
+ */
+function recordMeasuredSize(element: Element | null): void {
+  if (element == null || typeof element.getBoundingClientRect !== 'function') {
+    return;
+  }
+  const {width, height} = element.getBoundingClientRect();
+  measuredSizes.set(element, {width, height});
+}
+
+/**
+ * Whether a resize report gives the size the element had when its list last
+ * measured. Then the list's measurement is still current. The browser sends
+ * such a report for each element it starts to observe, after the list's first
+ * measurement has rendered.
+ */
+function isMeasuredSize(entry: ResizeObserverEntry): boolean {
+  const recorded = measuredSizes.get(entry.target);
+  const box = entry.borderBoxSize?.[0];
+  if (recorded == null || box == null) {
+    return false;
+  }
+  // The report gives logical sizes; the record gives physical ones.
+  const isSame = (a: number, b: number) => Math.abs(a - b) < 0.01;
+  return (
+    (isSame(box.inlineSize, recorded.width) &&
+      isSame(box.blockSize, recorded.height)) ||
+    (isSame(box.inlineSize, recorded.height) &&
+      isSame(box.blockSize, recorded.width))
+  );
+}
+
 /**
  * The observer calls back once while it registers. That call runs while
- * React commits the ref, so it counts as a commit.
+ * React commits the ref, so it counts as a commit. A later report of the
+ * size the list measured changes nothing, so it measures nothing.
  */
 function observeForOverflow(element: Element, measure: Measure): () => void {
   let isRegistering = true;
-  const unobserve = observeResize(element, () => {
+  const unobserve = observeResize(element, entry => {
+    if (!isRegistering && isMeasuredSize(entry)) {
+      return;
+    }
     scheduleMeasure(measure, isRegistering ? 'commit' : 'resize');
   });
   isRegistering = false;
@@ -379,6 +421,9 @@ export function useOverflowInternal(
       } else {
         availableWidth = container.offsetWidth;
       }
+
+      recordMeasuredSize(observedElRef.current);
+      recordMeasuredSize(measure);
 
       const allChildren = Array.from(measure.children) as HTMLElement[];
 
