@@ -3372,6 +3372,18 @@ async function change(sub, slug, thing, value, options) {
     } catch {
       // Not an object: read as typed.
     }
+    /** An entry's value as set takes it: text, a nested value as JSON. @param {unknown} x */
+    const entryText = x =>
+      x != null && typeof x === 'object' ? JSON.stringify(x) : String(x);
+    // Each key read as set reads a typed thing (spaces around it, a quote
+    // or a colon left on it): the one thing-name reader, normalizeEntry.
+    if (obj && typeof obj === 'object' && !Array.isArray(obj))
+      obj = Object.fromEntries(
+        Object.entries(obj).map(([k, x]) => [
+          String(normalizeEntry(k, entryText(x)).thing ?? k),
+          x,
+        ]),
+      );
     // One setting with its scope: the editor's own saved form (`{"thing",
     // "value", "on", …}`), or one setting beside scope keys (`{"color":
     // "red", "on": "card"}`): its thing and value, its scope as flags.
@@ -3423,6 +3435,12 @@ async function change(sub, slug, thing, value, options) {
     oneEntry = Boolean(
       obj && typeof obj === 'object' && Object.keys(obj).length === 1,
     );
+    // A pasted object of one entry is that entry, its key read above.
+    if (oneEntry) {
+      const [[k, x]] = Object.entries(obj);
+      thing = k;
+      value = entryText(x);
+    }
     if (obj && typeof obj === 'object' && Object.keys(obj).length > 1)
       refuse(
         E.ERR_INVALID_ARGUMENT,
@@ -3437,10 +3455,7 @@ async function change(sub, slug, thing, value, options) {
             Object.entries(obj)
               .slice(0, 6)
               .map(([k, x]) => {
-                const entry =
-                  x != null && typeof x === 'object'
-                    ? JSON.stringify(x)
-                    : String(x);
+                const entry = entryText(x);
                 const read = String(normalizeEntry(k, entry).value ?? '');
                 // Each line with the entry it carries, as typed.
                 return /** @type {[string, string, string]} */ ([
