@@ -9,8 +9,9 @@
  * @position Motion foundation, internal to core; the copy mechanism the
  *   in-place swap uses (`spec:AST-105` FR8,
  *   `architecture:component-style-authoring` INV7). It also makes the
- *   layer's exit copy. motion/animatedLayout.ts and Layer/layerExitCopy.ts
- *   import it.
+ *   layer's exit copy and the Reduce Motion cross-fade's copy.
+ *   motion/animatedLayout.ts, Layer/layerExitCopy.ts and
+ *   motion/reducedMotionCrossFade.ts import it.
  *
  * A copy takes no part in the page: it is inert and hidden from assistive
  * technology, carries no ids or test ids, joins no form or radio group (a
@@ -32,6 +33,7 @@
  * SYNC: When modified, update:
  * - /packages/core/src/motion/animatedLayout.ts
  * - /packages/core/src/Layer/layerExitCopy.ts
+ * - /packages/core/src/motion/reducedMotionCrossFade.ts
  */
 
 import {
@@ -213,14 +215,16 @@ export function keepInherited(copy: HTMLElement, host: Element): void {
  * Lay `element` over `rect` (viewport coordinates), absolutely, as a child of
  * `host` (before `beforeNode`, else last), wherever its containing block is:
  * no ancestor's position changes. A copy's scrolled descendants then restore their offsets, and the
- * CSS animations and transitions its element ran carry on in it.
+ * CSS animations and transitions its element ran carry on in it. Returns the
+ * host's scale on each axis, so a caller converts viewport pixels to the
+ * element's own without reading its box again.
  */
 export function placeOver(
   element: HTMLElement,
   host: Element,
   rect: DOMRect,
   beforeNode: Node | null = null,
-): void {
+): {x: number; y: number} {
   Object.assign(element.style, {
     position: 'absolute',
     boxSizing: 'border-box',
@@ -265,6 +269,7 @@ export function placeOver(
       node => carried.copyOf.get(node) ?? null,
     );
   }
+  return {x: scaleX, y: scaleY};
 }
 
 /**

@@ -39,6 +39,10 @@
 // theme's tempo scales it. Finger tracking runs on the main thread, because the
 // browser has no refresh pull to ride. Every release, settle and end runs on
 // the compositor.
+//
+// Under Reduce Motion, a settle and the end cross-fade through a copy of the
+// content. The copy fades out where the list shows, as the list lands and
+// fades in. So the list shows on every frame.
 
 import {
   useCallback,
@@ -55,6 +59,9 @@ import type {MotionCurve} from '@astryxdesign/core/internal/touch';
 import {cubicBezier} from '@astryxdesign/core/internal/touch';
 import {mapProgress} from '@astryxdesign/core/internal/touch';
 import {scroll} from '@astryxdesign/core/internal/touch';
+import {playReducedMotionCrossFade} from '@astryxdesign/core/internal/touch';
+import type {ReducedMotionCrossFade} from '@astryxdesign/core/internal/touch';
+import {reducedMotionFade} from '@astryxdesign/core/internal/touch';
 import {observeResize} from '@astryxdesign/core/utils';
 import {useMotionEngine} from '../internal/useMotionEngine';
 import {
@@ -118,6 +125,20 @@ function scrollContainersOf(start: HTMLElement): HTMLElement[] {
     }
   }
   return containers;
+}
+
+/**
+ * How near its target the content counts as there, in px. A move this small
+ * shows nothing.
+ */
+const AT_TARGET_PX = 0.05;
+
+/** Ends the cross-fade in flight, if any: its copy goes, and its finish never runs. */
+function cancelCrossFade(crossFade: {
+  current: ReducedMotionCrossFade | null;
+}): void {
+  crossFade.current?.cancel();
+  crossFade.current = null;
 }
 
 function overflows(element: HTMLElement): boolean {
@@ -255,10 +276,60 @@ export function useRefreshTouchController({
     },
     [content.animator, indicator.animator],
   );
+  // A cross-fade in flight. Stopping it lands the list where it was heading.
+  const crossFade = useRef<ReducedMotionCrossFade | null>(null);
   const stopPlacing = useCallback(() => {
+    cancelCrossFade(crossFade);
     content.animator.stop(['y']);
     indicator.animator.stop(['y']);
   }, [content.animator, indicator.animator]);
+  /**
+   * Cross-fades the content into what `land` writes, when Reduce Motion turns
+   * the move into a cross-fade. The animator's own form for a move is a dip,
+   * which blanks the list between the two states. A move of `travel` px that
+   * shows nothing lands at once, with no copy. Returns null when motion
+   * plays, when the change is instant, or when the content is too large to
+   * copy: the animator then plays the change.
+   */
+  const crossFadeContent = useCallback(
+    (
+      land: () => void,
+      travel: number,
+      touchRelease: boolean,
+    ): Promise<boolean> | null => {
+      const element = contentElement.current;
+      const fade =
+        element == null ||
+        content.animator.reducedMotion({touchRelease}) !== 'crossfade'
+          ? null
+          : reducedMotionFade(element, {touchRelease});
+      if (element == null || fade == null) {
+        return null;
+      }
+      stopPlacing();
+      if (Math.abs(travel) <= AT_TARGET_PX) {
+        land();
+        return Promise.resolve(true);
+      }
+      const played = playReducedMotionCrossFade(
+        element,
+        fade,
+        land,
+        owner.current,
+      );
+      if (played == null) {
+        return null;
+      }
+      crossFade.current = played;
+      played.finished.then(() => {
+        if (crossFade.current === played) {
+          crossFade.current = null;
+        }
+      });
+      return played.finished;
+    },
+    [content.animator, stopPlacing],
+  );
 
   /**
    * Puts the indicator back to opaque, and writes only if it changed. Each
@@ -458,12 +529,27 @@ export function useRefreshTouchController({
       // caught settle that resumes starts from rest.
       const velocity = releaseVelocity.current;
       releaseVelocity.current = 0;
-      // No start time: the animator starts the settle when the compositor
-      // does, so its first frame is the curve's start. A finger's release
-      // starts it as a touch release. So under Reduce Motion the animator
-      // cross-fades it instead of moving it, as it does for any release under
-      // a coarse primary pointer. A trackpad's release lands at once.
+      // A finger's release starts the settle as a touch release. So under
+      // Reduce Motion it cross-fades instead of moving, as any release does
+      // under a coarse primary pointer. A trackpad's release lands at once.
       const touchRelease = pullPointer.current === 'touch';
+      const crossFaded = crossFadeContent(
+        () => place(target),
+        target - from,
+        touchRelease,
+      );
+      if (crossFaded != null) {
+        if (to === 'top' && !model.current.isRefreshing && from > 0) {
+          crossFaded.then(done => {
+            if (done && !model.current.isRefreshing) {
+              resetIndicator();
+            }
+          });
+        }
+        return;
+      }
+      // No start time: the animator starts the settle when the compositor
+      // does, so its first frame is the curve's start.
       const contentSettle = content.animator.animate(
         {y: target},
         {spring: scroll.bounce, velocity: {y: velocity}},
@@ -477,8 +563,8 @@ export function useRefreshTouchController({
       if (to === 'top' && !model.current.isRefreshing && from > 0) {
         // The indicator fades as the content covers it, along the content's
         // own settle curve. Started in the same task, the two start on the
-        // same compositor frame. Under Reduce Motion the settle has no curve,
-        // and the indicator resets once the settle ends.
+        // same compositor frame. A settle with no curve (an instant one, or
+        // the animator's cross-fade) resets the indicator once it ends.
         const curve = contentSettle.curve('y');
         const {dimension} = pull.current;
         const start = revealProgress(from, dimension) || 1;
@@ -501,7 +587,13 @@ export function useRefreshTouchController({
         });
       }
     },
-    [content.animator, indicator.animator, resetIndicator],
+    [
+      content.animator,
+      crossFadeContent,
+      indicator.animator,
+      place,
+      resetIndicator,
+    ],
   );
 
   const settle = useCallback(
@@ -551,7 +643,7 @@ export function useRefreshTouchController({
     pendingEnd.current = () => {
       // The indicator stays opaque while the content slides up over its gap
       // (UIKit holds it at opacity 1 for nearly the whole end). Under Reduce
-      // Motion, the animator cross-fades the slide.
+      // Motion, the slide cross-fades.
       const from = content.animator.get('y');
       const element = contentElement.current;
       const finish = () => {
@@ -568,6 +660,22 @@ export function useRefreshTouchController({
         element == null ? null : endTiming(getComputedStyle(element));
       if (timing == null || timing.ms <= 0) {
         finish();
+        return;
+      }
+      // Under Reduce Motion, the list cross-fades onto where the slide ends.
+      // It takes the scroll back once the cross-fade ends, as the slide does,
+      // so the task that lays the copy reads no scroll.
+      const crossFaded = crossFadeContent(
+        () => place(animateTo),
+        animateTo - from,
+        false,
+      );
+      if (crossFaded != null) {
+        crossFaded.then(done => {
+          if (done) {
+            finish();
+          }
+        });
         return;
       }
       const {ms, points} = timing;
@@ -590,6 +698,7 @@ export function useRefreshTouchController({
     setEndTick(tick => tick + 1);
   }, [
     content.animator,
+    crossFadeContent,
     indicator.animator,
     place,
     resetIndicator,
@@ -615,11 +724,14 @@ export function useRefreshTouchController({
       });
     });
   }, [endTick]);
+  // Effect: at unmount, cancels the end's frame and a cross-fade in flight,
+  // so no copy and no deferred finish outlive the controller.
   useEffect(
     () => () => {
       if (endFrame.current != null) {
         cancelAnimationFrame(endFrame.current);
       }
+      cancelCrossFade(crossFade);
     },
     [],
   );
@@ -637,7 +749,7 @@ export function useRefreshTouchController({
       return;
     }
     const target = releaseTarget(model.current.isRefreshing);
-    if (Math.abs(content.animator.get('y') - target) > 0.05) {
+    if (Math.abs(content.animator.get('y') - target) > AT_TARGET_PX) {
       settle(model.current.isRefreshing ? 'inset' : 'top');
     }
   }, [content.animator, model, settle]);
@@ -798,6 +910,15 @@ export function useRefreshTouchController({
 
   const contentRef = useCallback(
     (element: HTMLElement | null) => {
+      if (element == null) {
+        // The list left the page. React attaches an element that takes its
+        // place in the same commit, so a cross-fade ends only if none did.
+        queueMicrotask(() => {
+          if (contentElement.current == null) {
+            cancelCrossFade(crossFade);
+          }
+        });
+      }
       contentElement.current = element;
       content.ref(element);
       setUpEdge.current?.();
@@ -821,14 +942,23 @@ export function useRefreshTouchController({
   const begin = useCallback(() => {
     showIndicator();
     if (!model.current.isPulling) {
-      // The inset arrives with no visible motion, as beginRefreshing().
+      // The inset arrives with no visible motion, as beginRefreshing(). An
+      // end still playing stops first, so its finish cannot drop the inset.
       cancelPendingEnd();
+      stopPlacing();
       const current = resolveOwner();
       place(REFRESH_HEIGHT);
       scrollOwnerBy(current, REFRESH_HEIGHT);
       hasInset.current = true;
     }
-  }, [cancelPendingEnd, model, place, resolveOwner, showIndicator]);
+  }, [
+    cancelPendingEnd,
+    model,
+    place,
+    resolveOwner,
+    showIndicator,
+    stopPlacing,
+  ]);
 
   return useMemo(
     () => ({
