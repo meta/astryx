@@ -210,6 +210,10 @@ hook does not expose it.
 - **PR3 — Autoscroll.** One interval while a tracked pointer rests in an
   edge zone of an overflowing menu; it stops when the pointer leaves the zone,
   the scroller reaches its edge, or the gesture ends.
+- **PR4 — The press model is the menus' own.** It builds on the layer
+  runtime's gesture counter and input hold. No engine that
+  `architecture:react-component-runtime` INV19 names models a menu's press,
+  where the row under the release acts, so none fits.
 
 ## Accessibility contract
 
