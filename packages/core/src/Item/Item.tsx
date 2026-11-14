@@ -65,6 +65,7 @@ import {computeTargetAndRel} from '../Link/computeTargetAndRel';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import {
   cancelNestedPress,
+  hasInteractiveAncestor,
   PRESSABLE_CONTAINER_ATTRIBUTE,
   useClickableContainerProxy,
 } from '../hooks/useClickableContainer';
@@ -849,7 +850,15 @@ export function Item({
       return;
     }
     const target = e.target as HTMLElement;
-    if (target.closest('button, a, input, select, textarea')) {
+    if (
+      // React bubbles a click through a portal the caller renders from the
+      // row (its own `createPortal`), but its target is not in the row.
+      !e.currentTarget.contains(target) ||
+      // This check also looks above the row. It keeps a row inside a link or
+      // button inert, and a read-only input, which the shared walk skips.
+      target.closest('button, a, input, select, textarea') ||
+      hasInteractiveAncestor(target, e.currentTarget)
+    ) {
       return;
     }
     if (isLinkRow) {
