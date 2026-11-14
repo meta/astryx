@@ -17,14 +17,22 @@
  */
 
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
-import {createRequire} from 'node:module';
-import {Worker} from 'node:worker_threads';
+import {fork, spawnSync} from 'node:child_process';
+import {builtinModules} from 'node:module';
+import {fileURLToPath} from 'node:url';
 import postcss from 'postcss';
 import {assetDataUri, isAssetBytes, isAssetPath, RenderAssetError} from './assets.mjs';
 import {classesIn, cutCss, layerOrderOf} from './css-cut.mjs';
-import {sourceBlock} from './source-block.mjs';
+import {RENDER_FORMAT, sha256, sourceBlock} from './source-block.mjs';
 import {embeddedPathProblem} from './embedded-files.mjs';
+import {isServedPackage, resolveServed} from './served-packages.mjs';
+import {CHART_CSS} from './charts.mjs';
+import {HOST_EXIT} from './host-exit.mjs';
+import {endNote, headerNote} from './file-header.mjs';
+import {textRuns} from './markup-edits.mjs';
+import {findNodeModulesPackage} from '../fs/paths.mjs';
 
 /** How long one page may take to render before it is stopped. */
 export const RENDER_TIMEOUT_MS = 60_000;
@@ -33,7 +41,7 @@ export {PAGE_EXTENSIONS} from './embedded-files.mjs';
 
 /**
  * @typedef {object} RenderWarning
- * @property {'dropped-children' | 'remote-asset' | 'missing-asset' | 'page-output' | 'page-script' | 'no-astryx-styles' | 'chart-size' | 'not-embedded'} code - What kind of problem.
+ * @property {'dropped-children' | 'remote-asset' | 'missing-asset' | 'page-output' | 'page-script' | 'no-astryx-styles' | 'chart-size' | 'not-embedded' | 'node-crash'} code - What kind of problem.
  * @property {string} message - What happened and what to do, in one sentence.
  */
 
@@ -47,6 +55,7 @@ export {PAGE_EXTENSIONS} from './embedded-files.mjs';
  * @property {number} markupBytes - Bytes of rendered markup.
  * @property {number} images - Local files inlined as data: URIs.
  * @property {RenderWarning[]} warnings
+ * @property {{name: string, dir: string}[]} fromSet - Packages that came from the package set the CLI runs from, not the page's folder.
  */
 
 /** An error carrying a render error code. */
@@ -128,7 +137,7 @@ function importParams(params) {
  * cut.
  * @param {string} file the stylesheet's own path
  * @param {string} css its text
- * @param {{warnings: RenderWarning[], carried: Set<string>, included: Set<string>, packageSheets: string[], seen?: Set<string>}} ctx
+ * @param {{warnings: RenderWarning[], carried: Set<string>, included: Set<string>, packageSheets: string[], served: ServedSet | null, seen?: Set<string>}} ctx
  *   `included`: stylesheet files already in the page (Core's, say), never
  *   inlined twice; `packageSheets`: package stylesheets this pulled in
  * @returns {string}
@@ -170,12 +179,8 @@ function expandImports(file, css, ctx) {
     if (/^\.{1,2}\//.test(url) || fs.existsSync(relative)) {
       target = fs.existsSync(relative) ? relative : null;
     } else {
-      try {
-        target = createRequire(file).resolve(url.replace(/^~/, ''));
-        fromPackage = true;
-      } catch {
-        target = null;
-      }
+      target = resolveServed(url.replace(/^~/, ''), file, ctx.served);
+      fromPackage = target !== null;
     }
     if (!target) {
       ctx.warnings.push({
@@ -221,62 +226,277 @@ function expandImports(file, css, ctx) {
   return root.toString();
 }
 
+/** @typedef {{dir: string, integrations: readonly string[]}} ServedSet */
+
+/** Signals that Node itself or a native module raises when it fails. */
+const CRASH_SIGNALS = new Set(['SIGSEGV', 'SIGBUS', 'SIGILL', 'SIGFPE', 'SIGABRT', 'SIGTRAP']);
+
 /**
- * Run the page in a worker, stopping it after `timeoutMs`.
- * @param {string} entry
- * @param {string} root
+ * How a native crash ended a process, or null when it was not one. On
+ * Windows a crash arrives as an exit status of 0xC0000000 and above (such as
+ * 0xC0000005, an access violation), not as a signal.
+ * @param {number | null} code
+ * @param {NodeJS.Signals | null} signal
+ */
+function crashOf(code, signal) {
+  if (signal) return CRASH_SIGNALS.has(signal) ? signal : null;
+  if (code !== null && code >>> 0 >= 0xc0000000) return `0x${(code >>> 0).toString(16).toUpperCase()}`;
+  return null;
+}
+
+/**
+ * Whether this Node crashes when it splits text with Intl.Segmenter. Some
+ * Node builds do, and Astryx components such as Avatar split text with it.
+ */
+function segmenterCrashes() {
+  const probe = spawnSync(
+    process.execPath,
+    ['-e', "[...new Intl.Segmenter('en', {granularity: 'grapheme'}).segment('a b')]"],
+    {stdio: 'ignore', timeout: 10_000},
+  );
+  return crashOf(probe.status, probe.signal) !== null;
+}
+
+/**
+ * The error for a page process that a crash or a signal ended. A crash comes
+ * from Node itself or a native module, never from the page's JavaScript.
+ * Every message names this Node.
+ * @param {string} how the crash (a signal name or a Windows status) or the stopping signal
+ * @param {{crashed: boolean, withoutSegmenter: boolean}} state
+ */
+function crashError(how, {crashed, withoutSegmenter}) {
+  const node = `Node ${process.version} (${process.execPath})`;
+  const detail = {signal: how, node: process.version, nodePath: process.execPath};
+  if (!crashed) {
+    const memory = how === 'SIGKILL' ? ' The system stops a process this way when the machine runs out of memory.' : '';
+    return new RenderError('ERR_RENDER_FAILED', `${node} was stopped by a signal (${how}) while it rendered the page.${memory}`, detail);
+  }
+  const cause = withoutSegmenter ? ' It crashed again with Intl.Segmenter removed, so the fault is elsewhere in this Node or in a native module.' : '';
+  return new RenderError(
+    'ERR_RENDER_FAILED',
+    `${node} crashed (${how}) while it rendered the page. A fault in Node or in a native module causes this, not the page's code.${cause} Render with an official Node.js build of another version.`,
+    detail,
+  );
+}
+
+/**
+ * The error for a page that ended without an answer, with why: the stage it
+ * reported last, how long it ran, the memory left, and its last stderr line.
+ * @param {any} message the host's {hostExit, reason, stage, elapsedMs, rssMb, freeMb, stderrTail}
+ */
+function noAnswerError({hostExit, reason, stage, elapsedMs, rssMb, freeMb, stderrTail}) {
+  const detail = {reason, exit: hostExit, stage, elapsedMs, rssMb, freeMb, ...(stderrTail ? {stderrTail} : {})};
+  const where = stage ? ` while ${stage}` : '';
+  const seconds = Math.round((elapsedMs ?? 0) / 1000);
+  if (reason === 'host-timeout') {
+    return new RenderError('ERR_RENDER_TIMEOUT', `The page's process stopped at its own time limit${where}, after ${seconds} seconds, before this process read an answer.`, detail);
+  }
+  const last = stderrTail ? ` Its last output: ${String(stderrTail).split('\n').at(-1)}` : '';
+  return new RenderError(
+    'ERR_RENDER_FAILED',
+    `The page stopped rendering without an answer (exit ${hostExit})${where}, after ${seconds} seconds, with ${freeMb} MB of memory free.${last}`,
+    detail,
+  );
+}
+
+/** The error for a host process that ended, without a signal, before it answered. */
+function hostEndError(/** @type {number | null} */ code) {
+  if (code === HOST_EXIT.disconnected) {
+    return new RenderError('ERR_RENDER_FAILED', "The page's process lost its channel to this process and stopped without an answer.", {reason: 'disconnected', exit: code});
+  }
+  if (code === HOST_EXIT.noChannel) {
+    return new RenderError('ERR_RENDER_FAILED', "The page's process had no channel left to send its answer on.", {reason: 'no-channel', exit: code});
+  }
+  if (code === HOST_EXIT.timeout) {
+    return new RenderError('ERR_RENDER_TIMEOUT', "The page's process stopped at its own time limit before this process read an answer.", {reason: 'host-timeout', exit: code});
+  }
+  if (code === HOST_EXIT.sendFailed) {
+    return new RenderError('ERR_RENDER_FAILED', "The page's process could not send its answer to this process.", {reason: 'send-failed', exit: code});
+  }
+  return new RenderError('ERR_RENDER_FAILED', `The page's process ended without an answer (exit ${code}).`, {reason: 'host-ended', exit: code});
+}
+
+/**
+ * The error for a host that ended with no answer reaching this process, from
+ * the state it left in its per-run file: an answer it sent that never
+ * arrived, or the stage it ended in.
+ * @param {number | null} code
+ * @param {string | undefined} stateFile
+ */
+function noMessageError(code, stateFile) {
+  if (code !== 0 && code !== null && Object.values(HOST_EXIT).includes(code)) return hostEndError(code);
+  /** @type {any} */
+  let saved = null;
+  try {
+    saved = stateFile ? JSON.parse(fs.readFileSync(stateFile, 'utf8')) : null;
+  } catch {
+    // No readable state: fall back to the bare message below.
+  }
+  if (!saved) return hostEndError(code);
+  const detail = {exit: code, stage: saved.stage, elapsedMs: saved.elapsedMs, rssMb: saved.rssMb, freeMb: saved.freeMb, ...(saved.stderrTail ? {stderrTail: saved.stderrTail} : {})};
+  if (saved.answered === 'sent') {
+    return new RenderError('ERR_RENDER_FAILED', `The page's process sent its answer, but this process did not receive it (exit ${code}).`, {reason: 'answer-lost', ...detail});
+  }
+  if (saved.answered === 'sending') {
+    return new RenderError('ERR_RENDER_FAILED', `The page's process ended while it sent its answer (exit ${code}).`, {reason: 'ended-while-sending', ...detail});
+  }
+  const seconds = Math.round((saved.elapsedMs ?? 0) / 1000);
+  const last = saved.stderrTail ? ` Its last output: ${String(saved.stderrTail).split('\n').at(-1)}` : '';
+  return new RenderError(
+    'ERR_RENDER_FAILED',
+    `The page's process ended without an answer (exit ${code}) while ${saved.stage}, after ${seconds} seconds, with ${saved.freeMb} MB of memory free.${last}`,
+    {reason: 'host-ended', ...detail},
+  );
+}
+
+/**
+ * Run the page in a host process (page-host.mjs), stopping it after
+ * `timeoutMs`. The host runs the page in a worker thread, and it exits when
+ * this process goes away.
+ * @param {{entry: string, root: string, served: ServedSet | null, withoutSegmenter: boolean}} input
  * @param {number} timeoutMs
+ * @returns {Promise<any>} the page's answer, or `{crashed: how}` when a
+ *   native crash ended the host
+ */
+function runWorker(input, timeoutMs) {
+  return withHostStateFile(stateFile => {
+    const data = {
+      ...input,
+      served: input.served ? {dir: input.served.dir, integrations: [...input.served.integrations]} : null,
+      timeoutMs,
+      stateFile,
+    };
+    const host = fork(fileURLToPath(new URL('./page-host.mjs', import.meta.url)), [JSON.stringify(data)], {
+      // Never the CLI's own flags (such as --input-type).
+      execArgv: [],
+      stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+      serialization: 'advanced',
+    });
+    return awaitHost(host, {timeoutMs, withoutSegmenter: input.withoutSegmenter, stateFile});
+  });
+}
+
+/**
+ * Run `use` with a state file for one host in a new folder under the system's
+ * temporary folder, never in the project, and remove the folder after. The
+ * state file only explains a failure: without a temporary folder, `use` gets
+ * none and the render runs without it.
+ * @template T
+ * @param {(stateFile: string | undefined) => Promise<T>} use
+ * @param {{makeTempDir?: (prefix: string) => string}} [options]
+ * @returns {Promise<T>}
+ */
+export async function withHostStateFile(
+  use,
+  {makeTempDir = prefix => fs.mkdtempSync(prefix)} = {},
+) {
+  /** @type {string} */
+  let dir;
+  try {
+    dir = makeTempDir(path.join(os.tmpdir(), 'astryx-render-'));
+  } catch {
+    // No temporary folder (missing or read-only): render without the state file.
+    return use(undefined);
+  }
+  try {
+    return await use(path.join(dir, 'host-state.json'));
+  } finally {
+    try {
+      fs.rmSync(dir, {recursive: true, force: true, maxRetries: 3});
+    } catch {
+      // Best effort: a removal that fails (a file still held open) never
+      // replaces the render's own result.
+    }
+  }
+}
+
+/**
+ * The page's answer from its host process, or the reason it has none.
+ * @param {import('node:child_process').ChildProcess} host
+ * @param {{timeoutMs: number, withoutSegmenter: boolean, stateFile?: string}} options
  * @returns {Promise<any>}
  */
-function runWorker(entry, root, timeoutMs) {
+export function awaitHost(host, {timeoutMs, withoutSegmenter, stateFile}) {
   return new Promise((resolve, reject) => {
-    const worker = new Worker(new URL('./page-worker.mjs', import.meta.url), {
-      workerData: {entry, root},
-      execArgv: [],
-      stdout: true,
-      stderr: true,
-      resourceLimits: {maxOldGenerationSizeMb: 4096},
-    });
-    // The page's own writes to stdout/stderr never reach the CLI's output.
-    worker.stdout.resume();
-    worker.stderr.resume();
     let settled = false;
-    const timer = setTimeout(() => {
+    /** @param {() => void} settle */
+    const finish = settle => {
       if (settled) return;
       settled = true;
-      void worker.terminate();
-      reject(
-        new RenderError(
-          'ERR_RENDER_TIMEOUT',
-          `The page did not finish rendering within ${timeoutMs / 1000} seconds, so it was stopped. Look for a loop that never ends or a promise the page waits on.`,
-          {seconds: timeoutMs / 1000},
+      clearTimeout(timer);
+      host.kill('SIGKILL');
+      settle();
+    };
+    const timer = setTimeout(() => {
+      finish(() =>
+        reject(
+          new RenderError(
+            'ERR_RENDER_TIMEOUT',
+            `The page did not finish rendering within ${timeoutMs / 1000} seconds, so it was stopped. Look for a loop that never ends or a promise the page waits on.`,
+            {seconds: timeoutMs / 1000},
+          ),
         ),
       );
     }, timeoutMs);
-    worker.once('message', message => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      void worker.terminate();
-      resolve(message);
+    host.once('message', (/** @type {any} */ message) => {
+      finish(() => {
+        if (message?.hostError !== undefined) {
+          const text = String(message.hostError);
+          reject(
+            /ERR_WORKER_OUT_OF_MEMORY|heap out of memory/.test(text)
+              ? new RenderError('ERR_RENDER_FAILED', 'The page ran out of memory while rendering.')
+              : new RenderError('ERR_RENDER_FAILED', `The page could not be rendered: ${text.split('\n')[0]}`),
+          );
+        } else if (message?.hostExit !== undefined) {
+          reject(noAnswerError(message));
+        } else {
+          resolve(message);
+        }
+      });
     });
-    worker.once('error', (/** @type {any} */ error) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      const out =
-        /ERR_WORKER_OUT_OF_MEMORY|heap out of memory/.test(String(error?.message ?? error))
-          ? new RenderError('ERR_RENDER_FAILED', 'The page ran out of memory while rendering.')
-          : new RenderError('ERR_RENDER_FAILED', `The page could not be rendered: ${String(error?.message ?? error).split('\n')[0]}`);
-      reject(out);
+    host.once('error', error => {
+      finish(() => reject(new RenderError('ERR_RENDER_FAILED', `The page could not be rendered: ${String(error?.message ?? error).split('\n')[0]}`)));
     });
-    worker.once('exit', code => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      reject(new RenderError('ERR_RENDER_FAILED', `The page stopped rendering without an answer (exit ${code}).`));
+    // 'close' comes after the IPC channel drains, so an answer the host sent
+    // just before it exited still wins; 'exit' can come first under load.
+    host.once('close', (code, signal) => {
+      finish(() => {
+        const crash = crashOf(code, signal);
+        if (crash) resolve({crashed: crash});
+        else if (signal) reject(crashError(signal, {crashed: false, withoutSegmenter}));
+        else reject(noMessageError(code, stateFile));
+      });
     });
   });
+}
+
+/**
+ * Run the page. When this Node crashes in Intl.Segmenter, run it once more
+ * without Intl.Segmenter and say so in a warning.
+ * @param {{entry: string, root: string, served: ServedSet | null}} input
+ * @param {number} timeoutMs
+ * @param {RenderWarning[]} warnings
+ */
+async function runPage(input, timeoutMs, warnings) {
+  const started = Date.now();
+  const first = await runWorker({...input, withoutSegmenter: false}, timeoutMs);
+  if (!first.crashed) return first;
+  if (!segmenterCrashes()) throw crashError(first.crashed, {crashed: true, withoutSegmenter: false});
+  const again = await runWorker({...input, withoutSegmenter: true}, Math.max(1000, timeoutMs - (Date.now() - started)));
+  if (again.crashed) throw crashError(again.crashed, {crashed: true, withoutSegmenter: true});
+  warnings.push(segmenterWarning());
+  return again;
+}
+
+/**
+ * The warning for a page rendered without Intl.Segmenter.
+ * @returns {RenderWarning}
+ */
+export function segmenterWarning() {
+  return {
+    code: 'node-crash',
+    message: `This Node build (${process.version} at ${process.execPath}) crashes in Intl.Segmenter, so the page rendered without it, and the output may differ slightly: initials and character counts (such as Avatar initials) can split a joined emoji, a flag, or a letter written with a separate accent mark. Render with an official Node.js build to remove the difference.`,
+  };
 }
 
 /**
@@ -354,6 +574,26 @@ function inlineAssets(text, kind, ctx) {
     });
 }
 
+/**
+ * The version of a package the page rendered with: the package set's copy
+ * when the page took it from there, else the copy Node's resolver finds from
+ * the page's folder.
+ * @param {string} name
+ * @param {string} dir the page's folder
+ * @param {Map<string, string>} setDirs the packages the page took from the package set: their folders
+ * @returns {string | null}
+ */
+function installedVersion(name, dir, setDirs) {
+  const packageDir = setDirs.get(name) ?? findNodeModulesPackage(dir, name)?.packageDir;
+  if (!packageDir) return null;
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8'));
+    return pkg?.name === name && typeof pkg.version === 'string' ? pkg.version : null;
+  } catch {
+    return null;
+  }
+}
+
 /** The light and dark switch every rendered page carries. */
 const SCHEME_CSS =
   ':root{color-scheme:light dark}:root[data-theme="light"]{color-scheme:light}:root[data-theme="dark"]{color-scheme:dark}';
@@ -361,15 +601,22 @@ const SCHEME_CSS =
 /**
  * Render a page module to one self-contained HTML file.
  * @param {string} entry absolute path of the page module
- * @param {{title?: string, timeoutMs?: number, version?: string}} [options]
+ * @param {{title?: string, timeoutMs?: number, version?: string, served?: ServedSet | null, output?: string}} [options]
+ *   `served`: the Core of the package set the CLI runs from, for the packages
+ *   the page's folder has no copy of; `output`: the file the HTML goes to.
+ *   With `output`, the file describes itself: notes at its top and end name
+ *   what made it and the commands that give the page back and render it
+ *   again, and its embedded source records the CLI version, the packages
+ *   the page rendered with, and the markup as rendered.
  * @returns {Promise<RenderedPage>}
  */
 export async function renderPage(entry, options = {}) {
   const dir = path.dirname(entry);
   const root = projectRootOf(dir);
-  const message = await runWorker(entry, root, options.timeoutMs ?? RENDER_TIMEOUT_MS);
+  const served = options.served ?? null;
   /** @type {RenderWarning[]} */
   const warnings = [];
+  const message = await runPage({entry, root, served}, options.timeoutMs ?? RENDER_TIMEOUT_MS, warnings);
   if (!message.ok) {
     throw new RenderError(message.error.code, message.error.message, message.error.detail);
   }
@@ -378,7 +625,6 @@ export async function renderPage(entry, options = {}) {
 
   // Stylesheets: Core's reset and components, plus each official package's
   // own stylesheet the page imports from.
-  const req = createRequire(entry);
   /** @type {string[]} */
   const sheets = [];
   /** @type {string[]} */
@@ -388,7 +634,8 @@ export async function renderPage(entry, options = {}) {
   /** @param {string} spec */
   const addSheet = spec => {
     try {
-      const file = req.resolve(spec);
+      const file = resolveServed(spec, entry, served);
+      if (!file) return false;
       sheets.push(spec);
       sheetText.push(fs.readFileSync(file, 'utf8'));
       sheetFiles.push(file);
@@ -402,8 +649,9 @@ export async function renderPage(entry, options = {}) {
   // Package stylesheets the page imports itself, such as a theme's.
   for (const {spec, from} of /** @type {{spec: string, from: string}[]} */ (message.packageCss ?? [])) {
     if (sheets.includes(spec)) continue;
+    const file = resolveServed(spec, from, served);
     try {
-      const file = createRequire(from).resolve(spec);
+      if (!file) throw new Error('not found');
       sheets.push(spec);
       sheetText.push(fs.readFileSync(file, 'utf8'));
       sheetFiles.push(file);
@@ -422,8 +670,10 @@ export async function renderPage(entry, options = {}) {
   if (!hasCore) {
     warnings.push({
       code: 'no-astryx-styles',
-      message:
-        '@astryxdesign/core is not installed where the page is, so the page has no Astryx styles; install it, or render from inside the project.',
+      // Outside a project the page would have taken the CLI's own Core.
+      message: served
+        ? '@astryxdesign/core is not installed where the page is, and the CLI runs without one, so the page has no Astryx styles; install it, or render from inside the project.'
+        : '@astryxdesign/core is not installed where the page is, so the page has no Astryx styles; install it, or render from inside the project.',
     });
   }
 
@@ -468,7 +718,7 @@ export async function renderPage(entry, options = {}) {
     /** A stylesheet's rules cut to the page, with its own imports inlined. @param {string} file @param {string} text */
     const sheet = (file, text) => {
       try {
-        const own = expandImports(file, text, {warnings, carried: carriedCss, included, packageSheets});
+        const own = expandImports(file, text, {warnings, carried: carriedCss, included, packageSheets, served});
         return inlineAssets(cutCss(own, used), 'css', {...ctx, dir: path.dirname(file)});
       } catch (e) {
         if (e instanceof RenderAssetError || e instanceof RenderError) throw e;
@@ -516,15 +766,30 @@ export async function renderPage(entry, options = {}) {
       message: `<${t.component}> on line ${t.line} did not render the text "${t.text.length > 60 ? `${t.text.slice(0, 57)}...` : t.text}" it was given; it takes that text through a prop (often label=), so check its props.`,
     });
   }
-  for (const f of /** @type {string[]} */ (message.files ?? [])) {
-    const src = fs.readFileSync(f, 'utf8');
-    if (/\bResponsiveContainer\b/.test(src)) {
-      warnings.push({
-        code: 'chart-size',
-        message: `${path.basename(f)} sizes a chart with ResponsiveContainer, which has no size until a browser measures it, so the chart is empty here; give the chart a fixed width and height.`,
-      });
-      break;
-    }
+  // A chart the render did not draw is an empty box: a ResponsiveContainer
+  // holds only its sizing box, and a chart of fixed size an empty wrapper.
+  const blankCharts =
+    (markup.match(/<div class="recharts-responsive-container[" ][^>]*><div[^>]*><\/div><\/div>/g) ?? []).length +
+    (markup.match(/<div\b[^>]*\bclass="recharts-wrapper"[^>]*><\/div>/g) ?? []).length +
+    (message.chartsFailed ?? 0);
+  if (blankCharts > 0) {
+    warnings.push({
+      code: 'chart-size',
+      message: `${blankCharts === 1 ? 'A chart' : `${blankCharts} charts`} could not be drawn without a browser, so ${blankCharts === 1 ? 'it is' : 'they are'} empty here: the render draws a chart only when a module of the page (not an installed package) imports the chart, and its ResponsiveContainer, from recharts by name (\`import {LineChart} from 'recharts'\`).`,
+    });
+  }
+  if (message.chartsAlone) {
+    /** @type {Record<string, string>} */
+    const causes = {
+      changed: 'The page changed its charts once its effects ran (their data or props, or which charts it shows)',
+      rerendered: 'A component that makes a chart rendered again once the page\'s effects ran',
+      error: 'The page could not be drawn again without a browser',
+    };
+    const why = causes[message.chartsAlone] ?? causes.error;
+    warnings.push({
+      code: 'chart-size',
+      message: `${why}, so each chart was drawn by itself, as the first render gave it: a custom tick, label or shape in a chart sees React context defaults, not the values the page provides.`,
+    });
   }
   for (const sheet of /** @type {string[]} */ (message.skippedCss ?? [])) {
     warnings.push({
@@ -588,14 +853,62 @@ export async function renderPage(entry, options = {}) {
   }
   const heading = /<h1\b[^>]*>([\s\S]*?)<\/h1>/i.exec(markup)?.[1]?.replace(/<[^>]*>/g, '').trim();
   const title = options.title ?? (heading ? decodeAttr(heading) : path.basename(entry).replace(/\.[^.]+$/, ''));
-  const html =
-    '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
-    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
-    '<meta name="color-scheme" content="light dark">' +
-    `<meta name="generator" content="Astryx${options.version ? ` ${escapeHtml(options.version)}` : ''}">` +
-    `<title>${escapeHtml(title)}</title>` +
-    `<style>${SCHEME_CSS}${css}</style></head><body>${markup}` +
-    `${sourceBlock(path.basename(entry), embedded)}</body></html>\n`;
+  const generator = `<meta name="generator" content="Astryx${options.version ? ` ${escapeHtml(options.version)}` : ''}">`;
+  const style = `<style>${SCHEME_CSS}${markup.includes('class="recharts-responsive-container"') ? CHART_CSS : ''}${css}</style>`;
+  let html;
+  if (options.output) {
+    // The charset and generator metas come first: a browser reads the
+    // charset only from the first 1024 bytes, and a CLI decides whether a
+    // render wrote a file from its first 4096.
+    const setDirs = new Map(/** @type {{name: string, dir: string}[]} */ (message.fromSet ?? []).map(p => [p.name, p.dir]));
+    const names = new Set([...(message.packages ?? []), ...setDirs.keys(), 'react', 'react-dom']);
+    if (hasCore) names.add('@astryxdesign/core');
+    /** @type {Record<string, string>} */
+    const packages = {};
+    for (const name of [...names].sort()) {
+      if (name.startsWith('node:') || builtinModules.includes(name)) continue;
+      const version = installedVersion(name, dir, setDirs);
+      if (version) packages[name] = version;
+    }
+    const file = path.basename(options.output);
+    const facts = {
+      cli: options.version ?? null,
+      format: RENDER_FORMAT,
+      file,
+      page: path.relative(root, entry).split(path.sep).join('/'),
+      restored: `${file.replace(/\.[^.]+$/, '')}-restored/${embedded[0].path}`,
+      files: embedded.map(f => f.path),
+      packages,
+      install: Object.entries(packages)
+        .filter(([name]) => !isServedPackage(name, []))
+        .map(([name, version]) => `${name}@${version}`),
+      ...(options.title === undefined ? {} : {title: options.title}),
+    };
+    const record = {
+      ...(facts.cli ? {cli: facts.cli} : {}),
+      page: facts.page,
+      ...(options.title === undefined ? {} : {title: options.title}),
+      packages,
+      markup: {
+        sha256: sha256(markup),
+        style: sha256(style),
+        text: Buffer.from(JSON.stringify({title, runs: textRuns(markup)})).toString('base64'),
+      },
+    };
+    html =
+      `<!doctype html><html lang="en"><head><meta charset="utf-8">${generator}\n${headerNote(facts)}\n` +
+      '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+      '<meta name="color-scheme" content="light dark">' +
+      `<title>${escapeHtml(title)}</title>${style}</head><body>${markup}` +
+      `${sourceBlock(path.basename(entry), embedded, record)}\n${endNote(facts)}\n</body></html>\n`;
+  } else {
+    html =
+      '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
+      '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+      '<meta name="color-scheme" content="light dark">' +
+      `${generator}<title>${escapeHtml(title)}</title>${style}</head><body>${markup}` +
+      `${sourceBlock(path.basename(entry), embedded)}</body></html>\n`;
+  }
   return {
     html,
     files: embedded.map(f => f.path),
@@ -608,5 +921,6 @@ export async function renderPage(entry, options = {}) {
       ...(message.assets ?? []),
     ]).size,
     warnings,
+    fromSet: message.fromSet ?? [],
   };
 }

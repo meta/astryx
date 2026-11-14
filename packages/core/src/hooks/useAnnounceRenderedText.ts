@@ -43,7 +43,7 @@ const BLOCKS = 'p, div, li, br, h1, h2, h3, h4, h5, h6';
  * placed directly in the element, beside its child elements, counts as a block
  * too (a status bar is an icon followed by its bare message).
  */
-function blockText(element: HTMLElement): string {
+function blockText(element: HTMLElement, exclude?: string): string {
   return Array.from(element.childNodes)
     .map(child => {
       if (child.nodeType === Node.TEXT_NODE) {
@@ -54,7 +54,10 @@ function blockText(element: HTMLElement): string {
       // constructor checks.
       if (child.nodeType === Node.ELEMENT_NODE) {
         const part = child as HTMLElement;
-        return part.matches(HIDDEN) ? '' : renderedText(part);
+        return part.matches(HIDDEN) ||
+          (exclude != null && part.matches(exclude))
+          ? ''
+          : renderedText(part, exclude);
       }
       return '';
     })
@@ -75,6 +78,8 @@ export interface AnnounceRenderedTextOptions {
    * polite. Defaults to polite.
    */
   politeness?: AnnouncePoliteness;
+  /** Accessible name to announce when the element has no rendered text. */
+  fallbackText?: string;
   /**
    * The owner's announcer, when the rendered text states the next value of
    * that announcer's state. For example, a picker's empty-panel message goes
@@ -82,16 +87,56 @@ export interface AnnounceRenderedTextOptions {
    * while not yet exposed. Defaults to this hook's own instance.
    */
   announce?: AnnounceFn;
+  /**
+   * A selector for subtrees to leave out of the text, such as the controls in
+   * a custom layout. Applied to the element's descendants.
+   */
+  exclude?: string;
 }
 
-/** The rendered text an assistive technology would read from `element`. */
-export function renderedText(element: HTMLElement): string {
-  // Clone so removing the hidden parts cannot disturb what is on screen. The
-  // clone is never attached to the document.
-  const copy = element.cloneNode(true) as HTMLElement;
-  copy.querySelectorAll(HIDDEN).forEach(node => node.remove());
-  copy.querySelectorAll(BLOCKS).forEach(node => node.after(' ')); // blocks apart
-  return (copy.textContent ?? '').replace(/\s+/g, ' ').trim();
+/**
+ * The rendered text an assistive technology would read from `element`. Block
+ * boxes read apart: a block tag, an element whose computed display is not
+ * inline, and any child of a flex or grid container (which the layout
+ * blockifies), so two stacked `Text` spans never run together. Hidden parts
+ * are skipped, and so are descendants that match `exclude`; nothing on screen
+ * changes. Reads the live element, so computed display resolves.
+ */
+export function renderedText(element: HTMLElement, exclude?: string): string {
+  const view = element.ownerDocument.defaultView;
+  const displayOf = (node: Element) =>
+    view?.getComputedStyle(node).display ?? '';
+  const parts: string[] = [];
+  const walk = (node: Node, parentDisplay: string) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      parts.push(node.textContent ?? '');
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      return;
+    }
+    const part = node as Element;
+    if (part.matches(HIDDEN) || (exclude != null && part.matches(exclude))) {
+      return;
+    }
+    const display = displayOf(part);
+    const isBlock =
+      part.matches(BLOCKS) ||
+      (display !== '' &&
+        display !== 'contents' &&
+        !display.startsWith('inline')) ||
+      /\b(flex|grid)\b/.test(parentDisplay);
+    if (isBlock) {
+      parts.push(' ');
+    }
+    part.childNodes.forEach(child => walk(child, display));
+    if (isBlock) {
+      parts.push(' ');
+    }
+  };
+  const ownDisplay = displayOf(element);
+  element.childNodes.forEach(child => walk(child, ownDisplay));
+  return parts.join('').replace(/\s+/g, ' ').trim();
 }
 
 /**
@@ -121,7 +166,9 @@ export function useAnnounceRenderedText(
   {
     skipFirstRender = false,
     politeness = 'polite',
+    fallbackText,
     announce: ownerAnnounce,
+    exclude,
   }: AnnounceRenderedTextOptions = {},
 ): void {
   const ownAnnounce = useAnnounce();
@@ -157,7 +204,23 @@ export function useAnnounceRenderedText(
     if (skipFirstRender && element.parentElement?.closest(LIVE_CONTAINER)) {
       return;
     }
-    const text = skipFirstRender ? blockText(element) : renderedText(element);
+    let text = skipFirstRender
+      ? blockText(element, exclude)
+      : renderedText(element, exclude);
+    if (text === '' && fallbackText !== undefined) {
+      text =
+        (element.getAttribute('aria-labelledby') ?? '')
+          .split(/\s+/)
+          .map(id => {
+            // Each referenced element as read: its hidden parts dropped, as
+            // the accessible name drops them.
+            const target = element.ownerDocument.getElementById(id);
+            return target == null ? '' : renderedText(target);
+          })
+          .join(' ')
+          .replace(/\s+/g, ' ')
+          .trim() || fallbackText;
+    }
     if (text === '') {
       // Nothing readable on screen either, so there is no announcement that
       // would match what the sighted user is seeing.

@@ -68,7 +68,7 @@ export const doc = {
       description:
         'Tell `{@command discover}` which integrations this project could add: an async function that returns a catalog. An integration can provide one too, as a `discover` named export from its manifest. Discover calls every source, yours first, and one that fails never hides the others. Discover only reads; your package manager installs.',
       example:
-        "async ({signal, package: name, version}) => fetchCatalog({signal, name, version})",
+        'async ({signal, package: name, version}) => fetchCatalog({signal, name, version})',
     },
     {
       name: 'experimental',
@@ -77,11 +77,19 @@ export const doc = {
       fields: [
         {
           name: 'experimental.iconSet',
+          type: 'string | string[]',
+          stability: 'experimental',
+          description:
+            "Experimental: may change or be removed in a patch release. The project's main icon set, by set name or as `<package>/<set>`; or a list of them, the main set first and then backup sets in order. A copied template takes each icon from the first set in the list that has its meaning, and draws a placeholder the copied file declares when none has it. It is the opt-in: copied templates use these icons, and `astryx discover` and `astryx doctor` report icon sets, only when it is set. `astryx experimental icon use <main> --backup <set>` writes it. `astryx experimental icon` ranks the main set's icons first; without it, the only installed set is the project's there. `astryx search` never returns icons.",
+          example: "['@acme/outline-icons/outline', '@acme/brand-icons/brand']",
+        },
+        {
+          name: 'experimental.iconVariant',
           type: 'string',
           stability: 'experimental',
           description:
-            "Experimental: may change or be removed in a patch release. The project's icon set, by set name or as `<package>/<set>`. It is the opt-in: copied templates use its icons, and `astryx discover` and `astryx doctor` report icon sets, only when it is set. `astryx experimental icon` ranks its icons first; without it, the only installed set is the project's there. `astryx search` never returns icons.",
-          example: "'@acme/outline-icons/outline'",
+            "Experimental: may change or be removed in a patch release. The look every icon of the project draws, such as `outline` or `filled`, by the variant name the icon sets declare. Each set in `experimental.iconSet` that declares a variant of that name draws it: copied templates import that variant's icons, and a theme takes that look's theme map (`themeIconsFilled`). A set that declares no variant of that name draws its default look. The main set must declare it, and it needs `experimental.iconSet`. `astryx experimental icon use <main> --variant <variant>` writes it; without `--variant` that command removes it.",
+          example: "'filled'",
         },
         {
           name: 'experimental.xle.components',

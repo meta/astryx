@@ -233,6 +233,8 @@ function memberFeatures(v) {
  * @property {string} [displayName]
  * @property {string} [category]
  * @property {string[]} [keywords]
+ * @property {string} [description]
+ * @property {string[]} [components]
  */
 
 /**
@@ -259,6 +261,16 @@ function ownWords(name, catalog, words) {
   return n;
 }
 
+/**
+ * A template's family: the part of its category before ` - `.
+ * @param {string} name
+ * @param {DescribedTemplate[]} catalog
+ */
+const familyOf = (name, catalog) =>
+  String(catalog.find(c => c.name === name)?.category ?? '')
+    .split(' - ')[0]
+    .trim();
+
 /** How many fewer own words a template whose family the idea names first may
  * name than the listed template it competes with, and still start. */
 const FAMILY_SLACK = 2;
@@ -281,24 +293,16 @@ function familyAt(name, catalog, order) {
 }
 
 /**
- * Where an idea starts, by the blended weights.
+ * The blend's score for every candidate: the app shell and every ready,
+ * non-shell template, the table's first, then any the table does not list.
  * @param {string} idea
- * @param {import('./rank.mjs').RankedPage[]} ranked the ranker's output for the idea
- * @param {import('./rank.mjs').RankedPage | null} pick the ranker's own start
- * @param {DescribedTemplate[]} catalog the project's ready page templates
- * @param {{weights?: WeightsFile | null, newPage?: boolean}} [options]
- *   `newPage`: the idea asks for a new page (rank.mjs `asksForNewPage`)
- * @returns {string | null | undefined} a template id, null for the app shell,
- *   undefined without weights
+ * @param {import('./rank.mjs').RankedPage[]} ranked
+ * @param {import('./rank.mjs').RankedPage | null} pick
+ * @param {DescribedTemplate[]} catalog
+ * @param {WeightsFile} weights
+ * @returns {{cands: string[], scores: number[], position: Map<string, number>}}
  */
-export function weighStart(
-  idea,
-  ranked,
-  pick,
-  catalog,
-  {weights = null, newPage = false} = {},
-) {
-  if (!weights) return undefined;
+function blend(idea, ranked, pick, catalog, weights) {
   const ready = new Set(catalog.map(t => t.name));
   const shellIds = new Set(
     ranked.filter(r => r.family === SHELL_FAMILY).map(r => r.name),
@@ -335,6 +339,162 @@ export function weighStart(
     for (const f of feats) for (const x of f[i]) s += x * weights.blend[j++];
     return s + (c === SHELL ? 1 : 0) * weights.blend[j];
   });
+  return {cands, scores, position};
+}
+
+/**
+ * The most typical of the ready templates the ranker ties with `name` in its
+ * family (same score, same id length): the one whose descriptor's words are
+ * shared by the most of its family's templates, on average. `name` keeps its
+ * place on an equal value. Reads only the templates' descriptors.
+ * @param {string} name
+ * @param {import('./rank.mjs').RankedPage[]} ranked
+ * @param {string[]} cands
+ * @returns {string}
+ */
+function typicalOfTie(name, ranked, cands) {
+  const self = ranked.find(r => r.name === name);
+  if (!self || self.family === SHELL_FAMILY || !self.family) return name;
+  const length = (/** @type {string} */ n) => n.split('-').length;
+  let chosen = self;
+  for (const r of ranked) {
+    if (
+      r.score === self.score &&
+      r.family === self.family &&
+      length(r.name) === length(self.name) &&
+      cands.includes(r.name) &&
+      r.typical > chosen.typical
+    )
+      chosen = r;
+  }
+  return chosen.name;
+}
+
+/**
+ * The words of a template's whole descriptor, stemmed, less search's
+ * stopwords: its display name, category, keywords, description, and the names
+ * of the components its page composes.
+ * @param {DescribedTemplate} t
+ * @returns {Set<string>}
+ */
+function descriptorWords(t) {
+  const components = (t.components ?? []).map(c =>
+    c.replace(/([a-z0-9])([A-Z])/g, '$1 $2'),
+  );
+  return new Set(
+    weightWords(
+      [
+        t.displayName ?? '',
+        t.category ?? '',
+        ...(t.keywords ?? []),
+        t.description ?? '',
+        ...components,
+      ].join(' '),
+    )
+      .filter(w => !STOPWORDS.has(w))
+      .map(stem),
+  );
+}
+
+/**
+ * Settles an exact tie in the ranker by a fuller reading of each tied
+ * template's own descriptor. Words every tied template names cannot choose
+ * between them, so they are left out; each other word of the idea that a
+ * template's descriptor names adds its rarity within the family. The highest
+ * total starts. An equal total goes to the most typical of the family
+ * (`typicalOfTie`), then to `name`. Reads only the templates' descriptors.
+ * @param {string} name
+ * @param {string} idea
+ * @param {import('./rank.mjs').RankedPage[]} ranked
+ * @param {string[]} cands
+ * @param {DescribedTemplate[]} catalog
+ * @returns {string}
+ */
+function fullerOfTie(name, idea, ranked, cands, catalog) {
+  const self = ranked.find(r => r.name === name);
+  if (!self || self.family === SHELL_FAMILY || !self.family) return name;
+  const length = (/** @type {string} */ n) => n.split('-').length;
+  const tied = ranked.filter(
+    r =>
+      r.score === self.score &&
+      r.family === self.family &&
+      length(r.name) === length(self.name) &&
+      cands.includes(r.name),
+  );
+  if (tied.length < 2) return name;
+  const family = catalog.filter(t => familyOf(t.name, catalog) === self.family);
+  const words = new Map(family.map(t => [t.name, descriptorWords(t)]));
+  const df = (/** @type {string} */ w) =>
+    family.filter(t => words.get(t.name)?.has(w)).length;
+  const said = new Set(
+    weightWords(idea)
+      .filter(w => !STOPWORDS.has(w))
+      .map(stem),
+  );
+  const own = tied.map(r => words.get(r.name) ?? new Set());
+  const n = family.length;
+  const score = tied.map((_, i) => {
+    let s = 0;
+    for (const w of said) {
+      if (!own[i].has(w) || own.every(o => o.has(w))) continue;
+      const d = df(w);
+      s += Math.log(1 + (n - d + 0.5) / (d + 0.5));
+    }
+    return s;
+  });
+  const top = Math.max(...score);
+  if (top === 0) return typicalOfTie(name, ranked, cands);
+  const leaders = tied.filter((_, i) => score[i] >= top - 1e-9);
+  if (leaders.length === 1) return leaders[0].name;
+  const lead = leaders.some(r => r.name === name) ? self : leaders[0];
+  return typicalOfTie(
+    lead.name,
+    ranked,
+    leaders.map(r => r.name),
+  );
+}
+
+/**
+ * Every ready, non-shell template in the blend's own order, best first: the
+ * order the page start is chosen from, so the alternatives build names beside
+ * the start come from the same ranking. Null without weights.
+ * @param {string} idea
+ * @param {import('./rank.mjs').RankedPage[]} ranked
+ * @param {import('./rank.mjs').RankedPage | null} pick
+ * @param {DescribedTemplate[]} catalog
+ * @param {WeightsFile | null} weights
+ * @returns {string[] | null}
+ */
+export function blendOrder(idea, ranked, pick, catalog, weights) {
+  if (!weights) return null;
+  const {cands, scores} = blend(idea, ranked, pick, catalog, weights);
+  return cands
+    .map((c, i) => ({c, s: scores[i], i}))
+    .filter(x => x.c !== SHELL)
+    .sort((x, y) => y.s - x.s || x.i - y.i)
+    .map(x => x.c);
+}
+
+/**
+ * Where an idea starts, by the blended weights.
+ * @param {string} idea
+ * @param {import('./rank.mjs').RankedPage[]} ranked the ranker's output for the idea
+ * @param {import('./rank.mjs').RankedPage | null} pick the ranker's own start
+ * @param {DescribedTemplate[]} catalog the project's ready page templates
+ * @param {{weights?: WeightsFile | null, newPage?: boolean}} [options]
+ *   `newPage`: the idea asks for a new page (rank.mjs `asksForNewPage`)
+ * @returns {string | null | undefined} a template id, null for the app shell,
+ *   undefined without weights
+ */
+export function weighStart(
+  idea,
+  ranked,
+  pick,
+  catalog,
+  {weights = null, newPage = false} = {},
+) {
+  if (!weights) return undefined;
+  const {cands, scores, position} = blend(idea, ranked, pick, catalog, weights);
   /** @param {(c: string) => boolean} ok */
   const best = ok => {
     let at = -1;
@@ -365,15 +525,22 @@ export function weighStart(
     const said = new Set(content.map(stem));
     const mine = ownWords(kept, catalog, said);
     const theirs = ownWords(listed, catalog, said);
-    if (mine >= theirs) return kept;
     // An idea that names the template's family before the listed one's
     // ("a dashboard with a data table") is that family's page, unless it
     // names far more of the listed template's words.
     const order = content.map(stem);
-    return familyAt(kept, catalog, order) < familyAt(listed, catalog, order) &&
-      mine >= theirs - FAMILY_SLACK
-      ? kept
-      : listed;
+    const stays =
+      mine >= theirs ||
+      (familyAt(kept, catalog, order) < familyAt(listed, catalog, order) &&
+        mine >= theirs - FAMILY_SLACK);
+    if (!stays) return listed;
+    // A tie in the ranker is no preference: every table that names "table"
+    // scores the same, and the alphabet must not choose the page. Among the
+    // family's templates the ranker ties with this unlisted one, the template
+    // whose own descriptor best matches the idea starts (`fullerOfTie`), then
+    // the one most typical of the family. Only the templates' descriptors
+    // decide this tie, never the tables.
+    return fullerOfTie(kept, idea, ranked, cands, catalog);
   }
   const top = best(() => true);
   if (top !== SHELL) return top;
@@ -381,4 +548,31 @@ export function weighStart(
   // the shell.
   if (newPage && kept) return kept;
   return null;
+}
+
+/**
+ * The blend's scores: the app shell's, and the best non-shell template with
+ * its score and the runner-up's. Null without weights.
+ * @param {string} idea
+ * @param {import('./rank.mjs').RankedPage[]} ranked
+ * @param {import('./rank.mjs').RankedPage | null} pick
+ * @param {DescribedTemplate[]} catalog
+ * @param {WeightsFile | null} weights
+ */
+export function blendSummary(idea, ranked, pick, catalog, weights) {
+  if (!weights) return null;
+  const {cands, scores} = blend(idea, ranked, pick, catalog, weights);
+  let shell = 0;
+  const rest = [];
+  for (let i = 0; i < cands.length; i++) {
+    if (cands[i] === SHELL) shell = scores[i];
+    else rest.push({name: cands[i], score: scores[i], i});
+  }
+  rest.sort((x, y) => y.score - x.score || x.i - y.i);
+  return {
+    shell,
+    best: rest[0]?.name ?? null,
+    bestScore: rest[0]?.score ?? 0,
+    secondScore: rest[1]?.score ?? 0,
+  };
 }

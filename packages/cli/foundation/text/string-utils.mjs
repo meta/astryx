@@ -58,7 +58,9 @@ export function findClosestComponents(name, components, maxDistance = 3) {
  */
 export async function searchComponents(needle, coreDir, components) {
   const {readDocView} = await import('../doc-compiler/read.mjs');
-  const fs = await import('node:fs');
+  const {listDirEntries, oncePerListing, pathExists} = await import(
+    '../fs/listing-cache.mjs'
+  );
   const path = await import('node:path');
 
   const term = needle.toLowerCase();
@@ -111,32 +113,30 @@ export async function searchComponents(needle, coreDir, components) {
   }
 
   // --- Pass 2: Keyword + description matching (async, reads doc files) ---
-  for (const comp of allNames) {
-    const srcDir = path.join(coreDir, 'src');
-
-    let docPath = null;
+  const srcDir = path.join(coreDir, 'src');
+  /**
+   * The doc that Pass 2 reads for `comp`, or null.
+   * @param {string} comp
+   * @returns {string | null}
+   */
+  function docPathOf(comp) {
     const direct = path.join(srcDir, comp, comp + '.doc.mjs');
-    if (fs.existsSync(direct)) {
-      docPath = direct;
+    if (pathExists(direct)) return direct;
+    const xdsDirect = path.join(srcDir, comp, 'XDS' + comp + '.doc.mjs');
+    if (pathExists(xdsDirect)) return xdsDirect;
+    if (!pathExists(srcDir)) return null;
+    for (const entry of listDirEntries(srcDir)) {
+      if (!entry.isDirectory()) continue;
+      const nested = path.join(srcDir, entry.name, comp, comp + '.doc.mjs');
+      if (pathExists(nested)) return nested;
     }
-    if (!docPath) {
-      const xdsDirect = path.join(srcDir, comp, 'XDS' + comp + '.doc.mjs');
-      if (fs.existsSync(xdsDirect)) {
-        docPath = xdsDirect;
-      }
-    }
-    if (!docPath && fs.existsSync(srcDir)) {
-      const entries = fs.readdirSync(srcDir, {withFileTypes: true});
-      for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
-        const nested = path.join(srcDir, entry.name, comp, comp + '.doc.mjs');
-        if (fs.existsSync(nested)) {
-          docPath = nested;
-          break;
-        }
-      }
-    }
-
+    return null;
+  }
+  // Each search probes the same paths, so one operation finds each doc once.
+  for (const comp of allNames) {
+    const docPath = oncePerListing(`search-doc\0${srcDir}\0${comp}`, () =>
+      docPathOf(comp),
+    );
     if (!docPath) continue;
 
     try {
@@ -255,8 +255,9 @@ export async function searchComponents(needle, coreDir, components) {
 
 /**
  * The first sentence of a text, whitespace collapsed. A period after "e.g" or
- * "i.e" does not end the sentence. Used where a description has to fit on one
- * line: `build`'s alternatives and its text kit.
+ * "i.e", or inside an open quote (a quoted date such as "2. Nov. 2026"), does
+ * not end the sentence. Used where a description has to fit on one line:
+ * `build`'s text kit, and the text views of `search` and `template --list`.
  * @param {string} text
  * @returns {string}
  */
@@ -264,9 +265,21 @@ export function firstSentence(text) {
   const flat = String(text ?? '').replace(/\s+/g, ' ').trim();
   const ends = /[.!?](?=\s|$)/g;
   for (let m = ends.exec(flat); m; m = ends.exec(flat)) {
-    if (!/\b(e\.g|i\.e)$/i.test(flat.slice(0, m.index))) {
+    const before = flat.slice(0, m.index);
+    if (!/\b(e\.g|i\.e)$/i.test(before) && !insideQuote(before)) {
       return flat.slice(0, m.index + 1);
     }
   }
   return flat;
+}
+
+/**
+ * Whether a text ends inside a quote it opened: an odd count of straight
+ * double quotes, or more opening curly quotes than closing ones.
+ * @param {string} text
+ * @returns {boolean}
+ */
+function insideQuote(text) {
+  const count = (/** @type {RegExp} */ re) => (text.match(re) ?? []).length;
+  return count(/"/g) % 2 === 1 || count(/\u201C/g) > count(/\u201D/g);
 }

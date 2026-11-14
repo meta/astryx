@@ -84,6 +84,9 @@
  * @property {string[] | null} variants - The variants the set declares: named looks such as outline or solid; size comes from CSS.
  * @property {IconSetCoverage} coverage - Which icon definitions the set's `map` covers.
  * @property {boolean} project - Whether this is the project's icon set.
+ * @property {'main' | 'backup' | null} role - The set's place in the project's list: its main set, a backup, or not listed.
+ * @property {number | null} rank - The set's position in the list, the main set at 1; null when it is not listed.
+ * @property {string | null} [look] - Present when the project names a variant: the look this set's icons draw, the variant when the set declares it, else its default look; null when the list leaves the set out or it declares no variants.
  */
 
 /**
@@ -113,7 +116,11 @@
  * @property {'selected' | 'none' | 'ambiguous' | 'missing' | 'withdrawn'} data.status - The project's icon-set state.
  * @property {string | null} data.projectSet - The project's set, as `<package>/<set>`, when selected.
  * @property {string} data.reason - Why the project has that set, or none.
- * @property {IconSetEntry[]} data.sets - Installed sets, the project's first.
+ * @property {string[]} data.order - The project's list as `<package>/<set>`: the main set, then each backup that resolves; empty when no main set is selected.
+ * @property {string | null} data.variant - The look the project's icons draw, as `experimental.iconVariant` names it; null when it names none.
+ * @property {Array<{iconSet: string, status: 'selected' | 'ambiguous' | 'missing' | 'withdrawn', reason: string}>} data.backups - Each backup the list names, and whether it resolves.
+ * @property {string} [data.next] - Present when two or more sets are installed and none is the main set: the command that chooses the order.
+ * @property {IconSetEntry[]} data.sets - Installed sets in list order: the main set, its backups, then the rest.
  * @property {IconWithdrawnEntry[]} data.withdrawn - Sets found but withdrawn.
  */
 
@@ -123,16 +130,24 @@
  * @typedef {object} IconUseResponse
  * @property {'icon.use'} type
  * @property {object} data
- * @property {string} data.iconSet - The value written to `experimental.iconSet`.
- * @property {string} data.set - The set it names, as `<package>/<set>`.
+ * @property {string} data.iconSet - The main set, as written to `experimental.iconSet` (alone, or first in the list).
+ * @property {string} data.set - The main set it names, as `<package>/<set>`.
+ * @property {Array<{iconSet: string, set: string}>} data.backups - The backup sets, in order, as written and as `<package>/<set>`; empty when there are none.
+ * @property {string | null} data.variant - The look every icon draws, as written to `experimental.iconVariant`; null when none is named, and the key is removed, so each set draws its default look.
  * @property {string} data.config - The config file, relative to the project.
  * @property {boolean} data.created - Whether the config file was created.
- * @property {string | null} data.previous - The `experimental.iconSet` value it replaced.
+ * @property {string | string[] | null} data.previous - The `experimental.iconSet` value it replaced.
+ * @property {string | null} data.previousVariant - The `experimental.iconVariant` value it replaced.
  * @property {boolean} data.changed - Whether anything was written.
+ * @property {string[]} data.unlisted - Installed sets the list leaves out, as `<package>/<set>`. Doctor fails a project that installs more than one set and leaves one out.
+ * @property {Array<{set: string, variant: string | null}>} [data.looks] - Present when a variant is named: each set in the list, main set first, as `<package>/<set>`, with the look its icons draw: the variant, or the set's default look when it declares no variant of that name (null when it declares no variants).
+ * @property {{module: string, export: string}} [data.themeMap] - Present when a variant is named and the main set has a theme map for that look: the export a theme sets as `icons` to draw the built-in icons in it (`themeIconsFilled`), and the module it is imported from.
+ * @property {string} [data.next] - Present when `unlisted` is not empty: the command that adds them as backups.
  * @property {string} [data.warning] - Present when the project's
- *   `@astryxdesign/cli` range admits a release before 0.7.4, which refuses
- *   an astryx.config that sets `experimental.iconSet`: what fails, and the
- *   range to require.
+ *   `@astryxdesign/cli` range admits a release that refuses the config
+ *   written: before 0.7.4 for `experimental.iconSet`, before 0.7.12 for it
+ *   as a list, and before 0.7.16 for `experimental.iconVariant`. It says
+ *   what fails, and the range to require.
  */
 
 /**
@@ -156,7 +171,9 @@
  * @property {string} data.file - The data file, relative to the package.
  * @property {Array<{definition: string, icon: string, previous: string | null, changed: boolean}>} data.entries - Each pair, in order, and what it replaced.
  * @property {boolean} data.changed - Whether the file was written.
+ * @property {{previous: string, module: string}} [data.moduleUpdate] - The data file's `module` before and after this command, when the package was renamed and the command wrote its new name.
  * @property {string[]} [data.files] - The generated module and its types, when its theme map was rewritten.
+ * @property {IconTemplateMeanings} [data.templateMeanings] - After a write: the icon definitions the bundled templates use that the set's `map` does not name. A copied template renders a placeholder for each in a project that uses this set.
  */
 
 /**
@@ -172,7 +189,9 @@
  * @property {string | null} data.icon - The id of the icon now mapped (the icon may be named by any name `map` accepts); null after `remove`.
  * @property {string | null} data.previous - The icon id it replaced.
  * @property {boolean} data.changed - Whether the file was written.
+ * @property {{previous: string, module: string}} [data.moduleUpdate] - The data file's `module` before and after this command, when the package was renamed and the command wrote its new name.
  * @property {string[]} [data.files] - The generated module and its types, when its theme map was rewritten.
+ * @property {IconTemplateMeanings} [data.templateMeanings] - After a write: the icon definitions the bundled templates use that the set's `map` does not name. A copied template renders a placeholder for each in a project that uses this set.
  */
 
 /**
@@ -183,7 +202,7 @@
  * @property {string} from - The module the icon is exported from: a package, a package subpath, or a relative path in this package.
  * @property {string} [set] - The set to edit, when the package ships several.
  * @property {string} [definition] - The icon definition to map the icon to.
- * @property {string} [newDefinition] - Add the set's own definition with this name and map the icon to it.
+ * @property {string} [newDefinition] - Add the set's own definition with this name (camelCase, or kebab-case written as camelCase) and map the icon to it.
  * @property {string} [description] - With `newDefinition`: what the icon is for.
  * @property {string[]} [words] - With `newDefinition`: words people search for.
  * @property {boolean} [useDefault] - The module's default export is the icon.
@@ -207,6 +226,7 @@
  * @property {string[]} data.missing - Ids of icons `from` has no export for; they keep no such variant.
  * @property {string[]} data.files - Files written, relative to the package.
  * @property {boolean} data.changed
+ * @property {{previous: string, module: string}} [data.moduleUpdate] - The data file's `module` before and after this command, when the package was renamed and the command wrote its new name.
  */
 
 /**
@@ -223,7 +243,10 @@
  * @property {string} [data.newDefinition] - The set's own definition the command wrote.
  * @property {string[]} data.files - Files written, relative to the package.
  * @property {boolean} data.changed - Whether anything was written.
+ * @property {boolean} data.added - Whether the icon, its variant, its `map` entry, or a new definition was added. False when the set already had them, even when `changed` is true because the command wrote a renamed package's new name.
+ * @property {{previous: string, module: string}} [data.moduleUpdate] - The data file's `module` before and after this command, when the package was renamed and the command wrote its new name.
  * @property {string} [data.note] - What the package still needs, as text to copy: the entry line that exports the icon from the set's module, and the package.json `files` that publishes a `./` source.
+ * @property {IconTemplateMeanings} [data.templateMeanings] - After a write: the icon definitions the bundled templates use that the set's `map` does not name. A copied template renders a placeholder for each in a project that uses this set.
  */
 
 /**
@@ -249,6 +272,7 @@
  * @property {string} data.id - The id the icon would get.
  * @property {IconDefinitionMatch[]} data.matches - At most 10, best first.
  * @property {string | null} data.newDefinition - The command that adds the set's own definition, when no match fits.
+ * @property {string} [data.variant] - When the set already has an icon for the export's glyph from another export of the library: the command that adds this export as that icon's variant.
  */
 
 /**
@@ -257,7 +281,7 @@
  * @typedef {object} IconOptions
  * @property {string} [cwd]
  * @property {boolean} [list] - List the installed sets.
- * @property {string} [set] - Keep one set, by name or `<package>/<set>`.
+ * @property {string} [set] - Keep one set, by name or `<package>/<set>`; with `definitions`, the set whose `map` they are checked against.
  * @property {number} [limit] - Max matches (default 10).
  * @property {boolean} [allIcons] - With `set` and no query: every icon of that set.
  * @property {boolean} [definitions] - Every Astryx icon definition, and nothing else.
@@ -269,7 +293,16 @@
  * @typedef {object} IconDefinitionsResponse
  * @property {'icon.definitions'} type
  * @property {object} data
- * @property {Array<{name: string, builtIn: boolean, description: string, words: string[]}>} data.definitions - Every Astryx icon definition, by name; `builtIn` ones every set maps.
+ * @property {string | null} data.set - The set `mapped` describes, as `<package>/<set>`: the one `set` names, else the project's main set, else the only set of the icon-set package the command runs in; null when there is none.
+ * @property {Array<{name: string, builtIn: boolean, description: string, words: string[], templates: number, mapped?: boolean}>} data.definitions - Every Astryx icon definition, by name; `builtIn` ones every set maps. `templates`: how many bundled templates use it. `mapped`: whether the set's `map` names it, present when `set` is not null.
+ */
+
+/**
+ * The icon definitions the bundled templates use that a set's `map` does not
+ * name.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} IconTemplateMeanings
+ * @property {Array<{definition: string, templates: number}>} unmapped - Each such definition and how many bundled templates use it, most used first, then by name; empty when the set maps them all.
  */
 
 /**
@@ -292,8 +325,9 @@
  * @property {boolean} [dryRun] - Return the receipt without writing.
  * @property {string} [from] - A module whose every icon component the set wraps: a package, a package subpath, or a ./ path in the package.
  * @property {string[] | string} [exclude] - With `from`: export names that are not icons; a string is split on commas.
+ * @property {string} [adapter] - `./<path>#<export>`: a function in the package that turns one library export that is not a component into one. It is written to the data file's `adapter`; with `from`, every data export of the library becomes an icon through it. On a set that already has icons, only with `from`.
  * @property {string[] | string} [variants] - The variants the set supplies, such as `outline,solid`; a string is split on commas.
- * @property {string} [defaultVariant] - With `variants`: the variant each icon's own export draws; the first variant when absent.
+ * @property {string} [defaultVariant] - With `variants`: the variant each icon's own export draws; when absent, the look the icons' exports draw in a library whose names encode looks; otherwise the set's current default, else, on a set without icons, the first variant. A set with icons changes it only with `from`, and only in a library whose names encode looks.
  * @property {string} [displayName] - The descriptor's display name; the set name in title case when absent.
  * @property {string} [description] - The descriptor's one-line description; `<Display name> icons.` when absent.
  */
@@ -323,11 +357,16 @@
  * @property {boolean} dryRun
  * @property {string} [from]
  * @property {number} [icons] - With `from`: how many icons it wrote.
- * @property {boolean} [refreshed] - With `from` on an existing set: the set was refreshed, not created.
+ * @property {boolean} [refreshed] - With `from` on an existing set that has icons: the set was refreshed, not created. Absent when the set had no icons yet: its icons were created.
+ * @property {boolean} [updated] - Without `from` on an existing set: its variants, default variant, display name, or description were updated in place, not created.
+ * @property {Array<{id: string, from: string, to: string}>} [moved] - On a refresh from a package root: the icons that read one file of that package (`from`) and now import from the root (`to`); each keeps its id, export, `map` entries, variants, and words.
+ * @property {{library: string, path: string}} [licenseNoticeMissing] - With `from`: the wrapped library (`name@version`) ships no license file to copy and the set has none. `path` is where to add a NOTICE file that names the library and its license; the CLI never writes it.
  * @property {Array<{from: string, to: string}>} [renamed] - On a refresh: the icons whose id this release's id rule changes, matched by the export the library still has; each keeps its `map` entries, variants, and words.
  * @property {Array<{definition: string, icon: string}>} [mapped] - With `from`: the `map` entries an icon with the definition's exact name gives (on a refresh, every such entry, kept or new); check each.
  * @property {Array<{definition: string, icon: string, word: string}>} [suggestions] - With `from`: for each unmapped Astryx definition, up to three icons it might map to, best first: the definition's name in another spelling or as another name of an icon, ids that start with it, an id or another name that is one of its words, then two-word ids that are a one-word word sized, shaped, or numbered (`grid-2x2`); never a negated form, the opposite direction, or an icon already mapped. `word` is the name or word that matched. Never written.
  * @property {string[]} [notes] - What the author does next, including each change the package needs that the CLI never makes itself (its entry, peers, scripts), as text to copy.
+ * @property {{previous: string, module: string}} [moduleUpdate] - On a refresh, an update, or a new definition with `icon`: the data file's `module` before and after this command, when the package was renamed and the command writes its new name.
+ * @property {IconTemplateMeanings} [templateMeanings] - From `iconNewSet()`, except in a dry run: the icon definitions the bundled templates use that the set's `map` does not name. A copied template renders a placeholder for each in a project that uses this set.
  */
 
 /**

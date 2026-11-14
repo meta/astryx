@@ -12,7 +12,7 @@ const anatomy = [
     name: 'Scroll region',
     required: true,
     description:
-      'Outer region that scrolls horizontally, enters the keyboard order, and contains overscroll only while the columns overflow.',
+      'Outer region that scrolls horizontally when columns overflow. Fixed-height virtualization also enables block scrolling; the region enters keyboard order while either applicable axis overflows.',
   },
   {
     name: 'Header section',
@@ -143,6 +143,40 @@ export const docs = {
       {className: 'astryx-table-cell', visualProps: ['density']},
       {className: 'astryx-table-header-cell', visualProps: ['density']},
     ],
+    componentIcons: [
+      {
+        slot: 'table-sort-indicator',
+        description:
+          "The sort direction glyph beside a sortable column's label (`useTableSortable`).",
+        fallback:
+          '`arrowUp` ascending; `arrowDown` descending; `arrowsUpDown` unsorted',
+        state: [
+          {
+            name: 'direction',
+            type: "'ascending' | 'descending' | 'none'",
+            description:
+              "The column's sort direction; `none` while the column is not sorted.",
+          },
+        ],
+        whenNull:
+          'Hides the glyph. The Sort control keeps its label and its click and keyboard sorting; the column header keeps `aria-sort`.',
+      },
+      {
+        slot: 'table-row-expand',
+        description:
+          "The glyph in a row's expansion toggle (`useTableRowExpansion`). The toggle turns the glyph a quarter turn while the row is expanded and mirrors it in right-to-left layouts, so map a glyph that points toward the inline end.",
+        fallback: '`chevronRight`, turned while expanded',
+        state: [
+          {
+            name: 'expanded',
+            type: 'boolean',
+            description: "True while the row's detail panel is open.",
+          },
+        ],
+        whenNull:
+          'Hides the glyph. The toggle keeps its size, its "Expand row" or "Collapse row" name, `aria-expanded`, and its click and keyboard toggling.',
+      },
+    ],
   },
   description:
     'Styled, data-driven table with density, dividers, hover highlight, striped rows, and named plugin support. T must extend Record<string, unknown>.',
@@ -163,7 +197,7 @@ export const docs = {
       name: 'idKey',
       type: '(keyof T & string) | ((item: T) => string | number)',
       description:
-        'Row key for React reconciliation. Pass a property name string or a function. Falls back to row index if omitted.',
+        'Canonical row identity: a property name projects valid strings and finite numbers to strings; a function retains string/number type. Optional legacy tables fall back to index. Virtualization requires explicit unique valid keys.',
     },
     {
       name: 'density',
@@ -203,6 +237,12 @@ export const docs = {
       description:
         "How body cell text behaves when it exceeds the column width. 'wrap' lets text wrap and the row grow taller; 'truncate' clips with an ellipsis (default-rendered cells show a tooltip on hover when truncated). Header cells always truncate.",
       default: "'wrap'",
+    },
+    {
+      name: 'virtualization',
+      type: 'TableVirtualizationCapability | TableVirtualizationCapability[]',
+      description:
+        "Geometry-only capability from useTableRowsVirtualization or useTableColumnsVirtualization, or a list with at most one of each; any other list renders without windowing. useTableColumnsVirtualization({initialViewportWidth}) mounts only the unpinned columns near the viewport. useTableRowsVirtualization({rowHeight, initialViewportHeight}) takes sizes that are both positive finite CSS pixels; the Table scrolls inside the height its parent gives it, and initialViewportHeight only sizes the first window. Give the Table's parent a height, fixed or relative, or a flex child, so windowing can bound the rows; with no height every row renders. Pass complete flat data and an explicit idKey. Default text truncates; custom renderers, wrapping, structural plugins, incompatible offsets, invalid identity or unrepresentable geometry use full rendering. Logical row positions include the header.",
     },
     {
       name: 'plugins',

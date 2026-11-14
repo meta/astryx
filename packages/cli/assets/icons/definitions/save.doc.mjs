@@ -5,5 +5,5 @@ export default {
   type: 'icon-definition',
   name: 'save',
   description: 'Save changes.',
-  words: ['store', 'keep', 'floppy'],
+  words: ['floppy disk', 'floppy', 'keep', 'store'],
 };

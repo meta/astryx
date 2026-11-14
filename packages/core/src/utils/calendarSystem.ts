@@ -271,9 +271,15 @@ export function calendarMonthFromYearMonth(
   {year, month}: CalendarYearMonth,
 ): CalendarMonth {
   if (isGregorianAligned(calendar)) {
+    // A Gregorian year has 12 months. Past it, `getDaysInMonth` answers
+    // undefined, so constrain here as the Temporal branch below already does.
+    const monthOfYear = Math.min(
+      month,
+      calendarMonthsInCalendarYear(calendar, year),
+    );
     return gregorianMonth(
       year - (GREGORIAN_YEAR_OFFSETS[calendar] ?? 0),
-      month,
+      monthOfYear,
     );
   }
   // `with` replaces the year and month of any date in the calendar.

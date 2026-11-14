@@ -568,6 +568,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-chat-virtualizer",
+      "path": "components/lab/chat-virtualizer",
+      "aliases": []
+    },
+    {
       "name": "component-lab-circle-check-indicator",
       "path": "components/lab/circle-check-indicator",
       "aliases": []
@@ -603,6 +608,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-dialog-hero-header",
+      "path": "components/lab/dialog-hero-header",
+      "aliases": []
+    },
+    {
       "name": "component-lab-diff-viewer",
       "path": "components/lab/diff-viewer",
       "aliases": []
@@ -613,6 +623,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-line-clamp",
+      "path": "components/lab/line-clamp",
+      "aliases": []
+    },
+    {
       "name": "component-lab-list-input",
       "path": "components/lab/list-input",
       "aliases": []
@@ -620,6 +635,21 @@
     {
       "name": "component-lab-log-stream",
       "path": "components/lab/log-stream",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-navigation-screen",
+      "path": "components/lab/navigation-screen",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-navigation-stack",
+      "path": "components/lab/navigation-stack",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-page-control",
+      "path": "components/lab/page-control",
       "aliases": []
     },
     {
@@ -650,6 +680,21 @@
     {
       "name": "component-lab-svg-icon",
       "path": "components/lab/svg-icon",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-tab-bar",
+      "path": "components/lab/tab-bar",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-tab-bar-item",
+      "path": "components/lab/tab-bar-item",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-tab-bar-more-list",
+      "path": "components/lab/tab-bar-more-list",
       "aliases": []
     },
     {
@@ -695,6 +740,11 @@
     {
       "name": "component-lab-transfer-list-selector",
       "path": "components/lab/transfer-list-selector",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-weighted-svg-icon",
+      "path": "components/lab/weighted-svg-icon",
       "aliases": []
     },
     {
@@ -865,6 +915,21 @@
     {
       "name": "component-richtext-rich-text-editor",
       "path": "components/richtext/rich-text-editor",
+      "aliases": []
+    },
+    {
+      "name": "component-richtext-rich-text-editor-auto-link-plugin",
+      "path": "components/richtext/rich-text-editor-auto-link-plugin",
+      "aliases": []
+    },
+    {
+      "name": "component-richtext-rich-text-editor-toolbar",
+      "path": "components/richtext/rich-text-editor-toolbar",
+      "aliases": []
+    },
+    {
+      "name": "component-richtext-rich-text-view",
+      "path": "components/richtext/rich-text-view",
       "aliases": []
     },
     {
@@ -1335,6 +1400,11 @@
     {
       "name": "example-base-typeahead-custom-search-bar",
       "path": "examples/base-typeahead/custom-search-bar",
+      "aliases": []
+    },
+    {
+      "name": "example-base-typeahead-menu",
+      "path": "examples/base-typeahead/menu",
       "aliases": []
     },
     {
@@ -1967,8 +2037,8 @@
       "aliases": []
     },
     {
-      "name": "example-create-pan-gesture-a-playing-card-without-react",
-      "path": "examples/create-pan-gesture/a-playing-card-without-react",
+      "name": "example-create-drag-to-snap-points-playing-card-in-plain-java-script",
+      "path": "examples/create-drag-to-snap-points/playing-card-in-plain-java-script",
       "aliases": []
     },
     {
@@ -2314,6 +2384,11 @@
     {
       "name": "example-input-group-basic",
       "path": "examples/input-group/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-internationalization-provider-calendar",
+      "path": "examples/internationalization-provider/calendar",
       "aliases": []
     },
     {
@@ -3672,6 +3747,26 @@
       "aliases": []
     },
     {
+      "name": "example-use-calendar-constraints-hotel-booking-range",
+      "path": "examples/use-calendar-constraints/hotel-booking-range",
+      "aliases": []
+    },
+    {
+      "name": "example-use-calendar-days-month-grid",
+      "path": "examples/use-calendar-days/month-grid",
+      "aliases": []
+    },
+    {
+      "name": "example-use-calendar-navigation-month-pager",
+      "path": "examples/use-calendar-navigation/month-pager",
+      "aliases": []
+    },
+    {
+      "name": "example-use-chat-dictation-voice-input",
+      "path": "examples/use-chat-dictation/voice-input",
+      "aliases": []
+    },
+    {
       "name": "example-use-clickable-container-clickable-project-card",
       "path": "examples/use-clickable-container/clickable-project-card",
       "aliases": []
@@ -3699,6 +3794,16 @@
     {
       "name": "example-use-container-reveal-reveal-on-hover-row-actions",
       "path": "examples/use-container-reveal/reveal-on-hover-row-actions",
+      "aliases": []
+    },
+    {
+      "name": "example-use-direction-hook-usage",
+      "path": "examples/use-direction/hook-usage",
+      "aliases": []
+    },
+    {
+      "name": "example-use-drag-to-snap-points-playing-card-on-three-places",
+      "path": "examples/use-drag-to-snap-points/playing-card-on-three-places",
       "aliases": []
     },
     {
@@ -3732,8 +3837,18 @@
       "aliases": []
     },
     {
+      "name": "example-use-input-container-search-field-wrapper",
+      "path": "examples/use-input-container/search-field-wrapper",
+      "aliases": []
+    },
+    {
       "name": "example-use-input-status-icon-coupon-code-status",
       "path": "examples/use-input-status-icon/coupon-code-status",
+      "aliases": []
+    },
+    {
+      "name": "example-use-interactive-role-one-tile-four-roles",
+      "path": "examples/use-interactive-role/one-tile-four-roles",
       "aliases": []
     },
     {
@@ -3757,6 +3872,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-linkify-links-in-a-comment-thread",
+      "path": "examples/use-linkify/links-in-a-comment-thread",
+      "aliases": []
+    },
+    {
       "name": "example-use-list-focus-recent-files",
       "path": "examples/use-list-focus/recent-files",
       "aliases": []
@@ -3764,6 +3884,21 @@
     {
       "name": "example-use-locale-invoice-summary",
       "path": "examples/use-locale/invoice-summary",
+      "aliases": []
+    },
+    {
+      "name": "example-use-merged-refs-auto-grow-text-area",
+      "path": "examples/use-merged-refs/auto-grow-text-area",
+      "aliases": []
+    },
+    {
+      "name": "example-use-multi-combobox-issue-labels",
+      "path": "examples/use-multi-combobox/issue-labels",
+      "aliases": []
+    },
+    {
+      "name": "example-use-outline-from-dom-article",
+      "path": "examples/use-outline-from-dom/article",
       "aliases": []
     },
     {
@@ -3777,8 +3912,18 @@
       "aliases": []
     },
     {
-      "name": "example-use-pan-gesture-a-playing-card",
-      "path": "examples/use-pan-gesture/a-playing-card",
+      "name": "example-use-overlay-product-quick-view",
+      "path": "examples/use-overlay/product-quick-view",
+      "aliases": []
+    },
+    {
+      "name": "example-use-pan-gesture-a-draggable-box",
+      "path": "examples/use-pan-gesture/a-draggable-box",
+      "aliases": []
+    },
+    {
+      "name": "example-use-pan-gesture-a-playing-card-advanced",
+      "path": "examples/use-pan-gesture/a-playing-card-advanced",
       "aliases": []
     },
     {
@@ -3787,8 +3932,18 @@
       "aliases": []
     },
     {
+      "name": "example-use-power-search-config-filtered-directory-table",
+      "path": "examples/use-power-search-config/filtered-directory-table",
+      "aliases": []
+    },
+    {
       "name": "example-use-press-feedback-pressable-card",
       "path": "examples/use-press-feedback/pressable-card",
+      "aliases": []
+    },
+    {
+      "name": "example-use-scroll-lock-full-screen-mobile-menu",
+      "path": "examples/use-scroll-lock/full-screen-mobile-menu",
       "aliases": []
     },
     {
@@ -3802,8 +3957,18 @@
       "aliases": []
     },
     {
+      "name": "example-use-snap-paging-onboarding-pages",
+      "path": "examples/use-snap-paging/onboarding-pages",
+      "aliases": []
+    },
+    {
       "name": "example-use-streaming-text-streaming-response",
       "path": "examples/use-streaming-text/streaming-response",
+      "aliases": []
+    },
+    {
+      "name": "example-use-syntax-theme-keyword-color",
+      "path": "examples/use-syntax-theme/keyword-color",
       "aliases": []
     },
     {
@@ -3812,8 +3977,23 @@
       "aliases": []
     },
     {
+      "name": "example-use-table-column-settings-state-column-visibility-picker",
+      "path": "examples/use-table-column-settings-state/column-visibility-picker",
+      "aliases": []
+    },
+    {
+      "name": "example-use-table-columns-virtualization-wide-table",
+      "path": "examples/use-table-columns-virtualization/wide-table",
+      "aliases": []
+    },
+    {
       "name": "example-use-table-grouped-rows-collapsible-groups",
       "path": "examples/use-table-grouped-rows/collapsible-groups",
+      "aliases": []
+    },
+    {
+      "name": "example-use-table-infinite-scroll-load-more-products",
+      "path": "examples/use-table-infinite-scroll/load-more-products",
       "aliases": []
     },
     {
@@ -3832,6 +4012,16 @@
       "aliases": []
     },
     {
+      "name": "example-use-table-rows-virtualization-fixed-height-rows",
+      "path": "examples/use-table-rows-virtualization/fixed-height-rows",
+      "aliases": []
+    },
+    {
+      "name": "example-use-table-selection-state-table-selection-in-the-leading-mark",
+      "path": "examples/use-table-selection-state/table-selection-in-the-leading-mark",
+      "aliases": []
+    },
+    {
       "name": "example-use-table-selection-table-bulk-actions",
       "path": "examples/use-table-selection/table-bulk-actions",
       "aliases": []
@@ -3842,6 +4032,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-table-sortable-state-multi-sort-orders",
+      "path": "examples/use-table-sortable-state/multi-sort-orders",
+      "aliases": []
+    },
+    {
       "name": "example-use-table-sticky-columns-pinned-columns",
       "path": "examples/use-table-sticky-columns/pinned-columns",
       "aliases": []
@@ -3849,6 +4044,11 @@
     {
       "name": "example-use-table-tree-data-tree-table",
       "path": "examples/use-table-tree-data/tree-table",
+      "aliases": []
+    },
+    {
+      "name": "example-use-theme-name-active-theme",
+      "path": "examples/use-theme-name/active-theme",
       "aliases": []
     },
     {
@@ -3869,6 +4069,11 @@
     {
       "name": "example-use-tree-focus-keyboard-file-tree",
       "path": "examples/use-tree-focus/keyboard-file-tree",
+      "aliases": []
+    },
+    {
+      "name": "example-use-truncation-tooltip-on-cut-off-text",
+      "path": "examples/use-truncation/tooltip-on-cut-off-text",
       "aliases": []
     },
     {
@@ -3902,8 +4107,18 @@
       "aliases": []
     },
     {
+      "name": "hook-create-drag-to-snap-points",
+      "path": "hooks/create-drag-to-snap-points",
+      "aliases": []
+    },
+    {
       "name": "hook-create-pan-gesture",
       "path": "hooks/create-pan-gesture",
+      "aliases": []
+    },
+    {
+      "name": "hook-create-reorderable",
+      "path": "hooks/create-reorderable",
       "aliases": []
     },
     {
@@ -3924,6 +4139,26 @@
     {
       "name": "hook-use-app-shell-mobile",
       "path": "hooks/use-app-shell-mobile",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-calendar-constraints",
+      "path": "hooks/use-calendar-constraints",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-calendar-days",
+      "path": "hooks/use-calendar-days",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-calendar-navigation",
+      "path": "hooks/use-calendar-navigation",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-chat-dictation",
+      "path": "hooks/use-chat-dictation",
       "aliases": []
     },
     {
@@ -3959,6 +4194,16 @@
     {
       "name": "hook-use-dev-warning",
       "path": "hooks/use-dev-warning",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-direction",
+      "path": "hooks/use-direction",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-drag-to-snap-points",
+      "path": "hooks/use-drag-to-snap-points",
       "aliases": []
     },
     {
@@ -4047,6 +4292,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-linkify",
+      "path": "hooks/use-linkify",
+      "aliases": []
+    },
+    {
       "name": "hook-use-list-focus",
       "path": "hooks/use-list-focus",
       "aliases": []
@@ -4082,6 +4332,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-outline-from-dom",
+      "path": "hooks/use-outline-from-dom",
+      "aliases": []
+    },
+    {
       "name": "hook-use-outline-from-markdown",
       "path": "hooks/use-outline-from-markdown",
       "aliases": []
@@ -4092,6 +4347,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-overlay",
+      "path": "hooks/use-overlay",
+      "aliases": []
+    },
+    {
       "name": "hook-use-pan-gesture",
       "path": "hooks/use-pan-gesture",
       "aliases": []
@@ -4099,6 +4359,11 @@
     {
       "name": "hook-use-popover",
       "path": "hooks/use-popover",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-power-search-config",
+      "path": "hooks/use-power-search-config",
       "aliases": []
     },
     {
@@ -4127,8 +4392,18 @@
       "aliases": []
     },
     {
+      "name": "hook-use-snap-paging",
+      "path": "hooks/use-snap-paging",
+      "aliases": []
+    },
+    {
       "name": "hook-use-streaming-text",
       "path": "hooks/use-streaming-text",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-syntax-theme",
+      "path": "hooks/use-syntax-theme",
       "aliases": []
     },
     {
@@ -4139,6 +4414,16 @@
     {
       "name": "hook-use-table-column-settings",
       "path": "hooks/use-table-column-settings",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-column-settings-state",
+      "path": "hooks/use-table-column-settings-state",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-columns-virtualization",
+      "path": "hooks/use-table-columns-virtualization",
       "aliases": []
     },
     {
@@ -4154,6 +4439,11 @@
     {
       "name": "hook-use-table-grouped-rows",
       "path": "hooks/use-table-grouped-rows",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-infinite-scroll",
+      "path": "hooks/use-table-infinite-scroll",
       "aliases": []
     },
     {
@@ -4177,6 +4467,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-table-rows-virtualization",
+      "path": "hooks/use-table-rows-virtualization",
+      "aliases": []
+    },
+    {
       "name": "hook-use-table-selection",
       "path": "hooks/use-table-selection",
       "aliases": []
@@ -4189,6 +4484,11 @@
     {
       "name": "hook-use-table-sortable",
       "path": "hooks/use-table-sortable",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-sortable-state",
+      "path": "hooks/use-table-sortable-state",
       "aliases": []
     },
     {
@@ -4212,6 +4512,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-theme-name",
+      "path": "hooks/use-theme-name",
+      "aliases": []
+    },
+    {
       "name": "hook-use-toast",
       "path": "hooks/use-toast",
       "aliases": []
@@ -4229,6 +4534,11 @@
     {
       "name": "hook-use-tree-focus",
       "path": "hooks/use-tree-focus",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-truncation",
+      "path": "hooks/use-truncation",
       "aliases": []
     },
     {
@@ -4549,6 +4859,11 @@
     {
       "name": "showcase-dialog-header-default",
       "path": "showcases/dialog-header/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-dialog-hero-header-default",
+      "path": "showcases/dialog-hero-header/default",
       "aliases": []
     },
     {
@@ -5139,6 +5454,11 @@
     {
       "name": "template-contact-form",
       "path": "templates/contact-form",
+      "aliases": []
+    },
+    {
+      "name": "template-course-detail",
+      "path": "templates/course-detail",
       "aliases": []
     },
     {

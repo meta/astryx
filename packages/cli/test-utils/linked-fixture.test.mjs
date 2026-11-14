@@ -24,7 +24,12 @@ describe('makeLinkedFixture', () => {
     const root = path.dirname(dir);
     try {
       expect(path.dirname(root)).toBe(fs.realpathSync(os.tmpdir()));
-      expect(fs.readdirSync(dir)).toEqual([]);
+      // A fixture that links Core holds only the package.json that lists it.
+      expect(fs.readdirSync(dir)).toEqual(['package.json']);
+      expect(
+        JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'))
+          .dependencies,
+      ).toEqual({'@astryxdesign/core': '*'});
       expect(
         JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')),
       ).toEqual({type: 'module'});
@@ -40,6 +45,13 @@ describe('makeLinkedFixture', () => {
       removeLinkedFixture(dir);
     }
     expect(fs.existsSync(root)).toBe(false);
+    // Removal takes the links, not the packages they point at.
+    expect(
+      fs.existsSync(path.join(import.meta.dirname, '../../core/package.json')),
+    ).toBe(true);
+    expect(
+      fs.existsSync(path.join(import.meta.dirname, '../package.json')),
+    ).toBe(true);
   });
 
   it('refuses to remove a directory it did not make', () => {

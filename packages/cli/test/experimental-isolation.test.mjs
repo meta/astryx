@@ -48,6 +48,7 @@ import {createHash} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 import {CLI_ROOT} from '../foundation/fs/paths.mjs';
 import {runCli} from '../test-utils/run-cli.mjs';
+import {startCliSequence} from '../test-utils/run-cli-sequence.mjs';
 import {writeIconSetProject} from '../test-utils/icon-set-fixture.mjs';
 
 const REPO_ROOT = path.resolve(CLI_ROOT, '..', '..');
@@ -65,6 +66,17 @@ const GOLDEN = path.join(CLI_ROOT, 'test', '__golden__', 'no-icon-set');
 /** Words an experimental surface's text uses; a stable doc that gains one leaks. */
 const LEAK_WORDS =
   /\bexperimental\b|\bicon[- ]?sets?\b|\bicon[- ]definitions?\b/iu;
+/**
+ * The one named exception (AST-017 FR27): stable theme help and docs may
+ * point at the experimental theme editor (`experimental theme editor`,
+ * `experimental theme preview`) as the way to make and change a theme, until
+ * it graduates or is removed. Only those two entry points are taken out
+ * before the leak check; every other experimental surface a stable text
+ * names still fails it.
+ * @param {string} text
+ */
+const withoutThemeEditor = text =>
+  text.replace(/\bexperimental theme (?:editor|preview)\b/giu, 'theme-editor');
 /** Writing the goldens from main's CLI, not checking this branch's. */
 const REGENERATING = Boolean(process.env.GOLDEN_CLI_ROOT);
 /**
@@ -179,6 +191,14 @@ const PROJECTS_ROOT = REGENERATING ? GOLDEN_REPO : REPO_ROOT;
 /** @type {string} */
 let project;
 
+/** The environment the CLI runs in. */
+const CLI_ENV = {
+  ...process.env,
+  NO_COLOR: '1',
+  FORCE_COLOR: '0',
+  COLUMNS: '100',
+};
+
 /**
  * Run the CLI in the project; machine paths and the CLI's release version
  * become placeholders.
@@ -188,7 +208,7 @@ function astryx(args, cwd = project) {
   const result = spawnSync(process.execPath, [CLI_BIN, ...args], {
     cwd,
     encoding: 'utf8',
-    env: {...process.env, NO_COLOR: '1', FORCE_COLOR: '0', COLUMNS: '100'},
+    env: CLI_ENV,
   });
   // A golden is main's own answer, never one main handed to this checkout.
   if (REGENERATING && /handed over from CLI/u.test(result.stderr)) {
@@ -360,7 +380,8 @@ function leakMentions(value) {
   const visit = each => {
     if (typeof each === 'string') {
       for (const sentence of each.split(/(?<=[.!?])\s+/u)) {
-        if (LEAK_WORDS.test(sentence)) found.add(sentence.trim());
+        if (LEAK_WORDS.test(withoutThemeEditor(sentence)))
+          found.add(sentence.trim());
       }
     } else if (Array.isArray(each)) {
       each.forEach(visit);
@@ -404,15 +425,42 @@ function textShape(text, keep = []) {
 }
 
 /**
+ * One CLI run for a golden. Outside regeneration it runs in this process, as
+ * the docs topics do. So the runs share one read of the catalog, and no run
+ * starts a new process.
+ * @param {string[]} args
+ * @param {string} cwd
+ */
+async function cliRun(args, cwd) {
+  if (REGENERATING) return astryx(args, cwd);
+  const result = await runCli(args, cwd);
+  return {
+    status: result.status,
+    stdout: placeholders(result.stdout, cwd),
+    stderr: placeholders(result.stderr, cwd),
+  };
+}
+
+/**
+ * The arguments of `astryx search <query>`, for JSON or for text.
+ * @param {string} query
+ * @param {boolean} json
+ */
+function searchArgs(query, json) {
+  return ['search', ...query.split(' '), ...(json ? ['--json'] : [])];
+}
+
+/**
  * `astryx search` as a golden: the count, and each result's identity and
  * order, with the sentences that name an experimental surface (the stable
  * icons topic names "the icon set" a theme swaps). No result is experimental,
  * an icon, or an icon definition.
  * @param {string} query
  * @param {string} cwd
+ * @param {typeof cliRun} [run] how the CLI runs: in this process by default
  */
-function searchGolden(query, cwd) {
-  const json = astryx(['search', ...query.split(' '), '--json'], cwd);
+async function searchGolden(query, cwd, run = cliRun) {
+  const json = await run(searchArgs(query, true), cwd);
   expect(json.status).toBe(0);
   const body = JSON.parse(json.stdout);
   // The one stable addition FR18 makes: the field reference's `stability`
@@ -436,7 +484,7 @@ function searchGolden(query, cwd) {
     ...skeleton(result),
     mentions: leakMentions(result),
   }));
-  const text = astryx(['search', ...query.split(' ')], cwd);
+  const text = await run(searchArgs(query, false), cwd);
   // The same addition left out of the text: its block, and its count.
   const blocks = text.stdout
     .split('\n\n')
@@ -516,11 +564,7 @@ describe('with no icon set, stable output is unchanged', () => {
     // instead of a new process per topic. Those runs print what the bin
     // prints, as the listing checks.
     /** @param {string[]} args */
-    const read = async args => {
-      if (REGENERATING) return astryx(args);
-      const result = await runCli(args, project);
-      return {...result, stdout: placeholders(result.stdout, project)};
-    };
+    const read = args => cliRun(args, project);
     expect((await read(['docs', '--json'])).stdout).toBe(listed.stdout);
     const list = JSON.parse(listed.stdout);
     /** @type {Record<string, any>} */
@@ -595,7 +639,8 @@ describe('with no icon set, stable output is unchanged', () => {
       const visit = each => {
         if (typeof each === 'string') {
           for (const sentence of each.split(/(?<=[.!?])\s+/u)) {
-            if (LEAK_WORDS.test(sentence)) found.add(sentence);
+            if (LEAK_WORDS.test(withoutThemeEditor(sentence)))
+              found.add(sentence);
           }
         } else if (Array.isArray(each)) {
           each.forEach(visit);
@@ -747,13 +792,23 @@ describe('with no icon set, stable output is unchanged', () => {
     'icon set',
   ])('search %s, text and JSON', async query => {
     const slug = query.replace(/\s+/g, '-');
-    const {json, text} = searchGolden(query, project);
+    const {json, text} = await searchGolden(query, project);
     await expect(json).toMatchFileSnapshot(
       path.join(GOLDEN, `search-${slug}.json`),
     );
     await expect(text).toMatchFileSnapshot(
       path.join(GOLDEN, `search-${slug}.txt`),
     );
+  });
+
+  it('an in-process search prints what the bin prints', async () => {
+    const args = ['search', 'close', '--json'];
+    const bin = astryx(args);
+    const inProcess = await cliRun(args, project);
+    expect({status: inProcess.status, stdout: inProcess.stdout}).toEqual({
+      status: bin.status,
+      stdout: bin.stdout,
+    });
   });
 
   it('search --type icon is an unknown type, offering only the stable domains', async () => {
@@ -826,7 +881,9 @@ describe('with no icon set, stable output is unchanged', () => {
 
   it('help gains only the experimental group', async () => {
     const help = astryx(['help']).stdout.split('\n');
-    const added = help.filter(line => /experimental|\bicon\b/i.test(line));
+    const added = help.filter(line =>
+      /experimental|\bicon\b/i.test(withoutThemeEditor(line)),
+    );
     if (!REGENERATING) {
       expect(added).toHaveLength(1);
       expect(added[0]).toMatch(/^\s+experimental\s+\[experimental\] /);
@@ -989,10 +1046,23 @@ export default {
 describe.skipIf(REGENERATING)(
   'with an icon set installed and configured, search is unchanged',
   () => {
+    const queries = [
+      'delete',
+      'close',
+      'trash can',
+      'experimental',
+      'icon set',
+    ];
     /** @type {string} */
     let root;
     /** @type {string} */
     let withSet;
+    /**
+     * Each search's result from the process that runs them, by its arguments.
+     * @type {Map<string, Promise<import('../test-utils/run-cli-sequence.mjs').CliResult>>}
+     */
+    const searches = new Map();
+    let stopSearches = () => {};
     beforeAll(() => {
       root = fs.mkdtempSync(
         path.join(PROJECTS_ROOT, '.astryx-icon-set-search-'),
@@ -1007,10 +1077,38 @@ describe.skipIf(REGENERATING)(
         path.join(withSet, 'node_modules', '.bin', 'astryx'),
         '',
       );
+      // One new process runs every search here, so nothing this process read
+      // for the project without icon sets can answer for this one. The
+      // searches share that process, so the CLI reads the catalog once.
+      const invocations = queries.flatMap(query => [
+        searchArgs(query, true),
+        searchArgs(query, false),
+      ]);
+      const sequence = startCliSequence(withSet, invocations, CLI_ENV);
+      invocations.forEach((args, index) =>
+        searches.set(args.join(' '), sequence.results[index]),
+      );
+      stopSearches = sequence.stop;
     });
     afterAll(() => {
+      stopSearches();
       fs.rmSync(root, {recursive: true, force: true});
     });
+
+    /**
+     * A search's result from the process that runs the searches.
+     * @param {string[]} args
+     * @param {string} cwd
+     */
+    async function search(args, cwd) {
+      const result = await searches.get(args.join(' '));
+      if (!result) throw new Error(`No search runs \`${args.join(' ')}\`.`);
+      return {
+        status: result.status,
+        stdout: placeholders(result.stdout, cwd),
+        stderr: placeholders(result.stderr, cwd),
+      };
+    }
 
     it('the set is loaded', () => {
       const list = JSON.parse(
@@ -1021,11 +1119,11 @@ describe.skipIf(REGENERATING)(
 
     // Icon words: icon lookup by meaning is only `astryx experimental icon`;
     // `astryx search` joins it only at promotion (spec:AST-084 FR11).
-    it.each(['delete', 'close', 'trash can', 'experimental', 'icon set'])(
+    it.each(queries)(
       'search %s equals the output without icon sets, text and JSON',
       async query => {
         const slug = query.replace(/\s+/g, '-');
-        const {json, text} = searchGolden(query, withSet);
+        const {json, text} = await searchGolden(query, withSet, search);
         await expect(json).toMatchFileSnapshot(
           path.join(GOLDEN, `search-${slug}.json`),
         );
@@ -1034,6 +1132,16 @@ describe.skipIf(REGENERATING)(
         );
       },
     );
+
+    it('a search in that process prints what the bin prints', async () => {
+      const args = searchArgs('close', true);
+      const bin = astryx(args, withSet);
+      const inProcess = await search(args, withSet);
+      expect({status: inProcess.status, stdout: inProcess.stdout}).toEqual({
+        status: bin.status,
+        stdout: bin.stdout,
+      });
+    });
 
     it('search --type icon stays an unknown type', () => {
       const res = astryx(
@@ -1347,5 +1455,20 @@ describe('with icon sets installed but no experimental.iconSet, stable output is
     await expect(withoutComputerChecks(res.stdout)).toMatchFileSnapshot(
       path.join(GOLDEN, 'doctor-installed-set.json'),
     );
+  });
+});
+
+describe('the theme editor exception is only the theme editor', () => {
+  it.each([
+    [
+      'use the experimental theme editor: astryx experimental theme editor new b',
+      false,
+    ],
+    ['look at it with astryx experimental theme preview add', false],
+    ['run astryx experimental icon search', true],
+    ['an experimental theme feature', true],
+    ['astryx experimental theme compile', true],
+  ])('%j leaks: %s', (sentence, leaks) => {
+    expect(LEAK_WORDS.test(withoutThemeEditor(sentence))).toBe(leaks);
   });
 });

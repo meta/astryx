@@ -71,6 +71,7 @@ import {
 import {
   MENU_ITEM_ROLES,
   MENU_ITEM_SELECTOR,
+  MENU_ROW_SELECTOR,
   MENU_BOUNDARY_SELECTOR,
   activateMenuItem,
 } from '../DropdownMenu/menuItemRoles';
@@ -81,6 +82,7 @@ import {useMenuPress} from '../hooks/useMenuPress';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {useLongPress} from '../hooks/useLongPress';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
+import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {
   colorVars,
   spacingVars,
@@ -147,7 +149,12 @@ const styles = stylex.create({
     display: 'flex',
     flexDirection: 'column',
     gap: spacingVars['--spacing-0-5'],
-    maxHeight: '300px',
+    // 300 px, and no taller than its layer's block-size cap, which folds in
+    // the software keyboard's.
+    maxHeight: stylex.firstThatWorks(
+      `min(300px, ${layerViewportInset.maxBlockSize})`,
+      `min(300px, ${layerViewportInset.maxBlockSizeFallback})`,
+    ),
     overflowY: 'auto',
     '--_dropdown-menu-radius': radiusVars['--radius-container'],
     '--_dropdown-menu-padding': spacingVars['--spacing-1'],
@@ -155,6 +162,19 @@ const styles = stylex.create({
     borderRadius: 'var(--_dropdown-menu-radius)',
     backgroundColor: colorVars['--color-background-popover'],
     boxShadow: shadowVars['--shadow-low'],
+    // Forced colors removes box-shadow, which is this surface's only edge.
+    borderWidth: {
+      default: null,
+      '@media (forced-colors: active)': '1px',
+    },
+    borderStyle: {
+      default: null,
+      '@media (forced-colors: active)': 'solid',
+    },
+    borderColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
     opacity: 1,
     transitionProperty: 'opacity',
     transitionDuration: durationVars['--duration-fast'],
@@ -191,13 +211,15 @@ const styles = stylex.create({
     userSelect: 'none',
   },
   // The menu's own inset inside the sheet content box (menuBottomSheetStyles
-  // .content): the 16px / 4px the sheet keeps plus the menu's 4px padding.
+  // .content): the 4px at the sides the content box keeps plus the menu's
+  // 4px padding; above the first row, the menu's 4px below the band the sheet
+  // keeps under its grab bar.
   sheetMenuInset: {
-    paddingBlockStart: `calc(${spacingVars['--spacing-4']} + ${spacingVars['--spacing-1']})`,
+    paddingBlockStart: spacingVars['--spacing-1'],
     paddingBlockEnd: spacingVars['--spacing-1'],
     paddingInline: `calc(${spacingVars['--spacing-1']} + ${spacingVars['--spacing-1']})`,
     // Bleeding rows read the padding this element applies.
-    '--container-padding-block-start': `calc(${spacingVars['--spacing-4']} + ${spacingVars['--spacing-1']})`,
+    '--container-padding-block-start': spacingVars['--spacing-1'],
     '--container-padding-block-end': spacingVars['--spacing-1'],
     '--container-padding-inline-start': `calc(${spacingVars['--spacing-1']} + ${spacingVars['--spacing-1']})`,
     '--container-padding-inline-end': `calc(${spacingVars['--spacing-1']} + ${spacingVars['--spacing-1']})`,
@@ -473,7 +495,8 @@ export function ContextMenu({
     ownsEvent,
     getItems: getMenuItems,
   } = useInternalListFocus<HTMLDivElement>({
-    itemSelector: MENU_ITEM_SELECTOR,
+    itemSelector: MENU_ROW_SELECTOR,
+    reachesDisabledItems: true,
     boundarySelector: MENU_BOUNDARY_SELECTOR,
     // Menus wrap from the last row to the first and back.
     wrap: true,
@@ -492,7 +515,8 @@ export function ContextMenu({
     getContainer: () => listRef.current,
   });
 
-  // Typeahead over the enabled menu items, matched on each row's LABEL alone.
+  // Typeahead over the menu items, disabled ones included, matched on each
+  // row's LABEL alone.
   // Reuses the hook's scoped item collection so an inline submenu flyout's
   // items aren't swept in.
   const typeahead = useTypeahead({
@@ -548,7 +572,12 @@ export function ContextMenu({
     (e: React.KeyboardEvent) => {
       // A submenu flyout renders inline inside this menu; its key events bubble
       // up here. Let that level own them — only handle events from this level.
+      // Except Tab: each open flyout has closed itself as the key bubbled up,
+      // and the menu closes as Tab from one of its own rows would (APG).
       if (!ownsEvent(e)) {
+        if (e.key === 'Tab') {
+          closeMenu();
+        }
         return;
       }
       if (e.key === 'Enter' || e.key === ' ') {
@@ -586,6 +615,16 @@ export function ContextMenu({
     [listNavKeyDown, closeMenu, typeahead, ownsEvent],
   );
 
+  // The box the cursor anchor's offsets are measured from: its containing
+  // block. That is the trigger, unless a caller's triggerXstyle leaves the
+  // trigger unpositioned so that another box holds the anchor.
+  const getAnchorBaseRect = useCallback((): DOMRect | undefined => {
+    const base = cursorAnchorRef.current?.offsetParent;
+    return (
+      base instanceof HTMLElement ? base : triggerRef.current
+    )?.getBoundingClientRect();
+  }, []);
+
   // Place the 1px cursor anchor at a point in the trigger's local
   // coordinate space and open the menu. Positioning the anchor inside the
   // trigger (rather than storing viewport coordinates on the menu itself) is
@@ -593,7 +632,7 @@ export function ContextMenu({
   // browser auto-flips it against the viewport edges via CSS anchor positioning.
   const openAtLocalPoint = useCallback(
     (localX: number, localY: number, focusEl: HTMLElement | null) => {
-      const rect = triggerRef.current?.getBoundingClientRect();
+      const rect = getAnchorBaseRect();
       const x = rect ? keepAnchorInside(localX, rect.width) : localX;
       const y = rect ? keepAnchorInside(localY, rect.height) : localY;
       positionRef.current = {x, y};
@@ -618,14 +657,7 @@ export function ContextMenu({
         layer.show();
       }
     },
-    [layer, updateOpenState, usesBottomSheet],
-  );
-
-  // The box the cursor anchor's offsets are measured from: the trigger, which
-  // is its containing block.
-  const getAnchorBaseRect = useCallback(
-    (): DOMRect | undefined => triggerRef.current?.getBoundingClientRect(),
-    [],
+    [getAnchorBaseRect, layer, updateOpenState, usesBottomSheet],
   );
 
   const handleContextMenu = useCallback(
@@ -643,9 +675,16 @@ export function ContextMenu({
         e.clientX === 0 && e.clientY === 0 && e.detail === 0;
       // Convert the viewport cursor point into the trigger's local space so
       // the anchor lives inside the (scrollable) trigger context.
-      const localX = isKeyboardInvoked || !rect ? 0 : e.clientX - rect.left;
-      const localY =
-        isKeyboardInvoked || !rect ? (rect?.height ?? 0) : e.clientY - rect.top;
+      const trigger = triggerRef.current?.getBoundingClientRect();
+      let localX = 0;
+      let localY = rect?.height ?? 0;
+      if (rect && isKeyboardInvoked && trigger) {
+        localX = trigger.left - rect.left;
+        localY = trigger.bottom - rect.top;
+      } else if (rect && !isKeyboardInvoked) {
+        localX = e.clientX - rect.left;
+        localY = e.clientY - rect.top;
+      }
       // A finger's long press reaches here as a pointer `contextmenu` where
       // the browser sends one (Chromium); its compatibility mousedown then
       // belongs to the opening press. A mouse or the keyboard opens without

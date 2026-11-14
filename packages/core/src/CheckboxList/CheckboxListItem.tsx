@@ -29,13 +29,13 @@ import type {InputStatus} from '../Field/types';
 import {CheckboxRowPressContext} from '../CheckboxInput/CheckboxRowPressContext';
 import {rowPressPaintStyles} from '../privateAttributes/press.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
-import {useTouchPresentation} from '../utils/touchPresentation';
 import {ListItem} from '../List/ListItem';
 import {ListContext} from '../List/ListContext';
 import {CheckboxListContext} from './CheckboxListContext';
 import {ItemDescriptionContext} from '../Item/ItemDescriptionContext';
 import {joinAriaIDs} from '../utils/inputAria';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {themeDataAttributes} from '../utils/themeProps';
 import type {ItemAlign} from '../Item';
 import {
   registerEnglishFallback,
@@ -310,11 +310,9 @@ export function CheckboxListItem({
     registerWithRequiredGroup,
   );
 
-  // Under a finger, a delegating row is the option's only press surface. A
-  // touch anywhere on it presses the row. A fine pointer keeps the box's own
-  // press.
-  const {isTouch} = useTouchPresentation();
-  const rowOwnsPress = isTouch && hasRowInteraction && !effectiveDisabled;
+  // A delegating row is the option's only press surface, for every pointer. A
+  // press anywhere on it presses the row.
+  const rowOwnsPress = hasRowInteraction && !effectiveDisabled;
 
   // A read-only checkbox carries aria-readonly, which the row's clickable
   // container treats as a non-interactive target, so a click on it would be
@@ -352,9 +350,14 @@ export function CheckboxListItem({
     }
   };
 
+  // The state follows the fill, so a theme can restyle the text on it.
+  const isCheckedRow =
+    resolvedChecked === true && !effectiveDisabled && !effectiveReadOnly;
+
   return (
     <ListItem
       {...restProps}
+      {...themeDataAttributes({selected: isCheckedRow ? 'selected' : null})}
       ref={ref}
       label={namesFromVisibleLabel ? <span id={labelID}>{label}</span> : label}
       description={description}
@@ -376,10 +379,7 @@ export function CheckboxListItem({
           // at that strength. So the row brings the release back, and the box
           // fades with the row.
           rowOwnsPress && interactionOverlayStyles.pressedAlpha,
-          resolvedChecked === true &&
-            !effectiveDisabled &&
-            !effectiveReadOnly &&
-            styles.selected,
+          isCheckedRow && styles.selected,
           xstyle,
         ] as StyleXStyles
       }

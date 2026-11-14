@@ -25,6 +25,7 @@ import {
   AgentDocsHomeError,
   resolveAgentDocsRoot,
 } from './agent-docs.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 
@@ -158,8 +159,14 @@ describe('generateCompressedIndex', () => {
 
   it('includes theme nudge rule', () => {
     const result = generateCompressedIndex('1.0.0');
-    expect(result).toMatch(/astryx docs theme/);
-    expect(result).toMatch(/never :root/);
+    // Themes go through the theme editor (preferred over hand-written files),
+    // never :root overrides; extending a theme and eject-to-fork stay named.
+    expect(result).toMatch(/astryx experimental theme editor new <name>/);
+    expect(result).toMatch(/prefer the experimental theme editor/);
+    expect(result).toMatch(/never :root overrides/);
+    expect(result).toContain('astryx docs theme');
+    expect(result).toContain('theme eject <slug>');
+    expect(result).toMatch(/extend an imported theme/);
   });
 
   it('sends frame choice to the layout doc rather than naming a shell', () => {
@@ -355,7 +362,7 @@ describe('generateCompressedIndex', () => {
 describe('renderAgentDocsBlock', () => {
   it('produces repeatable target bytes from configured manifests', async () => {
     const projectDir = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-agent-doc-render-'),
+      path.join(REPO_ROOT, '.astryx-agent-doc-render-'),
     );
     try {
       fs.writeFileSync(
@@ -433,7 +440,7 @@ describe('renderAgentDocsBlock', () => {
   });
   it('renders doc tokens in an integration line for the project', async () => {
     const projectDir = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-agent-doc-tokens-'),
+      path.join(REPO_ROOT, '.astryx-agent-doc-tokens-'),
     );
     try {
       fs.writeFileSync(
@@ -479,7 +486,7 @@ describe('renderAgentDocsBlock', () => {
 
   it('rejects a package label that could alter managed block structure', async () => {
     const projectDir = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-agent-doc-label-'),
+      path.join(REPO_ROOT, '.astryx-agent-doc-label-'),
     );
     try {
       fs.writeFileSync(
@@ -1766,7 +1773,7 @@ describe('agent docs never go into the home folder', () => {
     try {
       expect(() => installAgentDocs(link)).toThrow(AgentDocsHomeError);
     } finally {
-      fs.rmSync(link);
+      fs.unlinkSync(link);
     }
   });
 

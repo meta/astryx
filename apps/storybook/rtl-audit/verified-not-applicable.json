@@ -166,6 +166,14 @@
     "reason": "FormLayout arranges caller-owned fields with grid/block flow, logical gaps, and responsive columns. It owns no directional glyph, physical inline placement, transform, scrolling action, dragging, overlay, or keyboard behavior."
   },
   {
+    "component": "core/LayoutFooter",
+    "reason": "LayoutFooter is a block-axis band below the Layout's middle row. Its inner wrapper uses logical padding with the same value on both inline edges, its width is capped at the content width, and it centers inside the footer with marginInline auto. Its only line is on the block-start edge. It owns no directional glyph, physical inline offset or transform, inline ordering, scrolling, dragging, overlay, or keyboard behavior. Caller content follows the document direction."
+  },
+  {
+    "component": "core/LayoutHeader",
+    "reason": "LayoutHeader is a block-axis band above the Layout's middle row. Its inner wrapper uses logical padding with the same value on both inline edges; its width is capped at the content width, and it centers inside the header with marginInline auto. The only per-edge override, paddingBlockEnd, is on the block axis, and its only line is on the block-end edge. It owns no directional glyph, physical inline offset or transform, inline ordering, scrolling, dragging, overlay, or keyboard behavior. Caller content follows the document direction."
+  },
+  {
     "component": "core/Item",
     "reason": "Item places start content, text, and end content in normal flex flow using logical padding, text-align:start, and margin-inline-start:auto. Those slots mirror through CSS direction without component branching; Item owns no directional glyph or directional keyboard behavior."
   },
@@ -175,7 +183,7 @@
   },
   {
     "component": "core/List",
-    "reason": "List delegates marker placement and bidi ordering to semantic ol/ul elements and uses logical indentation and spacing. Item content is caller-owned; the component adds no directional controls, physical positioning, transforms, scrolling, dragging, or overlays."
+    "reason": "List delegates marker placement and bidi ordering to semantic ol/ul elements and places markers, row padding, edge treatments, and the reorder handle with logical properties. Its reorder, autoscroll, and animated row changes move rows only in the block axis, with Up and Down keys, and its reorder hint is a shared anchored layer. It owns no left/right glyph, physical inline placement, inline-axis ordering or scrolling, or horizontal keyboard behavior."
   },
   {
     "component": "core/Markdown",
@@ -442,6 +450,15 @@
       "apps/storybook/stories/DropdownMenuRadioItem.stories.tsx": "sha256:cfe1bd90a8fc189f0f3a94992dee2a148b7256433775c511099b57690c01a614",
       "packages/core/src/DropdownMenu/DropdownMenuRadioItem.tsx": "sha256:7d7ce618b802170660763de820c0551fc3c63530ba1c105cb4bf7146d30ad518",
       "packages/core/src/DropdownMenu/index.ts": "sha256:59bf02be4a577cbecf3ad7e981e2577602375892f74548593aa9b998cae733fa"
+    }
+  },
+  {
+    "component": "core/Kbd",
+    "reason": "Kbd renders one inline-flex group of key badges in the order the caller writes the keys, from inline start to inline end with a logical gap, so the sequence follows the region's direction (design:bidirectionality DR3). Its arrow badges name physical keys, so they stay unchanged (DR5): the left key shows ← in both directions, and the arrow glyphs are not Bidi_Mirrored. It draws no contextual separator, uses no physical inline property, and has no positioned affordance, scroll, drag, overlay, or keyboard behavior. Exact-head frames render the group in RTL and assert each badge's direction and inline order, and that every glyph keeps its text and has no transform.",
+    "evidence": {
+      "apps/storybook/stories/Kbd.stories.tsx": "sha256:b6770be1b6481064d541e9e9f9a75c3e5e0225aed6da242329c64e8102e03440",
+      "packages/core/src/Kbd/Kbd.tsx": "sha256:e64111634e63600c9a145f18b6e3e2a947bf3b39185ffbdffb0db3578d5e4f24",
+      "packages/core/src/Kbd/index.ts": "sha256:9e1e3942034e17a48c67b4a46161e8c44af9c16360a8d42e5fbb570135a975c2"
     }
   }
 ]

@@ -34,6 +34,8 @@ import {
 } from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
 import {INTERACTIVE_SELECTORS} from '../hooks/useClickableContainer';
+import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
+import type {AnnounceFn} from '../hooks/useAnnounce';
 import {useTheme} from '../theme';
 import {MediaTheme} from '../theme/MediaTheme';
 import type {
@@ -41,7 +43,7 @@ import type {
   ToastDismissReason,
   ToastContentRenderFn,
 } from './types';
-import {themeProps} from '../utils/themeProps';
+import {pickDataAttributes, themeProps} from '../utils/themeProps';
 import {useToastGesture, type ToastGestureDirection} from './useToastGesture';
 import {
   registerEnglishFallback,
@@ -52,6 +54,9 @@ import english from '../i18n/generated-english/Toast/Toast.generated';
 registerEnglishFallback(english);
 
 const SWIPE_INTERACTIVE_TARGET_SELECTOR = `${INTERACTIVE_SELECTORS},[tabindex],[contenteditable]:not([contenteditable="false"])`;
+
+const TOAST_ANNOUNCEMENT_EXCLUDED_SELECTOR =
+  'button, input, select, textarea, a[href], [role="button"], [role="link"], [tabindex], [contenteditable]:not([contenteditable="false"]), svg, [role="img"]';
 
 function isInteractiveTarget(
   target: EventTarget | null,
@@ -92,6 +97,10 @@ const styles = stylex.create({
       '@media (prefers-reduced-motion: reduce)': '0.01ms',
     },
     transitionTimingFunction: easeVars['--ease-standard'],
+  },
+  // A card enters from its edge only when it first renders. A move between
+  // modal outlets renders it again, and it must not enter again.
+  entering: {
     '@starting-style': {
       opacity: 0,
       transform: `translateY(var(--_toast-slide-y, ${TOAST_EDGE_DRIFT}))`,
@@ -154,6 +163,10 @@ export interface ToastProps {
 
 interface ToastSurfaceProps extends ToastProps {
   gestureDirection: ToastGestureDirection;
+  /** The viewport's modal-aware announcement channel. */
+  announce?: AnnounceFn;
+  /** Read the body after render when its text comes from a child component. */
+  isRenderedBodyAnnouncement?: boolean;
   /**
    * Changes when a uniqueID overwrite updates this card in place: the new
    * toast's auto-hide timer starts over.
@@ -164,6 +177,11 @@ interface ToastSurfaceProps extends ToastProps {
    * live region of its own, so an update in place is announced once.
    */
   isLiveRegion?: boolean;
+  /**
+   * True once the toast's row has started to open. The card then has no
+   * starting style, so a move between modal outlets starts no transition.
+   */
+  hasEntryStarted?: boolean;
 }
 
 /**
@@ -205,8 +223,14 @@ export function ToastSurface({
   gestureDirection,
   timerKey,
   isLiveRegion = true,
+  announce,
+  isRenderedBodyAnnouncement = false,
+  hasEntryStarted = false,
+  ...rest
 }: ToastSurfaceProps) {
   const t = useComponentTranslator();
+  const isError = type === 'error';
+  const bodyRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Every condition that holds the auto-hide timer (pointer over the card,
   // focus inside it, a touch or pen gesture, the window blurred) is tracked on
@@ -374,11 +398,27 @@ export function ToastSurface({
   });
   cardRootRef.current = rootRef;
 
+  // The viewport announces a plain-text body when it dispatches the toast.
+  // This reads a component body or a custom layout after commit. A body is
+  // read whole, links included. A custom layout leaves out its controls.
+  useAnnounceRenderedText(
+    renderContent != null ? rootRef : bodyRef,
+    !isLiveRegion && (renderContent != null || isRenderedBodyAnnouncement),
+    timerKey ?? '',
+    {
+      politeness: isError ? 'assertive' : 'polite',
+      announce,
+      exclude:
+        renderContent != null
+          ? TOAST_ANNOUNCEMENT_EXCLUDED_SELECTOR
+          : undefined,
+    },
+  );
+
   const handleDismiss = useCallback(() => {
     onDismiss('manual');
   }, [onDismiss]);
 
-  const isError = type === 'error';
   // The surface is *usually* dark in light mode and light in dark mode, but a
   // theme can define --color-background-inverted as anything — so the mode is
   // measured, not assumed. This is only the pre-measurement fallback.
@@ -387,6 +427,7 @@ export function ToastSurface({
 
   return (
     <div
+      {...pickDataAttributes(rest)}
       ref={rootRef}
       role={isLiveRegion ? (isError ? 'alert' : 'status') : undefined}
       aria-live={isLiveRegion ? (isError ? 'assertive' : 'polite') : undefined}
@@ -400,6 +441,7 @@ export function ToastSurface({
         themeProps('toast', {type}),
         stylex.props(
           styles.root,
+          !hasEntryStarted && styles.entering,
           isError ? styles.variantError : styles.variantDefault,
           isExiting && styles.exiting,
         ),
@@ -416,7 +458,9 @@ export function ToastSurface({
           })
         ) : (
           <div {...stylex.props(styles.inner)}>
-            <div {...stylex.props(styles.content)}>{body}</div>
+            <div ref={bodyRef} {...stylex.props(styles.content)}>
+              {body}
+            </div>
 
             <div {...stylex.props(styles.endContent)}>
               {endContent}

@@ -1,0 +1,2015 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+/**
+ * @file Previews for `astryx experimental theme editor` and `theme preview`: the sample app page and
+ * the theme-building page (every component grouped, overlays open, and real
+ * template pages), rendered with the theme to self-contained HTML by the
+ * render machinery; and the sources of the in-app preview route and its
+ * pages. PNG pictures
+ * are made only on request, with a Playwright or Chrome installed on the
+ * machine.
+ *
+ * @position api/theme-edit — previews and pictures
+ */
+
+import {createHash} from 'node:crypto';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import {spawn} from 'node:child_process';
+import * as os from 'node:os';
+import {fileURLToPath, pathToFileURL} from 'node:url';
+import {
+  SAMPLE_PAGE,
+  SHEET_ORDER,
+  elementNames,
+  pageSource,
+} from './_catalog.mjs';
+import {
+  catalogVariants,
+  demoProps,
+  needsParent,
+  renderDir,
+  renderGenerated,
+} from './_parts.mjs';
+import {OVERVIEW_SECTIONS} from './_overview.mjs';
+import {
+  folderIsEmpty,
+  camel,
+  fontPackages,
+  modesOf,
+  themeFiles,
+  shown,
+} from './_settings.mjs';
+import {writeWhole} from './_palette.mjs';
+import {cliVersion} from '../../foundation/release/run-context.mjs';
+import {importPathOf, installLine} from './_project.mjs';
+import {COLOR_PROP_PARTS, DIRECT, P, wordTable} from './_tables.mjs';
+import {extractImportedPackages} from '../../foundation/discovery/template-needs.mjs';
+import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
+import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
+
+const TEMPLATES_DIR = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../assets/templates/pages',
+);
+
+/** The groups of the theme-building page, in order. */
+export const SHOWCASE_GROUPS = [
+  'actions',
+  'inputs',
+  'selection',
+  'navigation',
+  'feedback',
+  'data',
+  'containers',
+  'overlays',
+  'pages',
+];
+
+/** Real template pages the theme-building page shows in full. */
+const PAGE_TEMPLATES = ['dashboard', 'contact-form', 'settings'];
+
+const SELECTION =
+  /Select|Checkbox|Radio|Switch|Segmented|Toggle|Slider|Typeahead|Tokenizer/;
+
+/**
+ * The group a component belongs to on the theme-building page.
+ * @param {string} name
+ * @param {string} category
+ * @returns {string | null}
+ */
+function groupOf(name, category) {
+  if (SELECTION.test(name)) return 'selection';
+  const c = category.toLowerCase();
+  if (c === 'action') return 'actions';
+  if (c === 'form controls') return 'inputs';
+  if (c === 'navigation') return 'navigation';
+  if (c === 'feedback & status') return 'feedback';
+  if (c === 'content' || c === 'table & list' || c === 'text' || c === 'media')
+    return 'data';
+  if (c === 'container' || c === 'layout') return 'containers';
+  if (c === 'overlay') return 'overlays';
+  return null;
+}
+
+/**
+ * Items of the theme-building page: each component once per variant
+ * (overlays open), the sample page, and template pages
+ * whose packages the project has.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string | undefined} group only this group
+ * @returns {{items: import('./_catalog.mjs').CatalogItem[], imports: Record<string, string>, skipped: string[]}}
+ */
+export function showcaseItems(project, group) {
+  /** @type {import('./_catalog.mjs').CatalogItem[]} */
+  const items = [];
+  /** @param {string} name */
+  const groupFor = name => {
+    const info = project.components[name];
+    // A part with no category of its own sits with its parent.
+    const parent = info?.subComponentOf
+      ? project.components[info.subComponentOf]
+      : null;
+    return groupOf(name, info?.category || parent?.category || '');
+  };
+  for (const name of Object.keys(project.components)) {
+    const g = groupFor(name);
+    if (!g) continue;
+    const inParent = inParentOf(project, name);
+    if (inParent === null) continue;
+    for (const v of catalogVariants(project, name, 12, {shown: true}))
+      items.push({
+        group: g,
+        name,
+        label: v.label,
+        tree: inParent({__element: name, props: v.props}),
+      });
+  }
+  items.push({
+    group: 'pages',
+    name: 'Sample app',
+    label: '',
+    tree: SAMPLE_PAGE,
+  });
+  /** @type {string[]} */
+  const skipped = [];
+  /** @type {Record<string, string>} */
+  const templateImports = {};
+  for (const t of PAGE_TEMPLATES) {
+    const file = path.join(TEMPLATES_DIR, t, 'page.tsx');
+    if (!fs.existsSync(file)) continue;
+    const src = fs.readFileSync(file, 'utf8');
+    const pkgs = [...extractImportedPackages(src)].filter(
+      pkg => !findNodeModulesPackage(project.cwd, pkg),
+    );
+    if (pkgs.length) {
+      skipped.push(
+        `the ${t} page needs ${pkgs.join(', ')} (${installLine(project.cwd, pkgs)})`,
+      );
+      continue;
+    }
+    const local = `Template_${t.replace(/-/g, '_')}`;
+    templateImports[local] = `./templates/${t}.tsx`;
+    items.push({
+      group: 'pages',
+      name: `${t} template`,
+      label: '',
+      tree: {__element: local, props: {}},
+    });
+  }
+  const order = (/** @type {import('./_catalog.mjs').CatalogItem} */ it) => {
+    const i = SHEET_ORDER.indexOf(it.name);
+    return SHOWCASE_GROUPS.indexOf(it.group ?? '') * 1000 + (i < 0 ? 500 : i);
+  };
+  const chosen = items
+    .filter(it => !group || it.group === group)
+    .sort((a, b) => order(a) - order(b) || a.name.localeCompare(b.name));
+  /** @type {Record<string, string>} */
+  const imports = {};
+  for (const n of elementNames(chosen.map(i => i.tree))) {
+    if (templateImports[n]) {
+      imports[n] = templateImports[n];
+      continue;
+    }
+    const spec = importPathOf(project, n);
+    if (spec) imports[n] = spec;
+  }
+  return {
+    items: chosen,
+    imports,
+    skipped: !group || group === 'pages' ? skipped : [],
+  };
+}
+
+/** Wrapper props that open a layer. A part shown on the page stays closed. */
+const OPEN_PROPS = ['isOpen', 'isMenuOpen', 'defaultOpen', 'defaultIsOpen'];
+
+/**
+ * How a component renders on its own: unchanged for a whole component; for
+ * a part of another, inside the parent its playground names. Null for a part
+ * with no such parent, or whose parent needs a parent of its own: the part
+ * only works inside its parent, and the parent's own item shows it.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} name
+ * @returns {((tree: import('./_catalog.mjs').Tree) => import('./_catalog.mjs').Tree) | null}
+ */
+function inParentOf(project, name) {
+  const info = project.components[name];
+  if (!info?.subComponentOf) return tree => tree;
+  const wrapper = info.wrapper;
+  // A part of a parent that shows inline (a dialog's header) renders inside
+  // that parent shown open and inline, as Core's docs show it: alone, it
+  // acts as in a modal one (a dialog header takes focus as it mounts).
+  const of = info.subComponentOf;
+  const parent = project.components[of];
+  if (!wrapper && parent?.props?.isInline && parent.props.isOpen) {
+    const props = Object.fromEntries(
+      Object.entries(demoProps(project, of) ?? {}).filter(
+        ([k]) => k !== 'children',
+      ),
+    );
+    return tree => ({
+      __element: of,
+      props: {...props, isOpen: true, isInline: true},
+      children: [tree],
+    });
+  }
+  // A part its parent does not list as an item, such as a heading of the
+  // text family, renders on its own.
+  if (!wrapper) return needsParent(project, name) ? null : tree => tree;
+  if (project.components[wrapper.component]?.wrapper) return null;
+  const props = Object.fromEntries(
+    Object.entries(wrapper.props).filter(([k]) => !OPEN_PROPS.includes(k)),
+  );
+  return tree => ({__element: wrapper.component, props, children: [tree]});
+}
+
+/**
+ * Template page modules the theme-building page imports, copied beside it.
+ * @param {Record<string, string>} imports
+ * @returns {Array<{name: string, from: string}>}
+ */
+function templateFiles(imports) {
+  return Object.values(imports).flatMap(spec => {
+    const m = /^\.\/templates\/([a-z0-9-]+)\.tsx$/.exec(spec);
+    return m
+      ? [
+          {
+            name: `templates/${m[1]}.tsx`,
+            from: path.join(TEMPLATES_DIR, m[1], 'page.tsx'),
+          },
+        ]
+      : [];
+  });
+}
+
+/**
+ * The fonts stylesheet of the theme a theme is built on, when its package
+ * ships one (`@astryxdesign/theme-neutral/fonts.css` loads Figtree): naming
+ * a family does not load it, and the base theme's families apply until the
+ * theme sets its own. Once the theme's build names none of the families the
+ * sheet loads, it is left out.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {string[]}
+ */
+export function baseFontsCss(ctx, data) {
+  if (!data.like) return [];
+  const pkg = `@astryxdesign/theme-${data.like}`;
+  const sheet = `${pkg}/fonts.css`;
+  // Read off disk: the package must export the sheet for an app to import
+  // it.
+  const found = findNodeModulesPackage(ctx.project.cwd, pkg);
+  /** @type {string} */
+  let text;
+  try {
+    if (!found) return [];
+    const exportsMap = JSON.parse(
+      fs.readFileSync(path.join(found.packageDir, 'package.json'), 'utf8'),
+    ).exports;
+    if (
+      !exportsMap ||
+      typeof exportsMap !== 'object' ||
+      !('./fonts.css' in exportsMap)
+    )
+      return [];
+    text = fs.readFileSync(path.join(found.packageDir, 'fonts.css'), 'utf8');
+  } catch {
+    return [];
+  }
+  // The families the sheet loads; with the theme's build at hand, the sheet
+  // is imported only while the build still names one of them.
+  const families = [...text.matchAll(/family=([^:&'")]+)/g)].map(m =>
+    decodeURIComponent(m[1].replace(/\+/g, ' ')),
+  );
+  /** @type {string | null} */
+  let built = null;
+  try {
+    built = fs.readFileSync(themeFiles(ctx.project.cwd, data.name).css, 'utf8');
+  } catch {
+    // Not built yet: the base families may still apply.
+  }
+  if (built != null && families.length) {
+    const css = built;
+    if (!families.some(f => css.includes(f))) return [];
+  }
+  return [sheet];
+}
+
+/**
+ * How a generated page imports the theme: its built module, its stylesheet,
+ * and the stylesheets of open fonts the project has installed.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {string} fromDir the folder of the page
+ */
+export function themeImports(ctx, slug, data, fromDir) {
+  const f = themeFiles(ctx.project.cwd, slug);
+  /** @param {string} file */
+  const rel = file => {
+    const r = path.relative(fromDir, file).split(path.sep).join('/');
+    return r.startsWith('.') ? r : `./${r}`;
+  };
+  const modes = modesOf(data);
+  const fonts = fontPackages(ctx, data)
+    .filter(x => x.installed)
+    .map(x => `${x.pkg}/index.css`);
+  return {
+    module: rel(f.js),
+    css: [rel(f.css), ...baseFontsCss(ctx, data), ...fonts],
+    mode: /** @type {'system' | 'light' | 'dark'} */ (
+      modes.length > 1 ? 'system' : modes[0]
+    ),
+  };
+}
+
+/**
+ * The inputs a page was rendered from and a hash of the page above it,
+ * recorded at the end of the page.
+ */
+const RENDER_STAMP = /<!-- astryx: render of ([0-9a-f]{24}) ([0-9a-f]{16}) -->/;
+
+/** @type {Map<string, string>} */
+const treeKeys = new Map();
+
+/**
+ * A cheap fingerprint of the files a package runs from: each file's path,
+ * size and modification time under its folder (node_modules left out), so a
+ * linked or patched copy with the same version reads as another. Once per
+ * process for each folder.
+ * @param {string | null | undefined} dir
+ * @returns {string}
+ */
+function treeKey(dir) {
+  if (!dir) return 'none';
+  const known = treeKeys.get(dir);
+  if (known) return known;
+  const h = createHash('sha256');
+  /** @param {string} d */
+  const walk = d => {
+    let entries;
+    try {
+      entries = fs.readdirSync(d, {withFileTypes: true});
+    } catch {
+      return;
+    }
+    entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    for (const e of entries) {
+      if (e.name === 'node_modules' || e.name.startsWith('.')) continue;
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.isFile()) {
+        try {
+          const st = fs.statSync(p);
+          h.update(`${path.relative(dir, p)}\0${st.size}\0${st.mtimeMs}\0`);
+        } catch {
+          // Gone meanwhile.
+        }
+      }
+    }
+  };
+  walk(dir);
+  const key = h.digest('hex').slice(0, 16);
+  treeKeys.set(dir, key);
+  return key;
+}
+
+/**
+ * The folder of an installed package, resolved from the project, or null.
+ * @param {string} cwd
+ * @param {string} name
+ */
+function packageDirOf(cwd, name) {
+  try {
+    return findNodeModulesPackage(cwd, name)?.packageDir ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** @param {string} text */
+const bodyHash = text =>
+  createHash('sha256').update(text).digest('hex').slice(0, 16);
+
+/**
+ * A key for everything a page render reads: the CLI, Core (its version and
+ * stylesheet, and the files it runs from), the base theme package's files,
+ * the generated page source, and the theme's built stylesheet and module.
+ * The same key means the same page.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} slug
+ * @param {string} source
+ * @param {string | null | undefined} [like] the base theme
+ * @returns {string}
+ */
+function renderKey(project, slug, source, like) {
+  const f = themeFiles(project.cwd, slug);
+  const h = createHash('sha256')
+    .update(cliVersion())
+    .update('\0')
+    .update(String(project.coreKey ?? ''))
+    .update('\0')
+    .update(treeKey(path.join(project.coreDir, 'dist')))
+    .update('\0')
+    .update(
+      like
+        ? treeKey(packageDirOf(project.cwd, `@astryxdesign/theme-${like}`))
+        : 'none',
+    )
+    .update('\0')
+    .update(source);
+  for (const file of [f.css, f.js]) {
+    h.update('\0');
+    try {
+      h.update(fs.readFileSync(file));
+    } catch {
+      h.update('missing');
+    }
+  }
+  return h.digest('hex').slice(0, 24);
+}
+
+/**
+ * Whether `out` is a page rendered from `key` (a no-op show renders
+ * nothing again).
+ * @param {string} out
+ * @param {string} key
+ */
+function renderedFrom(out, key) {
+  try {
+    const st = fs.lstatSync(out);
+    if (!st.isFile()) return false;
+    const text = fs.readFileSync(out, 'utf8');
+    const m = RENDER_STAMP.exec(text);
+    // The page above the comment is the one rendered: an edit by hand, or
+    // a comment pasted under another page, is rendered again.
+    // Nothing may follow the comment but the sheet's own build stamp
+    // (written after it by show): text added after it is rendered over.
+    const after = m
+      ? text
+          .slice(m.index + m[0].length)
+          .replace(/<!-- astryx: sheet of build [0-9a-f]{16} -->/, '')
+      : '';
+    return (
+      m != null &&
+      m[1] === key &&
+      after.trim() === '' &&
+      m[2] === bodyHash(text.slice(0, m.index).trimEnd())
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The page with its render key recorded at its end (after the closing tag:
+ * a comment before the doctype would put it in quirks mode).
+ * @param {string} html
+ * @param {string} key
+ */
+const withRenderKey = (html, key) => {
+  const body = html.replace(RENDER_STAMP, '').trimEnd();
+  return `${body}\n<!-- astryx: render of ${key} ${bodyHash(body)} -->\n`;
+};
+
+/**
+ * The sample page source of a theme's preview.html, its file, and the key
+ * of the inputs it is rendered from.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ */
+function previewInputs(ctx, slug, data) {
+  const {project} = ctx;
+  const imports = /** @type {Record<string, string>} */ ({});
+  for (const n of elementNames(SAMPLE_PAGE)) {
+    const spec = importPathOf(project, n);
+    if (spec) imports[n] = spec;
+  }
+  const source = pageSource({
+    items: [{name: 'page', label: '', tree: SAMPLE_PAGE}],
+    imports,
+    theme: themeImports(ctx, slug, data, renderDir(project)),
+    layout: 'page',
+    title: `${slug}: sample page`,
+  });
+  const out = themeFiles(project.cwd, slug).preview;
+  return {source, out, key: renderKey(project, slug, source, data.like)};
+}
+
+/**
+ * Whether themes/<slug>/preview.html was rendered from the theme as it is
+ * now (the same check renderPreview makes before it renders again).
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ */
+export function previewIsCurrent(ctx, slug, data) {
+  try {
+    const {out, key} = previewInputs(ctx, slug, data);
+    return renderedFrom(out, key);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Render the sample app page with the theme to themes/<slug>/preview.html.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {Promise<string>} the file written, as shown
+ */
+export async function renderPreview(ctx, slug, data) {
+  const {project} = ctx;
+  const {source, out, key} = previewInputs(ctx, slug, data);
+  // Rendered from the same inputs before: the page is as it would be.
+  if (renderedFrom(out, key)) return shown(project.cwd, out);
+  const {html} = await renderGenerated(project, `preview-${slug}.mjs`, source);
+  // Written whole and renamed in, never through a link.
+  writeWhole(out, withRenderKey(html, key));
+  return shown(project.cwd, out);
+}
+
+/**
+ * Render the theme-building page with the theme to one HTML file.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {{group?: string, out?: string}} [options]
+ * @returns {Promise<{file: string, components: number, skipped: string[]}>}
+ */
+export async function renderSheet(ctx, slug, data, options = {}) {
+  const {project} = ctx;
+  const {items, imports, skipped} = showcaseItems(project, options.group);
+  const source = pageSource({
+    items,
+    imports,
+    theme: themeImports(ctx, slug, data, renderDir(project)),
+    layout: 'sheet',
+    title: `${slug}: every component${options.group ? ` (${options.group})` : ''}`,
+  });
+  // One section goes to its own file, so the full sheet stays whole.
+  const full = themeFiles(project.cwd, slug).sheet;
+  const out =
+    options.out ??
+    (options.group
+      ? path.join(path.dirname(full), `sheet-${options.group}.html`)
+      : full);
+  const key = renderKey(project, slug, source, data.like);
+  const result = {
+    file: shown(project.cwd, out),
+    components: new Set(items.map(i => i.name)).size,
+    skipped,
+  };
+  // Rendered from the same inputs before: the sheet is as it would be.
+  if (renderedFrom(out, key)) return result;
+  const {html} = await renderGenerated(
+    project,
+    `sheet-${slug}.mjs`,
+    source,
+    templateFiles(imports),
+  );
+  fs.mkdirSync(path.dirname(out), {recursive: true});
+  // Written whole and renamed in, never through a link.
+  writeWhole(out, withRenderKey(html, key));
+  return {
+    file: shown(project.cwd, out),
+    components: new Set(items.map(i => i.name)).size,
+    skipped,
+  };
+}
+
+/** @param {unknown} v @returns {v is import('./_catalog.mjs').Tree} */
+const isElement = v =>
+  Boolean(
+    v &&
+    typeof v === 'object' &&
+    !Array.isArray(v) &&
+    typeof (/** @type {any} */ (v).__element) === 'string',
+  );
+
+/**
+ * The Core name an element stands for, or null when Core has no module for
+ * it. Some playground samples still use the old `XDS` prefix (`XDSVStack`).
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} name
+ * @returns {string | null}
+ */
+function coreName(project, name) {
+  if (importPathOf(project, name)) return name;
+  const bare = name.replace(/^XDS(?=[A-Z])/, '');
+  return bare !== name && importPathOf(project, bare) ? bare : null;
+}
+
+/**
+ * A copy of an element tree with Core names only. An element Core has no
+ * module for is left out.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {unknown} v
+ * @returns {unknown}
+ */
+function withCoreNames(project, v) {
+  if (Array.isArray(v))
+    return v.map(x => withCoreNames(project, x)).filter(x => x !== undefined);
+  if (isElement(v)) {
+    const name = coreName(project, v.__element);
+    if (!name) return undefined;
+    const props = Object.fromEntries(
+      Object.entries(v.props ?? {})
+        .map(([k, x]) => [k, withCoreNames(project, x)])
+        .filter(([, x]) => x !== undefined),
+    );
+    return {
+      __element: name,
+      props,
+      ...(v.children === undefined
+        ? {}
+        : {children: withCoreNames(project, v.children)}),
+    };
+  }
+  if (v && typeof v === 'object')
+    return Object.fromEntries(
+      Object.entries(v).map(([k, x]) => [k, withCoreNames(project, x)]),
+    );
+  return v;
+}
+
+/** @param {unknown} v @returns {boolean} */
+const holdsElement = v =>
+  isElement(v) || (Array.isArray(v) && v.some(holdsElement));
+
+/**
+ * A prop value that is source code, such as the name of a constant the page
+ * defines. @param {unknown} v @returns {v is {__code: string}}
+ */
+const isCode = v =>
+  Boolean(
+    v &&
+    typeof v === 'object' &&
+    typeof (/** @type {any} */ (v).__code) === 'string',
+  );
+
+/** @param {unknown} v @param {number} depth @returns {string} */
+function jsxValue(v, depth) {
+  if (isElement(v)) return jsx(v, depth);
+  if (isCode(v)) return v.__code;
+  if (Array.isArray(v) && v.some(holdsElement))
+    return `[${v
+      .map((x, i) =>
+        isElement(x)
+          ? jsx({...x, props: {key: String(i), ...x.props}}, depth)
+          : jsxValue(x, depth),
+      )
+      .join(', ')}]`;
+  return JSON.stringify(v);
+}
+
+/**
+ * JSX source for an element tree whose names are Core names. Each element
+ * renders through `C`, the page's table of Core components.
+ * @param {import('./_catalog.mjs').Tree} tree
+ * @param {number} depth
+ * @returns {string}
+ */
+function jsx(tree, depth) {
+  const pad = '  '.repeat(depth);
+  const {children: childProp, ...rest} = tree.props ?? {};
+  const props = Object.entries(rest).map(([k, v]) =>
+    typeof v === 'string' && !/[{}"<>&\n]/.test(v)
+      ? `${k}="${v}"`
+      : v === true
+        ? k
+        : `${k}={${jsxValue(v, depth + 1)}}`,
+  );
+  const kids = /** @type {unknown[]} */ (
+    [].concat(/** @type {any} */ (tree.children ?? childProp ?? []))
+  );
+  const tag = `C.${tree.__element}`;
+  const open = `<${tag}${props.length ? ` ${props.join(' ')}` : ''}`;
+  if (!kids.length) return `${open} />`;
+  const inner = kids
+    .map(k =>
+      isElement(k)
+        ? `${pad}  ${jsx(k, depth + 1)}`
+        : `${pad}  {${jsxValue(k, depth + 1)}}`,
+    )
+    .join('\n');
+  return `${open}>\n${inner}\n${pad}</${tag}>`;
+}
+
+/**
+ * The imports of a page and its table of components, `C`. Playground samples
+ * are not full prop sets (a controlled part has no handler), so `C` takes
+ * any props for each part; children must still be React nodes, and every
+ * name must be imported from Core.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {unknown} trees element trees with Core names
+ * @returns {string[]}
+ */
+function componentTable(project, trees) {
+  /** @type {Map<string, string[]>} */
+  const byModule = new Map();
+  for (const name of [...elementNames(trees)].sort()) {
+    const spec = /** @type {string} */ (importPathOf(project, name));
+    byModule.set(spec, [...(byModule.get(spec) ?? []), name]);
+  }
+  const names = [...byModule.values()].flat();
+  return [
+    ...[...byModule].map(
+      ([spec, list]) =>
+        `import {${list.join(', ')}} from ${JSON.stringify(spec)};`,
+    ),
+    '',
+    'type Part = React.ComponentType<{children?: React.ReactNode} & Record<string, unknown>>;',
+    `const C = {${names.map(n => `${n}: ${n} as unknown as Part`).join(', ')}};`,
+  ];
+}
+
+const SAFE = [
+  '/** Shows a short note for a component that throws, so the rest of the page renders. */',
+  'class Safe extends React.Component<{name: string, children: React.ReactNode}, {failed: boolean}> {',
+  '  override state = {failed: false};',
+  '  static getDerivedStateFromError() {',
+  '    return {failed: true};',
+  '  }',
+  '  override render() {',
+  '    return this.state.failed ? <div className="tp-note">{this.props.name} could not render here</div> : this.props.children;',
+  '  }',
+  '}',
+];
+
+/** The search source the page hands a part that needs one: a few fixed items. */
+const SAMPLE_SOURCE = [
+  'const SAMPLE_ITEMS = [',
+  "  {id: 'design', label: 'Design'},",
+  "  {id: 'engineering', label: 'Engineering'},",
+  "  {id: 'research', label: 'Research'},",
+  "  {id: 'marketing', label: 'Marketing'},",
+  '];',
+  'const SAMPLE_SOURCE = {',
+  '  search: (query: string) => SAMPLE_ITEMS.filter(item => item.label.toLowerCase().includes(query.toLowerCase())),',
+  '  bootstrap: () => SAMPLE_ITEMS,',
+  '  cancel: () => {},',
+  '};',
+];
+
+/**
+ * A copy of an element tree in which every part that requires a search
+ * source and has none gets the page's sample source. A typeahead without a
+ * source throws when it unmounts, and that error leaves the boundary around
+ * it, so leaving the page would crash the whole route.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {unknown} v
+ * @returns {unknown}
+ */
+function withSources(project, v) {
+  if (Array.isArray(v)) return v.map(x => withSources(project, x));
+  if (isElement(v)) {
+    const props = Object.fromEntries(
+      Object.entries(v.props ?? {}).map(([k, x]) => [
+        k,
+        withSources(project, x),
+      ]),
+    );
+    for (const [k, p] of Object.entries(
+      project.components[v.__element]?.props ?? {},
+    ))
+      if (p.required && p.type.startsWith('SearchSource') && !(k in props))
+        props[k] = {__code: 'SAMPLE_SOURCE'};
+    return {
+      ...v,
+      props,
+      ...(v.children === undefined
+        ? {}
+        : {children: withSources(project, v.children)}),
+    };
+  }
+  return v;
+}
+
+/** Controlled parts a sample gives a value: they call onChange on a click. */
+const CONTROLLED = new Set([
+  'TabList',
+  'SegmentedControl',
+  'RadioList',
+  'Switch',
+  'CheckboxInput',
+  'Selector',
+  'TextInput',
+  'TextArea',
+  'NumberInput',
+]);
+
+/**
+ * A copy of an element tree in which every controlled part with a value and
+ * no onChange gets one that does nothing, so a click on it never throws.
+ * @param {unknown} v
+ * @returns {unknown}
+ */
+function withHandlers(v) {
+  if (Array.isArray(v)) return v.map(withHandlers);
+  if (isElement(v)) {
+    const props = Object.fromEntries(
+      Object.entries(v.props ?? {}).map(([k, x]) => [k, withHandlers(x)]),
+    );
+    if (CONTROLLED.has(v.__element) && 'value' in props && !props.onChange)
+      props.onChange = {__code: '() => {}'};
+    return {
+      ...v,
+      props,
+      ...(v.children === undefined ? {} : {children: withHandlers(v.children)}),
+    };
+  }
+  return v;
+}
+
+/**
+ * Whether an element tree uses the page's sample search source.
+ * @param {unknown} v
+ * @returns {boolean}
+ */
+const usesSource = v =>
+  isCode(v)
+    ? v.__code === 'SAMPLE_SOURCE'
+    : Boolean(v && typeof v === 'object') &&
+      Object.values(/** @type {object} */ (v)).some(usesSource);
+
+/** The heading of each group on the components page. */
+const GROUP_TITLES = wordTable(
+  /** @type {Record<string, string>} */ ({
+    data: 'data display',
+    overlays: 'overlays (shown open)',
+  }),
+);
+
+/**
+ * A cell with the component's name. A cell whose parts show nothing on
+ * their own (no size and no text) says so, so no cell is blank.
+ */
+const CELL = [
+  'function Cell({name, children}: {name: string, children: React.ReactNode}) {',
+  '  const ref = React.useRef<HTMLDivElement>(null);',
+  '  const [empty, setEmpty] = React.useState(false);',
+  '  React.useEffect(() => {',
+  "    const row = ref.current?.querySelector('.tp-row');",
+  '    if (!row) return;',
+  "    const shown = Array.from(row.querySelectorAll('.tp-item > :not(.tp-label)')).some(el => {",
+  '      const box = el.getBoundingClientRect();',
+  "      return (box.width > 0 && box.height > 0 && (box.width > 2 || box.height > 2)) || (el.textContent ?? '').trim() !== '';",
+  '    });',
+  '    setEmpty(!shown);',
+  '  }, []);',
+  '  return (',
+  '    <div ref={ref} className="tp-cell">',
+  '      <div className="tp-name">{name}</div>',
+  '      {children}',
+  '      {empty ? <div className="tp-note">{name} shows nothing on its own here: it needs content or a trigger</div> : null}',
+  '    </div>',
+  '  );',
+  '}',
+];
+
+/**
+ * The command that changes a component most, from what its main part reads:
+ * its background, else its border, else its text color, else its corners;
+ * `how <part>` when it reads none of them.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {import('./_compiler.mjs').Compiler} C
+ * @param {string} name
+ * @param {string | null} theme
+ * @returns {string | null}
+ */
+function changeLine(project, C, name, theme) {
+  const keys = project.targets
+    .filter(t => t.component === name)
+    .map(t => t.key);
+  const kebabName = name.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+  const part = keys.includes(kebabName) ? kebabName : keys[0];
+  if (!part) return null;
+  const t = theme ?? '<theme>';
+  for (const [aspect, value] of /** @type {const} */ ([
+    ['background', '"<color>"'],
+    ['border', '"1px solid <color>"'],
+    ['text', '"<color>"'],
+  ]))
+    if (C.partReads(part, aspect).length)
+      // A part whose color comes from its color prop takes the text token.
+      return aspect === 'text' && COLOR_PROP_PARTS.includes(part)
+        ? `${P} set ${t} --color-text-primary ${value}`
+        : `${P} set ${t} ${DIRECT[aspect]} ${value} --on ${part}`;
+  if (C.showsCorners(part)) return `${P} set ${t} corners round --on ${part}`;
+  return `${P} how ${part}`;
+}
+
+/** Layers that stay closed until a person opens them, and a frame with no content: on the page they show nothing. */
+const PAGE_SKIP = new Set([
+  'AspectRatio',
+  'BottomSheet',
+  'BottomSheetSwitcher',
+  'Drawer',
+  'Lightbox',
+]);
+
+/**
+ * The source of the preview's components page: every component grouped,
+ * each variant side by side, overlays open. Template pages are pages of
+ * their own (`preview add --template`), so they are not on it.
+ * Under each cell, one line: the command that changes the component most,
+ * from what its part reads (`how <part>`).
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {{theme?: string | null, C?: import('./_compiler.mjs').Compiler}} [options]
+ * @returns {{source: string, components: number}}
+ */
+export function componentsPageSource(project, options = {}) {
+  // A name that Core's docs lack resolves by walking Core's source tree. One
+  // listing cache reads each folder once for the page, not once per name.
+  return withListingCache(() => componentsPage(project, options));
+}
+
+/**
+ * {@link componentsPageSource}'s work, inside its listing cache.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {{theme?: string | null, C?: import('./_compiler.mjs').Compiler}} options
+ * @returns {{source: string, components: number}}
+ */
+function componentsPage(project, {theme = null, C}) {
+  const items = showcaseItems(project, undefined)
+    .items.filter(
+      it =>
+        it.group !== 'pages' &&
+        !PAGE_SKIP.has(it.name) &&
+        !project.components[it.name]?.overlay,
+    )
+    .map(it => ({
+      ...it,
+      tree: withHandlers(withSources(project, withCoreNames(project, it.tree))),
+    }))
+    .filter(it => it.tree !== undefined);
+  /** @type {Map<string, Map<string, import('./_catalog.mjs').CatalogItem[]>>} */
+  const groups = new Map();
+  for (const it of items) {
+    const g = groups.get(it.group ?? '') ?? new Map();
+    const list = /** @type {import('./_catalog.mjs').CatalogItem[]} */ (
+      g.get(it.name) ?? []
+    );
+    if (!list.some(x => x.label === it.label)) list.push(it);
+    g.set(it.name, list);
+    groups.set(it.group ?? '', g);
+  }
+  const sections = [...groups]
+    .map(([g, comps]) => {
+      const cells = [...comps]
+        .map(([name, list]) => {
+          const body = list
+            .map(
+              it =>
+                `          <div className="${project.components[name]?.category === 'Layout' ? 'tp-item tp-fill' : 'tp-item'}">${it.label ? `\n            <div className="tp-label">${it.label}</div>` : ''}\n            <Safe name=${JSON.stringify(name)}>\n              ${jsx(/** @type {any} */ (it.tree), 7)}\n            </Safe>\n          </div>`,
+            )
+            .join('\n');
+          const line = C ? changeLine(project, C, name, theme) : null;
+          return `        <Cell name=${JSON.stringify(name)}>\n          <div className="tp-row">\n${body}\n          </div>${line ? `\n          <code className="tp-cmd">{${JSON.stringify(line)}}</code>` : ''}\n        </Cell>`;
+        })
+        .join('\n');
+      return `      <section>\n        <h2 className="tp-group">${GROUP_TITLES[g] ?? g}</h2>\n        <div className="tp-grid">\n${cells}\n        </div>\n      </section>`;
+    })
+    .join('\n');
+  const css = `.tp-group{font:600 14px ui-monospace,monospace;margin:16px 14px 0;opacity:.75}.tp-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;padding:14px;align-items:start}.tp-cell{border:1px dashed #8885;padding:10px;overflow:hidden}.tp-name{font:600 12px ui-monospace,monospace;opacity:.6;margin-bottom:8px}.tp-row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start}.tp-fill{flex:1 1 100%;max-height:300px;overflow:auto}.tp-label{font:10px ui-monospace,monospace;opacity:.5}.tp-cmd{display:block;margin-top:10px;font:10px ui-monospace,monospace;opacity:.75;overflow-wrap:break-word}.tp-note{font:11px ui-monospace,monospace;opacity:.6;padding:6px 8px;border:1px dashed #8886}`;
+  const source = [
+    '// Written by `astryx experimental theme preview add`: every component grouped, each variant side by side, overlays open.',
+    "'use client';",
+    '',
+    "import * as React from 'react';",
+    ...componentTable(
+      project,
+      items.map(it => it.tree),
+    ),
+    '',
+    ...SAFE,
+    '',
+    ...CELL,
+    '',
+    ...(usesSource(items) ? [...SAMPLE_SOURCE, ''] : []),
+    'export default function ComponentsPage() {',
+    '  return (',
+    '    <div>',
+    `      <style>{${JSON.stringify(css)}}</style>`,
+    sections,
+    '    </div>',
+    '  );',
+    '}',
+    '',
+  ].join('\n');
+  return {source, components: new Set(items.map(i => i.name)).size};
+}
+
+/**
+ * The source of the preview's Overview page: the theme at a glance, built
+ * to show what themes most often break (see _overview.mjs). A header names
+ * the theme, its fonts and its main colors; each section renders inside a
+ * boundary, so one part that throws never blanks the page. The preview
+ * route is the app shell, so the page has no shell of its own.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {{theme?: string | null, colors?: boolean}} [options] `colors`:
+ *   the preview has a Colors page, so the header points to it
+ * @returns {string}
+ */
+export function overviewPageSource(project, options = {}) {
+  // One listing cache for the page's names, as componentsPageSource holds.
+  return withListingCache(() => overviewPage(project, options));
+}
+
+/**
+ * {@link overviewPageSource}'s work, inside its listing cache.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {{theme?: string | null, colors?: boolean}} options
+ * @returns {string}
+ */
+function overviewPage(project, {theme = null, colors = false}) {
+  const sections = OVERVIEW_SECTIONS.map(x => ({
+    title: x.title,
+    tree: /** @type {import('./_catalog.mjs').Tree | undefined} */ (
+      withHandlers(withCoreNames(project, x.tree))
+    ),
+  })).filter(x => x.tree !== undefined);
+  const body = sections
+    .map(
+      x =>
+        `      <section className="tp-section">\n        <h2 className="tp-group">${x.title}</h2>\n        <Safe name=${JSON.stringify(x.title)}>\n          ${jsx(/** @type {any} */ (x.tree), 5)}\n        </Safe>\n      </section>`,
+    )
+    .join('\n');
+  const css =
+    '.tp-page{display:grid;gap:20px;padding:24px 24px 160px;color:var(--color-text-primary)}' +
+    '.tp-group{font:600 13px ui-monospace,monospace;margin:0 0 10px;opacity:.7;text-transform:uppercase;letter-spacing:.04em}' +
+    '.tp-head{display:flex;flex-wrap:wrap;gap:16px;align-items:end;justify-content:space-between}' +
+    '.tp-swatches{display:flex;flex-wrap:wrap;gap:8px}' +
+    '.tp-swatch{display:grid;gap:4px;font:11px ui-monospace,monospace;color:var(--color-text-secondary)}' +
+    '.tp-chip{width:56px;height:36px;border-radius:var(--radius-element);border:1px solid var(--color-border)}' +
+    '.tp-note{font:11px ui-monospace,monospace;opacity:.6;padding:6px 8px;border:1px dashed #8886}';
+  return [
+    '// Written by `astryx experimental theme preview add`: the theme at a glance, built to show what themes most often break.',
+    "'use client';",
+    '',
+    "import * as React from 'react';",
+    ...componentTable(
+      project,
+      sections.map(x => x.tree),
+    ),
+    '',
+    ...SAFE,
+    '',
+    '/** The main colors, as the theme resolves them. */',
+    'const SWATCHES = [',
+    ...[
+      ['accent', '--color-accent'],
+      ['neutral', '--color-background-surface'],
+      ['text', '--color-text-primary'],
+      ['info', '--color-info'],
+      ['success', '--color-success'],
+      ['warning', '--color-warning'],
+      ['danger', '--color-error'],
+    ].map(
+      ([n, t]) =>
+        `  {name: ${JSON.stringify(n)}, token: ${JSON.stringify(t)}},`,
+    ),
+    '];',
+    '',
+    '/** The first family of the body and heading fonts, read from the theme. */',
+    'function FontNames() {',
+    '  const ref = React.useRef<HTMLDivElement>(null);',
+    "  const [fonts, setFonts] = React.useState('');",
+    '  React.useEffect(() => {',
+    '    if (!ref.current) return;',
+    '    const style = getComputedStyle(ref.current);',
+    "    const first = (token: string) => (style.getPropertyValue(token).split(',')[0] ?? '').replace(/[\"']/g, '').trim() || 'default';",
+    '    // A family the browser does not have measures as its fallback does.',
+    '    const GENERIC = /^(default|serif|sans-serif|monospace|cursive|fantasy|system-ui|ui-[a-z-]+|math|emoji|fangsong)$/i;',
+    '    const missing = (family: string) => {',
+    '      if (GENERIC.test(family)) return false;',
+    "      const ctx = document.createElement('canvas').getContext('2d');",
+    '      if (!ctx) return false;',
+    "      const sample = 'mmmmmmmmmwwwwwww1234567890';",
+    "      return ['monospace', 'serif'].every(fallback => {",
+    '        ctx.font = `48px ${fallback}`;',
+    '        const plain = ctx.measureText(sample).width;',
+    '        ctx.font = `48px "${family}", ${fallback}`;',
+    '        return ctx.measureText(sample).width === plain;',
+    '      });',
+    '    };',
+    '    const shown = (token: string) => { const f = first(token); return missing(f) ? `${f} (not installed here)` : f; };',
+    "    const write = () => setFonts(`Body: ${shown('--font-family-body')}. Headings: ${shown('--font-family-heading')}.`);",
+    '    write();',
+    '    // Read again when the theme changes live (a stylesheet or theme',
+    '    // update while the page is open) and when a font finishes loading.',
+    '    document.fonts?.ready.then(write);',
+    "    document.fonts?.addEventListener?.('loadingdone', write);",
+    '    let queued = 0;',
+    '    const soon = () => { if (!queued) queued = requestAnimationFrame(() => { queued = 0; write(); }); };',
+    '    const watch = new MutationObserver(soon);',
+    '    watch.observe(document.head, {childList: true, subtree: true, characterData: true});',
+    "    watch.observe(document.documentElement, {attributes: true, subtree: true, attributeFilter: ['style', 'class', 'data-theme']});",
+    '    return () => {',
+    '      watch.disconnect();',
+    '      cancelAnimationFrame(queued);',
+    "      document.fonts?.removeEventListener?.('loadingdone', write);",
+    '    };',
+    '  }, []);',
+    '  return (',
+    "    <div ref={ref} style={{color: 'var(--color-text-secondary)', fontSize: 13}}>",
+    '      {fonts}',
+    '    </div>',
+    '  );',
+    '}',
+    '',
+    'export default function OverviewPage() {',
+    '  return (',
+    '    <div className="tp-page">',
+    `      <style>{${JSON.stringify(css)}}</style>`,
+    '      <header className="tp-head">',
+    '        <div>',
+    `          <h1 style={{margin: 0, fontSize: 28}}>{${JSON.stringify(theme ? `${theme} at a glance` : 'The theme at a glance')}}</h1>`,
+    '          <FontNames />',
+    '        </div>',
+    '        <div className="tp-swatches">',
+    '          {SWATCHES.map(s => (',
+    '            <div key={s.name} className="tp-swatch" title={s.token}>',
+    '              <div className="tp-chip" style={{background: `var(${s.token})`}} />',
+    '              {s.name}',
+    '            </div>',
+    '          ))}',
+    // The Colors page is there only for a theme with generated colors.
+    ...(colors
+      ? [
+          '          <div className="tp-swatch" style={{alignSelf: \'center\'}}>Every shade: the Colors page</div>',
+        ]
+      : []),
+    '        </div>',
+    '      </header>',
+    body,
+    '    </div>',
+    '  );',
+    '}',
+    '',
+  ].join('\n');
+}
+
+/**
+ * The source of the preview's Colors page: each generated color's shades in
+ * light and dark, with the shade number, the hex, and the tokens that use
+ * it. The shades come from the theme's generated color module, so the page
+ * follows every change; `uses` and `seeds` are written in by the editor.
+ * With no generated colors, the page says how to set one.
+ * @param {{slug: string, module: string | null, seeds: Record<string, string>, uses: Record<string, Record<'light' | 'dark', Record<string, string[]>>>}} colors
+ *   `module`: the import of the generated colors from the page, or null.
+ * @returns {string}
+ */
+export function colorsPageSource({slug, module, seeds, uses}) {
+  const head = [
+    "// Written by `astryx experimental theme preview add`: the theme's generated colors.",
+    '// `astryx experimental theme editor set` rewrites it with every change.',
+    "'use client';",
+    '',
+  ];
+  const text = {color: 'var(--color-text-primary)'};
+  const page = {
+    padding: 32,
+    display: 'grid',
+    gap: 32,
+    fontFamily: 'var(--font-family-body)',
+    ...text,
+  };
+  if (!module)
+    return [
+      ...head,
+      '',
+      'export default function ColorsPage() {',
+      '  return (',
+      `    <div style={${JSON.stringify(page)}}>`,
+      '      <p style={{margin: 0}}>',
+      `        {${JSON.stringify(`This theme sets no color yet. Set one, and its shades show here: astryx experimental theme editor set ${slug} accent "#7c3aed"`)}}`,
+      '      </p>',
+      '    </div>',
+      '  );',
+      '}',
+      '',
+    ].join('\n');
+  return [
+    ...head,
+    `import {palette} from ${JSON.stringify(module)};`,
+    '',
+    "type Mode = 'light' | 'dark';",
+    'type Ramp = Readonly<Record<string, string>>;',
+    '',
+    `const SEEDS: Record<string, string> = ${JSON.stringify(seeds)};`,
+    '// The tokens that use each shade, by color, mode and shade.',
+    `const USES: Record<string, Partial<Record<Mode, Record<string, string[]>>>> = ${JSON.stringify(uses)};`,
+    'const COLORS = Object.entries(palette) as Array<[string, Readonly<Partial<Record<Mode, Ramp>>>]>;',
+    "const MODES: Mode[] = ['light', 'dark'];",
+    '',
+    'export default function ColorsPage() {',
+    '  return (',
+    `    <div style={${JSON.stringify(page)}}>`,
+    '      <div>',
+    '        <h1 style={{margin: 0, fontSize: 28}}>Colors</h1>',
+    "        <p style={{margin: '8px 0 0', color: 'var(--color-text-secondary)'}}>",
+    `          {${JSON.stringify(`Each color is generated from one seed, light and dark. An outlined shade is one a token uses. Change one with: astryx experimental theme editor set ${slug} accent <color>`)}}`,
+    '        </p>',
+    '      </div>',
+    '      {COLORS.map(([name, ramps]) => (',
+    "        <section key={name} style={{display: 'grid', gap: 12}}>",
+    "          <h2 style={{margin: 0, fontSize: 20, textTransform: 'capitalize'}}>",
+    '            {name}',
+    '            {SEEDS[name] ? (',
+    "              <span style={{marginLeft: 8, fontSize: 14, fontWeight: 400, textTransform: 'none', color: 'var(--color-text-secondary)'}}>",
+    '                from {SEEDS[name]}',
+    '              </span>',
+    '            ) : null}',
+    '          </h2>',
+    '          {MODES.filter(mode => ramps[mode]).map(mode => (',
+    "            <div key={mode} style={{display: 'grid', gap: 6}}>",
+    "              <div style={{fontSize: 13, fontWeight: 600, textTransform: 'capitalize'}}>{mode}</div>",
+    "              <div style={{display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 8}}>",
+    '                {Object.entries(ramps[mode] ?? {}).map(([shade, hex]) => {',
+    '                  const tokens = USES[name]?.[mode]?.[shade] ?? [];',
+    '                  return (',
+    '                    <div',
+    '                      key={shade}',
+    "                      title={tokens.join(', ')}",
+    '                      style={{',
+    "                        border: tokens.length ? '2px solid var(--color-text-primary)' : '1px solid var(--color-border)',",
+    '                        borderRadius: 8,',
+    "                        overflow: 'hidden',",
+    "                        background: 'var(--color-background-card)',",
+    '                      }}>',
+    '                      <div style={{background: hex, height: 48}} />',
+    "                      <div style={{padding: 6, fontSize: 11, lineHeight: 1.4, fontFamily: 'ui-monospace, monospace'}}>",
+    '                        <div>',
+    '                          <strong>{shade}</strong> {hex}',
+    '                        </div>',
+    '                        {tokens.map(t => (',
+    "                          <div key={t} style={{color: 'var(--color-text-secondary)', overflowWrap: 'anywhere'}}>",
+    '                            {t}',
+    '                          </div>',
+    '                        ))}',
+    '                      </div>',
+    '                    </div>',
+    '                  );',
+    '                })}',
+    '              </div>',
+    '            </div>',
+    '          ))}',
+    '        </section>',
+    '      ))}',
+    '    </div>',
+    '  );',
+    '}',
+    '',
+  ].join('\n');
+}
+
+/**
+ * The source of the preview route: an app shell with a side nav item per
+ * preview page, a top bar with the theme name and, with a theme, a
+ * light/dark/system switch, and the selected page in the content area. It is a normal page of
+ * the app, so it keeps the app's layout, global CSS and providers.
+ * @param {{pages: Array<{id: string, label: string, file: string}>, theme: {name: string, module: string, css: string[], mode?: 'system' | 'light' | 'dark'} | null, by?: string}} spec
+ *   `file` relative to the route folder, without extension; no theme: the
+ *   app's own theme. A theme with one mode starts in it, with no switch.
+ *   `by`: the command that wrote the route, for its header.
+ * @returns {string}
+ */
+export function previewRouteSource({
+  pages,
+  theme,
+  by = 'astryx experimental theme preview add',
+}) {
+  const name = theme?.name ?? 'app theme';
+  const oneMode = theme?.mode && theme.mode !== 'system' ? theme.mode : null;
+  const mode =
+    theme && !oneMode
+      ? [
+          '          <SegmentedControl label="Color mode" size="sm" value={mode} onChange={v => setMode(v as Mode)}>',
+          '            <SegmentedControlItem value="light" label="Light" />',
+          '            <SegmentedControlItem value="dark" label="Dark" />',
+          '            <SegmentedControlItem value="system" label="System" />',
+          '          </SegmentedControl>',
+        ]
+      : [];
+  // The frame fills the viewport with the theme's own page background, so
+  // no root-layout background shows at the edges or on overscroll.
+  const shell = [
+    '      <div style={FRAME}>',
+    '      <AppShell',
+    '        height="fill"',
+    '        topNav={',
+    `          <TopNav label="Theme preview" heading={<strong>{${JSON.stringify(name)}}</strong>} endContent={`,
+    ...(mode.length ? mode : ['          null']),
+    '          } />',
+    '        }',
+    '        sideNav={',
+    '          <SideNav>',
+    '            {PAGES.map(p => (',
+    // Only a plain left click switches the page in place; a modified or
+    // middle click opens the page's URL as a link does (a new tab).
+    '              <SideNavItem key={p.id} label={p.label} isSelected={p.id === current.id} href={`?page=${p.id}`} onClick={e => { if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; e.preventDefault(); go(p.id); }} />',
+    '            ))}',
+    '          </SideNav>',
+    '        }>',
+    '        {ready ? <current.Page /> : null}',
+    '      </AppShell>',
+    '      </div>',
+  ];
+  return [
+    `// Written by \`${by}\`. \`preview add\`, \`preview remove\` and`,
+    '// theme-preview.json keep it: edit the list with those commands, not by hand.',
+    "'use client';",
+    '',
+    "import * as React from 'react';",
+    "import {AppShell} from '@astryxdesign/core/AppShell';",
+    "import {SideNav, SideNavItem} from '@astryxdesign/core/SideNav';",
+    "import {TopNav} from '@astryxdesign/core/TopNav';",
+    ...(theme
+      ? [
+          // The mode switch only for a theme with both modes: an import the
+          // route does not draw fails an app with noUnusedLocals.
+          ...(mode.length
+            ? [
+                "import {SegmentedControl, SegmentedControlItem} from '@astryxdesign/core/SegmentedControl';",
+              ]
+            : []),
+          "import {Theme} from '@astryxdesign/core/theme';",
+          `import {${camelName(theme.name)}Theme as theme} from ${JSON.stringify(theme.module.replace(/\.js$/, ''))};`,
+          ...theme.css.map(c => `import ${JSON.stringify(c)};`),
+        ]
+      : []),
+    ...pages.map(
+      (p, i) => `import Page${i} from ${JSON.stringify(`./${p.file}`)};`,
+    ),
+    '',
+    ...(theme ? ["type Mode = 'light' | 'dark' | 'system';", ''] : []),
+    'const FRAME: React.CSSProperties = {',
+    "  position: 'fixed',",
+    '  inset: 0,',
+    "  overflow: 'auto',",
+    "  overscrollBehavior: 'none',",
+    "  background: 'var(--color-background-body)',",
+    "  color: 'var(--color-text-primary)',",
+    '};',
+    '',
+    'const PAGES = [',
+    ...pages.map(
+      (p, i) =>
+        `  {id: ${JSON.stringify(p.id)}, label: ${JSON.stringify(p.label)}, Page: Page${i}},`,
+    ),
+    '];',
+    '',
+    'export default function ThemePreviewPage() {',
+    '  const [page, setPage] = React.useState(PAGES[0]?.id);',
+    // Each page has its own URL (?page=<id>), so a link, a reload, the back
+    // button or a screenshot reaches any page; the page renders after mount.
+    "  const fromUrl = () => new URLSearchParams(window.location.search).get('page');",
+    '  React.useEffect(() => {',
+    // A URL with no (or an unknown) ?page shows the first page, as a reload does.
+    '    const sync = () => { const id = fromUrl(); setPage(id && PAGES.some(p => p.id === id) ? id : PAGES[0]?.id); };',
+    '    sync();',
+    "    window.addEventListener('popstate', sync);",
+    "    return () => window.removeEventListener('popstate', sync);",
+    '  }, []);',
+    '  const go = (id: string) => {',
+    '    setPage(id);',
+    '    const url = new URL(window.location.href);',
+    "    url.searchParams.set('page', id);",
+    "    window.history.pushState(null, '', url);",
+    '  };',
+    // Pages render only in the browser: some components crash a server
+    // render, and Next prerenders a client page's first state.
+    '  const [ready, setReady] = React.useState(false);',
+    '  React.useEffect(() => setReady(true), []);',
+    ...(theme
+      ? [
+          oneMode
+            ? `  const mode: Mode = ${JSON.stringify(oneMode)};`
+            : "  const [mode, setMode] = React.useState<Mode>('system');",
+        ]
+      : []),
+    // The route always has a page; the cast keeps noUncheckedIndexedAccess apps building.
+    '  const current = (PAGES.find(p => p.id === page) ?? PAGES[0]) as (typeof PAGES)[number];',
+    '  return (',
+    ...(theme
+      ? ['    <Theme theme={theme} mode={mode}>', ...shell, '    </Theme>']
+      : ['    <>', ...shell, '    </>']),
+    '  );',
+    '}',
+    '',
+  ].join('\n');
+}
+
+/** @param {string} slug */
+const camelName = camel;
+
+/**
+ * A PNG of an HTML file, with a Playwright the project has installed, else
+ * a Chrome or Chromium found on the machine. Not ok with a reason when
+ * neither is there, or when one is there and fails: the reason then names
+ * its error.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} html absolute
+ * @param {string} png absolute
+ * @param {'light' | 'dark'} mode
+ * @returns {Promise<{ok: true, file: string, cut?: boolean} | {ok: false, reason: string, stopped?: string}>} `cut` when the picture is of the window, not the whole page
+ */
+export async function screenshot(project, html, png, mode) {
+  /** What was found and why it could not take the picture. @type {string[]} */
+  const failed = [];
+  /** The first line of an error, with no path of this machine. @param {unknown} e */
+  const firstLine = e =>
+    String(/** @type {any} */ (e)?.message ?? e ?? '')
+      .split('\n')
+      .map(l => l.trim())
+      .find(Boolean)
+      ?.split(project.cwd)
+      .join('.') ?? 'it stopped with no message';
+  for (const pkg of ['playwright', 'playwright-core']) {
+    /** @type {string} */
+    let entry;
+    try {
+      entry = project.req.resolve(pkg);
+    } catch {
+      continue;
+    }
+    try {
+      const pw = await import(pathToFileURL(entry).href);
+      const chromium = pw.chromium ?? pw.default?.chromium;
+      const browser = await chromium.launch(
+        chromeBinary() ? {executablePath: chromeBinary()} : {},
+      );
+      try {
+        const page = await browser.newPage({
+          viewport: {width: 1280, height: 900},
+          colorScheme: mode,
+        });
+        await page.goto(pathToFileURL(html).href, {waitUntil: 'load'});
+        await page.screenshot({path: png, fullPage: true});
+      } finally {
+        await browser.close();
+      }
+      return {ok: true, file: shown(project.cwd, png)};
+    } catch (e) {
+      // This Playwright could not launch its browser: try Chrome directly.
+      failed.push(`${pkg}: ${firstLine(e)}`);
+    }
+  }
+  const chrome = chromeBinary();
+  if (chrome) {
+    // Run without blocking, so a stop (Ctrl-C, SIGTERM) reaches this
+    // process while the browser runs: the browser is stopped with it, and
+    // the stop is reported as a stop, never as a browser that failed.
+    const r = await runBrowser(chrome, [
+      '--headless=new',
+      '--disable-gpu',
+      '--no-sandbox',
+      '--hide-scrollbars',
+      `--screenshot=${png}`,
+      '--window-size=1280,2400',
+      ...(mode === 'dark' ? ['--force-dark-mode'] : []),
+      pathToFileURL(html).href,
+    ]);
+    if (r.stoppedBy)
+      return {
+        ok: false,
+        stopped: r.stoppedBy,
+        reason: `the pictures were stopped (${r.stoppedBy}) before the browser finished`,
+      };
+    // The editor's own bound, not an outside kill: said so, with a retry.
+    if (r.timedOut)
+      return {
+        ok: false,
+        reason: `the browser (${chrome}) did not finish the picture within 60 seconds, so it was stopped; run the command again, or open the .html beside the picture to look without one`,
+      };
+    // A picture folder it cannot write: the folder, never the browser.
+    try {
+      fs.accessSync(path.dirname(png), fs.constants.W_OK);
+    } catch (e) {
+      return {
+        ok: false,
+        reason: `${shown(project.cwd, path.dirname(png))}/ cannot be written (${/** @type {any} */ (e)?.code ?? 'no access'}), so no picture was taken; fix its permissions, then run the command again`,
+      };
+    }
+    // Chrome alone takes the window, not the whole page.
+    if (r.status === 0 && fs.existsSync(png))
+      return {ok: true, file: shown(project.cwd, png), cut: true};
+    failed.push(
+      `${chrome}: ${firstLine(
+        r.error ??
+          // A browser stopped by a signal says so first: its stderr opens
+          // with unrelated noise (dbus) on Linux.
+          (r.signal
+            ? `stopped by ${r.signal}`
+            : meaningfulLine(r.stderr) ||
+              `exit ${r.status}, and no picture was written`),
+      )}`,
+    );
+  }
+  if (failed.length)
+    return {
+      ok: false,
+      reason: `A browser was found, but it could not take the picture (${failed.join('; ')}). Give Playwright its browser (npx playwright install chromium), or check that ${chrome ?? 'Google Chrome or Chromium'} starts on this machine. The HTML preview needs neither.`,
+    };
+  return {
+    ok: false,
+    reason: `No browser was found to take the picture. Install Playwright with its browser (${installLine(project.cwd, ['playwright'])}, then npx playwright install chromium), or install Google Chrome or Chromium. The HTML preview needs neither.`,
+  };
+}
+
+/** A Chrome or Chromium on this machine, at a usual place or on PATH. */
+function chromeBinary() {
+  const names = [
+    'google-chrome',
+    'google-chrome-stable',
+    'chromium',
+    'chromium-browser',
+    'chrome',
+  ];
+  const fixed = [
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+  ];
+  for (const f of fixed) if (fs.existsSync(f)) return f;
+  for (const dir of (process.env.PATH ?? '').split(path.delimiter)) {
+    for (const n of names) {
+      const f = path.join(dir, n);
+      if (dir && fs.existsSync(f)) return f;
+    }
+  }
+  return null;
+}
+
+/** The first line of every file the editor writes into a theme's app copy. */
+export {APP_COPY_MARK} from './_marks.mjs';
+import {APP_COPY_MARK, appCopyMark} from './_marks.mjs';
+import {builtColorMode} from '../../foundation/discovery/theme-imports.mjs';
+
+/**
+ * The font stylesheets a theme's app copy imports, from the fonts the theme
+ * loads now (an installed font package, the base theme's fonts).
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {string[]}
+ */
+export function copyFontsCss(ctx, slug, data) {
+  return themeImports(
+    ctx,
+    slug,
+    data,
+    path.join(ctx.project.cwd, 'src', 'themes', slug),
+  ).css.slice(1);
+}
+
+/**
+ * The app's copy of an editor theme: a standard local theme in
+ * src/themes/<theme>/ (a descriptor, a source that re-exports the built
+ * module, the built module, its stylesheet and font stylesheet), the shape
+ * `astryx theme add <theme>` reads, so the theme goes into the app with the
+ * stable theme commands. It is written again after every build of the
+ * theme, never edited by hand. A folder there that is not the editor's own
+ * copy is left alone: returns null then, else the folder.
+ * The built module and stylesheet are written whole: a local theme's source
+ * may import only files inside its own folder.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {string | null}
+ */
+export function writeAppCopy(ctx, slug, data) {
+  return writeAppCopyAt(ctx.project.cwd, slug, copyFontsCss(ctx, slug, data));
+}
+
+/**
+ * The files of a theme's app copy as the editor would write them now, by
+ * name; null with no build to copy. Font stylesheets as given, or null for
+ * the copy's own.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {string[] | null} fontsCss
+ * @returns {Record<string, string> | null}
+ */
+function appCopyFiles(cwd, slug, fontsCss) {
+  const f = themeFiles(cwd, slug);
+  const dir = path.join(cwd, 'src', 'themes', slug);
+  const name = `${camel(slug)}Theme`;
+  if (!fs.existsSync(f.js) || !fs.existsSync(f.css)) return null;
+  const source = `src/themes/${slug}/${name}.ts`;
+  const head = (/** @type {string} */ open, /** @type {string} */ close) =>
+    `${open} ${appCopyMark(slug)} after every build of themes/${slug}/; do not edit it here. Change the theme with the editor. ${close}\n`;
+  const keptFonts = path.join(dir, `${slug}.fonts.css`);
+  const fonts =
+    fontsCss ??
+    (fs.existsSync(keptFonts)
+      ? [
+          ...fs.readFileSync(keptFonts, 'utf8').matchAll(/@import "([^"]+)";/g),
+        ].map(m => m[1])
+      : []);
+  // A built file as `theme build` of the copy's source writes it: the
+  // editor's build of the same theme, with the header naming that source.
+  const asBuilt = (/** @type {string} */ text) =>
+    text
+      .replace(/^( \* Source: ).*$/m, `$1${source}`)
+      .replace(/^( \* Command: ).*$/m, `$1astryx theme build ${source}`);
+  /** @type {Record<string, string>} */
+  const built = {};
+  for (const ext of APP_COPY_BUILT) {
+    const from = path.join(f.dir, `${slug}${ext}`);
+    if (fs.existsSync(from))
+      built[`${slug}${ext}`] = asBuilt(fs.readFileSync(from, 'utf8'));
+  }
+  // A light-only or dark-only theme's build exports its one color mode
+  // (`colorModes`); the copy's source re-exports it, so a build of the copy
+  // writes it too and `theme add` reads it.
+  const oneMode = builtColorMode(f.js).mode;
+  const files = {
+    [`${name}.doc.mjs`]: `${head('//', '')}\n/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {\n  type: 'theme',\n  name: ${JSON.stringify(slug)},\n  displayName: ${JSON.stringify(slug)},\n  description: ${JSON.stringify(`The ${slug} theme, made with the theme editor (themes/${slug}/).`)},\n  maintained: false,\n};\n`,
+    [`${name}.ts`]: `${head('//', '')}export {${name}${oneMode ? ', colorModes' : ''}} from './${slug}';\n`,
+    ...built,
+    // Always there, so the app theme module's import of it holds when the
+    // theme's fonts change (none: a comment only).
+    [`${slug}.fonts.css`]: fonts.length
+      ? `${head('/*', '*/')}${fonts.map(c => `@import ${JSON.stringify(c)};`).join('\n')}\n`
+      : `${head('/*', '*/')}/* No font stylesheets: the theme uses fonts the system has. */\n`,
+  };
+  return files;
+}
+
+/**
+ * Why a theme's app copy is behind its build, or null when it is current:
+ * something in its way (appCopyStale), a copy file missing, or a file
+ * whose content is not what the editor would write now.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {string[] | null} [fontsCss] the font stylesheets the copy should
+ *   import now (null: the copy's own)
+ * @returns {string | null}
+ */
+export function appCopyBehind(cwd, slug, fontsCss = null) {
+  const stale = appCopyStale(cwd, slug).appCopyStale;
+  if (stale) return stale;
+  const files = appCopyFiles(cwd, slug, fontsCss);
+  if (!files) return null;
+  const dir = path.join(cwd, 'src', 'themes', slug);
+  if (!fs.existsSync(dir))
+    return `the app copy in src/themes/${slug}/ is gone; the editor writes it again`;
+  for (const [n, text] of Object.entries(files)) {
+    /** @type {string} */
+    let now;
+    try {
+      now = fs.readFileSync(path.join(dir, n), 'utf8');
+    } catch {
+      return `src/themes/${slug}/${n} is missing from the app copy`;
+    }
+    // Line endings as a checkout writes them (CRLF on Windows) are the
+    // same content, as the outputs check reads them.
+    const lf = (/** @type {string} */ x) => x.replace(/\r\n/g, '\n');
+    if (lf(now) !== lf(text))
+      return `src/themes/${slug}/${n} is not the current build of themes/${slug}/`;
+  }
+  return null;
+}
+
+/**
+ * {@link writeAppCopy} with the font stylesheets given, or null to keep the
+ * copy's own (a compile, which changes no setting).
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {string[] | null} fontsCss
+ * @returns {string | null}
+ */
+export function writeAppCopyAt(cwd, slug, fontsCss) {
+  const f = themeFiles(cwd, slug);
+  const dir = path.join(cwd, 'src', 'themes', slug);
+  const name = `${camel(slug)}Theme`;
+  const first = !fs.existsSync(path.join(dir, `${name}.doc.mjs`));
+  if (!fs.existsSync(f.js) || !fs.existsSync(f.css)) return null;
+  // Only the editor's own copy is written over.
+  if (appCopyBlocker(cwd, slug) !== null) return null;
+  const files = appCopyFiles(cwd, slug, fontsCss);
+  if (!files) return null;
+  const failKey = `${path.resolve(cwd)}\0${slug}`;
+  try {
+    fs.mkdirSync(dir, {recursive: true});
+    for (const [n, text] of Object.entries(files)) {
+      const file = path.join(dir, n);
+      if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === text)
+        continue;
+      writeWhole(file, text);
+    }
+    // A copy's own file this build no longer writes goes; anything else in
+    // the folder (yours, or the system's) stays as it is.
+    for (const n of fs.readdirSync(dir))
+      if (appCopyNames(slug).has(n) && !(n in files))
+        fs.rmSync(path.join(dir, n), {force: true});
+  } catch (e) {
+    // A copy that cannot be written is said, with the system's reason;
+    // the change itself stands.
+    const code = /** @type {any} */ (e)?.code ?? 'error';
+    // The folder that failed: the copy's, or a parent it could not be
+    // made in.
+    const failed = /** @type {any} */ (e)?.path
+      ? path.resolve(String(/** @type {any} */ (e).path))
+      : dir;
+    const at = fs.existsSync(failed) ? failed : path.dirname(failed);
+    const rel = path.relative(cwd, at).split(path.sep).join('/');
+    COPY_FAILED.set(
+      failKey,
+      code === 'EACCES' || code === 'EPERM' || code === 'EROFS'
+        ? `${rel} is not writable (${code})`
+        : code === 'ENOSPC'
+          ? `the disk is full (${code})`
+          : `${rel} could not be written (${code})`,
+    );
+    return null;
+  }
+  COPY_FAILED.delete(failKey);
+  // The first write is named in the command's result; later ones are not.
+  if (first)
+    FIRST_COPIES.set(
+      `${path.resolve(cwd)}\0${slug}`,
+      Object.keys(files)
+        .sort()
+        .map(n =>
+          path.relative(cwd, path.join(dir, n)).split(path.sep).join('/'),
+        ),
+    );
+  return dir;
+}
+
+/**
+ * The note for a copy a file of yours keeps from being written, as a
+ * result field: `{appCopyStale}` when one does, else nothing.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {{appCopyStale?: string}}
+ */
+export function appCopyStale(cwd, slug) {
+  const blocker =
+    appCopyBlocker(cwd, slug) ??
+    COPY_FAILED.get(`${path.resolve(cwd)}\0${slug}`) ??
+    null;
+  return blocker
+    ? {
+        appCopyStale: `the app copy in src/themes/${slug}/ was not updated: ${blocker}. The app keeps the theme as it was until that is out of the way; then any set or show writes it.`,
+      }
+    : {};
+}
+
+/**
+ * The names of a theme's app copy files.
+ * @param {string} slug
+ * @returns {Set<string>}
+ */
+function appCopyNames(slug) {
+  const name = `${camel(slug)}Theme`;
+  return new Set([
+    `${name}.doc.mjs`,
+    `${name}.ts`,
+    `${slug}.fonts.css`,
+    ...APP_COPY_BUILT.map(ext => `${slug}${ext}`),
+  ]);
+}
+
+/**
+ * Why the editor will not write a theme's app copy, or null when it will.
+ * Only a file of yours AT one of the copy's names stops it: a descriptor,
+ * source or font stylesheet without the editor's mark, or any copy file
+ * while the descriptor is not the editor's. Other files there (a note, a
+ * swap file, desktop.ini) are left as they are and the copy is written
+ * around them. Built bytes are not compared, so a stable rebuild of the
+ * copy leaves it the editor's. The one test the copy's writer, the change
+ * results and `wiring` use. Returns the file in the way.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {string | null}
+ */
+export function appCopyBlocker(cwd, slug) {
+  const dir = path.join(cwd, 'src', 'themes', slug);
+  const name = `${camel(slug)}Theme`;
+  const rel = path.relative(cwd, dir).split(path.sep).join('/');
+  // Nothing is written through a link on the way from the app to the copy
+  // (src/, src/themes/, the copy's folder), as for themes/.
+  for (const part of ['src', 'src/themes', rel]) {
+    try {
+      const st = fs.lstatSync(path.join(cwd, part));
+      if (st.isSymbolicLink())
+        return `${part} is a link (to ${fs.readlinkSync(path.join(cwd, part))}), and the editor writes nothing through a link`;
+      // A file where a folder on the way goes: nothing is half-written.
+      if (!st.isDirectory())
+        return part === rel
+          ? `${rel} is a file, where the copy's folder goes`
+          : `${part} is a file, where a folder on the way to the copy goes`;
+    } catch {
+      break;
+    }
+  }
+  try {
+    if (!fs.lstatSync(dir).isDirectory())
+      return `${rel} is a file, where the copy's folder goes`;
+  } catch {
+    // Not there yet: the copy makes it.
+  }
+  if (folderIsEmpty(dir)) return null;
+  /** @type {string[]} */
+  let names;
+  try {
+    names = fs.readdirSync(dir);
+  } catch (e) {
+    return `${rel} cannot be read (${/** @type {any} */ (e)?.code ?? 'error'})`;
+  }
+  /** @param {string} n */
+  const marked = n => {
+    try {
+      return fs.readFileSync(path.join(dir, n), 'utf8').includes(APP_COPY_MARK);
+    } catch {
+      return false;
+    }
+  };
+  const own = appCopyNames(slug);
+  const present = names.filter(n => own.has(n));
+  // A link at a copy name is never written through or replaced.
+  for (const n of present)
+    try {
+      const st = fs.lstatSync(path.join(dir, n));
+      if (st.isSymbolicLink())
+        return `${rel}/${n} is a link (to ${fs.readlinkSync(path.join(dir, n))}), at a name the copy uses, and the editor writes nothing through a link`;
+      if (st.isDirectory())
+        return `${rel}/${n} is a folder, at a name the copy uses for a file`;
+    } catch {
+      // Gone since it was listed.
+    }
+  // The copy is the editor's when any of its marked files carries the
+  // mark (one of them deleted is written back); then only a marked name
+  // without the mark is yours.
+  const markedNames = [`${name}.doc.mjs`, `${name}.ts`, `${slug}.fonts.css`];
+  // A build output of the copy's source carries the build's own header.
+  const generated = (/** @type {string} */ n) => {
+    try {
+      return /@generated by `astryx theme build`/.test(
+        fs.readFileSync(path.join(dir, n), 'utf8').slice(0, 600),
+      );
+    } catch {
+      return false;
+    }
+  };
+  const ours =
+    markedNames.some(n => present.includes(n) && marked(n)) ||
+    (present.length > 0 &&
+      present.every(n => !markedNames.includes(n) && generated(n)));
+  const foreign = ours
+    ? present.find(n => markedNames.includes(n) && !marked(n))
+    : present[0];
+  return foreign
+    ? `${rel}/${foreign} is yours, at a name the copy uses, and the editor never writes over your files`
+    : null;
+}
+
+/** The build outputs of a theme, by their ending after `<theme>`. */
+const APP_COPY_BUILT = ['.css', '.css.d.ts', '.js', '.d.ts', '.variants.d.ts'];
+
+/** Why the last write of a theme's app copy failed, by app and theme. @type {Map<string, string>} */
+const COPY_FAILED = new Map();
+
+/** App copies written for the first time in this process, by app and theme. @type {Map<string, string[]>} */
+const FIRST_COPIES = new Map();
+
+/**
+ * The files of a theme's app copy when this command wrote it for the first
+ * time (then forgotten, so one result names them), else null.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {string[] | null}
+ */
+export function takeFirstAppCopy(cwd, slug) {
+  const key = `${path.resolve(cwd)}\0${slug}`;
+  const wrote = FIRST_COPIES.get(key) ?? null;
+  FIRST_COPIES.delete(key);
+  return wrote;
+}
+
+/**
+ * Run a browser for a picture without blocking this process: a stop that
+ * reaches it (SIGINT, SIGTERM) stops the browser too, and is reported.
+ * Bounded to 60 seconds, as a picture run always was.
+ * @param {string} bin
+ * @param {string[]} args
+ * @param {number} [bound] milliseconds before the browser is stopped
+ * @returns {Promise<{status: number | null, signal: string | null, stderr: string, error?: Error, stoppedBy?: string, timedOut?: boolean}>}
+ */
+export function runBrowser(bin, args, bound = 60_000) {
+  return new Promise(resolve => {
+    /** @type {string | undefined} */
+    let stoppedBy;
+    let stderr = '';
+    // A profile folder of its own, removed on every way out (done, failed,
+    // timed out, stopped): Chrome leaves its org.chromium.* folders in the
+    // system temp folder otherwise.
+    /** @type {string | null} */
+    let profile = null;
+    try {
+      profile = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-chrome-'));
+    } catch {
+      // No temp folder: Chrome's own default.
+    }
+    const dropProfile = () => {
+      if (profile)
+        try {
+          fs.rmSync(profile, {recursive: true, force: true});
+        } catch {
+          // Gone already.
+        }
+    };
+    process.once('exit', dropProfile);
+    const child = spawn(
+      bin,
+      [...(profile ? [`--user-data-dir=${profile}`] : []), ...args],
+      {
+        stdio: ['ignore', 'ignore', 'pipe'],
+        env: profile ? {...process.env, TMPDIR: profile} : process.env,
+        // A group of its own, so a stop takes Chrome's helper processes
+        // with it, before its profile folder is removed.
+        detached: process.platform !== 'win32',
+      },
+    );
+    const killAll = () => {
+      try {
+        if (process.platform !== 'win32' && child.pid)
+          process.kill(-child.pid, 'SIGKILL');
+        else child.kill('SIGKILL');
+      } catch {
+        child.kill('SIGKILL');
+      }
+    };
+    child.stderr?.setEncoding('utf8');
+    child.stderr?.on('data', d => {
+      if (stderr.length < 8000) stderr += d;
+    });
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      killAll();
+    }, bound);
+    /** @param {NodeJS.Signals} sig */
+    const onStop = sig => {
+      stoppedBy = sig;
+      killAll();
+      dropProfile();
+      // Nothing else listening: the stop ends this process, as it would
+      // have without this listener.
+      if (process.listenerCount(sig) === 0) {
+        process.removeListener('SIGINT', onStop);
+        process.removeListener('SIGTERM', onStop);
+        process.kill(process.pid, sig);
+      }
+    };
+    process.once('SIGINT', onStop);
+    process.once('SIGTERM', onStop);
+    const done = (/** @type {any} */ out) => {
+      clearTimeout(timer);
+      dropProfile();
+      process.removeListener('exit', dropProfile);
+      process.removeListener('SIGINT', onStop);
+      process.removeListener('SIGTERM', onStop);
+      resolve({
+        ...out,
+        stderr,
+        ...(stoppedBy ? {stoppedBy} : {}),
+        ...(timedOut ? {timedOut} : {}),
+      });
+    };
+    child.on('error', error => done({status: null, signal: null, error}));
+    child.on('close', (status, signal) => done({status, signal}));
+  });
+}
+
+/**
+ * The first stderr line that says something about the picture: Chrome's
+ * startup warnings (dbus, GPU, sandbox notices) come first on Linux and
+ * say nothing about why no picture was written.
+ * @param {string} text
+ */
+export function meaningfulLine(text) {
+  const lines = String(text ?? '')
+    .split(/\r?\n/)
+    .map(l => l.trim())
+    .filter(Boolean);
+  return (
+    lines.find(
+      l =>
+        !/dbus|bus\.cc|gpu_|gl_|sandbox|fontconfig|crashpad|DevTools listening|WARNING:/i.test(
+          l,
+        ),
+    ) ??
+    lines[0] ??
+    ''
+  );
+}

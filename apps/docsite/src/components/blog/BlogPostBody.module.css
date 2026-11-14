@@ -8,3 +8,8 @@
 .body :is(h1, h2, h3, h4, h5, h6)[id] {
   scroll-margin-top: calc(var(--appshell-header-height, 0px) + 16px);
 }
+
+/* Image-only Markdown blocks have no paragraph margin between them. */
+.body img + img {
+  margin-block-start: var(--spacing-6);
+}

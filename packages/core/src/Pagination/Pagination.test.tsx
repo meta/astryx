@@ -20,6 +20,7 @@ import {
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Pagination, generatePageRange} from './Pagination';
+import {FormLayout} from '../FormLayout/FormLayout';
 import {InternationalizationProvider} from '../i18n';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 
@@ -430,10 +431,10 @@ describe('Pagination', () => {
         );
         expect(
           screen.getByRole('button', {name: 'Go to first page'}),
-        ).toBeDisabled();
+        ).toHaveAttribute('aria-disabled', 'true');
         expect(
           screen.getByRole('button', {name: 'Go to last page'}),
-        ).not.toBeDisabled();
+        ).not.toHaveAttribute('aria-disabled');
 
         rerender(
           <Pagination
@@ -446,10 +447,10 @@ describe('Pagination', () => {
         );
         expect(
           screen.getByRole('button', {name: 'Go to first page'}),
-        ).not.toBeDisabled();
+        ).not.toHaveAttribute('aria-disabled');
         expect(
           screen.getByRole('button', {name: 'Go to last page'}),
-        ).toBeDisabled();
+        ).toHaveAttribute('aria-disabled', 'true');
       });
 
       it('omits first/last when the total page count is unknown', async () => {
@@ -548,8 +549,8 @@ describe('Pagination', () => {
           variant="dots"
         />,
       );
-      const group = screen.getByRole('group', {name: 'Page indicators'});
-      expect(within(group).getAllByRole('button')).toHaveLength(5);
+      const group = screen.getByRole('radiogroup', {name: 'Page indicators'});
+      expect(within(group).getAllByRole('radio')).toHaveLength(5);
     });
 
     it('treats NaN pageSize as the default', () => {
@@ -606,28 +607,30 @@ describe('Pagination', () => {
           variant="dots"
         />,
       );
-      const group = screen.getByRole('group', {name: 'Page indicators'});
-      const dots = within(group).getAllByRole('button');
+      const group = screen.getByRole('radiogroup', {name: 'Page indicators'});
+      const dots = within(group).getAllByRole('radio');
       expect(dots).toHaveLength(5);
-    });
-
-    it('marks active dot with aria-current', () => {
-      render(
-        <Pagination
-          page={3}
-          onChange={() => {}}
-          totalPages={5}
-          variant="dots"
-        />,
-      );
-      const activeDot = screen.getByRole('button', {name: 'Go to page 3'});
-      expect(activeDot).toHaveAttribute('aria-current', 'page');
     });
 
     // -------------------------------------------------------------------------
     // Keyboard navigation (roving tabindex + arrow keys via useListFocus).
     // Selection follows focus: arrow/Home/End move focus and select that page.
     // -------------------------------------------------------------------------
+
+    it('does not choose a page on the press: the browser keeps focus off the dot until the click', () => {
+      const onChange = vi.fn();
+      render(
+        <Pagination
+          page={1}
+          onChange={onChange}
+          totalPages={3}
+          variant="dots"
+        />,
+      );
+      const dot = screen.getByRole('radio', {name: 'Page 2'});
+      expect(fireEvent.mouseDown(dot)).toBe(false);
+      expect(onChange).not.toHaveBeenCalled();
+    });
 
     it('uses roving tabindex — active dot has tabIndex 0, others -1', () => {
       render(
@@ -638,15 +641,18 @@ describe('Pagination', () => {
           variant="dots"
         />,
       );
-      expect(
-        screen.getByRole('button', {name: 'Go to page 2'}),
-      ).toHaveAttribute('tabindex', '0');
-      expect(
-        screen.getByRole('button', {name: 'Go to page 1'}),
-      ).toHaveAttribute('tabindex', '-1');
-      expect(
-        screen.getByRole('button', {name: 'Go to page 3'}),
-      ).toHaveAttribute('tabindex', '-1');
+      expect(screen.getByRole('radio', {name: 'Page 2'})).toHaveAttribute(
+        'tabindex',
+        '0',
+      );
+      expect(screen.getByRole('radio', {name: 'Page 1'})).toHaveAttribute(
+        'tabindex',
+        '-1',
+      );
+      expect(screen.getByRole('radio', {name: 'Page 3'})).toHaveAttribute(
+        'tabindex',
+        '-1',
+      );
     });
 
     it('ArrowRight moves focus to the next dot and selects it', async () => {
@@ -660,10 +666,10 @@ describe('Pagination', () => {
           variant="dots"
         />,
       );
-      screen.getByRole('button', {name: 'Go to page 2'}).focus();
+      screen.getByRole('radio', {name: 'Page 2'}).focus();
       await user.keyboard('{ArrowRight}');
       expect(onChange).toHaveBeenCalledWith(3);
-      expect(screen.getByRole('button', {name: 'Go to page 3'})).toHaveFocus();
+      expect(screen.getByRole('radio', {name: 'Page 3'})).toHaveFocus();
     });
 
     it('ArrowLeft moves focus to the previous dot and selects it', async () => {
@@ -677,10 +683,10 @@ describe('Pagination', () => {
           variant="dots"
         />,
       );
-      screen.getByRole('button', {name: 'Go to page 3'}).focus();
+      screen.getByRole('radio', {name: 'Page 3'}).focus();
       await user.keyboard('{ArrowLeft}');
       expect(onChange).toHaveBeenCalledWith(2);
-      expect(screen.getByRole('button', {name: 'Go to page 2'})).toHaveFocus();
+      expect(screen.getByRole('radio', {name: 'Page 2'})).toHaveFocus();
     });
 
     it('Home selects the first page, End the last', async () => {
@@ -694,10 +700,10 @@ describe('Pagination', () => {
           variant="dots"
         />,
       );
-      screen.getByRole('button', {name: 'Go to page 3'}).focus();
+      screen.getByRole('radio', {name: 'Page 3'}).focus();
       await user.keyboard('{Home}');
       expect(onChange).toHaveBeenCalledWith(1);
-      expect(screen.getByRole('button', {name: 'Go to page 1'})).toHaveFocus();
+      expect(screen.getByRole('radio', {name: 'Page 1'})).toHaveFocus();
 
       onChange.mockClear();
       rerender(
@@ -708,10 +714,10 @@ describe('Pagination', () => {
           variant="dots"
         />,
       );
-      screen.getByRole('button', {name: 'Go to page 3'}).focus();
+      screen.getByRole('radio', {name: 'Page 3'}).focus();
       await user.keyboard('{End}');
       expect(onChange).toHaveBeenCalledWith(5);
-      expect(screen.getByRole('button', {name: 'Go to page 5'})).toHaveFocus();
+      expect(screen.getByRole('radio', {name: 'Page 5'})).toHaveFocus();
     });
 
     it('wraps from the last dot to the first with ArrowRight', async () => {
@@ -725,10 +731,10 @@ describe('Pagination', () => {
           variant="dots"
         />,
       );
-      screen.getByRole('button', {name: 'Go to page 4'}).focus();
+      screen.getByRole('radio', {name: 'Page 4'}).focus();
       await user.keyboard('{ArrowRight}');
       expect(onChange).toHaveBeenCalledWith(1);
-      expect(screen.getByRole('button', {name: 'Go to page 1'})).toHaveFocus();
+      expect(screen.getByRole('radio', {name: 'Page 1'})).toHaveFocus();
     });
 
     it('wraps from the first dot to the last with ArrowLeft', async () => {
@@ -742,10 +748,10 @@ describe('Pagination', () => {
           variant="dots"
         />,
       );
-      screen.getByRole('button', {name: 'Go to page 1'}).focus();
+      screen.getByRole('radio', {name: 'Page 1'}).focus();
       await user.keyboard('{ArrowLeft}');
       expect(onChange).toHaveBeenCalledWith(4);
-      expect(screen.getByRole('button', {name: 'Go to page 4'})).toHaveFocus();
+      expect(screen.getByRole('radio', {name: 'Page 4'})).toHaveFocus();
     });
 
     it('does not navigate with arrow keys when disabled', async () => {
@@ -760,7 +766,7 @@ describe('Pagination', () => {
           isDisabled
         />,
       );
-      const dot = screen.getByRole('button', {name: 'Go to page 2'});
+      const dot = screen.getByRole('radio', {name: 'Page 2'});
       // spec:AST-085 FR1: the active dot keeps its tab stop, exposed as disabled.
       expect(dot).not.toHaveAttribute('disabled');
       expect(dot).toHaveAttribute('aria-disabled', 'true');
@@ -857,6 +863,28 @@ describe('Pagination', () => {
       expect(box).toHaveAttribute('aria-valuemax', '10');
     });
 
+    it('keeps its page box at commit timing inside a blur-or-enter FormLayout: nothing while typing, the rejection at Enter', () => {
+      render(
+        <FormLayout defaultEntryErrorBehavior="blur-or-enter">
+          <Pagination
+            page={3}
+            onChange={() => {}}
+            totalItems={100}
+            pageSize={10}
+            variant="input"
+          />
+        </FormLayout>,
+      );
+      const box = screen.getByRole('spinbutton', {name: 'Go to page'});
+      fireEvent.focus(box);
+      fireEvent.change(box, {target: {value: '2.5'}});
+      expect(box).not.toHaveAttribute('aria-invalid');
+      fireEvent.keyDown(box, {key: 'Enter'});
+      expect(box).toHaveAttribute('aria-invalid', 'true');
+      fireEvent.change(box, {target: {value: '2'}});
+      expect(box).not.toHaveAttribute('aria-invalid');
+    });
+
     it('commits a typed page on Enter and clamps an over-range entry', async () => {
       const user = userEvent.setup();
       const onChange = vi.fn();
@@ -902,7 +930,7 @@ describe('Pagination', () => {
       expect(onChange).toHaveBeenCalledWith(5);
     });
 
-    it('reverts to the current page on an invalid or empty entry', async () => {
+    it('keeps an invalid entry with its message and reverts an empty one', async () => {
       const user = userEvent.setup();
       const onChange = vi.fn();
       render(
@@ -915,19 +943,32 @@ describe('Pagination', () => {
         />,
       );
       const box = screen.getByRole('spinbutton', {name: 'Go to page'});
-      // A number input rejects non-numeric characters, so an invalid entry
-      // never navigates and reverts to the committed page on blur.
+      // An invalid entry never navigates. Blur keeps it with its message.
       await user.clear(box);
       await user.type(box, 'abc');
       await user.tab();
       expect(onChange).not.toHaveBeenCalled();
-      expect(box).toHaveValue('3');
+      expect(box).toHaveValue('abc');
+      expect(box).toHaveAttribute('aria-invalid', 'true');
+      // The message sits on the status icon, not in a box under the bar, and
+      // the box widens to hold the icon beside the text.
+      expect(document.querySelector('.astryx-field-status')).toBeNull();
+      expect(
+        screen.getByRole('button', {name: 'Error details'}),
+      ).toBeInTheDocument();
+      const describedBy = box.getAttribute('aria-describedby')!.split(' ');
+      expect(
+        describedBy.map(id => document.getElementById(id)?.textContent),
+      ).toContain('Invalid number');
+      const field = box.closest<HTMLElement>('[style*="calc("]');
+      expect(field).not.toBeNull();
 
       // Emptying the box and blurring reverts to the committed page too.
       await user.clear(box);
       await user.tab();
       expect(onChange).not.toHaveBeenCalled();
       expect(box).toHaveValue('3');
+      expect(box.closest('[style*="calc("]')).toBeNull();
     });
 
     it('announces the committed page to screen readers', async () => {
@@ -1091,10 +1132,10 @@ describe('Pagination', () => {
         );
         expect(
           screen.getByRole('button', {name: 'Go to first page'}),
-        ).toBeDisabled();
+        ).toHaveAttribute('aria-disabled', 'true');
         expect(
           screen.getByRole('button', {name: 'Go to last page'}),
-        ).not.toBeDisabled();
+        ).not.toHaveAttribute('aria-disabled');
 
         rerender(
           <Pagination
@@ -1107,10 +1148,10 @@ describe('Pagination', () => {
         );
         expect(
           screen.getByRole('button', {name: 'Go to last page'}),
-        ).toBeDisabled();
+        ).toHaveAttribute('aria-disabled', 'true');
         expect(
           screen.getByRole('button', {name: 'Go to first page'}),
-        ).not.toBeDisabled();
+        ).not.toHaveAttribute('aria-disabled');
       });
 
       it('hides first/last when hasFirstLast is false', () => {
@@ -1313,7 +1354,7 @@ describe('Pagination', () => {
           variant="dots"
         />,
       );
-      await user.click(screen.getByRole('button', {name: 'Go to page 4'}));
+      await user.click(screen.getByRole('radio', {name: 'Page 4'}));
       expect(onChange).toHaveBeenCalledWith(4);
     });
   });
@@ -1571,34 +1612,34 @@ describe('Pagination', () => {
       render(<Pagination page={1} onChange={() => {}} totalPages={5} />);
       expect(
         screen.getByRole('button', {name: 'Go to previous page'}),
-      ).toBeDisabled();
+      ).toHaveAttribute('aria-disabled', 'true');
     });
 
     it('disables next button on last page', () => {
       render(<Pagination page={5} onChange={() => {}} totalPages={5} />);
       expect(
         screen.getByRole('button', {name: 'Go to next page'}),
-      ).toBeDisabled();
+      ).toHaveAttribute('aria-disabled', 'true');
     });
 
     it('enables both buttons on middle page', () => {
       render(<Pagination page={3} onChange={() => {}} totalPages={5} />);
       expect(
         screen.getByRole('button', {name: 'Go to previous page'}),
-      ).not.toBeDisabled();
+      ).not.toHaveAttribute('aria-disabled');
       expect(
         screen.getByRole('button', {name: 'Go to next page'}),
-      ).not.toBeDisabled();
+      ).not.toHaveAttribute('aria-disabled');
     });
 
     it('disables both buttons when only one page', () => {
       render(<Pagination page={1} onChange={() => {}} totalPages={1} />);
       expect(
         screen.getByRole('button', {name: 'Go to previous page'}),
-      ).toBeDisabled();
+      ).toHaveAttribute('aria-disabled', 'true');
       expect(
         screen.getByRole('button', {name: 'Go to next page'}),
-      ).toBeDisabled();
+      ).toHaveAttribute('aria-disabled', 'true');
     });
   });
 
@@ -1611,28 +1652,28 @@ describe('Pagination', () => {
       render(<Pagination page={1} onChange={() => {}} hasMore />);
       expect(
         screen.getByRole('button', {name: 'Go to next page'}),
-      ).not.toBeDisabled();
+      ).not.toHaveAttribute('aria-disabled');
     });
 
     it('disables next when hasMore is false', () => {
       render(<Pagination page={3} onChange={() => {}} hasMore={false} />);
       expect(
         screen.getByRole('button', {name: 'Go to next page'}),
-      ).toBeDisabled();
+      ).toHaveAttribute('aria-disabled', 'true');
     });
 
     it('disables previous on first page with hasMore', () => {
       render(<Pagination page={1} onChange={() => {}} hasMore />);
       expect(
         screen.getByRole('button', {name: 'Go to previous page'}),
-      ).toBeDisabled();
+      ).toHaveAttribute('aria-disabled', 'true');
     });
 
     it('enables previous on page > 1 with hasMore', () => {
       render(<Pagination page={2} onChange={() => {}} hasMore />);
       expect(
         screen.getByRole('button', {name: 'Go to previous page'}),
-      ).not.toBeDisabled();
+      ).not.toHaveAttribute('aria-disabled');
     });
   });
 
@@ -1679,12 +1720,14 @@ describe('Pagination', () => {
       );
       expect(
         screen.getByRole('button', {name: 'Go to previous page'}),
-      ).toBeDisabled();
+      ).toHaveAttribute('aria-disabled', 'true');
       expect(
         screen.getByRole('button', {name: 'Go to next page'}),
-      ).toBeDisabled();
+      ).toHaveAttribute('aria-disabled', 'true');
       // Page buttons should also be disabled
-      expect(screen.getByRole('button', {name: 'Go to page 1'})).toBeDisabled();
+      expect(
+        screen.getByRole('button', {name: 'Go to page 1'}),
+      ).toHaveAttribute('aria-disabled', 'true');
     });
 
     it('does not call onChange when disabled', async () => {
