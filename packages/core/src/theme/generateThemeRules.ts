@@ -1432,7 +1432,7 @@ function generateComponentRules(
           );
           if (pseudo.startsWith(':') && pseudoEntries.length > 0) {
             const declarations = joinDeclarations(
-              pseudoEntries as [string, string][],
+              pseudoEntries,
               `${location}[${JSON.stringify(pseudo)}]`,
               sink,
               toKebabCase,
