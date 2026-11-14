@@ -318,6 +318,41 @@ describe('weighStart', () => {
     });
   });
 
+  describe('a template the tables do not list, without a ranker lead', () => {
+    // The ranker has no start for these ideas (pick null). A shell-averse
+    // blend so the test reads the page choice alone.
+    const blendWeights = {
+      ...WEIGHTS,
+      blend: [1, 0, 0, 0.5, 0, 0, 0.2, 0, 0, -5],
+    };
+    const catalog = [
+      {name: 'board', displayName: 'Kanban Board', keywords: ['kanban']},
+      {name: 'charts', displayName: 'Charts', category: 'Charts - Overview'},
+      {name: 'grid', displayName: 'Grid Detail'},
+      {
+        name: 'gauge-fleet',
+        displayName: 'Fleet Gauges Detail',
+        category: 'Gauges - Fleet',
+        keywords: ['gauges', 'meters'],
+      },
+    ];
+    const ranked = [page('gauge-fleet', 9, 'Gauges'), ...RANKED];
+
+    it('competes on the listed scale when the idea names a word only its label carries', () => {
+      const start = weighStart('fleet gauges', ranked, null, catalog, {
+        weights: blendWeights,
+      });
+      expect(start).toBe('gauge-fleet');
+    });
+
+    it('stays below the listed templates when the idea names only a word labels share', () => {
+      const start = weighStart('detail', ranked, null, catalog, {
+        weights: blendWeights,
+      });
+      expect(start).not.toBe('gauge-fleet');
+    });
+  });
+
   describe('a template the tables do not list (cold start)', () => {
     // A made-up family the tables have never seen, described only by its own
     // descriptor, next to listed templates with descriptors of their own.
