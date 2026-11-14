@@ -463,6 +463,6 @@
   },
   {
     "component": "core/MobileNavToggle",
-    "reason": "MobileNavToggle is one icon-only ghost Button. Its default `menu` glyph is three horizontal bars, symmetric about the block axis, so it has nothing to mirror; caller `children` replace that glyph and are the caller's content. It positions, orders, scrolls, drags and animates nothing along the inline axis, and its only keyboard behavior is the native button activation. Where it sits in a bar is the placing component's layout (AppShell's mobile top bar, TopNav's mobile bar, or the caller's own row), and it renders nothing at the audit's desktop width."
+    "reason": "MobileNavToggle is one icon-only ghost Button. Its default `menu` glyph is three horizontal bars, symmetric about the block axis, so it has nothing to mirror; caller `children` replace that glyph and are the caller's content. It positions, orders, scrolls, drags and animates nothing along the inline axis, and its only keyboard behavior is the native button activation. Where it sits in a bar is the placing component's layout (AppShell's mobile top bar, TopNav's mobile bar, or the caller's own row)."
   }
 ]

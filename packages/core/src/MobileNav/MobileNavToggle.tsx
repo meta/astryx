@@ -11,7 +11,7 @@
  *
  * Hamburger button that opens/closes the mobile nav drawer.
  * Reads from AppShell mobile context — renders nothing above the mobile
- * breakpoint or when AppShell has no mobile navigation.
+ * breakpoint, outside AppShell, or when AppShell has no mobile navigation.
  * Can be placed anywhere in the component tree (TopNav, content area, custom toolbar, etc.).
  * Host attributes and DOM handlers reach the button; its `aria-expanded` and
  * `aria-controls` stay component-owned, and a caller `onClick` runs after the

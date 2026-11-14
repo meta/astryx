@@ -26,6 +26,7 @@ import {render, screen, fireEvent} from '@testing-library/react';
 import {AppShell} from '../AppShell/AppShell';
 import {Icon} from '../Icon/Icon';
 import {SideNav, SideNavItem, SideNavSection} from '../SideNav';
+import {MobileNav} from './MobileNav';
 import {MobileNavToggle, type MobileNavToggleProps} from './MobileNavToggle';
 
 // jsdom doesn't implement showModal/close on <dialog>, so we mock them
@@ -218,6 +219,28 @@ describe('MobileNavToggle presence', () => {
     expect(screen.queryByTestId('placed-toggle')).toBeNull();
   });
 
+  it('renders nothing when AppShell takes a MobileNav node', () => {
+    render(
+      <ShellWithPlacedToggle
+        mobileNav={
+          <MobileNav>
+            <SideNavItem label="Home" />
+          </MobileNav>
+        }
+      />,
+    );
+    expect(screen.queryByTestId('placed-toggle')).toBeNull();
+  });
+
+  it('renders nothing in an AppShell with no side or top nav', () => {
+    render(
+      <AppShell mobileNav={{breakpoint: 'md'}}>
+        <MobileNavToggle data-testid="placed-toggle" />
+      </AppShell>,
+    );
+    expect(screen.queryByTestId('placed-toggle')).toBeNull();
+  });
+
   it('renders nothing outside an AppShell', () => {
     render(<MobileNavToggle data-testid="placed-toggle" />);
     expect(screen.queryByTestId('placed-toggle')).toBeNull();
@@ -269,13 +292,13 @@ describe('MobileNavToggle button, name, and icon', () => {
   });
 
   it('draws the menu icon by default', () => {
-    const {container: menu} = render(<Icon icon="menu" color="inherit" />);
-    const menuGlyph = menu.querySelector('svg')?.outerHTML;
+    const {container: menu} = render(<Icon icon="menu" />);
+    const menuGlyph = menu.querySelector('svg')?.innerHTML;
     render(<ShellWithToggle />);
     const icons = screen.getByTestId('page-menu').querySelectorAll('svg');
     expect(icons).toHaveLength(1);
-    expect(menuGlyph).toBeDefined();
-    expect(icons[0].outerHTML).toBe(menuGlyph);
+    expect(menuGlyph).toBeTruthy();
+    expect(icons[0].innerHTML).toBe(menuGlyph);
   });
 
   it('draws children in place of the menu icon', () => {

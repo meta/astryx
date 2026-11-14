@@ -47,13 +47,15 @@ type AuditCase = {
 const PHONE = {width: 390, height: 844};
 const NARROW = {width: 320, height: 640};
 const WIDE = {width: 1180, height: 800};
+/** Above the `xl` breakpoint the page-placed story uses. */
+const WIDER = {width: 1440, height: 800};
 
 const TOGGLE = '[data-testid="mobile-nav-toggle"]';
 const DEFAULT_NAME = 'Open navigation';
 /** WCAG 2.2 SC 2.5.8 minimum target, and SC 1.4.11 non-text contrast. */
 const MIN_TARGET_PX = 24;
 const MIN_ICON_CONTRAST = 3;
-/** FR5 bounds the close at 250 ms after the request; leave room for the frame. */
+/** The drawer closes within 250 ms of the request. Allow time for a frame. */
 const CLOSE_WAIT_MS = 1000;
 
 test.describe.configure({retries: 0});
@@ -237,7 +239,7 @@ async function axeToggle(page: Page) {
 
 type Toggle = Awaited<ReturnType<typeof toggles>>[number];
 
-/** FR11 and AR3 wiring, the 24 px target, and the icon's non-text contrast. */
+/** Name, expanded state, controlled dialog, the 24 px target, and icon contrast. */
 function checkToggle(
   check: Check,
   toggle: Toggle,
@@ -277,7 +279,7 @@ function checkToggle(
 /**
  * Drives the toggle through hover, keyboard focus, open, and Escape. Each
  * state must paint differently from rest, and focus must come back to the
- * toggle after the drawer closes (FR6).
+ * toggle after the drawer closes.
  */
 async function driveStates(
   page: Page,
@@ -490,17 +492,19 @@ for (const mode of ['light', 'dark'] as const) {
   }
 }
 cases.push({
-  key: 'placed-wide-light-ltr',
+  key: 'placed-wider-light-ltr',
   group: 'placed',
   story: PLACED_STORY,
   ready: '#storybook-root nav',
   mode: 'light',
   direction: 'ltr',
-  viewport: WIDE,
+  viewport: WIDER,
   run: async (page, check, frame) => {
     const list = await toggles(page, TOGGLE);
     check(list.length === 0, `${list.length} toggles above the breakpoint`);
-    await frame('rest', {list});
+    const ax = await axButtons(page, PLACED_NAME);
+    check(ax.length === 0, `${ax.length} toggles in the accessibility tree`);
+    await frame('rest', {list, ax});
   },
 });
 

@@ -382,9 +382,9 @@ export const TallHeader: Story = {
 
 /**
  * A MobileNavToggle the page places itself, with its own label and icon.
- * `mobileNav={{hasToggle: false}}` removes AppShell's own toggle. Below the
- * mobile breakpoint the toggle opens the drawer AppShell renders; above it,
- * the toggle renders nothing and the side nav shows inline.
+ * `hasToggle: false` removes AppShell's own toggle. Below the `xl`
+ * breakpoint the toggle opens the drawer AppShell renders; above it, the
+ * toggle renders nothing and the side nav shows inline.
  */
 export const ToggleInAppShell: Story = {
   name: 'Toggle In App Shell',
@@ -392,7 +392,7 @@ export const ToggleInAppShell: Story = {
   render: () => (
     <AppShell
       contentPadding={4}
-      mobileNav={{hasToggle: false}}
+      mobileNav={{breakpoint: 'xl', hasToggle: false}}
       sideNav={
         <SideNav>
           <SideNavSection title="Main" isHeaderHidden>
