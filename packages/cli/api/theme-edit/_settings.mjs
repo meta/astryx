@@ -526,6 +526,9 @@ export function nearest(x, list, n = 3) {
     ![...list].some(c => /^(no|not)-/.test(c) && typoNear(x, c))
   )
     return [];
+  // A long input (a pasted stylesheet or blob) holds many names inside
+  // it: it is near nothing.
+  if (x.length > 64) return [];
   // Within the editor's one typo limit (typoLimit), nearest by edit
   // distance first (brand-drak is brand-dark, not brand); a name one holds
   // inside the other is near too, after the close ones.

@@ -206,9 +206,8 @@ describe('refusals', () => {
       themeEditSet('t', 'box-shadow', 'none', {cwd}),
     );
     expect(r.code).toBe('ERR_MISSING_ARGUMENT');
-    expect(r.run[0]).toBe(
-      'astryx experimental theme editor set t box-shadow none --on card',
-    );
+    // No part was named and box-shadow has no theme-wide dial: how.
+    expect(r.run[0]).toBe('astryx experimental theme editor how box-shadow');
   });
 });
 

@@ -20,7 +20,7 @@ import {
   splitCommand,
   vetSuggestions,
 } from './_vet.mjs';
-import {colorPair, offersTyped} from './_normal.mjs';
+import {allowedLine, colorPair, withoutCopyDebris} from './_normal.mjs';
 import {
   AUTO_SPREAD,
   CORNERS,
@@ -1267,7 +1267,14 @@ function refuseStoredTokens(ctx, slug, data, skip) {
   // A repair offers only the value it holds, cleaned: never a stock value
   // the saved setting did not hold.
   for (const b of bad) {
-    if (b.fix && !offersTyped(String(b.fix), String(b.setting.value)))
+    if (
+      b.fix &&
+      !allowedLine({
+        offered: String(b.fix),
+        typed: String(b.setting.value),
+        thing: b.setting.thing,
+      })
+    )
       delete b.fix;
     // A light and a dark color saved as one (`red / blue`) is that pair.
     const pair =
@@ -1342,7 +1349,7 @@ function refuseStoredTokens(ctx, slug, data, skip) {
           ? [
               // The value the check suggests for this value, else a stock
               // one of the token's type.
-              `${P} set ${slug} ${one.setting.thing} ${quoteCommandArgument(String(one.fix))}`,
+              `${P} set ${slug} ${one.setting.thing} ${quoteCommandArgument(String(one.fix))}${one.setting.mode ? ` --mode ${one.setting.mode}` : ''}`,
             ]
           : one && one.fix && one.setting.source === 'dial'
             ? [
@@ -1747,8 +1754,10 @@ function looseObject(text) {
  * @param {string} slug
  * @param {string} thing
  * @param {unknown} typed
+ * @param {import('./_settings.mjs').ThemeData} [data] the theme, whose saved
+ *   values a keep line may carry
  */
-function carryTyped(e, sub, slug, thing, typed) {
+function carryTyped(e, sub, slug, thing, typed, data) {
   if (
     sub !== 'set' ||
     !(e instanceof AstryxError) ||
@@ -1762,29 +1771,110 @@ function carryTyped(e, sub, slug, thing, typed) {
   const same = (/** @type {string} */ x) =>
     x.replace(/^-+/, '').toLowerCase() ===
     String(thing).replace(/^-+/, '').toLowerCase();
-  const kept = e.suggestions.filter(x => {
+  // Every set line, of this setting or another (a dial's other name, a
+  // label, a theme-wide equivalent), offers a value only through the
+  // allowlist of exact readings: never a stock, reset or nearest value.
+  // Another setting's line may carry words of the thing typed too (an
+  // object or a label typed as the thing).
+  const typedText = `${String(thing)} ${typed}`;
+  const saved = data
+    ? [
+        data.like ?? '',
+        data.mode ?? '',
+        ...data.settings.map(x => String(x.value ?? '')),
+      ].join(' ')
+    : '';
+  /** @type {Set<string>} */
+  const dropped = new Set();
+  const lines = e.suggestions.filter(x => {
     const m = head.exec(x.name);
     if (!m) return true;
     const v = m[3] ?? m[4];
-    // A stock value on another setting's line (the typed thing held an
-    // object or a label) is no more the input's than on this one.
-    if (!same(m[1] ?? m[2]))
-      return /^\s*[{"']/.test(String(thing))
-        ? offersTyped(v, `${String(thing)} ${typed}`)
-        : true;
-    return offersTyped(v, typed);
+    if (
+      allowedLine({
+        offered: v,
+        typed: same(m[1] ?? m[2]) ? typed : typedText,
+        thing: m[1] ?? m[2],
+        saved,
+      })
+    )
+      return true;
+    dropped.add(v.replace(/^'(.*)'$/, '$1').toLowerCase());
+    return false;
   });
-  if (kept.length === e.suggestions.length) return e;
-  e.suggestions = kept.some(x => / (set|undo|new) /.test(` ${x.name} `))
+  // A value named as a did-you-mean goes with its line.
+  const kept = lines.filter(
+    x => !(x.reason === 'did you mean' && dropped.has(x.name.toLowerCase())),
+  );
+  // A refusal always names a command that works: with no set, undo, new or
+  // how line left, how for the setting.
+  const runnable = kept.some(
+    x => x.reason !== 'did you mean' && !/ --help$/.test(x.name),
+  );
+  if (kept.length === e.suggestions.length && runnable) return e;
+  e.suggestions = runnable
     ? kept
     : [
-        ...kept,
+        ...kept.filter(x => !/ --help$/.test(x.name)),
         {
           name: `${P} how ${quoteCommandArgument(String(thing))}`,
           reason: 'what it takes',
         },
       ];
   return e;
+}
+
+/**
+ * A theme's settings file as written, for the values a keep line may carry
+ * when the theme does not load (a damaged entry); null when it cannot be
+ * read.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {import('./_settings.mjs').ThemeData | undefined}
+ */
+function savedAsWritten(cwd, slug) {
+  try {
+    const j = JSON.parse(
+      fs
+        .readFileSync(themeFiles(cwd, slug).settings, 'utf8')
+        .replace(/^\uFEFF/, ''),
+    );
+    return j && Array.isArray(j.settings) ? j : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The lines of a repair that work: each run through set's own check (in
+ * memory) and offered only when set takes it as offered and its value
+ * passes the allowlist of exact readings of what was typed. With none
+ * left, how for the thing.
+ * @param {'set' | 'undo'} sub
+ * @param {string} slug
+ * @param {string[]} lines
+ * @param {string} cwd
+ * @param {string} typed
+ * @param {string} thing
+ * @returns {Promise<string[]>}
+ */
+async function workingLines(sub, slug, lines, cwd, typed, thing) {
+  /** @type {string[]} */
+  const out = [];
+  for (const line of lines) {
+    // The line as set takes it (a repair set offers for it folded in).
+    const followed = await followChangeLine(sub, slug, line, cwd);
+    if (followed.why) continue;
+    const read = readSetLine(followed.line, slug);
+    if (
+      sub === 'set' &&
+      read &&
+      !allowedLine({offered: read.value, typed, thing: read.thing})
+    )
+      continue;
+    out.push(followed.line);
+  }
+  return out.length ? out : [`${P} how ${quoteCommandArgument(thing)}`];
 }
 
 /**
@@ -1883,12 +1973,22 @@ async function change(sub, slug, thing, value, options) {
         E.ERR_INVALID_ARGUMENT,
         `This holds ${Object.keys(obj).length} settings; ${sub} changes one at a time.`,
         {
-          run: Object.entries(obj)
-            .slice(0, 6)
-            .map(
-              ([k, x]) =>
-                `${P} ${sub} ${slug} ${quoteCommandArgument(k)}${sub === 'set' ? ` ${quoteCommandArgument(String(x))}` : ''}`,
-            ),
+          // Each entry as its own line, a nested value (`{"$value": …}`, a
+          // light and dark pair) written back as typed; each line checked,
+          // and one set refuses is left out.
+          run: await workingLines(
+            sub,
+            slug,
+            Object.entries(obj)
+              .slice(0, 6)
+              .map(
+                ([k, x]) =>
+                  `${P} ${sub} ${slug} ${quoteCommandArgument(k)}${sub === 'set' ? ` ${quoteCommandArgument(String(normalizeEntry(k, x != null && typeof x === 'object' ? JSON.stringify(x) : String(x)).value ?? ''))}` : ''}`,
+              ),
+            options.cwd ?? process.cwd(),
+            objectText,
+            'settings',
+          ),
         },
       );
   }
@@ -1898,15 +1998,17 @@ async function change(sub, slug, thing, value, options) {
   if (typeof value === 'string' && /\s--(mode|state|on|when)\b/.test(value)) {
     /** @type {Record<string, string>} */
     const lifted = {};
-    const bare = value
-      .replace(
+    // The rest is cleaned as any value is (a trailing `;`, `!important`,
+    // a comment).
+    const bare = withoutCopyDebris(
+      value.replace(
         /\s+--(mode|state|on|when)(?:\s*=\s*|\s+)("[^"]*"|'[^']*'|\S+)/g,
         (_, f, x) => {
           lifted[f] = x.replace(/^(["'])(.*)\1$/, '$2');
           return '';
         },
-      )
-      .trim();
+      ),
+    );
     if (bare && Object.keys(lifted).length) {
       const opts = /** @type {Record<string, unknown>} */ ({
         ...options,
@@ -1922,9 +2024,18 @@ async function change(sub, slug, thing, value, options) {
           .map(f => `--${f}`)
           .join(' and ')} inside the value; a flag goes outside the quotes.`,
         {
-          run: [
-            `${P} ${sub} ${slug} ${quoteCommandArgument(String(thing))}${sub === 'set' ? ` ${quoteCommandArgument(bare)}` : ''}${flagText}${options.only ? ' --only' : ''}`,
-          ],
+          // The line is checked as set checks it; one set refuses is left
+          // out, and how is named instead.
+          run: await workingLines(
+            sub,
+            slug,
+            [
+              `${P} ${sub} ${slug} ${quoteCommandArgument(String(thing))}${sub === 'set' ? ` ${quoteCommandArgument(bare)}` : ''}${flagText}${options.only ? ' --only' : ''}`,
+            ],
+            options.cwd ?? process.cwd(),
+            value,
+            String(thing),
+          ),
         },
       );
     }
@@ -2039,6 +2150,7 @@ async function change(sub, slug, thing, value, options) {
         slug,
         typedThing,
         typedValue,
+        seen.data ?? savedAsWritten(options.cwd ?? process.cwd(), slug),
       ),
       seen.data?.name ?? slug,
       seen.data,

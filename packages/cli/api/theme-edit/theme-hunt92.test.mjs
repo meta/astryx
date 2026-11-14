@@ -239,7 +239,7 @@ const CASES =
       'accent',
       'red --mode dark',
       {},
-      [/ set b accent red --mode dark$/],
+      [/ set b --color-accent red --mode dark$/],
       / set b accent red$/,
     ],
     [
