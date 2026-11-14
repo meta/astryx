@@ -19,7 +19,7 @@ export const doc = {
     'The "build a page" entry point. Called with no query it returns the ' +
     'how-to-build-a-page playbook as data: the workflow steps with their ' +
     'commands, the on-system rules, and related lookups. Called with a query it names the page template to ' +
-    "START from (always one: for a whole page, the template its page-pick model chooses from the page ranker's list and its own word tables; for a part " +
+    "START from (always one: for a whole page, the template its page-pick model chooses from the page ranker's list and its own word tables, or the app shell when its word weights call the shell; for a part " +
     'of a page, the page it names; else the app shell, unless the idea reads as a whole page, which starts ' +
     'from the closest page template) and the next two templates, ' +
     'and the unified search grouped around it: the other close page templates, drop-in blocks, and ' +
