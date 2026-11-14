@@ -422,6 +422,44 @@ describe('generateThemeRules', () => {
     ).toBe(true);
   });
 
+  it("keeps a link's hover tint of its color prop when a theme styles the link", () => {
+    const linkRules = generateThemeRules(
+      defineTheme({
+        name: 'link-pins',
+        components: {link: {base: {textDecoration: 'underline'}}},
+      }),
+    );
+    const pins = linkRules.join('\n');
+    // At rest the prop's color; on hover Core's tint of it, for the colors
+    // Core tints.
+    for (const name of ['primary', 'secondary', 'accent']) {
+      expect(pins).toContain(
+        `.astryx-link[data-color="${name}"] { color: var(--color-text-${name}); }`,
+      );
+      expect(pins).toContain(
+        `.astryx-link[data-color="${name}"]:where(:hover):where(:not(:disabled,[aria-disabled="true"])) { color: color-mix(in srgb, var(--color-text-${name}), var(--color-tint-hover) 15%); }`,
+      );
+    }
+    expect(pins).not.toContain('[data-color="disabled"]:where(:hover)');
+  });
+
+  it("lets a theme's hover color on a link color key win over the hover pin", () => {
+    const linkRules = generateThemeRules(
+      defineTheme({
+        name: 'link-hover',
+        components: {link: {'color:accent': {':hover': {color: '#0000ff'}}}},
+      }),
+    ).join('\n');
+    // The theme's rule carries :hover itself; the pin's :hover sits in
+    // :where(), so the theme's rule is the heavier one.
+    expect(linkRules).toMatch(
+      /\.astryx-link\[data-color="accent"\]:hover[^{]*\{\s*color: #0000ff;/,
+    );
+    expect(linkRules).toContain(
+      '.astryx-link[data-color="accent"]:where(:hover):where(:not(:disabled,[aria-disabled="true"])) { color: color-mix(',
+    );
+  });
+
   // --- Size-prop overrides (so `size` beats a themed `type`) ---
 
   it('emits Text size-prop font-size overrides in the same layer as type rules', () => {

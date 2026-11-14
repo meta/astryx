@@ -35,10 +35,23 @@ describe('color-mode blocks', () => {
     expect(out).toContain(
       `@media (prefers-color-scheme: dark) {\n  :is(.astryx-button):where(:scope:not([data-theme="light"], [data-theme="dark"]) *)${outsideSurfaces} {`,
     );
-    // Inside a media surface, the surface decides as the onDark and onLight
-    // overrides do, at the same weight as the root's rule.
-    expect(out).toContain(
-      ':is(.astryx-button):where(:scope [data-astryx-media="dark"] *) {',
+    // Inside media surfaces, the nearest surface decides, at the same weight
+    // as the root's rule: a dark surface, or a dark one inside a light one,
+    // never a light one inside a dark one.
+    const nearestDark = out
+      .split('\n')
+      .map(line => line.trim())
+      .find(line =>
+        line.startsWith(
+          ':is(.astryx-button):where(:scope [data-astryx-media="dark"] *:not(',
+        ),
+      );
+    expect(nearestDark).toBeDefined();
+    expect(nearestDark).toContain(
+      ':scope [data-astryx-media="dark"] *:not(:scope [data-astryx-media="dark"] [data-astryx-media="light"] *)',
+    );
+    expect(nearestDark).toContain(
+      ':scope [data-astryx-media="light"] [data-astryx-media="dark"] *:not(:scope [data-astryx-media="light"] [data-astryx-media="dark"] [data-astryx-media="light"] *)',
     );
     expect(out).not.toContain('@scope ([data-astryx-media');
     // The mode rules are component rules, after the block's own rule.
@@ -84,6 +97,63 @@ describe('color-mode blocks', () => {
     expect(out).toMatch(/--_button-radius: 2px/);
   });
 
+  it('reads the nearest of up to five nested surfaces, and writes nothing deeper', () => {
+    const out = css({
+      button: {base: {'@dark': {backgroundColor: 'blue'}}},
+    });
+    const rule = out
+      .split('\n')
+      .map(line => line.trim())
+      .find(line =>
+        line.startsWith(
+          ':is(.astryx-button):where(:scope [data-astryx-media="dark"] *:not(',
+        ),
+      );
+    const where = /^:is\(\.astryx-button\):where\((.*)\) \{$/.exec(
+      rule ?? '',
+    )?.[1];
+    expect(where).toBeDefined();
+    // Surfaces alternating in mode, outermost first, around a button.
+    const nest = (modes: string[]) => {
+      const root = document.createElement('div');
+      let at = root;
+      for (const mode of modes) {
+        const surface = document.createElement('div');
+        surface.setAttribute('data-astryx-media', mode);
+        at.appendChild(surface);
+        at = surface;
+      }
+      const button = document.createElement('button');
+      at.appendChild(button);
+      document.body.appendChild(root);
+      // The theme root stands in for :scope.
+      const matches = button.matches(
+        `:is(${String(where).replaceAll(':scope', ':where(body > div)')})`,
+      );
+      root.remove();
+      return matches;
+    };
+    const alternating = (n: number, last: string) =>
+      Array.from({length: n}, (_, i) =>
+        (n - 1 - i) % 2 === 0 ? last : last === 'dark' ? 'light' : 'dark',
+      );
+    for (let n = 1; n <= 5; n++) {
+      expect(nest(alternating(n, 'dark')), `${n} deep, dark nearest`).toBe(
+        true,
+      );
+      expect(nest(alternating(n, 'light')), `${n} deep, light nearest`).toBe(
+        false,
+      );
+    }
+    // Six alternating surfaces are past the limit: the block writes nothing.
+    expect(nest(alternating(6, 'dark'))).toBe(false);
+    expect(nest(alternating(6, 'light'))).toBe(false);
+    // Surfaces of one mode in a row count once.
+    expect(nest(['light', 'dark', 'dark', 'light', 'light', 'dark'])).toBe(
+      true,
+    );
+  });
+
   it('writes the dark block before the light one, as the surface overrides go', () => {
     const out = css({
       button: {
@@ -92,7 +162,7 @@ describe('color-mode blocks', () => {
     });
     const surface = (mode: string) =>
       out.indexOf(
-        `:is(.astryx-button):where(:scope [data-astryx-media="${mode}"] *)`,
+        `:is(.astryx-button):where(:scope [data-astryx-media="${mode}"] *:not(`,
       );
     expect(surface('dark')).toBeGreaterThan(-1);
     expect(surface('light')).toBeGreaterThan(surface('dark'));
