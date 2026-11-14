@@ -1364,6 +1364,18 @@ export function registerExperimentalTheme(group, program) {
               /** @type {string | null} */
               let open = null;
               let named = false;
+              /** The word typed as the name, where it is not the first. @type {string | null} */
+              let nameWord = null;
+              /** The words read as more of a value. @type {string[]} */
+              const intoValues = [];
+              /**
+               * Whether a word is left for the name after argv[i] in the same
+               * run of words (up to the next option): the last word of the
+               * run straight after an option's value is the name.
+               * @param {number} i
+               */
+              const wordLeft = i =>
+                i + 1 < argv.length && !argv[i + 1].startsWith('-');
               for (let i = from + 1; from >= 0 && i < argv.length; i++) {
                 const w = argv[i];
                 if (w === '--') {
@@ -1383,10 +1395,20 @@ export function registerExperimentalTheme(group, program) {
                   open = textFlags.has(flag) ? camel(flag) : null;
                   continue;
                 }
-                // The name ends the value of an option typed before it: a
-                // word after the name is never more of that value.
+                // Words straight after an option's value are more of it
+                // while a later word is left for the name; the name ends the
+                // value, and a word after the name is never more of it.
+                if (open && !named && wordLeft(i)) {
+                  const had = given[open];
+                  given[open] = Array.isArray(had)
+                    ? [...had.slice(0, -1), `${had.at(-1)} ${w}`]
+                    : `${had} ${w}`;
+                  intoValues.push(w);
+                  continue;
+                }
                 if (!named) {
                   named = true;
+                  if (w !== String(name)) nameWord = w;
                   open = null;
                   continue;
                 }
@@ -1395,6 +1417,7 @@ export function registerExperimentalTheme(group, program) {
                   given[open] = Array.isArray(had)
                     ? [...had.slice(0, -1), `${had.at(-1)} ${w}`]
                     : `${had} ${w}`;
+                  intoValues.push(w);
                   continue;
                 }
                 words.push(w);
@@ -1402,7 +1425,7 @@ export function registerExperimentalTheme(group, program) {
               // A built-in theme among the words (after a `like` word, or
               // typed as the name with the real name after it) is the base,
               // as --like; every other word is part of the name.
-              const all = [String(name), ...words];
+              const all = [nameWord ?? String(name), ...words];
               const baseAt = all.findIndex(
                 (w, i) =>
                   builtInThemes().includes(w.toLowerCase()) &&
@@ -1422,7 +1445,7 @@ export function registerExperimentalTheme(group, program) {
               // The line is checked as every new line is offered.
               const read = Object.keys(given).some(k => given[k] !== o[k]);
               throw new AstryxError(
-                `new takes one theme name; "${extra.join(' ')}" is extra.${read ? ' A value of more than one word goes in quotes.' : ''} For a base theme, use --like. Nothing was changed.`,
+                `new takes one theme name; "${(nameWord ? [...intoValues, ...words] : extra).join(' ')}" is extra.${read ? ' A value of more than one word goes in quotes.' : ''} For a base theme, use --like. Nothing was changed.`,
                 await editorCheckedNewLines(
                   `${EDITOR} new ${quoteCommandArgument(fixed)}${newFlagLine(given)}`,
                   fixed,
