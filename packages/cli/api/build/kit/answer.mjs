@@ -52,10 +52,6 @@ export function kitAnswer(
     own.set(b.name, [...(own.get(b.name) ?? []), b]);
   /** @type {Set<string>} */
   const added = new Set();
-  // Each listed block, with the kinds of place it goes in (its doc's `fits`)
-  // and the start's slot it goes in. One placed copy per entry, so build's
-  // own entries stay the same objects in both lists the size fit compares.
-  const place = placer(signals);
   const named = blocks
     .flatMap(name => {
       const entry = own.get(name)?.shift();
@@ -70,8 +66,7 @@ export function kitAnswer(
       added.add(name);
       return [found];
     })
-    .slice(0, signals.blocks.length)
-    .map(place);
+    .slice(0, signals.blocks.length);
 
   // What to try when the kit comes back thin. Keyword search over a design
   // system misses in a predictable way — the reader's words and the package's
@@ -113,12 +108,15 @@ export function kitAnswer(
 
   // An added block must not make the answer longer than build's own, as JSON
   // or as text: trim the added blocks' descriptions, never which blocks are
-  // listed.
-  const fitted = fitDescriptions(named, signals.blocks.map(place), {
+  // listed. The sizes leave out where each block goes, so the descriptions
+  // are the same with it or without it.
+  const fitted = fitDescriptions(named, signals.blocks, {
     json: list => bytes(answer(list)),
     text: textSize,
   });
-  return answer(fitted);
+  // Then each listed block gets the kinds of place it goes in (its doc's
+  // `fits`) and the start's slot it goes in.
+  return answer(fitted.map(placer(signals)));
 }
 
 /**

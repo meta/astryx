@@ -34,6 +34,7 @@ import {defineCommand} from '../lib/define-command.mjs';
 import {build as buildApi} from '../../../api/build/build.mjs';
 import {doc as buildCommand} from './build.doc.mjs';
 import {doc as buildFn} from '../../../api/build/build.doc.mjs';
+import {slotsText} from '../lib/template-format.mjs';
 
 /**
  * Playbook commands as records whose field names are the JSON keys, so a
@@ -203,21 +204,6 @@ export function registerBuild(program) {
         ],
         format: {command: formatCliCommand, deprecated: formatDeprecation},
       };
-      /**
-       * The start's slots on one line: each slot's name, kind and what goes
-       * there.
-       * @param {unknown} slots
-       */
-      const formatSlots = slots =>
-        /** @type {{name: string, kind: string, description?: string}[]} */ (
-          slots
-        )
-          .map(slot =>
-            slot.description
-              ? `${slot.name} (${slot.kind}): ${slot.description.replace(/\.$/, '')}`
-              : `${slot.name} (${slot.kind})`,
-          )
-          .join('; ');
       /** @param {string[]} fields */
       const brief = fields => ({
         fields,
@@ -271,7 +257,10 @@ export function registerBuild(program) {
                     'command',
                     'slots',
                   ],
-                  format: {command: formatCliCommand, slots: formatSlots},
+                  format: {
+                    command: formatCliCommand,
+                    slots: slots => slotsText(slots, {describe: true}),
+                  },
                 }
               : brief(['name', 'package', 'description', 'command']),
           ),

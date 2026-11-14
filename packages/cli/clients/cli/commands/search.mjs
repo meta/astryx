@@ -36,6 +36,7 @@ import {firstSentence} from '../../../foundation/text/string-utils.mjs';
 import {warnOnIntegrationIssues} from '../../../foundation/integrations/integration-warnings.mjs';
 import {doc as searchCommand} from './search.doc.mjs';
 import {doc as searchFn} from '../../../api/search/search.doc.mjs';
+import {slotsText} from '../lib/template-format.mjs';
 
 /**
  * @param {import('commander').Command} program
@@ -191,16 +192,7 @@ export function registerSearch(program) {
             // --verbose and --json keep the description whole.
             ...(options.verbose ? {} : {description: firstSentence}),
             // A page's slots: each one's name and kind, then what goes there.
-            slots: slots =>
-              /** @type {{name: string, kind: string, description?: string}[]} */ (
-                slots
-              )
-                .map(slot =>
-                  slot.description
-                    ? `${slot.name} (${slot.kind}): ${slot.description.replace(/\.$/, '')}`
-                    : `${slot.name} (${slot.kind})`,
-                )
-                .join('; '),
+            slots: slots => slotsText(slots, {describe: true}),
           },
         }),
         ...note,

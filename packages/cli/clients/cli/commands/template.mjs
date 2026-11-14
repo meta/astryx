@@ -14,6 +14,7 @@ import {
   record,
 } from '../formatters/index.mjs';
 import {cliError, rejectEmptyArgument} from '../lib/cli-error.mjs';
+import {placementLine, slotsText} from '../lib/template-format.mjs';
 import {template as templateApi} from '../../../api/template/template.mjs';
 import {Project} from '../../../foundation/config/project.mjs';
 import {warnOnIntegrationIssues} from '../../../foundation/integrations/integration-warnings.mjs';
@@ -247,9 +248,7 @@ export function registerTemplate(program) {
                   ? t.package
                   : '',
               replaces: t.replaces ?? '',
-              slots: t.slots?.length
-                ? t.slots.map(slot => `${slot.name} (${slot.kind})`).join(', ')
-                : '',
+              slots: t.slots?.length ? slotsText(t.slots) : '',
               fits: t.fits ? t.fits.join(', ') || 'none' : '',
             });
             const fields = ['id', 'name', 'description', 'package', 'replaces', 'slots', 'fits'];
@@ -376,24 +375,4 @@ export function registerTemplate(program) {
         return answered;
       },
   });
-}
-
-/**
- * A template's placement in one line: a page's slots (`slots: kpis
- * (metrics), …`) or a block's fit (`fits: toolbar, header`; `fits: none` for a
- * block that goes in no slot). Null when the template declares neither.
- * @param {{name: string, kind: string}[] | undefined} slots
- * @param {string[] | undefined} fits
- * @returns {string | null}
- */
-function placementLine(slots, fits) {
-  if (slots?.length) {
-    return `slots: ${slots.map(slot => `${slot.name} (${slot.kind})`).join(', ')}`;
-  }
-  if (fits) {
-    return fits.length > 0
-      ? `fits: ${fits.join(', ')}`
-      : 'fits: none (it goes in no slot: it lays out a component\'s options, or frames a whole page)';
-  }
-  return null;
 }
