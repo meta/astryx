@@ -316,7 +316,7 @@ export function sourcesOf(t, copy, packages, memo, closures = new Map()) {
 
 /**
  * Runs one slice of the proof: the targets at `index` of every `count`, in
- * the scope {@link proofScope} chooses. In the affected scope the slice
+ * the scope scope.mjs's runScope gives. In the affected scope the slice
  * proves the targets whose copy depends on a changed source file.
  * @param {{index: number, count: number, notRendered: Record<string, string>, project: string, all?: boolean, browser?: boolean}} options
  */

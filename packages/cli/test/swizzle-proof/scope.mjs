@@ -213,7 +213,7 @@ export function runScope({all = false} = {}) {
   return {base, changed, toolchain, relevant, scope};
 }
 
-// Run directly (CI's swizzle-proof legs), it prints the scope and, under
+// Run directly (CI's swizzle-proof-scope job), it prints the scope and, under
 // GitHub Actions, writes it as the step's `mode` output.
 if (
   process.argv[1] &&

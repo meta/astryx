@@ -1248,9 +1248,9 @@ jobs:
   # The Node project's browser contracts run in a job of their own, beside the
   # Node legs: theme-family compilation (owned by `theme-build`, not Build,
   # until that surface has an admitted lane of its own), offline-media's
-  # real-browser cases and the theme editor's render case. In a Node leg they
-  # took a share no split could book: the leg ran its share of the Node files
-  # and these on top. Same scope as the Node tests; `test` requires it.
+  # real-browser cases and the theme editor's render case. No Node leg runs a
+  # step the others don't, so the legs split the Node files evenly. Same scope
+  # as the Node tests; `test` requires it.
   node-browser-contracts:
     needs: [admission, heavy-ci]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (needs.admission.result == 'success' && (github.event_name != 'workflow_dispatch'))) }}
