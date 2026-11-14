@@ -234,6 +234,32 @@ test.describe('with a mouse', () => {
     expect(await announced(page)).not.toContain('Dropped');
   });
 
+  test("the hint disables its move past the list's first or last place, and a press there leaves the row and the focus", async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), STORY);
+    await expectFinePointer(page);
+    const up = page.getByRole('button', {name: 'Move up'});
+    const down = page.getByRole('button', {name: 'Move down'});
+    await handle(page, 'Inbox').click();
+    await expect(up).toHaveAttribute('aria-disabled', 'true');
+    await expect(down).not.toHaveAttribute('aria-disabled');
+    // A real press, past Playwright's own wait for an enabled button.
+    await up.click({force: true});
+    expect(await labels(page)).toEqual(ROWS);
+    await expect(handle(page, 'Inbox')).toBeFocused();
+    await down.click();
+    await expect(up).not.toHaveAttribute('aria-disabled');
+    await page.keyboard.press('Escape');
+    await handle(page, 'Trash').click();
+    await expect(down).toHaveAttribute('aria-disabled', 'true');
+    await expect(up).not.toHaveAttribute('aria-disabled');
+    const before = await labels(page);
+    await down.click({force: true});
+    expect(await labels(page)).toEqual(before);
+    await expect(handle(page, 'Trash')).toBeFocused();
+  });
+
   for (const key of ['Space', 'Enter']) {
     test(`${key} turns on reorder mode, each arrow commits a move at once with the focus on the handle, and Escape ends the mode keeping the moves`, async ({
       page,

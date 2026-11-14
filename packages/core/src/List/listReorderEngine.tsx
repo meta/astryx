@@ -264,6 +264,12 @@ export interface ListReorderHandleName {
 }
 
 /**
+ * Which ends of the list a row sits at: the first place, the last, or both
+ * (the only row). Null for a row between them.
+ */
+type ModeEnds = 'first' | 'last' | 'only' | null;
+
+/**
  * The list's rows: its element children. A removed row put back for its exit
  * holds no place in the order, so it is left out (`markLeaving`).
  */
@@ -744,6 +750,7 @@ export class ListReorderController implements ListReorderSession {
   private namelessCount = 0;
   /** The handle whose row is in reorder mode, if any. */
   private modeHandle: HTMLElement | null = null;
+  private modeEndsValue: ModeEnds = null;
   private readonly modeListeners = new Set<() => void>();
   /** Reorder mode's hint, while it shows: focus in it keeps the mode. */
   private hintElement: HTMLElement | null = null;
@@ -921,6 +928,12 @@ export class ListReorderController implements ListReorderSession {
 
   private readonly onNamesMutation = (): void => {
     this.refreshNames();
+    // A committed move changes which end the row in reorder mode sits at.
+    const ends = this.readModeEnds();
+    if (ends !== this.modeEndsValue) {
+      this.modeEndsValue = ends;
+      this.notifyMode();
+    }
   };
 
   /** Reads the names once the current commit is done, for every handle. */
@@ -1056,20 +1069,52 @@ export class ListReorderController implements ListReorderSession {
     return this.modeHandle;
   }
 
+  /**
+   * The ends of the list that the row in reorder mode sits at. No move goes
+   * past them. Null when no row is in the mode, or the row is at neither end.
+   */
+  get modeEnds(): ModeEnds {
+    return this.modeEndsValue;
+  }
+
+  private readModeEnds(): ModeEnds {
+    const list = this.getList();
+    const row = this.rowOf(this.modeHandle);
+    if (list == null || row == null) {
+      return null;
+    }
+    const rows = this.rows.read(list);
+    const index = rows.indexOf(row);
+    if (index < 0) {
+      return null;
+    }
+    const isFirst = index === 0;
+    const isLast = index === rows.length - 1;
+    if (isFirst && isLast) {
+      return 'only';
+    }
+    return isFirst ? 'first' : isLast ? 'last' : null;
+  }
+
+  private notifyMode(): void {
+    for (const listener of [...this.modeListeners]) {
+      listener();
+    }
+  }
+
   private setMode(handle: HTMLElement | null): void {
     if (this.modeHandle === handle) {
       return;
     }
     this.modeHandle = handle;
+    this.modeEndsValue = this.readModeEnds();
     this.lastStep = null;
     this.clearModeLine();
     const list = this.getList();
     if (handle != null && list != null) {
       this.placeModeLine(list);
     }
-    for (const listener of [...this.modeListeners]) {
-      listener();
-    }
+    this.notifyMode();
   }
 
   /**
@@ -2476,21 +2521,29 @@ const hintStyles = stylex.create({
   done: {
     paddingInline: spacingVars['--spacing-1'],
   },
+  // The Kbd glyph paints its own color, so the whole button dims.
+  disabled: {
+    opacity: 0.5,
+  },
 });
 
 /**
  * One of the hint's buttons: it never takes the focus from the handle (a
- * press does not move it), and does what its key does.
+ * press does not move it), and does what its key does. A disabled one stays
+ * focusable (`aria-disabled`) and does nothing: a native `disabled` button
+ * would drop a screen reader's focus in the hint to the page.
  */
 function HintButton({
   label,
   onPress,
   isText = false,
+  isDisabled = false,
   children,
 }: {
   label?: string;
   onPress: () => void;
   isText?: boolean;
+  isDisabled?: boolean;
   children: ReactNode;
 }) {
   // A finger's target: the shared touch hit area grows the button's hit
@@ -2502,12 +2555,14 @@ function HintButton({
       type="button"
       tabIndex={-1}
       aria-label={label}
+      aria-disabled={isDisabled || undefined}
       onPointerDown={event => event.preventDefault()}
       onMouseDown={event => event.preventDefault()}
-      onClick={onPress}
+      onClick={isDisabled ? undefined : onPress}
       {...focusOutlineProps.focusVisible([
         hintStyles.button,
         isText && hintStyles.done,
+        isDisabled && hintStyles.disabled,
         touchHitAreaStyles.layer,
       ])}>
       {children}
@@ -2522,7 +2577,8 @@ function HintButton({
  * move is a button that does what its key does, with the same announcement,
  * and the focus stays on the handle. Done ends the mode as Escape does. So
  * a pointer or a finger can reorder by tapping the handle, the moves, then
- * Done.
+ * Done. A move past the list's first or last place is disabled, because its
+ * key does nothing there.
  */
 function ListReorderModeHint({
   controller,
@@ -2533,6 +2589,11 @@ function ListReorderModeHint({
   const target = useSyncExternalStore(
     controller.subscribeMode,
     () => controller.modeTarget,
+    () => null,
+  );
+  const ends = useSyncExternalStore(
+    controller.subscribeMode,
+    () => controller.modeEnds,
     () => null,
   );
   const layer = useLayer({mode: 'context'});
@@ -2574,11 +2635,13 @@ function ListReorderModeHint({
         {...stylex.props(anchoredHintStyles.keys)}>
         <HintButton
           label={t('@astryx.list.reorderMoveUp')}
+          isDisabled={ends === 'first' || ends === 'only'}
           onPress={() => controller.step(target, -1)}>
           <Kbd keys="up" aria-hidden />
         </HintButton>
         <HintButton
           label={t('@astryx.list.reorderMoveDown')}
+          isDisabled={ends === 'last' || ends === 'only'}
           onPress={() => controller.step(target, 1)}>
           <Kbd keys="down" aria-hidden />
         </HintButton>
