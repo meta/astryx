@@ -107,8 +107,10 @@ describe('a List given no animatedLayout handle', () => {
     ['List', 'packages/core/src/List/List.tsx'],
     ['CheckboxList', 'packages/core/src/CheckboxList/CheckboxList.tsx'],
   ])('an import of %s carries no layout engine', (name, entry) => {
-    const {eager} = importOf([[name, entry]], name);
+    const {eager, onDemand} = importOf([[name, entry]], name);
     expect(eager[ENGINE] ?? 0).toBe(0);
+    // Not through import() either: the engine comes only with a handle.
+    expect(onDemand[ENGINE] ?? 0).toBe(0);
   });
 
   it('an app that creates a handle carries the layout engine', () => {

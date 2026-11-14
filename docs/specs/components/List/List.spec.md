@@ -197,8 +197,9 @@ Consumer migration instructions belong in consumer docs and release notes.
 - **PR2 — Motion only where it applies.** FR11 adds no listener, observer,
   measurement, or animation under a fine pointer, and FR12 measures rows only
   with a handle. Every motion runs on transform and opacity. FR12's layout
-  calls come with the handle, so a List given no handle loads no layout-motion
-  code (`architecture:component-import-boundaries` INV7).
+  calls come with the handle, so a List given no handle loads only its own
+  row-update glue, not the shared layout-motion module
+  (`architecture:component-import-boundaries` INV7).
 
 ## Accessibility contract
 
