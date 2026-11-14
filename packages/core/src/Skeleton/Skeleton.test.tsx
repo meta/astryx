@@ -1,8 +1,11 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {createRef} from 'react';
 import {describe, it, expect} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import {Skeleton} from './Skeleton';
+import type {SkeletonRadius} from './Skeleton';
+import {declaredValue} from '../__tests__/stylexDeclarations';
 import {
   getAllInjectedCss,
   getForcedColorsRules,
@@ -59,6 +62,13 @@ function opacityAt(frames: [number, number][], x: number): number {
     }
   }
   return frames[frames.length - 1][1];
+}
+
+/** The value a dynamic StyleX property resolves to on this element. */
+function resolved(el: HTMLElement, property: string): string {
+  const declared = declaredValue(el, property) ?? '';
+  const name = /^var\((--[\w-]+)/.exec(declared)?.[1];
+  return name ? el.style.getPropertyValue(name) : declared;
 }
 
 describe('Skeleton', () => {
@@ -144,5 +154,98 @@ describe('forced colors (WCAG 1.4.11)', () => {
     expect(css).toContain('background-color: graytext;');
     // The resting 0.25 opacity is lifted so the static placeholder reads.
     expect(css).toContain('opacity: 1;');
+  });
+});
+
+describe('size', () => {
+  it('fills its container when no size is given', () => {
+    render(<Skeleton data-testid="sk" />);
+    const el = screen.getByTestId('sk');
+    expect(resolved(el, 'width')).toBe('100%');
+    expect(resolved(el, 'height')).toBe('100%');
+  });
+
+  it('reads a number as pixels', () => {
+    render(<Skeleton width={200} height={20} data-testid="sk" />);
+    const el = screen.getByTestId('sk');
+    expect(resolved(el, 'width')).toBe('200px');
+    expect(resolved(el, 'height')).toBe('20px');
+  });
+
+  it('passes a string size through unchanged', () => {
+    render(<Skeleton width="12rem" height="50%" data-testid="sk" />);
+    const el = screen.getByTestId('sk');
+    expect(resolved(el, 'width')).toBe('12rem');
+    expect(resolved(el, 'height')).toBe('50%');
+  });
+});
+
+describe('stagger', () => {
+  it('starts the pulse after a one second delay by default', () => {
+    render(<Skeleton width={200} height={20} data-testid="sk" />);
+    expect(resolved(screen.getByTestId('sk'), 'animation-delay')).toBe(
+      '1000ms',
+    );
+  });
+
+  it('adds 100ms to the delay for each index step', () => {
+    const {rerender} = render(
+      <Skeleton width={200} height={20} index={1} data-testid="sk" />,
+    );
+    expect(resolved(screen.getByTestId('sk'), 'animation-delay')).toBe(
+      '1100ms',
+    );
+    rerender(<Skeleton width={200} height={20} index={3} data-testid="sk" />);
+    expect(resolved(screen.getByTestId('sk'), 'animation-delay')).toBe(
+      '1300ms',
+    );
+  });
+});
+
+describe('radius', () => {
+  it.each([
+    ['none', '0'],
+    [0, 'var(--radius-none)'],
+    [1, 'var(--radius-inner)'],
+    [2, 'var(--radius-element)'],
+    [3, 'var(--radius-container)'],
+    [4, 'var(--radius-container)'],
+    ['rounded', 'var(--radius-full)'],
+  ] as [SkeletonRadius, string][])('maps radius %s to %s', (radius, token) => {
+    render(<Skeleton radius={radius} data-testid="sk" />);
+    expect(declaredValue(screen.getByTestId('sk'), 'border-radius')).toBe(
+      token,
+    );
+  });
+});
+
+describe('props', () => {
+  it('forwards its ref to the root element', () => {
+    const ref = createRef<HTMLDivElement>();
+    render(<Skeleton ref={ref} width={200} height={20} data-testid="sk" />);
+    expect(ref.current).toBe(screen.getByTestId('sk'));
+  });
+
+  it('keeps a caller className and style next to its own', () => {
+    render(
+      <Skeleton
+        width={200}
+        height={20}
+        className="caller-class"
+        style={{marginTop: 4}}
+        data-testid="sk"
+      />,
+    );
+    const el = screen.getByTestId('sk');
+    expect(el).toHaveClass('caller-class');
+    expect(el.style.marginTop).toBe('4px');
+    expect(resolved(el, 'width')).toBe('200px');
+  });
+
+  it('passes other attributes through to the root element', () => {
+    render(
+      <Skeleton width={200} height={20} data-testid="sk" data-extra="yes" />,
+    );
+    expect(screen.getByTestId('sk')).toHaveAttribute('data-extra', 'yes');
   });
 });
