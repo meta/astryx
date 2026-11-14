@@ -73,6 +73,7 @@ import {
 import {animatorFor, SETTLE_THRESHOLD} from '../motion/animator';
 import {resolveMoveTiming} from '../motion/resolveMotion';
 import {springs} from '../motion/uikit/springs';
+import {FIELD_OFFSET} from '../keyboard/keyboardTarget';
 import {useMobileKeyboard} from '../keyboard/useMobileKeyboard';
 import {
   scrollPreservationPadding,
@@ -104,7 +105,6 @@ function sheetReserve(viewportHeight: number): number {
     Math.ceil(viewportHeight * RESERVE_VIEWPORT_SHARE),
   );
 }
-const MOBILE_KEYBOARD_BOTTOM_CLEARANCE = 48;
 // How many more frames a drag's close looks for its scrim's fade to adopt.
 const MAX_SCRIM_FADE_ADOPT_FRAMES = 3;
 const TRANSITION_BACKSTOP_BUFFER_MS = 50;
@@ -525,9 +525,12 @@ const styles = stylex.create({
     // range.
     minHeight: 'fit-content',
   },
-  tallKeyboardBody: {
-    scrollPaddingBlockEnd: MOBILE_KEYBOARD_BOTTOM_CLEARANCE,
-  },
+  // While the keyboard covers the sheet, a field the browser scrolls into the
+  // body keeps the keyboard module's clearance at its end. With no keyboard,
+  // the body has no scroll padding, as other scroll areas.
+  tallKeyboardBody: (clearance: number) => ({
+    scrollPaddingBlockEnd: clearance,
+  }),
   // The inset the keyboard takes at the end of a Tall sheet's content
   // (useMobileKeyboard), so its last control can scroll above the keyboard.
   // It is the content box's last in-flow box, after the content's own
@@ -973,7 +976,6 @@ export function BottomSheetPanel({
   const keyboard = useMobileKeyboard(elementRef, {
     move: 'ride',
     inset: true,
-    offset: MOBILE_KEYBOARD_BOTTOM_CLEARANCE,
     isEnabled: height === 'tall' && isPresented,
     isExpanded: settledOffset === 0,
     isOpen: isInteractive,
@@ -1307,7 +1309,9 @@ export function BottomSheetPanel({
               stylex.props(
                 focusOutlineStyles.focusVisible,
                 styles.body,
-                height === 'tall' && styles.tallKeyboardBody,
+                height === 'tall' &&
+                  keyboardInset > 0 &&
+                  styles.tallKeyboardBody(FIELD_OFFSET),
               ),
               bodyEndPadding != null
                 ? {style: {paddingBlockEnd: bodyEndPadding}}

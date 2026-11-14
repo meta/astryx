@@ -122,9 +122,9 @@ that times motion with it. Everything here is internal to
   script's `focus()` that no claim saw, is put back (`watchRevealPan`).
 - **The surface hook (FR4, FR5):** `useMobileKeyboard(targetRef, options)`
   (`useMobileKeyboard.ts`) keeps a focused field in a target above the
-  keyboard. BottomSheet passes its panel with `{move: 'ride', inset: true}`
-  and its suggestion clearance as `offset`, and enables it for a presented
-  Tall sheet. The inset goes at the end of the panel's scroll area, its body,
+  keyboard. BottomSheet passes its panel with `{move: 'ride', inset: true}`,
+  keeps the default `offset` (`FIELD_OFFSET`, 10 px), and enables it for a
+  presented Tall sheet. The inset goes at the end of the panel's scroll area, its body,
   which `useScrollableArea` marks. The hook gives a fully expanded sheet its
   keyboard scroll range, claims focus moves into it, and puts back a document
   scroll while the page is locked. It attaches through `useAttachment`. It

@@ -376,6 +376,12 @@ No covered field meets FR9 on `main`. Each gap below is open.
   Safari on iOS (`packages/core/src/keyboard/useMobileKeyboard.ts`). But
   Firefox reports the keyboard's hide once, at its end. The sheet's content
   moves at that report, in one frame, instead of riding from the blur (FR3).
+- **Gap 13 — A fully expanded Tall sheet's field in Safari on iOS.** Partly
+  met: the focused field rests 10 to 20 CSS px above the keyboard, not 10
+  (FR9). Safari reports the keyboard twice as it rises. At the second report,
+  the sheet retargets its reveal from a stale scroll base. That base is the
+  position from before its first smooth scroll, which Safari has already moved,
+  so the field lands up to 10 px high.
 
 ### Follow-up
 
