@@ -3,7 +3,9 @@
 /**
  * @file numberParser.ts
  * @input Text a person typed or pasted, plus the resolved BCP 47 locale
- * @output Exports parseLocaleNumber and formatEditableNumber
+ * @output Exports parseLocaleNumber, formatEditableNumber,
+ *   formatGroupedEditableNumber, groupEditableDraft, and
+ *   deleteDigitAcrossGroupSeparator
  * @position Internal to NumberInput; not part of the public surface
  *
  * People paste numbers out of spreadsheets, and a spreadsheet writes them
@@ -48,6 +50,7 @@ interface LocaleNumberSymbols {
   primaryGroupSize: number;
   /** Digits in every group left of it — 2 in en-IN's lakh grouping. */
   secondaryGroupSize: number;
+  hasGrouping: boolean;
 }
 
 const symbolsByLocale = new Map<string, LocaleNumberSymbols>();
@@ -78,6 +81,7 @@ function getLocaleNumberSymbols(locale: Locale | undefined) {
       decimal: parts.find(p => p.type === 'decimal')?.value ?? '.',
       primaryGroupSize: hasGrouping ? groupSizes[groupSizes.length - 1] : 3,
       secondaryGroupSize: hasGrouping ? groupSizes[groupSizes.length - 2] : 3,
+      hasGrouping,
     };
     symbolsByLocale.set(key, symbols);
   }
@@ -362,4 +366,427 @@ export function formatEditableNumber(value: number, locale?: Locale): string {
   const {decimal} = getLocaleNumberSymbols(locale);
   const raw = String(value);
   return decimal === '.' ? raw : raw.replace('.', decimal);
+}
+
+export interface GroupedEditableDraft {
+  text: string;
+  caret: number;
+}
+
+const ASCII_DIGIT = /[0-9]/;
+const LEADING_SIGNS = new RegExp(`^[+${MINUS_SIGNS}]+`);
+
+function isAsciiDigit(character: string): boolean {
+  return ASCII_DIGIT.test(character);
+}
+
+function countDigits(text: string): number {
+  let count = 0;
+  for (const character of text) {
+    if (isAsciiDigit(character)) {
+      count++;
+    }
+  }
+  return count;
+}
+
+function indexAfterDigits(text: string, digitCount: number): number {
+  if (digitCount <= 0) {
+    return 0;
+  }
+  let seen = 0;
+  for (let i = 0; i < text.length; i++) {
+    if (isAsciiDigit(text[i])) {
+      seen++;
+      if (seen === digitCount) {
+        return i + 1;
+      }
+    }
+  }
+  return text.length;
+}
+
+function insertGroupSeparators(
+  digits: string,
+  group: string,
+  primaryGroupSize: number,
+  secondaryGroupSize: number,
+): string {
+  if (group === '' || digits.length <= primaryGroupSize) {
+    return digits;
+  }
+  const chunks = [digits.slice(-primaryGroupSize)];
+  let rest = digits.slice(0, -primaryGroupSize);
+  while (rest.length > secondaryGroupSize) {
+    chunks.unshift(rest.slice(-secondaryGroupSize));
+    rest = rest.slice(0, -secondaryGroupSize);
+  }
+  if (rest.length > 0) {
+    chunks.unshift(rest);
+  }
+  return chunks.join(group);
+}
+
+function extractDigits(text: string, group: string): string {
+  if (group === '') {
+    return text.replace(/\D/g, '');
+  }
+  let digits = '';
+  let i = 0;
+  while (i < text.length) {
+    if (isAsciiDigit(text[i])) {
+      digits += text[i];
+      i++;
+      continue;
+    }
+    if (text.startsWith(group, i)) {
+      i += group.length;
+      continue;
+    }
+    break;
+  }
+  return digits;
+}
+
+/**
+ * A grouping separator belongs this many digits from the right of the
+ * integer: the primary size, then every secondary size after that. Same
+ * offsets `insertGroupSeparators` writes, and the same sizes `readUnder`
+ * requires of a well-formed group.
+ */
+function isGroupSeparatorOffset(
+  digitsFromRight: number,
+  primaryGroupSize: number,
+  secondaryGroupSize: number,
+): boolean {
+  if (digitsFromRight < primaryGroupSize || secondaryGroupSize <= 0) {
+    return false;
+  }
+  return (digitsFromRight - primaryGroupSize) % secondaryGroupSize === 0;
+}
+
+/**
+ * True when at least one group character in `run` sits on a grouping
+ * boundary for `totalDigits`. A separator off those boundaries is a
+ * decimal or a malformed group, not a thousands mark.
+ */
+function hasSeparatorAtGroupingOffset(
+  run: string,
+  group: string,
+  totalDigits: number,
+  primaryGroupSize: number,
+  secondaryGroupSize: number,
+): boolean {
+  if (group === '' || totalDigits <= primaryGroupSize) {
+    return false;
+  }
+  let digitsSeen = 0;
+  let i = 0;
+  while (i < run.length) {
+    if (isAsciiDigit(run[i])) {
+      digitsSeen++;
+      i++;
+      continue;
+    }
+    if (run.startsWith(group, i)) {
+      const fromRight = totalDigits - digitsSeen;
+      if (
+        digitsSeen > 0 &&
+        fromRight > 0 &&
+        isGroupSeparatorOffset(fromRight, primaryGroupSize, secondaryGroupSize)
+      ) {
+        return true;
+      }
+      i += group.length;
+      continue;
+    }
+    break;
+  }
+  return false;
+}
+
+/** The sign-free run of digits and group characters at the start of `text`. */
+function findIntegerRun(
+  text: string,
+  group: string,
+): {runStart: number; runEnd: number} {
+  const signMatch = LEADING_SIGNS.exec(text);
+  const runStart = signMatch?.[0].length ?? 0;
+  let runEnd = runStart;
+  while (runEnd < text.length) {
+    if (isAsciiDigit(text[runEnd])) {
+      runEnd++;
+      continue;
+    }
+    if (text.startsWith(group, runEnd)) {
+      runEnd += group.length;
+      continue;
+    }
+    break;
+  }
+  return {runStart, runEnd};
+}
+
+/** The text an edit inserted between the unchanged prefix and suffix. */
+function insertedByEdit(previous: string, next: string): string {
+  const maxPrefix = Math.min(previous.length, next.length);
+  let prefix = 0;
+  while (prefix < maxPrefix && previous[prefix] === next[prefix]) {
+    prefix++;
+  }
+  const maxSuffix = Math.min(previous.length, next.length) - prefix;
+  let suffix = 0;
+  while (
+    suffix < maxSuffix &&
+    previous[previous.length - 1 - suffix] === next[next.length - 1 - suffix]
+  ) {
+    suffix++;
+  }
+  return next.slice(prefix, next.length - suffix);
+}
+
+/**
+ * True when the edit from `previous` to `next` only inserted digits, only
+ * deleted text, or replaced a selection with digits.
+ */
+function isDigitOrDeletionEdit(previous: string, next: string): boolean {
+  return /^[0-9]*$/.test(insertedByEdit(previous, next));
+}
+
+/**
+ * True when the previous draft's integer run carried no group character or
+ * exactly the grouping this field writes, so every separator in it was ours.
+ */
+function hasOnlyFieldGrouping(
+  text: string,
+  group: string,
+  primaryGroupSize: number,
+  secondaryGroupSize: number,
+): boolean {
+  const {runStart, runEnd} = findIntegerRun(text, group);
+  const run = text.slice(runStart, runEnd);
+  if (!run.includes(group)) {
+    return true;
+  }
+  return (
+    run ===
+    insertGroupSeparators(
+      extractDigits(run, group),
+      group,
+      primaryGroupSize,
+      secondaryGroupSize,
+    )
+  );
+}
+
+/**
+ * Group separators belong only in the integer run. A sign, a decimal mark, or
+ * any other character stays where the person typed it. A group character that
+ * is not on a grouping boundary stays too: it may be a decimal (de-DE `1.5`)
+ * or a malformed group (en-US `1,23`).
+ *
+ * With `previousText`, an edit that only inserted digits or deleted text from
+ * a draft whose separators were all the field's own regroups even though it
+ * shifted those separators off their boundaries (en-US `1,500` then `0` is
+ * `15,000`, Backspace at the end of `1,500,000` is `150,000`).
+ */
+export function groupEditableDraft(
+  text: string,
+  caret: number,
+  locale?: Locale,
+  previousText?: string,
+): GroupedEditableDraft {
+  const clampedCaret = Math.max(0, Math.min(caret, text.length));
+  const {group, primaryGroupSize, secondaryGroupSize, hasGrouping} =
+    getLocaleNumberSymbols(locale);
+  if (!hasGrouping || group === '') {
+    return {text, caret: clampedCaret};
+  }
+
+  const {runStart, runEnd} = findIntegerRun(text, group);
+  const run = text.slice(runStart, runEnd);
+  const digits = extractDigits(run, group);
+  if (digits === '') {
+    return {text, caret: clampedCaret};
+  }
+
+  // A group character the person just typed may be a decimal (vi-VN / de-DE
+  // `1.500` then `.5`) or a typo (en-US `1,500` then `,5`). Never fold it into
+  // the digits: leave the text as typed so the parser decides.
+  if (
+    previousText !== undefined &&
+    insertedByEdit(previousText, text).includes(group)
+  ) {
+    return {text, caret: clampedCaret};
+  }
+
+  const isDigitOrDeletion =
+    previousText !== undefined && isDigitOrDeletionEdit(previousText, text);
+  const previousIsFieldGrouping =
+    previousText !== undefined &&
+    hasOnlyFieldGrouping(
+      previousText,
+      group,
+      primaryGroupSize,
+      secondaryGroupSize,
+    );
+
+  // A digit or deletion edit to a draft that holds a group character the
+  // person typed (vi-VN `1.500.5`, then Backspace) stays as typed too, so a
+  // typed decimal is never folded into the digits a keystroke later.
+  if (isDigitOrDeletion && !previousIsFieldGrouping) {
+    return {text, caret: clampedCaret};
+  }
+
+  const isEditOfFieldGrouping = isDigitOrDeletion && previousIsFieldGrouping;
+
+  // Otherwise strip group characters only when at least one of them is
+  // already in a valid grouping position, and leave the typed text alone so
+  // a decimal (de-DE / vi-VN `1.5`) or a malformed group (en-US `1,23`) is
+  // not folded into the digits.
+  if (
+    !isEditOfFieldGrouping &&
+    run.includes(group) &&
+    !hasSeparatorAtGroupingOffset(
+      run,
+      group,
+      digits.length,
+      primaryGroupSize,
+      secondaryGroupSize,
+    )
+  ) {
+    return {text, caret: clampedCaret};
+  }
+
+  const groupedRun = insertGroupSeparators(
+    digits,
+    group,
+    primaryGroupSize,
+    secondaryGroupSize,
+  );
+  const nextText = text.slice(0, runStart) + groupedRun + text.slice(runEnd);
+  if (clampedCaret <= runStart) {
+    return {text: nextText, caret: clampedCaret};
+  }
+  if (clampedCaret >= runEnd) {
+    return {
+      text: nextText,
+      caret: runStart + groupedRun.length + (clampedCaret - runEnd),
+    };
+  }
+  const digitsBefore = countDigits(text.slice(runStart, clampedCaret));
+  return {
+    text: nextText,
+    caret: runStart + indexAfterDigits(groupedRun, digitsBefore),
+  };
+}
+
+/**
+ * The focused text when grouping stays on. Scientific notation has no groups
+ * to insert, so it stays as `formatEditableNumber`.
+ */
+export function formatGroupedEditableNumber(
+  value: number,
+  locale?: Locale,
+): string {
+  if (!Number.isFinite(value)) {
+    return formatEditableNumber(value, locale);
+  }
+  const raw = Object.is(value, -0) ? '0' : String(value);
+  if (/[eE]/.test(raw)) {
+    return formatEditableNumber(value, locale);
+  }
+  const {decimal, hasGrouping} = getLocaleNumberSymbols(locale);
+  if (!hasGrouping) {
+    return formatEditableNumber(value, locale);
+  }
+  const localized = decimal === '.' ? raw : raw.replace('.', decimal);
+  return groupEditableDraft(localized, localized.length, locale).text;
+}
+
+function digitIndexBeforeGroup(
+  text: string,
+  separatorStart: number,
+  group: string,
+): number {
+  let i = separatorStart;
+  while (i > 0) {
+    if (i >= group.length && text.startsWith(group, i - group.length)) {
+      i -= group.length;
+      continue;
+    }
+    if (isAsciiDigit(text[i - 1])) {
+      return i - 1;
+    }
+    return -1;
+  }
+  return -1;
+}
+
+function digitIndexAfterGroup(
+  text: string,
+  separatorStart: number,
+  group: string,
+): number {
+  let i = separatorStart + group.length;
+  while (i < text.length) {
+    if (text.startsWith(group, i)) {
+      i += group.length;
+      continue;
+    }
+    if (isAsciiDigit(text[i])) {
+      return i;
+    }
+    return -1;
+  }
+  return -1;
+}
+
+/**
+ * Backspace after a group separator, or Delete before one, would otherwise
+ * remove only the separator. The next keystroke then puts it back. Delete the
+ * digit on the far side of the separator instead.
+ *
+ * Only when the integer run carries exactly the field's own grouping. A group
+ * character the person typed as a decimal (de-DE / vi-VN `1.5`) or a malformed
+ * group (en-US `1,23`) is left to the browser, which deletes just that
+ * character.
+ */
+export function deleteDigitAcrossGroupSeparator(
+  text: string,
+  caret: number,
+  key: 'Backspace' | 'Delete',
+  locale?: Locale,
+): GroupedEditableDraft | null {
+  const {group, hasGrouping, primaryGroupSize, secondaryGroupSize} =
+    getLocaleNumberSymbols(locale);
+  if (!hasGrouping || group === '' || caret < 0 || caret > text.length) {
+    return null;
+  }
+  if (
+    !hasOnlyFieldGrouping(text, group, primaryGroupSize, secondaryGroupSize)
+  ) {
+    return null;
+  }
+  let digitIndex: number;
+  let nextCaret: number;
+  if (key === 'Backspace') {
+    const separatorStart = caret - group.length;
+    if (separatorStart < 0 || !text.startsWith(group, separatorStart)) {
+      return null;
+    }
+    digitIndex = digitIndexBeforeGroup(text, separatorStart, group);
+    nextCaret = digitIndex;
+  } else {
+    if (!text.startsWith(group, caret)) {
+      return null;
+    }
+    digitIndex = digitIndexAfterGroup(text, caret, group);
+    nextCaret = caret;
+  }
+  if (digitIndex < 0) {
+    return null;
+  }
+  const nextText = text.slice(0, digitIndex) + text.slice(digitIndex + 1);
+  return groupEditableDraft(nextText, nextCaret, locale, text);
 }

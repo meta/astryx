@@ -1,7 +1,13 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect} from 'vitest';
-import {formatEditableNumber, parseLocaleNumber} from './numberParser';
+import {
+  deleteDigitAcrossGroupSeparator,
+  formatEditableNumber,
+  formatGroupedEditableNumber,
+  groupEditableDraft,
+  parseLocaleNumber,
+} from './numberParser';
 
 const NBSP = '\u00A0';
 const NARROW_NBSP = '\u202F';
@@ -218,5 +224,189 @@ describe('formatEditableNumber', () => {
         ).toBe(value);
       }
     }
+  });
+});
+
+describe('formatGroupedEditableNumber', () => {
+  it.each([
+    [1500000, 'en-US', '1,500,000'],
+    [1500000, 'vi-VN', '1.500.000'],
+    [1234567, 'en-IN', '12,34,567'],
+    [42, 'en-US', '42'],
+    [-1500000, 'en-US', '-1,500,000'],
+    [1500.5, 'en-US', '1,500.5'],
+    [1500.5, 'de-DE', '1.500,5'],
+  ])('shows %j in %s as %j', (value, locale, expected) => {
+    expect(formatGroupedEditableNumber(value, locale)).toBe(expected);
+  });
+
+  it('round trips grouped integers through the parser', () => {
+    for (const locale of ['en-US', 'vi-VN', 'de-DE', 'en-IN']) {
+      for (const value of [0, 42, 1500, 1500000, 123456789, -1500000]) {
+        expect(
+          parseLocaleNumber(formatGroupedEditableNumber(value, locale), locale),
+        ).toBe(value);
+      }
+    }
+  });
+
+  it('leaves scientific notation ungrouped', () => {
+    expect(formatGroupedEditableNumber(1e21, 'en-US')).toBe('1e+21');
+    expect(formatGroupedEditableNumber(1.5e-7, 'de-DE')).toBe('1,5e-7');
+  });
+});
+
+describe('groupEditableDraft', () => {
+  it('regroups digits and keeps the caret before the same digits', () => {
+    expect(groupEditableDraft('15600000', 3, 'en-US')).toEqual({
+      text: '15,600,000',
+      caret: 4,
+    });
+    expect(groupEditableDraft('1,5600,000', 4, 'en-US')).toEqual({
+      text: '15,600,000',
+      caret: 4,
+    });
+    expect(groupEditableDraft('15600000', 3, 'vi-VN')).toEqual({
+      text: '15.600.000',
+      caret: 4,
+    });
+  });
+
+  it('leaves a sign, a decimal mark, or a letter where it was typed', () => {
+    expect(groupEditableDraft('-1500000', 8, 'en-US')).toEqual({
+      text: '-1,500,000',
+      caret: 10,
+    });
+    expect(groupEditableDraft('1500.5', 6, 'en-US')).toEqual({
+      text: '1,500.5',
+      caret: 7,
+    });
+    expect(groupEditableDraft('1500000a', 8, 'en-US')).toEqual({
+      text: '1,500,000a',
+      caret: 10,
+    });
+  });
+
+  it('leaves a group character that is not in a valid grouping position', () => {
+    for (const locale of ['vi-VN', 'de-DE']) {
+      const draft = groupEditableDraft('1.5', 3, locale);
+      expect(draft).toEqual({text: '1.5', caret: 3});
+      expect(parseLocaleNumber(draft.text, locale)).toBe(1.5);
+
+      const pi = groupEditableDraft('3.14159', 7, locale);
+      expect(pi.text).toBe('3.14159');
+      expect(pi.text).not.toBe('314159');
+      expect(pi.caret).toBe(7);
+      expect(parseLocaleNumber(pi.text, locale)).toBe(3.14159);
+    }
+
+    const malformed = groupEditableDraft('1,23', 4, 'en-US');
+    expect(malformed).toEqual({text: '1,23', caret: 4});
+    expect(parseLocaleNumber(malformed.text, 'en-US')).toBeNull();
+  });
+
+  it('regroups an edit in the last digit group of a field-grouped draft', () => {
+    expect(groupEditableDraft('1,5000', 6, 'en-US', '1,500')).toEqual({
+      text: '15,000',
+      caret: 6,
+    });
+    expect(groupEditableDraft('1.5000', 6, 'vi-VN', '1.500')).toEqual({
+      text: '15.000',
+      caret: 6,
+    });
+    expect(groupEditableDraft('1,500,00', 8, 'en-US', '1,500,000')).toEqual({
+      text: '150,000',
+      caret: 7,
+    });
+    expect(groupEditableDraft('1,500,00', 7, 'en-US', '1,500,000')).toEqual({
+      text: '150,000',
+      caret: 6,
+    });
+  });
+
+  it('leaves a typed separator alone even with a previous draft', () => {
+    expect(groupEditableDraft('1.5', 3, 'vi-VN', '1')).toEqual({
+      text: '1.5',
+      caret: 3,
+    });
+    expect(groupEditableDraft('1.55', 4, 'vi-VN', '1.5')).toEqual({
+      text: '1.55',
+      caret: 4,
+    });
+    expect(groupEditableDraft('1,23', 4, 'en-US', '1,2')).toEqual({
+      text: '1,23',
+      caret: 4,
+    });
+    expect(groupEditableDraft('1,23', 4, 'en-US', '')).toEqual({
+      text: '1,23',
+      caret: 4,
+    });
+  });
+
+  it('regroups a well-formed ungrouped integer', () => {
+    expect(groupEditableDraft('1234567', 7, 'en-US')).toEqual({
+      text: '1,234,567',
+      caret: 9,
+    });
+    expect(groupEditableDraft('1234567', 7, 'vi-VN')).toEqual({
+      text: '1.234.567',
+      caret: 9,
+    });
+  });
+});
+
+describe('deleteDigitAcrossGroupSeparator', () => {
+  it('deletes the digit before a separator on Backspace', () => {
+    expect(
+      deleteDigitAcrossGroupSeparator('1,500,000', 2, 'Backspace', 'en-US'),
+    ).toEqual({text: '500,000', caret: 0});
+    expect(
+      deleteDigitAcrossGroupSeparator('1.500.000', 2, 'Backspace', 'vi-VN'),
+    ).toEqual({text: '500.000', caret: 0});
+  });
+
+  it('deletes the digit after a separator on Delete', () => {
+    expect(
+      deleteDigitAcrossGroupSeparator('1,500,000', 1, 'Delete', 'en-US'),
+    ).toEqual({text: '100,000', caret: 1});
+    expect(
+      deleteDigitAcrossGroupSeparator('1.500.000', 1, 'Delete', 'vi-VN'),
+    ).toEqual({text: '100.000', caret: 1});
+  });
+
+  it('regroups after Delete across a separator into the last group', () => {
+    expect(
+      deleteDigitAcrossGroupSeparator('1,500,000', 5, 'Delete', 'en-US'),
+    ).toEqual({text: '150,000', caret: 5});
+  });
+
+  it('returns null when the key would not hit a separator', () => {
+    expect(
+      deleteDigitAcrossGroupSeparator('1,500,000', 3, 'Backspace', 'en-US'),
+    ).toBeNull();
+    expect(
+      deleteDigitAcrossGroupSeparator('1,500,000', 3, 'Delete', 'en-US'),
+    ).toBeNull();
+  });
+
+  it('leaves a typed decimal or malformed group to the browser', () => {
+    expect(
+      deleteDigitAcrossGroupSeparator('1.5', 2, 'Backspace', 'vi-VN'),
+    ).toBeNull();
+    expect(
+      deleteDigitAcrossGroupSeparator('1.', 2, 'Backspace', 'vi-VN'),
+    ).toBeNull();
+    expect(
+      deleteDigitAcrossGroupSeparator('3.14', 1, 'Delete', 'de-DE'),
+    ).toBeNull();
+    expect(
+      deleteDigitAcrossGroupSeparator('1,23', 2, 'Backspace', 'en-US'),
+    ).toBeNull();
+  });
+
+  it('still deletes across the field grouping in de-DE', () => {
+    expect(
+      deleteDigitAcrossGroupSeparator('1.500', 2, 'Backspace', 'de-DE'),
+    ).toEqual({text: '500', caret: 0});
   });
 });

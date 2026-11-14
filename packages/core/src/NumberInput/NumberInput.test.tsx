@@ -529,6 +529,412 @@ describe('NumberInput', () => {
     });
   });
 
+  describe('isGroupedWhileEditing', () => {
+    function ignoreChange(_value: number) {}
+
+    function GroupedField({
+      locale,
+      value = 1500000,
+      isGroupedWhileEditing = true,
+      onChange = ignoreChange,
+      formatValue,
+    }: {
+      locale: string;
+      value?: number | null;
+      isGroupedWhileEditing?: boolean;
+      onChange?: (value: number) => void;
+      formatValue?: (value: number) => string;
+    }) {
+      return (
+        <InternationalizationProvider locale={locale}>
+          <NumberInput
+            label="Amount"
+            value={value}
+            onChange={onChange}
+            isGroupedWhileEditing={isGroupedWhileEditing}
+            formatValue={
+              formatValue ?? (number => number.toLocaleString(locale))
+            }
+          />
+        </InternationalizationProvider>
+      );
+    }
+
+    it('shows grouped text on focus in en-US', () => {
+      render(<GroupedField locale="en-US" />);
+      const input = screen.getByRole('spinbutton');
+      expect(input).toHaveValue('1,500,000');
+      fireEvent.focus(input);
+      expect(input).toHaveValue('1,500,000');
+    });
+
+    it('shows grouped text on focus in vi-VN', () => {
+      render(<GroupedField locale="vi-VN" />);
+      const input = screen.getByRole('spinbutton');
+      expect(input).toHaveValue('1.500.000');
+      fireEvent.focus(input);
+      expect(input).toHaveValue('1.500.000');
+    });
+
+    it('keeps the default ungrouped focused value when the prop is off', () => {
+      render(<GroupedField locale="en-US" isGroupedWhileEditing={false} />);
+      const input = screen.getByRole('spinbutton');
+      expect(input).toHaveValue('1,500,000');
+      fireEvent.focus(input);
+      expect(input).toHaveValue('1500000');
+    });
+
+    it('keeps the default ungrouped focused value when the prop is omitted', () => {
+      render(
+        <InternationalizationProvider locale="en-US">
+          <NumberInput
+            label="Amount"
+            value={1500000}
+            onChange={() => {}}
+            formatValue={number => number.toLocaleString('en-US')}
+          />
+        </InternationalizationProvider>,
+      );
+      const input = screen.getByRole('spinbutton');
+      fireEvent.focus(input);
+      expect(input).toHaveValue('1500000');
+    });
+
+    it('regroups typed digits and keeps the caret before the same digits', () => {
+      render(<GroupedField locale="en-US" />);
+      const input = screen.getByRole<HTMLInputElement>('spinbutton');
+      fireEvent.focus(input);
+      input.setSelectionRange(3, 3);
+      fireEvent.input(input, {
+        target: {value: '1,5600,000', selectionStart: 4, selectionEnd: 4},
+      });
+      expect(input).toHaveValue('15,600,000');
+      expect(input.selectionStart).toBe(4);
+      expect(input.selectionEnd).toBe(4);
+    });
+
+    it('regroups typed digits in vi-VN, where the group separator is a full stop', () => {
+      render(<GroupedField locale="vi-VN" />);
+      const input = screen.getByRole<HTMLInputElement>('spinbutton');
+      fireEvent.focus(input);
+      input.setSelectionRange(3, 3);
+      fireEvent.input(input, {
+        target: {value: '1.5600.000', selectionStart: 4, selectionEnd: 4},
+      });
+      expect(input).toHaveValue('15.600.000');
+      expect(input.selectionStart).toBe(4);
+      expect(input.selectionEnd).toBe(4);
+    });
+
+    it('regroups a digit typed at the end of a grouped number', () => {
+      render(<GroupedField locale="en-US" value={1500} />);
+      const input = screen.getByRole<HTMLInputElement>('spinbutton');
+      fireEvent.focus(input);
+      expect(input).toHaveValue('1,500');
+      fireEvent.input(input, {
+        target: {value: '1,5000', selectionStart: 6, selectionEnd: 6},
+      });
+      expect(input).toHaveValue('15,000');
+      expect(input.selectionStart).toBe(6);
+    });
+
+    it('regroups a digit typed at the end of a grouped number in vi-VN', () => {
+      const onChange = vi.fn();
+      render(<GroupedField locale="vi-VN" value={1500} onChange={onChange} />);
+      const input = screen.getByRole<HTMLInputElement>('spinbutton');
+      fireEvent.focus(input);
+      expect(input).toHaveValue('1.500');
+      fireEvent.input(input, {
+        target: {value: '1.5000', selectionStart: 6, selectionEnd: 6},
+      });
+      expect(input).toHaveValue('15.000');
+      fireEvent.blur(input);
+      expect(onChange).toHaveBeenCalledWith(15000);
+    });
+
+    it('regroups after Backspace in the last digit group', () => {
+      render(<GroupedField locale="en-US" />);
+      const input = screen.getByRole<HTMLInputElement>('spinbutton');
+      fireEvent.focus(input);
+      fireEvent.input(input, {
+        target: {value: '1,500,00', selectionStart: 8, selectionEnd: 8},
+      });
+      expect(input).toHaveValue('150,000');
+      expect(input.selectionStart).toBe(7);
+    });
+
+    it('regroups after Delete in the last digit group', () => {
+      render(<GroupedField locale="en-US" />);
+      const input = screen.getByRole<HTMLInputElement>('spinbutton');
+      fireEvent.focus(input);
+      fireEvent.input(input, {
+        target: {value: '1,500,00', selectionStart: 7, selectionEnd: 7},
+      });
+      expect(input).toHaveValue('150,000');
+      expect(input.selectionStart).toBe(6);
+    });
+
+    it('keeps a typed vi-VN decimal as typed', () => {
+      const onChange = vi.fn();
+      render(<GroupedField locale="vi-VN" value={null} onChange={onChange} />);
+      const input = screen.getByRole('spinbutton');
+      fireEvent.focus(input);
+      fireEvent.input(input, {target: {value: '1'}});
+      fireEvent.input(input, {target: {value: '1.5'}});
+      expect(input).toHaveValue('1.5');
+      fireEvent.blur(input);
+      expect(onChange).toHaveBeenCalledWith(1.5);
+    });
+
+    it('keeps a vi-VN decimal typed after a grouped number as typed', () => {
+      const onChange = vi.fn();
+      render(<GroupedField locale="vi-VN" value={1500} onChange={onChange} />);
+      const input = screen.getByRole('spinbutton');
+      fireEvent.focus(input);
+      expect(input).toHaveValue('1.500');
+      fireEvent.input(input, {target: {value: '1.500.'}});
+      expect(input).toHaveValue('1.500.');
+      fireEvent.input(input, {target: {value: '1.500.5'}});
+      expect(input).toHaveValue('1.500.5');
+      fireEvent.blur(input);
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('keeps an en-US group character typed after a grouped number as typed', () => {
+      const onChange = vi.fn();
+      render(<GroupedField locale="en-US" value={1500} onChange={onChange} />);
+      const input = screen.getByRole('spinbutton');
+      fireEvent.focus(input);
+      expect(input).toHaveValue('1,500');
+      fireEvent.input(input, {target: {value: '1,500,'}});
+      expect(input).toHaveValue('1,500,');
+      fireEvent.input(input, {target: {value: '1,500,5'}});
+      expect(input).toHaveValue('1,500,5');
+      fireEvent.blur(input);
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('keeps a vi-VN draft with a typed decimal as typed after Backspace', () => {
+      const onChange = vi.fn();
+      render(<GroupedField locale="vi-VN" value={1500} onChange={onChange} />);
+      const input = screen.getByRole('spinbutton');
+      fireEvent.focus(input);
+      fireEvent.input(input, {target: {value: '1.500.'}});
+      fireEvent.input(input, {target: {value: '1.500.5'}});
+      fireEvent.input(input, {
+        target: {value: '1.500.', selectionStart: 6, selectionEnd: 6},
+      });
+      expect(input).toHaveValue('1.500.');
+      fireEvent.input(input, {
+        target: {value: '1.500.7', selectionStart: 7, selectionEnd: 7},
+      });
+      expect(input).toHaveValue('1.500.7');
+      fireEvent.blur(input);
+      expect(onChange).not.toHaveBeenCalledWith(15007);
+    });
+
+    it('keeps an en-US draft with a typed group character as typed after Backspace', () => {
+      const onChange = vi.fn();
+      render(<GroupedField locale="en-US" value={1500} onChange={onChange} />);
+      const input = screen.getByRole('spinbutton');
+      fireEvent.focus(input);
+      fireEvent.input(input, {target: {value: '1,500,'}});
+      fireEvent.input(input, {target: {value: '1,500,5'}});
+      fireEvent.input(input, {
+        target: {value: '1,500,', selectionStart: 6, selectionEnd: 6},
+      });
+      expect(input).toHaveValue('1,500,');
+      fireEvent.blur(input);
+      expect(onChange).not.toHaveBeenCalledWith(1500);
+    });
+
+    it('deletes the digit beyond a separator on Backspace', () => {
+      render(<GroupedField locale="en-US" />);
+      const input = screen.getByRole<HTMLInputElement>('spinbutton');
+      fireEvent.focus(input);
+      input.setSelectionRange(2, 2);
+      fireEvent.keyDown(input, {key: 'Backspace'});
+      expect(input).toHaveValue('500,000');
+      expect(input.selectionStart).toBe(0);
+    });
+
+    it('deletes the digit beyond a separator on Delete', () => {
+      render(<GroupedField locale="en-US" />);
+      const input = screen.getByRole<HTMLInputElement>('spinbutton');
+      fireEvent.focus(input);
+      input.setSelectionRange(1, 1);
+      fireEvent.keyDown(input, {key: 'Delete'});
+      expect(input).toHaveValue('100,000');
+      expect(input.selectionStart).toBe(1);
+    });
+
+    it('leaves composing text ungrouped until compositionend', () => {
+      render(<GroupedField locale="en-US" />);
+      const input = screen.getByRole('spinbutton');
+      fireEvent.focus(input);
+      fireEvent.compositionStart(input);
+      fireEvent.input(input, {target: {value: '1500000'}});
+      expect(input).toHaveValue('1500000');
+      fireEvent.compositionEnd(input);
+      expect(input).toHaveValue('1,500,000');
+    });
+
+    it('regroups a composed digit in the last group from the draft before it', () => {
+      render(<GroupedField locale="en-US" value={1500} />);
+      const input = screen.getByRole('spinbutton');
+      fireEvent.focus(input);
+      expect(input).toHaveValue('1,500');
+      fireEvent.compositionStart(input);
+      fireEvent.input(input, {target: {value: '1,5000'}});
+      expect(input).toHaveValue('1,5000');
+      fireEvent.compositionEnd(input);
+      expect(input).toHaveValue('15,000');
+    });
+
+    it('regroups a composed digit in the last vi-VN group', () => {
+      render(<GroupedField locale="vi-VN" value={1500} />);
+      const input = screen.getByRole('spinbutton');
+      fireEvent.focus(input);
+      expect(input).toHaveValue('1.500');
+      fireEvent.compositionStart(input);
+      fireEvent.input(input, {target: {value: '1.5000'}});
+      fireEvent.compositionEnd(input);
+      expect(input).toHaveValue('15.000');
+    });
+
+    it('folds a composed full-width digit to ASCII before regrouping', () => {
+      const onChange = vi.fn();
+      render(<GroupedField locale="en-US" value={1500} onChange={onChange} />);
+      const input = screen.getByRole('spinbutton');
+      fireEvent.focus(input);
+      fireEvent.compositionStart(input);
+      fireEvent.input(input, {target: {value: '1,500\uFF10'}});
+      fireEvent.compositionEnd(input);
+      expect(input).toHaveValue('15,000');
+
+      fireEvent.blur(input);
+      expect(onChange).toHaveBeenCalledWith(15000);
+    });
+
+    it('runs caller composition handlers', () => {
+      const onCompositionStart = vi.fn();
+      const onCompositionEnd = vi.fn();
+      render(
+        <InternationalizationProvider locale="en-US">
+          <NumberInput
+            label="Amount"
+            value={1500}
+            onChange={ignoreChange}
+            isGroupedWhileEditing
+            onCompositionStart={onCompositionStart}
+            onCompositionEnd={onCompositionEnd}
+          />
+        </InternationalizationProvider>,
+      );
+      const input = screen.getByRole('spinbutton');
+      fireEvent.focus(input);
+      fireEvent.compositionStart(input);
+      fireEvent.input(input, {target: {value: '1,5000'}});
+      fireEvent.compositionEnd(input);
+      expect(onCompositionStart).toHaveBeenCalledTimes(1);
+      expect(onCompositionEnd).toHaveBeenCalledTimes(1);
+      expect(input).toHaveValue('15,000');
+    });
+
+    it('runs caller composition handlers without grouping', () => {
+      const onCompositionStart = vi.fn();
+      const onCompositionEnd = vi.fn();
+      render(
+        <NumberInput
+          label="Amount"
+          value={1500}
+          onChange={ignoreChange}
+          onCompositionStart={onCompositionStart}
+          onCompositionEnd={onCompositionEnd}
+        />,
+      );
+      const input = screen.getByRole('spinbutton');
+      fireEvent.compositionStart(input);
+      fireEvent.compositionEnd(input);
+      expect(onCompositionStart).toHaveBeenCalledTimes(1);
+      expect(onCompositionEnd).toHaveBeenCalledTimes(1);
+    });
+
+    it('withholds caller composition handlers while disabled', () => {
+      const onCompositionStart = vi.fn();
+      const onCompositionEnd = vi.fn();
+      render(
+        <NumberInput
+          label="Amount"
+          value={1500}
+          onChange={ignoreChange}
+          isDisabled
+          onCompositionStart={onCompositionStart}
+          onCompositionEnd={onCompositionEnd}
+        />,
+      );
+      const input = screen.getByRole('spinbutton');
+      fireEvent.compositionStart(input);
+      fireEvent.compositionEnd(input);
+      expect(onCompositionStart).not.toHaveBeenCalled();
+      expect(onCompositionEnd).not.toHaveBeenCalled();
+    });
+
+    it('does not regroup a composing candidate that is not only digits', () => {
+      render(<GroupedField locale="en-US" />);
+      const input = screen.getByRole('spinbutton');
+      fireEvent.focus(input);
+      fireEvent.compositionStart(input);
+      fireEvent.input(input, {target: {value: '1,500,000n'}});
+      expect(input).toHaveValue('1,500,000n');
+      fireEvent.compositionEnd(input);
+      expect(input).toHaveValue('1,500,000n');
+    });
+
+    it('leaves a typed decimal mark in place and regroups the integer run', () => {
+      render(<GroupedField locale="en-US" value={1500} />);
+      const input = screen.getByRole('spinbutton');
+      fireEvent.focus(input);
+      fireEvent.input(input, {target: {value: '1500.5'}});
+      expect(input).toHaveValue('1,500.5');
+    });
+
+    it('rejects a malformed en-US group instead of folding it into digits', () => {
+      const onChange = vi.fn();
+      render(<GroupedField locale="en-US" value={null} onChange={onChange} />);
+      const input = screen.getByRole('spinbutton');
+      fireEvent.focus(input);
+      fireEvent.input(input, {target: {value: '1,23'}});
+      expect(input).toHaveValue('1,23');
+
+      fireEvent.blur(input);
+      expect(input).toHaveValue('1,23');
+      expect(onChange).not.toHaveBeenCalled();
+      expect(screen.getByText('Invalid number')).toBeInTheDocument();
+    });
+
+    it('selects the grouped editable text when Tab swaps a currency format', async () => {
+      const user = userEvent.setup();
+      render(
+        <>
+          <button type="button">Before</button>
+          <GroupedField
+            locale="en-US"
+            formatValue={number => `$${number.toLocaleString('en-US')}`}
+          />
+        </>,
+      );
+      const input = screen.getByRole<HTMLInputElement>('spinbutton');
+      expect(input).toHaveValue('$1,500,000');
+      await user.click(screen.getByRole('button', {name: 'Before'}));
+      await user.tab();
+      expect(input).toHaveFocus();
+      expect(input).toHaveValue('1,500,000');
+      expect(input.selectionStart).toBe(0);
+      expect(input.selectionEnd).toBe('1,500,000'.length);
+    });
+  });
+
   describe('onChange validation', () => {
     it('commits a valid number on blur', async () => {
       const user = userEvent.setup();
