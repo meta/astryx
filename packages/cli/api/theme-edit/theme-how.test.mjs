@@ -4189,6 +4189,26 @@ describe('how answers final-14 fixes', () => {
 });
 
 describe('how lookups', () => {
+  it('names the same states for a state a part lacks as set and how <part> do', async () => {
+    const {data} = await themeEditHow('checked rows in the table tinted blue', {
+      cwd,
+      theme: 'q',
+    });
+    const said = /its states: ([^)]*)\)/.exec(
+      (data.results ?? []).map((/** @type {any} */ r) => r.text).join('\n'),
+    )?.[1];
+    const part = (await themeEditHow('table-row', {cwd, theme: 'q'})).data;
+    const r = await refusal(() =>
+      themeEditSet('q', 'background', '#dbeafe', {
+        cwd,
+        on: 'table-row',
+        state: 'checked',
+      }),
+    );
+    expect(said).toBe(part.states.join(', '));
+    expect(r.message).toContain(`States: ${said}.`);
+  });
+
   it('maps what a part reads under to the flags set takes, or says why none does', async () => {
     const button = (await themeEditHow('button', {cwd, theme: 'q'})).data;
     const when = button.reads.background.flatMap(

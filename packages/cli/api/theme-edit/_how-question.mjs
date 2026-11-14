@@ -26,7 +26,6 @@ import {
   FONTS,
   HOW,
   OPEN_FONTS,
-  COMMON_STATES,
   COLOR_PROPS,
   GROUPS,
   isSystemFamily,
@@ -40,6 +39,7 @@ import {
   lengthPx,
   partRuleTokens,
 } from './_settings.mjs';
+import {settableStates} from './_check.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {cssProperties, keywordsOf, matchValue, splitTop} from './_css.mjs';
 
@@ -4639,13 +4639,28 @@ export function draftAnswer(ctx, env, question) {
         ? ', each mode from its own value'
         : ` in ${steps[0].mode} mode only (the other mode keeps its value)`
       : '';
+  /** @type {Map<string, string[]>} */
+  const stateLists = new Map();
+  /**
+   * The states set takes on a part, the list `how <part>` and a refused
+   * state name too.
+   * @param {string} on
+   */
+  const statesOf = on => {
+    const part = one(on);
+    let list = stateLists.get(part);
+    if (!list) {
+      list = settableStates(ctx, env.slug, env.data, part);
+      stateLists.set(part, list);
+    }
+    return list;
+  };
   /**
    * The state a part takes for a state word, as `set` names it.
    * @param {string} on @param {string} word
    */
   const stateFor = (on, word) => {
-    const t = TARGET.get(one(on));
-    const states = [...(t?.states ?? []), ...COMMON_STATES];
+    const states = statesOf(on);
     if (word === 'focus')
       return focusStateOf(/** @type {any} */ ({C}), one(on)) ?? 'focus-visible';
     if (word === 'invalid') return null;
@@ -7099,9 +7114,8 @@ export function draftAnswer(ctx, env, question) {
     const on = p?.on;
     const {noState, ...f} = p ? flagsFor(c, p) : {};
     if (noState && on) {
-      const t = TARGET.get(one(on));
       return {
-        text: `${on} has no ${noState} state that set can name (its states: ${[...(t?.states ?? []), ...COMMON_STATES].join(', ')}), so a change would reach every ${on}`,
+        text: `${on} has no ${noState} state that set can name (its states: ${statesOf(on).join(', ') || 'none'}), so a change would reach every ${on}`,
         options: [],
         lookup: `${HOW} ${on}`,
       };
