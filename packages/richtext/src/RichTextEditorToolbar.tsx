@@ -104,7 +104,7 @@ import {
   ToolbarLinkPopover,
   isInsertLink,
   useToolbarLink,
-} from './ToolbarLinkPopover';
+} from './internal/ToolbarLinkPopover';
 import {$selectedExtensionNodesOnly} from './markdownExtensionNode';
 
 /** Block types exposed by the toolbar's format selector. */

@@ -9,7 +9,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {describe, expect, it} from 'vitest';
 import {classesIn, cutCss, layerOrderOf, requiredClasses} from './css-cut.mjs';
-import {readSourceBlock, sourceBlock} from './source-block.mjs';
+import {readSourceBlock, renderedHeadOf, renderedMarkupOf, sourceBlock} from './source-block.mjs';
 import {isAstryxMarkup, parseHtml} from './html-reader.mjs';
 import {renderPage} from './render-page.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
@@ -85,6 +85,71 @@ describe('the embedded source', () => {
     expect('damaged' in readSourceBlock(block.replace('"version":1', '"version":"one"'))).toBe(true);
     expect('damaged' in readSourceBlock(block.replace('"version":1', '"version":0'))).toBe(true);
     expect(readSourceBlock('<p>none</p>')).toEqual({found: false});
+  });
+
+  it('finds the block as a browser reads its tag: any attribute order, quoting or letter case', () => {
+    const bytes = Buffer.from('export default () => null;\n');
+    const block = sourceBlock('page.tsx', [{path: 'page.tsx', bytes}]);
+    const json = block.slice(block.indexOf('>') + 1, block.lastIndexOf('</script>'));
+    for (const tag of [
+      '<script type=application/x-astryx-source>',
+      "<script type='application/x-astryx-source'>",
+      '<script id="source" type="application/x-astryx-source">',
+      '<SCRIPT TYPE="Application/X-Astryx-Source">',
+      '<script\n  type="application/x-astryx-source"\n>',
+    ]) {
+      const html = `<html><head></head><body><p>x</p>${tag}${json}</SCRIPT></body></html>`;
+      const read = readSourceBlock(html);
+      expect(read.found && 'source' in read && Buffer.from(read.source.files[0].base64, 'base64')).toEqual(bytes);
+      expect(renderedMarkupOf(html)).toBe('<p>x</p>');
+    }
+    // A hand edit that leaves a comment or a textarea open before the block
+    // does not hide it.
+    for (const edit of ['<!-- note', '<textarea>draft']) {
+      const read = readSourceBlock(`<html><head></head><body><p>x</p>${edit}${block}</body></html>`);
+      expect(read.found && 'source' in read && Buffer.from(read.source.files[0].base64, 'base64')).toEqual(bytes);
+    }
+    expect(readSourceBlock(`<body><p>x</p>${block.slice(0, -20)}`)).toEqual({
+      found: true,
+      damaged: 'its embedded source is cut short: the file ends inside it',
+    });
+  });
+});
+
+describe('the parts of a rendered file a reverse compares', () => {
+  it('finds the title, the style and the body as a browser does: outside comments and style text', () => {
+    const style = '<style>.t::before{content:"</head><body><!-- x -->"}</style>';
+    const html =
+      '<!doctype html><html><head><meta charset="utf-8">\n<!-- Page: src/<body>/page.tsx -->\n' +
+      `<title>Report</title>${style}</head><body class="x">Markup<script type="application/x-astryx-source">{}</script></body></html>`;
+    expect(renderedHeadOf(html)).toEqual({title: 'Report', style});
+    expect(renderedMarkupOf(html)).toBe('Markup');
+  });
+
+  it('reads <!--> and <!---> as whole comments, in the page and in its head alike', () => {
+    const p = /** @type {any} */ (parseHtml('<p>a<!-->b<!--->c<!---->d</p>').children[0]);
+    expect(p.children.map((/** @type {{text: string}} */ c) => c.text).join('')).toBe('abcd');
+    expect(renderedHeadOf('<html><head><!--><title>T</title><!---><style>s</style></head><body>M')).toEqual({
+      title: 'T',
+      style: '<style>s</style>',
+    });
+  });
+
+  it('reads crafted markup in time that grows with its length', () => {
+    const started = Date.now();
+    for (const html of ['<html><head>' + '<a '.repeat(32000), '<html><head>' + '<style>a</style>'.repeat(20000) + '<body>x']) {
+      parseHtml(html);
+      renderedHeadOf(html);
+      renderedMarkupOf(html);
+      readSourceBlock(html);
+    }
+    expect(Date.now() - started).toBeLessThan(1500);
+  });
+
+  it('reads a file a released CLI wrote, with no note', () => {
+    const html = '<!doctype html><html><head><title>A &amp; B</title><style>a{}</style></head><body><p>M</p><script type="application/x-astryx-source">{}</script></body></html>';
+    expect(renderedHeadOf(html)).toEqual({title: 'A &amp; B', style: '<style>a{}</style>'});
+    expect(renderedMarkupOf(html)).toBe('<p>M</p>');
   });
 });
 

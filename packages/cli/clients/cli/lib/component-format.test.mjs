@@ -6,6 +6,7 @@ import {
   formatBrief,
   formatCompact,
   formatFull,
+  formatProps,
 } from './component-format.mjs';
 
 describe('component accessibility guidance', () => {
@@ -226,7 +227,8 @@ describe('prop lists keep union types whole', () => {
         {
           name: 'mobileNav',
           type: 'ReactNode',
-          description: "Config. breakpoint is 'sm' | 'md' | 'lg' | 'none'.",
+          description:
+            "Collapses below breakpoint 'sm' | 'md' | 'lg' | 'none'.",
         },
       ],
     };
@@ -235,7 +237,7 @@ describe('prop lists keep union types whole', () => {
       .find(l => l.startsWith('- `mobileNav`'));
 
     expect(line).toBe(
-      "- `mobileNav`: `ReactNode` - Config. breakpoint is 'sm' | 'md' | 'lg' | 'none'.",
+      "- `mobileNav`: `ReactNode` - Collapses below breakpoint 'sm' | 'md' | 'lg' | 'none'.",
     );
   });
 });
@@ -378,6 +380,63 @@ describe('example kind', () => {
     const out = formatBrief(docs, 'Widget');
     expect(out).toContain('<Widget label="Hi" />');
     expect(out).not.toContain('createWidgetStore');
+  });
+});
+
+describe('prop descriptions in a component read', () => {
+  const long =
+    'Whether the details collapse. On by default, starting collapsed. `false` keeps them always visible, with no toggle and no animation, in every layout and at every size. `{defaultIsOpen: true}` starts open, and `{isOpen, onOpenChange}` makes it controlled, like any other collapsible region in the system.';
+  const docs = {
+    name: 'Notice',
+    description: 'A notice.',
+    props: [
+      {
+        name: 'collapsible',
+        type: 'boolean',
+        default: 'true',
+        description: long,
+      },
+      {name: 'title', type: 'string', description: 'The main message.'},
+    ],
+  };
+  const propsCommand = 'component Notice --props';
+
+  it('prints the first sentence and names the command that prints them whole', () => {
+    const out = formatFull(docs, {propsCommand});
+
+    expect(out).toContain(
+      '- `collapsible`: `boolean` = `true` - Whether the details collapse.\n',
+    );
+    expect(out).toContain('- `title`: `string` - The main message.');
+    expect(out).toMatch(
+      /Each prop description's first sentence; `.* component Notice --props` prints them whole\./,
+    );
+  });
+
+  it('prints every description whole in the --props view', () => {
+    expect(formatProps(docs, 'Notice')).toContain(
+      `- \`collapsible\`: \`boolean\` = \`true\` - ${long}`,
+    );
+  });
+
+  it('prints descriptions whole when the read names no --props command', () => {
+    const out = formatFull(docs);
+
+    expect(out).toContain(long);
+    expect(out).not.toContain('first sentence');
+  });
+
+  it('prints descriptions whole when the cut saves less than the pointer costs', () => {
+    const short = {
+      ...docs,
+      props: [
+        {name: 'title', type: 'string', description: 'The message. Short.'},
+      ],
+    };
+    const out = formatFull(short, {propsCommand});
+
+    expect(out).toContain('- `title`: `string` - The message. Short.');
+    expect(out).not.toContain('first sentence');
   });
 });
 

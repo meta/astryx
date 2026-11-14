@@ -609,7 +609,7 @@
       "status": "allowed",
       "reason": "Each copy observes for its own subscribers; a second observer changes no result."
     },
-    "packages/richtext/src/CodeSyntaxPlugin.tsx:hasInjectedRules": {
+    "packages/richtext/src/internal/CodeSyntaxPlugin.tsx:hasInjectedRules": {
       "status": "allowed",
       "reason": "Deduplicates an idempotent style insertion; a copy can at most insert the same rules again."
     },

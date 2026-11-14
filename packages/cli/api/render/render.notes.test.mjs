@@ -13,7 +13,7 @@ import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {render} from './render.mjs';
 import {readSourceBlock, recordedText, renderedMarkupOf, sha256, SOURCE_TYPE} from '../../foundation/render/source-block.mjs';
-import {textEdits} from '../../foundation/render/markup-edits.mjs';
+import {clip, locate, textEdits} from '../../foundation/render/markup-edits.mjs';
 import {cliVersion} from '../../foundation/integrations/cli-peer-version.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
@@ -187,6 +187,40 @@ describe('render --reverse says what changed after the render', () => {
     expect(read('edited-back/sections/Kpi.tsx')).toBe(KPI);
   });
 
+  it('names where an edited text sits when it wraps across lines in the source, and finds a long one by its whole text', async () => {
+    // Longer than a change shows, so it is found by its whole text.
+    const long = Array.from({length: 60}, (_, i) => `word${i}`).join(' ');
+    put(
+      'wrapped/page.tsx',
+      `import {Text} from '@astryxdesign/core/Text';\n\nexport default function Page() {\n  return (\n    <main>\n      <Text>\n        Figures are in thousands and include every region\n        that reported before the close.\n      </Text>\n      <p>\n        ${long.split(' ').slice(0, 30).join(' ')}\n        ${long.split(' ').slice(30).join(' ')}\n      </p>\n    </main>\n  );\n}\n`,
+    );
+    await render('wrapped/page.tsx', {cwd: dir});
+    const html = read('wrapped/page.html');
+    put('wrapped/edited.html', html.replace('before the close.', 'before the deadline.').replace('word1 ', 'second '));
+    const back = /** @type {any} */ (await render('wrapped/edited.html', {cwd: dir, reverse: true, out: 'wrapped-back/page.tsx'}));
+    expect(back.data.edits).toEqual([
+      {
+        was: 'Figures are in thousands and include every region that reported before the close.',
+        now: 'Figures are in thousands and include every region that reported before the deadline.',
+        file: 'wrapped-back/page.tsx',
+        line: 7,
+      },
+      {was: clip(long), now: clip(long.replace('word1 ', 'second ')), file: 'wrapped-back/page.tsx', line: 11},
+    ]);
+  });
+
+  it('names where an edited run of several thousand words sits', async () => {
+    const words = Array.from({length: 6000}, (_, i) => `w${i}`);
+    const lines = Array.from({length: 60}, (_, i) => `        ${words.slice(i * 100, i * 100 + 100).join(' ')}`).join('\n');
+    put('many-words/page.tsx', `export default function Page() {\n  return (\n    <p>\n${lines}\n    </p>\n  );\n}\n`);
+    await render('many-words/page.tsx', {cwd: dir});
+    put('many-words/edited.html', read('many-words/page.html').replace(' w5999<', ' last<'));
+    const back = /** @type {any} */ (await render('many-words/edited.html', {cwd: dir, reverse: true, out: 'many-words-back/page.tsx'}));
+    expect(back.data.edits).toEqual([
+      {was: clip(words.join(' ')), now: clip([...words.slice(0, -1), 'last'].join(' ')), file: 'many-words-back/page.tsx', line: 4},
+    ]);
+  });
+
   it('reports text added and removed after the render, and an edit with no text change', async () => {
     put('added.html', editBody(html, body => body.replace('</main>', '<p>Footnote</p></main>').replace('Revenue grew in every region.', '')));
     const added = /** @type {any} */ (await render('added.html', {cwd: dir, reverse: true, out: 'added-back/report.tsx'}));
@@ -320,6 +354,19 @@ describe('render --reverse says what changed after the render', () => {
     expect(long.data.edits[0].now).toHaveLength(300);
   });
 
+  it('leaves an untouched file unedited when its stylesheet text or its page folder looks like HTML', async () => {
+    put('odd/<body>/page.tsx', `import './look.css';\nexport default function Page() {\n  return <p className="tagged">Tagged</p>;\n}\n`);
+    put('odd/<body>/look.css', '.tagged::before { content: "</head><body><!-- x -->"; }\n');
+    await render('odd/<body>/page.tsx', {cwd: dir, out: 'odd.html'});
+    const odd = read('odd.html');
+    // The render keeps the stylesheet's text (it only escapes a comment
+    // opener), and the note names the page's folder.
+    expect(odd).toContain('content: "</head><body>');
+    expect(odd).toContain('Page: odd/<body>/page.tsx');
+    const back = /** @type {any} */ (await render('odd.html', {cwd: dir, reverse: true, out: 'odd-back/page.tsx'}));
+    expect(back.data).toMatchObject({exact: true, edited: false, stylesEdited: false});
+  });
+
   it('keeps every path in the note relative to the project: no folder above it, user or host name', () => {
     expect(html).not.toContain(path.dirname(dir));
     expect(html).not.toContain(os.homedir());
@@ -376,6 +423,13 @@ export default function Page() {
 });
 
 describe('text edits', () => {
+  it('finds a run of text in the source across any white space, and only when it appears once', () => {
+    const source = '<Text>\n  Every region\n  reported.\n</Text>\n';
+    expect(locate('Every region reported.', [{file: 'page.tsx', text: source}])).toEqual({file: 'page.tsx', line: 2});
+    expect(locate('a (b) c.d?', [{file: 'page.tsx', text: '<p>a (b)\n c.d?</p>'}])).toEqual({file: 'page.tsx', line: 1});
+    expect(locate('Every region', [{file: 'a.tsx', text: 'Every region'}, {file: 'b.tsx', text: 'Every\n region'}])).toBeNull();
+  });
+
   it('pairs replaced runs, keeps the order, and caps the list', () => {
     expect(textEdits(['a', 'b', 'c'], ['a', 'B', 'c'])).toEqual({edits: [{was: 'b', now: 'B'}], more: 0});
     expect(textEdits(['a', 'b'], ['a', 'b', 'c'])).toEqual({edits: [{was: null, now: 'c'}], more: 0});
