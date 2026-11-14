@@ -737,7 +737,7 @@ describe('review fixes', () => {
     240_000,
   );
 
-  it("a one-mode theme leaves the other mode's settings out and names them", async () => {
+  it("a one-mode theme keeps the other mode's settings for the regions Core draws in that mode, and names them", async () => {
     await themeEditNew('om', {
       cwd,
       like: 'neutral',
@@ -749,9 +749,12 @@ describe('review fixes', () => {
     });
     const r = await themeEditSet('om', 'mode', 'dark-only', {cwd});
     expect(r.data.notes.join(' ')).toContain(
-      'not applied in a dark-only theme',
+      'a dark-only theme shows the other mode only where Core draws it (a toast, a lightbox), so these apply there',
     );
-    expect(r.data.changedTokens.join(' ')).not.toContain('#bbbbbb');
+    // The light half keeps the light setting, for a toast or a lightbox.
+    expect(read('themes/om/om.css')).toMatch(
+      /--color-text-primary:\s*light-dark\(#bbbbbb,/,
+    );
     // Both halves stay: the mode is the one the app's <Theme> is given.
     expect(read('themes/om/om.settings.ts')).toMatch(
       /"--color-accent": \[\s*palette\.accent\.light\[\d+\],\s*palette\.accent\.dark\[\d+\]/,
@@ -759,7 +762,7 @@ describe('review fixes', () => {
     const show = await themeEditShow('om', {cwd});
     expect(
       show.data.settings.find(x => x.thing === '--color-text-primary')?.masked,
-    ).toContain('does not apply');
+    ).toBeUndefined();
     await themeEditPreviewAdd(undefined, {
       cwd,
       theme: 'om',

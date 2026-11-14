@@ -727,8 +727,19 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
           intent.zero &&
           ['radius', 'space', 'border', 'shadow'].includes(fam)
         ) {
-          const n = measureNumber(after);
-          if (!/^(none|transparent|0)$/.test(after) && n !== 0)
+          // (Core's own composed layers, a card's ring, are no shadow of
+          // the theme's: a shadow of only those is none at rest.)
+          const own = splitTop(after, ',')
+            .map(x => x.trim())
+            .filter(
+              x =>
+                x &&
+                !/^var\(\s*--_/.test(x) &&
+                !/^(?:0(?:px)?\s+)+transparent$/i.test(x),
+            )
+            .join(', ');
+          const n = measureNumber(own);
+          if (own && !/^(none|transparent|0)$/.test(own) && n !== 0)
             return `${part}'s ${prop} would be ${after} in ${mode} mode, not none`;
           continue;
         }
