@@ -28,7 +28,7 @@ import {
   type NodeKey,
   type TextNode,
 } from 'lexical';
-import {$isImageSource} from './markdownCharacterReferences';
+import {$isImageSource} from '../markdownCharacterReferences';
 
 interface CaretPoint {
   readonly key: NodeKey;

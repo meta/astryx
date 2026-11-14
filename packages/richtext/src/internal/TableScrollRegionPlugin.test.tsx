@@ -12,9 +12,9 @@
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {act, render, waitFor} from '@testing-library/react';
-import {RichTextEditor} from './RichTextEditor';
-import {RichTextView} from './RichTextView';
-import {markdownToEditorStateJSON} from './markdownSerializers';
+import {RichTextEditor} from '../RichTextEditor';
+import {RichTextView} from '../RichTextView';
+import {markdownToEditorStateJSON} from '../markdownSerializers';
 
 const TABLE = markdownToEditorStateJSON(
   '| Name | Role |\n| --- | --- |\n| Ada | Engineer |',

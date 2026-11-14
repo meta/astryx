@@ -35,8 +35,8 @@ import {
   type LexicalEditor,
   type RangeSelection,
 } from 'lexical';
-import {toLinkHref} from './linkEditing';
-import {LinkForm} from './linkForm';
+import {toLinkHref} from '../linkEditing';
+import {LinkForm} from '../linkForm';
 
 /**
  * The platform-primary modifier for shortcuts: Cmd on Apple, Ctrl elsewhere.

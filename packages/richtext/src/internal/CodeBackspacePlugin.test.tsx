@@ -24,8 +24,8 @@ import {
   DELETE_CHARACTER_COMMAND,
   type LexicalEditor,
 } from 'lexical';
-import {RichTextEditor, type RichTextEditorRef} from './RichTextEditor';
-import {markdownToEditorStateJSON} from './markdownSerializers';
+import {RichTextEditor, type RichTextEditorRef} from '../RichTextEditor';
+import {markdownToEditorStateJSON} from '../markdownSerializers';
 
 // jsdom's Range has no getBoundingClientRect, which Lexical calls to scroll
 // the selection into view while the editor has focus.
