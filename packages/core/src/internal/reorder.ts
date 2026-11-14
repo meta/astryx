@@ -54,6 +54,8 @@ export function adaptReorderable<TKey extends string | number, TTo>(
     },
     [REORDER_ENGINE]: source[REORDER_ENGINE],
     start: key => source.start(key),
+    attach: (container, attachOptions) =>
+      source.attach(container, attachOptions),
   };
   return adapted as unknown as Reorderable<TKey, TTo>;
 }

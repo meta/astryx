@@ -639,6 +639,10 @@
     "defaultMessage": "Can't move past {label}",
     "description": "Screen-reader announcement when an arrow key in reorder mode would move a List row past a row that keeps its place. `{label}` is that row's text (e.g. \"Can't move past Pinned\")."
   },
+  "@astryx.list.reorderNotMoved": {
+    "defaultMessage": "Can't move {label}",
+    "description": "Screen-reader announcement when a move made in reorder mode on an attached container is not applied by the app by the end of the task. `{label}` is the item's text (e.g. \"Can't move King of hearts\")."
+  },
   "@astryx.list.reorderItemAt": {
     "defaultMessage": "Item {position, number}",
     "description": "What reorder announcements call a List row that shows no text, such as an icon-only row. `{position}` is its 1-based place (e.g. \"after Item 2\")."
