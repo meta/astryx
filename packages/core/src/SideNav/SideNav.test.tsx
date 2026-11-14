@@ -1623,8 +1623,19 @@ describe('SideNav resizable', () => {
     const container = nav.parentElement;
     const handle = screen.getByTestId('astryx-sidenav-resize-handle');
 
+    expect(nav).toContainElement(handle);
     expect(container).toContainElement(handle);
+    expect(getComputedStyle(nav).position).toBe('relative');
+    expect(getComputedStyle(handle).position).toBe('absolute');
+    expect(['0', '0px']).toContain(getComputedStyle(handle).insetInlineEnd);
     expect(getComputedStyle(container!).overflow).toBe('clip');
+  });
+
+  it('keeps the resize handle inside the navigation landmark', () => {
+    render(<SideNav resizable>Content</SideNav>);
+    expect(
+      within(screen.getByRole('navigation')).getByRole('separator'),
+    ).toBeInTheDocument();
   });
 
   it('does not render drag handle without resizable', () => {
