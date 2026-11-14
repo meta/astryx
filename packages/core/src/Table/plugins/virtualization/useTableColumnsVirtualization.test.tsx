@@ -534,6 +534,13 @@ function controlledViewport(width = 500) {
     return isArea(this) ? left : 0;
   });
   let top = 0;
+  // A scrolled body moves above the viewport; jsdom has no layout.
+  vi.spyOn(
+    HTMLTableSectionElement.prototype,
+    'getBoundingClientRect',
+  ).mockImplementation(function (this: HTMLTableSectionElement) {
+    return new DOMRect(0, this.tagName === 'TBODY' ? -top : 0, 0, 0);
+  });
   vi.spyOn(Element.prototype, 'scrollTop', 'get').mockImplementation(function (
     this: Element,
   ) {
