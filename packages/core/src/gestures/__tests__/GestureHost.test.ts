@@ -3731,6 +3731,36 @@ describe('GestureHost', () => {
     touch('touchend', stepper, [heldMoved, secondMoved], [], 64);
   });
 
+  it("leaves a pinch to the browser: once a second finger is down, a kept press no longer cancels its finger's moves (spec:AST-094 FR10)", () => {
+    detachers.push(coarsePrimaryPointer());
+    const {stepper} = mount('<div id="stepper">+</div>');
+    detachers.push(
+      host.attachConsumer(
+        stepper,
+        createPressTracker({getBounds: () => null, keepsTouch: true}),
+      ),
+    );
+    const held = {id: 1, x: 5, y: 5};
+    const heldMoved = {id: 1, x: 5, y: 6};
+    const second = {id: 2, x: 40, y: 40};
+    touch('touchstart', stepper, [held], [held], 0);
+    // Alone, the held finger is the control's.
+    expect(
+      touch('touchmove', stepper, [heldMoved], [heldMoved], 16)
+        .defaultPrevented,
+    ).toBe(true);
+    // A second finger lands, and both spread: the browser may zoom.
+    touch('touchstart', stepper, [second], [heldMoved, second], 32);
+    const spread = [
+      {...heldMoved, x: 0, y: 0},
+      {...second, x: 90, y: 90},
+    ];
+    expect(
+      touch('touchmove', stepper, spread, spread, 48).defaultPrevented,
+    ).toBe(false);
+    touch('touchend', stepper, spread, [], 64);
+  });
+
   it('writes touch-action: manipulation for a kept-press control, so rapid taps never zoom, for every pointer (spec:AST-094 FR18, FR43)', () => {
     const pointer = pointerQuery(true);
     detachers.push(pointer.restore);

@@ -1861,6 +1861,41 @@ function sidewaysThenOff(
   return [...sideways, ...off];
 }
 
+// Longer than a scroller's content-touch delay, so the press shows first.
+const HOLD_MS = 450;
+
+/**
+ * One finger: still on `from` for `holdMs`, then straight up or down to
+ * `turn`, along to `to`, and a rest before the lift.
+ */
+function verticalThenAlong(
+  from: {x: number; y: number},
+  turn: {x: number; y: number},
+  to: {x: number; y: number},
+  holdMs: number,
+) {
+  const [landing, ...vertical] = touchDrag(from, turn, {durationMs: 250});
+  const moving = vertical
+    .slice(0, -1)
+    .map(frame => ({...frame, t: frame.t + holdMs}));
+  const lastT = moving[moving.length - 1].t;
+  const along = touchDrag(turn, to, {durationMs: 300, restMs: 200})
+    .slice(1)
+    .map(frame => ({...frame, t: frame.t + lastT}));
+  return [landing, ...moving, ...along];
+}
+
+/** Takes the control out of the page's scroller: a bar fixed near the bottom. */
+async function fixAtBottom(control: Control): Promise<void> {
+  await control.group.evaluate(group => {
+    Object.assign((group as HTMLElement).style, {
+      position: 'fixed',
+      bottom: '120px',
+      left: '16px',
+    });
+  });
+}
+
 /** The radiogroup's bottom edge in client coordinates. */
 async function bottomOf(control: Control): Promise<number> {
   const group = await control.group.boundingBox();
@@ -1911,6 +1946,63 @@ test.describe('a drag that drifts off the control keeps choosing by its horizont
       'aria-checked',
       'true',
     );
+  });
+
+  for (const below of [30, 110]) {
+    test(`held on the selected segment, straight down ${below} px below the control, then along, the release selects the segment under the finger`, async ({
+      page,
+    }) => {
+      const control = await openControl(page);
+      // The page scrolls, so the browser's pan could take the finger.
+      await makePageScroll(page);
+      const selections = await recordSelections(control.group);
+      const moves = await recordTouchMoves(page);
+      const from = await clientCenter(control, 'grid');
+      const list = await clientCenter(control, 'list');
+      const y = (await bottomOf(control)) + below;
+      await control.driver.play(
+        verticalThenAlong(from, {x: from.x, y}, {x: list.x, y}, HOLD_MS),
+      );
+      // The held finger stays the control's: each of its moves is cancelled,
+      // so the browser's pan never takes it.
+      const cancelled = await moves();
+      expect(cancelled.length).toBeGreaterThan(0);
+      expect(cancelled.every(Boolean)).toBe(true);
+      expect((await selections()).map(change => change.value)).toEqual([
+        'list',
+      ]);
+      await expect(control.segment('list')).toHaveAttribute(
+        'aria-checked',
+        'true',
+      );
+    });
+  }
+
+  test('in a fixed bar, a vertical swipe that starts at once keeps choosing: the press shows at touch-down, so the control keeps the finger', async ({
+    page,
+  }) => {
+    const control = await openControl(page);
+    await makePageScroll(page);
+    // Outside a scroll view, the press shows at touch-down (spec:AST-094 FR11).
+    await fixAtBottom(control);
+    const selections = await recordSelections(control.group);
+    const moves = await recordTouchMoves(page);
+    const from = await clientCenter(control, 'grid');
+    const list = await clientCenter(control, 'list');
+    const group = await control.group.boundingBox();
+    if (group == null) {
+      throw new Error('no radiogroup');
+    }
+    // Straight up, where the page could scroll, then along to List.
+    const y = group.y - 60;
+    await control.driver.play(
+      verticalThenAlong(from, {x: from.x, y}, {x: list.x, y}, 0),
+    );
+    const cancelled = await moves();
+    expect(cancelled.length).toBeGreaterThan(0);
+    expect(cancelled.every(Boolean)).toBe(true);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    expect((await selections()).map(change => change.value)).toEqual(['list']);
   });
 
   test('past the end segment, the release selects the end segment', async ({
@@ -3241,6 +3333,72 @@ test('a vertical drag that starts on the control scrolls the page and lifts noth
   expect(await shown()).toEqual([]);
   expect(await selections()).toEqual([]);
 });
+
+/**
+ * Two fingers: the first rests on `first` for `restMs`, then a second lands
+ * beside it and both spread toward the middle of the viewport.
+ */
+function restThenSpread(
+  first: {x: number; y: number},
+  restMs: number,
+  viewport: {width: number; height: number},
+) {
+  const dx = first.x < viewport.width / 2 ? 1 : -1;
+  const dy = first.y < viewport.height / 2 ? 1 : -1;
+  const frames: {t: number; fingers: {id: number; x: number; y: number}[]}[] = [
+    {t: 0, fingers: [{id: 0, ...first}]},
+  ];
+  for (let step = 0; step <= 10; step++) {
+    const p = step / 10;
+    frames.push({
+      t: restMs + step * 30,
+      fingers: [
+        {id: 0, x: first.x - dx * 10 * p, y: first.y - dy * 10 * p},
+        {
+          id: 1,
+          x: first.x + dx * (40 + 140 * p),
+          y: first.y + dy * (40 + 140 * p),
+        },
+      ],
+    });
+  }
+  frames.push({t: restMs + 350, fingers: []});
+  return frames;
+}
+
+// Page zoom stays the browser's (spec:AST-094 FR10; WCAG 1.4.4): a pressed
+// segment keeps a finger only while it is alone on the screen.
+for (const place of ['in scrolling content', 'in a fixed bar'] as const) {
+  test(`${place}, a two-finger pinch whose first finger rests on a segment zooms the page and selects nothing`, async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName === 'webkit',
+      'needs native pinch-zoom from injected touches (Mobile Safari on the simulator)',
+    );
+    const control = await openControl(page);
+    await makePageScroll(page);
+    if (place === 'in a fixed bar') {
+      await fixAtBottom(control);
+    }
+    const selections = await recordSelections(control.group);
+    const viewport = page.viewportSize();
+    if (viewport == null) {
+      throw new Error('no viewport');
+    }
+    // The first finger's press shows before the second lands: at once in a
+    // fixed bar, after the content-touch delay in scrolling content.
+    const restMs = place === 'in a fixed bar' ? 100 : HOLD_MS;
+    await control.driver.play(
+      restThenSpread(await clientCenter(control, 'list'), restMs, viewport),
+    );
+    await expect
+      .poll(async () => page.evaluate(() => window.visualViewport?.scale ?? 1))
+      .toBeGreaterThan(1.2);
+    expect(await selections()).toEqual([]);
+  });
+}
 
 test('RTL: a drag carries the lens toward the finger and commits once, at the lift', async ({
   page,
