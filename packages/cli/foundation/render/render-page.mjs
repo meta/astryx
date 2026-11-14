@@ -73,17 +73,20 @@ export class RenderError extends Error {
 }
 
 /**
- * The nearest folder at or above `dir` with a package.json, else `dir`.
+ * The folder whose files are the page's own: the nearest folder at or above
+ * `dir` with a package.json. Outside a project, the current folder when it
+ * holds the page, so a page with neighbours above its own folder (as a
+ * restore lays them out) carries them; else `dir`.
  * @param {string} dir
+ * @param {string} [cwd]
  */
-function projectRootOf(dir) {
-  let d = dir;
-  for (;;) {
+function projectRootOf(dir, cwd) {
+  for (let d = dir; ; d = path.dirname(d)) {
     if (fs.existsSync(path.join(d, 'package.json'))) return d;
-    const up = path.dirname(d);
-    if (up === d) return dir;
-    d = up;
+    if (path.dirname(d) === d) break;
   }
+  const fromCwd = cwd ? path.relative(cwd, dir) : '..';
+  return fromCwd.startsWith('..') || path.isAbsolute(fromCwd) ? dir : /** @type {string} */ (cwd);
 }
 
 /** @param {string} s */
@@ -601,9 +604,11 @@ const SCHEME_CSS =
 /**
  * Render a page module to one self-contained HTML file.
  * @param {string} entry absolute path of the page module
- * @param {{title?: string, timeoutMs?: number, version?: string, served?: ServedSet | null, output?: string}} [options]
+ * @param {{title?: string, timeoutMs?: number, version?: string, served?: ServedSet | null, output?: string, cwd?: string}} [options]
  *   `served`: the Core of the package set the CLI runs from, for the packages
- *   the page's folder has no copy of; `output`: the file the HTML goes to.
+ *   the page's folder has no copy of; `output`: the file the HTML goes to;
+ *   `cwd`: the current folder, whose files are the page's own outside a
+ *   project.
  *   With `output`, the file describes itself: notes at its top and end name
  *   what made it and the commands that give the page back and render it
  *   again, and its embedded source records the CLI version, the packages
@@ -612,7 +617,7 @@ const SCHEME_CSS =
  */
 export async function renderPage(entry, options = {}) {
   const dir = path.dirname(entry);
-  const root = projectRootOf(dir);
+  const root = projectRootOf(dir, options.cwd);
   const served = options.served ?? null;
   /** @type {RenderWarning[]} */
   const warnings = [];

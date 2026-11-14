@@ -1611,6 +1611,19 @@ describe('render(): a page outside a project', () => {
     expect(fs.readFileSync(path.join(away, 'page-restored', 'page.tsx'), 'utf8')).toBe(PAGE);
   }, 60_000);
 
+  it('carries the modules a page imports from above its own folder, as a restore lays them out', () => {
+    const tree = path.join(away, 'tree');
+    fs.mkdirSync(path.join(tree, 'app/x'), {recursive: true});
+    fs.mkdirSync(path.join(tree, 'components'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'components/Banner.tsx'), 'export function Banner() {\n  return <p>Banner above the page</p>;\n}\n');
+    fs.writeFileSync(path.join(tree, 'app/x/page.tsx'), "import {Banner} from '../../components/Banner';\nexport default function Page() {\n  return <main><Banner /></main>;\n}\n");
+    const run = runBin(tree, ['experimental', 'render', 'app/x/page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.files).toEqual(['app/x/page.tsx', 'components/Banner.tsx']);
+    const back = runBin(tree, ['experimental', 'render', '--reverse', 'app/x/page.html']);
+    expect(back.json.data).toMatchObject({exact: true, files: ['app/x/page-restored/app/x/page.tsx', 'app/x/page-restored/components/Banner.tsx']});
+  }, 60_000);
+
   it('loads one React outside a project, even when the folder holds its own copy', () => {
     const sub = path.join(away, 'own-react');
     for (const name of ['react', 'react-dom']) {
