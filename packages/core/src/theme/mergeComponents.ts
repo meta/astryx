@@ -30,7 +30,7 @@ const COLOR_MODE_KEYS = ['@light', '@dark'] as const;
  */
 function readEntries<T>(
   value: T,
-  read: (entry: StyleValue) => StyleValue,
+  read: (entry: StyleValue, key: string) => StyleValue,
 ): T | undefined {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     return value;
@@ -39,7 +39,8 @@ function readEntries<T>(
   let changed = false;
   const kept: [string, unknown][] = [];
   for (const [key, entry] of entries) {
-    const set = entry === undefined ? undefined : read(entry as StyleValue);
+    const set =
+      entry === undefined ? undefined : read(entry as StyleValue, key);
     if (set === undefined) {
       changed = true;
       continue;
@@ -54,13 +55,17 @@ function readEntries<T>(
 }
 
 /**
- * A block without the properties it leaves undefined, at every depth. A
- * nested block (a pseudo-class or color-mode block) stays even when that
- * empties it: a restated pseudo-class block still replaces the base's.
+ * A style key's value without the properties it leaves undefined, at every
+ * depth. A pseudo-class block that empties stays, empty: a restated
+ * pseudo-class block still replaces the base's. A color-mode block that
+ * empties is not set, as a property is not.
  */
-function withoutUndefined(value: StyleValue): StyleValue {
+function withoutUndefined(value: StyleValue, key: string): StyleValue {
   const set = readEntries(value, withoutUndefined);
-  return set === undefined ? {} : set;
+  return set === undefined &&
+    !(COLOR_MODE_KEYS as ReadonlyArray<string>).includes(key)
+    ? {}
+    : set;
 }
 
 /**

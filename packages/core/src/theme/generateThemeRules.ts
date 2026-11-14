@@ -1228,9 +1228,8 @@ export function generateThemeRules(
 
   // 2. Component overrides: stable .astryx-* target classes combined with
   // reflected data-* selectors for visual props and runtime states. A rule
-  // source passed straight in can still hold undefined values (a defined
-  // theme's map no longer does), so it is read the way every layer reads
-  // one: what it leaves undefined is not set.
+  // source passed in directly can still hold undefined. Read it as every
+  // layer does: an undefined value is not set.
   const components = withoutUnsetComponents(theme.components);
   if (components) {
     generateComponentRules(components, parts, {sink});

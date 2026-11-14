@@ -287,6 +287,40 @@ describe('generateThemeRules', () => {
       },
     });
     expect(defined.components?.text).toBeUndefined();
+    // A color-mode block whose every value is undefined is not set either,
+    // so its component writes no override rules.
+    expect(
+      generateThemeRules({
+        tokens: {},
+        components: {
+          text: {
+            base: {'@dark': {color: undefined as unknown as string}},
+          },
+          heading: {
+            base: {'@dark': {color: undefined as unknown as string}},
+          },
+          link: {
+            base: {'@light': {color: undefined as unknown as string}},
+          },
+        },
+      }),
+    ).toEqual(plain);
+    // A pseudo-class block whose every value is undefined stays, empty: it
+    // is restated, so its component is themed (the prop override rules are
+    // written) and the block itself writes no rule.
+    const hover = generateThemeRules({
+      tokens: {},
+      components: {
+        text: {base: {':hover': {color: undefined as unknown as string}}},
+        heading: {base: {':hover': {color: undefined as unknown as string}}},
+        link: {base: {':hover': {color: undefined as unknown as string}}},
+      },
+    });
+    const added = hover.filter(rule => !plain.includes(rule)).join('\n');
+    expect(added).toMatch(/\.astryx-text\[data-color="secondary"\]/);
+    expect(added).toMatch(/\.astryx-heading\[data-weight=/);
+    expect(added).toMatch(/\.astryx-link\[data-color=/);
+    expect(added).not.toMatch(/:hover/);
   });
 
   it('replaces an inherited pseudo-class block with a restated one whose every value is left undefined', () => {
