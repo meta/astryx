@@ -750,7 +750,6 @@ export class ListReorderController implements ListReorderSession {
   private namelessCount = 0;
   /** The handle whose row is in reorder mode, if any. */
   private modeHandle: HTMLElement | null = null;
-  /** The ends of the list that the row in reorder mode sits at. */
   private modeEndsValue: ModeEnds = null;
   private readonly modeListeners = new Set<() => void>();
   /** Reorder mode's hint, while it shows: focus in it keeps the mode. */
