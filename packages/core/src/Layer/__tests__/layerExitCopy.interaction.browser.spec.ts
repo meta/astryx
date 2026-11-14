@@ -9,8 +9,10 @@
  *   The copy is placed as the layer closes, from script and by the browser's
  *   own light dismiss. It is in the top layer as a manual popover with no
  *   `z-index`. The clipping panel does not cut it. Its drawn box equals the
- *   layer's drawn box mid-entrance, within half a px. A second copy for the
- *   same layer replaces the first, while another layer's copy stays.
+ *   layer's drawn box mid-entrance, within half a px. A copy of a surface
+ *   inside the layer keeps its padding, border and colors, so its content
+ *   stays put. A second copy for the same layer replaces the first, while
+ *   another layer's copy stays.
  * @position Browser proof for layerExitCopy.ts, run by `pnpm
  *   test:interaction`; jsdom has no layout and no top layer. Chromium 150
  *   and later refuse a show during another popover's toggle. There the copy
@@ -125,6 +127,57 @@ test('a copy placed as a layer closes mid-entrance is in the top layer, where th
   result!.copy.forEach((value, index) => {
     expect(Math.abs(value - result!.drawn[index])).toBeLessThanOrEqual(0.5);
   });
+});
+
+test('a copy of a surface inside the layer keeps its padding, border and colors, so its content stays where it was drawn', async ({
+  page,
+}) => {
+  await open(page);
+  const result = await page.evaluate(
+    async ({attribute}) => {
+      const layer = document.getElementById('layer') as HTMLElement;
+      layer.showPopover();
+      // The surface is no popover and has no padding or border of its own.
+      const surface = layer.querySelector('[role="dialog"]') as HTMLElement;
+      // No margin to collapse through the surface: the copy, a fixed box,
+      // would hold it inside.
+      const text = surface.querySelector('p');
+      if (text == null) {
+        return null;
+      }
+      text.style.margin = '0';
+      const drawn = text.getBoundingClientRect();
+      const live = getComputedStyle(surface);
+      const copy = window.ExitCopy.placeLayerExitCopy(surface, attribute);
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      const copiedText = copy?.querySelector('p');
+      if (copy == null || copiedText == null) {
+        return null;
+      }
+      const copied = copiedText.getBoundingClientRect();
+      const style = getComputedStyle(copy);
+      return {
+        drawn: [drawn.left, drawn.top, drawn.width, drawn.height],
+        copied: [copied.left, copied.top, copied.width, copied.height],
+        styles: ['padding-left', 'border-top-width', 'background-color'].map(
+          property => [
+            style.getPropertyValue(property),
+            live.getPropertyValue(property),
+          ],
+        ),
+      };
+    },
+    {attribute: ATTRIBUTE},
+  );
+  if (result == null) {
+    throw new Error('no copy of the surface');
+  }
+  result.copied.forEach((value, index) => {
+    expect(Math.abs(value - result.drawn[index])).toBeLessThanOrEqual(0.5);
+  });
+  for (const [copied, live] of result.styles) {
+    expect(copied).toBe(live);
+  }
 });
 
 test('the browser\u2019s own light dismiss gets the copy too, uncut by the clipping panel', async ({
