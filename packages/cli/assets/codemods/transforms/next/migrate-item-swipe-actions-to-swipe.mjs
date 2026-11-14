@@ -17,7 +17,8 @@
  * with a TODO. Each entry
  * with no `id` takes one from its static label, then its handler's name, then
  * its side and place with a TODO. Rows with the same options in one place
- * share one definition. A `swipeBehavior={B}` joins the options; a static
+ * share one definition when every local they read keeps one value. A
+ * `swipeBehavior={B}` joins the options; a static
  * `'reveal'`, the default, is dropped. On a row that already sets `swipe`, the
  * deprecated props do nothing, so they are removed, and so is a lone
  * `swipeBehavior`. The `ItemSwipe*` types stay as they are.
@@ -633,28 +634,53 @@ const RUNS_CODE = new Set([
 const FIXED_GLOBALS = new Set(['undefined', 'NaN', 'Infinity']);
 
 /**
+ * Whether `path` lies inside an entry's `onActivate` function in `object`.
+ * It is the only code in a swipe's options that runs when an action fires.
+ * Any other function there, such as a `map` callback that builds a label,
+ * runs at render.
+ * @param {any} path @param {any} object
+ */
+function inActivate(path, object) {
+  for (let q = path.parent; q != null && q.node !== object; q = q.parent) {
+    const node = q.node;
+    if (node.type === 'ObjectMethod') {
+      if (keyOf(node) === 'onActivate') {
+        return true;
+      }
+      continue;
+    }
+    const property = q.parent?.node;
+    if (
+      FUNCTION_TYPES.has(node.type) &&
+      (property?.type === 'ObjectProperty' || property?.type === 'Property') &&
+      property.value === node &&
+      keyOf(property) === 'onActivate'
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Whether a swipe's options hold only values that stay the same where its
  * definition goes. At module scope (`owner` null), each value outside a
  * handler is a literal, a JSX element, or a name bound by an import, a module
  * `const`, or a function or class declaration. In `useMemo` in `owner`, the
  * owner's locals count too, since each becomes a dependency, and so does a
  * call or a property read on one, such as `t('archive')` with a `t` from
- * `useTranslation()`. Any other call, construction, property read or global
+ * `useTranslation()`. A ref or a setter stays out of the dependencies, so a
+ * read or call on one does not count. Any other call, construction, property
+ * read or global
  * such as `window` runs or reads at render, so a definition would freeze it:
  * at module scope once, at import; in `useMemo` until a dependency changes.
- * A handler's body runs when the action fires, so it may read anything.
+ * Only an entry's `onActivate` is a handler: its body runs when the action
+ * fires, so it may read anything.
  * @param {any} j @param {any} objectPath @param {Set<any>} created @param {any} owner
  */
 function fixedWhereDefined(j, objectPath, created, owner = null) {
   const object = objectPath.node;
-  const inHandler = (/** @type {any} */ p) => {
-    for (let q = p.parent; q != null && q.node !== object; q = q.parent) {
-      if (FUNCTION_TYPES.has(q.node.type) || q.node.type === 'ObjectMethod') {
-        return true;
-      }
-    }
-    return false;
-  };
+  const inHandler = (/** @type {any} */ p) => inActivate(p, object);
   let fixed = true;
   /** Whether a member read reads a namespace import, which never changes. */
   const readsNamespace = (/** @type {any} */ p) => {
@@ -681,6 +707,18 @@ function fixedWhereDefined(j, objectPath, created, owner = null) {
   /** Whether a name is one of the owner's locals: a dependency of its memo. */
   const ownerLocal = (/** @type {any} */ p, /** @type {string} */ name) =>
     owner != null && p.scope?.lookup(name)?.path.node === owner;
+  /**
+   * Whether an owner's local can change between renders, so its memo
+   * depends on it. A ref or a setter is stable and stays out of the
+   * dependencies: a ref's `current` read at render would freeze.
+   */
+  const changingLocal = (/** @type {any} */ p, /** @type {string} */ name) =>
+    ownerLocal(p, name) && !isStable(p.scope.lookup(name), name);
+  /** Whether a name is bound inside the options, as a callback's parameter. */
+  const ownBinding = (/** @type {any} */ p, /** @type {string} */ name) => {
+    const scope = p.scope?.lookup(name);
+    return scope != null && within(scope.path.node, object);
+  };
   /** The identifier a chain of member reads and calls starts from, or null. */
   const chainStart = (/** @type {any} */ node) => {
     let current = unwrap(node);
@@ -715,13 +753,14 @@ function fixedWhereDefined(j, objectPath, created, owner = null) {
         const start = isRead || isCall ? chainStart(p.node) : null;
         fixed =
           (isRead && readsNamespace(p)) ||
-          (start != null && ownerLocal(p, start.name));
+          (start != null &&
+            (ownBinding(p, start.name) || changingLocal(p, start.name)));
         return;
       }
       if (p.node.type !== 'Identifier' || !isReference(p)) {
         return;
       }
-      if (ownerLocal(p, p.node.name)) {
+      if (ownerLocal(p, p.node.name) || ownBinding(p, p.node.name)) {
         return;
       }
       const scope = p.scope?.lookup(p.node.name);
@@ -876,7 +915,7 @@ function isStable(scope, name) {
  * binding declared after the row's statement or after an early return, or a
  * value read at render.
  * @param {any} j @param {any} root @param {any} rowPath @param {any} objectPath @param {Set<any>} created
- * @returns {{kind: 'module'} | {kind: 'memo', owner: any, deps: string[]} | null}
+ * @returns {{kind: 'module', shareable: boolean, after: any} | {kind: 'memo', owner: any, deps: string[], shareable: boolean, after: any} | null}
  */
 function placementOf(j, root, rowPath, objectPath, created) {
   const object = objectPath.node;
@@ -886,7 +925,7 @@ function placementOf(j, root, rowPath, objectPath, created) {
     .forEach((/** @type {any} */ p) => {
       movable = movable && hasOwnThis(p, object);
     });
-  /** @type {Array<{name: string, scope: any}>} */
+  /** @type {Array<{name: string, scope: any, inHandler: boolean}>} */
   const outer = [];
   const read = (/** @type {any} */ p) => {
     if (created.has(p.node) || !isReference(p) || inType(p, object)) {
@@ -898,7 +937,11 @@ function placementOf(j, root, rowPath, objectPath, created) {
     }
     const scope = p.scope?.lookup(p.node.name);
     if (scope != null && !within(scope.path.node, object)) {
-      outer.push({name: p.node.name, scope});
+      outer.push({
+        name: p.node.name,
+        scope,
+        inHandler: inActivate(p, object),
+      });
     }
   };
   j(objectPath).find(j.Identifier).forEach(read);
@@ -923,7 +966,10 @@ function placementOf(j, root, rowPath, objectPath, created) {
   if (local.length === 0) {
     const body = root.get().node.program.body;
     const row = statementIn(body, rowPath);
-    for (const {name, scope} of outer) {
+    // A handler reads a module binding only when its action fires, so only
+    // reads outside one decide how early the definition can run.
+    let lastDependency = -1;
+    for (const {name, scope, inHandler} of outer) {
       for (const binding of scope.getBindings()[name] ?? []) {
         const declared = statementIn(body, binding);
         const hoisted =
@@ -936,11 +982,22 @@ function placementOf(j, root, rowPath, objectPath, created) {
         ) {
           return null;
         }
+        if (!hoisted && !inHandler) {
+          lastDependency = Math.max(lastDependency, body.indexOf(declared));
+        }
       }
     }
-    return row == null || !fixedWhereDefined(j, objectPath, created)
-      ? null
-      : {kind: 'module'};
+    if (row == null || !fixedWhereDefined(j, objectPath, created)) {
+      return null;
+    }
+    const after = afterFor(row, body, lastDependency);
+    if (
+      after !== undefined &&
+      reachedAbove(j, body, indexFor(body, after, body.indexOf(row), true), row)
+    ) {
+      return null;
+    }
+    return {kind: 'module', shareable: true, after};
   }
   const owner = local[0].scope.path;
   const fn = owner.node;
@@ -959,6 +1016,7 @@ function placementOf(j, root, rowPath, objectPath, created) {
   const statements = fn.body.type === 'BlockStatement' ? fn.body.body : null;
   const row =
     statements == null ? null : statementHolding(j, statements, rowPath);
+  let lastDependency = -1;
   if (statements != null) {
     const index = statements.indexOf(row);
     if (row == null || statements.slice(0, index).some(returns)) {
@@ -973,6 +1031,7 @@ function placementOf(j, root, rowPath, objectPath, created) {
         if (declared == null || statements.indexOf(declared) >= index) {
           return null;
         }
+        lastDependency = Math.max(lastDependency, statements.indexOf(declared));
       }
     }
   } else if (!local.every(r => isParam(r.name))) {
@@ -988,32 +1047,188 @@ function placementOf(j, root, rowPath, objectPath, created) {
   if (!fixedWhereDefined(j, objectPath, created, fn)) {
     return null;
   }
-  return {kind: 'memo', owner: fn, deps};
+  // Rows with the same options share one definition only when every local
+  // those options read keeps one value: a `let` reassigned between two rows
+  // would show the first row's value on the second.
+  const shareable = local.every(
+    r => isParam(r.name) || keepsOneValue(owner.scope, r.name),
+  );
+  // `useMemo` reads its dependencies when it runs, handler reads included.
+  const after =
+    statements == null ? undefined : afterFor(row, statements, lastDependency);
+  if (
+    after !== undefined &&
+    reachedAbove(
+      j,
+      statements,
+      indexFor(statements, after, statements.indexOf(row), false),
+      row,
+    )
+  ) {
+    return null;
+  }
+  return {kind: 'memo', owner: fn, deps, shareable, after};
 }
 
 /**
- * Inserts a swipe's definition before the statement that holds the row: at
- * module scope, or at the top level of the owner's body.
+ * Whether code in `body` above `index` can call the hoisted function that
+ * `row` declares before a definition placed at `index` runs. A statement
+ * there names it, or names a function declaration whose body names it, and
+ * so on.
+ * @param {any} j @param {any[]} body @param {number} index @param {any} row
+ */
+function reachedAbove(j, body, index, row) {
+  const declared = (/** @type {any} */ statement) =>
+    statement.type === 'FunctionDeclaration'
+      ? statement
+      : statement.declaration?.type === 'FunctionDeclaration'
+        ? statement.declaration
+        : null;
+  const name = declared(row)?.id?.name;
+  if (name == null) {
+    return false;
+  }
+  const callers = new Set([name]);
+  const names = (/** @type {any} */ node) =>
+    j(node)
+      .find(j.Node)
+      .filter(
+        (/** @type {any} */ p) =>
+          (p.node.type === 'JSXIdentifier' ||
+            (p.node.type === 'Identifier' && isReference(p))) &&
+          callers.has(p.node.name),
+      )
+      .size() > 0;
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const statement of body) {
+      const fn = declared(statement);
+      if (fn?.id != null && !callers.has(fn.id.name) && names(fn.body)) {
+        callers.add(fn.id.name);
+        grew = true;
+      }
+    }
+  }
+  return body.slice(0, index).some(names);
+}
+
+/**
+ * Whether every binding of a name keeps one value: a `const`, directly or
+ * through a destructuring pattern such as `const [rows, setRows] =
+ * useState()`, or a function or class declaration.
+ * @param {any} scope @param {string} name
+ */
+function keepsOneValue(scope, name) {
+  return (scope.getBindings()[name] ?? []).every((/** @type {any} */ b) => {
+    const declarator = b.parent?.node?.type;
+    if (
+      declarator === 'FunctionDeclaration' ||
+      declarator === 'ClassDeclaration'
+    ) {
+      return true;
+    }
+    for (let p = b.parent; p != null; p = p.parent) {
+      const type = p.node?.type;
+      if (type === 'VariableDeclaration') {
+        return p.node.kind === 'const';
+      }
+      if (
+        type !== 'VariableDeclarator' &&
+        type !== 'ArrayPattern' &&
+        type !== 'ObjectPattern' &&
+        type !== 'ObjectProperty' &&
+        type !== 'Property' &&
+        type !== 'RestElement' &&
+        type !== 'AssignmentPattern'
+      ) {
+        return false;
+      }
+    }
+    return false;
+  });
+}
+
+/**
+ * Where a definition goes when the row's statement is a hoisted function
+ * declaration: code above it may call it before a `const` placed just before
+ * it initializes. So the definition goes right after the last statement that
+ * declares a binding it reads when it runs, or at the top (after the imports)
+ * when it reads none. When code above that point can still reach the
+ * function, `placementOf` keeps `createSwipe` on the row. Undefined
+ * otherwise: the definition goes just before the row's statement.
+ * @param {any} row @param {any[]} body @param {number} lastDependency
+ * @returns {any}
+ */
+function afterFor(row, body, lastDependency) {
+  const hoisted =
+    row?.type === 'FunctionDeclaration' ||
+    ((row?.type === 'ExportNamedDeclaration' ||
+      row?.type === 'ExportDefaultDeclaration') &&
+      row.declaration?.type === 'FunctionDeclaration');
+  if (!hoisted) {
+    return undefined;
+  }
+  return lastDependency >= 0 ? body[lastDependency] : null;
+}
+
+/**
+ * The index in `body` a definition goes to: `before`, the row statement's
+ * index, unless `afterFor` gave a point (`after`): right after that
+ * statement, or at the top, after the imports at module scope.
+ * @param {any[]} body @param {any} after @param {number} before @param {boolean} isModule
+ */
+function indexFor(body, after, before, isModule) {
+  if (after === undefined) {
+    return before;
+  }
+  if (after != null) {
+    return body.indexOf(after) + 1;
+  }
+  let afterImports = 0;
+  if (isModule) {
+    body.forEach((statement, i) => {
+      if (statement.type === 'ImportDeclaration') {
+        afterImports = i + 1;
+      }
+    });
+  }
+  return afterImports;
+}
+
+/**
+ * Where a swipe's definition goes: the statement list and its index, at
+ * module scope or at the top level of the owner's body. Null for an owner
+ * whose body is an expression, which `insertDefinition` wraps in a block.
+ * @param {any} j @param {any} root @param {any} placement @param {any} rowPath
+ * @returns {{body: any[], index: number} | null}
+ */
+function insertionPoint(j, root, placement, rowPath) {
+  if (placement.kind === 'module') {
+    const body = root.get().node.program.body;
+    const before = body.indexOf(statementIn(body, rowPath));
+    return {body, index: indexFor(body, placement.after, before, true)};
+  }
+  if (placement.owner.body.type !== 'BlockStatement') {
+    return null;
+  }
+  const body = placement.owner.body.body;
+  const row = statementHolding(j, body, rowPath);
+  const before = row == null ? body.length - 1 : body.indexOf(row);
+  return {body, index: indexFor(body, placement.after, before, false)};
+}
+
+/**
+ * Inserts a swipe's definition where `insertionPoint` says.
  * @param {any} j @param {any} root @param {any} placement @param {any} rowPath @param {any} declaration
  */
 function insertDefinition(j, root, placement, rowPath, declaration) {
-  if (placement.kind === 'module') {
-    const body = root.get().node.program.body;
-    body.splice(body.indexOf(statementIn(body, rowPath)), 0, declaration);
-    return;
-  }
-  const owner = placement.owner;
-  if (owner.body.type !== 'BlockStatement') {
+  const point = insertionPoint(j, root, placement, rowPath);
+  if (point == null) {
+    const owner = placement.owner;
     owner.body = j.blockStatement([declaration, j.returnStatement(owner.body)]);
     return;
   }
-  const body = owner.body.body;
-  const row = statementHolding(j, body, rowPath);
-  body.splice(
-    row == null ? body.length - 1 : body.indexOf(row),
-    0,
-    declaration,
-  );
+  point.body.splice(point.index, 0, declaration);
 }
 
 /**
@@ -1314,6 +1529,9 @@ export default function transformer(file, api) {
   const created = new Set();
   /** @type {Map<string, string>} */
   const definitions = new Map();
+  /** Each definition's declaration, by the name it defines. */
+  /** @type {Map<string, any>} */
+  const definitionNodes = new Map();
   /** @type {Map<any, string>} */
   const owners = new Map();
   const ownerKey = (/** @type {any} */ placement) => {
@@ -1426,8 +1644,19 @@ export default function transformer(file, api) {
               addComment(j, actions, NAME_COMMENT);
             }
           } else {
-            const key = `${ownerKey(placement)}\u0000${shapeOf(object)}`;
-            let name = definitions.get(key);
+            const key = placement.shareable
+              ? `${ownerKey(placement)}\u0000${shapeOf(object)}`
+              : null;
+            let name = key == null ? undefined : definitions.get(key);
+            // A hoisted row's definition must run before any call to it, so
+            // it reuses one only where that one already sits early enough.
+            if (name != null && placement.after !== undefined) {
+              const point = insertionPoint(j, root, placement, rowPath);
+              const at = point?.body.indexOf(definitionNodes.get(name)) ?? -1;
+              if (point == null || at === -1 || at > point.index) {
+                name = undefined;
+              }
+            }
             if (name == null) {
               name = freeName(j, root, swipeName(ids, positional));
               const call = j.callExpression(j.identifier(create), [object]);
@@ -1448,7 +1677,10 @@ export default function transformer(file, api) {
                 addComment(j, declaration, NAME_COMMENT);
               }
               insertDefinition(j, root, placement, rowPath, declaration);
-              definitions.set(key, name);
+              definitionNodes.set(name, declaration);
+              if (key != null) {
+                definitions.set(key, name);
+              }
             }
             replacement = j.identifier(name);
           }
