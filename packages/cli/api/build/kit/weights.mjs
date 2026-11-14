@@ -250,7 +250,9 @@ function memberFeatures(v) {
   const val = v.map(x => (x === undefined ? -1e9 : x));
   // Equal values share the average of the ranks they span. That is the mean
   // rank an arbitrary order gives them, which is what the blend numbers were
-  // fit on, and the candidates' order in the weights file never decides.
+  // fit on, and the candidates' order in the weights file never decides. Two
+  // or more candidates tied at a member's top share a rank above 0, so none
+  // of them gets the is-top feature.
   const rank = val.map(
     x =>
       val.filter(y => y > x).length + (val.filter(y => y === x).length - 1) / 2,
@@ -504,8 +506,9 @@ export function tieReading(names, idea, catalog) {
 }
 
 /**
- * Settles an exact tie in the ranker by a fuller reading of each tied
- * template's own descriptor. Words every tied template names cannot choose
+ * Settles an exact tie in the ranker: a tied template the idea names by its
+ * whole name starts (`namedOutright`); otherwise a fuller reading of each tied
+ * template's own descriptor decides. Words every tied template names cannot choose
  * between them, so they are left out; each other word of the idea that a
  * template's descriptor names adds its rarity within the family. The highest
  * total starts. An equal total goes to the most typical of the family
@@ -569,8 +572,10 @@ function bestPage(idea, ranked, pick, catalog, weights, ok = () => true) {
 /**
  * Every ready, non-shell template in the pick model's order, best first.
  * Templates the pick model scores exactly the same are ordered like an exact
- * tie in the ranker: by how strongly each one's own descriptor answers the
- * idea (`tieReading`), then by how typical of its family it is, then by name.
+ * tie in the ranker: a template the idea names by its whole name first
+ * (`namedOutright`), then by how strongly each one's own descriptor answers
+ * the idea (`tieReading`), then by how typical of its family it is, then by
+ * name.
  * The weights file's candidate order never decides.
  * @param {string} idea
  * @param {import('./rank.mjs').RankedPage[]} ranked
