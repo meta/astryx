@@ -2023,9 +2023,17 @@ test('no caption read follows a write in the same resize delivery, from opening 
         ...styleOwn,
         get(this: HTMLElement) {
           const style = getStyle.call(this) as CSSStyleDeclaration;
+          // A style declaration's members: its values and its methods.
+          type StyleMember =
+            | string
+            | number
+            | CSSRule
+            | null
+            | undefined
+            | ((...args: never[]) => string | undefined);
           return new Proxy(style, {
-            get(target, key) {
-              const value = Reflect.get(target, key, target);
+            get(target, key): StyleMember {
+              const value = Reflect.get(target, key, target) as StyleMember;
               return typeof value === 'function' ? value.bind(target) : value;
             },
             set(target, key, value) {

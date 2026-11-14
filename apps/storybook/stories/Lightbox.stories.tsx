@@ -293,6 +293,79 @@ export const CaptionEndingInTallImage: Story = {
 };
 
 /**
+ * A long caption that ends in a flex row of short tags. The row narrows beside
+ * the toggle, so "less" stays beside it.
+ */
+export const CaptionEndingInFlexRow: Story = {
+  args: {
+    media: [
+      {
+        ...GALLERY_MEDIA[0],
+        caption: (
+          <>
+            A winding path through the forest, past the old mill and down to the
+            river, where the trail turns back toward the village. In autumn the
+            beeches along it turn copper, and on a clear morning you can see the
+            church spire from the bridge.
+            <div data-caption-end-block style={{display: 'flex', gap: 4}}>
+              <span>Autumn</span>
+              <span>River</span>
+            </div>
+          </>
+        ),
+      },
+      {...GALLERY_MEDIA[1], caption: 'Morning fog'},
+    ],
+  },
+  render: ({media}) => {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <>
+        <button onClick={() => setIsOpen(true)}>Open flex-row caption</button>
+        <Lightbox isOpen={isOpen} onOpenChange={setIsOpen} media={media} />
+      </>
+    );
+  },
+};
+
+/**
+ * A long caption that ends in a short block that clips its overflow. The block
+ * narrows beside the toggle, so "less" stays beside it.
+ */
+export const CaptionEndingInClippedBlock: Story = {
+  args: {
+    media: [
+      {
+        ...GALLERY_MEDIA[0],
+        caption: (
+          <>
+            A winding path through the forest, past the old mill and down to the
+            river, where the trail turns back toward the village. In autumn the
+            beeches along it turn copper, and on a clear morning you can see the
+            church spire from the bridge.
+            <div data-caption-end-block style={{overflow: 'hidden'}}>
+              Photo by the trail club
+            </div>
+          </>
+        ),
+      },
+      {...GALLERY_MEDIA[1], caption: 'Morning fog'},
+    ],
+  },
+  render: ({media}) => {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <>
+        <button onClick={() => setIsOpen(true)}>
+          Open clipped-block caption
+        </button>
+        <Lightbox isOpen={isOpen} onOpenChange={setIsOpen} media={media} />
+      </>
+    );
+  },
+};
+
+/**
  * A long caption that ends in a block shorter than half a line, here an empty
  * block. It sits on the toggle's own line, so "less" stays beside the text.
  */

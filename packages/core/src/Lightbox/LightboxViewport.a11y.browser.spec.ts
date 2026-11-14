@@ -980,6 +980,45 @@ test.describe('an open caption that ends in a block, with no ResizeObserver loop
     }
   });
 
+  for (const [id, name] of [
+    ['caption-ending-in-flex-row', 'Open flex-row caption'],
+    ['caption-ending-in-clipped-block', 'Open clipped-block caption'],
+  ] as const) {
+    for (const width of [362, 400, 420]) {
+      test(`${id} keeps "less" beside its last block, which narrows beside the place (${width} px)`, async ({
+        page,
+      }) => {
+        await page.setViewportSize({width, height: 874});
+        await page.route(/picsum\.photos/, async route =>
+          route.fulfill({contentType: 'image/svg+xml', body: PHOTO_SVG}),
+        );
+        await page.goto(
+          `${storybook.origin}/iframe.html?id=core-lightbox--${id}&viewMode=story`,
+        );
+        await page.getByRole('button', {name}).click();
+        const dialog = page.getByRole('dialog');
+        await dialog.getByRole('button', {name: 'more'}).click();
+        await expect(dialog.getByRole('button', {name: 'less'})).toBeVisible();
+        const facts = await dialog.evaluate(element => {
+          const caption = element.querySelector(
+            '[data-current] [data-lightbox-caption]',
+          ) as HTMLElement;
+          const toggle = caption.querySelector('button') as HTMLElement;
+          const block = caption.querySelector(
+            '[data-caption-end-block]',
+          ) as HTMLElement;
+          return {
+            toggleTop: toggle.getBoundingClientRect().top,
+            blockBottom: block.getBoundingClientRect().bottom,
+          };
+        });
+        // Beside the block, "less" starts above the block's bottom. On a line
+        // of its own it would start at or below it.
+        expect(facts.toggleTop).toBeLessThan(facts.blockBottom - 1);
+      });
+    }
+  }
+
   test('a short block leaves "less" on the last line of text', async ({
     page,
   }) => {

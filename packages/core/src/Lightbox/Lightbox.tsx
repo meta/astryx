@@ -597,33 +597,26 @@ const KEYBOARD_PAN_OFFSETS: Record<string, [number, number]> = {
 /** The height of a video's native controls, px: no browser reports it. */
 const VIDEO_CONTROLS_BAND = 48;
 
-// Elements that the browser replaces with their own content. When such an
-// element is block-level, its box does not overlap a float's box.
+// Elements that the browser replaces with their own content.
 const REPLACED_ELEMENT =
   /^(?:img|video|canvas|svg|iframe|embed|object|picture)$/;
 
 /**
- * Whether a box in the caption's flow keeps clear of a float, as a block-level
- * replaced element and a box with its own formatting context do. Such a box
- * drops below the toggle's place when it does not fit beside it. Other boxes
- * wrap their lines around the place.
+ * Whether a box in the caption's flow cannot narrow to sit beside a float. A
+ * block-level replaced element, such as an image, keeps its own width, so it
+ * drops below the toggle's place when it does not fit beside it. Any other
+ * block narrows beside the place, and inline boxes wrap around it.
  */
-function keepsClearOfFloats(element: Element, view: Window): boolean {
-  const style = view.getComputedStyle(element);
-  if (
-    /^(?:inline|contents|none)/.test(style.display) ||
-    style.position === 'absolute' ||
-    style.position === 'fixed' ||
-    style.float !== 'none'
-  ) {
+function isUnnarrowableBlock(element: Element, view: Window): boolean {
+  if (!REPLACED_ELEMENT.test(element.localName)) {
     return false;
   }
+  const style = view.getComputedStyle(element);
   return (
-    REPLACED_ELEMENT.test(element.localName) ||
-    /^(?:flow-root|flex|grid|table)/.test(style.display) ||
-    !/^(?:visible|clip)$/.test(style.overflowX) ||
-    !/^(?:visible|clip)$/.test(style.overflowY) ||
-    /\b(?:layout|paint|content|strict)\b/.test(style.contain)
+    !/^(?:inline|contents|none)/.test(style.display) &&
+    style.position !== 'absolute' &&
+    style.position !== 'fixed' &&
+    style.float === 'none'
   );
 }
 
@@ -631,9 +624,9 @@ function keepsClearOfFloats(element: Element, view: Window): boolean {
  * Whether the toggle's place, shown with the flow's lines, would push a box
  * in the flow down by half a line or more. The flow is read without the
  * place. The place floats at the flow's start and is as long as the flow, so
- * a box that keeps clear of floats and is wider than the room beside the
- * place drops below the place's last line. A box shorter than half a line
- * adds no line to the place, so it stays where the text ends.
+ * a box that cannot narrow and is wider than the room beside the place drops
+ * below the place's last line. A box shorter than half a line adds no line
+ * to the place, so it stays where the text ends.
  */
 function wouldPlacePushBlock(
   flow: HTMLElement,
@@ -643,17 +636,10 @@ function wouldPlacePushBlock(
   placeBottom: number,
   line: number,
 ): boolean {
-  const clearBoxes: Element[] = [];
   for (const element of Array.from(flow.querySelectorAll('*'))) {
-    if (
-      element === place ||
-      clearBoxes.some(box => box.contains(element)) ||
-      !keepsClearOfFloats(element, view)
-    ) {
+    if (element === place || !isUnnarrowableBlock(element, view)) {
       continue;
     }
-    // The boxes inside this one are laid out apart from the place.
-    clearBoxes.push(element);
     const box = element.getBoundingClientRect();
     if (box.width > room + 0.5 && placeBottom - box.top > line / 2) {
       return true;
