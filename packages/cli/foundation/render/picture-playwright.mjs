@@ -12,6 +12,7 @@
  */
 
 import {pathToFileURL} from 'node:url';
+import {LOCAL_URL} from './offline.mjs';
 
 const [entry, html, png, mode, executablePath] = process.argv.slice(2);
 try {
@@ -23,6 +24,13 @@ try {
       viewport: {width: 1280, height: 900},
       colorScheme: mode === 'dark' ? 'dark' : 'light',
     });
+    // The page loads its own files only: a remote stylesheet, font or image
+    // fails at once instead of holding the load on a network.
+    await page.route(
+      (/** @type {URL} */ url) => !LOCAL_URL.test(url.href),
+      (/** @type {{abort: (why: string) => Promise<void>}} */ route) =>
+        route.abort('blockedbyclient'),
+    );
     await page.goto(pathToFileURL(html).href, {waitUntil: 'load'});
     await page.screenshot({path: png, fullPage: true});
   } finally {

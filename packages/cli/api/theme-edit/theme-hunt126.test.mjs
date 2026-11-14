@@ -172,7 +172,7 @@ describe('a picture run that stops part way', () => {
          fs.writeFileSync(${JSON.stringify(count)}, String(n));
          if (n > 1) throw new Error('crashed on start ' + n);
          return {
-           async newPage() { return {async goto() {}, async screenshot({path}) { fs.writeFileSync(path, Buffer.from(${JSON.stringify(PNG.toString('base64'))}, 'base64')); }}; },
+           async newPage() { return {async route() {}, async goto() {}, async screenshot({path}) { fs.writeFileSync(path, Buffer.from(${JSON.stringify(PNG.toString('base64'))}, 'base64')); }}; },
            async close() {},
          };
        }};`,
