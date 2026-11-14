@@ -352,10 +352,11 @@ those contracts.
   and arrow keys at once, with no drag or slide; a Lightbox shows each item at
   its fit size: pinch, double-tap, double-click and the zoom keys do not zoom,
   and a drag does not dismiss; the close button, Escape and the backdrop work
-  as always. A gesture in that window does not start the load. The bundler
-  keeps one copy per page however many components use them. If the runtime's
-  chunk fails to load, the page stays as it is before the load: components
-  work by taps, clicks and keys, and no gesture retries the load.
+  as always; a resize handle pulled past its pane's limit stops at the limit,
+  with no overshoot. A gesture in that window does not start the load. The
+  bundler keeps one copy per page however many components use them. If the
+  runtime's chunk fails to load, the page stays as it is before the load:
+  components work by taps, clicks and keys, and no gesture retries the load.
   `utils/touchRuntimeModules.tsx` is the one module the loader's `import()`
   targets; it gathers the touch runtime, so the loader names a single chunk.
   `motion/settleThreshold.ts` holds `SETTLE_THRESHOLD` apart from the
@@ -366,31 +367,35 @@ those contracts.
   target helpers apart from the tracking runtime, so a group's static code
   finds its neighbours without loading gesture code. Gap: these modules still
   import the shared touch modules statically, so a page that renders them
-  carries the touch runtime in its first load: Resizable (`resizablePane`),
-  Slider (`sliderTouchController`), SnapPaging, Chat (`useChatKeyboard`), and
-  the date and time fields' wheels (`motion/reducedMotion`). A surface
-  revealed by interaction that a component loads with `import()` under
-  `architecture:component-import-boundaries` INV1 imports these modules
-  statically too; the bundler still keeps one copy per page. That `import()`
-  targets the surface module, never one of these modules, and it is not a
-  component lazy-loading its own touch code (`spec:AST-080` DEC-5). A touch
-  behavior that a caller opts into and that carries a large resource cost
-  comes through a public constructor whose module statically imports the
-  modules that behavior runs on; the component imports none of those, so only
-  an app that imports the constructor ships them
-  (`architecture:public-component-api` INV19). `Item`'s swipe actions come
-  from `createSwipe` (`spec:AST-057` FR10): `Item` and `ListItem` import none
-  of the swipe modules — the gesture core, the animator, the panels'
+  carries the touch runtime in its first load: Slider
+  (`sliderTouchController`), Chat (`useChatKeyboard`), the date and time
+  fields' wheels (`DateInput/PickerWheel`, `DateInput/wheelStrip`,
+  `motion/reducedMotion`), and Calendar and DateInput's native field, which
+  import the `hooks` barrel. Through them DateRangeInput, PowerSearch and
+  Table carry it too. A surface revealed by interaction that a component loads
+  with `import()` under `architecture:component-import-boundaries` INV1
+  imports these modules statically too; the bundler still keeps one copy per
+  page. That `import()` targets the surface module, never one of these
+  modules, and it is not a component lazy-loading its own touch code
+  (`spec:AST-080` DEC-5). A touch behavior that a caller opts into and that
+  carries a large resource cost comes through a public constructor whose
+  module statically imports the modules that behavior runs on; the component
+  imports none of those, so only an app that imports the constructor ships
+  them (`architecture:public-component-api` INV19). `useSnapPaging`
+  (`@astryxdesign/core/SnapPaging`) is such an entry too: no component imports
+  it, so only an app that imports it ships the pager. `Item`'s swipe actions
+  come from `createSwipe` (`spec:AST-057` FR10): `Item` and `ListItem` import
+  none of the swipe modules — the gesture core, the animator, the panels'
   rendering, and the row's gesture code — while `Item` keeps using the touch
   modules for its other jobs, such as press feedback. The only swipe code in
   `Item` is its deprecated path, serving its deprecated `swipeActions` and
   `swipeBehavior` props only until they leave in 0.8.0 (`spec:AST-057`
   DEP-0017, CLN-0025): the released loader, the one `import()` of swipe code;
   the released row style; the role gate and the `commit` warning; the bridge
-  the loaded layer fills and the key forwarder into that bridge; and the
-  coexistence diagnostic. There is no
-  install call, no public entry, and no public installed check; tests reset
-  the modules through an internal hook only. A component's own touch logic is
+  the loaded layer fills, the click guard, and the event forwarders into that
+  bridge; and the coexistence diagnostic. There is no install call, no public
+  entry, and no public installed check; tests reset the modules through an
+  internal hook only. A component's own touch logic is
   small glue in its own build over these modules. The gesture host attaches for
   every pointer, with no touch-only query; under a fine pointer only a component that
   uses a gesture listens (`spec:AST-094` FR19, FR24, FR43). The gesture host, press feedback, page hold, finger-scroll watch and click guard hear document-wide input through one capture-phase listener per event type on the window, present while a subscriber needs it. They run in subscription order, before any document or element listener; it is passive unless a subscriber cancels the event. The modules are not public exports and are not

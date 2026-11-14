@@ -13,7 +13,15 @@
 
 import {act, fireEvent, render, screen} from '@testing-library/react';
 import {useLayoutEffect, useState} from 'react';
-import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  beforeAll,
+} from 'vitest';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import type * as AnimatedLayoutModule from '../motion/animatedLayout';
 import {Layout} from '../Layout/Layout';
@@ -25,6 +33,13 @@ import {
   type ResizableRegion,
   type UseResizableSingleConfig,
 } from './useResizable';
+import {__loadTouchRuntimeForTest} from '../utils/touchRuntime';
+
+// The handle's overshoot and spring-back come with the shared touch runtime
+// once the page has loaded it.
+beforeAll(async () => {
+  await __loadTouchRuntimeForTest();
+});
 
 interface RecordedReveal {
   edge: string;
