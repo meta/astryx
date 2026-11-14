@@ -15,7 +15,7 @@
 }
 
 /* Keep a blank line between prose and an adjacent photograph in either order. */
-.body .astryx-markdown-paragraph + img,
-.body img + .astryx-markdown-paragraph {
+.body :global(.astryx-markdown-paragraph) + img,
+.body img + :global(.astryx-markdown-paragraph) {
   margin-block-start: var(--spacing-8);
 }
