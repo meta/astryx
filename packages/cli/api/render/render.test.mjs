@@ -330,20 +330,26 @@ describe('render(): every write takes its place in one step', () => {
     60_000,
   );
 
-  it('removes a temporary that a stopped run on this computer left beside its target, and keeps any other', async () => {
-    const host = os.hostname();
+  it('removes a temporary that a stopped run in this process space left beside its target, and keeps any other', async () => {
+    const {pidSpace} = await import('../../foundation/release/cache.mjs');
+    const space = `${os.hostname()}-${/\[(\d+)\]/.exec(pidSpace() ?? '')?.[1] ?? 'x'}`;
     // A process id no system gives out, so its run is gone.
-    const left = path.join(dir, `.stale.html.tmp-${host}-999999999-${randomUUID()}`);
-    const running = path.join(dir, `.stale.html.tmp-${host}-${process.pid}-${randomUUID()}`);
-    const leftFolder = path.join(dir, `.page-restored.tmp-${host}-999999999-${randomUUID()}`);
-    for (const temporary of [left, running]) fs.writeFileSync(temporary, 'part of a file');
+    const left = path.join(dir, `.stale.html.tmp-${space}-999999999-${randomUUID()}`);
+    const running = path.join(dir, `.stale.html.tmp-${space}-${process.pid}-${randomUUID()}`);
+    // A run in another process-ID namespace cannot be seen from here, so its
+    // temporary stays, whatever its process id.
+    const elsewhere = path.join(dir, `.stale.html.tmp-${os.hostname()}-1-999999999-${randomUUID()}`);
+    const leftFolder = path.join(dir, `.page-restored.tmp-${space}-999999999-${randomUUID()}`);
+    for (const temporary of [left, running, elsewhere]) fs.writeFileSync(temporary, 'part of a file');
     put(path.relative(dir, path.join(leftFolder, 'page.tsx')), 'part of a folder');
     await render('page.tsx', {cwd: dir, out: 'stale.html'});
     const restored = /** @type {any} */ (await render('page.html', {cwd: dir, reverse: true}));
     expect(fs.existsSync(left)).toBe(false);
     expect(fs.existsSync(leftFolder)).toBe(false);
     expect(fs.existsSync(running)).toBe(true);
+    expect(fs.existsSync(elsewhere)).toBe(true);
     fs.rmSync(running);
+    fs.rmSync(elsewhere);
     fs.rmSync(path.join(dir, path.dirname(restored.data.output)), {recursive: true});
   }, 60_000);
 

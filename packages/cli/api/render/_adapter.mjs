@@ -44,7 +44,7 @@ import {cliVersion} from '../../foundation/integrations/cli-peer-version.mjs';
 import {assertWithin, PathSafetyError} from '../../foundation/fs/path-safety.mjs';
 import {requireCoreDir} from '../../foundation/fs/paths.mjs';
 import {runChoice} from '../../foundation/release/run-context.mjs';
-import {isAlive} from '../../foundation/release/cache.mjs';
+import {isAlive, pidSpace} from '../../foundation/release/cache.mjs';
 import {isServedPackage} from '../../foundation/render/served-packages.mjs';
 import {hostedRun, recordResolved} from '../../foundation/runtime/package-root.mjs';
 
@@ -185,25 +185,33 @@ function refuseProtected(files, cwd, newFolder = null) {
 }
 
 /**
- * The start of the hidden temporary names a run on this computer gives a
- * file or folder beside its target, before the run's process id.
+ * The process space runs here share: this computer's name and its process-ID
+ * namespace (a container or sandbox on one computer has its own), in which a
+ * process id names one process.
+ */
+const PROCESS_SPACE = `${os.hostname()}-${/\[(\d+)\]/.exec(pidSpace() ?? '')?.[1] ?? 'x'}`;
+
+/**
+ * The start of the hidden temporary names a run in this process space gives
+ * a file or folder beside its target, before the run's process id.
  * @param {string} target absolute
  */
-const temporaryPrefix = target => `.${path.basename(target)}.tmp-${os.hostname()}-`;
+const temporaryPrefix = target => `.${path.basename(target)}.tmp-${PROCESS_SPACE}-`;
 
 /**
  * A hidden temporary name beside a file or folder, as the CLI's other writers
- * name theirs, with this computer's name and this process's id, so a later
- * run can tell when the run that made it is gone.
+ * name theirs, with this process space and this process's id, so a later run
+ * can tell when the run that made it is gone.
  * @param {string} target absolute
  */
 const temporaryBeside = target => path.join(path.dirname(target), `${temporaryPrefix(target)}${process.pid}-${randomUUID()}`);
 
 /**
- * Remove the temporaries that runs on this computer left beside a target
- * when they stopped between their write and their rename: those whose
+ * Remove the temporaries that runs in this process space left beside a
+ * target when they stopped between their write and their rename: those whose
  * process no longer runs. A temporary of a run that still runs, or of a run
- * on another computer, stays.
+ * in another process space (another computer, container or sandbox, whose
+ * processes cannot be seen from here), stays.
  * @param {string} target absolute
  */
 function removeStaleTemporaries(target) {
@@ -246,7 +254,9 @@ function newFolderOf(file) {
  */
 function writeFailure(e, temporary, folder, cwd) {
   const err = /** @type {NodeJS.ErrnoException} */ (e);
-  if (temporary && err?.path === temporary) return `${shown(cwd, folder)} does not take a new file (${err.code ?? err.message})`;
+  if (temporary && err?.path === temporary && (err.syscall === 'open' || err.syscall === 'mkdir')) {
+    return `${shown(cwd, folder)} does not take a new file (${err.code ?? err.message})`;
+  }
   if (temporary && err?.path?.startsWith(temporary + path.sep)) return err.code ?? err.message;
   return String(err?.message ?? e);
 }
