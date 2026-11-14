@@ -1622,6 +1622,18 @@ describe('render(): a page outside a project', () => {
     expect(run.json.data.files).toEqual(['app/x/page.tsx', 'components/Banner.tsx']);
     const back = runBin(tree, ['experimental', 'render', '--reverse', 'app/x/page.html']);
     expect(back.json.data).toMatchObject({exact: true, files: ['app/x/page-restored/app/x/page.tsx', 'app/x/page-restored/components/Banner.tsx']});
+    // The page's own folder still holds the tsconfig.json and the public/
+    // images it is rendered with.
+    fs.mkdirSync(path.join(tree, 'site/public'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'site/tsconfig.json'), '{"compilerOptions": {"paths": {"@/*": ["./*"]}}}\n');
+    fs.writeFileSync(path.join(tree, 'site/public/logo.png'), PNG);
+    fs.writeFileSync(path.join(tree, 'site/Note.tsx'), 'export function Note() {\n  return <p>Note by alias</p>;\n}\n');
+    fs.writeFileSync(path.join(tree, 'site/page.tsx'), "import {Note} from '@/Note';\nexport default function Page() {\n  return <main><Note /><img src=\"/logo.png\" alt=\"\" /></main>;\n}\n");
+    const site = runBin(tree, ['experimental', 'render', 'site/page.tsx']);
+    expect(site.status).toBe(0);
+    const siteHtml = fs.readFileSync(path.join(tree, 'site/page.html'), 'utf8');
+    expect(siteHtml).toContain('Note by alias');
+    expect(siteHtml).toContain('src="data:image/png;base64,');
   }, 60_000);
 
   it('loads one React outside a project, even when the folder holds its own copy', () => {

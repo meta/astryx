@@ -73,18 +73,29 @@ export class RenderError extends Error {
 }
 
 /**
- * The folder whose files are the page's own: the nearest folder at or above
- * `dir` with a package.json. Outside a project, the current folder when it
- * holds the page, so a page with neighbours above its own folder (as a
- * restore lays them out) carries them; else `dir`.
+ * The nearest folder at or above `dir` with a package.json, or null outside
+ * a project.
+ * @param {string} dir
+ * @returns {string | null}
+ */
+function projectOf(dir) {
+  for (let d = dir; ; d = path.dirname(d)) {
+    if (fs.existsSync(path.join(d, 'package.json'))) return d;
+    if (path.dirname(d) === d) return null;
+  }
+}
+
+/**
+ * The folder whose modules the page carries: its project's. Outside a
+ * project, the current folder when it holds the page, so a page with
+ * neighbours above its own folder (as a restore lays them out) carries them;
+ * else the page's folder.
  * @param {string} dir
  * @param {string} [cwd]
  */
-function projectRootOf(dir, cwd) {
-  for (let d = dir; ; d = path.dirname(d)) {
-    if (fs.existsSync(path.join(d, 'package.json'))) return d;
-    if (path.dirname(d) === d) break;
-  }
+function carryScopeOf(dir, cwd) {
+  const project = projectOf(dir);
+  if (project) return project;
   const fromCwd = cwd ? path.relative(cwd, dir) : '..';
   return fromCwd.startsWith('..') || path.isAbsolute(fromCwd) ? dir : /** @type {string} */ (cwd);
 }
@@ -356,7 +367,7 @@ function noMessageError(code, stateFile) {
  * Run the page in a host process (page-host.mjs), stopping it after
  * `timeoutMs`. The host runs the page in a worker thread, and it exits when
  * this process goes away.
- * @param {{entry: string, root: string, served: ServedSet | null, withoutSegmenter: boolean}} input
+ * @param {{entry: string, root: string, scope: string, served: ServedSet | null, withoutSegmenter: boolean}} input
  * @param {number} timeoutMs
  * @returns {Promise<any>} the page's answer, or `{crashed: how}` when a
  *   native crash ended the host
@@ -476,7 +487,7 @@ export function awaitHost(host, {timeoutMs, withoutSegmenter, stateFile}) {
 /**
  * Run the page. When this Node crashes in Intl.Segmenter, run it once more
  * without Intl.Segmenter and say so in a warning.
- * @param {{entry: string, root: string, served: ServedSet | null}} input
+ * @param {{entry: string, root: string, scope: string, served: ServedSet | null}} input
  * @param {number} timeoutMs
  * @param {RenderWarning[]} warnings
  */
@@ -617,11 +628,14 @@ const SCHEME_CSS =
  */
 export async function renderPage(entry, options = {}) {
   const dir = path.dirname(entry);
-  const root = projectRootOf(dir, options.cwd);
+  // The project's folder, else the page's: where its tsconfig.json and
+  // public/ images are read.
+  const root = projectOf(dir) ?? dir;
+  const scope = carryScopeOf(dir, options.cwd);
   const served = options.served ?? null;
   /** @type {RenderWarning[]} */
   const warnings = [];
-  const message = await runPage({entry, root, served}, options.timeoutMs ?? RENDER_TIMEOUT_MS, warnings);
+  const message = await runPage({entry, root, scope, served}, options.timeoutMs ?? RENDER_TIMEOUT_MS, warnings);
   if (!message.ok) {
     throw new RenderError(message.error.code, message.error.message, message.error.detail);
   }
@@ -815,12 +829,12 @@ export async function renderPage(entry, options = {}) {
   // (`<img src="./logo.png">`, `url(./bg.png)`) are carried too, so the page
   // comes back with them; a package's own files are not.
   for (const sheet of carriedCss) {
-    const rel = path.relative(root, sheet);
+    const rel = path.relative(scope, sheet);
     if (rel.startsWith('..') || path.isAbsolute(rel) || rel.split(path.sep).includes('node_modules')) continue;
     if (!files.includes(sheet)) files.push(sheet);
   }
   for (const asset of ctx.localAssets) {
-    const rel = path.relative(root, asset);
+    const rel = path.relative(scope, asset);
     if (rel.startsWith('..') || path.isAbsolute(rel) || rel.split(path.sep).includes('node_modules')) continue;
     if (files.includes(asset)) continue;
     // Carried only when its bytes are a known image, font or media format,
