@@ -502,9 +502,12 @@ describe('the answer that joins every clause is measured too', () => {
         'make form controls like inputs and checkboxes rounder',
         {cwd, theme: 'q'},
       );
-      expect(
-        (data.results ?? []).some(r => /^all of it, in order/.test(r.text)),
-      ).toBe(false);
+      // (Both clauses work now: checkboxes leave out the radio, which is
+      // fully round already. "All of it" holds both, never one.)
+      const all = (data.results ?? []).find(r =>
+        /^all of it, in order/.test(r.text),
+      );
+      expect(all?.commands.length ?? 0).not.toBe(1);
     },
     T,
   );

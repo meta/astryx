@@ -139,6 +139,7 @@ export const DENSITY = /** @type {const} */ ({
     'relaxed',
     'comfortable',
     'sparse',
+    'padded',
     'generous',
     'spread out',
   ],
