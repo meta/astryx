@@ -429,6 +429,25 @@ describe('a whole-button hover on butter', () => {
   }, 240_000);
 });
 
+describe('a whole-part hover the own source sets itself', () => {
+  it('is not repeated on the variants either, so the note that it does not show holds on every variant', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('h6o', {cwd, like: 'neutral'});
+    ownSource(
+      'h6o',
+      "components: {button: {base: {':hover': {backgroundColor: 'red'}}}},",
+    );
+    await themeEditShow('h6o', {cwd});
+    const r = await themeEditSet('h6o', 'background-color', 'blue', {
+      cwd,
+      on: 'button',
+      state: 'hover',
+    });
+    expect(r.data.notes.join(' ')).toMatch(/so this does not show there/);
+    expect(cssOf('h6o')).not.toMatch(/background-color: blue/);
+  }, 240_000);
+});
+
 describe('a longhand after a shorthand the base holds', () => {
   it('wins on butter: padding-inline after padding, border-color after border', async ctx => {
     if (needBases(ctx)) return;
@@ -595,7 +614,7 @@ describe('the spacing dial around kept sizes', () => {
 });
 
 describe('runs and notes', () => {
-  it('offers the per-mode color step that works, and never a currentcolor gradient', async ctx => {
+  it('offers the per-mode color step that works, and paints a gradient in its mode only', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('r3', {cwd, like: 'neutral'});
     const border = await refusal(() =>
@@ -611,15 +630,15 @@ describe('runs and notes', () => {
         /border-color '#ff0000' --on card --when variant:[\w-]+ --mode dark/,
       ),
     );
-    const grad = await refusal(() =>
-      themeEditSet('r3', 'background', 'linear-gradient(#ff0000, #0000ff)', {
-        cwd,
-        on: 'card',
-        mode: 'dark',
-      }),
+    await themeEditSet(
+      'r3',
+      'background',
+      'linear-gradient(#ff0000, #0000ff)',
+      {cwd, on: 'card', mode: 'dark'},
     );
-    expect(grad.run.join('\n')).not.toMatch(/currentcolor/);
-    expect(grad.run.join('\n')).toMatch(/linear-gradient\(#ff0000, #0000ff\)/);
+    expect(ruleOf('r3', '.astryx-card')).toContain(
+      'linear-gradient(light-dark(transparent, #ff0000), light-dark(transparent, #0000ff))',
+    );
   }, 240_000);
 
   it('says the corners show on the other corners when the own source sets one', async ctx => {
