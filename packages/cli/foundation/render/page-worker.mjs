@@ -34,7 +34,7 @@ import {transformSync} from '@babel/core';
 import {LOAD_EXTENSIONS, existingFile, matchPath, readPathsIn, resolvePath} from './ts-paths.mjs';
 import {createJiti} from 'jiti';
 import {assetDataUri, isAssetPath} from './assets.mjs';
-import {SINGLE_COPY, isServedPackage, packageOf} from './served-packages.mjs';
+import {SINGLE_COPY, isServedPackage, packageOf, resolveServed} from './served-packages.mjs';
 import {findNodeModulesPackage} from '../fs/paths.mjs';
 import {importSpecifiers} from './embedded-imports.mjs';
 import {CHART_GLOBAL, CHART_ROOTS, chartDocument, chartSize, markLegends} from './charts.mjs';
@@ -713,6 +713,32 @@ if (servedParent && Object.keys(SINGLE_COPY_ALIASES).length > 0) {
   });
 }
 
+/** What the StyleX compiler reads as a theme or constants file, by name. */
+const STYLEX_THEME_FILE = /\.(?:stylex(?:\.const)?|transformed)(?:\.(?:js|ts|tsx|jsx|mjs|cjs))?$/;
+
+/**
+ * Outside a project, the file the page loads for each StyleX theme file a
+ * module imports from a package, for the StyleX compiler. The compiler finds
+ * a theme import from the folder of the file that imports it, which outside
+ * a project holds no copy of the packages the set serves, so it is given the
+ * file the page loads. Its own rules still name that file for the variables'
+ * names, so they match the package's stylesheet.
+ * @param {string} source
+ * @param {string} filename
+ * @returns {Record<string, string[]> | null}
+ */
+function servedThemeFiles(source, filename) {
+  if (!served) return null;
+  /** @type {Record<string, string[]>} */
+  const files = {};
+  for (const spec of importSpecifiers(source, filename)) {
+    if (spec.startsWith('.') || path.isAbsolute(spec) || !STYLEX_THEME_FILE.test(spec)) continue;
+    const file = resolveServed(spec, filename, served);
+    if (file) files[spec] = [file];
+  }
+  return Object.keys(files).length > 0 ? files : null;
+}
+
 const plain = createJiti(entry, {fsCache: false, jsx: {runtime: 'automatic'}});
 
 const jiti = createJiti(entry, {
@@ -735,6 +761,7 @@ const jiti = createJiti(entry, {
     if (filename && isLocal(filename) && /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(filename)) {
       if (!localFiles.includes(filename)) localFiles.push(filename);
       const ts = /\.(tsx?|mts|cts)$/.test(filename);
+      const themeFiles = source.includes('stylex') ? servedThemeFiles(source, filename) : null;
       const result = transformSync(source, {
         filename,
         babelrc: false,
@@ -755,6 +782,7 @@ const jiti = createJiti(entry, {
                     runtimeInjection: false,
                     treeshakeCompensation: true,
                     unstable_moduleResolution: {type: 'commonJS', rootDir: root},
+                    ...(themeFiles ? {aliases: themeFiles} : {}),
                   },
                 ],
               ]

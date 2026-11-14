@@ -1666,6 +1666,34 @@ console.log(JSON.stringify({inside, outside}));
     expect(outside).toContain('and the CLI runs without one');
   }, 60_000);
 
+  it("compiles a page's StyleX that reads Core's theme variables, with the names Core's stylesheet defines", () => {
+    const sub = path.join(away, 'tokens');
+    fs.mkdirSync(sub, {recursive: true});
+    fs.writeFileSync(
+      path.join(sub, 'page.tsx'),
+      [
+        "import * as stylex from '@stylexjs/stylex';",
+        "import {colorVars, spacingVars} from '@astryxdesign/core/theme/tokens.stylex';",
+        "import {Text} from '@astryxdesign/core/Text';",
+        '',
+        "const styles = stylex.create({box: {backgroundColor: colorVars['--color-background-surface'], padding: spacingVars['--spacing-2']}});",
+        '',
+        'export default function Page() {',
+        '  return <div {...stylex.props(styles.box)}><Text>Themed box</Text></div>;',
+        '}',
+        '',
+      ].join('\n'),
+    );
+    const run = runBin(sub, ['experimental', 'render', 'page.tsx']);
+    expect(run.status, JSON.stringify(run.json)).toBe(0);
+    const html = fs.readFileSync(path.join(sub, 'page.html'), 'utf8');
+    const style = html.slice(html.indexOf('<style>'), html.indexOf('</style>'));
+    for (const name of ['--color-background-surface', '--spacing-2']) {
+      expect(style).toContain(`var(${name})`);
+      expect(style).toContain(`${name}:`);
+    }
+  }, 60_000);
+
   it('still names a package the CLI does not carry as not installed', () => {
     fs.writeFileSync(path.join(away, 'dep.jsx'), "import x from 'not-a-real-package-xyz';\nexport default () => <p>{String(x)}</p>;\n");
     const run = runBin(away, ['experimental', 'render', 'dep.jsx']);
