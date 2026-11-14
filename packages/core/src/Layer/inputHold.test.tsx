@@ -1059,3 +1059,31 @@ describe("holdInput's dismissal that keeps focus inside (component:BottomSheet F
     release();
   });
 });
+
+describe("a released 'kept-inside' hold", () => {
+  it('leaves the layer usable when its focus check runs after the release', async () => {
+    const layer = document.createElement('div');
+    const inside = document.createElement('button');
+    const outside = document.createElement('button');
+    layer.append(inside);
+    document.body.append(layer, outside);
+    inside.focus();
+
+    const release = holdInput(layer, {
+      until: new Promise<never>(() => {}),
+      scope: 'layer',
+      focus: 'kept-inside',
+    });
+    // As a closing BottomSheet does: focus returns to its trigger, which
+    // queues the hold's focus check, and the hold is released in the same task.
+    outside.focus();
+    release();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(layer.hasAttribute('inert')).toBe(false);
+    expect(layer.hasAttribute('aria-hidden')).toBe(false);
+    layer.remove();
+    outside.remove();
+  });
+});
