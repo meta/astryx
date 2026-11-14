@@ -88,6 +88,19 @@ function projectRootOf(dir) {
 }
 
 /**
+ * Whether a path names a file. A name the system cannot look up (a segment
+ * too long, a folder it may not read) names none.
+ * @param {string} file
+ */
+function isFileAt(file) {
+  try {
+    return fs.statSync(file).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The first bytes of a file, enough to tell its format.
  * @param {string} file
  */
@@ -883,7 +896,7 @@ export async function renderPage(entry, options = {}) {
     for (const ref of assetRefsOf(text, file)) {
       const asset = path.resolve(path.dirname(file), ref);
       if (path.relative(named, asset).startsWith('..')) continue;
-      if (fs.statSync(asset, {throwIfNoEntry: false})?.isFile()) {
+      if (isFileAt(asset)) {
         carryAsset(asset, `named in ${path.relative(dir, file).split(path.sep).join('/')}`);
       }
     }

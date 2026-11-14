@@ -482,6 +482,13 @@ describe('render(): every write stays inside the current folder', () => {
     expect(again.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('missing-asset');
   }, 60_000);
 
+  it('renders a page whose module names a path the system cannot look up', async () => {
+    put('long-name/names.ts', `export const far = './${'a'.repeat(300)}.png';\n`);
+    put('long-name/page.tsx', "import {far} from './names';\nexport default function Page() {\n  return <p>{far.length}</p>;\n}\n");
+    const result = /** @type {any} */ (await render('long-name/page.tsx', {cwd: dir}));
+    expect(result.data.files).toEqual(['page.tsx', 'names.ts']);
+  }, 60_000);
+
   it('leaves out a named image outside the folder that holds the carried files, so the layout stays', async () => {
     // A page under a tests/ folder: were the layout to move above it, its
     // module would land under tests/, which a render never carries.
