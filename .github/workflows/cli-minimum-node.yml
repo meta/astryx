@@ -43,12 +43,20 @@ jobs:
           echo "The CLI declares Node $node as its minimum."
           echo "node=$node" >> "$GITHUB_OUTPUT"
 
+  # The CLI's tests, in four legs split by the Node legs' recorded times
+  # (scripts/vitest-shard-sequencer.mjs): in one job they outgrew its time
+  # limit on the minimum Node, where every gather is fresh.
   cli-tests:
     needs: version
+    name: cli-tests (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -59,10 +67,46 @@ jobs:
         with:
           node-version: ${{ needs.version.outputs.node }}
           package-manager-cache: false
-      - name: Run the CLI's tests on Node ${{ needs.version.outputs.node }}
+      # The shard watchdog stops the leg before the job limit and names the
+      # file still running (scripts/vitest-shard-watchdog.mjs).
+      - name: Run this leg of the CLI's tests on Node ${{ needs.version.outputs.node }}
+        id: tests
+        env:
+          SHARD: ${{ matrix.shard }}
         run: |
           node --version
-          pnpm -F @astryxdesign/cli test
+          started=$(ps -o etimes= -C Runner.Worker 2>/dev/null | sort -n | tail -1 | tr -d ' ')
+          VITEST_SHARD_WATCHDOG_SECONDS=$(( 28 * 60 - ${started:-180} ))
+          export VITEST_SHARD_WATCHDOG_SECONDS
+          set -o pipefail
+          pnpm -F @astryxdesign/cli test --shard="$SHARD/4" \
+            --reporter=default --reporter=github-actions \
+            --reporter=./scripts/vitest-shard-watchdog.mjs 2>&1 | tee "$RUNNER_TEMP/cli-tests.log"
+
+      # pass, fail, or none: a leg the watchdog stopped judged nothing. A leg
+      # the job limit cancels uploads no verdict, which also means none.
+      - name: Record this leg's verdict
+        if: always() && steps.tests.outcome != 'skipped'
+        env:
+          OUTCOME: ${{ steps.tests.outcome }}
+          SHARD: ${{ matrix.shard }}
+        run: |
+          if [ "$OUTCOME" = success ]; then verdict=pass
+          elif grep -q 'Node shard stuck' "$RUNNER_TEMP/cli-tests.log" 2>/dev/null; then verdict=none
+          elif [ "$OUTCOME" = failure ]; then verdict=fail
+          else verdict=none
+          fi
+          echo "Leg $SHARD/4: $verdict"
+          mkdir -p verdict
+          printf '{"shard": %s, "verdict": "%s"}\n' "$SHARD" "$verdict" > "verdict/leg-$SHARD.json"
+
+      - name: Keep this leg's verdict
+        if: always() && steps.tests.outcome != 'skipped'
+        uses: actions/upload-artifact@v7
+        with:
+          name: cli-tests-verdict-${{ matrix.shard }}
+          path: verdict/leg-${{ matrix.shard }}.json
+          retention-days: 7
 
   pack:
     needs: version
@@ -132,15 +176,34 @@ jobs:
           sparse-checkout: .github/scripts/cli-minimum-node.mjs
           sparse-checkout-cone-mode: false
           persist-credentials: false
+      - name: Read the legs' verdicts
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: cli-tests-verdict-*
+          path: verdicts
+          merge-multiple: true
+      # A failed test fails the run; a leg with no verdict (stopped or cancelled
+      # at its time limit) makes the run's verdict none, which never closes the
+      # issue or calls the CLI failed.
       - name: Open, update or close the minimum-Node issue
         uses: actions/github-script@v9
         env:
-          OK: ${{ needs.version.result == 'success' && needs.cli-tests.result == 'success' && needs.pack.result == 'success' && needs.smoke.result == 'success' }}
+          VERSION_RESULT: ${{ needs.version.result }}
+          PACK_RESULT: ${{ needs.pack.result }}
+          SMOKE_RESULT: ${{ needs.smoke.result }}
           NODE_VERSION: ${{ needs.version.outputs.node || 'unknown' }}
         with:
           script: |
-            const {reportIssue} = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/cli-minimum-node.mjs`);
+            const {reportIssue, runVerdict, readLegVerdicts} = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/cli-minimum-node.mjs`);
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const done = await reportIssue({github, context, ok: process.env.OK === 'true', version: process.env.NODE_VERSION, runUrl});
-            core.info(`minimum-Node issue: ${done}`);
-            if (process.env.OK !== 'true') core.setFailed(`The CLI failed on Node ${process.env.NODE_VERSION}.`);
+            const verdict = runVerdict({
+              version: process.env.VERSION_RESULT,
+              legs: readLegVerdicts('verdicts', 4),
+              pack: process.env.PACK_RESULT,
+              smoke: process.env.SMOKE_RESULT,
+            });
+            const done = await reportIssue({github, context, verdict, version: process.env.NODE_VERSION, runUrl});
+            core.info(`minimum-Node verdict: ${verdict}; issue: ${done}`);
+            if (verdict === 'fail') core.setFailed(`The CLI failed on Node ${process.env.NODE_VERSION}.`);
+            if (verdict === 'none') core.setFailed(`No verdict on Node ${process.env.NODE_VERSION}: a part of the run stopped or was cancelled before it judged anything.`);

@@ -7,12 +7,19 @@
  */
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
 
-import {ISSUE_TITLE, minimumVersion, reportIssue} from './cli-minimum-node.mjs';
+import {
+  ISSUE_TITLE,
+  minimumVersion,
+  readLegVerdicts,
+  reportIssue,
+  runVerdict,
+} from './cli-minimum-node.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const workflow = yaml.parse(
@@ -88,9 +95,8 @@ describe('the workflow', () => {
   });
 
   it("runs the CLI's tests and the global-mode smoke on that version", () => {
-    expect(jobs['cli-tests'].steps.at(-1).run).toContain(
-      'pnpm -F @astryxdesign/cli test',
-    );
+    const tests = jobs['cli-tests'].steps.find(step => step.id === 'tests');
+    expect(tests.run).toContain('pnpm -F @astryxdesign/cli test');
     expect(
       jobs.smoke.steps.find(step =>
         step.run?.includes('cli-global-mode-smoke.mjs'),
@@ -112,8 +118,109 @@ describe('the workflow', () => {
       );
     }
     const env = jobs.report.steps.at(-1).env;
-    for (const need of ['version', 'cli-tests', 'pack', 'smoke']) {
-      expect(env.OK).toContain(`needs.${need}.result == 'success'`);
+    for (const need of ['version', 'pack', 'smoke'])
+      expect(env[`${need.toUpperCase()}_RESULT`]).toBe(
+        `\${{ needs.${need}.result }}`,
+      );
+  });
+
+  it('runs the CLI tests in four legs, split by the recorded times, each stopped by name before its limit', () => {
+    const cli = jobs['cli-tests'];
+    expect(cli.strategy.matrix.shard).toEqual([1, 2, 3, 4]);
+    expect(cli.strategy['fail-fast']).toBe(false);
+    expect(cli['timeout-minutes']).toBe(30);
+    const tests = cli.steps.find(step => step.id === 'tests');
+    expect(tests.run).toContain('--shard="$SHARD/4"');
+    expect(tests.run).toContain(
+      '--reporter=./scripts/vitest-shard-watchdog.mjs',
+    );
+    expect(tests.run).toContain('VITEST_SHARD_WATCHDOG_SECONDS=$(( 28 * 60');
+    expect(tests.run).toContain('set -o pipefail');
+  });
+
+  it('keeps each leg’s verdict for the report, which reads all four', () => {
+    const cli = jobs['cli-tests'];
+    const record = cli.steps.find(
+      step => step.name === "Record this leg's verdict",
+    );
+    expect(record.if).toBe("always() && steps.tests.outcome != 'skipped'");
+    expect(record.run).toContain('Node shard stuck');
+    const keep = cli.steps.find(
+      step => step.name === "Keep this leg's verdict",
+    );
+    expect(keep.with.name).toBe('cli-tests-verdict-${{ matrix.shard }}');
+    const read = jobs.report.steps.find(step =>
+      String(step.uses ?? '').startsWith('actions/download-artifact'),
+    );
+    expect(read.with.pattern).toBe('cli-tests-verdict-*');
+    expect(jobs.report.steps.at(-1).with.script).toContain(
+      "readLegVerdicts('verdicts', 4)",
+    );
+  });
+});
+
+describe('the run verdict', () => {
+  const parts = (
+    legs,
+    pack = 'success',
+    smoke = 'success',
+    version = 'success',
+  ) => ({
+    version,
+    legs,
+    pack,
+    smoke,
+  });
+
+  it('passes only when every leg and both jobs pass', () => {
+    expect(runVerdict(parts(['pass', 'pass', 'pass', 'pass']))).toBe('pass');
+  });
+
+  it('fails when any leg or job fails, even beside a leg with no verdict', () => {
+    expect(runVerdict(parts(['pass', 'fail', 'none', 'pass']))).toBe('fail');
+    expect(runVerdict(parts(['pass', 'pass', 'pass', 'pass'], 'failure'))).toBe(
+      'fail',
+    );
+  });
+
+  it('has no verdict when a leg was stopped or cancelled, or a job was cancelled or skipped', () => {
+    expect(runVerdict(parts(['pass', 'none', 'pass', 'pass']))).toBe('none');
+    expect(
+      runVerdict(
+        parts(['pass', 'pass', 'pass', 'pass'], 'success', 'cancelled'),
+      ),
+    ).toBe('none');
+    expect(
+      runVerdict(
+        parts(
+          ['pass', 'pass', 'pass', 'pass'],
+          'success',
+          'success',
+          'failure',
+        ),
+      ),
+    ).toBe('none');
+  });
+
+  it('reads each leg’s file, and a missing or broken file as no verdict', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'verdicts-'));
+    try {
+      fs.writeFileSync(
+        path.join(dir, 'leg-1.json'),
+        '{"shard": 1, "verdict": "pass"}',
+      );
+      fs.writeFileSync(
+        path.join(dir, 'leg-3.json'),
+        '{"shard": 3, "verdict": "fail"}',
+      );
+      fs.writeFileSync(path.join(dir, 'leg-4.json'), 'not json');
+      expect(readLegVerdicts(dir, 4)).toEqual(['pass', 'none', 'fail', 'none']);
+      expect(readLegVerdicts(path.join(dir, 'missing'), 2)).toEqual([
+        'none',
+        'none',
+      ]);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
     }
   });
 });
@@ -151,7 +258,7 @@ describe('the one issue', () => {
       await reportIssue({
         github: fresh,
         context,
-        ok: false,
+        verdict: 'fail',
         version: '22.13.0',
         runUrl: 'u',
       }),
@@ -163,7 +270,7 @@ describe('the one issue', () => {
       await reportIssue({
         github: open,
         context,
-        ok: false,
+        verdict: 'fail',
         version: '22.13.0',
         runUrl: 'u',
       }),
@@ -176,7 +283,7 @@ describe('the one issue', () => {
       await reportIssue({
         github: open,
         context,
-        ok: true,
+        verdict: 'pass',
         version: '22.13.0',
         runUrl: 'u',
       }),
@@ -190,7 +297,7 @@ describe('the one issue', () => {
       await reportIssue({
         github: persons,
         context,
-        ok: true,
+        verdict: 'pass',
         version: '22.13.0',
         runUrl: 'u',
       }),
@@ -199,10 +306,43 @@ describe('the one issue', () => {
       await reportIssue({
         github: fakeGithub(),
         context,
-        ok: true,
+        verdict: 'pass',
         version: '22.13.0',
         runUrl: 'u',
       }),
     ).toBe('none');
+  });
+});
+
+describe('a run with no verdict', () => {
+  it('only notes it on the open issue: no close, no claim of failure', async () => {
+    const github = fakeGithub([ours]);
+    const done = await reportIssue({
+      github,
+      context,
+      verdict: 'none',
+      version: '22.13.0',
+      runUrl: 'https://example.test/run',
+    });
+    expect(done).toBe('no verdict noted');
+    const writes = github.calls.filter(([kind]) => kind !== 'search');
+    expect(writes).toHaveLength(1);
+    expect(writes[0][0]).toBe('comment');
+    expect(writes[0][1].body).toMatch(/^No verdict on Node 22\.13\.0:/);
+    expect(writes[0][1].body).not.toMatch(/failed|pass/);
+  });
+
+  it('writes nothing when no issue is open', async () => {
+    const github = fakeGithub([]);
+    expect(
+      await reportIssue({
+        github,
+        context,
+        verdict: 'none',
+        version: '22.13.0',
+        runUrl: 'https://example.test/run',
+      }),
+    ).toBe('none');
+    expect(github.calls.filter(([kind]) => kind !== 'search')).toEqual([]);
   });
 });

@@ -16,6 +16,7 @@
  */
 
 import fs from 'node:fs';
+import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 export const ISSUE_TITLE = 'CLI fails on its minimum Node';
@@ -95,9 +96,71 @@ async function findOpenIssue(github, context) {
  * A failed run opens the issue, or comments on the open one; a passing run
  * closes an open issue this job opened. Returns what it did.
  */
-export async function reportIssue({github, context, ok, version, runUrl}) {
+/**
+ * Each leg's verdict from the files the CLI test legs upload
+ * (`{"shard": <n>, "verdict": "pass" | "fail" | "none"}`): "none" for a leg
+ * with no file, which the job limit cancelled before it could write one.
+ * @param {string} dir
+ * @param {number} count legs
+ * @returns {Array<'pass' | 'fail' | 'none'>}
+ */
+export function readLegVerdicts(dir, count) {
+  const verdicts = Array.from({length: count}, () => 'none');
+  let names = [];
+  try {
+    names = fs.readdirSync(dir);
+  } catch {
+    // No verdict was uploaded at all.
+  }
+  for (const name of names) {
+    try {
+      const {shard, verdict} = JSON.parse(
+        fs.readFileSync(path.join(dir, name), 'utf8'),
+      );
+      if (
+        Number.isInteger(shard) &&
+        shard >= 1 &&
+        shard <= count &&
+        ['pass', 'fail', 'none'].includes(verdict)
+      )
+        verdicts[shard - 1] = verdict;
+    } catch {
+      // An unreadable file leaves that leg without a verdict.
+    }
+  }
+  return verdicts;
+}
+
+/** A job's result as a verdict: only success passes and only failure fails. */
+const jobVerdict = result =>
+  result === 'success' ? 'pass' : result === 'failure' ? 'fail' : 'none';
+
+/**
+ * The run's verdict: "fail" when any part failed a check, else "none" when
+ * any part judged nothing (stopped, cancelled or skipped), else "pass".
+ * @param {{version: string, legs: Array<'pass' | 'fail' | 'none'>, pack: string, smoke: string}} parts
+ * @returns {'pass' | 'fail' | 'none'}
+ */
+export function runVerdict({version, legs, pack, smoke}) {
+  if (version !== 'success') return 'none';
+  const all = [...legs, jobVerdict(pack), jobVerdict(smoke)];
+  if (all.includes('fail')) return 'fail';
+  return all.includes('none') ? 'none' : 'pass';
+}
+
+export async function reportIssue({github, context, verdict, version, runUrl}) {
   const issue = await findOpenIssue(github, context);
-  if (ok) {
+  // No verdict neither closes the issue nor says the CLI failed.
+  if (verdict === 'none') {
+    if (!issue) return 'none';
+    await github.rest.issues.createComment({
+      ...context.repo,
+      issue_number: issue.number,
+      body: `No verdict on Node ${version}: part of the run stopped or was cancelled at its time limit before it judged anything ([run](${runUrl})). This issue stays as it is.`,
+    });
+    return 'no verdict noted';
+  }
+  if (verdict === 'pass') {
     if (!issue) return 'none';
     await github.rest.issues.createComment({
       ...context.repo,
