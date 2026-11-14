@@ -24,9 +24,13 @@ const total = leg => leg.reduce((sum, file) => sum + recorded[file], 0);
 const slowest = [...files].sort((a, b) => recorded[b] - recorded[a]);
 
 describe('duration-balanced Node legs', () => {
-  // The Node shard step sets the switch for its own run; these tests set it
-  // themselves, so they read the same in that step as anywhere else.
-  beforeEach(() => vi.stubEnv('VITEST_LEG_ONE_RESERVE', '0'));
+  // The Node shard step sets the leg-one switch, and Main's release re-check
+  // sets SWIZZLE_PROOF_ALL, for their own runs; these tests set both
+  // themselves, so they read the same in those runs as anywhere else.
+  beforeEach(() => {
+    vi.stubEnv('VITEST_LEG_ONE_RESERVE', '0');
+    vi.stubEnv('SWIZZLE_PROOF_ALL', '');
+  });
   afterEach(() => vi.unstubAllEnvs());
 
   it('balances a slow changed test with the guards when one run lists both', () => {
