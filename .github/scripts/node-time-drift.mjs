@@ -14,11 +14,11 @@
  * MIN_PEERS such files there is no baseline in the leg: the factor is 1, and
  * the output says so. A changed file fails when it ran
  * more than RATIO times its record × the leg factor, and more than MARGIN_S
- * seconds over that. A changed file with no recorded time (new, or renamed
- * from a name with no record) fails when it ran more than NEW_FILE_S × the leg
- * factor: the legs' split counts it as the median until it is recorded. A
- * rename carries the old name's record. Each failure names the one entry to
- * add or update and its value.
+ * seconds over that. A changed file with no recorded time under its own path
+ * fails when it ran more than NEW_FILE_S × the leg factor: the legs' split
+ * looks the record up by path, so it counts that file as the median until the
+ * path is recorded. That includes a renamed file, whose old entry the failure
+ * asks to move. Each failure names the one entry to add, move or update.
  *
  * @input --times <file> (the shard watchdog's per-file seconds),
  *   --changed <base> (the merge commit's first parent)
@@ -100,14 +100,17 @@ export function drifted(measured, recorded, changed) {
 }
 
 /**
- * Changed test files with no recorded time that ran more than NEW_FILE_S × the
- * leg factor.
+ * Changed test files with no recorded time under their own path that ran more
+ * than NEW_FILE_S × the leg factor. A renamed file whose old path has a record
+ * names that path as `from`, so the entry can move.
  * @param {Record<string, number>} measured
  * @param {Record<string, number>} recorded
  * @param {string[]} changed
+ * @param {Array<[string, string]>} [renames] [old, new] paths
  */
-export function unrecorded(measured, recorded, changed) {
+export function unrecorded(measured, recorded, changed, renames = []) {
   const touched = new Set(changed);
+  const fromOf = new Map(renames.map(([from, to]) => [to, from]));
   const {factor} = legFactor(measured, recorded, touched);
   return Object.entries(measured)
     .filter(
@@ -116,27 +119,19 @@ export function unrecorded(measured, recorded, changed) {
         typeof recorded[file] !== 'number' &&
         seconds > NEW_FILE_S * factor,
     )
-    .map(([file, seconds]) => ({
-      file,
-      measured: seconds,
-      factor: Math.round(factor * 100) / 100,
-      suggested: Math.round((seconds / factor) * 10) / 10,
-    }))
+    .map(([file, seconds]) => {
+      const from = fromOf.get(file);
+      return {
+        file,
+        measured: seconds,
+        factor: Math.round(factor * 100) / 100,
+        suggested: Math.round((seconds / factor) * 10) / 10,
+        ...(from && typeof recorded[from] === 'number'
+          ? {from, fromRecorded: recorded[from]}
+          : {}),
+      };
+    })
     .sort((a, b) => b.measured - a.measured);
-}
-
-/**
- * The record as this change sees it: a renamed file keeps its old name's
- * recorded time, so a rename is never a new, unrecorded file.
- * @param {Record<string, number>} recorded
- * @param {Array<[string, string]>} renames [old, new] paths
- */
-export function withRenames(recorded, renames) {
-  const view = {...recorded};
-  for (const [from, to] of renames)
-    if (typeof view[to] !== 'number' && typeof recorded[from] === 'number')
-      view[to] = recorded[from];
-  return view;
 }
 
 /**
@@ -181,10 +176,9 @@ function main(args) {
       {encoding: 'utf8'},
     ),
   );
-  const recorded = withRenames(
-    JSON.parse(fs.readFileSync(path.join(ROOT, RECORD), 'utf8')).seconds,
-    renames,
-  );
+  const recorded = JSON.parse(
+    fs.readFileSync(path.join(ROOT, RECORD), 'utf8'),
+  ).seconds;
   const leg = legFactor(measured, recorded, new Set(changed));
   if (!leg.baseline)
     console.log(
@@ -205,10 +199,14 @@ function main(args) {
       `::error file=${file},title=Recorded Node test time is stale::${file} ran ${now} s; ${RECORD} records ${before} s, and ${legSays}. This change touches the file, so set only its entry in ${RECORD}: "${file}": ${suggested} (${value}). Leave every other entry as it is.`,
     );
   }
-  const unseen = unrecorded(measured, recorded, changed);
-  for (const {file, measured: now, suggested} of unseen) {
+  const unseen = unrecorded(measured, recorded, changed, renames);
+  const legSentence = `${legSays[0].toUpperCase()}${legSays.slice(1)}`;
+  for (const {file, measured: now, suggested, from, fromRecorded} of unseen) {
+    const fix = from
+      ? `It was renamed from ${from} (recorded at ${fromRecorded} s), so move that entry: replace "${from}" with "${file}": ${suggested} (${value}).`
+      : `Add only its entry to ${RECORD}: "${file}": ${suggested} (${value}).`;
     console.log(
-      `::error file=${file},title=New Node test file has no recorded time::new test file ${file} ran ${now} s and has no recorded time: run record. ${legSays[0].toUpperCase()}${legSays.slice(1)}; the legs' split counts this file as the median until it is recorded. Add only its entry to ${RECORD}: "${file}": ${suggested} (${value}).`,
+      `::error file=${file},title=Node test file has no recorded time::test file ${file} ran ${now} s and has no recorded time under that path. ${legSentence}; the legs' split looks the record up by path, so it counts this file as the median. ${fix}`,
     );
   }
   if (late.length === 0 && unseen.length === 0)
