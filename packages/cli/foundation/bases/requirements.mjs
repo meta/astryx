@@ -26,6 +26,23 @@ export function missingSteps(base, steps) {
 }
 
 /**
+ * Is a command, option, or argument value available on `base`, as help and
+ * the manifest show it? A command that only groups subcommands and declares
+ * no step of its own is available when any of its subcommands is.
+ * @param {import('./resolve.mjs').ActiveBase} base
+ * @param {readonly string[] | undefined} requires the steps it declares
+ * @param {readonly boolean[]} [subcommands] whether each subcommand is
+ *   available, for a command that groups subcommands
+ * @returns {boolean}
+ */
+export function isAvailable(base, requires, subcommands = []) {
+  if (subcommands.length > 0 && !requires?.length) {
+    return subcommands.some(Boolean);
+  }
+  return missingSteps(base, requires).length === 0;
+}
+
+/**
  * What a refused run needs.
  * @typedef {object} Requirement
  * @property {string} command the command as a user types it after `astryx`

@@ -28,6 +28,7 @@ import {recordCommandResult} from '../../../foundation/debug/index.mjs';
 import {routeSegment} from '../../../foundation/discovery/docs-section-key.mjs';
 import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
 import {renderTokens} from '../../../foundation/doc-compiler/links.mjs';
+import {pointerClause} from '../../../foundation/discovery/command-pointers.mjs';
 import {text} from '../formatters/index.mjs';
 
 /**
@@ -98,6 +99,52 @@ export function commandDocsOf(cmd) {
 }
 
 /**
+ * Text in a description that names other commands, by their command paths.
+ * @typedef {{commands: string[], text: string}} HelpPointer
+ */
+
+/** The parts a description was set from, and the text they made. */
+const DESCRIPTION_PARTS = Symbol('astryx.descriptionParts');
+
+/**
+ * Set a command's description from parts: plain text, and pointers whose
+ * text names other commands. The description holds every part, as the
+ * manifest publishes it; help reads the parts through
+ * {@link servedDescription}.
+ * @param {import('commander').Command} cmd
+ * @param {Array<string | HelpPointer>} parts
+ */
+export function describeCommand(cmd, parts) {
+  const text = parts
+    .map(part => (typeof part === 'string' ? part : part.text))
+    .join('');
+  cmd.description(text);
+  Object.defineProperty(cmd, DESCRIPTION_PARTS, {
+    value: {parts, text},
+    configurable: true,
+  });
+}
+
+/**
+ * A command's description with each pointer left out unless `served` holds
+ * for every command it names. A description set later, outside
+ * {@link describeCommand}, has no parts and is returned whole.
+ * @param {import('commander').Command} cmd
+ * @param {(command: string) => boolean} served
+ * @returns {string}
+ */
+export function servedDescription(cmd, served) {
+  const description = cmd.description();
+  /** @type {{parts: Array<string | HelpPointer>, text: string} | undefined} */
+  const recorded = /** @type {any} */ (cmd)[DESCRIPTION_PARTS];
+  if (recorded == null || recorded.text !== description) return description;
+  return recorded.parts
+    .filter(part => typeof part === 'string' || part.commands.every(served))
+    .map(part => (typeof part === 'string' ? part : part.text))
+    .join('');
+}
+
+/**
  * Build a Commander command from a CommandDoc and attach it to `parent`.
  *
  * @param {import('commander').Command} parent - program or a group command.
@@ -128,15 +175,20 @@ export function defineCommand(parent, doc, {fn, action, hidden} = {}) {
   );
   Object.defineProperty(cmd, COMMAND_DOCS, {value: {doc, fn}, configurable: true});
   // Help shows doc tokens as commands, the way `astryx docs` does.
-  if (doc.summary) cmd.description(renderTokens(doc.summary));
+  /** @type {Array<string | HelpPointer>} */
+  const parts = [
+    ...(doc.summary ? [renderTokens(doc.summary)] : []),
+    ...(doc.pointers ?? []).map(pointer => ({
+      commands: pointer.commands,
+      text: pointerClause(renderTokens(pointer.text)),
+    })),
+  ];
   // An experimental command says so wherever its name is listed in help.
   if (doc.stability === 'experimental') {
-    cmd.description(`[experimental] ${cmd.description() || ''}`.trimEnd());
+    parts.unshift(parts.length > 0 ? '[experimental] ' : '[experimental]');
   }
-  if (doc.deprecated) {
-    const base = cmd.description() || '';
-    cmd.description(`${base} [DEPRECATED: ${doc.deprecated}]`);
-  }
+  if (doc.deprecated) parts.push(` [DEPRECATED: ${doc.deprecated}]`);
+  if (parts.length > 0) describeCommand(cmd, parts);
   if (doc.replaces?.length) {
     cmd.addHelpText('before', `Will replace: ${doc.replaces.map(name => `astryx ${name}`).join(', ')}\n`);
   }

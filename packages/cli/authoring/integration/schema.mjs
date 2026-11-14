@@ -15,7 +15,6 @@
 
 import {z} from 'zod';
 import {formatZodError} from '../_shared/errors.mjs';
-import {BASE_CAPABILITIES} from './base-steps.mjs';
 
 /** @typedef {import('./type.js').AstryxIntegration} AstryxIntegration */
 
@@ -193,20 +192,7 @@ export function unknownIntegrationKeys(input) {
   if (input == null || typeof input !== 'object' || Array.isArray(input)) {
     return [];
   }
-  const unknown = Object.keys(input).filter(
+  return Object.keys(input).filter(
     key => !KNOWN_INTEGRATION_KEYS.includes(key),
   );
-  // A capability this CLI does not know is ignored, so a typo in one is
-  // reported the way an unknown key is.
-  const adapters = /** @type {{base?: {adapters?: unknown}}} */ (input).base
-    ?.adapters;
-  if (adapters != null && typeof adapters === 'object') {
-    for (const capability of Object.keys(adapters)) {
-      if (!(/** @type {readonly string[]} */ (BASE_CAPABILITIES)).includes(capability)) {
-        unknown.push(`base.adapters.${capability}`);
-      }
-    }
-  }
-  return unknown;
 }
-

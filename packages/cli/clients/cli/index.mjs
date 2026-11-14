@@ -31,7 +31,7 @@ import {section, text, records} from './formatters/index.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
 import {installJsonShim} from './lib/json-shim.mjs';
-import {markReportsResult} from './lib/define-command.mjs';
+import {describeCommand, markReportsResult} from './lib/define-command.mjs';
 // The light modules, not agent-docs.mjs: that one loads discovery and the
 // project config, which every run would pay for at startup.
 import {
@@ -502,12 +502,13 @@ async function readsCore() {
   const {runBase, requestedBase} = await import(
     '../../foundation/bases/resolve.mjs'
   );
+  const {CORE_BASE_NAME} = await import('../../foundation/bases/core.mjs');
   // A base is an integration, so where none can load, and no --base names
   // another, the run reads Core with no project load.
   const named = requestedBase();
   if (
     !mayHaveIntegrations(process.cwd()) &&
-    (named == null || named === '@astryxdesign/core')
+    (named == null || named === CORE_BASE_NAME)
   ) {
     return true;
   }
@@ -648,9 +649,24 @@ export async function createProgram({argv} = {}) {
   );
   addBaseHelpText(program);
 
+  // The theme editor paragraph names commands, so help shows it only where
+  // the run's base serves them.
+  describeCommand(program, [
+    'Design system CLI — components, themes, and tooling',
+    {
+      commands: [
+        'experimental theme editor new',
+        'experimental theme editor set',
+        'experimental theme editor how',
+        'experimental theme editor show',
+        'experimental theme preview app',
+      ],
+      text: '\n\nMaking or changing a theme? Use the experimental theme editor: astryx experimental theme editor new <name> --like neutral, then editor set / editor how "<what you want>"; after each change look at it with astryx experimental theme editor show <name> --png (takes pictures of real components): a theme change is not done until you have looked. No app yet: astryx experimental theme preview app <dir>.',
+    },
+  ]);
+
   program
     .name('astryx')
-    .description('Design system CLI — components, themes, and tooling\n\nMaking or changing a theme? Use the experimental theme editor: astryx experimental theme editor new <name> --like neutral, then editor set / editor how "<what you want>"; after each change look at it with astryx experimental theme editor show <name> --png (takes pictures of real components): a theme change is not done until you have looked. No app yet: astryx experimental theme preview app <dir>.')
     .version(pkg.version)
     // These four change only the reads named in their text; every other
     // command ignores them.

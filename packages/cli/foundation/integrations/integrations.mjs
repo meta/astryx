@@ -38,6 +38,7 @@ export {findManifestPaths, MANIFEST_BASENAMES};
 import {parseGapReportHandler} from '../../authoring/gap-report/parse.mjs';
 import {parseDiscoverSource} from '../../authoring/discover/parse.mjs';
 import {resolveProviders} from './provider-resolution.mjs';
+import {unknownCapabilityKeys} from '../bases/steps.mjs';
 
 /**
  * A fully-resolved, loaded integration. Identity (`name`, `version`) comes from
@@ -272,7 +273,7 @@ export async function loadManifest(
       ...(agentDocs == null ? {} : {agentDocs}),
       ...(cliCommand == null ? {} : {cliCommand}),
     },
-    unknownKeys: unknownIntegrationKeys(raw),
+    unknownKeys: [...unknownIntegrationKeys(raw), ...unknownCapabilityKeys(raw)],
     declaredKeys:
       raw != null && typeof raw === 'object' ? Object.keys(raw) : [],
     debug:

@@ -126,6 +126,10 @@ import {
 } from './_adapter.mjs';
 import {checkBuilt} from './built-checks.mjs';
 import {coreOnlyDocNames} from '../../foundation/bases/core-docs.mjs';
+import {
+  CLI_PROVIDER_ID,
+  CORE_PROVIDER_ID,
+} from '../../foundation/identity/providers.mjs';
 
 /**
  * @typedef {'pass'|'warn'|'fail'|'info'} DoctorStatus
@@ -1622,28 +1626,8 @@ export async function checkCliDocs(_ctx, options = {}) {
 }
 
 /** The providers whose docs a run on another base leaves out. */
-const CORE_DOC_PROVIDERS = new Set(['@astryxdesign/core', '@astryxdesign/cli']);
-
-/**
- * Does a link problem name, as its missing target, a doc in `names` that a
- * Core provider owns? A link written `"[<provider>:]<kind>:<name>"` with no
- * provider names a doc of the doc it sits in.
- * @param {string} problem `<route>[ § <section> or (<field>)]: …`
- * @param {Set<string>} names
- * @param {Map<string, string>} providerByRoute
- * @returns {boolean}
- */
-function namesCoreDoc(problem, names, providerByRoute) {
-  if (names.size === 0) return false;
-  const source = providerByRoute.get(problem.split(/ §| \(|:/u, 1)[0]);
-  for (const match of problem.matchAll(/"(?:([^":\s]+):)?[a-z-]+:([\w-]+)"/gu)) {
-    const [, written, name] = match;
-    const provider = written ?? source;
-    if (provider == null || !CORE_DOC_PROVIDERS.has(provider)) continue;
-    if (names.has(name)) return true;
-  }
-  return false;
-}
+/** @type {Set<string>} */
+const CORE_DOC_PROVIDERS = new Set([CORE_PROVIDER_ID, CLI_PROVIDER_ID]);
 
 /**
  * The docs tree builds with no error, and every CLI typed doc in a `cli/...`
@@ -1686,25 +1670,18 @@ export async function checkDocsTree(_ctx, options = {}) {
       // typed fields, reference and workflow blocks, and inline links. A
       // reference block also includes all it names. A run whose base is not
       // Core leaves Core's docs out; a link to one of them is not a problem.
-      const linkProblems = [];
       for (const node of tree.nodes.values()) {
         for (const edge of typedEdges(tree, node).unresolved) {
-          linkProblems.push(`${node.route}: ${edge}`);
+          problems.push(`${node.route}: ${edge}`);
         }
       }
-      linkProblems.push(...(await docsLinkProblems(catalog, tree)));
-      linkProblems.push(
-        ...(await docsLinkProblems(catalog, tree, {references: true})),
-      );
       const coreDocs = await coreOnlyDocNames();
-      /** @type {Map<string, string>} */
-      const providerByRoute = new Map(
-        [...tree.nodes.values()].map(node => [node.route, node.provider]),
-      );
+      /** @param {{provider: string, name: string}} target */
+      const absent = target =>
+        CORE_DOC_PROVIDERS.has(target.provider) && coreDocs.has(target.name);
+      problems.push(...(await docsLinkProblems(catalog, tree, {absent})));
       problems.push(
-        ...linkProblems.filter(
-          problem => !namesCoreDoc(problem, coreDocs, providerByRoute),
-        ),
+        ...(await docsLinkProblems(catalog, tree, {references: true, absent})),
       );
     }
     // New findings warn: a project that passed before keeps passing

@@ -8,7 +8,7 @@
 
 import {readFileSync} from 'node:fs';
 import * as path from 'node:path';
-import {realDir, requireCoreDir} from '../../foundation/fs/paths.mjs';
+import {coreContentDir, realDir} from '../../foundation/fs/paths.mjs';
 import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 import {persistedGather} from '../../foundation/fs/gather-cache.mjs';
 import {
@@ -36,12 +36,14 @@ export {componentKeywords} from './_gather-components.mjs';
 /**
  * The Core a typed search reads: the project's, else the release's own,
  * installed into the per-user cache first when needed (a network install and
- * an npm subprocess; spec AST-081 FR3). Throws as requireCoreDir does.
+ * an npm subprocess; spec AST-081 FR3). Throws as requireCoreDir does. Null
+ * in a run whose base is not Core: such a search finds no Core component or
+ * hook, and still gathers its integrations' components.
  * @param {string} cwd
- * @returns {string}
+ * @returns {string | null}
  */
-export function requireSearchCoreDir(cwd) {
-  return requireCoreDir(cwd);
+export function searchCoreContentDir(cwd) {
+  return coreContentDir(cwd);
 }
 
 /**
@@ -66,7 +68,8 @@ export function gatherCandidates(options) {
  * without Core gathers the docs and themes alone and records why in
  * `coreSkipped`; it never fails silently.
  * @param {string | undefined} type
- * @param {(cwd: string) => string} lookup finds the Core folder, or throws
+ * @param {(cwd: string) => string | null} lookup finds the Core folder (null
+ *   when the run reads no Core), or throws
  * @param {string} cwd
  * @returns {{coreDir: string | null, coreSkipped: string | null, coreSkippedCode: string | null, wants: (domain: string) => boolean}}
  */
@@ -89,9 +92,10 @@ export function resolveSearchCore(type, lookup, cwd) {
       coreSkippedCode = typeof code === 'string' ? code : null;
     }
   }
+  const coreFound = needsCore && coreSkipped == null;
   /** @param {string} domain */
   const wants = domain =>
-    (!type && (coreDir != null || CORELESS_DOMAINS.includes(domain))) ||
+    (!type && (coreFound || CORELESS_DOMAINS.includes(domain))) ||
     type === domain;
   return {coreDir, coreSkipped, coreSkippedCode, wants};
 }
@@ -103,14 +107,14 @@ async function gatherDomains(options) {
   const {cwd = process.cwd(), type} = options;
   const {coreDir, coreSkipped, coreSkippedCode, wants} = resolveSearchCore(
     type,
-    requireSearchCoreDir,
+    searchCoreContentDir,
     cwd,
   );
   const [components, hooks, docTopics, templates, themes] = await Promise.all([
     wants('component')
-      ? gatherComponents(/** @type {string} */ (coreDir), cwd)
+      ? gatherComponents(coreDir, cwd)
       : [],
-    wants('hook') ? gatherHooks(/** @type {string} */ (coreDir)) : [],
+    wants('hook') ? gatherHooks(coreDir) : [],
     wants('doc') ? gatherDocs(cwd) : [],
     wants('template') ? gatherTemplates(cwd) : [],
     wants('theme') ? gatherThemes(cwd) : [],

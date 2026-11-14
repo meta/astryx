@@ -115,7 +115,6 @@ import {doc as themeEjectFn} from '../../../api/theme/themeEject.doc.mjs';
 import {doc as themeTemplateFn} from '../../../api/theme/themeTemplate.doc.mjs';
 import {doc as themeTargetsFn} from '../../../api/theme/themeTargets.doc.mjs';
 import {doc as themePaletteGenerateFn} from '../../../api/theme/themePaletteGenerate.doc.mjs';
-import {currentNonCoreBase} from '../../../foundation/bases/state.mjs';
 
 /**
  * The words a theme command is run with: `theme build` here, and the copies
@@ -851,8 +850,8 @@ export function registerTheme(program) {
   // under `component`. Without this pointer the group reads as a build-tool
   // menu, and the component targets are unreachable from the noun the user
   // started at.
-  // The run's base may not serve `theme targets`; help then leaves that line
-  // out.
+  // Help leaves out a line whose command the run's base does not serve, or
+  // whose value names an item only Core has (the theme topic).
   const overrides = [
     ['theme targets', `  ${getCliInvocation()} theme targets            Every themeable class, with its props and states\n`],
     ['component <Name>', `  ${getCliInvocation()} component <Name>         One component's theming table\n`],
@@ -864,8 +863,6 @@ export function registerTheme(program) {
       `\nComponent style overrides:\n` +
       overrides
         .filter(([cli]) => exampleAvailable(program, cli, helpBase()))
-        // The theme topic describes Core's theming; another base has none.
-        .filter(([cli]) => !(cli === 'docs theme' && currentNonCoreBase()))
         .map(([, line]) => line)
         .join(''),
   );

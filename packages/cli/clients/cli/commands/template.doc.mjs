@@ -30,6 +30,7 @@ export const doc = {
       param: 'name',
       required: false,
       description: 'Template id (see --list). Omit it to list the templates.',
+      names: 'template',
     },
     {
       name: 'path',

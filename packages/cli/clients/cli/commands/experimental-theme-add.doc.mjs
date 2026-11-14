@@ -22,6 +22,7 @@ export const doc = {
       name: 'slug',
       param: 'slug',
       required: false,
+      names: 'theme',
     },
   ],
   options: [

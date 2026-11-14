@@ -240,7 +240,10 @@ help`, `astryx --help`, and a group's help MUST list only the commands,
   step refuses it (FR8).
 
   FR7 gap: next-step hints, `doctor` fixes, and agent text, the block `init`
-  writes included, name commands without reading the active base.
+  writes included, name commands without reading the active base. The own
+  help of a group, such as `astryx experimental theme --help`, prints the
+  group's description whole, and it can name a subcommand the active base
+  does not serve.
 
 - **FR8 — A command the base cannot serve refuses with one line.** A command,
   option, or argument value that fails FR6's `requires` check MUST write

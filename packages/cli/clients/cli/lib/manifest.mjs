@@ -44,8 +44,8 @@ import {commandDocsOf} from './define-command.mjs';
 import {doc as manifestDoc} from '../commands/manifest.doc.mjs';
 import {commandAvailable, helpBase} from './base-gate.mjs';
 import {
+  isAvailable,
   longFlag,
-  missingSteps,
 } from '../../../foundation/bases/requirements.mjs';
 import {coreBase} from '../../../foundation/bases/core.mjs';
 import {answeredBy} from '../../../foundation/release/run-context.mjs';
@@ -190,7 +190,7 @@ function describeCommand(cmd, root, jsonSupported, base = null) {
       o => longFlag(o.flag) === longFlag(option.flag),
     );
     if (declared?.requires?.length) option.requires = [...declared.requires];
-    option.available = missingSteps(base ?? coreBase(), option.requires).length === 0;
+    option.available = isAvailable(base ?? coreBase(), option.requires);
   }
   for (const argument of entry.arguments) {
     const declared = (docs?.doc.args ?? []).find(a => a.name === argument.name);
@@ -310,13 +310,14 @@ export function rebaseManifest(manifest, base) {
   const rebase = cmds =>
     cmds.map(cmd => {
       const subcommands = cmd.subcommands ? rebase(cmd.subcommands) : undefined;
-      const available =
-        subcommands && !cmd.requires?.length
-          ? subcommands.some(sub => sub.available)
-          : missingSteps(shown, cmd.requires).length === 0;
+      const available = isAvailable(
+        shown,
+        cmd.requires,
+        subcommands?.map(sub => Boolean(sub.available)),
+      );
       const options = (cmd.options ?? []).map(option => ({
         ...option,
-        available: missingSteps(shown, option.requires).length === 0,
+        available: isAvailable(shown, option.requires),
       }));
       return {...cmd, options, ...(subcommands ? {subcommands} : {}), available};
     });

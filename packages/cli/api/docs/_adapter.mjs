@@ -1156,23 +1156,42 @@ async function includedContent(catalog, tree, block, found) {
  * guide the tree places, and each typed doc.
  * @param {DocsCatalog} catalog
  * @param {DocsTree} tree
- * @param {{owner?: string, references?: boolean}} [options] `owner`: only the
- *   docs this package owns. `references`: instead of the links, each reference
- *   block that cannot include what it names; a reader loses that content,
- *   where a link that names no doc still prints as written
+ * @param {{owner?: string, references?: boolean, absent?: (target: {provider: string, kind: string, name: string}) => boolean}} [options]
+ *   `owner`: only the docs this package owns. `references`: instead of the
+ *   links, each reference block that cannot include what it names; a reader
+ *   loses that content, where a link that names no doc still prints as
+ *   written. `absent`: true for a target the run leaves out on purpose, such
+ *   as a Core doc in a run whose base is not Core; a link to it is no problem.
+ *   A target that names no provider names one of its own doc's provider.
  * @returns {Promise<string[]>}
  */
 export async function docsLinkProblems(
   catalog,
   tree,
-  {owner, references = false} = {},
+  {owner, references = false, absent} = {},
 ) {
   /** @type {string[]} */
   const problems = [];
-  /** @param {string} where @param {LinkProblem[]} found */
-  const note = (where, found) => {
+  /**
+   * @param {LinkProblem} problem
+   * @param {string | undefined} provider the provider of the doc it sits in
+   */
+  const leftOut = (problem, provider) => {
+    if (absent == null) return false;
+    const target = parseLinkTarget(problem.target);
+    if ('error' in target) return false;
+    const owning = target.provider ?? provider;
+    return owning != null && absent({...target, provider: owning});
+  };
+  /**
+   * @param {string} where
+   * @param {string | undefined} provider
+   * @param {LinkProblem[]} found
+   */
+  const note = (where, provider, found) => {
     for (const problem of found) {
       if ((problem.include === true) !== references) continue;
+      if (leftOut(problem, provider)) continue;
       problems.push(
         `${where}${problem.section ? ` \u00a7 ${problem.section}` : ''}${problem.field ? ` (${problem.field})` : ''}: ${problem.message}`,
       );
@@ -1189,7 +1208,7 @@ export async function docsLinkProblems(
       continue;
     }
     try {
-      note(entry.name, await topicLinkProblems(catalog, entry));
+      note(entry.name, entry.package, await topicLinkProblems(catalog, entry));
     } catch {
       // The topic budget check reports a topic that does not load.
     }
@@ -1207,12 +1226,20 @@ export async function docsLinkProblems(
     }
     if (node.kind === 'generic' && node.ref?.topicFile) {
       try {
-        note(node.route, await topicLinkProblems(catalog, guideEntry(node)));
+        note(
+          node.route,
+          node.provider,
+          await topicLinkProblems(catalog, guideEntry(node)),
+        );
       } catch {
         // As above.
       }
     } else if (node.ref?.selfDoc) {
-      note(node.route, (await nodeContent(catalog, tree, node)).problems);
+      note(
+        node.route,
+        node.provider,
+        (await nodeContent(catalog, tree, node)).problems,
+      );
     }
   }
   return problems;

@@ -84,9 +84,10 @@ export function writeFailed(target, cwd, cause, unrestored = []) {
  * foundation/fs/paths.mjs), raising its coded failure as an AstryxError:
  * ERR_CORE_NOT_FOUND with no Core to answer from, ERR_VERSIONS_UNAVAILABLE
  * when the carried Core is needed and cannot be installed.
- * @param {(cwd: string) => string} lookup the foundation lookup
+ * @template {string | null} T
+ * @param {(cwd: string) => T} lookup the foundation lookup
  * @param {string} cwd
- * @returns {string}
+ * @returns {T}
  */
 export function coreDirOrThrow(lookup, cwd) {
   try {

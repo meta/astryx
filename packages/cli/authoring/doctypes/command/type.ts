@@ -26,6 +26,11 @@ export interface CommandArgDoc {
    *  `{theme: ['themes.scaffold']}`. A base that does not serve them hides
    *  nothing for the argument, and a run given that value refuses. */
   requires?: Record<string, BaseStep[]>;
+  /** The kind of item a value of this argument names, such as `component`
+   *  for `astryx component <names...>`. Help on a base other than Core hides
+   *  an example that gives such an argument a value: the item it names is
+   *  Core's. A `<placeholder>` value names no item and stays. */
+  names?: 'component' | 'hook' | 'topic' | 'template' | 'theme';
 }
 
 /** A flag/option. `param` links it to a FunctionDoc param; `cliOnly` for flags
@@ -103,6 +108,14 @@ export interface CommandDoc extends AuthoredDocGraphFields {
   exitCodes?: {code: number; when: string}[];
   /** What the command does outside a project: `same`, `refuse`, or `own`. Every command and subcommand declares one, and `astryx manifest` publishes it; a command that only groups subcommands declares none. */
   outsideProject?: CommandOutsideProject;
+  /** Short clauses that send a reader of the summary to other commands,
+   *  each with the command paths it names, such as
+   *  `{commands: ['theme build'], text: 'to compile one, use theme build'}`.
+   *  Help, `astryx manifest`, `astryx docs`, and search show each after the
+   *  summary, in parentheses; help leaves one out when the run's base does
+   *  not serve every command it names. The summary itself names no other
+   *  command. */
+  pointers?: {commands: string[]; text: string}[];
   /** Platform steps the command cannot run without. Declare only a step the
    *  command cannot do without; a command that declares none works on every
    *  base. Help hides the command on a base that does not serve them, a run

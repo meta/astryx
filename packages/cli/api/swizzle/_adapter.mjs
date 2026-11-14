@@ -14,11 +14,7 @@
  */
 
 import {executablesOnSearchPath} from '../../foundation/env/search-path.mjs';
-import {
-  findProjectCoreDir,
-  listComponents,
-  NO_CORE_CONTENT_DIR,
-} from '../../foundation/fs/paths.mjs';
+import {findProjectCoreDir, listComponents} from '../../foundation/fs/paths.mjs';
 import {resolveComponentReplacements} from '../../foundation/discovery/component-replacement.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {AstryxError} from '../error.mjs';
@@ -53,7 +49,7 @@ export {CORE_PROVIDER_ID as CORE_PACKAGE} from '../../foundation/identity/provid
 /**
  * The integration component that replaces the Core component `name`
  * (spec:AST-035 FR11), or undefined when none does.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
  * @param {import('../../foundation/integrations/integrations.mjs').LoadedIntegration[]} loadedIntegrations
  * @param {string} name
  * @returns {Promise<import('../../foundation/discovery/component-replacement.mjs').ActiveComponentReplacement | undefined>}
@@ -70,15 +66,15 @@ export async function resolveComponentReplacement(
 }
 
 /**
- * Locate @astryxdesign/core for `cwd` and list its swizzlable components.
+ * Locate @astryxdesign/core for `cwd` and list its swizzlable components. A
+ * run whose base is not Core reads no Core: its `coreDir` is null and it has
+ * no Core component to copy.
  * @param {string} cwd
- * @returns {{coreDir: string, components: string[]}}
+ * @returns {{coreDir: string | null, components: string[]}}
  */
 export function resolveCore(cwd) {
-  // A run whose base is not Core lists no Core component to copy.
-  const coreDir = currentNonCoreBase()
-    ? NO_CORE_CONTENT_DIR
-    : findProjectCoreDir(cwd);
+  if (currentNonCoreBase()) return {coreDir: null, components: []};
+  const coreDir = findProjectCoreDir(cwd);
   if (!coreDir) {
     throw new AstryxError(
       'Could not find @astryxdesign/core package. Make sure you are inside the design system monorepo or have @astryxdesign/core installed.',

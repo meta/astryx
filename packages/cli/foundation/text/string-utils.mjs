@@ -52,7 +52,8 @@ export function findClosestComponents(name, components, maxDistance = 3) {
  * the component's score: the position of the keyword that set it.
  *
  * @param {string} needle
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core: only the
+ *   names in `components` are scored
  * @param {Record<string, string[]>} components
  * @returns {Promise<{name: string, score: number, reason: string}[]>}
  */
@@ -113,13 +114,14 @@ export async function searchComponents(needle, coreDir, components) {
   }
 
   // --- Pass 2: Keyword + description matching (async, reads doc files) ---
-  const srcDir = path.join(coreDir, 'src');
+  const srcDir = coreDir == null ? null : path.join(coreDir, 'src');
   /**
    * The doc that Pass 2 reads for `comp`, or null.
    * @param {string} comp
    * @returns {string | null}
    */
   function docPathOf(comp) {
+    if (srcDir == null) return null;
     const direct = path.join(srcDir, comp, comp + '.doc.mjs');
     if (pathExists(direct)) return direct;
     const xdsDirect = path.join(srcDir, comp, 'XDS' + comp + '.doc.mjs');

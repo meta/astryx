@@ -12,7 +12,7 @@ export const doc = {
   description:
     'Sets one added slug as the default and regenerates the generated theme module. Add the theme first if it is not already in the app.',
   fn: 'themeUse',
-  args: [{name: 'slug', param: 'slug', required: true}],
+  args: [{name: 'slug', param: 'slug', required: true, names: 'theme'}],
   examples: [{label: 'Choose the default theme', cli: 'astryx theme use ocean'}],
   outsideProject: 'refuse',
   requires: ['themes.appModule'],

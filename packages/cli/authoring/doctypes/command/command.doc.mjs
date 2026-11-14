@@ -104,6 +104,12 @@ export const doc = {
           description:
             'Whether the argument collects a variable number of values.',
         },
+        {
+          name: 'args[].names',
+          type: "'component' | 'hook' | 'topic' | 'template' | 'theme'",
+          description:
+            "The kind of item a value of the argument names, such as `component` for `astryx component <names...>`. On a base other than Core, help hides an example that gives the argument a value, since the item it names is Core's; a `<placeholder>` value names no item, so its example stays.",
+        },
       ],
     },
     {
@@ -203,6 +209,12 @@ export const doc = {
       type: "'same' | 'refuse' | 'own'",
       description:
         'What the command does outside a project. `same`: the answer it gives in a new project. `refuse`: it writes nothing and fails, naming the app project or integration package it needs. `own`: something else. Every `refuse` and `own` command also carries an `In global mode:` note in its `notes` that tells readers exactly what it does. Every command and subcommand declares one, and `astryx manifest` publishes it; a command that only groups subcommands declares none. The CLI tests run every command in an empty folder and check what it does against this value; `astryx doctor` does not check it.',
+    },
+    {
+      name: 'pointers',
+      type: '{commands: string[], text: string}[]',
+      description:
+        "Short clauses that send a reader of the summary to other commands, each with the command paths it names, such as `{commands: ['theme build'], text: 'to compile one, use theme build'}`. Help, `astryx manifest`, `astryx docs`, and search show each after the summary, in parentheses; help leaves one out when the run's base does not serve every command it names. Keep the summary itself free of other command names.",
     },
     {
       name: 'requires',

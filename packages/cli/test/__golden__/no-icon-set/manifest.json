@@ -319,7 +319,8 @@
           {
             "flag": "--list",
             "description": "<text>",
-            "type": "boolean"
+            "type": "boolean",
+            "available": true
           },
           {
             "flag": "--index",

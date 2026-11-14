@@ -22,7 +22,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
-  requireCoreDir as requireAnswerCoreDir,
+  coreContentDir as answerCoreContentDir,
   discoverExternalPackages,
 } from '../../foundation/fs/paths.mjs';
 import {
@@ -150,12 +150,14 @@ export {CORE_PACKAGE, unscopedComponentOwners};
  */
 
 /**
- * Locate `@astryxdesign/core`, throwing the stable not-found error when absent.
+ * Locate the Core whose components this run reads, throwing the stable
+ * not-found error when a run on Core finds none. Null in a run whose base is
+ * not Core: it has no Core components.
  * @param {string} cwd
- * @returns {string}
+ * @returns {string | null}
  */
-export function requireCoreDir(cwd) {
-  return coreDirOrThrow(requireAnswerCoreDir, cwd);
+export function coreContentDir(cwd) {
+  return coreDirOrThrow(answerCoreContentDir, cwd);
 }
 
 /**
@@ -192,7 +194,7 @@ export function loadComponentReplacements(coreDir, loadedIntegrations) {
 /**
  * The integration component that answers to the Core component name
  * `dirName` for unqualified lookup, or undefined when none replaces it.
- * @param {string} coreDir
+ * @param {string | null} coreDir
  * @param {import('../../foundation/integrations/integrations.mjs').LoadedIntegration[]} loadedIntegrations
  * @param {string} dirName
  * @returns {Promise<import('../../foundation/discovery/component-replacement.mjs').ActiveComponentReplacement | undefined>}
@@ -222,7 +224,7 @@ function findLoadedIntegration(loadedIntegrations, packageName) {
  * Read the exact installed version available to a package-qualified component
  * selector. Legacy docs packages do not expose a reliable version here, so a
  * version-qualified lookup never falls through to them.
- * @param {string} coreDir
+ * @param {string | null} coreDir
  * @param {import('../../foundation/integrations/integrations.mjs').LoadedIntegration[]} loadedIntegrations
  * @param {string} packageName
  * @returns {string|null}
@@ -233,6 +235,7 @@ export function installedComponentPackageVersion(
   packageName,
 ) {
   if (packageName === CORE_PACKAGE) {
+    if (coreDir == null) return null;
     try {
       const pkg = JSON.parse(
         fs.readFileSync(path.join(coreDir, 'package.json'), 'utf8'),
@@ -261,7 +264,7 @@ function resolveExternalPackage(packageName, cwd) {
  * Build the set of OWNER packages that provide a component with this name
  * across core + every loaded integration. This is what lets the CLI
  * disambiguate by package and expose the owner's source + issuesUrl.
- * @param {string} coreDir
+ * @param {string | null} coreDir
  * @param {string} dirName - bare component name (no `XDS` prefix)
  * @param {import('../../foundation/integrations/integrations.mjs').LoadedIntegration[]} loadedIntegrations
  * @returns {ComponentOwner[]}
@@ -436,7 +439,7 @@ export function legacyExternalKeeps(cwd, dirName, owners) {
 /**
  * The core source file for `dirName` (the no-scope `--source` path reads core
  * directly — it does NOT fall back to externals or fuzzy search).
- * @param {string} coreDir
+ * @param {string | null} coreDir
  * @param {string} dirName
  * @returns {string | null}
  */
@@ -451,7 +454,7 @@ export function resolveCoreSourcePath(coreDir, dirName) {
  * packages provide the same name
  * (with candidate suggestions when close) or ERR_NO_DOC.
  * @param {string} dirName - bare component name (no `XDS` prefix)
- * @param {{coreDir: string, cwd: string, name: string}} ctx - `name` is the caller's original (prefixed) input, used in error text
+ * @param {{coreDir: string | null, cwd: string, name: string}} ctx - `name` is the caller's original (prefixed) input, used in error text
  * @returns {Promise<ResolvedUnscopedDoc>}
  */
 export async function resolveUnscopedDoc(dirName, {coreDir, cwd, name}) {
@@ -612,7 +615,7 @@ function withExampleKinds(examples) {
  * @param {LoadedComponentDoc} docs
  * @param {OwnershipSubject} owner
  * @param {string} componentName
- * @param {string} coreDir
+ * @param {string | null} coreDir
  * @returns {import('./component.type.mjs').ComponentDetailResponse['data']}
  */
 export function withOwnership(docs, owner, componentName, coreDir) {
@@ -672,7 +675,7 @@ function resolveIntegrationImportPath(owner, componentName, authoredImport) {
  * not a scopeable parent.
  * @param {LoadedComponentDoc} docs
  * @param {string} dirName
- * @param {string} coreDir
+ * @param {string | null} coreDir
  * @returns {{scoped: LoadedComponentDoc & {parentDoc?: string, import?: string}, matchingComponent: any} | null}
  */
 export function scopeSubComponent(docs, dirName, coreDir) {
@@ -867,7 +870,7 @@ export async function linkComponentResponse(response, cwd) {
  * matcher's suggestions stay. Returns `error` unchanged otherwise.
  * @param {unknown} error
  * @param {string} dirName
- * @param {{coreDir: string, cwd: string}} context
+ * @param {{coreDir: string | null, cwd: string}} context
  * @returns {Promise<unknown>}
  */
 export async function withExampleBlockPointer(error, dirName, {coreDir, cwd}) {
@@ -908,7 +911,7 @@ export async function withExampleBlockPointer(error, dirName, {coreDir, cwd}) {
  * the components the block uses, its own folder's component first, that
  * resolves as a component and whose related blocks include the block.
  * @param {{dirName: string, category?: string, componentsUsed?: string[]}} block
- * @param {string} coreDir
+ * @param {string | null} coreDir
  * @param {string} cwd
  * @returns {Promise<string | null>}
  */

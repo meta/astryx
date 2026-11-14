@@ -24,7 +24,7 @@ import {
 } from '../../foundation/bases/requirements.mjs';
 import {BASE_STEPS} from '../../foundation/bases/steps.mjs';
 import {coreBase} from '../../foundation/bases/core.mjs';
-import {unknownIntegrationKeys} from '../../authoring/integration/schema.mjs';
+import {unknownCapabilityKeys} from '../../foundation/bases/steps.mjs';
 import {refusesHereFirst} from './lib/base-gate.mjs';
 import {rebaseManifest} from './lib/manifest.mjs';
 
@@ -312,7 +312,7 @@ describe('a stored manifest', () => {
 describe('the base declaration', () => {
   it('reports an adapter capability this CLI does not know', () => {
     expect(
-      unknownIntegrationKeys({base: {adapters: {theme: './t.mjs', themes: './t.mjs'}}}),
+      unknownCapabilityKeys({base: {adapters: {theme: './t.mjs', themes: './t.mjs'}}}),
     ).toEqual(['base.adapters.theme']);
   });
 });

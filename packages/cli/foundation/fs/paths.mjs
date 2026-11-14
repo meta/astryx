@@ -31,12 +31,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /** Root of the @astryxdesign/cli package */
 export const CLI_ROOT = path.resolve(__dirname, '..', '..');
 
-/**
- * A folder with no Core content: an empty `src` and no package.json. A run whose
- * base is not Core reads it wherever a command reads Core's folder layout.
- */
-export const NO_CORE_CONTENT_DIR = path.resolve(__dirname, '..', 'bases', 'no-core');
-
 /** The package every Core lookup answers for. */
 const CORE_PACKAGE = '@astryxdesign/core';
 
@@ -112,10 +106,6 @@ export function unavailableCoreMessage(found, inProject) {
  * @returns {string}
  */
 export function requireCoreDir(startDir = process.cwd()) {
-  // A run whose base is not Core reads a folder with no Core content in
-  // Core's place, so a command finds no Core item and answers from the
-  // base's integrations alone.
-  if (currentNonCoreBase()) return NO_CORE_CONTENT_DIR;
   const found = findProjectCoreDir(startDir) ?? carriedCoreFor(startDir, true);
   if (typeof found === 'string') return noteCore(found, 'project');
   if (found.unavailable) {
@@ -129,6 +119,19 @@ export function requireCoreDir(startDir = process.cwd()) {
     'Could not find @astryxdesign/core package',
     ERROR_CODES.ERR_CORE_NOT_FOUND,
   );
+}
+
+/**
+ * The Core whose components, hooks, and docs this run reads: as
+ * {@link requireCoreDir} in a run on Core, and null in a run on another
+ * base, which reads no Core content. Each content reader treats null as no
+ * Core items and answers from the run's integrations alone.
+ *
+ * @param {string} [startDir]
+ * @returns {string | null}
+ */
+export function coreContentDir(startDir = process.cwd()) {
+  return currentNonCoreBase() ? null : requireCoreDir(startDir);
 }
 
 /**
@@ -914,9 +917,11 @@ export function discoverExternalPackages(startDir = process.cwd()) {
  * List available component directories in packages/core/src.
  * Component directories are capitalized (`Button`, `Dialog`); lowercase
  * directories hold shared infrastructure and are never listed.
- * @param {string} coreDir
+ * @param {string | null} coreDir null in a run that reads no Core
+ * @returns {string[]}
  */
 export function listComponents(coreDir) {
+  if (coreDir == null) return [];
   const srcDir = path.join(coreDir, 'src');
   if (!fs.existsSync(srcDir)) return [];
 

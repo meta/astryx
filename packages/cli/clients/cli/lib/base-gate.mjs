@@ -13,6 +13,7 @@ import {Help} from 'commander';
 import {runBase} from '../../../foundation/bases/resolve.mjs';
 import {
   checkRequirements,
+  isAvailable,
   longFlag,
   missingSteps,
   refusalLine,
@@ -22,7 +23,11 @@ import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {setOutcome} from '../../../foundation/debug/index.mjs';
 import {cliError} from './cli-error.mjs';
 import {isOutsideProject} from '../../../foundation/env/project-scope.mjs';
-import {commandDocsOf, setHelpExampleFilter} from './define-command.mjs';
+import {
+  commandDocsOf,
+  servedDescription,
+  setHelpExampleFilter,
+} from './define-command.mjs';
 import {commandPath} from './command-path.mjs';
 
 /** @typedef {import('commander').Command} Command */
@@ -61,12 +66,11 @@ function childCommands(cmd) {
  */
 export function commandAvailable(cmd, base) {
   if (base == null || base.core) return true;
-  const requires = commandDocsOf(cmd)?.doc.requires;
-  const children = childCommands(cmd);
-  if (children.length > 0 && !requires?.length) {
-    return children.some(child => commandAvailable(child, base));
-  }
-  return missingSteps(base, requires).length === 0;
+  return isAvailable(
+    base,
+    commandDocsOf(cmd)?.doc.requires,
+    childCommands(cmd).map(child => commandAvailable(child, base)),
+  );
 }
 
 /**
@@ -81,60 +85,22 @@ export function optionAvailable(cmd, option, base) {
   const declared = (commandDocsOf(cmd)?.doc.options ?? []).find(
     o => longFlag(o.flag) === option.long,
   );
-  return missingSteps(base, declared?.requires).length === 0;
+  return isAvailable(base, declared?.requires);
 }
 
 /**
- * The command paths a text names: each run of two or more words that walks
- * from the root down its commands, such as `experimental theme editor`.
- * @param {Command} root
- * @param {string} text
- * @returns {string[]}
- */
-function namedPaths(root, text) {
-  const words = text.toLowerCase().match(/[a-z][a-z-]*/gu) ?? [];
-  /** @type {string[]} */
-  const paths = [];
-  for (let i = 0; i < words.length; i += 1) {
-    let cmd = root;
-    const path = [];
-    for (let j = i; j < words.length; j += 1) {
-      const child = childCommands(cmd).find(c => c.name() === words[j]);
-      if (!child) break;
-      path.push(words[j]);
-      cmd = child;
-    }
-    if (path.length >= 2) paths.push(path.join(' '));
-  }
-  return paths;
-}
-
-/**
- * Help text with what names a command the run's base does not serve left
- * out: such a parenthetical, else such a paragraph.
- * @param {Command} cmd the command the text describes
- * @param {string} text
+ * A command's description as help prints it: a pointer to a command the
+ * run's base does not serve is left out.
+ * @param {Command} cmd
  * @returns {string}
  */
-function servedText(cmd, text) {
+function servedHelpDescription(cmd) {
   const base = helpBase();
-  if (base == null || base.core || !text) return text;
+  if (base == null || base.core) return cmd.description();
   /** @type {Command} */
   let root = cmd;
   while (root.parent) root = root.parent;
-  // A path a text names starts at the root, or at the command it describes.
-  const prefix = commandPath(cmd);
-  /** @param {string} part */
-  const served = part =>
-    [
-      ...namedPaths(root, part),
-      ...namedPaths(cmd, part).map(path => `${prefix} ${path}`),
-    ].every(path => exampleAvailable(root, path, base));
-  return text
-    .replace(/ ?\([^()]*\)/gu, part => (served(part) ? part : ''))
-    .split('\n\n')
-    .filter(served)
-    .join('\n\n');
+  return servedDescription(cmd, path => exampleAvailable(root, path, base));
 }
 
 /**
@@ -145,10 +111,10 @@ function servedText(cmd, text) {
 export function baseHelpSettings() {
   return {
     commandDescription(cmd) {
-      return servedText(cmd, Help.prototype.commandDescription.call(this, cmd));
+      return servedHelpDescription(cmd);
     },
     subcommandDescription(cmd) {
-      return servedText(cmd, Help.prototype.subcommandDescription.call(this, cmd));
+      return cmd.summary() || servedHelpDescription(cmd);
     },
     visibleCommands(cmd) {
       const visible = Help.prototype.visibleCommands.call(this, cmd);
@@ -383,16 +349,27 @@ export async function checkRun(program, actionCommand) {
   else checkedAdapters = verdict.adapters;
 }
 
-/** Commands whose example values name an item of Core's content. */
-const CORE_ITEM_COMMANDS = new Set([
-  'component',
-  'hook',
-  'swizzle',
-  'docs',
-  'template',
-  'theme',
-  'gap-report',
-]);
+/**
+ * The argument a positional value fills: the one at its position, else a
+ * last variadic argument, which takes every value after it.
+ * @param {import('@astryxdesign/cli/authoring').CommandArgDoc[]} args
+ * @param {number} position
+ * @returns {import('@astryxdesign/cli/authoring').CommandArgDoc | undefined}
+ */
+function argumentAt(args, position) {
+  const last = args.at(-1);
+  return args[position] ?? (last?.variadic ? last : undefined);
+}
+
+/**
+ * Is an example value a placeholder in usage syntax, such as `<Name>` or
+ * `[path]`, rather than a value?
+ * @param {string} token
+ * @returns {boolean}
+ */
+function isPlaceholder(token) {
+  return token.startsWith('<') || token.startsWith('[');
+}
 
 /**
  * Does an example invocation name only commands, options, and argument
@@ -423,14 +400,11 @@ export function exampleAvailable(root, cli, base) {
       cmd = child;
       continue;
     }
-    const arg = commandDocsOf(cmd)?.doc.args?.[positional];
-    if (missingSteps(base, arg?.requires?.[token]).length > 0) return false;
-    // A content command's example values name Core's items (a component, a
-    // hook, a topic, a template, a theme), which another base does not have.
-    // A placeholder such as `<Name>` names no item.
-    const words = commandPath(cmd).split(' ');
-    const group = words[0] === 'experimental' ? words[1] : words[0];
-    if (!/^[<[]/u.test(token) && CORE_ITEM_COMMANDS.has(group)) return false;
+    const arg = argumentAt(commandDocsOf(cmd)?.doc.args ?? [], positional);
+    if (!isAvailable(base, arg?.requires?.[token])) return false;
+    // A value of an argument that names an item names one of Core's items,
+    // which this base does not have.
+    if (arg?.names != null && !isPlaceholder(token)) return false;
     positional += 1;
   }
   return true;

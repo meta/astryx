@@ -10,7 +10,6 @@
  */
 
 import {z} from 'zod';
-import {BASE_STEPS} from '../integration/base-steps.mjs';
 
 /** @typedef {import('./base/type.js').AuthoredDocGraphFields} AuthoredDocGraphFieldsType */
 /** @typedef {import('./base/type.js').AuthoredDocKind} AuthoredDocKind */
@@ -594,8 +593,16 @@ export const SchemaDocKindSchema = z
  * >} _SchemaDocDriftLock
  */
 
-/** A platform step a base serves. */
-const BaseStepSchema = z.enum(BASE_STEPS);
+/**
+ * A platform step a base serves, named `<capability>.<step>`. The schema
+ * checks the shape; the closed list lives with the CLI's requirement check,
+ * and a test holds every command declaration to it.
+ * @type {z.ZodType<import('../integration/type.js').BaseStep>}
+ */
+const BaseStepSchema = z.custom(
+  value => typeof value === 'string' && /^[a-z]+\.[a-zA-Z]+$/u.test(value),
+  {message: 'a step is named `<capability>.<step>`, such as `themes.compile`'},
+);
 
 /** New stamped command doc (`type: 'command'`). */
 export const CommandDocKindSchema = z
@@ -618,6 +625,9 @@ export const CommandDocKindSchema = z
             required: z.boolean().optional(),
             variadic: z.boolean().optional(),
             requires: z.record(z.string(), z.array(BaseStepSchema)).optional(),
+            names: z
+              .enum(['component', 'hook', 'topic', 'template', 'theme'])
+              .optional(),
           })
           .passthrough(),
       )
@@ -657,6 +667,16 @@ export const CommandDocKindSchema = z
     outsideProject: z.enum(['same', 'refuse', 'own']).optional(),
     replaces: z.array(z.string()).optional(),
     requires: z.array(BaseStepSchema).optional(),
+    pointers: z
+      .array(
+        z
+          .object({
+            commands: z.array(z.string().min(1)).min(1),
+            text: z.string().min(1),
+          })
+          .strict(),
+      )
+      .optional(),
     related: z.array(z.string()).optional(),
     notes: z.array(ReferenceContentBlockSchema).optional(),
   })
@@ -723,6 +743,7 @@ export const NamespaceDocKindSchema = z
     title: nonEmptyString,
     summary: nonEmptyString,
     keywords: z.array(nonEmptyString).optional(),
+    describes: z.literal('cli').optional(),
     slots: z
       .record(nonEmptyString, NamespaceSlotSchema)
       .refine(slots => Object.keys(slots).length > 0, {

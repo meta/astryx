@@ -33,12 +33,6 @@ const LARGE_PACKAGES = [
 ];
 
 /**
- * Modules under a large folder that every run may load: each imports nothing
- * and holds one constant list.
- */
-const SMALL_CLI_MODULES = new Set(['authoring/integration/base-steps.mjs']);
-
-/**
  * The CLI's own modules that only doc, discovery, project and integration work
  * uses, as paths under the CLI root. A path that ends in `/` names a folder.
  */
@@ -152,9 +146,7 @@ describe('a run of the bin that prints the version', () => {
     run => {
       const {status, cliModules} = modulesLoadedBy(run.split(' '));
       expect(status).toBe(0);
-      const loaded = [...cliModules].filter(
-        file => !SMALL_CLI_MODULES.has(file),
-      );
+      const loaded = [...cliModules];
       expect(
         LARGE_CLI_MODULES.filter(large =>
           loaded.some(file =>

@@ -973,14 +973,9 @@ export async function loadTreeInputs({
 }
 
 /**
- * The root namespaces whose guides describe the CLI itself. Every other root
- * describes Core, so its namespaces and guides show only in a run whose base
- * is Core.
- */
-const CLI_ROOTS = new Set(['authoring', 'cli', 'global']);
-
-/**
- * The tree inputs under a root in {@link CLI_ROOTS}. A doc that names no
+ * The tree inputs under a root namespace that describes the CLI itself
+ * (`describes: 'cli'`). Every other root describes Core, so its namespaces
+ * and guides show only in a run whose base is Core. A doc that names no
  * parent is a CLI self-doc that a namespace adopts by its group, and stays.
  * @param {TreeNamespaceInput[]} namespaces
  * @param {TreeDocInput[]} docs
@@ -993,25 +988,25 @@ function onlyCliRoots(namespaces, docs) {
     placement.parent.startsWith('namespace:')
       ? placement.parent.slice('namespace:'.length)
       : undefined;
-  /** @type {Map<string, string | undefined>} */
-  const parents = new Map(
-    namespaces.map(ns => [ns.doc.name, parentOf(ns.doc.placement)]),
-  );
+  /** @type {Map<string, TreeNamespaceInput['doc']>} */
+  const byName = new Map(namespaces.map(ns => [ns.doc.name, ns.doc]));
   /** @param {string} name */
-  const rootOf = name => {
+  const describesCli = name => {
     const seen = new Set();
-    let current = name;
-    while (parents.get(current) && !seen.has(current)) {
-      seen.add(current);
-      current = /** @type {string} */ (parents.get(current));
+    let current = byName.get(name);
+    while (current != null && !seen.has(current.name)) {
+      seen.add(current.name);
+      const parent = parentOf(current.placement);
+      if (parent == null) return current.describes === 'cli';
+      current = byName.get(parent);
     }
-    return current;
+    return false;
   };
   return {
-    namespaces: namespaces.filter(ns => CLI_ROOTS.has(rootOf(ns.doc.name))),
+    namespaces: namespaces.filter(ns => describesCli(ns.doc.name)),
     docs: docs.filter(doc => {
       const parent = parentOf(doc.placement);
-      return parent == null || CLI_ROOTS.has(rootOf(parent));
+      return parent == null || describesCli(parent);
     }),
   };
 }
