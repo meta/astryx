@@ -9,6 +9,7 @@
  * SYNC: When MoreMenu.tsx changes, update tests to match new behavior
  */
 
+import {createRef} from 'react';
 import {describe, it, expect, vi, beforeAll, beforeEach} from 'vitest';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -256,6 +257,16 @@ describe('MoreMenu', () => {
     expect(handleEdit).not.toHaveBeenCalled();
   });
 
+  it('forwards its ref to the bottom-sheet trigger', () => {
+    const ref = createRef<HTMLButtonElement>();
+    render(
+      <MoreMenu items={defaultItems} ref={ref} presentation="bottom-sheet" />,
+    );
+    expect(ref.current).toBe(
+      screen.getByRole('button', {name: 'More options'}),
+    );
+  });
+
   it('supports forwardRef', () => {
     const ref = vi.fn();
     render(<MoreMenu items={defaultItems} ref={ref} />);
@@ -352,5 +363,31 @@ describe('MoreMenu', () => {
         'position-area: self-block-start span-self-inline-end',
       );
     });
+  });
+
+  it('passes data-* attributes to the trigger button, not the menu', () => {
+    render(
+      <MoreMenu items={[{label: 'Edit', onClick: () => {}}]} data-tag="m" />,
+    );
+    expect(document.querySelectorAll('[data-tag="m"]')).toHaveLength(1);
+    expect(screen.getByRole('button', {name: 'More options'})).toHaveAttribute(
+      'data-tag',
+      'm',
+    );
+  });
+
+  it('passes data-* attributes to the bottom-sheet trigger, not the sheet', () => {
+    render(
+      <MoreMenu
+        items={[{label: 'Edit', onClick: () => {}}]}
+        presentation="bottom-sheet"
+        data-tag="m"
+      />,
+    );
+    expect(document.querySelectorAll('[data-tag="m"]')).toHaveLength(1);
+    expect(screen.getByRole('button', {name: 'More options'})).toHaveAttribute(
+      'data-tag',
+      'm',
+    );
   });
 });

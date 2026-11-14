@@ -111,7 +111,7 @@ export default function App() {
         },
         {
           type: 'prose',
-          text: "Single-catalog usage (where an external i18n runtime like react-intl or i18next resolves both your app strings AND astryx's strings through one provider) is on the roadmap via a `Translator` adapter. Track [facebook/astryx#4029](https://github.com/facebook/astryx/issues/4029). For now, run the two providers side by side as shown above.",
+          text: "Single-catalog usage (where an external i18n runtime like react-intl or i18next resolves both your app strings AND astryx's strings through one provider) is on the roadmap via a `Translator` adapter. Track [meta/astryx#4029](https://github.com/meta/astryx/issues/4029). For now, run the two providers side by side as shown above.",
         },
       ],
     },

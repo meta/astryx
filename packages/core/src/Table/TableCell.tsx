@@ -25,7 +25,10 @@ import {
 } from '../theme/tokens.stylex';
 import type {StyleXStyles} from '../theme/types';
 import type {TableContextActions} from './types';
-import {wrapInTableContextMenu} from './tableContextMenu';
+import {
+  hasTableContextActions,
+  wrapInTableContextMenu,
+} from './tableContextMenu';
 import {
   overflowStyles,
   wrapStyles,
@@ -38,6 +41,7 @@ import {
   mergeXStyle,
 } from './useTableCellStyles';
 import {mergeProps} from '../utils';
+import {glidingDividerStyles} from './glidingDivider';
 import {themeProps} from '../utils/themeProps';
 
 /** Props for TableCell — thin `<td>` wrapper */
@@ -145,6 +149,12 @@ const contextMenuCellStyles = stylex.create({
 
 const dividerRowStyles = stylex.create({
   cell: {
+    // The width this cell's divider draws, for a pinned cell's own divider
+    // to match (plugins/stickyColumns). Private plumbing, not a theme API.
+    '--_table-row-divider-width': {
+      default: borderVars['--border-width'],
+      [stylex.when.ancestor(':last-child', tableRowMarker)]: '0px',
+    },
     borderBottomWidth: {
       default: borderVars['--border-width'],
       // Skip border on cells in the last body row to avoid a
@@ -152,7 +162,12 @@ const dividerRowStyles = stylex.create({
       // Scoped to tableRowMarker so only the parent <tr> is checked —
       // without the scope, <tbody> (also a :last-child) would match
       // and suppress borders on every row.
-      [stylex.when.ancestor(':last-child', tableRowMarker)]: '0',
+      [stylex.when.ancestor(
+        ':last-child:not([data-table-final-row="false"])',
+        tableRowMarker,
+      )]: '0',
+      [stylex.when.ancestor('[data-table-final-row="true"]', tableRowMarker)]:
+        '0',
     },
     borderBottomStyle: 'solid',
     borderBottomColor: colorVars['--color-border'],
@@ -207,9 +222,7 @@ export function TableCell({
 }: TableCellProps) {
   const ctx = useTableContext();
 
-  const hasContextMenu =
-    typeof contextMenuActions === 'function' ||
-    (Array.isArray(contextMenuActions) && contextMenuActions.length > 0);
+  const hasContextMenu = hasTableContextActions(contextMenuActions);
 
   // When the cell owns a context menu, its density padding is relocated onto
   // the right-click trigger wrapper (see `content` below) so the entire cell —
@@ -228,6 +241,8 @@ export function TableCell({
           dividerColumnStyles.cell,
         ),
         ...(hasContextMenu ? [contextMenuCellStyles.cell] : []),
+        // While a glide moves the row, its divider moves with it.
+        glidingDividerStyles.cell,
       ]
     : [];
 

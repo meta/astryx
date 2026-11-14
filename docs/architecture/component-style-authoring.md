@@ -13,6 +13,8 @@ applies_to: [packages/core/src/, packages/lab/src/]
 verified_by:
   [
     internal/stylex-capabilities/scan.mjs,
+    packages/core/src/theme/dynamicType.test.ts,
+    packages/core/src/theme/Theme.test.tsx,
     internal/eslint-plugin-astryx/no-border-shorthand.test.mjs,
     internal/eslint-plugin-astryx/no-stylex-null-override.test.mjs,
     internal/eslint-plugin-astryx/no-style-only-wrapper.test.mjs,
@@ -110,7 +112,9 @@ not evidence of conformance or violation.
   to one component is flagged. Its pull request either takes that JavaScript
   from the shared internal touch modules (`architecture:react-component-runtime`
   INV13), which a page carries once however many components use them, or
-  justifies the cost. For flagged CSS, its pull request
+  justifies the cost. A flagged component that defers a surface revealed by
+  interaction (`architecture:component-import-boundaries` INV1) counts only its
+  eager JavaScript. For flagged CSS, its pull request
   justifies the cost, because that CSS stays in the package stylesheet
   (`spec:AST-080` FR1, FR8). Sizes are gzip at the default compression level,
   and 1 KB is 1,024 bytes; measured as `spec:AST-080` FR8 measures CSS, a
@@ -133,11 +137,17 @@ not evidence of conformance or violation.
   never through extra elements. A pseudo-element carries decoration that has
   no semantic role and never repeats content. Content renders once: no hidden
   twin to measure or reserve space, because CSS can size and reserve it on the
-  element that shows it (INV2). A layer mounts exactly one presentation. The
+  element that shows it (INV2). The theme runtime may own one shared, empty,
+  aria-hidden probe element per document, outside every component's DOM, used
+  only to read a platform text size; it renders no content, is not a theming
+  target, and is removed with the last root Theme. A layer mounts exactly one
+  presentation. The
   only second copy is one transient copy during an exit, a presentation
   switch, a lift from the trigger (`architecture:layer-runtime` INV15), or a
   handoff between sheets, such as the cross-fade
-  `design:reduced-motion` DR2 requires, or one moving preview while a
+  `design:reduced-motion` DR2 requires; AppShell's old content wrap during a
+  side nav collapse or expand (`component:AppShell` FR17); the SideNav rail's
+  old state during a collapse or expand (`component:SideNav` FR6); or one moving preview while a
   reorderable item is dragged (`design:ordered-collection-reordering`); it is
   made by one Core mechanism for its kind, rather than by each component, and is removed within 1
   second of the transition ending. Until that shared mechanism exists, a
@@ -224,6 +234,8 @@ This record does not absorb adjacent audit rules:
   define client entry points, directive placement, mixed/server-safe barrels,
   built-output preservation, and RSC-usable exports. This record does not turn
   `'use client'` placement into style policy.
+  Which modules a public import reaches eagerly, including surfaces revealed by
+  interaction and opt-in capabilities, is `architecture:component-import-boundaries`.
 
 ## Audit-row routing
 
@@ -303,4 +315,5 @@ RSC owners retain the delegated decisions above.
 | INV5                | Wrapper mutations in default and host-composed render paths                                                                                                                              | Removing a wrapper changes no semantic, behavior/ref, formatting-context, outside-border-spacing, or required style-bearing DOM boundary                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | INV6                | Pull-request size report against base, with value-table import fixtures                                                                                                                  | A changed component with no base-against-head gzip JavaScript or CSS figure; a touch-only feature over 2 KB gzip JavaScript or 1 KB gzip CSS per component that is not flagged; importing a component pulls in value-table rows only other components read                                                                                                                                                                                                                                                                                                                                                                            |
 | INV7                | Story element counts (`document.body.querySelectorAll('*').length`) at rest and open under a fine and a coarse pointer, base against head, plus render inspection for duplicated content | An element beyond the component's roles, themable parts, and INV5 wrappers, or a duplicated or hidden twin of content; a state or variant rendered as an extra element; a pseudo-element repeating content; a layer with two presentations mounted outside the transient copy, content mounted twice, more elements under a coarse pointer than a fine one beyond the allowance of `spec:AST-017` FR60, a transient copy made by a component itself, or one left past 1 second; an added element with no measured counts, or a budget exceeded with no recorded owner exception; a second reorder preview, or one left after the drop |
+| INV7 (probe)        | `dynamicType.test.ts` shared-probe, cleanup, and capability-gate cases; `Theme.test.tsx` nested-Theme and no-capability cases                                                            | More than one probe in a document; a probe a nested Theme creates; a probe left after the last root Theme unmounts; a probe where the engine has no `font: -apple-system-body`                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | Capability registry | Registry generation against the installed StyleX package                                                                                                                                 | Recorded and installed StyleX versions differ, so capability-dependent cases are untestable                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |

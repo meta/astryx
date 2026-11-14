@@ -10,6 +10,7 @@
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Outline/Outline.doc.mjs
+ * - /packages/core/src/Outline/useOutlineFromDOM.doc.mjs
  * - /packages/core/src/Outline/index.ts
  */
 
@@ -42,6 +43,8 @@ export function useOutlineFromDOM(
     collectOutlineItems(containerRef.current),
   );
 
+  // Syncs the outline items with the container's DOM through a
+  // MutationObserver.
   useEffect(() => {
     const container = containerRef.current;
     setItems(collectOutlineItems(container));

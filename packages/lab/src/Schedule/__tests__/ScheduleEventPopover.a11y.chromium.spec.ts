@@ -6,7 +6,8 @@
  * @output Receipted evidence that, with renderPopover, events are keyboard
  *   reachable buttons whose popup attributes track one view-owned popover:
  *   open on Enter, Space, click, and tap; close on Escape and light dismiss
- *   with focus returned to the event; switch between events in one gesture;
+ *   with focus returned to the event; switch between events in one gesture
+ *   with a mouse or a finger; close on a press on the open event;
  *   leave a null event read-only; keep the read-only story unchanged; show
  *   no scrollbar on a popover whose content fits; and scroll long content
  *   from the keyboard
@@ -15,7 +16,7 @@
  *   focus ring, or produce a touch tap.
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import pixelmatch from 'pixelmatch';
 // @ts-expect-error -- pngjs ships no declarations; runtime support is pinned.
 import {PNG} from 'pngjs';
@@ -228,6 +229,44 @@ test('click opens, clicking another event switches in one gesture, and light dis
   await expect
     .poll(async () => (await readDialog(page)).details)
     .toBe('contain-long');
+});
+
+test('a press on the open event closes it, and another event opens in the same press, with a mouse and a finger', async ({
+  page,
+}) => {
+  await openStory(evidence, page, POPOVER_STORY, WIDE);
+  const workshop = page.getByRole('button', {name: /^Workshop,/});
+  const coffee = page.getByRole('button', {name: /^Coffee chat,/});
+
+  // Mouse: the press on the open event closes it, and it stays closed.
+  await workshop.click();
+  await expect
+    .poll(async () => (await readDialog(page)).details)
+    .toBe('contain-long');
+  await workshop.click();
+  await expect.poll(async () => (await readDialog(page)).openCount).toBe(0);
+  await page.waitForTimeout(300);
+  expect((await readDialog(page)).openCount).toBe(0);
+  await expect(workshop).toHaveAttribute('aria-expanded', 'false');
+
+  // Finger: a tap on another event while one is open opens it there.
+  await workshop.tap();
+  await expect
+    .poll(async () => (await readDialog(page)).details)
+    .toBe('contain-long');
+  await coffee.tap();
+  await expect
+    .poll(async () => (await readDialog(page)).details)
+    .toBe('contain-short');
+  expect((await readDialog(page)).openCount).toBe(1);
+  await expect(coffee).toHaveAttribute('aria-expanded', 'true');
+  await expect(workshop).toHaveAttribute('aria-expanded', 'false');
+
+  // A tap on the open event closes it.
+  await coffee.tap();
+  await expect.poll(async () => (await readDialog(page)).openCount).toBe(0);
+  await page.waitForTimeout(300);
+  expect((await readDialog(page)).openCount).toBe(0);
 });
 
 test('an event without content stays read-only and the open popover closes when its event leaves', async ({
@@ -443,38 +482,74 @@ test('long popover content scrolls from the keyboard: Tab reaches its named grou
       top: Math.round(element.scrollTop),
       max: element.scrollHeight - element.clientHeight,
     }));
-  // Keyboard scrolling is smooth, so each press is followed until the region
-  // settles; the key is pressed until a press no longer moves it.
-  const settle = async () => {
-    let last = -1;
-    for (let frame = 0; frame < 40; frame += 1) {
-      const {top} = await scroll();
-      if (top === last) {
-        return top;
-      }
-      last = top;
-      await page.waitForTimeout(50);
-    }
-    return last;
+  // Keyboard scrolling is smooth, and a busy browser can start it frames after
+  // the press, so each press is followed to the region's `scrollend`. A press
+  // that starts no scroll within 60 frames of its keydown is one that cannot
+  // move the region.
+  const press = async (key: string) => {
+    await region.evaluate(element => {
+      (window as unknown as {scrolled?: Promise<boolean>}).scrolled =
+        new Promise<boolean>(resolve => {
+          const listening = new AbortController();
+          const end = (scrolled: boolean) => {
+            listening.abort();
+            resolve(scrolled);
+          };
+          let started = false;
+          element.addEventListener(
+            'scroll',
+            () => {
+              started = true;
+            },
+            {signal: listening.signal},
+          );
+          element.addEventListener('scrollend', () => end(true), {
+            signal: listening.signal,
+          });
+          // The frames count from the key's own keydown, so a slow runner
+          // between this setup and the press does not use them up.
+          window.addEventListener(
+            'keydown',
+            () => {
+              let frames = 0;
+              const wait = () => {
+                if (started || listening.signal.aborted) {
+                  return;
+                }
+                frames += 1;
+                if (frames > 60) {
+                  end(false);
+                  return;
+                }
+                requestAnimationFrame(wait);
+              };
+              requestAnimationFrame(wait);
+            },
+            {capture: true, once: true, signal: listening.signal},
+          );
+        });
+    });
+    await page.keyboard.press(key);
+    return page.evaluate(
+      () => (window as unknown as {scrolled?: Promise<boolean>}).scrolled,
+    );
   };
-  const pressUntilStill = async (key: string) => {
-    let top = await settle();
+  // The key is pressed until the region reaches its end or a press no longer
+  // moves it.
+  const pressUntilEnd = async (key: string) => {
     for (let presses = 0; presses < 200; presses += 1) {
-      await page.keyboard.press(key);
-      const next = await settle();
-      if (next === top) {
+      const {top, max} = await scroll();
+      if (top >= max - 1 || !(await press(key))) {
         break;
       }
-      top = next;
     }
     return scroll();
   };
   const atStart = await scroll();
-  const afterPageDown = await pressUntilStill('PageDown');
-  await page.keyboard.press('Home');
-  await settle();
+  const afterPageDown = await pressUntilEnd('PageDown');
+  await press('Home');
   const afterHome = await scroll();
-  const afterArrowDown = await pressUntilStill('ArrowDown');
+  const afterArrowDown = await pressUntilEnd('ArrowDown');
   // The surface itself stays inside the viewport.
   const surface = await dialog.boundingBox();
   const viewportHeight = page.viewportSize()?.height ?? 0;

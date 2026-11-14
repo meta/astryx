@@ -10,7 +10,9 @@
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/MetadataList/MetadataList.doc.mjs
+ * - /packages/core/src/MetadataList/MetadataListItem.doc.mjs
  * - /packages/core/src/MetadataList/MetadataList.test.tsx
+ * - /packages/core/src/MetadataList/MetadataListItem.test.tsx
  * - /packages/core/src/MetadataList/index.ts
  * - /apps/storybook/stories/MetadataList.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/MetadataList/ (showcase blocks)
@@ -27,6 +29,7 @@ import {
 import {MetadataListContext} from './MetadataListContext';
 import type {BaseProps} from '../BaseProps';
 import {mergeProps} from '../utils';
+import {isRenderable} from '../utils/isRenderable';
 import {themeProps} from '../utils/themeProps';
 
 // =============================================================================
@@ -34,7 +37,10 @@ import {themeProps} from '../utils/themeProps';
 // =============================================================================
 
 export interface MetadataListItemProps extends BaseProps<HTMLDivElement> {
-  /** Ref forwarded to the root element */
+  /**
+   * Ref forwarded to the item element: the label `dt` side by side, or the
+   * stacked wrapper.
+   */
   ref?: React.Ref<HTMLDivElement>;
   /**
    * Content value for this metadata item.
@@ -122,7 +128,7 @@ const styles = stylex.create({
 // =============================================================================
 
 /**
- * A single labeled metadata value within an MetadataList.
+ * A single labeled metadata value within a MetadataList.
  *
  * Renders a `<dt>` / `<dd>` pair. Layout (side-by-side or stacked) is
  * determined by the parent MetadataList's label configuration.
@@ -153,7 +159,7 @@ export function MetadataListItem({
 
   const labelContent = (
     <>
-      {icon != null && (
+      {isRenderable(icon) && (
         <span {...stylex.props(styles.iconWrapper)}>{icon}</span>
       )}
       {label}

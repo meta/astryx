@@ -1,0 +1,26 @@
+diff --git a/packages/core/src/DateInput/MonthScroller.tsx b/packages/core/src/DateInput/MonthScroller.tsx
+index 63c8da60124d7..dbf2b8e129481 100644
+--- a/packages/core/src/DateInput/MonthScroller.tsx
++++ b/packages/core/src/DateInput/MonthScroller.tsx
+@@ -329,0 +368,7 @@ export function MonthScroller({
++  // Synchronizes the scroller's snapping with the browser's frame loop: it
++  // comes back on in the frame after the pause's commit, and a restore still
++  // pending at the next pause or at unmount is dropped.
++  useLayoutEffect(() => {
++    const scroller = scrollerRef.current;
++    if (snapPauses === 0 || scroller == null) {
++      return undefined;
+@@ -604,7 +684,13 @@ export function MonthScroller({
+     };
+     scroller.addEventListener('scroll', onScroll, {passive: true});
++    for (const type of USER_INPUT_EVENTS) {
++      scroller.addEventListener(type, endSteer, {passive: true});
++    }
+     scroller.addEventListener('touchstart', onTouchStart, {passive: true});
+     return () => {
+       scroller.removeEventListener('scroll', onScroll);
++      for (const type of USER_INPUT_EVENTS) {
++        scroller.removeEventListener(type, endSteer);
++      }
+       scroller.removeEventListener('touchstart', onTouchStart);
+       if (frameRef.current != null) {

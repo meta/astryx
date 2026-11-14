@@ -28,7 +28,10 @@ import type {StyleXStyles} from '../theme/types';
 import type {TableContextActions} from './types';
 import {overflowStyles, containerEdgeStyles} from './table.stylex';
 import {useTableContext, mergeXStyle} from './useTableCellStyles';
-import {wrapInTableContextMenu} from './tableContextMenu';
+import {
+  hasTableContextActions,
+  wrapInTableContextMenu,
+} from './tableContextMenu';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
 
@@ -83,9 +86,26 @@ const headerStyles = stylex.create({
 
 const headerDividerStyles = stylex.create({
   cell: {
+    // For a pinned header cell's own divider to match (plugins/stickyColumns).
+    '--_table-row-divider-width': borderVars['--border-width'],
     borderBottomWidth: borderVars['--border-width'],
     borderBottomStyle: 'solid',
     borderBottomColor: colorVars['--color-border'],
+  },
+});
+
+const headerTriggerStyles = stylex.create({
+  unpositioned: {
+    position: 'static',
+  },
+});
+
+// Holds the context menu's cursor anchor in place of its unpositioned
+// trigger, so the menu still scrolls with the table. A plugin's own position,
+// such as a sticky column, wins.
+const headerMenuCellStyles = stylex.create({
+  cell: {
+    position: 'relative',
   },
 });
 
@@ -133,6 +153,7 @@ export function TableHeaderCell({
   // Header cells always get the bottom divider (separates header from body).
   // When used standalone (no table context) the cell renders plain, with no
   // density/divider styles.
+  const hasContextMenu = hasTableContextActions(contextMenuActions);
   const cellStyles: StyleXStyles[] = [];
   if (ctx) {
     cellStyles.push(
@@ -146,11 +167,20 @@ export function TableHeaderCell({
     if (ctx.dividers === 'columns' || ctx.dividers === 'grid') {
       cellStyles.push(dividerColumnStyles.cell);
     }
+    if (hasContextMenu) {
+      cellStyles.push(headerMenuCellStyles.cell);
+    }
   }
 
   // The cell owns the context-menu wrapper so it controls how the menu
-  // interacts with its padding / content. No-op when no actions.
-  const content = wrapInTableContextMenu(children, contextMenuActions);
+  // interacts with its padding / content. No-op when no actions. Inside a
+  // Table the wrapper stays unpositioned, so a header plugin's overlay, such
+  // as a resize boundary, positions against the cell and sits on its edge.
+  const content = wrapInTableContextMenu(
+    children,
+    contextMenuActions,
+    ctx && hasContextMenu ? headerTriggerStyles.unpositioned : undefined,
+  );
 
   return (
     <th

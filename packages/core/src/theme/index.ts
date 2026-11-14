@@ -1,7 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 /**
  * Astryx Theme System
  *
@@ -104,6 +102,11 @@ export type {ColorScaleConfig, ColorScaleTokens} from './expandColorScale';
 
 export {expandMotionScale} from './expandMotionScale';
 export type {MotionScaleConfig, MotionScaleTokens} from './expandMotionScale';
+export type {
+  MotionCharacter,
+  ThemeMotionConfig,
+  ThemeMotionKnobs,
+} from './themeMotion';
 
 // Export token defaults and vars for use in custom components and themes
 export {

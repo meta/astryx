@@ -1,12 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-/**
- * @file Lightbox.doc.mjs
- * @input Lightbox public props and custom content keyboard behavior
- * @output Consumer documentation for media and custom galleries
- * @position Lightbox docs consumed by the CLI and docsite
- */
-
 /** @type {import('@astryxdesign/cli/authoring').ComponentAnatomyElement[]} */
 const anatomy = [
   {
@@ -39,7 +32,8 @@ const anatomy = [
   {
     name: 'Caption',
     required: false,
-    description: 'Caller-provided caption displayed below the active media.',
+    description:
+      'Caller-provided caption displayed below the active media, in a band at the bottom of the viewer. It shows at most two lines, for a single photo as for a gallery; a longer caption ends in an inline "more" link that opens it in full over the photo.',
   },
   {
     name: 'Counter',
@@ -79,7 +73,8 @@ export const docs = {
     {
       name: 'onOpenChange',
       type: '(isOpen: boolean) => void',
-      description: 'Callback when the lightbox open state changes.',
+      description:
+        'Callback when the lightbox open state changes: the Close button, Escape, a tap beside the media, or, on a phone or tablet, dragging a photo down from its fitted size.',
       required: true,
     },
     {
@@ -91,7 +86,7 @@ export const docs = {
       // the description instead (#1645).
       type: 'LightboxItem | LightboxItem[]',
       description:
-        "Items to display. Pass a single object for one item, or an array for gallery mode with prev/next navigation. Each item is either a media item {src: string, alt: string, caption?: ReactNode, type?: 'image' | 'video'} (type defaults to 'image', and zoom/pan is disabled for 'video') or a custom item {type: 'custom', content: ReactNode, label: string, caption?: ReactNode}, which renders arbitrary React content without zoom/pan. Both kinds can be mixed in one gallery.",
+        "Items to display. Pass a single object for one item, or an array for gallery mode with prev/next navigation (on a phone or tablet, a swipe moves between items too). Each item is either a media item {src: string, alt: string, caption?: ReactNode, type?: 'image' | 'video'} (type defaults to 'image', and zoom/pan is disabled for 'video') or a custom item {type: 'custom', content: ReactNode, label: string, caption?: ReactNode}, which renders arbitrary React content without zoom, pan or the drag to close. Both kinds can be mixed in one gallery.",
       required: true,
     },
     {
@@ -103,13 +98,13 @@ export const docs = {
       name: 'onIndexChange',
       type: '(index: number) => void',
       description:
-        'Callback when the gallery index changes via prev/next navigation.',
+        'Callback when the gallery index changes: prev/next, the arrow keys, or a swipe.',
     },
     {
       name: 'hasZoom',
       type: 'boolean',
       description:
-        'Enable zoom on double-click, or Enter/Space/+/- via keyboard (images only). When zoomed, drag or use arrow keys to pan.',
+        'Enable zoom (images only): pinch (or ctrl-wheel), or double-tap or double-click to zoom in at that point and back; Enter/Space/+/- zoom 2× about the centre and back, and 0 returns to the fitted size. When zoomed, drag or scroll a trackpad to pan, or use arrow keys; on a phone or a tablet, the pan has momentum.',
       default: 'false',
     },
     {
@@ -139,7 +134,7 @@ export const docs = {
   usage: {
     anatomy,
     description:
-      'A fullscreen overlay for viewing images, videos, and arbitrary React content at full resolution. Supports single-item and gallery modes with prev/next navigation, optional zoom and pan for images, and native video controls. Items with type custom host a rich React subtree and reuse the same gallery navigation, keyboard, scroll lock, and backdrop dismissal.',
+      'A fullscreen overlay for viewing images, videos, and arbitrary React content at full resolution. Supports single-item and gallery modes with prev/next navigation and swiping, optional zoom and pan for images, and native video controls. Items with type custom host a rich React subtree and reuse the same gallery navigation, keyboard, scroll lock, and backdrop dismissal.',
     bestPractices: [
       {
         guidance: true,
@@ -203,14 +198,15 @@ export const docsZh = {
     {
       name: 'onOpenChange',
       type: '(isOpen: boolean) => void',
-      description: '灯箱打开状态变化时的回调。',
+      description:
+        '灯箱打开状态变化时的回调：关闭按钮、Esc 键、点按媒体旁空白处，或在手机或平板上从适合大小向下拖动照片。',
       required: true,
     },
     {
       name: 'media',
       type: 'LightboxItem | LightboxItem[]',
       description:
-        "要显示的项目。传入单个对象或数组（用于画廊模式的上一张/下一张导航）。每项可以是媒体项 {src, alt, caption?, type?: 'image' | 'video'}（type 默认为 'image'，'video' 禁用缩放/平移），也可以是自定义项 {type: 'custom', content, label, caption?}（渲染任意 React 内容，不支持缩放/平移）。两种类型可在同一画廊中混用。",
+        "要显示的项目。传入单个对象或数组（用于画廊模式的上一张/下一张导航；在手机或平板上，滑动也可在各项之间切换）。每项可以是媒体项 {src, alt, caption?, type?: 'image' | 'video'}（type 默认为 'image'，'video' 禁用缩放/平移），也可以是自定义项 {type: 'custom', content, label, caption?}（渲染任意 React 内容，不支持缩放、平移或下拉关闭）。两种类型可在同一画廊中混用。",
       required: true,
     },
     {
@@ -226,7 +222,8 @@ export const docsZh = {
     {
       name: 'hasZoom',
       type: 'boolean',
-      description: '启用双击缩放（仅图片）。缩放后可拖动平移。',
+      description:
+        '启用缩放（仅图片）：双指捏合（或按住 Ctrl 滚动滚轮），或双点按、双击在该处放大并还原；Enter/Space/+/- 键以中心放大 2 倍并还原，0 键恢复到适合大小。缩放后可拖动或在触控板上滚动平移，或用方向键平移；在手机或平板上，平移带惯性。',
       default: 'false',
     },
     {
@@ -242,7 +239,7 @@ export const docsZh = {
   usage: {
     anatomy,
     description:
-      'A fullscreen overlay for viewing images, videos, and arbitrary React content at full resolution. Supports single-item and gallery modes with prev/next navigation, optional zoom and pan for images, and native video controls. Items with type custom host a rich React subtree and reuse the same gallery navigation, keyboard, scroll lock, and backdrop dismissal.',
+      'A fullscreen overlay for viewing images, videos, and arbitrary React content at full resolution. Supports single-item and gallery modes with prev/next navigation and swiping, optional zoom and pan for images, and native video controls. Items with type custom host a rich React subtree and reuse the same gallery navigation, keyboard, scroll lock, and backdrop dismissal.',
     bestPractices: [
       {
         guidance: true,
@@ -284,7 +281,7 @@ export const docsDense = {
   usage: {
     anatomy,
     description:
-      'A fullscreen overlay for viewing images, videos, and arbitrary React content at full resolution. Supports single-item and gallery modes with prev/next navigation, optional zoom and pan for images, and native video controls. Items with type custom host a rich React subtree and reuse the gallery navigation, keyboard, scroll lock, and backdrop dismissal.',
+      'A fullscreen overlay for viewing images, videos, and arbitrary React content at full resolution. Supports single-item and gallery modes with prev/next navigation and swiping, optional zoom and pan for images, and native video controls. Items with type custom host a rich React subtree and reuse the same gallery navigation, keyboard, scroll lock, and backdrop dismissal.',
     bestPractices: [
       {
         guidance: true,
@@ -319,13 +316,15 @@ export const docsDense = {
   },
   propDescriptions: {
     isOpen: 'Whether the lightbox is open.',
-    onOpenChange: 'Callback when open state changes.',
+    onOpenChange:
+      'Callback when open state changes (including a photo dragged down).',
     media:
       'Single item or array for gallery mode; each item is an image/video or a custom React subtree (type custom).',
     index: 'Current index in gallery mode.',
-    onIndexChange: 'Callback when gallery index changes.',
+    onIndexChange:
+      'Callback when gallery index changes (buttons, keys or a swipe).',
     hasZoom:
-      'Enable zoom (double-click, Enter/Space, or +/-) and pan (drag or arrow keys) for images.',
+      'Enable zoom (pinch or ctrl-wheel, double-tap or double-click, Enter/Space, or +/-; 0 resets) and pan (drag, trackpad scroll, or arrow keys) for images.',
     xstyle: 'StyleX styles for layout customization.',
   },
 };

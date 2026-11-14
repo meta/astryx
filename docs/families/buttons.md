@@ -161,7 +161,9 @@ Membership follows public responsibility, not an import of Button or a rendered
 - **FR11 — A button-specific group has one accessible owner.** ButtonGroup and
   ToggleButtonGroup MUST expose an accessible group label and propagate their
   documented size and disabled defaults without removing a member's accessible
-  name. The group owns only the behavior and surface declared by its group mode.
+  name. The group owns only the behavior and surface declared by its group
+  mode, and the press tracking across members that `family:action-groups`
+  gives it.
   A ToggleButtonGroup member identified by `value` MUST derive pressed state and
   selection requests from the group, not its standalone `isPressed`,
   `onPressedChange`, or `pressedChangeAction`. Member `onPressedChange` and

@@ -8,6 +8,7 @@ import {Button, Card, Stack, Text} from '@astryxdesign/core';
 import {Theme, defineTheme, useTheme} from '@astryxdesign/core/theme';
 import {Heading} from '@astryxdesign/core/Text';
 import {useCssLengthInPixels} from './chartThemingUtils';
+import {rtlAuditParameters} from '../rtl-audit/story-parameters';
 import {dataVars} from '@astryxdesign/core/theme/dataTokens.stylex';
 import {
   colorVars,
@@ -32,6 +33,14 @@ import {
 const meta: Meta = {
   title: 'Lab/ChartTheming/Recharts',
   parameters: {
+    // The plot stays physical in RTL (design:bidirectionality DR5), so its
+    // tooltip keeps beside the bar it describes instead of mirroring.
+    ...rtlAuditParameters({
+      D5: {
+        physical: 'chart',
+        within: '[aria-label="Quarterly performance chart"]',
+      },
+    }),
     docs: {
       description: {
         component:

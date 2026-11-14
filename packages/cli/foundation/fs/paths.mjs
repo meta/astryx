@@ -13,7 +13,13 @@ import {createRequire} from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {listDir, pathExists} from './listing-cache.mjs';
+import {
+  findEntry,
+  listDir,
+  listDirEntries,
+  listingCacheActive,
+  pathExists,
+} from './listing-cache.mjs';
 import {ERROR_CODES} from '../response/error-codes.mjs';
 import {carriedCore, runChoice} from '../release/run-context.mjs';
 import {findDeclaringPackage} from '../release/project.mjs';
@@ -263,7 +269,7 @@ function isCoreSource(dir) {
  * @param {string} p
  * @returns {string}
  */
-function realDir(p) {
+export function realDir(p) {
   try {
     return fs.realpathSync(path.resolve(p));
   } catch {
@@ -276,7 +282,7 @@ function realDir(p) {
  *
  * @returns {string|null}
  */
-function homeFolder() {
+export function homeFolder() {
   try {
     const home = os.homedir();
     return home ? realDir(home) : null;
@@ -334,6 +340,31 @@ export function findPackageRoot(startDir) {
 }
 
 /**
+ * A path a command writes in a project, read the same way by every theme
+ * command: from the working folder when given, from the project root (the
+ * nearest folder with a package.json, else the working folder) when not,
+ * and with a backslash as a folder separator on every platform.
+ * @param {string} cwd
+ * @param {string | undefined} typed the path as given, or undefined
+ * @param {string} fallback the path from the project root when none is given
+ * @returns {{projectDir: string, typed: string | undefined, relative: string}}
+ *   `typed`: the path as given with `/`; `relative`: from the project root
+ */
+export function projectWritePath(cwd, typed, fallback) {
+  const projectDir = findPackageRoot(cwd) ?? path.resolve(cwd);
+  const given = typed == null ? undefined : String(typed).replace(/\\/g, '/');
+  const absolute =
+    given == null ? path.join(projectDir, fallback) : path.resolve(cwd, given);
+  return {
+    projectDir,
+    typed: given,
+    relative: path.isAbsolute(given ?? '')
+      ? /** @type {string} */ (given)
+      : path.relative(projectDir, absolute) || '.',
+  };
+}
+
+/**
  * The Astryx project `startDir` belongs to: the nearest folder at or above it
  * whose package.json declares an Astryx package (`@astryxdesign/*`, or the
  * legacy `@xds/*`), or that a workspace whose root declares one lists as a
@@ -368,8 +399,22 @@ export function findAstryxProject(startDir) {
  * @returns {string}
  */
 export function findWorkspaceRoot(startDir) {
-  /** @type {string|null} */
-  let nearestPackage = null;
+  return (
+    findDeclaredWorkspaceRoot(startDir) ??
+    findPackageRoot(startDir) ??
+    path.resolve(startDir)
+  );
+}
+
+/**
+ * The nearest directory at or above `startDir` that declares a workspace,
+ * by a `pnpm-workspace.yaml` or a package.json `workspaces` field; null
+ * outside a workspace.
+ *
+ * @param {string} startDir
+ * @returns {string|null}
+ */
+export function findDeclaredWorkspaceRoot(startDir) {
   for (const dir of foldersUpFrom(startDir)) {
     if (
       fs.existsSync(path.join(dir, 'pnpm-workspace.yaml')) ||
@@ -377,14 +422,8 @@ export function findWorkspaceRoot(startDir) {
     ) {
       return dir;
     }
-    if (
-      nearestPackage == null &&
-      fs.existsSync(path.join(dir, 'package.json'))
-    ) {
-      nearestPackage = dir;
-    }
   }
-  return nearestPackage ?? path.resolve(startDir);
+  return null;
 }
 
 /**
@@ -806,7 +845,7 @@ export function discoverExternalPackages(startDir = process.cwd()) {
   /** @param {string} searchDir */
   const scanDir = searchDir => {
     if (!fs.existsSync(searchDir)) return;
-    const entries = fs.readdirSync(searchDir, {withFileTypes: true});
+    const entries = listDirEntries(searchDir);
 
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
@@ -848,7 +887,8 @@ export function discoverExternalPackages(startDir = process.cwd()) {
 
 /**
  * List available component directories in packages/core/src.
- * Returns directory names that contain Astryx*.tsx files.
+ * Component directories are capitalized (`Button`, `Dialog`); lowercase
+ * directories hold shared infrastructure and are never listed.
  * @param {string} coreDir
  */
 export function listComponents(coreDir) {
@@ -859,12 +899,35 @@ export function listComponents(coreDir) {
   return entries
     .filter(e => {
       if (!e.isDirectory()) return false;
-      // Skip non-component dirs
-      if (['hooks', 'theme', 'utils'].includes(e.name)) return false;
-      return true;
+      return /^[A-Z]/.test(e.name);
     })
     .map(e => e.name)
     .sort();
+}
+
+/**
+ * `path.relative(root, target)`, read straight off the string when `target`
+ * is a plain path under `root`. A resolver probes tens of thousands of such
+ * paths, and `path.relative` normalizes both on every call.
+ * @param {string} root
+ * @param {string} target
+ * @returns {string}
+ */
+function relativeInside(root, target) {
+  const prefix = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
+  if (path.isAbsolute(root) && target.startsWith(prefix)) {
+    const rest = target.slice(prefix.length);
+    const plain =
+      rest !== '' &&
+      !(path.sep === '\\' && rest.includes('/')) &&
+      rest
+        .split(path.sep)
+        .every(
+          segment => segment !== '' && segment !== '.' && segment !== '..',
+        );
+    if (plain) return rest;
+  }
+  return path.relative(root, target);
 }
 
 /**
@@ -883,13 +946,28 @@ export function listComponents(coreDir) {
  * @returns {boolean}
  */
 export function existsCaseExact(targetPath, rootDir) {
-  if (!pathExists(targetPath)) return false;
-
-  const rel = path.relative(rootDir, targetPath);
-  if (rel === '') return true;
+  const rel = relativeInside(rootDir, targetPath);
+  if (rel === '') return pathExists(targetPath);
   if (path.isAbsolute(rel) || rel === '..' || rel.startsWith(`..${path.sep}`))
     return false;
 
+  if (listingCacheActive()) {
+    // Inside an operation the folders' listings answer, so a name that a
+    // listing lacks costs no probe of the disk. A symbolic link still needs
+    // its target.
+    let folder = rootDir;
+    let entry = null;
+    for (const segment of rel.split(path.sep)) {
+      entry = findEntry(folder, segment);
+      if (!entry) return false;
+      folder = folder.endsWith(path.sep)
+        ? `${folder}${segment}`
+        : `${folder}${path.sep}${segment}`;
+    }
+    return !entry?.isSymbolicLink() || pathExists(targetPath);
+  }
+
+  if (!pathExists(targetPath)) return false;
   let dir = rootDir;
   for (const segment of rel.split(path.sep)) {
     let entries;

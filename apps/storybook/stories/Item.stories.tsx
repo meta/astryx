@@ -1,6 +1,14 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {useState, type ReactNode} from 'react';
+/**
+ * @file Item.stories.tsx
+ * @input Item and composing rows, including numbered/bulleted marker anatomy
+ * @output Reusable row examples and before/after DOM-count browser fixtures
+ * @position Storybook examples and Item/List regression evidence
+ */
+
+import {useMemo, useState, type ReactNode} from 'react';
+import {Button} from '@astryxdesign/core/Button';
 import * as stylex from '@stylexjs/stylex';
 import type {Meta, StoryObj} from '@storybook/react';
 import {expect} from 'storybook/test';
@@ -11,10 +19,18 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {Text} from '@astryxdesign/core/Text';
 import {Stack} from '@astryxdesign/core/Layout';
 import {List, ListItem} from '@astryxdesign/core/List';
+import {createSwipe} from '@astryxdesign/core/Swipe';
 import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
 import {StatusDot} from '@astryxdesign/core/StatusDot';
 
 const storyStyles = stylex.create({
+  markerAnatomy: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 16,
+    width: 320,
+    maxWidth: '100%',
+  },
   iconCircle: {
     display: 'flex',
     alignItems: 'center',
@@ -50,6 +66,64 @@ const meta: Meta<typeof Item> = {
 
 export default meta;
 type Story = StoryObj<typeof Item>;
+
+/** Numbered rows alone need the two-column marker/content grouping. */
+export const MarkerAnatomy: Story = {
+  tags: ['!autodocs'],
+  render: function MarkerAnatomyStory() {
+    const [isOpen, setOpen] = useState(false);
+    const slots = {
+      startContent: <span data-anatomy-slot="start">S</span>,
+      label: (
+        <span data-anatomy-slot="label">
+          A row label that can wrap naturally
+        </span>
+      ),
+      description: 'Secondary description',
+      endContent: <span data-anatomy-slot="end">E</span>,
+      align: 'first-line' as const,
+    };
+    const marker = <span data-anatomy-slot="marker">•</span>;
+    return (
+      <div data-marker-anatomy {...stylex.props(storyStyles.markerAnatomy)}>
+        <div data-marker-case="numbered">
+          <List listStyle="decimal" start={99}>
+            <ListItem {...slots} />
+          </List>
+        </div>
+        <div data-marker-case="bulleted">
+          <List listStyle="disc">
+            <ListItem {...slots} isSelected />
+          </List>
+        </div>
+        <div data-marker-case="marked-item">
+          <Item {...slots} marker={marker} />
+        </div>
+        <div data-marker-case="unmarked-item">
+          <Item {...slots} />
+        </div>
+        <Button
+          label="Toggle marker menu"
+          onClick={() => setOpen(value => !value)}
+        />
+        {isOpen && (
+          <div
+            role="menu"
+            aria-label="Marker anatomy menu"
+            data-marker-case="menu">
+            <Item
+              {...slots}
+              marker={marker}
+              role="menuitem"
+              tabIndex={0}
+              onClick={() => {}}
+            />
+          </div>
+        )}
+      </div>
+    );
+  },
+};
 
 /** Basic item with all slots populated. */
 export const Default: Story = {
@@ -269,6 +343,37 @@ export const Disabled: Story = {
   ),
 };
 
+/**
+ * Each row state on one interactive row: rest, highlighted (the active row of
+ * a menu or a picker), selected, disabled, and selected while disabled. The
+ * row reflects each state on its `item` theme target.
+ */
+export const States: Story = {
+  render: () => (
+    <Stack gap={0}>
+      {(
+        [
+          ['Rest', {}],
+          ['Highlighted', {isHighlighted: true}],
+          ['Selected', {isSelected: true}],
+          ['Disabled', {isDisabled: true}],
+          ['Selected and disabled', {isSelected: true, isDisabled: true}],
+        ] as const
+      ).map(([label, state]) => (
+        <Item
+          key={label}
+          {...state}
+          startContent={<Icon icon={DocumentIcon} size="sm" />}
+          label={label}
+          description="Edited 2 hours ago"
+          endContent={<Badge label="Draft" />}
+          onClick={() => {}}
+        />
+      ))}
+    </Stack>
+  ),
+};
+
 /** Top-aligned layout for multi-line content. */
 export const AlignStart: Story = {
   render: () => (
@@ -467,13 +572,14 @@ export const AlignFirstLine: Story = {
 };
 
 /**
- * Swipe actions, as a mail list uses them: on a touch screen a drag toward
- * the inline start uncovers Archive and Delete (Delete outermost, so a long
- * drag or a fling fires it); a drag toward the inline end uncovers a
- * read/unread toggle. Under `reveal` (the default) the row rests open with
- * every entry a real button. Every verb is also in the row's own content, so
- * a mouse and a keyboard reach it without the gesture. `List` clips the rows
- * in the inline axis for the slide.
+ * Swipe actions, as a mail list uses them. On a touch screen a drag toward
+ * the inline start uncovers Archive and Delete, with Delete outermost. Under
+ * `reveal` (the default), a fling or a long drag rests that side open with
+ * every entry a real button. A drag that starts on the open row fires Delete.
+ * A drag toward the inline end uncovers a read/unread toggle, which a long
+ * drag fires. Every verb is also in the row's own content, so a mouse and a
+ * keyboard reach it without the gesture. `List` clips the rows in the inline
+ * axis for the slide.
  */
 export const SwipeActions: Story = {
   render: () => {
@@ -484,19 +590,55 @@ export const SwipeActions: Story = {
         label: `Message ${index + 1}`,
       })),
     );
-    const remove = (id: number) =>
-      setRows(current => current.filter(row => row.id !== id));
-    const toggleRead = (id: number) =>
-      setRows(current =>
-        current.map(row =>
-          row.id === id ? {...row, isUnread: !row.isUnread} : row,
-        ),
-      );
+    // Each swipe is defined once and serves every row: a handler reads its
+    // row from the key. Unread rows offer Read and read rows offer Unread, so
+    // there are two.
+    const [unreadSwipe, readSwipe] = useMemo(() => {
+      const toggleRead = ({itemKey}: {itemKey: string | number | undefined}) =>
+        setRows(current =>
+          current.map(row =>
+            row.id === itemKey ? {...row, isUnread: !row.isUnread} : row,
+          ),
+        );
+      const remove = ({itemKey}: {itemKey: string | number | undefined}) =>
+        setRows(current => current.filter(row => row.id !== itemKey));
+      const swipeFor = (leadingLabel: string) =>
+        createSwipe({
+          leading: [
+            {
+              id: 'read',
+              label: leadingLabel,
+              icon: <Icon icon={EnvelopeIcon} size="sm" />,
+              onActivate: toggleRead,
+            },
+          ],
+          trailing: [
+            {
+              id: 'archive',
+              label: 'Archive',
+              icon: <Icon icon={ArchiveBoxIcon} size="sm" />,
+              onActivate: remove,
+              variant: 'neutral',
+              hasRemoval: true,
+            },
+            {
+              id: 'delete',
+              label: 'Delete',
+              icon: <Icon icon={TrashIcon} size="sm" />,
+              onActivate: remove,
+              variant: 'destructive',
+              hasRemoval: true,
+            },
+          ],
+        });
+      return [swipeFor('Read'), swipeFor('Unread')];
+    }, []);
     return (
       <List>
         {rows.map(row => (
           <ListItem
             key={row.id}
+            itemKey={row.id}
             label={row.label}
             description={row.isUnread ? 'Unread' : 'Read'}
             onClick={() => {}}
@@ -505,31 +647,7 @@ export const SwipeActions: Story = {
                 {row.isUnread ? 'Mark read' : 'Mark unread'} · Archive · Delete
               </Text>
             }
-            swipeActions={{
-              leading: [
-                {
-                  label: row.isUnread ? 'Read' : 'Unread',
-                  icon: <Icon icon={EnvelopeIcon} size="sm" />,
-                  onActivate: () => toggleRead(row.id),
-                },
-              ],
-              trailing: [
-                {
-                  label: 'Archive',
-                  icon: <Icon icon={ArchiveBoxIcon} size="sm" />,
-                  onActivate: () => remove(row.id),
-                  variant: 'neutral',
-                  hasRemoval: true,
-                },
-                {
-                  label: 'Delete',
-                  icon: <Icon icon={TrashIcon} size="sm" />,
-                  onActivate: () => remove(row.id),
-                  variant: 'destructive',
-                  hasRemoval: true,
-                },
-              ],
-            }}
+            swipe={row.isUnread ? unreadSwipe : readSwipe}
           />
         ))}
         {rows.length === 0 && <ListItem label="All done." />}
@@ -539,7 +657,7 @@ export const SwipeActions: Story = {
 };
 
 /**
- * `swipeBehavior="commit"`: one verb per side; a release past the commit
+ * `swipeBehavior: 'commit'`: one verb per side; a release past the commit
  * point slides the row out and fires it, and nothing rests. The panel is
  * presentational.
  */
@@ -551,29 +669,36 @@ export const SwipeCommit: Story = {
         label: `Notification ${index + 1}`,
       })),
     );
-    const remove = (id: number) =>
-      setRows(current => current.filter(row => row.id !== id));
+    // One swipe serves every row: the handler reads its row from the key.
+    const dismissSwipe = useMemo(
+      () =>
+        createSwipe({
+          trailing: [
+            {
+              id: 'dismiss',
+              label: 'Dismiss',
+              icon: <Icon icon={TrashIcon} size="sm" />,
+              onActivate: ({itemKey}) =>
+                setRows(current => current.filter(row => row.id !== itemKey)),
+              variant: 'destructive',
+              hasRemoval: true,
+            },
+          ],
+          swipeBehavior: 'commit',
+        }),
+      [],
+    );
     return (
       <List>
         {rows.map(row => (
           <ListItem
             key={row.id}
+            itemKey={row.id}
             label={row.label}
             description="Swipe toward the start to dismiss"
             onClick={() => {}}
             endContent={<Text color="secondary">Dismiss</Text>}
-            swipeBehavior="commit"
-            swipeActions={{
-              trailing: [
-                {
-                  label: 'Dismiss',
-                  icon: <Icon icon={TrashIcon} size="sm" />,
-                  onActivate: () => remove(row.id),
-                  variant: 'destructive',
-                  hasRemoval: true,
-                },
-              ],
-            }}
+            swipe={dismissSwipe}
           />
         ))}
         {rows.length === 0 && <ListItem label="All caught up." />}

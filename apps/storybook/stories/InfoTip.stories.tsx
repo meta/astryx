@@ -1,12 +1,13 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import type {Meta, StoryObj} from '@storybook/react';
-import {InfoTip} from '@astryxdesign/lab/InfoTip';
+import {InfoTip} from '@astryxdesign/core/InfoTip';
 import {HStack} from '@astryxdesign/core/Layout';
+import {List, ListItem} from '@astryxdesign/core/List';
 import {Text} from '@astryxdesign/core/Text';
 
 const meta: Meta<typeof InfoTip> = {
-  title: 'Lab/InfoTip',
+  title: 'Core/InfoTip',
   component: InfoTip,
   tags: ['autodocs'],
   argTypes: {
@@ -42,11 +43,9 @@ export const NextToALabel: Story = {
 };
 
 /**
- * The trigger is a button, so `Tooltip`'s `auto` touch rule would give the tap
- * to the control and suppress the tooltip. `InfoTip` sets `touchTrigger="tap"`
- * because revealing the tooltip is the button's only purpose — tap the icon on
- * a phone (or with touch emulation on) and the tooltip opens; tap outside and
- * it dismisses.
+ * Revealing the help is the button's only purpose, so `InfoTip` pins it on a
+ * press: tap the icon on a phone (or with touch emulation on), click it, or
+ * press Enter or Space and the help pins open; tap outside and it dismisses.
  */
 export const Touch: Story = {
   render: () => (
@@ -71,6 +70,38 @@ export const Sizes: Story = {
         <InfoTip content="Medium" size="md" />
         <InfoTip content="Large" size="lg" />
       </HStack>
+    </div>
+  ),
+};
+
+/**
+ * Info buttons at the end of divided List rows. Under a finger each button
+ * takes taps out toward 44 px, as anywhere else. The row's divider never
+ * widens that reach.
+ */
+export const InADividedList: Story = {
+  render: () => (
+    <div style={{maxWidth: 360}}>
+      <List hasDividers>
+        <ListItem
+          label="Rolling average"
+          endContent={
+            <InfoTip
+              content="30-day rolling average, recomputed nightly."
+              label="About rolling average"
+            />
+          }
+        />
+        <ListItem
+          label="Peak"
+          endContent={
+            <InfoTip
+              content="The highest daily value this month."
+              label="About peak"
+            />
+          }
+        />
+      </List>
     </div>
   ),
 };

@@ -35,7 +35,9 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {findPresentFiles, loadModuleWithParser} from '../fs/module-loader.mjs';
+import {LOCAL_THEME_ROOT} from './theme-state.mjs';
+import {loadModuleWithParser} from '../fs/module-loader.mjs';
+import {findConfigPath} from './config-path.mjs';
 import {parseConfig} from '../../authoring/config/parse.mjs';
 import {
   loadIntegrations,
@@ -43,6 +45,7 @@ import {
   resolveInstalledIntegrationDir,
 } from '../integrations/integrations.mjs';
 import {loadAutolinkCandidates} from '../integrations/autolink.mjs';
+import {missingDeclaredDependency} from '../integrations/missing-dependency.mjs';
 import {
   computerInstallRoots,
   loadComputerIntegrations,
@@ -65,7 +68,12 @@ import {
   discoverValidIntegrationComponents,
 } from '../discovery/component-discovery.mjs';
 import {resolveComponentReplacements} from '../discovery/component-replacement.mjs';
-import {CLI_ROOT, findCoreDir, findPackageRoot, findProjectCoreDir} from '../fs/paths.mjs';
+import {
+  CLI_ROOT,
+  findCoreDir,
+  findPackageRoot,
+  findProjectCoreDir,
+} from '../fs/paths.mjs';
 import {
   applyTemplateReplacements,
   effectiveTemplateDiscovery,
@@ -94,6 +102,8 @@ import {
   selectIntegrationCodemods,
 } from '../../assets/codemods/integration-discovery.mjs';
 import {validateLoadedIntegration} from '../integrations/validate-contributions.mjs';
+import {persistedGather} from '../fs/gather-cache.mjs';
+
 import {recordDeclaredCliCommands} from '../env/cli-command.mjs';
 import {
   hostedRun,
@@ -104,6 +114,24 @@ import {
   cacheKey,
   configContentHash,
 } from './config-cache.mjs';
+
+/** Issues are plain records, kept as they are. */
+const ISSUES_CODEC = {
+  encode: (/** @type {any} */ value) => value,
+  decode: (/** @type {any} */ value) => value,
+  /** A list of issue records, each with its code, severity and message. */
+  valid: (/** @type {any} */ value) =>
+    Array.isArray(value) &&
+    value.every(
+      issue =>
+        issue != null &&
+        typeof issue.code === 'string' &&
+        typeof issue.severity === 'string' &&
+        typeof issue.message === 'string',
+    ),
+};
+
+export {CONFIG_BASENAMES, findConfigPath} from './config-path.mjs';
 
 /**
  * Extract a human-readable message from an unknown thrown value.
@@ -321,16 +349,8 @@ function readPackageJson(dir) {
  * @typedef {import('../integrations/issue').AstryxIntegrationIssue & {package: string}} ProjectIntegrationIssue
  */
 
-/** Conventional config basenames, in load-precedence order. */
-export const CONFIG_BASENAMES = [
-  'astryx.config.ts',
-  'astryx.config.mjs',
-  'astryx.config.js',
-];
-
 /** Default issue tracker used when neither config nor integration routes one. */
-export const DEFAULT_ISSUES_URL =
-  'https://github.com/facebook/astryx/issues/new';
+export const DEFAULT_ISSUES_URL = 'https://github.com/meta/astryx/issues/new';
 
 /**
  * Whether this project accepts `debug` handlers contributed by the
@@ -368,26 +388,6 @@ function inheritsIntegrationDebug(projectDir) {
 }
 
 /**
- * Find astryx.config.{ts,mjs,js} as a sibling of the nearest package.json.
- * Returns the absolute path, or null if none is present. Throws if multiple
- * config files exist at that root.
- * @param {string} [startDir]
- * @returns {string|null}
- */
-export function findConfigPath(startDir = process.cwd()) {
-  const root = findPackageRoot(startDir) ?? startDir;
-  const present = findPresentFiles(root, CONFIG_BASENAMES);
-  if (present.length > 1) {
-    throw new Error(
-      `Multiple Astryx config files found in ${root} (${present
-        .map(p => path.basename(p))
-        .join(', ')}). Keep exactly one.`,
-    );
-  }
-  return present.length === 1 ? present[0] : null;
-}
-
-/**
  * The provider ledger each loaded Project resolved, kept off the class so it
  * is not part of the Project API.
  * @type {WeakMap<Project, import('../integrations/provider-resolution.mjs').ProviderLedger>}
@@ -404,6 +404,15 @@ const PROVIDER_LEDGERS = new WeakMap();
 export function providerLedgerOf(project) {
   return PROVIDER_LEDGERS.get(project) ?? new Map();
 }
+
+/**
+ * True when an integration's templates root exists, the only place its
+ * templates come from (discoverIntegrationTemplatesForOne).
+ * @param {any} integration
+ * @returns {boolean}
+ */
+const hasTemplatesRoot = integration =>
+  integration?.templates != null && fs.existsSync(integration.templates);
 
 /**
  * The single API for reading resolved project configuration. Construct via the
@@ -432,6 +441,8 @@ export class Project {
   #core = 'any';
   /** @type {ProjectIntegrationIssue[]} */
   #issues = [];
+  /** @type {Array<{slug: string, path: string, reason: string}>} */
+  #skippedLocalThemes = [];
   /**
    * Loaded integrations whose issues have already been collected (via a
    * discovery method or a direct issues() validation), so issues() can fill in
@@ -487,7 +498,10 @@ export class Project {
    * @param {{cache?: import('./config-cache.mjs').ConfigCache, fresh?: boolean, core?: 'any' | 'project'}} [options]
    * @returns {Promise<Project>}
    */
-  static async load(cwd = process.cwd(), {cache, fresh = false, core = 'any'} = {}) {
+  static async load(
+    cwd = process.cwd(),
+    {cache, fresh = false, core = 'any'} = {},
+  ) {
     const resolvedCache = fresh
       ? new InMemoryConfigCache()
       : (cache ?? new InMemoryConfigCache());
@@ -751,10 +765,21 @@ export class Project {
     try {
       // An experimental root is checked only in a project that opts in
       // (spec:AST-017 FR27); the package's own checks read it either way.
-      const found = await validateLoadedIntegration(
-        this.#config.experimental?.iconSet
-          ? integration
-          : {...integration, iconSets: undefined},
+      const checked = this.#config.experimental?.iconSet
+        ? integration
+        : {...integration, iconSets: undefined};
+      // A function of the files the checks read, which the kept gather
+      // stamps: a later run with every one unchanged reads the issues back.
+      const found = await persistedGather(
+        [
+          'integration-issues',
+          this.#cwd,
+          integration.__packageDir ?? null,
+          integration.name ?? null,
+          Boolean(this.#config.experimental?.iconSet),
+        ],
+        () => validateLoadedIntegration(checked),
+        ISSUES_CODEC,
       );
       for (const issue of found ?? []) this.#pushIssue(pkg, issue);
     } catch (err) {
@@ -938,14 +963,39 @@ export class Project {
    * ejects share one discovery seam. A broken integration theme contribution is
    * reported without hiding the package's other valid kinds.
    *
-   * @param {{includeLocal?: boolean}} [options]
+   * With `skipBrokenLocal`, a local theme folder that fails validation is
+   * left out and recorded for `skippedLocalThemes()`, so one broken folder
+   * does not hide every other theme.
+   *
+   * @param {{includeLocal?: boolean, skipBrokenLocal?: boolean}} [options]
    * @returns {Promise<import('../discovery/theme-discovery.mjs').DiscoveredTheme[]>}
    */
-  async themes({includeLocal = true} = {}) {
-    return this.#memo(includeLocal ? 'themes' : 'themes:external', async () => {
+  async themes({includeLocal = true, skipBrokenLocal = false} = {}) {
+    const kind = !includeLocal
+      ? 'themes:external'
+      : skipBrokenLocal
+        ? 'themes:skip-broken'
+        : 'themes';
+    return this.#memo(kind, async () => {
       const themes = discoverBundledThemes();
       const projectDir = findPackageRoot(this.#cwd) ?? this.#cwd;
-      if (includeLocal) themes.push(...discoverLocalThemes(projectDir));
+      if (includeLocal) {
+        themes.push(
+          ...discoverLocalThemes(projectDir, undefined, {
+            onFolderError: skipBrokenLocal
+              ? (slug, error) =>
+                  this.#skippedLocalThemes.push({
+                    slug,
+                    path: path.posix.join(
+                      LOCAL_THEME_ROOT.replace(/^\.\//, ''),
+                      slug,
+                    ),
+                    reason: error.message,
+                  })
+              : undefined,
+          }),
+        );
+      }
 
       for (const integration of this.#loadedIntegrations) {
         await this.#collectIssues(integration);
@@ -964,6 +1014,14 @@ export class Project {
 
       return themes;
     });
+  }
+
+  /**
+   * Local theme folders `themes({skipBrokenLocal: true})` left out, with why.
+   * @returns {Array<{slug: string, path: string, reason: string}>}
+   */
+  skippedLocalThemes() {
+    return this.#skippedLocalThemes.map(entry => ({...entry}));
   }
 
   /**
@@ -1030,6 +1088,7 @@ export class Project {
         sets,
         this.#config.experimental?.iconSet,
         withdrawn,
+        this.#config.experimental?.iconVariant,
       );
       return {sets: orderIconSets(sets, choice), withdrawn, choice};
     });
@@ -1274,6 +1333,63 @@ export class Project {
   }
 
   /**
+   * The passes that find every integration issue: template and component
+   * replacement validity (over Core plus every integration), then each
+   * integration's own checks.
+   */
+  async #runIssuePasses() {
+    // Template replacement validity depends on the combined Core +
+    // integration catalog. Resolve it first so issue results never depend
+    // on which discovery method the caller happened to invoke earlier. Only
+    // an integration's own templates can replace one, so with none, Core's
+    // templates stay unread.
+    if (this.#loadedIntegrations.some(hasTemplatesRoot)) {
+      await this.templates();
+    }
+    // Component replacement validity likewise depends on Core plus every
+    // integration's components.
+    await this.componentReplacements();
+    for (const integration of this.#loadedIntegrations) {
+      await this.#collectIssues(integration);
+    }
+    // An installed dependency whose manifest could not be loaded for want of
+    // a package leaves no loaded record, so nothing above sees it: report it
+    // here, as a package named in astryx.config that fails to load is.
+    for (const failed of this.#unloadedDependencies()) {
+      this.#pushIssue(failed.spec, {
+        code: 'integration_error',
+        severity: 'error',
+        message: failed.error,
+      });
+    }
+  }
+
+  /**
+   * The installed dependencies, linked without a config entry, whose manifest
+   * could not be loaded because a package that the importing package requires
+   * (a dependency or a required peer) is missing, with the load error. That is a broken install, which the
+   * project can fix by installing again; a dependency's own packaging bug (a
+   * manifest that throws, does not validate, or imports what it does not
+   * declare) stays out of the project's issues, since the project cannot fix
+   * it.
+   * @returns {Array<{spec: string, error: string}>}
+   */
+  #unloadedDependencies() {
+    return [...(PROVIDER_LEDGERS.get(this)?.values() ?? [])].flatMap(entry =>
+      entry.outcome === 'load-failed' &&
+      entry.candidate.source === 'autolinked' &&
+      missingDeclaredDependency(entry.error ?? '') != null
+        ? [
+            {
+              spec: entry.candidate.spec ?? entry.label,
+              error: entry.error ?? 'its manifest could not be loaded',
+            },
+          ]
+        : [],
+    );
+  }
+
+  /**
    * The accumulated integration issues (deduped by package, code, message).
    * When called directly, also validates any configured integration not yet
    * visited by a discovery call, so the returned set is complete on demand.
@@ -1281,15 +1397,42 @@ export class Project {
    * @returns {Promise<ProjectIntegrationIssue[]>}
    */
   async issues() {
-    // Template replacement validity depends on the combined Core + integration
-    // catalog. Resolve it first so issue results never depend on which discovery
-    // method the caller happened to invoke earlier.
-    await this.templates();
-    // Component replacement validity likewise depends on Core plus every
-    // integration's components.
-    await this.componentReplacements();
-    for (const integration of this.#loadedIntegrations) {
-      await this.#collectIssues(integration);
+    // Each issue these passes find belongs to an integration, because Core's
+    // templates and components declare no replacement. A project with no
+    // integration skips them (one whose manifest failed to load counts).
+    if (
+      this.#loadedIntegrations.length > 0 ||
+      this.#unloadedDependencies().length > 0
+    ) {
+      // A function of the files the passes read and of the issues already
+      // found (which the key holds): the kept gather stamps the files, so a
+      // later run with every one unchanged reads the whole list back and
+      // skips the passes, discovery included.
+      const before = this.#issues.map(i => ({...i}));
+      const all = await persistedGather(
+        [
+          'project-issues',
+          this.#cwd,
+          // The Core the replacement pass reads: a carried Core for everyday
+          // commands, the project's own for doctor.
+          this.#core,
+          this.coreDir() ?? null,
+          this.#loadedIntegrations.map(
+            integration => integration.__packageDir ?? integration.name ?? null,
+          ),
+          Boolean(this.#config.experimental?.iconSet),
+          this.#unloadedDependencies(),
+          before,
+        ],
+        async () => {
+          await this.#runIssuePasses();
+          return this.#issues.map(i => ({...i}));
+        },
+        ISSUES_CODEC,
+      );
+      this.#issues = all.map((/** @type {ProjectIntegrationIssue} */ i) => ({
+        ...i,
+      }));
     }
     // Return a stable copy so callers can't mutate internal state.
     return this.#issues.map(i => ({...i}));

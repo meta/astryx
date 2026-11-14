@@ -113,8 +113,9 @@ const FOLDERS = {
   },
 };
 
-/** @type {string[]} */
-const bases = [];
+/** Run folders not yet removed: a run removes its own once it has read it. */
+/** @type {Set<string>} */
+const bases = new Set();
 
 /**
  * Every file under `root`, skipping node_modules, by path relative to `base`.
@@ -144,7 +145,7 @@ function readTree(root, base, into = new Map()) {
  */
 async function runThrough(door, argv, setUp) {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-door-'));
-  bases.push(base);
+  bases.add(base);
   const dir = path.join(base, 'app');
   const home = path.join(base, 'home');
   fs.mkdirSync(dir);
@@ -191,6 +192,12 @@ async function runThrough(door, argv, setUp) {
   });
   let stdout = '';
   let stderr = '';
+  // Decode each stream as UTF-8 across chunk boundaries. Appending raw
+  // chunks decodes each one alone, so a multi-byte character split between
+  // two chunks turns into replacement characters at a place that depends on
+  // the pipe, not on the output.
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
   child.stdout.on('data', chunk => (stdout += chunk));
   child.stderr.on('data', chunk => (stderr += chunk));
   const timer = setTimeout(() => child.kill('SIGKILL'), RUN_TIMEOUT_MS);
@@ -202,6 +209,10 @@ async function runThrough(door, argv, setUp) {
   const placeholders = text =>
     text.split(real).join('<run>').split(base).join('<run>');
   const after = read();
+  // The run's folder is read; it goes now, while the runs are spread over
+  // the setup's own budget, rather than all of them at once after the file.
+  fs.rmSync(base, {recursive: true, force: true});
+  bases.delete(base);
   /** @type {Record<string, string | null>} */
   const changes = {};
   for (const [file, text] of after) {
@@ -240,6 +251,7 @@ async function inBatches(tasks, limit) {
 
 const examples = await commandExamples();
 
+// Only a run that failed before removing its folder leaves one here.
 afterAll(() => {
   for (const base of bases) fs.rmSync(base, {recursive: true, force: true});
 });
@@ -260,7 +272,12 @@ describe.each(Object.entries(FOLDERS))('in %s', (_folder, setUp) => {
     examples.forEach(({cli}, index) => {
       runs.set(cli, {bin: results[2 * index], host: results[2 * index + 1]});
     });
-  }, 15 * 60_000);
+    // Each folder runs every example twice (bin and host entry), `limit` at a
+    // time: 4 on CI's 4-core runners. The whole file, three folders, took
+    // 377 s on a loaded CI leg. 10 minutes per folder leaves a margin over
+    // that, and a hung hook that starts early in its leg fails by this hook's
+    // name. Later in a leg, the shard watchdog names the file instead.
+  }, 10 * 60_000);
 
   it('runs every example', () => {
     expect(examples.length).toBeGreaterThan(100);

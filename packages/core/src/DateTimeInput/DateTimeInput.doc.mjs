@@ -115,8 +115,8 @@ export const docs = {
       name: 'hourFormat',
       type: "'12h' | '24h'",
       description:
-        "Hour display format. '12h' shows AM/PM; '24h' uses 24-hour notation.",
-      default: "'12h'",
+        "Hour display format. '12h' shows the locale's day period; '24h' uses 24-hour notation. When unset, follows the InternationalizationProvider locale's hour cycle (en-US 12-hour, en-GB 24-hour); a person's own preference rides on the locale tag (e.g. 'en-US-u-hc-h23').",
+      default: "the locale's hour cycle",
     },
     {
       name: 'timeIncrement',
@@ -141,8 +141,15 @@ export const docs = {
       name: 'placeholder',
       type: 'string',
       description:
-        'Placeholder text shown in the date portion when no date is selected.',
+        'Placeholder text shown in the date portion when no date is selected. A caller placeholder replaces the calendar format hint.',
       default: "'Select a date'",
+    },
+    {
+      name: 'calendar',
+      type: "'gregory' | 'iso8601' | 'buddhist' | 'roc' | 'japanese' | 'persian' | 'indian' | 'hebrew' | 'chinese' | 'dangi' | 'coptic' | 'ethiopic' | 'ethioaa' | 'islamic-civil' | 'islamic-tbla' | 'islamic-umalqura'",
+      description:
+        'The calendar the date segment reads and writes typed dates in, and the calendar its popover and bottom sheet show. value, onChange, min, and max stay Gregorian ISO datetimes. People type a date the way the locale writes it in this calendar, in any decimal digits; the field reports a date only once it is complete, and names a date the calendar does not have. Years are years of this calendar, so set min and max on Buddhist and Minguo calendar fields to catch a Gregorian year typed by mistake. Calendars other than gregory, iso8601, buddhist, roc, and japanese need Temporal, native or a polyfill the application loads; without it the field shows Gregorian dates. With a calendar other than gregory or iso8601, a presentation that would show native controls shows the popovers on a fine pointer and the bottom sheet on a coarse pointer, because the native date control is Gregorian; the Date panel of the bottom sheet shows the months, leap months, and era years of the calendar. A year in which the era changes is labeled with the era of the shown month, such as 平成31 in January 2019 and 令和元 in July.',
+      default: "the InternationalizationProvider's calendar, else 'gregory'",
     },
     {
       name: 'timePlaceholder',
@@ -167,7 +174,21 @@ export const docs = {
       name: 'status',
       type: "{type: 'warning' | 'error' | 'success', message?: string}",
       description:
-        'Status indicator object for error, warning, or success states with a message.',
+        'Status indicator object for error, warning, or success states with a message. For a date the field rejects, typed or picked in the native control, and for unreadable or unfinished text that Enter or blur keeps, the field shows its own error message instead; with onEntryErrorChange, an error status with a message shows in place of that message. A warning or success never replaces a rejection. A typed time the time segment rejects shows once it is complete, or at Enter or blur, and stays in the field; its own error message shows unless the date segment shows its message or an error status with a message shows in its place.',
+    },
+    {
+      name: 'onEntryErrorChange',
+      type: "(error: {kind: 'unreadable' | 'incomplete' | 'nonexistent' | 'outOfRange' | 'unavailable', text: string, date?: ISODateString} | null) => void",
+      description:
+        "Called each time the date segment's rejection of typed text changes, and with null when the rejection ends. kind is 'unreadable', 'incomplete' (part of a date that Enter or blur cannot finish), 'nonexistent' (a date the calendar does not have), 'outOfRange' (before the date of min or after the date of max), or 'unavailable' (a day dateConstraints rules out); text is the typed text; date is the Gregorian ISO date the text names, for 'outOfRange' and 'unavailable'. It also runs when a new min, max, dateConstraints, or value, a calendar pick, disabling the field, or Enter or blur changes the rejection, and never twice for the same rejection; it reports null when the typed field leaves while its rejection stands, as when a presentation or pointer change shows the native or touch picker. With it, an error status with a message replaces the field's own message, and a rejection that starts under an unchanged error message announces that message once. The native and touch pickers take no typed text, so it never reports a rejection there.",
+    },
+    {
+      name: 'entryErrorBehavior',
+      type: "'complete' | 'blur-or-enter'",
+      description:
+        "When both segments show their own entry errors: a typed date or time the field rejects. It sets when the error shows, not when validation runs, so it is not React Aria's validationBehavior (native versus ARIA validation), and it never changes a caller status. 'complete' shows a complete typed date the calendar does not have or that is out of range, a complete typed time outside the range, and a time the native control reports outside the range at once, and other rejected text at Enter or blur. 'blur-or-enter' holds every rejection until Enter or blur in its segment: the message, aria-invalid, the invalid styling, the announcement, and the date segment's onEntryErrorChange report then appear together. Under both values, an edit the field accepts or that empties the segment clears the error at once; under 'blur-or-enter', an edit that leaves the entry wrong keeps the shown error until the next Enter or blur. A date the native control refuses shows at Enter or blur under both values. The field's own value wins over the nearest FormLayout's defaultEntryErrorBehavior.",
+      default:
+        "the nearest FormLayout's defaultEntryErrorBehavior, else 'complete'",
     },
     {
       name: 'labelTooltip',
@@ -193,14 +214,14 @@ export const docs = {
       name: 'presentation',
       type: "'popover' | 'bottom-sheet' | 'native' | 'adaptive-bottom-sheet' | 'adaptive-native'",
       description:
-        "Which surfaces draw the date and time pickers. 'adaptive-native' (the default) uses Astryx's typed fields and popovers on a fine pointer and browser/OS controls on a coarse pointer — with per-segment Astryx fallbacks: hasSeconds, non-default timeIncrement, or timeOptionInterval retain Astryx's time field because iOS cannot express them faithfully; 'native' always uses both browser/OS controls with no fallback; 'adaptive-bottom-sheet' uses popovers on a fine pointer and Astryx's coordinated bottom sheet on a coarse pointer; 'popover' and 'bottom-sheet' force that Astryx surface on every pointer. Every value opens pickers; typed-only fields are TimeInput's alone. Use a non-native presentation when numberOfMonths, weekStartsOn, or visible dateConstraints behavior matters. Constraints are enforced on commit; min/max are forwarded as hints. hourFormat formats the closed time, while the OS picker follows the user's locale.",
+        "Which surfaces draw the date and time pickers. 'adaptive-native' (the default) uses Astryx's typed fields and popovers on a fine pointer and browser/OS controls on a coarse pointer — with per-segment Astryx fallbacks: hasSeconds, non-default timeIncrement, or timeOptionInterval retain Astryx's time field because iOS cannot express them faithfully; 'native' always uses both browser/OS controls with no fallback; 'adaptive-bottom-sheet' uses popovers on a fine pointer and Astryx's coordinated bottom sheet on a coarse pointer; 'popover' and 'bottom-sheet' force that Astryx surface on every pointer. Every value opens pickers; typed-only fields are TimeInput's alone. Use a non-native presentation when numberOfMonths, weekStartsOn, or visible dateConstraints behavior matters. Constraints are enforced on commit; min/max are forwarded as hints. hourFormat formats the closed time, while the OS picker follows the user's locale. With a calendar other than gregory or iso8601, 'native' and 'adaptive-native' use the popovers on a fine pointer and the bottom sheet on a coarse pointer, and an explicit 'native' warns in development.",
       default: "'adaptive-native'",
     },
     {
       name: 'nativePicker',
       type: "'touch' | 'always' | 'never'",
       description:
-        "Deprecated: use presentation ('touch' = 'adaptive-native', 'always' = 'native', 'never' = 'adaptive-bottom-sheet'). Still works exactly as released; presentation wins when both are set.",
+        "Deprecated: use presentation ('touch' = 'adaptive-native', 'always' = 'native', 'never' = 'adaptive-bottom-sheet'). Still works exactly as released; presentation wins when both are set. With a calendar other than gregory or iso8601, 'touch' and 'always' use the popovers on a fine pointer and the bottom sheet on a coarse pointer.",
       default: "'touch'",
     },
     {
@@ -265,12 +286,17 @@ export const docs = {
       {
         guidance: true,
         description:
+          'Set min and max on a Buddhist or Minguo calendar field, so a Gregorian year typed by mistake shows an error instead of a date centuries away.',
+      },
+      {
+        guidance: true,
+        description:
           'Use hasClear when the datetime is optional so the user can reset it.',
       },
       {
         guidance: true,
         description:
-          "Choose the hour format (12h or 24h) that matches your audience's locale.",
+          "Leave hourFormat unset so the field follows the InternationalizationProvider locale's hour cycle (12-hour in en-US, 24-hour in en-GB or de-DE). Set it only when the field itself needs a fixed format, and carry a person's own 12/24-hour preference on the provider locale (e.g. 'en-US-u-hc-h23') rather than on each field.",
       },
       {
         guidance: false,
@@ -388,12 +414,17 @@ export const docsZh = {
       {
         guidance: true,
         description:
+          'Set min and max on a Buddhist or Minguo calendar field, so a Gregorian year typed by mistake shows an error instead of a date centuries away.',
+      },
+      {
+        guidance: true,
+        description:
           'Use hasClear when the datetime is optional so the user can reset it.',
       },
       {
         guidance: true,
         description:
-          "Choose the hour format (12h or 24h) that matches your audience's locale.",
+          "Leave hourFormat unset so the field follows the InternationalizationProvider locale's hour cycle (12-hour in en-US, 24-hour in en-GB or de-DE). Set it only when the field itself needs a fixed format, and carry a person's own 12/24-hour preference on the provider locale (e.g. 'en-US-u-hc-h23') rather than on each field.",
       },
       {
         guidance: false,
@@ -445,7 +476,8 @@ export const docsZh = {
     {
       name: 'isDisabled',
       type: 'boolean',
-      description: '禁用输入框和选择器。字段仍可聚焦并暴露 `aria-disabled`，但不能输入或打开选择器。',
+      description:
+        '禁用输入框和选择器。字段仍可聚焦并暴露 `aria-disabled`，但不能输入或打开选择器。',
       default: 'false',
     },
     {
@@ -502,8 +534,9 @@ export const docsZh = {
     {
       name: 'hourFormat',
       type: "'12h' | '24h'",
-      description: "控制显示格式。'12h' 显示 AM/PM；'24h' 使用 24 小时制。",
-      default: "'12h'",
+      description:
+        "控制显示格式。'12h' 使用区域设置的上午/下午用语；'24h' 使用 24 小时制。未设置时遵循 InternationalizationProvider 区域设置的小时制（en-US 为 12 小时制，en-GB 为 24 小时制）；用户自己的偏好可通过区域标签传入（例如 'en-US-u-hc-h23'）。",
+      default: '区域设置的小时制',
     },
     {
       name: 'timeIncrement',
@@ -521,8 +554,16 @@ export const docsZh = {
     {
       name: 'placeholder',
       type: 'string',
-      description: '日期部分未选择日期时显示的占位符文本。',
+      description:
+        '日期部分未选择日期时显示的占位符文本。调用方提供的占位符会替代日历格式提示。',
       default: "'Select a date'",
+    },
+    {
+      name: 'calendar',
+      type: "'gregory' | 'iso8601' | 'buddhist' | 'roc' | 'japanese' | 'persian' | 'indian' | 'hebrew' | 'chinese' | 'dangi' | 'coptic' | 'ethiopic' | 'ethioaa' | 'islamic-civil' | 'islamic-tbla' | 'islamic-umalqura'",
+      description:
+        '日期部分读写输入日期所用的历法，也是其弹出日历和底部面板显示的历法。value、onChange、min 和 max 始终为公历 ISO 日期时间。用户按当前语言区域在该历法中的写法输入日期，可使用任意十进制数字；只有输入完整时字段才会报告日期，并会指出该历法中不存在的日期。年份是该历法的年份，因此请为佛历和民国纪年字段设置 min 和 max，以发现误输入的公历年份。gregory、iso8601、buddhist、roc 和 japanese 以外的历法需要 Temporal（原生或由应用加载的 polyfill）；没有 Temporal 时字段显示公历日期。使用 gregory 或 iso8601 以外的历法时，原本显示原生控件的呈现会在精细指针上显示弹出层、在粗指针上显示底部面板，因为原生日期控件只显示公历；底部面板的日期页显示该历法的月份、闰月和带纪元的年份。年号更替的年份按所显示月份的年号标注，如 2019 年 1 月为“平成31”，7 月为“令和元”。',
+      default: "InternationalizationProvider 的历法，否则为 'gregory'",
     },
     {
       name: 'timePlaceholder',
@@ -546,7 +587,22 @@ export const docsZh = {
     {
       name: 'status',
       type: "{type: 'warning' | 'error' | 'success', message?: string}",
-      description: '错误、警告或成功状态的状态指示对象，附带消息。',
+      description:
+        '错误、警告或成功状态的状态指示对象，附带消息。对于字段拒绝的日期（无论是输入的还是在原生控件中选择的），以及按 Enter 或失焦后保留的无法识别或未完成的文本，字段显示自身的错误消息；传入 onEntryErrorChange 时，改为显示带消息的 error 状态。warning 或 success 状态不会替代拒绝消息。时间部分拒绝的输入时间在完整后或按 Enter、失焦时显示，并保留在字段中；除非日期部分正在显示其消息，或带消息的 error 状态显示在其位置，否则显示其自身的错误消息。',
+    },
+    {
+      name: 'onEntryErrorChange',
+      type: "(error: {kind: 'unreadable' | 'incomplete' | 'nonexistent' | 'outOfRange' | 'unavailable', text: string, date?: ISODateString} | null) => void",
+      description:
+        "每当日期部分对输入文本的拒绝发生变化时调用，拒绝结束时传入 null。kind 为 'unreadable'、'incomplete'（按 Enter 或失焦也无法补全的部分日期）、'nonexistent'（该日历中不存在的日期）、'outOfRange'（早于 min 的日期或晚于 max 的日期）或 'unavailable'（被 dateConstraints 排除的日期）；text 为输入的文本；date 为文本所指的公历 ISO 日期，用于 'outOfRange' 和 'unavailable'。新的 min、max、dateConstraints 或 value、在日历中选择日期、禁用字段，或按 Enter、失焦改变拒绝时也会调用；同一拒绝不会重复调用；拒绝仍存在时若输入字段被替换（例如展示方式或指针类型改变而显示原生或触控选择器），会传入 null。传入此回调后，带消息的 error 状态会替代字段自身的错误消息；若拒绝开始时该错误消息未变，字段会再播报一次该消息。原生和触控选择器不接受输入文本，因此不会报告拒绝。",
+    },
+    {
+      name: 'entryErrorBehavior',
+      type: "'complete' | 'blur-or-enter'",
+      description:
+        "两个分段何时显示自身的输入错误：即字段拒绝的输入日期或时间。它设定错误何时显示，而不是何时校验，因此不同于 React Aria 的 validationBehavior（原生校验与 ARIA 校验之分），也不会改变调用方的 status。'complete' 立即显示完整输入但日历中不存在或超出范围的日期、完整输入但超出范围的时间，以及原生控件报告的超出范围的时间；其他被拒绝的文本在按 Enter 或失焦时显示。'blur-or-enter' 将每个拒绝保留到在该分段中按 Enter 或失焦：届时消息、aria-invalid、无效样式、播报和日期分段的 onEntryErrorChange 报告一起出现。两种取值下，字段接受的编辑或清空分段的编辑都会立即清除错误；在 'blur-or-enter' 下，输入仍然错误的编辑会保留已显示的错误，直到下一次按 Enter 或失焦。原生控件拒绝的日期在两种取值下都在按 Enter 或失焦时显示。字段自身的取值优先于最近的 FormLayout 的 defaultEntryErrorBehavior。",
+      default:
+        "最近的 FormLayout 的 defaultEntryErrorBehavior，否则为 'complete'",
     },
     {
       name: 'labelTooltip',
@@ -571,14 +627,14 @@ export const docsZh = {
       name: 'presentation',
       type: "'popover' | 'bottom-sheet' | 'native' | 'adaptive-bottom-sheet' | 'adaptive-native'",
       description:
-        "选择由哪些界面绘制日期和时间选择器。'adaptive-native'（默认）在精细指针上使用 Astryx 文本字段与弹出层、在粗指针上使用浏览器/操作系统控件，并按段回退：hasSeconds、非默认 timeIncrement 或 timeOptionInterval 会保留 Astryx 时间字段；'native' 始终使用两个原生控件且不回退；'adaptive-bottom-sheet' 在精细指针上用弹出层、在粗指针上用 Astryx 协调底部面板；'popover' 与 'bottom-sheet' 在任何指针上强制使用对应 Astryx 界面。每个值都会打开选择器；仅文本字段的呈现只属于 TimeInput。需要 numberOfMonths、weekStartsOn 或可见 dateConstraints 行为时请使用非原生呈现。约束会在提交时执行，min/max 作为提示传给原生控件。hourFormat 格式化关闭状态的时间，而操作系统选择器遵循用户区域设置。",
+        "选择由哪些界面绘制日期和时间选择器。'adaptive-native'（默认）在精细指针上使用 Astryx 文本字段与弹出层、在粗指针上使用浏览器/操作系统控件，并按段回退：hasSeconds、非默认 timeIncrement 或 timeOptionInterval 会保留 Astryx 时间字段；'native' 始终使用两个原生控件且不回退；'adaptive-bottom-sheet' 在精细指针上用弹出层、在粗指针上用 Astryx 协调底部面板；'popover' 与 'bottom-sheet' 在任何指针上强制使用对应 Astryx 界面。每个值都会打开选择器；仅文本字段的呈现只属于 TimeInput。需要 numberOfMonths、weekStartsOn 或可见 dateConstraints 行为时请使用非原生呈现。约束会在提交时执行，min/max 作为提示传给原生控件。hourFormat 格式化关闭状态的时间，而操作系统选择器遵循用户区域设置。使用 gregory 或 iso8601 以外的历法时，'native' 与 'adaptive-native' 在精细指针上使用弹出层、在粗指针上使用底部面板，显式的 'native' 会在开发环境中发出警告。",
       default: "'adaptive-native'",
     },
     {
       name: 'nativePicker',
       type: "'touch' | 'always' | 'never'",
       description:
-        "已弃用：请使用 presentation（'touch'='adaptive-native'、'always'='native'、'never'='adaptive-bottom-sheet'）。仍按已发布行为工作；同时设置时以 presentation 为准。",
+        "已弃用：请使用 presentation（'touch'='adaptive-native'、'always'='native'、'never'='adaptive-bottom-sheet'）。仍按已发布行为工作；同时设置时以 presentation 为准。使用 gregory 或 iso8601 以外的历法时，'touch' 与 'always' 在精细指针上使用弹出层、在粗指针上使用底部面板。",
       default: "'touch'",
     },
     {
@@ -643,12 +699,17 @@ export const docsDense = {
       {
         guidance: true,
         description:
+          'Set min and max on a Buddhist or Minguo calendar field, so a Gregorian year typed by mistake shows an error instead of a date centuries away.',
+      },
+      {
+        guidance: true,
+        description:
           'Use hasClear when the datetime is optional so the user can reset it.',
       },
       {
         guidance: true,
         description:
-          "Choose the hour format (12h or 24h) that matches your audience's locale.",
+          "Leave hourFormat unset so the field follows the InternationalizationProvider locale's hour cycle (12-hour in en-US, 24-hour in en-GB or de-DE). Set it only when the field itself needs a fixed format, and carry a person's own 12/24-hour preference on the provider locale (e.g. 'en-US-u-hc-h23') rather than on each field.",
       },
       {
         guidance: false,
@@ -690,28 +751,36 @@ export const docsDense = {
     dateConstraints: 'custom constraint fns to disable specific dates',
     hasSeconds:
       'include seconds; retains Astryx time field because iOS native picker has no seconds wheel',
-    hourFormat: "display format. '12h' shows AM/PM; '24h' uses 24-hour",
+    hourFormat:
+      "display format. '12h' shows the locale's day period; '24h' uses 24-hour. Unset follows the provider locale's hour cycle (a -u-hc- tag carries a user preference)",
     timeIncrement:
       'minute step for Astryx typed field; non-default retains Astryx time field in native modes because iOS native step is validation-only',
     timeOptionInterval:
       'preset-time combobox cadence; setting it retains Astryx time field because native pickers have no equivalent list',
     hasClear: 'Shows clear button when datetime is set',
     placeholder: 'date-portion placeholder when empty',
+    calendar:
+      "calendar for typed + committed date text, the popover, and the sheet's Date panel (months, leap months, era years; an era-change year follows the shown month, e.g. 平成31 in Jan 2019, 令和元 in Jul) (default: provider's, else 'gregory'); values stay Gregorian ISO; years are the calendar's, so set min/max on buddhist/roc fields; non-Gregorian-aligned calendars need Temporal (native or app-loaded polyfill), else Gregorian; non-gregory/iso8601 never shows native controls: popovers fine / sheet coarse",
     timePlaceholder:
       'time-portion placeholder when empty; shown on touch closed time segment',
     timeLabel:
       'accessible label for the time input; defaults to "{label} time"',
     size: 'input control size',
-    status: 'error/warning/success status w/ message',
+    status:
+      'error/warning/success status w/ message; a rejected date (typed or native) or kept unreadable/unfinished text shows its own error instead, unless onEntryErrorChange is set and status is an error w/ message; a rejected typed time (complete, or at Enter/blur, text kept) shows its own error unless the date message shows or status is an error w/ message',
+    onEntryErrorChange:
+      "(error|null) on each typed-rejection change: kind 'unreadable'|'incomplete'|'nonexistent'|'outOfRange' (min/max)|'unavailable' (dateConstraints), text, date (Gregorian ISO, outOfRange/unavailable); also on new min/max/dateConstraints/value, calendar pick, disable, Enter/blur; never twice for one rejection; null when the typed field leaves mid-rejection (presentation/pointer switch); with it an error status w/ message replaces the field's own message, re-announced once if unchanged when a rejection starts; never a rejection on native/touch pickers",
+    entryErrorBehavior:
+      "'complete'|'blur-or-enter': when both segments' own rejections show (not when validation runs; not React Aria validationBehavior; never changes status). complete: complete nonexistent/out-of-range date, complete out-of-range time and native out-of-range time at once, other text at Enter/blur. blur-or-enter: message, aria-invalid, styling, announcement and date onEntryErrorChange report all wait for Enter/blur in that segment. Accepted or emptied entry clears at once; still-wrong edit keeps a shown error (blur-or-enter). Native date refusals wait for Enter/blur under both. Default: nearest FormLayout defaultEntryErrorBehavior, else complete",
     labelTooltip: 'tooltip text via info icon at label end',
     numberOfMonths:
       'Astryx pointer-calendar months shown simultaneously; ignored by native date controls and the mobile touch sheet',
     weekStartsOn:
       'first day of week in Astryx calendars (0=Sunday, or name e.g. "mon"); ignored by native date controls',
     presentation:
-      "date+time surfaces: 'adaptive-native' (default) = Astryx popovers fine / browser/OS coarse w/ per-segment fallbacks (seconds/timeIncrement/timeOptionInterval); 'native' = browser/OS always, no fallback; 'adaptive-bottom-sheet' = popovers fine / coordinated sheet coarse; 'popover'/'bottom-sheet' force Astryx. every value opens pickers (no typed-only value; that is TimeInput's).",
+      "date+time surfaces: 'adaptive-native' (default) = Astryx popovers fine / browser/OS coarse w/ per-segment fallbacks (seconds/timeIncrement/timeOptionInterval); 'native' = browser/OS always, no fallback; 'adaptive-bottom-sheet' = popovers fine / coordinated sheet coarse; 'popover'/'bottom-sheet' force Astryx. every value opens pickers (no typed-only value; that is TimeInput's). non-gregory/iso8601 calendar: native + adaptive-native become popovers fine / sheet coarse; explicit 'native' warns in dev.",
     nativePicker:
-      "deprecated, use presentation: 'touch'='adaptive-native', 'always'='native', 'never'='adaptive-bottom-sheet'. still works as released; presentation wins if both set.",
+      "deprecated, use presentation: 'touch'='adaptive-native', 'always'='native', 'never'='adaptive-bottom-sheet'. still works as released, except that a calendar other than gregory or iso8601 never shows the native control; presentation wins if both set.",
     containerXstyle:
       'Field box (label+control+status); also containerClassName/containerStyle. no effect in InputGroup or horizontal-labels FormLayout',
     controlXstyle:

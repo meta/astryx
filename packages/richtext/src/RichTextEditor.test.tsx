@@ -5,7 +5,8 @@
  * @input Uses vitest, @testing-library/react, RichTextEditor + RichTextView
  * @output Unit tests for the opt-in Lexical editor components, including
  *   accessible label wiring, shared input visuals/status variants, theme-target
- *   metadata, placeholder semantics, canonical link-dialog layout, top-toolbar
+ *   metadata, placeholder semantics, the link popover in place of the browser
+ *   prompt, top-toolbar
  *   ordering and horizontal scrolling, and the read-only vs disabled split
  *   with editable-state sync across prop toggles
  * @position Testing; validates RichTextEditor.tsx and RichTextView.tsx
@@ -13,10 +14,24 @@
  * SYNC: When the editor components change, update these tests to match.
  */
 
-import {describe, it, expect, vi, beforeAll, afterAll} from 'vitest';
-import {render, screen, waitFor, fireEvent, act} from '@testing-library/react';
+import {$createLinkNode} from '@lexical/link';
+import {describe, it, expect, vi, beforeAll} from 'vitest';
+import {
+  render,
+  screen,
+  waitFor,
+  fireEvent,
+  act,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {createRef, StrictMode, useEffect, useState} from 'react';
+import {
+  createRef,
+  StrictMode,
+  useEffect,
+  useState,
+  type ReactNode,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 import type {EditorState, LexicalEditor} from 'lexical';
@@ -61,46 +76,6 @@ import {docs as richTextEditorDoc} from './RichTextEditor.doc.mjs';
 // Closed popover-backed tooltips are intentionally hidden from the default
 // accessibility tree until their trigger opens them.
 const h = {hidden: true} as const;
-
-const originalShowModal = Object.getOwnPropertyDescriptor(
-  HTMLDialogElement.prototype,
-  'showModal',
-);
-const originalDialogClose = Object.getOwnPropertyDescriptor(
-  HTMLDialogElement.prototype,
-  'close',
-);
-
-beforeAll(() => {
-  // JSDOM does not implement the native dialog lifecycle used by Dialog.
-  HTMLDialogElement.prototype.showModal = function () {
-    this.setAttribute('open', '');
-  };
-  HTMLDialogElement.prototype.close = function () {
-    this.removeAttribute('open');
-  };
-});
-
-afterAll(() => {
-  if (originalShowModal) {
-    Object.defineProperty(
-      HTMLDialogElement.prototype,
-      'showModal',
-      originalShowModal,
-    );
-  } else {
-    delete (HTMLDialogElement.prototype as {showModal?: unknown}).showModal;
-  }
-  if (originalDialogClose) {
-    Object.defineProperty(
-      HTMLDialogElement.prototype,
-      'close',
-      originalDialogClose,
-    );
-  } else {
-    delete (HTMLDialogElement.prototype as {close?: unknown}).close;
-  }
-});
 
 // jsdom's Range does not implement getBoundingClientRect, which Lexical
 // calls (via scroll-into-view) whenever it reconciles a selection while the
@@ -477,6 +452,38 @@ describe('RichTextEditor', () => {
     expect(textbox).not.toHaveAttribute('aria-readonly');
     // Disabled controls leave the tab order.
     expect(textbox).not.toHaveAttribute('tabindex', '0');
+  });
+
+  it('keeps a link in a disabled editor out of the tab order and inert', () => {
+    render(
+      <RichTextEditor
+        label="Notes"
+        isDisabled
+        defaultValue={markdownToEditorStateJSON(
+          'See [the guide](https://example.com/guide).\n',
+        )}
+      />,
+    );
+    const link = screen.getByText('the guide').closest('a');
+    expect(link).not.toBeNull();
+    // An enabled editor's links are not tab stops; a disabled one adds none
+    // (FR1), and activation never navigates (FR2).
+    expect(link).toHaveAttribute('tabindex', '-1');
+    expect(link).toHaveAttribute('aria-disabled', 'true');
+    expect(fireEvent.click(link as HTMLAnchorElement)).toBe(false);
+  });
+
+  it('gives a link back its default behavior when the editor is enabled again', () => {
+    const document = markdownToEditorStateJSON(
+      'See [the guide](https://example.com/guide).\n',
+    );
+    const {rerender} = render(
+      <RichTextEditor label="Notes" isDisabled defaultValue={document} />,
+    );
+    rerender(<RichTextEditor label="Notes" defaultValue={document} />);
+    const link = screen.getByText('the guide').closest('a');
+    expect(link).not.toHaveAttribute('tabindex');
+    expect(link).not.toHaveAttribute('aria-disabled');
   });
 
   it('keeps the dimmed treatment on a disabled editor', () => {
@@ -1328,9 +1335,19 @@ describe('markdown serializers', () => {
 });
 
 describe('RichTextEditorToolbar', () => {
-  it('treats a false conditional toolbar as absent', () => {
+  // A slot is empty for exactly the values React renders as nothing.
+  it.each([
+    ['false', false],
+    ['an empty string', ''],
+    ['true', true],
+    ['null', null],
+  ])('treats a %s conditional toolbar as absent', (_name, value) => {
     const {container, rerender} = render(
-      <RichTextEditor label="Notes" toolbar={false} tabEscapeHint="" />,
+      <RichTextEditor
+        label="Notes"
+        toolbar={value as ReactNode}
+        tabEscapeHint=""
+      />,
     );
     const conditionalBodyClass = container.querySelector(
       '.astryx-rich-text-editor',
@@ -1353,7 +1370,9 @@ describe('RichTextEditorToolbar', () => {
     const textbox = screen.getByRole('textbox');
     const editor = container.querySelector('.astryx-rich-text-editor');
     const toolbarRegion = toolbar.parentElement?.parentElement;
-    const editorBody = toolbarRegion?.nextElementSibling;
+    // The toolbar's link popover renders beside it, hidden while closed, so
+    // the body is found from the editable text it holds.
+    const editorBody = textbox.parentElement?.parentElement;
 
     expect(toolbar).toHaveClass('astryx-toolbar');
     expect(toolbar).toHaveAttribute('data-size', 'sm');
@@ -1368,6 +1387,7 @@ describe('RichTextEditorToolbar', () => {
     expect(toolbarRegion?.parentElement).toBe(editor);
     expect(toolbarRegion).toBeInstanceOf(HTMLElement);
     expect(editorBody).toBeInstanceOf(HTMLElement);
+    expect(editorBody?.parentElement).toBe(editor);
     // The compact gutter is emitted by StyleX; do not regress to a component
     // inline-style escape hatch. Browser coverage below owns the geometry.
     expect(toolbarRegion).not.toHaveAttribute('style');
@@ -1501,7 +1521,10 @@ describe('RichTextEditorToolbar', () => {
         toolbar={<RichTextEditorToolbar />}
       />,
     );
-    expect(screen.getByRole('button', {name: 'Bold'})).toBeDisabled();
+    expect(screen.getByRole('button', {name: 'Bold'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
   });
 
   it('renders a theme-registered icon override for a richtext:* key', () => {
@@ -1575,9 +1598,21 @@ describe('linkUtils', () => {
       expect(sanitizeUrl('example.com')).toBe('https://example.com/');
     });
 
+    it('defaults a scheme-less host with a port to https', () => {
+      expect(sanitizeUrl('example.com:8080')).toBe('https://example.com:8080/');
+      expect(sanitizeUrl('example.com:8080/docs?q=1')).toBe(
+        'https://example.com:8080/docs?q=1',
+      );
+      expect(sanitizeUrl('www.example.com:8080')).toBe(
+        'https://www.example.com:8080/',
+      );
+      expect(sanitizeUrl('localhost:3000')).toBe('https://localhost:3000/');
+    });
+
     it('preserves mailto and tel schemes', () => {
       expect(sanitizeUrl('mailto:a@b.com')).toBe('mailto:a@b.com');
       expect(sanitizeUrl('tel:+15551234')).toBe('tel:+15551234');
+      expect(sanitizeUrl('tel:911')).toBe('tel:911');
     });
 
     it('rejects javascript: and other unsafe schemes as about:blank', () => {
@@ -1597,6 +1632,9 @@ describe('linkUtils', () => {
       expect(validateUrl('https://example.com')).toBe(true);
       expect(validateUrl('example.com')).toBe(true);
       expect(validateUrl('mailto:a@b.com')).toBe(true);
+      expect(validateUrl('example.com:8080')).toBe(true);
+      expect(validateUrl('localhost:3000')).toBe(true);
+      expect(validateUrl('tel:911')).toBe(true);
     });
 
     it('rejects unsafe schemes and empty input', () => {
@@ -1614,7 +1652,8 @@ describe('RichTextEditorToolbar — links', () => {
     expect(screen.getByRole('button', {name: 'Link'})).toBeInTheDocument();
   });
 
-  it('opens an Astryx Dialog instead of the browser prompt by default', async () => {
+  // RichTextEditorToolbarLink.test.tsx covers the popover's behavior.
+  it('opens the link popover instead of the browser prompt by default', async () => {
     const browserPrompt = vi.spyOn(window, 'prompt').mockReturnValue(null);
     try {
       render(
@@ -1624,20 +1663,13 @@ describe('RichTextEditorToolbar — links', () => {
       fireEvent.click(screen.getByRole('button', {name: 'Link'}));
 
       expect(browserPrompt).not.toHaveBeenCalled();
-      await waitFor(() =>
-        expect(
-          screen.getByRole('dialog', {name: 'Insert link', ...h}),
-        ).toBeInTheDocument(),
-      );
-      const dialog = screen.getByRole('dialog', {
+      const popover = await screen.findByRole('dialog', {
         name: 'Insert link',
         ...h,
       });
-      expect(dialog.querySelector('.astryx-layout-header')).toBeInTheDocument();
-      expect(
-        dialog.querySelector('.astryx-layout-content'),
-      ).toBeInTheDocument();
-      expect(dialog.querySelector('.astryx-layout-footer')).toBeInTheDocument();
+      // A popover, not a modal dialog.
+      expect(popover).not.toHaveAttribute('aria-modal');
+      expect(document.querySelector('dialog')).toBeNull();
       expect(
         screen.getByRole('textbox', {name: 'URL', ...h}),
       ).toBeInTheDocument();
@@ -1737,6 +1769,178 @@ describe('RichTextEditorToolbar — links', () => {
     });
   });
 
+  describe('with a collapsed selection', () => {
+    /** The paragraph's children as `text` or `link:<href>:<text>`. */
+    function paragraphParts(editor: LexicalEditor): string[] {
+      const parts: string[] = [];
+      editor.getEditorState().read(() => {
+        const paragraph = $getRoot().getFirstChild();
+        if (!$isElementNode(paragraph)) {
+          return;
+        }
+        for (const child of paragraph.getChildren()) {
+          parts.push(
+            'getURL' in child
+              ? `link:${(child as {getURL(): string}).getURL()}:${child.getTextContent()}`
+              : child.getTextContent(),
+          );
+        }
+      });
+      return parts;
+    }
+
+    async function renderWithPrompt() {
+      let editor!: LexicalEditor;
+      render(
+        <RichTextEditor
+          label="Notes"
+          toolbar={<RichTextEditorToolbar promptForUrl={() => 'example.com'} />}
+          plugins={<CaptureEditor onReady={e => (editor = e)} />}
+        />,
+      );
+      await waitFor(() => expect(editor).toBeDefined());
+      return editor;
+    }
+
+    it('inserts the URL as a link in an empty paragraph', async () => {
+      const editor = await renderWithPrompt();
+      editor.update(() => {
+        const root = $getRoot();
+        root.clear();
+        const paragraph = $createParagraphNode();
+        root.append(paragraph);
+        paragraph.select();
+      });
+
+      fireEvent.click(screen.getByRole('button', {name: 'Link'}));
+
+      await waitFor(() =>
+        expect(paragraphParts(editor)).toEqual([
+          'link:https://example.com/:example.com',
+        ]),
+      );
+    });
+
+    it('inserts the link at a caret inside text, linking nothing else', async () => {
+      const editor = await renderWithPrompt();
+      editor.update(() => {
+        const root = $getRoot();
+        root.clear();
+        const paragraph = $createParagraphNode();
+        const textNode = $createTextNode('hello world');
+        paragraph.append(textNode);
+        root.append(paragraph);
+        textNode.select(6, 6);
+      });
+
+      fireEvent.click(screen.getByRole('button', {name: 'Link'}));
+
+      await waitFor(() =>
+        expect(paragraphParts(editor)).toEqual([
+          'hello ',
+          'link:https://example.com/:example.com',
+          'world',
+        ]),
+      );
+    });
+
+    it('inserts the link at a caret from Cmd/Ctrl+K with promptForUrl', async () => {
+      const editor = await renderWithPrompt();
+      editor.update(() => {
+        const root = $getRoot();
+        root.clear();
+        const paragraph = $createParagraphNode();
+        const textNode = $createTextNode('hello world');
+        paragraph.append(textNode);
+        root.append(paragraph);
+        textNode.select(6, 6);
+      });
+      await waitFor(() =>
+        expect(paragraphParts(editor)).toEqual(['hello world']),
+      );
+
+      const textbox = screen.getByRole('textbox');
+      fireEvent.keyDown(textbox, {key: 'k', metaKey: true});
+      fireEvent.keyDown(textbox, {key: 'k', ctrlKey: true});
+
+      await waitFor(() =>
+        expect(paragraphParts(editor)).toContain(
+          'link:https://example.com/:example.com',
+        ),
+      );
+      expect(paragraphParts(editor)[0]).toBe('hello ');
+      expect(paragraphParts(editor)).not.toContain(
+        'link:https://example.com/:hello world',
+      );
+    });
+
+    it('updates the link around a caret instead of splitting it', async () => {
+      let editor!: LexicalEditor;
+      render(
+        <RichTextEditor
+          label="Notes"
+          toolbar={<RichTextEditorToolbar />}
+          plugins={<CaptureEditor onReady={e => (editor = e)} />}
+        />,
+      );
+      await waitFor(() => expect(editor).toBeDefined());
+      editor.update(() => {
+        const root = $getRoot();
+        root.clear();
+        const paragraph = $createParagraphNode();
+        const link = $createLinkNode('https://old.example/');
+        const linkText = $createTextNode('docs');
+        link.append(linkText);
+        paragraph.append($createTextNode('see '), link);
+        root.append(paragraph);
+        linkText.select(2, 2);
+      });
+      await waitFor(() =>
+        expect(paragraphParts(editor)).toEqual([
+          'see ',
+          'link:https://old.example/:docs',
+        ]),
+      );
+
+      fireEvent.click(screen.getByRole('button', {name: 'Link'}));
+      expect(
+        await screen.findByRole('dialog', {name: 'Edit link', ...h}),
+      ).toBeInTheDocument();
+      const url = screen.getByRole('textbox', {name: 'URL', ...h});
+      fireEvent.change(url, {target: {value: 'https://new.example/'}});
+      fireEvent.click(screen.getByRole('button', {name: 'Update link', ...h}));
+
+      await waitFor(() =>
+        expect(paragraphParts(editor)).toEqual([
+          'see ',
+          'link:https://new.example/:docs',
+        ]),
+      );
+    });
+
+    it('still links the selected text when the selection is not empty', async () => {
+      const editor = await renderWithPrompt();
+      editor.update(() => {
+        const root = $getRoot();
+        root.clear();
+        const paragraph = $createParagraphNode();
+        const textNode = $createTextNode('hello world');
+        paragraph.append(textNode);
+        root.append(paragraph);
+        textNode.select(0, 5);
+      });
+
+      fireEvent.click(screen.getByRole('button', {name: 'Link'}));
+
+      await waitFor(() =>
+        expect(paragraphParts(editor)).toEqual([
+          'link:https://example.com/:hello',
+          ' world',
+        ]),
+      );
+    });
+  });
+
   it('does not create a link when promptForUrl returns an unsafe scheme', async () => {
     let editor!: LexicalEditor;
     const promptForUrl = vi.fn(() => 'javascript:alert(1)');
@@ -1801,6 +2005,25 @@ describe('RichTextEditorAutoLinkPlugin', () => {
     expect(emailMatch).not.toBeNull();
     expect(emailMatch?.url).toBe('mailto:a@b.com');
     expect(emailMatch?.attributes).toEqual(NEW_TAB_LINK_ATTRIBUTES);
+  });
+
+  it.each([
+    ['first.last+tag@sub.example.co.uk', 'first.last+tag@sub.example.co.uk'],
+    ['"john doe"@example.com', '"john doe"@example.com'],
+    ['user@[192.168.0.1]', 'user@[192.168.0.1]'],
+    ['(a@b.com)', 'a@b.com'],
+  ])('matches the email in %s', (text, email) => {
+    expect(DEFAULT_LINK_MATCHERS[1](text)?.text).toBe(email);
+  });
+
+  it.each([
+    ['a long word', 'a'.repeat(100_000)],
+    ['a run of quotes', '"'.repeat(100_000)],
+    ['dotted atoms', 'a.'.repeat(50_000)],
+  ])('scans %s without an email in linear time', (_, text) => {
+    const start = performance.now();
+    expect(DEFAULT_LINK_MATCHERS[1](text)).toBeNull();
+    expect(performance.now() - start).toBeLessThan(500);
   });
 
   it('auto-links a typed URL as an AutoLinkNode', async () => {
@@ -2189,12 +2412,17 @@ describe('toolbar follows the editable props after mount', () => {
         toolbar={<RichTextEditorToolbar />}
       />,
     );
-    expect(screen.getByRole('button', {name: 'Bold'})).toBeDisabled();
+    expect(screen.getByRole('button', {name: 'Bold'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
 
     rerender(
       <RichTextEditor label="Notes" toolbar={<RichTextEditorToolbar />} />,
     );
-    expect(screen.getByRole('button', {name: 'Bold'})).toBeEnabled();
+    expect(screen.getByRole('button', {name: 'Bold'})).not.toHaveAttribute(
+      'aria-disabled',
+    );
 
     rerender(
       <RichTextEditor
@@ -2203,7 +2431,10 @@ describe('toolbar follows the editable props after mount', () => {
         toolbar={<RichTextEditorToolbar />}
       />,
     );
-    expect(screen.getByRole('button', {name: 'Bold'})).toBeDisabled();
+    expect(screen.getByRole('button', {name: 'Bold'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
   });
 });
 
@@ -2254,5 +2485,45 @@ describe('RichTextEditor translation', () => {
     expect(screen.getByRole('textbox')).toHaveAccessibleDescription(
       'Custom hint',
     );
+  });
+});
+
+describe('RichTextEditorToolbar end content', () => {
+  it.each([
+    ['an empty string', ''],
+    ['false', false],
+    ['true', true],
+    ['null', null],
+  ])('adds no divider for %s', (_name, value) => {
+    const html = () =>
+      within(
+        screen.getByRole('toolbar', {name: 'Text formatting'}),
+      ).queryAllByRole('separator').length;
+    const {unmount} = render(
+      <RichTextEditor
+        label="Notes"
+        toolbar={<RichTextEditorToolbar endContent={value as ReactNode} />}
+      />,
+    );
+    const withEnd = html();
+    unmount();
+    render(
+      <RichTextEditor label="Notes" toolbar={<RichTextEditorToolbar />} />,
+    );
+    expect(withEnd).toBe(html());
+  });
+
+  it('renders 0 as end content, as React does', () => {
+    render(
+      <RichTextEditor
+        label="Notes"
+        toolbar={<RichTextEditorToolbar endContent={0} />}
+      />,
+    );
+    expect(
+      within(screen.getByRole('toolbar', {name: 'Text formatting'})).getByText(
+        '0',
+      ),
+    ).toBeInTheDocument();
   });
 });

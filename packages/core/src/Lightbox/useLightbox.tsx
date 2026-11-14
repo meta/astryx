@@ -33,10 +33,7 @@ type LightboxOptions = Omit<
 >;
 
 export interface UseLightboxOptions extends LightboxOptions {
-  /**
-   * Items to display in the lightbox — images/videos (`LightboxMedia`) or
-   * arbitrary React subtrees (`LightboxCustomItem`), which can be mixed.
-   */
+  /** Media to display in the lightbox. */
   media: LightboxItem | LightboxItem[];
 }
 

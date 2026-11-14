@@ -6,6 +6,7 @@
  * Global options: --detail full|compact|brief, --lang en|zh|dense
  */
 
+import {withListingCache} from '../../../foundation/fs/listing-cache.mjs';
 import {findCoreDir} from '../../../foundation/fs/paths.mjs';
 import {
   resolveImportPath,
@@ -94,9 +95,16 @@ function summarize(result) {
  * @param {string} requestedName
  * @param {'full'|'compact'|'brief'} detail
  * @param {Awaited<ReturnType<typeof resolveTheme>>} themeData
+ * @param {string} [scopePackage] - the `--package` the read was scoped to
  * @returns {import('../formatters/index.mjs').Block[]}
  */
-function componentDetailBlocks(result, requestedName, detail, themeData) {
+function componentDetailBlocks(
+  result,
+  requestedName,
+  detail,
+  themeData,
+  scopePackage,
+) {
   const requested = (requestedName.split('/').pop() ?? requestedName).replace(
     /^XDS/,
     '',
@@ -109,6 +117,12 @@ function componentDetailBlocks(result, requestedName, detail, themeData) {
     result.data.replaces === requested
       ? result.data.name
       : requested;
+  // The command that prints this read's props whole names the read's own
+  // selector and scope, so it resolves to the same component.
+  const scope = scopePackage ? ` --package ${scopePackage}` : '';
+  const propsCommand = requestedName
+    ? `component ${requestedName}${scope} --props`
+    : null;
   switch (result.type) {
     case 'component.detail': {
       /** @type {import('../formatters/index.mjs').Block[]} */
@@ -125,12 +139,15 @@ function componentDetailBlocks(result, requestedName, detail, themeData) {
             )
           : detail === 'compact'
             ? code(
-                formatCompact(result.data, resolvedName, result.data.import),
+                formatCompact(result.data, resolvedName, result.data.import, {
+                  propsCommand,
+                }),
               )
             : code(
                 formatFull(result.data, {
                   themeData,
                   importHint: result.data.import,
+                  propsCommand,
                 }),
               ),
       );
@@ -307,15 +324,18 @@ export function registerComponent(program) {
                 }
               }
             }
+            // Each row resolves its import by walking the same source tree.
             emit(
               code(
-                await formatBriefAll(coreDir, {
-                  zh,
-                  lang,
-                  themeData,
-                  replacements,
-                  categories: Object.keys(result.data.components),
-                }),
+                await withListingCache(() =>
+                  formatBriefAll(coreDir, {
+                    zh,
+                    lang,
+                    themeData,
+                    replacements,
+                    categories: Object.keys(result.data.components),
+                  }),
+                ),
               ),
             );
             break;
@@ -383,7 +403,13 @@ export function registerComponent(program) {
               ? section(firstGroup[0])
               : section(`Components (${sorted.length})`),
             records(
-              sorted.map(item => ({name: item.name, import: importCell(item)})),
+              // Each row resolves its import by walking the same source tree.
+              withListingCache(() =>
+                sorted.map(item => ({
+                  name: item.name,
+                  import: importCell(item),
+                })),
+              ),
               {fields: ['name', 'import']},
             ),
             listFooter,
@@ -415,6 +441,7 @@ export function registerComponent(program) {
                   row.selector,
                   detail,
                   themeData,
+                  options.package,
                 ),
               );
               continue;
@@ -462,6 +489,7 @@ export function registerComponent(program) {
               name ?? '',
               detail,
               themeData,
+              options.package,
             ),
           );
           break;

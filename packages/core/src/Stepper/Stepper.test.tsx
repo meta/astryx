@@ -57,6 +57,48 @@ describe('Stepper', () => {
     expect(screen.getByTestId('step-2')).not.toHaveAttribute('aria-current');
   });
 
+  it.each([
+    ['horizontal', 'separated'],
+    ['vertical', 'separated'],
+    ['horizontal', 'on-track'],
+    ['vertical', 'on-track'],
+  ] as const)(
+    'keeps aria-current on the in-progress step over a caller’s (%s, %s)',
+    (orientation, indicatorPosition) => {
+      render(
+        <Stepper
+          activeStep={1}
+          orientation={orientation}
+          indicatorPosition={indicatorPosition}>
+          <Step
+            step={0}
+            label="Step 1"
+            data-testid="step-0"
+            aria-current="page"
+          />
+          <Step
+            step={1}
+            label="Step 2"
+            data-testid="step-1"
+            aria-current="false"
+          />
+          <Step
+            step={2}
+            label="Step 3"
+            data-testid="step-2"
+            aria-current="true"
+          />
+        </Stepper>,
+      );
+      expect(screen.getByTestId('step-0')).not.toHaveAttribute('aria-current');
+      expect(screen.getByTestId('step-1')).toHaveAttribute(
+        'aria-current',
+        'step',
+      );
+      expect(screen.getByTestId('step-2')).not.toHaveAttribute('aria-current');
+    },
+  );
+
   it('renders descriptions when provided', () => {
     render(
       <Stepper activeStep={0}>
@@ -185,17 +227,75 @@ describe('Stepper', () => {
     expect(handleClick).toHaveBeenCalledWith(2);
   });
 
-  it('does not render buttons for disabled steps', () => {
+  it('keeps a disabled step focusable and aria-disabled, and never activates it (spec:AST-085 FR1, FR2, FR5)', async () => {
+    const user = userEvent.setup();
+    const handleClick = vi.fn();
     render(
-      <Stepper activeStep={2} onStepClick={() => {}}>
+      <Stepper activeStep={2} onStepClick={handleClick}>
         <Step step={0} label="Step 1" isDisabled />
         <Step step={1} label="Step 2" />
         <Step step={2} label="Step 3" />
       </Stepper>,
     );
-    expect(
-      screen.queryByRole('button', {name: /Go to step 1: Step 1/}),
-    ).not.toBeInTheDocument();
+    const disabled = screen.getByRole('button', {name: /Go to step 1: Step 1/});
+    expect(disabled).toHaveAttribute('aria-disabled', 'true');
+    expect(disabled).not.toHaveAttribute('disabled');
+    await user.click(disabled);
+    disabled.focus();
+    await user.keyboard('{Enter}');
+    await user.keyboard(' ');
+    expect(handleClick).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['separated', {}],
+    ['on-track horizontal', {indicatorPosition: 'on-track'}],
+    [
+      'on-track vertical',
+      {indicatorPosition: 'on-track', orientation: 'vertical'},
+    ],
+  ] as const)(
+    "describes a disabled step with its reason, the step's description, %s (spec:AST-085 FR5)",
+    (_layout, layout) => {
+      render(
+        <Stepper activeStep={1} onStepClick={() => {}} {...layout}>
+          <Step step={0} label="Setup" />
+          <Step
+            step={1}
+            label="Permissions"
+            description="Requires admin role"
+            isDisabled
+          />
+        </Stepper>,
+      );
+      const step = screen.getByRole('button', {
+        name: /Go to step 2: Permissions/,
+      });
+      expect(step).toHaveAccessibleDescription('Requires admin role');
+      expect(
+        screen.getByRole('button', {name: /Go to step 1: Setup/}),
+      ).not.toHaveAttribute('aria-describedby');
+    },
+  );
+
+  it('keeps focus on a step that becomes disabled while focused (spec:AST-085 FR4)', () => {
+    const {rerender} = render(
+      <Stepper activeStep={2} onStepClick={() => {}}>
+        <Step step={0} label="Step 1" />
+        <Step step={1} label="Step 2" />
+      </Stepper>,
+    );
+    const step = screen.getByRole('button', {name: /Go to step 1: Step 1/});
+    step.focus();
+    rerender(
+      <Stepper activeStep={2} onStepClick={() => {}}>
+        <Step step={0} label="Step 1" isDisabled />
+        <Step step={1} label="Step 2" />
+      </Stepper>,
+    );
+    const after = screen.getByRole('button', {name: /Go to step 1: Step 1/});
+    expect(after).toHaveFocus();
+    expect(after).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('does not render buttons when onStepClick is not provided', () => {
@@ -610,7 +710,7 @@ describe('Stepper', () => {
       expect(handleClick).toHaveBeenCalledWith(0);
     });
 
-    it('tabs through steps in document order, skipping disabled ones', async () => {
+    it('tabs through steps in document order, disabled ones included', async () => {
       const user = userEvent.setup();
       render(
         <Stepper activeStep={3} onStepClick={() => {}}>
@@ -623,7 +723,11 @@ describe('Stepper', () => {
       expect(
         screen.getByRole('button', {name: 'Go to step 1: One, completed'}),
       ).toHaveFocus();
-      // The disabled step renders no button, so Tab lands on step 3 next.
+      // The disabled step keeps its tab stop (spec:AST-085 FR1).
+      await user.tab();
+      expect(
+        screen.getByRole('button', {name: 'Go to step 2: Two, completed'}),
+      ).toHaveFocus();
       await user.tab();
       expect(
         screen.getByRole('button', {name: 'Go to step 3: Three, completed'}),
@@ -1457,6 +1561,46 @@ describe('Stepper', () => {
       },
     );
 
+    it('measures the list only while it is mounted and horizontal', () => {
+      const observed = new Set<Element>();
+      class ResizeObserverStub {
+        observe(element: Element) {
+          observed.add(element);
+        }
+        unobserve(element: Element) {
+          observed.delete(element);
+        }
+        disconnect() {
+          observed.clear();
+        }
+      }
+      vi.stubGlobal('ResizeObserver', ResizeObserverStub);
+      const stepper = (orientation: 'horizontal' | 'vertical') => (
+        <Stepper activeStep={0} orientation={orientation}>
+          <Step step={0} label="Account" />
+          <Step step={1} label="Review" />
+        </Stepper>
+      );
+      try {
+        const view = render(stepper('horizontal'));
+        const horizontalList = screen.getByRole('list');
+        expect(observed.has(horizontalList)).toBe(true);
+
+        view.rerender(stepper('vertical'));
+        expect(observed.has(horizontalList)).toBe(false);
+        expect(observed.has(screen.getByRole('list'))).toBe(false);
+
+        view.rerender(stepper('horizontal'));
+        const list = screen.getByRole('list');
+        expect(observed.has(list)).toBe(true);
+
+        view.unmount();
+        expect(observed.has(list)).toBe(false);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
     it('stops the controls at both ends of the sequence', () => {
       const onStepClick = vi.fn();
       // Disabled the Astryx way: aria-disabled, so the control keeps its place
@@ -1965,10 +2109,10 @@ describe('step-label and step-description theme targets', () => {
     expect(descriptions[2].dataset.status).toBe('error');
   });
 
-  it('reflects disabled on the label target and emits its theme selector', () => {
-    // The label owns disabled paint (`styles.labelDisabled`); the description
-    // does not. The selector follows that ownership instead of being copied to
-    // every text target for vocabulary symmetry.
+  it('reflects disabled on the indicator and label targets, not the step or description, and emits theme selectors', () => {
+    // The indicator and label own disabled paint (`styles.numberDisabled` /
+    // `styles.labelDisabled`), so each carries the selector. The step and the
+    // description paint nothing of their own when disabled.
     const {container} = render(
       <Stepper activeStep={0}>
         <Step
@@ -1979,24 +2123,30 @@ describe('step-label and step-description theme targets', () => {
         />
       </Stepper>,
     );
+    const step = container.querySelector('.astryx-step');
+    const indicator = container.querySelector('.astryx-step-indicator');
     const label = container.querySelector('.astryx-step-label');
     const description = container.querySelector('.astryx-step-description');
+    expect(step).not.toHaveAttribute('data-disabled');
+    expect(indicator).toHaveAttribute('data-disabled', 'disabled');
     expect(label).toHaveAttribute('data-disabled', 'disabled');
-    expect(label).toHaveAttribute('data-disabled', 'disabled');
-    expect(description).not.toHaveAttribute('data-disabled');
     expect(description).not.toHaveAttribute('data-disabled');
 
     // A DOM attribute alone would not prove the public defineTheme path accepts
     // and emits the state. Hold both halves of the contract.
     const theme = defineTheme({
-      name: 'step-label-disabled-state-test',
+      name: 'step-disabled-state-test',
       components: {
+        'step-indicator': {
+          'disabled:disabled': {filter: 'grayscale(1)'},
+        },
         'step-label': {
           'disabled:disabled': {opacity: '0.4'},
         },
       },
     });
     const {component: css} = generateThemeCSS(theme);
+    expect(css).toContain('.astryx-step-indicator[data-disabled="disabled"]');
     expect(css).toContain('.astryx-step-label[data-disabled="disabled"]');
     expect(css).toContain('opacity: 0.4');
   });

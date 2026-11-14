@@ -17,8 +17,16 @@ export const doc = {
   description:
     "Ejects a component's source into the consumer project for deep customization. " +
     'It copies from the locally resolved @astryxdesign/core (or the owning integration) ' +
-    'package source, rewriting imports that escape the component directory to the owner ' +
-    "package's subpaths and flagging whether any copied file uses StyleX. With no name " +
+    'package source. Every import in the copy names a file the copy holds or a path ' +
+    'the owner package exports: names the package exports are imported from its ' +
+    'public paths, and every internal module the component needs is ' +
+    "copied beside it in the package's folder layout. Tests, stories and docs are not " +
+    'copied. An output folder swizzle owns (one the copy creates, an empty one, or one it ' +
+    'marked before) gets an astryx-swizzle.json marker naming each package its copies came from, ' +
+    "with its version, so @astryxdesign/build's Babel, PostCSS and Vite integrations, and " +
+    'withAstryx() under webpack, compile the copy below the theme. The receipt flags whether ' +
+    'any copied file uses StyleX and lists each npm package the copy imports with the range ' +
+    'the owner package declares. With no name ' +
     '(or list) it returns the swizzlable component names instead. An integration ' +
     'component that replaces a Core component is what that Core name copies; ' +
     "options.package '@astryxdesign/core' copies the original. The list names Core " +
@@ -63,7 +71,8 @@ export const doc = {
     {
       name: 'options.overwrite',
       type: 'boolean',
-      description: 'Overwrite existing files instead of erroring.',
+      description:
+        "Replace the component's existing files instead of erroring. A helper an earlier swizzle wrote is never replaced by a copy that carries it: a different one stays, and the new copy writes its own under a version-suffixed name. Swizzling the component whose folder holds that helper counts it as one of that component's own files. A changed private attribute owner module, or a style module it imports, throws ERR_FILE_EXISTS without overwrite and is replaced with it.",
       default: 'false',
     },
   ],
@@ -76,7 +85,7 @@ export const doc = {
     {
       type: 'swizzle.copy',
       description:
-        'A receipt after copying the component into the project: the component name, owning package, output directory, files-copied count, the written file names, whether any file uses StyleX, and, when the owner has an issues URL, feedback ({issuesUrl, ghCommand?}): where to report the gap that led to swizzling.',
+        'A receipt after copying the component into the project: the component name, owning package, output directory, files-copied count, the copied file names (relative to the component folder; the internal modules copied beside it start with `../`, e.g. `../InputGroup/groupStyles.ts`), whether any file uses StyleX, the npm packages the copy imports with the ranges the owner declares (dependencies), the output folder\'s astryx-swizzle.json (marker: {path, written, found?}; written is false for a folder swizzle does not own, and found names up to five entries it already holds), and, when the owner has an issues URL, feedback ({issuesUrl, ghCommand?}): where to report the gap that led to swizzling.',
     },
   ],
   throws: [

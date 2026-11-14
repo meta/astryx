@@ -2,7 +2,7 @@
 
 /**
  * @file Codemod: Rename Avatar named sizes to Icon's abbreviated scale
- * @see https://github.com/facebook/astryx/issues/2672
+ * @see https://github.com/meta/astryx/issues/2672
  *
  * This transform is deliberately limited to static literals written directly
  * in the `size` prop of an imported Avatar or AvatarGroup JSX element. It does
@@ -14,11 +14,15 @@
 import {transformProp} from '../../transform-prop.mjs';
 
 export const meta = {
-  title: 'Rename Avatar named sizes tiny/xsmall/small/medium/large → xsm/sm/md/lg/xl',
+  title:
+    'Rename Avatar named sizes tiny/xsmall/small/medium/large → xsm/sm/md/lg/xl',
   description:
     'Renames static sizes written directly on imported Avatar and AvatarGroup ' +
     'JSX elements. Indirect values are left unchanged for manual migration.',
   pr: '#2672',
+  // A file changes only through a JSX `size` prop
+  // (assets/codemods/run-codemod.mjs).
+  mentions: ['size'],
 };
 
 const IMPORT_SOURCES = new Set([

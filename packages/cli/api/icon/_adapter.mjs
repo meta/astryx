@@ -4,10 +4,10 @@
  * @file The `icon` subject's adapter: its only access to the environment.
  * Loads the project and reads its icon sets through the `Project` seam.
  *
- * @position api/icon — adapter for api/icon/{search,detail,list,use,map,add,
- *   new-set,new-definition}; it also carries the icon ranking, the icon-set
- *   writer, the set and definition authoring writes, and the config writer
- *   the leaves use
+ * @position api/icon — adapter for api/icon/{search,detail,list,definitions,
+ *   use,map,add,new-set,new-definition}; it also carries the icon ranking, the icon-set
+ *   writer, the set and definition authoring writes, the default-look
+ *   rule, and the config writer the leaves use
  */
 
 import * as fs from 'node:fs';
@@ -22,21 +22,38 @@ import {
 import {PathSafetyError} from '../../foundation/fs/path-safety.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {projectIconSetCliWarning} from '../../foundation/integrations/cli-requirement.mjs';
+import {findLocalIconSet} from '../../foundation/discovery/icon-set-writer.mjs';
+import {
+  templateIconMeanings,
+  unmappedTemplateMeanings,
+} from '../../foundation/discovery/template-icon-meanings.mjs';
 
 export {
   iconRecord,
   importLine,
   leadingReading,
   matchIcon,
+  answeringMatches,
   rankIcons,
   scoreIcon,
 } from '../../foundation/discovery/icon-ranking.mjs';
 export {astryxIconDefinitions} from '../../foundation/discovery/icon-definition-discovery.mjs';
 export {iconSetKey} from '../../foundation/discovery/icon-set-discovery.mjs';
-export {setConfigString} from '../../foundation/config/config-writer.mjs';
+export {
+  setConfigString,
+  setConfigValues,
+} from '../../foundation/config/config-writer.mjs';
+export {lookThemeMap} from '../../foundation/discovery/icon-set-theme-maps.mjs';
+export {
+  ICON_USE_ORDER_COMMAND,
+  iconSetLook,
+  iconUseCommand,
+  unlistedIconSets,
+} from '../../foundation/discovery/icon-set-discovery.mjs';
 export {
   assertIconExport,
   checkNewDefinition,
+  definitionNameFromInput,
   definitionFile,
   findLocalIconSet,
   writeDefinitionFile,
@@ -53,6 +70,9 @@ export {
   iconExportName,
   iconNaming,
   modulePrefix,
+  moduleNaming,
+  iconNamingWithoutLook,
+  splitLook,
   setModuleNote,
   variantExportName,
   writeGeneratedIcons,
@@ -64,7 +84,9 @@ export {
   THEME_MAP_NAME,
 } from '../../foundation/discovery/icon-set-writer.mjs';
 export {exportValueKind} from '../../foundation/discovery/module-exports.mjs';
+export {templateIconMeanings} from '../../foundation/discovery/template-icon-meanings.mjs';
 export {addIconDefinition, addIconSet} from './_authoring.mjs';
+export {checkVariantLook, drawnLooks} from './_default-look.mjs';
 
 /**
  * Refuse a command that writes to a project or package when `cwd` is outside
@@ -148,7 +170,12 @@ export async function loadIconSets(cwd) {
 export async function loadIconProject(cwd) {
   const project = await Project.load(cwd);
   const {sets, withdrawn} = await project.iconSets({experimental: true});
-  return {projectDir: findProjectDir(cwd), sets, withdrawn};
+  return {
+    projectDir: findProjectDir(cwd),
+    sets,
+    withdrawn,
+    variant: project.config.experimental?.iconVariant ?? null,
+  };
 }
 
 /**
@@ -171,9 +198,11 @@ function findProjectDir(cwd) {
  * `experimental.iconSet`, read from the project's package.json; null when
  * nothing says so.
  * @param {string} projectDir
+ * @param {{list?: boolean, variant?: boolean}} [options] `list`: the value
+ *   written is a list; `variant`: `experimental.iconVariant` is written too
  * @returns {string | null}
  */
-export function iconSetConfigCliWarning(projectDir) {
+export function iconSetConfigCliWarning(projectDir, options = {}) {
   let pkg;
   try {
     pkg = JSON.parse(
@@ -182,5 +211,28 @@ export function iconSetConfigCliWarning(projectDir) {
   } catch {
     return null;
   }
-  return projectIconSetCliWarning(pkg);
+  return projectIconSetCliWarning(pkg, options);
+}
+
+/**
+ * The icon definitions the bundled templates use that a set of the local
+ * icon-set package leaves unmapped, read from the set's files as they are
+ * now; null when the package has no such set.
+ * @param {string} cwd
+ * @param {string | undefined} selector the set's name
+ * @returns {Promise<import('./icon.type.mjs').IconTemplateMeanings | null>}
+ */
+export async function templateMeaningsOf(cwd, selector) {
+  let set;
+  try {
+    ({set} = await findLocalIconSet(cwd, selector));
+  } catch {
+    return null;
+  }
+  return {
+    unmapped: unmappedTemplateMeanings(
+      await templateIconMeanings(),
+      set.data.map,
+    ),
+  };
 }

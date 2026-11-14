@@ -30,7 +30,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {parse} from '@babel/parser';
+import {babelParse as parse} from '../runtime/lazy-dependencies.mjs';
 import {findProjectCoreDir} from '../fs/paths.mjs';
 import {normalizeProviderId} from '../identity/provider-identity.mjs';
 import {
@@ -667,7 +667,7 @@ function readOwnExportNames(file, cache, stack) {
  * @param {SubpathDeclaration} declaration
  * @returns {{files: string[], allPresent: boolean}}
  */
-function declaredTargets(packageDir, declaration) {
+export function declaredTargets(packageDir, declaration) {
   if (declaration.state !== 'declared') return {files: [], allPresent: false};
   const root = path.resolve(packageDir);
   const all = allTargets(declaration.value)
@@ -693,7 +693,7 @@ function declaredTargets(packageDir, declaration) {
  *   so a list without the module's types can still judge it
  * @returns {string[] | null} null when it cannot be judged
  */
-function missingNames(
+export function missingNames(
   statement,
   files,
   cache,

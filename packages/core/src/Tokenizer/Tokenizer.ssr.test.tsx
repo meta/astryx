@@ -3,16 +3,27 @@
  * @file Tokenizer.ssr.test.tsx
  * @input Uses vitest, react-dom/server, react-dom/client, Tokenizer
  * @output Proof of component:Tokenizer FR16's server and hydration path for
- *   `adaptive`: the server renders the inline combobox, the client hydrates
+ *   the default `adaptive`: the server renders the inline combobox, the
+ *   client hydrates
  *   it without a recoverable error, a coarse-pointer client swaps to the
  *   trigger in the first post-hydration render, and focus is undisturbed
- * @position Core Tokenizer tests
+ * @position Core Tokenizer tests. Each case hydrates a fresh module graph and
+ *   finishes the on-demand sheet load its hydration starts, so none of its
+ *   work lands in the next case
  */
 import {act} from 'react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {hydrateRoot} from 'react-dom/client';
 import {renderToString} from 'react-dom/server';
 import type {SearchableItem, SearchSource} from '../Typeahead/types';
+import type {TokenizerPresentation} from './Tokenizer';
+// The Tokenizer entry each case imports and its on-demand sheet, loaded
+// while this file is collected, which is untimed: a first load transforms
+// their whole module graph, which takes seconds, and many times that on a
+// busy machine. Each fresh module graph below runs these modules again
+// without that cost.
+import './Tokenizer';
+import './TokenizerBottomSheet';
 
 const ITEMS: SearchableItem[] = [
   {id: 'design', label: 'Design'},
@@ -24,7 +35,15 @@ const source: SearchSource<SearchableItem> = {
   bootstrap: () => ITEMS,
 };
 
-afterEach(() => {
+/** A case's hydration, while it runs. */
+let hydrating: Promise<unknown> | null = null;
+
+afterEach(async () => {
+  // A case that ended before its hydration did (a timeout) leaves it running:
+  // it finishes here, before the next case starts.
+  if (hydrating != null) {
+    await hydrating;
+  }
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   document.body.replaceChildren();
@@ -46,19 +65,36 @@ function stubCoarsePointer(matches: boolean) {
   );
 }
 
+interface HydrationOptions {
+  presentation?: TokenizerPresentation;
+  hasAutoFocus?: boolean;
+  onFocus?: () => void;
+  onBlur?: () => void;
+}
+
 async function serverRenderThenHydrate(
   isCoarsePointer: boolean,
-  options: {
-    hasAutoFocus?: boolean;
-    onFocus?: () => void;
-    onBlur?: () => void;
-  } = {},
+  options: HydrationOptions = {},
+) {
+  const run = hydrateFreshTokenizer(isCoarsePointer, options);
+  hydrating = run;
+  try {
+    return await run;
+  } finally {
+    if (hydrating === run) {
+      hydrating = null;
+    }
+  }
+}
+
+async function hydrateFreshTokenizer(
+  isCoarsePointer: boolean,
+  options: HydrationOptions,
 ) {
   vi.resetModules();
-  const {TokenizerWithPresentation} =
-    await import('../internal/tokenizer-presentation');
+  const {Tokenizer} = await import('./Tokenizer');
   const tree = (
-    <TokenizerWithPresentation
+    <Tokenizer
       label="Tags"
       searchSource={source}
       value={[ITEMS[0]]}
@@ -66,7 +102,7 @@ async function serverRenderThenHydrate(
       hasAutoFocus={options.hasAutoFocus}
       onFocus={options.onFocus}
       onBlur={options.onBlur}
-      experimental={{presentation: 'adaptive'}}
+      presentation={options.presentation}
     />
   );
   // The server has no matchMedia: the resolver answers `popover`.
@@ -81,7 +117,9 @@ async function serverRenderThenHydrate(
   }
 
   stubCoarsePointer(isCoarsePointer);
-  vi.spyOn(console, 'error').mockImplementation(() => {});
+  // Watched, not muted: React reports some mismatches (an attribute whose
+  // server value differs from the client's, for one) only on the console.
+  const logged = vi.spyOn(console, 'error');
   const recoverableErrors: unknown[] = [];
   let root!: ReturnType<typeof hydrateRoot>;
   await act(async () => {
@@ -96,14 +134,25 @@ async function serverRenderThenHydrate(
     trigger: container.querySelector('button[aria-haspopup="dialog"]'),
     activeElement: document.activeElement,
   };
+  // Right after hydration a coarse-pointer client presents the sheet: its
+  // host renders and the preload starts loading the sheet on demand. Finish
+  // that load before the case ends, or it resolves during the next case's
+  // hydration.
+  if (isCoarsePointer) {
+    await act(async () => {
+      await import('./TokenizerBottomSheet');
+    });
+  }
   await act(async () => {
     root.unmount();
   });
   container.remove();
-  return result;
+  const consoleErrors = [...logged.mock.calls];
+  logged.mockRestore();
+  return {...result, consoleErrors};
 }
 
-describe('Tokenizer — SSR with experimental.presentation: adaptive (FR16)', () => {
+describe('Tokenizer — SSR with the default presentation, adaptive (FR16)', () => {
   it('server-renders the inline combobox, hydrates it without a recoverable error, and swaps to the trigger on a coarse-pointer client with focus undisturbed', async () => {
     const result = await serverRenderThenHydrate(true);
     // The server markup is the inline field: a combobox input, no trigger.
@@ -112,6 +161,7 @@ describe('Tokenizer — SSR with experimental.presentation: adaptive (FR16)', ()
     // Hydration matches that markup, then the first client render after it
     // resolves `bottom-sheet` and renders the trigger in the field's place.
     expect(result.recoverableErrors).toEqual([]);
+    expect(result.consoleErrors).toEqual([]);
     expect(result.trigger).not.toBeNull();
     expect(result.combobox).toBeNull();
     // Nothing was focused before interaction, and the swap moves no focus.
@@ -128,6 +178,7 @@ describe('Tokenizer — SSR with experimental.presentation: adaptive (FR16)', ()
     });
     expect(result.html).toContain('autofocus=""');
     expect(result.recoverableErrors).toEqual([]);
+    expect(result.consoleErrors).toEqual([]);
     expect(result.trigger).not.toBeNull();
     expect(result.combobox).toBeNull();
     // The same element and visit: the trigger holds the focus the input had.
@@ -139,8 +190,21 @@ describe('Tokenizer — SSR with experimental.presentation: adaptive (FR16)', ()
   it('keeps the inline combobox after hydration on a fine-pointer client', async () => {
     const result = await serverRenderThenHydrate(false);
     expect(result.recoverableErrors).toEqual([]);
+    expect(result.consoleErrors).toEqual([]);
     expect(result.combobox).not.toBeNull();
     expect(result.trigger).toBeNull();
     expect(result.activeElement).toBe(document.body);
+  }, 30000);
+
+  it('server-renders the same markup as presentation="popover", which stays inline on a coarse-pointer client', async () => {
+    const byDefault = await serverRenderThenHydrate(false);
+    const popover = await serverRenderThenHydrate(true, {
+      presentation: 'popover',
+    });
+    expect(popover.html).toBe(byDefault.html);
+    expect(popover.recoverableErrors).toEqual([]);
+    expect(popover.consoleErrors).toEqual([]);
+    expect(popover.combobox).not.toBeNull();
+    expect(popover.trigger).toBeNull();
   }, 30000);
 });

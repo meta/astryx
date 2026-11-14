@@ -344,7 +344,7 @@ describe('classifyVisualDiff', () => {
       const result = classifyVisualDiff(
         [
           change.diff,
-          makeDiff('packages/core/src/Button/Button.spec.md', [
+          makeDiff('docs/specs/components/Button/Button.spec.md', [
             '| DD1 | Keep the label quiet. | Preserve emphasis. | Label | Theme tokens may vary. |',
           ]),
           makeDiff('evidence/button-after.png', ['binary evidence']),

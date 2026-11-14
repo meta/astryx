@@ -25,6 +25,10 @@ import {Carousel} from '@astryxdesign/core/Carousel';
 import {packages} from '../../../generated/packageRegistry';
 import {themeObjects} from '../../../generated/themeRegistry';
 import {ThemePackagePage} from '../../../components/ThemePackagePage';
+import {
+  getThemeExplorerPackages,
+  getThemeShowcaseSource,
+} from '../../../components/themeExplorerData';
 import {ThemeHeading} from '../../../components/ThemeHeading';
 import {
   ThemeExplorerActions,
@@ -121,7 +125,14 @@ async function SeededThemeExplorer({
     notFound();
   }
 
-  return <ThemePackagePage packageName={seedPkg.name} theme={seedTheme} />;
+  return (
+    <ThemePackagePage
+      packageName={seedPkg.name}
+      theme={seedTheme}
+      themePackages={getThemeExplorerPackages()}
+      showcaseSource={getThemeShowcaseSource()}
+    />
+  );
 }
 
 /**

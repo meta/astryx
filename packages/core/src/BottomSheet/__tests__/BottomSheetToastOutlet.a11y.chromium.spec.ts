@@ -1,5 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 // @pr-a11y release-only
+// @visits BottomSheet
 
 /**
  * @file BottomSheetToastOutlet.a11y.chromium.spec.ts
@@ -13,7 +14,7 @@
  *   lives.
  */
 
-import {expect, test} from '@playwright/test';
+import {expect, test} from '@astryxdesign/a11y-spec/playwright';
 import {holdMotionStill} from '@astryxdesign/a11y-spec/chromium';
 import {
   DEFAULT_STORYBOOK_DIR,

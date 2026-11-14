@@ -7,14 +7,14 @@
  * this file into the resolved version folder.
  */
 
-import migrateCodeBlockTokenizerToLanguage, {
-  meta as migrateCodeBlockTokenizerToLanguageMeta,
-} from './migrate-codeblock-tokenizer-to-language.mjs';
+import migrateItemSwipeActionsToSwipe, {
+  meta as migrateItemSwipeActionsToSwipeMeta,
+} from './migrate-item-swipe-actions-to-swipe.mjs';
 
 export default [
   {
-    name: 'migrate-codeblock-tokenizer-to-language',
-    transform: migrateCodeBlockTokenizerToLanguage,
-    meta: migrateCodeBlockTokenizerToLanguageMeta,
+    name: 'migrate-item-swipe-actions-to-swipe',
+    transform: migrateItemSwipeActionsToSwipe,
+    meta: migrateItemSwipeActionsToSwipeMeta,
   },
 ];

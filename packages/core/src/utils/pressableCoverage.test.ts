@@ -15,7 +15,9 @@
  * holds it equal to the marked set:
  *
  *  - A file paints a press when its StyleX carries an `':active` key, a
- *    `[data-astryx-press` arm, or composes `interactionOverlayStyles`.
+ *    `[data-astryx-press` arm, or composes `interactionOverlayStyles` or the
+ *    press owner's ready-made paint (`indicatorPressPaintStyles`,
+ *    `rowPressPaintStyles`).
  *  - A file is marked when it calls `usePressFeedback(`.
  *  - A file whose press arms are read off an ancestor scope marker
  *    (`stylex.when.ancestor(':active', someScope)`, the way an indicator
@@ -32,9 +34,15 @@ import {describe, expect, it} from 'vitest';
 
 const SRC = path.resolve(__dirname, '..');
 
-/** The utility and the controller define the model; they are not surfaces. */
+/**
+ * The utility, the list row's press layer, the press attribute's owner
+ * module (the selector a themed press uses) and the controller define the
+ * model; they are not surfaces.
+ */
 const MODEL_FILES = new Set([
   'utils/interactionOverlay.stylex.ts',
+  'privateAttributes/press.stylex.ts',
+  'privateAttributes/press.ts',
   'utils/pressFeedback.ts',
   'utils/pressGesture.ts',
 ]);
@@ -63,12 +71,42 @@ const source = new Map(
   files.map(file => [path.relative(SRC, file), fs.readFileSync(file, 'utf8')]),
 );
 
-const PRESS_ARM = /':active|'\[data-astryx-press=|interactionOverlayStyles\./;
+// A press arm keys on `:active` or on the attribute the controller writes, as
+// a bare attribute selector or inside `:is(…)`. The press attribute's owner
+// module writes some arms for a component, which composes them ready-made.
+const PRESS_ARM =
+  /':active|'(?::is\()?\[data-astryx-press=|interactionOverlayStyles\.|indicatorPressPaintStyles\.|rowPressPaintStyles\./;
 const ANCESTOR_ARM =
-  /stylex\.when\.ancestor\(\s*'(?::active|\[data-astryx-press=[^)]*)',\s*(\w+)\s*\)/g;
+  /stylex\.when\.ancestor\(\s*'(?::active|\[data-astryx-press=[^)]*)',\s*(\w+)\s*,?\s*\)/g;
 
+/** Whether `text` renders a ListItem or Item with an `interactiveRef` prop. */
+function delegatesToItem(text: string): boolean {
+  for (const match of text.matchAll(/<(?:List)?Item\b/g)) {
+    // The opening tag ends at the first `>` outside braces.
+    let depth = 0;
+    for (let i = match.index + match[0].length; i < text.length; i++) {
+      if (text[i] === '{') {
+        depth++;
+      } else if (text[i] === '}') {
+        depth--;
+      } else if (text[i] === '>' && depth === 0) {
+        if (text.slice(match.index, i).includes('interactiveRef=')) {
+          return true;
+        }
+        break;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Whether a file marks its pressable: it calls `usePressFeedback`, or it
+ * hands a ListItem or Item an `interactiveRef`, which Item marks itself.
+ */
 function isMarked(file: string): boolean {
-  return (source.get(file) ?? '').includes('usePressFeedback(');
+  const text = source.get(file) ?? '';
+  return text.includes('usePressFeedback(') || delegatesToItem(text);
 }
 
 /** Files (other than `except`) that apply the scope marker `name` to an element. */
@@ -164,6 +202,20 @@ describe('every surface that paints a press is reachable by the touch press cont
       expect(problems).toEqual([]);
     },
   );
+
+  it('counts a ListItem or Item handed an interactiveRef as marked', () => {
+    expect(delegatesToItem('<ListItem label="a" interactiveRef={ref} />')).toBe(
+      true,
+    );
+    expect(
+      delegatesToItem('<Item\n  interactiveRef={on ? ref : undefined}\n/>'),
+    ).toBe(true);
+    expect(delegatesToItem('<ListItem onClick={() => {}} />')).toBe(false);
+    expect(delegatesToItem('<ListItem label={<b>x</b>} />')).toBe(false);
+    expect(delegatesToItem('<CheckboxListItem interactiveRef={ref} />')).toBe(
+      false,
+    );
+  });
 
   it('marks nothing that does not paint a press', () => {
     // The converse: a marker with no arm would ask the controller to write an

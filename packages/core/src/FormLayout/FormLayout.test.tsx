@@ -10,14 +10,27 @@
  */
 
 import {describe, it, expect} from 'vitest';
-import {render, screen} from '@testing-library/react';
-import {use} from 'react';
-import {FormLayout} from './FormLayout';
+import {fireEvent, render, screen} from '@testing-library/react';
+import {use, type ReactNode} from 'react';
+import {FormLayout, type FormLayoutProps} from './FormLayout';
 import {FormLayoutContext} from './FormLayoutContext';
-import type {FormLayoutDirection} from './FormLayoutContext';
+import type {
+  EntryErrorBehavior,
+  FormLayoutDirection,
+} from './FormLayoutContext';
+import {DateInput} from '../DateInput/DateInput';
+import {
+  DateTimeInput,
+  type ISODateTimeString,
+} from '../DateTimeInput/DateTimeInput';
+import {Dialog} from '../Dialog';
+import {TimeInput} from '../TimeInput/TimeInput';
+import type {ISOTimeString} from '../utils';
 import {Field} from '../Field';
 import {TextInput} from '../TextInput';
 import {CheckboxInput} from '../CheckboxInput';
+import {CheckboxList, CheckboxListItem} from '../CheckboxList';
+import {Switch} from '../Switch';
 
 // Helper component to read context
 function DirectionReader() {
@@ -283,7 +296,8 @@ describe('FormLayout', () => {
   // `aria-required` must still be exposed — otherwise a sighted user reads a
   // field as required (form default, no indicator) while a screen reader hears
   // "not required". Native `required` stays bound to the explicit prop so a
-  // layout default never switches on browser validation.
+  // layout default never switches on browser validation. Checkboxes, switches
+  // and checkbox groups are the exception: empty or off is an answer.
 
   it('required default: an unmarked input still exposes aria-required', () => {
     render(
@@ -320,17 +334,49 @@ describe('FormLayout', () => {
     expect(screen.getByLabelText('Solo')).not.toHaveAttribute('aria-required');
   });
 
-  it('required default resolves aria-required without native required', () => {
+  // FR5 exception: an unchecked box, an off switch or an empty checkbox group
+  // is an answer, so the form default gives them no required state. A text
+  // field beside them still takes it.
+  it('required default gives an unmarked checkbox, switch and checkbox group no required state', () => {
     render(
       <FormLayout defaultOptionality="required">
-        <CheckboxInput label="Terms" value={false} onChange={() => {}} />
+        <TextInput label="Name" value="" onChange={() => {}} />
+        <CheckboxInput label="Subscribe" value={false} onChange={() => {}} />
+        <Switch label="Dark mode" value={false} onChange={() => {}} />
+        <CheckboxList label="Topics" value={[]} onChange={() => {}}>
+          <CheckboxListItem label="Design" value="design" />
+          <CheckboxListItem label="Code" value="code" />
+        </CheckboxList>
       </FormLayout>,
     );
-    const checkbox = screen.getByRole('checkbox', {name: 'Terms'});
-    // Announced as required (form default)…
-    expect(checkbox).toHaveAttribute('aria-required', 'true');
-    // …but the native `required` attribute is not switched on by the layout.
-    expect(checkbox).not.toHaveAttribute('required');
+    expect(screen.getByLabelText('Name')).toHaveAttribute(
+      'aria-required',
+      'true',
+    );
+    const unmarked = [
+      screen.getByRole('checkbox', {name: 'Subscribe'}),
+      screen.getByRole('switch', {name: 'Dark mode'}),
+      screen.getByRole('checkbox', {name: 'Design'}),
+      screen.getByRole('checkbox', {name: 'Code'}),
+    ];
+    for (const control of unmarked) {
+      expect(control).not.toHaveAttribute('aria-required');
+      expect(control).not.toHaveAttribute('required');
+    }
+    // The form default still hides the "Required" marker on these labels
+    // (FieldLabel FR4), as on every field.
+    expect(screen.queryByText('Required')).toBeNull();
+  });
+
+  it('explicit isRequired on a switch drives aria-required and native required under a layout', () => {
+    render(
+      <FormLayout defaultOptionality="required">
+        <Switch label="Accept" value={false} onChange={() => {}} isRequired />
+      </FormLayout>,
+    );
+    const control = screen.getByRole('switch', {name: 'Accept'});
+    expect(control).toHaveAttribute('aria-required', 'true');
+    expect(control).toBeRequired();
   });
 
   it('explicit isRequired still drives native required under a layout', () => {
@@ -440,5 +486,125 @@ describe('FormLayout', () => {
     expect(
       fieldChildren[1].contains(screen.getByTestId('username-input')),
     ).toBe(true);
+  });
+});
+
+describe('FormLayout defaultEntryErrorBehavior', () => {
+  /** Whether a typed nonexistent date shows its rejection before any commit. */
+  function revealsWhileTyping(ui: ReactNode): boolean {
+    const {unmount} = render(ui);
+    const input = screen.getByRole('combobox', {name: 'Due'});
+    fireEvent.change(input, {target: {value: '02/31/2026'}});
+    const isInvalid = input.getAttribute('aria-invalid') === 'true';
+    unmount();
+    return isInvalid;
+  }
+  const dueField = (entryErrorBehavior?: EntryErrorBehavior) => (
+    <DateInput
+      label="Due"
+      onChange={() => {}}
+      entryErrorBehavior={entryErrorBehavior}
+    />
+  );
+  const form = (
+    defaultEntryErrorBehavior: FormLayoutProps['defaultEntryErrorBehavior'],
+    children: ReactNode,
+  ) => (
+    <FormLayout defaultEntryErrorBehavior={defaultEntryErrorBehavior}>
+      {children}
+    </FormLayout>
+  );
+
+  it.each([
+    ['no layout, no prop', true, dueField()],
+    ['an unset default', true, form(undefined, dueField())],
+    ['a complete default', true, form('complete', dueField())],
+    ['a blur-or-enter default', false, form('blur-or-enter', dueField())],
+    [
+      'a field complete under a blur-or-enter default',
+      true,
+      form('blur-or-enter', dueField('complete')),
+    ],
+    [
+      'a field blur-or-enter under a complete default',
+      false,
+      form('complete', dueField('blur-or-enter')),
+    ],
+    [
+      'an unset nested layout inside a blur-or-enter default',
+      true,
+      form('blur-or-enter', form(undefined, dueField())),
+    ],
+    [
+      'a blur-or-enter nested layout inside a complete default',
+      false,
+      form('complete', form('blur-or-enter', dueField())),
+    ],
+    [
+      'a Dialog opened inside a blur-or-enter default',
+      true,
+      form(
+        'blur-or-enter',
+        <Dialog isOpen isInline onOpenChange={() => {}}>
+          {dueField()}
+        </Dialog>,
+      ),
+    ],
+  ] as const)(
+    'with %s, a date field reveals a nonexistent date while typing: %s',
+    (_case, reveals, ui) => {
+      expect(revealsWhileTyping(ui)).toBe(reveals);
+    },
+  );
+
+  it('carries the default on the layout context, and an unset nested layout carries none', () => {
+    const seen: (EntryErrorBehavior | undefined)[] = [];
+    function Probe() {
+      seen.push(use(FormLayoutContext).defaultEntryErrorBehavior);
+      return null;
+    }
+    render(
+      form('blur-or-enter', [
+        <Probe key="a" />,
+        form(undefined, <Probe key="b" />),
+      ]),
+    );
+    expect(seen).toEqual(['blur-or-enter', undefined]);
+  });
+
+  it('holds the time rejections of TimeInput and DateTimeInput under a blur-or-enter default', () => {
+    render(
+      form('blur-or-enter', [
+        <TimeInput
+          key="time"
+          label="Start"
+          hourFormat="12h"
+          min={'14:00' as ISOTimeString}
+          onChange={() => {}}
+        />,
+        <DateTimeInput
+          key="dateTime"
+          label="Meeting"
+          hourFormat="12h"
+          value={'2026-03-15T15:00' as ISODateTimeString}
+          min={'2026-03-15T14:00' as ISODateTimeString}
+          onChange={() => {}}
+        />,
+      ]),
+    );
+    for (const name of ['Start', 'Meeting time']) {
+      const input = screen.getByLabelText(name);
+      fireEvent.change(input, {target: {value: '1:30 PM'}});
+      expect(input).not.toHaveAttribute('aria-invalid');
+      fireEvent.blur(input);
+      expect(input).toHaveAttribute('aria-invalid', 'true');
+    }
+  });
+
+  it('takes only the two values', () => {
+    // @ts-expect-error -- 'eager' is not an entry error behavior.
+    expect(form('eager', null)).toBeTruthy();
+    // @ts-expect-error -- 'blur' is not an entry error behavior.
+    expect(dueField('blur')).toBeTruthy();
   });
 });

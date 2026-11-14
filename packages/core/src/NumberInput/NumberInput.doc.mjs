@@ -4,6 +4,9 @@
 
 export const docs = {
   name: 'NumberInput',
+  playground: {
+    defaults: {label: 'Count', value: 3},
+  },
   displayName: 'Number Input',
   category: 'Form Controls',
   keywords: [
@@ -116,7 +119,22 @@ export const docs = {
     {
       name: 'status',
       type: "{type: 'error' | 'warning' | 'success', message?: string}",
-      description: 'Validation status with optional message.',
+      description:
+        'Validation status with optional message. Typing never shows a rejection: a typed number is complete only at commit. When Enter or blur meets text that is not a number, a fraction in an integer-only field, or any number while min is above max, the text stays in the field and the field shows its own error message in place of status. An error status with a message shows instead of that message, and the rejection is still announced and marks the field invalid. A warning or success status, or an error status without a message, never replaces it. A number outside an ordinary range clamps instead.',
+    },
+    {
+      name: 'onEntryErrorChange',
+      type: "(error: {kind: 'unreadable' | 'fractional' | 'outOfRange', text: string, value?: number} | null) => void",
+      description:
+        "Called each time the field's rejection of typed text changes, and with null when the rejection ends. A rejection starts only at Enter or blur. kind is 'unreadable' (text that is not a number), 'fractional' (a fraction when isIntegerOnly), or 'outOfRange' (any number while min is above max); text is the typed text; value is the number it names, for 'fractional' and 'outOfRange'. It also runs when an edit makes the text valid or empty, when a new value, min, max, or isIntegerOnly changes or ends the rejection, and when disabling the field drops the text, and never twice for the same rejection; it reports null when the field unmounts while a rejection stands. Pass an error status with a message to word the rejection yourself.",
+    },
+    {
+      name: 'entryErrorBehavior',
+      type: "'complete' | 'blur-or-enter'",
+      description:
+        "When the field shows its own entry error: typed text it rejects, as onEntryErrorChange reports it. It sets when the error shows, not when validation runs, so it is not React Aria's validationBehavior (native versus ARIA validation), and it never changes a caller status. A typed number is complete only at Enter or blur, so 'complete' and 'blur-or-enter' behave the same: the message, aria-invalid, the invalid styling, the announcement, and the onEntryErrorChange report appear together at Enter or blur, never while a person types, and an edit that makes the text valid or empty clears the error at once. Set it to match the other fields of a form; the field's own value wins over the nearest FormLayout's defaultEntryErrorBehavior.",
+      default:
+        "the nearest FormLayout's defaultEntryErrorBehavior, else 'complete'",
     },
     {
       name: 'statusVariant',
@@ -160,7 +178,7 @@ export const docs = {
       name: 'hasNumberSteppers',
       type: 'boolean',
       description:
-        'Shows increment and decrement buttons at the end of the input.',
+        'Shows increment and decrement buttons at the end of the input on fine pointers. Hidden on coarse pointers (such as touch screens); text entry and keyboard stepping remain available. Holding a button with a mouse or a pen repeats the step and commits once, when the hold ends.',
       default: 'false',
     },
     {
@@ -184,7 +202,8 @@ export const docs = {
     {
       name: 'htmlName',
       type: 'string',
-      description: 'HTML name attribute for form submissions.',
+      description:
+        'HTML name attribute for form submissions. While blur keeps rejected text, the form posts the committed number, until the person edits the text or a new value replaces it.',
     },
     {
       name: 'autoComplete',
@@ -226,12 +245,14 @@ export const docs = {
     {
       name: 'containerClassName',
       type: 'string',
-      description: 'Class name for the field container. Same targeting as `containerXstyle`.',
+      description:
+        'Class name for the field container. Same targeting as `containerXstyle`.',
     },
     {
       name: 'containerStyle',
       type: 'CSSProperties',
-      description: 'Inline styles for the field container. Same targeting as `containerXstyle`.',
+      description:
+        'Inline styles for the field container. Same targeting as `containerXstyle`.',
     },
     {
       name: 'controlXstyle',
@@ -433,7 +454,22 @@ export const docsZh = {
     {
       name: 'status',
       type: "{type: 'error' | 'warning' | 'success', message?: string}",
-      description: '带可选消息的验证状态。',
+      description:
+        '带可选消息的验证状态。输入过程中不会显示拒绝：输入的数字只有在提交时才算完整。按 Enter 或失焦时，若文本不是数字、在仅限整数的字段中带有小数，或 min 大于 max 时输入了任何数字，文本会保留在字段中，字段显示自身的错误消息以替代 status。带消息的 error 状态会替代该消息，拒绝仍会被播报并将字段标记为无效。warning 或 success 状态，以及不带消息的 error 状态，不会替代拒绝消息。超出普通范围的数字会被限制到边界值。',
+    },
+    {
+      name: 'onEntryErrorChange',
+      type: "(error: {kind: 'unreadable' | 'fractional' | 'outOfRange', text: string, value?: number} | null) => void",
+      description:
+        "每当字段对输入文本的拒绝发生变化时调用，拒绝结束时传入 null。拒绝只在按 Enter 或失焦时开始。kind 为 'unreadable'（不是数字的文本）、'fractional'（启用 isIntegerOnly 时的小数）或 'outOfRange'（min 大于 max 时的任何数字）；text 为输入的文本；value 为文本所指的数字，用于 'fractional' 和 'outOfRange'。编辑使文本有效或为空时、新的 value、min、max 或 isIntegerOnly 改变或结束拒绝时、禁用字段丢弃文本时也会调用；同一拒绝不会重复调用；拒绝仍存在时字段卸载会传入 null。传入带消息的 error 状态即可自行措辞拒绝消息。",
+    },
+    {
+      name: 'entryErrorBehavior',
+      type: "'complete' | 'blur-or-enter'",
+      description:
+        "字段何时显示自身的输入错误：即字段拒绝的输入文本，也就是 onEntryErrorChange 报告的拒绝。它设定错误何时显示，而不是何时校验，因此不同于 React Aria 的 validationBehavior（原生校验与 ARIA 校验之分），也不会改变调用方的 status。输入的数字只有在按 Enter 或失焦时才算完整，因此 'complete' 和 'blur-or-enter' 的行为相同：消息、aria-invalid、无效样式、播报和 onEntryErrorChange 报告都在按 Enter 或失焦时一起出现，输入过程中从不出现；使文本有效或清空文本的编辑会立即清除错误。可将其设为与表单中其他字段一致；字段自身的取值优先于最近的 FormLayout 的 defaultEntryErrorBehavior。",
+      default:
+        "最近的 FormLayout 的 defaultEntryErrorBehavior，否则为 'complete'",
     },
     {
       name: 'statusVariant',
@@ -474,7 +510,8 @@ export const docsZh = {
     {
       name: 'hasNumberSteppers',
       type: 'boolean',
-      description: '是否在输入框末尾显示递增和递减按钮。',
+      description:
+        '在精细指针设备上于输入框末尾显示递增和递减按钮。粗指针设备（例如触摸屏）上隐藏按钮；仍可直接输入数值或使用键盘步进。',
       default: 'false',
     },
     {
@@ -497,7 +534,8 @@ export const docsZh = {
     {
       name: 'htmlName',
       type: 'string',
-      description: '用于表单提交的 HTML name 属性。',
+      description:
+        '用于表单提交的 HTML name 属性。失焦后保留被拒绝的文本时，表单提交已提交的数字，直到用户编辑该文本或新的 value 替换它。',
     },
     {
       name: 'autoComplete',
@@ -720,10 +758,12 @@ export const docsDense = {
     ],
   },
   propDescriptions: {
-    containerXstyle: 'StyleX styles for the field container; no effect in InputGroup or horizontal-labels FormLayout. No root xstyle/className/style.',
+    containerXstyle:
+      'StyleX styles for the field container; no effect in InputGroup or horizontal-labels FormLayout. No root xstyle/className/style.',
     containerClassName: 'Class name for the field container.',
     containerStyle: 'Inline styles for the field container.',
-    controlXstyle: 'StyleX styles for the visual control box (border, background, icons); not the native input.',
+    controlXstyle:
+      'StyleX styles for the visual control box (border, background, icons); not the native input.',
     controlClassName: 'Class name for the visual control box.',
     controlStyle: 'Inline styles for the visual control box.',
     label: 'Label text (always rendered for accessibility).',
@@ -744,7 +784,12 @@ export const docsDense = {
     labelTooltip: 'Tooltip text in info icon at label end.',
     startIcon: 'Icon at input start.',
     labelIcon: 'Icon before label text.',
-    status: 'Validation status w/ optional message.',
+    status:
+      "Validation status w/ optional message; nothing shows while typing; at Enter/blur, unreadable text, a fraction when isIntegerOnly, or any number while min > max stays w/ the field's own error message in place of status, unless status is an error w/ message (still announced + aria-invalid); warning/success never hide it; out-of-range numbers clamp.",
+    onEntryErrorChange:
+      "(error|null) on each typed-rejection change, starting only at Enter/blur: kind 'unreadable'|'fractional' (isIntegerOnly)|'outOfRange' (min > max), text, value (fractional/outOfRange); also on an edit to valid/empty, new value/min/max/isIntegerOnly, disable; never twice for one rejection; null on unmount mid-rejection; word it via an error status w/ message",
+    entryErrorBehavior:
+      "'complete'|'blur-or-enter': when the field's own rejection shows (not when validation runs; not React Aria validationBehavior; never changes status). A typed number is complete only at Enter/blur, so both values behave the same: message, aria-invalid, styling, announcement and onEntryErrorChange report wait for Enter/blur; valid or emptied text clears at once. Default: nearest FormLayout defaultEntryErrorBehavior, else complete",
     statusVariant:
       'How status message is placed: attached overlaps below input; detached floats below w/ spacing; tooltip hides the box and shows it on the status icon.',
     min: 'Minimum value allowed.',
@@ -754,12 +799,14 @@ export const docsDense = {
       'Formats committed value at rest; raw number is shown while editing.',
     isWheelEnabled:
       'Allow focused wheel gestures to step value. Defaults to true.',
-    hasNumberSteppers: 'Show increment + decrement buttons. Defaults to false.',
+    hasNumberSteppers:
+      'Show increment + decrement buttons on fine pointers; hidden on coarse pointers. Defaults to false.',
     units: 'Units suffix (e.g. "%" or "GB").',
     isIntegerOnly: 'Only allow integer values.',
     hasClear:
       'Shows clear button when input has value. onChange also accepts null on clear.',
-    htmlName: 'HTML name for form submissions.',
+    htmlName:
+      'HTML name for form submissions; while blur keeps rejected text, posts the committed number until an edit or a new value.',
     autoComplete: 'HTML autocomplete attribute.',
     hasAutoFocus: 'Focus input on mount.',
     onFocus: 'Callback on focus.',
