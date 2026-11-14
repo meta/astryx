@@ -45,6 +45,7 @@ import {
   isRecord,
   subpathDeclaration,
 } from './exports-subpaths.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 /**
  * @typedef {import('./issue').AstryxIntegrationIssue} Issue
@@ -283,7 +284,7 @@ function declarationIn(exportsField, packageDir, subpath) {
  * @param {string} file
  * @returns {string | null}
  */
-function subpathFor(exportsField, packageDir, file) {
+export function subpathFor(exportsField, packageDir, file) {
   if (!isRecord(exportsField)) return null;
   const wanted = `./${rel(packageDir, file)}`;
   for (const [key, value] of Object.entries(exportsField)) {
@@ -786,7 +787,7 @@ function augmentationReason(ctx) {
     } catch {
       continue;
     }
-    entries.sort((x, y) => x.name.localeCompare(y.name));
+    entries.sort((x, y) => compareText(x.name, y.name));
     for (const entry of entries) {
       if (++seen > AUGMENTATION_WALK_LIMIT) {
         reason = `the package has more than ${AUGMENTATION_WALK_LIMIT} files to search for a \`declare module\` block, which can add names to its modules, so the names it imports were not checked`;

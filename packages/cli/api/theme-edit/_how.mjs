@@ -34,14 +34,15 @@ import {
   loadTheme,
   nearest,
   refuse,
+  themeSourceParseError,
   themeSourceProblem,
 } from './_settings.mjs';
-import {ASPECTS, checkSetting} from './_check.mjs';
+import {ASPECTS, settableStates} from './_check.mjs';
 import {MODAL} from './_compiler.mjs';
 import {PALETTE_DIALS, mappingRows, paletteFiles} from './_palette.mjs';
 import {requireProject, context} from './_context.mjs';
 import {checked, exampleStep, howTheme, render} from './_how-commands.mjs';
-import {draftAnswer, valueAsked} from './_how-question.mjs';
+import {draftAnswer, partLexicon, valueAsked} from './_how-question.mjs';
 import {
   getCliInvocation,
   quoteCommandArgument,
@@ -249,11 +250,17 @@ async function answer(subject, options, cwd) {
     }
     // A theme whose source no longer extends its settings takes no setting:
     // an answer would suggest commands that cannot run.
-    const broken = themeSourceProblem(cwd, options.theme);
+    const parseError = themeSourceParseError(cwd, options.theme);
+    const broken = parseError
+      ? {
+          problem: parseError,
+          fix: `Fix themes/${options.theme}/${options.theme}.theme.ts.`,
+        }
+      : await themeSourceProblem(cwd, options.theme);
     if (broken)
       refuse(
         E.ERR_THEME_INVALID,
-        `${broken}, so settings cannot take effect and no command here would change the theme. Put back the import, extends and name lines in themes/${options.theme}/${options.theme}.theme.ts, then ask again.`,
+        `${broken.problem}, so settings cannot take effect and no command here would change the theme. ${broken.fix} Then ask again.`,
         {run: [`${P} show ${options.theme}`]},
       );
   }
@@ -279,16 +286,21 @@ async function answer(subject, options, cwd) {
   }
   if (isPicture(t, cwd))
     return {kind: 'picture', subject: t, ...pictureColors(t, cwd, at, count)};
+  // What runs instead: the same subject without the picture option (a
+  // real command), never a made-up file name.
+  const without = t ? `${HOW} ${quoteCommandArgument(t)}` : `${HOW} --help`;
   if (at.length)
     refuse(
       E.ERR_INVALID_ARGUMENT,
-      '--at reads the color at points of a PNG picture; name the picture first.',
-      {run: [`${HOW} picture.png --at "40,20"`]},
+      `--at reads the color at points of a PNG picture; name your picture first (${HOW} <your .png file> --at x,y).`,
+      {run: [without]},
     );
   if (count != null)
-    refuse(E.ERR_INVALID_ARGUMENT, 'A count applies only to a picture.', {
-      run: [`${HOW} picture.png 5`],
-    });
+    refuse(
+      E.ERR_INVALID_ARGUMENT,
+      `A count applies only to a picture (${HOW} <your .png file> 5).`,
+      {run: [without]},
+    );
   if (!t) {
     refuse(
       E.ERR_MISSING_ARGUMENT,
@@ -462,9 +474,31 @@ async function answer(subject, options, cwd) {
   // "What does --color-accent do", "what's the variable for card padding":
   // "--focus-outline-width: 3px": a token typed with a value is set exactly,
   // or refused with the nearest names; never another token.
+  // "cards: --color-border red", "--color-border red on inputs": the token
+  // on that part.
+  const scopeLead = /^\s*([a-z][a-z -]*?)\s*:\s*(?=--)/i.exec(t)?.[1];
+  const scopeTail =
+    /\s+(?:on|for)\s+(?:the |my |all )?([a-z][a-z -]*?)\s*$/i.exec(t)?.[1];
+  const scopeWord = scopeLead ?? scopeTail;
+  const scopeOn = scopeWord
+    ? (() => {
+        const w = ` ${scopeWord.trim().toLowerCase()} `;
+        return (
+          partLexicon(ctx).parts.find(([re]) => re.test(w))?.[1].on ?? null
+        );
+      })()
+    : null;
   const typedToken =
     /^\s*(--[a-z][a-z0-9-]*)\s*(?::|\s+to\s+|\s+)\s*([^;]+?)\s*;?\s*(?:\bin (light|dark) mode\b.*)?$/i.exec(
-      t.replace(/^\s*(?:change|set|make|token)\s+/i, ' '),
+      t
+        .replace(/^\s*(?:change|set|make|token)\s+/i, ' ')
+        .replace(/^\s*[a-z][a-z -]*?\s*:\s*(?=--)/i, ' ')
+        .replace(
+          scopeOn && scopeTail
+            ? /\s+(?:on|for)\s+(?:the |my |all )?[a-z][a-z -]*?\s*$/i
+            : /$^/,
+          '',
+        ),
     );
   if (
     typedToken &&
@@ -503,6 +537,7 @@ async function answer(subject, options, cwd) {
           verb: 'set',
           thing: token,
           value,
+          ...(scopeOn ? {on: scopeOn} : {}),
           ...(mode && env.data.mode === 'both' ? {mode} : {}),
         },
       ],
@@ -612,10 +647,13 @@ async function answer(subject, options, cwd) {
     ...unknown,
     ...(empty
       ? {
-          hint: results.length
-            ? `No command does all of "${t}" on ${env.slug}; the lines above say why.`
-            : `No match for "${t}". Name the part (header, nav links, card, button, banner, input...) and what to change (text color, background, gradient, corners, border, shadow, spacing, bold), in English.`,
+          hint: `${
+            results.length
+              ? `No command does all of "${t}" on ${env.slug}; the lines above say why.`
+              : `No match for "${t}". Name the part (header, nav links, card, button, banner, input...) and what to change (text color, background, gradient, corners, border, shadow, spacing, bold), in English.`
+          } See ${HOW} --help for the asks it understands.`,
           run: [
+            `${HOW} --help`,
             `${HOW} --list parts`,
             `${HOW} "rounder buttons"`,
             `${HOW} colors`,
@@ -626,13 +664,76 @@ async function answer(subject, options, cwd) {
 }
 
 /**
+ * The commands a refusal names to run instead that answer the draft: the
+ * same thing set, accepted by set's check, and (for a draft that carries
+ * what its clause asks) measured to do it.
+ * @param {import('./_how-commands.mjs').HowTheme} env
+ * @param {import('./_how-question.mjs').Draft} d
+ * @param {Array<{command: string, why: string, run?: string[]}>} refused
+ * @returns {string[]}
+ */
+function insteadOf(env, d, refused) {
+  // (The same thing on the same part: another part is another ask.)
+  const things = new Set(
+    d.options.flat().map(st => `${st.thing}|${st.on ?? ''}`),
+  );
+  /** @type {string[]} */
+  const out = [];
+  for (const line of refused.flatMap(r => r.run ?? [])) {
+    const words = [
+      ...line
+        .replace(/^.*? editor /, '')
+        .matchAll(/'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)"|(\S+)/g),
+    ].map(m => m[1] ?? m[2] ?? m[3]);
+    const st = exampleStep(
+      words.map(w => (/\s/.test(w) ? `"${w}"` : w)).join(' '),
+    );
+    if (
+      !st ||
+      !things.has(`${st.thing}|${st.on ?? ''}`) ||
+      /[<>]/.test(String(st.value ?? ''))
+    )
+      continue;
+    if (!env.check([st]).ok) continue;
+    // Held to what the draft asks, else to the way its own dial step went
+    // ("more"): never offered unmeasured.
+    const way = d.options
+      .flat()
+      .map(x => x.value)
+      .find(v => v === 'more' || v === 'less');
+    const intent =
+      d.intent ??
+      (way
+        ? /** @type {import('./_how-commands.mjs').MeasureIntent} */ ({
+            families: [],
+            typed: [],
+            opacityDir: null,
+            dir: way,
+            zero: false,
+            lighter: null,
+            subjects: [],
+            keep: [],
+            mode: null,
+          })
+        : null);
+    if (!intent || typeof env.measure !== 'function') continue;
+    // A dial word the other way round from the one asked never answers it.
+    if (way && (st.value === 'more' || st.value === 'less') && st.value !== way)
+      continue;
+    if (env.measure([st], intent)) continue;
+    out.push(render(st, env.slug));
+  }
+  return out;
+}
+
+/**
  * Check each draft's commands and keep what passes; a draft whose commands
  * are all refused says why, and points to the lookup that helps.
  * @param {import('./_how-commands.mjs').HowTheme} env
  * @param {import('./_how-question.mjs').Draft[]} drafts
  */
 function finish(env, drafts) {
-  /** @type {Array<{text: string, commands: string[], sequence?: boolean, refused?: Array<{command: string, why: string}>}>} */
+  /** @type {Array<{text: string, commands: string[], sequence?: boolean, refused?: Array<{command: string, why: string, run?: string[]}>}>} */
   const out = [];
   // The measured check runs first on the drafts that carry what their
   // clause asks; a draft that joins them ("all of it, in order") then keeps
@@ -705,7 +806,10 @@ function finish(env, drafts) {
     if (!commands.length && d.options.length && !lookups.length) {
       out.push({
         text: `${d.text}: no command does it on ${env.slug}${refused[0] ? `: ${refused[0].why}` : ''}`,
-        commands: [],
+        // The command the refusal itself names to run instead, when it
+        // sets the same thing, passes set's check and does what the
+        // question asks.
+        commands: insteadOf(env, d, refused),
         refused,
       });
       continue;
@@ -781,25 +885,7 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
     ctx.project.target.get(key)
   );
   const group = familyOf(key);
-  // Only the states set takes on this part (it refuses one that never
-  // applies there).
-  // Only the states set takes on this part: a state is dropped when the
-  // same change without it passes and with it is refused.
-  const takes = (/** @type {string | undefined} */ st) => {
-    try {
-      checkSetting(ctx, env.slug, env.data, 'opacity', '1', {
-        on: key,
-        ...(st ? {state: st} : {}),
-      });
-      return true;
-    } catch {
-      return false;
-    }
-  };
-  const plainOk = takes(undefined);
-  const states = [...new Set([...target.states, ...COMMON_STATES])].filter(
-    st => !plainOk || takes(st),
-  );
+  const states = settableStates(ctx, env.slug, env.data, key);
   const reads = Object.fromEntries(
     Object.keys(GROUPS).map(g => [
       g,
@@ -1442,14 +1528,18 @@ async function listItems(kind, filter, cwd) {
  * Read `--at` points: "x,y;x,y", "x,y x,y", repeated, or a flat "a,b,c,d".
  * Each number is a whole pixel; anything else is refused by name.
  * @param {string[]} at
+ * @param {string | null} [file] the picture the points are on
  * @returns {Array<{x: number, y: number}>}
  */
-export function parsePoints(at) {
+export function parsePoints(at, file = null) {
   const words = at
     .join(' ')
     .split(/[;\s]+/)
     .filter(Boolean);
-  const example = `${HOW} picture.png --at "40,20;300,180"`;
+  // The picture named, never a made-up file.
+  const example = file
+    ? `${HOW} ${quoteCommandArgument(file)} --at "40,20;300,180"`
+    : `${HOW} --help`;
   if (!words.length)
     refuse(E.ERR_INVALID_ARGUMENT, '--at names no point; give x,y pairs.', {
       run: [example],
@@ -1509,7 +1599,7 @@ function pictureColors(file, cwd, at, count) {
       `The count must be a positive whole number, not "${count}".`,
       {run: [`${HOW} ${file} 5`]},
     );
-  const points = at.length ? parsePoints(at) : null;
+  const points = at.length ? parsePoints(at, file) : null;
   // The header holds the size, so a huge picture is refused unread.
   const fd = fs.openSync(abs, 'r');
   const head = Buffer.alloc(8);

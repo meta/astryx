@@ -14,7 +14,7 @@ import * as path from 'node:path';
 import * as zlib from 'node:zlib';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {themeEditNew, themeEditSet} from './theme-edit.mjs';
-import {adoptOlderPicture, editorWrote, recordWritten} from './_settings.mjs';
+import {editorWrote, recordWritten} from './_settings.mjs';
 import {pictures} from './_context.mjs';
 import {EDITOR_STAMP, pngTexts, withPngText} from './_png.mjs';
 import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
@@ -74,33 +74,12 @@ describe('#11453: the editor stamp and older pictures', () => {
     fs.rmSync(file);
   });
 
-  it('an older picture is adopted only as the editor’s window, while no record exists', () => {
+  it('a picture of the editor’s size that the editor did not take is never taken over', () => {
     const dir = path.join(cwd, 'themes/t');
     fs.rmSync(path.join(dir, 't.pictures.json'), {force: true});
-    fs.writeFileSync(path.join(dir, 'mine.png'), png(1280));
-    fs.writeFileSync(path.join(dir, 'preview-dark.png'), png(640));
     fs.writeFileSync(path.join(dir, 'preview.png'), png(1280));
-    expect(adoptOlderPicture(cwd, 't', path.join(dir, 'mine.png'))).toBe(false);
-    expect(
-      adoptOlderPicture(cwd, 't', path.join(dir, 'preview-dark.png')),
-    ).toBe(false);
-    expect(adoptOlderPicture(cwd, 't', path.join(dir, 'preview.png'))).toBe(
-      true,
-    );
-    expect(editorWrote(cwd, 't', path.join(dir, 'preview.png'))).toBe(true);
-    // A record exists now: nothing more is adopted.
-    fs.writeFileSync(path.join(dir, 'sheet.png'), png(1280));
-    expect(adoptOlderPicture(cwd, 't', path.join(dir, 'sheet.png'))).toBe(
-      false,
-    );
-    for (const n of [
-      'mine.png',
-      'preview-dark.png',
-      'preview.png',
-      'sheet.png',
-      't.pictures.json',
-    ])
-      fs.rmSync(path.join(dir, n), {force: true});
+    expect(editorWrote(cwd, 't', path.join(dir, 'preview.png'))).toBe(false);
+    fs.rmSync(path.join(dir, 'preview.png'), {force: true});
   });
 });
 

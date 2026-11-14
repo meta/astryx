@@ -49,8 +49,10 @@ describe('corners in a state', () => {
     expect(r.data.notes.join(' ')).toMatch(
       /--_button-radius .* keeps the plain value/,
     );
+    // A button draws its corners one by one from the radius token (a
+    // group squares its inner joins), so the radius is that token.
     expect(read('s.css')).toMatch(
-      /\.astryx-button:hover[^{]*\{[^}]*border-radius: 9999px;/,
+      /\.astryx-button:hover[^{]*\{[^}]*--radius-element: 9999px;/,
     );
     expect(read('s.settings.ts')).not.toMatch(/--_/);
     const bin = path.resolve(

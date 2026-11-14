@@ -97,6 +97,7 @@ import {
   orderRouteSuggestions,
 } from '../../foundation/text/suggest-order.mjs';
 import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
 
 export {OVERLAY_LANGUAGES, overlayLanguages};
 
@@ -2293,6 +2294,6 @@ export async function integrationDocTypes(integration, cwd) {
     unchecked: [
       ...report.unchecked,
       ...unread.map(entry => ({doc: rel(entry.path), reason: entry.reason})),
-    ].sort((a, b) => a.doc.localeCompare(b.doc)),
+    ].sort((a, b) => compareText(a.doc, b.doc)),
   };
 }

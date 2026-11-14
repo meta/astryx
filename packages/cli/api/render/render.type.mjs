@@ -33,7 +33,7 @@
  * @typedef {object} RenderEdit
  * @property {string | null} was - The text as rendered; null for text added after the render.
  * @property {string | null} now - The text the file holds now; null for text removed after the render.
- * @property {string} [file] - The restored module that holds the text as rendered, when it appears there exactly once.
+ * @property {string} [file] - The restored module or JSON file that holds the text as rendered, when it appears exactly once across them.
  * @property {number} [line] - The line of `file` where that text starts.
  */
 
@@ -46,12 +46,22 @@
  * @property {string} data.input - The page module, relative to cwd when inside it.
  * @property {string} data.output - The HTML file written.
  * @property {number} data.bytes - Size of the HTML file.
- * @property {string[]} data.files - Local files the page loaded (modules, stylesheets, images, JSON), relative to the folder that holds them all (the page's folder unless it imports from above it), page first; each is embedded so --reverse can give it back.
+ * @property {string[]} data.files - Local files the file carries, relative to the folder that holds them all (the page's folder unless it imports from above it), page first: the modules, stylesheets, images and JSON the page loaded, and the images, fonts and media a carried module or stylesheet names by a relative path inside that folder; each is embedded so --reverse can give it back.
  * @property {string[]} data.stylesheets - Package stylesheets that were cut to the rules the page uses and inlined.
  * @property {number} data.classes - Distinct class names in the markup.
  * @property {number} data.cssBytes - Size of the inlined CSS.
  * @property {number} data.images - Local files inlined as data: URIs.
  * @property {RenderWarning[]} data.warnings - Empty when nothing looked wrong.
+ */
+
+/**
+ * The imports a restored page makes through a path alias that no alias in
+ * the receiving project names, and the `paths` entries that let them build.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} RenderAliased
+ * @property {string} config - The tsconfig.json or jsconfig.json the entries belong in, from the current folder: the one TypeScript reads for the page, else a new one at the project's root (or the current folder outside a project).
+ * @property {Record<string, string[]>} paths - The whole `paths` it needs, relative to its `baseUrl`, else to its folder: the entries it has now, its own or inherited (a `paths` of its own replaces inherited ones), with every target the imports need (`{"@/*": ["./report-restored/*"]}`), and an entry of its own for each import through a pattern with more than one target, which TypeScript reads first.
+ * @property {{import: string, file: string}[]} imports - Each import as the page writes it (`@/components/Header`), with the file it came back as, from the current folder.
  */
 
 /**
@@ -66,6 +76,7 @@
  * @property {string[]} data.files - Every file written, page first.
  * @property {boolean} data.exact - Whether the page and every file it imports came back exactly as rendered.
  * @property {string[]} [data.missing] - Embedded only: relative imports the file did not carry (files a render never embeds), so the restored page needs them before it renders.
+ * @property {RenderAliased} [data.aliased] - Embedded only: the imports the page makes through a path alias that no alias here names. Their files come back in the page's own layout inside the new folder, and the page needs the alias to build or render again: `config` names the tsconfig.json or jsconfig.json TypeScript reads for the page (or the new one to create), `paths` the whole `paths` it needs, and `imports` each import with the file it came back as.
  * @property {string[]} [data.components] - Rebuilt only: the components the page uses.
  * @property {number} [data.elements] - Rebuilt only: how many component elements were rebuilt.
  * @property {string[]} [data.unknown] - Rebuilt only: Astryx class names no installed component claims; their content is kept as plain elements.
