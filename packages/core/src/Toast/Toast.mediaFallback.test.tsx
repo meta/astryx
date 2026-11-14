@@ -70,6 +70,15 @@ describe('Toast media side before measurement', () => {
     expect(media(withSurface('hsl(200 30% 95%)'), 'dark')).toBe('light');
   });
 
+  it('a translucent on-color is composited over the surface, as the measurement does', () => {
+    expect(
+      media(
+        withSurface('#f4f0e8', 'rgba(255, 255, 255, 0.6)', '#111111'),
+        'light',
+      ),
+    ).toBe('light');
+  });
+
   it('a translucent surface, another named color or an unread on-color starts from the color mode', () => {
     expect(media(withSurface('rgba(244, 240, 232, 0.9)'), 'light')).toBe(
       'dark',
