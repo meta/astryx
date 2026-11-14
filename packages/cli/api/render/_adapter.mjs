@@ -9,6 +9,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {randomUUID} from 'node:crypto';
 import {createRequire} from 'node:module';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
@@ -34,6 +35,7 @@ import {isValidSemver} from '../../foundation/env/semver.mjs';
 import {embeddedPathProblem, runnerPicksUp} from '../../foundation/render/embedded-files.mjs';
 import {isAssetBytes, isAssetPath} from '../../foundation/render/assets.mjs';
 import {createFileProtectionResolver} from '../../foundation/fs/file-protection.mjs';
+import {publishNewFile} from '../../foundation/fs/publish-file.mjs';
 import {reachableFiles, receivingAliases} from '../../foundation/render/embedded-imports.mjs';
 import {isAstryxMarkup} from '../../foundation/render/html-reader.mjs';
 import {rebuildPage} from '../../foundation/render/rebuild.mjs';
@@ -113,14 +115,28 @@ function confined(file, cwd, what) {
 }
 
 /**
+ * Whether a file is inside a folder (not the folder itself).
+ * @param {string} file absolute
+ * @param {string | null} folder absolute
+ */
+const isInside = (file, folder) => {
+  if (!folder) return false;
+  const rel = path.relative(folder, file);
+  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+};
+
+/**
  * Refuse, before anything is written, a write that reaches through a
  * symbolic link, and the replacement of an existing file the project
  * protects (generated, vendored, ignored, a dependency or version-control
- * metadata; spec:AST-040 FR2), even with --overwrite.
+ * metadata; spec:AST-040 FR2), even with --overwrite. A file inside the new
+ * folder a restore creates replaces nothing: that folder takes its name in
+ * one step, after every check.
  * @param {string[]} files absolute
  * @param {string} cwd
+ * @param {string | null} [newFolder] the new folder a restore creates, if any
  */
-function refuseProtected(files, cwd) {
+function refuseProtected(files, cwd, newFolder = null) {
   for (const file of files) {
     let current = cwd;
     for (const part of path.relative(cwd, file).split(path.sep)) {
@@ -140,7 +156,7 @@ function refuseProtected(files, cwd) {
       }
     }
   }
-  const existing = files.filter(file => fs.existsSync(file));
+  const existing = files.filter(file => !isInside(file, newFolder) && fs.existsSync(file));
   if (existing.length === 0) return;
   /** @type {ReturnType<typeof createFileProtectionResolver>} */
   let resolver;
@@ -167,75 +183,146 @@ function refuseProtected(files, cwd) {
 }
 
 /**
- * Write several files all or nothing: each goes to a temporary file beside
- * its target first, and only when every one is written are they moved into
- * place. On a failure, the temporary files and the folders this made are
- * removed, so nothing is left behind.
- * @param {{file: string, bytes: Buffer}[]} writes absolute targets
- * @param {string} cwd
+ * A hidden temporary name beside a file or folder, as the CLI's other writers
+ * name theirs.
+ * @param {string} file absolute
  */
-function writeAll(writes, cwd) {
-  /** @type {string[]} */
-  const madeDirs = [];
-  /** @type {{temp: string, file: string}[]} */
-  const staged = [];
-  const undo = () => {
-    for (const {temp} of staged) fs.rmSync(temp, {force: true});
-    for (const dir of madeDirs.reverse()) {
-      try {
-        fs.rmdirSync(dir);
-      } catch {
-        // Not empty or already gone: leave it.
-      }
+const temporaryBeside = file => path.join(path.dirname(file), `.${path.basename(file)}.tmp-${randomUUID()}`);
+
+/**
+ * The topmost folder on the way to `file` that does not exist yet, or null
+ * when the file's own folder exists.
+ * @param {string} file absolute
+ * @returns {string | null}
+ */
+function newFolderOf(file) {
+  /** @type {string | null} */
+  let top = null;
+  for (let d = path.dirname(file); !fs.existsSync(d) && path.dirname(d) !== d; d = path.dirname(d)) top = d;
+  return top;
+}
+
+/**
+ * Write one file in one step: its bytes go to a temporary file beside it,
+ * which then takes its name. A reader, or another run at the same time, sees
+ * the old whole file or the new one, never part of one, and a run stopped
+ * part-way leaves the old file as it was. A file this user cannot write is
+ * not replaced, and a replaced file keeps its permission bits.
+ * @param {string} file absolute
+ * @param {string | Buffer} content
+ * @param {string} cwd
+ * @param {{replace: boolean}} options `replace`: an existing file may be
+ *   replaced; without it, a file that appeared since the checks stays
+ */
+function writeOutput(file, content, cwd, {replace}) {
+  /** @type {string | null} */
+  let temporary = null;
+  try {
+    fs.mkdirSync(path.dirname(file), {recursive: true});
+    /** @type {fs.Stats | null} */
+    let existing = null;
+    try {
+      existing = fs.statSync(file);
+    } catch {
+      // No file there yet.
     }
-  };
-  let current = '';
+    if (existing?.isDirectory()) {
+      throw Object.assign(new Error(`EISDIR: illegal operation on a directory, open '${file}'`), {code: 'EISDIR'});
+    }
+    if (existing) fs.accessSync(file, fs.constants.W_OK);
+    temporary = temporaryBeside(file);
+    fs.writeFileSync(temporary, content, {flag: 'wx'});
+    if (existing) fs.chmodSync(temporary, existing.mode & 0o7777);
+    if (replace) fs.renameSync(temporary, file);
+    else publishNewFile(temporary, file);
+  } catch (e) {
+    if (!replace && /** @type {any} */ (e)?.code === 'EEXIST') {
+      throw new AstryxError(
+        `${shown(cwd, file)} appeared while this ran; nothing was written. Pass --overwrite to replace it.`,
+        [],
+        ERROR_CODES.ERR_FILE_EXISTS,
+      );
+    }
+    throw new AstryxError(
+      `Could not write ${shown(cwd, file)}: ${/** @type {Error} */ (e).message}; nothing was written.`,
+      [],
+      ERROR_CODES.ERR_WRITE_FAILED,
+    );
+  } finally {
+    if (temporary) fs.rmSync(temporary, {force: true});
+  }
+}
+
+/**
+ * Write a new folder and every file in it, all or nothing, in one step: the
+ * files go into a temporary folder beside it, which then takes the folder's
+ * name. A run stopped part-way leaves no folder behind, so running it again
+ * works, and of two runs that pick the same name, one gets it and the other
+ * learns that it is taken.
+ * @param {string} folder absolute; does not exist yet
+ * @param {{file: string, bytes: Buffer}[]} writes absolute targets inside `folder`
+ * @param {string} cwd
+ * @returns {boolean} false when the folder appeared before this run could take its name
+ */
+function writeFolder(folder, writes, cwd) {
+  const staging = temporaryBeside(folder);
+  let current = folder;
   try {
     for (const w of writes) {
       current = w.file;
-      /** @type {string[]} */
-      const missing = [];
-      for (let d = path.dirname(w.file); !fs.existsSync(d); d = path.dirname(d)) missing.unshift(d);
-      for (const d of missing) {
-        fs.mkdirSync(d);
-        madeDirs.push(d);
-      }
-      const temp = `${w.file}.astryx-${process.pid}.tmp`;
-      fs.writeFileSync(temp, w.bytes, {flag: 'wx'});
-      staged.push({temp, file: w.file});
+      const staged = path.join(staging, path.relative(folder, w.file));
+      fs.mkdirSync(path.dirname(staged), {recursive: true});
+      fs.writeFileSync(staged, w.bytes, {flag: 'wx'});
     }
-    for (const {temp, file} of staged) {
-      current = file;
-      fs.renameSync(temp, file);
+    current = folder;
+    try {
+      fs.renameSync(staging, folder);
+    } catch (e) {
+      if (fs.existsSync(folder)) return false;
+      throw e;
     }
+    return true;
   } catch (e) {
-    undo();
     throw new AstryxError(
       `Could not write ${shown(cwd, current)}: ${/** @type {Error} */ (e).message}; nothing was written.`,
       [],
       ERROR_CODES.ERR_WRITE_FAILED,
     );
+  } finally {
+    fs.rmSync(staging, {recursive: true, force: true});
   }
 }
 
 /**
- * Write one file, creating its folder.
- * @param {string} file absolute
- * @param {string | Buffer} content
+ * Write a restore's files: into the new folder that holds them all, in one
+ * step, or, when the page goes into a folder that exists (the only file a
+ * restore writes there), the page alone.
+ * @param {{file: string, bytes: Buffer}[]} writes absolute targets, the page first
+ * @param {string | null} folder the new folder that holds every file, or null
+ * @param {string} cwd
+ * @param {boolean} overwrite whether an existing page may be replaced
+ * @returns {boolean} false when the new folder appeared before this run could take its name
+ */
+function writeRestore(writes, folder, cwd, overwrite) {
+  if (folder) return writeFolder(folder, writes, cwd);
+  writeOutput(writes[0].file, writes[0].bytes, cwd, {replace: overwrite});
+  return true;
+}
+
+/** How many times a restore without --out takes the next folder name when another run took one first. */
+const RESTORE_ATTEMPTS = 100;
+
+/**
+ * The refusal for a restore whose new folder another run created first.
+ * @param {string} folder
  * @param {string} cwd
  */
-function writeOutput(file, content, cwd) {
-  try {
-    fs.mkdirSync(path.dirname(file), {recursive: true});
-    fs.writeFileSync(file, content);
-  } catch (e) {
-    throw new AstryxError(
-      `Could not write ${shown(cwd, file)}: ${/** @type {Error} */ (e).message}`,
-      [],
-      ERROR_CODES.ERR_WRITE_FAILED,
-    );
-  }
-}
+const folderTaken = (folder, cwd) =>
+  new AstryxError(
+    `${shown(cwd, folder)} appeared while this restore ran; nothing was written. Restore into another folder with --out.`,
+    [],
+    ERROR_CODES.ERR_FILE_EXISTS,
+  );
 
 /** @param {unknown} e */
 function asAstryxError(e) {
@@ -325,7 +412,7 @@ export async function renderToFile({cwd, input, output, title}) {
       ERROR_CODES.ERR_FILE_EXISTS,
     );
   }
-  writeOutput(output, page.html, cwd);
+  writeOutput(output, page.html, cwd, {replace: true});
   return {
     input: shown(cwd, input),
     output: shown(cwd, output),
@@ -514,132 +601,137 @@ export function reverseToFile({cwd, input, output, overwrite}) {
         );
       }
     });
-    // Without --out, the page and the files it imports come back into a new
-    // folder beside the HTML file, named after it (`report.html` gives
-    // `report-restored/`), with the layout they were rendered in. Nothing in
-    // the received file decides where in your project anything goes.
-    const requested = output ?? path.join(restoreFolder(input), ...source.files[0].path.split('/'));
-    refuseConfigTarget(requested);
-    const seen = new Set();
-    for (const f of source.files) {
-      const key = f.path.toLowerCase();
-      if (seen.has(key)) {
+    for (let attempt = 1; ; attempt++) {
+      // Without --out, the page and the files it imports come back into a new
+      // folder beside the HTML file, named after it (`report.html` gives
+      // `report-restored/`), with the layout they were rendered in. Nothing in
+      // the received file decides where in your project anything goes.
+      const folder = output ? null : restoreFolder(input);
+      const requested = output ?? path.join(/** @type {string} */ (folder), ...source.files[0].path.split('/'));
+      refuseConfigTarget(requested);
+      const seen = new Set();
+      for (const f of source.files) {
+        const key = f.path.toLowerCase();
+        if (seen.has(key)) {
+          throw new AstryxError(
+            `${shown(cwd, input)} lists ${f.path} more than once, which a render never does; nothing was written.`,
+            [],
+            ERROR_CODES.ERR_RENDER_SOURCE_DAMAGED,
+          );
+        }
+        seen.add(key);
+      }
+      // Modules, stylesheets and JSON are written only when the page reaches
+      // them through its own imports: one it never imports is not part of it,
+      // whatever its name.
+      const {reached, missing} = reachableFiles(source.files, {aliases: receivingAliases(path.dirname(requested))});
+      // A carried image, font or media file needs no import to be part of the
+      // page (it may be named in markup, a stylesheet, JSON or a computed
+      // path): the render's own list is the authority, so it is kept when its
+      // bytes are a known image, font or media format (any, whatever the
+      // extension), and goes where the layout puts it.
+      for (const f of source.files) {
+        if (reached.has(f.path) || !isAssetPath(f.path)) continue;
+        if (isAssetBytes(Buffer.from(f.base64, 'base64'))) reached.set(f.path, {relative: true, aliased: new Set()});
+      }
+      const stray = source.files.filter(f => !reached.has(f.path)).map(f => f.path);
+      if (stray.length > 0) {
         throw new AstryxError(
-          `${shown(cwd, input)} lists ${f.path} more than once, which a render never does; nothing was written.`,
+          `${shown(cwd, input)} carries ${stray.length === 1 ? 'a file' : 'files'} the page does not import, or that is not the image, font or media file its name says (${stray.join(', ')}), which a render never embeds; nothing was written. A file reached through a path alias needs the same alias in this project's tsconfig.json or jsconfig.json.`,
           [],
           ERROR_CODES.ERR_RENDER_SOURCE_DAMAGED,
         );
       }
-      seen.add(key);
-    }
-    // Modules, stylesheets and JSON are written only when the page reaches
-    // them through its own imports: one it never imports is not part of it,
-    // whatever its name.
-    const {reached, missing} = reachableFiles(source.files, {aliases: receivingAliases(path.dirname(requested))});
-    // A carried image, font or media file needs no import to be part of the
-    // page (it may be named in markup, a stylesheet, JSON or a computed
-    // path): the render's own list is the authority, so it is kept when its
-    // bytes are a known image, font or media format (any, whatever the
-    // extension), and goes where the layout puts it.
-    for (const f of source.files) {
-      if (reached.has(f.path) || !isAssetPath(f.path)) continue;
-      if (isAssetBytes(Buffer.from(f.base64, 'base64'))) reached.set(f.path, {relative: true, aliased: new Set()});
-    }
-    const stray = source.files.filter(f => !reached.has(f.path)).map(f => f.path);
-    if (stray.length > 0) {
-      throw new AstryxError(
-        `${shown(cwd, input)} carries ${stray.length === 1 ? 'a file' : 'files'} the page does not import, or that is not the image, font or media file its name says (${stray.join(', ')}), which a render never embeds; nothing was written. A file reached through a path alias needs the same alias in this project's tsconfig.json or jsconfig.json.`,
-        [],
-        ERROR_CODES.ERR_RENDER_SOURCE_DAMAGED,
-      );
-    }
-    // Each file the page reaches by a relative import goes where that import
-    // finds it from the page's new folder, so every relative import still
-    // resolves wherever the page lands; a file reached through an alias goes
-    // where this project's alias points. Every file but the page must land
-    // in a folder this restore creates: a received file never adds a file to
-    // a folder that already exists (a server hook at the project root, a
-    // middleware module), so a page with neighbours comes back into a new
-    // folder.
-    const entryDir = path.posix.dirname(source.files[0].path);
-    const anchor = path.dirname(requested);
-    /** @param {string} p */
-    const placeFrom = p => path.resolve(anchor, path.posix.relative(entryDir, p));
-    // A file beside the page or elsewhere goes only into a folder this
-    // restore creates: never into a folder that already exists.
-    // The one folder every file but the page must land in: the topmost
-    // folder on the page's path that this restore creates. When the page's
-    // folder already exists there is none, so a page with neighbours comes
-    // back only into a new folder.
-    /** @type {string | null} */
-    let home = null;
-    for (let d = anchor; !fs.existsSync(d) && path.dirname(d) !== d; d = path.dirname(d)) home = d;
-    const within = (/** @type {string} */ file) => {
-      if (!home) return false;
-      const rel = path.relative(home, file);
-      return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
-    };
-    const target = path.join(anchor, path.basename(requested));
-    /** @type {{file: string, bytes: Buffer}[]} */
-    const writes = [];
-    const placed = new Set();
-    /** @type {string[]} */
-    const outside = [];
-    /** @type {string[]} */
-    const aliasedOutside = [];
-    source.files.forEach((f, i) => {
-      const reach = /** @type {import('../../foundation/render/embedded-imports.mjs').Reach} */ (reached.get(f.path));
-      const relative = i === 0 ? [target] : reach.relative ? [placeFrom(f.path)] : [];
-      for (const [file, aliased] of [...relative.map(x => /** @type {[string, boolean]} */ ([x, false])), ...[...reach.aliased].map(x => /** @type {[string, boolean]} */ ([x, true]))]) {
-        if (placed.has(file)) continue;
-        placed.add(file);
-        if (i > 0 && !within(file)) (aliased ? aliasedOutside : outside).push(file);
-        writes.push({file, bytes: Buffer.from(f.base64, 'base64')});
+      // Each file the page reaches by a relative import goes where that import
+      // finds it from the page's new folder, so every relative import still
+      // resolves wherever the page lands; a file reached through an alias goes
+      // where this project's alias points. Every file but the page must land
+      // in a folder this restore creates: a received file never adds a file to
+      // a folder that already exists (a server hook at the project root, a
+      // middleware module), so a page with neighbours comes back into a new
+      // folder.
+      const entryDir = path.posix.dirname(source.files[0].path);
+      const anchor = path.dirname(requested);
+      /** @param {string} p */
+      const placeFrom = p => path.resolve(anchor, path.posix.relative(entryDir, p));
+      // A file beside the page or elsewhere goes only into a folder this
+      // restore creates: never into a folder that already exists.
+      // The one folder every file but the page must land in: the topmost
+      // folder on the page's path that this restore creates. When the page's
+      // folder already exists there is none, so a page with neighbours comes
+      // back only into a new folder.
+      // Without --out, that is the folder this restore picked because no
+      // folder had its name: another run that takes the name first makes this
+      // one take the next.
+      const home = folder ?? newFolderOf(requested);
+      const within = (/** @type {string} */ file) => isInside(file, home);
+      const target = path.join(anchor, path.basename(requested));
+      /** @type {{file: string, bytes: Buffer}[]} */
+      const writes = [];
+      const placed = new Set();
+      /** @type {string[]} */
+      const outside = [];
+      /** @type {string[]} */
+      const aliasedOutside = [];
+      source.files.forEach((f, i) => {
+        const reach = /** @type {import('../../foundation/render/embedded-imports.mjs').Reach} */ (reached.get(f.path));
+        const relative = i === 0 ? [target] : reach.relative ? [placeFrom(f.path)] : [];
+        for (const [file, aliased] of [...relative.map(x => /** @type {[string, boolean]} */ ([x, false])), ...[...reach.aliased].map(x => /** @type {[string, boolean]} */ ([x, true]))]) {
+          if (placed.has(file)) continue;
+          placed.add(file);
+          if (i > 0 && !within(file)) (aliased ? aliasedOutside : outside).push(file);
+          writes.push({file, bytes: Buffer.from(f.base64, 'base64')});
+        }
+      });
+      if (aliasedOutside.length > 0) {
+        throw new AstryxError(
+          `${shown(cwd, input)} imports ${aliasedOutside.map(file => shown(cwd, file)).join(', ')} through a path alias that points outside the folder the restore creates; nothing was written. A received page never adds files to your existing folders: change those imports to relative ones before rendering, or restore it in a project whose alias points somewhere new.`,
+          [],
+          ERROR_CODES.ERR_PATH_TRAVERSAL,
+        );
       }
-    });
-    if (aliasedOutside.length > 0) {
-      throw new AstryxError(
-        `${shown(cwd, input)} imports ${aliasedOutside.map(file => shown(cwd, file)).join(', ')} through a path alias that points outside the folder the restore creates; nothing was written. A received page never adds files to your existing folders: change those imports to relative ones before rendering, or restore it in a project whose alias points somewhere new.`,
-        [],
-        ERROR_CODES.ERR_PATH_TRAVERSAL,
-      );
+      if (outside.length > 0) {
+        const top = entryDir === '.' ? '' : `${entryDir}/`;
+        let fresh = 'restored';
+        for (let n = 2; fs.existsSync(path.join(cwd, fresh)); n++) fresh = `restored-${n}`;
+        const suggestion = `--out ${shellArg(`${fresh}/${top}${path.basename(requested)}`)}`;
+        throw new AstryxError(
+          `${shown(cwd, input)} would add ${outside.map(file => shown(cwd, file)).join(', ')} outside the folder the restore creates; nothing was written. A received page writes the files it imports only inside one new folder: restore it into one, such as ${suggestion}.`,
+          [{name: suggestion, reason: 'restore the page and the files it imports into a new folder, keeping their layout'}],
+          ERROR_CODES.ERR_PATH_TRAVERSAL,
+        );
+      }
+      writes.forEach((w, i) => confined(w.file, cwd, i === 0 ? 'The page' : 'The embedded file'));
+      refuseRunnable(writes.map(w => w.file), cwd, input);
+      refuseExisting(writes.filter(w => !isInside(w.file, home)).map(w => w.file));
+      refuseProtected(writes.map(w => w.file), cwd, home);
+      if (!writeRestore(writes, home, cwd, overwrite)) {
+        // Another run took the folder's name first: a restore without --out
+        // takes the next one.
+        if (output || attempt >= RESTORE_ATTEMPTS) throw folderTaken(/** @type {string} */ (home), cwd);
+        continue;
+      }
+      const renderedBy = renderedByOf(source, html);
+      const packages = packagesOf(source);
+      const modules = writes
+        .filter(w => PAGE_EXTENSIONS.includes(path.extname(w.file).toLowerCase()))
+        .map(w => ({file: shown(cwd, w.file), text: w.bytes.toString('utf8')}));
+      return {
+        input: shown(cwd, input),
+        mode: 'embedded',
+        output: shown(cwd, target),
+        files: writes.map(w => shown(cwd, w.file)),
+        // The page is byte for byte the one rendered; an import it makes that
+        // the file does not carry (a file a render never embeds) is named.
+        exact: missing.length === 0,
+        ...(missing.length > 0 ? {missing} : {}),
+        format: source.version,
+        ...(renderedBy ? {renderedBy} : {}),
+        ...(packages ? {packages} : {}),
+        ...(typeof source.title === 'string' ? {title: source.title} : {}),
+        ...pageChanges(source, html, modules),
+      };
     }
-    if (outside.length > 0) {
-      const top = entryDir === '.' ? '' : `${entryDir}/`;
-      let fresh = 'restored';
-      for (let n = 2; fs.existsSync(path.join(cwd, fresh)); n++) fresh = `restored-${n}`;
-      const suggestion = `--out ${shellArg(`${fresh}/${top}${path.basename(requested)}`)}`;
-      throw new AstryxError(
-        `${shown(cwd, input)} would add ${outside.map(file => shown(cwd, file)).join(', ')} outside the folder the restore creates; nothing was written. A received page writes the files it imports only inside one new folder: restore it into one, such as ${suggestion}.`,
-        [{name: suggestion, reason: 'restore the page and the files it imports into a new folder, keeping their layout'}],
-        ERROR_CODES.ERR_PATH_TRAVERSAL,
-      );
-    }
-    writes.forEach((w, i) => confined(w.file, cwd, i === 0 ? 'The page' : 'The embedded file'));
-    refuseRunnable(writes.map(w => w.file), cwd, input);
-    refuseExisting(writes.map(w => w.file));
-    refuseProtected(writes.map(w => w.file), cwd);
-    writeAll(writes, cwd);
-    const renderedBy = renderedByOf(source, html);
-    const packages = packagesOf(source);
-    const modules = writes
-      .filter(w => PAGE_EXTENSIONS.includes(path.extname(w.file).toLowerCase()))
-      .map(w => ({file: shown(cwd, w.file), text: w.bytes.toString('utf8')}));
-    return {
-      input: shown(cwd, input),
-      mode: 'embedded',
-      output: shown(cwd, target),
-      files: writes.map(w => shown(cwd, w.file)),
-      // The page is byte for byte the one rendered; an import it makes that
-      // the file does not carry (a file a render never embeds) is named.
-      exact: missing.length === 0,
-      ...(missing.length > 0 ? {missing} : {}),
-      format: source.version,
-      ...(renderedBy ? {renderedBy} : {}),
-      ...(packages ? {packages} : {}),
-      ...(typeof source.title === 'string' ? {title: source.title} : {}),
-      ...pageChanges(source, html, modules),
-    };
   }
   // A file a render wrote, whose source block was taken out on the way
   // (sanitizers and editors strip <script> elements), says so.
@@ -662,27 +754,34 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       ERROR_CODES.ERR_RENDER_NOT_ASTRYX,
     );
   }
-  const target = output ?? path.join(restoreFolder(input), 'page.tsx');
-  refuseConfigTarget(target);
-  confined(target, cwd, 'The page');
-  refuseRunnable([target], cwd, input);
-  refuseExisting([target]);
-  // Components resolve from where the page will live, then from the HTML
-  // file's folder, then from the current folder.
-  const from =
-    [path.dirname(target), path.dirname(input), cwd].find(d => resolvesCore(d)) ?? cwd;
-  const rebuilt = rebuildPage(html, from);
-  refuseProtected([target], cwd);
-  writeOutput(target, rebuilt.source, cwd);
-  return {
-    input: shown(cwd, input),
-    mode: 'rebuilt',
-    output: shown(cwd, target),
-    files: [shown(cwd, target)],
-    exact: false,
-    components: rebuilt.components,
-    elements: rebuilt.elements,
-    unknown: rebuilt.unknown,
-    omitted: rebuilt.omitted,
-  };
+  for (let attempt = 1; ; attempt++) {
+    const folder = output ? null : restoreFolder(input);
+    const target = output ?? path.join(/** @type {string} */ (folder), 'page.tsx');
+    const home = folder ?? newFolderOf(target);
+    refuseConfigTarget(target);
+    confined(target, cwd, 'The page');
+    refuseRunnable([target], cwd, input);
+    refuseExisting(isInside(target, home) ? [] : [target]);
+    // Components resolve from where the page will live, then from the HTML
+    // file's folder, then from the current folder.
+    const from =
+      [path.dirname(target), path.dirname(input), cwd].find(d => resolvesCore(d)) ?? cwd;
+    const rebuilt = rebuildPage(html, from);
+    refuseProtected([target], cwd, home);
+    if (!writeRestore([{file: target, bytes: Buffer.from(rebuilt.source)}], home, cwd, overwrite)) {
+      if (output || attempt >= RESTORE_ATTEMPTS) throw folderTaken(/** @type {string} */ (home), cwd);
+      continue;
+    }
+    return {
+      input: shown(cwd, input),
+      mode: 'rebuilt',
+      output: shown(cwd, target),
+      files: [shown(cwd, target)],
+      exact: false,
+      components: rebuilt.components,
+      elements: rebuilt.elements,
+      unknown: rebuilt.unknown,
+      omitted: rebuilt.omitted,
+    };
+  }
 }

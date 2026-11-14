@@ -207,6 +207,58 @@ describe('render(): page to one HTML file', () => {
   });
 });
 
+describe('render(): every write takes its place in one step', () => {
+  const BIN = path.join(CLI_DIR, 'clients/cli/bin/astryx.mjs');
+  /**
+   * Run the CLI in a process of its own.
+   * @param {string[]} args
+   * @returns {Promise<{code: number | null, out: string}>}
+   */
+  const cliRun = args =>
+    new Promise(resolve => {
+      const child = spawn(process.execPath, [BIN, '--json', ...args], {cwd: dir, stdio: ['ignore', 'pipe', 'ignore']});
+      let out = '';
+      child.stdout.on('data', chunk => (out += chunk));
+      child.on('close', code => resolve({code, out}));
+    });
+
+  it('renders one page to one file from many processes at once: every run succeeds and the file is whole', async () => {
+    // A large image makes each write long enough for the runs to overlap.
+    put('big.png', Buffer.concat([PNG, Buffer.alloc(6_000_000, 7)]));
+    put('big-page.tsx', "import big from './big.png';\nexport default function Big() {\n  return <img src={big} alt=\"\" />;\n}\n");
+    const runs = await Promise.all(Array.from({length: 8}, () => cliRun(['experimental', 'render', 'big-page.tsx', '--out', 'shared.html'])));
+    expect(runs.map(r => r.code)).toEqual(Array(8).fill(0));
+    const {readSourceBlock} = await import('../../foundation/render/source-block.mjs');
+    expect('source' in readSourceBlock(fs.readFileSync(path.join(dir, 'shared.html'), 'utf8'))).toBe(true);
+  }, 120_000);
+
+  it('restores one file from many processes at once: each run gets a folder of its own, whole', async () => {
+    const runs = await Promise.all(Array.from({length: 8}, () => cliRun(['experimental', 'render', '--reverse', 'page.html'])));
+    expect(runs.map(r => r.code)).toEqual(Array(8).fill(0));
+    const pages = runs.map(r => JSON.parse(r.out).data.output);
+    expect(new Set(pages.map(p => path.dirname(p))).size).toBe(8);
+    for (const p of pages) expect(fs.readFileSync(path.join(dir, p), 'utf8')).toBe(PAGE);
+  }, 120_000);
+
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'leaves a file this user cannot write as it is, and keeps the permission bits of a file it replaces',
+    async () => {
+      await render('page.tsx', {cwd: dir, out: 'modes.html'});
+      const file = path.join(dir, 'modes.html');
+      fs.chmodSync(file, 0o444);
+      expect(await codeOf(() => render('page.tsx', {cwd: dir, out: 'modes.html'}))).toBe('ERR_WRITE_FAILED');
+      fs.chmodSync(file, 0o640);
+      await render('page.tsx', {cwd: dir, out: 'modes.html'});
+      expect(fs.statSync(file).mode & 0o777).toBe(0o640);
+    },
+    60_000,
+  );
+
+  it('leaves no temporary file or folder behind', () => {
+    expect(fs.readdirSync(dir).filter(name => name.includes('.tmp-'))).toEqual([]);
+  });
+});
+
 describe('render(): embedded files stay inside the current folder', () => {
   it('refuses an embedded path that climbs out', async () => {
     const {sourceBlock} = await import('../../foundation/render/source-block.mjs');
