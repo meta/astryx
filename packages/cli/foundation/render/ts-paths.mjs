@@ -19,7 +19,6 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {createRequire} from 'node:module';
 
 /**
  * @typedef {object} PathPattern
@@ -71,27 +70,38 @@ function readJsonc(file) {
 
 /**
  * The config file an `extends` entry names, from the folder of the config
- * that writes it: a path (`.json` may be left off), or a package's config
- * (`@scope/tsconfig/base.json`, or a package's own `tsconfig.json`).
+ * that writes it, as TypeScript finds it: a path (`.json` may be left off);
+ * or a package's config: a path inside the package (as its `exports` map it,
+ * else as written, `.json` may be left off), else the file its package.json
+ * names in `tsconfig`, else its `tsconfig.json`. A package's `main` is code,
+ * never its config.
  * @param {unknown} spec
  * @param {string} fromDir
  * @returns {string | null}
  */
 function extendedFile(spec, fromDir) {
   if (typeof spec !== 'string' || !spec) return null;
-  if (spec.startsWith('.') || path.isAbsolute(spec)) {
-    const file = path.resolve(fromDir, spec);
-    return isFile(file) ? file : isFile(`${file}.json`) ? `${file}.json` : null;
-  }
-  const require = createRequire(path.join(fromDir, 'tsconfig.json'));
-  for (const candidate of [spec, `${spec}.json`, `${spec}/tsconfig.json`]) {
-    try {
-      return require.resolve(candidate);
-    } catch {
-      // Not this form of the name.
+  /** @param {string} file */
+  const jsonFile = file => (isFile(file) ? file : isFile(`${file}.json`) ? `${file}.json` : null);
+  if (spec.startsWith('.') || path.isAbsolute(spec)) return jsonFile(path.resolve(fromDir, spec));
+  const parts = spec.split('/');
+  const scoped = spec.startsWith('@');
+  const name = parts.slice(0, scoped ? 2 : 1).join('/');
+  const sub = parts.slice(scoped ? 2 : 1).join('/');
+  for (let d = fromDir; ; d = path.dirname(d)) {
+    const dir = path.join(d, 'node_modules', name);
+    if (fs.existsSync(dir)) {
+      const pkg = readJsonc(path.join(dir, 'package.json')) ?? {};
+      if (sub) {
+        const mapped = pkg.exports && typeof pkg.exports === 'object' ? pkg.exports[`./${sub}`] : undefined;
+        const target = typeof mapped === 'string' ? mapped : typeof mapped?.default === 'string' ? mapped.default : null;
+        return jsonFile(path.join(dir, target ?? sub));
+      }
+      if (typeof pkg.tsconfig === 'string') return jsonFile(path.join(dir, pkg.tsconfig));
+      return jsonFile(path.join(dir, 'tsconfig.json'));
     }
+    if (path.dirname(d) === d) return null;
   }
-  return null;
 }
 
 /**
