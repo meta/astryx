@@ -43,7 +43,13 @@ import {resolveLayerPortalTarget} from './layerHost';
 import {layerTextReset} from './layerTextReset.stylex';
 import {layerStructureReset} from './layerStructureReset.stylex';
 import {layerViewportInset} from './layerViewportInset.stylex';
-import {keyboardLiftStyle, useLayerKeyboardClearance} from './LayerTouch';
+import {
+  LAYER_KEYBOARD_CAP_PROPERTY,
+  LAYER_KEYBOARD_INSET_PROPERTY,
+  LAYER_KEYBOARD_OVERFLOW_PROPERTY,
+  keyboardLiftStyle,
+  useLayerKeyboardClearance,
+} from './LayerTouch';
 import {
   layerEntranceSide,
   readLayerEntranceSide,
@@ -2455,15 +2461,21 @@ function useLayerImplementation(
           aria-label={ariaLabel}
           popover={lightDismiss ? 'auto' : 'manual'}
           className={combinedClassName}
-          style={{
-            ...stylexResult.style,
-            ...anchorStyle,
-            ...keyboardLiftStyle(keyboardLift),
-            ...clearanceProperty,
-            ...layerInsetProperties(declaredInset),
-            ...mount.portalStyle,
-            ...extraStyle,
-          }}
+          style={
+            {
+              ...stylexResult.style,
+              [LAYER_KEYBOARD_CAP_PROPERTY]:
+                keyboardCap == null ? '100vh' : `${keyboardCap}px`,
+              [LAYER_KEYBOARD_OVERFLOW_PROPERTY]:
+                keyboardCap == null ? 'visible' : 'auto',
+              ...anchorStyle,
+              ...keyboardLiftStyle(keyboardLift),
+              ...clearanceProperty,
+              ...layerInsetProperties(declaredInset),
+              ...mount.portalStyle,
+              ...extraStyle,
+            } as React.CSSProperties
+          }
           onMouseEnter={onMouseEnter}
           onMouseLeave={onMouseLeave}
           // Presses inside the layer do not reach handlers around where it

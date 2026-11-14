@@ -127,6 +127,7 @@ function Harness({
   shiftedTop,
   ignoresLift = false,
   slidesAboveKeyboard = false,
+  topGutter = 0,
 }: {
   isOpen?: boolean;
   isAnchored?: boolean;
@@ -152,6 +153,8 @@ function Harness({
    * inset is out, the layer ends above it.
    */
   slidesAboveKeyboard?: boolean;
+  /** Top gutter that stops a layer sliding toward the block-start edge. */
+  topGutter?: number;
 }) {
   const layerRef = useRef<HTMLDivElement>(null);
   const {cap, lift, inset, followLayerElement} = useLayerKeyboardClearance(
@@ -174,6 +177,7 @@ function Harness({
       key={layerKey}
       {...(isAnchored ? {[LAYER_ANCHORED_ATTRIBUTE]: ''} : {})}
       style={{
+        ...(topGutter > 0 ? {marginBlockStart: `${topGutter}px`} : {}),
         ...(cap == null ? {} : {[LAYER_KEYBOARD_CAP_PROPERTY]: `${cap}px`}),
         ...(inset == null
           ? {}
@@ -208,7 +212,12 @@ function Harness({
               shiftedTop != null && h >= natural ? shiftedTop : box.top;
             const start =
               slidesAboveKeyboard && !Number.isNaN(keyboardInset)
-                ? Math.min(placed, VIEWPORT - keyboardInset - h)
+                ? topGutter > 0
+                  ? Math.max(
+                      topGutter,
+                      Math.min(placed, VIEWPORT - keyboardInset - h),
+                    )
+                  : Math.min(placed, VIEWPORT - keyboardInset - h)
                 : placed;
             const lifted = ignoresLift ? 0 : liftOf(el);
             const top = (heldBottom ? box.bottom - h : start) - lifted + shift;
@@ -508,6 +517,88 @@ describe('useLayerKeyboardClearance', () => {
     guide.emit({kind: 'hide', from: COVER, to: 0});
     expect(capOf(container)).toBe('');
     expect(layer.getBoundingClientRect().top).toBe(placed);
+  });
+
+  it('caps a flipped layer stopped against the top gutter so it ends clear of the keyboard', () => {
+    // Natural height 450 px, gutter 16 px, limit = 714 - 337 - 10 = 367 px.
+    // Slid above keyboard: start is pushed past gutter, so it clamps to top 16 px.
+    // Room between top gutter and keyboard line is 367 - 16 = 351 px.
+    const {container} = render(
+      <Harness
+        box={{top: 200, bottom: 650}}
+        slidesAboveKeyboard
+        topGutter={16}
+      />,
+    );
+    guide.emit({kind: 'change', from: 0, to: COVER, animated: false});
+    expect(capOf(container)).toBe(
+      `${VIEWPORT - COVER - LAYER_KEYBOARD_CLEARANCE_PX - 16}px`,
+    );
+    const layer = screen.getByTestId('layer');
+    expect(layer.getBoundingClientRect().top).toBe(16);
+    expect(layer.getBoundingClientRect().bottom).toBe(
+      VIEWPORT - COVER - LAYER_KEYBOARD_CLEARANCE_PX,
+    );
+  });
+
+  it('releases the cap on a flipped layer stopped at the gutter when the keyboard closes', () => {
+    const {container} = render(
+      <Harness
+        box={{top: 200, bottom: 650}}
+        slidesAboveKeyboard
+        topGutter={16}
+      />,
+    );
+    guide.emit({kind: 'change', from: 0, to: COVER, animated: false});
+    expect(capOf(container)).toBe(
+      `${VIEWPORT - COVER - LAYER_KEYBOARD_CLEARANCE_PX - 16}px`,
+    );
+    guide.emit({kind: 'hide', from: COVER, to: 0});
+    expect(capOf(container)).toBe('');
+  });
+
+  it('does not cap a flipped layer that slides above the keyboard and fits without hitting the gutter', () => {
+    // Natural height 200 px (from 200 to 400).
+    // Slid above keyboard: start = Math.min(200, 714 - 347 - 200) = 167 px >= gutter (16 px).
+    // Bottom = 167 + 200 = 367 px <= limit (367 px).
+    // It fits whole above the keyboard without being capped.
+    const {container} = render(
+      <Harness
+        box={{top: 200, bottom: 400}}
+        slidesAboveKeyboard
+        topGutter={16}
+      />,
+    );
+    guide.emit({kind: 'change', from: 0, to: COVER, animated: false});
+    expect(capOf(container)).toBe('');
+    const layer = screen.getByTestId('layer');
+    expect(layer.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      VIEWPORT - COVER - LAYER_KEYBOARD_CLEARANCE_PX,
+    );
+  });
+
+  it('converges to a settled rect without repeated cap commits when capped at the gutter', () => {
+    let commitCount = 0;
+    function CommitsHarness() {
+      commitCount += 1;
+      return (
+        <Harness
+          box={{top: 200, bottom: 650}}
+          slidesAboveKeyboard
+          topGutter={16}
+        />
+      );
+    }
+    const {container} = render(<CommitsHarness />);
+    const initialCommits = commitCount;
+    guide.emit({kind: 'change', from: 0, to: COVER, animated: false});
+    expect(capOf(container)).toBe(
+      `${VIEWPORT - COVER - LAYER_KEYBOARD_CLEARANCE_PX - 16}px`,
+    );
+    const capCommits = commitCount - initialCommits;
+    expect(capCommits).toBeLessThanOrEqual(2);
+    guide.emit({kind: 'change', from: COVER, to: COVER, animated: false});
+    expect(commitCount - initialCommits).toBe(capCommits);
   });
 
   it('caps in layout px under a pinch zoom, where WebKit reports innerHeight zoomed (spec:AST-059 FR9)', () => {
