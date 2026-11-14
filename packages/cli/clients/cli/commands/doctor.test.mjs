@@ -481,9 +481,7 @@ describe('doctor — text output mirrors the JSON', () => {
       // A wrapped record continues on indented lines; join them back.
       const lines = logCalls.join('\n').replace(/\n +/g, ' ').split('\n');
 
-      expect(lines[1]).toBe(
-        'Each check: status, id, label, message, fix',
-      );
+      expect(lines[1]).toBe('Each check: status, id, label, message, fix');
       const column = Math.max(
         ...checks.map(check => TOKEN[check.status].length),
       );
