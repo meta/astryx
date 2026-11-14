@@ -86,16 +86,20 @@ jobs:
             --reporter=default --reporter=github-actions \
             --reporter=./scripts/vitest-shard-watchdog.mjs 2>&1 | tee "$RUNNER_TEMP/cli-tests.log"
 
-      # pass, fail, or none: a leg the watchdog stopped judged nothing. A leg
-      # the job limit cancels uploads no verdict, which also means none.
+      # pass, fail, or none. A failed test is fail even when the watchdog then
+      # stopped the leg; a leg the watchdog stopped with no failure judged
+      # nothing (none). A leg the job limit cancels uploads no verdict, which
+      # also means none.
       - name: Record this leg's verdict
         if: always() && steps.tests.outcome != 'skipped'
         env:
           OUTCOME: ${{ steps.tests.outcome }}
           SHARD: ${{ matrix.shard }}
         run: |
+          log="$RUNNER_TEMP/cli-tests.log"
           if [ "$OUTCOME" = success ]; then verdict=pass
-          elif grep -q 'Node shard stuck' "$RUNNER_TEMP/cli-tests.log" 2>/dev/null; then verdict=none
+          elif grep -qE '^ *(FAIL |×)' "$log" 2>/dev/null; then verdict=fail
+          elif grep -q 'Node shard stuck' "$log" 2>/dev/null; then verdict=none
           elif [ "$OUTCOME" = failure ]; then verdict=fail
           else verdict=none
           fi
@@ -192,6 +196,7 @@ jobs:
         with:
           sparse-checkout: |
             .github/scripts/cli-minimum-node.mjs
+            .github/scripts/node-time-drift.mjs
             scripts/vitest-node-durations.min-node.json
           sparse-checkout-cone-mode: false
           persist-credentials: false

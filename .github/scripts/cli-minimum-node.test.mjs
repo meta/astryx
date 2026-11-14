@@ -6,6 +6,7 @@
  *   one issue that a failure opens and a later pass closes.
  */
 
+import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
 import {createRequire} from 'node:module';
 import os from 'node:os';
@@ -190,6 +191,9 @@ describe('the workflow', () => {
     expect(checkout.with['sparse-checkout']).toContain(
       'scripts/vitest-node-durations.min-node.json',
     );
+    expect(checkout.with['sparse-checkout']).toContain(
+      '.github/scripts/node-time-drift.mjs',
+    );
     const keepRecord = jobs.report.steps.at(-1);
     expect(keepRecord.with.name).toBe('min-node-record');
     expect(keepRecord.if).toBe('always()');
@@ -199,7 +203,64 @@ describe('the workflow', () => {
   });
 });
 
+describe("a leg's verdict, as its step decides it", () => {
+  const record = workflow.jobs['cli-tests'].steps.find(
+    step => step.name === "Record this leg's verdict",
+  );
+
+  /** Runs the step's script with this test log and test-step outcome. */
+  function verdictFor(outcome, log) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'leg-'));
+    try {
+      if (log != null) fs.writeFileSync(path.join(dir, 'cli-tests.log'), log);
+      execFileSync('bash', ['-e', '-c', record.run], {
+        cwd: dir,
+        env: {...process.env, RUNNER_TEMP: dir, OUTCOME: outcome, SHARD: '2'},
+      });
+      return JSON.parse(
+        fs.readFileSync(path.join(dir, 'verdict/leg-2.json'), 'utf8'),
+      );
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  }
+  const stuck =
+    '::error title=Node shard stuck::shard stuck in a.test.mjs (300 s)\n';
+  const failed =
+    ' FAIL  |node| packages/cli/b.test.mjs > reads b\n   × reads b 20ms\n';
+
+  it('passes when the tests passed', () => {
+    expect(verdictFor('success', '')).toEqual({shard: 2, verdict: 'pass'});
+  });
+
+  it('fails when a test failed, even if the watchdog then stopped the leg', () => {
+    expect(verdictFor('failure', failed + stuck).verdict).toBe('fail');
+    expect(verdictFor('failure', failed).verdict).toBe('fail');
+  });
+
+  it('has no verdict when the watchdog stopped the leg before any test failed', () => {
+    expect(
+      verdictFor('failure', ' ✓ |node| a.test.mjs (2 tests) 10ms\n' + stuck)
+        .verdict,
+    ).toBe('none');
+  });
+
+  it('has no verdict when the test step was cancelled', () => {
+    expect(verdictFor('cancelled', null).verdict).toBe('none');
+  });
+});
+
 describe('the minimum-Node times', () => {
+  it('takes the run’s own slowdown out, so a uniformly slow run names no file', () => {
+    const recorded = Object.fromEntries(
+      ['a', 'b', 'c', 'd', 'e', 'f'].map(name => [`${name}.test.mjs`, 10]),
+    );
+    const times = Object.fromEntries(
+      Object.keys(recorded).map(file => [file, 30]),
+    );
+    expect(slowFiles(times, recorded)).toEqual([]);
+  });
+
   it('names a file past 1.5 times its record and more than 10 s over it, and judges no file the record lacks', () => {
     const recorded = {'a.test.mjs': 10, 'b.test.mjs': 30, 'c.test.mjs': 2};
     const times = {
@@ -502,8 +563,7 @@ describe('the report step, run as the workflow runs it', () => {
       {...context, serverUrl: 'https://github.com', runId: 1},
       core,
       createRequire(import.meta.url),
-      () =>
-        import(path.join(root, '.github/scripts/cli-minimum-node.mjs')),
+      () => import(path.join(root, '.github/scripts/cli-minimum-node.mjs')),
     );
     return {
       summary: summary.join('\n'),
@@ -528,6 +588,16 @@ describe('the report step, run as the workflow runs it', () => {
     expect(failed).toEqual([
       'No verdict on Node 22.13.0: a part of the run stopped or was cancelled before it judged anything.',
     ]);
+  });
+
+  it('a leg that failed and was then stopped, beside a leg with no verdict: says the CLI failed', async () => {
+    const {writes, failed} = await report(
+      ['fail', 'none', 'pass', 'pass'],
+      [ours],
+    );
+    expect(writes.map(([kind]) => kind)).toEqual(['comment']);
+    expect(writes[0][1].body).toMatch(/failed on Node 22\.13\.0/);
+    expect(failed).toEqual(['The CLI failed on Node 22.13.0.']);
   });
 
   it('a failed leg: says the CLI failed', async () => {

@@ -19,6 +19,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
+import {drifted} from './node-time-drift.mjs';
+
 export const ISSUE_TITLE = 'CLI fails on its minimum Node';
 const BOT = 'github-actions[bot]';
 
@@ -93,10 +95,6 @@ async function findOpenIssue(github, context) {
 }
 
 /**
- * A failed run opens the issue, or comments on the open one; a passing run
- * closes an open issue this job opened. Returns what it did.
- */
-/**
  * Each leg's verdict from the files the CLI test legs upload
  * (`{"shard": <n>, "verdict": "pass" | "fail" | "none"}`): "none" for a leg
  * with no file, which the job limit cancelled before it could write one.
@@ -131,31 +129,26 @@ export function readLegVerdicts(dir, count) {
   return verdicts;
 }
 
-/** How far past its minimum-Node record a file may run before it is named. */
-export const SLOW_RATIO = 1.5;
-/** Seconds past its record a file must also run before it is named. */
+/** Seconds past its expected time a file must also run before it is named. */
 export const SLOW_MARGIN_S = 10;
 
 /**
- * The files that ran past their minimum-Node record: more than SLOW_RATIO
- * times it and more than SLOW_MARGIN_S over it, slowest past it first. A
- * file the record lacks is not judged.
+ * The files that ran past their minimum-Node record, by the Node legs' own
+ * drift rule (node-time-drift.mjs `drifted`): every timed file is judged, the
+ * run's own slowdown is taken out, and a file must also run SLOW_MARGIN_S
+ * past its expected time. A file the record lacks is not judged.
  * @param {Record<string, number>} times seconds per test file, this run
  * @param {Record<string, number>} recorded seconds per test file, the record
  * @returns {{file: string, recorded: number, measured: number}[]}
  */
 export function slowFiles(times, recorded) {
-  return Object.entries(times)
-    .filter(([file, seconds]) => {
-      const before = recorded[file];
-      return (
-        typeof before === 'number' &&
-        seconds > before * SLOW_RATIO &&
-        seconds - before > SLOW_MARGIN_S
-      );
-    })
-    .map(([file, measured]) => ({file, recorded: recorded[file], measured}))
-    .sort((a, b) => b.measured - b.recorded - (a.measured - a.recorded));
+  return drifted(times, recorded, [], {all: true, margin: SLOW_MARGIN_S}).map(
+    ({file, recorded: before, measured}) => ({
+      file,
+      recorded: before,
+      measured,
+    }),
+  );
 }
 
 /**
@@ -218,6 +211,11 @@ export function runVerdict({version, legs, pack, smoke}) {
   return all.includes('none') ? 'none' : 'pass';
 }
 
+/**
+ * A failed run opens the issue, or comments on the open one; a passing run
+ * closes an open issue this job opened; a run with no verdict only notes it
+ * on an open issue. Returns what it did.
+ */
 export async function reportIssue({github, context, verdict, version, runUrl}) {
   const issue = await findOpenIssue(github, context);
   // No verdict neither closes the issue nor says the CLI failed.
@@ -226,7 +224,7 @@ export async function reportIssue({github, context, verdict, version, runUrl}) {
     await github.rest.issues.createComment({
       ...context.repo,
       issue_number: issue.number,
-      body: `No verdict on Node ${version}: part of the run stopped or was cancelled at its time limit before it judged anything ([run](${runUrl})). This issue stays as it is.`,
+      body: `No verdict on Node ${version}: part of the run stopped, was cancelled or was skipped before it judged anything ([run](${runUrl})). This issue stays as it is.`,
     });
     return 'no verdict noted';
   }

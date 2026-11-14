@@ -69,20 +69,32 @@ export function legFactor(measured, recorded, touched) {
 
 /**
  * The changed test files whose measured time is past their record, after the
- * leg's own slowdown is taken out.
+ * leg's own slowdown is taken out. With `all`, every measured file is judged,
+ * and the leg's slowdown is read from every file (a scheduled run has no
+ * change to set apart).
  * @param {Record<string, number>} measured seconds per test file, this leg
  * @param {Record<string, number>} recorded seconds per test file, the record
  * @param {string[]} changed the files the change touches
+ * @param {{all?: boolean, margin?: number}} [options] `margin`: seconds past
+ *   the expected time a file must also run (MARGIN_S by default)
  * @returns {{file: string, recorded: number, measured: number, factor: number, suggested: number}[]}
  */
-export function drifted(measured, recorded, changed) {
+export function drifted(
+  measured,
+  recorded,
+  changed,
+  {all = false, margin = MARGIN_S} = {},
+) {
   const touched = new Set(changed);
-  const {factor} = legFactor(measured, recorded, touched);
+  const {factor} = legFactor(measured, recorded, all ? new Set() : touched);
   return Object.entries(measured)
-    .filter(([file]) => touched.has(file) && typeof recorded[file] === 'number')
+    .filter(
+      ([file]) =>
+        (all || touched.has(file)) && typeof recorded[file] === 'number',
+    )
     .filter(([file, seconds]) => {
       const expected = recorded[file] * factor;
-      return seconds > expected * RATIO && seconds - expected > MARGIN_S;
+      return seconds > expected * RATIO && seconds - expected > margin;
     })
     .map(([file, seconds]) => ({
       file,
