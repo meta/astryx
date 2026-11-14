@@ -50,13 +50,14 @@ const ATTRIBUTE = 'data-exit-copy';
 
 // A real navigation (not setContent): the page keeps its own window. The
 // layer sits in a panel that clips and is transformed. A fixed box placed
-// there would be cut and moved; the top layer is neither.
+// there would be cut and moved; the top layer is neither. The page's popover
+// rule skips the copy, so the browser's own popover style reaches it.
 async function open(page: Page) {
   const html = `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
   html, body { margin: 0; background: #fff; }
   .panel { position: absolute; left: 20px; top: 20px; width: 60px; height: 40px; overflow: hidden; transform: translateX(30px); }
-  [popover] { position: fixed; inset: auto; margin: 0; padding: 0; border: 0; left: 40px; top: 120px; width: 280px; height: 200px; background: #36c; color: #fff; }
+  [popover]:not([data-exit-copy]) { position: fixed; inset: auto; margin: 0; padding: 0; border: 0; left: 40px; top: 120px; width: 280px; height: 200px; background: #36c; color: #fff; }
   .other { left: 40px; top: 400px; width: 120px; height: 60px; }
 </style>
 <div class="panel">
