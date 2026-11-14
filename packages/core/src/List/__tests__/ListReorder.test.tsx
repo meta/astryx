@@ -15,7 +15,8 @@
  *   row that stays at either end is refused and announced. Escape or another
  *   activation ends the mode and keeps the moves; a lost focus keeps it.
  *   While the mode is on, a hint shows the moves and Done as buttons. They
- *   do what the keys do and leave the focus on the handle. The
+ *   do what the keys do and leave the focus on the handle. A move past the
+ *   list's first or last place is disabled, and does nothing. The
  *   object's start(key) enters the same mode from the app's own UI. It keeps
  *   the mode when that UI hands its focus back. It only warns for a key that
  *   cannot move or is not mounted. It uses the list mounted last for an
@@ -1206,6 +1207,50 @@ describe('List reorderable', () => {
     // Kept: nothing undone.
     expect(onReorder).toHaveBeenCalledTimes(3);
     expect(labels()).toEqual(['Sent', 'Inbox', 'Drafts']);
+  });
+
+  it("disables the hint's move past either end of the list, updating after each move", async () => {
+    const user = userEvent.setup();
+    const onReorder = vi.fn();
+    render(
+      <ReorderableRows
+        initial={['Inbox', 'Sent', 'Drafts']}
+        onReorder={onReorder}
+      />,
+    );
+    const handle = handleOf('Inbox');
+    await user.click(handle);
+    const up = () => hintButton('Move up') as HTMLElement;
+    const down = () => hintButton('Move down') as HTMLElement;
+    expect(up()).toHaveAttribute('aria-disabled', 'true');
+    expect(down()).not.toHaveAttribute('aria-disabled');
+    // A press on a disabled move does nothing, and the focus stays.
+    await user.click(up());
+    expect(onReorder).not.toHaveBeenCalled();
+    expect(handle).toHaveFocus();
+    await user.click(down());
+    await waitFor(() => expect(up()).not.toHaveAttribute('aria-disabled'));
+    expect(down()).not.toHaveAttribute('aria-disabled');
+    await user.click(down());
+    expect(labels()).toEqual(['Sent', 'Drafts', 'Inbox']);
+    await waitFor(() =>
+      expect(down()).toHaveAttribute('aria-disabled', 'true'),
+    );
+    expect(up()).not.toHaveAttribute('aria-disabled');
+    await user.click(down());
+    expect(onReorder).toHaveBeenCalledTimes(2);
+    expect(handle).toHaveFocus();
+    expect(handle).toHaveAttribute('aria-pressed', 'true');
+    // Done is never disabled.
+    expect(hintButton('Done')).not.toHaveAttribute('aria-disabled');
+  });
+
+  it("disables both of the hint's moves for a list's only row", async () => {
+    const user = userEvent.setup();
+    render(<ReorderableRows initial={['Inbox']} />);
+    await user.click(handleOf('Inbox'));
+    expect(hintButton('Move up')).toHaveAttribute('aria-disabled', 'true');
+    expect(hintButton('Move down')).toHaveAttribute('aria-disabled', 'true');
   });
 
   it("refuses the hint's move into a row that keeps its place, as the key does", async () => {
