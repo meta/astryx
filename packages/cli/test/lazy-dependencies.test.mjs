@@ -49,6 +49,7 @@ const API_EXPORTS = {
   integrationCheck: 'function/0/async',
   integrationComponentConflicts: 'function/1/async',
   integrationDocConflicts: 'function/1/async',
+  integrationExampleScope: 'function/1/async',
   integrationPackCheck: 'function/0/async',
   integrationTemplateConflicts: 'function/1/async',
   listThemes: 'function/0',
