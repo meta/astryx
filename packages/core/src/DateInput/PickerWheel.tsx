@@ -27,9 +27,8 @@ import {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {scrollTypeOf} from '../gestures/scrollType';
-import {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
-import {TapGestureRecognizer} from '../gestures/TapGestureRecognizer';
-import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
+import type {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
+import type {TapGestureRecognizer} from '../gestures/TapGestureRecognizer';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {rubberBandInverse} from '../motion/rubberBand';
 import {resolveMotion} from '../motion/resolveMotion';
@@ -45,7 +44,7 @@ import {
 } from '../theme/tokens.stylex';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {mod, nearestLoopCopy} from '../hooks/pagerIndex';
-import {lockSelection} from '../gestures/selectionLock';
+import {useTouchRuntime} from '../utils/touchRuntime';
 import {dateInputTouchGeometry, dateInputTouchSizes} from './tokens.stylex';
 import {useOwnScrollGesture} from './useOwnScrollGesture';
 import {useWheelListbox} from './useWheelListbox';
@@ -700,124 +699,107 @@ export function PickerWheel({
     [motion, move, onEnd, cover],
   );
 
-  const pan = useGestureRecognizer(
-    columnRef,
-    () =>
-      new PanGestureRecognizer({
-        name: 'wheel-pan',
-        direction: 'vertical',
-        // A trackpad's two-finger scroll drives the pan as a finger does. The
-        // rows follow, coast on at the lift with the fingers' last speed, and
-        // rest by the rest rule. A mouse wheel's notches never reach the pan.
-        allowedScrollTypes: ['continuous'],
-        // A held finger on the wheel never starts text selection or the
-        // callout.
-        selectionLock: lockSelection,
-        shouldReceiveTouch: (_pan, touch) => {
-          onTouchDownRef.current(touch.time);
-          return true;
-        },
-      }),
-    recognizer => {
-      const {layout: currentLayout} = latestRef.current;
-      switch (recognizer.state) {
-        case 'began': {
-          const shown = motion.isMoving() ? motion.stop() : motion.offset();
-          dragRef.current = {start: fingerOffset(shown, currentLayout)};
-          motion.resetDrag();
-          motion.setOffset(
-            dragOffset(
-              dragRef.current.start - recognizer.translation().y,
-              currentLayout,
-            ),
-            {ticks: true},
-          );
-          break;
-        }
-        case 'changed': {
-          const drag = dragRef.current;
-          if (drag == null) {
-            break;
-          }
-          const offset = dragOffset(
-            drag.start - recognizer.translation().y,
+  // The wheel's drag, its catch and its tap come with the shared touch
+  // runtime, which loads after first paint. Until then a wheel turns by its
+  // keys and by a click on a row, with no drag and no spin.
+  const touchRuntime = useTouchRuntime();
+  const handlePan = (recognizer: PanGestureRecognizer) => {
+    const {layout: currentLayout} = latestRef.current;
+    switch (recognizer.state) {
+      case 'began': {
+        const shown = motion.isMoving() ? motion.stop() : motion.offset();
+        dragRef.current = {start: fingerOffset(shown, currentLayout)};
+        motion.resetDrag();
+        motion.setOffset(
+          dragOffset(
+            dragRef.current.start - recognizer.translation().y,
             currentLayout,
-          );
-          if (currentLayout.looping) {
-            const position = nearestIndex(offset, currentLayout);
-            cover(position, position);
-          }
-          motion.setOffset(offset, {ticks: true});
-          break;
-        }
-        case 'ended': {
-          const drag = dragRef.current;
-          dragRef.current = null;
-          // A scroll view's release velocity (the pan's last two, blended as
-          // UIPickerView's); the rows move against the finger.
-          release(drag == null ? 0 : -recognizer.scrollVelocity().y);
-          break;
-        }
-        case 'cancelled': {
-          dragRef.current = null;
-          release(0);
-          break;
-        }
-        case 'possible':
-        case 'failed':
-          break;
+          ),
+          {ticks: true},
+        );
+        break;
       }
-    },
-    {isEnabled: isActive},
-  );
-
+      case 'changed': {
+        const drag = dragRef.current;
+        if (drag == null) {
+          break;
+        }
+        const offset = dragOffset(
+          drag.start - recognizer.translation().y,
+          currentLayout,
+        );
+        if (currentLayout.looping) {
+          const position = nearestIndex(offset, currentLayout);
+          cover(position, position);
+        }
+        motion.setOffset(offset, {ticks: true});
+        break;
+      }
+      case 'ended': {
+        const drag = dragRef.current;
+        dragRef.current = null;
+        // A scroll view's release velocity (the pan's last two, blended as
+        // UIPickerView's); the rows move against the finger.
+        release(drag == null ? 0 : -recognizer.scrollVelocity().y);
+        break;
+      }
+      case 'cancelled': {
+        dragRef.current = null;
+        release(0);
+        break;
+      }
+      case 'possible':
+      case 'failed':
+        break;
+    }
+  };
   // A touch that stopped a moving wheel and lifted without dragging: the
   // wheel eases onto the nearest row, as a release without velocity does.
-  useEffect(
-    () =>
-      pan.addTransitionListener((_pan, _from, to) => {
-        // The flag stays up until the next touch lands. The tap recognizer may
-        // hear of this lift after the pan does, and must not read it as a tap
-        // on a row.
-        if (to === 'failed' && caughtRef.current && !motion.isMoving()) {
-          release(0);
-        }
-      }),
-    [pan, motion, release],
-  );
-
-  useGestureRecognizer(
-    columnRef,
-    () => new TapGestureRecognizer({name: 'wheel-tap'}),
-    recognizer => {
-      if (recognizer.state !== 'ended' || caughtRef.current) {
-        return;
-      }
-      const column = columnRef.current;
-      if (column == null) {
-        return;
-      }
-      const box = column.getBoundingClientRect();
-      const {y} = recognizer.location();
-      const offset = motion.offset();
-      const currentLayout = latestRef.current.layout;
-      const target = rowAtPoint(
-        y - (box.top + box.height / 2),
-        offset,
-        currentLayout,
-      );
-      if (target == null || target === nearestIndex(offset, currentLayout)) {
-        return;
-      }
-      // On a loop the tapped row can be a copy: the wheel turns onto it, as
-      // UIKit's does.
-      cover(nearestIndex(offset, currentLayout), target);
-      move(turnCurve(columnRef.current, offset, target * ROW_HEIGHT), {
-        onEnd,
-      });
-    },
-    {isEnabled: isActive},
-  );
+  // The flag stays up until the next touch lands. The tap recognizer may hear
+  // of this lift after the pan does, and must not read it as a tap on a row.
+  const handlePanFailed = () => {
+    if (caughtRef.current && !motion.isMoving()) {
+      release(0);
+    }
+  };
+  const handleTap = (recognizer: TapGestureRecognizer) => {
+    if (recognizer.state !== 'ended' || caughtRef.current) {
+      return;
+    }
+    const column = columnRef.current;
+    if (column == null) {
+      return;
+    }
+    const box = column.getBoundingClientRect();
+    const {y} = recognizer.location();
+    const offset = motion.offset();
+    const currentLayout = latestRef.current.layout;
+    const target = rowAtPoint(
+      y - (box.top + box.height / 2),
+      offset,
+      currentLayout,
+    );
+    if (target == null || target === nearestIndex(offset, currentLayout)) {
+      return;
+    }
+    // On a loop the tapped row can be a copy: the wheel turns onto it, as
+    // UIKit's does.
+    cover(nearestIndex(offset, currentLayout), target);
+    move(turnCurve(columnRef.current, offset, target * ROW_HEIGHT), {
+      onEnd,
+    });
+  };
+  const wheelGestures =
+    touchRuntime == null ? null : (
+      <touchRuntime.WheelGestures
+        columnRef={columnRef}
+        isActive={isActive}
+        onTouchDown={time => onTouchDownRef.current(time)}
+        onPan={handlePan}
+        onPanFailed={handlePanFailed}
+        onTap={handleTap}
+      />
+    );
 
   // Keep the finger, and the pointer it lands with: inside a BottomSheet the
   // sheet would otherwise read a downward drag here as swipe-to-dismiss. This
@@ -1004,40 +986,43 @@ export function PickerWheel({
   });
 
   return (
-    <div
-      ref={columnRef}
-      {...listboxProps}
-      data-wheel=""
-      {...stylex.props(styles.column, focusOutlineStyles.focusVisible)}>
-      <div data-wheel-fade="" {...stylex.props(styles.fade)}>
-        <div aria-hidden="true" {...stylex.props(styles.band)} />
-        <div
-          ref={attachStrip}
-          data-wheel-strip=""
-          {...stylex.props(styles.strip)}>
-          {options.map((option, index) => (
-            <div
-              key={option.value}
-              {...optionProps(option, index)}
-              data-wheel-row=""
-              data-label={option.label}
-              {...stylex.props(
-                styles.row,
-                styles.rowAt(`${index * ROW_HEIGHT}px`),
-                index === selectedIndex && styles.rowActive,
-                option.isDisabled && styles.rowDisabled,
-              )}>
-              {option.label}
-            </div>
-          ))}
-          {loops && (
-            // The copies, drawn directly: assistive technology meets each
-            // value once, on the wheel's own row.
-            <div ref={copiesRef} aria-hidden="true" />
-          )}
+    <>
+      <div
+        ref={columnRef}
+        {...listboxProps}
+        data-wheel=""
+        {...stylex.props(styles.column, focusOutlineStyles.focusVisible)}>
+        <div data-wheel-fade="" {...stylex.props(styles.fade)}>
+          <div aria-hidden="true" {...stylex.props(styles.band)} />
+          <div
+            ref={attachStrip}
+            data-wheel-strip=""
+            {...stylex.props(styles.strip)}>
+            {options.map((option, index) => (
+              <div
+                key={option.value}
+                {...optionProps(option, index)}
+                data-wheel-row=""
+                data-label={option.label}
+                {...stylex.props(
+                  styles.row,
+                  styles.rowAt(`${index * ROW_HEIGHT}px`),
+                  index === selectedIndex && styles.rowActive,
+                  option.isDisabled && styles.rowDisabled,
+                )}>
+                {option.label}
+              </div>
+            ))}
+            {loops && (
+              // The copies, drawn directly: assistive technology meets each
+              // value once, on the wheel's own row.
+              <div ref={copiesRef} aria-hidden="true" />
+            )}
+          </div>
         </div>
       </div>
-    </div>
+      {wheelGestures}
+    </>
   );
 }
 

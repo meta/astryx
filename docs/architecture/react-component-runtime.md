@@ -354,10 +354,12 @@ those contracts.
   its fit size: pinch, double-tap, double-click and the zoom keys do not zoom,
   and a drag does not dismiss; the close button, Escape and the backdrop work
   as always; a resize handle pulled past its pane's limit stops at the limit,
-  with no overshoot. A gesture in that window does not start the load. The
-  bundler keeps one copy per page however many components use them. If the
-  runtime's chunk fails to load, the page stays as it is before the load:
-  components work by taps, clicks and keys, and no gesture retries the load.
+  with no overshoot; a date or time wheel turns by its keys, a mouse wheel's
+  notches and a click on a row, at once, with no drag, no coast and no snap. A
+  gesture in that window does not start the load. The bundler keeps one copy
+  per page however many components use them. If the runtime's chunk fails to
+  load, the page stays as it is before the load: components work by taps,
+  clicks and keys, and no gesture retries the load.
   `utils/touchRuntimeModules.tsx` is the one module the loader's `import()`
   targets; it gathers the touch runtime, so the loader names a single chunk.
   `motion/settleThreshold.ts` holds `SETTLE_THRESHOLD` apart from the
@@ -373,9 +375,7 @@ those contracts.
   finds its neighbours without loading gesture code. Gap: these modules still
   import the shared touch modules statically, so a page that renders them
   carries the touch runtime in its first load: Slider
-  (`sliderTouchController`), Chat (`useChatKeyboard`), and the date and time
-  fields' wheels (`DateInput/PickerWheel`, `DateInput/wheelStrip`). Through
-  the wheels, PowerSearch and Table carry it too.
+  (`sliderTouchController`) and Chat (`useChatKeyboard`).
   `@astryx/no-static-touch-runtime` reports any other static path from a
   component into these modules; its allowlist names exactly these imports and
   shrinks as they move behind the loader. A surface revealed by interaction
