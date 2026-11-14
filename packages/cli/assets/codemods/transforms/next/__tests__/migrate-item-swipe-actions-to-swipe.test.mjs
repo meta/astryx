@@ -445,7 +445,7 @@ export function Rows({rows}) {
   const list = rows.map(renderItem);
   const remove = useRemove();
   function renderItem(row) {
-    return <ListItem key={row.id} label={row.label} swipeActions={{trailing: [{label: 'Delete', onActivate: remove}]}} />;
+    return <ListItem key={row.id} label={row.label} swipeActions={{trailing: [{label: 'Delete', onActivate: () => remove()}]}} />;
   }
   return <List>{list}</List>;
 }`);
@@ -512,7 +512,7 @@ function Mapped({tags, remove}) {
     await expectStable(raw);
   });
 
-  it('shares one definition between rows only when every local their options read keeps one value: a let reassigned between them gets one each', async () => {
+  it('shares one definition between rows when no local their options read is written after its declaration; a let reassigned between them keeps createSwipe on each row', async () => {
     const raw =
       await applyTransform(`import {ListItem} from '@astryxdesign/core/List';
 function Reassigned({remove}) {
@@ -534,12 +534,61 @@ function Constant({remove}) {
       output.indexOf('function Constant'),
     );
     const constant = output.slice(output.indexOf('function Constant'));
-    expect(reassigned.match(/= useMemo\(/g)).toHaveLength(2);
-    // The second definition reads the value the reassignment set.
-    expect(reassigned.indexOf("label = 'Remove'")).toBeLessThan(
-      reassigned.lastIndexOf('= useMemo('),
-    );
+    expect(reassigned).not.toMatch(/= useMemo\(/);
+    expect(reassigned.match(/swipe=\{createSwipe\(/g)).toHaveLength(2);
+    expect(reassigned).toContain('TODO');
     expect(constant.match(/= useMemo\(/g)).toHaveLength(1);
+    await expectStable(raw);
+  });
+
+  /** Each row stays inline with a TODO: no definition, which would keep a stale value. */
+  const expectInlineWithTodo = (/** @type {string} */ output, rows) => {
+    expect(output).not.toMatch(/= useMemo\(/);
+    expect(output.match(/swipe=\{createSwipe\(/g)).toHaveLength(rows);
+    expect(output).toContain('TODO');
+  };
+
+  it('keeps createSwipe on the row with a TODO when a let its options read is reassigned above a hoisted function', async () => {
+    const raw =
+      await applyTransform(`import {List, ListItem} from '@astryxdesign/core/List';
+function Rows({rows, isAlt, remove}) {
+  let label = 'Delete';
+  if (isAlt) label = 'Remove';
+  function renderRow(row) {
+    return <ListItem key={row.id} label={row.label} swipeActions={{trailing: [{label, onActivate: remove}]}} />;
+  }
+  return <List>{rows.map(renderRow)}</List>;
+}`);
+    expectInlineWithTodo(flat(raw), 1);
+    await expectStable(raw);
+  });
+
+  it('keeps createSwipe on the row with a TODO when a let its options read is reassigned in a loop before each row', async () => {
+    const raw =
+      await applyTransform(`import {List, ListItem} from '@astryxdesign/core/List';
+function Rows({items, remove}) {
+  const rows = [];
+  let label;
+  for (const item of items) {
+    label = item.name;
+    rows.push(<ListItem key={item.id} label={item.name} swipeActions={{trailing: [{label, onActivate: remove}]}} />);
+  }
+  return <List>{rows}</List>;
+}`);
+    expectInlineWithTodo(flat(raw), 1);
+    await expectStable(raw);
+  });
+
+  it('keeps createSwipe on each row with a TODO when a parameter its options read is reassigned between two rows', async () => {
+    const raw =
+      await applyTransform(`import {ListItem} from '@astryxdesign/core/List';
+function Rows({label, remove}) {
+  const first = <ListItem label="A" swipeActions={{trailing: [{label, onActivate: remove}]}} />;
+  label = label + '!';
+  const second = <ListItem label="B" swipeActions={{trailing: [{label, onActivate: remove}]}} />;
+  return <>{first}{second}</>;
+}`);
+    expectInlineWithTodo(flat(raw), 2);
     await expectStable(raw);
   });
 

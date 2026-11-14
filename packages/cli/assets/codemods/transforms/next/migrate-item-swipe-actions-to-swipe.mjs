@@ -17,8 +17,7 @@
  * with a TODO. Each entry
  * with no `id` takes one from its static label, then its handler's name, then
  * its side and place with a TODO. Rows with the same options in one place
- * share one definition when every local they read keeps one value. A
- * `swipeBehavior={B}` joins the options; a static
+ * share one definition. A `swipeBehavior={B}` joins the options; a static
  * `'reveal'`, the default, is dropped. On a row that already sets `swipe`, the
  * deprecated props do nothing, so they are removed, and so is a lone
  * `swipeBehavior`. The `ItemSwipe*` types stay as they are.
@@ -911,11 +910,12 @@ function isStable(scope, name) {
  * only module bindings declared before the row's statement, or in `useMemo` in
  * the component or hook whose bindings they read. Either way, they hold only
  * values that stay the same there (`fixedWhereDefined`). Null when neither
- * works: a `this`, a binding of an inner function such as a map callback, a
- * binding declared after the row's statement or after an early return, or a
- * value read at render.
+ * works: a `this`, a binding of an inner function such as a map callback, or
+ * a value read at render. Null too for a binding written after its
+ * declaration, or declared after the row's statement or after an early
+ * return.
  * @param {any} j @param {any} root @param {any} rowPath @param {any} objectPath @param {Set<any>} created
- * @returns {{kind: 'module', shareable: boolean, after: any} | {kind: 'memo', owner: any, deps: string[], shareable: boolean, after: any} | null}
+ * @returns {{kind: 'module', after: any} | {kind: 'memo', owner: any, deps: string[], after: any} | null}
  */
 function placementOf(j, root, rowPath, objectPath, created) {
   const object = objectPath.node;
@@ -962,6 +962,11 @@ function placementOf(j, root, rowPath, objectPath, created) {
   if (!movable) {
     return null;
   }
+  // A binding written after its declaration can hold another value at each
+  // row, or by the time the row renders, where a definition keeps one.
+  if (outer.some(r => reassigned(j, r.scope, r.name))) {
+    return null;
+  }
   const local = outer.filter(r => r.scope.path.node.type !== 'Program');
   if (local.length === 0) {
     const body = root.get().node.program.body;
@@ -997,7 +1002,7 @@ function placementOf(j, root, rowPath, objectPath, created) {
     ) {
       return null;
     }
-    return {kind: 'module', shareable: true, after};
+    return {kind: 'module', after};
   }
   const owner = local[0].scope.path;
   const fn = owner.node;
@@ -1047,12 +1052,6 @@ function placementOf(j, root, rowPath, objectPath, created) {
   if (!fixedWhereDefined(j, objectPath, created, fn)) {
     return null;
   }
-  // Rows with the same options share one definition only when every local
-  // those options read keeps one value: a `let` reassigned between two rows
-  // would show the first row's value on the second.
-  const shareable = local.every(
-    r => isParam(r.name) || keepsOneValue(owner.scope, r.name),
-  );
   // `useMemo` reads its dependencies when it runs, handler reads included.
   const after =
     statements == null ? undefined : afterFor(row, statements, lastDependency);
@@ -1067,7 +1066,7 @@ function placementOf(j, root, rowPath, objectPath, created) {
   ) {
     return null;
   }
-  return {kind: 'memo', owner: fn, deps, shareable, after};
+  return {kind: 'memo', owner: fn, deps, after};
 }
 
 /**
@@ -1113,39 +1112,57 @@ function reachedAbove(j, body, index, row) {
 }
 
 /**
- * Whether every binding of a name keeps one value: a `const`, directly or
- * through a destructuring pattern such as `const [rows, setRows] =
- * useState()`, or a function or class declaration.
- * @param {any} scope @param {string} name
+ * Whether a binding takes another value after its declaration. An
+ * assignment, an update or a `for…in` or `for…of` loop writes it, or it is
+ * declared more than once.
+ * @param {any} j @param {any} scope @param {string} name
  */
-function keepsOneValue(scope, name) {
-  return (scope.getBindings()[name] ?? []).every((/** @type {any} */ b) => {
-    const declarator = b.parent?.node?.type;
-    if (
-      declarator === 'FunctionDeclaration' ||
-      declarator === 'ClassDeclaration'
-    ) {
-      return true;
+function reassigned(j, scope, name) {
+  if ((scope.getBindings()[name] ?? []).length > 1) {
+    return true;
+  }
+  return (
+    j(scope.path)
+      .find(j.Identifier, {name})
+      .filter(
+        (/** @type {any} */ p) =>
+          p.scope?.lookup(name)?.path.node === scope.path.node && written(p),
+      )
+      .size() > 0
+  );
+}
+
+/**
+ * Whether an identifier is the target of an assignment, an update, or a
+ * `for…in` or `for…of` loop, directly or inside a destructuring pattern.
+ * @param {any} path
+ */
+function written(path) {
+  let child = path;
+  let parent = path.parent;
+  while (parent != null) {
+    const node = parent.node;
+    const nests =
+      node.type === 'ArrayPattern' ||
+      node.type === 'ObjectPattern' ||
+      node.type === 'RestElement' ||
+      (node.type === 'AssignmentPattern' && node.left === child.node) ||
+      ((node.type === 'ObjectProperty' || node.type === 'Property') &&
+        node.value === child.node &&
+        parent.parent?.node?.type === 'ObjectPattern');
+    if (!nests) {
+      break;
     }
-    for (let p = b.parent; p != null; p = p.parent) {
-      const type = p.node?.type;
-      if (type === 'VariableDeclaration') {
-        return p.node.kind === 'const';
-      }
-      if (
-        type !== 'VariableDeclarator' &&
-        type !== 'ArrayPattern' &&
-        type !== 'ObjectPattern' &&
-        type !== 'ObjectProperty' &&
-        type !== 'Property' &&
-        type !== 'RestElement' &&
-        type !== 'AssignmentPattern'
-      ) {
-        return false;
-      }
-    }
-    return false;
-  });
+    child = parent;
+    parent = parent.parent;
+  }
+  const node = parent?.node;
+  return (
+    (node?.type === 'AssignmentExpression' && node.left === child.node) ||
+    node?.type === 'UpdateExpression' ||
+    ((node?.type === 'ForInStatement' || node?.type === 'ForOfStatement') &&
+      node.left === child.node)
+  );
 }
 
 /**
@@ -1644,10 +1661,8 @@ export default function transformer(file, api) {
               addComment(j, actions, NAME_COMMENT);
             }
           } else {
-            const key = placement.shareable
-              ? `${ownerKey(placement)}\u0000${shapeOf(object)}`
-              : null;
-            let name = key == null ? undefined : definitions.get(key);
+            const key = `${ownerKey(placement)}\u0000${shapeOf(object)}`;
+            let name = definitions.get(key);
             // A hoisted row's definition must run before any call to it, so
             // it reuses one only where that one already sits early enough.
             if (name != null && placement.after !== undefined) {
@@ -1678,9 +1693,7 @@ export default function transformer(file, api) {
               }
               insertDefinition(j, root, placement, rowPath, declaration);
               definitionNodes.set(name, declaration);
-              if (key != null) {
-                definitions.set(key, name);
-              }
+              definitions.set(key, name);
             }
             replacement = j.identifier(name);
           }
