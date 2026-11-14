@@ -542,7 +542,7 @@ function changeBlocks(r) {
  * @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditShowResponse['data']} d
  */
 function showBlocks(d) {
-  const {settings, colors, colorNotes, colorFiles, ...rest} = d;
+  const {settings, colors, colorNotes, colorFiles, unreached, ...rest} = d;
   const [head, ...others] = project(/** @type {any} */ (rest));
   return [
     head,
@@ -552,6 +552,14 @@ function showBlocks(d) {
       ? [section('settings:'), records(settings.map(s => flatRecord(s)))]
       : []),
     ...others,
+    // The parts the look leaves as the base has them, on one line.
+    ...(unreached?.length
+      ? [
+          record({
+            unreached: `${unreached.join(', ')} (no setting reaches them, and none of the tokens they read changed)`,
+          }),
+        ]
+      : []),
     ...(colors.length
       ? [
           section('colors:'),

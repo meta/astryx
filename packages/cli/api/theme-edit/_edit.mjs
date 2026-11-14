@@ -5789,6 +5789,12 @@ export async function themeEditShow(theme, options = {}) {
         modes[0],
       ),
       ...colorsReport(pal, data, res, theme),
+      unreached: unreachedParts(
+        ctx,
+        data,
+        res,
+        await baseResolved(ctx.project, data.like),
+      ),
       problems,
       preview,
       previewStale,
@@ -6266,6 +6272,39 @@ function ownSourceMaskNotes(ctx, cwd, slug, data, base) {
       );
   }
   return notes;
+}
+
+/**
+ * The parts with a fill of their own that the theme leaves on its base's
+ * look: no setting is on them, and none of the tokens they read (from the
+ * part data, in any state) has a value other than the base's in either
+ * mode. What an agent reads to see which parts its look did not reach
+ * (toast, banner, badge). None for a theme with no settings.
+ * @param {any} ctx
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {Record<string, Record<string, string>>} res
+ * @param {Record<string, any>} base
+ * @returns {string[]}
+ */
+function unreachedParts(ctx, data, res, base) {
+  if (!data.settings.length) return [];
+  const modes = Object.keys(res).filter(m => m === 'light' || m === 'dark');
+  /** @param {string} token */
+  const changed = token =>
+    modes.some(m => String(res[m]?.[token]) !== String(base[m]?.[token]));
+  const set = new Set(
+    data.settings.filter(s => s.on).flatMap(s => partsOf(ctx, s)),
+  );
+  return Object.keys(ctx.C.MAP).filter(part => {
+    if (set.has(part)) return false;
+    const reads = ctx.C.partReads(part, null);
+    const filled = reads.some(
+      (/** @type {any} */ r) =>
+        /^--color-/.test(r.token) &&
+        r.props.some((/** @type {string} */ x) => /^background/.test(x)),
+    );
+    return filled && !reads.some((/** @type {any} */ r) => changed(r.token));
+  });
 }
 
 /**

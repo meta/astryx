@@ -11,7 +11,13 @@
  * press opens (a menu's button, a selector's field) or a typed letter opens
  * (a typeahead) is opened in turn, and each one's markup is kept.
  *
- * @position foundation/render — used by page-worker.mjs
+ * A page can also ask for one part to be drawn open in its own place (the
+ * theme sheet does, for its overlays section): it writes the marker
+ * {@link layerPlaceholder} gives through the global the worker installs, and
+ * the worker puts the part there, drawn, with each overlay it opened after it.
+ *
+ * @position foundation/render — used by page-worker.mjs and by pages the
+ *   theme editor writes (_catalog.mjs)
  */
 
 import {chartDocument} from './charts.mjs';
@@ -62,6 +68,11 @@ export async function layerDocument() {
     }
   };
   g.document.getAnimations = () => [];
+  // The DOM classes a component checks against by name (an `instanceof
+  // Element` before it measures), as a browser gives them.
+  for (const name of ['Node', 'Element', 'HTMLElement', 'HTMLInputElement', 'Event', 'CustomEvent', 'KeyboardEvent', 'MouseEvent', 'FocusEvent']) {
+    if (g.window[name]) g[name] ??= g.window[name];
+  }
   for (const name of ['MutationObserver', 'IntersectionObserver']) {
     g[name] ??= class {
       observe() {}
@@ -115,8 +126,12 @@ export async function openLayerMarkup(host, flushSync) {
   keep();
   const controls = [...host.querySelectorAll('[aria-haspopup][aria-expanded="false"], [role="combobox"][aria-expanded="false"]')];
   for (const control of controls) {
-    for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'])
+    // A press, up to the event that opens it: a control that opens on
+    // pointer down would close again on the click that follows.
+    for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
       send(control, type, {button: 0, pointerType: 'mouse', detail: 1});
+      if (control.getAttribute('aria-expanded') === 'true') break;
+    }
     if (control.getAttribute('aria-expanded') !== 'true' && control.tagName === 'INPUT') {
       control.value = 'a';
       send(control, 'input');
@@ -125,4 +140,19 @@ export async function openLayerMarkup(host, flushSync) {
     keep();
   }
   return out;
+}
+
+/** The global the render worker installs for parts a page shows open in place. SYNC: page-worker.mjs assigns it by this name. */
+export const LAYER_GLOBAL = '__astryxRenderLayer';
+
+/** Where a part drawn open goes in the server markup. */
+export const LAYER_PLACEHOLDER = /<astryx-layer data-layer="(\d+)"><\/astryx-layer>/g;
+
+/**
+ * The marker for the part at `index`, which the worker replaces with the
+ * part drawn open in place (its overlays after it).
+ * @param {number} index
+ */
+export function layerPlaceholder(index) {
+  return `<astryx-layer data-layer="${index}"></astryx-layer>`;
 }

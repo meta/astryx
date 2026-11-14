@@ -16,8 +16,17 @@
 
 /**
  * @typedef {{__element: string, props?: Record<string, unknown>, children?: unknown}} Tree
- * @typedef {{name: string, label: string, tree: unknown, group?: string}} CatalogItem
+ * @typedef {{name: string, label: string, tree: unknown, group?: string, open?: boolean, openable?: boolean, onlyOpen?: boolean, openTree?: unknown}} CatalogItem
+ *   `open`: drawn open in a document after the server render (a popover,
+ *   tooltip or menu, which Core places only once mounted: layers.mjs);
+ *   `openable`: also shown open in the overlays section when it holds an
+ *   overlay a press opens (a dropdown's menu, a selector's list);
+ *   `onlyOpen`: in the page for that open look alone; `openTree`: the part
+ *   as shown open, when a prop its doc names opens it (a dropdown's
+ *   `isMenuOpen`)
  */
+
+import {LAYER_GLOBAL} from '../../foundation/render/layers.mjs';
 
 /** @param {string} name @param {Record<string, unknown>} [props] @param {...unknown} children @returns {Tree} */
 export const h = (name, props = {}, ...children) => ({
@@ -278,14 +287,20 @@ export function pageSource({items, imports, theme, layout, title = ''}) {
   );
   lines.push(`const MODE = ${JSON.stringify(theme?.mode ?? 'light')};`);
   lines.push(
-    'function html(tree, mode = MODE) { try { const node = el(tree); return renderToStaticMarkup(theme ? React.createElement(Theme, {theme, mode}, node) : node); } catch { return null; } }',
+    // A part shown open whose server render leaves only a layer's marker
+    // (Core places a popover, tooltip or menu once mounted) goes to the
+    // render's drawing of open layers, which puts it in place after the
+    // server render. Any other part is its server render. `open` is
+    // 'ifOpen' for a part shown only for its open look: drawn as nothing when
+    // nothing opens.
+    `function html(tree, mode = MODE, open = false) { try { const node = el(tree); const whole = theme ? React.createElement(Theme, {theme, mode}, node) : node; const markup = renderToStaticMarkup(whole); const layered = markup.includes('<template></template>'); if (open === 'ifOpen' && !layered) return null; const draw = open && layered ? globalThis[${JSON.stringify(LAYER_GLOBAL)}] : null; return draw ? draw(whole, open === 'ifOpen') : markup; } catch { return null; } }`,
   );
   // A theme with both modes: each part is rendered in light and in dark, as
   // the app renders it in each (a part that picks its look from the mode as
   // it renders, such as a Toast's text on its inverted surface, differs);
   // a part whose two renders are the same is written once.
   lines.push(
-    'function modes(tree) { if (!theme || MODE !== "system") { const one = html(tree); return one == null ? null : {one}; } const light = html(tree, "light"); const dark = html(tree, "dark"); if (light == null && dark == null) return null; return light === dark ? {one: light} : {light: light ?? "", dark: dark ?? ""}; }',
+    'function modes(tree, open) { if (!theme || MODE !== "system") { const one = html(tree, MODE, open); return one == null ? null : {one}; } const light = html(tree, "light", open); const dark = html(tree, "dark", open); if (light == null && dark == null) return null; return light === dark ? {one: light} : {light: light ?? "", dark: dark ?? ""}; }',
   );
   lines.push(`const LAYOUT = ${JSON.stringify(layout)};`);
   lines.push(`const TITLE = ${JSON.stringify(title)};`);
@@ -303,7 +318,21 @@ export default function Page() {
       return markup == null ? null : h('section', {key: i, 'data-cat': it.name, dangerouslySetInnerHTML: {__html: markup}});
     }));
   }
-  const done = ITEMS.map(it => ({...it, markup: modes(it.tree)})).filter(it => it.markup != null);
+  const rendered = ITEMS.map(it => ({...it, markup: modes(it.tree, it.open)})).filter(it => it.markup != null);
+  // A part only in this page for its open look (the overlays section alone)
+  // is not shown closed.
+  const done = rendered.filter(it => !it.onlyOpen);
+  // A part with a closed control that opens a popup (a dropdown's menu
+  // button, a selector's field: the controls the drawing presses) is shown
+  // open too, with the overlays, so a look's menus and lists show in the
+  // pictures.
+  const opensPopup = html => (html.match(/<[^>]*\\baria-expanded="false"[^>]*>/g) ?? []).some(tag => /\\baria-haspopup=|\\brole="combobox"/.test(tag));
+  for (const it of rendered) {
+    const m = it.markup;
+    if (!it.openable || !opensPopup(m.one ?? m.light)) continue;
+    const open = modes(it.openTree ?? it.tree, 'ifOpen');
+    if (open) done.push({...it, group: 'overlays', label: 'open', markup: open, opened: true});
+  }
   const part = (m, key) => m.one != null
     ? h('div', {key, dangerouslySetInnerHTML: {__html: m.one}})
     : h(React.Fragment, {key}, h('div', {className: 'cs-light', dangerouslySetInnerHTML: {__html: m.light}}), h('div', {className: 'cs-dark', dangerouslySetInnerHTML: {__html: m.dark}}));
@@ -329,7 +358,7 @@ export default function Page() {
         h('div', {className: 'cs-name'}, c.name),
         h('div', {className: 'cs-row'}, c.list.map((x, j) => h('div', {key: j, className: 'cs-item'},
           x.label ? h('div', {className: 'cs-label'}, x.label) : null,
-          part(x.markup)))))))));
+          x.opened ? h('div', {className: 'cs-open'}, part(x.markup)) : part(x.markup)))))))));
   }
   const page = h('div', {className: 'cs-page', style: {background: 'var(--color-background-body)', color: 'var(--color-text-primary)', minHeight: '100vh'}}, bar, body);
   return h('main', null, h('style', {dangerouslySetInnerHTML: {__html: SHEET_CSS}}), theme ? h(Theme, {theme, mode: MODE}, page) : page);
@@ -357,6 +386,12 @@ export const SHEET_CSS = [
   '.cs-row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start}',
   '.cs-label{font:10px ui-monospace,monospace;opacity:.5}',
   '.cs-item{max-width:100%;position:relative}',
-  // Overlays shown open in place: a layer the page would open with script.
-  '.cs-cell [popover]{display:block!important;position:relative!important;inset:auto!important;margin:8px 0 0!important;translate:none!important;transform:none!important}',
+  // Overlays shown open in place: a layer the page would open with script
+  // (its root alone: a hidden helper popover inside it stays hidden), and a
+  // panel over the page (a drawer, a bottom sheet, a lightbox) at the size
+  // of its cell.
+  '.cs-cell [popover][data-astryx-layer-root]{display:block!important;position:relative!important;inset:auto!important;margin:8px 0 0!important;translate:none!important;transform:none!important}',
+  // A part shown for its open look that opened nothing has no cell.
+  '.cs-cell:has(.cs-open):not(:has(.cs-open [data-astryx-layer-root])){display:none}',
+  '.cs-cell dialog{display:block!important;position:relative!important;inset:auto!important;margin:0!important;max-width:100%!important;max-height:300px!important;translate:none!important;transform:none!important}',
 ].join('');

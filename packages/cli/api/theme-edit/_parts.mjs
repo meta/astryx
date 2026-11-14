@@ -32,7 +32,7 @@ import {SAMPLE_PAGE, elementNames, pageSource} from './_catalog.mjs';
 import {removeOnStop} from '../../foundation/fs/stop-cleanup.mjs';
 
 /** Bump when the shape of the cached part data changes. */
-const PART_DATA_VERSION = 13;
+const PART_DATA_VERSION = 14;
 
 /**
  * Flags that change what a component does or whether it shows, not how it

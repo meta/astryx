@@ -79,6 +79,9 @@ const PAGE_TEMPLATES = ['dashboard', 'contact-form', 'settings'];
 const SELECTION =
   /Select|Checkbox|Radio|Switch|Segmented|Toggle|Slider|Typeahead|Tokenizer/;
 
+/** Props a doc names that open a part's own menu or list. */
+const OPENERS = ['isMenuOpen', 'isDefaultOpen'];
+
 /**
  * The group a component belongs to on the theme-building page.
  * @param {string} name
@@ -127,13 +130,41 @@ export function showcaseItems(project, group) {
     // A component no Core module exports by its name cannot be imported,
     // so it would draw an empty cell: it gets none.
     if (!importPathOf(project, name)) continue;
-    for (const v of catalogVariants(project, name, 12, {shown: true}))
+    const info = project.components[name];
+    catalogVariants(project, name, 12, {shown: true}).forEach((v, i) =>
       items.push({
         group: g,
         name,
         label: v.label,
         tree: inParent({__element: name, props: v.props}),
-      });
+        // An overlay shown open is drawn open: Core places a popover,
+        // tooltip or hover card only once it is mounted. Any other part, as
+        // first shown, is shown open with the overlays too when a press
+        // opens one from it (the page sees which: _catalog.mjs).
+        ...(info?.opens
+          ? {open: true}
+          : i === 0 && g !== 'overlays'
+            ? {
+                openable: true,
+                // A prop its doc names that opens it opens it; else the
+                // drawing's press does.
+                ...(OPENERS.some(p => info?.props?.[p])
+                  ? {
+                      openTree: inParent({
+                        __element: name,
+                        props: {
+                          ...v.props,
+                          [/** @type {string} */ (
+                            OPENERS.find(p => info?.props?.[p])
+                          )]: true,
+                        },
+                      }),
+                    }
+                  : {}),
+              }
+            : {}),
+      }),
+    );
   }
   items.push({
     group: 'pages',
@@ -181,8 +212,16 @@ export function showcaseItems(project, group) {
     const i = SHEET_ORDER.indexOf(it.name);
     return SHOWCASE_GROUPS.indexOf(it.group ?? '') * 1000 + (i < 0 ? 500 : i);
   };
+  // The overlays section also shows open each part another section holds
+  // that opens one (a dropdown's menu), and only open.
   const chosen = items
-    .filter(it => !group || it.group === group)
+    .flatMap(it =>
+      !group || it.group === group
+        ? [it]
+        : group === 'overlays' && it.openable
+          ? [{...it, onlyOpen: true}]
+          : [],
+    )
     .sort((a, b) => order(a) - order(b) || compareText(a.name, b.name));
   /** @type {Record<string, import('./_catalog.mjs').Binding>} */
   const imports = {};

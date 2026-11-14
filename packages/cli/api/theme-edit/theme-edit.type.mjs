@@ -125,6 +125,7 @@
  * @property {Array<ThemeEditSetting & {parts: string[], masked?: string}>} data.settings - Each setting with the parts it styles; `masked` says what a later or stronger setting hides of it.
  * @property {Record<string, Record<string, string | null> | string | null>} data.resolved - Key tokens: colors and shadows per mode; sizes, numbers and fonts, which are the same in both modes, as one value.
  * @property {string[]} data.partValues - Each corners or spacing setting on a part or group, with what its parts get and the whole-theme value beside it.
+ * @property {string[]} data.unreached - The parts with a fill of their own the theme leaves on its base's look: no setting is on them, and none of the tokens they read changed (empty for a theme with no settings).
  * @property {number | null} data.vibrancy - How saturated the generated colors are (0 to 100); null when the theme sets no color.
  * @property {ThemeEditColor[]} data.colors - Each color the theme sets, with the shade each token uses.
  * @property {string[]} data.colorNotes - What the color config keeps or replaced of a hand edit, tokens that use another shade than usual so they read, and any that still do not.

@@ -129,7 +129,7 @@ export const doc = {
       value: 'themeEdit.show',
       stability: 'experimental',
       description:
-        'Every `settings` entry with the `parts` it styles, key `resolved` token values (colors and shadows per mode, other values once), `partValues` (corners or spacing set on a part or group, with what its parts get beside the whole-theme value), the generated colors (`vibrancy`; `colors`, each with its `seed` and the shade each token uses in light and dark; `colorNotes` on shades moved for contrast), contrast `problems`, font `notes`, the `preview` and `sheet` pages, the `sheetComponents` count, template pages `skipped`, any `pictures`, and last the generated color files (`colorFiles`; null with no color). Experimental: may change or be removed in a patch release.',
+        'Every `settings` entry with the `parts` it styles, key `resolved` token values (colors and shadows per mode, other values once), `partValues` (corners or spacing set on a part or group, with what its parts get beside the whole-theme value), `unreached` (the parts with a fill of their own the theme leaves on the base look: no setting on them and none of the tokens they read changed), the generated colors (`vibrancy`; `colors`, each with its `seed` and the shade each token uses in light and dark; `colorNotes` on shades moved for contrast), contrast `problems`, font `notes`, the `preview` and `sheet` pages, the `sheetComponents` count, template pages `skipped`, any `pictures`, and last the generated color files (`colorFiles`; null with no color). Experimental: may change or be removed in a patch release.',
     },
     {
       value: 'themeEdit.undo',
