@@ -133,9 +133,8 @@ const styles = stylex.create({
     flex: '0 1 auto',
     minWidth: 0,
   },
-  // Plain text has no box of its own that can clip it. This box keeps a
-  // plain-text heading on one line and ends it in an ellipsis, as
-  // TopNavHeading does for its own text, so the bar does not grow taller.
+  // Plain text has no box that can clip it. This box clips it to one line,
+  // so the bar keeps its height.
   mobileBarHeadingText: {
     minWidth: 0,
     overflow: 'hidden',
