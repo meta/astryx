@@ -10,7 +10,8 @@ export const doc = {
   keywords: [
     'shell',
     'chrome',
-    'layout frame',
+    'layout',
+    'frame',
     'header',
     'menu',
     'topbar',
