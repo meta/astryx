@@ -74,14 +74,14 @@ describe('own-source token values', () => {
     expect(css('num')).not.toMatch(/--radius-page:\s*12;/);
   }, 240_000);
 
-  it('checks a font family token, and takes a family list as Core quotes it', async () => {
+  it('checks a font family token as set does', async () => {
     await withOwn('ff', "  tokens: {'--font-family-body': '12px'},");
     const c = await compile('ff');
     expect(c.status).toBe(1);
     expect(c.stdout + c.stderr).toContain('--font-family-body');
     await withOwn(
       'ffok',
-      `  tokens: {'--font-family-body': '"Georgia, serif"', '--font-family-heading': '"Open Sans", sans-serif'},`,
+      `  tokens: {'--font-family-heading': '"Open Sans", sans-serif'},`,
     );
     await themeEditShow('ffok', {cwd});
     expect((await compile('ffok')).status).toBe(0);

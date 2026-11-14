@@ -459,6 +459,22 @@ describe('--built edge cases', () => {
     expect(check('src').usage.status).not.toBe('pass');
   });
 
+  it('counts a require() or import() call with a comment or a line break before its parenthesis, or an escape in its name', () => {
+    write({
+      'src/a.ts':
+        "export const a = import /* lazy */ ('@astryxdesign/core/Text');\n",
+      'src/b.ts':
+        "export const b = import\n  // lazy\n  ('@astryxdesign/core/Card');\n",
+      'src/c.ts':
+        "export const c = requir\\u0065('@astryxdesign/core/Badge');\n",
+      'src/d.ts': "export const d = require ('@astryxdesign/core/Grid');\n",
+      'src/e.ts': 'export const e = 1;\n',
+    });
+    const scan = scanBuilt(path.join(dir, 'src'), []);
+    expect(scan.imports).toBe(4);
+    expect(scan.importFiles).toBe(4);
+  });
+
   it('does not count an import written only in a string or JSX text', () => {
     write({
       'src/Page.tsx': [

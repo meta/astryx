@@ -64,6 +64,7 @@ import {createRequire, isBuiltin} from 'node:module';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {babelParse as parse} from '../../../foundation/runtime/lazy-dependencies.mjs';
 import {createJiti} from 'jiti';
+import {jitiCacheOptions} from '../../../foundation/fs/jiti-cache.mjs';
 import {
   formatCliCommand,
   getCliInvocation,
@@ -335,10 +336,12 @@ function realOrSelf(file) {
 /**
  * `target` spelled through real directories: the deepest ancestor that exists
  * is resolved through its symlinks, and the missing rest is appended as given.
+ * The build confines its outputs by it, and the theme editor's compile guard
+ * reads paths through it too, so both read a path the same way.
  * @param {string} target absolute path
  * @returns {string}
  */
-function realLocation(target) {
+export function realLocation(target) {
   /** @type {string[]} */
   const missing = [];
   let existing = target;
@@ -2724,9 +2727,9 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
     loader ??
     createJiti(import.meta.url, {
       moduleCache: false,
-      // No transpile cache: it is written to the system temp folder, named
-      // for the theme, and never removed, so every edit added files there.
-      fsCache: false,
+      // The per-user transpile cache: an edited theme is transpiled again,
+      // and the folder stays within its size limit.
+      ...jitiCacheOptions(),
       jsx: true,
       extensions: THEME_MODULE_EXTENSIONS,
       ...(interception ? {virtualModules: interception.modules} : {}),
@@ -5145,7 +5148,7 @@ export async function themeBuildFamily(
   await selectCore(cwd);
   const familyInterception = interceptCore(_coreThemeModule, _coreRootModule);
   // prettier-ignore
-  const familyLoader = createJiti(import.meta.url, {moduleCache: true, fsCache: false, interopDefault: false, jsx: true, extensions: THEME_MODULE_EXTENSIONS, virtualModules: familyInterception.modules});
+  const familyLoader = createJiti(import.meta.url, {moduleCache: true, ...jitiCacheOptions(), interopDefault: false, jsx: true, extensions: THEME_MODULE_EXTENSIONS, virtualModules: familyInterception.modules});
   /** @type {any[]} */
   const prepared = [];
   for (const source of planFamilySources(files, cwd)) {

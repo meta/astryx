@@ -33,9 +33,6 @@ export const DURATIONS = path.join(ROOT, 'scripts/vitest-node-durations.json');
 const PROJECT = 'node';
 // Seconds of import and transform per Node test file, as the legs report.
 export const PER_FILE_SECONDS = 0.4;
-// Seconds of summed file time a leg finishes per second of its run: test files
-// run side by side (measured on main's six Node legs: 2.1 to 2.5).
-export const LEG_PARALLELISM = 2.3;
 
 /**
  * Splits files into `count` legs by recorded seconds.
@@ -48,60 +45,16 @@ export function partitionByDuration(
   files,
   count,
   seconds,
-  {legOneSeconds = 0} = {},
+  {idle = new Set()} = {},
 ) {
-  const cost = costOf(files, seconds);
+  const recorded = costOf(files, seconds);
+  // A file that runs no test in this run (the swizzle-proof slices when the
+  // change reaches no component) costs only its import.
+  const cost = file => (idle.has(file) ? 0 : recorded(file));
   // Every file also costs its import and transform, which its recorded time
   // leaves out; without it the hundreds of files recorded at 0 s would all go
   // to one leg.
-  return splitByDuration(
-    files,
-    count,
-    file => cost(file) + PER_FILE_SECONDS,
-    // The first leg's own steps take that much of its run, in file time.
-    count > 1 ? [legOneSeconds * LEG_PARALLELISM] : [],
-  );
-}
-
-/**
- * Seconds of the steps only the first leg runs (the record's legOneSteps), or
- * 0 when the record has none.
- */
-export function readLegOneSeconds(file = DURATIONS) {
-  try {
-    const steps = JSON.parse(fs.readFileSync(file, 'utf8')).legOneSteps ?? {};
-    return Object.values(steps).reduce((sum, s) => sum + (Number(s) || 0), 0);
-  } catch {
-    return 0;
-  }
-}
-
-/**
- * Seconds per step of the first Node leg, from a job log as `gh run view
- * --log` prints it (job, step and a timestamp per line), for the step names
- * given.
- * @param {string} text
- * @param {string[]} names
- * @returns {Record<string, number>}
- */
-export function recordLegOneSteps(text, names) {
-  const wanted = new Set(names);
-  /** @type {Map<string, [number, number]>} */
-  const spans = new Map();
-  for (const line of text.split('\n')) {
-    const [job, step, rest] = line.split('\t');
-    if (!/^test-node \(1\//.test(job ?? '') || !wanted.has(step)) continue;
-    const at = Date.parse((rest ?? '').split(' ')[0]);
-    if (!Number.isFinite(at)) continue;
-    const span = spans.get(step) ?? [at, at];
-    spans.set(step, [Math.min(span[0], at), Math.max(span[1], at)]);
-  }
-  return Object.fromEntries(
-    [...spans].map(([step, [from, to]]) => [
-      step,
-      Math.round((to - from) / 1000),
-    ]),
-  );
+  return splitByDuration(files, count, file => cost(file) + PER_FILE_SECONDS);
 }
 
 /** Recorded seconds per file, or none when the file cannot be read. */
@@ -113,25 +66,68 @@ export function readDurations(file = DURATIONS) {
   }
 }
 
-/** Seconds per Node test file from Vitest's default reporter lines. */
+/**
+ * A Node leg's job name, as `gh run view --log` starts each of its lines: a
+ * pull request's `test-node (2/5)` or a Main run's `test-node (2)`.
+ */
+const NODE_LEG_JOB = /^test-node \(\d+(?:\/\d+)?\)$/;
+
+/**
+ * Seconds per Node test file from Vitest's default reporter lines. A whole
+ * run's log (`gh run view --log`) names each line's job in its first
+ * tab-separated column: only the Node legs' lines count, since other jobs (the
+ * build job runs its own `--project node` tests, which the Node legs skip)
+ * would book time no leg spends. A single leg's own log has no job column.
+ */
 export function recordDurations(text) {
   const seconds = {};
   // Colour codes arrive as escape bytes, or, in `gh run view --log` output,
   // spelled out as `^[[…m`.
   const plain = text.replace(/(?:\x1b|\^\[)\[[0-9;]*m/g, '');
   for (const line of plain.split('\n')) {
+    const columns = line.split('\t');
+    if (columns.length >= 3 && !NODE_LEG_JOB.test(columns[0])) continue;
     const match =
       /[✓❯×]\s+\|?node\|?\s+(\S+\.(?:test|spec)\.[cm]?[jt]sx?)\s+\(\d+ tests?[^)]*\)\s+(\d+(?:\.\d+)?)(ms|s)\s*$/.exec(
         line,
       );
-    if (!match) continue;
-    const value = Number(match[2]) / (match[3] === 'ms' ? 1000 : 1);
-    seconds[match[1]] = Math.round(value * 10) / 10;
+    if (match) {
+      const value = Number(match[2]) / (match[3] === 'ms' ? 1000 : 1);
+      seconds[match[1]] = Math.round(value * 10) / 10;
+      continue;
+    }
+    // A file whose every test skips in the leg costs the leg nothing: it is
+    // recorded at 0, so a time another job gave it never stays booked.
+    const skipped =
+      /↓\s+\|?node\|?\s+(\S+\.(?:test|spec)\.[cm]?[jt]sx?)\s+\((\d+) tests? \| (\d+) skipped\)/.exec(
+        line,
+      );
+    if (skipped && skipped[2] === skipped[3]) seconds[skipped[1]] = 0;
   }
   return seconds;
 }
 
 const SWIZZLE_PROOF = /(^|\/)swizzle-proof\.\d+\.test\.mjs$/;
+
+/**
+ * The swizzle-proof slices among `files` that prove nothing in this run: every
+ * slice reads the same scope first (packages/cli/test/swizzle-proof/scope.mjs
+ * runScope), and in the scope `none` it runs no target. Their recorded time is
+ * the time they take when a change reaches them, so without this the legs that
+ * hold them would finish early while the other legs carry the rest.
+ * @param {string[]} files
+ * @returns {Promise<Set<string>>}
+ */
+export async function idleSwizzleSlices(files) {
+  const slices = files.filter(file => SWIZZLE_PROOF.test(file));
+  if (slices.length === 0) return new Set();
+  const {runScope} = await import(
+    pathToFileURL(path.join(ROOT, 'packages/cli/test/swizzle-proof/scope.mjs'))
+      .href
+  );
+  const {scope} = runScope({all: process.env.SWIZZLE_PROOF_ALL === '1'});
+  return new Set(scope.mode === 'none' ? slices : []);
+}
 
 /**
  * The record after a run. The run's times replace those files' times; files
@@ -174,11 +170,10 @@ export default class DurationShardSequencer extends BaseSequencer {
     const relative = spec => this.relative(spec);
     const node = specs.filter(spec => spec.project.name === PROJECT);
     const others = specs.filter(spec => spec.project.name !== PROJECT);
-    const legOneSeconds =
-      process.env.VITEST_LEG_ONE_RESERVE === '1' ? readLegOneSeconds() : 0;
+    const files = node.map(relative);
     const mine = new Set(
-      partitionByDuration(node.map(relative), count, readDurations(), {
-        legOneSeconds,
+      partitionByDuration(files, count, readDurations(), {
+        idle: await idleSwizzleSlices(files),
       })[index - 1],
     );
     return [
@@ -234,14 +229,6 @@ if (
   const current = fs.existsSync(DURATIONS)
     ? JSON.parse(fs.readFileSync(DURATIONS, 'utf8'))
     : {};
-  // The first leg's own steps, from the same logs; a step the logs do not
-  // show keeps its earlier time.
-  const legOneSteps = {...(current.legOneSteps ?? {})};
-  for (const log of logs)
-    Object.assign(
-      legOneSteps,
-      recordLegOneSteps(fs.readFileSync(log, 'utf8'), Object.keys(legOneSteps)),
-    );
   fs.writeFileSync(
     DURATIONS,
     `${JSON.stringify(
@@ -249,7 +236,6 @@ if (
         ...current,
         source: 'recorded Node leg logs',
         seconds: mergeRecord(current.seconds ?? {}, seconds),
-        legOneSteps,
       },
       null,
       2,
