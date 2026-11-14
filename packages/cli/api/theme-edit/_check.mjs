@@ -4290,8 +4290,10 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         );
     }
     // A state Core paints at run time with an inline style (a selected table
-    // row's wash) outranks any theme rule for that property: the token the
-    // inline style reads is what changes it.
+    // row's wash) outranks any theme rule for that property while Core paints
+    // it: the token the inline style reads is what changes it. A component
+    // option can turn that paint off (a table without its row highlight), and
+    // then a rule in the state applies; the refusal says both.
     if (s.state && !unset) {
       const family =
         prop === 'background' || prop === 'background-color'
@@ -4303,7 +4305,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       if (inline)
         refuse(
           E.ERR_THEME_NO_EFFECT,
-          `Core paints ${inline[0]}'s ${family} when ${s.state} as an inline style from ${inline[1]}, which no theme rule can replace; set ${inline[1]} on ${inline[0]} when ${s.state} instead.`,
+          `By default Core paints ${inline[0]}'s ${family} when ${s.state} as an inline style from ${inline[1]}, which no theme rule can replace, so set ${inline[1]} on ${inline[0]} when ${s.state} instead; only where the component is set not to paint it (such as a table with its row highlight off) does a ${s.state} ${family} apply, and there ${inline[1]} paints nothing.`,
           {
             run: [
               `${P} set ${slug} ${inline[1]} ${quoteCommandArgument(v)} --on ${inline[0]} --state ${s.state}${s.mode ? ` --mode ${s.mode}` : ''}`,

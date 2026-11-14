@@ -29,10 +29,10 @@
  * Because the background is an inline style, it outranks anything
  * userland can layer on with StyleX. `hasRowHighlight: false` is the
  * supported way to reclaim the row background; `aria-selected` is
- * unaffected by it. A selected row also carries the `table-row` target's
- * `selected` theme state, whatever `hasRowHighlight` is: a theme styles it
- * there, and recolors the wash through `--color-accent-muted`, which the
- * inline background reads.
+ * unaffected by it. A selected row also carries the `table-row` `selected`
+ * theme state (`data-selected="selected"`), whatever `hasRowHighlight` is.
+ * A theme styles the row there. To recolor the wash, a theme sets
+ * `--color-accent-muted`, which the inline background reads.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Table/useTableSelection.doc.mjs (config prop table)

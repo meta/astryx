@@ -32,15 +32,15 @@ system_specs: []
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                 |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | `children`, `isHeaderRow`, `xstyle` (a list of StyleX styles), root `BaseProps`, and a `ref`.                                                            |
-| Behavior                | A native `tr` carrying the `table-row` target that takes the enclosing Table's striping and hover treatment and holds its cells' divider during a glide. |
-| End-user impact         | People can follow a row across the table by its stripe or hover highlight, and assistive technology reads it as a row.                                   |
-| Builder impact          | None; the record describes shipped behavior.                                                                                                             |
-| Compatibility/readiness | Released behavior recorded as current; no API, default, or output changes.                                                                               |
-| Review checks           | Reject striping that counts an expansion panel, hover or striping on a header row, a lost target, or caller props that miss the row.                     |
-| Governing rules         | `architecture:public-component-api` INV5–INV8; `architecture:component-theming-surface`.                                                                 |
+| Area                    | Contract                                                                                                                                                                  |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | `children`, `isHeaderRow`, `xstyle` (a list of StyleX styles), root `BaseProps`, and a `ref`.                                                                             |
+| Behavior                | A native `tr` carrying the `table-row` target that takes the enclosing Table's striping and hover treatment and holds its cells' divider during a glide.                  |
+| End-user impact         | People can follow a row across the table by its stripe or hover highlight, and assistive technology reads it as a row.                                                    |
+| Builder impact          | A theme styles a selected row through the `table-row` target's `selected` state (FR5).                                                                                    |
+| Compatibility/readiness | Additive: a selected row gains `data-selected="selected"` and the `table-row` target gains the `selected` theme state (FR5); no prop, default, or styling output changes. |
+| Review checks           | Reject striping that counts an expansion panel, hover or striping on a header row, a lost target, or caller props that miss the row.                                      |
+| Governing rules         | `architecture:public-component-api` INV5–INV8; `architecture:component-theming-surface`.                                                                                  |
 
 This table is a review projection; the body below is authoritative.
 
@@ -55,8 +55,9 @@ Consumer syntax and examples belong in `TableRow.doc.mjs`.
 ## Compatibility and migration
 
 - Released default preserved: `yes` — a body row.
-- Compatibility class: records shipped behavior; no public prop, default, DOM,
-  target, or styling output changes.
+- Compatibility class: additive; a selected row gains `data-selected="selected"`
+  and the `table-row` target gains the `selected` theme state (FR5); no prop,
+  default, or styling output changes.
 - Controlled/uncontrolled behavior: not applicable
 - Migration decision: none
 

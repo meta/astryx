@@ -129,7 +129,12 @@ describe('refusals', () => {
       }),
     );
     expect(r.code).toBe('ERR_THEME_NO_EFFECT');
-    expect(r.message).toContain('inline style from --color-accent-muted');
+    expect(r.message).toContain(
+      "By default Core paints table-row's background-color when selected as an inline style from --color-accent-muted",
+    );
+    expect(r.message).toContain(
+      'only where the component is set not to paint it (such as a table with its row highlight off) does a selected background-color apply',
+    );
     expect(r.run).toContain(
       "astryx experimental theme editor set t --color-accent-muted '#dbeafe' --on table-row --state selected",
     );
