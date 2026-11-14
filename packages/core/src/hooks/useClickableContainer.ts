@@ -25,6 +25,7 @@ import {
   type MouseEvent,
   type PointerEvent,
 } from 'react';
+import {computeTargetAndRel} from '../Link/computeTargetAndRel';
 import {isLayerSurface} from '../Layer/layerSurfacePress';
 import {isSafeUrl} from '../utils/safeUrl';
 import {cancelPress} from '../utils/pressFeedback';
@@ -210,6 +211,36 @@ export interface ClickableContainerResult {
   onPointerDown: (event: PointerEvent<HTMLElement>) => void;
 }
 
+function getWindowOpenFeatures(
+  target: string | undefined,
+  interactiveRef: RefObject<HTMLElement | null> | undefined,
+): string {
+  if (target !== '_blank') {
+    const {rel} = computeTargetAndRel(target, undefined);
+    return rel?.split(/\s+/).join(',') ?? 'noopener';
+  }
+
+  if (interactiveRef?.current == null) {
+    // Keep the imperative path on the same target/rel contract as Link.
+    const {rel} = computeTargetAndRel(target, undefined);
+    return rel?.split(/\s+/).join(',') ?? 'noopener';
+  }
+
+  // A delegated link is the source of truth for referrer policy. This keeps
+  // the hook's synthetic middle-click path aligned with the anchor's normal
+  // activation, including links whose rel is supplied by a router component.
+  const interactive = interactiveRef.current;
+  if (
+    typeof HTMLAnchorElement !== 'undefined' &&
+    interactive instanceof HTMLAnchorElement &&
+    interactive.relList.contains('noreferrer')
+  ) {
+    return 'noopener,noreferrer';
+  }
+
+  return 'noopener';
+}
+
 /**
  * Hook that makes a container element clickable while preserving
  * nested interactive element behavior.
@@ -308,7 +339,11 @@ export function useClickableContainerProxy({
         const shouldOpenNewTab =
           target === '_blank' || event.ctrlKey || event.metaKey;
         if (shouldOpenNewTab) {
-          window.open(href, '_blank', 'noopener');
+          window.open(
+            href,
+            '_blank',
+            getWindowOpenFeatures(target, interactiveRef),
+          );
         } else if (interactiveRef?.current) {
           // Proxy click to the sr-only link so the framework link component
           // handles navigation (client-side transitions in Next.js, etc.).
@@ -363,10 +398,14 @@ export function useClickableContainerProxy({
         (eventTarget === event.currentTarget ||
           !hasInteractiveAncestor(eventTarget, containerEl))
       ) {
-        window.open(href, '_blank', 'noopener');
+        window.open(
+          href,
+          '_blank',
+          getWindowOpenFeatures(target, interactiveRef),
+        );
       }
     },
-    [containerRef, href, disabled],
+    [containerRef, interactiveRef, href, target, disabled],
   );
 
   // The press-state counterpart of onClick's rule: a press that would not
