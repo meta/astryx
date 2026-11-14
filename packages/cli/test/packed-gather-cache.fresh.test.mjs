@@ -86,16 +86,23 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
   );
 
   it.skipIf(!hasModuleHooks)(
-    'is not kept by the first run, which only makes its folder',
+    'is kept by the first run, which makes its folder, and used by the next',
     () => {
+      const fresh = run(QUERIES[0], {tmp: freshTmp()});
       const tmp = path.join(work, 'tmp', 'first');
-      const first = run(QUERIES[0], {tmp});
+      // The release cache, as keptTmp() leaves it: this packed copy, with no
+      // Core beside it, starts a background Core install that makes the
+      // folder, and the gather looks it up.
+      fs.mkdirSync(path.join(tmp, 'astryx', 'releases'), {recursive: true});
+      expect(run(QUERIES[0], {tmp})).toEqual(fresh);
       expect(fs.readdirSync(path.join(tmp, 'astryx'))).toContain('catalogs');
       expect(fs.statSync(path.join(tmp, CACHE_NAME)).mode & 0o777).toBe(0o700);
-      expect(fs.readdirSync(path.join(tmp, CACHE_NAME))).toEqual([]);
-      expect(first).toEqual(run(QUERIES[0], {tmp: freshTmp()}));
-      run(QUERIES[0], {tmp});
-      expect(entries(tmp).size).toBe(1);
+      const kept = entries(tmp);
+      expect(kept.size).toBe(1);
+      expect(run(QUERIES[0], {tmp})).toEqual(fresh);
+      const [name] = [...kept.keys()];
+      // The second run read the entry back: it did not write it again.
+      expect(entries(tmp).get(name)?.ino).toBe(kept.get(name)?.ino);
     },
     120_000,
   );
