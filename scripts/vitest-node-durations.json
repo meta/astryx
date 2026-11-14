@@ -1073,6 +1073,7 @@
     "packages/cli/test/packed-gather-cache.malformed.test.mjs": 64.9,
     "packages/cli/test/packed-gather-cache.nested.test.mjs": 181.3,
     "packages/cli/test/packed-gather-cache.records.test.mjs": 103.1,
+    "packages/cli/test/packed-gather-cache.replacements.test.mjs": 30,
     "packages/cli/test/packed-help-imports.test.mjs": 1.5,
     "packages/cli/test/packed-manifest.test.mjs": 3.5,
     "packages/cli/test/packed-self-audit.test.mjs": 6.3,
