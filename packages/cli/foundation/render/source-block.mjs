@@ -18,7 +18,7 @@
 
 import {createHash} from 'node:crypto';
 import {isValidSemver} from '../env/semver.mjs';
-import {scanHtml} from './html-reader.mjs';
+import {decode, scanHtml} from './html-reader.mjs';
 
 /** The script type of the embedded-source block. */
 export const SOURCE_TYPE = 'application/x-astryx-source';
@@ -114,21 +114,39 @@ function pageParts(html) {
 }
 
 /**
- * Every embedded-source block in a file's body, in order, with its index in
- * the whole file. The note in <head> may quote a title or a path with any
- * text, so the search starts at <body>.
+ * Whether a script tag's attributes give it the source type. A MIME type is
+ * matched without regard to letter case.
+ * @param {Array<[string, string]>} attrs
+ */
+const isSourceType = attrs => {
+  const type = attrs.find(([name]) => name === 'type')?.[1];
+  return type !== undefined && decode(type).trim().toLowerCase() === SOURCE_TYPE;
+};
+
+/**
+ * Every embedded-source block in a file, in order: each script element whose
+ * type is the source type, found as a browser finds it. The tag may hold its
+ * attributes in any order, quoted or not, in any letter case (a minifier
+ * rewrites it so), and a tag inside a comment (the note) or inside the text
+ * of another element is not one.
  * @param {string} html
+ * @returns {{index: number, json: string, closed: boolean}[]} where each
+ *   opening tag starts, the text of the block, and whether its end tag is
+ *   there (a file cut inside the block has none)
  */
 const blocksIn = html => {
-  const start = Math.max(0, pageParts(html).body);
-  return [
-    ...html.slice(start).matchAll(
-      new RegExp(
-        `<script\\s+type=["']${SOURCE_TYPE.replace(/[/+.-]/g, c => `\\${c}`)}["'][^>]*>([\\s\\S]*?)</script>`,
-        'gi',
-      ),
-    ),
-  ].map(m => Object.assign(m, {index: (m.index ?? 0) + start}));
+  /** @type {{index: number, json: string, closed: boolean}[]} */
+  const blocks = [];
+  /** @type {number | null} */
+  let opened = null;
+  for (const token of scanHtml(html)) {
+    // The text of a script element is the raw piece right after its tag.
+    if (token.kind === 'raw' && opened !== null) {
+      blocks.push({index: opened, json: html.slice(token.start, token.end), closed: /^<\/script/i.test(html.slice(token.end, token.end + 8))});
+    }
+    opened = token.kind === 'start' && token.tag === 'script' && isSourceType(token.attrs) ? token.start : null;
+  }
+  return blocks;
 };
 
 /**
@@ -139,17 +157,13 @@ const blocksIn = html => {
 export function readSourceBlock(html) {
   // The block is written last in the body; a page's own markup cannot end
   // it, so the last one is the CLI's.
-  const m = blocksIn(html).at(-1);
-  if (!m) {
-    // An opening tag with no block after it: the file ends inside the block.
-    return html.slice(Math.max(0, pageParts(html).body)).includes(`<script type="${SOURCE_TYPE}">`)
-      ? {found: true, damaged: 'its embedded source is cut short: the file ends inside it'}
-      : {found: false};
-  }
+  const block = blocksIn(html).at(-1);
+  if (!block) return {found: false};
+  if (!block.closed) return {found: true, damaged: 'its embedded source is cut short: the file ends inside it'};
   /** @type {any} */
   let payload;
   try {
-    payload = JSON.parse(m[1]);
+    payload = JSON.parse(block.json);
   } catch {
     return {found: true, damaged: 'its embedded source is not valid JSON'};
   }
@@ -194,7 +208,7 @@ export function readSourceBlock(html) {
  */
 export function renderedMarkupOf(html) {
   const block = blocksIn(html).at(-1);
-  if (!block || block.index === undefined) return null;
+  if (!block) return null;
   const start = pageParts(html).body;
   return start < 0 || start > block.index ? null : html.slice(start, block.index);
 }

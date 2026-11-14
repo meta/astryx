@@ -86,6 +86,30 @@ describe('the embedded source', () => {
     expect('damaged' in readSourceBlock(block.replace('"version":1', '"version":0'))).toBe(true);
     expect(readSourceBlock('<p>none</p>')).toEqual({found: false});
   });
+
+  it('finds the block as a browser does: any attribute order, quoting or letter case, never in a comment or in other text', () => {
+    const bytes = Buffer.from('export default () => null;\n');
+    const block = sourceBlock('page.tsx', [{path: 'page.tsx', bytes}]);
+    const json = block.slice(block.indexOf('>') + 1, block.lastIndexOf('</script>'));
+    for (const tag of [
+      '<script type=application/x-astryx-source>',
+      "<script type='application/x-astryx-source'>",
+      '<script id="source" type="application/x-astryx-source">',
+      '<SCRIPT TYPE="Application/X-Astryx-Source">',
+      '<script\n  type="application/x-astryx-source"\n>',
+    ]) {
+      const html = `<html><head></head><body><p>x</p>${tag}${json}</SCRIPT></body></html>`;
+      const read = readSourceBlock(html);
+      expect(read.found && 'source' in read && Buffer.from(read.source.files[0].base64, 'base64')).toEqual(bytes);
+      expect(renderedMarkupOf(html)).toBe('<p>x</p>');
+    }
+    expect(readSourceBlock(`<body><!-- ${block} --></body>`)).toEqual({found: false});
+    expect(readSourceBlock(`<body><textarea>${block}</textarea></body>`)).toEqual({found: false});
+    expect(readSourceBlock(`<body><p>x</p>${block.slice(0, -20)}`)).toEqual({
+      found: true,
+      damaged: 'its embedded source is cut short: the file ends inside it',
+    });
+  });
 });
 
 describe('the parts of a rendered file a reverse compares', () => {

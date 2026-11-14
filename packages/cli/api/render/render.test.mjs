@@ -205,6 +205,16 @@ describe('render(): page to one HTML file', () => {
       'ERR_RENDER_SOURCE_DAMAGED',
     );
   });
+
+  it('gives back a file a minifier rewrote: comments gone, the tag unquoted, its attributes reordered', async () => {
+    const minified = html
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace('<script type="application/x-astryx-source">', '<script data-kind=source type=application/x-astryx-source>');
+    put('minified.html', minified);
+    const back = /** @type {any} */ (await render('minified.html', {cwd: dir, reverse: true, out: 'minified-back/page.tsx'}));
+    expect(back.data).toMatchObject({mode: 'embedded', exact: true, edited: false});
+    expect(fs.readFileSync(path.join(dir, 'minified-back/page.tsx'), 'utf8')).toBe(PAGE);
+  });
 });
 
 describe('render(): embedded files stay inside the current folder', () => {
