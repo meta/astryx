@@ -407,9 +407,9 @@ function TokenizerSheetContent<T extends SearchableItem>({
   // query survives the sheet's unmount between presentations (FR18).
   const [query, setQuery] = useState(initialQuery);
   const [sourceResults, setSourceResults] = useState<T[]>([]);
-  // Matches past `maxMenuItems` in the last answer. The result count names
-  // every match, not only the rows listed.
-  const [sourceHiddenCount, setSourceHiddenCount] = useState(0);
+  // Matches the cap hid from the last answer: the result count names every
+  // match, and a hidden match the sheet lists as selected counts once.
+  const [sourceHidden, setSourceHidden] = useState<T[]>([]);
   const trimmedQueryForSearch = query.trim();
   // A query shorter than `minQueryLength` is never searched: no source rows,
   // no busy feedback, no empty state, no outcome announcement, as the inline
@@ -418,7 +418,7 @@ function TokenizerSheetContent<T extends SearchableItem>({
     trimmedQueryForSearch !== '' &&
     trimmedQueryForSearch.length < minQueryLength;
   const results = isBelowMinQuery ? EMPTY_RESULTS : sourceResults;
-  const hiddenMatchCount = isBelowMinQuery ? 0 : sourceHiddenCount;
+  const hiddenMatches = isBelowMinQuery ? EMPTY_RESULTS : sourceHidden;
   // Whether a query is one the source is asked about: empty (the bootstrap
   // set) or at least `minQueryLength`. Below that nothing is searched, so
   // nothing is pending and no outcome is owed. One rule for every way a query
@@ -556,7 +556,7 @@ function TokenizerSheetContent<T extends SearchableItem>({
       unanswered = null;
       if (seqRef.current === seq) {
         setSourceResults(items.slice(0, maxMenuItems));
-        setSourceHiddenCount(Math.max(0, items.length - maxMenuItems));
+        setSourceHidden(items.slice(maxMenuItems));
         setIsPending(false);
       }
     };
@@ -625,6 +625,10 @@ function TokenizerSheetContent<T extends SearchableItem>({
   }, [query, results, selectedItemsAtOpen, draftValue]);
 
   const renderedItems = visibleItems.slice(0, renderedItemCount);
+  const hiddenMatchCount = useMemo(() => {
+    const listedIds = new Set(visibleItems.map(item => item.id));
+    return hiddenMatches.filter(item => !listedIds.has(item.id)).length;
+  }, [hiddenMatches, visibleItems]);
 
   // A settled search may remove the row that holds focus: it was listed from
   // the previous search and is not in this one. Focus would fall to the page

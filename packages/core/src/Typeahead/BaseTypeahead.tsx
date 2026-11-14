@@ -1229,8 +1229,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       let shownRows: T[] | null = null;
       let shownState: T[] | null = null;
       let shownEntryCount = 0;
-      // Matches past `maxMenuItems` in the list last shown. The result count
-      // names every match, not only the rows shown.
+      // The result count names every match, not only the rows shown.
       let hiddenMatchCount = 0;
 
       const showList = (list: T[], isFinal: boolean): T[] => {

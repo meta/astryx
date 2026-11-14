@@ -1037,6 +1037,55 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     }
   });
 
+  it('counts a selected match past maxMenuItems once (AR6)', async () => {
+    const matches = Element.prototype.matches;
+    const modalSpy = vi
+      .spyOn(Element.prototype, 'matches')
+      .mockImplementation(function (this: Element, selector: string) {
+        return selector === ':modal'
+          ? this instanceof HTMLDialogElement && this.open
+          : matches.call(this, selector);
+      });
+    try {
+      const tags = Array.from({length: 5}, (_, index) => ({
+        id: `tag-${index}`,
+        label: `Tag ${index}`,
+      }));
+      // Five matches, two listed by the cap, and Tag 4 (past the cap) selected:
+      // the sheet lists Tag 4, Tag 0 and Tag 1, and the cap hides Tag 2 and
+      // Tag 3. Five matches in all.
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={{
+            search: (q: string) =>
+              tags.filter(tag =>
+                tag.label.toLowerCase().includes(q.toLowerCase()),
+              ),
+          }}
+          value={[tags[4]]}
+          onChange={() => {}}
+          debounceMs={0}
+          maxMenuItems={2}
+          presentation="bottom-sheet"
+        />,
+      );
+      fireEvent.click(openTrigger());
+      const dialog = await screen.findByRole('dialog', {name: 'Tags'});
+      const region = () =>
+        dialog.querySelector(
+          ':scope > [data-astryx-modal-live-region="polite"]',
+        );
+      fireEvent.change(screen.getByLabelText('Search Tags'), {
+        target: {value: 'tag'},
+      });
+      await waitFor(() => expect(region()).toHaveTextContent('5 results'));
+      expect(screen.getAllByRole('checkbox')).toHaveLength(3);
+    } finally {
+      modalSpy.mockRestore();
+    }
+  });
+
   it('counts the create row it offers, as the inline field counts its create entry (FR20, FR22; AR6)', async () => {
     const matches = Element.prototype.matches;
     const modalSpy = vi

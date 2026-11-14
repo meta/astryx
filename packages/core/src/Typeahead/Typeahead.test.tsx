@@ -248,7 +248,7 @@ describe('BaseTypeahead', () => {
       const region = document.querySelector(
         '[data-astryx-live-region="polite"]',
       );
-      expect(region?.textContent).toContain('40');
+      expect(region?.textContent).toBe('40 results');
     });
     // The list still shows only the first ten.
     expect(document.querySelectorAll('[role="option"]')).toHaveLength(10);
