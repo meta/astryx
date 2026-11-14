@@ -79,6 +79,12 @@ registerEnglishFallback(english);
 // runtime's.
 const CONTENT_BLOCK_CAP = '480px';
 
+/**
+ * The trigger's own list is open. A press does not scale the box then, so the
+ * list anchors to the box at rest.
+ */
+const LAYER_OPEN: string = ':has([aria-expanded="true"])';
+
 const styles = stylex.create({
   // The status glyph or info-tip keeps its size when the trigger text is long.
   statusTip: {
@@ -161,17 +167,20 @@ const styles = stylex.create({
       ':focus-within': 'none',
     },
     fontWeight: fontWeightVars['--font-weight-medium'],
-    transitionProperty:
-      'background-image, background-color, color, opacity, transform',
+    transitionProperty: {
+      default: 'background-image, background-color, color, opacity, transform',
+      // The press scale goes at once as the list opens.
+      [LAYER_OPEN]: 'background-image, background-color, color, opacity',
+    },
     transform: {
       default: 'scale(1)',
       // A mouse press; under a coarse pointer the touch press model writes
       // `data-astryx-press` instead (see interactionOverlay.stylex.ts).
-      ':active': {
+      [`:active:not(${LAYER_OPEN})`]: {
         default: 'scale(0.98)',
         '@media (pointer: coarse)': 'scale(1)',
       },
-      '[data-astryx-press="on"]': 'scale(0.98)',
+      [`[data-astryx-press="on"]:not(${LAYER_OPEN})`]: 'scale(0.98)',
     },
   },
   // Keep the input-family width contract while reusing ghost's borderless paint
@@ -188,15 +197,18 @@ const styles = stylex.create({
       ':focus-within': 'none',
     },
     fontWeight: fontWeightVars['--font-weight-medium'],
-    transitionProperty:
-      'background-image, background-color, color, opacity, transform',
+    transitionProperty: {
+      default: 'background-image, background-color, color, opacity, transform',
+      // The press scale goes at once as the list opens.
+      [LAYER_OPEN]: 'background-image, background-color, color, opacity',
+    },
     transform: {
       default: 'scale(1)',
-      ':active': {
+      [`:active:not(${LAYER_OPEN})`]: {
         default: 'scale(0.98)',
         '@media (pointer: coarse)': 'scale(1)',
       },
-      '[data-astryx-press="on"]': 'scale(0.98)',
+      [`[data-astryx-press="on"]:not(${LAYER_OPEN})`]: 'scale(0.98)',
     },
   },
   triggerGhostDisabled: {

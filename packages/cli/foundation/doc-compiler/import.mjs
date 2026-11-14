@@ -35,7 +35,12 @@ import {
   readInTurn,
 } from '../fs/module-loader.mjs';
 import {fileStamp, recordContentRead} from '../fs/read-record.mjs';
-import {readStore, storedKey, STORED_DOCS_FILE} from './stored-docs.mjs';
+import {
+  noteStoredExport,
+  readStore,
+  storedKey,
+  STORED_DOCS_FILE,
+} from './stored-docs.mjs';
 
 const requireFromHere = createRequire(import.meta.url);
 
@@ -132,6 +137,7 @@ function storedModule(file) {
       enumerable: true,
       writable: true,
     });
+    noteStoredExport(exports[name], key, name);
   }
   Object.defineProperty(module, Symbol.toStringTag, {value: 'Module'});
   Object.preventExtensions(module);

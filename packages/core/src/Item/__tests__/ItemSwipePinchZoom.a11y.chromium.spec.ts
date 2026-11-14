@@ -56,8 +56,8 @@ async function openStory(page: Page) {
   const rows = page.locator('.astryx-item');
   const row = rows.first();
   await expect(row.getByText('Message 1')).toBeVisible();
-  // The gesture arrives with the lazily loaded swipe layer; its panel is the
-  // sign the row can be dragged.
+  // The story's rows take `swipe={createSwipe(…)}`, so the gesture and its
+  // panel come with the row; the panel is the sign the row can be dragged.
   await expect(row.locator('[data-swipe-panel="leading"]')).toBeAttached();
   const box = (await row.boundingBox()) as Box;
   const next = (await rows.nth(1).boundingBox()) as Box;
@@ -175,7 +175,8 @@ test('a one-finger sideways drag still swipes the row and leaves the zoom alone'
     type: 'touchStart',
     touchPoints: [{x: startX, y}],
   });
-  for (const dx of [6, 14, 28, 44, 60]) {
+  // The swipe begins after 25 px and is the travel past them.
+  for (const dx of [6, 14, 28, 50, 70, 90]) {
     await cdp.send('Input.dispatchTouchEvent', {
       type: 'touchMove',
       touchPoints: [{x: startX + dx, y}],

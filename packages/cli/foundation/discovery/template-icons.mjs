@@ -32,7 +32,12 @@
  * would collide with another binding in the file; a mapped default import
  * becomes the set's named import aliased to its local name. An icon from an
  * installed set that draws a variant (such as solid) maps to the target's
- * variant of that name, else its default. With a project icon set, every
+ * variant of that name, else its default. When the project names a variant
+ * (`experimental.iconVariant`), every mapped icon asks for that look
+ * instead; an icon from the library the main set wraps maps to the main
+ * set's icon, and an icon from a set in the list in another look moves to
+ * that icon's export for the variant, so each draws the project's look
+ * where its set has it. With a project icon set, every
  * declared key ends up mapped, a placeholder, or kept (FR10): an icon that
  * draws no Astryx definition and has no match keeps its original import, and
  * a key bound only by a namespace import, a type-only import, a re-export, an
@@ -53,8 +58,9 @@ import {
   walk,
   writtenNames,
 } from './template-source-tree.mjs';
-import {definitionsByIcon} from './icon-set-discovery.mjs';
+import {definitionsByIcon, iconUseCommand} from './icon-set-discovery.mjs';
 import {astryxDefinitionsByName} from './icon-definition-discovery.mjs';
+import {generatedOrigins} from './icon-set-writer.mjs';
 
 /** @typedef {import('./icon-set-discovery.mjs').DiscoveredIconSet} DiscoveredIconSet */
 /** @typedef {import('./icon-set-discovery.mjs').IconSetChoice} IconSetChoice */
@@ -81,13 +87,16 @@ import {astryxDefinitionsByName} from './icon-definition-discovery.mjs';
  * @property {string[]} [dropped] the library's sizing props (`size`,
  *   `strokeWidth`, `absoluteStrokeWidth`) removed from its elements: an icon
  *   set's icons take their size from CSS
- * @property {'match' | 'definition'} by `match`: a reviewed
+ * @property {'match' | 'definition' | 'variant'} by `match`: a reviewed
  *   `exact` or `strong` match in the project set's data names the source
  *   icon; `definition`: the target's `map` names it for the Astryx icon
- *   definition the source draws
+ *   definition the source draws; `variant`: the source is already this icon
+ *   of a set in the project's list, in another look, and moves to the look
+ *   the project names
  * @property {{asked: string, used: string | null}} [variant] present when the
- *   source draws a look the target set's icon does not have: the look it
- *   asked for, and the look used (the set's default look)
+ *   look asked for, the project's variant or else the look the source draws,
+ *   is one the target set's icon does not have: that look, and the look used
+ *   (the set's default look)
  */
 
 /**
@@ -135,6 +144,8 @@ import {astryxDefinitionsByName} from './icon-definition-discovery.mjs';
  * @property {string[]} [order] the main set and each backup, as
  *   `<package>/<set>`, in the order icons are looked up; present when the
  *   project lists backups
+ * @property {string} [variant] the look the project's icons draw, as
+ *   `experimental.iconVariant` names it; present when it is set
  * @property {string} reason
  * @property {MappedIcon[]} mapped
  * @property {PlaceholderIcon[]} placeholder
@@ -316,15 +327,19 @@ function specifierText(entry) {
 }
 
 /**
- * The commands that give a placeholder icon a real one.
+ * The commands that give a placeholder icon a real one. The `use` command
+ * keeps the list's backups and the project's look, and adds a backup after
+ * them.
  * @param {string[]} definitions
  * @param {string} main the main set's name as the list writes it
+ * @param {readonly string[]} [backups] the list's backups as it writes them
+ * @param {string | null} [variant] the project's look
  * @returns {string[]}
  */
-export function placeholderFixes(definitions, main) {
+export function placeholderFixes(definitions, main, backups = [], variant) {
   return [
     `astryx experimental icon map ${definitions[0] ?? '<definition>'} <icon> --set ${main}`,
-    `astryx experimental icon use ${main} --backup <set>`,
+    iconUseCommand(main, [...backups, '<set>'], variant),
   ];
 }
 
@@ -435,8 +450,9 @@ export function matchIcon(source, target) {
 }
 
 /**
- * The export a mapped icon uses: the target's variant of the source's
- * variant name when it has one, else the default.
+ * The export a mapped icon uses: the target's variant of the name asked for
+ * (the project's variant, else the source's) when it has one, else the
+ * default.
  * @param {IconSetIcon} icon
  * @param {DiscoveredIconSet} set
  * @param {string | undefined} variant
@@ -453,9 +469,10 @@ function targetExport(icon, set, variant) {
 }
 
 /**
- * The look a mapped icon draws when the source asked for one the target's
- * icon does not have: what it asked for and the target's default look.
- * Undefined when the look is kept, or when the source names no look.
+ * The look a mapped icon draws when the look asked for (the project's
+ * variant, else the source's) is one the target's icon does not have: what
+ * was asked for and the target's default look. Undefined when the look is
+ * kept, or when no look is asked for.
  * @param {IconSetIcon} icon
  * @param {DiscoveredIconSet} set
  * @param {string | undefined} variant
@@ -469,6 +486,53 @@ function lookChange(icon, set, variant) {
     return undefined;
   }
   return {asked: variant, used: fallback};
+}
+
+/**
+ * Whether an icon draws a look: its own export draws the set's default
+ * variant, and each of its `variants` one more.
+ * @param {IconSetIcon} icon
+ * @param {DiscoveredIconSet} set
+ * @param {string} variant
+ */
+function hasLook(icon, set, variant) {
+  return (
+    variant === set.data.default?.variant ||
+    (icon.variants ?? []).some(each => each.variant === variant)
+  );
+}
+
+/**
+ * The icon of a set whose export re-exports a library export, read from the
+ * set's generated module: the same artwork, in one of the set's looks.
+ * @param {DiscoveredIconSet} set
+ * @param {string} module the library module the template imports from
+ * @param {string} imported the export it imports
+ * @param {Map<DiscoveredIconSet, Map<string, string>>} read each set's
+ *   exports by the library export they re-export, read once per mapping
+ * @returns {IconSetIcon | undefined}
+ */
+function wrappedIcon(set, module, imported, read) {
+  let byOrigin = read.get(set);
+  if (!byOrigin) {
+    byOrigin = new Map();
+    if (set.packageDir && set.data.generated) {
+      const origins = generatedOrigins(set.packageDir, set.data.generated);
+      for (const [exported, origin] of origins) {
+        if (!origin.adapt) {
+          byOrigin.set(`${origin.module}\0${origin.source}`, exported);
+        }
+      }
+    }
+    read.set(set, byOrigin);
+  }
+  const exported = byOrigin.get(`${module}\0${imported}`);
+  if (!exported) return undefined;
+  return set.data.icons.find(
+    icon =>
+      icon.export === exported ||
+      (icon.variants ?? []).some(each => each.export === exported),
+  );
 }
 
 /**
@@ -835,6 +899,7 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
     ...(targets.length > 1
       ? {order: targets.map(each => `${each.package}/${each.name}`)}
       : {}),
+    ...(choice.variant ? {variant: choice.variant} : {}),
     reason: choice.reason,
     mapped: [],
     placeholder: [],
@@ -843,6 +908,13 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
   };
   if (!target) return {source, icons};
   const main = choice.configured ?? target.name;
+  /** The look every icon draws, when the project names one. */
+  const lookVariant = choice.variant;
+  const listedBackups = (choice.backups ?? []).map(each => each.selector);
+  /** @type {Map<DiscoveredIconSet, Map<string, string>>} */
+  const wrappedRead = new Map();
+  /** @param {SourceIcon} record the look a mapped icon asks for */
+  const askedLook = record => lookVariant ?? record.variant;
 
   /** @type {any} */
   let ast;
@@ -885,7 +957,7 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
   /**
    * The source record of each mapped import specifier, the first set in the
    * list that matches it, and the match.
-   * @type {Map<any, {record: SourceIcon, set: DiscoveredIconSet, match: ReturnType<typeof matchIcon>}>}
+   * @type {Map<any, {record: SourceIcon, set: DiscoveredIconSet, match: {icon: IconSetIcon, by: 'match' | 'definition' | 'variant'} | null}>}
    */
   const planned = new Map();
   /**
@@ -894,11 +966,41 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
    * @type {Map<any, DiscoveredIconSet>}
    */
   const wrapped = new Map();
+  /**
+   * Plan each icon a template imports from a set in the list in another look
+   * than the project's variant: it moves to that icon's export for the
+   * variant, when the icon has one, and otherwise keeps its import.
+   * @param {any} node an import declaration from a set in the list
+   * @param {string} module
+   */
+  const planLookMoves = (node, module) => {
+    for (const specifier of node.specifiers) {
+      if (
+        specifier.type === 'ImportNamespaceSpecifier' ||
+        specifier.importKind === 'type'
+      ) {
+        continue;
+      }
+      const record = index.get(`${module}\0${importedName(specifier)}`);
+      const set = record?.set;
+      if (!record || !set || !targets.includes(set)) continue;
+      if (record.variant === lookVariant) continue;
+      const icon = set.data.icons.find(each => each.id === record.id);
+      if (!icon || !hasLook(icon, set, /** @type {string} */ (lookVariant))) {
+        continue;
+      }
+      planned.set(specifier, {record, set, match: {icon, by: 'variant'}});
+      freed.add(specifier.local.name);
+    }
+  };
   for (const node of ast.program.body) {
     if (node.type !== 'ImportDeclaration' || node.importKind === 'type')
       continue;
     const module = node.source.value;
-    if (targetModules.has(module)) continue;
+    if (targetModules.has(module)) {
+      if (lookVariant) planLookMoves(node, module);
+      continue;
+    }
     for (const specifier of node.specifiers) {
       if (
         specifier.type === 'ImportNamespaceSpecifier' ||
@@ -937,19 +1039,29 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
       if (!record || (record.set && targets.includes(record.set))) continue;
       // An import from the library a listed set wraps is already an icon
       // the project chose. The main set's own library keeps its icons as
-      // written; another set's library keeps an icon that no set maps.
+      // written; another set's library keeps an icon that no set maps. With
+      // a project variant, an icon from the main set's library maps to the
+      // main set's icon, so it draws that look: the icon its `map` names, or
+      // else the icon that re-exports the same library export when that icon
+      // draws the look. Otherwise it keeps its import.
       const wrapper = targets.find(each => wrapsModule(each, module));
-      if (wrapper === target) {
+      if (wrapper === target && !lookVariant) {
         wrapped.set(specifier, wrapper);
         continue;
       }
-      /** @type {{set: DiscoveredIconSet, match: ReturnType<typeof matchIcon>}} */
+      /** @type {{set: DiscoveredIconSet, match: {icon: IconSetIcon, by: 'match' | 'definition' | 'variant'} | null}} */
       let found = {set: target, match: null};
-      for (const each of targets) {
+      for (const each of wrapper === target ? [target] : targets) {
         const match = matchIcon(record, each);
         if (match) {
           found = {set: each, match};
           break;
+        }
+      }
+      if (!found.match && wrapper === target && lookVariant) {
+        const icon = wrappedIcon(target, module, record.export, wrappedRead);
+        if (icon && hasLook(icon, target, lookVariant)) {
+          found = {set: target, match: {icon, by: 'variant'}};
         }
       }
       if (!found.match && wrapper) {
@@ -975,7 +1087,6 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
     if (node.type !== 'ImportDeclaration') continue;
     if (node.importKind === 'type') continue;
     const module = node.source.value;
-    if (targetModules.has(module)) continue;
     if (!node.specifiers.some((/** @type {any} */ each) => planned.has(each))) {
       continue;
     }
@@ -1012,13 +1123,18 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
           source: {module, export: imported},
           target: {local: placeholderName},
           definitions: record.definitions,
-          fixes: placeholderFixes(record.definitions, main),
+          fixes: placeholderFixes(
+            record.definitions,
+            main,
+            listedBackups,
+            lookVariant,
+          ),
           ...(likely
             ? {
                 suggestion: {
                   set: target.name,
                   id: likely.id,
-                  ...targetExport(likely, target, record.variant),
+                  ...targetExport(likely, target, askedLook(record)),
                   confidence: /** @type {const} */ ('likely'),
                 },
               }
@@ -1043,7 +1159,7 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
                 suggestion: {
                   set: target.name,
                   id: likely.id,
-                  ...targetExport(likely, target, record.variant),
+                  ...targetExport(likely, target, askedLook(record)),
                   confidence: /** @type {const} */ ('likely'),
                 },
               }
@@ -1051,8 +1167,8 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
         });
         continue;
       }
-      const chosen = targetExport(match.icon, set, record.variant);
-      const look = lookChange(match.icon, set, record.variant);
+      const chosen = targetExport(match.icon, set, askedLook(record));
+      const look = lookChange(match.icon, set, askedLook(record));
       const key = `${chosen.module}\0${chosen.export}`;
       let entry = added.get(key);
       if (!entry) {

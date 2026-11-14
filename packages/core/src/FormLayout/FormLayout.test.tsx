@@ -10,11 +10,22 @@
  */
 
 import {describe, it, expect} from 'vitest';
-import {render, screen} from '@testing-library/react';
-import {use} from 'react';
-import {FormLayout} from './FormLayout';
+import {fireEvent, render, screen} from '@testing-library/react';
+import {use, type ReactNode} from 'react';
+import {FormLayout, type FormLayoutProps} from './FormLayout';
 import {FormLayoutContext} from './FormLayoutContext';
-import type {FormLayoutDirection} from './FormLayoutContext';
+import type {
+  EntryErrorBehavior,
+  FormLayoutDirection,
+} from './FormLayoutContext';
+import {DateInput} from '../DateInput/DateInput';
+import {
+  DateTimeInput,
+  type ISODateTimeString,
+} from '../DateTimeInput/DateTimeInput';
+import {Dialog} from '../Dialog';
+import {TimeInput} from '../TimeInput/TimeInput';
+import type {ISOTimeString} from '../utils';
 import {Field} from '../Field';
 import {TextInput} from '../TextInput';
 import {CheckboxInput} from '../CheckboxInput';
@@ -475,5 +486,125 @@ describe('FormLayout', () => {
     expect(
       fieldChildren[1].contains(screen.getByTestId('username-input')),
     ).toBe(true);
+  });
+});
+
+describe('FormLayout defaultEntryErrorBehavior', () => {
+  /** Whether a typed nonexistent date shows its rejection before any commit. */
+  function revealsWhileTyping(ui: ReactNode): boolean {
+    const {unmount} = render(ui);
+    const input = screen.getByRole('combobox', {name: 'Due'});
+    fireEvent.change(input, {target: {value: '02/31/2026'}});
+    const isInvalid = input.getAttribute('aria-invalid') === 'true';
+    unmount();
+    return isInvalid;
+  }
+  const dueField = (entryErrorBehavior?: EntryErrorBehavior) => (
+    <DateInput
+      label="Due"
+      onChange={() => {}}
+      entryErrorBehavior={entryErrorBehavior}
+    />
+  );
+  const form = (
+    defaultEntryErrorBehavior: FormLayoutProps['defaultEntryErrorBehavior'],
+    children: ReactNode,
+  ) => (
+    <FormLayout defaultEntryErrorBehavior={defaultEntryErrorBehavior}>
+      {children}
+    </FormLayout>
+  );
+
+  it.each([
+    ['no layout, no prop', true, dueField()],
+    ['an unset default', true, form(undefined, dueField())],
+    ['a complete default', true, form('complete', dueField())],
+    ['a blur-or-enter default', false, form('blur-or-enter', dueField())],
+    [
+      'a field complete under a blur-or-enter default',
+      true,
+      form('blur-or-enter', dueField('complete')),
+    ],
+    [
+      'a field blur-or-enter under a complete default',
+      false,
+      form('complete', dueField('blur-or-enter')),
+    ],
+    [
+      'an unset nested layout inside a blur-or-enter default',
+      true,
+      form('blur-or-enter', form(undefined, dueField())),
+    ],
+    [
+      'a blur-or-enter nested layout inside a complete default',
+      false,
+      form('complete', form('blur-or-enter', dueField())),
+    ],
+    [
+      'a Dialog opened inside a blur-or-enter default',
+      true,
+      form(
+        'blur-or-enter',
+        <Dialog isOpen isInline onOpenChange={() => {}}>
+          {dueField()}
+        </Dialog>,
+      ),
+    ],
+  ] as const)(
+    'with %s, a date field reveals a nonexistent date while typing: %s',
+    (_case, reveals, ui) => {
+      expect(revealsWhileTyping(ui)).toBe(reveals);
+    },
+  );
+
+  it('carries the default on the layout context, and an unset nested layout carries none', () => {
+    const seen: (EntryErrorBehavior | undefined)[] = [];
+    function Probe() {
+      seen.push(use(FormLayoutContext).defaultEntryErrorBehavior);
+      return null;
+    }
+    render(
+      form('blur-or-enter', [
+        <Probe key="a" />,
+        form(undefined, <Probe key="b" />),
+      ]),
+    );
+    expect(seen).toEqual(['blur-or-enter', undefined]);
+  });
+
+  it('holds the time rejections of TimeInput and DateTimeInput under a blur-or-enter default', () => {
+    render(
+      form('blur-or-enter', [
+        <TimeInput
+          key="time"
+          label="Start"
+          hourFormat="12h"
+          min={'14:00' as ISOTimeString}
+          onChange={() => {}}
+        />,
+        <DateTimeInput
+          key="dateTime"
+          label="Meeting"
+          hourFormat="12h"
+          value={'2026-03-15T15:00' as ISODateTimeString}
+          min={'2026-03-15T14:00' as ISODateTimeString}
+          onChange={() => {}}
+        />,
+      ]),
+    );
+    for (const name of ['Start', 'Meeting time']) {
+      const input = screen.getByLabelText(name);
+      fireEvent.change(input, {target: {value: '1:30 PM'}});
+      expect(input).not.toHaveAttribute('aria-invalid');
+      fireEvent.blur(input);
+      expect(input).toHaveAttribute('aria-invalid', 'true');
+    }
+  });
+
+  it('takes only the two values', () => {
+    // @ts-expect-error -- 'eager' is not an entry error behavior.
+    expect(form('eager', null)).toBeTruthy();
+    // @ts-expect-error -- 'blur' is not an entry error behavior.
+    expect(dueField('blur')).toBeTruthy();
   });
 });

@@ -1,5 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y always
+// @pr-a11y scope ^packages/core/src/Lightbox/ ^apps/storybook/stories/Lightbox
 
 /**
  * @file LightboxViewport.a11y.browser.spec.ts
@@ -36,7 +36,9 @@ test('the viewer is as tall as the dynamic viewport, so a toolbar never covers i
   page,
 }) => {
   // The story's photo is remote; the sizing does not need it to load.
-  await page.route(/picsum\.photos/, async route => route.abort());
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
+    route.abort(),
+  );
   await page.goto(
     `${storybook.origin}/iframe.html?id=core-lightbox--default&viewMode=story`,
   );
@@ -89,7 +91,7 @@ async function openCaptionGallery(
   theme?: string,
 ): Promise<Locator> {
   await page.setViewportSize(viewport);
-  await page.route(/picsum\.photos/, async route =>
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
     route.fulfill({contentType: 'image/svg+xml', body: PHOTO_SVG}),
   );
   // Storybook's theme global applies from the story's first render.
@@ -349,7 +351,7 @@ test(`the first frame that shows the clamped caption at open already ends it in 
   page,
 }) => {
   await page.setViewportSize({width: 402, height: 874});
-  await page.route(/picsum\.photos/, async route =>
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
     route.fulfill({contentType: 'image/svg+xml', body: PHOTO_SVG}),
   );
   // A frame's resize observers deliver after its animation-frame callbacks

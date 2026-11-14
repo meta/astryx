@@ -50,9 +50,18 @@ export const URL_MATCHER =
 export const EMAIL_MATCHER =
   /((?<![^<>()[\]\\,;:\s@"])[^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*|("[^"\r\n]+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))/;
 
+/**
+ * A host with a port also looks like a scheme (`example.com:`).
+ * The host needs a dot or is `localhost`, so `tel:911` keeps its scheme.
+ */
+const HOST_WITH_PORT =
+  /^(?:localhost|[a-z0-9-]+(?:\.[a-z0-9-]+)+):\d{1,5}(?:[/?#]|$)/i;
+
 /** Prepend a default `https://` scheme to a bare host so it parses as absolute. */
 function withDefaultScheme(url: string): string {
-  return HAS_SCHEME.test(url) ? url : `https://${url}`;
+  return HAS_SCHEME.test(url) && !HOST_WITH_PORT.test(url)
+    ? url
+    : `https://${url}`;
 }
 
 /**

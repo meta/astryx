@@ -5,17 +5,19 @@
  * @input vitest (jsdom, fake clock), the internal snap-point drag with its
  *   pan (createPan, gestures/createPanGesture.ts) replaced by a stand-in that hands its pan
  *   events to the test
- * @output Checks the options only Core passes. A model draws a drag one for
- *   one or on a spring, or leaves the element as it is inside a dead zone.
- *   A settle under the dead zone carries on until the model's first target
- *   catches it. A release or a cancel lands where the model says. After the
- *   snap points change, a cancel lands on the new list, mid-drag too, on the
- *   point the drag started on. A settle in flight re-aims at the new list,
- *   even under a drag that has not caught it, and never calls `onPass`
- *   twice. An empty list stops a settle where it is and ends a drag in
- *   progress. After `destroy`, new snap points change nothing. An x drag can
- *   draw into a custom property instead of `translate`, and a y drag that
- *   asks for one warns.
+ * @output Checks the options only Core passes. A model draws a drag one for one
+ *   or on a spring, or leaves the element as it is inside a dead zone. A settle
+ *   under the dead zone carries on until the model's first target catches it. A
+ *   release or a cancel lands where the model says. After the snap points
+ *   change, a cancel lands on the new list, mid-drag too, on the point the drag
+ *   started on. A settle in flight re-aims at the new list, even under a drag
+ *   that has not caught it, and never calls `onPass` twice. An empty list stops
+ *   a settle where it is and ends a drag in progress. After `destroy`, new snap
+ *   points change nothing. An x drag can draw into a custom property instead of
+ *   `translate`, and a y drag that asks for one warns. With compositor parts, a
+ *   settle plays one `translate` per part on one clock, and reports from its
+ *   curve. It holds where a drag or a destroy stops it. Reduce Motion keeps the
+ *   animator's settle.
  * @position Testing; validates createSnapDrag (createDragToSnapPoints.ts)
  */
 
@@ -454,6 +456,25 @@ describe('createSnapDrag (the options only Core passes)', () => {
     }
   });
 
+  it('starts a settle asked for in an input event’s own task at the next frame', () => {
+    const node = element();
+    const snap = createSnapDrag(node, {
+      axis: 'x',
+      snapPoints: [-100, 0],
+      onSettle: () => {},
+      customProperty: PROPERTY,
+    });
+    const animate = vi.spyOn(snap.animator, 'animate');
+    snap.settleTo(0, {start: 'next-frame'});
+    expect(animate).toHaveBeenLastCalledWith(
+      {x: -100},
+      expect.anything(),
+      expect.objectContaining({start: 'next-frame'}),
+    );
+    snap.settleTo(1);
+    expect(animate.mock.lastCall?.[2]).not.toHaveProperty('start');
+  });
+
   it('settles on a snap point with the spring and velocity it is given, and returns its motion', async () => {
     const node = element();
     const onSettle = vi.fn();
@@ -663,5 +684,261 @@ describe('createSnapDrag: a companion drawn from the travel (internal)', () => {
         });
       }
     }
+  });
+});
+
+describe('createSnapDrag on the compositor (compositorParts)', () => {
+  interface Played {
+    keyframes: Keyframe[];
+    options: KeyframeAnimationOptions;
+    animation: {cancel: () => void; startTime: number | null};
+  }
+
+  /** A root and a child part whose elements record what they play. */
+  function partsOf(node: HTMLElement) {
+    const child = document.createElement('div');
+    node.append(child);
+    const played: Played[] = [];
+    for (const target of [node, child]) {
+      target.animate = ((
+        keyframes: Keyframe[],
+        options: KeyframeAnimationOptions,
+      ) => {
+        const animation = {cancel: vi.fn(), startTime: null};
+        played.push({keyframes, options, animation});
+        return animation;
+      }) as unknown as HTMLElement['animate'];
+    }
+    const parts = [
+      {element: node, offset: (value: number) => value},
+      {element: child, offset: (value: number) => -value},
+    ];
+    return {parts, played};
+  }
+
+  it('plays a settle as one translate per part, from its offset back to none, while the drawn value holds the end', () => {
+    const node = element();
+    const {parts, played} = partsOf(node);
+    const snap = createSnapDrag(node, {
+      axis: 'x',
+      snapPoints: [-100, 0],
+      onSettle: () => {},
+      customProperty: PROPERTY,
+      compositorParts: () => parts,
+    });
+    pan('began', 0);
+    pan('changed', -40);
+    expect(travel(node)).toBe('-40px');
+    expect(snap.settleTo(1)).toBeNull();
+    // The end at once: 0, which the animator draws as no value at all.
+    expect(parseFloat(travel(node) || '0px')).toBe(0);
+    expect(played).toHaveLength(2);
+    const [root, child] = played;
+    expect(root.keyframes[0]).toMatchObject({
+      offset: 0,
+      translate: '-40px 0px',
+    });
+    expect(root.keyframes.at(-1)).toMatchObject({
+      offset: 1,
+      translate: '0px 0px',
+    });
+    expect(child.keyframes[0]).toMatchObject({translate: '40px 0px'});
+    expect(root.options).toMatchObject({easing: 'linear', fill: 'backwards'});
+    // One clock: every part starts at the same time.
+    expect(root.animation.startTime).not.toBeNull();
+    expect(child.animation.startTime).toBe(root.animation.startTime);
+  });
+
+  it("plays a role spring at the theme's tempo, as the animator does", () => {
+    const durationAt = (tempo: string) => {
+      const node = element();
+      node.style.setProperty('--_astryx-motion-tempo', tempo);
+      const {parts, played} = partsOf(node);
+      const snap = createSnapDrag(node, {
+        axis: 'x',
+        snapPoints: [-100, 0],
+        onSettle: () => {},
+        customProperty: PROPERTY,
+        compositorParts: () => parts,
+      });
+      pan('began', 0);
+      pan('changed', -40);
+      snap.settleTo(1);
+      const duration = Number(played[0]?.options.duration);
+      snap.destroy();
+      return duration;
+    };
+    const atOne = durationAt('1');
+    // Twice the tempo: the same spring takes about twice as long.
+    expect(durationAt('2')).toBeGreaterThan(atOne * 1.6);
+  });
+
+  it('finishSettle ends a compositor settle at its end now: the parts stop, onSettle runs once, and the curve reports nothing later', () => {
+    const node = element();
+    const {parts, played} = partsOf(node);
+    const onSettle = vi.fn();
+    const snap = createSnapDrag(node, {
+      axis: 'x',
+      snapPoints: [-100, 0],
+      onSettle,
+      customProperty: PROPERTY,
+      compositorParts: () => parts,
+    });
+    snap.settleTo(0);
+    vi.advanceTimersByTime(48);
+    expect(onSettle).not.toHaveBeenCalled();
+    snap.finishSettle();
+    for (const {animation} of played) {
+      expect(animation.cancel).toHaveBeenCalled();
+    }
+    expect(onSettle).toHaveBeenCalledTimes(1);
+    expect(onSettle).toHaveBeenLastCalledWith(0);
+    expect(snap.position()).toBe(-100);
+    vi.advanceTimersByTime(3000);
+    expect(onSettle).toHaveBeenCalledTimes(1);
+    // With nothing in flight, it does nothing.
+    snap.finishSettle();
+    expect(onSettle).toHaveBeenCalledTimes(1);
+  });
+
+  it('finishSettle leaves a settle the animator draws alone', async () => {
+    const node = element();
+    const onSettle = vi.fn();
+    const snap = createSnapDrag(node, {
+      axis: 'x',
+      snapPoints: [-100, 0],
+      onSettle,
+      customProperty: PROPERTY,
+    });
+    snap.settleTo(0);
+    await vi.advanceTimersByTimeAsync(48);
+    const midway = snap.position();
+    snap.finishSettle();
+    expect(onSettle).not.toHaveBeenCalled();
+    expect(snap.position()).toBe(midway);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(onSettle).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports the settle once its curve ends, and calls onPass once, on the first frame past its offset', () => {
+    const node = element();
+    const {parts} = partsOf(node);
+    const onSettle = vi.fn();
+    const call = vi.fn();
+    const snap = createSnapDrag(node, {
+      axis: 'x',
+      snapPoints: [-100, 0],
+      onSettle,
+      customProperty: PROPERTY,
+      compositorParts: () => parts,
+    });
+    snap.settleTo(0, {onPass: {offset: -50, direction: -1, call}});
+    expect(call).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(48);
+    expect(onSettle).not.toHaveBeenCalled();
+    let passedAt = snap.position();
+    for (
+      let frame = 0;
+      frame < 120 && call.mock.calls.length === 0;
+      frame += 1
+    ) {
+      passedAt = snap.position();
+      vi.advanceTimersByTime(16);
+    }
+    expect(call).toHaveBeenCalledTimes(1);
+    expect(passedAt).toBeGreaterThan(-50);
+    expect(onSettle).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(3000);
+    expect(call).toHaveBeenCalledTimes(1);
+    expect(onSettle).toHaveBeenCalledTimes(1);
+    expect(onSettle).toHaveBeenLastCalledWith(0);
+  });
+
+  it('starts a settle asked for in an input event’s own task at the next frame', () => {
+    const node = element();
+    const {parts, played} = partsOf(node);
+    const snap = createSnapDrag(node, {
+      axis: 'x',
+      snapPoints: [-100, 0],
+      onSettle: () => {},
+      customProperty: PROPERTY,
+      compositorParts: () => parts,
+    });
+    snap.settleTo(0, {start: 'next-frame'});
+    expect(played).toHaveLength(0);
+    expect(travel(node)).not.toBe('-100px');
+    vi.advanceTimersByTime(16);
+    expect(played).toHaveLength(2);
+    expect(travel(node)).toBe('-100px');
+  });
+
+  it('lets a drag catch the settle where it is on screen: the parts stop, and the drag starts there', () => {
+    const node = element();
+    const {parts, played} = partsOf(node);
+    const onSettle = vi.fn();
+    const snap = createSnapDrag(node, {
+      axis: 'x',
+      snapPoints: [-100, 0],
+      onSettle,
+      customProperty: PROPERTY,
+      compositorParts: () => parts,
+    });
+    snap.settleTo(0);
+    vi.advanceTimersByTime(96);
+    const onScreen = snap.position();
+    expect(onScreen).toBeLessThan(0);
+    expect(onScreen).toBeGreaterThan(-100);
+    // The drawn value holds the end; the parts' animations draw the rest.
+    expect(travel(node)).toBe('-100px');
+    pan('began', 0);
+    pan('changed', -10);
+    for (const {animation} of played) {
+      expect(animation.cancel).toHaveBeenCalled();
+    }
+    expect(parseFloat(travel(node))).toBeCloseTo(onScreen - 10, 3);
+    vi.advanceTimersByTime(3000);
+    expect(onSettle).not.toHaveBeenCalled();
+  });
+
+  it('keeps the animator’s settle under Reduce Motion', () => {
+    const matchMedia = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: query === '(prefers-reduced-motion: reduce)',
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia;
+    try {
+      const node = element();
+      const {parts, played} = partsOf(node);
+      const snap = createSnapDrag(node, {
+        axis: 'x',
+        snapPoints: [-100, 0],
+        onSettle: () => {},
+        customProperty: PROPERTY,
+        compositorParts: () => parts,
+      });
+      expect(snap.settleTo(0)).not.toBeNull();
+      expect(played).toHaveLength(0);
+    } finally {
+      window.matchMedia = matchMedia;
+    }
+  });
+
+  it('holds the element where the settle is when the drag is destroyed', () => {
+    const node = element();
+    const {parts} = partsOf(node);
+    const snap = createSnapDrag(node, {
+      axis: 'x',
+      snapPoints: [-100, 0],
+      onSettle: () => {},
+      customProperty: PROPERTY,
+      compositorParts: () => parts,
+    });
+    snap.settleTo(0);
+    vi.advanceTimersByTime(96);
+    const onScreen = snap.position();
+    snap.destroy();
+    expect(parseFloat(travel(node))).toBeCloseTo(onScreen, 3);
   });
 });

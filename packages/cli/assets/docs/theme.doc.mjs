@@ -8,7 +8,7 @@ export const docs = {
   category: 'guide',
   keywords: ['theme', 'theming', 'theme system', 'dark mode', 'defineTheme', 'provider'],
   description:
-    'How to use and create themes: see Use a theme for applying themes, and Author a theme for creating and customizing them.',
+    'To create or change a theme, use the experimental theme editor: `astryx experimental theme editor new <name> --like neutral`, then `editor set` / `editor how "<what you want>"`, wire it with `astryx theme add <name>`, and after each change look at it with `astryx experimental theme editor show <name> --png` (takes pictures of real components): a theme change is not done until you have looked. How to use and create themes: see Use a theme for applying themes, and Author a theme for creating and customizing them.',
 
   sections: [
     {
