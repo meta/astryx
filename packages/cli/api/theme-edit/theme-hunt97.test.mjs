@@ -229,3 +229,46 @@ describe('shadows written as 8-digit hex colors', () => {
     T,
   );
 });
+
+describe('a mode named for the shadows', () => {
+  it(
+    'chocolate: darker shadows in light mode raise the light halves only',
+    async test => {
+      if (unbuilt) {
+        console.warn(`skipped: ${unbuilt}`);
+        return test.skip();
+      }
+      for (const q of [
+        'make shadows darker in light mode',
+        'darker shadows in light mode',
+        'make shadows stronger in light mode',
+      ]) {
+        const {first} = await answer(q, 'c');
+        const pairs = first.flatMap(c =>
+          [
+            ...c.matchAll(
+              /light-dark\(#[0-9a-f]{6}([0-9a-f]{2}), #[0-9a-f]{6}([0-9a-f]{2})\)/gi,
+            ),
+          ].map(m => [Number.parseInt(m[1], 16), Number.parseInt(m[2], 16)]),
+        );
+        expect(pairs.length).toBeGreaterThan(0);
+        expect(pairs.every(([light, dark]) => light > dark)).toBe(true);
+      }
+    },
+    T,
+  );
+  it(
+    'a light-only theme asked about dark mode says it has no dark mode',
+    async () => {
+      await themeEditNew('lo', {cwd, like: 'neutral'});
+      await themeEditSet('lo', 'mode', 'light-only', {cwd});
+      const {first, text} = await answer(
+        'make shadows darker in dark mode',
+        'lo',
+      );
+      expect(first).toEqual([]);
+      expect(text).toMatch(/has only a light mode/);
+    },
+    T,
+  );
+});

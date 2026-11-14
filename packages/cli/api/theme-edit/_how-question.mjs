@@ -1003,6 +1003,18 @@ function exampleOf(prop) {
   return 'a length such as 16px';
 }
 
+/**
+ * A clause's words with its mode phrases taken out ("in light mode", "dark
+ * theme", "in light"), so "darker … in light mode" reads as darker.
+ * @param {string} t
+ */
+function noMode(t) {
+  return String(t).replace(
+    /\b(?:(?:in|for|on|but not in|except in) )?(?:light|dark)(?:[- ](?:mode|theme)s?)\b|\bin (?:light|dark)(?=\s*(?:[,;.!?]|$|and\b|only\b))/gi,
+    ' ',
+  );
+}
+
 /** A keep step for a part the change does not reach. */
 const UNTOUCHED = /** @type {const} */ ('untouched');
 
@@ -4297,10 +4309,9 @@ export function draftAnswer(ctx, env, question) {
    */
   const withMode = (d, c) => {
     if (!c?.mode || !d.options.length) return d;
-    // A value that already holds the mode's change in its light-dark()
-    // halves (a shadow's colors in one mode) needs no --mode.
-    if (/** @type {any} */ (d).modeInValue) return d;
     if (d.options.every(o => o.every(st => st.thing === 'mode'))) return d;
+    // A one-mode theme shows only its mode: an ask for the other mode
+    // changes nothing anyone sees, whatever form the value takes.
     if (env.data.mode !== 'both') {
       const only = env.data.mode === 'light-only' ? 'light' : 'dark';
       if (only === c.mode) return d;
@@ -4310,6 +4321,9 @@ export function draftAnswer(ctx, env, question) {
         lookup: `${HOW} mode`,
       };
     }
+    // A value that already holds the mode's change in its light-dark()
+    // halves (a shadow's colors in one mode) needs no --mode.
+    if (/** @type {any} */ (d).modeInValue) return d;
     /** @param {Step} st */
     const modal = st => {
       if (st.mode) return true;
@@ -7234,7 +7248,8 @@ export function draftAnswer(ctx, env, question) {
         if (!typedShadow && !on && !c.neg && shadowIn(q)) return null;
         // "too strong" asks for softer: the word after "too" is what to
         // move away from.
-        const shadowText = c.text.replace(/\btoo \w+/g, ' ');
+        // (A mode phrase is no way: "darker in light mode" is darker.)
+        const shadowText = noMode(c.text).replace(/\btoo \w+/g, ' ');
         const soft =
           c.dir === 'less' ||
           /\b(soft(er)?|subtle(r)?|light(er)?|gentle|less)\b/.test(shadowText);
