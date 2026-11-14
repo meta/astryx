@@ -3852,6 +3852,53 @@ export function compileTheme(ctx, data, base) {
     const k = kebab(p);
     return k === 'background' ? 'background-color' : k;
   };
+  /** One-mode colors in a variant or a state, written after every other setting. @type {Array<() => void>} */
+  const scopedQueue = [];
+  let drainingScoped = false;
+  /**
+   * A part's rule for a scope as the theme has it, without making one.
+   * @param {Setting} s @param {string} target
+   * @returns {Record<string, any> | undefined}
+   */
+  const peekBlock = (s, target) => {
+    const t = theme.components[target];
+    if (!t) return undefined;
+    const rule = t[s.when ?? 'base'];
+    if (!s.state) return rule;
+    const tg = ctx.project.target.get(target);
+    if (tg?.states.includes(s.state))
+      return s.when == null ? t[s.state] : t[`${s.when}+${s.state}`];
+    return rule?.[stateKey(s.state, wrapsOneControl(ctx, target))];
+  };
+  /**
+   * The theme's own value of a property in one mode for the scope around a
+   * setting's scope: the variant's resting rule for a state, then the
+   * part's plain rule, then, for a token, the whole theme's value; null
+   * when the theme gives none, so the base theme's and Core's values apply.
+   * @param {Setting} s @param {string} target @param {string} prop
+   * @param {'light' | 'dark'} side
+   * @returns {string | null}
+   */
+  const enclosingValue = (s, target, prop, side) => {
+    const family = /^background(-color)?$/.test(kebab(prop))
+      ? ['backgroundColor', 'background']
+      : [prop];
+    /** @type {Setting[]} */
+    const scopes = [];
+    if (s.state) scopes.push({...s, state: undefined, mode: undefined});
+    if (s.when || s.state)
+      scopes.push({...s, when: undefined, state: undefined, mode: undefined});
+    for (const sc of scopes) {
+      const rule = peekBlock(sc, target);
+      for (const k of family) {
+        const x = rule?.[k];
+        if (typeof x === 'string' && !/gradient\(|url\(/i.test(x))
+          return halfOf(x, side === 'light' ? 1 : 2);
+      }
+    }
+    if (prop.startsWith('--')) return tok[prop]?.[side] ?? null;
+    return null;
+  };
   /** @param {Setting} s @param {string} target @param {string} prop @param {string} v */
   const putComp = (s, target, prop, v) => {
     const b = block(s, target);
@@ -3878,7 +3925,14 @@ export function compileTheme(ctx, data, base) {
         }
         modeLayers.set(b, rec);
       }
-      rec[s.mode] = maskLayers(v, s.mode);
+      // The background shorthand's last layer may carry the color under
+      // the images: that color is this mode's background color, and the
+      // rest are the images.
+      const {images, color} =
+        kebab(prop) === 'background'
+          ? backgroundColorLayer(v)
+          : {images: v, color: null};
+      rec[s.mode] = images ? maskLayers(images, s.mode) : [];
       const parts = [...rec.light, ...rec.dark].map(layerParts);
       for (const k of [
         'backgroundImage',
@@ -3893,6 +3947,8 @@ export function compileTheme(ctx, data, base) {
         b.backgroundSize = parts.map(x => x.size || 'auto').join(', ');
         b.backgroundRepeat = parts.map(x => x.repeat || 'repeat').join(', ');
       }
+      if (!parts.length) delete b.backgroundImage;
+      if (color) putComp(s, target, 'backgroundColor', color);
       return;
     }
     // A color set in a one-mode theme fills its mode's half only (as a
@@ -3901,6 +3957,15 @@ export function compileTheme(ctx, data, base) {
     const mode =
       s.mode ??
       (modeOnly && parseColor(String(v).trim()) ? modeOnly : undefined);
+    // A color for one mode on a part rule also gives the other mode a
+    // value in that rule, which outranks the rules the base theme and Core
+    // give the part in context there (a selected or current item, a status
+    // border): the result says so.
+    if (mode && !prop.startsWith('--')) {
+      const note = `a ${mode}-only color on ${target} gives the other mode ${target}'s own value, so in that mode it overrides what Core or the base theme gives ${target} in context (a selected or current item, a status border)`;
+      if (!(ctx.compileNotes ?? []).includes(note))
+        (ctx.compileNotes ??= []).push(note);
+    }
     if (mode && !s.when && variantsReading(ctx, target, prop, s.state).length) {
       // A color for one mode on a part whose variants each have their own:
       // each variant's rule (in the state, for a state setting) gets the
@@ -4011,6 +4076,13 @@ export function compileTheme(ctx, data, base) {
       }
       return;
     }
+    // A color for one mode in a variant or a state is written once every
+    // other setting is in, so its other half is the theme's own value for
+    // the scope around it as the theme finally has it (below).
+    if (mode && (s.when || s.state) && !drainingScoped) {
+      scopedQueue.push(() => putComp(s, target, prop, v));
+      return;
+    }
     if (mode && colorFamily(prop) === 'background-color') {
       // The background shorthand and its color are one property: the one
       // the rule holds (as a color) gives the other half and is replaced, so
@@ -4051,6 +4123,7 @@ export function compileTheme(ctx, data, base) {
         : null;
       const other =
         prev ??
+        enclosingValue(s, target, prop, otherSide) ??
         tokenOther ??
         baseComponent(base, ctx, target, prop, s) ??
         partDefault(ctx, target, prop, s.when, s.state) ??
@@ -4191,7 +4264,7 @@ export function compileTheme(ctx, data, base) {
               rung || pill ? derived(radiusTokenOf(ctx, t, s.when)) : `${px}px`,
             );
           }
-        else
+        else {
           for (const token of [
             '--radius-element',
             '--radius-inner',
@@ -4202,6 +4275,21 @@ export function compileTheme(ctx, data, base) {
             // build by an earlier editor, or a step back) are kept, as the
             // colors are: they change only when corners or the base does.
             putTok(token, ctx.keepRadii?.[token] ?? derived(token));
+          // A part rule of the base theme that gives a radius of its own
+          // (not one of the radius tokens) would keep it over the dial: the
+          // rule is given the radius token the part reads, so every part
+          // follows the dial.
+          for (const [t, when] of basePinnedRadii(
+            /** @type {{components?: Record<string, any>}} */ (base),
+          ))
+            if (ctx.project.target.has(t))
+              putComp(
+                {...s, mode: undefined, when},
+                t,
+                'borderRadius',
+                `var(${radiusTokenOf(ctx, t, when)})`,
+              );
+        }
       } else if (PALETTE_DIALS.includes(s.thing) || s.thing === 'vibrancy') {
         // The palette mapping above sets these tokens.
       } else if (s.thing === 'font') {
@@ -4600,6 +4688,8 @@ export function compileTheme(ctx, data, base) {
       }
     }
   }
+  drainingScoped = true;
+  for (const write of scopedQueue) write();
   emitPadding();
   for (const r of fixedToViewport) {
     delete r.backgroundAttachment;
@@ -4779,6 +4869,52 @@ export function maskLayers(value, mode) {
       );
       return `${fn[1]}(${args.join(', ')})${layer.slice(end + 1)}`;
     });
+}
+
+/**
+ * The part rules of a base theme that give a border radius of their own,
+ * not a radius token: each as its part and the rule's --when (undefined
+ * for the plain rule).
+ * @param {{components?: Record<string, any>}} base
+ * @returns {Array<[string, string | undefined]>}
+ */
+function basePinnedRadii(base) {
+  /** @type {Array<[string, string | undefined]>} */
+  const out = [];
+  for (const [t, rules] of Object.entries(base.components ?? {}))
+    for (const [key, rule] of Object.entries(
+      /** @type {Record<string, any>} */ (rules ?? {}),
+    )) {
+      if (key !== 'base' && !/^[\w-]+:[\w-]+$/.test(key)) continue;
+      const r = rule?.borderRadius;
+      if (typeof r === 'string' && !/var\(\s*--radius-/.test(r))
+        out.push([t, key === 'base' ? undefined : key]);
+    }
+  return out;
+}
+
+/**
+ * A background shorthand split into its image layers and the color its
+ * last layer may carry (the color under every image): a color word beside
+ * the last image, or a last layer that is a color alone.
+ * @param {string} value
+ * @returns {{images: string, color: string | null}}
+ */
+export function backgroundColorLayer(value) {
+  const layers = splitTop(value, ',')
+    .map(x => x.trim())
+    .filter(Boolean);
+  const last = layers.at(-1) ?? '';
+  const words = splitTop(last, ' ').map(x => x.trim());
+  const at = words.findIndex(
+    w => !/gradient\(|url\(/i.test(w) && isColorValue(w),
+  );
+  if (at < 0) return {images: value, color: null};
+  const rest = words.filter((_, i) => i !== at).join(' ');
+  return {
+    images: [...layers.slice(0, -1), ...(rest ? [rest] : [])].join(', '),
+    color: words[at],
+  };
 }
 
 /**

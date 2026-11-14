@@ -98,6 +98,7 @@ import {
   themeFiles,
   ownSourceTokenValues,
   baseTopTokens,
+  baseComponent,
   baseComponentReads,
   baseRuleHas,
   partRuleTokens,
@@ -128,6 +129,26 @@ export {
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
 export {lengthPx};
+
+/**
+ * The radius the base theme's own rule gives a part, in px, or null when
+ * its rule gives none.
+ * @param {any} ctx
+ * @param {{light: Record<string, string>}} base
+ * @param {string} part
+ * @param {string | undefined} when
+ * @returns {number | null}
+ */
+function basePartRadiusPx(ctx, base, part, when) {
+  const own = ctx.base
+    ? baseComponent(ctx.base, ctx, part, 'borderRadius', {when})
+    : null;
+  if (typeof own !== 'string') return null;
+  const tokenName = /var\(\s*(--radius-[\w-]+)/.exec(own)?.[1];
+  if (tokenName) return tokenPx(base, tokenName);
+  const px = lengthPx(own);
+  return px == null ? null : Math.min(px, 9999);
+}
 
 /**
  * A token's value in px, following var() references through the tokens.
@@ -2632,6 +2653,26 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     s.mode = mode;
   }
   const onFlag = s.on ? ` --on ${s.on}` : '';
+  // A CSS-wide keyword is no color for one mode: a mode's half takes a
+  // color, and the keyword applies to the whole declaration, in both modes.
+  if (
+    s.mode &&
+    !unset &&
+    CSS_WIDE.includes(
+      String(v ?? '')
+        .trim()
+        .toLowerCase(),
+    )
+  )
+    refuse(
+      E.ERR_THEME_NO_MODE,
+      `"${String(v).trim()}" is a CSS keyword, which applies in both modes, so it takes no --mode. Give the ${s.mode} color, or set ${thing} ${String(v).trim()} for both modes.`,
+      {
+        run: [
+          `${P} set ${slug} ${thing} ${String(v).trim()}${onFlag}${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}`,
+        ],
+      },
+    );
   // A value that already gives both modes takes no --mode (a gradient
   // holding a light-dark() stop included).
   if (
@@ -3554,9 +3595,12 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
                 : cornerPxOf(onPart.value)
               : whole
                 ? radiusAt(base, whole.value, token)
-                : // The base theme's radius; one it does not give in px (a var()
-                  // chain) counts as medium's.
-                  (tokenPx(base, token) ?? radiusAt(base, 'medium', token));
+                : // The base theme's own radius on the part, when its rule
+                  // gives one; else the radius token's; one it does not give
+                  // in px (a var() chain) counts as medium's.
+                  (basePartRadiusPx(ctx, base, part, s.when) ??
+                  tokenPx(base, token) ??
+                  radiusAt(base, 'medium', token));
         const rungs = CORNERS.map(
           ([n]) => /** @type {const} */ ([n, radiusAt(base, n, token)]),
         );
