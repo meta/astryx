@@ -1948,6 +1948,27 @@ const FONT_NAMES = [...Object.keys(OPEN_FONTS), ...Object.keys(FONTS)]
 function namedLists(q, partWords, isVariant) {
   /** @param {string} w */
   const partOf = w => partWords.find(([re]) => re.test(` ${w} `))?.[1] ?? null;
+  // "primary buttons and the ghost ones": "the ghost ones" after a part
+  // said before names that part ("ghost buttons"), so the items read alike.
+  const onesNamed = q.replace(
+    /\b(?:the\s+)?([a-z]+)\s+ones\b/gi,
+    (m, word, at, all) => {
+      const before = String(all).slice(0, at);
+      const noun = [...before.matchAll(/[a-z][a-z-]*/gi)]
+        .map(x => x[0].toLowerCase())
+        .reverse()
+        .find(w => partOf(w));
+      const on = noun ? partOf(noun)?.on : null;
+      // (Only after an item of a list, "A and the B ones": an except of
+      // "ones" is read by the list itself.)
+      return noun &&
+        on &&
+        /\b(?:and|or)\s*$|,\s*(?:and\s+|or\s+)?$/.test(before) &&
+        isVariant(String(word).toLowerCase(), on)
+        ? `${String(word).toLowerCase()} ${noun}`
+        : m;
+    },
+  );
   // "primary and ghost buttons blue and cards red", "… a border and a
   // shadow", "… blue and their text white": a list of a part's variants or
   // states with asks after its noun. Every ask said of them, up to an
@@ -1957,11 +1978,11 @@ function namedLists(q, partWords, isVariant) {
     /\b((?:the\s+)?[a-z]+(?:\s*,\s*(?:the\s+)?[a-z]+)*\s*,?\s+(?:and|or)\s+(?:the\s+)?[a-z]+)\s+([a-z][a-z-]*)\b/gi;
   let tailed = '';
   let from = 0;
-  for (const m of q.matchAll(LIST)) {
+  for (const m of onesNamed.matchAll(LIST)) {
     const at = /** @type {number} */ (m.index);
     if (at < from) continue;
     const [whole, list, noun] = m;
-    const before = q.slice(0, at);
+    const before = onesNamed.slice(0, at);
     const on = partOf(String(noun).toLowerCase())?.on;
     const items = String(list)
       .split(/\s*,\s*(?:(?:and|or)\s+)?|\s+(?:and|or)\s+/)
@@ -1982,7 +2003,7 @@ function namedLists(q, partWords, isVariant) {
     // The asks said of the list: up to a full stop or semicolon, an
     // except, or an "and" before an ask about a part of its own (one that
     // does not refer back with "their", "its" or "them").
-    const rest = q.slice(at + whole.length);
+    const rest = onesNamed.slice(at + whole.length);
     const stop = /[;.]|\bexcept\b/i.exec(rest);
     const span = stop ? rest.slice(0, stop.index) : rest;
     const pieces = span.split(/(\s*,?\s+(?:and|but|then|plus)\s+|\s*,\s*)/);
@@ -1997,84 +2018,107 @@ function namedLists(q, partWords, isVariant) {
     }
     if (!tail.trim()) continue;
     tailed +=
-      q.slice(from, at) + items.map(w => `${w} ${noun}${tail}`).join(' and ');
+      onesNamed.slice(from, at) +
+      items.map(w => `${w} ${noun}${tail}`).join(' and ');
     from = at + whole.length + tail.length;
   }
-  tailed += q.slice(from);
-  return tailed
-    .replace(
-      /\b([a-z]+(?:\s*,\s*[a-z]+)*\s*,?\s+(?:and|or)\s+[a-z]+)\b/gi,
-      (m, list, at, all) => {
-        const items = String(list)
-          .split(/\s*,\s*(?:(?:and|or)\s+)?|\s+(?:and|or)\s+/)
-          .map(w => w.trim().toLowerCase())
-          .filter(Boolean);
-        if (items.length < 2) return m;
-        const before = all.slice(0, at);
-        const after = all.slice(at + m.length);
-        const next =
-          /^\s+([a-z][a-z-]*)/i.exec(after)?.[1]?.toLowerCase() ?? '';
-        // The part the items are said of: the noun after them, or for
-        // "ones" the last part said before the list.
-        const nounPart = partOf(next);
-        const ones = /^ones?$/.test(next);
-        const earlier = ones
-          ? [...before.matchAll(/[a-z][a-z-]*/gi)]
-              .map(x => x[0].toLowerCase())
-              .reverse()
-              .find(w => partOf(w))
-          : undefined;
-        const noun = nounPart ? next : earlier;
-        const on = nounPart?.on ?? (earlier ? partOf(earlier)?.on : null);
-        if (noun && on) {
-          const modifies = (/** @type {string} */ w) =>
-            stateWord(w) != null || isVariant(w, on);
-          if (items.every(modifies))
-            return (
-              items.map(w => `${w} ${noun}`).join(' and ') +
-              (ones ? ' X_ONES' : '')
+  tailed += onesNamed.slice(from);
+  return (
+    tailed
+      // "the A, and the B, rounder": the commas around the last item set it
+      // off; it is one list.
+      .replace(/,\s*(and|or)\s+([a-z][a-z -]*?),\s*/gi, (m, j, item) =>
+        String(item).split(/\s+/).length <= 4 &&
+        String(item)
+          .split(/\s+/)
+          .some(w => partOf(w.toLowerCase()))
+          ? ` ${j} ${item} `
+          : m,
+      )
+      .replace(
+        /\b((?:the\s+)?[a-z]+(?:\s*,\s*(?:the\s+)?[a-z]+)*\s*,?\s+(?:and|or)\s+(?:the\s+)?[a-z]+)\b/gi,
+        (m, list, at, all) => {
+          // ("the blue, the green and the red ones": the article goes with
+          // each item.)
+          const items = String(list)
+            .split(/\s*,\s*(?:(?:and|or)\s+)?|\s+(?:and|or)\s+/)
+            .map(w =>
+              w
+                .trim()
+                .toLowerCase()
+                .replace(/^the\s+/, ''),
+            )
+            .filter(Boolean);
+          if (items.length < 2 || items.some(w => /\s/.test(w))) return m;
+          const before = all.slice(0, at);
+          const after = all.slice(at + m.length);
+          const next =
+            /^\s+([a-z][a-z-]*)/i.exec(after)?.[1]?.toLowerCase() ?? '';
+          // The part the items are said of: the noun after them, or for
+          // "ones" the last part said before the list.
+          const nounPart = partOf(next);
+          const ones = /^ones?$/.test(next);
+          const earlier = ones
+            ? [...before.matchAll(/[a-z][a-z-]*/gi)]
+                .map(x => x[0].toLowerCase())
+                .reverse()
+                .find(w => partOf(w))
+            : undefined;
+          const noun = nounPart ? next : earlier;
+          const on = nounPart?.on ?? (earlier ? partOf(earlier)?.on : null);
+          if (noun && on) {
+            const modifies = (/** @type {string} */ w) =>
+              stateWord(w) != null || isVariant(w, on);
+            if (items.every(modifies))
+              // (The noun said after the list stays after its last item.)
+              return ones
+                ? `${items.map(w => `${w} ${noun}`).join(' and ')} X_ONES`
+                : items
+                    .map((w, i) => (i < items.length - 1 ? `${w} ${noun}` : w))
+                    .join(' and ');
+          }
+          // States after "when": in an except, each one excepted; else the
+          // ask said before them is said for each ("make buttons orange when
+          // hovered and make buttons orange when pressed").
+          if (
+            /\bwhen\s*$/.test(before) &&
+            items.every(w => stateWord(w) != null)
+          ) {
+            const lead = before.slice(
+              Math.max(
+                ...[';', ',', '.', '\n'].map(x => before.lastIndexOf(x)),
+              ) + 1,
             );
-        }
-        // States after "when": in an except, each one excepted; else the
-        // ask said before them is said for each ("make buttons orange when
-        // hovered and make buttons orange when pressed").
-        if (
-          /\bwhen\s*$/.test(before) &&
-          items.every(w => stateWord(w) != null)
-        ) {
-          const lead = before.slice(
-            Math.max(...[';', ',', '.', '\n'].map(x => before.lastIndexOf(x))) +
-              1,
-          );
-          const tail = /^[^;,.\n]*/.exec(after)?.[0] ?? '';
-          return /\bexcept\b/.test(lead)
-            ? items.map((w, i) => (i ? `when ${w}` : w)).join(' and ')
-            : items
-                .map((w, i) =>
-                  i === 0
-                    ? `${w}${tail}`
-                    : i === items.length - 1
-                      ? `${lead.trim()} ${w}`
-                      : `${lead.trim()} ${w}${tail}`,
-                )
-                .join(' and ');
-        }
-        // Parts, each taking the ask said before or after the list.
-        if (!nounPart && items.every(w => partOf(w))) {
-          const segStart = Math.max(
-            before.lastIndexOf(';'),
-            before.lastIndexOf('\n'),
-            before.search(/\.\s[^.]*$/),
-          );
-          const lead = before.slice(segStart + 1);
-          if (/\bexcept\s*$|\b(?:match|equally|alike|the same)\b/.test(lead))
-            return m;
-          return items.join(' and ');
-        }
-        return m;
-      },
-    )
-    .replace(/ X_ONES ones?\b/g, '');
+            const tail = /^[^;,.\n]*/.exec(after)?.[0] ?? '';
+            return /\bexcept\b/.test(lead)
+              ? items.map((w, i) => (i ? `when ${w}` : w)).join(' and ')
+              : items
+                  .map((w, i) =>
+                    i === 0
+                      ? `${w}${tail}`
+                      : i === items.length - 1
+                        ? `${lead.trim()} ${w}`
+                        : `${lead.trim()} ${w}${tail}`,
+                  )
+                  .join(' and ');
+          }
+          // Parts, each taking the ask said before or after the list.
+          if (!nounPart && items.every(w => partOf(w))) {
+            const segStart = Math.max(
+              before.lastIndexOf(';'),
+              before.lastIndexOf('\n'),
+              before.search(/\.\s[^.]*$/),
+            );
+            const lead = before.slice(segStart + 1);
+            if (/\bexcept\s*$|\b(?:match|equally|alike|the same)\b/.test(lead))
+              return m;
+            return items.join(' and ');
+          }
+          return m;
+        },
+      )
+      .replace(/ X_ONES ones?\b/g, '')
+  );
 }
 
 /**
@@ -2670,6 +2714,33 @@ export function draftAnswer(ctx, env, question) {
       const spaced = word.replace(/[-_]+/g, ' ').toLowerCase();
       return said(joined) ? joined : said(spaced) ? spaced : word;
     },
+  );
+  // "except cards, make everything rounder", "apart from headings, …": an
+  // except said first is read after the ask it belongs to.
+  question = question.replace(
+    /^\s*(?:except(?: for)?|other than|apart from|aside from|besides|but not)\s+([^,;.]+?)\s*,\s*((?:please\s+)?[a-z][^;]*)$/i,
+    '$2 except $1',
+  );
+  // "remove the shadow from cards and the border from buttons": the removal
+  // is said for each item of the list.
+  question = question.replace(
+    new RegExp(
+      `\\b(${REMOVAL_VERBS})\\s+([^,;.]+?)\\s+(from|on|off)\\s+([^,;.]+?)\\s+and\\s+(?!(?:${REMOVAL_LEAD}|make|set|give|turn|add|change)\\b)([^,;.]+?)\\s+(from|on|off)\\s+`,
+      'gi',
+    ),
+    '$1 $2 $3 $4 and $1 $5 $6 ',
+  );
+  // "un-outlined", "borderless", "shadowless": the removal of that thing,
+  // read as "no border".
+  question = question.replace(
+    /\b(?:un-?(border|outline|shadow|stroke|underline)(?:d|ed)?|(border|outline|shadow|stroke|underline)less)\b/gi,
+    (_m, a, b) => `no ${String(a ?? b).toLowerCase()}`,
+  );
+  // "make everything rounder, buttons unchanged": a part said as staying
+  // is a keep.
+  question = question.replace(
+    /,\s*(?:but\s+|and\s+)?((?:the\s+)?[a-z][a-z -]*?)\s+(?:unchanged|untouched|as is|as they are|the same as now)\s*$/i,
+    ', keep $1 as they are',
   );
   // "Without changing buttons" is a prohibition, read as one.
   question = question.replace(
@@ -4851,6 +4922,22 @@ export function draftAnswer(ctx, env, question) {
       c.parts = before.parts.map(p => ({...p}));
       c.state ??= before.state;
     }
+    // "the accent darker in dark mode and lighter in light mode": a clause
+    // with only a direction (and a mode) after one that names a theme color
+    // with no part is about that color too.
+    if (
+      prev &&
+      !c.parts.length &&
+      !c.except &&
+      !prev.parts.length &&
+      !ROLE_WORDS.test(c.text) &&
+      !c.colors.length &&
+      c.dir &&
+      ROLE_WORDS.test(prev.text)
+    ) {
+      const role = ROLE_WORDS.exec(prev.text)?.[0];
+      if (role) c.text = `${role} ${c.text}`;
+    }
     if (
       !c.aspects.length &&
       !ROLE_WORDS.test(c.text) &&
@@ -5773,9 +5860,137 @@ export function draftAnswer(ctx, env, question) {
         }
       : d;
   };
+  /**
+   * The every-word gate: the words of a clause that name something the
+   * answer must show, and that its write does not. A state, a mode, a
+   * variant of a part it changes, a typed color, an except or a removal
+   * said in the clause and missing from every step was not read; the
+   * clause is not guessed at, and the answer says what was read.
+   * @param {Clause} c
+   * @param {Step[][]} options
+   * @returns {string[]}
+   */
+  const unreadWords = (c, options) => {
+    const steps = options.flat();
+    const text = ` ${String(c.text ?? '').toLowerCase()} `;
+    /** @type {string[]} */
+    const unread = [];
+    const values = steps.map(st => String(st.value ?? '').toLowerCase());
+    // A state said, never in a step. (A part's own name holds no state:
+    // "hover card".)
+    const noParts = lex.parts.reduce(
+      (t, [re]) =>
+        t.replace(
+          new RegExp(
+            re.source,
+            re.flags.includes('g') ? re.flags : `${re.flags}g`,
+          ),
+          ' ',
+        ),
+      text,
+    );
+    for (const [re, st] of STATE_WORDS) {
+      const m = new RegExp(re.source).exec(noParts);
+      if (
+        m &&
+        !steps.some(
+          x => x.state || x.when || String(x.thing ?? '').includes(st),
+        )
+      )
+        unread.push(m[0].trim());
+    }
+    // A mode said, never in a step (a two-mode theme only).
+    // (The mode the clause's own mode reader found.)
+    const mode = c.mode ? [`${c.mode} mode`] : null;
+    if (
+      mode &&
+      modal &&
+      !steps.some(
+        x =>
+          x.mode ||
+          /light-dark\(/.test(String(x.value ?? '')) ||
+          x.thing === 'mode',
+      )
+    )
+      unread.push(mode[0].trim());
+    // A typed color, in no step's value. (A color to avoid, "never pure
+    // white", is a constraint, and a direction, "a darker red", makes its
+    // own color: neither is the value.)
+    // (Only a color written out, a hex or a color function: a color word
+    // is read loosely, "warm gray", "brand blue".)
+    const avoided = /\b(?:never|avoid|not|no|without|don'?t)\b/.test(text);
+    const literals =
+      avoided || c.dir
+        ? []
+        : (text.match(
+            /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|oklch|oklab|lab|lch|hwb)\([^)]*\)/g,
+          ) ?? []);
+    if (
+      literals.length &&
+      steps.length &&
+      !steps.some(x => x.verb !== 'set') &&
+      !literals.some(l => values.some(v => v.includes(l)))
+    )
+      unread.push(literals[0]);
+    // A removal said, answered with something added.
+    if (
+      new RegExp(`\\b(?:${REMOVAL_VERBS})\\b`).test(text) &&
+      steps.length &&
+      steps.every(
+        x =>
+          x.verb === 'set' &&
+          /^(?:border|box-shadow|outline|background|text-decoration)$/.test(
+            x.thing,
+          ) &&
+          !/^(?:none|0(?:px)?|transparent)$|light-dark\(|transparent/.test(
+            String(x.value ?? '').trim(),
+          ),
+      )
+    )
+      unread.push(
+        new RegExp(`\\b(?:${REMOVAL_VERBS})\\b`).exec(text)?.[0] ?? '',
+      );
+    // What the clause names to change, in no step: a shadow, a border,
+    // corners, padding, or an on-color ("on-accent text").
+    const things = steps.map(x => `${x.thing} ${x.value ?? ''}`.toLowerCase());
+    for (const [re, want] of /** @type {Array<[RegExp, RegExp]>} */ ([
+      [/\bshadows?\b/, /shadow|elevation/],
+      [/\bborders?\b(?![\s-]*radius)/, /border|outline/],
+      [/\b(?:corners?|radius|radii)\b/, /radius|corners/],
+      [/\bpadding\b/, /padding|spacing/],
+      [/\bon-?(?:accent|primary|danger|error|success|warning|info)\b/, /on-/],
+    ])) {
+      const m = re.exec(text);
+      if (m && steps.length && !things.some(t => want.test(t)))
+        unread.push(m[0]);
+    }
+    // An except word inside an ask clause.
+    const exceptWord =
+      /\b(except|other than|apart from|aside from|besides)\b/.exec(text);
+    if (exceptWord && !c.except) unread.push(exceptWord[0]);
+    return [...new Set(unread.filter(Boolean))];
+  };
   /** @param {Draft} input */
   const push = input => {
-    const d0 = keepLineColors(groupCornerEnds(withMode(input, clauseNow)));
+    const d1 = keepLineColors(groupCornerEnds(withMode(input, clauseNow)));
+    // The every-word gate, on the steps as they will run (a one-mode ask
+    // carries its mode by then, or was refused with its own reason).
+    const unread =
+      clauseNow && !clauseNow.except && d1.options.some(o => o.length)
+        ? unreadWords(clauseNow, d1.options)
+        : [];
+    if (process.env.HO_UNREAD && unread.length)
+      console.error('UNREAD', unread.join(','), '|', clauseNow?.text);
+    const d0 = unread.length
+      ? {
+          ...d1,
+          text: `read "${clauseNow?.text}" but not ${unread.map(w => `"${w}"`).join(', ')}, so nothing is written: say it in words how reads (a part, what to change, and a value or a way such as darker or more)`,
+          options: [],
+          ...(clauseNow?.parts[0]
+            ? {lookup: `${HOW} ${clauseNow.parts[0].on}`}
+            : {}),
+        }
+      : d1;
     // A resting shadow on a part that rings itself in its shadow would wipe
     // those rings: not offered, and said.
     const ringed = d0.options
@@ -6007,8 +6222,21 @@ export function draftAnswer(ctx, env, question) {
     if (c.state && !c.except)
       c.parts = c.parts.map(p => {
         if (stateFor(p.on, /** @type {string} */ (c.state))) return p;
-        const held = (C.MAP[one(p.on)]?.contains ?? []).find(x =>
-          stateFor(x, /** @type {string} */ (c.state)),
+        // (Only a part of the part's own anatomy, its component's own
+        // parts: never what a sample happens to hold, a card's table rows.)
+        const own = Object.values(ctx.project.components)
+          .map(info =>
+            (info.targets ?? []).map((/** @type {any} */ t) =>
+              String(t.className).replace(/^astryx-/, ''),
+            ),
+          )
+          .filter(ts => ts.includes(one(p.on)))
+          .flat();
+        const held = (C.MAP[one(p.on)]?.contains ?? []).find(
+          x =>
+            x !== one(p.on) &&
+            own.includes(x) &&
+            stateFor(x, /** @type {string} */ (c.state)),
         );
         return held ? {on: held} : p;
       });
@@ -8149,8 +8377,9 @@ export function draftAnswer(ctx, env, question) {
             ['text', 'background', 'border'].includes(a)
           ) {
             const [vp, vals] = variant;
+            // (An example only, in the words: never a command beside the
+            // answer, where it would read as the next step to run.)
             d.text += `; ${p.on} has ${vp} ${vals.join('|')}, and without --when the change reaches every ${vp}; for one, add --when ${vp}:${vals[0]}`;
-            d.options.push([{...first, when: `${vp}:${vals[0]}`}]);
           }
         }
         if (d) {
@@ -8892,6 +9121,27 @@ export function draftAnswer(ctx, env, question) {
       partReadsToken(p.on, st.thing)
     )
       return set(st.thing, textPin(st.thing), flags);
+    // A kept state that reads no token for the property, yet the plain write
+    // reaches it ("tabs blue except the selected one": Core's selected tab
+    // shows transparent): what Core draws there, written back.
+    if (
+      p.state &&
+      st.on &&
+      (st.on === p.on || (FAMILIES[st.on] ?? []).includes(one(p.on))) &&
+      /^[a-z]/.test(st.thing) &&
+      !st.state
+    ) {
+      const prop = st.thing === 'background' ? 'background-color' : st.thing;
+      const at = C.MAP[one(p.on)]?.at?.[prop] ?? {};
+      const attr = `${p.state}=`;
+      const drawn = Object.entries(at).find(
+        ([k]) =>
+          k.split(/[ ,]/).some(x => x.startsWith(attr)) ||
+          k.includes(`:${p.state}`),
+      )?.[1];
+      if (drawn != null && !/var\(--_/.test(String(drawn)))
+        return set(prop, String(drawn), flags);
+    }
     return null;
   }
 

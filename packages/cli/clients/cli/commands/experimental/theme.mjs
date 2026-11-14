@@ -724,6 +724,35 @@ function strayOption(command, doc, rest) {
       !/^--[a-z0-9-]+\s*:\s*\S/i.test(w),
   );
   if (word == null) return null;
+  // An option the command takes, after the POSIX "--": every word after it
+  // is a value, so the option was not read. The line without the "--" is
+  // the one meant.
+  const argv = process.argv;
+  const dashes = argv.indexOf('--', argv.indexOf(command) + 1);
+  const takes = (doc.options ?? []).flatMap(o =>
+    String(o.flag)
+      .split(/[\s,]+/)
+      .filter(w => w.startsWith('--')),
+  );
+  if (dashes >= 0 && takes.includes(word) && argv.indexOf(word) > dashes) {
+    const words = argv
+      .slice(argv.indexOf(command) + 1)
+      .filter((w, i) => i !== dashes - argv.indexOf(command) - 1);
+    return cliError(
+      `every word after "--" is a value, so ${word} after it is not read as the option ${command} takes; write the line without the "--" (a value that starts with a dash, such as -0.5px, needs none). Nothing was changed.`,
+      {
+        suggestions: [
+          {
+            name: cmd(
+              `${EDITOR} ${command} ${words.map(w => (/^--[a-z]/.test(w) && takes.includes(w) ? w : quoteCommandArgument(w))).join(' ')}`,
+            ),
+            reason: 'do this instead',
+          },
+        ],
+        code: ERROR_CODES.ERR_INVALID_ARGUMENT,
+      },
+    );
+  }
   return strayRefusal(command, doc, `${EDITOR} ${command}`, {
     option: word,
     note: 'a design token (such as --color-accent) is the thing a change names, before its value',
@@ -1738,31 +1767,54 @@ export function registerExperimentalTheme(group, program) {
         /** @type {any} */ o,
         /** @type {import('commander').Command} */ c,
       ) =>
-        (async () =>
-          (await readOptionsChecked('undo', undoDoc)) ??
-          strayOption('undo', undoDoc, [which, ...(c?.args ?? []).slice(3)]) ??
-          extraWords('undo', undoDoc, (c?.args ?? []).slice(3)) ??
-          run(
-            program,
-            () =>
-              themeEditUndo(name, {
-                ...changeOptions(o),
-                ...(thing == null ? {} : {thing, value: which}),
-              }),
-            r =>
-              r.data.action === 'step'
-                ? [
-                    // What was undone is in the headline, so a tail of
-                    // the output keeps it.
-                    `[ok] ${r.data.theme}: undid ${/** @type {any} */ (r.data).undid ?? 'the last change'}${/** @type {any} */ (r.data).refusedBefore ? ` (${/** @type {any} */ (r.data).refusedBefore})` : ''}`,
-                    ...project(/** @type {any} */ (r.data)),
-                  ]
-                : changeBlocks(
-                    /** @type {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditChangeResponse} */ (
-                      r
+        (async () => {
+          // "undo t accent, corners and spacing" unquoted: the words make one
+          // list of settings, read as the quoted list is.
+          const words = [thing, which, ...(c?.args ?? []).slice(3)].filter(
+            w => typeof w === 'string',
+          );
+          const listed =
+            words.length > 1 &&
+            words.some(
+              (w, i) => /,$/.test(String(w)) || (i > 0 && w === 'and'),
+            ) &&
+            !words.some(w => String(w).startsWith('-'));
+          const list = listed ? words.join(' ') : null;
+          return (
+            (await readOptionsChecked('undo', undoDoc)) ??
+            (list
+              ? null
+              : (strayOption('undo', undoDoc, [
+                  which,
+                  ...(c?.args ?? []).slice(3),
+                ]) ?? extraWords('undo', undoDoc, (c?.args ?? []).slice(3)))) ??
+            run(
+              program,
+              () =>
+                themeEditUndo(name, {
+                  ...changeOptions(o),
+                  ...(list != null
+                    ? {thing: list}
+                    : thing == null
+                      ? {}
+                      : {thing, value: which}),
+                }),
+              r =>
+                r.data.action === 'step'
+                  ? [
+                      // What was undone is in the headline, so a tail of
+                      // the output keeps it.
+                      `[ok] ${r.data.theme}: undid ${/** @type {any} */ (r.data).undid ?? 'the last change'}${/** @type {any} */ (r.data).refusedBefore ? ` (${/** @type {any} */ (r.data).refusedBefore})` : ''}`,
+                      ...project(/** @type {any} */ (r.data)),
+                    ]
+                  : changeBlocks(
+                      /** @type {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditChangeResponse} */ (
+                        r
+                      ),
                     ),
-                  ),
-          ))(),
+            )
+          );
+        })(),
     }),
     undoDoc,
     {tokens: true},
