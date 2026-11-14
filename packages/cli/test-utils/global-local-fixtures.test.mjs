@@ -29,7 +29,7 @@ import {
 import {cleanupFixtures, tempDir} from './release-fixtures.mjs';
 
 // Unpacking the CLI writes thousands of files. It is the suite's setup, as
-// in global-local.test.mjs, not part of whichever test places a copy first.
+// in the global-local tests, not part of whichever test places a copy first.
 beforeAll(() => {
   packedCli();
 }, 120_000);
