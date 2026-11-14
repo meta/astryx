@@ -30,7 +30,8 @@ import type {BaseProps} from '../BaseProps';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '../Button';
 import {Icon} from '../Icon';
-import {useAnnounce, useGridFocus} from '../hooks';
+import {useAnnounce} from '../hooks/useAnnounce';
+import {useGridFocus} from '../hooks/useGridFocus';
 import {useCalendarConstraints, type CalendarDay} from './hooks';
 import {useCalendarDays} from './hooks/useCalendarDays';
 import {
