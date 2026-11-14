@@ -94,7 +94,7 @@ describe('WebKit interaction proof routing', () => {
     expect(chromium.if).toContain(nightly);
     expect(webkit.if).toBe(chromium.if.replace(nightly, weekly));
     expect(ungated(webkit.if)).toBe(
-      "(github.event_name != 'workflow_dispatch' || inputs.operation == 'webkit-weekly' && needs.webkit-weekly-request.result == 'success') && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true'",
+      "(github.event_name != 'workflow_dispatch' || inputs.operation == 'webkit-weekly' && needs.webkit-weekly-request.result == 'success') && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.room.outputs.superseded != 'true' && needs.admission.outputs.full != 'true'",
     );
     // Admission too: the Storybook build starts beside it (spec:AST-030 FR16).
     expect(webkit.needs).toEqual([

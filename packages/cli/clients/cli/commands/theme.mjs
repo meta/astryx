@@ -31,6 +31,10 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {
+  fontKey,
+  stylesheetFontFamilies,
+} from '../../../foundation/fonts/font-stylesheet.mjs';
 import {fileURLToPath} from 'node:url';
 import {spawn} from 'node:child_process';
 import {
@@ -130,7 +134,32 @@ import {doc as themePaletteGenerateFn} from '../../../api/theme/themePaletteGene
  */
 
 /** @type {ThemeCommandWords} */
-const THEME_WORDS = {group: 'theme', build: 'build'};
+const THEME_WORDS = {
+  group: 'theme',
+  build: 'build',
+  loadedFonts: fontsLoadedBeside,
+};
+
+/**
+ * The font families a local theme's font stylesheet loads: the
+ * `<slug>.fonts.css` beside its source, where the theme's folder is named
+ * for its slug (the one font stylesheet `theme add` imports for it), read
+ * with its imports (an @fontsource package by its name, a stylesheet by its
+ * @font-face rules or the `family=` it requests). A build of that source
+ * does not name those families as unloaded. Another stylesheet in the
+ * folder loads nothing for the app, so it counts for nothing. Null when the
+ * theme has no font stylesheet.
+ * @param {string} file the theme source, as given
+ * @param {string} cwd
+ * @returns {((family: string) => boolean) | null}
+ */
+function fontsLoadedBeside(file, cwd) {
+  const dir = path.dirname(path.resolve(cwd, file));
+  const sheet = path.join(dir, `${path.basename(dir)}.fonts.css`);
+  if (!fs.existsSync(sheet)) return null;
+  const loaded = stylesheetFontFamilies(sheet);
+  return loaded.size ? family => loaded.has(fontKey(family)) : null;
+}
 
 /**
  * Text as the group that ran the command words it: under `experimental

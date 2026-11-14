@@ -103,19 +103,19 @@
         "id": "authoring-docs",
         "label": "<text>",
         "status": "pass",
-        "message": "<text> 19"
+        "message": "<text> 20"
       },
       {
         "id": "cli-docs",
         "label": "<text>",
         "status": "pass",
-        "message": "<text> 101 82 19"
+        "message": "<text> 103 83 20"
       },
       {
         "id": "docs-tree",
         "label": "<text>",
         "status": "pass",
-        "message": "<text> 201 32 13"
+        "message": "<text> 202 32 13"
       },
       {
         "id": "docs-progressive-disclosure",

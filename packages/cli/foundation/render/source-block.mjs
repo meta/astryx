@@ -23,8 +23,46 @@ import {decode, readTag, scanHtml} from './html-reader.mjs';
 /** The script type of the embedded-source block. */
 export const SOURCE_TYPE = 'application/x-astryx-source';
 
-/** The render format this CLI writes, and the newest one it reads. */
-export const RENDER_FORMAT = 1;
+/** The newest render format this CLI reads, and the newest it writes. */
+export const RENDER_FORMAT = 2;
+
+/**
+ * What a format 1 reader refuses besides the page, as a kind no render
+ * embeds, and format 2 carries: an `.mts`, `.cts` or `.cjs` module; JSON
+ * whose name holds `config`, ends in `rc` or `lock`, or names a manifest;
+ * and a module named `config.*` or with a stem that ends in `rc`. A file
+ * that carries one says format 2, so a CLI that reads render formats names
+ * the CLI that reads it instead of calling the file damaged; every other
+ * file says format 1, which every CLI that reads render files opens. The
+ * rules stay as format 1 readers have them: a kind a later CLI adds needs a
+ * format of its own.
+ */
+const FORMAT_1_REFUSED_MODULE = /\.(?:mts|cts|cjs)$/i;
+const FORMAT_1_CONFIG_JSON =
+  /^(package|package-lock|composer|deno|turbo|vercel|nx|lerna|app|bower|now|netlify|firebase|renovate|project|workspace|angular|biome|components)\.jsonc?$|config|(^|[._-])rc\.jsonc?$|(^|[._-])lock\.jsonc?$/i;
+const FORMAT_1_CONFIG_MODULE = /(^|\.)config\.[cm]?[jt]sx?$|^[a-z0-9-]+rc\.[cm]?[jt]s$/i;
+
+/**
+ * Whether a format 1 reader refuses a carried file other than the page.
+ * @param {string} p its path in the file, `/`-separated
+ */
+function format1Refuses(p) {
+  const name = p.slice(p.lastIndexOf('/') + 1);
+  return (
+    FORMAT_1_REFUSED_MODULE.test(name) ||
+    (/\.jsonc?$/i.test(name) && FORMAT_1_CONFIG_JSON.test(name)) ||
+    FORMAT_1_CONFIG_MODULE.test(name)
+  );
+}
+
+/**
+ * The render format a file that carries these files says, the page first.
+ * @param {{path: string}[]} files
+ * @returns {number}
+ */
+export function formatFor(files) {
+  return files.slice(1).some(f => format1Refuses(f.path)) ? 2 : 1;
+}
 
 /**
  * @typedef {object} EmbeddedFile
@@ -38,9 +76,10 @@ export const RENDER_FORMAT = 1;
  * optional: files from older CLIs have none of them.
  * @typedef {object} RenderRecord
  * @property {string} [cli] - The version of the CLI that rendered the file.
- * @property {string} [page] - The page's path from its project's root, `/`-separated.
+ * @property {string} [page] - The page's path from its project's root, `/`-separated; outside a project, its path among the files it carries.
  * @property {string} [title] - The title given with --title, which a render again needs too.
  * @property {Record<string, string>} [packages] - The packages the page rendered with, by name: their versions.
+ * @property {Record<string, string>} [aliases] - Each path-alias import a carried module makes that cannot be a package name (`@/…`, `~/…`), as written (without a query), with the embedded path of the carried file it names, so a reverse where no alias names it still finds the file.
  * @property {{sha256: string, style?: string, text?: string}} [markup] - The page as rendered, so a reverse can tell what changed after the render: the SHA-256 of the markup in <body> and of the <style> element, and `text`, the base64 of the JSON `{title, runs}` (the title and the markup's runs of text in order). The text stays encoded so that a find-and-replace over the page's text cannot change the record too.
  */
 
@@ -69,12 +108,13 @@ export const asParsed = text => text.replace(/\r\n?/g, '\n');
 export function sourceBlock(entry, files, record = {}) {
   /** @type {EmbeddedSource} */
   const payload = {
-    version: RENDER_FORMAT,
+    version: formatFor(files),
     entry,
     ...(record.cli ? {cli: record.cli} : {}),
     ...(record.page ? {page: record.page} : {}),
     ...(record.title === undefined ? {} : {title: record.title}),
     ...(record.packages ? {packages: record.packages} : {}),
+    ...(record.aliases ? {aliases: record.aliases} : {}),
     files: files.map(f => ({
       path: f.path,
       sha256: sha256(f.bytes),
@@ -189,7 +229,7 @@ export function readSourceBlock(html) {
     return {found: true, newer: {format: payload.version, cli: isValidSemver(payload.cli) ? payload.cli : null}};
   }
   if (
-    payload?.version !== 1 ||
+    !(Number.isInteger(payload?.version) && payload.version >= 1) ||
     typeof payload.entry !== 'string' ||
     !Array.isArray(payload.files) ||
     payload.files.length === 0

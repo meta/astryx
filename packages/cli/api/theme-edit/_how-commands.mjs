@@ -359,7 +359,11 @@ function measureNumber(v) {
  */
 const isForeground = (name, contrast = false) =>
   !/background|surface|fill|accent|overlay/.test(name) &&
-  (/border|outline/.test(name) || (contrast && /text|^color$|on-/.test(name)));
+  (/border|outline/.test(name) ||
+    // The shared text tokens step by contrast with the page (how answers
+    // "lighter text" that way); a part's own color steps as written.
+    /^--color-text-/.test(name) ||
+    (contrast && /text|^color$|on-/.test(name)));
 
 /**
  * How strong a shadow reads: the sum of its colors' alphas; 0 for none.
@@ -393,6 +397,24 @@ function shadowLook(v) {
     })
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+/**
+ * A color as it paints over the page in a mode: its alpha blended with the
+ * page color, so a see-through fill compares by what shows.
+ * @param {string} v
+ * @param {Record<string, string>} toks the mode's tokens
+ * @param {'light' | 'dark'} mode
+ * @returns {number[] | null}
+ */
+function painted(v, toks, mode) {
+  const rgb = parseColor(v);
+  if (!rgb) return null;
+  const a = alphaOf(v);
+  const page =
+    parseColor(resolveIn('var(--color-background-body)', toks, mode)) ??
+    (mode === 'dark' ? [0, 0, 0] : [255, 255, 255]);
+  return rgb.slice(0, 3).map((x, i) => x * a + page[i] * (1 - a));
 }
 
 /** @param {number[]} c */
@@ -477,7 +499,16 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
     const b = shown(now, tn, part);
     for (const [k, v] of b) {
       // A whole kept part: its plain look (base); a state or variant: that.
-      if (prefix ? !k.startsWith(prefix) : !k.startsWith('base|')) continue;
+      // A whole kept part: every rule it shows at rest (its plain rule and
+      // each variant's); a state or variant: that.
+      // (At rest: the plain rule, or one variant's alone; a variant in a
+      // selected or checked state is a state of it.)
+      if (
+        prefix
+          ? !k.startsWith(prefix)
+          : k.split('|')[1] || !/^(base|[a-z]+:[\w-]+)$/.test(k.split('|')[0])
+      )
+        continue;
       // A plain color written as `background` is the background color the
       // part painted before.
       const prop0 = k.split('|')[2] ?? '';
@@ -534,8 +565,17 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
   // A shadow ask is answered only by a shadow that looks different: an
   // opaque color written with alpha ff, or clamped there, is no change.
   let shadowMoved = !intent.shadowDir;
-  if (steps.some(st => typed.has(String(st.value ?? '').toLowerCase())))
-    return null;
+  // A value the question types is the target: the way of what it writes
+  // is as written, but the kind of change and a removal are still held,
+  // and every other value is measured the way asked (a dial step beside a
+  // typed value included: "smaller, 16px" never gives spacing more). A dial
+  // is judged by what it does, never by its own word: "vibrancy less" is
+  // the way "more washed out" asks.
+  const typedFamilies = new Set(
+    steps
+      .filter(st => typed.has(String(st.value ?? '').toLowerCase()))
+      .map(st => familyOf(st.thing)),
+  );
   // The subject's changed values: family, direction, removal.
   const touched = new Set([
     ...subjects,
@@ -570,7 +610,17 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
       if (o && o.light === v.light && o.dark === v.dark) continue;
       const fam = familyOf(prop);
       if (!fam) continue;
-      if (intent.families.length && !intent.families.includes(fam))
+      // A property a typed value writes is asked: the question wrote it.
+      const typedHere = steps.some(
+        st =>
+          typed.has(String(st.value ?? '').toLowerCase()) &&
+          familyOf(st.thing) === fam,
+      );
+      if (
+        intent.families.length &&
+        !intent.families.includes(fam) &&
+        !typedHere
+      )
         return `it would also change ${part}'s ${prop}, which is not what the question asks to change`;
       for (const mode of /** @type {const} */ (['light', 'dark'])) {
         if (visible && mode !== visible) continue;
@@ -585,7 +635,7 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
             return `${part}'s ${prop} would be ${after} in ${mode} mode, not none`;
           continue;
         }
-        if (before == null) continue;
+        if (before == null || typedFamilies.has(fam)) continue;
         // A shadow's strength moves the way asked, in each mode.
         if (fam === 'shadow' && intent.shadowDir) {
           const x = shadowStrength(after);
@@ -624,7 +674,7 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
                 : 'ink';
           if (
             !steps.some(
-              st => !/^--/.test(st.thing) && kindOf(st.thing) === kindOf(prop),
+              st => kindOf(st.thing.replace(/^--color-/, '')) === kindOf(prop),
             )
           )
             continue;
@@ -633,8 +683,8 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
             /overlay|tint/.test(v.raw)
           )
             continue;
-          const x = parseColor(after);
-          const y = parseColor(before);
+          const x = painted(after, tn[mode], mode);
+          const y = painted(before, tw[mode], mode);
           const want =
             mode === 'dark' && isForeground(prop, intent.contrast)
               ? !intent.lighter
@@ -698,6 +748,7 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
           return `${tok} would be ${after} in ${mode} mode, not none`;
         continue;
       }
+      if (typedFamilies.has(fam)) continue;
       if (fam === 'shadow' && intent.shadowDir) {
         const x = shadowStrength(after);
         const y = shadowStrength(before);
@@ -720,8 +771,8 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
       }
       if (fam === 'color' && intent.lighter != null) {
         if (intent.mode && mode !== intent.mode) continue;
-        const x = parseColor(after);
-        const y = parseColor(before);
+        const x = painted(after, tn[mode], mode);
+        const y = painted(before, tw[mode], mode);
         const want =
           mode === 'dark' && isForeground(tok, intent.contrast)
             ? !intent.lighter

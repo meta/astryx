@@ -20,6 +20,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {reusedWhileUnchanged} from '../fs/read-record.mjs';
 import {loadComponentDoc} from './component-loader.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 const SKIP_DIRS = new Set(['node_modules', '__tests__']);
 
@@ -142,7 +143,7 @@ async function scanThemingTargets(coreSrc) {
   const canonical = canonicalizeParentTargets(targets);
   canonical.sort(
     (a, b) =>
-      a.key.localeCompare(b.key) || a.component.localeCompare(b.component),
+      compareText(a.key, b.key) || compareText(a.component, b.component),
   );
   return canonical;
 }
@@ -254,7 +255,7 @@ export async function collectThemingVars(coreSrc) {
 
   await scan(coreSrc);
 
-  return [...vars.values()].sort((a, b) => a.name.localeCompare(b.name));
+  return [...vars.values()].sort((a, b) => compareText(a.name, b.name));
 }
 
 /**

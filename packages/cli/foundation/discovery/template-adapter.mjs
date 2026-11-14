@@ -52,6 +52,7 @@ import {
 } from './template-ids.mjs';
 import {EXACT_CODEC} from '../fs/exact-codec.mjs';
 import {babelParser} from '../runtime/lazy-dependencies.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 export {
   coreTemplateIds,
@@ -1478,7 +1479,7 @@ export function applyTemplateReplacements(templates, declarationErrors = []) {
   });
 
   return {
-    templates: effective.sort((a, b) => a.name.localeCompare(b.name)),
+    templates: effective.sort((a, b) => compareText(a.name, b.name)),
     errors,
   };
 }
@@ -1509,7 +1510,7 @@ async function discoverAllSources(cwd = process.cwd()) {
  */
 export async function discoverAllUnresolved(cwd = process.cwd()) {
   return (await discoverAllSources(cwd)).templates.sort((a, b) =>
-    a.name.localeCompare(b.name),
+    compareText(a.name, b.name),
   );
 }
 

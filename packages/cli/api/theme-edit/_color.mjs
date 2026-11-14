@@ -179,6 +179,14 @@ const NAMED = wordTable(
 /** The CSS named colors, for suggestions. */
 export const COLOR_NAMES = Object.keys(NAMED);
 
+/**
+ * The hex a CSS color name is, or null.
+ * @param {string} name
+ * @returns {string | null}
+ */
+export const namedColorHex = name =>
+  Object.hasOwn(NAMED, name) ? NAMED[name] : null;
+
 /** Color keywords that are valid colors but have no fixed value. */
 const KEYWORDS = ['transparent', 'currentcolor', ...CSS_WIDE];
 

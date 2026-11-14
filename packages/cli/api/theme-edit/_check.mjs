@@ -61,6 +61,7 @@ import {
   wordTable,
   WRAPPED_PARTS,
   CARD_LIKE,
+  isSystemFamily,
 } from './_tables.mjs';
 import {
   COLOR_NAMES,
@@ -98,11 +99,13 @@ import {
   themeFiles,
   ownSourceTokenValues,
   baseTopTokens,
+  baseComponent,
   baseComponentReads,
   baseRuleHas,
   partRuleTokens,
   cssFamily,
   familySpaces,
+  fontsourcePackageOf,
 } from './_settings.mjs';
 import {isColorToken} from './_compiler.mjs';
 import {
@@ -116,6 +119,13 @@ import {
   withoutDebris,
   typoOf,
   typoNear,
+  PROPERTY_WORDS,
+  WEIGHT_WORDS,
+  TAILWIND_RADIUS,
+  documentReadings,
+  documentNumericTable,
+  documentRange,
+  withoutCopyDebris,
 } from './_normal.mjs';
 
 export {
@@ -128,6 +138,26 @@ export {
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
 export {lengthPx};
+
+/**
+ * The radius the base theme's own rule gives a part, in px, or null when
+ * its rule gives none.
+ * @param {any} ctx
+ * @param {{light: Record<string, string>}} base
+ * @param {string} part
+ * @param {string | undefined} when
+ * @returns {number | null}
+ */
+function basePartRadiusPx(ctx, base, part, when) {
+  const own = ctx.base
+    ? baseComponent(ctx.base, ctx, part, 'borderRadius', {when})
+    : null;
+  if (typeof own !== 'string') return null;
+  const tokenName = /var\(\s*(--radius-[\w-]+)/.exec(own)?.[1];
+  if (tokenName) return tokenPx(base, tokenName);
+  const px = lengthPx(own);
+  return px == null ? null : Math.min(px, 9999);
+}
 
 /**
  * A token's value in px, following var() references through the tokens.
@@ -144,6 +174,13 @@ function tokenPx(base, token) {
   }
   return lengthPx(v);
 }
+
+// A type scale ratio is a number above 1, up to 2.
+documentNumericTable(
+  ['type'],
+  Object.entries(TYPE_STYLES).map(([name, style]) => [name, style.ratio]),
+  [1, 2],
+);
 
 /**
  * The `type` preset nearest a scale ratio typed as a number (1.3 is
@@ -776,6 +813,22 @@ export function storedProblems(ctx, slug, data, skip = '') {
         return scope(`${s.thing} applies to the whole theme, not to ${s.on}`);
       if (s.mode && s.source === 'dial' && !PALETTE_DIALS.includes(s.thing))
         return scope(`${s.thing} is the same in light and dark`);
+      // A light and a dark pair saved for one mode (a hand edit): set
+      // refuses that, so the loader does too; the repair is the half saved
+      // for that mode.
+      if (s.mode && /^\s*light-dark\(/i.test(String(s.value ?? ''))) {
+        const pair = colorPair(
+          String(s.value)
+            .trim()
+            .replace(/^light-dark\(\s*([\s\S]*)\)\s*$/i, 'light: $1')
+            .replace(/,\s*/, '; dark: '),
+        );
+        return {
+          setting: s,
+          why: `${s.thing} gives both modes with light-dark(), and is saved for ${s.mode} only`,
+          ...(pair ? {fix: s.mode === 'dark' ? pair.dark : pair.light} : {}),
+        };
+      }
       if (t && s.state && ![...t.states, ...COMMON_STATES].includes(s.state))
         return scope(`"${s.state}" is not a state of ${s.on}`);
       if (t && s.when) {
@@ -932,6 +985,16 @@ const GENERIC_FAMILIES = [
   'ui-rounded',
 ];
 
+/** The theme-wide dial or token for a CSS property typed with no part. */
+const WHOLE_THEME_EQUIVALENT = /** @type {Record<string, string>} */ ({
+  'border-radius': 'corners',
+  'font-size': 'text-size',
+  'font-family': 'font',
+  color: '--color-text-primary',
+  background: '--color-background-body',
+  'background-color': '--color-background-body',
+});
+
 /** A number or a size, which is never a font family. */
 const NUMBERISH = /^[+-]?(\d+\.?\d*|\.\d+)(px|rem|em|pt|%)?$/i;
 
@@ -1069,6 +1132,8 @@ function groupOfPropType(prop) {
  * @param {string} slug
  * @param {string[]} [readers] the CSS properties that read the token
  * @param {boolean} [multiplied] whether Core multiplies the token by a size
+ * @param {boolean} [isSet] whether the theme sets the token now (an undo
+ *   of it works)
  */
 function checkTypedValue(
   type,
@@ -1079,6 +1144,7 @@ function checkTypedValue(
   slug,
   readers = [],
   multiplied = false,
+  isSet = true,
 ) {
   // The value meant, when what is wrong is how it was typed (a trailing
   // `;`, a comment, quotes around it, full-width characters, a font name
@@ -1175,11 +1241,12 @@ function checkTypedValue(
   if (keyword)
     refuse(
       E.ERR_THEME_BAD_VALUE,
-      `"${keyword}" is a CSS keyword, not a value: on ${name} it leaves the token empty, so what reads it drops its style. Give a value such as ${exampleOf(type, name)}, or undo ${name} to go back to the base theme's.`,
+      `"${keyword}" is a CSS keyword, not a value: on ${name} it leaves the token empty, so what reads it drops its style. Give a ${type} value${isSet ? `, or undo ${name} to go back to the base theme's` : ''}.`,
       {
+        // How for the token; the undo only when the theme sets it.
         run: [
-          `${P} set ${slug} ${name} ${quoteCommandArgument(exampleOf(type, name))}`,
-          `${P} undo ${slug} ${name}`,
+          `${HOW} ${name}`,
+          ...(isSet ? [`${P} undo ${slug} ${name}`] : []),
         ],
       },
     );
@@ -1287,8 +1354,12 @@ function checkTypedValue(
     // A bare number is the size in px.
     // A bare number is the size in px; a minus sign is dropped.
     const plain = value.trim().replace(/^-(?=\d|\.\d)/, '');
+    // A bare number below one (a pasted `--radius: 0.5rem` that lost its
+    // unit) has no unit to read it by: no size is guessed, as corners does.
     const px = /^[+]?\d*\.?\d+(e[+-]?\d+)?$/i.test(plain)
-      ? `${Number(plain)}px`
+      ? Number(plain) > 0 && Number(plain) < 1
+        ? null
+        : `${Number(plain)}px`
       : /^\d*\.?\d+[a-z%]+$/i.test(plain) && plain !== value.trim()
         ? plain
         : null;
@@ -1612,6 +1683,9 @@ function nearestColorName(v) {
 const OBSOLETE_KEYWORDS = {
   cursor: {hand: 'pointer'},
 };
+documentReadings(
+  Object.values(OBSOLETE_KEYWORDS).flatMap(words => Object.entries(words)),
+);
 
 /**
  * Why a value is not one the property takes, or null. Colors are checked
@@ -1700,42 +1774,13 @@ function propertyProblem(prop, value) {
   // A lone length on a shorthand where it is only a position (background,
   // mask) wipes the rest: no px is guessed there.
   const pxFits = !/^(background|mask)$/i.test(prop);
-  // Words with a documented reading on a property.
-  const WORDS = /** @type {Record<string, Record<string, string>>} */ ({
-    opacity: {
-      half: '0.5',
-      'half-transparent': '0.5',
-      opaque: '1',
-      solid: '1',
-    },
-    'text-transform': {
-      caps: 'uppercase',
-      'all-caps': 'uppercase',
-      upper: 'uppercase',
-      lower: 'lowercase',
-      title: 'capitalize',
-      'no-caps': 'none',
-    },
-    'border-radius': {
-      round: '9999px',
-      rounded: '9999px',
-      pill: '9999px',
-      circle: '50%',
-      square: '0',
-    },
-  });
+  // Words with a documented reading on a property (the allowlist a repair
+  // may map through).
+  const WORDS = PROPERTY_WORDS;
   // A weight word is its number (the same table the headings dial reads);
   // text in content is that text, quoted.
   const weightWord = typed.replace(/[\s-]+/g, '');
-  const weight =
-    HEADING_WEIGHTS[weightWord] ??
-    /** @type {Record<string, string>} */ ({
-      thin: '100',
-      extralight: '200',
-      extrabold: '800',
-      ultrabold: '800',
-      black: '900',
-    })[weightWord];
+  const weight = HEADING_WEIGHTS[weightWord] ?? WEIGHT_WORDS[weightWord];
   const mapped =
     WORDS[prop]?.[typed.replace(/\s+/g, '-')] ??
     (prop === 'font-weight' && weight ? weight : null) ??
@@ -1843,6 +1888,46 @@ function baseReads(ctx, like, token) {
   }
 }
 
+/**
+ * The headings rung nearest a weight number (800 is heavy).
+ * @param {number} weight
+ */
+const weightRung = weight =>
+  Object.entries(HEADING_WEIGHTS).reduce((a, b) =>
+    Math.abs(Number(b[1]) - weight) < Math.abs(Number(a[1]) - weight) ? b : a,
+  )[0];
+documentNumericTable(
+  ['headings', 'font-weight'],
+  Object.entries(HEADING_WEIGHTS).map(([w, n]) => [w, Number(n)]),
+  [1, 1000],
+);
+// A font weight runs from 1 to 1000.
+documentRange(['font-weight', '--font-weight-*'], 1, 1000);
+documentNumericTable(
+  ['spacing'],
+  SPACING.map(([name, factor]) => [name, factor]),
+);
+documentNumericTable(
+  ['text-size'],
+  TEXT_SIZE.map(([name, px]) => [name, px]),
+);
+// The text size number is the body size in pixels, 10 to 32; vibrancy
+// runs from 0 to 100.
+documentRange(['text-size'], 10, 32);
+documentRange(['vibrancy'], 0, 100);
+documentReadings(TEXT_SIZE.map(([name, px]) => [name, `${px}px`]));
+documentReadings(Object.entries(HEADING_TRACKING));
+// `bold` given a no (false, off) is the normal weight.
+documentReadings(['false', 'off', 'no', 'none'].map(w => [w, 'normal']));
+/** Words for no rounding: corners square. */
+const NO_ROUNDING = ['0', '0%', 'none', 'sharp', 'zero', 'no', 'flat'];
+/** Words for no space: spacing's tightest rung. */
+const NO_SPACE = ['0', 'none', 'zero', 'no', 'off'];
+documentReadings(NO_ROUNDING.map(w => [w, 'square']));
+documentReadings(NO_SPACE.map(w => [w, SPACING[0][0]]));
+documentReadings(
+  Object.values(DIAL_WORDS).flatMap(words => Object.entries(words)),
+);
 /** State words a value may be labeled with. */
 const STATE_WORDS = [
   'hover',
@@ -1933,6 +2018,32 @@ const ownLabel = (thing, word) =>
   (thing === 'text-size' && word === 'font-size');
 
 /**
+ * Whether a family is one the editor knows: a system family on the theme
+ * build's list, an open font in its table or a preset's family, or one
+ * whose @fontsource package the project has installed.
+ * @param {any} ctx
+ * @param {string} family without quotes
+ */
+function knownFamily(ctx, family) {
+  const name = family.trim().toLowerCase();
+  if (!name) return false;
+  if (isSystemFamily(family)) return true;
+  if (
+    [
+      ...Object.values(OPEN_FONTS).map(f => f.family),
+      ...Object.values(FONTS).map(f => f[0]),
+    ].some(f => f.toLowerCase() === name)
+  )
+    return true;
+  try {
+    ctx?.project?.req?.resolve(`${fontsourcePackageOf(family)}/package.json`);
+    return Boolean(ctx?.project?.req);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The one mode a light-only or dark-only theme shows, or null.
  * @param {{mode?: string} | null | undefined} data
  * @returns {'light' | 'dark' | null}
@@ -1975,6 +2086,19 @@ export function checkSetting(
   // makes both modes from it. Never one of them for both.
   // A light-dark() written with another separator (`light-dark(red /
   // blue)`, `light-dark(red; blue)`): the pair meant, with a comma.
+  // A dial's own words in any case (ROOMY, MORE, Both, NONE): the word.
+  if (!unset && typeof value === 'string' && DIALS[thing]) {
+    const words = new Set(
+      String(DIALS[thing].values ?? '')
+        .split('|')
+        .filter(w => /^[a-z][a-z-]*$/.test(w)),
+    );
+    const lower = value.trim().toLowerCase();
+    // (On the font dial several words are a family list, whose names keep
+    // their letters; one word is the preset.)
+    const read = thing === 'font' ? [lower] : lower.split(/\s+/);
+    if (lower && read.every(w => words.has(w))) value = lower;
+  }
   if (!unset && typeof value === 'string') {
     const near =
       /^\s*light-dark\(\s*([^,;/()]+?)\s*(?:\s\/\s|\/|;)\s*([^,;/()]+?)\s*\)\s*$/i.exec(
@@ -1996,6 +2120,68 @@ export function checkSetting(
           ],
         },
       );
+  }
+  // A weight (or a style) after a family (`Inter 600`, `Inter bold
+  // italic`) is no family name: the family alone, and the weight where a
+  // weight is set.
+  const familyWeight =
+    !unset &&
+    typeof value === 'string' &&
+    (thing === 'font' ||
+      thing === 'font-family' ||
+      thing.startsWith('--font-family'))
+      ? /^\s*([A-Za-z][A-Za-z ]*?)\s+(\d{3}|thin|light|regular|medium|semibold|semi-bold|bold|extrabold|heavy|black)(\s+italic)?\s*$/i.exec(
+          value,
+        )
+      : null;
+  // A weight word after a family is part of the family's name (Arial
+  // Black, Archivo Black, Segoe UI Semibold) unless the whole name is no
+  // family the editor knows and the name without it is; a weight number
+  // (`Inter 600`) is never part of a name.
+  const weightIsName =
+    familyWeight != null &&
+    !/^\d+$/.test(familyWeight[2]) &&
+    !(
+      !knownFamily(ctx, `${familyWeight[1].trim()} ${familyWeight[2]}`) &&
+      knownFamily(ctx, familyWeight[1].trim())
+    );
+  if (
+    familyWeight &&
+    !weightIsName &&
+    typeof value === 'string' &&
+    !value.includes(',') &&
+    // `bold bold` is a weight twice and `italic bold` a style and a
+    // weight, read below: no family is named.
+    familyWeight[1]
+      .trim()
+      .toLowerCase()
+      .split(/\s+/)
+      .some(
+        w =>
+          HEADING_WEIGHTS[w] === undefined &&
+          WEIGHT_WORDS[w] === undefined &&
+          !/^(italic|oblique|normal|small-caps)$/.test(w),
+      )
+  ) {
+    const family = familyWeight[1].trim();
+    const w = familyWeight[2].toLowerCase().replace('-', '');
+    const word = /^\d+$/.test(w)
+      ? Object.keys(HEADING_WEIGHTS).find(k => HEADING_WEIGHTS[k] === w)
+      : HEADING_WEIGHTS[w] !== undefined
+        ? w
+        : null;
+    refuse(
+      E.ERR_THEME_BAD_VALUE,
+      `"${value.trim()}" puts a weight after the family, so the browser reads one family named that and falls back. ${thing} takes the family (${family}); a weight is set with headings, font-weight or a --font-weight-* token.`,
+      {
+        run: [
+          `${P} set ${slug} ${thing} ${quoteCommandArgument(family)}${flags.on ? ` --on ${flags.on}` : ''}`,
+          ...(thing === 'font' && word
+            ? [`${P} set ${slug} headings ${word}`]
+            : []),
+        ],
+      },
+    );
   }
   // A number or size given as a font family (`--font-family-body 700`,
   // `font-family 16px --on card`) is a weight or a size, never a family.
@@ -2093,6 +2279,24 @@ export function checkSetting(
     (DIALS[thing] || partProperty || thing.startsWith('--'))
   ) {
     const label = valueLabel(value);
+    // Another CSS property's name before a part property's value
+    // (`padding 'margin: 8px'`) is that property's value, never this one's.
+    if (
+      label &&
+      partProperty &&
+      label.word !== thing &&
+      !ownLabel(thing, label.word) &&
+      cssProperties().has(label.word) &&
+      label.rest.trim()
+    )
+      refuse(
+        E.ERR_THEME_BAD_VALUE,
+        `"${value}" is labeled ${label.word}, another property than ${thing}; nothing is set from it.`,
+        {
+          didYouMean: [label.word],
+          run: [setLine(slug, label.word, label.rest.trim(), flags, false)],
+        },
+      );
     // A CSS property's name before the value (`border-radius: pill`,
     // `color: #e11d48`, `font: bold 16px Inter`) is read by the paths
     // below, as a declaration pasted from a stylesheet.
@@ -2296,6 +2500,19 @@ export function checkSetting(
           },
         );
       }
+      // A Google Fonts family spec (`Inter:wght@400;600`): the family
+      // before the colon.
+      if (
+        (thing === 'font' || familyToken || thing === 'font-family') &&
+        /^(ital,)?wght@|^ital@/i.test(rest)
+      ) {
+        const family = String(value).split(':')[0].replace(/\+/g, ' ').trim();
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          `"${value}" is a Google Fonts family spec; ${thing} takes the family (${family}). A weight is set with font-weight or a --font-weight-* token.`,
+          {run: [`${P} set ${slug} ${thing} ${q(family)}${scope}`]},
+        );
+      }
       // A family's own words may hold a colon; only the words above are
       // read there.
       if (!familyToken && !otherSettingLabel(thing, value))
@@ -2303,11 +2520,8 @@ export function checkSetting(
           E.ERR_THEME_BAD_VALUE,
           `"${label.word}" in "${value}" is not a name the editor reads for ${thing}; give the value alone.`,
           {
-            didYouMean: nearest(label.word, [
-              ...Object.keys(DIALS),
-              ...parts,
-              ...STATE_WORDS,
-            ]),
+            // Only setting names: a part or a state is never a value.
+            didYouMean: nearest(label.word, Object.keys(DIALS)),
             run: [`${P} set ${slug} ${thing} ${q(rest)}${scope}`],
           },
         );
@@ -2632,6 +2846,26 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     s.mode = mode;
   }
   const onFlag = s.on ? ` --on ${s.on}` : '';
+  // A CSS-wide keyword is no color for one mode: a mode's half takes a
+  // color, and the keyword applies to the whole declaration, in both modes.
+  if (
+    s.mode &&
+    !unset &&
+    CSS_WIDE.includes(
+      String(v ?? '')
+        .trim()
+        .toLowerCase(),
+    )
+  )
+    refuse(
+      E.ERR_THEME_NO_MODE,
+      `"${String(v).trim()}" is a CSS keyword, which applies in both modes, so it takes no --mode. Give the ${s.mode} color, or set ${thing} ${String(v).trim()} for both modes.`,
+      {
+        run: [
+          `${P} set ${slug} ${thing} ${String(v).trim()}${onFlag}${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}`,
+        ],
+      },
+    );
   // A value that already gives both modes takes no --mode (a gradient
   // holding a light-dark() stop included).
   if (
@@ -2891,6 +3125,27 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         inactive: ['disabled'],
       }),
     );
+    // Several states in one --state (`hover,focus-visible`, `hover
+    // focus-visible`): one line per state, the value quoted as typed.
+    const typedStates = String(flags.state ?? '')
+      .split(/\s*(?:,|\/|&|\band\b)\s*|\s+/)
+      .map(x => x.trim().toLowerCase())
+      .filter(Boolean);
+    if (
+      typedStates.length > 1 &&
+      typedStates.every(x => states.includes(x)) &&
+      !states.includes(String(s.state))
+    )
+      refuse(
+        E.ERR_THEME_UNKNOWN_STATE,
+        `"${flags.state}" names ${typedStates.length} states; --state takes one at a time.`,
+        {
+          didYouMean: typedStates,
+          run: typedStates
+            .slice(0, 6)
+            .map(state => setLine(slug, thing, v, {...s, state}, unset)),
+        },
+      );
     const meant =
       (SYNONYMS[String(s.state ?? '').toLowerCase()] ?? []).find(x =>
         states.includes(x),
@@ -3313,14 +3568,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         const weight = /^\d+(\.\d+)?$/.test(lower) ? Number(lower) : null;
         const meant =
           words.find(w => w === lower) ??
-          (weight != null
-            ? Object.entries(HEADING_WEIGHTS).reduce((a, b) =>
-                Math.abs(Number(b[1]) - weight) <
-                Math.abs(Number(a[1]) - weight)
-                  ? b
-                  : a,
-              )[0]
-            : nearest(lower, words)[0]);
+          (weight != null ? weightRung(weight) : nearest(lower, words)[0]);
         refuse(
           E.ERR_THEME_BAD_VALUE,
           `headings takes ${DIALS.headings.values}, not "${v}".${weight != null && meant ? ` ${meant} sets weight ${HEADING_WEIGHTS[meant]}.` : ''}`,
@@ -3554,9 +3802,12 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
                 : cornerPxOf(onPart.value)
               : whole
                 ? radiusAt(base, whole.value, token)
-                : // The base theme's radius; one it does not give in px (a var()
-                  // chain) counts as medium's.
-                  (tokenPx(base, token) ?? radiusAt(base, 'medium', token));
+                : // The base theme's own radius on the part, when its rule
+                  // gives one; else the radius token's; one it does not give
+                  // in px (a var() chain) counts as medium's.
+                  (basePartRadiusPx(ctx, base, part, s.when) ??
+                  tokenPx(base, token) ??
+                  radiusAt(base, 'medium', token));
         const rungs = CORNERS.map(
           ([n]) => /** @type {const} */ ([n, radiusAt(base, n, token)]),
         );
@@ -3577,17 +3828,27 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           );
         s.value = next ? next[0] : 'medium';
       } else {
+        // A value with copy debris (`8px;`): the value without it.
+        if (withoutCopyDebris(v) !== v && withoutCopyDebris(v))
+          refuse(
+            E.ERR_THEME_BAD_VALUE,
+            `"${v}" holds copy debris (a ;, a comment or !important); corners takes the value alone.`,
+            {run: [setLine(slug, 'corners', withoutCopyDebris(v), s)]},
+          );
         // A rung in any case, a size in px written any way: the plain form.
         const lower = v.toLowerCase();
-        // Any CSS number in px (2e1px, +4px), the shared length parse.
-        const pxLen = /px$/.test(lower) ? lengthPx(lower) : null;
+        // Any CSS number in px (2e1px, +4px), the shared length parse; a
+        // rem is that many 16px, saved in px.
+        const pxLen = /\d(px|rem)$/.test(lower) ? lengthPx(lower) : null;
         if (CORNERS.some(([n]) => n === lower)) s.value = lower;
-        else if (pxLen != null && pxLen >= 0)
+        else if (pxLen != null && pxLen >= 0) {
           s.value =
             pxLen >= 1000 ? 'pill' : `${Math.round(pxLen * 10000) / 10000}px`;
+          if (/rem$/.test(lower))
+            s.note = `corners ${v.trim()} is saved as ${s.value}`;
+        }
         // No rounding, said any way, is square.
-        else if (/^(0|0%|none|sharp|zero|no|flat)$/.test(lower))
-          s.value = 'square';
+        else if (NO_ROUNDING.includes(lower)) s.value = 'square';
         else {
           // What it most likely means, as a value corners takes: a simple
           // calc() of px is worked out.
@@ -3618,13 +3879,12 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           // pill, rounded-[12px] is 12px).
           const tw = /^rounded-\[(.+)\]$/.exec(lower)?.[1];
           const opposite =
-            lower === 'rounded-full'
-              ? 'pill'
-              : tw && lengthPx(tw) != null
-                ? `${Math.round(Number(lengthPx(tw)) * 100) / 100}px`
-                : negates(lower) && /round/.test(lower)
-                  ? 'square'
-                  : null;
+            TAILWIND_RADIUS[lower] ??
+            (tw && lengthPx(tw) != null
+              ? `${Math.round(Number(lengthPx(tw)) * 100) / 100}px`
+              : negates(lower) && /round/.test(lower)
+                ? 'square'
+                : null);
           // A radius below zero means none: square.
           const meant =
             opposite ??
@@ -3649,9 +3909,21 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
               ...(meant ? {didYouMean: [meant]} : {}),
               // The same scope, flags included.
               // Nothing near: how corners, never a stock rung.
-              run: [
-                meant ? setLine(slug, 'corners', meant, s) : `${HOW} corners`,
-              ],
+              // A whole bare number gets the line with px, the unit it
+              // most likely meant, and how corners; one below one (a
+              // pasted 0.5rem that lost its unit) has no unit to read it
+              // by: how corners only.
+              run:
+                bareNumber && Number(lower) >= 1
+                  ? [
+                      setLine(slug, 'corners', `${Number(lower)}px`, s),
+                      `${HOW} corners`,
+                    ]
+                  : [
+                      meant
+                        ? setLine(slug, 'corners', meant, s)
+                        : `${HOW} corners`,
+                    ],
             },
           );
         }
@@ -3712,7 +3984,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
             run: [setLine(slug, 'spacing', nearFactor, s)],
           },
         );
-      else if (/^(0|none|zero|no|off)$/i.test(v))
+      else if (NO_SPACE.includes(v.toLowerCase()))
         // Spacing scales the theme's space; it never goes to nothing. The
         // tightest rung is the nearest that works.
         refuse(
@@ -3846,28 +4118,42 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         // is that color.
         // Two names run together (`navyblue`) are the first, as the
         // spaced form is.
-        const named = negates(v)
-          ? []
-          : v
-              .toLowerCase()
-              .split(/[\s,-]+/)
-              .flatMap(w =>
-                COLOR_NAMES.includes(w)
-                  ? [w]
-                  : COLOR_NAMES.filter(
-                      n =>
-                        n.length >= 3 &&
-                        w.startsWith(n) &&
-                        COLOR_NAMES.includes(w.slice(n.length)),
-                    ).slice(0, 1),
-              );
+        const words = v
+          .toLowerCase()
+          .split(/[\s,-]+/)
+          .filter(Boolean);
+        // The words joined (dark red, light-blue, dark-slate-gray) are the
+        // color they name. A word with a scale step (red-500, gray-900) is
+        // no CSS color, and the bare word is another color: none is named.
+        const joined = words.join('');
+        const scaled = words.some(w => /\d/.test(w)) || /^[{]/.test(v.trim());
+        const named =
+          negates(v) || scaled
+            ? []
+            : words.length > 1 && COLOR_NAMES.includes(joined)
+              ? [joined]
+              : v
+                  .toLowerCase()
+                  .split(/[\s,-]+/)
+                  .flatMap(w =>
+                    COLOR_NAMES.includes(w)
+                      ? [w]
+                      : COLOR_NAMES.filter(
+                          n =>
+                            n.length >= 3 &&
+                            w.startsWith(n) &&
+                            COLOR_NAMES.includes(w.slice(n.length)),
+                        ).slice(0, 1),
+                  );
         const near =
           problem.kind === 'unknown'
             ? /^#?[0-9a-f]{4,8}$/i.test(v.trim())
               ? []
               : named.length
                 ? named.slice(0, 1)
-                : nearest(v.toLowerCase(), COLOR_NAMES)
+                : scaled
+                  ? []
+                  : nearest(v.toLowerCase(), COLOR_NAMES)
             : [];
         // light-dark(a, b): the dial takes one color, from which it makes
         // both modes; the light one is offered.
@@ -4290,15 +4576,32 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         },
       );
     if (!(thing in TOKENS)) {
-      refuse(E.ERR_THEME_UNKNOWN_TOKEN, `"${thing}" is not a design token.`, {
-        didYouMean: nearest(thing, Object.keys(TOKENS)),
-        run: [
-          `${HOW} --list tokens ${thing
-            .replace(/^-+(color-)?/, '')
-            .split('-')[0]
-            .trim()}`.trim(),
-        ],
-      });
+      // The editor's own color words: danger is the error role, brand and
+      // primary are the accent (as the danger and accent dials say).
+      const role = thing
+        .replace(/\bdanger\b/, 'error')
+        .replace(/\b(brand|primary)\b/, 'accent');
+      const aliased = role !== thing && role in TOKENS ? role : null;
+      // The filtered list only when it lists something.
+      const word = thing
+        .replace(/^-+(color-)?/, '')
+        .split('-')[0]
+        .trim();
+      const listed =
+        word && Object.keys(TOKENS).some(k => k.includes(word))
+          ? `${HOW} --list tokens ${word}`
+          : `${HOW} --list tokens`;
+      refuse(
+        E.ERR_THEME_UNKNOWN_TOKEN,
+        `"${thing}" is not a design token.${aliased ? ` The token for that role is ${aliased}.` : ''}`,
+        {
+          didYouMean: aliased ? [aliased] : nearest(thing, Object.keys(TOKENS)),
+          run: [
+            ...(aliased ? [setLine(slug, aliased, v, s, unset)] : []),
+            listed,
+          ],
+        },
+      );
     }
     const type = C.typeOf(thing);
     // Only colors differ by mode: a shadow list cannot sit inside
@@ -4333,6 +4636,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       slug,
       C.propsReading(thing),
       multipliedTokens(ctx.project).has(thing),
+      data.settings.some(x => x.thing === thing),
     );
     checkCycle(thing, v, TOKENS, data, ctx.project.cwd, s);
     // With no part data, what reads the token is unknown: save, unchecked.
@@ -4490,9 +4794,15 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         E.ERR_MISSING_ARGUMENT,
         `${prop} is a CSS property, so it needs --on <part|group>. For the whole theme use a dial or a token.`,
         {
+          // The theme-wide dial or token for it, when there is one; never
+          // a part that was not named.
           run: [
-            `${P} set ${slug} ${prop} ${quoteCommandArgument(v || exampleOf(groupOfPropType(prop), prop))} --on card`,
-            `${HOW} "${prop}"`,
+            ...(v && WHOLE_THEME_EQUIVALENT[prop]
+              ? [
+                  `${P} set ${slug} ${WHOLE_THEME_EQUIVALENT[prop]} ${quoteCommandArgument(v)}`,
+                ]
+              : []),
+            `${HOW} ${quoteCommandArgument(prop)}`,
           ],
         },
       );
@@ -4681,7 +4991,14 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       refuse(
         E.ERR_THEME_BAD_VALUE,
         `"${v}" cannot be a CSS value: it has a ; { } < > or a newline, a comment, !important, or an unclosed bracket or quote.`,
-        {run: [`${HOW} ${prop}`]},
+        {
+          // The value without its copy debris, when that is one.
+          run: [
+            withoutCopyDebris(v) !== v && isSafeValue(withoutCopyDebris(v))
+              ? setLine(slug, prop, withoutCopyDebris(v), s)
+              : `${HOW} ${prop}`,
+          ],
+        },
       );
     if (/radius$/.test(prop)) refuseInvisibleCorners(ctx, slug, s, data);
     if (step)

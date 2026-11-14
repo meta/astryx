@@ -101,7 +101,8 @@ const CASES = [
   [
     'a corners value',
     'ERR_THEME_BAD_VALUE',
-    [...E, 'set', 't', 'corners', '1.5rem'],
+    // A bare number: corners takes rem and px, but no number without a unit.
+    [...E, 'set', 't', 'corners', '6'],
   ],
   [
     'a mode',

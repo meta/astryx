@@ -3,7 +3,7 @@
 /**
  * @file The integration subject's access to the environment (INV21): reading
  * one package's component docs and sources with the project's own TypeScript,
- * and its topics.
+ * its topics, and the scope its examples are read against.
  *
  * @input a loaded integration and the directory the command runs in
  * @output the reports the integration checks attach to their results
@@ -23,6 +23,15 @@ import {findCopiedPassages} from '../../foundation/discovery/copied-passages.mjs
 import {findFluff} from '../../foundation/discovery/doc-fluff.mjs';
 import {findDocCommands} from '../../foundation/discovery/runner-commands.mjs';
 import {findStrayPointers} from '../../foundation/discovery/stray-pointers.mjs';
+import {findPackageRoot} from '../../foundation/fs/paths.mjs';
+import {
+  loadLocalIntegration,
+  resolveInstalledIntegrationDir,
+} from '../../foundation/integrations/integrations.mjs';
+import {
+  exampleCodeCheck,
+  exampleScopeFor,
+} from '../../foundation/integrations/example-code.mjs';
 
 /**
  * Each component doc's props compared with the component's TypeScript props,
@@ -173,4 +182,71 @@ export async function projectUsesIconSets(cwd) {
   } catch {
     return false;
   }
+}
+
+/**
+ * @typedef {object} LoadedExampleScope
+ * @property {boolean} found whether an integration manifest loaded
+ * @property {string | null} name
+ * @property {string | null} version
+ * @property {import('../../authoring/example/type.ts').ExampleScope | null} scope
+ * @property {string} [reason] why there is no scope
+ * @property {string} [incomplete] why names Core or React give were not read
+ */
+
+/**
+ * The scope a package's component examples are read against: the local
+ * package rooted at `cwd` (no `pkg`), or a package installed beside it.
+ * Throws when `pkg` is not a bare package name.
+ * @param {string | undefined} pkg
+ * @param {string} cwd
+ * @returns {Promise<LoadedExampleScope>}
+ */
+export async function loadExampleScope(pkg, cwd) {
+  const packageDir = pkg
+    ? resolveInstalledIntegrationDir(pkg, cwd)
+    : findPackageRoot(cwd);
+  /** @type {any} */
+  let integration = null;
+  /** @type {string | undefined} */
+  let reason;
+  if (packageDir) {
+    try {
+      integration = await loadLocalIntegration(packageDir);
+    } catch (err) {
+      reason = /** @type {Error} */ (err).message;
+    }
+  }
+  if (integration?.__loadError) reason = integration.__loadError;
+  if (!integration || reason) {
+    return {
+      found: false,
+      name: integration?.name ?? null,
+      version: integration?.version ?? null,
+      scope: null,
+      reason:
+        reason ??
+        (packageDir
+          ? `No astryx.integration.{ts,mjs,js} next to the package.json in ${packageDir}.`
+          : 'No package.json found.'),
+    };
+  }
+  const read = await exampleScopeFor(integration);
+  return {
+    found: true,
+    name: integration.name ?? null,
+    version: integration.version ?? null,
+    scope: read.scope,
+    ...(read.reason ? {reason: read.reason} : {}),
+    ...(read.incomplete ? {incomplete: read.incomplete} : {}),
+  };
+}
+
+/**
+ * Each of the package's component examples that cannot run on its own, as a
+ * note with its fix, and the examples that could not be judged.
+ * @param {any} integration a loaded integration
+ */
+export function integrationExampleCode(integration) {
+  return exampleCodeCheck(integration);
 }

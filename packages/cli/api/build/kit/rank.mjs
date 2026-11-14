@@ -23,7 +23,10 @@
  * "board" picks the kanban board for a game board. Here every matched term
  * counts, weighted by how rare it is among page templates (inverse document
  * frequency), so the page that answers more of the idea — and its rarer words —
- * wins. Structural signals sit on top:
+ * wins. Structural signals sit on top. They order the ranker's list; for a
+ * whole page, the page-pick model in weights.mjs reads that list beside its
+ * own word tables and picks the start, so the start can differ from the
+ * ranker's first template:
  *
  * - The head noun. The words before the first "with", ":" or "," name what
  *   the page is ("audit dashboard: dense table with …"); a family word there
@@ -62,6 +65,8 @@ import {
   keywordWordsFor,
   framesOf,
 } from './words.mjs';
+import {namedOutright, tieReading} from './weights.mjs';
+import {compareText} from '../../../foundation/text/compare-text.mjs';
 
 /**
  * @typedef {import('./words.mjs').PageTemplate} PageTemplate
@@ -131,8 +136,10 @@ const START_SCORE = 10;
 const START_TERMS = 2;
 
 /**
- * Rank page templates against an idea, best first. Ties go to the template
- * with the shorter id (the family's broader page), then by name.
+ * Rank page templates against an idea, best first. An exact tie goes to a
+ * family's base template ahead of a variant; templates still tied are ordered
+ * by how strongly each one's own descriptor answers the idea, then by how
+ * typical of its family it is, then by name (`settleTies`).
  *
  * @param {string} query
  * @param {PageTemplate[]} pages
@@ -285,18 +292,64 @@ export function rankPages(query, pages) {
         matched,
       };
     })
-    .sort(
-      (a, b) =>
-        b.score - a.score ||
-        a.name.split('-').length - b.name.split('-').length ||
-        a.name.localeCompare(b.name),
-    );
-  return baseFirst(ranked);
+    .sort((a, b) => b.score - a.score || Number(b.base) - Number(a.base));
+  return baseFirst(settleTies(ranked, query, pages));
+}
+
+/**
+ * Order each run of templates the ranker scores exactly the same (and that
+ * are all bases or all variants), whatever their families: first the one the
+ * idea names by its whole name (`namedOutright`), then by how strongly each
+ * one's own descriptor answers the idea (`tieReading`), then by how typical of
+ * its family it is, then by name. The catalog's order never decides, and
+ * neither does the host's locale.
+ * @param {RankedPage[]} ranked sorted by score, then base first
+ * @param {string} query
+ * @param {PageTemplate[]} pages
+ * @returns {RankedPage[]}
+ */
+function settleTies(ranked, query, pages) {
+  const out = [];
+  for (let i = 0; i < ranked.length;) {
+    let j = i + 1;
+    while (
+      j < ranked.length &&
+      ranked[j].score === ranked[i].score &&
+      ranked[j].base === ranked[i].base
+    )
+      j++;
+    const run = ranked.slice(i, j);
+    if (run.length > 1) {
+      const reading = tieReading(
+        run.map(r => r.name),
+        query,
+        pages,
+      );
+      const named = namedOutright(
+        run.map(r => r.name),
+        query,
+        pages,
+      );
+      const at = new Map(run.map((r, k) => [r, reading[k]]));
+      const outright = new Map(run.map((r, k) => [r, named[k]]));
+      run.sort(
+        (a, b) =>
+          Number(outright.get(b)) - Number(outright.get(a)) ||
+          Number(at.get(b)) - Number(at.get(a)) ||
+          b.typical - a.typical ||
+          compareText(a.name, b.name),
+      );
+    } else run.sort((a, b) => compareText(a.name, b.name));
+    out.push(...run);
+    i = j;
+  }
+  return out;
 }
 
 /**
  * Put a named family's base template ahead of the variant that outranks it,
- * unless the variant matched START_TERMS terms the base did not, or the base
+ * unless the variant matched START_TERMS terms the base did not, the idea
+ * places the page in the variant's frame and not the base's, or the base
  * cannot start on its own: too little score, or too few matched terms. The
  * head names the exception: a family word in the idea's head is start
  * evidence on its own — the same evidence pickStart accepts in place of a
@@ -319,8 +372,9 @@ function baseFirst(ranked) {
   ) {
     return ranked;
   }
+  // The frame is what a template is, and pickStart takes it as evidence.
   const own = [...top.matched].filter(t => !base.matched.has(t)).length;
-  return own >= START_TERMS
+  return own >= START_TERMS || (top.containerMatched && !base.containerMatched)
     ? ranked
     : [base, ...ranked.filter(r => r !== base)];
 }

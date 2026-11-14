@@ -28,6 +28,7 @@ import {
   searchComponents,
   levenshteinDistance,
 } from './string-utils.mjs';
+import {compareText} from './compare-text.mjs';
 
 const COMPONENTS = {group: ['Button', 'Card', 'Text', 'Badge', 'Avatar']};
 // A coreDir that does not exist -> Pass 2 (doc reads) is a no-op, so results
@@ -143,7 +144,7 @@ describe('searchComponents', () => {
       const cur = results[i];
       expect(prev.score).toBeGreaterThanOrEqual(cur.score);
       if (prev.score === cur.score) {
-        expect(prev.name.localeCompare(cur.name)).toBeLessThanOrEqual(0);
+        expect(compareText(prev.name, cur.name)).toBeLessThanOrEqual(0);
       }
     }
   });
