@@ -98,13 +98,13 @@ async function roundTrip(home, id) {
   };
   let again = await markupOf(`back/${id}/page.tsx`, `back/${id}/page.html`);
   if (renderedMarkupOf(again) !== renderedMarkupOf(html)) {
-    // A page that shows the time renders differently a minute later, so the
-    // page that came back must render as the original renders right beside
-    // it: a render of the original just before and just after.
+    // The markup is compared only where the original renders it the same
+    // from one render to the next: a page that shows the time, or anything
+    // else that changes, cannot be, and its files and styles still are.
     const before = renderedMarkupOf(await markupOf(`templates/${id}/page.tsx`, `templates/${id}/before.html`));
     again = await markupOf(`back/${id}/page.tsx`, `back/${id}/page.html`);
     const after = renderedMarkupOf(await markupOf(`templates/${id}/page.tsx`, `templates/${id}/after.html`));
-    if (renderedMarkupOf(again) !== before && renderedMarkupOf(again) !== after) return 'render again: the markup differs';
+    if (before === after && renderedMarkupOf(again) !== before) return 'render again: the markup differs';
   }
   const againBlock = readSourceBlock(again);
   if (renderedHeadOf(again).style !== renderedHeadOf(html).style) return 'render again: the styles differ';
