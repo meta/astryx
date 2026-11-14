@@ -28,6 +28,7 @@ import {
   easeVars,
   fontWeightVars,
   typeScaleVars,
+  focusVars,
 } from '../theme/tokens.stylex';
 import {Icon} from '../Icon';
 import {mergeProps} from '../utils';
@@ -194,7 +195,7 @@ const styles = stylex.create({
     justifyContent: 'center',
     position: 'relative',
     padding: 0,
-    marginInlineEnd: `calc(-1 * ${spacingVars['--spacing-1']})`,
+    marginInlineStart: `calc(${focusVars['--focus-outline-offset']} + ${focusVars['--focus-outline-width']} + ${spacingVars['--spacing-0-5']} - ${spacingVars['--spacing-1']})`,
     cursor: {
       default: 'pointer',
       ':is(:disabled,[aria-disabled="true"])': 'default',
