@@ -917,39 +917,43 @@
   },
   "@astryx.richTextEditor.toolbar.link": {
     "defaultMessage": "Link",
-    "description": "Label of the toolbar toggle that opens the dialog to add or edit a link on selected text."
+    "description": "Label of the toolbar toggle that opens the popover to add or edit a link on selected text."
   },
   "@astryx.richTextEditor.link.insertTitle": {
     "defaultMessage": "Insert link",
-    "description": "Title of the RichTextEditor dialog that adds a new link."
+    "description": "Screen-reader name of the RichTextEditor link popover when it adds a new link."
   },
   "@astryx.richTextEditor.link.editTitle": {
     "defaultMessage": "Edit link",
-    "description": "Title of the RichTextEditor dialog that changes or removes an existing link."
+    "description": "Screen-reader name of the RichTextEditor link popover when it changes or removes an existing link."
   },
   "@astryx.richTextEditor.link.url": {
     "defaultMessage": "URL",
-    "description": "Label of the web address field in the RichTextEditor link dialog."
+    "description": "Visually hidden label of the web address field in the RichTextEditor link popover."
+  },
+  "@astryx.richTextEditor.link.urlPlaceholder": {
+    "defaultMessage": "example.com",
+    "description": "Placeholder of the web address field in the RichTextEditor link popover: an example address, shown while the field is empty. An address without a scheme is accepted and becomes an https link, so keep it a bare domain."
   },
   "@astryx.richTextEditor.link.invalidUrl": {
     "defaultMessage": "Enter a valid http, https, mailto, or tel URL.",
-    "description": "Error under the link dialog address field when the entered address is not allowed. Keep the scheme names http, https, mailto, and tel untranslated."
+    "description": "Error under the link popover address field when the entered address is not allowed. Keep the scheme names http, https, mailto, and tel untranslated."
   },
   "@astryx.richTextEditor.link.remove": {
     "defaultMessage": "Remove link",
-    "description": "Button in the RichTextEditor link dialog that removes the link from the selected text and keeps the text."
+    "description": "Label and tooltip of the icon button in the RichTextEditor link popover that removes the link from the selected text and keeps the text."
   },
   "@astryx.richTextEditor.link.cancel": {
     "defaultMessage": "Cancel",
-    "description": "Button that closes the RichTextEditor link dialog without changing anything."
+    "description": "Label and tooltip of the icon button that closes the RichTextEditor link popover without changing anything."
   },
   "@astryx.richTextEditor.link.add": {
     "defaultMessage": "Add link",
-    "description": "Submit button of the RichTextEditor link dialog when adding a new link."
+    "description": "Label and tooltip of the icon button that applies the address in the RichTextEditor link popover when adding a new link."
   },
   "@astryx.richTextEditor.link.update": {
     "defaultMessage": "Update link",
-    "description": "Submit button of the RichTextEditor link dialog when changing an existing link address."
+    "description": "Label and tooltip of the icon button that applies the address in the RichTextEditor link popover when changing an existing link address."
   },
   "@astryx.markdown.taskList": {
     "defaultMessage": "Task list",
@@ -1405,7 +1409,7 @@
   },
   "@astryx.timeInput.invalidTime": {
     "defaultMessage": "Invalid time",
-    "description": "Screen-reader-only live-region alert in TimeInput / DateTimeInput when the typed time cannot be parsed. \"Time\" = clock time (HH:MM). The field silently reverts on blur, so this is the only rejection feedback a screen-reader user gets."
+    "description": "Error message in TimeInput / DateTimeInput for a typed time that cannot be parsed or is outside the allowed range, shown below the field and announced to screen readers. \"Time\" = clock time (HH:MM). The typed text stays in the field so the person can correct it."
   },
   "@astryx.timeInput.openPicker": {
     "defaultMessage": "Open {label}",
@@ -1697,11 +1701,11 @@
   },
   "@astryx.lightbox.captionMore": {
     "defaultMessage": "more",
-    "description": "Visible label of the button after a gallery caption that two lines cut short in a Lightbox. It opens the full caption over the photo. Pairs with `lightbox.captionLess`."
+    "description": "Visible label of the button after a Lightbox caption that two lines cut short, for a single photo or a gallery. It opens the full caption over the photo. Pairs with `lightbox.captionLess`."
   },
   "@astryx.lightbox.captionLess": {
     "defaultMessage": "less",
-    "description": "Visible label of the same button while a Lightbox gallery's full caption is open over the photo. It closes the full caption. Pairs with `lightbox.captionMore`."
+    "description": "Visible label of the same button while a Lightbox caption is open in full over the photo. It closes the full caption. Pairs with `lightbox.captionMore`."
   },
   "@astryx.metadataList.showMore": {
     "defaultMessage": "Show more",

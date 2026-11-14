@@ -45,7 +45,7 @@ import {STOPWORDS} from '../../search/_query.mjs';
 /**
  * Keeps a value derived from the catalog between runs (build's adapter does
  * it beside the kept search catalog), or works it out.
- * @typedef {<T>(key: unknown[], compute: () => T, codec: {encode: (value: T) => any, decode: (stored: any) => T}) => T} KeepCatalog
+ * @typedef {<T>(key: unknown[], compute: () => T, codec: {encode: (value: T) => any, decode: (stored: any) => T, valid?: (value: any) => boolean}) => T} KeepCatalog
  */
 
 /**
@@ -410,6 +410,23 @@ function computeCatalog(key, catalog, components, weights) {
  * projection as its numbers.
  */
 const CATALOG_CODEC = {
+  /**
+   * What decode can get wrong in a read-back catalog: its key, each block's
+   * component, and projections of one width with finite numbers.
+   * @param {any} read
+   */
+  valid: read => {
+    if (read == null || typeof read.key !== 'string') return false;
+    const blocks = [...read.blocks.values()];
+    const width = blocks[0]?.projected.length;
+    return blocks.every(
+      (/** @type {any} */ b) =>
+        typeof b.component === 'string' &&
+        b.projected.length > 0 &&
+        b.projected.length === width &&
+        [...b.projected].every(Number.isFinite),
+    );
+  },
   /** @param {ReturnType<typeof computeCatalog>} read */
   encode: read => ({
     key: read.key,

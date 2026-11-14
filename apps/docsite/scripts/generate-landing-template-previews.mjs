@@ -1,16 +1,20 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Renders the decorative landing previews to static markup at build time.
+ * @file Renders the decorative landing previews at build time.
  * @input The tile rows, the page templates, the neutral theme, the themes
  *   card's Butter store (ThemesStorePreview), the CLI's experimental page
  *   renderer, the image and icon rewrites of the template previews, and the
  *   experimental DOCSITE_ICON_SET setting.
- * @output src/generated/landingPreviews.ts: each preview's rendered markup,
- *   with no script. The markup uses the site's own StyleX classes.
+ * @output public/landing/template-previews/<slug>.html: each tile's template
+ *   as one self-contained page with no script. `#light` or `#dark` in its URL
+ *   sets its color mode. src/generated/landingPreviews.ts: the themes card
+ *   store's markup, which uses the site's own StyleX classes. The same
+ *   markup as public/landing-previews.json, for a client-side
+ *   navigation to the homepage.
  * @position Part of `pnpm generate`, before the docsite build and dev server.
- *   FrozenPreview puts the markup into the page; CSS scales it and the page's
- *   color mode reaches it through CSS variables.
+ *   TemplatesPreview shows the tile pages in frames. FrozenPreview puts the
+ *   store markup into the page.
  */
 
 import fs from 'node:fs';
@@ -33,9 +37,26 @@ const rowsFile = path.join(
   docsiteDir,
   'src/app/(site)/_landing/landingTemplateRows.json',
 );
+const outDir = path.join(docsiteDir, 'public/landing/template-previews');
 const outFile = path.join(docsiteDir, 'src/generated/landingPreviews.ts');
+/**
+ * The URL of the same markup as JSON. A client-side navigation to the
+ * homepage has no server HTML, so FrozenPreview loads this file then. Every
+ * deploy rewrites it, so it stays outside /landing/, whose photo cache rule
+ * (next.config.mjs) would serve an older build's markup.
+ * SYNC: CLIENT_NAVIGATION_URL in src/app/(site)/_landing/FrozenPreview.tsx
+ */
+export const CLIENT_NAVIGATION_URL = '/landing-previews.json';
+export const CLIENT_NAVIGATION_FILE = path.join(
+  docsiteDir,
+  'public/landing-previews.json',
+);
 // The page template the themes card shows.
 const STORE_TEMPLATE = 'theme-showcase';
+const themeFontsFile = path.resolve(
+  docsiteDir,
+  '../../packages/themes/neutral/fonts.css',
+);
 const themesStoreModule = path.join(
   docsiteDir,
   'src/app/(site)/_landing/ThemesStorePreview',
@@ -53,13 +74,28 @@ const templatesDir = path.resolve(
 // high-density screen. It must be a width the image optimizer allows.
 export const PREVIEW_IMAGE_WIDTH = 640;
 
+// The page fills the frame and never scrolls, as a live template preview
+// fills its tile: without this, a template taller than the frame shows a
+// scrollbar where scrollbars are always visible. The card cannot run script
+// in the page, so the URL fragment carries the site's color mode: `#light` or
+// `#dark` targets one of two hidden anchors, and these rules follow it.
+const PREVIEW_STYLE = [
+  'html,body{height:100%;overflow:hidden}',
+  'body>[data-astryx-theme]{height:100%}',
+  'body>[data-astryx-theme]>:first-child{height:100%!important;min-height:100%!important}',
+  ...['light', 'dark'].map(
+    mode =>
+      `:root:has(#${mode}:target),:root:has(#${mode}:target) [data-astryx-theme]{color-scheme:${mode}!important}`,
+  ),
+].join('');
+const COLOR_MODE_ANCHORS = '<a id="light" hidden></a><a id="dark" hidden></a>';
+
 const SOURCE_BLOCK =
   /<script type="application\/x-astryx-source">[\s\S]*?<\/script>/u;
 
 /**
  * The page that the renderer renders for a tile: the template inside the
- * neutral theme and the preview-viewport wrapper, as the live template
- * previews show it.
+ * neutral theme, as the live template previews show it.
  * @param {string} templatePage the template's page module, relative to the wrapper
  * @returns {string}
  */
@@ -72,13 +108,44 @@ import Page from ${JSON.stringify(templatePage)};
 export default function Preview() {
   return (
     <Theme theme={neutralTheme} mode="system">
-      <div className="preview-viewport">
-        <Page />
-      </div>
+      <Page />
     </Theme>
   );
 }
 `;
+}
+
+/**
+ * The stylesheet URL that loads the theme's fonts, read from the theme's
+ * `fonts.css`.
+ * @param {string} fontsCss
+ * @returns {string | null}
+ */
+export function fontStylesheetOf(fontsCss) {
+  return (
+    /@import\s+url\(\s*['"]?([^'")]+)['"]?\s*\)/u.exec(fontsCss)?.[1] ?? null
+  );
+}
+
+/**
+ * Turns a rendered page into a preview document. It drops the embedded
+ * source, which only `render --reverse` reads, and loads the theme's fonts.
+ * It makes the page fill its frame, and lets the URL fragment set the color
+ * mode. Search engines must not index the file.
+ * @param {string} html
+ * @param {{fontStylesheet: string | null}} options
+ * @returns {string}
+ */
+export function previewDocument(html, {fontStylesheet}) {
+  const head = [
+    '<meta name="robots" content="noindex">',
+    fontStylesheet ? `<link rel="stylesheet" href="${fontStylesheet}">` : '',
+    `<style>${PREVIEW_STYLE}</style>`,
+  ].join('');
+  return html
+    .replace(SOURCE_BLOCK, '')
+    .replace('</head>', `${head}</head>`)
+    .replace(/<body[^>]*>/u, body => `${body}${COLOR_MODE_ANCHORS}`);
 }
 
 /**
@@ -198,6 +265,11 @@ async function main() {
   /** @type {string[]} */
   const slugs = JSON.parse(fs.readFileSync(rowsFile, 'utf8')).flat();
   const iconSets = previewIconSetList(process.env[ICON_SET_SETTING]);
+  const fontStylesheet = fontStylesheetOf(
+    fs.readFileSync(themeFontsFile, 'utf8'),
+  );
+  fs.rmSync(outDir, {recursive: true, force: true});
+  fs.mkdirSync(outDir, {recursive: true});
   fs.rmSync(workDir, {recursive: true, force: true});
   fs.mkdirSync(workDir, {recursive: true});
   fs.writeFileSync(
@@ -226,7 +298,15 @@ async function main() {
         iconSets,
         projectDir: docsiteDir,
       });
-      await renderPage(slug, pageDir);
+      await render('page.tsx', {cwd: pageDir, out: 'page.html'});
+      const html = previewDocument(
+        fs.readFileSync(path.join(pageDir, 'page.html'), 'utf8'),
+        {fontStylesheet},
+      );
+      fs.writeFileSync(path.join(outDir, `${slug}.html`), html);
+      console.log(
+        `landing preview ${slug}.html ${(html.length / 1024).toFixed(0)} KB`,
+      );
     }
     const storeDir = path.join(workDir, 'themes-store');
     fs.mkdirSync(storeDir);
@@ -256,6 +336,7 @@ async function main() {
       '',
     ].join('\n'),
   );
+  fs.writeFileSync(CLIENT_NAVIGATION_FILE, JSON.stringify(previews));
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

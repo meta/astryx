@@ -3,8 +3,10 @@
 /**
  * A published CLI keeps the catalog `search` and `build` gather between runs
  * (foundation/fs/gather-cache.mjs) and uses it only while nothing it read has
- * changed: a kept catalog is not used after edits, a change above the project, or another project or environment.
- * Each case's answer from a kept catalog must equal a fresh gather's.
+ * changed: a kept catalog is not used after edits, a change above the project,
+ * or another project or environment, nor when a variable the gather reads
+ * changes. Each case's answer from a kept catalog must equal a fresh gather's.
+ * packed-gather-cache.nested.test.mjs covers the entries a kept entry nests.
  */
 
 import {describe, expect, it} from 'vitest';
@@ -22,9 +24,10 @@ import {
   makeProject,
   run,
   keptTmp,
+  allInodes,
+  expectWarmHit,
   freshTmp,
   entries,
-  templatesEntries,
   QUERIES,
   expectSameAsFresh,
   hasModuleHooks,
@@ -65,10 +68,14 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     'is not used by another project, another CLI, or another environment',
     async () => {
       const tmp = keptTmp('other');
-      await expectSameAsFresh(tmp);
+      // The second query reads the first's catalog back: the warm path hits.
+      expect(await expectSameAsFresh(tmp)).toEqual(['miss', 'hit']);
       const other = makeProject();
       try {
-        await expectSameAsFresh(tmp, {cwd: other.dir});
+        expect(await expectSameAsFresh(tmp, {cwd: other.dir})).toEqual([
+          'miss',
+          'hit',
+        ]);
         expect(entries(tmp).size).toBe(2);
       } finally {
         fs.rmSync(other.dir, {recursive: true, force: true});
@@ -95,7 +102,9 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     /** @type {string[]} */
     const made = [];
     try {
-      await expectSameAsFresh(tmp);
+      const first = await expectSameAsFresh(tmp);
+      // Where the CLI keeps catalogs, the warm path hits.
+      if (hasModuleHooks) expect(first).toEqual(['miss', 'hit']);
       // A package.json, then a config file, in the folder above.
       for (const [name, text] of [
         ['package.json', JSON.stringify({name: 'parent'})],
@@ -212,6 +221,13 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
       const at = (/** @type {string} */ value, /** @type {string} */ where) =>
         run(ask, {tmp: where, cwd: other.dir, env: {ASTRYX_TEST_ROOT: value}});
       expect(at('a', tmp)).toEqual(at('a', freshTmp()));
+      // The warm path hits while the variable keeps its value.
+      if (hasModuleHooks) {
+        expectWarmHit(tmp, [ask], {
+          cwd: other.dir,
+          env: {ASTRYX_TEST_ROOT: 'a'},
+        });
+      }
       const b = at('b', tmp);
       expect(b.stdout).toContain('Grand totals');
       expect(b).toEqual(at('b', freshTmp()));
@@ -261,6 +277,13 @@ process.stdout.write(answer);
       };
       fs.writeFileSync(input, '1');
       expect(at('a')).toBe('a:1');
+      // Nothing changed: both gathers are read back, nothing written again.
+      if (hasModuleHooks) {
+        const warm = allInodes(tmp);
+        expect(warm.size).toBe(2);
+        expect(at('a')).toBe('a:1');
+        expect(allInodes(tmp)).toEqual(warm);
+      }
       // Only the outer input changes: the outer gathers again while the
       // inner is read back.
       fs.writeFileSync(input, '2');
@@ -271,64 +294,4 @@ process.stdout.write(answer);
       fs.rmSync(dir, {recursive: true, force: true});
     }
   }, 60_000);
-  it('sees a template added or renamed after template discovery was kept inside search', () => {
-    const tmp = keptTmp('nested-listing');
-    const other = makeProject();
-    try {
-      const templates = path.join(other.widgets, 'templates');
-      fs.mkdirSync(templates, {recursive: true});
-      /** @param {string} name @param {string} description */
-      const template = (name, description) => {
-        fs.writeFileSync(
-          path.join(templates, `${name}.doc.mjs`),
-          `export default {type: 'block', name: '${name}', description: '${description}', category: 'Widget - Gate'};\n`,
-        );
-        fs.writeFileSync(
-          path.join(templates, `${name}.tsx`),
-          `export default function Block() { return null; }\n`,
-        );
-      };
-      template('gate-fixture', 'Gate fixture block with running totals.');
-      const ask = ['search', 'gate', 'fixture', 'block'];
-      const searchAt = (/** @type {string} */ where) =>
-        run(ask, {tmp: where, cwd: other.dir});
-      // Template discovery is kept by template --list; search then keeps its
-      // catalog with discovery read back inside it.
-      run(['template', '--list'], {tmp, cwd: other.dir, json: false});
-      const kept = templatesEntries(tmp);
-      expect(kept.size).toBe(1);
-      searchAt(tmp);
-      const catalogs = entries(tmp);
-      const inodes = () =>
-        new Map([...entries(tmp)].map(([name, {ino}]) => [name, ino]));
-      const warm = inodes();
-      expect(catalogs.size).toBeGreaterThan(0);
-      // The warm path hits: the same answer from the same files.
-      searchAt(tmp);
-      expect(inodes()).toEqual(warm);
-      expect(templatesEntries(tmp)).toEqual(kept);
-      // A template added: the next search sees it, as a fresh one does.
-      template('gate-fixture-extra', 'Gate fixture extra block for ledgers.');
-      const added = searchAt(tmp);
-      expect(added.stdout).toContain('gate-fixture-extra');
-      expect(added).toEqual(searchAt(freshTmp()));
-      // Renamed: likewise.
-      for (const ext of ['.doc.mjs', '.tsx']) {
-        fs.renameSync(
-          path.join(templates, `gate-fixture-extra${ext}`),
-          path.join(templates, `gate-fixture-renamed${ext}`),
-        );
-      }
-      fs.writeFileSync(
-        path.join(templates, 'gate-fixture-renamed.doc.mjs'),
-        `export default {type: 'block', name: 'gate-fixture-renamed', description: 'Gate fixture extra block for ledgers.', category: 'Widget - Gate'};\n`,
-      );
-      const renamed = searchAt(tmp);
-      expect(renamed.stdout).toContain('gate-fixture-renamed');
-      expect(renamed.stdout).not.toContain('gate-fixture-extra');
-      expect(renamed).toEqual(searchAt(freshTmp()));
-    } finally {
-      fs.rmSync(other.dir, {recursive: true, force: true});
-    }
-  }, 180_000);
 });

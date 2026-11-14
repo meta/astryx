@@ -455,8 +455,8 @@ export function Pagination({
   // Track the page optimistically so rapid prev/next clicks advance from the
   // in-flight target instead of stalling on the last committed page.
   const [optimisticPage, setOptimisticPage] = useOptimistic(page);
-  // Whether the page box keeps a rejected entry, which widens it to fit the
-  // status icon beside the typed text.
+  // A kept rejected entry widens the page box to fit the status icon beside
+  // the typed text.
   const [isPageEntryRejected, setIsPageEntryRejected] = useState(false);
 
   // Roving-tabindex + arrow/Home/End keyboard nav for the dots variant, owned
@@ -772,6 +772,7 @@ export function Pagination({
           <NumberInput
             label={goToPageLabel}
             isLabelHidden
+            entryErrorBehavior="complete"
             value={inputCommittedValue}
             onChange={handleInputCommit}
             min={1}
