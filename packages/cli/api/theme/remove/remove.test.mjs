@@ -180,6 +180,29 @@ describe('themeRemove', () => {
       expect(fs.readFileSync(modulePath(), 'utf-8')).toBe(edited);
     });
 
+    it('after a package upgrade adds an import, names theme use to rewrite the module', async () => {
+      const packageDir = path.join(tmpDir, 'node_modules/@acme/themes');
+      const pkg = JSON.parse(
+        fs.readFileSync(path.join(packageDir, 'package.json'), 'utf-8'),
+      );
+      pkg.exports['./themes/ocean.fonts.css'] = './dist/ocean.fonts.css';
+      fs.writeFileSync(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify(pkg),
+      );
+      fs.writeFileSync(
+        path.join(packageDir, 'dist/ocean.fonts.css'),
+        '/* fonts */\n',
+      );
+      const before = fs.readFileSync(modulePath(), 'utf-8');
+      await expect(themeRemove('ocean', {cwd: tmpDir})).rejects.toMatchObject({
+        code: 'ERR_THEME_INVALID',
+        message: expect.stringContaining('as after a theme package upgrade'),
+        suggestions: [{name: expect.stringMatching(/ theme use ocean$/)}],
+      });
+      expect(fs.readFileSync(modulePath(), 'utf-8')).toBe(before);
+    });
+
     it('never deletes a module outside the project through a symlinked src', async () => {
       const outside = fs.mkdtempSync(
         path.join(REPO_ROOT, '.astryx-theme-outside-'),

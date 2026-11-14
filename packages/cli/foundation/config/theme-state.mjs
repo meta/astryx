@@ -482,7 +482,7 @@ export function renderThemeModule(
   }`;
 }
 
-/** A JSON string literal as the renderer writes it, or null. */
+/** A JSON string literal as the renderer writes it. */
 const JSON_STRING_RE = /"(?:[^"\\]|\\.)*"/u;
 const NAMED_IMPORT_RE = new RegExp(
   `^import \\{([A-Za-z_$][\\w$]*) as _astryxTheme\\d+\\} from (${JSON_STRING_RE.source});$`,

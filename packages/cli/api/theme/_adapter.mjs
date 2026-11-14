@@ -1499,9 +1499,18 @@ async function removeLastTheme(state, slug) {
   const original = module.expectedOriginal;
   const source = original?.toString('utf-8') ?? '';
   if (original == null || !(await isUneditedModule(state, source))) {
+    // A module the CLI wrote whose imports differ from what it writes now (a
+    // theme package upgrade moves them) is rewritten by `theme use`.
+    const use = formatCliCommand(`theme use ${slug}`, state.projectDir);
+    const rewritable =
+      original != null && isUneditedThemeModule(source, module.typescript);
     throw new AstryxError(
-      `Theme "${slug}" is the only added theme, and ${module.path} has changes the CLI did not write, so the CLI leaves it. To stop using app themes, delete ${module.path} and remove its import and the Theme wrapper from the app root.`,
-      undefined,
+      rewritable
+        ? `Theme "${slug}" is the only added theme, and ${module.path} differs from what the CLI writes for it now, as after a theme package upgrade, so the CLI leaves it. Run \`${use}\` to rewrite it, then remove the theme again.`
+        : `Theme "${slug}" is the only added theme, and ${module.path} has changes the CLI did not write, so the CLI leaves it. To stop using app themes, delete ${module.path} and remove its import and the Theme wrapper from the app root.`,
+      rewritable
+        ? [{name: use, reason: 'rewrite the module, then remove the theme'}]
+        : undefined,
       ERROR_CODES.ERR_THEME_INVALID,
     );
   }

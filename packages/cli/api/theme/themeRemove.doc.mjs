@@ -43,7 +43,7 @@ export const doc = {
     },
     {
       code: 'ERR_THEME_INVALID',
-      when: 'the theme is the default and other themes are added (the suggestions name `theme use` with up to three of them), it is the only added theme and the module has changes the CLI did not write (the module stays; the suggestion is `theme list`), generated state is invalid, or the slug is not added and names a local theme folder that is broken',
+      when: 'the theme is the default and other themes are added (the suggestions name `theme use` with up to three of them), it is the only added theme and the module has changes the CLI did not write (the module stays and the message gives the steps by hand; when only its imports differ, as after a theme package upgrade, the suggestion is `theme use <slug>`, which rewrites it), generated state is invalid, or the slug is not added and names a local theme folder that is broken',
     },
     {
       code: 'ERR_WRITE_FAILED',
