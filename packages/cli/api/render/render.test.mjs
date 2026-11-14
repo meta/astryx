@@ -569,6 +569,21 @@ describe('render(): every write stays inside the current folder', () => {
     const pkg = /** @type {any} */ (await render('ext-pkg/src/page.tsx', {cwd: dir}));
     expect(pkg.data.files).toEqual(['page.tsx', 'ui/Panel.tsx']);
     expect(fs.readFileSync(path.join(dir, 'ext-pkg/src/page.html'), 'utf8')).toContain('Panel from the package alias');
+    // A package named alone: its tsconfig field, else its tsconfig.json,
+    // never its code `main`.
+    for (const [name, files] of [
+      ['js-main', {'package.json': '{"name":"js-main","version":"1.0.0","main":"index.js"}', 'index.js': 'module.exports = {};\n', 'tsconfig.json': '{"compilerOptions": {"paths": {"@ui/*": ["${configDir}/src/ui/*"]}}}\n'}],
+      ['field', {'package.json': '{"name":"field","version":"1.0.0","main":"index.js","tsconfig":"./configs/base.json"}', 'index.js': 'module.exports = {};\n', 'configs/base.json': '{"compilerOptions": {"paths": {"@ui/*": ["${configDir}/src/ui/*"]}}}\n'}],
+    ]) {
+      const root = `ext-${name}`;
+      put(`${root}/package.json`, `{"name":"${root}","private":true}`);
+      for (const [file, text] of Object.entries(files)) put(`${root}/node_modules/${name}/${file}`, text);
+      put(`${root}/tsconfig.json`, `{"extends": "${name}"}\n`);
+      put(`${root}/src/ui/Panel.tsx`, 'export function Panel() { return <section>Panel</section>; }\n');
+      put(`${root}/src/page.tsx`, "import {Panel} from '@ui/Panel';\nexport default function Page() { return <Panel />; }\n");
+      const r = /** @type {any} */ (await render(`${root}/src/page.tsx`, {cwd: dir}));
+      expect(r.data.files, name).toEqual(['page.tsx', 'ui/Panel.tsx']);
+    }
   }, 60_000);
 
   it('gives back a page that imports through an alias where this project\'s alias points', async () => {
