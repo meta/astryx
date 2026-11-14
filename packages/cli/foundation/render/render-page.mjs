@@ -882,12 +882,20 @@ export async function renderPage(entry, options = {}) {
         message: `${path.relative(dir, asset).split(path.sep).join('/')} is ${how} but not carried in the file: ${why}, so --reverse cannot give it back.`,
       });
     };
-    // The same limit as a file the page shows, which a render inlines.
-    if (fs.statSync(asset).size > MAX_ASSET_BYTES) {
-      leaveOut(`it is larger than ${MAX_ASSET_BYTES / 1048576} MB, the most a rendered page carries of one file`);
+    /** @type {Buffer} */
+    let head;
+    try {
+      // The same limit as a file the page shows, which a render inlines.
+      if (fs.statSync(asset).size > MAX_ASSET_BYTES) {
+        leaveOut(`it is larger than ${MAX_ASSET_BYTES / 1048576} MB, the most a rendered page carries of one file`);
+        return;
+      }
+      head = headOf(asset);
+    } catch (e) {
+      leaveOut(`it cannot be read (${/** @type {NodeJS.ErrnoException} */ (e).code ?? 'an error from the file system'})`);
       return;
     }
-    if (!isAssetBytes(headOf(asset))) {
+    if (!isAssetBytes(head)) {
       leaveOut('its bytes are not a known image, font or media format');
       return;
     }
