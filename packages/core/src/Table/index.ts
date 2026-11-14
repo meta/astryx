@@ -74,6 +74,7 @@ export {
   resolveColumnWidths,
   DEFAULT_MIN_COLUMN_WIDTH,
 } from './columnUtils';
+export {registerFixedHeightColumn} from './tableColumnAdmission';
 export type {
   TableColumn,
   TableColumnAlign,

@@ -1,8 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 /**
- * @file Private fixed-height column admission.
- * @input First-party columns whose structural renderer is owned and bounded.
- * @output Identity-based admission without a new caller assertion prop.
+ * @file Fixed-height column admission.
+ * @input Columns whose structural renderer is known to keep a uniform row pitch.
+ * @output Identity-based admission for Table row windowing.
  * @position Shared Table protocol, with actual pitch validated after mount.
  */
 import type {ReactNode} from 'react';
@@ -12,7 +12,11 @@ const logicalRenderers = new WeakMap<
   object,
   (logicalIndex: number) => ReactNode
 >();
-/** Admits a first-party column to fixed-height windowing. */
+/**
+ * Admits a custom-rendered column to fixed-height row windowing.
+ *
+ * Call this only when the renderer keeps the same row height for every item.
+ */
 export function registerFixedHeightColumn<T extends Record<string, unknown>>(
   column: TableColumn<T>,
   isCompatible = true,

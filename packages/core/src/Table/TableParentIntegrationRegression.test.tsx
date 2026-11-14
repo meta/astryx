@@ -7,6 +7,7 @@ import {TableBody} from './TableBody';
 import {TableCell} from './TableCell';
 import {TableRow} from './TableRow';
 import type {TablePlugin} from './types';
+import {registerFixedHeightColumn} from './utils';
 import {useTableRowsVirtualization} from './plugins/virtualization/useTableRowsVirtualization';
 const columns = [{key: 'name', header: 'Name'}];
 afterEach(() => {
@@ -94,6 +95,38 @@ describe('Table parent compatibility regressions', () => {
     expect(container.querySelector('td')?.className).not.toContain(
       'overflowStyles',
     );
+  });
+  it('admits a uniform custom renderer through the public Table utility', () => {
+    const customColumn = {
+      key: 'name',
+      header: 'Name',
+      renderCell: (item: {name: string}) => item.name,
+    };
+    registerFixedHeightColumn(customColumn);
+    function Fixture() {
+      const virtualization = useTableRowsVirtualization({
+        rowHeight: 56,
+        initialViewportHeight: 240,
+      });
+      return (
+        <Table
+          data={Array.from({length: 20}, (_, index) => ({
+            id: String(index),
+            name: `Item ${index}`,
+          }))}
+          columns={[customColumn]}
+          idKey="id"
+          virtualization={virtualization}
+        />
+      );
+    }
+
+    const {container} = render(<Fixture />);
+    const mountedRows = container.querySelectorAll(
+      'tbody > tr:not([aria-hidden])',
+    );
+    expect(mountedRows.length).toBeGreaterThan(0);
+    expect(mountedRows.length).toBeLessThan(20);
   });
   it('reports no header row to scroll-wrapper plugins in children mode', () => {
     const headerRowCounts: number[] = [];

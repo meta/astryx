@@ -1,9 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 import {describe, expect, it} from 'vitest';
-import {
-  registerFixedHeightColumn,
-  withLogicalPositionWidths,
-} from './tableColumnAdmission';
+import {registerFixedHeightColumn} from './utils';
+import {withLogicalPositionWidths} from './tableColumnAdmission';
 import type {TableColumn} from './types';
 
 type Row = {id: string};

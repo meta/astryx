@@ -242,7 +242,7 @@ export const docs = {
       name: 'virtualization',
       type: 'TableVirtualizationCapability | TableVirtualizationCapability[]',
       description:
-        "Geometry-only capability from useTableRowsVirtualization or useTableColumnsVirtualization, or a list with at most one of each; any other list renders without windowing. useTableColumnsVirtualization({initialViewportWidth}) mounts only the unpinned columns near the viewport. useTableRowsVirtualization({rowHeight, initialViewportHeight}) takes sizes that are both positive finite CSS pixels; the Table scrolls inside the height its parent gives it, and initialViewportHeight only sizes the first window. Give the Table's parent a height, fixed or relative, or a flex child, so windowing can bound the rows; with no height every row renders. Pass complete flat data and an explicit idKey. Default text truncates; custom renderers, wrapping, structural plugins, incompatible offsets, invalid identity or unrepresentable geometry use full rendering. Logical row positions include the header.",
+        "Geometry-only capability from useTableRowsVirtualization or useTableColumnsVirtualization, or a list with at most one of each; any other list renders without windowing. useTableColumnsVirtualization({initialViewportWidth}) mounts only the unpinned columns near the viewport. useTableRowsVirtualization({rowHeight, initialViewportHeight}) takes sizes that are both positive finite CSS pixels; the Table scrolls inside the height its parent gives it, and initialViewportHeight only sizes the first window. Give the Table's parent a height, fixed or relative, or a flex child, so windowing can bound the rows; with no height every row renders. Pass complete flat data and an explicit idKey. Default text truncates; custom renderers, wrapping, structural plugins, incompatible offsets, invalid identity or unrepresentable geometry use full rendering. Call registerFixedHeightColumn(column) from @astryxdesign/core/Table or @astryxdesign/core/Table/utils for a custom renderer that keeps one row pitch. Logical row positions include the header.",
     },
     {
       name: 'plugins',
@@ -322,6 +322,11 @@ export const docs = {
         guidance: true,
         description:
           'Use the data-driven API from React Server Components: proportional(), pixel(), and column definitions without function props are server-safe. Columns using renderCell (or any function prop) need the table wrapped in a "use client" component, since functions cannot cross the server-client boundary.',
+      },
+      {
+        guidance: true,
+        description:
+          'For a renderCell column whose content keeps one row pitch, call registerFixedHeightColumn(column) before passing it to a row-virtualized Table. Leave variable-height custom renderers unregistered so Table safely renders every row.',
       },
       {
         guidance: false,
@@ -405,7 +410,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Data-driven API is RSC-safe: proportional(), pixel(), column defs w/o function props work in Server Components. renderCell (any function prop) requires a "use client" wrapper.',
+          'Data-driven API is RSC-safe: proportional(), pixel(), column defs w/o function props work in Server Components. renderCell (any function prop) requires a "use client" wrapper. A uniform-height custom renderer can opt into row windowing with registerFixedHeightColumn(column).',
       },
       {
         guidance: false,
