@@ -103,6 +103,18 @@ describe('mcpTools', () => {
     }
   });
 
+  it('keeps an experimental command in its namespace', () => {
+    const experimental = tools.filter(t => t.words[0] === 'experimental');
+    expect(experimental.length).toBeGreaterThan(0);
+    for (const tool of experimental) {
+      expect(tool.name.startsWith('experimental_'), tool.name).toBe(true);
+      expect(tool.description.startsWith('[experimental]'), tool.name).toBe(true);
+    }
+    for (const tool of tools.filter(t => t.words[0] !== 'experimental')) {
+      expect(tool.description.startsWith('[experimental]'), tool.name).toBe(false);
+    }
+  });
+
   it('keeps only names MCP clients accept', () => {
     for (const tool of tools) {
       expect(tool.name).toMatch(/^[A-Za-z0-9_-]{1,64}$/);
