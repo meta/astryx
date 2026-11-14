@@ -16,6 +16,7 @@ import {
   GREEN,
   MAX_AGE_MS,
   listVerdicts,
+  ancestorsOf,
   releaseScope,
   releaseVersion,
 } from './webkit-release-scope.mjs';
@@ -287,6 +288,7 @@ describe('the release check WebKit scope', () => {
         version: '0.7.13',
         verdicts: [green('2026-11-15T11:00:00Z')],
         now,
+        isAncestor: () => true,
       }).full,
     ).toBe(false);
   });
@@ -297,6 +299,7 @@ describe('the release check WebKit scope', () => {
       version: '0.7.13',
       verdicts: [green(old)],
       now,
+      isAncestor: () => true,
     });
     expect(scope.full).toBe(true);
     expect(scope.reason).toContain('more than 7');
@@ -307,6 +310,7 @@ describe('the release check WebKit scope', () => {
       version: '0.7.13',
       verdicts: [green('2026-11-08T11:00:00Z'), failed('2026-11-15T11:00:00Z')],
       now,
+      isAncestor: () => true,
     });
     expect(scope.full).toBe(true);
     expect(scope.reason).toContain('failed');
@@ -351,15 +355,25 @@ describe('the release check WebKit scope', () => {
     expect(verdicts).toEqual([
       {name: FAILED, createdAt: '2026-11-08T11:00:00Z', sha: 'e'.repeat(40)},
     ]);
-    const scope = releaseScope({version: '0.7.13', verdicts, now});
+    const scope = releaseScope({
+      version: '0.7.13',
+      verdicts,
+      now,
+      isAncestor: () => true,
+    });
     expect(scope.full).toBe(true);
     expect(scope.reason).toContain('failed');
   });
 
   it('runs the full suite when no full weekly run is recorded', () => {
-    expect(releaseScope({version: '0.7.13', verdicts: [], now}).full).toBe(
-      true,
-    );
+    expect(
+      releaseScope({
+        version: '0.7.13',
+        verdicts: [],
+        now,
+        isAncestor: () => true,
+      }).full,
+    ).toBe(true);
   });
 
   it('runs the full suite at every minor release, and when the version is unknown', () => {
@@ -368,6 +382,7 @@ describe('the release check WebKit scope', () => {
         version: '0.8.0',
         verdicts: [green('2026-11-15T11:00:00Z')],
         now,
+        isAncestor: () => true,
       }).full,
     ).toBe(true);
     expect(
@@ -375,6 +390,7 @@ describe('the release check WebKit scope', () => {
         version: null,
         verdicts: [green('2026-11-15T11:00:00Z')],
         now,
+        isAncestor: () => true,
       }).full,
     ).toBe(true);
   });
@@ -401,6 +417,89 @@ describe('the release check WebKit scope', () => {
     );
     for (const id of ['pr-interaction-webkit', 'interaction-legs'])
       expect(ci.jobs[id].permissions.actions, id).toBe('read');
+  });
+
+  it('does not count a newer green run at a commit after the release: the full suite runs', () => {
+    const scope = releaseScope({
+      version: '0.7.13',
+      verdicts: [green('2026-11-15T11:00:00Z', 'c'.repeat(40))],
+      now,
+      isAncestor: () => false,
+    });
+    expect(scope.full).toBe(true);
+    expect(scope.reason).toContain("release's history");
+  });
+
+  it('runs the subset from an older green run in the release history, past a newer run after the release', () => {
+    const scope = releaseScope({
+      version: '0.7.13',
+      verdicts: [
+        green('2026-11-15T11:00:00Z', 'c'.repeat(40)),
+        green('2026-11-12T11:00:00Z', 'a'.repeat(40)),
+      ],
+      now,
+      isAncestor: sha => sha === 'a'.repeat(40),
+    });
+    expect(scope.full).toBe(false);
+    expect(scope.reason).toContain('aaaaaaaaaa');
+    expect(scope.reason).toContain('1 newer run(s)');
+  });
+
+  it('runs the full suite when the last run in the release history failed, whatever a later run says', () => {
+    const scope = releaseScope({
+      version: '0.7.13',
+      verdicts: [
+        green('2026-11-15T11:00:00Z', 'c'.repeat(40)),
+        failed('2026-11-14T11:00:00Z', 'b'.repeat(40)),
+      ],
+      now,
+      isAncestor: sha => sha === 'b'.repeat(40),
+    });
+    expect(scope.full).toBe(true);
+    expect(scope.reason).toContain('failed');
+  });
+
+  it('counts a commit as in the history only when the compare API says ahead or identical, and a failed lookup as not', async () => {
+    const status = {
+      ['a'.repeat(40)]: 'ahead',
+      ['b'.repeat(40)]: 'identical',
+      ['c'.repeat(40)]: 'behind',
+      ['d'.repeat(40)]: 'diverged',
+    };
+    const asked = [];
+    const github = {
+      rest: {
+        repos: {
+          compareCommits: async ({base, head}) => {
+            asked.push([base.slice(0, 1), head]);
+            if (!(base in status)) throw new Error('HTTP 502');
+            return {data: {status: status[base]}};
+          },
+        },
+      },
+    };
+    const found = await ancestorsOf({
+      github,
+      owner: 'meta',
+      repo: 'astryx',
+      head: 'f'.repeat(40),
+      shas: [...Object.keys(status), 'e'.repeat(40), 'a'.repeat(40)],
+    });
+    expect([...found].sort()).toEqual(['a'.repeat(40), 'b'.repeat(40)]);
+    // Each commit is compared once, always against the release head.
+    expect(asked).toHaveLength(5);
+    expect(asked.every(([, head]) => head === 'f'.repeat(40))).toBe(true);
+  });
+
+  it("gives each release scope step the pull request's head commit", () => {
+    const steps = Object.values(ci.jobs)
+      .flatMap(job => job.steps ?? [])
+      .filter(step => step.name === 'Decide the WebKit scope');
+    expect(steps.length).toBe(2);
+    for (const step of steps)
+      expect(step.env.RELEASE_HEAD_SHA).toBe(
+        '${{ github.event.pull_request.head.sha }}',
+      );
   });
 });
 

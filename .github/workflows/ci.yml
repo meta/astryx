@@ -2932,6 +2932,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           RELEASE_TITLE: ${{ github.event.pull_request.title }}
+          RELEASE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           if [ "${WEBKIT_WEEKLY:-}" = true ]; then
             echo "The weekly run: every WebKit interaction spec."
@@ -3411,6 +3412,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           RELEASE_TITLE: ${{ github.event.pull_request.title }}
+          RELEASE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           if [ "${WEBKIT_WEEKLY:-}" = true ]; then
             echo "The weekly run: every WebKit interaction spec."

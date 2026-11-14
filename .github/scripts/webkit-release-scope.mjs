@@ -12,6 +12,8 @@
  *   a pull request runs, while the last full weekly run on main is green and
  *   at most seven days old. It runs the full suite when that run failed, is
  *   older, or is missing, and at every minor release (spec:AST-030 DEC-24).
+ *   Only a weekly run at a commit in the release's own history counts: a run
+ *   at a later main commit tested code the release does not have.
  */
 
 import {createRequire} from 'node:module';
@@ -40,9 +42,16 @@ export function releaseVersion(title) {
  * @param {Array<{name: string, createdAt: string, sha?: string}>} options.verdicts
  *   the verdicts Main's own runs on `main` recorded (listVerdicts)
  * @param {number} options.now milliseconds since the epoch
+ * @param {(sha: string) => boolean} [options.isAncestor] whether a commit is
+ *   in the release head's history (the head itself included); unknown is no
  * @returns {{full: boolean, reason: string}}
  */
-export function releaseScope({version, verdicts, now}) {
+export function releaseScope({
+  version,
+  verdicts,
+  now,
+  isAncestor = () => false,
+}) {
   if (version == null)
     return {
       full: true,
@@ -61,8 +70,21 @@ export function releaseScope({version, verdicts, now}) {
       full: true,
       reason: 'no full weekly WebKit run is recorded, so the full suite runs',
     };
-  const last = recorded[0];
-  const at = last.sha ? ` at ${last.sha.slice(0, 10)}` : '';
+  const inHistory = recorded.filter(
+    verdict => verdict.sha && isAncestor(verdict.sha),
+  );
+  if (inHistory.length === 0)
+    return {
+      full: true,
+      reason: `none of the ${recorded.length} recorded full weekly run(s) is at a commit in the release's history, so the full suite runs`,
+    };
+  const last = inHistory[0];
+  const newer = recorded.indexOf(last);
+  const at =
+    ` at ${last.sha.slice(0, 10)}` +
+    (newer
+      ? ` (${newer} newer run(s), at commits after the release, do not count)`
+      : '');
   if (last.name === FAILED)
     return {
       full: true,
@@ -100,10 +122,56 @@ export async function listVerdicts({github, owner, repo}) {
   return verdicts;
 }
 
-/** The one REST call listVerdicts makes, without Octokit. */
+/**
+ * Which recorded commits are in the release head's history: the compare API
+ * says `ahead` or `identical` for a commit the head contains. A failed lookup
+ * counts as not in it, so the full suite runs.
+ * @param {{github: object, owner: string, repo: string, head: string, shas: string[]}} options
+ * @returns {Promise<Set<string>>}
+ */
+export async function ancestorsOf({github, owner, repo, head, shas}) {
+  const found = new Set();
+  for (const sha of new Set(shas)) {
+    try {
+      const {data} = await github.rest.repos.compareCommits({
+        owner,
+        repo,
+        base: sha,
+        head,
+        per_page: 1,
+      });
+      if (data.status === 'ahead' || data.status === 'identical')
+        found.add(sha);
+    } catch (error) {
+      console.error(
+        `::warning title=WebKit weekly ancestry unreadable::${sha.slice(0, 10)}: ${error.message}`,
+      );
+    }
+  }
+  return found;
+}
+
+/** The REST calls this script makes, without Octokit. */
 function restClient(token) {
+  const get = async (url, what) => {
+    const response = await fetch(url, {
+      headers: {
+        authorization: `Bearer ${token}`,
+        accept: 'application/vnd.github+json',
+      },
+    });
+    if (!response.ok) throw new Error(`${what}: HTTP ${response.status}`);
+    return {data: await response.json()};
+  };
   return {
     rest: {
+      repos: {
+        compareCommits: ({owner, repo, base, head}) =>
+          get(
+            `https://api.github.com/repos/${owner}/${repo}/compare/${base}...${head}?per_page=1`,
+            `comparing ${base.slice(0, 10)} with the release head`,
+          ),
+      },
       actions: {
         listArtifactsForRepo: async ({owner, repo, name, per_page}) => {
           const response = await fetch(
@@ -129,13 +197,29 @@ function restClient(token) {
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   // A failure to read the record counts as no record: the full suite runs.
   let verdicts = [];
+  let inHistory = new Set();
+  const head = process.env.RELEASE_HEAD_SHA ?? '';
+  const now = Date.now();
   try {
     const [owner, repo] = String(process.env.GITHUB_REPOSITORY).split('/');
-    verdicts = await listVerdicts({
-      github: restClient(process.env.GITHUB_TOKEN),
-      owner,
-      repo,
-    });
+    const github = restClient(process.env.GITHUB_TOKEN);
+    verdicts = await listVerdicts({github, owner, repo});
+    // Only a run of the last 7 days can choose the subset, so only those
+    // commits are compared with the release head.
+    if (/^[0-9a-f]{40}$/.test(head))
+      inHistory = await ancestorsOf({
+        github,
+        owner,
+        repo,
+        head,
+        shas: verdicts
+          .filter(v => v.sha && now - Date.parse(v.createdAt) <= MAX_AGE_MS)
+          .map(v => v.sha),
+      });
+    else
+      console.error(
+        '::warning title=Release head unknown::RELEASE_HEAD_SHA is not a commit, so no weekly run counts',
+      );
   } catch (error) {
     console.error(
       `::warning title=WebKit weekly record unreadable::${error.message}`,
@@ -144,7 +228,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const {full, reason} = releaseScope({
     version: releaseVersion(process.env.RELEASE_TITLE),
     verdicts,
-    now: Date.now(),
+    now,
+    isAncestor: sha => inHistory.has(sha),
   });
   console.error(`Release WebKit scope: ${reason}.`);
   console.log(`WEBKIT_ALL_SPECS=${full}`);
