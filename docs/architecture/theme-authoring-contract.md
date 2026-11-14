@@ -125,6 +125,9 @@ Normalization follows one precedence order:
 
 Explicit values win within their surface. Component maps merge by component,
 style key, and CSS property rather than replacing the entire inherited target.
+A value left `undefined` in a component block, pseudo-class block, color-mode
+block, surface, or adaptation rule is not set, and an inherited value stays;
+`null` keeps its existing meaning.
 An explicit icon, indicator, or `componentIcons` entry replaces the inherited
 entry for the same key whole. An explicit `iconVariants` list replaces the
 inherited list; an omitted list is inherited. An inherited function entry keeps

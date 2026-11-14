@@ -216,18 +216,59 @@ describe('generateThemeRules', () => {
     expect(warnings).toEqual([]);
   });
 
-  it('keeps an inherited part value a child leaves undefined', () => {
+  it('keeps an inherited part value a child leaves undefined, in a style key and a color-mode block', () => {
     const base = defineTheme({
       name: 'unset-base',
-      components: {button: {base: {padding: '8px'}}},
+      components: {
+        button: {base: {padding: '8px', '@dark': {color: 'white'}}},
+      },
     });
     const child = defineTheme({
       extends: base,
       name: 'unset-child',
-      components: {button: {base: {padding: undefined as unknown as string}}},
+      components: {
+        button: {
+          base: {
+            padding: undefined as unknown as string,
+            '@dark': {color: undefined as unknown as string},
+          },
+        },
+      },
     });
-    expect(child.components?.button?.base?.padding).toBe('8px');
-    expect(generateThemeRules(child).join('\n')).toMatch(/padding: 8px;/);
+    const merged = child.components?.button?.base as Record<string, unknown>;
+    expect(merged.padding).toBe('8px');
+    expect(merged['@dark']).toEqual({color: 'white'});
+    const css = generateThemeRules(child).join('\n');
+    expect(css).toMatch(/padding: 8px;/);
+    expect(css).toMatch(/color: white;/);
+    expect(css).not.toMatch(/:\s*undefined;/);
+  });
+
+  it('keeps null as it was: it replaces an inherited value and is written as it is', () => {
+    const base = defineTheme({
+      name: 'null-base',
+      components: {
+        button: {base: {padding: '8px', '@dark': {color: 'white'}}},
+      },
+    });
+    const child = defineTheme({
+      extends: base,
+      name: 'null-child',
+      components: {
+        button: {
+          base: {
+            padding: null as unknown as string,
+            '@dark': {color: null as unknown as string},
+          },
+        },
+      },
+    });
+    const merged = child.components?.button?.base as Record<string, unknown>;
+    expect(merged.padding).toBeNull();
+    expect(merged['@dark']).toEqual({color: null});
+    const css = generateThemeRules(child).join('\n');
+    expect(css).toMatch(/padding: null;/);
+    expect(css).not.toMatch(/padding: 8px;/);
   });
 
   it('includes explicit component overrides', () => {
