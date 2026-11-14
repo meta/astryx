@@ -69,6 +69,7 @@ export function commandAvailable(cmd, base) {
   return isAvailable(
     base,
     commandDocsOf(cmd)?.doc.requires,
+    commandPath(cmd),
     childCommands(cmd).map(child => commandAvailable(child, base)),
   );
 }
@@ -85,7 +86,7 @@ export function optionAvailable(cmd, option, base) {
   const declared = (commandDocsOf(cmd)?.doc.options ?? []).find(
     o => longFlag(o.flag) === option.long,
   );
-  return isAvailable(base, declared?.requires);
+  return isAvailable(base, declared?.requires, commandPath(cmd));
 }
 
 /**
@@ -179,7 +180,7 @@ export function addBaseHelpText(program) {
       return '';
     }
     const requires = commandDocsOf(command)?.doc.requires ?? [];
-    const missing = missingSteps(base, requires);
+    const missing = missingSteps(base, requires, commandPath(command));
     if (missing.length === 0) {
       return `astryx ${commandPath(command)} needs steps the active base ${base.name} does not provide.\n`;
     }
@@ -268,20 +269,28 @@ export function refusesHereFirst(doc, cwd) {
 }
 
 /**
- * Every step the commands below a group declare.
+ * Every step the commands below a group declare that `base` does not serve
+ * them.
  * @param {Command} group
+ * @param {ActiveBase} base
  * @returns {string[]}
  */
-function stepsBelow(group) {
+function stepsBelow(group, base) {
   return childCommands(group).flatMap(child => [
-    ...(commandDocsOf(child)?.doc.requires ?? []),
-    ...stepsBelow(child),
+    ...missingSteps(
+      base,
+      commandDocsOf(child)?.doc.requires,
+      commandPath(child),
+    ),
+    ...stepsBelow(child, base),
   ]);
 }
 
 /** The adapters the check loaded for the running command. */
 let checkedAdapters =
   /** @type {Record<string, Record<string, unknown>>} */ ({});
+/** The base the check passed the running command on, when it is not Core. */
+let checkedBase = /** @type {ActiveBase | null} */ (null);
 
 /**
  * The adapters of the run's base that the check loaded, by capability. A
@@ -294,6 +303,16 @@ export function runAdapters() {
 }
 
 /**
+ * What a command needs to call a step of the run's base, or null when the
+ * run's base is Core, whose steps the command performs itself.
+ * @returns {import('../../../api/base/call-step.mjs').StepCall | null}
+ */
+export function runStepCall() {
+  if (checkedBase == null) return null;
+  return {base: checkedBase, adapters: checkedAdapters, cwd: process.cwd()};
+}
+
+/**
  * The check, as a preAction hook: resolve the run's base, then check the
  * command, each given option, and each given argument value against it.
  * The first failure ends the run.
@@ -303,6 +322,7 @@ export function runAdapters() {
  */
 export async function checkRun(program, actionCommand) {
   checkedAdapters = {};
+  checkedBase = null;
   if (actionCommand === program) {
     // A bare run declares no step, but it answers from the run's base.
     const resolution = runBase();
@@ -318,7 +338,7 @@ export async function checkRun(program, actionCommand) {
   // A group none of whose commands the base serves is a hidden name too.
   if (!commandAvailable(actionCommand, base) && !doc?.requires?.length) {
     const requires = [
-      ...new Set(stepsBelow(actionCommand).filter(step => !base.steps.includes(step))),
+      ...new Set(stepsBelow(actionCommand, base)),
     ];
     refuseRequirement({
       command: commandPath(actionCommand),
@@ -346,7 +366,10 @@ export async function checkRun(program, actionCommand) {
     base,
   );
   if (!verdict.ok) refuseRequirement(verdict.requirement);
-  else checkedAdapters = verdict.adapters;
+  else {
+    checkedAdapters = verdict.adapters;
+    checkedBase = base;
+  }
 }
 
 /**
@@ -401,7 +424,9 @@ export function exampleAvailable(root, cli, base) {
       continue;
     }
     const arg = argumentAt(commandDocsOf(cmd)?.doc.args ?? [], positional);
-    if (!isAvailable(base, arg?.requires?.[token])) return false;
+    if (!isAvailable(base, arg?.requires?.[token], commandPath(cmd))) {
+      return false;
+    }
     // A value of an argument that names an item names one of Core's items,
     // which this base does not have.
     if (arg?.names != null && !isPlaceholder(token)) return false;

@@ -94,6 +94,7 @@
  *   | 'ERR_BASE_CAPABILITY'
  *   | 'ERR_BASE_NOT_FOUND'
  *   | 'ERR_BASE_AMBIGUOUS'
+ *   | 'ERR_BASE_ADAPTER'
  *   | 'ERR_RENDER_COMPILE'
  *   | 'ERR_RENDER_NO_DEFAULT_EXPORT'
  *   | 'ERR_RENDER_MISSING_DEPENDENCY'
@@ -300,6 +301,12 @@ export const ERROR_CODES = Object.freeze({
    * none with `--base`. Nothing was done.
    */
   ERR_BASE_AMBIGUOUS: 'ERR_BASE_AMBIGUOUS',
+  /**
+   * The active base's adapter threw, or returned something that is not a
+   * step result or does not match the step's contract. The message names the
+   * base, the step, and the module. Nothing was written.
+   */
+  ERR_BASE_ADAPTER: 'ERR_BASE_ADAPTER',
 
   // ── Render (experimental) ────────────────────────────────────────
   /**

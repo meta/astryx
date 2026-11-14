@@ -439,7 +439,7 @@ describe('the requirement check', () => {
       steps: BASE_STEPS.filter(step => step.startsWith('themes.')),
     };
     const ok = await checkRequirements(
-      'demo',
+      'theme build',
       doc,
       {options: new Set(), args: []},
       base,
@@ -448,7 +448,7 @@ describe('the requirement check', () => {
     expect(ok.ok && typeof ok.adapters.themes.compile).toBe('function');
 
     const scaffold = await checkRequirements(
-      'demo',
+      'theme build',
       doc,
       {options: new Set(), args: ['theme']},
       base,
@@ -457,10 +457,22 @@ describe('the requirement check', () => {
       argument: {name: 'kind', value: 'theme'},
       missing: ['themes.scaffold'],
       reason: 'not-declared',
+      module: null,
+    });
+    // A step the base serves passes only for a command that calls it.
+    const notCaller = await checkRequirements(
+      'experimental theme editor show',
+      doc,
+      {options: new Set(), args: []},
+      base,
+    );
+    expect(!notCaller.ok && notCaller.requirement).toMatchObject({
+      missing: ['themes.compile'],
+      reason: 'not-declared',
     });
 
     const broken = await checkRequirements(
-      'demo',
+      'theme build',
       doc,
       {options: new Set(), args: []},
       {...base, adapters: {themes: './adapters/missing.mjs'}},
@@ -674,7 +686,7 @@ describe('a project whose only base is not Core', () => {
   );
 
   it(
-    'serves no step from a declared adapter, and never loads it',
+    'lists a declared step in help without loading its adapter, and loads it for a run',
     () => {
       const dir = project({
         '@acme/native-ui': {
@@ -687,14 +699,15 @@ describe('a project whose only base is not Core', () => {
         },
       });
       const help = astryx(['theme', '--help'], dir);
-      expect(help.stdout).not.toMatch(/^ {2}targets /m);
+      expect(help.status).toBe(0);
+      expect(help.stdout).toMatch(/^ {2}targets /m);
       const r = astryx(['--json', 'theme', 'targets'], dir);
       expect(r.status).toBe(1);
       expect(r.json().requirement).toMatchObject({
         missing: ['themes.targets'],
-        reason: 'not-declared',
+        reason: 'failed-to-load',
+        module: './adapters/themes.mjs',
       });
-      expect(r.json().requirement.module).toBeUndefined();
     },
     SLOW,
   );
@@ -985,6 +998,313 @@ describe('a command that refuses outside a project', () => {
       expect(r.json().code).not.toBe('ERR_BASE_NOT_FOUND');
       const plain = astryx(['--json', 'theme', 'use', 'ocean'], empty);
       expect(r.json().code).toBe(plain.json().code);
+    },
+    SLOW,
+  );
+});
+
+/** A native base whose themes adapter compiles to plain token objects. */
+const NATIVE_THEMES_ADAPTER = `
+export function targets() {
+  return {ok: true, value: {targets: [
+    {key: 'button', component: 'Button', props: ['variant:primary'], states: ['pressed']},
+    {key: 'switch-thumb', component: 'Switch', props: [], states: ['checked']},
+  ]}};
+}
+export function compile({theme, name}) {
+  const tokens = theme.value.tokens ?? {};
+  if (tokens['radius-md'] === 'calc(1rem)') {
+    return {ok: false, failure: {code: 'invalid-input', message: 'radius-md "calc(1rem)" has no native value.', at: {file: theme.file}}};
+  }
+  return {
+    ok: true,
+    value: {
+      name,
+      tokenCount: Object.keys(tokens).length,
+      componentCount: 0,
+      files: [{name: name + '.ts', role: 'module', contents: 'export const ' + theme.exportName + ' = ' + JSON.stringify({name, light: tokens}) + ' as const;\\n'}],
+    },
+    notices: ['components are web-only; not compiled'],
+  };
+}
+export function appModule({themes, defaultSlug}) {
+  const imports = themes.map((t, i) => 'import {' + t.exportName + ' as _t' + i + "} from '" + t.module + "';").join('\\n');
+  const entries = themes.map((t, i) => JSON.stringify(t.slug) + ': _t' + i).join(', ');
+  return {ok: true, value: {source: imports + '\\nexport const themes = {' + entries + '} as const;\\nexport const defaultThemeSlug = ' + JSON.stringify(defaultSlug) + ';\\n'}};
+}
+`;
+
+/**
+ * A project on the native base, with local theme sources.
+ * @param {string} adapter the themes adapter module source
+ * @param {string} [declaration] the `themes` adapter declaration
+ * @returns {string}
+ */
+function nativeProject(adapter, declaration = "'./adapters/themes.mjs'") {
+  const dir = project({
+    '@acme/native-ui': {
+      manifest: `export default {base: {adapters: {themes: ${declaration}}}};\n`,
+      files: {'adapters/themes.mjs': adapter},
+    },
+  });
+  write(path.join(dir, 'tsconfig.json'), '{}\n');
+  for (const [slug, accent] of [['matcha', '#3f7d3a'], ['sencha', '#6b8e23']]) {
+    const folder = path.join(dir, 'src', 'themes', slug);
+    write(
+      path.join(folder, `${slug}Theme.doc.mjs`),
+      `/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {type: 'theme', name: '${slug}', displayName: '${slug}', description: '${slug} theme.', maintained: false};\n`,
+    );
+    write(
+      path.join(folder, `${slug}Theme.ts`),
+      `export const ${slug}Theme = {name: '${slug}', tokens: {'color-accent': '${accent}'}};\n`,
+    );
+  }
+  return dir;
+}
+
+describe("theme commands call the native base's themes adapter", () => {
+  it(
+    'theme targets lists the targets the adapter returns, filtered by the CLI',
+    () => {
+      const dir = nativeProject(NATIVE_THEMES_ADAPTER);
+      const all = astryx(['--json', 'theme', 'targets'], dir);
+      expect(all.status).toBe(0);
+      expect(all.json().data).toEqual({
+        filter: null,
+        componentCount: 2,
+        targets: [
+          {key: 'button', component: 'Button', className: '', props: ['variant:primary'], states: ['pressed']},
+          {key: 'switch-thumb', component: 'Switch', className: '', props: [], states: ['checked']},
+        ],
+      });
+      const one = astryx(['--json', 'theme', 'targets', 'switch'], dir);
+      expect(one.json().data.targets.map(t => t.key)).toEqual(['switch-thumb']);
+      const none = astryx(['--json', 'theme', 'targets', 'Sliderx'], dir);
+      expect(none.status).toBe(1);
+      expect(none.json().code).toBe('ERR_UNKNOWN_COMPONENT');
+    },
+    SLOW,
+  );
+
+  it(
+    'theme build writes the files compile returns, and --check compares them',
+    () => {
+      const dir = nativeProject(NATIVE_THEMES_ADAPTER);
+      const source = 'src/themes/matcha/matchaTheme.ts';
+      const built = astryx(['--json', 'theme', 'build', source], dir);
+      expect(built.status, built.stderr).toBe(0);
+      expect(built.json()).toMatchObject({
+        type: 'theme.build.base',
+        data: {
+          name: 'matcha',
+          base: '@acme/native-ui',
+          tokenCount: 1,
+          componentCount: 0,
+          outputs: [{role: 'module', path: 'src/themes/matcha/matcha.ts'}],
+          warnings: [],
+          notices: ['components are web-only; not compiled'],
+        },
+      });
+      const file = path.join(dir, 'src/themes/matcha/matcha.ts');
+      expect(fs.readFileSync(file, 'utf8')).toBe(
+        'export const matchaTheme = {"name":"matcha","light":{"color-accent":"#3f7d3a"}} as const;\n',
+      );
+      const fresh = astryx(['--json', 'theme', 'build', source, '--check'], dir);
+      expect(fresh.status).toBe(0);
+      expect(fresh.json().data).toMatchObject({upToDate: true, stale: []});
+      fs.writeFileSync(file, 'export const matchaTheme = {};\n');
+      const stale = astryx(['--json', 'theme', 'build', source, '--check'], dir);
+      expect(stale.status).toBe(1);
+      expect(stale.json().data.stale).toEqual([
+        {path: 'src/themes/matcha/matcha.ts', reason: 'outdated'},
+      ]);
+      expect(fs.readFileSync(file, 'utf8')).toBe('export const matchaTheme = {};\n');
+
+      const text = astryx(['theme', 'build', source], dir);
+      expect(text.status).toBe(0);
+      expect(text.stdout).toContain('[ok] src/themes/matcha/matcha.ts (module)');
+      expect(text.stdout).toContain('[note] components are web-only; not compiled');
+    },
+    SLOW,
+  );
+
+  it(
+    'turns a typed failure into the command error, writing nothing',
+    () => {
+      const dir = nativeProject(NATIVE_THEMES_ADAPTER);
+      write(
+        path.join(dir, 'src/themes/matcha/matchaTheme.ts'),
+        "export const matchaTheme = {name: 'matcha', tokens: {'radius-md': 'calc(1rem)'}};\n",
+      );
+      const before = listFiles(dir);
+      const r = astryx(['--json', 'theme', 'build', 'src/themes/matcha/matchaTheme.ts'], dir);
+      expect(r.status).toBe(1);
+      expect(r.json()).toMatchObject({
+        code: 'ERR_THEME_INVALID',
+        error: 'radius-md "calc(1rem)" has no native value. (src/themes/matcha/matchaTheme.ts)',
+      });
+      expect(listFiles(dir)).toEqual(before);
+    },
+    SLOW,
+  );
+
+  it(
+    'theme add, use, and remove write the module appModule returns under the CLI header',
+    () => {
+      const dir = nativeProject(NATIVE_THEMES_ADAPTER);
+      for (const slug of ['matcha', 'sencha']) {
+        const b = astryx(['theme', 'build', `src/themes/${slug}/${slug}Theme.ts`], dir);
+        expect(b.status, b.stderr).toBe(0);
+      }
+      const module = path.join(dir, 'src/astryx-themes.ts');
+      const add = astryx(['--json', 'theme', 'add', 'matcha'], dir);
+      expect(add.status, add.stderr).toBe(0);
+      expect(add.json().data).toMatchObject({
+        themes: [
+          {slug: 'matcha', owner: './src/themes', module: './themes/matcha/matcha', stylesheet: null, source: 'local'},
+        ],
+        default: 'matcha',
+        modulePath: 'src/astryx-themes.ts',
+      });
+      expect(fs.readFileSync(module, 'utf8')).toBe(
+        [
+          '/**',
+          ' * @generated by `astryx theme` — do not edit manually.',
+          ' * @astryx-theme-record {"themes":{"matcha":"./src/themes"},"defaultThemeSlug":"matcha"}',
+          ' */',
+          '',
+          "import {matchaTheme as _t0} from './themes/matcha/matcha';",
+          'export const themes = {"matcha": _t0} as const;',
+          'export const defaultThemeSlug = "matcha";',
+          '',
+        ].join('\n'),
+      );
+      const text = astryx(['theme', 'add', 'sencha'], dir);
+      expect(text.status, text.stderr).toBe(0);
+      expect(text.stdout).not.toContain('@astryxdesign/core');
+      const use = astryx(['--json', 'theme', 'use', 'sencha'], dir);
+      expect(use.status, use.stderr).toBe(0);
+      expect(fs.readFileSync(module, 'utf8')).toContain('export const defaultThemeSlug = "sencha";');
+      const remove = astryx(['--json', 'theme', 'remove', 'matcha'], dir);
+      expect(remove.status, remove.stderr).toBe(0);
+      const after = fs.readFileSync(module, 'utf8');
+      expect(after).toContain('{"themes":{"sencha":"./src/themes"},"defaultThemeSlug":"sencha"}');
+      expect(after).not.toContain('matcha');
+    },
+    SLOW,
+  );
+
+  it(
+    'fails with ERR_BASE_ADAPTER when a step throws or returns a malformed result',
+    () => {
+      const throwing = nativeProject(
+        NATIVE_THEMES_ADAPTER.replace(
+          'export function compile(',
+          'export function compile() { throw new Error("no compiler"); }\nfunction compileOld(',
+        ),
+      );
+      const before = listFiles(throwing);
+      const thrown = astryx(['--json', 'theme', 'build', 'src/themes/matcha/matchaTheme.ts'], throwing);
+      expect(thrown.status).toBe(1);
+      expect(thrown.json()).toMatchObject({
+        code: 'ERR_BASE_ADAPTER',
+        error: 'The active base @acme/native-ui broke its themes.compile step in ./adapters/themes.mjs: it threw: no compiler',
+      });
+      expect(listFiles(throwing)).toEqual(before);
+
+      const malformed = nativeProject(
+        NATIVE_THEMES_ADAPTER.replace(
+          'export function appModule(',
+          'export function appModule() { return {ok: true, value: {source: 42}}; }\nfunction appModuleOld(',
+        ),
+      );
+      expect(astryx(['theme', 'build', 'src/themes/matcha/matchaTheme.ts'], malformed).status).toBe(0);
+      const bad = astryx(['--json', 'theme', 'add', 'matcha'], malformed);
+      expect(bad.status).toBe(1);
+      expect(bad.json()).toMatchObject({
+        code: 'ERR_BASE_ADAPTER',
+        error: 'The active base @acme/native-ui broke its themes.appModule step in ./adapters/themes.mjs: source is not a string.',
+      });
+      expect(fs.existsSync(path.join(malformed, 'src/astryx-themes.ts'))).toBe(false);
+    },
+    SLOW,
+  );
+
+  it(
+    'refuses and hides a command that needs a served step but does not call it',
+    () => {
+      const dir = nativeProject(NATIVE_THEMES_ADAPTER);
+      const before = listFiles(dir);
+      for (const args of [
+        ['experimental', 'theme', 'editor', 'show', 'matcha'],
+        ['experimental', 'theme', 'editor', 'how', 'button'],
+        ['experimental', 'theme', 'preview', 'add', 'matcha'],
+      ]) {
+        const r = astryx(['--json', ...args], dir);
+        expect(r.status, args.join(' ')).toBe(1);
+        expect(r.json()).toMatchObject({
+          code: 'ERR_BASE_CAPABILITY',
+          requirement: {reason: 'not-declared'},
+        });
+      }
+      const editor = astryx(['--json', 'experimental', 'theme', 'editor'], dir);
+      expect(editor.status).toBe(1);
+      expect(editor.json().code).toBe('ERR_BASE_CAPABILITY');
+      expect(editor.json().requirement.missing).toEqual(
+        expect.arrayContaining(['themes.targets', 'themes.compile']),
+      );
+      expect(listFiles(dir)).toEqual(before);
+      const help = astryx(['experimental', 'theme', '--help'], dir);
+      expect(help.stdout).toMatch(/^ {2}compile /m);
+      expect(help.stdout).toMatch(/^ {2}targets /m);
+      expect(help.stdout).not.toMatch(/^ {2}editor /m);
+      const manifest = astryx(['--json', 'manifest'], dir).json().data;
+      const experimental = manifest.commands
+        .find(c => c.name === 'experimental')
+        .subcommands.find(c => c.name === 'experimental theme');
+      const available = Object.fromEntries(
+        experimental.subcommands.map(c => [c.name, c.available]),
+      );
+      expect(available).toMatchObject({
+        'experimental theme compile': true,
+        'experimental theme editor': false,
+      });
+    },
+    SLOW,
+  );
+
+  it(
+    'serves only the listed steps, and refuses a listed step the module does not export',
+    () => {
+      const dir = nativeProject(
+        "export function targets() { return {ok: true, value: {targets: []}}; }\nexport function appModule() { throw new Error('not listed, never called'); }\n",
+        "{module: './adapters/themes.mjs', steps: ['targets', 'compile']}",
+      );
+      const help = astryx(['theme', '--help'], dir);
+      expect(help.stdout).toMatch(/^ {2}targets /m);
+      expect(help.stdout).toMatch(/^ {2}build /m);
+      expect(help.stdout).not.toMatch(/^ {2}add /m);
+
+      const build = astryx(['--json', 'theme', 'build', 'src/themes/matcha/matchaTheme.ts'], dir);
+      expect(build.status).toBe(1);
+      expect(build.json()).toMatchObject({
+        code: 'ERR_BASE_CAPABILITY',
+        error:
+          'astryx theme build needs the themes.compile step; the active base @acme/native-ui lists it but ./adapters/themes.mjs does not export it.',
+        requirement: {
+          missing: ['themes.compile'],
+          reason: 'not-exported',
+          module: './adapters/themes.mjs',
+        },
+      });
+      const add = astryx(['--json', 'theme', 'add', 'matcha'], dir);
+      expect(add.status).toBe(1);
+      expect(add.json().requirement).toMatchObject({
+        missing: ['themes.appModule'],
+        reason: 'not-declared',
+      });
+      const manifest = astryx(['--json', 'manifest'], dir);
+      expect(manifest.json().data.base.steps).toEqual(['themes.targets', 'themes.compile']);
     },
     SLOW,
   );

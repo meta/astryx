@@ -56,13 +56,19 @@ export function normalizeTargetFilter(filter) {
  * prints) rather than every key that happens to contain "button".
  *
  * @param {string} [filter] - component name, or a substring of a target key
- * @param {{cwd?: string}} [ctx]
+ * @param {{cwd?: string, collect?: () => Promise<import('../../../foundation/discovery/theming-targets.mjs').ThemingTarget[]>}} [ctx]
+ *   `collect` reads the targets from the run's base when it is not Core
  * @returns {Promise<import('../theme.type.mjs').ThemeTargetsResponse>}
  */
-export async function themeTargets(filter, {cwd = process.cwd()} = {}) {
-  const coreDir = coreDirOrThrow(requireThemeCoreDir, cwd);
-
-  const all = await collectThemingTargets(path.join(coreDir, 'src'));
+export async function themeTargets(
+  filter,
+  {cwd = process.cwd(), collect} = {},
+) {
+  const all = collect
+    ? await collect()
+    : await collectThemingTargets(
+        path.join(coreDirOrThrow(requireThemeCoreDir, cwd), 'src'),
+      );
   const needle = normalizeTargetFilter(filter);
   let targets = all;
   if (needle) {

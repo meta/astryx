@@ -21,6 +21,7 @@ import {themeImportPackage} from './theme-discovery.mjs';
 import {isLocalThemeOwner, projectPath} from '../config/theme-state.mjs';
 import {formatCliCommand} from '../env/package-manager.mjs';
 import {installCommandFor} from './template-needs.mjs';
+import {currentNonCoreBase} from '../bases/state.mjs';
 
 export class ThemeImportError extends Error {
   /**
@@ -56,6 +57,7 @@ function readPackage(file) {
  * @param {string} cwd
  */
 function resolveLocalTheme(theme, cwd) {
+  if (currentNonCoreBase()) return resolveBaseLocalTheme(theme, cwd);
   const moduleFile = path.join(theme.sourceDir, `${theme.slug}.js`);
   const stylesheetFile = path.join(theme.sourceDir, `${theme.slug}.css`);
   const fontStylesheetFile = path.join(
@@ -102,6 +104,51 @@ function resolveLocalTheme(theme, cwd) {
     ...(fs.existsSync(fontStylesheetFile) ? {fontStylesheetFile} : {}),
     source: /** @type {const} */ ('local'),
     ...builtColorMode(moduleFile, theme.exportName),
+  };
+}
+
+/**
+ * A local theme on a base other than Core: the module the base's
+ * `themes.compile` step returned, beside the source, named for the theme. The
+ * base decides whether a theme has a stylesheet.
+ * @param {import('./theme-discovery.mjs').DiscoveredTheme} theme
+ * @param {string} cwd
+ */
+function resolveBaseLocalTheme(theme, cwd) {
+  const source = projectPath(
+    path.relative(cwd, path.join(theme.sourceDir, theme.entry)),
+  );
+  const moduleFile = ['.js', '.mjs', '.ts', '.tsx']
+    .map(ext => path.join(theme.sourceDir, `${theme.slug}${ext}`))
+    .find(file => {
+      try {
+        return fs.statSync(file).isFile();
+      } catch {
+        return false;
+      }
+    });
+  if (moduleFile == null) {
+    throw new ThemeImportError(
+      `Local theme "${theme.slug}" is not built. Run \`${formatCliCommand(`theme build ${source}`, cwd)}\` and try again.`,
+    );
+  }
+  if (!moduleExportsName(moduleFile, theme.exportName)) {
+    throw new ThemeImportError(
+      `Local theme "${theme.slug}" built module ${projectPath(
+        path.relative(cwd, moduleFile),
+      )} does not export "${theme.exportName}". Rebuild it with \`${formatCliCommand(`theme build ${source}`, cwd)}\`.`,
+    );
+  }
+  const stylesheetFile = path.join(theme.sourceDir, `${theme.slug}.css`);
+  return {
+    slug: theme.slug,
+    owner: theme.package,
+    exportName: theme.exportName,
+    module: '',
+    stylesheet: null,
+    moduleFile,
+    stylesheetFile: fs.existsSync(stylesheetFile) ? stylesheetFile : null,
+    source: /** @type {const} */ ('local'),
   };
 }
 

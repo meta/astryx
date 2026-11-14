@@ -1117,22 +1117,23 @@ async function validatePackedThemeExports(
         {
           kind: 'stylesheet',
           expected: expectedCss,
-          local: localImports.stylesheetFile,
-          packed: packedImports.stylesheetFile,
+          // A package theme always resolves a stylesheet.
+          local: /** @type {string} */ (localImports.stylesheetFile),
+          packed: /** @type {string} */ (packedImports.stylesheetFile),
           staleCode: 'theme_stylesheet_stale',
           packedCode: 'packed_theme_stylesheet_changed',
         },
       ];
       const localEntry = {
         exportName: localTheme.exportName,
-        stylesheetFile: localImports.stylesheetFile,
+        stylesheetFile: /** @type {string} */ (localImports.stylesheetFile),
         fontStylesheetFile: localImports.fontStylesheetFile,
         pkg: integrationPackageMetadata(localIntegration),
         packageDir: localIntegration.__packageDir,
       };
       const packedEntry = {
         exportName: packedTheme.exportName,
-        stylesheetFile: packedImports.stylesheetFile,
+        stylesheetFile: /** @type {string} */ (packedImports.stylesheetFile),
         fontStylesheetFile: packedImports.fontStylesheetFile,
         pkg: integrationPackageMetadata(packedIntegration),
         packageDir: packedIntegration.__packageDir,

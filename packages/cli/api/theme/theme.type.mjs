@@ -35,6 +35,14 @@
  */
 
 /**
+ * astryx --json theme build <file> on a base other than Core: the files the
+ * base's themes.compile step returned, as the CLI wrote them.
+ * @typedef {object} ThemeBaseBuildResponse
+ * @property {'theme.build.base'} type
+ * @property {{name: string, base: string, tokenCount: number, componentCount: number, outputs: Array<{role: string, path: string}>, warnings: string[], notices: string[]}} data
+ */
+
+/**
  * astryx --json theme build <file> --check
  * @typedef {object} ThemeBuildCheckResponse
  * @property {'theme.build.check'} type
@@ -49,7 +57,7 @@
  * returns the bare theme.build / theme.build.check envelope.
  * @typedef {object} ThemeBuildBatchResponse
  * @property {'theme.build.batch'} type
- * @property {{count: number, results: Array<{file: string, receipt: ThemeBuildResponse | ThemeBuildCheckResponse | null}>}} data
+ * @property {{count: number, results: Array<{file: string, receipt: ThemeBuildResponse | ThemeBaseBuildResponse | ThemeBuildCheckResponse | null}>}} data
  */
 
 /**
@@ -89,7 +97,8 @@
  * @property {string} slug
  * @property {string} owner package name or local themes root
  * @property {string} module built theme module import
- * @property {string} stylesheet production stylesheet import
+ * @property {string | null} stylesheet production stylesheet import; null
+ *   on a base whose themes have no stylesheet
  * @property {string} [fontStylesheet] package-owned font stylesheet import
  * @property {'bundled'|'package'|'local'} source
  * @property {'light'|'dark'} [mode] the one color mode the theme has, when its

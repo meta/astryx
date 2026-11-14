@@ -21,7 +21,7 @@ import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
  * compatibility no-op.
  *
  * @param {string} slug
- * @param {{targetPath?: string, overwrite?: boolean, import?: boolean, cwd?: string, package?: string}} [options]
+ * @param {{targetPath?: string, overwrite?: boolean, import?: boolean, cwd?: string, package?: string, renderModule?: import('../_adapter.mjs').ThemeModuleRenderer}} [options]
  * @returns {Promise<import('../theme.type.mjs').ThemeAppResponse>}
  */
 export async function themeAdd(slug, options = {}) {
