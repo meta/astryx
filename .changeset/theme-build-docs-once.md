@@ -2,6 +2,6 @@
 '@astryxdesign/cli': patch
 ---
 
-[perf] `theme build` reads each Core component doc once per run. It checked a theme against three views of Core's docs (the theming targets, the known variant values, and the components a variant map augments), and each view read and checked every doc again. `theme build` now finishes about 50 to 110 ms sooner. Output does not change.
+[perf] `theme build` reads each Core component doc at most once per run. A theme whose component overrides name prop values (such as `variant:ghost` or `size:sm`) was checked against up to three views of Core's docs (the theming targets, the known prop values, and the components a new value augments), and each view read and checked every doc again. Such a build now finishes about 50 to 110 ms sooner. A theme with no such overrides reads the docs once, as before. Output does not change.
 
 @josephfarina
