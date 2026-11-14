@@ -92,7 +92,10 @@ import {applyWrites} from '../../integration/add-helpers.mjs';
 import {logger} from '../../logger.mjs';
 import {loadComponentDoc} from '../../../foundation/discovery/component-loader.mjs';
 import {THEME_SOURCE_EXTENSIONS} from '../../../foundation/discovery/theme-module-extensions.mjs';
-import {withEmptyStylesheets} from '../../../foundation/fs/module-loader.mjs';
+import {
+  createJiti,
+  withEmptyStylesheets,
+} from '../../../foundation/fs/module-loader.mjs';
 import {
   collectThemingTargets,
   targetsByKey,
@@ -110,15 +113,6 @@ import {
 import {generateFamilyCSS, resolveThemeFamily} from './family.mjs';
 import {resolveIconImports} from './icon-imports.mjs';
 import {generatedMark} from '../../theme-edit/_marks.mjs';
-
-const requireFromHere = createRequire(import.meta.url);
-
-/**
- * jiti, loaded on first use: every command that imports the CLI's API reaches
- * this module, and only a theme build loads a theme through jiti.
- * @type {typeof import('jiti').createJiti}
- */
-const createJiti = (...args) => requireFromHere('jiti').createJiti(...args);
 
 // Import shared theme processing from core. `astryx theme build` MUST produce the
 // exact same CSS as the `<Theme>` runtime, so it has exactly one generation
