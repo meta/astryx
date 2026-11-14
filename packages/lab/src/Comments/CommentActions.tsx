@@ -4,7 +4,8 @@
 
 /**
  * @file CommentActions.tsx
- * @input Uses React, React DOM flushSync, StyleX, useClipboard, useAnnounce, IconButton,
+ * @input Uses React, React DOM flushSync, StyleX, Core's internal
+ *   useClipboardCopy, IconButton,
  *   Button, Tooltip, ToggleButton, OverflowList, DropdownMenu, Popover, Text
  * @output Exports CommentActions (a comment's header actions), ReactionSummary
  *   (its reaction toggles), and the action-lookup helpers rows use for focus
@@ -12,7 +13,7 @@
  * @position Internal parts of a comment row in the Comments family
  */
 
-import {useCallback, useEffect, useRef, useState, type ReactNode} from 'react';
+import {useCallback, useRef, useState, type ReactNode} from 'react';
 import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '@astryxdesign/core/Button';
@@ -20,8 +21,8 @@ import {
   DropdownMenu,
   type DropdownMenuOption,
 } from '@astryxdesign/core/DropdownMenu';
-import {useAnnounce, useClipboard} from '@astryxdesign/core/hooks';
 import {Icon} from '@astryxdesign/core/Icon';
+import {useClipboardCopy} from '@astryxdesign/core/internal/clipboard-copy';
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {OverflowList, type OverflowItem} from '@astryxdesign/core/OverflowList';
@@ -37,8 +38,6 @@ import {commentAnchorId, type AnyComment} from './utils';
 import type {CommentReaction, CommentReactionOption} from './types';
 
 const MORE_MENU_MIN_WIDTH = `calc(${spacingVars['--spacing-8']} * 5)`;
-/** How long a failed link copy shows: useClipboard's copied-state default. */
-const LINK_FEEDBACK_MS = 2000;
 
 const styles = stylex.create({
   actionsList: {
@@ -259,24 +258,13 @@ export function CommentActions({
 }) {
   const t = useTranslator();
   const linkCopyFailedLabel = t('@astryx.comments.linkCopyFailed');
-  const {copy: copyToClipboard, isCopied: isLinkCopied} = useClipboard();
-  const announce = useAnnounce();
-  const [isLinkCopyFailed, setIsLinkCopyFailed] = useState(false);
-  const linkCopyFailedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
-  const isMountedRef = useRef(true);
-  // Syncs the failed-copy reset timer with the mount: unmounting stops it, and
-  // a write still in flight then sets no state.
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-      if (linkCopyFailedTimerRef.current != null) {
-        clearTimeout(linkCopyFailedTimerRef.current);
-      }
-    };
-  }, []);
+  // A failed write shows for as long as a copied one and is announced
+  // assertively, as CodeBlock's copy button does.
+  const {
+    copy: copyToClipboard,
+    isCopied: isLinkCopied,
+    isFailed: isLinkCopyFailed,
+  } = useClipboardCopy({announceFailure: linkCopyFailedLabel});
   const [isLinkTooltipOpen, setIsLinkTooltipOpen] = useState(false);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(NO_COLLAPSED_ACTIONS);
@@ -299,31 +287,8 @@ export function CommentActions({
     <CommentIcon name="copyLink" />
   );
 
-  // The public useClipboard reports a failed write but keeps no failed state,
-  // and Core's shared failure state is not exported to Lab. A failed write
-  // shows as long as a copied one. It is an error, so it goes to the assertive
-  // region.
-  const copyCommentLink = async () => {
-    const isWritten = await copyToClipboard(
-      new URL(href, window.location.href).href,
-    );
-    if (!isMountedRef.current) {
-      return;
-    }
-    if (linkCopyFailedTimerRef.current != null) {
-      clearTimeout(linkCopyFailedTimerRef.current);
-      linkCopyFailedTimerRef.current = null;
-    }
-    setIsLinkCopyFailed(!isWritten);
-    if (isWritten) {
-      return;
-    }
-    announce(linkCopyFailedLabel, 'assertive');
-    linkCopyFailedTimerRef.current = setTimeout(() => {
-      linkCopyFailedTimerRef.current = null;
-      setIsLinkCopyFailed(false);
-    }, LINK_FEEDBACK_MS);
-  };
+  const copyCommentLink = async () =>
+    copyToClipboard(new URL(href, window.location.href).href);
 
   const changePicker = (isOpen: boolean) => {
     setIsPickerOpen(isOpen);
@@ -506,7 +471,9 @@ export function CommentActions({
                 variant="ghost"
                 size="sm"
                 data-comment-action="link"
-                data-link-copied={isLinkCopied ? 'true' : undefined}
+                data-link-copied={
+                  isLinkCopied && !isLinkCopyFailed ? 'true' : undefined
+                }
                 icon={linkIcon}
                 onClick={() => void copyCommentLink()}
               />
