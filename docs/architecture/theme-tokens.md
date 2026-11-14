@@ -365,7 +365,7 @@ them, and people see unreadable buttons. Theme generation already derives
 status content when a theme sets only the fill
 (`architecture:theme-compilation` INV17). It now derives `--color-on-accent`
 the same way, and the compiler reports any pair below its floor
-(`architecture:theme-compilation` INV18). The same applies on media
+(`architecture:theme-compilation` INV20). The same applies on media
 surfaces: unset accent text and icon colours there follow the surface's
 content colour, so a theme that authors one accent value for both modes no
 longer keeps it on a media band where it can fail contrast. A value the theme sets still wins,

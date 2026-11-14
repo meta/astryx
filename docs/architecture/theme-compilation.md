@@ -244,7 +244,7 @@ Platform-specific details stay inside that compiler.
   one. A derived value is emitted in the scope where its source is set
   (INV16), and runtime and static output derive the same values.
 
-- **INV18 — A pair below its floor is reported.** When a theme sets one or
+- **INV20 — A pair below its floor is reported.** When a theme sets one or
   both colours of a pair whose floor `architecture:theme-tokens` INV11, INV12,
   or INV15 names, and the pair measures below that floor in a colour mode, the
   compiler appends one warning that names the pair, the mode, and the measured
@@ -370,7 +370,7 @@ tiers.
 | INV15            | CLI build fixtures with function entries, slot functions, a variant list, and an inherited entry under a replaced list, compared with runtime resolution                                                                                                                                                                                                                                                                                                                                                              | Built and runtime icons differ, a function is dropped silently, or tooling enumerates a variant an entry cannot receive                                                                                                                                                                           |
 | INV16            | Root, adaptation, media, nested-theme, and CLI-built status-alias fixtures                                                                                                                                                                                                                                                                                                                                                                                                                                            | A generated role escapes its source scope, overrides an authored role, changes cascade meaning, cycles, or differs by output path                                                                                                                                                                 |
 | INV17            | A minimal custom theme that sets only its four status fills, compiled at runtime and through the CLI build, plus themes that set a light fill, a grey fill, an unresolved fill, an unresolved card surface, only a surface, only a hue text token, a fill only inside an adaptation rule, and one that `extends` a theme setting a status role, each also read through non-CSS resolution; a media-surface fixture where the theme sets no media accent text (text and icon accent follow the surface content colour) | A content or text role is missing, misses an INV11 floor in light or dark mode, is grey, ignores a value the theme set, or differs between runtime, build, and non-CSS resolution; an icon or border role does not follow the text role; a fill is derived; or an inherited role is derived again |
-| INV18            | A theme that sets a dark-mode accent with white content below 4.5:1, a theme that sets a status fill and its content below the floor, a theme with an unresolved reference, compiled at runtime and through the CLI build; a theme that sets a media-surface accent text below the floor (its value wins and one warning names the surface, mode and ratio)                                                                                                                                                           | A below-floor pair compiles silently, a report changes the generated CSS, or an unmeasurable pair is reported                                                                                                                                                                                     |
+| INV20            | A theme that sets a dark-mode accent with white content below 4.5:1, a theme that sets a status fill and its content below the floor, a theme with an unresolved reference, compiled at runtime and through the CLI build; a theme that sets a media-surface accent text below the floor (its value wins and one warning names the surface, mode and ratio)                                                                                                                                                           | A below-floor pair compiles silently, a report changes the generated CSS, or an unmeasurable pair is reported                                                                                                                                                                                     |
 
 ## Known conformance and verification gaps
 
@@ -381,8 +381,8 @@ derived values. Inside adaptation rules, each rule's derived
 values combine the root with that rule alone, so rules that match together and
 each set a measured colour do not yet derive from their combination.
 
-The derived `--color-on-accent` in INV17 and the below-floor report in INV18
-are accepted but not yet shipped; INV18 reports through INV14's channel once
+The derived `--color-on-accent` in INV17 and the below-floor report in INV20
+are accepted but not yet shipped; INV20 reports through INV14's channel once
 that collector ships, and through runtime warnings until then.
 
 Declaration-boundary enforcement and the warnings-array collector in INV13–INV14
