@@ -602,36 +602,28 @@ function startsWithRows<T extends SearchableItem>(
  * untouched state, and `hasEntriesOnFocus` owns what happens there.
  */
 // The caller's control must carry its own name: a screen reader reaches it
-// through the action cell. Checked on the rendered DOM, in development only.
-const useUnnamedActionWarning =
+// through the action cell. Checked when an action cell attaches, in
+// development only.
+const checkActionName =
   process.env.NODE_ENV === 'production'
-    ? () => {}
-    : (panelRef: React.RefObject<HTMLElement | null>) => {
-        useEffect(() => {
-          const isUnnamed = (control: HTMLElement | null) =>
-            control != null &&
-            (control.getAttribute('aria-label') ?? '').trim() === '' &&
-            !control.hasAttribute('aria-labelledby') &&
-            (control.textContent ?? '').trim() === '' &&
-            (control.getAttribute('title') ?? '').trim() === '';
-          const actionCells =
-            panelRef.current?.querySelectorAll<HTMLElement>(
-              '[role="gridcell"] + [role="gridcell"]',
-            ) ?? [];
-          if (
-            Array.from(actionCells).some(cell =>
-              isUnnamed(cell.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)),
-            )
-          ) {
-            warnOnce(
-              'base-typeahead:unnamed-action',
-              'BaseTypeahead',
-              'A result `action` renders a control with no accessible name. ' +
-                'Give it a label: a screen reader reaches it through the ' +
-                'action cell.',
-            );
-          }
-        });
+    ? undefined
+    : (cell: HTMLElement | null) => {
+        const control = cell?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
+        if (
+          control != null &&
+          (control.getAttribute('aria-label') ?? '').trim() === '' &&
+          !control.hasAttribute('aria-labelledby') &&
+          (control.textContent ?? '').trim() === '' &&
+          (control.getAttribute('title') ?? '').trim() === ''
+        ) {
+          warnOnce(
+            'base-typeahead:unnamed-action',
+            'BaseTypeahead',
+            'A result `action` renders a control with no accessible name. ' +
+              'Give it a label: a screen reader reaches it through the ' +
+              'action cell.',
+          );
+        }
       };
 
 function preventOptionFocus(event: React.MouseEvent) {
@@ -2165,7 +2157,8 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
           if (isActionCellActive) {
             // The highlight is on the caller's control: fire it, and only
             // it. The selection, the highlight and the list stay as they are.
-            document
+            // The input's root node finds the cell in a shadow root too.
+            (e.currentTarget.getRootNode() as Document | ShadowRoot)
               .getElementById(`${getItemId(highlightedIndex)}-action`)
               ?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)
               ?.click();
@@ -2380,8 +2373,6 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     };
   }, []);
 
-  useUnnamedActionWarning(dropdownRef);
-
   const listbox = (
     <div
       ref={dropdownRef}
@@ -2467,6 +2458,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
                     <div
                       role="gridcell"
                       id={`${itemId}-action`}
+                      ref={checkActionName}
                       {...stylex.props(
                         styles.actionCell,
                         index === highlightedIndex &&

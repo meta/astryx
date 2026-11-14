@@ -9,7 +9,13 @@
  */
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
-import {render, screen, waitFor, within} from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {useState} from 'react';
 import {BaseTypeahead} from './BaseTypeahead';
@@ -217,7 +223,7 @@ describe('BaseTypeahead option actions', () => {
       ).toBeTruthy();
     });
 
-    it('keeps the "nothing matched" message out of the accessibility tree in both roles', async () => {
+    it('keeps the "nothing matched" message out of the listbox options', async () => {
       const source: SearchSource<SearchableItem> = {
         search: () => [],
         bootstrap: () => [],
@@ -231,6 +237,26 @@ describe('BaseTypeahead option actions', () => {
       expect(within(listbox).queryAllByRole('option', {hidden: true})).toEqual(
         [],
       );
+    });
+
+    it('keeps the "nothing matched" message out of the grid rows', async () => {
+      render(<Field source={officeSource(() => {})} />);
+      const {user, input} = await openFor('o');
+      const grid = await screen.findByRole('grid', {hidden: true});
+      await user.clear(input);
+      await user.type(input, 'zz');
+      await waitFor(() => {
+        expect(within(grid).queryAllByRole('row', {hidden: true})).toEqual([]);
+      });
+      await waitFor(() => {
+        expect(grid).toHaveTextContent(/./);
+      });
+      // Still a grid, and the message is no row and no cell.
+      expect(screen.getByRole('grid', {hidden: true})).toBe(grid);
+      expect(within(grid).queryAllByRole('gridcell', {hidden: true})).toEqual(
+        [],
+      );
+      expect(within(grid).queryAllByRole('option', {hidden: true})).toEqual([]);
     });
   });
 
@@ -265,6 +291,33 @@ describe('BaseTypeahead option actions', () => {
       expect(onChange).toHaveBeenCalledWith(
         expect.objectContaining({id: 'boston'}),
       );
+    });
+
+    it('fires the action with Enter when the field is inside a shadow root', async () => {
+      const onPin = vi.fn();
+      const onChange = vi.fn();
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      const container = document.createElement('div');
+      host.attachShadow({mode: 'open'}).appendChild(container);
+      try {
+        render(<Field source={officeSource(onPin)} onChange={onChange} />, {
+          container,
+        });
+        const input = container.querySelector('input')!;
+        fireEvent.change(input, {target: {value: 'o'}});
+        await waitFor(() => {
+          expect(container.querySelector('[role="grid"]')).not.toBeNull();
+        });
+        fireEvent.keyDown(input, {key: 'Home'});
+        fireEvent.keyDown(input, {key: 'ArrowRight'});
+        expect(input.getAttribute('aria-activedescendant')).toMatch(/-action$/);
+        fireEvent.keyDown(input, {key: 'Enter'});
+        expect(onPin).toHaveBeenCalledWith('Boston');
+        expect(onChange).not.toHaveBeenCalled();
+      } finally {
+        host.remove();
+      }
     });
 
     it('follows visual direction in right-to-left', async () => {

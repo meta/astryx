@@ -6,6 +6,7 @@ import {expect, userEvent, waitFor, within} from 'storybook/test';
 import {Typeahead, TypeaheadItem} from '@astryxdesign/core/Typeahead';
 import type {SearchableItem, SearchSource} from '@astryxdesign/core/Typeahead';
 import {MagnifyingGlassIcon} from '@heroicons/react/24/outline';
+import {Icon} from '@astryxdesign/core/Icon';
 import {IconButton} from '@astryxdesign/core/IconButton';
 
 // Sample data
@@ -142,7 +143,7 @@ export const ResultActions: Story = {
             action: (
               <IconButton
                 label={`Edit ${fruit.label}`}
-                icon="moreHorizontal"
+                icon={<Icon icon="moreHorizontal" />}
                 variant="ghost"
                 size="sm"
                 onClick={() => setLastEdited(fruit.label)}
