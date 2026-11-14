@@ -125,8 +125,11 @@ import {doc as themePaletteGenerateFn} from '../../../api/theme/themePaletteGene
  * @property {(err: import('../../../api/error.mjs').AstryxError, cwd: string) => import('../../../api/error.mjs').AstryxError | null} [explain] - A clearer refusal for this group, or null.
  * @property {(files: string[], options: {cwd: string, check?: boolean, family?: boolean, iconsSpecifier?: string, out?: string}) => Promise<import('../../../api/error.mjs').AstryxError | null>} [preflight] - A refusal before a build starts, or null.
  * @property {(err: import('../../../api/error.mjs').AstryxError, cwd: string) => Promise<import('../../../api/error.mjs').AstryxError>} [follow] - The refusal with its first suggested build checked and repaired as the build would check it.
+ * @property {(file: string, cwd: string) => import('../../../api/theme/build/build.mjs').FontHelp | null} [fontHelp] - How a group says to load a theme's fonts when it loads them itself (the editor's app copy).
+ * @property {(file: string, cwd: string) => string | null} [sourcePath] - The path a source builds under, when not the typed one; null to keep it.
+ * @property {(files: string[], cwd: string) => Promise<Record<string, Record<string, unknown>>>} [afterBuild] - Writes a group makes once a build's outputs are written (the editor's app copy), with what each did, by file, for its result.
  * @property {(files: string[], options: {cwd: string, check?: boolean, out?: string}) => Promise<() => Promise<void>>} [hold] - Locks held while a build or check runs; resolves to their release.
- * @property {(file: string, cwd: string, opts: {check: boolean, upToDate?: boolean, out?: string}) => Record<string, unknown> | null | Promise<Record<string, unknown> | null>} [extraData] - Fields a group adds to a build's result data (the editor's `appCopyStale`); in a check, `upToDate: false` fails it.
+ * @property {(file: string, cwd: string, opts: {check: boolean, upToDate?: boolean, out?: string, iconsSpecifier?: string}) => Record<string, unknown> | null | Promise<Record<string, unknown> | null>} [extraData] - Fields a group adds to a build's result data (the editor's `appCopyStale`); in a check, `upToDate: false` fails it.
  * @property {(file: string, cwd: string) => (['light'] | ['dark'] | null)} [colorModes] - The one color mode a theme file has that the file itself cannot say, for the build to write into the built module.
  * @property {(file: string, cwd: string) => ((family: string) => boolean) | null | Promise<((family: string) => boolean) | null>} [loadedFonts] - Font families the app loads for a theme file that the file itself cannot say, so the build does not name them as unloaded.
  * @property {(file: string, cwd: string) => {name: string, reason: string} | null} [missingSource] - For a source file that is not there, this group's way to write it again, or null.
@@ -227,7 +230,7 @@ function inGroupNotes(result, words) {
  * group that works whatever went wrong.
  * @param {import('../../../api/error.mjs').AstryxError} err
  * @param {ThemeCommandWords} [words]
- * @param {Array<{name: string, reason: string}>} [fallback]
+ * @param {Array<{name: string, reason?: string}>} [fallback]
  */
 function themeError(err, words = THEME_WORDS, fallback = []) {
   err = words.explain?.(err, process.cwd()) ?? err;
@@ -244,6 +247,41 @@ function themeError(err, words = THEME_WORDS, fallback = []) {
       ...(x.reason ? {reason: local(x.reason)} : {}),
     })),
     code: err.code,
+  });
+}
+
+/**
+ * Add a group's fields to a build's result data. Its warnings join the
+ * build's own, and are printed as the build's are (`--json` prints none).
+ * @param {Record<string, any>} data
+ * @param {Record<string, unknown>} extra
+ */
+function mergeResultData(data, extra) {
+  const {warnings, ...rest} = /** @type {any} */ (extra);
+  Object.assign(data, rest);
+  if (Array.isArray(warnings) && warnings.length > 0) {
+    data.warnings = [...(data.warnings ?? []), ...warnings];
+    for (const w of warnings) logger.warn(`Warning: ${w}`);
+  }
+}
+
+/** Marks a suggested build with what it builds, for the group's checks. */
+const BUILD_RUN = Symbol('build run');
+
+/**
+ * A suggested build, marked with the files and mode it builds so the
+ * group's own checks can vet it before it is shown (the mark is not part of
+ * what is printed).
+ * @template {{name: string, reason: string}} S
+ * @param {S} suggestion
+ * @param {string[]} files
+ * @param {{check?: boolean, family?: boolean, iconsSpecifier?: string, out?: string}} mode
+ * @returns {S}
+ */
+function buildRun(suggestion, files, mode) {
+  return Object.defineProperty(suggestion, BUILD_RUN, {
+    value: {files, mode},
+    enumerable: false,
   });
 }
 
@@ -1026,9 +1064,51 @@ function registerThemeCommands(theme, program, docs, words) {
   const buildCli = defineCommand(theme, docs.build, {
     fn: themeBuildFn,
     action: async (
-      /** @type {string[]} */ files,
+      /** @type {string[]} */ typedFiles,
       /** @type {{out?: string, watch?: boolean, check?: boolean, iconsSpecifier?: string, family?: boolean, familyKey?: string}} */ options,
     ) => {
+      // A group may name the path a source builds under (an editor theme
+      // reached through a link builds under its own path, which its
+      // outputs' headers name).
+      const files = typedFiles.map(
+        file => words.sourcePath?.(file, process.cwd()) ?? file,
+      );
+      // Every suggested build passes the group's own checks before it is
+      // shown (from a subfolder an editor theme compiles from the app
+      // root): a suggestion the group refuses gives way to the group's own
+      // suggestion, which does.
+      /** @param {Array<{name: string, reason?: string}> | undefined} list */
+      const vet = async list => {
+        /** @type {Array<{name: string, reason?: string}>} */
+        const out = [];
+        for (const s of list ?? []) {
+          const run = /** @type {any} */ (s)[BUILD_RUN];
+          const refused = run
+            ? await words.preflight?.(run.files, {
+                cwd: process.cwd(),
+                ...run.mode,
+              })
+            : null;
+          out.push(...(refused ? (refused.suggestions ?? []) : [s]));
+        }
+        return out;
+      };
+      /** @param {string} message @param {Parameters<typeof cliError>[1]} [opts] */
+      const refuse = async (message, opts = {}) =>
+        cliError(message, {
+          ...opts,
+          suggestions: await vet(opts.suggestions),
+        });
+      /**
+       * @param {import('../../../api/error.mjs').AstryxError} err
+       * @param {ThemeCommandWords} [w]
+       * @param {Array<{name: string, reason?: string}>} [fallback]
+       */
+      const refuseTheme = async (err, w = words, fallback = []) => {
+        err.suggestions = await vet(err.suggestions);
+        return themeError(err, w, await vet(fallback));
+      };
+
       const json = program.opts().json || false;
       // The report is one line per theme unless the user asks for
       // `--detail full`, which prints the install example and the font
@@ -1063,7 +1143,7 @@ function registerThemeCommands(theme, program, docs, words) {
             ? null
             : generatedSourceCommand(entry.filePath);
         if (by)
-          return cliError(
+          return await refuse(
             `File not found: ${entry.filePath}. It is a generated file: the files beside it are written by ${by}, so rebuild it with the command that made it.`,
             {
               code: ERROR_CODES.ERR_FILE_NOT_FOUND,
@@ -1077,7 +1157,7 @@ function registerThemeCommands(theme, program, docs, words) {
                 : [],
             },
           );
-        return cliError(`File not found: ${entry.filePath}`, {
+        return await refuse(`File not found: ${entry.filePath}`, {
           code: ERROR_CODES.ERR_FILE_NOT_FOUND,
           suggestions: rewrite
             ? [rewrite]
@@ -1105,11 +1185,28 @@ function registerThemeCommands(theme, program, docs, words) {
                   },
                 ]
               : guesses.length > 0
-                ? guesses.map(guess => ({
-                    // The same build of that source: a --check stays a check.
-                    name: buildSuggestion(guess, options, process.cwd(), words),
-                    reason: 'a theme source that exists',
-                  }))
+                ? guesses.map(guess =>
+                    buildRun(
+                      {
+                        // The same build of that source: a --check stays a
+                        // check.
+                        name: buildSuggestion(
+                          guess,
+                          options,
+                          process.cwd(),
+                          words,
+                        ),
+                        reason: 'a theme source that exists',
+                      },
+                      [guess],
+                      {
+                        check: Boolean(options.check),
+                        family: Boolean(options.family),
+                        iconsSpecifier: options.iconsSpecifier,
+                        out: options.out,
+                      },
+                    ),
+                  )
                 : [
                     themeCommand(
                       words,
@@ -1129,23 +1226,37 @@ function registerThemeCommands(theme, program, docs, words) {
        * @param {string[]} [only] the files to build, when not all of them
        */
       const buildWithout = (drop, reason, only = files) =>
-        themeCommand(
-          words,
-          words.build,
-          [
-            ...(options.family && !drop.includes('family')
-              ? ['--family', ...only, '--family-key', String(options.familyKey)]
-              : only),
-            ...(options.out && !drop.includes('out')
-              ? ['--out', options.out]
-              : []),
-            ...(options.check && !drop.includes('check') ? ['--check'] : []),
-            ...(options.watch && !drop.includes('watch') ? ['--watch'] : []),
-            ...(options.iconsSpecifier
-              ? ['--icons-specifier', options.iconsSpecifier]
-              : []),
-          ],
-          reason,
+        buildRun(
+          themeCommand(
+            words,
+            words.build,
+            [
+              ...(options.family && !drop.includes('family')
+                ? [
+                    '--family',
+                    ...only,
+                    '--family-key',
+                    String(options.familyKey),
+                  ]
+                : only),
+              ...(options.out && !drop.includes('out')
+                ? ['--out', options.out]
+                : []),
+              ...(options.check && !drop.includes('check') ? ['--check'] : []),
+              ...(options.watch && !drop.includes('watch') ? ['--watch'] : []),
+              ...(options.iconsSpecifier
+                ? ['--icons-specifier', options.iconsSpecifier]
+                : []),
+            ],
+            reason,
+          ),
+          only,
+          {
+            check: Boolean(options.check) && !drop.includes('check'),
+            family: Boolean(options.family) && !drop.includes('family'),
+            iconsSpecifier: options.iconsSpecifier,
+            out: drop.includes('out') ? undefined : options.out,
+          },
         );
 
       // A refusal from the build that names no command: without --out the
@@ -1177,7 +1288,7 @@ function registerThemeCommands(theme, program, docs, words) {
                 ) === index,
             )
             .map(other => other.file);
-          return cliError(
+          return await refuse(
             `${entry.file} is given more than once. Select each theme file once.`,
             {
               code: ERROR_CODES.ERR_THEME_INVALID,
@@ -1192,30 +1303,15 @@ function registerThemeCommands(theme, program, docs, words) {
       // Its key is required exactly with --family, and options that describe one
       // standalone output or a long-running loop remain intentionally separate.
       if (Boolean(options.family) !== Boolean(options.familyKey)) {
-        // The suggestion below builds each theme on its own; a group that
-        // refuses that build too (an editor theme run from a subfolder)
-        // answers with its own refusal, whose suggestion runs.
-        const own = await words.preflight?.(files, {
-          cwd: process.cwd(),
-          check: options.check,
-          family: false,
-          iconsSpecifier: options.iconsSpecifier,
-          out: files.length === 1 ? options.out : undefined,
-        });
-        if (own)
-          return themeError(
-            (await words.follow?.(own, process.cwd())) ?? own,
-            words,
-          );
-        return cliError(
+        return await refuse(
           options.family
             ? '--family requires --family-key <key>'
             : '--family-key requires --family',
           {
             code: ERROR_CODES.ERR_THEME_INVALID,
             suggestions: [
-              {
-                ...themeCommand(
+              buildRun(
+                themeCommand(
                   words,
                   words.build,
                   [
@@ -1231,13 +1327,20 @@ function registerThemeCommands(theme, program, docs, words) {
                   ],
                   'build each theme on its own',
                 ),
-              },
+                files,
+                {
+                  check: Boolean(options.check),
+                  family: false,
+                  iconsSpecifier: options.iconsSpecifier,
+                  out: files.length === 1 ? options.out : undefined,
+                },
+              ),
             ],
           },
         );
       }
       if (options.family && options.out) {
-        return cliError('--family cannot be combined with --out', {
+        return await refuse('--family cannot be combined with --out', {
           code: ERROR_CODES.ERR_THEME_INVALID,
           suggestions: [
             buildWithout(['out'], 'family outputs go beside the family root'),
@@ -1245,7 +1348,7 @@ function registerThemeCommands(theme, program, docs, words) {
         });
       }
       if (options.family && options.watch) {
-        return cliError('--family cannot be combined with --watch', {
+        return await refuse('--family cannot be combined with --watch', {
           code: ERROR_CODES.ERR_THEME_INVALID,
           suggestions: [buildWithout(['watch'], 'build the family once')],
         });
@@ -1254,7 +1357,7 @@ function registerThemeCommands(theme, program, docs, words) {
       // --check and --watch are mutually exclusive: check is a one-shot,
       // exit-coded verification; watch is a long-running rebuild loop.
       if (options.check && options.watch) {
-        return cliError('--check cannot be combined with --watch', {
+        return await refuse('--check cannot be combined with --watch', {
           code: ERROR_CODES.ERR_THEME_INVALID,
           suggestions: [buildWithout(['watch'], 'check once')],
         });
@@ -1264,7 +1367,7 @@ function registerThemeCommands(theme, program, docs, words) {
       // it each theme writes `<theme name>.css` beside its source, which is
       // what a multi-theme build wants anyway.
       if (options.out && entries.length > 1) {
-        return cliError(
+        return await refuse(
           `--out takes a single output path and ${entries.length} theme files were given. ` +
             'Build them without --out (each theme writes <name>.css next to its source), ' +
             'or run one invocation per theme.',
@@ -1285,7 +1388,7 @@ function registerThemeCommands(theme, program, docs, words) {
       // supported in --json (machine) mode, which expects a single envelope.
       if (options.watch) {
         if (json) {
-          return cliError('--watch is not supported with --json', {
+          return await refuse('--watch is not supported with --json', {
             code: ERROR_CODES.ERR_THEME_INVALID,
             suggestions: [
               buildWithout(['watch'], 'build once, with a JSON result'),
@@ -1326,7 +1429,7 @@ function registerThemeCommands(theme, program, docs, words) {
         out: options.out,
       });
       if (refused)
-        return themeError(
+        return await refuseTheme(
           (await words.follow?.(refused, process.cwd())) ?? refused,
           words,
           buildFallback,
@@ -1359,7 +1462,7 @@ function registerThemeCommands(theme, program, docs, words) {
         } catch (e) {
           const err =
             /** @type {import('../../../api/error.mjs').AstryxError} */ (e);
-          return themeError(err, words, [
+          return await refuseTheme(err, words, [
             buildWithout(['family'], 'build each theme on its own'),
           ]);
         }
@@ -1389,8 +1492,8 @@ function registerThemeCommands(theme, program, docs, words) {
           for (const show of theme.lines) show();
         }
       };
-      const writeFailed = (/** @type {unknown} */ error) =>
-        themeError(
+      const writeFailed = async (/** @type {unknown} */ error) =>
+        refuseTheme(
           /** @type {import('../../../api/error.mjs').AstryxError} */ (error),
           words,
           [
@@ -1410,24 +1513,10 @@ function registerThemeCommands(theme, program, docs, words) {
         const log = logger.log;
         const warn = logger.warn;
         // A group may know fonts the app loads that the theme file cannot
-        // say (the editor's app copy stylesheet): those are not named as
-        // unloaded, in the notices, the trailer or the full help.
+        // say (the editor's app copy stylesheet): the build leaves them out
+        // of every "not loaded" note, family by family.
         const loads =
           (await words.loadedFonts?.(entry.file, process.cwd())) ?? null;
-        /** @param {string} msg */
-        const namesOnlyLoaded = msg => {
-          // The families the notice names: on its first line, after the
-          // theme's own name.
-          const line =
-            msg
-              .split('\n')
-              .find(l => /not load/.test(l))
-              ?.replace(/^.*?(names fonts it does not load:|Font )/, '') ?? '';
-          const fonts = [...line.matchAll(/"([^"]+)"/g)].map(m => m[1]);
-          return (
-            Boolean(loads) && fonts.length > 0 && fonts.every(f => loads?.(f))
-          );
-        };
         // A check whose result a group may still fail holds its lines
         // until the group has looked.
         /** @type {Array<string | undefined> | null} */
@@ -1436,19 +1525,6 @@ function registerThemeCommands(theme, program, docs, words) {
           held = [];
           logger.log = (/** @type {string | undefined} */ message) => {
             held?.push(message);
-          };
-        }
-        if (loads && !deferred && !held) {
-          logger.log = (/** @type {string | undefined} */ message) => {
-            if (
-              typeof message === 'string' &&
-              /names fonts it does not load|named by this theme but not loaded/.test(
-                message,
-              ) &&
-              namesOnlyLoaded(message)
-            )
-              return;
-            log.call(logger, message);
           };
         }
         if (deferred) {
@@ -1471,6 +1547,8 @@ function registerThemeCommands(theme, program, docs, words) {
             deferredWrites: deferred ? writes : undefined,
             commandWords: words,
             colorModes: words.colorModes?.(entry.file, process.cwd()) ?? null,
+            fontHelp: words.fontHelp?.(entry.file, process.cwd()) ?? null,
+            loadedFonts: loads,
           };
           let result;
           if (report) {
@@ -1482,19 +1560,6 @@ function registerThemeCommands(theme, program, docs, words) {
               handOff,
             );
             result = built.receipt;
-            if (loads && built.trailer) {
-              const named = (/** @type {string} */ msg) =>
-                built.trailer?.unloadedFonts.some(
-                  (/** @type {string} */ f) =>
-                    loads(f) && msg.includes(`"${f}"`),
-                ) ?? false;
-              built.trailer.fontNotices = built.trailer.fontNotices.filter(
-                (/** @type {string} */ m) => !named(m),
-              );
-              built.trailer.unloadedFonts = built.trailer.unloadedFonts.filter(
-                (/** @type {string} */ f) => !loads(f),
-              );
-            }
             if (built.trailer) trailers.push(built.trailer);
             if (compact && result?.type === 'theme.build') {
               const {outputs, sizeKB, tokenCount, componentCount} = result.data;
@@ -1517,23 +1582,15 @@ function registerThemeCommands(theme, program, docs, words) {
           }
           logger.log = log;
           logger.warn = warn;
-          const data = /** @type {any} */ (result)?.data;
-          if (loads && data && Array.isArray(data.notices))
-            data.notices = data.notices.filter(
-              (/** @type {string} */ m) =>
-                !(
-                  /named by this theme but not loaded/.test(m) &&
-                  namesOnlyLoaded(m)
-                ),
-            );
           // A group may add to a build's result (the editor's app copy:
           // what keeps it behind, and in a check whether it is current).
           const extra = await words.extraData?.(entry.file, process.cwd(), {
             check: Boolean(options.check),
             upToDate: /** @type {any} */ (result)?.data?.upToDate,
             out: options.out,
+            iconsSpecifier: options.iconsSpecifier,
           });
-          if (extra && result?.data) Object.assign(result.data, extra);
+          if (extra && result?.data) mergeResultData(result.data, extra);
           // A check the group failed says so where the check said ok.
           if (held) {
             logger.log = log;
@@ -1572,7 +1629,7 @@ function registerThemeCommands(theme, program, docs, words) {
           if (/** @type {any} */ (err).outputCollision) {
             // Nothing is written, so only this theme's warnings are shown.
             for (const show of lines) show();
-            return themeError(err, words, [
+            return await refuseTheme(err, words, [
               buildWithout([], 'build the first theme on its own', [
                 entries[0].file,
               ]),
@@ -1591,7 +1648,7 @@ function registerThemeCommands(theme, program, docs, words) {
           if (report && compact) printCompactTrailer(trailers);
           else if (report) printBatchTrailer(trailers);
           if (entries.length > 1) err.message = `${entry.file}: ${err.message}`;
-          return themeError(
+          return await refuseTheme(
             entries.length === 1
               ? ((await words.follow?.(err, process.cwd())) ?? err)
               : err,
@@ -1605,6 +1662,18 @@ function registerThemeCommands(theme, program, docs, words) {
           publish();
         } catch (e) {
           return writeFailed(e);
+        }
+      }
+      // A group follows the written outputs with writes of its own (the
+      // editor's app copy), and each result says what they did.
+      if (words.afterBuild && !options.check) {
+        const more = await words.afterBuild(
+          results.map(r => r.file),
+          process.cwd(),
+        );
+        for (const r of results) {
+          const data = /** @type {any} */ (r.receipt)?.data;
+          if (data && more[r.file]) mergeResultData(data, more[r.file]);
         }
       }
 

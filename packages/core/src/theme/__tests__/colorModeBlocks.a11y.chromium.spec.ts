@@ -167,22 +167,20 @@ test.describe('color-mode blocks', () => {
     }
   });
 
-  test('follow a surface as the onDark and onLight overrides do', async ({
-    page,
-  }) => {
+  test('follow the nearest surface', async ({page}) => {
     await openStory(page);
     // A surface inside the root decides there.
     const first = await shown(page, 'alternating-dark');
     expect(first.ghost).toBe(MAGENTA);
     expect(first.plain).not.toBe(GREEN);
-    // A light surface inside it takes the light block. It also sits inside
-    // the dark surface, so the dark block applies too, as onDark does; where
-    // both set a property, the light block, written later, wins.
-    for (const id of ['alternating-light', 'alternating-dark-again']) {
-      const inner = await shown(page, id);
-      expect(inner.plain, id).toBe(GREEN);
-      expect(inner.ghost, id).toBe(MAGENTA);
-    }
+    // The nearest surface decides: a light surface inside it takes the
+    // light block alone, and a dark one inside that the dark block alone.
+    const light = await shown(page, 'alternating-light');
+    expect(light.plain).toBe(GREEN);
+    expect(light.ghost).not.toBe(MAGENTA);
+    const darkAgain = await shown(page, 'alternating-dark-again');
+    expect(darkAgain.ghost).toBe(MAGENTA);
+    expect(darkAgain.plain).not.toBe(GREEN);
   });
 
   test('follow a nested Theme and a MediaTheme surface', async ({page}) => {

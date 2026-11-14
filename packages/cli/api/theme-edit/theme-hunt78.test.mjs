@@ -165,12 +165,13 @@ describe('except keeps every excepted part, variant and state', () => {
     T,
   );
   it(
-    'all text bigger keeps the button text size',
+    'all text bigger except buttons says the button size differs by screen',
     async () => {
+      // Phones keep their own base text sizes while the dial moves the
+      // others: one size on the button would change it on phones.
       const r = await answer('make all text bigger except buttons');
-      expect(r.commands.some(c => /font-size \S+ --on button/.test(c))).toBe(
-        true,
-      );
+      expect(r.commands.some(c => /--on button/.test(c))).toBe(false);
+      expect(r.text).toMatch(/differs by screen/);
     },
     T,
   );
@@ -320,7 +321,9 @@ describe('scope words', () => {
       expect(
         (await answer('make inputs with errors have a red background'))
           .commands[0],
-      ).toMatch(/^set q background '#dc2626' --on inputs --when status:error$/);
+      ).toMatch(
+        /^set q background-color '#dc2626' --on inputs --when status:error$/,
+      );
     },
     T,
   );
@@ -448,11 +451,11 @@ describe('"like" and "as" compare only in comparison forms', () => {
       // A value for that part.
       [
         'use red as the button background',
-        "set q background '#dc2626' --on button",
+        "set q background-color '#dc2626' --on button",
       ],
       [
         'use navy as the card background',
-        "set q background '#1e3a8a' --on card",
+        "set q background-color '#1e3a8a' --on card",
       ],
       ['use 8px as the button radius', 'set q border-radius 8px --on button'],
       ['use 12px as the card padding', 'set q padding 12px --on card'],

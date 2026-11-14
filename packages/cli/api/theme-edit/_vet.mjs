@@ -132,8 +132,13 @@ export function vetSuggestions(e, ctx, slug, data) {
         false,
       );
       return true;
-    } catch {
-      return false;
+    } catch (err) {
+      // A line its own refusal offers again after a step (an install) works
+      // once that step is done.
+      return (
+        err instanceof AstryxError &&
+        (err.suggestions ?? []).some(x => x.name === s.name)
+      );
     }
   });
   if (kept.length === list.length) return e;
@@ -154,7 +159,8 @@ export function vetSuggestions(e, ctx, slug, data) {
  * @param {string} line
  * @param {(line: string) => Promise<AstryxError | null> | AstryxError | null} check
  * @param {(name: string) => boolean} isRepair
- * @returns {Promise<{line: string, why: string | null}>}
+ * @returns {Promise<{line: string, why: string | null, next?: import("../../foundation/response/base").Suggestion[]}>}
+ *   `next`: the commands the last refusal offers (an install before the line, a look at the theme)
  */
 export async function followLine(line, check, isRepair) {
   const tried = new Set([line]);
@@ -162,13 +168,20 @@ export async function followLine(line, check, isRepair) {
   for (;;) {
     const refused = await check(now);
     if (!refused) return {line: now, why: null};
-    const next = (refused.suggestions ?? []).find(
-      x => isRepair(x.name) && !tried.has(x.name),
-    );
+    // A refusal that offers the line itself after another step (an
+    // install) says the line works once that is done: no other line is
+    // followed in its place.
+    const again = (refused.suggestions ?? []).some(x => x.name === now);
+    const next = again
+      ? undefined
+      : (refused.suggestions ?? []).find(
+          x => isRepair(x.name) && !tried.has(x.name),
+        );
     if (!next)
       return {
         line: now,
         why: refused.message.replace(/\s*Nothing was changed\.$/, ''),
+        next: refused.suggestions ?? [],
       };
     now = next.name;
     tried.add(now);

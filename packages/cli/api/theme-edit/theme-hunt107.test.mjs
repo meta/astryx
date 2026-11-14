@@ -60,12 +60,12 @@ describe('the theme a source defines is the one the build loads', () => {
       "export const a = defineTheme({extends: w4Settings, name: 'x'});\nexport const w4Theme = defineTheme({extends: w4Settings, name: 'w4'});",
     );
     await expect(themeEditSet('w4', 'corners', 'pill', {cwd})).rejects.toThrow(
-      "no longer names the theme 'w4'",
+      'reads its export a',
     );
     for (const args of [[], ['--check']]) {
       const r = compile('themes/w4/w4.theme.ts', ...args);
       expect(r.status, args.join(' ')).not.toBe(0);
-      expect(r.stdout + r.stderr).toContain("no longer names the theme 'w4'");
+      expect(r.stdout + r.stderr).toContain('reads its export a');
     }
     expect(fs.existsSync(path.join(cwd, 'themes/w4/x.css'))).toBe(false);
     expect(read('themes/w4/w4.css')).toBe(before);

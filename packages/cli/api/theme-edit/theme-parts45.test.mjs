@@ -17,7 +17,7 @@ import {
 } from '../../test-utils/linked-fixture.mjs';
 import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
 import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
-import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
+import {modeValue, refusal} from '../../test-utils/theme-edit-fixture.mjs';
 
 vi.mock('./_preview.mjs', async importOriginal =>
   (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
@@ -90,9 +90,23 @@ describe('state settings keep what they do not name', () => {
       state: 'hover',
       mode: 'dark',
     });
+    // Dark hovers blue; light writes no hover of its own, so the light
+    // resting color shows there.
+    const hover = `.astryx-button[data-variant="primary"]${HOVER}`;
+    expect(modeValue(cssOf('s2'), hover, 'background-color', 'dark')).toBe(
+      '#0000ff',
+    );
+    expect(modeValue(cssOf('s2'), hover, 'background-color', 'light')).toBe(
+      undefined,
+    );
     expect(
-      ruleOf('s2', `.astryx-button[data-variant="primary"]${HOVER}`),
-    ).toMatch(/background-color: light-dark\(#eeeeee, #0000ff\)/);
+      modeValue(
+        cssOf('s2'),
+        '.astryx-button[data-variant="primary"]',
+        'background-color',
+        'light',
+      ),
+    ).toBe('#eeeeee');
   }, 240_000);
 
   it('accepts a one-mode border color in a state the base theme gives a border color (butter)', async ctx => {
@@ -105,7 +119,14 @@ describe('state settings keep what they do not name', () => {
       state: 'hover',
       mode: 'light',
     });
-    expect(cssOf('s3')).toMatch(/border-color: light-dark\(#00ff00, /);
+    expect(
+      modeValue(
+        cssOf('s3'),
+        `.astryx-button[data-variant="secondary"]${HOVER}`,
+        'border-color',
+        'light',
+      ),
+    ).toBe('#00ff00');
   }, 240_000);
 });
 
@@ -124,9 +145,10 @@ describe('the background family across one-mode and both-mode settings', () => {
       when: 'variant:muted',
       mode: 'dark',
     });
-    const muted = ruleOf('b1', '.astryx-card[data-variant="muted"]');
-    expect(muted).toMatch(/light-dark\(#ff0000, #0000ff\)/);
-    expect(muted).not.toMatch(/light-dark\([^)]*, #0000ff\)[^]*background/);
+    const css = cssOf('b1');
+    const muted = '.astryx-card[data-variant="muted"]';
+    expect(modeValue(css, muted, 'background-color', 'light')).toBe('#ff0000');
+    expect(modeValue(css, muted, 'background', 'dark')).toBe('#0000ff');
   }, 240_000);
 
   it('replaces a one-mode background with a later both-mode background-color', async ctx => {

@@ -147,8 +147,26 @@ export function namedFontFamilies(value) {
 }
 
 /**
+ * The family list of a CSS `font` shorthand: what follows its size (and
+ * line height), as the shorthand's grammar puts it last. A system font
+ * keyword (`caption`, `menu`, ...) or a value with no size names none.
+ * @param {string} value
+ * @returns {string}
+ */
+export function fontShorthandFamilyList(value) {
+  // A size has a unit (a bare number is a weight); a line height may
+  // follow it after a slash.
+  const size =
+    /(?<=^|\s)(?:[+-]?(?:\d+\.?\d*|\.\d+)(?:[a-z]+|%)|xx-small|x-small|small|medium|large|x-large|xx-large|xxx-large|larger|smaller|(?:calc|clamp|min|max|var)\([^)]*\))(?:\s*\/\s*\S+)?\s+(?=\S)/i;
+  // The first size: a family name after it may hold anything.
+  const m = size.exec(String(value));
+  return m ? String(value).slice(m.index + m[0].length) : '';
+}
+
+/**
  * Collect the font families a resolved theme names but does not load —
- * every `--font-family-*` token plus every component-override `fontFamily`,
+ * every `--font-family-*` token plus every component-override `fontFamily`
+ * and the families of a `font` shorthand,
  * minus generics, CSS-wide keywords, `var()` references, and known system
  * families. Source order, first-seen casing, deduped case-insensitively.
  *
@@ -202,6 +220,9 @@ export function collectUnloadedFonts(resolvedTheme) {
     if (!node || typeof node !== 'object') return;
     for (const [key, value] of Object.entries(node)) {
       if (key === 'fontFamily') consider(value);
+      // A `font` shorthand names its families last.
+      else if (key === 'font' && typeof value === 'string')
+        consider(fontShorthandFamilyList(value));
       else walk(value);
     }
   };
@@ -217,13 +238,19 @@ export function collectUnloadedFonts(resolvedTheme) {
  *
  * @param {string} themeName
  * @param {string[]} families
+ * @param {(families: string[]) => string} [recipe] the caller's own way to
+ *   load them, in place of the generic recipe
  * @returns {string}
  */
-export function formatFontLoadingHelp(themeName, families) {
+export function formatFontLoadingHelp(
+  themeName,
+  families,
+  recipe = fontLoadingRecipe,
+) {
   const named = families.map(f => `"${f}"`).join(', ');
   return `
 [note] Theme "${themeName}" names fonts it does not load: ${named}
-${fontLoadingRecipe(families)}`;
+${recipe(families)}`;
 }
 
 /**
@@ -231,16 +258,21 @@ ${fontLoadingRecipe(families)}`;
  * do not load, with the themes that name it, then one recipe for all of them.
  *
  * @param {Array<{family: string, themes: string[]}>} entries
+ * @param {(families: string[]) => string} [recipe] the caller's own way to
+ *   load them, in place of the generic recipe
  * @returns {string}
  */
-export function formatBatchFontLoadingHelp(entries) {
+export function formatBatchFontLoadingHelp(
+  entries,
+  recipe = fontLoadingRecipe,
+) {
   const named = entries
     .map(({family, themes}) => `  "${family}" (${themes.join(', ')})`)
     .join('\n');
   return `
 [note] The built themes name fonts they do not load:
 ${named}
-${fontLoadingRecipe(entries.map(entry => entry.family))}`;
+${recipe(entries.map(entry => entry.family))}`;
 }
 
 /**

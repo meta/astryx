@@ -23,10 +23,18 @@ import {fork, spawnSync} from 'node:child_process';
 import {builtinModules} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import postcss from 'postcss';
-import {assetDataUri, isAssetBytes, isAssetPath, MAX_ASSET_BYTES, RenderAssetError} from './assets.mjs';
+import {
+  assetDataUri,
+  isAssetBytes,
+  isAssetPath,
+  MAX_ASSET_BYTES,
+  RenderAssetError,
+} from './assets.mjs';
 import {classesIn, cutCss, layerOrderOf} from './css-cut.mjs';
 import {asParsed, formatFor, sha256, sourceBlock} from './source-block.mjs';
 import {embeddedPathProblem} from './embedded-files.mjs';
+import {scanHtml} from './html-reader.mjs';
+import {removeOnStop} from '../fs/stop-cleanup.mjs';
 import {aliasOnly, assetRefsOf} from './embedded-imports.mjs';
 import {isServedPackage, resolveServed} from './served-packages.mjs';
 import {CHART_CSS} from './charts.mjs';
@@ -131,6 +139,31 @@ function carryScopeOf(dir, cwd) {
 const escapeHtml = s =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+/**
+ * The attributes a page's root Theme puts on `<html>` in a browser, for the
+ * static page: Core's root provider sets `data-astryx-theme` (and
+ * `data-theme` for a one-mode page) on the document element once it runs,
+ * so root-scoped tokens (the focus ring's color) resolve against the theme.
+ * A page runs no script, so they are written here: from the outermost
+ * element the theme marks, the root Theme's own.
+ * @param {string} markup
+ */
+function rootThemeAttrs(markup) {
+  for (const t of scanHtml(markup)) {
+    if (t.kind !== 'start') continue;
+    const attrs = new Map(t.attrs);
+    if (!attrs.has('data-astryx-theme')) continue;
+    return ['data-astryx-theme', 'data-theme']
+      .filter(a => attrs.has(a))
+      .map(
+        a =>
+          ` ${a}="${escapeHtml(String(attrs.get(a))).replace(/"/g, '&quot;')}"`,
+      )
+      .join('');
+  }
+  return '';
+}
+
 /** @param {string} s */
 const decodeAttr = s =>
   s
@@ -147,7 +180,10 @@ const decodeAttr = s =>
  * @returns {{url: string, layer: string | null, supports: string | null, media: string} | null}
  */
 function importParams(params) {
-  const m = /^\s*(?:url\(\s*(['"]?)([\s\S]*?)\1\s*\)|(['"])([\s\S]*?)\3)\s*([\s\S]*)$/.exec(params);
+  const m =
+    /^\s*(?:url\(\s*(['"]?)([\s\S]*?)\1\s*\)|(['"])([\s\S]*?)\3)\s*([\s\S]*)$/.exec(
+      params,
+    );
   if (!m) return null;
   let rest = m[5];
   /** @type {string | null} */
@@ -159,7 +195,9 @@ function importParams(params) {
   }
   /** @type {string | null} */
   let supports = null;
-  const sup = /^supports\(((?:[^()]|\((?:[^()]|\([^()]*\))*\))*)\)\s*/i.exec(rest);
+  const sup = /^supports\(((?:[^()]|\((?:[^()]|\([^()]*\))*\))*)\)\s*/i.exec(
+    rest,
+  );
   if (sup) {
     supports = sup[1];
     rest = rest.slice(sup[0].length);
@@ -240,7 +278,10 @@ function expandImports(file, css, ctx) {
     if (fromPackage) ctx.packageSheets.push(url.replace(/^~/, ''));
     else ctx.carried.add(target);
     const from = target;
-    let inner = expandImports(from, fs.readFileSync(from, 'utf8'), {...ctx, seen});
+    let inner = expandImports(from, fs.readFileSync(from, 'utf8'), {
+      ...ctx,
+      seen,
+    });
     // Keep the imported sheet's relative url()s pointing at the same files.
     inner = inner.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/g, (u, q, r) => {
       if (/^(data:|blob:|#|\/|[a-z]+:)/i.test(r)) return u;
@@ -251,13 +292,17 @@ function expandImports(file, css, ctx) {
       return `url(${q}${rebased.startsWith('.') ? rebased : `./${rebased}`}${q})`;
     });
     // The import's conditions still scope what it brings in.
-    if (parsed.supports) inner = `@supports (${parsed.supports.replace(/^\((.*)\)$/s, '$1')}){${inner}}`;
+    if (parsed.supports)
+      inner = `@supports (${parsed.supports.replace(/^\((.*)\)$/s, '$1')}){${inner}}`;
     if (parsed.media) inner = `@media ${parsed.media}{${inner}}`;
-    if (parsed.layer !== null) inner = `@layer${parsed.layer ? ` ${parsed.layer}` : ''}{${inner}}`;
+    if (parsed.layer !== null)
+      inner = `@layer${parsed.layer ? ` ${parsed.layer}` : ''}{${inner}}`;
     try {
       rule.replaceWith(postcss.parse(inner, {from}).nodes);
     } catch (e) {
-      const reason = /** @type {any} */ (e)?.reason ?? (e instanceof Error ? e.message : String(e));
+      const reason =
+        /** @type {any} */ (e)?.reason ??
+        (e instanceof Error ? e.message : String(e));
       throw new RenderError(
         'ERR_RENDER_COMPILE',
         `${path.basename(from)}, imported by ${path.basename(file)}, is not valid CSS: ${reason}`,
@@ -270,7 +315,14 @@ function expandImports(file, css, ctx) {
 /** @typedef {{dir: string, integrations: readonly string[]}} ServedSet */
 
 /** Signals that Node itself or a native module raises when it fails. */
-const CRASH_SIGNALS = new Set(['SIGSEGV', 'SIGBUS', 'SIGILL', 'SIGFPE', 'SIGABRT', 'SIGTRAP']);
+const CRASH_SIGNALS = new Set([
+  'SIGSEGV',
+  'SIGBUS',
+  'SIGILL',
+  'SIGFPE',
+  'SIGABRT',
+  'SIGTRAP',
+]);
 
 /**
  * How a native crash ended a process, or null when it was not one. On
@@ -281,7 +333,8 @@ const CRASH_SIGNALS = new Set(['SIGSEGV', 'SIGBUS', 'SIGILL', 'SIGFPE', 'SIGABRT
  */
 function crashOf(code, signal) {
   if (signal) return CRASH_SIGNALS.has(signal) ? signal : null;
-  if (code !== null && code >>> 0 >= 0xc0000000) return `0x${(code >>> 0).toString(16).toUpperCase()}`;
+  if (code !== null && code >>> 0 >= 0xc0000000)
+    return `0x${(code >>> 0).toString(16).toUpperCase()}`;
   return null;
 }
 
@@ -292,7 +345,10 @@ function crashOf(code, signal) {
 function segmenterCrashes() {
   const probe = spawnSync(
     process.execPath,
-    ['-e', "[...new Intl.Segmenter('en', {granularity: 'grapheme'}).segment('a b')]"],
+    [
+      '-e',
+      "[...new Intl.Segmenter('en', {granularity: 'grapheme'}).segment('a b')]",
+    ],
     {stdio: 'ignore', timeout: 10_000},
   );
   return crashOf(probe.status, probe.signal) !== null;
@@ -307,12 +363,25 @@ function segmenterCrashes() {
  */
 function crashError(how, {crashed, withoutSegmenter}) {
   const node = `Node ${process.version} (${process.execPath})`;
-  const detail = {signal: how, node: process.version, nodePath: process.execPath};
+  const detail = {
+    signal: how,
+    node: process.version,
+    nodePath: process.execPath,
+  };
   if (!crashed) {
-    const memory = how === 'SIGKILL' ? ' The system stops a process this way when the machine runs out of memory.' : '';
-    return new RenderError('ERR_RENDER_FAILED', `${node} was stopped by a signal (${how}) while it rendered the page.${memory}`, detail);
+    const memory =
+      how === 'SIGKILL'
+        ? ' The system stops a process this way when the machine runs out of memory.'
+        : '';
+    return new RenderError(
+      'ERR_RENDER_FAILED',
+      `${node} was stopped by a signal (${how}) while it rendered the page.${memory}`,
+      detail,
+    );
   }
-  const cause = withoutSegmenter ? ' It crashed again with Intl.Segmenter removed, so the fault is elsewhere in this Node or in a native module.' : '';
+  const cause = withoutSegmenter
+    ? ' It crashed again with Intl.Segmenter removed, so the fault is elsewhere in this Node or in a native module.'
+    : '';
   return new RenderError(
     'ERR_RENDER_FAILED',
     `${node} crashed (${how}) while it rendered the page. A fault in Node or in a native module causes this, not the page's code.${cause} Render with an official Node.js build of another version.`,
@@ -325,14 +394,36 @@ function crashError(how, {crashed, withoutSegmenter}) {
  * reported last, how long it ran, the memory left, and its last stderr line.
  * @param {any} message the host's {hostExit, reason, stage, elapsedMs, rssMb, freeMb, stderrTail}
  */
-function noAnswerError({hostExit, reason, stage, elapsedMs, rssMb, freeMb, stderrTail}) {
-  const detail = {reason, exit: hostExit, stage, elapsedMs, rssMb, freeMb, ...(stderrTail ? {stderrTail} : {})};
+function noAnswerError({
+  hostExit,
+  reason,
+  stage,
+  elapsedMs,
+  rssMb,
+  freeMb,
+  stderrTail,
+}) {
+  const detail = {
+    reason,
+    exit: hostExit,
+    stage,
+    elapsedMs,
+    rssMb,
+    freeMb,
+    ...(stderrTail ? {stderrTail} : {}),
+  };
   const where = stage ? ` while ${stage}` : '';
   const seconds = Math.round((elapsedMs ?? 0) / 1000);
   if (reason === 'host-timeout') {
-    return new RenderError('ERR_RENDER_TIMEOUT', `The page's process stopped at its own time limit${where}, after ${seconds} seconds, before this process read an answer.`, detail);
+    return new RenderError(
+      'ERR_RENDER_TIMEOUT',
+      `The page's process stopped at its own time limit${where}, after ${seconds} seconds, before this process read an answer.`,
+      detail,
+    );
   }
-  const last = stderrTail ? ` Its last output: ${String(stderrTail).split('\n').at(-1)}` : '';
+  const last = stderrTail
+    ? ` Its last output: ${String(stderrTail).split('\n').at(-1)}`
+    : '';
   return new RenderError(
     'ERR_RENDER_FAILED',
     `The page stopped rendering without an answer (exit ${hostExit})${where}, after ${seconds} seconds, with ${freeMb} MB of memory free.${last}`,
@@ -343,18 +434,38 @@ function noAnswerError({hostExit, reason, stage, elapsedMs, rssMb, freeMb, stder
 /** The error for a host process that ended, without a signal, before it answered. */
 function hostEndError(/** @type {number | null} */ code) {
   if (code === HOST_EXIT.disconnected) {
-    return new RenderError('ERR_RENDER_FAILED', "The page's process lost its channel to this process and stopped without an answer.", {reason: 'disconnected', exit: code});
+    return new RenderError(
+      'ERR_RENDER_FAILED',
+      "The page's process lost its channel to this process and stopped without an answer.",
+      {reason: 'disconnected', exit: code},
+    );
   }
   if (code === HOST_EXIT.noChannel) {
-    return new RenderError('ERR_RENDER_FAILED', "The page's process had no channel left to send its answer on.", {reason: 'no-channel', exit: code});
+    return new RenderError(
+      'ERR_RENDER_FAILED',
+      "The page's process had no channel left to send its answer on.",
+      {reason: 'no-channel', exit: code},
+    );
   }
   if (code === HOST_EXIT.timeout) {
-    return new RenderError('ERR_RENDER_TIMEOUT', "The page's process stopped at its own time limit before this process read an answer.", {reason: 'host-timeout', exit: code});
+    return new RenderError(
+      'ERR_RENDER_TIMEOUT',
+      "The page's process stopped at its own time limit before this process read an answer.",
+      {reason: 'host-timeout', exit: code},
+    );
   }
   if (code === HOST_EXIT.sendFailed) {
-    return new RenderError('ERR_RENDER_FAILED', "The page's process could not send its answer to this process.", {reason: 'send-failed', exit: code});
+    return new RenderError(
+      'ERR_RENDER_FAILED',
+      "The page's process could not send its answer to this process.",
+      {reason: 'send-failed', exit: code},
+    );
   }
-  return new RenderError('ERR_RENDER_FAILED', `The page's process ended without an answer (exit ${code}).`, {reason: 'host-ended', exit: code});
+  return new RenderError(
+    'ERR_RENDER_FAILED',
+    `The page's process ended without an answer (exit ${code}).`,
+    {reason: 'host-ended', exit: code},
+  );
 }
 
 /**
@@ -365,7 +476,8 @@ function hostEndError(/** @type {number | null} */ code) {
  * @param {string | undefined} stateFile
  */
 function noMessageError(code, stateFile) {
-  if (code !== 0 && code !== null && Object.values(HOST_EXIT).includes(code)) return hostEndError(code);
+  if (code !== 0 && code !== null && Object.values(HOST_EXIT).includes(code))
+    return hostEndError(code);
   /** @type {any} */
   let saved = null;
   try {
@@ -374,15 +486,32 @@ function noMessageError(code, stateFile) {
     // No readable state: fall back to the bare message below.
   }
   if (!saved) return hostEndError(code);
-  const detail = {exit: code, stage: saved.stage, elapsedMs: saved.elapsedMs, rssMb: saved.rssMb, freeMb: saved.freeMb, ...(saved.stderrTail ? {stderrTail: saved.stderrTail} : {})};
+  const detail = {
+    exit: code,
+    stage: saved.stage,
+    elapsedMs: saved.elapsedMs,
+    rssMb: saved.rssMb,
+    freeMb: saved.freeMb,
+    ...(saved.stderrTail ? {stderrTail: saved.stderrTail} : {}),
+  };
   if (saved.answered === 'sent') {
-    return new RenderError('ERR_RENDER_FAILED', `The page's process sent its answer, but this process did not receive it (exit ${code}).`, {reason: 'answer-lost', ...detail});
+    return new RenderError(
+      'ERR_RENDER_FAILED',
+      `The page's process sent its answer, but this process did not receive it (exit ${code}).`,
+      {reason: 'answer-lost', ...detail},
+    );
   }
   if (saved.answered === 'sending') {
-    return new RenderError('ERR_RENDER_FAILED', `The page's process ended while it sent its answer (exit ${code}).`, {reason: 'ended-while-sending', ...detail});
+    return new RenderError(
+      'ERR_RENDER_FAILED',
+      `The page's process ended while it sent its answer (exit ${code}).`,
+      {reason: 'ended-while-sending', ...detail},
+    );
   }
   const seconds = Math.round((saved.elapsedMs ?? 0) / 1000);
-  const last = saved.stderrTail ? ` Its last output: ${String(saved.stderrTail).split('\n').at(-1)}` : '';
+  const last = saved.stderrTail
+    ? ` Its last output: ${String(saved.stderrTail).split('\n').at(-1)}`
+    : '';
   return new RenderError(
     'ERR_RENDER_FAILED',
     `The page's process ended without an answer (exit ${code}) while ${saved.stage}, after ${seconds} seconds, with ${saved.freeMb} MB of memory free.${last}`,
@@ -403,17 +532,27 @@ function runWorker(input, timeoutMs) {
   return withHostStateFile(stateFile => {
     const data = {
       ...input,
-      served: input.served ? {dir: input.served.dir, integrations: [...input.served.integrations]} : null,
+      served: input.served
+        ? {dir: input.served.dir, integrations: [...input.served.integrations]}
+        : null,
       timeoutMs,
       stateFile,
     };
-    const host = fork(fileURLToPath(new URL('./page-host.mjs', import.meta.url)), [JSON.stringify(data)], {
-      // Never the CLI's own flags (such as --input-type).
-      execArgv: [],
-      stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
-      serialization: 'advanced',
+    const host = fork(
+      fileURLToPath(new URL('./page-host.mjs', import.meta.url)),
+      [JSON.stringify(data)],
+      {
+        // Never the CLI's own flags (such as --input-type).
+        execArgv: [],
+        stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+        serialization: 'advanced',
+      },
+    );
+    return awaitHost(host, {
+      timeoutMs,
+      withoutSegmenter: input.withoutSegmenter,
+      stateFile,
     });
-    return awaitHost(host, {timeoutMs, withoutSegmenter: input.withoutSegmenter, stateFile});
   });
 }
 
@@ -439,9 +578,12 @@ export async function withHostStateFile(
     // No temporary folder (missing or read-only): render without the state file.
     return use(undefined);
   }
+  // A stop while the page renders removes the folder too.
+  const untrack = removeOnStop(dir);
   try {
     return await use(path.join(dir, 'host-state.json'));
   } finally {
+    untrack();
     try {
       fs.rmSync(dir, {recursive: true, force: true, maxRetries: 3});
     } catch {
@@ -485,8 +627,14 @@ export function awaitHost(host, {timeoutMs, withoutSegmenter, stateFile}) {
           const text = String(message.hostError);
           reject(
             /ERR_WORKER_OUT_OF_MEMORY|heap out of memory/.test(text)
-              ? new RenderError('ERR_RENDER_FAILED', 'The page ran out of memory while rendering.')
-              : new RenderError('ERR_RENDER_FAILED', `The page could not be rendered: ${text.split('\n')[0]}`),
+              ? new RenderError(
+                  'ERR_RENDER_FAILED',
+                  'The page ran out of memory while rendering.',
+                )
+              : new RenderError(
+                  'ERR_RENDER_FAILED',
+                  `The page could not be rendered: ${text.split('\n')[0]}`,
+                ),
           );
         } else if (message?.hostExit !== undefined) {
           reject(noAnswerError(message));
@@ -496,7 +644,14 @@ export function awaitHost(host, {timeoutMs, withoutSegmenter, stateFile}) {
       });
     });
     host.once('error', error => {
-      finish(() => reject(new RenderError('ERR_RENDER_FAILED', `The page could not be rendered: ${String(error?.message ?? error).split('\n')[0]}`)));
+      finish(() =>
+        reject(
+          new RenderError(
+            'ERR_RENDER_FAILED',
+            `The page could not be rendered: ${String(error?.message ?? error).split('\n')[0]}`,
+          ),
+        ),
+      );
     });
     // 'close' comes after the IPC channel drains, so an answer the host sent
     // just before it exited still wins; 'exit' can come first under load.
@@ -504,7 +659,8 @@ export function awaitHost(host, {timeoutMs, withoutSegmenter, stateFile}) {
       finish(() => {
         const crash = crashOf(code, signal);
         if (crash) resolve({crashed: crash});
-        else if (signal) reject(crashError(signal, {crashed: false, withoutSegmenter}));
+        else if (signal)
+          reject(crashError(signal, {crashed: false, withoutSegmenter}));
         else reject(noMessageError(code, stateFile));
       });
     });
@@ -522,9 +678,14 @@ async function runPage(input, timeoutMs, warnings) {
   const started = Date.now();
   const first = await runWorker({...input, withoutSegmenter: false}, timeoutMs);
   if (!first.crashed) return first;
-  if (!segmenterCrashes()) throw crashError(first.crashed, {crashed: true, withoutSegmenter: false});
-  const again = await runWorker({...input, withoutSegmenter: true}, Math.max(1000, timeoutMs - (Date.now() - started)));
-  if (again.crashed) throw crashError(again.crashed, {crashed: true, withoutSegmenter: true});
+  if (!segmenterCrashes())
+    throw crashError(first.crashed, {crashed: true, withoutSegmenter: false});
+  const again = await runWorker(
+    {...input, withoutSegmenter: true},
+    Math.max(1000, timeoutMs - (Date.now() - started)),
+  );
+  if (again.crashed)
+    throw crashError(again.crashed, {crashed: true, withoutSegmenter: true});
   warnings.push(segmenterWarning());
   return again;
 }
@@ -552,7 +713,8 @@ function inlineAssets(text, kind, ctx) {
   const resolveRef = ref => {
     const clean = decodeAttr(ref).trim().split(/[?#]/)[0];
     if (!clean) return null;
-    if (/^(data:|blob:|#|about:|mailto:|tel:|javascript:)/i.test(clean)) return null;
+    if (/^(data:|blob:|#|about:|mailto:|tel:|javascript:)/i.test(clean))
+      return null;
     if (/^(https?:)?\/\//i.test(clean)) {
       const key = `remote:${clean}`;
       if (!ctx.counted.has(key)) {
@@ -625,11 +787,16 @@ function inlineAssets(text, kind, ctx) {
  * @returns {string | null}
  */
 function installedVersion(name, dir, setDirs) {
-  const packageDir = setDirs.get(name) ?? findNodeModulesPackage(dir, name)?.packageDir;
+  const packageDir =
+    setDirs.get(name) ?? findNodeModulesPackage(dir, name)?.packageDir;
   if (!packageDir) return null;
   try {
-    const pkg = JSON.parse(fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8'));
-    return pkg?.name === name && typeof pkg.version === 'string' ? pkg.version : null;
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8'),
+    );
+    return pkg?.name === name && typeof pkg.version === 'string'
+      ? pkg.version
+      : null;
   } catch {
     return null;
   }
@@ -662,9 +829,17 @@ export async function renderPage(entry, options = {}) {
   const served = options.served ?? null;
   /** @type {RenderWarning[]} */
   const warnings = [];
-  const message = await runPage({entry, root, scope, served}, options.timeoutMs ?? RENDER_TIMEOUT_MS, warnings);
+  const message = await runPage(
+    {entry, root, scope, served},
+    options.timeoutMs ?? RENDER_TIMEOUT_MS,
+    warnings,
+  );
   if (!message.ok) {
-    throw new RenderError(message.error.code, message.error.message, message.error.detail);
+    throw new RenderError(
+      message.error.code,
+      message.error.message,
+      message.error.detail,
+    );
   }
   /** @type {string} */
   let markup = message.markup;
@@ -693,7 +868,9 @@ export async function renderPage(entry, options = {}) {
   const hasCore = addSheet('@astryxdesign/core/reset.css');
   if (hasCore) addSheet('@astryxdesign/core/astryx.css');
   // Package stylesheets the page imports itself, such as a theme's.
-  for (const {spec, from} of /** @type {{spec: string, from: string}[]} */ (message.packageCss ?? [])) {
+  for (const {spec, from} of /** @type {{spec: string, from: string}[]} */ (
+    message.packageCss ?? []
+  )) {
     if (sheets.includes(spec)) continue;
     const file = resolveServed(spec, from, served);
     try {
@@ -723,7 +900,13 @@ export async function renderPage(entry, options = {}) {
     });
   }
 
-  const ctx = {dir, root, warnings, counted: new Set(), localAssets: /** @type {Set<string>} */ (new Set())};
+  const ctx = {
+    dir,
+    root,
+    warnings,
+    counted: new Set(),
+    localAssets: /** @type {Set<string>} */ (new Set()),
+  };
   /** Stylesheets pulled in by another's `@import`. @type {Set<string>} */
   const carriedCss = new Set();
   try {
@@ -740,7 +923,9 @@ export async function renderPage(entry, options = {}) {
           'The page renders a <script> element. A sandboxed viewer blocks it, and anywhere else it runs when the file is opened; remove it from the page.',
       });
     }
-    for (const m of markup.matchAll(/<(link|iframe|object|embed)\b[^>]*?\s(?:href|src|data)="([^"]*)"/gi)) {
+    for (const m of markup.matchAll(
+      /<(link|iframe|object|embed)\b[^>]*?\s(?:href|src|data)="([^"]*)"/gi,
+    )) {
       if (/^(data:|#)/i.test(m[2])) continue;
       warnings.push({
         code: 'remote-asset',
@@ -749,7 +934,8 @@ export async function renderPage(entry, options = {}) {
     }
   } catch (e) {
     const err = /** @type {any} */ (e);
-    if (err instanceof RenderAssetError) throw new RenderError(err.code, err.message, err.detail);
+    if (err instanceof RenderAssetError)
+      throw new RenderError(err.code, err.message, err.detail);
     throw e;
   }
   const used = classesIn(markup);
@@ -764,11 +950,22 @@ export async function renderPage(entry, options = {}) {
     /** A stylesheet's rules cut to the page, with its own imports inlined. @param {string} file @param {string} text */
     const sheet = (file, text) => {
       try {
-        const own = expandImports(file, text, {warnings, carried: carriedCss, included, packageSheets, served});
-        return inlineAssets(cutCss(own, used), 'css', {...ctx, dir: path.dirname(file)});
+        const own = expandImports(file, text, {
+          warnings,
+          carried: carriedCss,
+          included,
+          packageSheets,
+          served,
+        });
+        return inlineAssets(cutCss(own, used), 'css', {
+          ...ctx,
+          dir: path.dirname(file),
+        });
       } catch (e) {
         if (e instanceof RenderAssetError || e instanceof RenderError) throw e;
-        const reason = /** @type {any} */ (e)?.reason ?? (e instanceof Error ? e.message : String(e));
+        const reason =
+          /** @type {any} */ (e)?.reason ??
+          (e instanceof Error ? e.message : String(e));
         throw new RenderError(
           'ERR_RENDER_COMPILE',
           `${path.relative(dir, file).split(path.sep).join('/')} is not valid CSS: ${reason}`,
@@ -778,14 +975,21 @@ export async function renderPage(entry, options = {}) {
     sheetText.forEach((text, i) => {
       css += sheet(sheetFiles[i], text);
     });
-    for (const {file, css: text} of /** @type {{file: string, css: string}[]} */ (message.importedCss ?? [])) {
+    for (const {
+      file,
+      css: text,
+    } of /** @type {{file: string, css: string}[]} */ (
+      message.importedCss ?? []
+    )) {
       css += sheet(file, text);
     }
-    for (const spec of packageSheets) if (!sheets.includes(spec)) sheets.push(spec);
+    for (const spec of packageSheets)
+      if (!sheets.includes(spec)) sheets.push(spec);
     if (message.css) css += inlineAssets(message.css, 'css', ctx);
   } catch (e) {
     const err = /** @type {any} */ (e);
-    if (err instanceof RenderAssetError) throw new RenderError(err.code, err.message, err.detail);
+    if (err instanceof RenderAssetError)
+      throw new RenderError(err.code, err.message, err.detail);
     throw e;
   }
   // Keep inlined CSS from ending its own <style> element.
@@ -805,7 +1009,9 @@ export async function renderPage(entry, options = {}) {
   for (const t of /** @type {any[]} */ (message.texts ?? [])) {
     if (t.hidden || t.text.length < 2 || plainText.includes(t.text)) continue;
     // The code around it ran: other text from the same function rendered.
-    const around = /** @type {string[]} */ (message.fnTexts?.[t.fn] ?? []).filter(o => o !== t.text);
+    const around = /** @type {string[]} */ (
+      message.fnTexts?.[t.fn] ?? []
+    ).filter(o => o !== t.text);
     if (!around.some(o => plainText.includes(o))) continue;
     warnings.push({
       code: 'dropped-children',
@@ -815,8 +1021,13 @@ export async function renderPage(entry, options = {}) {
   // A chart the render did not draw is an empty box: a ResponsiveContainer
   // holds only its sizing box, and a chart of fixed size an empty wrapper.
   const blankCharts =
-    (markup.match(/<div class="recharts-responsive-container[" ][^>]*><div[^>]*><\/div><\/div>/g) ?? []).length +
-    (markup.match(/<div\b[^>]*\bclass="recharts-wrapper"[^>]*><\/div>/g) ?? []).length +
+    (
+      markup.match(
+        /<div class="recharts-responsive-container[" ][^>]*><div[^>]*><\/div><\/div>/g,
+      ) ?? []
+    ).length +
+    (markup.match(/<div\b[^>]*\bclass="recharts-wrapper"[^>]*><\/div>/g) ?? [])
+      .length +
     (message.chartsFailed ?? 0);
   if (blankCharts > 0) {
     warnings.push({
@@ -827,8 +1038,10 @@ export async function renderPage(entry, options = {}) {
   if (message.chartsAlone) {
     /** @type {Record<string, string>} */
     const causes = {
-      changed: 'The page changed its charts once its effects ran (their data or props, or which charts it shows)',
-      rerendered: 'A component that makes a chart rendered again once the page\'s effects ran',
+      changed:
+        'The page changed its charts once its effects ran (their data or props, or which charts it shows)',
+      rerendered:
+        "A component that makes a chart rendered again once the page's effects ran",
       error: 'The page could not be drawn again without a browser',
     };
     const why = causes[message.chartsAlone] ?? causes.error;
@@ -843,7 +1056,9 @@ export async function renderPage(entry, options = {}) {
       message: `The page imports ${sheet}, a Sass or Less stylesheet, which a render does not compile, so its styles are missing.`,
     });
   }
-  for (const log of /** @type {{level: string, text: string}[]} */ (message.logs ?? []).slice(0, 5)) {
+  for (const log of /** @type {{level: string, text: string}[]} */ (
+    message.logs ?? []
+  ).slice(0, 5)) {
     warnings.push({
       code: 'page-output',
       message: `The page printed while rendering (${log.level}): ${log.text.split('\n')[0].slice(0, 200)}`,
@@ -856,7 +1071,11 @@ export async function renderPage(entry, options = {}) {
   // (`<img src="./logo.png">`, `url(./bg.png)`) are carried too, so the page
   // comes back with them; a package's own files are not.
   for (const sheet of carriedCss) {
-    if (!isInside(sheet, scope) || path.relative(scope, sheet).split(path.sep).includes('node_modules')) continue;
+    if (
+      !isInside(sheet, scope) ||
+      path.relative(scope, sheet).split(path.sep).includes('node_modules')
+    )
+      continue;
     if (!files.includes(sheet)) files.push(sheet);
   }
   /** Assets named in a warning already, so each is named once. @type {Set<string>} */
@@ -869,7 +1088,11 @@ export async function renderPage(entry, options = {}) {
    * @param {string} how how the page uses it, for the warning
    */
   const carryAsset = (asset, how) => {
-    if (!isInside(asset, scope) || path.relative(scope, asset).split(path.sep).includes('node_modules')) return;
+    if (
+      !isInside(asset, scope) ||
+      path.relative(scope, asset).split(path.sep).includes('node_modules')
+    )
+      return;
     if (files.includes(asset) || notCarried.has(asset)) return;
     /** @param {string} why */
     const leaveOut = why => {
@@ -884,12 +1107,16 @@ export async function renderPage(entry, options = {}) {
     try {
       // The same limit as a file the page shows, which a render inlines.
       if (fs.statSync(asset).size > MAX_ASSET_BYTES) {
-        leaveOut(`it is larger than ${MAX_ASSET_BYTES / 1048576} MB, the most a rendered page carries of one file`);
+        leaveOut(
+          `it is larger than ${MAX_ASSET_BYTES / 1048576} MB, the most a rendered page carries of one file`,
+        );
         return;
       }
       head = headOf(asset);
     } catch (e) {
-      leaveOut(`it cannot be read (${/** @type {NodeJS.ErrnoException} */ (e).code ?? 'an error from the file system'})`);
+      leaveOut(
+        `it cannot be read (${/** @type {NodeJS.ErrnoException} */ (e).code ?? 'an error from the file system'})`,
+      );
       return;
     }
     if (!isAssetBytes(head)) {
@@ -908,7 +1135,12 @@ export async function renderPage(entry, options = {}) {
     while (!isInside(f, named)) named = path.dirname(named);
   }
   const carriedText = files.filter(
-    f => /\.(?:[cm]?[jt]sx?|css)$/i.test(f) && (f === entry || !embeddedPathProblem(path.relative(named, f).split(path.sep).join('/'))),
+    f =>
+      /\.(?:[cm]?[jt]sx?|css)$/i.test(f) &&
+      (f === entry ||
+        !embeddedPathProblem(
+          path.relative(named, f).split(path.sep).join('/'),
+        )),
   );
   for (const file of carriedText) {
     let text;
@@ -921,7 +1153,10 @@ export async function renderPage(entry, options = {}) {
       const asset = path.resolve(path.dirname(file), ref);
       if (!isInside(asset, named)) continue;
       if (isFileAt(asset)) {
-        carryAsset(asset, `named in ${path.relative(dir, file).split(path.sep).join('/')}`);
+        carryAsset(
+          asset,
+          `named in ${path.relative(dir, file).split(path.sep).join('/')}`,
+        );
       }
     }
   }
@@ -933,7 +1168,14 @@ export async function renderPage(entry, options = {}) {
   for (const f of files) {
     while (!isInside(f, base)) {
       const up = path.dirname(base);
-      if (up === base || embeddedPathProblem(path.relative(up, entry).split(path.sep).join('/'), {page: true})) break;
+      if (
+        up === base ||
+        embeddedPathProblem(
+          path.relative(up, entry).split(path.sep).join('/'),
+          {page: true},
+        )
+      )
+        break;
       base = up;
     }
   }
@@ -953,8 +1195,15 @@ export async function renderPage(entry, options = {}) {
     }
     embedded.push({path: rel, bytes: fs.readFileSync(f)});
   }
-  const heading = /<h1\b[^>]*>([\s\S]*?)<\/h1>/i.exec(markup)?.[1]?.replace(/<[^>]*>/g, '').trim();
-  const title = options.title ?? (heading ? decodeAttr(heading) : path.basename(entry).replace(/\.[^.]+$/, ''));
+  const heading = /<h1\b[^>]*>([\s\S]*?)<\/h1>/i
+    .exec(markup)?.[1]
+    ?.replace(/<[^>]*>/g, '')
+    .trim();
+  const title =
+    options.title ??
+    (heading
+      ? decodeAttr(heading)
+      : path.basename(entry).replace(/\.[^.]+$/, ''));
   const generator = `<meta name="generator" content="Astryx${options.version ? ` ${escapeHtml(options.version)}` : ''}">`;
   const style = `<style>${SCHEME_CSS}${markup.includes('class="recharts-responsive-container"') ? CHART_CSS : ''}${css}</style>`;
   let html;
@@ -962,8 +1211,17 @@ export async function renderPage(entry, options = {}) {
     // The charset and generator metas come first: a browser reads the
     // charset only from the first 1024 bytes, and a CLI decides whether a
     // render wrote a file from its first 4096.
-    const setDirs = new Map(/** @type {{name: string, dir: string}[]} */ (message.fromSet ?? []).map(p => [p.name, p.dir]));
-    const names = new Set([...(message.packages ?? []), ...setDirs.keys(), 'react', 'react-dom']);
+    const setDirs = new Map(
+      /** @type {{name: string, dir: string}[]} */ (message.fromSet ?? []).map(
+        p => [p.name, p.dir],
+      ),
+    );
+    const names = new Set([
+      ...(message.packages ?? []),
+      ...setDirs.keys(),
+      'react',
+      'react-dom',
+    ]);
     if (hasCore) names.add('@astryxdesign/core');
     /** @type {Record<string, string>} */
     const packages = {};
@@ -977,7 +1235,9 @@ export async function renderPage(entry, options = {}) {
       cli: options.version ?? null,
       format: formatFor(embedded),
       file,
-      page: projectOf(dir) ? path.relative(root, entry).split(path.sep).join('/') : embedded[0].path,
+      page: projectOf(dir)
+        ? path.relative(root, entry).split(path.sep).join('/')
+        : embedded[0].path,
       restored: `${file.replace(/\.[^.]+$/, '')}-restored/${embedded[0].path}`,
       files: embedded.map(f => f.path),
       packages,
@@ -988,10 +1248,17 @@ export async function renderPage(entry, options = {}) {
     };
     // The file each alias import named, for the files the page carries, so a
     // reverse where no alias names it still finds the file.
-    const carried = new Map(embedded.map(f => [path.resolve(base, f.path), f.path]));
+    const carried = new Map(
+      embedded.map(f => [path.resolve(base, f.path), f.path]),
+    );
     /** @type {Record<string, string>} */
     const aliases = {};
-    for (const {spec, file: named} of /** @type {{spec: string, file: string}[]} */ (message.aliasImports ?? []).sort((a, b) => (a.spec < b.spec ? -1 : a.spec > b.spec ? 1 : 0))) {
+    for (const {
+      spec,
+      file: named,
+    } of /** @type {{spec: string, file: string}[]} */ (
+      message.aliasImports ?? []
+    ).sort((a, b) => (a.spec < b.spec ? -1 : a.spec > b.spec ? 1 : 0))) {
       const rel = carried.get(path.resolve(named));
       if (rel && aliasOnly(spec)) aliases[spec] = rel;
     }
@@ -1004,18 +1271,20 @@ export async function renderPage(entry, options = {}) {
       markup: {
         sha256: sha256(asParsed(markup)),
         style: sha256(asParsed(style)),
-        text: Buffer.from(JSON.stringify({title, runs: textRuns(markup)})).toString('base64'),
+        text: Buffer.from(
+          JSON.stringify({title, runs: textRuns(markup)}),
+        ).toString('base64'),
       },
     };
     html =
-      `<!doctype html><html lang="en"><head><meta charset="utf-8">${generator}\n${headerNote(facts)}\n` +
+      `<!doctype html><html lang="en"${rootThemeAttrs(markup)}><head><meta charset="utf-8">${generator}\n${headerNote(facts)}\n` +
       '<meta name="viewport" content="width=device-width,initial-scale=1">' +
       '<meta name="color-scheme" content="light dark">' +
       `<title>${escapeHtml(title)}</title>${style}</head><body>${markup}` +
       `${sourceBlock(path.basename(entry), embedded, record)}\n${endNote(facts)}\n</body></html>\n`;
   } else {
     html =
-      '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
+      `<!doctype html><html lang="en"${rootThemeAttrs(markup)}><head><meta charset="utf-8">` +
       '<meta name="viewport" content="width=device-width,initial-scale=1">' +
       '<meta name="color-scheme" content="light dark">' +
       `${generator}<title>${escapeHtml(title)}</title>${style}</head><body>${markup}` +
@@ -1029,7 +1298,9 @@ export async function renderPage(entry, options = {}) {
     cssBytes: Buffer.byteLength(css),
     markupBytes: Buffer.byteLength(markup),
     images: new Set([
-      ...[...ctx.counted].filter(k => k.startsWith('file:')).map(k => k.slice(5)),
+      ...[...ctx.counted]
+        .filter(k => k.startsWith('file:'))
+        .map(k => k.slice(5)),
       ...(message.assets ?? []),
     ]).size,
     warnings,

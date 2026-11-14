@@ -274,8 +274,16 @@ describe('asks it used to drop', () => {
     T,
   );
   it(
-    'a shadow typed for one mode goes into light-dark()',
+    'a shadow typed for one mode goes into light-dark() on a part with no shadow',
     async () => {
+      expect(
+        (await answer('popover shadow 0 4px 12px #00000080 in dark mode'))
+          .first,
+      ).toEqual([
+        "set q box-shadow '0 4px 12px light-dark(transparent, #00000080)' --on popover",
+      ]);
+      // A card shows no shadow at rest (its selection ring is a state of
+      // its own): the light half is transparent too.
       expect(
         (await answer('card shadow 0 4px 12px #00000080 in dark mode')).first,
       ).toEqual([
