@@ -269,7 +269,7 @@ function isCoreSource(dir) {
  * @param {string} p
  * @returns {string}
  */
-function realDir(p) {
+export function realDir(p) {
   try {
     return fs.realpathSync(path.resolve(p));
   } catch {
@@ -282,7 +282,7 @@ function realDir(p) {
  *
  * @returns {string|null}
  */
-function homeFolder() {
+export function homeFolder() {
   try {
     const home = os.homedir();
     return home ? realDir(home) : null;
@@ -292,15 +292,28 @@ function homeFolder() {
 }
 
 /**
+ * Whether a relative path climbs out of the folder it starts in: `..`
+ * itself, or a path that begins with `../` (or `..` and the platform's
+ * separator). A name that only
+ * begins with two dots (`..x`) is a folder or file like any other.
+ *
+ * @param {string} rel
+ * @returns {boolean}
+ */
+export function climbsOut(rel) {
+  return rel === '..' || rel.startsWith('../') || rel.startsWith(`..${path.sep}`);
+}
+
+/**
  * Whether `child` lies strictly inside `parent`.
  *
  * @param {string} child
  * @param {string} parent
  * @returns {boolean}
  */
-function isInside(child, parent) {
+export function isInside(child, parent) {
   const rel = path.relative(parent, child);
-  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+  return rel !== '' && !climbsOut(rel) && !path.isAbsolute(rel);
 }
 
 /**
@@ -340,6 +353,31 @@ export function findPackageRoot(startDir) {
 }
 
 /**
+ * A path a command writes in a project, read the same way by every theme
+ * command: from the working folder when given, from the project root (the
+ * nearest folder with a package.json, else the working folder) when not,
+ * and with a backslash as a folder separator on every platform.
+ * @param {string} cwd
+ * @param {string | undefined} typed the path as given, or undefined
+ * @param {string} fallback the path from the project root when none is given
+ * @returns {{projectDir: string, typed: string | undefined, relative: string}}
+ *   `typed`: the path as given with `/`; `relative`: from the project root
+ */
+export function projectWritePath(cwd, typed, fallback) {
+  const projectDir = findPackageRoot(cwd) ?? path.resolve(cwd);
+  const given = typed == null ? undefined : String(typed).replace(/\\/g, '/');
+  const absolute =
+    given == null ? path.join(projectDir, fallback) : path.resolve(cwd, given);
+  return {
+    projectDir,
+    typed: given,
+    relative: path.isAbsolute(given ?? '')
+      ? /** @type {string} */ (given)
+      : path.relative(projectDir, absolute) || '.',
+  };
+}
+
+/**
  * The Astryx project `startDir` belongs to: the nearest folder at or above it
  * whose package.json declares an Astryx package (`@astryxdesign/*`, or the
  * legacy `@xds/*`), or that a workspace whose root declares one lists as a
@@ -374,8 +412,22 @@ export function findAstryxProject(startDir) {
  * @returns {string}
  */
 export function findWorkspaceRoot(startDir) {
-  /** @type {string|null} */
-  let nearestPackage = null;
+  return (
+    findDeclaredWorkspaceRoot(startDir) ??
+    findPackageRoot(startDir) ??
+    path.resolve(startDir)
+  );
+}
+
+/**
+ * The nearest directory at or above `startDir` that declares a workspace,
+ * by a `pnpm-workspace.yaml` or a package.json `workspaces` field; null
+ * outside a workspace.
+ *
+ * @param {string} startDir
+ * @returns {string|null}
+ */
+export function findDeclaredWorkspaceRoot(startDir) {
   for (const dir of foldersUpFrom(startDir)) {
     if (
       fs.existsSync(path.join(dir, 'pnpm-workspace.yaml')) ||
@@ -383,14 +435,8 @@ export function findWorkspaceRoot(startDir) {
     ) {
       return dir;
     }
-    if (
-      nearestPackage == null &&
-      fs.existsSync(path.join(dir, 'package.json'))
-    ) {
-      nearestPackage = dir;
-    }
   }
-  return nearestPackage ?? path.resolve(startDir);
+  return null;
 }
 
 /**

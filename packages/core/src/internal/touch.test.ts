@@ -120,6 +120,9 @@ describe('internal/touch', () => {
     expect(entry).not.toHaveProperty('springs');
     expect(entry.focusForLastInput).toBe(focusReturn.focusForLastInput);
     expect(entry.isFocusLost).toBe(focusReturn.isFocusLost);
+    expect(entry.prepareFocusReturnOnRemoval).toBe(
+      focusReturn.prepareFocusReturnOnRemoval,
+    );
     expect(entry.useInteractionModalityTracking).toBe(
       modality.useInteractionModalityTracking,
     );
@@ -130,6 +133,7 @@ describe('internal/touch', () => {
       'toSpring',
       'focusForLastInput',
       'isFocusLost',
+      'prepareFocusReturnOnRemoval',
       'useInteractionModalityTracking',
     ]) {
       expect(typeof entry[name], name).toBe('function');

@@ -603,7 +603,11 @@ describe('round 4 follow-ups', () => {
         path: 'src/app/my preview',
       }),
     );
-    expect(r.run[0]).toMatch(/--theme s --path 'src\/app\/my preview'$/);
+    // The folder name is no plain URL segment: the way on names one that is,
+    // with the description quoted.
+    expect(r.run[0]).toMatch(
+      /add 'a weather widget' --theme s --path src\/app\/my-preview$/,
+    );
   }, 120_000);
 });
 
@@ -748,8 +752,9 @@ describe('review fixes', () => {
       'not applied in a dark-only theme',
     );
     expect(r.data.changedTokens.join(' ')).not.toContain('#bbbbbb');
+    // Both halves stay: the mode is the one the app's <Theme> is given.
     expect(read('themes/om/om.settings.ts')).toMatch(
-      /"--color-accent": palette\.accent\.dark\[\d+\],/,
+      /"--color-accent": \[\s*palette\.accent\.light\[\d+\],\s*palette\.accent\.dark\[\d+\]/,
     );
     const show = await themeEditShow('om', {cwd});
     expect(
@@ -773,7 +778,9 @@ describe('review fixes', () => {
     const before = read('themes/hi/hi.settings.json');
     const u = await refusal(() => themeEditUndo('hi', {cwd}));
     expect(u.code).toBe('ERR_THEME_INVALID');
-    expect(u.message).toContain('delete themes/hi/hi.history.json');
+    expect(u.message).toContain(
+      'move themes/hi/hi.history.json out of the theme folder',
+    );
     expect(read('themes/hi/hi.settings.json')).toBe(before);
     const r = await themeEditSet('hi', 'spacing', 'roomy', {cwd});
     expect(r.data.notes.join(' ')).toContain('a new undo history starts');

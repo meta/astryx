@@ -17,21 +17,28 @@
  */
 
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import {fork, spawnSync} from 'node:child_process';
+import {builtinModules} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import postcss from 'postcss';
-import {assetDataUri, isAssetBytes, isAssetPath, RenderAssetError} from './assets.mjs';
+import {assetDataUri, isAssetBytes, isAssetPath, MAX_ASSET_BYTES, RenderAssetError} from './assets.mjs';
 import {classesIn, cutCss, layerOrderOf} from './css-cut.mjs';
-import {sourceBlock} from './source-block.mjs';
+import {asParsed, formatFor, sha256, sourceBlock} from './source-block.mjs';
 import {embeddedPathProblem} from './embedded-files.mjs';
-import {resolveServed} from './served-packages.mjs';
+import {aliasOnly, assetRefsOf} from './embedded-imports.mjs';
+import {isServedPackage, resolveServed} from './served-packages.mjs';
 import {CHART_CSS} from './charts.mjs';
+import {HOST_EXIT} from './host-exit.mjs';
+import {endNote, headerNote} from './file-header.mjs';
+import {textRuns} from './markup-edits.mjs';
+import {findNodeModulesPackage, isInside} from '../fs/paths.mjs';
 
 /** How long one page may take to render before it is stopped. */
 export const RENDER_TIMEOUT_MS = 60_000;
 
-export {PAGE_EXTENSIONS} from './embedded-files.mjs';
+export {MODULE_EXTENSIONS, PAGE_EXTENSIONS} from './embedded-files.mjs';
 
 /**
  * @typedef {object} RenderWarning
@@ -67,17 +74,57 @@ export class RenderError extends Error {
 }
 
 /**
- * The nearest folder at or above `dir` with a package.json, else `dir`.
+ * The nearest folder at or above `dir` with a package.json, or null outside
+ * a project.
  * @param {string} dir
+ * @returns {string | null}
  */
-function projectRootOf(dir) {
-  let d = dir;
-  for (;;) {
+function projectOf(dir) {
+  for (let d = dir; ; d = path.dirname(d)) {
     if (fs.existsSync(path.join(d, 'package.json'))) return d;
-    const up = path.dirname(d);
-    if (up === d) return dir;
-    d = up;
+    if (path.dirname(d) === d) return null;
   }
+}
+
+/**
+ * Whether a path names a file. A name the system cannot look up (a segment
+ * too long, a folder it may not read) names none.
+ * @param {string} file
+ */
+function isFileAt(file) {
+  try {
+    return fs.statSync(file).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The first bytes of a file, enough to tell its format.
+ * @param {string} file
+ */
+function headOf(file) {
+  const fd = fs.openSync(file, 'r');
+  try {
+    const head = Buffer.alloc(4096);
+    return head.subarray(0, fs.readSync(fd, head, 0, head.length, 0));
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+/**
+ * The folder whose modules the page carries: its project's. Outside a
+ * project, the current folder when it holds the page, so a page with
+ * neighbours above its own folder (as a restore lays them out) carries them;
+ * else the page's folder.
+ * @param {string} dir
+ * @param {string} [cwd]
+ */
+function carryScopeOf(dir, cwd) {
+  const project = projectOf(dir);
+  if (project) return project;
+  return cwd && (dir === cwd || isInside(dir, cwd)) ? cwd : dir;
 }
 
 /** @param {string} s */
@@ -274,20 +321,91 @@ function crashError(how, {crashed, withoutSegmenter}) {
 }
 
 /**
+ * The error for a page that ended without an answer, with why: the stage it
+ * reported last, how long it ran, the memory left, and its last stderr line.
+ * @param {any} message the host's {hostExit, reason, stage, elapsedMs, rssMb, freeMb, stderrTail}
+ */
+function noAnswerError({hostExit, reason, stage, elapsedMs, rssMb, freeMb, stderrTail}) {
+  const detail = {reason, exit: hostExit, stage, elapsedMs, rssMb, freeMb, ...(stderrTail ? {stderrTail} : {})};
+  const where = stage ? ` while ${stage}` : '';
+  const seconds = Math.round((elapsedMs ?? 0) / 1000);
+  if (reason === 'host-timeout') {
+    return new RenderError('ERR_RENDER_TIMEOUT', `The page's process stopped at its own time limit${where}, after ${seconds} seconds, before this process read an answer.`, detail);
+  }
+  const last = stderrTail ? ` Its last output: ${String(stderrTail).split('\n').at(-1)}` : '';
+  return new RenderError(
+    'ERR_RENDER_FAILED',
+    `The page stopped rendering without an answer (exit ${hostExit})${where}, after ${seconds} seconds, with ${freeMb} MB of memory free.${last}`,
+    detail,
+  );
+}
+
+/** The error for a host process that ended, without a signal, before it answered. */
+function hostEndError(/** @type {number | null} */ code) {
+  if (code === HOST_EXIT.disconnected) {
+    return new RenderError('ERR_RENDER_FAILED', "The page's process lost its channel to this process and stopped without an answer.", {reason: 'disconnected', exit: code});
+  }
+  if (code === HOST_EXIT.noChannel) {
+    return new RenderError('ERR_RENDER_FAILED', "The page's process had no channel left to send its answer on.", {reason: 'no-channel', exit: code});
+  }
+  if (code === HOST_EXIT.timeout) {
+    return new RenderError('ERR_RENDER_TIMEOUT', "The page's process stopped at its own time limit before this process read an answer.", {reason: 'host-timeout', exit: code});
+  }
+  if (code === HOST_EXIT.sendFailed) {
+    return new RenderError('ERR_RENDER_FAILED', "The page's process could not send its answer to this process.", {reason: 'send-failed', exit: code});
+  }
+  return new RenderError('ERR_RENDER_FAILED', `The page's process ended without an answer (exit ${code}).`, {reason: 'host-ended', exit: code});
+}
+
+/**
+ * The error for a host that ended with no answer reaching this process, from
+ * the state it left in its per-run file: an answer it sent that never
+ * arrived, or the stage it ended in.
+ * @param {number | null} code
+ * @param {string | undefined} stateFile
+ */
+function noMessageError(code, stateFile) {
+  if (code !== 0 && code !== null && Object.values(HOST_EXIT).includes(code)) return hostEndError(code);
+  /** @type {any} */
+  let saved = null;
+  try {
+    saved = stateFile ? JSON.parse(fs.readFileSync(stateFile, 'utf8')) : null;
+  } catch {
+    // No readable state: fall back to the bare message below.
+  }
+  if (!saved) return hostEndError(code);
+  const detail = {exit: code, stage: saved.stage, elapsedMs: saved.elapsedMs, rssMb: saved.rssMb, freeMb: saved.freeMb, ...(saved.stderrTail ? {stderrTail: saved.stderrTail} : {})};
+  if (saved.answered === 'sent') {
+    return new RenderError('ERR_RENDER_FAILED', `The page's process sent its answer, but this process did not receive it (exit ${code}).`, {reason: 'answer-lost', ...detail});
+  }
+  if (saved.answered === 'sending') {
+    return new RenderError('ERR_RENDER_FAILED', `The page's process ended while it sent its answer (exit ${code}).`, {reason: 'ended-while-sending', ...detail});
+  }
+  const seconds = Math.round((saved.elapsedMs ?? 0) / 1000);
+  const last = saved.stderrTail ? ` Its last output: ${String(saved.stderrTail).split('\n').at(-1)}` : '';
+  return new RenderError(
+    'ERR_RENDER_FAILED',
+    `The page's process ended without an answer (exit ${code}) while ${saved.stage}, after ${seconds} seconds, with ${saved.freeMb} MB of memory free.${last}`,
+    {reason: 'host-ended', ...detail},
+  );
+}
+
+/**
  * Run the page in a host process (page-host.mjs), stopping it after
  * `timeoutMs`. The host runs the page in a worker thread, and it exits when
  * this process goes away.
- * @param {{entry: string, root: string, served: ServedSet | null, withoutSegmenter: boolean}} input
+ * @param {{entry: string, root: string, scope: string, served: ServedSet | null, withoutSegmenter: boolean}} input
  * @param {number} timeoutMs
  * @returns {Promise<any>} the page's answer, or `{crashed: how}` when a
  *   native crash ended the host
  */
 function runWorker(input, timeoutMs) {
-  return new Promise((resolve, reject) => {
+  return withHostStateFile(stateFile => {
     const data = {
       ...input,
       served: input.served ? {dir: input.served.dir, integrations: [...input.served.integrations]} : null,
       timeoutMs,
+      stateFile,
     };
     const host = fork(fileURLToPath(new URL('./page-host.mjs', import.meta.url)), [JSON.stringify(data)], {
       // Never the CLI's own flags (such as --input-type).
@@ -295,6 +413,52 @@ function runWorker(input, timeoutMs) {
       stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
       serialization: 'advanced',
     });
+    return awaitHost(host, {timeoutMs, withoutSegmenter: input.withoutSegmenter, stateFile});
+  });
+}
+
+/**
+ * Run `use` with a state file for one host in a new folder under the system's
+ * temporary folder, never in the project, and remove the folder after. The
+ * state file only explains a failure: without a temporary folder, `use` gets
+ * none and the render runs without it.
+ * @template T
+ * @param {(stateFile: string | undefined) => Promise<T>} use
+ * @param {{makeTempDir?: (prefix: string) => string}} [options]
+ * @returns {Promise<T>}
+ */
+export async function withHostStateFile(
+  use,
+  {makeTempDir = prefix => fs.mkdtempSync(prefix)} = {},
+) {
+  /** @type {string} */
+  let dir;
+  try {
+    dir = makeTempDir(path.join(os.tmpdir(), 'astryx-render-'));
+  } catch {
+    // No temporary folder (missing or read-only): render without the state file.
+    return use(undefined);
+  }
+  try {
+    return await use(path.join(dir, 'host-state.json'));
+  } finally {
+    try {
+      fs.rmSync(dir, {recursive: true, force: true, maxRetries: 3});
+    } catch {
+      // Best effort: a removal that fails (a file still held open) never
+      // replaces the render's own result.
+    }
+  }
+}
+
+/**
+ * The page's answer from its host process, or the reason it has none.
+ * @param {import('node:child_process').ChildProcess} host
+ * @param {{timeoutMs: number, withoutSegmenter: boolean, stateFile?: string}} options
+ * @returns {Promise<any>}
+ */
+export function awaitHost(host, {timeoutMs, withoutSegmenter, stateFile}) {
+  return new Promise((resolve, reject) => {
     let settled = false;
     /** @param {() => void} settle */
     const finish = settle => {
@@ -325,7 +489,7 @@ function runWorker(input, timeoutMs) {
               : new RenderError('ERR_RENDER_FAILED', `The page could not be rendered: ${text.split('\n')[0]}`),
           );
         } else if (message?.hostExit !== undefined) {
-          reject(new RenderError('ERR_RENDER_FAILED', `The page stopped rendering without an answer (exit ${message.hostExit}).`));
+          reject(noAnswerError(message));
         } else {
           resolve(message);
         }
@@ -334,12 +498,14 @@ function runWorker(input, timeoutMs) {
     host.once('error', error => {
       finish(() => reject(new RenderError('ERR_RENDER_FAILED', `The page could not be rendered: ${String(error?.message ?? error).split('\n')[0]}`)));
     });
-    host.once('exit', (code, signal) => {
+    // 'close' comes after the IPC channel drains, so an answer the host sent
+    // just before it exited still wins; 'exit' can come first under load.
+    host.once('close', (code, signal) => {
       finish(() => {
         const crash = crashOf(code, signal);
         if (crash) resolve({crashed: crash});
-        else if (signal) reject(crashError(signal, {crashed: false, withoutSegmenter: input.withoutSegmenter}));
-        else reject(new RenderError('ERR_RENDER_FAILED', `The page stopped rendering without an answer (exit ${code}).`));
+        else if (signal) reject(crashError(signal, {crashed: false, withoutSegmenter}));
+        else reject(noMessageError(code, stateFile));
       });
     });
   });
@@ -348,7 +514,7 @@ function runWorker(input, timeoutMs) {
 /**
  * Run the page. When this Node crashes in Intl.Segmenter, run it once more
  * without Intl.Segmenter and say so in a warning.
- * @param {{entry: string, root: string, served: ServedSet | null}} input
+ * @param {{entry: string, root: string, scope: string, served: ServedSet | null}} input
  * @param {number} timeoutMs
  * @param {RenderWarning[]} warnings
  */
@@ -449,6 +615,26 @@ function inlineAssets(text, kind, ctx) {
     });
 }
 
+/**
+ * The version of a package the page rendered with: the package set's copy
+ * when the page took it from there, else the copy Node's resolver finds from
+ * the page's folder.
+ * @param {string} name
+ * @param {string} dir the page's folder
+ * @param {Map<string, string>} setDirs the packages the page took from the package set: their folders
+ * @returns {string | null}
+ */
+function installedVersion(name, dir, setDirs) {
+  const packageDir = setDirs.get(name) ?? findNodeModulesPackage(dir, name)?.packageDir;
+  if (!packageDir) return null;
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8'));
+    return pkg?.name === name && typeof pkg.version === 'string' ? pkg.version : null;
+  } catch {
+    return null;
+  }
+}
+
 /** The light and dark switch every rendered page carries. */
 const SCHEME_CSS =
   ':root{color-scheme:light dark}:root[data-theme="light"]{color-scheme:light}:root[data-theme="dark"]{color-scheme:dark}';
@@ -456,18 +642,27 @@ const SCHEME_CSS =
 /**
  * Render a page module to one self-contained HTML file.
  * @param {string} entry absolute path of the page module
- * @param {{title?: string, timeoutMs?: number, version?: string, served?: ServedSet | null}} [options]
+ * @param {{title?: string, timeoutMs?: number, version?: string, served?: ServedSet | null, output?: string, cwd?: string}} [options]
  *   `served`: the Core of the package set the CLI runs from, for the packages
- *   the page's folder has no copy of
+ *   the page's folder has no copy of; `output`: the file the HTML goes to;
+ *   `cwd`: the current folder, whose files are the page's own outside a
+ *   project.
+ *   With `output`, the file describes itself: notes at its top and end name
+ *   what made it and the commands that give the page back and render it
+ *   again, and its embedded source records the CLI version, the packages
+ *   the page rendered with, and the markup as rendered.
  * @returns {Promise<RenderedPage>}
  */
 export async function renderPage(entry, options = {}) {
   const dir = path.dirname(entry);
-  const root = projectRootOf(dir);
+  // The project's folder, else the page's: where its tsconfig.json and
+  // public/ images are read.
+  const root = projectOf(dir) ?? dir;
+  const scope = carryScopeOf(dir, options.cwd);
   const served = options.served ?? null;
   /** @type {RenderWarning[]} */
   const warnings = [];
-  const message = await runPage({entry, root, served}, options.timeoutMs ?? RENDER_TIMEOUT_MS, warnings);
+  const message = await runPage({entry, root, scope, served}, options.timeoutMs ?? RENDER_TIMEOUT_MS, warnings);
   if (!message.ok) {
     throw new RenderError(message.error.code, message.error.message, message.error.detail);
   }
@@ -661,30 +856,86 @@ export async function renderPage(entry, options = {}) {
   // (`<img src="./logo.png">`, `url(./bg.png)`) are carried too, so the page
   // comes back with them; a package's own files are not.
   for (const sheet of carriedCss) {
-    const rel = path.relative(root, sheet);
-    if (rel.startsWith('..') || path.isAbsolute(rel) || rel.split(path.sep).includes('node_modules')) continue;
+    if (!isInside(sheet, scope) || path.relative(scope, sheet).split(path.sep).includes('node_modules')) continue;
     if (!files.includes(sheet)) files.push(sheet);
   }
-  for (const asset of ctx.localAssets) {
-    const rel = path.relative(root, asset);
-    if (rel.startsWith('..') || path.isAbsolute(rel) || rel.split(path.sep).includes('node_modules')) continue;
-    if (files.includes(asset)) continue;
-    // Carried only when its bytes are a known image, font or media format,
-    // the same test --reverse applies, so the file always comes back.
-    if (!isAssetBytes(fs.readFileSync(asset))) {
+  /** Assets named in a warning already, so each is named once. @type {Set<string>} */
+  const notCarried = new Set();
+  /**
+   * Carry an image, font or media file of the project's own. It is carried
+   * only when its bytes are a known image, font or media format, the same
+   * test --reverse applies, so the file always comes back.
+   * @param {string} asset absolute
+   * @param {string} how how the page uses it, for the warning
+   */
+  const carryAsset = (asset, how) => {
+    if (!isInside(asset, scope) || path.relative(scope, asset).split(path.sep).includes('node_modules')) return;
+    if (files.includes(asset) || notCarried.has(asset)) return;
+    /** @param {string} why */
+    const leaveOut = why => {
+      notCarried.add(asset);
       warnings.push({
         code: 'not-embedded',
-        message: `${path.relative(dir, asset).split(path.sep).join('/')} is shown inline but not carried in the file: its bytes are not a known image, font or media format, so --reverse cannot give it back.`,
+        message: `${path.relative(dir, asset).split(path.sep).join('/')} is ${how} but not carried in the file: ${why}, so --reverse cannot give it back.`,
       });
-      continue;
+    };
+    /** @type {Buffer} */
+    let head;
+    try {
+      // The same limit as a file the page shows, which a render inlines.
+      if (fs.statSync(asset).size > MAX_ASSET_BYTES) {
+        leaveOut(`it is larger than ${MAX_ASSET_BYTES / 1048576} MB, the most a rendered page carries of one file`);
+        return;
+      }
+      head = headOf(asset);
+    } catch (e) {
+      leaveOut(`it cannot be read (${/** @type {NodeJS.ErrnoException} */ (e).code ?? 'an error from the file system'})`);
+      return;
+    }
+    if (!isAssetBytes(head)) {
+      leaveOut('its bytes are not a known image, font or media format');
+      return;
     }
     files.push(asset);
+  };
+  for (const asset of ctx.localAssets) carryAsset(asset, 'shown inline');
+  // A carried module or stylesheet can name an image, font or media file by
+  // a relative path. --reverse expects each such file back, also when this
+  // render does not show it, when it lies inside the folder that holds the
+  // carried files (a name that climbs out of it is not the page's file).
+  let named = dir;
+  for (const f of files) {
+    while (!isInside(f, named)) named = path.dirname(named);
+  }
+  const carriedText = files.filter(
+    f => /\.(?:[cm]?[jt]sx?|css)$/i.test(f) && (f === entry || !embeddedPathProblem(path.relative(named, f).split(path.sep).join('/'))),
+  );
+  for (const file of carriedText) {
+    let text;
+    try {
+      text = fs.readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    for (const ref of assetRefsOf(text, file)) {
+      const asset = path.resolve(path.dirname(file), ref);
+      if (!isInside(asset, named)) continue;
+      if (isFileAt(asset)) {
+        carryAsset(asset, `named in ${path.relative(dir, file).split(path.sep).join('/')}`);
+      }
+    }
   }
   // Paths are kept relative to the folder that holds every file: the page's
-  // folder, or an ancestor when the page imports from above it.
+  // folder, or an ancestor when the page imports from above it, but never one
+  // from which the page's own path holds a name a reverse refuses (a
+  // dot-folder): a file above that stays out of the file, and is named.
   let base = dir;
   for (const f of files) {
-    while (path.relative(base, f).startsWith('..')) base = path.dirname(base);
+    while (!isInside(f, base)) {
+      const up = path.dirname(base);
+      if (up === base || embeddedPathProblem(path.relative(up, entry).split(path.sep).join('/'), {page: true})) break;
+      base = up;
+    }
   }
   // Page first, so the reader knows which file is the page. Only files a
   // rendered page may carry are embedded (see embedded-files.mjs).
@@ -704,14 +955,72 @@ export async function renderPage(entry, options = {}) {
   }
   const heading = /<h1\b[^>]*>([\s\S]*?)<\/h1>/i.exec(markup)?.[1]?.replace(/<[^>]*>/g, '').trim();
   const title = options.title ?? (heading ? decodeAttr(heading) : path.basename(entry).replace(/\.[^.]+$/, ''));
-  const html =
-    '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
-    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
-    '<meta name="color-scheme" content="light dark">' +
-    `<meta name="generator" content="Astryx${options.version ? ` ${escapeHtml(options.version)}` : ''}">` +
-    `<title>${escapeHtml(title)}</title>` +
-    `<style>${SCHEME_CSS}${markup.includes('class="recharts-responsive-container"') ? CHART_CSS : ''}${css}</style></head><body>${markup}` +
-    `${sourceBlock(path.basename(entry), embedded)}</body></html>\n`;
+  const generator = `<meta name="generator" content="Astryx${options.version ? ` ${escapeHtml(options.version)}` : ''}">`;
+  const style = `<style>${SCHEME_CSS}${markup.includes('class="recharts-responsive-container"') ? CHART_CSS : ''}${css}</style>`;
+  let html;
+  if (options.output) {
+    // The charset and generator metas come first: a browser reads the
+    // charset only from the first 1024 bytes, and a CLI decides whether a
+    // render wrote a file from its first 4096.
+    const setDirs = new Map(/** @type {{name: string, dir: string}[]} */ (message.fromSet ?? []).map(p => [p.name, p.dir]));
+    const names = new Set([...(message.packages ?? []), ...setDirs.keys(), 'react', 'react-dom']);
+    if (hasCore) names.add('@astryxdesign/core');
+    /** @type {Record<string, string>} */
+    const packages = {};
+    for (const name of [...names].sort()) {
+      if (name.startsWith('node:') || builtinModules.includes(name)) continue;
+      const version = installedVersion(name, dir, setDirs);
+      if (version) packages[name] = version;
+    }
+    const file = path.basename(options.output);
+    const facts = {
+      cli: options.version ?? null,
+      format: formatFor(embedded),
+      file,
+      page: projectOf(dir) ? path.relative(root, entry).split(path.sep).join('/') : embedded[0].path,
+      restored: `${file.replace(/\.[^.]+$/, '')}-restored/${embedded[0].path}`,
+      files: embedded.map(f => f.path),
+      packages,
+      install: Object.entries(packages)
+        .filter(([name]) => !isServedPackage(name, []))
+        .map(([name, version]) => `${name}@${version}`),
+      ...(options.title === undefined ? {} : {title: options.title}),
+    };
+    // The file each alias import named, for the files the page carries, so a
+    // reverse where no alias names it still finds the file.
+    const carried = new Map(embedded.map(f => [path.resolve(base, f.path), f.path]));
+    /** @type {Record<string, string>} */
+    const aliases = {};
+    for (const {spec, file: named} of /** @type {{spec: string, file: string}[]} */ (message.aliasImports ?? []).sort((a, b) => (a.spec < b.spec ? -1 : a.spec > b.spec ? 1 : 0))) {
+      const rel = carried.get(path.resolve(named));
+      if (rel && aliasOnly(spec)) aliases[spec] = rel;
+    }
+    const record = {
+      ...(facts.cli ? {cli: facts.cli} : {}),
+      page: facts.page,
+      ...(options.title === undefined ? {} : {title: options.title}),
+      packages,
+      ...(Object.keys(aliases).length > 0 ? {aliases} : {}),
+      markup: {
+        sha256: sha256(asParsed(markup)),
+        style: sha256(asParsed(style)),
+        text: Buffer.from(JSON.stringify({title, runs: textRuns(markup)})).toString('base64'),
+      },
+    };
+    html =
+      `<!doctype html><html lang="en"><head><meta charset="utf-8">${generator}\n${headerNote(facts)}\n` +
+      '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+      '<meta name="color-scheme" content="light dark">' +
+      `<title>${escapeHtml(title)}</title>${style}</head><body>${markup}` +
+      `${sourceBlock(path.basename(entry), embedded, record)}\n${endNote(facts)}\n</body></html>\n`;
+  } else {
+    html =
+      '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
+      '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+      '<meta name="color-scheme" content="light dark">' +
+      `${generator}<title>${escapeHtml(title)}</title>${style}</head><body>${markup}` +
+      `${sourceBlock(path.basename(entry), embedded)}</body></html>\n`;
+  }
   return {
     html,
     files: embedded.map(f => f.path),

@@ -12,6 +12,31 @@
 import {discoverBundledThemes} from '../../foundation/discovery/theme-discovery.mjs';
 import {collectUnloadedFonts} from '../theme/build/font-warning.mjs';
 
+/**
+ * A lookup table that only answers for its own keys: a word typed by a
+ * person (`constructor`, `__proto__`, `toString`) never reaches
+ * `Object.prototype`. Plain objects inside it, in arrays too, get the same.
+ * @template T
+ * @param {T} table
+ * @returns {T}
+ */
+export function wordTable(table) {
+  /** @param {any} v @returns {any} */
+  const own = v => {
+    if (Array.isArray(v)) return v.map(own);
+    if (
+      !v ||
+      typeof v !== 'object' ||
+      Object.getPrototypeOf(v) !== Object.prototype
+    )
+      return v;
+    const out = Object.create(null);
+    for (const [k, x] of Object.entries(v)) out[k] = own(x);
+    return out;
+  };
+  return own(table);
+}
+
 /** The command prefix every suggested command starts with. */
 export const P = 'astryx experimental theme editor';
 
@@ -33,7 +58,7 @@ export const LIKE = discoverBundledThemes()
  * Groups of parts that should look alike. `--on <group>` styles every member.
  * @type {Record<string, string[]>}
  */
-export const FAMILIES = {
+export const FAMILIES = wordTable({
   inputs: [
     'text-input',
     'text-area',
@@ -66,7 +91,7 @@ export const FAMILIES = {
     'typeahead-dropdown',
     'context-menu',
   ],
-};
+});
 
 /**
  * Groups whose members always look alike: styling one member styles them
@@ -113,7 +138,7 @@ export const FONT_ROLES = ['body', 'heading', 'code'];
  * Font presets: the family, then its fallbacks.
  * @type {Record<string, [string, string]>}
  */
-export const FONTS = {
+export const FONTS = wordTable({
   system: ['system-ui', '-apple-system, "Segoe UI", Roboto, sans-serif'],
   tahoma: ['Tahoma', 'Verdana, "Segoe UI", sans-serif'],
   verdana: ['Verdana', 'Tahoma, sans-serif'],
@@ -125,7 +150,7 @@ export const FONTS = {
   courier: ['Courier New', 'Courier, monospace'],
   rounded: ['Nunito', '"Varela Round", system-ui, sans-serif'],
   comic: ['Comic Sans MS', '"Comic Neue", cursive'],
-};
+});
 /** The CSS-wide keywords: valid in any declaration, never a value of their own. */
 export const CSS_WIDE = [
   'inherit',
@@ -176,6 +201,10 @@ const ONE_SYSTEM_FAMILIES = new Map(
       'segoe ui',
       'segoe ui emoji',
       'segoe ui symbol',
+      'segoe ui light',
+      'segoe ui semilight',
+      'segoe ui semibold',
+      'segoe ui black',
       'consolas',
       'cambria',
       'calibri',
@@ -233,7 +262,7 @@ export const SYSTEM_FONTS = Object.keys(FONTS).filter(k =>
  * When the package is installed, previews show the font; the app loads it
  * by importing the package once.
  */
-const OPEN_FONT_FAMILIES = {
+const OPEN_FONT_FAMILIES = wordTable({
   inter: 'Inter',
   roboto: 'Roboto',
   poppins: 'Poppins',
@@ -249,26 +278,30 @@ const OPEN_FONT_FAMILIES = {
   'mona-sans': 'Mona Sans',
   geist: 'Geist Sans',
   'geist-mono': 'Geist Mono',
-};
-/** Presets whose package is not named after them. */
-const OPEN_FONT_PACKAGES = /** @type {Record<string, string>} */ ({
-  'source-serif': 'source-serif-4',
-  geist: 'geist-sans',
 });
+/** Presets whose package is not named after them. */
+const OPEN_FONT_PACKAGES = wordTable(
+  /** @type {Record<string, string>} */ ({
+    'source-serif': 'source-serif-4',
+    geist: 'geist-sans',
+  }),
+);
 /** @type {Record<string, {family: string, fallbacks: string, pkg: string}>} */
-export const OPEN_FONTS = Object.fromEntries(
-  Object.entries(OPEN_FONT_FAMILIES).map(([key, family]) => [
-    key,
-    {
-      family,
-      fallbacks: key.endsWith('-mono')
-        ? 'ui-monospace, monospace'
-        : /serif/i.test(family)
-          ? 'Georgia, serif'
-          : 'system-ui, sans-serif',
-      pkg: `@fontsource/${OPEN_FONT_PACKAGES[key] ?? key}`,
-    },
-  ]),
+export const OPEN_FONTS = wordTable(
+  Object.fromEntries(
+    Object.entries(OPEN_FONT_FAMILIES).map(([key, family]) => [
+      key,
+      {
+        family,
+        fallbacks: key.endsWith('-mono')
+          ? 'ui-monospace, monospace'
+          : /serif/i.test(family)
+            ? 'Georgia, serif'
+            : 'system-ui, sans-serif',
+        pkg: `@fontsource/${OPEN_FONT_PACKAGES[key] ?? key}`,
+      },
+    ]),
+  ),
 );
 
 /**
@@ -276,7 +309,7 @@ export const OPEN_FONTS = Object.fromEntries(
  * a theme that names one gets.
  * @type {Record<string, string>}
  */
-export const CLOSEST_OPEN_FONT = {
+export const CLOSEST_OPEN_FONT = wordTable({
   'sf pro': 'inter',
   'sf pro text': 'inter',
   'sf pro display': 'inter',
@@ -299,49 +332,55 @@ export const CLOSEST_OPEN_FONT = {
   futura: 'poppins',
   menlo: 'jetbrains-mono',
   'sf mono': 'jetbrains-mono',
-};
+});
 
 /** Heading weights (`headings` dial): rung -> font-weight. */
-export const HEADING_WEIGHTS = /** @type {Record<string, string>} */ ({
-  light: '300',
-  regular: '400',
-  medium: '500',
-  semibold: '600',
-  bold: '700',
-  heavy: '800',
-});
+export const HEADING_WEIGHTS = wordTable(
+  /** @type {Record<string, string>} */ ({
+    light: '300',
+    regular: '400',
+    medium: '500',
+    semibold: '600',
+    bold: '700',
+    heavy: '800',
+  }),
+);
 /** Heading letter spacing (`headings` dial): rung -> letter-spacing. */
-export const HEADING_TRACKING = /** @type {Record<string, string>} */ ({
-  tight: '-0.02em',
-  tighter: '-0.04em',
-  normal: '0',
-  wide: '0.02em',
-});
+export const HEADING_TRACKING = wordTable(
+  /** @type {Record<string, string>} */ ({
+    tight: '-0.02em',
+    tighter: '-0.04em',
+    normal: '0',
+    wide: '0.02em',
+  }),
+);
 
 /** The `surfaces` dial: how every container sits on the page. */
-export const SURFACES = /** @type {Record<string, Record<string, string>>} */ ({
-  flat: {
-    borderStyle: 'none',
-    boxShadow: 'none',
-    backgroundColor: 'var(--color-background-muted)',
-  },
-  outlined: {
-    borderStyle: 'solid',
-    borderWidth: '1px',
-    borderColor: 'var(--color-border)',
-    boxShadow: 'none',
-  },
-  raised: {borderStyle: 'none', boxShadow: 'var(--shadow-med)'},
-  glass: {
-    backgroundColor:
-      'color-mix(in srgb, var(--color-background-card) 72%, transparent)',
-    backdropFilter: 'blur(14px) saturate(1.4)',
-    borderStyle: 'solid',
-    borderWidth: '1px',
-    borderColor: 'rgb(255 255 255 / 0.22)',
-    boxShadow: 'var(--shadow-low)',
-  },
-});
+export const SURFACES = wordTable(
+  /** @type {Record<string, Record<string, string>>} */ ({
+    flat: {
+      borderStyle: 'none',
+      boxShadow: 'none',
+      backgroundColor: 'var(--color-background-muted)',
+    },
+    outlined: {
+      borderStyle: 'solid',
+      borderWidth: '1px',
+      borderColor: 'var(--color-border)',
+      boxShadow: 'none',
+    },
+    raised: {borderStyle: 'none', boxShadow: 'var(--shadow-med)'},
+    glass: {
+      backgroundColor:
+        'color-mix(in srgb, var(--color-background-card) 72%, transparent)',
+      backdropFilter: 'blur(14px) saturate(1.4)',
+      borderStyle: 'solid',
+      borderWidth: '1px',
+      borderColor: 'rgb(255 255 255 / 0.22)',
+      boxShadow: 'var(--shadow-low)',
+    },
+  }),
+);
 /** The parts the `surfaces` dial moves. */
 export const SURFACE_PARTS = [
   'card',
@@ -372,7 +411,7 @@ export const TYPE_STYLES =
  */
 
 /** @type {Record<string, Dial>} */
-export const DIALS = {
+export const DIALS = wordTable({
   corners: {
     help:
       'How round corners are. Rungs: ' +
@@ -394,7 +433,7 @@ export const DIALS = {
     help:
       'How much room there is: padding, gaps and control heights together. Rungs: ' +
       SPACING.map(([n, f]) => `${n} (x${f})`).join(', ') +
-      '. Whole theme: scales every spacing token and control height. With --on <part or group>: only inside it.',
+      '. Whole theme: scales every spacing token and control height (a denser theme has shorter controls; the small, medium and large sizes stay apart and in order, none under 24px). With --on <part or group>: only inside it.',
     values: 'tight|compact|medium|roomy|spacious|more|less',
     examples: [
       'set my spacing compact',
@@ -525,82 +564,94 @@ export const DIALS = {
     examples: ['set my mode dark-only'],
     words: 'mode light dark only night day scheme',
   },
-};
+});
 
 /** CSS properties grouped by the aspect of a part they change. */
-export const GROUPS = /** @type {Record<string, string[]>} */ ({
-  text: ['color', 'fill', '-webkit-text-fill-color', 'caret-color'],
-  background: ['background-color', 'background-image', 'background'],
-  border: [
-    'border-color',
-    'border-top-color',
-    'border-bottom-color',
-    'border-left-color',
-    'border-right-color',
-    'border-block-color',
-    'border-inline-color',
-    'border-width',
-    'border-style',
-    'outline-color',
-  ],
-  corners: [
-    'border-radius',
-    'border-start-start-radius',
-    'border-start-end-radius',
-    'border-end-start-radius',
-    'border-end-end-radius',
-    'border-top-left-radius',
-    'border-top-right-radius',
-    'border-bottom-left-radius',
-    'border-bottom-right-radius',
-  ],
-  shadow: ['box-shadow'],
-  spacing: [
-    'padding',
-    'padding-block',
-    'padding-inline',
-    'padding-top',
-    'padding-bottom',
-    'padding-inline-start',
-    'padding-inline-end',
-    'padding-left',
-    'padding-right',
-    'gap',
-    'row-gap',
-    'column-gap',
-    'margin',
-    'margin-block',
-    'margin-inline',
-  ],
-  font: [
-    'font-family',
-    'font-size',
-    'font-weight',
-    'line-height',
-    'letter-spacing',
-    'text-transform',
-  ],
-  size: [
-    'height',
-    'min-height',
-    'width',
-    'min-width',
-    'block-size',
-    'inline-size',
-  ],
-});
+export const GROUPS = wordTable(
+  /** @type {Record<string, string[]>} */ ({
+    text: ['color', 'fill', '-webkit-text-fill-color', 'caret-color'],
+    background: ['background-color', 'background-image', 'background'],
+    border: [
+      'border-color',
+      'border-top-color',
+      'border-bottom-color',
+      'border-left-color',
+      'border-right-color',
+      'border-block-color',
+      'border-inline-color',
+      'border-width',
+      'border-style',
+      'outline-color',
+    ],
+    corners: [
+      'border-radius',
+      'border-start-start-radius',
+      'border-start-end-radius',
+      'border-end-start-radius',
+      'border-end-end-radius',
+      'border-top-left-radius',
+      'border-top-right-radius',
+      'border-bottom-left-radius',
+      'border-bottom-right-radius',
+    ],
+    shadow: ['box-shadow'],
+    spacing: [
+      'padding',
+      'padding-block',
+      'padding-inline',
+      'padding-top',
+      'padding-bottom',
+      'padding-inline-start',
+      'padding-inline-end',
+      'padding-left',
+      'padding-right',
+      'gap',
+      'row-gap',
+      'column-gap',
+      'margin',
+      'margin-block',
+      'margin-inline',
+      'margin-top',
+      'margin-bottom',
+      'margin-left',
+      'margin-right',
+      'margin-block-start',
+      'margin-block-end',
+      'margin-inline-start',
+      'margin-inline-end',
+    ],
+    font: [
+      'font-family',
+      'font-size',
+      'font-weight',
+      'line-height',
+      'letter-spacing',
+      'text-transform',
+    ],
+    size: [
+      'height',
+      'min-height',
+      'width',
+      'min-width',
+      'block-size',
+      'inline-size',
+    ],
+  }),
+);
 
 /** The CSS property that sets each aspect directly, whatever token it reads. */
-export const DIRECT = /** @type {Record<string, string>} */ ({
-  text: 'color',
-  background: 'background',
-  border: 'border',
-  corners: 'border-radius',
-  shadow: 'box-shadow',
-  spacing: 'padding',
-  font: 'font-weight',
-  size: 'min-height',
-});
+export const DIRECT = wordTable(
+  /** @type {Record<string, string>} */ ({
+    text: 'color',
+    background: 'background',
+    border: 'border',
+    corners: 'border-radius',
+    shadow: 'box-shadow',
+    spacing: 'padding',
+    font: 'font-weight',
+    size: 'min-height',
+  }),
+);
 
 /** Properties whose value is one plain color. */
 export const COLOR_PROPS =
@@ -651,39 +702,78 @@ export const COMMON_PROPERTIES = [
  * the commands that do what they mean.
  * @type {Record<string, (value: string, on: string | undefined) => string[]>}
  */
-export const THING_HINTS = {
+export const THING_HINTS = wordTable({
   gradient: (v, on) => [
     `${P} set <theme> background "linear-gradient(${v || '#ffffff, #dddddd'})" --on ${on ?? '<part>'}`,
   ],
   bevel: (_v, on) => [
     `${P} set <theme> box-shadow "inset 1px 1px 0 #ffffff, inset -1px -1px 0 #9ca3af" --on ${on ?? '<part>'}`,
   ],
-  shadow: (_v, on) => [
-    `${P} set <theme> box-shadow "0 2px 6px rgb(0 0 0 / 0.3)" --on ${on ?? '<part>'}`,
+  // The value given is carried (none, false and off are no shadow); the
+  // sample only when none is.
+  shadow: (v, on) => [
+    `${P} set <theme> box-shadow ${/^(none|false|off|no|0)$/i.test(v.trim()) ? 'none' : v.trim() ? JSON.stringify(v.trim()) : '"0 2px 6px rgb(0 0 0 / 0.3)"'} --on ${on ?? '<part>'}`,
   ],
   radius: (v, on) => [
     `${P} set <theme> corners ${v || 'medium'}${on ? ` --on ${on}` : ''}`,
   ],
-  rounded: (_v, on) => [
-    `${P} set <theme> corners round${on ? ` --on ${on}` : ''}`,
+  rounded: (v, on) => [
+    `${P} set <theme> corners ${/^(none|false|off|no|0)$/i.test(v.trim()) ? 'square' : /^(true|yes|on)?$/i.test(v.trim()) ? 'round' : v.trim()}${on ? ` --on ${on}` : ''}`,
   ],
   padding: (_v, on) => [
     `${P} set <theme> spacing roomy${on ? ` --on ${on}` : ''}`,
     `${P} set <theme> padding 12px --on ${on ?? '<part>'}`,
   ],
-  density: () => [`${P} set <theme> spacing compact`],
-  bold: (_v, on) => [`${P} set <theme> font-weight 700 --on ${on ?? '<part>'}`],
+  // The density named carries over: a spacing rung as it is, a word for
+  // more or less room as the rung that way; else how spacing.
+  density: (v, on) => {
+    const w = v.trim().toLowerCase();
+    const rung = SPACING.some(([n]) => n === w)
+      ? w
+      : /^(airy|loose|relaxed|comfortable|open|sparse|generous)$/.test(w)
+        ? 'roomy'
+        : /^(dense|cramped|condensed|packed|small|less)$/.test(w)
+          ? 'compact'
+          : null;
+    return [
+      rung
+        ? `${P} set <theme> spacing ${rung}${on ? ` --on ${on}` : ''}`
+        : `${HOW} spacing`,
+    ];
+  },
+  bold: (v, on) => [
+    `${P} set <theme> font-weight ${/^(none|false|off|no|normal)$/i.test(v.trim()) ? 'normal' : 'bold'} --on ${on ?? '<part>'}`,
+  ],
   'text-color': (_v, on) => [`${HOW} "text color on ${on ?? '<part>'}"`],
-};
+});
 
 /** Sample values for design words in a `how` question. */
-export const DESIGN = /** @type {Record<string, string>} */ ({
-  gradient: '"linear-gradient(#ffffff, #d1d5db)"',
-  glossy: '"linear-gradient(#ffffff 0%, #c7d2fe 45%, #6366f1 100%)"',
-  bevel: '"inset 1px 1px 0 #ffffff, inset -1px -1px 0 #9ca3af"',
-  raised: '"0 1px 2px rgb(0 0 0 / 0.3)"',
-  flat: 'none',
-  sunken: '"inset 1px 1px 2px rgb(0 0 0 / 0.3)"',
+export const DESIGN = wordTable(
+  /** @type {Record<string, string>} */ ({
+    gradient: '"linear-gradient(#ffffff, #d1d5db)"',
+    glossy: '"linear-gradient(#ffffff 0%, #c7d2fe 45%, #6366f1 100%)"',
+    bevel: '"inset 1px 1px 0 #ffffff, inset -1px -1px 0 #9ca3af"',
+    raised: '"0 1px 2px rgb(0 0 0 / 0.3)"',
+    flat: 'none',
+    sunken: '"inset 1px 1px 2px rgb(0 0 0 / 0.3)"',
+  }),
+);
+
+/**
+ * Parts drawn by a Card (their class sits on the Card's own element), so
+ * their padding is the card's padding variables.
+ */
+export const CARD_LIKE = ['clickable-card', 'selectable-card'];
+
+/**
+ * Parts whose theme class sits on a transparent wrapper while Core draws the
+ * visible box on an inner element with no class of its own (see
+ * /core-gaps: the composer body). Padding reaches the box only through the
+ * part's padding variable; a surface (background, border, shadow) paints
+ * the wrapper's square corners; a density re-sets the variable on the box.
+ */
+export const WRAPPED_PARTS = /** @type {Record<string, {box: string}>} */ ({
+  'chat-composer': {box: 'the rounded composer body'},
 });
 
 /** States every part takes, beyond the ones its doc lists. */
@@ -695,6 +785,20 @@ export const COMMON_STATES = [
   'focus-within',
   'disabled',
 ];
+
+/**
+ * Mode words a value or a saved entry may be labeled with, and the mode
+ * each means: `set` reads a typed label by it, and loading reads a saved
+ * entry's mode by it.
+ */
+export const MODE_WORDS = /** @type {Record<string, 'light' | 'dark'>} */ ({
+  light: 'light',
+  'light-mode': 'light',
+  day: 'light',
+  dark: 'dark',
+  'dark-mode': 'dark',
+  night: 'dark',
+});
 
 // These tables are looked up by words people type: with no prototype,
 // `constructor` or `__proto__` is never found in them.
@@ -712,5 +816,6 @@ for (const table of [
   DIRECT,
   THING_HINTS,
   DESIGN,
+  MODE_WORDS,
 ])
   Object.setPrototypeOf(table, null);

@@ -49,6 +49,7 @@ import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {mergeProps} from '../utils/mergeProps';
 import {useTouchHitArea} from '../utils/touchHitArea';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
+import {pickDataAttributes} from '../utils/themeProps';
 
 registerEnglishFallback(english);
 
@@ -135,6 +136,7 @@ export function InfoTip({
   xstyle,
   className,
   style,
+  ...rest
 }: InfoTipProps): ReactNode {
   const t = useComponentTranslator();
   const hitAreaRef = useTouchHitArea(true);
@@ -193,6 +195,7 @@ export function InfoTip({
   return (
     <>
       <button
+        {...pickDataAttributes(rest)}
         ref={mergedRef}
         type="button"
         aria-label={label ?? t('@astryx.infoTip.label')}

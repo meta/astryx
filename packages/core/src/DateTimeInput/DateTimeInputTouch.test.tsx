@@ -739,6 +739,29 @@ describe('DateTimeInput touch surface', () => {
     expect(onChange).toHaveBeenCalledWith('2026-03-15T14:30:45');
   });
 
+  it('keeps a bound with no whole minute when a date change clamps the drafted time', () => {
+    const onChange = vi.fn();
+    withMonthLayout(() => {
+      render(
+        <DateTimeInput
+          label="Meeting"
+          min={'2026-03-21T23:59:30' as ISODateTimeString}
+          onChange={onChange}
+        />,
+      );
+      openDateSheet();
+      switchToTimePanel();
+      fireEvent.click(optionIn('Hour', '3'));
+
+      fireEvent.click(screen.getByRole('radio', {name: 'Date'}));
+      fireEvent.click(
+        screen.getByRole('button', {name: 'Saturday, March 21, 2026'}),
+      );
+
+      expect(onChange).toHaveBeenLastCalledWith('2026-03-21T23:59:30');
+    });
+  });
+
   it('disables out-of-range hours on the min/max boundary date', () => {
     render(
       <DateTimeInput

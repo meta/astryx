@@ -8,7 +8,7 @@ import {loadTaskSet, renderPrompt, TASKS_ROOT} from './tasks.mjs';
 
 const arms = Object.values(ARMS);
 
-const SETS = {pilot: 5, v1: 8};
+const SETS = {pilot: 5, v1: 15};
 
 describe.each(Object.entries(SETS))('%s task set', (set, size) => {
   const tasks = loadTaskSet(set);

@@ -753,7 +753,7 @@ export default function DashboardTemplate() {
                     <MetricCard
                       key={m.label}
                       {...m}
-                      sparkline={sparklines[start + i]}
+                      sparkline={sparklines[start + i] ?? []}
                     />
                   ))}
                 </Grid>

@@ -917,39 +917,43 @@
   },
   "@astryx.richTextEditor.toolbar.link": {
     "defaultMessage": "Link",
-    "description": "Label of the toolbar toggle that opens the dialog to add or edit a link on selected text."
+    "description": "Label of the toolbar toggle that opens the popover to add or edit a link on selected text."
   },
   "@astryx.richTextEditor.link.insertTitle": {
     "defaultMessage": "Insert link",
-    "description": "Title of the RichTextEditor dialog that adds a new link."
+    "description": "Screen-reader name of the RichTextEditor link popover when it adds a new link."
   },
   "@astryx.richTextEditor.link.editTitle": {
     "defaultMessage": "Edit link",
-    "description": "Title of the RichTextEditor dialog that changes or removes an existing link."
+    "description": "Screen-reader name of the RichTextEditor link popover when it changes or removes an existing link."
   },
   "@astryx.richTextEditor.link.url": {
     "defaultMessage": "URL",
-    "description": "Label of the web address field in the RichTextEditor link dialog."
+    "description": "Visually hidden label of the web address field in the RichTextEditor link popover."
+  },
+  "@astryx.richTextEditor.link.urlPlaceholder": {
+    "defaultMessage": "example.com",
+    "description": "Placeholder of the web address field in the RichTextEditor link popover: an example address, shown while the field is empty. An address without a scheme is accepted and becomes an https link, so keep it a bare domain."
   },
   "@astryx.richTextEditor.link.invalidUrl": {
     "defaultMessage": "Enter a valid http, https, mailto, or tel URL.",
-    "description": "Error under the link dialog address field when the entered address is not allowed. Keep the scheme names http, https, mailto, and tel untranslated."
+    "description": "Error under the link popover address field when the entered address is not allowed. Keep the scheme names http, https, mailto, and tel untranslated."
   },
   "@astryx.richTextEditor.link.remove": {
     "defaultMessage": "Remove link",
-    "description": "Button in the RichTextEditor link dialog that removes the link from the selected text and keeps the text."
+    "description": "Label and tooltip of the icon button in the RichTextEditor link popover that removes the link from the selected text and keeps the text."
   },
   "@astryx.richTextEditor.link.cancel": {
     "defaultMessage": "Cancel",
-    "description": "Button that closes the RichTextEditor link dialog without changing anything."
+    "description": "Label and tooltip of the icon button that closes the RichTextEditor link popover without changing anything."
   },
   "@astryx.richTextEditor.link.add": {
     "defaultMessage": "Add link",
-    "description": "Submit button of the RichTextEditor link dialog when adding a new link."
+    "description": "Label and tooltip of the icon button that applies the address in the RichTextEditor link popover when adding a new link."
   },
   "@astryx.richTextEditor.link.update": {
     "defaultMessage": "Update link",
-    "description": "Submit button of the RichTextEditor link dialog when changing an existing link address."
+    "description": "Label and tooltip of the icon button that applies the address in the RichTextEditor link popover when changing an existing link address."
   },
   "@astryx.markdown.taskList": {
     "defaultMessage": "Task list",
@@ -1217,7 +1221,7 @@
   },
   "@astryx.dateInput.invalidDate": {
     "defaultMessage": "Invalid date",
-    "description": "Screen-reader-only live-region alert in DateInput / DateTimeInput when the typed text cannot be read as a date. Text the field cannot finish, such as a one-digit year, stays on Enter or blur and shows this message as the field status."
+    "description": "Error in DateInput / DateTimeInput, shown below the field and announced, when Enter or blur keeps typed text that cannot be read as a date. Text the field cannot finish, such as a one-digit year, shows it too."
   },
   "@astryx.dateInput.nonexistentDate": {
     "defaultMessage": "{named, select, yes {Enter a real date ({calendar})} other {Enter a real date}}",
@@ -1405,7 +1409,7 @@
   },
   "@astryx.timeInput.invalidTime": {
     "defaultMessage": "Invalid time",
-    "description": "Screen-reader-only live-region alert in TimeInput / DateTimeInput when the typed time cannot be parsed. \"Time\" = clock time (HH:MM). The field silently reverts on blur, so this is the only rejection feedback a screen-reader user gets."
+    "description": "Error message in TimeInput / DateTimeInput for a typed time that cannot be parsed or is outside the allowed range, shown below the field and announced to screen readers. \"Time\" = clock time (HH:MM). The typed text stays in the field so the person can correct it."
   },
   "@astryx.timeInput.openPicker": {
     "defaultMessage": "Open {label}",
@@ -1695,6 +1699,14 @@
     "defaultMessage": "Zoomed out",
     "description": "Polite screen-reader announcement after zooming back out of a Lightbox image. Pairs with `lightbox.zoomedIn`."
   },
+  "@astryx.lightbox.captionMore": {
+    "defaultMessage": "more",
+    "description": "Visible label of the button after a Lightbox caption that two lines cut short, for a single photo or a gallery. It opens the full caption over the photo. Pairs with `lightbox.captionLess`."
+  },
+  "@astryx.lightbox.captionLess": {
+    "defaultMessage": "less",
+    "description": "Visible label of the same button while a Lightbox caption is open in full over the photo. It closes the full caption. Pairs with `lightbox.captionMore`."
+  },
   "@astryx.metadataList.showMore": {
     "defaultMessage": "Show more",
     "description": "Button label under a MetadataList that reveals items hidden beyond the configured maximum. Toggles with `metadataList.showLess` — keep the pair parallel in your language."
@@ -1741,7 +1753,7 @@
   },
   "@astryx.numberInput.invalidNumber": {
     "defaultMessage": "Invalid number",
-    "description": "Screen-reader-only live-region alert in NumberInput when the typed text is not a valid number for the field. The field silently reverts on blur, so this is the only rejection feedback a screen-reader user gets."
+    "description": "Error in NumberInput, shown as the field's error status and announced, when Enter or blur meets typed text the field cannot commit: text that is not a number, a number with a fraction in a whole-number field, or any number while the field's minimum is above its maximum. The typed text stays in the field."
   },
   "@astryx.selector.clearLabel": {
     "defaultMessage": "Clear {label}",
@@ -2574,6 +2586,118 @@
   "@astryx.infoTip.label": {
     "defaultMessage": "More information",
     "description": "Default accessible name of an InfoTip, the small info-icon button whose press reveals help about the label, value, or metric beside it."
+  },
+  "@astryx.mediaPlayer.play": {
+    "defaultMessage": "Play",
+    "description": "Accessible name and tooltip of the button that starts playback in a lab media player (video or audio)."
+  },
+  "@astryx.mediaPlayer.pause": {
+    "defaultMessage": "Pause",
+    "description": "Accessible name and tooltip of the button that pauses playback in a lab media player."
+  },
+  "@astryx.mediaPlayer.replay": {
+    "defaultMessage": "Replay",
+    "description": "Accessible name and tooltip of the play button in a lab media player after the media has ended; pressing it plays from the start."
+  },
+  "@astryx.mediaPlayer.skipBack": {
+    "defaultMessage": "Back {seconds, plural, one {# second} other {# seconds}}",
+    "description": "Accessible name and tooltip of the button that moves playback back in a lab media player. `seconds` is how far it moves, e.g. 15."
+  },
+  "@astryx.mediaPlayer.skipForward": {
+    "defaultMessage": "Forward {seconds, plural, one {# second} other {# seconds}}",
+    "description": "Accessible name and tooltip of the button that moves playback forward in a lab media player. `seconds` is how far it moves, e.g. 30."
+  },
+  "@astryx.mediaPlayer.mute": {
+    "defaultMessage": "Mute",
+    "description": "Accessible name and tooltip of the button that silences a lab media player."
+  },
+  "@astryx.mediaPlayer.unmute": {
+    "defaultMessage": "Unmute",
+    "description": "Accessible name and tooltip of the button that turns sound back on in a lab media player."
+  },
+  "@astryx.mediaPlayer.volume": {
+    "defaultMessage": "Volume",
+    "description": "Accessible name of the volume slider in a lab media player."
+  },
+  "@astryx.mediaPlayer.seek": {
+    "defaultMessage": "Seek",
+    "description": "Accessible name of the timeline slider in a lab media player; moving it changes the playback position."
+  },
+  "@astryx.mediaPlayer.timeValue": {
+    "defaultMessage": "{current} of {duration}",
+    "description": "Spoken value of the timeline slider in a lab media player. `current` is the playback position and `duration` the total length, both already written as words, e.g. \"1 minute, 5 seconds\"."
+  },
+  "@astryx.mediaPlayer.timeValueContext": {
+    "defaultMessage": "{value}, {context}",
+    "description": "Spoken value of the timeline slider in a lab media player when the position is inside a chapter or at a marker. `value` is the spoken time, e.g. \"1 minute, 5 seconds of 3 minutes\", and `context` is the chapter title or the marker label, e.g. \"Pollen\"."
+  },
+  "@astryx.mediaPlayer.previousTrack": {
+    "defaultMessage": "Previous track",
+    "description": "Name and tooltip of the button in a lab audio player that goes to the previous track or episode in the product's queue."
+  },
+  "@astryx.mediaPlayer.nextTrack": {
+    "defaultMessage": "Next track",
+    "description": "Name and tooltip of the button in a lab audio player that goes to the next track or episode in the product's queue."
+  },
+  "@astryx.mediaPlayer.live": {
+    "defaultMessage": "Live",
+    "description": "Shown instead of the playback time in a lab media player when the media is a live stream."
+  },
+  "@astryx.mediaPlayer.captions": {
+    "defaultMessage": "Captions",
+    "description": "Accessible name and tooltip of the toggle button that turns captions on and off in a lab video player."
+  },
+  "@astryx.mediaPlayer.enterFullscreen": {
+    "defaultMessage": "Full screen",
+    "description": "Accessible name and tooltip of the button that shows a lab video player over the whole screen."
+  },
+  "@astryx.mediaPlayer.exitFullscreen": {
+    "defaultMessage": "Exit full screen",
+    "description": "Accessible name and tooltip of the button that leaves full screen in a lab video player."
+  },
+  "@astryx.mediaPlayer.playbackSpeed": {
+    "defaultMessage": "Playback speed",
+    "description": "Tooltip of the button that opens the playback speed menu of a lab media player, and the name of the list of speeds in that menu."
+  },
+  "@astryx.mediaPlayer.playbackSpeedValue": {
+    "defaultMessage": "Playback speed, {rate}×",
+    "description": "Accessible name of the button that opens the playback speed menu of a lab media player. {rate} is the current speed as a number, such as 1.5; × means times normal speed."
+  },
+  "@astryx.mediaPlayer.playbackRate": {
+    "defaultMessage": "{rate}×",
+    "description": "Visible label of the playback speed menu button in a lab media player, and of each speed in its menu. `rate` is the speed, already formatted as a number, e.g. \"1.5\"; × means times normal speed."
+  },
+  "@astryx.mediaPlayer.error": {
+    "defaultMessage": "This media can't be played.",
+    "description": "Message a lab media player shows when the browser cannot play its video or audio; a Try again button follows."
+  },
+  "@astryx.mediaPlayer.retry": {
+    "defaultMessage": "Try again",
+    "description": "Label of the button that loads the media again after a lab media player failed to play it."
+  },
+  "@astryx.mediaPlayer.announceMuted": {
+    "defaultMessage": "Muted",
+    "description": "Screen reader announcement after a keyboard shortcut silences a lab media player."
+  },
+  "@astryx.mediaPlayer.announceUnmuted": {
+    "defaultMessage": "Unmuted",
+    "description": "Screen reader announcement after a keyboard shortcut turns sound back on in a lab media player."
+  },
+  "@astryx.mediaPlayer.announceCaptionsOn": {
+    "defaultMessage": "Captions on",
+    "description": "Screen reader announcement after a keyboard shortcut turns captions on in a lab video player."
+  },
+  "@astryx.mediaPlayer.announceCaptionsOff": {
+    "defaultMessage": "Captions off",
+    "description": "Screen reader announcement after a keyboard shortcut turns captions off in a lab video player."
+  },
+  "@astryx.mediaPlayer.announceVolume": {
+    "defaultMessage": "Volume {percent}",
+    "description": "Screen reader announcement after a keyboard shortcut changes the volume of a lab media player. `percent` is already formatted, e.g. \"40%\"."
+  },
+  "@astryx.mediaPlayer.announceSpeed": {
+    "defaultMessage": "Speed {rate}×",
+    "description": "Screen reader announcement after a keyboard shortcut changes how fast a lab media player plays. `rate` is already formatted, e.g. \"1.5\"; × means times normal speed."
   },
   "@astryx.navigationStack.back": {
     "defaultMessage": "Back",

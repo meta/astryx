@@ -14,7 +14,7 @@ export const doc = {
   stability: 'experimental',
   summary: 'Fork a theme as editable local source',
   description:
-    "Copies a bundled or installed package theme's complete source into the local themes root, including a local descriptor. Writes are atomic. Existing files require --overwrite. Eject never writes into a folder that holds another theme or a theme the theme editor made, even with --overwrite. When the fork imports packages the app lacks, the result names them with an install command. Use --package when package themes share a slug.",
+    "Copies a bundled or installed package theme's complete source into the local themes root, including a local descriptor. Writes are atomic. Existing files require --overwrite. Eject never writes into a folder that holds another theme or a theme the theme editor made, even with --overwrite. A subfolder of a folder the theme editor made is written, and the CLI warns; to keep the editor folder to its own theme, fork into the default folder or a path outside it. When the fork imports packages the app lacks, the result names them with an install command. Use --package when package themes share a slug.",
   fn: 'themeEject',
   args: [
     {

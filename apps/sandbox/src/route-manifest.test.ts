@@ -122,6 +122,8 @@ describe('Sandbox static export contract', () => {
     expect(canHydrate('/pages/list-reorder-cases/', '')).toBe(true);
     expect(canHydrate('/pages/scroll-edge-taps/', '?case=refresh')).toBe(false);
     expect(canHydrate('/pages/scroll-edge-taps/', '')).toBe(true);
+    expect(canHydrate('/pages/swipe-actions-cases/', '?case=mail')).toBe(false);
+    expect(canHydrate('/pages/swipe-actions-cases/', '')).toBe(true);
   });
 
   it('does not turn unknown URLs, dynamic segments or traversal into a 200 fallback', () => {

@@ -96,3 +96,52 @@ function openStore(file) {
     return new Map();
   }
 }
+
+/**
+ * Each export value of a stored doc's module (./import.mjs), with the doc's
+ * key and the export's name, so its parse can be answered from the store
+ * ({@link storedParse}).
+ * @type {WeakMap<object, {key: string, name: string}>}
+ */
+const storedExports = new WeakMap();
+
+/**
+ * Note that `value` is the `name` export of the stored doc `key`.
+ * @param {unknown} value
+ * @param {string} key
+ * @param {string} name
+ */
+export function noteStoredExport(value, key, name) {
+  if (value && typeof value === 'object') storedExports.set(value, {key, name});
+}
+
+/**
+ * Where a stored doc's export, as the readers parse it, is stored at publish.
+ * @param {string} key the doc's key
+ * @param {string} name the export's name
+ * @returns {string}
+ */
+export function storedParseKey(key, name) {
+  return `parsed:${name}:${key}`;
+}
+
+/**
+ * The parse of `value`, read from the store, when `value` is a stored doc's
+ * export whose parse was stored at publish: a fresh value, as a parse gives.
+ * Undefined otherwise, or when the store cannot be read.
+ * @param {unknown} value
+ * @returns {any}
+ */
+export function storedParse(value) {
+  if (!value || typeof value !== 'object') return undefined;
+  const at = storedExports.get(value);
+  if (!at) return undefined;
+  try {
+    const parsed = readStore(STORED_DOCS_FILE).get(
+      storedParseKey(at.key, at.name),
+    );
+    return parsed != null && typeof parsed === 'object' ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
