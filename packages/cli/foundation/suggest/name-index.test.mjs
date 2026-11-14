@@ -3,9 +3,10 @@
 /**
  * @file The not-found hint's one name index: a project's first miss makes
  * the kept gathers' folder and keeps the index there, later misses reuse it,
- * and adding, renaming or removing a doc, a template or an integration shows
- * in the very next hint. The index is kept only by an installed CLI with a
- * build id, so the CLI's root is set to an installed-looking folder with one.
+ * adding, renaming or removing a doc, a template or an integration shows in
+ * the very next hint, and a new CLI build makes it again. The index is kept
+ * only by an installed CLI with a build id, so the CLI's root is set to an
+ * installed-looking folder with one.
  *
  * @input a project whose one integration ships a component, a template and a
  *   docs topic
@@ -16,7 +17,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
-import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const SLOW = 60_000;
 
@@ -68,11 +68,18 @@ beforeAll(async () => {
   // No kept gathers' folder yet: the first miss makes it.
   process.env.XDG_CACHE_HOME = CACHE;
 
-  project = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-name-index-'));
+  // Outside the repository, whose folder other tests change while this one
+  // waits for its stamps to settle.
+  project = fs.mkdtempSync(path.join(TEMP_ROOT, 'project-'));
   fs.writeFileSync(
     path.join(project, 'package.json'),
     JSON.stringify({name: 'consumer'}),
   );
+  // A repository and a lockfile mark the project's root, as for a project
+  // that is installed and checked out, so no folder above it is read: the
+  // system temp folder above changes while this test waits.
+  fs.mkdirSync(path.join(project, '.git'));
+  fs.writeFileSync(path.join(project, 'package-lock.json'), '{}\n');
   fs.writeFileSync(
     path.join(project, 'astryx.config.mjs'),
     "export default {integrations: ['@acme/glints']};\n",
@@ -224,6 +231,22 @@ describe('the name index', () => {
       expect(await hint('GlintCard', [])).toBeNull();
       expect(await hint('glossy-panel', [])).toBeNull();
       expect(await hint('GlintCard')).toBe('astryx component GlintCard');
+    },
+    SLOW,
+  );
+
+  it(
+    'is made again for a new CLI build, which its own files are kept under',
+    async () => {
+      await sleep(SETTLE_WAIT_MS);
+      expect(await hint('GlintCard')).toBe('astryx component GlintCard');
+      const before = keptIndexes();
+      fs.writeFileSync(
+        path.join(FAKE_CLI_ROOT, 'clients', 'cli', 'build-id.generated.json'),
+        JSON.stringify({id: 'name-index-test-upgraded'}),
+      );
+      expect(await hint('GlintCard')).toBe('astryx component GlintCard');
+      expect(keptIndexes()).toBe(before + 1);
     },
     SLOW,
   );

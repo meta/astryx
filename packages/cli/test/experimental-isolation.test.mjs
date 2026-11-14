@@ -156,6 +156,8 @@ const ICON_SET_READERS = {
   // Readers behind a gated reader.
   'api/docs/_entry-names.mjs':
     "whether a loaded integration names a root, so the docs tree may hold more than the CLI's own; it reads the sets only through project.iconSets()",
+  'foundation/suggest/name-index.mjs':
+    "a loaded integration's root, as part of the key its kept docs routes (api/docs/_entry-names.mjs) are kept under; it reads no set",
   'api/doctor/doctor.mjs': 'project.iconSets()',
   'api/template/_adapter.mjs': 'project.iconSets()',
   'foundation/doc-compiler/inputs.mjs': 'project.iconSets()',

@@ -133,17 +133,9 @@ export function storedSelfAudit(name) {
  */
 export function inputsUnchanged(root, inputs, skip = PACKING_NAMES) {
   for (const [rel, state] of Object.entries(inputs)) {
-    if (inputState(inputPath(root, rel), skip) !== state) return false;
+    if (inputState(path.join(root, ...rel.split('/')), skip) !== state) {
+      return false;
+    }
   }
   return true;
-}
-
-/**
- * An input's path, from its path under `root` ({@link selfAuditInputs}).
- * @param {string} root
- * @param {string} rel
- * @returns {string}
- */
-export function inputPath(root, rel) {
-  return path.join(root, ...rel.split('/'));
 }

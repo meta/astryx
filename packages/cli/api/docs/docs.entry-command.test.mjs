@@ -56,7 +56,7 @@ const SLOW = 30_000;
 const componentsNaming = async (components, wanted) =>
   integrationsFilesNaming(
     [components],
-    (await hintNameIndex(null, [{components}])).components,
+    (await hintNameIndex(process.cwd(), null, [{components}])).components,
     wanted,
   )[0];
 
@@ -280,7 +280,7 @@ describe('the cheap name checks', () => {
       const ids = (await discoverCoreTemplates()).map(t => t.dirName);
       expect([...coreTemplateIds()].sort()).toEqual([...ids].sort());
       // The name index's block ids hold each block id, and no made-up one.
-      const kept = (await hintNameIndex(null, [])).templates;
+      const kept = (await hintNameIndex(process.cwd(), null, [])).templates;
       for (const id of coreTemplateIds()) {
         if (listTemplates().includes(id)) continue;
         expect(templateFilesNaming(kept, foldEntryName(id)).blocks).toBe(true);
@@ -297,7 +297,7 @@ describe('the cheap name checks', () => {
         (/** @type {string} */ wanted) => (/** @type {string} */ n) =>
           n === wanted;
       const core = /** @type {string | string[]} */ (
-        (await hintNameIndex(coreDir, [])).core
+        (await hintNameIndex(process.cwd(), coreDir, [])).core
       );
       for (const name of Object.values(discoverComponents(coreDir)).flat()) {
         const found = coreFilesNaming(core, foldEntryName(name));
@@ -367,7 +367,8 @@ describe('the cheap name checks', () => {
       'templates',
     );
     expect(integrationTemplateIds({templates})).toEqual(['glimmer-panel']);
-    const ids = (await hintNameIndex(null, [{templates}])).templates;
+    const ids = (await hintNameIndex(process.cwd(), null, [{templates}]))
+      .templates;
     expect(templateFilesNaming(ids, 'glimmerpanel').listed).toBe(true);
     expect(templateFilesNaming(ids, 'glimmer').listed).toBe(false);
     expect(integrationMayReplaceTemplate({templates})).toBe(false);

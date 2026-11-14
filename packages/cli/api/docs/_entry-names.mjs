@@ -2,62 +2,25 @@
 
 /**
  * @file The names `astryx docs` reads in a project: every route of the
- * project's docs tree, namespaces and flat topics included.
+ * project's docs tree, namespaces and flat topics included, worked out now.
  *
  * @input a project folder and the integrations it loads
  * @output the routes, in tree order
- * @position api/docs: given by the component, hook and template lookups to
- *   the not-found hint (foundation/suggest/other-command.mjs), loaded only
- *   when the hint asks (./_entry-names-lazily.mjs). Where no
+ * @position api/docs: read by the lookup commands' not-found hint, through
+ *   ./_entry-names-lazily.mjs, which keeps them in its name index
+ *   (foundation/suggest/name-index.mjs) and reads them here only where no
+ *   index is kept (a checkout). Where no
  *   integration adds docs, the routes are the CLI's own, stored at publish
- *   (scripts/generate-docs-routes.mjs); elsewhere they are kept between runs.
- *   The tree is built only when neither answers: in a checkout, or after a
- *   file they depend on changes.
+ *   (scripts/generate-docs-routes.mjs) and used while every file their tree
+ *   read is unchanged; else the tree is built.
  */
 
-import {fileURLToPath} from 'node:url';
-import {
-  persistedSummary,
-  persistedSummaryAsync,
-} from '../../foundation/fs/gather-cache.mjs';
-import {fileStamp, recordReads} from '../../foundation/fs/read-record.mjs';
-import {CLI_ROOT, realDir} from '../../foundation/fs/paths.mjs';
+import {CLI_ROOT} from '../../foundation/fs/paths.mjs';
 import {
   DOCS_ROUTES_FILE,
   readStore,
 } from '../../foundation/doc-compiler/stored-docs.mjs';
-import {
-  inputPath,
-  inputsUnchanged,
-} from '../../foundation/discovery/stored-self-audit.mjs';
-import {hostedRun} from '../../foundation/runtime/package-root.mjs';
-
-/** The module's own file. */
-const OWN_FILE = fileURLToPath(import.meta.url);
-
-/**
- * The modules whose code decides a project's routes from its files: a kept
- * set of routes is kept only while each is unchanged.
- */
-const ROUTES_CODE = [
-  OWN_FILE,
-  fileURLToPath(new URL('./_adapter.mjs', import.meta.url)),
-  fileURLToPath(
-    new URL('../../foundation/doc-compiler/tree.mjs', import.meta.url),
-  ),
-  fileURLToPath(
-    new URL(
-      '../../foundation/doc-compiler/generated-levels.mjs',
-      import.meta.url,
-    ),
-  ),
-  fileURLToPath(
-    new URL('../../foundation/discovery/docs-discovery.mjs', import.meta.url),
-  ),
-  fileURLToPath(
-    new URL('../../foundation/config/project.mjs', import.meta.url),
-  ),
-];
+import {inputsUnchanged} from '../../foundation/discovery/stored-self-audit.mjs';
 
 /**
  * Every route `astryx docs <route>` reads in the project at `cwd`, in tree
@@ -68,83 +31,26 @@ const ROUTES_CODE = [
  *   the integrations the project loads
  * @returns {Promise<string[]>}
  */
-export async function docsEntryNames(cwd, integrations) {
+export async function docsRoutesNow(cwd, integrations) {
   // The docs tree joins an integration's docs and, with the opt-in, its icon
   // sets' definitions; without either, the project's tree is the CLI's own.
   if (integrations.every(each => !each?.docs && !each?.iconSets)) {
     return storedCliRoutes() ?? (await cliDocsRoutesNow());
   }
-  return keptProjectRoutes(cwd, integrations);
+  return projectRoutesNow(cwd);
 }
 
 /**
  * The CLI's own routes as stored at publish, while every file and folder
- * their tree read is as it was then; else null. The check is kept between
- * runs while none of those paths has a new stamp.
+ * their tree read is as it was then; else null.
  * @returns {string[] | null}
  */
 function storedCliRoutes() {
-  return persistedSummary(['cli-docs-routes'], () => {
-    /** @type {[string, string][]} */
-    const stamps = [
-      [OWN_FILE, fileStamp(OWN_FILE)],
-      [DOCS_ROUTES_FILE, fileStamp(DOCS_ROUTES_FILE)],
-    ];
-    /** @type {{inputs: Record<string, string>, value: string[]} | undefined} */
-    const stored = readStore(DOCS_ROUTES_FILE).get('routes');
-    if (!stored) return {value: null, stamps};
-    for (const rel of Object.keys(stored.inputs)) {
-      const file = inputPath(CLI_ROOT, rel);
-      stamps.push([file, fileStamp(file)]);
-    }
-    return {
-      value: inputsUnchanged(CLI_ROOT, stored.inputs) ? stored.value : null,
-      stamps,
-    };
-  });
-}
-
-/**
- * The project's routes, kept between runs while every file and folder the
- * tree read, every path it probed and the code that builds it are unchanged.
- * @param {string} cwd
- * @param {Array<{docs?: unknown, iconSets?: unknown, name?: string} | null | undefined>} integrations
- * @returns {Promise<string[]>}
- */
-function keptProjectRoutes(cwd, integrations) {
-  return persistedSummaryAsync(
-    [
-      'docs-entry-names',
-      realDir(cwd),
-      CLI_ROOT,
-      hostedRun()?.integrations ?? [],
-      // Which integrations load, and where their docs are, decide what the
-      // tree reads.
-      integrations.map(each => [
-        each?.name ?? null,
-        typeof each?.docs === 'string' ? each.docs : null,
-        typeof each?.iconSets === 'string' ? each.iconSets : null,
-      ]),
-      ROUTES_CODE.map(file => [file, fileStamp(file)]),
-    ],
-    async () => {
-      /** @type {Map<string, string>} */
-      const seen = new Map();
-      const value = await recordReads(seen, () => projectRoutesNow(cwd), {
-        exact: true,
-      });
-      return {
-        value,
-        // A folder probed is recorded by its identity alone. The full stamp,
-        // taken now, is stricter; a change during the read leaves it too
-        // young to keep.
-        stamps: [...seen].map(([file, state]) => [
-          file,
-          state.startsWith('dir:') ? fileStamp(file) : state,
-        ]),
-      };
-    },
-  );
+  /** @type {{inputs: Record<string, string>, value: string[]} | undefined} */
+  const stored = readStore(DOCS_ROUTES_FILE).get('routes');
+  return stored && inputsUnchanged(CLI_ROOT, stored.inputs)
+    ? stored.value
+    : null;
 }
 
 /**

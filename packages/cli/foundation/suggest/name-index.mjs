@@ -22,7 +22,8 @@ import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {hasNameLine, keptTreeSummaryAsync} from '../fs/kept-tree.mjs';
 import {makeGatherCacheDir} from '../fs/gather-cache.mjs';
-import {CLI_ROOT} from '../fs/paths.mjs';
+import {CLI_ROOT, realDir} from '../fs/paths.mjs';
+import {hostedRun} from '../runtime/package-root.mjs';
 import {
   BLOCKS_DIR,
   BUILTIN_DOCS_DIR,
@@ -47,6 +48,10 @@ const INDEX_CODE = [
     '../discovery/docs-section-key.mjs',
     '../discovery/docs-discovery.mjs',
     '../doc-compiler/generated-levels.mjs',
+    '../doc-compiler/tree.mjs',
+    '../config/project.mjs',
+    '../../api/docs/_entry-names.mjs',
+    '../../api/docs/_adapter.mjs',
   ].map(rel => fileURLToPath(new URL(rel, import.meta.url))),
 ];
 
@@ -59,6 +64,13 @@ const INDEX_CODE = [
  */
 
 /**
+ * What works out every route `astryx docs` reads in a project with these
+ * integrations (api/docs/_entry-names.mjs docsRoutesNow, which the docs
+ * lookup owns).
+ * @typedef {(cwd: string, integrations: any[]) => Promise<string[]>} DocsRoutes
+ */
+
+/**
  * The project's name index.
  * @typedef {{
  *   core: string | string[] | null,
@@ -67,8 +79,10 @@ const INDEX_CODE = [
  *   docs: DocEntry[][],
  *   topics: string[],
  *   treeStems: string[],
+ *   levels: string[],
  *   segments: string | string[],
  *   selfDocs: string | string[],
+ *   routes: string[] | null,
  * }} NameIndex
  *   `core`: Core's names (entry-name-files.mjs coreNameLines), null without
  *   Core; `templates`: Core's page folders, folded, and the block ids and
@@ -76,26 +90,33 @@ const INDEX_CODE = [
  *   templateIdLines); `components`, `docs`: one index for each integration
  *   components or docs folder that is set, in project order; `topics`: the
  *   CLI's flat topics, as docs discovery lists them; `treeStems`: the stem of
- *   each CLI docs tree file, in listing order; `segments`: the folded route
- *   segment of each of those, of each level the docs tree generates
- *   (generated-levels.mjs), as lines; `selfDocs`: the route segments the
- *   CLI's typed docs can carry (cli-self-doc-names.mjs)
+ *   each CLI docs tree file, in listing order; `levels`: the routes of the
+ *   levels that hold the flat topics (generated-levels.mjs TOPIC_LEVELS);
+ *   `segments`: the folded route segment of each of those, and of each level
+ *   the docs tree groups doc kinds in, as lines; `selfDocs`: the route
+ *   segments the CLI's typed docs can carry (cli-self-doc-names.mjs);
+ *   `routes`: every route `astryx docs` reads in the project ({@link
+ *   DocsRoutes}), kept with the index; null where no index is kept, so a
+ *   checkout works them out only when a name can end one, or where the
+ *   caller gives none
  */
 
 /**
- * The name index of a project with Core at `coreDir` and these
+ * The name index of the project at `cwd`, with Core at `coreDir` and these
  * integrations: the kept one while every folder it listed and every file it
  * read is unchanged, else made now and kept. Making it loads each integration
- * doc once, to keep the name it declares; what those loads read is checked
- * too. The kept gathers' folder is made first where none exists
- * (gather-cache.mjs makeGatherCacheDir), so the first miss keeps it for the
- * next.
+ * doc once, to keep the name it declares, and works out the project's docs
+ * routes; what those read is checked too. The kept gathers' folder is made
+ * first where none exists (gather-cache.mjs makeGatherCacheDir), so the
+ * first miss keeps it for the next.
+ * @param {string} cwd
  * @param {string | null} coreDir
- * @param {Array<{components?: string, templates?: string, docs?: unknown} | null | undefined>} integrations
+ * @param {Array<{name?: string, components?: string, templates?: string, docs?: unknown, iconSets?: unknown} | null | undefined>} integrations
+ * @param {DocsRoutes} [docsRoutes]
  * @returns {Promise<NameIndex>}
  */
-export function hintNameIndex(coreDir, integrations) {
-  makeGatherCacheDir();
+export function hintNameIndex(cwd, coreDir, integrations, docsRoutes) {
+  const withRoutes = makeGatherCacheDir() && docsRoutes != null;
   const templates = templateRoots(
     integrations.flatMap(each => (each ? [each] : [])),
   );
@@ -122,6 +143,18 @@ export function hintNameIndex(coreDir, integrations) {
         ...selfDocs.map(root => ({root, skip: skipCliSelfDocFolder})),
       ],
       code: INDEX_CODE,
+      // The routes depend on the project, which integrations load, where
+      // their docs and icon sets are, and what a hosted run approves.
+      key: [
+        realDir(cwd),
+        hostedRun()?.integrations ?? [],
+        integrations.map(each => [
+          each?.name ?? null,
+          typeof each?.docs === 'string' ? each.docs : null,
+          typeof each?.iconSets === 'string' ? each.iconSets : null,
+        ]),
+        withRoutes,
+      ],
       recorded: true,
     },
     async trees => {
@@ -164,6 +197,7 @@ export function hintNameIndex(coreDir, integrations) {
         docs: docEntries,
         topics,
         treeStems,
+        levels: Object.values(levels.TOPIC_LEVELS).map(level => level.route),
         segments: names.foldedLines(
           [
             ...Object.values(levels.TOPIC_LEVELS).map(level => level.route),
@@ -173,6 +207,8 @@ export function hintNameIndex(coreDir, integrations) {
           ].map(name => sections.routeSegment(name)),
         ),
         selfDocs: self.cliSelfDocNameLines(selfDocTrees),
+        routes:
+          withRoutes && docsRoutes ? await docsRoutes(cwd, integrations) : null,
       };
     },
   );

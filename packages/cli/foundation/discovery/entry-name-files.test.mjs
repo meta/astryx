@@ -60,6 +60,7 @@ beforeAll(async () => {
   dirs = [one, undefined, two, path.join(root, 'missing')];
   indexes = (
     await hintNameIndex(
+      process.cwd(),
       null,
       dirs.map(docs => ({docs})),
     )

@@ -53,7 +53,7 @@ export async function loadTemplateIconSets(cwd) {
  */
 export async function withOtherCommandHint(name, suggestions, cwd, namesOf) {
   try {
-    const [{findOtherCommand, withOtherCommand}, {docsEntryNamesLazily}] =
+    const [{findOtherCommand, withOtherCommand}, {docsRoutesLazily}] =
       await Promise.all([
         import('../../foundation/suggest/other-command.mjs'),
         import('../docs/_entry-names-lazily.mjs'),
@@ -61,7 +61,7 @@ export async function withOtherCommandHint(name, suggestions, cwd, namesOf) {
     const hint = await findOtherCommand(name, {
       from: 'template',
       cwd,
-      docsNames: docsEntryNamesLazily,
+      docsRoutes: docsRoutesLazily,
     });
     return withOtherCommand(suggestions, hint, name, {
       from: 'template',

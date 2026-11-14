@@ -2025,17 +2025,24 @@ export async function unknownTopicError(topic, catalog, {cwd} = {}) {
   const project =
     suggestions.length > 0 ? await catalogProject(catalog, cwd) : undefined;
   // The hint's modules load only on this path.
-  const hint = project
-    ? await import('../../foundation/suggest/other-command.mjs')
-    : undefined;
-  const elsewhere = hint
-    ? await hint.findOtherCommand(topic, {
-        from: 'docs',
-        cwd,
-        coreDir: project?.coreDir(),
-        integrations: project?.loadedIntegrations,
-      })
-    : null;
+  const [hint, routes] = project
+    ? await Promise.all([
+        import('../../foundation/suggest/other-command.mjs'),
+        import('./_entry-names-lazily.mjs'),
+      ])
+    : [];
+  const elsewhere =
+    hint && routes
+      ? await hint.findOtherCommand(topic, {
+          from: 'docs',
+          cwd,
+          coreDir: project?.coreDir(),
+          integrations: project?.loadedIntegrations,
+          // Kept with the project's one name index (the docs catalog itself
+          // is not asked from here).
+          docsRoutes: routes.docsRoutesLazily,
+        })
+      : null;
   if (hint && elsewhere) {
     const sharesAWord =
       !everyDoc ||

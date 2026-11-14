@@ -25,9 +25,10 @@
  *   by `doctor` (api/doctor/_adapter.mjs) for its file-only docs checks and
  *   its theme-wiring scan,
  *   in a run that records modules and variables to its end, and, through
- *   `persistedSummary`, by kept-tree.mjs for the lookup commands' not-found hint's
- *   summaries of folder trees and by the docs lookup (api/docs/_entry-names.mjs)
- *   for the routes that hint reads, each kept while every path it stamped is
+ *   `persistedSummary`, by kept-tree.mjs for summaries of folder trees, the
+ *   lookup commands' not-found hint's name index among them
+ *   (foundation/suggest/name-index.mjs), each kept while every path it
+ *   stamped but the CLI's own files (which its build id covers) is
  *   unchanged, in any command. The commands whose runs keep the other
  *   entries are `search`, `build`, `component`, `template`, `theme`,
  *   `discover`, `docs` and `doctor`. The first such run on a machine makes the
@@ -294,6 +295,7 @@ export async function recordRunFor(argv, fn) {
  * start; the lookup commands' not-found hint makes it before it keeps its
  * name index, so a project's first miss keeps what later misses read. A
  * folder that cannot be made keeps nothing; nothing more.
+ * @returns {boolean} whether this run keeps summaries there
  */
 export function makeGatherCacheDir() {
   if (
@@ -301,7 +303,7 @@ export function makeGatherCacheDir() {
     currentUid() == null ||
     withoutRecording(buildId) == null
   ) {
-    return;
+    return false;
   }
   const dir = cacheDirPath();
   try {
@@ -312,6 +314,7 @@ export function makeGatherCacheDir() {
   } catch {
     // A folder that cannot be made keeps no catalogs.
   }
+  return withoutRecording(gatherCacheDir) != null;
 }
 
 /**
@@ -832,7 +835,8 @@ function settled(stamps) {
 /**
  * A summary of files and folders, made at once, kept as an entry beside the
  * gathers, in or out of a recorded run: the stored value while every path
- * `make` stamped has the stamp it was stored with, else the one `make` gives
+ * `make` stamped has the stamp it was stored with (the CLI's own files are
+ * covered by the build id instead: inCliBuild), else the one `make` gives
  * now, which is stored unless a stamp is younger than
  * {@link SUMMARY_SETTLE_MS}. The folder, the build id, the Yarn Plug'n'Play
  * rule, the 0600 rename write and the eviction are those of a kept gather;
@@ -928,15 +932,33 @@ function storedSummary({file, entry}) {
 }
 
 /**
+ * Whether `file` is one of the installed CLI's own files: under its folder,
+ * outside the node_modules folder inside it. A summary is kept only by an
+ * installed CLI, under its build id (summaryAt), and an installed package's
+ * files stay as published, so the build id covers them; a package placed in
+ * that node_modules folder is not part of the build.
+ * @param {string} file
+ * @returns {boolean}
+ */
+function inCliBuild(file) {
+  const root = CLI_ROOT + path.sep;
+  return (
+    file.startsWith(root) && !file.startsWith(root + 'node_modules' + path.sep)
+  );
+}
+
+/**
  * Keep `value` at `at` with its stamps, unless a stamp is too young or the
  * value does not read back the same. Silent on any failure. A file in jiti's
- * cache is not kept as a stamp, as for a kept gather (inJitiCache).
+ * cache is not kept as a stamp, as for a kept gather (inJitiCache), nor is
+ * one of the CLI's own files: the build id in the summary's key covers them
+ * (inCliBuild), so a new build makes the summary again.
  * @param {{dir: string, file: string, entry: string}} at
  * @param {unknown} value
  * @param {[string, string][]} made the stamps the summary was made with
  */
 function storeSummary({dir, file, entry}, value, made) {
-  const stamps = made.filter(([at]) => !inJitiCache(at));
+  const stamps = made.filter(([at]) => !inJitiCache(at) && !inCliBuild(at));
   if (!settled(stamps)) return;
   withoutRecording(() => {
     try {

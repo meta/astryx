@@ -928,7 +928,7 @@ export async function withOtherCommandHint(
   }
   try {
     // The hint's modules load only on this path.
-    const [{findOtherCommand, withOtherCommand}, {docsEntryNamesLazily}] =
+    const [{findOtherCommand, withOtherCommand}, {docsRoutesLazily}] =
       await Promise.all([
         import('../../foundation/suggest/other-command.mjs'),
         import('../docs/_entry-names-lazily.mjs'),
@@ -938,7 +938,7 @@ export async function withOtherCommandHint(
       cwd,
       coreDir,
       integrations: loadedIntegrations,
-      docsNames: docsEntryNamesLazily,
+      docsRoutes: docsRoutesLazily,
     });
     if (!hint) return error;
     return new AstryxError(

@@ -33,7 +33,6 @@ import {
   integrationsFilesNaming,
 } from '../discovery/entry-name-files.mjs';
 import {BUILTIN_DOCS_DIR, rootNamespaceName} from '../discovery/name-roots.mjs';
-import {TOPIC_LEVELS} from '../doc-compiler/generated-levels.mjs';
 import {hasNameLine, keptTreeSummary} from '../fs/kept-tree.mjs';
 import {carriesEveryTypedWord} from '../text/suggest-order.mjs';
 import {findCoreDir} from '../fs/paths.mjs';
@@ -281,21 +280,19 @@ export function withOtherCommand(
  * then, only for the names that fold to it, and only until a catalog before
  * it has an exact match. So a name no file carries reads no doc and loads no
  * discovery. The docs catalog is every route of the docs tree, from
- * `docsNames`, which the docs lookup owns; it is read only when the name's
- * last segment can end a route. A check that fails gives no hint.
+ * `docsRoutes`, which the docs lookup owns; the index keeps them where it is
+ * kept, and they are worked out only when the name's last segment can end a
+ * route. A check that fails gives no hint.
  * @param {unknown} typed
  * @param {{
  *   from: LookupCommand,
  *   cwd?: string,
  *   coreDir?: string | null,
  *   integrations?: import('../integrations/integrations.mjs').LoadedIntegration[],
- *   docsNames?: (
- *     cwd: string,
- *     integrations: import('../integrations/integrations.mjs').LoadedIntegration[],
- *   ) => Promise<string[]>,
+ *   docsRoutes?: import('./name-index.mjs').DocsRoutes,
  * }} context `coreDir` and `integrations` are the ones the lookup found, if
- *   any. `docsNames` gives every route `astryx docs` reads in the project
- *   with these integrations; without it, no docs route is a hint
+ *   any. `docsRoutes` works out every route `astryx docs` reads in the
+ *   project with these integrations; without it, no docs route is a hint
  * @returns {Promise<Found | null>}
  */
 export async function findOtherCommand(
@@ -305,7 +302,7 @@ export async function findOtherCommand(
     cwd = process.cwd(),
     coreDir: knownCoreDir,
     integrations: known,
-    docsNames,
+    docsRoutes,
   },
 ) {
   if (typeof typed !== 'string') return null;
@@ -329,7 +326,12 @@ export async function findOtherCommand(
   /** @type {import('./name-index.mjs').NameIndex | undefined} */
   let index;
   const indexOnce = async () =>
-    (index ??= await hintNameIndex(coreDir, await integrationsOnce()));
+    (index ??= await hintNameIndex(
+      cwd,
+      coreDir,
+      await integrationsOnce(),
+      docsRoutes,
+    ));
   /** @type {ReturnType<typeof coreFilesNaming> | {component: boolean, hook: boolean, componentTops?: undefined, hookTops?: undefined}} */
   let inCore = {component: false, hook: false};
   try {
@@ -405,11 +407,12 @@ export async function findOtherCommand(
           if (roots.length > 0) return {docs: roots};
         }
         const segment = foldEntryName(typed.slice(typed.lastIndexOf('/') + 1));
+        if (!docsRoutes || !docNamed(docsDirs, names, segment)) {
+          return {docs: []};
+        }
         return {
           docs:
-            docsNames && docNamed(docsDirs, names, segment)
-              ? await docsNames(cwd, await integrationsOnce())
-              : [],
+            names.routes ?? (await docsRoutes(cwd, await integrationsOnce())),
         };
       },
     ],
@@ -462,9 +465,7 @@ async function rootDocNames(docsDirs, index, wanted, isWanted) {
       );
       return name && isWanted(name) ? [name] : [];
     }),
-    ...Object.values(TOPIC_LEVELS)
-      .map(level => level.route)
-      .filter(isWanted),
+    ...index.levels.filter(isWanted),
   ];
   if (builtin.length > 0) return builtin;
   // A topic or root namespace: a doc without `placement`.
