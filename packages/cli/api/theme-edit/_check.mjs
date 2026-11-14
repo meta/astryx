@@ -2580,6 +2580,95 @@ export function drawsLine(C, parts, prop, state) {
 }
 
 /**
+ * Whether a part reads a token in any of its rules.
+ * @param {any} C the part census
+ * @param {string} part
+ * @param {string} token
+ */
+function readsToken(C, part, token) {
+  return Object.keys(GROUPS).some(g =>
+    (C.partReads(part, g) ?? []).some(
+      (/** @type {{token: string}} */ r) => r.token === token,
+    ),
+  );
+}
+
+/**
+ * The parts drawn as pills: they read --radius-full, which the corners
+ * dial leaves round.
+ * @param {any} C the part census
+ * @returns {string[]}
+ */
+export function pillParts(C) {
+  return Object.keys(C.MAP).filter(p => readsToken(C, p, '--radius-full'));
+}
+
+/**
+ * The surfaces whose border the shared border tokens never reach: the
+ * containers, menus and overlays (a part with an elevation shadow, or one
+ * the layer runtime places: a tooltip) whose border reads no border width
+ * or border color token. Some draw none (a dialog); some draw a fixed
+ * line of their own (a popover's 1px), which --border-width does not
+ * widen. A family member the census does not record is kept.
+ * @param {any} C the part census
+ * @returns {string[]}
+ */
+export function borderlessSurfaces(C) {
+  const rest = (/** @type {{when: string[]}} */ r) =>
+    r.when.some(w => !/:|selected/.test(w));
+  /** Whether the layer runtime places the part (its sizes read the layer's inset). @param {string} pt */
+  const layered = pt =>
+    Object.values(C.MAP[pt]?.own ?? {}).some((/** @type {any} */ x) =>
+      (x?.values ?? []).some((/** @type {unknown} */ v) =>
+        /--astryx-layer-/.test(String(v)),
+      ),
+    );
+  const candidates = new Set([
+    ...(FAMILIES.containers ?? []),
+    ...(FAMILIES.menus ?? []),
+    ...Object.keys(C.MAP).filter(
+      pt =>
+        layered(pt) ||
+        (C.partReads(pt, 'shadow') ?? []).some(
+          (/** @type {any} */ r) => /^--shadow-/.test(r.token) && rest(r),
+        ),
+    ),
+  ]);
+  return [...candidates].filter(
+    pt =>
+      !(C.partReads(pt, 'border') ?? []).some(
+        (/** @type {{token: string}} */ r) =>
+          r.token === '--border-width' || /^--color-border/.test(r.token),
+      ),
+  );
+}
+
+/**
+ * The parts that draw a divider with the shared border width: one side's
+ * border (a table cell's bottom rule) or an inner line (a divider's), not
+ * a box around the part. A wider --border-width makes their rules heavy.
+ * @param {any} C the part census
+ * @returns {string[]}
+ */
+export function dividerParts(C) {
+  return Object.keys(C.MAP).filter(pt => {
+    const at = C.MAP[pt]?.at ?? {};
+    /** @param {string} k */
+    const reads = k =>
+      Object.values(at[k] ?? {}).some(v => /--border-width/.test(String(v)));
+    if (reads('border-width')) return false;
+    const sides = Object.keys(at).filter(
+      k => /^border-[a-z-]+-width$/.test(k) && reads(k),
+    );
+    const inner = (C.MAP[pt]?.inside?.['--border-width'] ?? []).some(
+      (/** @type {string} */ p) =>
+        /^(height|width|block-size|inline-size)$/.test(p),
+    );
+    return sides.length === 1 || (!sides.length && inner);
+  });
+}
+
+/**
  * The states a part (or a group's members) draws a ring of its own in,
  * with its box-shadow (an input's hover and focus rings), or none. A shadow
  * the theme sets on the part's resting rule replaces them in every state:

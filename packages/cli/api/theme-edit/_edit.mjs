@@ -120,12 +120,16 @@ import {
   folderIsEmpty,
   dialValueFits,
   holdAfterBuild,
+  cornersPlain,
   setArgs,
 } from './_settings.mjs';
 import {
+  borderlessSurfaces,
   checkSetting,
   coveredPaints,
+  dividerParts,
   normalizeEntry,
+  pillParts,
   propertyValueProblem,
   storedProblems,
 } from './_check.mjs';
@@ -1828,6 +1832,64 @@ async function loadedForCheck(cwd, slug, skip) {
   } catch {
     return null;
   }
+}
+
+/**
+ * What a whole-theme change leaves out, by the census, with the line that
+ * reaches it: square corners leave the parts drawn as pills round (they
+ * read --radius-full); a wider or narrower --border-width does not reach
+ * the surfaces that draw no border or a fixed line of their own, and moves
+ * every divider's rule with it.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {string} sub
+ * @param {import('./_settings.mjs').Setting} s
+ * @returns {string[]}
+ */
+function leftOutNotes(ctx, slug, data, sub, s) {
+  if (sub !== 'set' || s.on || s.when || s.state) return [];
+  const C = ctx.C;
+  const has = (/** @type {string} */ p) => ctx.project.target.has(p);
+  /** @param {string[]} list */
+  const named = list =>
+    `${list.slice(0, 6).join(', ')}${list.length > 6 ? ` and ${list.length - 6} more` : ''}`;
+  /** @type {string[]} */
+  const out = [];
+  if (
+    s.source === 'dial' &&
+    s.thing === 'corners' &&
+    ['square', '0px'].includes(cornersPlain(String(s.value)) ?? '') &&
+    !data.settings.some(x => x.thing === '--radius-full' && !x.on)
+  ) {
+    const pills = pillParts(C).filter(has);
+    if (pills.length)
+      out.push(
+        `the parts drawn as pills stay round (${named(pills)}): they read --radius-full, which corners leaves as it is; ${P} set ${slug} --radius-full 0px squares them`,
+      );
+  }
+  if (s.source === 'token' && s.thing === '--border-width') {
+    const bordered = (/** @type {string} */ p) =>
+      data.settings.some(x => x.on === p && /^border(-width)?$/.test(x.thing));
+    const bare = borderlessSurfaces(C).filter(p => has(p) && !bordered(p));
+    if (bare.length)
+      out.push(
+        `--border-width does not reach the surfaces that draw no border or a fixed line of their own (${bare.join(', ')}); ${P} set ${slug} border ${quoteCommandArgument(`${s.value} solid var(--color-border)`)} --on ${bare[0]} gives ${bare[0]} one, and the same line with each name gives the others one`,
+      );
+    const own = String(
+      ctx.project.core.tokenDefaults?.['--border-width'] ?? '1px',
+    );
+    const pinned = (/** @type {string} */ p) =>
+      data.settings.some(x => x.thing === '--border-width' && x.on === p);
+    const dividers = dividerParts(C).filter(
+      p => has(p) && !bare.includes(p) && !pinned(p),
+    );
+    if (dividers.length && String(s.value).trim() !== own)
+      out.push(
+        `the dividers draw their rules at --border-width too, so they are ${s.value} now (${dividers.join(', ')}); ${P} set ${slug} --border-width ${own} --on ${dividers[0]} keeps ${dividers[0]}'s at ${own}, and the same line with each name keeps the others'`,
+      );
+  }
+  return out;
 }
 
 /**
@@ -5207,6 +5269,7 @@ async function changeOnce(
         : null
     : null;
   if (s.note) notes.push(s.note);
+  notes.push(...leftOutNotes(ctx, slug, data, sub, s));
   // A fill on the plain part covers the paints Core gives its variants and
   // states (a primary button's accent, a checked box's): said, with the
   // lines that change one of them, or only the part at rest.
