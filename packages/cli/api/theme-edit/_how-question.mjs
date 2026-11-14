@@ -57,6 +57,7 @@ import {
   ringStatesOf,
   settableStates,
 } from './_check.mjs';
+import {coreKeyframes} from './_parts.mjs';
 import {NUMBER_WORDS, commaNumbers} from './_normal.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {cssProperties, keywordsOf, matchValue, splitTop} from './_css.mjs';
@@ -264,6 +265,12 @@ const KEEP = new Set([
   'witch',
   'sharper',
   'taller',
+  // Motion effects ("slide in", "fades"), never a part's near miss.
+  'slide',
+  'slides',
+  'fades',
+  'faded',
+  'zooms',
 ]);
 
 /**
@@ -1844,13 +1851,13 @@ function aspectsOf(text) {
   if (!a.length && /\b(thick(er)?|thin(ner)?)\b/.test(c)) add('border');
   // "faster hover transitions", "fade in slower": motion, not opacity.
   if (
-    /\b(transitions?|animations?|animate[sd]?|fade[sd]? (in|out)|motion)\b/.test(
+    /\b(transitions?|animations?|animate[sd]?|(?:fade|slide|zoom)[sd]? (in|out)|motion)\b/.test(
       c,
     ) &&
     (/\b(fast(er)?|slow(er)?|quick(er)?|snappier|speed|duration|\d+(\.\d+)?m?s|off|no|none|disable|stop|remove)\b/.test(
       c,
     ) ||
-      /\bfade[sd]?[- ](in|out)\b/.test(c))
+      /\b(?:fade|slide|zoom)[sd]?[- ](in|out)\b/.test(c))
   ) {
     a.splice(0, a.length);
     add('motion');
@@ -2091,6 +2098,8 @@ function clausesOf(q, partWords) {
       )
       // "when I tab to a link": the key, not the tab part.
       .replace(/\b(i |we |you )?tab(bing)? (to|through|into)\b/g, ' ')
+      // "slide in", "zoom out": a motion, not the slider part.
+      .replace(/\b(?:fade|slide|zoom)[sd]?[- ](?:in|out)\b/g, ' ')
       // "from the page color to …": the page's color as a value (a stop),
       // never the page as a part to change (PAGE_COLOR_REF).
       .replace(PAGE_COLOR_REF, ' ')
@@ -9095,6 +9104,74 @@ export function draftAnswer(ctx, env, question) {
       };
     }
     if (a === 'motion') {
+      // "fade in tooltips", "slide in dialogs": an effect, not a speed. The
+      // editor sets how long motion takes, never which effect a part uses;
+      // the answer says what the part does now (Core's own keyframes and
+      // transitions) or why it cannot be set.
+      const effect =
+        /\b(fade|slide|zoom|scale|grow|spin|rotate)[sd]?\b/.exec(c.text)?.[1] ??
+        null;
+      const speed =
+        /\b(fast(er)?|slow(er)?|quick(er)?|snappier|speed|duration|longer|shorter|\d+(\.\d+)?m?s)\b/.test(
+          c.text,
+        );
+      if (effect && !speed && !c.neg) {
+        const kind =
+          effect === 'fade'
+            ? 'opacity'
+            : effect === 'slide'
+              ? 'translate'
+              : effect === 'spin' || effect === 'rotate'
+                ? 'rotate'
+                : 'scale';
+        const part = on ? one(on) : null;
+        const own = part ? (C.MAP[part]?.own ?? {}) : {};
+        const frames = (own['animation-name']?.values ?? [])
+          .filter((/** @type {string} */ n) => n !== 'none')
+          .map((/** @type {string} */ n) => coreKeyframes(ctx.project, n));
+        const moved = new Set([
+          ...frames.flatMap(f => [...f.props, ...f.transforms]),
+          ...(own['transition-property']?.values ?? []).flatMap(
+            (/** @type {string} */ v) => v.split(/\s*,\s*/),
+          ),
+          ...(own.transform?.values ?? []).flatMap((/** @type {string} */ v) =>
+            [...v.matchAll(/\b([a-z]+)\(/g)].map(m => m[1]),
+          ),
+        ]);
+        const does =
+          kind === 'opacity'
+            ? moved.has('opacity')
+            : [...moved].some(x => x.startsWith(kind));
+        const time0 =
+          own['animation-duration']?.values?.[0] ??
+          own['transition-duration']?.values?.[0] ??
+          null;
+        const time = time0
+          ? String(time0).replace(
+              /var\(\s*(--[a-z0-9-]+)\s*\)/g,
+              (m, t) => resolvedValue(t) || m,
+            )
+          : null;
+        const said =
+          effect === 'fade'
+            ? 'fades'
+            : effect === 'slide'
+              ? 'slides'
+              : effect === 'spin' || effect === 'rotate'
+                ? 'turns'
+                : 'grows';
+        if (part && does)
+          return {
+            text: `${part} ${said} in already, as Core draws it${time ? ` (over ${time})` : ''}: the editor changes how long it takes ("faster" or "slower"), not which effect it uses`,
+            options: [],
+            lookup: `${HOW} ${part}`,
+          };
+        return {
+          text: `${part ? `${part} does not ${effect} in now; ` : ''}the editor changes how long motion takes (the --duration-* tokens, or a part's transition-duration), not which effect a part uses, so a ${effect} needs CSS of your own`,
+          options: [],
+          lookup: part ? `${HOW} ${part}` : `${HOW} --duration-medium`,
+        };
+      }
       // "turn off all animations", "no transition on links".
       if (c.neg || /\b(off|none)\b/.test(c.text)) {
         if (on)
@@ -9159,11 +9236,35 @@ export function draftAnswer(ctx, env, question) {
           sequence: true,
         };
       }
+      // The part's own motion: an animation (a tooltip's entrance) or a
+      // transition, each from the time it takes now.
+      const prop =
+        own['animation-duration'] && !own['transition-duration']
+          ? 'animation-duration'
+          : 'transition-duration';
+      // (Its time as drawn: a token read to its value; a 0s one, a reduced
+      // motion rule, is not the motion.)
+      const nowMs = (own[prop]?.values ?? [])
+        .map((/** @type {string} */ v) => {
+          const t = /^(\d*\.?\d+)(ms|s)$/.exec(
+            String(v)
+              .trim()
+              .replace(
+                /^var\(\s*(--[a-z0-9-]+)\s*\)$/,
+                (m, tk) => resolvedValue(tk) || m,
+              ),
+          );
+          return t ? Number(t[1]) * (t[2] === 's' ? 1000 : 1) : null;
+        })
+        .find((/** @type {number | null} */ x) => x != null && x > 0);
+      const next =
+        ms ??
+        (nowMs != null
+          ? String(Math.round(nowMs * (slower ? 1.5 : 0.6)))
+          : String(slower ? 300 : 100));
       return {
-        text: `${slower ? 'slower' : 'faster'} transitions${where}: transition-duration`,
-        options: [
-          [set('transition-duration', `${ms ?? (slower ? 300 : 100)}ms`, f)],
-        ],
+        text: `${slower ? 'slower' : 'faster'} ${prop === 'animation-duration' ? 'motion' : 'transitions'}${where}: ${prop}${nowMs != null && !ms ? ` (now ${nowMs}ms)` : ''}`,
+        options: [[set(prop, `${next}ms`, f)]],
       };
     }
     // A divider draws with the border tokens: its thickness and color.

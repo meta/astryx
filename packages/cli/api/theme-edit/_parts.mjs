@@ -763,6 +763,63 @@ export function coreFallback(project, name) {
 const coreCssCache = new Map();
 
 /**
+ * Core's stylesheet text, read once; empty with no stylesheet.
+ * @param {any} project
+ * @returns {string}
+ */
+function coreCss(project) {
+  /** @type {string} */
+  let file;
+  try {
+    file = project.req.resolve('@astryxdesign/core/astryx.css');
+  } catch {
+    return '';
+  }
+  let css = coreCssCache.get(file);
+  if (css == null) {
+    try {
+      css = fs.readFileSync(file, 'utf8');
+    } catch {
+      css = '';
+    }
+    coreCssCache.set(file, css);
+  }
+  return css;
+}
+
+/**
+ * The properties a keyframes rule of Core's animates (a tooltip's entrance
+ * animates opacity and transform), and the transform functions it uses.
+ * Empty when Core has no such rule.
+ * @param {any} project
+ * @param {string} name
+ * @returns {{props: string[], transforms: string[]}}
+ */
+export function coreKeyframes(project, name) {
+  const css = coreCss(project);
+  const at = css.indexOf(`@keyframes ${name}{`);
+  if (at < 0) return {props: [], transforms: []};
+  let depth = 0;
+  let end = at;
+  for (let j = css.indexOf('{', at); j < css.length; j++) {
+    if (css[j] === '{') depth++;
+    else if (css[j] === '}' && --depth === 0) {
+      end = j;
+      break;
+    }
+  }
+  const body = css.slice(at, end);
+  return {
+    props: [
+      ...new Set([...body.matchAll(/[{;]\s*([a-z-]+)\s*:/g)].map(m => m[1])),
+    ].filter(p => p !== 'animation-timing-function'),
+    transforms: [
+      ...new Set([...body.matchAll(/\b([a-z]+[XYZ3d]*)\(/g)].map(m => m[1])),
+    ].filter(f => /^(?:translate|scale|rotate|skew)/.test(f)),
+  };
+}
+
+/**
  * Every value Core's stylesheet gives a variable of its own (a card's
  * `--_card-elevation` is a shared shadow at each elevation; its
  * `--_card-ring` is a colored ring), deduplicated. Empty with no
@@ -772,18 +829,8 @@ const coreCssCache = new Map();
  * @returns {string[]}
  */
 export function coreVarValues(project, name) {
-  /** @type {string} */
-  let file;
-  try {
-    file = project.req.resolve('@astryxdesign/core/astryx.css');
-  } catch {
-    return [];
-  }
-  let css = coreCssCache.get(file);
-  if (css == null) {
-    css = fs.readFileSync(file, 'utf8');
-    coreCssCache.set(file, css);
-  }
+  const css = coreCss(project);
+  if (!css) return [];
   const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return [
     ...new Set(

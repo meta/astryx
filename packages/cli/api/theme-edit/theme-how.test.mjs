@@ -2912,7 +2912,8 @@ const QUESTIONS_I = [
   ],
   [
     'faster hover transitions on buttons',
-    {top: /^set q transition-duration 100ms --on button --state hover$/},
+    // (From the time the button's transition takes now.)
+    {top: /^set q transition-duration [1-9]\d*ms --on button --state hover$/},
   ],
   ['spinner in the accent color', {top: null, text: /spinner reads no fill/}],
   [
@@ -3635,7 +3636,8 @@ const QUESTIONS_P = [
     'shrink headings by 20%',
     /^set q --text-heading-1-size [\d.]+rem && .*--text-heading-6-size [\d.]+rem$/,
   ],
-  ['fade in tooltips', /--on tooltip$/, /transitions on tooltip/],
+  // A fade is an effect, not a speed: the tooltip fades in already.
+  ['fade in tooltips', null, /tooltip fades in already/],
   ['why are my buttons black', null, /how button says/],
   ['radius lg', /^set q corners 12px$/],
   ['setRadius(4)', /^set q corners 4px$/],

@@ -96,7 +96,8 @@ describe('answers that hold together', () => {
         "set n --color-border-emphasized '#000000'",
       ]);
       expect(r.first).toContain("set n border '2px solid #000000' --on dialog");
-      expect(r.first).toContain(
+      // (A popover draws a border of its own: the shared ones reach it.)
+      expect(r.first).not.toContain(
         "set n border '2px solid #000000' --on popover",
       );
     },

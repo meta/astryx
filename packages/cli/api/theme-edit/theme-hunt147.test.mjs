@@ -193,9 +193,10 @@ describe('readers the lists lean on', () => {
     'shadows how cannot measure get a true reason',
     async test => {
       needsBases(test);
+      // (The census sees a popover drawn open: its shadow is measured, and
+      // softer starts from it.)
       const pop = await answer('lighter shadows on popovers');
-      expect(pop.first).toEqual([]);
-      expect(pop.text).toMatch(/not seen it drawn/);
+      expect(pop.first.join('\n')).not.toMatch(/'var\(--shadow-low\)'/);
       const card = await answer('make card shadows softer in light mode');
       expect(card.first).toEqual([]);
       expect(card.text).toMatch(/draws no shadow of its own at rest/);
