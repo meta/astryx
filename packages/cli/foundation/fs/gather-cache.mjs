@@ -52,7 +52,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {isDeepStrictEqual} from 'node:util';
-import {CLI_ROOT} from './paths.mjs';
+import {CLI_ROOT, realDir} from './paths.mjs';
 import {mayHaveIntegrations} from '../integrations/may-have-integrations.mjs';
 import {currentUid, isPrivateDir} from '../env/private-dir.mjs';
 import {userCacheDir} from '../env/user-dirs.mjs';
@@ -548,15 +548,7 @@ function hostInputs() {
   const hosted = hostedRun();
   if (hosted == null) return null;
   return {
-    roots: hosted.roots.map(root =>
-      withoutRecording(() => {
-        try {
-          return fs.realpathSync(root);
-        } catch {
-          return root;
-        }
-      }),
-    ),
+    roots: hosted.roots.map(root => withoutRecording(() => realDir(root))),
     integrations: [...hosted.integrations],
   };
 }
