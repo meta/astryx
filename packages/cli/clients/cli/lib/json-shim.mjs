@@ -46,7 +46,12 @@ import {answeredBy} from '../../../foundation/release/run-context.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {setCommand, setOutcome, recordHelp} from '../../../foundation/debug/index.mjs';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
-import {commandAvailable, helpBase, optionAvailable} from './base-gate.mjs';
+import {
+  commandAvailable,
+  helpBase,
+  optionAvailable,
+  servedHelpDescription,
+} from './base-gate.mjs';
 import {commandPath} from './command-path.mjs';
 
 /**
@@ -94,14 +99,14 @@ export function buildHelpEnvelope(cmd) {
 
   const subcommands = cmd.commands
     .filter((s) => !(/** @type {any} */ (s))._hidden && commandAvailable(s, base))
-    .map((s) => ({name: s.name(), description: s.description() || ''}));
+    .map((s) => ({name: s.name(), description: servedHelpDescription(s) || ''}));
 
   return {
     apiVersion: API_VERSION,
     type: 'help',
     data: {
       command: nameParts.join(' '),
-      description: cmd.description() || '',
+      description: servedHelpDescription(cmd) || '',
       usage: `${nameParts.join(' ')} ${cmd.usage()}`.trim(),
       options,
       subcommands,

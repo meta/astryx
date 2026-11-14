@@ -81,6 +81,10 @@ exports, named `<capability>.<step>`, from the closed list in FR4.
   fails with `ERR_VERSION_DETECT` when the project installs no Core. The integration
   manifest has no hooks root, so a base cannot ship hook descriptors.
 
+  FR1 gap: `component --list` at `--detail compact` and `--detail full`
+  lists only Core's components, in a run on any base, so a base's own
+  components appear only in the default list.
+
   FR1 gap: a copied template treats React, React DOM, StyleX, and the
   `@astryxdesign/` packages as installed and gets a DOM icon placeholder, and
   icon meanings are counted from Core's templates, whatever the active base.

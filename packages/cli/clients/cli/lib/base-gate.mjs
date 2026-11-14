@@ -94,7 +94,7 @@ export function optionAvailable(cmd, option, base) {
  * @param {Command} cmd
  * @returns {string}
  */
-function servedHelpDescription(cmd) {
+export function servedHelpDescription(cmd) {
   const base = helpBase();
   if (base == null || base.core) return cmd.description();
   /** @type {Command} */

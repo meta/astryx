@@ -553,6 +553,10 @@ describe('a project whose only base is not Core', () => {
         .find(c => c.name === 'template').options;
       expect(manifestOptions.find(o => o.flag.includes('--skeleton')).available).toBe(false);
       expect(manifestOptions.find(o => o.flag.includes('--list')).available).toBe(true);
+      const rootJson = astryx(['--json', 'help'], dir).json();
+      expect(JSON.stringify(rootJson.data)).not.toContain('experimental theme editor');
+      const themeJson = astryx(['theme', '--help', '--json'], dir).json();
+      expect(themeJson.data.description).not.toContain('experimental theme editor');
       const groupJson = astryx(['--json', 'experimental', 'theme'], dir);
       expect(groupJson.json().data.commands.map(c => c.name)).not.toContain('compile');
       const bare = astryx(['--json', '--base', '@acme/nope'], dir);
