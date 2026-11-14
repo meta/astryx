@@ -128,7 +128,6 @@ const styles = stylex.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacingVars['--spacing-2'],
-    paddingBlock: spacingVars['--spacing-2'],
     paddingInline: spacingVars['--spacing-3'],
     borderWidth: 0,
     borderStyle: 'none',
@@ -282,13 +281,22 @@ const dynamicStyles = stylex.create({
   width: (width: SizeValue | null) => ({width}),
 });
 
-// At the default text size one label line is shorter than the element size,
-// so a caller's height still replaces this one. A larger text size makes the
-// line taller, and the button grows with its label.
+// The minimum height preserves the element size at the default text scale.
+// Size-specific padding keeps the default dimensions exact while allowing a
+// theme's padding override to grow a labelled button.
 const sizeStyles = stylex.create({
-  sm: {height: `max(${sizeVars['--size-element-sm']}, 1lh)`},
-  md: {height: `max(${sizeVars['--size-element-md']}, 1lh)`},
-  lg: {height: `max(${sizeVars['--size-element-lg']}, 1lh)`},
+  sm: {
+    minHeight: sizeVars['--size-element-sm'],
+    paddingBlock: spacingVars['--spacing-1'],
+  },
+  md: {
+    minHeight: sizeVars['--size-element-md'],
+    paddingBlock: spacingVars['--spacing-1-5'],
+  },
+  lg: {
+    minHeight: sizeVars['--size-element-lg'],
+    paddingBlock: spacingVars['--spacing-2'],
+  },
 });
 
 // An icon-only button holds its glyph, which does not grow with the text, so
