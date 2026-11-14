@@ -99,6 +99,7 @@ function extendedFile(spec, fromDir) {
  * @property {Record<string, unknown>} options - Compiler options, the extending config's winning key by key.
  * @property {string} baseUrlDir - The folder of the config that writes `baseUrl`.
  * @property {string} pathsDir - The folder of the config that writes `paths`.
+ * @property {string | null} pathsFile - The config that writes `paths`, if any does.
  * @property {{list: unknown[], dir: string} | null} files - `files`, from the nearest config that writes it, with that config's folder.
  * @property {{list: unknown[], dir: string} | null} include - `include`, likewise.
  * @property {{list: unknown[], dir: string} | null} exclude - `exclude`, likewise.
@@ -121,7 +122,7 @@ function readConfig(file, seen = new Set()) {
   /** @type {Record<string, unknown>} */
   const options = path.basename(file) === 'jsconfig.json' ? {allowJs: true} : {};
   /** @type {ReadConfig} */
-  const config = {options, baseUrlDir: dir, pathsDir: dir, files: null, include: null, exclude: null, references: []};
+  const config = {options, baseUrlDir: dir, pathsDir: dir, pathsFile: null, files: null, include: null, exclude: null, references: []};
   const bases = Array.isArray(json.extends) ? json.extends : json.extends === undefined ? [] : [json.extends];
   for (const spec of bases) {
     const baseFile = extendedFile(spec, dir);
@@ -129,14 +130,20 @@ function readConfig(file, seen = new Set()) {
     if (!base) continue;
     Object.assign(config.options, base.options);
     if ('baseUrl' in base.options) config.baseUrlDir = base.baseUrlDir;
-    if ('paths' in base.options) config.pathsDir = base.pathsDir;
+    if ('paths' in base.options) {
+      config.pathsDir = base.pathsDir;
+      config.pathsFile = base.pathsFile;
+    }
     for (const key of /** @type {const} */ (['files', 'include', 'exclude'])) config[key] = base[key] ?? config[key];
   }
   const own = json.compilerOptions && typeof json.compilerOptions === 'object' ? json.compilerOptions : {};
   for (const [key, value] of Object.entries(own)) {
     config.options[key] = value;
     if (key === 'baseUrl') config.baseUrlDir = dir;
-    if (key === 'paths') config.pathsDir = dir;
+    if (key === 'paths') {
+      config.pathsDir = dir;
+      config.pathsFile = file;
+    }
   }
   for (const key of /** @type {const} */ (['files', 'include', 'exclude'])) {
     if (Array.isArray(json[key])) config[key] = {list: json[key], dir};
@@ -297,21 +304,23 @@ export function pathsFor(file) {
 
 /**
  * Where `paths` entries for a file belong: the config TypeScript reads for
- * it, else a new `tsconfig.json` in `fallbackDir`; and the folder the
- * entries' targets resolve from there (its `baseUrl`, else that config's own
- * folder, which writes the entries).
+ * it, else a new `tsconfig.json` in `fallbackDir`; the folder the entries'
+ * targets resolve from there (its `baseUrl`, else that config's own folder,
+ * which writes the entries); and the patterns it has now, its own or
+ * inherited through `extends` (a `paths` of its own replaces inherited ones).
  * @param {string} file absolute, which need not exist yet
  * @param {string} fallbackDir absolute: where a project with no config would add one
- * @returns {{config: string, base: string}}
+ * @returns {{config: string, base: string, current: PathPattern[]}}
  */
 export function pathsHomeFor(file, fallbackDir) {
   const found = configFor(file);
-  if (!found) return {config: path.join(fallbackDir, 'tsconfig.json'), base: fallbackDir};
+  if (!found) return {config: path.join(fallbackDir, 'tsconfig.json'), base: fallbackDir, current: []};
   const configDir = path.dirname(found.file);
   const {baseUrl} = found.config.options;
   return {
     config: found.file,
     base: typeof baseUrl === 'string' ? configPath(baseUrl, found.config.baseUrlDir, configDir) : configDir,
+    current: patternsOf(found.config, configDir),
   };
 }
 

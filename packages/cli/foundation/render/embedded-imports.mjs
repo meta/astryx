@@ -26,14 +26,15 @@ const PACKAGE_NAME = /^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9-][\w.-]*$/i;
 
 /**
  * Whether only a path alias can resolve an import: its name cannot be a
- * package's or a Node built-in's (`@/components/Header`, `~/lib/data` and
- * `#utils` cannot; `react`, `@acme/ui` and `fs` can). A received file's
+ * package's, a Node built-in's, or a package's own subpath import
+ * (`@/components/Header` and `~/lib/data` cannot; `react`, `@acme/ui`, `fs`
+ * and `#utils`, which a package.json `imports` maps, can). A received file's
  * record of alias imports counts only for these, so it can never remap a
- * package for the reader.
+ * package, or the reader's own imports, for the reader.
  * @param {string} spec
  */
 export function aliasOnly(spec) {
-  if (spec.startsWith('node:')) return false;
+  if (spec.startsWith('node:') || spec.startsWith('#')) return false;
   const segments = spec.split('/');
   const name = spec.startsWith('@') ? segments.slice(0, 2).join('/') : segments[0];
   return !PACKAGE_NAME.test(name) && !builtinModules.includes(name);

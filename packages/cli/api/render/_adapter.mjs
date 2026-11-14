@@ -564,9 +564,10 @@ function aliasEntry(spec, file, base) {
 
 /**
  * What a restore tells about the alias imports no alias of the receiving
- * project names: the config the `paths` entries belong in (the one
- * TypeScript reads for the page, else a new tsconfig.json at the project's
- * root or the current folder), the entries, and each import with its file.
+ * project names: the config the `paths` belong in (the one TypeScript reads
+ * for the page, else a new tsconfig.json at the project's root or the
+ * current folder), the whole `paths` it needs (its current entries and the
+ * new ones), and each import with its file.
  * @param {{spec: string, file: string}[]} unaliased
  * @param {string} page absolute: where the page lands
  * @param {string} cwd
@@ -585,11 +586,19 @@ function aliasedResult(unaliased, page, cwd) {
     }
   }
   const home = pathsHomeFor(page, root);
+  /** @param {string} p */
+  const fromBase = p => {
+    const rel = path.relative(home.base, p).split(path.sep).join('/');
+    return rel.startsWith('..') ? rel : `./${rel}`;
+  };
+  // The whole `paths` the config needs: the entries it has now (a `paths` of
+  // its own replaces inherited ones), then every target the imports need.
   /** @type {Record<string, string[]>} */
   const paths = {};
+  for (const pattern of home.current) paths[pattern.key] = pattern.targets.map(fromBase);
   for (const {spec, file} of unaliased) {
     const [key, target] = aliasEntry(spec, file, home.base);
-    paths[key] ??= [target];
+    paths[key] = [...new Set([...(paths[key] ?? []), target])];
   }
   return {
     config: shown(cwd, home.config),
@@ -797,7 +806,7 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       const stray = source.files.filter(f => !reached.has(f.path)).map(f => f.path);
       if (stray.length > 0) {
         throw new AstryxError(
-          `${shown(cwd, input)} carries ${stray.length === 1 ? 'a file' : 'files'} the page does not reach through its imports here, or that is not the image, font or media file its name says (${stray.join(', ')}), which a render never embeds; nothing was written. A file the page imports through a path alias comes back where this project's tsconfig.json or jsconfig.json has that alias.`,
+          `${shown(cwd, input)} carries ${stray.length === 1 ? 'a file' : 'files'} the page does not reach through its imports here, or that is not the image, font or media file its name says (${stray.join(', ')}), which a render never embeds; nothing was written. A file the page imports through a path alias comes back where this project's tsconfig.json or jsconfig.json has that alias, and anywhere when the import cannot be a package name (\`@/…\`, \`~/…\`) and the CLI that rendered the file recorded it (as this one does).`,
           [],
           ERROR_CODES.ERR_RENDER_SOURCE_DAMAGED,
         );

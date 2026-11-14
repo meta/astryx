@@ -623,6 +623,33 @@ describe('render(): every write stays inside the current folder', () => {
     );
   }, 60_000);
 
+  it('names the whole paths a page needs: every target of an alias, and the entries a config inherits', async () => {
+    put('multi/package.json', '{"name":"multi","private":true}');
+    put('multi/tsconfig.json', '{"compilerOptions": {"paths": {"@/*": ["./src/*", "./generated/*"]}}}\n');
+    put('multi/src/components/Header.tsx', 'export function Header() { return <h1>Multi</h1>; }\n');
+    put('multi/generated/api/client.ts', "export const client = 'generated client';\n");
+    put(
+      'multi/src/app/page.tsx',
+      "import {Header} from '@/components/Header';\nimport {client} from '@/api/client';\nexport default function Page() { return <main><Header />{client}</main>; }\n",
+    );
+    await render('multi/src/app/page.tsx', {cwd: dir});
+    // A project whose config takes its paths from the config it extends.
+    put('multi-to/package.json', '{"name":"multi-to","private":true}');
+    put('multi-to/tsconfig.base.json', '{"compilerOptions": {"paths": {"$lib/*": ["./lib/*"]}}}\n');
+    put('multi-to/tsconfig.json', '{"extends": "./tsconfig.base.json"}\n');
+    fs.copyFileSync(path.join(dir, 'multi/src/app/page.html'), path.join(dir, 'multi-to/multi.html'));
+    const back = /** @type {any} */ (await render('multi.html', {cwd: path.join(dir, 'multi-to'), reverse: true}));
+    expect(back.data).toMatchObject({exact: true});
+    expect(back.data.aliased).toEqual({
+      config: 'tsconfig.json',
+      paths: {'$lib/*': ['./lib/*'], '@/*': ['./multi-restored/generated/*', './multi-restored/src/*']},
+      imports: [
+        {import: '@/api/client', file: 'multi-restored/generated/api/client.ts'},
+        {import: '@/components/Header', file: 'multi-restored/src/components/Header.tsx'},
+      ],
+    });
+  }, 60_000);
+
   it('gives back an aliased page where no alias of the project names its imports: in its own layout, naming the paths to add', async () => {
     const {sourceBlock: sourceBlockOf} = await import('../../foundation/render/source-block.mjs');
     put('alias-home/tsconfig.json', '{"compilerOptions": {"paths": {"@/*": ["./src/*"], "@members": ["./src/lib/members.ts"]}}}\n');
@@ -656,7 +683,7 @@ describe('render(): every write stays inside the current folder', () => {
       expect(fs.readFileSync(path.join(cwd, 'team-restored', name))).toEqual(fs.readFileSync(path.join(dir, 'alias-home/src', name)));
     }
     const {stdout} = await runCli(['experimental', 'render', '--reverse', 'team.html'], {cwd});
-    expect(stdout).toContain('add to the "paths" of tsconfig.json (create it if it is not there): "@/*": ["./team-restored-2/*"], "@members": ["./team-restored-2/lib/members.ts"].');
+    expect(stdout).toContain('set the "paths" of tsconfig.json (create it if it is not there) to: "@/*": ["./team-restored-2/*"], "@members": ["./team-restored-2/lib/members.ts"].');
     // The entries are written for the config TypeScript reads there, from
     // its baseUrl.
     put('alias-base/package.json', '{"name":"alias-base","private":true}');
@@ -679,6 +706,20 @@ describe('render(): every write stays inside the current folder', () => {
     );
     expect(await codeOf(() => render('forged-react.html', {cwd, reverse: true}))).toBe('ERR_RENDER_SOURCE_DAMAGED');
     expect(fs.existsSync(path.join(cwd, 'forged-react-restored'))).toBe(false);
+    // Nor a package's own subpath import, which its package.json may map.
+    put(
+      'alias-away/forged-hash.html',
+      `<!doctype html><html><body><p class="astryx-text">x</p>${sourceBlockOf(
+        'page.tsx',
+        [
+          {path: 'page.tsx', bytes: Buffer.from("import {u} from '#utils';\nexport default function Page() { return <p>{u}</p>; }\n")},
+          {path: 'lib/utils.ts', bytes: Buffer.from("export const u = 'x';\n")},
+        ],
+        {aliases: {'#utils': 'lib/utils.ts'}},
+      )}</body></html>`,
+    );
+    expect(await codeOf(() => render('forged-hash.html', {cwd, reverse: true}))).toBe('ERR_RENDER_SOURCE_DAMAGED');
+    expect(fs.existsSync(path.join(cwd, 'forged-hash-restored'))).toBe(false);
     // A record entry that names no carried file counts for nothing.
     put(
       'alias-away/forged.html',

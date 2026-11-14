@@ -118,7 +118,7 @@ export function registerExperimentalRender(group, program) {
         ...(d.aliased
           ? [
               text(
-                `The page imports ${d.aliased.imports.length === 1 ? 'a file' : 'files'} through a path alias this project does not have, so ${d.aliased.imports.length === 1 ? 'it' : 'they'} came back in the page's own layout. To build or render the page again, add to the "paths" of ${d.aliased.config} (create it if it is not there): ${Object.entries(d.aliased.paths)
+                `The page imports ${d.aliased.imports.length === 1 ? 'a file' : 'files'} through a path alias this project does not have, so ${d.aliased.imports.length === 1 ? 'it' : 'they'} came back in the page's own layout. To build or render the page again, set the "paths" of ${d.aliased.config} (create it if it is not there) to: ${Object.entries(d.aliased.paths)
                   .map(([key, targets]) => `${JSON.stringify(key)}: ${JSON.stringify(targets)}`)
                   .join(', ')}.`,
               ),
