@@ -73,6 +73,7 @@ import {cliDoor} from '../env/cli-command.mjs';
 import {CACHE_LIMIT_BYTES, evictOldest} from './cache-eviction.mjs';
 import {
   fileStamp,
+  keepState,
   recordReads,
   recordStates,
   stillInState,
@@ -665,9 +666,8 @@ function statesOf(entry) {
 }
 
 /**
- * States from several lists, one per path. Where one list holds a folder by
- * its identity alone and another by its full stamp, the full stamp is kept,
- * as a run keeps a folder it probed and then listed (read-record.mjs).
+ * States from several lists, one per path, as a run's record keeps them
+ * (keepState).
  * @param {...[string, string][]} lists
  * @returns {[string, string][]}
  */
@@ -675,15 +675,7 @@ function mergeStates(...lists) {
   /** @type {Map<string, string>} */
   const merged = new Map();
   for (const list of lists) {
-    for (const [at, state] of list) {
-      const had = merged.get(at);
-      if (
-        had === undefined ||
-        (had.startsWith('dir:') && !state.startsWith('dir:'))
-      ) {
-        merged.set(at, state);
-      }
-    }
+    for (const [at, state] of list) keepState(merged, at, state);
   }
   return [...merged];
 }

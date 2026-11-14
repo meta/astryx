@@ -28,13 +28,14 @@ export function readKept(file) {
 }
 
 /**
- * Write an entry `readKept` read back in its own layout: a gather's entry as
- * two lines (one, when its value was removed), anything else as one object.
+ * Write an entry `readKept` read back in its own layout: a gather's entry,
+ * which names the entries it builds on, as two lines (one, when its value was
+ * removed), anything else as one object.
  * @param {string} file
  * @param {any} entry
  */
 export function writeKept(file, entry) {
-  if (!Array.isArray(entry.stamps)) {
+  if (!Array.isArray(entry.deps)) {
     fs.writeFileSync(file, JSON.stringify(entry));
     return;
   }
