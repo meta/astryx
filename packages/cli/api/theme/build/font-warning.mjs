@@ -130,6 +130,20 @@ function splitFamilies(value) {
 }
 
 /**
+ * The font families a CSS font-family value names that something has to
+ * load: its names without generics, CSS-wide keywords, `var()` references
+ * or known system families.
+ * @param {string} value
+ * @returns {string[]}
+ */
+export function loadableFontFamilies(value) {
+  return splitFamilies(value).filter(family => {
+    const key = family.toLowerCase();
+    return !GENERIC_KEYWORDS.has(key) && !SYSTEM_FAMILIES.has(key);
+  });
+}
+
+/**
  * Collect the font families a resolved theme names but does not load —
  * every `--font-family-*` token plus every component-override `fontFamily`,
  * minus generics, CSS-wide keywords, `var()` references, and known system

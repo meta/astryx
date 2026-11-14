@@ -5485,13 +5485,28 @@ export function refuseThemeParse(cwd, slug) {
  */
 export function refuseThemeSource(cwd, slug) {
   refuseThemeParse(cwd, slug);
+  const refusal = themeSourceRefusal(cwd, slug);
+  if (refusal) throw refusal;
+}
+
+/**
+ * The refusal for a theme source that cannot carry the settings (it no
+ * longer imports or extends them, or names another theme), naming the
+ * lines that put it back; null when it carries them. Every command that
+ * builds the theme refuses with it.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {AstryxError | null}
+ */
+export function themeSourceRefusal(cwd, slug) {
   const why = themeSourceProblem(cwd, slug);
-  if (why)
-    throw new AstryxError(
-      `${why}, so settings cannot take effect. Put back the import of ${camel(slug)}Settings from './${slug}.settings', extends: ${camel(slug)}Settings and name: '${slug}' in themes/${slug}/${slug}.theme.ts (your own changes stay below them). Nothing was changed.`,
-      [{name: `${P} show ${slug}`, reason: 'see the theme as it is'}],
-      ERROR_CODES.ERR_THEME_INVALID,
-    );
+  return why
+    ? new AstryxError(
+        `${why}, so settings cannot take effect. Put back the import of ${camel(slug)}Settings from './${slug}.settings', extends: ${camel(slug)}Settings and name: '${slug}' in themes/${slug}/${slug}.theme.ts (your own changes stay below them). Nothing was changed.`,
+        [{name: `${P} show ${slug}`, reason: 'see the theme as it is'}],
+        ERROR_CODES.ERR_THEME_INVALID,
+      )
+    : null;
 }
 
 /**
@@ -7575,6 +7590,20 @@ export async function commitTheme(
   };
 }
 
+/**
+ * The @fontsource package named for a font family (`Open Sans` is
+ * `@fontsource/open-sans`).
+ * @param {string} family
+ * @returns {string}
+ */
+export function fontsourcePackageOf(family) {
+  return `@fontsource/${String(family)
+    .replace(/["']/g, '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')}`;
+}
+
 /** @param {Ctx} ctx @param {ThemeData} data */
 export function fontPackages(ctx, data) {
   /** @type {Array<{pkg: string, family: string, installed: boolean, of: Setting}>} */
@@ -7594,7 +7623,7 @@ export function fontPackages(ctx, data) {
     const name = family.replace(/["']/g, '');
     // An installed @fontsource package of the family always loads it, even
     // for a family some systems ship.
-    const own = `@fontsource/${name.toLowerCase().replace(/\s+/g, '-')}`;
+    const own = fontsourcePackageOf(name);
     const pkg = known ?? (isInstalled(own) ? own : null);
     if (!pkg || out.some(x => x.pkg === pkg)) continue;
     out.push({pkg, family: name, installed: isInstalled(pkg), of: s});

@@ -31,6 +31,10 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {
+  fontKey,
+  stylesheetFontFamilies,
+} from '../../../foundation/fonts/font-stylesheet.mjs';
 import {fileURLToPath} from 'node:url';
 import {spawn} from 'node:child_process';
 import {
@@ -130,7 +134,38 @@ import {doc as themePaletteGenerateFn} from '../../../api/theme/themePaletteGene
  */
 
 /** @type {ThemeCommandWords} */
-const THEME_WORDS = {group: 'theme', build: 'build'};
+const THEME_WORDS = {
+  group: 'theme',
+  build: 'build',
+  loadedFonts: fontsLoadedBeside,
+};
+
+/**
+ * The font families a font stylesheet beside a theme source loads
+ * (`<name>.fonts.css` in the same folder, as a local theme ships one): an
+ * @fontsource package by its name, another stylesheet by the `family=` it
+ * requests. A build of that source does not name those families as
+ * unloaded. Null when no such stylesheet is there.
+ * @param {string} file the theme source, as given
+ * @param {string} cwd
+ * @returns {((family: string) => boolean) | null}
+ */
+function fontsLoadedBeside(file, cwd) {
+  const dir = path.dirname(path.resolve(cwd, file));
+  /** @type {string[]} */
+  let sheets;
+  try {
+    sheets = fs.readdirSync(dir).filter(n => n.endsWith('.fonts.css'));
+  } catch {
+    return null;
+  }
+  /** @type {Set<string>} */
+  const loaded = new Set();
+  for (const sheet of sheets)
+    for (const f of stylesheetFontFamilies(path.join(dir, sheet)))
+      loaded.add(f);
+  return loaded.size ? family => loaded.has(fontKey(family)) : null;
+}
 
 /**
  * Text as the group that ran the command words it: under `experimental

@@ -3849,6 +3849,23 @@ async function themeBuildInternal(
   report = {},
   handOff = {},
 ) {
+  // A blank --out names no file: the build would write files named by the
+  // spaces alone.
+  if (
+    typeof options.out === 'string' &&
+    options.out !== '' &&
+    !options.out.trim()
+  )
+    throw new AstryxError(
+      '--out is blank; name a file or folder, or leave out --out to write beside the source.',
+      [
+        {
+          name: buildSuggestion(file, {...options, out: undefined}, cwd),
+          reason: 'do this instead',
+        },
+      ],
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
   // A backslash in --out separates folders on every platform, as it does in
   // the other theme paths (a Windows path copied into a POSIX shell).
   if (typeof options.out === 'string' && options.out.includes('\\'))

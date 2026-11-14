@@ -45,6 +45,10 @@ import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {findPackageRoot} from '../../foundation/fs/paths.mjs';
 import {context, coreApp} from './_context.mjs';
 import {APP_COPY_MARK} from './_marks.mjs';
+import {
+  fontKey,
+  importedFontFamilies,
+} from '../../foundation/fonts/font-stylesheet.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {withFolderLock} from '../../foundation/release/folder-lock.mjs';
 import {
@@ -75,6 +79,8 @@ import {
   setAfterBuild,
   editedThemes,
   themeFiles,
+  fontsourcePackageOf,
+  themeSourceRefusal,
   typedThemeName,
 } from './_settings.mjs';
 
@@ -1167,6 +1173,13 @@ export async function editorCompileProblem(
         ],
         ERROR_CODES.ERR_INVALID_ARGUMENT,
       );
+    // A source that no longer carries the settings (another theme's name,
+    // or no extends of them) is refused as set refuses it: a build would
+    // write another theme's files, or drop every setting.
+    {
+      const refusal = themeSourceRefusal(root, slug);
+      if (refusal) return refusal;
+    }
     if (family)
       return new AstryxError(
         `${slug} is a theme the editor made; --family builds package theme families, not editor themes. Compile it on its own.`,
@@ -1520,51 +1533,35 @@ export async function editorLoadedFonts(file, cwd) {
       ? editorThemeAt(root, abs)?.slug
       : null);
   if (!slug) return null;
-  /** @param {string} s */
-  const key = s =>
-    String(s)
-      .replace(/["']/g, '')
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, '');
-  /** @type {Set<string>} */
-  const loaded = new Set();
   // The stylesheets the copy's font file imports once this compile has
-  // written it: from the fonts the theme loads now (a package installed or
-  // removed since the last write), as the copy write computes them.
+  // written it: from the fonts the theme loads now, as the copy write
+  // computes them.
   /** @type {string[]} */
   let specs;
   try {
     specs = copyFontsCss(await context(root), slug, loadTheme(root, slug));
   } catch {
-    try {
-      specs = [
-        ...fs
-          .readFileSync(
-            path.join(root, 'src', 'themes', slug, `${slug}.fonts.css`),
-            'utf8',
-          )
-          .matchAll(/@import\s+"([^"]+)"/g),
-      ].map(m => m[1]);
-    } catch {
-      return null;
-    }
+    return null;
   }
+  const copyDir = path.join(root, 'src', 'themes', slug);
+  const from = fs.existsSync(copyDir) ? copyDir : root;
+  /** @type {Set<string>} */
+  const loaded = new Set();
+  for (const spec of specs)
+    for (const f of importedFontFamilies(spec, from)) loaded.add(f);
+  // A family the build names whose @fontsource package is installed: the
+  // copy written after this build imports that package (copyFontsCss).
   const req = createRequire(path.join(root, 'package.json'));
-  for (const spec of specs) {
-    const pkg = /^@fontsource(?:-variable)?\/([^/]+)/.exec(spec);
-    if (pkg) {
-      loaded.add(key(pkg[1]));
-      continue;
-    }
+  /** @param {string} family */
+  const installed = family => {
     try {
-      const css = fs.readFileSync(req.resolve(spec), 'utf8');
-      for (const f of css.matchAll(/family=([^:&'")]+)/g))
-        loaded.add(key(decodeURIComponent(f[1].replace(/\+/g, ' '))));
+      req.resolve(`${fontsourcePackageOf(family)}/package.json`);
+      return true;
     } catch {
-      // A stylesheet that cannot be read loads nothing known here.
+      return false;
     }
-  }
-  return family => loaded.has(key(family));
+  };
+  return family => loaded.has(fontKey(family)) || installed(family);
 }
 
 /**
