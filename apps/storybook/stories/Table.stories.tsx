@@ -192,7 +192,7 @@ export const StickyHeader: Story = {
       <div
         style={{
           maxHeight: '240px',
-          width: '320px',
+          width: '720px',
           maxWidth: '100%',
           overflowY: 'auto',
           border: '1px solid #d9d9de',
@@ -203,7 +203,6 @@ export const StickyHeader: Story = {
           columns={columns}
           idKey="id"
           hasStickyHeader={args.hasStickyHeader}
-          style={{minWidth: '720px'}}
         />
       </div>
     );
