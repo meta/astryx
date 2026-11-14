@@ -140,27 +140,21 @@ interface WebKitVideoElement extends HTMLVideoElement {
   webkitDisplayingFullscreen?: boolean;
 }
 
-let volumeProbeResult: boolean | null = null;
-
 /**
  * iOS Safari ignores script writes to `volume`, so a probe element shows
- * whether the platform lets script set it.
+ * whether the platform lets script set it. Each store probes once.
  */
 function canScriptSetVolume(): boolean {
-  if (volumeProbeResult != null) {
-    return volumeProbeResult;
-  }
   if (typeof document === 'undefined') {
     return true;
   }
   try {
     const probe = document.createElement('audio');
     probe.volume = 0.5;
-    volumeProbeResult = probe.volume === 0.5;
+    return probe.volume === 0.5;
   } catch {
-    volumeProbeResult = false;
+    return false;
   }
-  return volumeProbeResult;
 }
 
 function clamp(value: number, min: number, max: number): number {

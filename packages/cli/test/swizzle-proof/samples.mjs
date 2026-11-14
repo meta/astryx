@@ -121,6 +121,18 @@ function navigation(React, Stack, Screen) {
   });
 }
 
+/** A media part inside a player from the same copy, so it reads that player. */
+function mediaPart(React, mod, Pkg, part) {
+  const h = React.createElement;
+  const MediaPlayer = mod.MediaPlayer ?? Pkg.MediaPlayer;
+  const MediaPlayerElement = mod.MediaPlayerElement ?? Pkg.MediaPlayerElement;
+  return h(
+    MediaPlayer,
+    {label: 'Clip'},
+    h(MediaPlayerElement, {kind: 'video', src: '/clip.mp4'}),
+    part,
+  );
+}
 export const samples = {
   core__AlertDialog: ({C, React}) =>
     React.createElement(C, {
@@ -538,6 +550,28 @@ export const samples = {
     }
     return React.createElement(Sample);
   },
+  lab__MediaPlayerElement: ({C, React, mod, Pkg}) =>
+    React.createElement(
+      mod.MediaPlayer ?? Pkg.MediaPlayer,
+      {label: 'Clip'},
+      React.createElement(C, {kind: 'video', src: '/clip.mp4'}),
+    ),
+  lab__MediaPlayButton: ({C, React, mod, Pkg}) =>
+    mediaPart(React, mod, Pkg, React.createElement(C)),
+  lab__MediaSeekButton: ({C, React, mod, Pkg}) =>
+    mediaPart(React, mod, Pkg, React.createElement(C, {offset: 10})),
+  lab__MediaVolume: ({C, React, mod, Pkg}) =>
+    mediaPart(React, mod, Pkg, React.createElement(C)),
+  lab__MediaTimeSlider: ({C, React, mod, Pkg}) =>
+    mediaPart(React, mod, Pkg, React.createElement(C)),
+  lab__MediaTime: ({C, React, mod, Pkg}) =>
+    mediaPart(React, mod, Pkg, React.createElement(C)),
+  lab__MediaCaptionsButton: ({C, React, mod, Pkg}) =>
+    mediaPart(React, mod, Pkg, React.createElement(C)),
+  lab__MediaFullscreenButton: ({C, React, mod, Pkg}) =>
+    mediaPart(React, mod, Pkg, React.createElement(C)),
+  lab__MediaPlaybackRate: ({C, React, mod, Pkg}) =>
+    mediaPart(React, mod, Pkg, React.createElement(C)),
 };
 
 /**
