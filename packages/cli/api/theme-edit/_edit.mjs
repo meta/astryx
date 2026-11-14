@@ -3658,8 +3658,14 @@ async function changeOnce(
     );
     notes.push(...unsetColorNotes(data, base, slug));
   }
-  // A font set (the dial, or a part's own font-family): how it loads.
-  if ((s.thing === 'font' || s.thing === 'font-family') && sub === 'set')
+  // A font set (the dial, a part's own font-family, a font token): how
+  // it loads.
+  if (
+    (s.thing === 'font' ||
+      s.thing === 'font-family' ||
+      /^--font-family-/.test(s.thing)) &&
+    sub === 'set'
+  )
     notes.unshift(...fontNotes(ctx, {...data, settings: [s]}));
   if (s.thing === 'type' || s.thing === 'headings')
     for (const [m, why] of maskedSettings(data, ctx))
