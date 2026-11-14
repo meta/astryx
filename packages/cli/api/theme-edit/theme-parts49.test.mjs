@@ -221,7 +221,13 @@ describe('results and refusals', () => {
       'linear-gradient(red, blue) no-repeat center / 50% 50%, ivory',
       {cwd, on: 'card', mode: 'dark'},
     );
-    expect(r.data.notes.join(' ')).not.toMatch(/covers|does not show/);
+    // (The fill covers the card's variant fills, which is said; nothing
+    // covers the color given beside the image.)
+    expect(
+      r.data.notes
+        .filter(n => !/'s fill now covers the fill Core gives it/.test(n))
+        .join(' '),
+    ).not.toMatch(/covers|does not show/);
   }, 240_000);
 
   it('offers only the color for a keyword with --mode on a token', async ctx => {

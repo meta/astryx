@@ -1696,9 +1696,18 @@ const QUESTIONS_3 = [
   ],
   [
     'Can you please make the tooltip darker? Thanks!',
-    // A color ask never answers with a filter, which dims the text too; the
-    // tooltip's fill is not read, so the answer asks for a color.
-    {top: null, text: /has not read the fill of tooltip/},
+    // A color ask never answers with a filter, which dims the text too: the
+    // tooltip's fill, read from it drawn open, is made darker.
+    {
+      top: /^set q background-color '#[0-9a-f]{6}' --on tooltip/,
+      text: /a darker background on tooltip/,
+    },
+  ],
+  [
+    'Can you please make the context menu darker? Thanks!',
+    // A part Core draws only once a press opens it has no fill read: the
+    // answer asks for a color.
+    {top: null, text: /has not read the fill of context-menu/},
   ],
   [
     'make inputs taller (44px)',
@@ -3626,7 +3635,7 @@ const QUESTIONS_P = [
     'shrink headings by 20%',
     /^set q --text-heading-1-size [\d.]+rem && .*--text-heading-6-size [\d.]+rem$/,
   ],
-  ['fade in tooltips', null, /no motion of its own/],
+  ['fade in tooltips', /--on tooltip$/, /transitions on tooltip/],
   ['why are my buttons black', null, /how button says/],
   ['radius lg', /^set q corners 12px$/],
   ['setRadius(4)', /^set q corners 4px$/],
@@ -4248,11 +4257,13 @@ describe('how lookups', () => {
   });
 
   it('a part the part data does not have says so, with commands that apply', async () => {
-    const {data} = await themeEditHow('tooltip', {cwd, theme: 'q'});
+    const {data} = await themeEditHow('context-menu', {cwd, theme: 'q'});
     expect(data.recorded).toBe(false);
-    expect(data.unrecorded.reason).toMatch(/what tooltip reads is unknown/);
+    expect(data.unrecorded.reason).toMatch(
+      /what context-menu reads is unknown/,
+    );
     expect(data.unrecorded.examples.map(bare)).toContain(
-      "set q background-color '#f3f4f6' --on tooltip",
+      "set q background-color '#f3f4f6' --on context-menu",
     );
   });
 

@@ -223,9 +223,11 @@ describe('one mode', () => {
       expect(card.first[0]).toMatch(
         /^set n box-shadow '.*light-dark\(transparent, .*' --on card$/,
       );
-      const pop = await answer('make popover shadows blue in light mode');
+      const pop = await answer('make context-menu shadows blue in light mode');
       expect(pop.first).toEqual([]);
-      expect(pop.text).toMatch(/what popover shows in dark mode is unknown/);
+      expect(pop.text).toMatch(
+        /what context-menu shows in dark mode is unknown/,
+      );
       const removal = await answer('remove card shadows in dark mode');
       expect(removal.first).toEqual([]);
       expect(removal.text).not.toMatch(/no color of its own/);

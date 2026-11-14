@@ -290,7 +290,12 @@ export function pageSource({items, imports, theme, layout, title = ''}) {
   lines.push(`const LAYOUT = ${JSON.stringify(layout)};`);
   lines.push(`const TITLE = ${JSON.stringify(title)};`);
   lines.push(`const SHEET_CSS = ${JSON.stringify(SHEET_CSS)};`);
+  // The parts as live elements, for drawing the overlays they show or open
+  // (render-page's openLayers): the page itself holds only their markup.
   lines.push(`const h = React.createElement;
+export function openLayerElements() {
+  return ITEMS.map(it => { const node = el(it.tree); return theme ? h(Theme, {theme, mode: MODE === 'system' ? 'light' : MODE}, node) : node; });
+}
 export default function Page() {
   if (LAYOUT === 'catalog') {
     return h('div', null, ITEMS.map((it, i) => {

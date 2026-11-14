@@ -124,6 +124,7 @@ import {
 } from './_settings.mjs';
 import {
   checkSetting,
+  coveredPaints,
   normalizeEntry,
   propertyValueProblem,
   storedProblems,
@@ -5051,6 +5052,80 @@ async function changeOnce(
         : null
     : null;
   if (s.note) notes.push(s.note);
+  // A fill on the plain part covers the paints Core gives its variants and
+  // states (a primary button's accent, a checked box's): said, with the
+  // lines that change one of them, or only the part at rest.
+  if (
+    sub === 'set' &&
+    s.on &&
+    !s.state &&
+    !s.when &&
+    /^background(-color)?$/.test(s.thing)
+  )
+    for (const t of parts) {
+      const {rest, covered} = coveredPaints(ctx, t, s.thing);
+      if (!covered.length) continue;
+      const all = [...new Set(covered.map(c => `${c.cond} (${c.token})`))];
+      const named = [
+        ...all.slice(0, 4),
+        ...(all.length > 4 ? [`${all.length - 4} more`] : []),
+      ];
+      const lines = [
+        ...new Set(
+          covered
+            .filter(c => c.flags)
+            .map(
+              c =>
+                `${P} set ${slug} background-color ${quoteCommandArgument(String(s.value))} --on ${t} ${c.flags}`,
+            ),
+        ),
+      ];
+      notes.push(
+        `${t}'s fill now covers the fill Core gives it ${named.length > 1 ? 'in each of' : 'in'} ${named.join(', ')}, so ${named.length > 1 ? 'those no longer differ' : 'that no longer shows'}${
+          rest
+            ? `; to change only its fill at rest: ${P} set ${slug} ${rest} ${quoteCommandArgument(String(s.value))} --on ${t}`
+            : ''
+        }${lines.length ? `; to fill only one of them: ${lines.slice(0, 3).join('; ')}` : ''}`,
+      );
+    }
+  // A color dial or token that a plain part's own fill covers no longer
+  // reaches that part where Core paints with it: said.
+  if (sub === 'set' && !s.on) {
+    const tokens = s.source === 'token' ? new Set([s.thing]) : dialTokens;
+    for (const x of data.settings) {
+      if (
+        x === s ||
+        !x.on ||
+        x.state ||
+        x.when ||
+        !/^background(-color)?$/.test(x.thing)
+      )
+        continue;
+      const lost = [
+        ...new Set(
+          partsOf(ctx, x)
+            .flatMap(t => coveredPaints(ctx, t, x.thing).covered)
+            .filter(c => tokens.has(c.token))
+            .filter(
+              c =>
+                !data.settings.some(
+                  y =>
+                    y.on === x.on &&
+                    /^background(-color)?$/.test(y.thing) &&
+                    c.flags != null &&
+                    (`--when ${y.when}` === c.flags ||
+                      `--state ${y.state}` === c.flags),
+                ),
+            )
+            .map(c => c.cond),
+        ),
+      ];
+      if (lost.length)
+        notes.push(
+          `the fill set on ${x.on} (${x.value}) covers ${lost.join(', ')}, so ${s.thing} does not reach ${x.on} there`,
+        );
+    }
+  }
   // A value for the mode a one-mode theme does not show applies where Core
   // draws that mode.
   if (

@@ -2634,6 +2634,57 @@ export function settableStates(ctx, slug, data, part) {
 }
 
 /**
+ * The paints of a property Core gives a part in its variants and states at
+ * rest (a primary button's accent fill, a checked box's), which a setting
+ * of that property on the plain part covers in every one of them (the
+ * theme's rules sit over Core's). Each with the condition as set names it
+ * (`--when variant:primary`, `--state checked`) when it can, else as Core's
+ * condition (`checked=checked`, `aria-current=page`); and the token the
+ * plain part reads at rest, if any.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} part
+ * @param {string} prop a background or color property
+ * @returns {{rest: string | null, covered: Array<{token: string, flags: string | null, cond: string}>}}
+ */
+export function coveredPaints(ctx, part, prop) {
+  const C = ctx.C;
+  const group = C.groupOfProp(prop);
+  const props = /^background/.test(prop)
+    ? ['background-color', 'background']
+    : [prop];
+  const t = ctx.project.target.get(part);
+  const reads = (group ? C.partReads(part, group) : []).filter(
+    r => r.props.some(x => props.includes(x)) && !/overlay|tint/.test(r.token),
+  );
+  const rest = reads.find(r => r.when.includes(''))?.token ?? null;
+  /** @type {Array<{token: string, flags: string | null, cond: string}>} */
+  const covered = [];
+  for (const r of reads)
+    for (const w of r.when) {
+      // Only the conditions of the part at rest: a pseudo-class (hover) is
+      // a state set names itself.
+      const cond = w
+        .replace(/^--when /, '')
+        .replace(/\s*\(not settable:.*$/, '')
+        .trim();
+      if (!cond || /(^|\s):|--state/.test(cond)) continue;
+      // One condition set can name: a state of the part's own (written as
+      // its name) with --state, a visual prop of its with --when.
+      const one = /^([\w-]+)[=:]([\w-]+)$/.exec(cond);
+      const [k, v] = one ? [one[1], one[2]] : ['', ''];
+      const flags = !one
+        ? null
+        : t?.states.includes(k) && (v === k || v === 'true')
+          ? `--state ${k}`
+          : t?.props.includes(k)
+            ? `--when ${k}:${v}`
+            : null;
+      covered.push({token: r.token, flags, cond: cond.replace(':', '=')});
+    }
+  return {rest, covered};
+}
+
+/**
  * The colors a part's color prop may show when none is given: its default
  * as its doc gives it; with none (Text's depends on its type), each value
  * of the prop whose text token the part's own color reads, in the order
@@ -4534,8 +4585,21 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
                   (basePartRadiusPx(ctx, base, part, s.when) ??
                   tokenPx(base, token) ??
                   radiusAt(base, 'medium', token));
-        const rungs = CORNERS.map(
-          ([n]) => /** @type {const} */ ([n, radiusAt(base, n, token)]),
+        // A step between round and pill (half as round again as round), so
+        // one step more from round is not a pill.
+        const roundPx = CORNERS.find(([n]) => n === 'round')?.[1] ?? 16;
+        const ladder = CORNERS.flatMap(([n]) =>
+          n === 'pill' ? [`${roundPx * 1.5}px`, n] : [n],
+        );
+        // A size on a part is that radius as written (as the part's own
+        // setting reads); a rung, or a size for the whole theme, is the
+        // radius it gives the part's token.
+        const rungs = ladder.map(
+          n =>
+            /** @type {const} */ ([
+              n,
+              s.on && !isRung(n) ? cornerPxOf(n) : radiusAt(base, n, token),
+            ]),
         );
         const next =
           v === 'more'

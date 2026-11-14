@@ -18,7 +18,13 @@
  * so the server render sets them aside and draws them after it with React
  * DOM in a small document (charts.mjs).
  *
- * @input workerData {entry, root, scope, served, withoutSegmenter}
+ * Overlays (a tooltip, a menu) render on the server as markers alone; with
+ * `openLayers`, the page is drawn again the same way (or the elements its
+ * `openLayerElements()` export gives, for a page that holds only their
+ * markup) and each overlay they show or open is added after the markup
+ * (layers.mjs).
+ *
+ * @input workerData {entry, root, scope, served, withoutSegmenter, openLayers}
  * @output one message: {ok: true, markup, css, files, texts, logs} or
  *   {ok: false, error: {code, message, detail?}}
  * @position foundation/render — started by page-host.mjs
@@ -38,6 +44,7 @@ import {SINGLE_COPY, isServedPackage, packageOf, resolveServed} from './served-p
 import {findNodeModulesPackage} from '../fs/paths.mjs';
 import {importSpecifiers} from './embedded-imports.mjs';
 import {CHART_GLOBAL, CHART_ROOTS, FOLLOWS_WIDTH, boxHeights, chartDocument, chartDrawings, foldLegends, roundCoordinates, separateIds} from './charts.mjs';
+import {layerDocument, openLayerMarkup} from './layers.mjs';
 
 /** @typedef {{level: string, text: string}} PageLog */
 
@@ -431,6 +438,57 @@ async function drawCharts(markup, Page) {
     failed,
     alone,
   };
+}
+
+/**
+ * The overlays the elements show open, and those their controls open, drawn
+ * in the layer document (layers.mjs), for after the page's markup in one
+ * element of their own; nothing when they cannot be drawn there. Each
+ * element draws on its own: one that throws leaves the others drawn.
+ * @param {unknown[]} elements
+ * @param {any} React
+ * @returns {Promise<string>}
+ */
+async function drawOpenLayers(elements, React) {
+  /** @type {any} */
+  let client;
+  /** @type {any} */
+  let flushSync;
+  try {
+    await layerDocument();
+    client = await jiti.import('react-dom/client');
+    ({flushSync} = /** @type {any} */ (await jiti.import('react-dom')));
+  } catch {
+    return '';
+  }
+  const g = /** @type {any} */ (globalThis);
+  const host = g.document.createElement('div');
+  g.document.body.appendChild(host);
+  const root = client.createRoot(host, {onUncaughtError: () => {}, onRecoverableError: () => {}});
+  /** @type {string[]} */
+  let layers = [];
+  try {
+    class Alone extends React.Component {
+      state = {failed: false};
+      static getDerivedStateFromError() {
+        return {failed: true};
+      }
+      render() {
+        return this.state.failed ? null : this.props.children;
+      }
+    }
+    flushSync(() => root.render(createElement(React.Fragment, null, ...elements.map((e, i) => createElement(Alone, {key: i}, e)))));
+    layers = await openLayerMarkup(host, flushSync);
+  } catch {
+    // A page that cannot be drawn there adds no overlays.
+  }
+  try {
+    root.unmount();
+  } catch {
+    // Unmounting a page that failed to draw changes nothing.
+  }
+  host.remove();
+  return layers.length ? `<div data-astryx-open-layers="">${layers.join('')}</div>` : '';
 }
 
 /**
@@ -1048,6 +1106,15 @@ try {
       const printed = logs.length;
       reach('drawing charts');
       ({markup, failed: chartsFailed, alone: chartsAlone} = await drawCharts(markup, Page));
+      logs.length = printed;
+    }
+    if (workerData.openLayers) {
+      const printed = logs.length;
+      reach('drawing open overlays');
+      markup += await drawOpenLayers(
+        typeof mod.openLayerElements === 'function' ? mod.openLayerElements() : [React.createElement(Page)],
+        React,
+      );
       logs.length = printed;
     }
   } catch (e) {

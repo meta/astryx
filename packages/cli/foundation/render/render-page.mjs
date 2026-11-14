@@ -670,7 +670,7 @@ export function awaitHost(host, {timeoutMs, withoutSegmenter, stateFile}) {
 /**
  * Run the page. When this Node crashes in Intl.Segmenter, run it once more
  * without Intl.Segmenter and say so in a warning.
- * @param {{entry: string, root: string, scope: string, served: ServedSet | null}} input
+ * @param {{entry: string, root: string, scope: string, served: ServedSet | null, openLayers?: boolean}} input
  * @param {number} timeoutMs
  * @param {RenderWarning[]} warnings
  */
@@ -845,11 +845,12 @@ const SCHEME_CSS =
 /**
  * Render a page module to one self-contained HTML file.
  * @param {string} entry absolute path of the page module
- * @param {{title?: string, timeoutMs?: number, version?: string, served?: ServedSet | null, output?: string, cwd?: string}} [options]
+ * @param {{title?: string, timeoutMs?: number, version?: string, served?: ServedSet | null, output?: string, cwd?: string, openLayers?: boolean}} [options]
  *   `served`: the Core of the package set the CLI runs from, for the packages
  *   the page's folder has no copy of; `output`: the file the HTML goes to;
  *   `cwd`: the current folder, whose files are the page's own outside a
- *   project.
+ *   project; `openLayers`: the overlays the page shows or opens are drawn
+ *   and added after its markup (layers.mjs), for reading what they paint.
  *   With `output`, the file describes itself: notes at its top and end name
  *   what made it and the commands that give the page back and render it
  *   again, and its embedded source records the CLI version, the packages
@@ -866,7 +867,7 @@ export async function renderPage(entry, options = {}) {
   /** @type {RenderWarning[]} */
   const warnings = [];
   const message = await runPage(
-    {entry, root, scope, served},
+    {entry, root, scope, served, openLayers: options.openLayers === true},
     options.timeoutMs ?? RENDER_TIMEOUT_MS,
     warnings,
   );

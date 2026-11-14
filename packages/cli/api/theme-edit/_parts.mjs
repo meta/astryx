@@ -32,7 +32,7 @@ import {SAMPLE_PAGE, elementNames, pageSource} from './_catalog.mjs';
 import {removeOnStop} from '../../foundation/fs/stop-cleanup.mjs';
 
 /** Bump when the shape of the cached part data changes. */
-const PART_DATA_VERSION = 12;
+const PART_DATA_VERSION = 13;
 
 /**
  * Flags that change what a component does or whether it shows, not how it
@@ -386,9 +386,17 @@ function sweepRenders(themes) {
  * @param {string} file name inside the render folder
  * @param {string} source
  * @param {Array<{name: string, from: string}>} [extra] files copied beside it
+ * @param {{openLayers?: boolean}} [opts] `openLayers`: the overlays it shows
+ *   or opens are drawn and added after its markup
  * @returns {Promise<{html: string, markup: string}>}
  */
-export async function renderGenerated(project, file, source, extra = []) {
+export async function renderGenerated(
+  project,
+  file,
+  source,
+  extra = [],
+  opts = {},
+) {
   const dir = renderDir(project);
   // A lookup in an app with no themes must not leave a themes/ folder.
   const themes = path.dirname(dir);
@@ -424,6 +432,7 @@ export async function renderGenerated(project, file, source, extra = []) {
     const page = await renderPage(entry, {
       title: file.replace(/\.[^.]+$/, ''),
       timeoutMs: EDITOR_RENDER_MS,
+      ...(opts.openLayers ? {openLayers: true} : {}),
     });
     // The page is the same whichever command rendered it: the folder's
     // per-process name never reaches the file.
@@ -661,10 +670,14 @@ function addInlineStatePaint(project, map) {
 async function buildPartData(project) {
   const {items, imports} = catalogItems(project);
   const all = [...items, {name: 'sample-page', label: '', tree: SAMPLE_PAGE}];
+  // Overlays (a tooltip, a menu's list) are drawn open too: the server
+  // markup holds none of them.
   const {markup} = await renderGenerated(
     project,
     'catalog.mjs',
     pageSource({items: all, imports, theme: null, layout: 'catalog'}),
+    [],
+    {openLayers: true},
   );
   let css = '';
   try {
@@ -676,7 +689,32 @@ async function buildPartData(project) {
     // No stylesheet: every part reads nothing.
   }
   const tokens = new Set(Object.keys(project.core.tokenDefaults ?? {}));
-  const result = walkMarkup(markup, declarations(css), tokens, project.target);
+  // The overlays drawn open add the parts the server markup cannot hold (a
+  // tooltip, a menu's items); a part the page shows already keeps what it
+  // reads there, never a look another component gives it inside an overlay
+  // (a dialog's round close button).
+  const at = markup.indexOf('<div data-astryx-open-layers=');
+  const decls = declarations(css);
+  const result = walkMarkup(
+    at < 0 ? markup : markup.slice(0, at),
+    decls,
+    tokens,
+    project.target,
+  );
+  if (at >= 0) {
+    const layers = walkMarkup(markup.slice(at), decls, tokens, project.target);
+    const added = Object.keys(layers.map).filter(k => !(k in result.map));
+    for (const k of added) result.map[k] = layers.map[k];
+    const seen = new Set(result.pairs.map(x => JSON.stringify(x)));
+    for (const x of layers.pairs)
+      if (
+        [x.text, x.fg.target, x.bg.target].some(t =>
+          added.includes(String(t)),
+        ) &&
+        !seen.has(JSON.stringify(x))
+      )
+        result.pairs.push(x);
+  }
   addInlineStatePaint(project, result.map);
   addIndicatorRings(project, result.map);
   return {

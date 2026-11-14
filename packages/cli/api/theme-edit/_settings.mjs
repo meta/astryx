@@ -7429,6 +7429,7 @@ export async function contrastProblems(ctx, data, res) {
       x =>
         `text in ${x.part} ("${x.sample}") is ${x.ratio}:1 in ${x.mode} (${x.fg} on ${x.bgPart ?? 'the page'}'s ${x.bg}${x.over ? ` over ${x.over}` : ''}); text needs 4.5:1`,
     ),
+    ...borderContrastProblems(ctx, data, res, base),
     ...(more
       ? [`and ${more} more text pair${more > 1 ? 's' : ''} below 4.5:1`]
       : []),
@@ -7461,6 +7462,139 @@ export async function contrastProblems(ctx, data, res) {
         ]
       : []),
   ];
+}
+
+/**
+ * Border contrast problems this theme caused: a border color it sets (a
+ * border token for the whole theme, or a part's own border) below 3:1
+ * against what the border sits on (the part's background, else the page)
+ * in a mode, where the base theme's border there was not as low. A border
+ * below 3:1 does not show as an edge (a control's edge needs 3:1, WCAG
+ * 1.4.11).
+ * @param {Ctx} ctx
+ * @param {ThemeData} data
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} res
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} base
+ * @returns {string[]}
+ */
+function borderContrastProblems(ctx, data, res, base) {
+  /** A value as one color in a mode: its half of light-dark(), a token read. @param {string} v @param {'light' | 'dark'} m @param {Record<string, string>} tokens */
+  const inMode = (v, m, tokens) => {
+    let x = String(v ?? '').trim();
+    for (let i = 0; i < 4; i++) {
+      const pair = /^light-dark\((.*)\)$/is.exec(x);
+      if (pair) {
+        const halves = splitTop(pair[1], ',');
+        if (halves.length === 2) x = halves[m === 'light' ? 0 : 1].trim();
+      }
+      const ref = /^var\(\s*(--[\w-]+)\s*(?:,[^)]*)?\)$/.exec(x);
+      if (!ref) break;
+      x = String(tokens[ref[1]] ?? '');
+    }
+    return x;
+  };
+  /** The color word of a border shorthand, or the value. @param {string} v */
+  const colorOfBorder = v =>
+    splitTop(String(v).trim(), ' ').find(
+      w => /^(light-dark|var)\(/i.test(w) || isColorValue(w),
+    ) ?? null;
+  /** The ratio of a border over what it sits on, or null when either is no one color. @param {string} border @param {string} ground @param {string} page */
+  const measure = (border, ground, page) => {
+    const p = parseColor(page);
+    const g0 = parseColor(ground);
+    const b0 = parseColor(border);
+    if (!p || !g0 || !b0) return null;
+    const g = compositeOver(g0, alphaOf(ground), p);
+    const b = compositeOver(b0, alphaOf(border), g);
+    return ratio(b, g);
+  };
+  /** @type {string[]} */
+  const out = [];
+  for (const m of modesOf(data)) {
+    const mode = /** @type {'light' | 'dark'} */ (m);
+    const page = res[mode]['--color-background-body'];
+    const basePage = base[mode]['--color-background-body'];
+    for (const x of data.settings) {
+      if (x.state || x.when || (x.mode && x.mode !== mode)) continue;
+      // A border token for the whole theme, on the page.
+      if (
+        x.source === 'token' &&
+        !x.on &&
+        /^--color-border(-|$)/.test(x.thing)
+      ) {
+        const now = measure(
+          inMode(res[mode][x.thing], mode, res[mode]),
+          page,
+          page,
+        );
+        const was = measure(
+          inMode(base[mode][x.thing], mode, base[mode]),
+          basePage,
+          basePage,
+        );
+        if (now != null && now < 3 && (was == null || was > now))
+          out.push(
+            `the border ${x.thing} (${inMode(res[mode][x.thing], mode, res[mode])}) is ${now.toFixed(2)}:1 on the page in ${mode} (${page}); a border needs 3:1 to show as an edge`,
+          );
+        continue;
+      }
+      // A part's own border color, on the part's background.
+      if (
+        x.source !== 'property' ||
+        !x.on ||
+        !/^(border|border-color|outline|outline-color)$/.test(x.thing)
+      )
+        continue;
+      const color = /-color$/.test(x.thing)
+        ? String(x.value)
+        : colorOfBorder(String(x.value));
+      if (!color) continue;
+      const border = inMode(color, mode, res[mode]);
+      for (const t of partsOf(ctx, x)) {
+        const own = [...data.settings]
+          .reverse()
+          .find(
+            y =>
+              !y.state &&
+              !y.when &&
+              (!y.mode || y.mode === mode) &&
+              y.source === 'property' &&
+              /^background(-color)?$/.test(y.thing) &&
+              partsOf(ctx, y).includes(t),
+          );
+        const read = ctx.C.partReads(t, 'background').find(
+          r => r.when.includes('') && r.props.some(p => /^background/.test(p)),
+        );
+        const ground = own
+          ? inMode(String(own.value), mode, res[mode])
+          : read
+            ? inMode(`var(${read.token})`, mode, res[mode])
+            : page;
+        const now = measure(border, ground || page, page);
+        // The base theme's border on the part: what it reads at rest, else
+        // in its default variant (a card's), else the shared border token.
+        const bReads = ctx.C.partReads(t, 'border').filter(r =>
+          r.props.some(p => /border.*color|^border$/.test(p)),
+        );
+        const bRead = bReads.find(r => r.when.includes('')) ??
+          bReads[0] ?? {token: '--color-border'};
+        const was = measure(
+          inMode(`var(${bRead.token})`, mode, base[mode]),
+          read
+            ? inMode(`var(${read.token})`, mode, base[mode]) || basePage
+            : basePage,
+          basePage,
+        );
+        if (now != null && now < 3 && (was == null || was > now)) {
+          out.push(
+            `the border on ${t} (${border}) is ${now.toFixed(2)}:1 on its ${ground && ground !== page ? `background ${ground}` : `page ${page}`} in ${mode}; a border needs 3:1 to show as an edge`,
+          );
+          break;
+        }
+      }
+    }
+  }
+  return [...new Set(out)];
 }
 
 /**
