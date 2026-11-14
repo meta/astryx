@@ -263,7 +263,8 @@ export function rankPages(query, pages) {
 
 /**
  * Put a named family's base template ahead of the variant that outranks it,
- * unless the variant matched START_TERMS terms the base did not, or the base
+ * unless the variant matched START_TERMS terms the base did not, the idea
+ * names the variant's frame (its container) and not the base's, or the base
  * cannot start on its own: too little score, or too few matched terms. The
  * head names the exception: a family word in the idea's head is start
  * evidence on its own — the same evidence pickStart accepts in place of a
@@ -286,8 +287,7 @@ function baseFirst(ranked) {
   ) {
     return ranked;
   }
-  // A variant the idea names by its frame ("in a modal") keeps the lead:
-  // the frame is what a template is, and pickStart takes it as evidence.
+  // The frame is what a template is, and pickStart takes it as evidence.
   const own = [...top.matched].filter(t => !base.matched.has(t)).length;
   return own >= START_TERMS || (top.containerMatched && !base.containerMatched)
     ? ranked
@@ -326,15 +326,8 @@ export function pickAlternatives(ranked, startName, count = 2) {
  */
 export function pickStart(ranked, kind = 'page') {
   if (kind !== 'page') {
-    // A part placed in a family starts from that family's page for the frame
-    // the idea names ("notes in a settings modal"), else from its base.
-    const base = kind === 'part' && ranked.find(r => r.base && r.familyNamed);
-    if (base) {
-      const framed =
-        !base.containerMatched &&
-        ranked.find(r => r.family === base.family && r.containerMatched);
-      return framed || base;
-    }
+    const host = kind === 'part' && ranked.find(r => r.base && r.familyNamed);
+    if (host) return host;
     // Otherwise the app shell (FR2): the shell template the idea describes
     // when one leads ("a frame with sidebar navigation"), else none, for the
     // kit's neutral fallback.

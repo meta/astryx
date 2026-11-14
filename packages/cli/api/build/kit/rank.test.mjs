@@ -389,7 +389,7 @@ describe('pickStart on parts and edits (spec:AST-048/FR3)', () => {
     ).toBeNull();
   });
 
-  it("starts from its family's page for the frame the idea names", async () => {
+  it("starts a page from its family's template for the frame the idea names", async () => {
     expect(await start('notification settings in a modal')).toBe(
       'settings-dialog',
     );
@@ -397,12 +397,10 @@ describe('pickStart on parts and edits (spec:AST-048/FR3)', () => {
       page('widget', 'Widget - Basic', 'A plain widget page.'),
       page('widget-dialog', 'Widget - Dialog', 'A widget page in a dialog.'),
     ];
-    const part = (/** @type {string} */ idea) =>
-      pickStart(rankPages(idea, pages), 'part')?.name;
-    expect(part('a two-button footer in a widget dialog')).toBe(
-      'widget-dialog',
-    );
-    expect(part('an empty state for a widget page')).toBe('widget');
+    const lead = (/** @type {string} */ idea) =>
+      pickStart(rankPages(idea, pages))?.name;
+    expect(lead('widget settings in a dialog')).toBe('widget-dialog');
+    expect(lead('widget settings with two sections')).toBe('widget');
   });
 
   it('still starts a whole page from its template', async () => {
