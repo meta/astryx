@@ -154,7 +154,11 @@ export const editorBaseIn = (slug, cwd) =>
 /** The sections `show --section` takes. */
 export const showSections = () => [...SHOWCASE_GROUPS];
 
-export {dialValueFits, usableNewName as editorFreeName} from './_settings.mjs';
+export {
+  dialTakesText,
+  dialValueFits,
+  usableNewName as editorFreeName,
+} from './_settings.mjs';
 
 /**
  * The project a command acts on: the Astryx project at or above `cwd`, found

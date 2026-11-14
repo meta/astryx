@@ -263,6 +263,17 @@ export function folderIsEmpty(dir) {
 }
 
 /**
+ * Whether a dial takes a value of its own kind beside its named words (a
+ * size, a color, a family, a number: its list of values holds a `<…>`), so
+ * a value of several words can be one value of it (`Open Sans`, `dark
+ * blue`). A dial of named words only (mode, spacing) takes one word.
+ * @param {string} dial
+ */
+export function dialTakesText(dial) {
+  return /</.test(String(DIALS[dial]?.values ?? ''));
+}
+
+/**
  * Whether a value fits what a dial takes, read from the dial's own list of
  * values: a named rung in any case, or a value of the kind it names (a size,
  * a color, a number). `set` still checks the value in full.
@@ -1090,7 +1101,7 @@ export function loadTheme(
     throw new AstryxError(
       `themes/${slug}/${slug}.settings.json holds ${all.length} settings the editor no longer accepts: ${all
         .slice(0, 6)
-        .map(s => valueProblem(s))
+        .map(s => entryProblem(s, data))
         .join(
           '; ',
         )}${all.length > 6 ? `; and ${all.length - 6} more` : ''}. Remove or change each; nothing else needs to change. Nothing was changed.`,
@@ -1147,7 +1158,7 @@ export function loadTheme(
     // a typed one, and offers that repair beside the undo (see _edit).
     throw Object.assign(
       new AstryxError(
-        `themes/${slug}/${slug}.settings.json: ${problem}, a value the editor no longer accepts. Remove or change that setting; nothing else needs to change. Nothing was changed.`,
+        `themes/${slug}/${slug}.settings.json: ${problem}${valueProblem(bad) ? ', a value the editor no longer accepts' : ''}. Remove or change that setting; nothing else needs to change. Nothing was changed.`,
         [
           {
             name: `${P} undo ${slug} ${undoArgs(bad)}`,
@@ -1378,7 +1389,7 @@ export function settingsProblem(
       return `${describe({...s, value: '?'}).replace(' = ?', '')} is listed twice (${JSON.stringify(keys.get(key).value)}, ${JSON.stringify(s.value)})`;
     keys.set(key, s);
     if (!skips(s, skip) && (twins.get(key) ?? 0) < 2) {
-      const problem = valueProblem(s);
+      const problem = entryProblem(s, data);
       if (problem) return problem;
     }
   }
@@ -1563,10 +1574,13 @@ function readEntryWords(data) {
         else delete s.axis;
       }
     }
-    // `only` is true or absent; a yes or no written as text (`"true"`,
-    // `"yes"`, `"off"`) is read as what it says by the one yes/no reader,
-    // since the build reads any other value as true.
-    if (typeof s.only === 'string' && booleanWord(s.only) != null) {
+    // `only` is true or absent; a yes or no written as text or a number
+    // (`"true"`, `"yes"`, `"off"`, `1`, `0`) is read as what it says by the
+    // one yes/no reader, since the build reads any other value as true.
+    if (
+      (typeof s.only === 'string' || typeof s.only === 'number') &&
+      booleanWord(s.only) != null
+    ) {
       const read = booleanWord(s.only) === true;
       notes.push(
         `${s.thing} was saved with only ${JSON.stringify(s.only)}, read as ${read}`,
@@ -1715,8 +1729,32 @@ function skips(s, skip) {
 export function badSettings(data) {
   return (Array.isArray(data?.settings) ? data.settings : []).filter(
     (/** @type {any} */ s) =>
-      s && typeof s.thing === 'string' && valueProblem(s),
+      s && typeof s.thing === 'string' && entryProblem(s, data),
   );
+}
+
+/**
+ * What is wrong with one saved setting among the others, or null: its
+ * value (valueProblem), or a rule set checks against the theme's other
+ * settings: a vibrancy saturates the colors the color dials make, so with
+ * no color dial set it does nothing, and set refuses it.
+ * @param {any} s
+ * @param {any} data
+ * @returns {string | null}
+ */
+export function entryProblem(s, data) {
+  const own = valueProblem(s);
+  if (own) return own;
+  if (
+    s?.thing === 'vibrancy' &&
+    s.source === 'dial' &&
+    !(Array.isArray(data?.settings) ? data.settings : []).some(
+      (/** @type {any} */ x) =>
+        x && x.source === 'dial' && PALETTE_DIALS.includes(x.thing),
+    )
+  )
+    return `vibrancy ${JSON.stringify(s.value)} saturates the colors the color dials make, and no color dial is set, so it does nothing`;
+  return null;
 }
 
 /**
@@ -1771,7 +1809,7 @@ function scopeFlags(x) {
  */
 export function badSetting(data) {
   for (const s of Array.isArray(data?.settings) ? data.settings : [])
-    if (s && typeof s.thing === 'string' && valueProblem(s)) return s;
+    if (s && typeof s.thing === 'string' && entryProblem(s, data)) return s;
   return null;
 }
 
@@ -1782,7 +1820,7 @@ export function badSetting(data) {
  * @returns {{data: ThemeData, dropped: Setting[]}}
  */
 export function withoutBadValues(data) {
-  const dropped = data.settings.filter(s => valueProblem(s));
+  const dropped = data.settings.filter(s => entryProblem(s, data));
   return {
     data: {...data, settings: data.settings.filter(s => !dropped.includes(s))},
     dropped,
@@ -7253,10 +7291,20 @@ export function readFields(data, cwd, fixing, slug) {
     throw Object.assign(
       new AstryxError(
         `themes/${slug}/${slug}.settings.json: ${field === 'mode' ? 'mode' : 'base'} "${field === 'mode' ? data.mode : data.like}" is no value the editor reads, and a change never drops it. Set it again. Nothing was changed.`,
-        (fixes.length
-          ? fixes.map(fix => `${P} set ${slug} ${field} ${fix}`)
-          : [`${P} how ${field}`]
-        ).map(name => ({name, reason: 'do this instead'})),
+        // A base line for a built-in base not installed goes after its
+        // install (the one install helper).
+        fixes.length
+          ? fixes.flatMap(fix =>
+              field === 'base' && LIKE.includes(fix)
+                ? onBuiltInSteps(cwd, fix, `${P} set ${slug} base ${fix}`)
+                : [
+                    {
+                      name: `${P} set ${slug} ${field} ${fix}`,
+                      reason: 'do this instead',
+                    },
+                  ],
+            )
+          : [{name: `${P} how ${field}`, reason: 'do this instead'}],
         ERROR_CODES.ERR_THEME_INVALID,
       ),
       {aboutSaved: true},

@@ -18,7 +18,7 @@ import {
   wordTable,
 } from './_tables.mjs';
 import {colorProblem, hex, parseColor} from './_color.mjs';
-import {sameKindValues} from './_css.mjs';
+import {sameKindValues, takesWholeNumbersOnly} from './_css.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 
 /**
@@ -841,11 +841,18 @@ export function commaNumbers(text, thousands = false) {
 }
 
 /**
- * Whether a setting's numbers are weights (whole hundreds up to 1000).
+ * Whether a comma between a setting's digits groups thousands: its numbers
+ * are weights (whole hundreds up to 1000) or the property takes only whole
+ * numbers (z-index, order), so no comma there can be a decimal one.
  * @param {string} thing
  */
-export const weightSetting = thing =>
-  /^(font-weight|headings)$|^--font-weight/.test(String(thing).toLowerCase());
+export const thousandsSetting = thing => {
+  const t = String(thing).toLowerCase();
+  return (
+    /^(font-weight|headings)$|^--font-weight/.test(t) ||
+    (/^[a-z][a-z-]*$/.test(t) && takesWholeNumbersOnly(t))
+  );
+};
 
 /**
  * The one mode a word names, or null: light or dark, written as a mode
@@ -1165,7 +1172,7 @@ export function readsTyped({
     .toLowerCase();
   const key = String(thing).toLowerCase();
   const typedKey = String(typedThing || thing).toLowerCase();
-  const t = typedReading(typed, {thousands: weightSetting(typedKey)});
+  const t = typedReading(typed, {thousands: thousandsSetting(typedKey)});
   const T = tokensOf(t);
   const O = tokensOf(o);
   // (1) The value typed.
@@ -1442,7 +1449,7 @@ export function readsTyped({
  * @param {string} [thing] the setting typed (its numbers' reading)
  */
 export function coversTyped(reads, typed, thing = '') {
-  const T = tokensOf(typedReading(typed, {thousands: weightSetting(thing)}));
+  const T = tokensOf(typedReading(typed, {thousands: thousandsSetting(thing)}));
   // By token, counted: two lines may each carry one of two equal words
   // (`normal normal 16px serif`).
   /** @type {Map<string, number>} */

@@ -51,6 +51,7 @@ import {
 } from '../../../../api/theme-edit/theme-edit.mjs';
 import {
   builtInThemes,
+  dialTakesText,
   dialValueFits,
   newFlagList,
   editorCheckedLine,
@@ -832,6 +833,13 @@ function optionsAsWritten(
       }
       // A yes/no option given twice is one option.
       if (flag !== '--json' && !words.includes(flag)) words.push(flag);
+      // A word right after a mistyped yes/no option that reads as neither
+      // (`--olny dark`) is no value of it: the line leaves it out, and says
+      // so, never gluing it onto the setting's value.
+      if (written !== flag && next != null && !/^-/.test(next)) {
+        i += 1;
+        why = `${why}; "${next}" after it is no value of ${flag}, so the line leaves it out`;
+      }
       continue;
     }
     // An option that takes a value, given none, is left out of the line.
@@ -1253,12 +1261,24 @@ export function registerExperimentalTheme(group, program) {
               const given = {...o};
               /** @type {string[]} */
               const words = [];
-              // Each word in the order typed: one that follows an option's
+              // Each word in the order typed: one that follows a dial's
               // value with no option between is more of that value, read as
-              // set reads it (`--font Open Sans` is the family Open Sans).
+              // set reads it (`--font Open Sans` is the family Open Sans),
+              // when the dial takes a value of its own kind; a base name
+              // (--like) and a dial of named words (--mode) take one word,
+              // and a word after it is a word of the name.
               const valueFlags = new Set(
                 (newDoc.options ?? [])
                   .filter(opt => /</.test(String(opt.flag)))
+                  .map(opt => String(opt.flag).split(' ')[0]),
+              );
+              const textFlags = new Set(
+                (newDoc.options ?? [])
+                  .filter(
+                    opt =>
+                      opt.param === 'options.settings' &&
+                      dialTakesText(String(opt.flag).split(' ')[0].slice(2)),
+                  )
                   .map(opt => String(opt.flag).split(' ')[0]),
               );
               const camel = (/** @type {string} */ f) =>
@@ -1283,8 +1303,8 @@ export function registerExperimentalTheme(group, program) {
                 }
                 if (w.startsWith('-')) {
                   const flag = w.split('=')[0];
-                  open = valueFlags.has(flag) ? camel(flag) : null;
-                  if (open && !w.includes('=')) i += 1;
+                  if (valueFlags.has(flag) && !w.includes('=')) i += 1;
+                  open = textFlags.has(flag) ? camel(flag) : null;
                   continue;
                 }
                 // The name ends the value of an option typed before it: a
