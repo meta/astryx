@@ -235,14 +235,15 @@ describe('one mode', () => {
     T,
   );
   it(
-    'a resting shadow on a part that rings itself is not offered',
+    'a resting shadow on a part that rings itself is offered, its rings kept by the build',
     async test => {
       needsBases(test);
       const r = await answer(
         'in dark mode, inputs should have shadow 0 2px 6px #00000066',
       );
-      expect(r.first).toEqual([]);
-      expect(r.text).toMatch(/rings in its box-shadow/);
+      expect(r.first).toEqual([
+        "set n box-shadow '0 2px 6px light-dark(transparent, #00000066)' --on inputs",
+      ]);
     },
     T,
   );

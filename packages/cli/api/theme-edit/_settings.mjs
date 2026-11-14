@@ -4956,6 +4956,64 @@ export function compileTheme(ctx, data, base) {
             delete mb[k];
       mb[prop] = v;
     } else b[prop] = v;
+    if (kebab(prop) === 'box-shadow' && !s.state) withRingStates(s, target, v);
+  };
+  /**
+   * A resting shadow on a part that draws rings in its box-shadow in some
+   * states (an input's hover and focus rings): in each such state, as Core
+   * writes it (its status included), the theme's shadow with that ring
+   * after it, so the ring still shows (`<shadow>, <ring>`). A state the
+   * theme sets a shadow of its own keeps that.
+   * @param {Setting} s @param {string} target @param {string} v
+   */
+  const withRingStates = (s, target, v) => {
+    if (/^\s*none\s*$/i.test(String(v))) return;
+    const tg = ctx.project.target.get(target);
+    const at = ctx.C.MAP[target]?.at?.['box-shadow'] ?? {};
+    for (const [k, ring] of Object.entries(at)) {
+      const [attrs, ...rest] = k.split(' ');
+      // The state as set names it: one pseudo-class (Core's guard against
+      // another state, `:hover:not(:focus-within)`, is the order the rules
+      // come in, hover before focus).
+      const state = /^:(hover|focus-within|focus-visible|focus|active)\b/.exec(
+        rest.join(' '),
+      )?.[1];
+      if (!state || /^\s*none\s*$/i.test(String(ring))) continue;
+      // The part's visual props that tell its renders apart (a status, a
+      // file input's mode), as set names them with --when; a prop the part
+      // was drawn with one value of (its default size) says nothing. A
+      // rule under any other attribute (disabled, read-only) is left as
+      // Core draws it.
+      const seen = ctx.C.MAP[target]?.attrs ?? {};
+      const pairs = attrs
+        .split(',')
+        .filter(Boolean)
+        .map(a => a.split('='))
+        .filter(
+          ([key]) => (seen[key]?.length ?? 0) > 1 || !tg?.props.includes(key),
+        );
+      if (pairs.some(([key]) => !tg?.props.includes(key))) continue;
+      const when =
+        [
+          ...(s.when ? [s.when] : []),
+          ...pairs
+            .map(([key, val]) => `${key}:${val}`)
+            .filter(w => w !== s.when),
+        ].join('+') || undefined;
+      if (
+        data.settings.some(
+          y =>
+            y.source === 'property' &&
+            kebab(y.thing) === 'box-shadow' &&
+            y.state === state &&
+            (y.when ?? undefined) === when &&
+            partsOf(ctx, y).includes(target),
+        )
+      )
+        continue;
+      const rb = block({...s, state, when}, target);
+      rb.boxShadow = `${v}, ${ring}`;
+    }
   };
   // Palette stops go first, so an exact token setting always wins over them.
   const pal = keepShades(

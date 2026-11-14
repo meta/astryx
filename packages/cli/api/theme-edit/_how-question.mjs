@@ -57,7 +57,6 @@ import {
   dividerParts,
   drawsLine,
   inheritedReach,
-  ringStatesOf,
   settableStates,
 } from './_check.mjs';
 import {coreKeyframes} from './_parts.mjs';
@@ -5805,15 +5804,6 @@ export function draftAnswer(ctx, env, question) {
     };
   };
   /**
-   * The states a part draws a ring of its own in, with its box-shadow (an
-   * input's hover and focus rings), or none. A shadow the theme sets on the
-   * part's resting rule replaces them in every state: Core's state rules
-   * sit under the theme's rules.
-   * @param {string} on
-   * @returns {string[]}
-   */
-  const ringStates = (/** @type {string} */ on) => ringStatesOf(ctx, on);
-  /**
    * A corners step on a group ("checkboxes", the checks) leaves out the
    * members already at that end (a radio is fully round, so it cannot get
    * rounder): each other member takes the step on its own.
@@ -6087,32 +6077,7 @@ export function draftAnswer(ctx, env, question) {
             : {}),
         }
       : d1;
-    // A resting shadow on a part that rings itself in its shadow would wipe
-    // those rings: not offered, and said.
-    const ringed = d0.options
-      .flat()
-      .map(st =>
-        st.verb === 'set' && st.thing === 'box-shadow' && st.on && !st.state
-          ? {on: st.on, states: ringStates(st.on)}
-          : null,
-      )
-      .find(x => x && x.states.length);
-    const d = ringed
-      ? {
-          ...d0,
-          text: `${d0.text}: ${ringed.on} draws its ${ringed.states.join(' and ')} rings in its box-shadow, and a shadow set on it would replace them in every state, so it is left as it is`,
-          options: d0.options.filter(
-            o =>
-              !o.some(
-                st =>
-                  st.verb === 'set' &&
-                  st.thing === 'box-shadow' &&
-                  st.on === ringed.on &&
-                  !st.state,
-              ),
-          ),
-        }
-      : d0;
+    const d = d0;
     // The measured check runs on the final commands (_how.mjs): each draft
     // carries what its clause asks for.
     if (clauseNow && !clauseNow.except && !d.intent)
@@ -10733,7 +10698,12 @@ export function draftAnswer(ctx, env, question) {
         const value = glow
           ? `0 0 12px 2px ${c.colors[0] ?? 'var(--color-accent)'}`
           : design
-            ? DESIGN[design].replace(/^"|"$/g, '')
+            ? // A sunken (pressed in) bevel is lit from the other side: its
+              // dark edge at the top left.
+              design === 'bevel' &&
+              /\b(sunken|inset|recessed|pressed[- ]in|sunk)\b/.test(c.text)
+              ? DESIGN['sunken bevel'].replace(/^"|"$/g, '')
+              : DESIGN[design].replace(/^"|"$/g, '')
             : typedColor
               ? offsets.length >= 2
                 ? `${offsets.join(' ')} ${typedColor}`

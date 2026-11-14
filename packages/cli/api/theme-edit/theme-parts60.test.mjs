@@ -122,16 +122,16 @@ describe('shadows', () => {
     }
   }, 240_000);
 
-  it('refuses a resting shadow on a file input, which rings itself', async ctx => {
+  it("keeps a file input's hover ring under a resting shadow (the part data records it)", async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('f', {cwd, like: 'neutral'});
-    const r = await refusal(() =>
-      themeEditSet('f', 'box-shadow', '0 2px 6px #0000004d', {
-        cwd,
-        on: 'file-input',
-      }),
+    await themeEditSet('f', 'box-shadow', '0 2px 6px #0000004d', {
+      cwd,
+      on: 'file-input',
+    });
+    expect(fs.readFileSync(path.join(cwd, 'themes/f/f.css'), 'utf8')).toMatch(
+      /\.astryx-file-input:hover[^{]*\{\s*box-shadow: 0 2px 6px #0000004d, inset 0 0 0 2px /,
     );
-    expect(r.code).toBe('ERR_THEME_NO_EFFECT');
   }, 240_000);
 });
 
