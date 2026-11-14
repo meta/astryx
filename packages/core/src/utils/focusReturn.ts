@@ -21,6 +21,7 @@ import {
   type InteractionModality,
 } from './interactionModality';
 import {isFocusDetached} from './isFocusDetached';
+import {isShadowRoot} from './nodeType';
 
 function focusRoot(node: Node): Document | ShadowRoot | null {
   const root = node.getRootNode();
@@ -37,7 +38,7 @@ export function ownsFocus(element: Element): boolean {
   if (!root || root.activeElement !== element) {
     return false;
   }
-  const owner = 'host' in root ? root.host : root.defaultView?.frameElement;
+  const owner = isShadowRoot(root) ? root.host : root.defaultView?.frameElement;
   return owner == null || ownsFocus(owner);
 }
 
@@ -46,7 +47,7 @@ export function isFocusUnclaimed(node: Node): boolean {
   let root = focusRoot(node);
   let surface: Element | null = null;
   while (root) {
-    if ('host' in root) {
+    if (isShadowRoot(root)) {
       if (root.activeElement != null) {
         return (
           surface != null &&

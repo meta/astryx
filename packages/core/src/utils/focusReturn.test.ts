@@ -391,6 +391,23 @@ describe('isFocusUnclaimed', () => {
     expect(isFocusUnclaimed(surface)).toBe(false);
   });
 
+  it('does not treat a document with a named host as a shadow root', () => {
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    const doc = frame.contentDocument!;
+    const form = doc.createElement('form');
+    form.name = 'host';
+    const target = doc.createElement('button');
+    doc.body.append(form, target);
+    Object.defineProperty(doc, 'host', {value: form, configurable: true});
+
+    target.focus();
+    expect(ownsFocus(target)).toBe(true);
+    expect(isFocusUnclaimed(doc)).toBe(false);
+    target.remove();
+    expect(isFocusUnclaimed(doc)).toBe(true);
+  });
+
   it('preserves focus outside a nested frame even when its document is detached', () => {
     const outer = document.createElement('iframe');
     const outside = document.createElement('button');
