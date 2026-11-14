@@ -14,9 +14,22 @@
 import {act, cleanup, render, screen, within} from '@testing-library/react';
 import {Suspense, startTransition, use, useState} from 'react';
 import {createPortal} from 'react-dom';
-import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import {PRESSED_ATTRIBUTE} from '../utils/pressFeedback';
 import {ContextMenu} from './ContextMenu';
+import {__loadContextMenuTouchLayerForTest} from './contextMenuTouchLoader';
+
+// The touch layer loads after first paint. These cases hold a finger once the
+// page has settled, so they load it up front.
+beforeAll(__loadContextMenuTouchLayerForTest, 20000);
 
 const animator = vi.hoisted(() => ({
   elements: [] as HTMLElement[],

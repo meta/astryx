@@ -4480,6 +4480,62 @@ describe('GestureHost.fingersDown', () => {
   });
 });
 
+describe('a late begin: a finger that landed before its recognizer attached', () => {
+  it('begins the finger from its own touchstart at the host’s time now, so a hold counts from then', () => {
+    const {handle} = mount('<div id="handle"></div>');
+    const press = new LongPressGestureRecognizer({minimumPressDuration: 500});
+    const states: string[] = [];
+    press.addListener(recognizer => states.push(recognizer.state));
+    const finger = {id: 1, x: 10, y: 10, target: handle};
+    // Nothing on the page listens as the finger lands.
+    const landed = touch('touchstart', handle, [finger], [finger], 0);
+    clock.time = 300;
+    detachers.push(host.attach(handle, press));
+    host.beginLateTouches(landed as TouchEvent);
+    expect(press.numberOfTouches).toBe(1);
+    clock.runDue(799);
+    expect(states).not.toContain('began');
+    clock.runDue(800);
+    expect(states).toContain('began');
+    touch('touchend', handle, [finger], [], 900);
+    expect(press.numberOfTouches).toBe(0);
+  });
+
+  it('follows the late finger’s moves: a drift past the press’s limit fails it', () => {
+    const {handle} = mount('<div id="handle"></div>');
+    const press = new LongPressGestureRecognizer({minimumPressDuration: 500});
+    const states: string[] = [];
+    press.addListener(recognizer => states.push(recognizer.state));
+    const finger = {id: 1, x: 10, y: 10, target: handle};
+    const landed = touch('touchstart', handle, [finger], [finger], 0);
+    clock.time = 300;
+    detachers.push(host.attach(handle, press));
+    host.beginLateTouches(landed as TouchEvent);
+    const moved = {...finger, x: 60};
+    touch('touchmove', handle, [moved], [moved], 350);
+    clock.runDue(1000);
+    expect(states).not.toContain('began');
+    touch('touchend', handle, [moved], [], 1000);
+  });
+
+  it('begins nothing again from a touchstart it already heard', () => {
+    const {handle} = mount('<div id="handle"></div>');
+    const press = new LongPressGestureRecognizer({minimumPressDuration: 500});
+    const states: string[] = [];
+    press.addListener(recognizer => states.push(recognizer.state));
+    detachers.push(host.attach(handle, press));
+    const finger = {id: 1, x: 10, y: 10, target: handle};
+    const landed = touch('touchstart', handle, [finger], [finger], 0);
+    clock.time = 300;
+    host.beginLateTouches(landed as TouchEvent);
+    expect(press.numberOfTouches).toBe(1);
+    // The hold still counts from the touchstart the host heard.
+    clock.runDue(500);
+    expect(states).toContain('began');
+    touch('touchend', handle, [finger], [], 600);
+  });
+});
+
 describe('where the primary pointer is fine (spec:AST-094 FR43, FR24)', () => {
   /** Quiets the development warning, and returns its spy. */
   function quietWarning() {

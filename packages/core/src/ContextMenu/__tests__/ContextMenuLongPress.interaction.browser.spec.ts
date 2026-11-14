@@ -84,7 +84,9 @@ interface TouchStory {
 async function openTouchStory(
   page: Page,
   story = 'core-contextmenu--touch-long-press',
+  {waitsForTouchLayer = true}: {waitsForTouchLayer?: boolean} = {},
 ): Promise<TouchStory> {
+  const touchLayerChunk = waitsForTouchLayer ? watchTouchLayer(page) : null;
   await installInputLog(page);
   await installLongTaskLog(page);
   // Note when the menu is asked to show, on the page clock (no per-frame
@@ -166,6 +168,9 @@ async function openTouchStory(
     };
   });
   await openStory(page, storybook(), story);
+  if (touchLayerChunk != null) {
+    await waitForTouchLayer(page, touchLayerChunk);
+  }
   const driver = await touchDriver(page);
   const trigger = page.getByTestId('touch-context-menu');
   const box = await trigger.boundingBox();
@@ -363,11 +368,13 @@ test('a finger held on a Table’s sortable header gets the menu where it landed
 }) => {
   // The header leaves its trigger unpositioned, so the cell holds the cursor
   // anchor. A finger's point is measured from that cell, as a pointer's is.
+  const touchLayerChunk = watchTouchLayer(page);
   await openStory(
     page,
     storybook(),
     'core-tablecolumnresize--with-sortable-columns',
   );
+  await waitForTouchLayer(page, touchLayerChunk);
   const driver = await touchDriver(page);
   const header = page.getByRole('columnheader', {name: /Name/});
   const box = await header.boundingBox();
@@ -386,6 +393,121 @@ test('a finger held on a Table’s sortable header gets the menu where it landed
   // The menu hangs from a 1px anchor placed at the finger.
   expect(anchor?.x).toBeCloseTo(point.x, 0);
   expect(anchor?.y).toBeCloseTo(point.y, 0);
+});
+
+/** The touch layer's own chunk, which loads after the page's first paint. */
+const TOUCH_LAYER_CHUNK = /\/ContextMenuTouchLayer-[\w-]+\.js(?:\?.*)?$/;
+
+type ChunkResponse = Awaited<ReturnType<Page['waitForResponse']>>;
+
+/** The touch layer chunk's response, watched from before the story opens. */
+async function watchTouchLayer(page: Page): Promise<ChunkResponse> {
+  return page.waitForResponse(response =>
+    TOUCH_LAYER_CHUNK.test(response.url()),
+  );
+}
+
+/**
+ * Waits for the touch layer, which loads after the page's first paint: its
+ * chunk's response, then the module itself (an import of the same URL
+ * resolves once it and its imports have run), then two frames for the layer
+ * to mount. A finger that lands sooner starts its hold only at that mount.
+ */
+async function waitForTouchLayer(
+  page: Page,
+  chunk: Promise<ChunkResponse>,
+): Promise<void> {
+  const url = (await chunk).url();
+  await page.evaluate(async layerUrl => {
+    await import(layerUrl);
+    await new Promise<void>(resolve => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
+  }, url);
+}
+
+/**
+ * Holds back the touch layer's chunk. The call it returns releases the chunk
+ * and returns when, on the page clock.
+ */
+async function holdTouchLayer(page: Page): Promise<() => Promise<number>> {
+  let release = () => {};
+  const held = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  await page.route(TOUCH_LAYER_CHUNK, async route => {
+    await held;
+    await route.continue();
+  });
+  return async () => {
+    const releasedAt = await page.evaluate(() => performance.now());
+    release();
+    return releasedAt;
+  };
+}
+
+/** How long a finger stays down before the held chunk is released, ms. */
+const BEFORE_LOAD_MS = 300;
+
+test('a finger that lands before the touch layer loads starts the hold once it loads: the menu shows 735 ms after the load', async ({
+  page,
+}) => {
+  const releaseLayer = await holdTouchLayer(page);
+  const {driver, center} = await openTouchStory(page, undefined, {
+    waitsForTouchLayer: false,
+  });
+  const finger = await driver.press(center);
+  const start = await touchStartedAt(page);
+  await page.waitForFunction(
+    dueAt => performance.now() > dueAt,
+    start + BEFORE_LOAD_MS,
+  );
+  const released = await releaseLayer();
+  await expect
+    .poll(async () => menuShownAt(page), {timeout: 5000})
+    .not.toBeNull();
+  const shown = (await menuShownAt(page)) as number;
+  expect(
+    shown - start,
+    'the menu showed before its touch layer loaded',
+  ).toBeGreaterThanOrEqual(BEFORE_LOAD_MS + menuDisplayMs);
+  expect(shown - released).toBeGreaterThanOrEqual(menuDisplayMs);
+  // The chunk, its imports and the layer's mount fit in this.
+  expect(shown - released).toBeLessThan(menuDisplayMs + 500);
+  await finger.lift();
+  await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
+});
+
+test('a finger that lifts before the touch layer loads makes a plain tap: one click, and no menu once the layer loads', async ({
+  page,
+}) => {
+  const releaseLayer = await holdTouchLayer(page);
+  const {driver, center} = await openTouchStory(page, undefined, {
+    waitsForTouchLayer: false,
+  });
+  test.skip(!driver.drivesNativeGestures, CLICK_FROM_SCRIPT_SKIP);
+  const clicks = await countTriggerClicks(page);
+  await driver.play(hold(center, 250));
+  await expect.poll(clicks).toBe(1);
+  const released = await releaseLayer();
+  await page.waitForFunction(
+    dueAt => performance.now() > dueAt,
+    released + menuDisplayMs + 300,
+  );
+  expect(await menuShownAt(page)).toBeNull();
+  await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeHidden();
+  expect(await clicks()).toBe(1);
+});
+
+test('a right click opens the menu at once while the touch layer has not loaded', async ({
+  page,
+}) => {
+  await holdTouchLayer(page);
+  const {trigger} = await openTouchStory(page, undefined, {
+    waitsForTouchLayer: false,
+  });
+  await trigger.click({button: 'right'});
+  await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeVisible();
 });
 
 /** The press counts a move as late when it reaches the page this long after its own time. */

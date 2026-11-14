@@ -32,6 +32,10 @@ import {
 import userEvent from '@testing-library/user-event';
 import {readFileSync} from 'node:fs';
 import {ContextMenu} from './ContextMenu';
+import {
+  __loadContextMenuTouchLayerForTest,
+  __resetContextMenuTouchLayerForTest,
+} from './contextMenuTouchLoader';
 import {ContextMenuGroup} from './index';
 import {
   ContextMenuItem,
@@ -53,6 +57,9 @@ import {contextMenu} from '../motion/uikit/contextMenu';
 // The touch sheet is loaded lazily; resolve its modules once up front, so
 // ContextMenu's own lazy sheet renders within the cases' waitFor.
 beforeAll(warmMenuBottomSheet, 20000);
+// The touch layer loads after first paint. These cases hold a finger once the
+// page has settled, so they load it up front; the before-load cases reset it.
+beforeAll(__loadContextMenuTouchLayerForTest, 20000);
 
 function NestedDismissibleLayer({onDismiss}: {onDismiss: () => void}) {
   const [isOpen, setIsOpen] = useState(true);
@@ -889,6 +896,81 @@ describe.each([
       advance(1);
       expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
       press.up();
+    });
+
+    describe('before its touch layer loads', () => {
+      // The page's one load waits for a frame these cases never run, so each
+      // case loads the layer when it chooses.
+      beforeEach(() => {
+        __resetContextMenuTouchLayerForTest();
+        vi.spyOn(window, 'requestAnimationFrame').mockImplementation(() => 0);
+      });
+      afterEach(async () => {
+        vi.mocked(window.requestAnimationFrame).mockRestore();
+        await __loadContextMenuTouchLayerForTest();
+      });
+      const loadLayer = async () =>
+        act(async () => {
+          await __loadContextMenuTouchLayerForTest();
+        });
+
+      it('starts the hold of a finger that landed before the load once the layer loads', async () => {
+        const trigger = renderMenu();
+        const press = finger(trigger);
+        press.down();
+        advance(1000);
+        expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+        await loadLayer();
+        advance(contextMenu.press.menuDisplayMs - 1);
+        expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+        advance(1);
+        expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+        press.up();
+      });
+
+      it('opens nothing for a finger lifted before the load', async () => {
+        const trigger = renderMenu();
+        const press = finger(trigger);
+        press.down();
+        advance(200);
+        press.up();
+        await loadLayer();
+        advance(contextMenu.press.menuDisplayMs * 2);
+        expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+      });
+
+      it('keeps the browser’s own long-press menu from opening it for a finger held through the load', async () => {
+        const trigger = renderMenu();
+        const press = finger(trigger);
+        press.down();
+        advance(500);
+        const opened = fireEvent(
+          trigger,
+          new MouseEvent('contextmenu', {bubbles: true, cancelable: true}),
+        );
+        expect(opened).toBe(false);
+        expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+        await loadLayer();
+        advance(contextMenu.press.menuDisplayMs);
+        expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+        press.up();
+      });
+
+      it('opens at once for a right click or the menu key, with no finger down', () => {
+        const trigger = renderMenu();
+        fireEvent.contextMenu(trigger, {clientX: 10, clientY: 10});
+        expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+      });
+
+      it('schedules the load at the first ContextMenu under the touch model, for after a frame, and a finger does not start it', () => {
+        const trigger = renderMenu();
+        expect(window.requestAnimationFrame).toHaveBeenCalledTimes(1);
+        const press = finger(trigger);
+        press.down();
+        advance(1000);
+        press.up();
+        expect(window.requestAnimationFrame).toHaveBeenCalledTimes(1);
+      });
     });
 
     it('mounts the menu, closed, at the commit, and shows that element at 735 ms', () => {
