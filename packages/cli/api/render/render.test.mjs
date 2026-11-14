@@ -571,6 +571,108 @@ describe('render(): every write stays inside the current folder', () => {
     expect(await codeOf(() => render('aliased/src/bad.tsx', {cwd: dir}))).toBe('ERR_FILE_NOT_FOUND');
   }, 60_000);
 
+  it('reads the aliases of the referenced project that holds the page, behind a solution-style tsconfig.json', async () => {
+    const vite = (/** @type {string} */ name) => {
+      put(`${name}/package.json`, `{"name":"${name}","private":true}`);
+      put(`${name}/tsconfig.json`, '{\n  "files": [],\n  "references": [{"path": "./tsconfig.app.json"}, {"path": "./tsconfig.node.json"}]\n}\n');
+      put(`${name}/tsconfig.app.json`, '{\n  "compilerOptions": {"paths": {"@/*": ["./src/*"]}},\n  "include": ["src"],\n}\n');
+      put(`${name}/tsconfig.node.json`, '{"compilerOptions": {"paths": {"@/*": ["./config/*"]}}, "include": ["vite.config.ts"]}\n');
+    };
+    vite('solution');
+    put('solution/src/components/Header.tsx', 'export function Header() { return <p>Solution header</p>; }\n');
+    put('solution/src/pages/page.tsx', "import {Header} from '@/components/Header';\nexport default function Page() { return <Header />; }\n");
+    const r = /** @type {any} */ (await render('solution/src/pages/page.tsx', {cwd: dir}));
+    expect(r.data.files).toEqual(['pages/page.tsx', 'components/Header.tsx']);
+    expect(fs.readFileSync(path.join(dir, 'solution/src/pages/page.html'), 'utf8')).toContain('Solution header');
+    // A project laid out the same way takes it back where its own alias points.
+    vite('solution-to');
+    fs.copyFileSync(path.join(dir, 'solution/src/pages/page.html'), path.join(dir, 'solution-to/page.html'));
+    const back = /** @type {any} */ (await render('page.html', {cwd: path.join(dir, 'solution-to'), reverse: true, out: 'src/pages/page.tsx'}));
+    expect(back.data).toMatchObject({exact: true, files: ['src/pages/page.tsx', 'src/components/Header.tsx']});
+  }, 60_000);
+
+  it('reads aliases through extends: a path without .json, a package, and a list whose later config wins', async () => {
+    // A base config above the project: its baseUrl is read from its own folder.
+    put('ext/tsconfig.base.json', '{"compilerOptions": {"baseUrl": "apps/web", "paths": {"@data/*": ["src/data/*"]}}}\n');
+    put('ext/apps/web/package.json', '{"name":"web","private":true}');
+    put('ext/apps/web/tsconfig.json', '{"extends": "../../tsconfig.base"}\n');
+    put('ext/apps/web/src/data/rows.ts', "export const rows = ['North', 'South'];\n");
+    put('ext/apps/web/src/pages/page.tsx', "import {rows} from '@data/rows';\nexport default function Page() { return <ul>{rows.map(r => <li key={r}>{r}</li>)}</ul>; }\n");
+    const web = /** @type {any} */ (await render('ext/apps/web/src/pages/page.tsx', {cwd: dir}));
+    expect(web.data.files).toEqual(['pages/page.tsx', 'data/rows.ts']);
+    // A package's config, after one of the project's own: the later one wins,
+    // and ${configDir} is the folder of the config the project reads.
+    put('ext-pkg/package.json', '{"name":"ext-pkg","private":true}');
+    put('ext-pkg/node_modules/@acme/tsconfig/package.json', '{"name":"@acme/tsconfig","version":"1.0.0"}');
+    put('ext-pkg/node_modules/@acme/tsconfig/base.json', '{"compilerOptions": {"paths": {"@ui/*": ["${configDir}/src/ui/*"]}}}\n');
+    put('ext-pkg/tsconfig.first.json', '{"compilerOptions": {"paths": {"@ui/*": ["./elsewhere/*"]}}}\n');
+    put('ext-pkg/tsconfig.json', '{"extends": ["./tsconfig.first.json", "@acme/tsconfig/base.json"]}\n');
+    put('ext-pkg/src/ui/Panel.tsx', 'export function Panel() { return <section>Panel from the package alias</section>; }\n');
+    put('ext-pkg/src/page.tsx', "import {Panel} from '@ui/Panel';\nexport default function Page() { return <Panel />; }\n");
+    const pkg = /** @type {any} */ (await render('ext-pkg/src/page.tsx', {cwd: dir}));
+    expect(pkg.data.files).toEqual(['page.tsx', 'ui/Panel.tsx']);
+    expect(fs.readFileSync(path.join(dir, 'ext-pkg/src/page.html'), 'utf8')).toContain('Panel from the package alias');
+    // A package named alone: its tsconfig field, else its tsconfig.json,
+    // never its code `main`.
+    const config = '{"compilerOptions": {"paths": {"@ui/*": ["${configDir}/src/ui/*"]}}}\n';
+    for (const [name, files, extendsName = name] of [
+      ['js-main', {'package.json': '{"name":"js-main","version":"1.0.0","main":"index.js"}', 'index.js': 'module.exports = {};\n', 'tsconfig.json': config}],
+      ['field', {'package.json': '{"name":"field","version":"1.0.0","main":"index.js","tsconfig":"./configs/base.json"}', 'index.js': 'module.exports = {};\n', 'configs/base.json': config}],
+      // A package whose exports send "." to its config, or a pattern a subpath matches.
+      ['dot', {'package.json': '{"name":"dot","version":"1.0.0","exports":{".":{"import":"./esm.json","require":"./configs/base.json"}}}', 'configs/base.json': config}],
+      ['star', {'package.json': '{"name":"star","version":"1.0.0","exports":{"./*":"./configs/*.json"}}', 'configs/strict.json': config}, 'star/strict'],
+      // Of two patterns, the one with the longer part before the `*` wins, as in Node.
+      ['order', {'package.json': '{"name":"order","version":"1.0.0","exports":{"./*.json":"./wrong/*.json","./a*":"./right/a*"}}', 'right/ab.json': config, 'wrong/ab.json': '{"compilerOptions": {"paths": {"@ui/*": ["${configDir}/src/nowhere/*"]}}}\n'}, 'order/ab.json'],
+    ]) {
+      const root = `ext-${name}`;
+      put(`${root}/package.json`, `{"name":"${root}","private":true}`);
+      for (const [file, text] of Object.entries(files)) put(`${root}/node_modules/${name}/${file}`, text);
+      put(`${root}/tsconfig.json`, `{"extends": "${extendsName}"}\n`);
+      put(`${root}/src/ui/Panel.tsx`, 'export function Panel() { return <section>Panel</section>; }\n');
+      put(`${root}/src/page.tsx`, "import {Panel} from '@ui/Panel';\nexport default function Page() { return <Panel />; }\n");
+      const r = /** @type {any} */ (await render(`${root}/src/page.tsx`, {cwd: dir}));
+      expect(r.data.files, name).toEqual(['page.tsx', 'ui/Panel.tsx']);
+    }
+    // A config package read through a link: from where it really is, so a
+    // package it extends in turn, and paths that climb out of it, resolve
+    // from there; and a nearer copy without the config is passed by.
+    const panel = 'export function Panel() { return <section>Panel</section>; }\n';
+    const page = "import {Panel} from '@ui/Panel';\nexport default function Page() { return <Panel />; }\n";
+    put('ext-store/package.json', '{"name":"ext-store","private":true}');
+    put('ext-store/node_modules/.pnpm/cfg@1.0.0/node_modules/cfg/package.json', '{"name":"cfg","version":"1.0.0"}');
+    put('ext-store/node_modules/.pnpm/cfg@1.0.0/node_modules/cfg/tsconfig.json', '{"extends": "cfg-base"}\n');
+    put('ext-store/node_modules/.pnpm/cfg@1.0.0/node_modules/cfg-base/package.json', '{"name":"cfg-base","version":"1.0.0"}');
+    put('ext-store/node_modules/.pnpm/cfg@1.0.0/node_modules/cfg-base/tsconfig.json', '{"compilerOptions": {"paths": {"@ui/*": ["${configDir}/src/ui/*"]}}}\n');
+    fs.symlinkSync(path.join(dir, 'ext-store/node_modules/.pnpm/cfg@1.0.0/node_modules/cfg'), path.join(dir, 'ext-store/node_modules/cfg'), 'junction');
+    put('ext-store/tsconfig.json', '{"extends": "cfg"}\n');
+    put('ext-store/src/ui/Panel.tsx', panel);
+    put('ext-store/src/page.tsx', page);
+    const store = /** @type {any} */ (await render('ext-store/src/page.tsx', {cwd: dir}));
+    expect(store.data.files).toEqual(['page.tsx', 'ui/Panel.tsx']);
+    put('ext-ws/package.json', '{"name":"ext-ws","private":true}');
+    put('ext-ws/packages/tsconfig/package.json', '{"name":"@acme/tsconfig","version":"1.0.0"}');
+    put('ext-ws/packages/tsconfig/base.json', '{"compilerOptions": {"paths": {"@ui/*": ["../ui/src/*"]}}}\n');
+    put('ext-ws/packages/ui/src/Panel.tsx', panel);
+    put('ext-ws/apps/web/package.json', '{"name":"web","private":true}');
+    fs.mkdirSync(path.join(dir, 'ext-ws/apps/web/node_modules/@acme'), {recursive: true});
+    fs.symlinkSync(path.join(dir, 'ext-ws/packages/tsconfig'), path.join(dir, 'ext-ws/apps/web/node_modules/@acme/tsconfig'), 'junction');
+    put('ext-ws/apps/web/tsconfig.json', '{"extends": "@acme/tsconfig/base"}\n');
+    put('ext-ws/apps/web/src/page.tsx', page);
+    // The alias leads out of the app, to the workspace package it names.
+    await render('ext-ws/apps/web/src/page.tsx', {cwd: dir});
+    expect(fs.readFileSync(path.join(dir, 'ext-ws/apps/web/src/page.html'), 'utf8')).toContain('<section>Panel</section>');
+    put('ext-near/package.json', '{"name":"ext-near","private":true}');
+    put('ext-near/node_modules/shared-cfg/package.json', '{"name":"shared-cfg","version":"1.0.0"}');
+    put('ext-near/node_modules/shared-cfg/tsconfig.json', '{"compilerOptions": {"paths": {"@ui/*": ["${configDir}/src/ui/*"]}}}\n');
+    put('ext-near/app/package.json', '{"name":"app","private":true}');
+    put('ext-near/app/node_modules/shared-cfg/package.json', '{"name":"shared-cfg","version":"0.1.0"}');
+    put('ext-near/app/tsconfig.json', '{"extends": "shared-cfg"}\n');
+    put('ext-near/app/src/ui/Panel.tsx', panel);
+    put('ext-near/app/src/page.tsx', page);
+    const near = /** @type {any} */ (await render('ext-near/app/src/page.tsx', {cwd: dir}));
+    expect(near.data.files).toEqual(['page.tsx', 'ui/Panel.tsx']);
+  }, 60_000);
+
   it('gives back a page that imports through an alias where this project\'s alias points', async () => {
     put('aliased-src/tsconfig.json', '{"compilerOptions": {"baseUrl": ".", "paths": {"@/*": ["./src/*"]}}}\n');
     put('aliased-src/package.json', '{"name":"aliased-src","private":true}');
