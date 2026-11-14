@@ -92,6 +92,17 @@ describe('Drawer', () => {
     expect(screen.getByText('Drawer content')).toBeInTheDocument();
   });
 
+  it("paints the theme's text color on its surface, not the browser's", () => {
+    render(
+      <Drawer isOpen onOpenChange={() => {}} label="Host details">
+        Drawer content
+      </Drawer>,
+    );
+    expect(getComputedStyle(screen.getByRole('dialog')).color).toBe(
+      'var(--color-text-primary)',
+    );
+  });
+
   it('does not show when isOpen is false', () => {
     render(
       <Drawer isOpen={false} onOpenChange={() => {}} label="Host details">

@@ -341,6 +341,9 @@ const styles = stylex.create({
     width: '100%',
     maxWidth: 640,
     backgroundColor: colorVars['--color-background-surface'],
+    // The surface sets its own text color: a <dialog> or [popover] otherwise
+    // takes the browser's CanvasText, not the theme's text.
+    color: colorVars['--color-text-primary'],
     // A hairline on the three edges that face the scrim. In dark mode the
     // surface and the scrim are only a few RGB steps apart, and the shadow is
     // black on near-black, so the side edges disappear. The block-end edge

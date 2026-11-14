@@ -217,6 +217,9 @@ const styles = stylex.create({
       '@media (forced-colors: active)': 'CanvasText',
     },
     backgroundColor: colorVars['--color-background-surface'],
+    // The surface sets its own text color: a <dialog> or [popover] otherwise
+    // takes the browser's CanvasText, not the theme's text.
+    color: colorVars['--color-text-primary'],
     '--_dialog-radius': radiusVars['--radius-container'],
     borderRadius: 'var(--_dialog-radius)',
     boxShadow: shadowVars['--shadow-high'],
@@ -316,6 +319,7 @@ const styles = stylex.create({
   inlineWrapper: {
     padding: 0,
     backgroundColor: colorVars['--color-background-surface'],
+    color: colorVars['--color-text-primary'],
     '--_dialog-radius': radiusVars['--radius-container'],
     borderRadius: 'var(--_dialog-radius)',
     boxShadow: shadowVars['--shadow-high'],

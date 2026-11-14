@@ -94,6 +94,9 @@ const styles = stylex.create({
   // Consumers that need a raw positioned layer should use useLayer instead.
   surface: {
     backgroundColor: colorVars['--color-background-popover'],
+    // The surface sets its own text color: a <dialog> or [popover] otherwise
+    // takes the browser's CanvasText, not the theme's text.
+    color: colorVars['--color-text-primary'],
     '--_popover-radius': radiusVars['--radius-container'],
     borderRadius: 'var(--_popover-radius)',
     boxShadow: shadowVars['--shadow-low'],

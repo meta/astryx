@@ -131,6 +131,9 @@ const styles = stylex.create({
     boxSizing: 'border-box',
     flexDirection: 'column',
     backgroundColor: colorVars['--color-background-surface'],
+    // The surface sets its own text color: a <dialog> or [popover] otherwise
+    // takes the browser's CanvasText, not the theme's text.
+    color: colorVars['--color-text-primary'],
     boxShadow: shadowVars['--shadow-high'],
     // `clip`, not `hidden`: `hidden` makes the panel a scroll container, and
     // Chromium then holds a finger's drag on the page beside an open
