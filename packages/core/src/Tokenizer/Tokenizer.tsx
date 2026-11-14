@@ -1857,6 +1857,8 @@ export function Tokenizer<T extends SearchableItem>({
   // the group's are the ones shown — so neither is referenced or painted; the
   // disabled reason is input-local and stays.
   const localStatus = inputGroup ? undefined : status;
+  // A grouped Tokenizer has no local status, so a group error marks it invalid
+  // whatever `status` it was given.
   const isMemberInvalid = useIsMemberInvalid(localStatus);
 
   const {ariaLabelledBy: groupLabelledBy, ariaDescribedBy} = getInputARIA(

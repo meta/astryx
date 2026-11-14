@@ -765,7 +765,7 @@ function PointerDateField({
     hasPlaceholder: placeholderFromProps != null,
     entryErrorBehavior: resolvedEntryErrorBehavior,
   });
-  // The field's own status decides; without one, a group error marks it invalid.
+  // `fieldStatus`, not `status`: it is the one the field shows.
   const isMemberInvalid = useIsMemberInvalid(fieldStatus);
 
   const {statusIcon, describedBy: statusTooltipDescribedBy} =

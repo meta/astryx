@@ -3132,6 +3132,26 @@ describe('Tokenizer', () => {
       expect(screen.queryByText('Local error')).not.toBeInTheDocument();
     });
 
+    it('marks the input invalid from the group error, not the status the group drops', () => {
+      render(
+        <InputGroup label="Recipients" status={{type: 'error', message: 'Bad'}}>
+          <InputGroupText>To</InputGroupText>
+          <Tokenizer
+            label="People"
+            isLabelHidden
+            status={{type: 'success', message: 'Fine'}}
+            searchSource={userSource}
+            value={[]}
+            onChange={() => {}}
+          />
+        </InputGroup>,
+      );
+
+      expect(
+        screen.getByRole('combobox', {name: 'Recipients People'}),
+      ).toHaveAttribute('aria-invalid', 'true');
+    });
+
     it('forwards the ref and DOM props to the combobox input in a group', () => {
       const ref = vi.fn();
       const renderGrouped = () => (
