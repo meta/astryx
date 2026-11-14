@@ -184,6 +184,9 @@ describe('--list, the same as giving no topic', () => {
       ['--depth', '1', '--json'],
       ['--index', '--full', '--json'],
       ['--depth', 'deep', '--json'],
+      ['--dense'],
+      ['--lang', 'zh'],
+      ['--detail', 'compact', '--json'],
     ]) {
       const bare = await runCli(['docs', ...flags]);
       const listed = await runCli(['docs', '--list', ...flags]);
