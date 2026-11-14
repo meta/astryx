@@ -792,6 +792,66 @@ test("a drag that starts on a video's controls stays the video's; a drag on its 
   expect(await counter()).toBe('3 / 3');
 });
 
+test("a drag that starts on custom content stays the content's; a drag beside it pages", async ({
+  page,
+}) => {
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
+    route.fulfill({contentType: 'image/svg+xml', body: photoSvg('#888')}),
+  );
+  await openStory(page, storybook(), 'core-lightbox--mixed-gallery');
+  const driver = await touchDriver(page);
+  const trigger = await page
+    .getByRole('button', {name: 'Open mixed gallery'})
+    .boundingBox();
+  if (trigger == null) {
+    throw new Error('no trigger');
+  }
+  await driver.tap({
+    x: trigger.x + trigger.width / 2,
+    y: trigger.y + trigger.height / 2,
+  });
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  const track = dialog.locator('[data-lightbox-page]').first().locator('..');
+  const counter = async () =>
+    (await dialog.getByText(/^\d+ \/ \d+$/).textContent()) ?? '';
+  const next = await dialog.getByRole('button', {name: 'Next'}).boundingBox();
+  if (next == null) {
+    throw new Error('no Next button');
+  }
+  await driver.tap({x: next.x + next.width / 2, y: next.y + next.height / 2});
+  await waitForRest(track);
+  expect(await counter()).toBe('2 / 3');
+  const card = await dialog
+    .locator('[data-current] [data-lightbox-custom]')
+    .boundingBox();
+  if (card == null) {
+    throw new Error('no custom content');
+  }
+  const width = page.viewportSize()?.width ?? 0;
+  // On the content, the drag is the content's: a slider's or a text field's.
+  await driver.play(
+    slowDrag(
+      {x: card.x + card.width * 0.8, y: card.y + card.height / 2},
+      -width * 0.6,
+    ),
+  );
+  await waitForRest(track);
+  expect(await counter()).toBe('2 / 3');
+  // Beside the content, on the stage, the drag pages.
+  await driver.play(
+    slowDrag(
+      {
+        x: card.x + card.width + (width - card.x - card.width) / 2,
+        y: card.y + card.height / 2,
+      },
+      -width * 0.6,
+    ),
+  );
+  await waitForRest(track);
+  expect(await counter()).toBe('3 / 3');
+});
+
 test('a video that ends during a drag on its frame leaves the drag to page', async ({
   page,
 }) => {

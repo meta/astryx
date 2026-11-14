@@ -8,7 +8,8 @@
  *   and isRtlElement (gallery arrow keys follow the rendered direction). The
  *   zoom uses useZoomCore and useZoomStage, a gallery pages with usePager,
  *   and the drag to dismiss fades the backdrop and controls on the animator
- * @output Exports Lightbox component, LightboxProps, LightboxMedia
+ * @output Exports Lightbox component, LightboxProps, LightboxMedia,
+ *   LightboxCustomItem, LightboxItem; custom content keeps its own keys and drags
  * @position Core implementation; consumed by index.ts
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -112,7 +113,7 @@ registerEnglishFallback(english);
 export type LightboxMediaType = 'image' | 'video';
 
 /**
- * Describes a single media item in a lightbox.
+ * Describes a single image or video item in a lightbox.
  */
 export interface LightboxMedia {
   /** Media source URL */
@@ -128,6 +129,47 @@ export interface LightboxMedia {
   type?: LightboxMediaType;
 }
 
+/**
+ * Describes an arbitrary React content item in a lightbox — a live preview,
+ * an embed, or any rich subtree. Custom items reuse the same gallery
+ * navigation, keyboard handling, scroll lock, and backdrop/Escape dismissal
+ * as media items, but zoom, pan and the drag to dismiss never apply to them.
+ */
+export interface LightboxCustomItem {
+  /** Discriminant marking this as an arbitrary React content item. */
+  type: 'custom';
+  /** React subtree rendered on the lightbox stage. */
+  content: ReactNode;
+  /**
+   * Accessible label for this item. Used as the dialog's `aria-label` while
+   * the item is active and announced to screen readers on gallery
+   * navigation. Required because custom items have no `alt` text.
+   */
+  label: string;
+  /** Optional noninteractive caption displayed below the content. */
+  caption?: ReactNode;
+}
+
+/**
+ * A single lightbox item — either an image/video (`LightboxMedia`) or an
+ * arbitrary React subtree (`LightboxCustomItem`). Discriminated by `type`.
+ */
+export type LightboxItem = LightboxMedia | LightboxCustomItem;
+
+/** Narrows a lightbox item to a custom (arbitrary React content) item. */
+function isCustomItem(entry: LightboxItem): entry is LightboxCustomItem {
+  return entry.type === 'custom';
+}
+
+// Marks a custom item's box. Keys and drags that start inside it stay the
+// content's own.
+const CUSTOM_CONTENT_SELECTOR = '[data-lightbox-custom]';
+function isInCustomContent(target: unknown): boolean {
+  return (
+    target instanceof Element && target.closest(CUSTOM_CONTENT_SELECTOR) != null
+  );
+}
+
 export interface LightboxProps extends BaseProps<HTMLDialogElement> {
   /** Ref forwarded to the root dialog element */
   ref?: React.Ref<HTMLDialogElement>;
@@ -141,10 +183,13 @@ export interface LightboxProps extends BaseProps<HTMLDialogElement> {
    */
   onOpenChange: (isOpen: boolean) => void;
   /**
-   * Media to display. Pass a single object for one item, or an array
-   * for gallery mode with prev/next navigation.
+   * Items to display. Pass a single object for one item, or an array for
+   * gallery mode with prev/next navigation. Each item is either an
+   * image/video (`LightboxMedia`) or an arbitrary React subtree
+   * (`LightboxCustomItem`, `type: 'custom'`); the two kinds can be mixed
+   * in a single gallery.
    */
-  media: LightboxMedia | LightboxMedia[];
+  media: LightboxItem | LightboxItem[];
   /**
    * Current index in gallery mode (when `media` is an array).
    * When provided, puts the component in controlled mode.
@@ -472,6 +517,18 @@ const styles = stylex.create({
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
   },
+  // Custom (arbitrary React) content: centred but interactive. It takes no
+  // zoom cursor and lifts the stage's text-selection lock, so nested controls
+  // and text behave normally. The content sizes itself within the page.
+  customContent: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    maxWidth: '100%',
+    maxHeight: '100%',
+    minHeight: 0,
+    userSelect: 'text',
+  },
   image: {
     maxWidth: '100%',
     maxHeight: '100%',
@@ -701,7 +758,7 @@ export function Lightbox({
   const index = Math.max(0, Math.min(wholeIndex, mediaArray.length - 1));
   const currentItem = mediaArray.length > 0 ? mediaArray[index] : null;
   const currentType = currentItem?.type ?? 'image';
-  const isVideo = currentType === 'video';
+  const isImage = currentType === 'image';
   const canPrev = isGallery && index > 0;
   const canNext = isGallery && index < mediaArray.length - 1;
 
@@ -710,7 +767,11 @@ export function Lightbox({
 
   // A new media item starts unzoomed. Adjusted during render, so the new item
   // never paints as zoomed; the stage resets the photo before it paints.
-  const currentSrc = currentItem?.src;
+  // Custom items have no `src`; for them the index alone marks a new item.
+  const currentSrc =
+    currentItem != null && !isCustomItem(currentItem)
+      ? currentItem.src
+      : undefined;
   const [viewedItem, setViewedItem] = useState({index, src: currentSrc});
   if (
     !Object.is(viewedItem.index, index) ||
@@ -746,10 +807,12 @@ export function Lightbox({
       return;
     }
     const item = mediaArray[index];
+    // Custom items narrate by their required `label`.
+    const name = item ? (isCustomItem(item) ? item.label : item.alt) : '';
     const position = {index: index + 1, total: mediaArray.length};
     announce(
-      item?.alt
-        ? t('@astryx.lightbox.mediaPosition', {alt: item.alt, ...position})
+      name
+        ? t('@astryx.lightbox.mediaPosition', {alt: name, ...position})
         : t('@astryx.lightbox.imagePosition', position),
     );
   }, [index, isOpen, announce, mediaArray, t]);
@@ -1154,7 +1217,9 @@ export function Lightbox({
   const isClickOutsideMedia = useCallback((e: ReactMouseEvent<HTMLElement>) => {
     const viewer = imageWrapperRef.current;
     const page = viewer?.querySelector('[data-current]');
-    const media = page?.querySelector('img') ?? page?.querySelector('video');
+    const media =
+      page?.querySelector<HTMLElement>('[data-lightbox-page-media] > img') ??
+      page?.querySelector<HTMLElement>('[data-lightbox-page-media] > video');
     // The page's photo box, which centres the photo.
     const box = media?.parentElement;
     const group = mediaGroupRef.current;
@@ -1239,7 +1304,7 @@ export function Lightbox({
     [handleClose, isClickOutsideMedia],
   );
 
-  const isZoomTarget = hasZoom && !isVideo;
+  const isZoomTarget = hasZoom && isImage;
 
   // The current page's caption band. The drag to close fades it with the
   // viewer's controls.
@@ -1332,8 +1397,8 @@ export function Lightbox({
     dismiss: {
       // Part of the touch presentation, which applies under a coarse primary
       // pointer. Where it is fine, a drag leaves the photo in place. A video
-      // keeps its own controls' drags.
-      isEnabled: isOpen && !isVideo && isTouch,
+      // keeps its own controls' drags, and custom content its own.
+      isEnabled: isOpen && isImage && isTouch,
       onDrag: travel => {
         const {backdrop, chrome} = dismissFades();
         fadedRef.current = backdrop == null ? chrome : [backdrop, ...chrome];
@@ -1498,7 +1563,9 @@ export function Lightbox({
     panOptions: {
       allowedPointerTypes: ['touch', 'pen', 'mouse'],
       maximumNumberOfTouches: 1,
-      shouldBegin: pan => !startsOnVideoControls(pan.trackedTouches[0]),
+      shouldBegin: pan =>
+        !startsOnVideoControls(pan.trackedTouches[0]) &&
+        !isInCustomContent(pan.trackedTouches[0]?.target),
     },
     shouldBeginPan: direction => !stage.isZoomed() || stage.isAtEdge(direction),
     onIndexChange: (next, reason) => {
@@ -1513,7 +1580,9 @@ export function Lightbox({
       for (const page of trackRef.current?.querySelectorAll<HTMLElement>(
         ':scope > [data-lightbox-page]',
       ) ?? []) {
-        const img = page.querySelector<HTMLElement>('img');
+        const img = page.querySelector<HTMLElement>(
+          '[data-lightbox-page-media] > img',
+        );
         if (img != null && page.dataset.lightboxPage !== String(settled)) {
           img.style.translate = '';
           img.style.scale = '';
@@ -1535,7 +1604,9 @@ export function Lightbox({
       return r != null && r.width > 0 && r.height > 0 ? r : null;
     };
     const media =
-      sized(page?.querySelector('img')) ?? sized(page?.querySelector('video'));
+      sized(page?.querySelector('[data-lightbox-page-media] > img')) ??
+      sized(page?.querySelector('[data-lightbox-page-media] > video')) ??
+      sized(page?.querySelector(CUSTOM_CONTENT_SELECTOR));
     const caption = sized(page?.querySelector('[data-lightbox-caption]'));
     const boxes = [media, caption].filter((r): r is DOMRect => r != null);
     const inRows = (r: DOMRect | null) =>
@@ -1603,6 +1674,11 @@ export function Lightbox({
   // its right.
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      // Custom subtrees own their keyboard interaction, including native input
+      // defaults and composite widgets. Shortcuts stay on the viewer/chrome.
+      if (e.defaultPrevented || isInCustomContent(e.target)) {
+        return;
+      }
       if (isZoomTarget) {
         if (e.key === '+' || e.key === '=') {
           e.preventDefault();
@@ -1709,11 +1785,16 @@ export function Lightbox({
     );
   };
 
-  const renderMedia = (
-    {src, alt, type: kind = 'image'}: LightboxMedia,
-    isCurrent: boolean,
-  ) =>
-    kind === 'video' ? (
+  const renderMedia = (item: LightboxItem, isCurrent: boolean) => {
+    if (isCustomItem(item)) {
+      return (
+        <div data-lightbox-custom="" {...stylex.props(styles.customContent)}>
+          {item.content}
+        </div>
+      );
+    }
+    const {src, alt, type: kind = 'image'} = item;
+    return kind === 'video' ? (
       <video
         src={src}
         aria-label={alt}
@@ -1732,6 +1813,7 @@ export function Lightbox({
         {...stylex.props(styles.image)}
       />
     );
+  };
   // The current item and its neighbours; the pager shows one at rest.
   const pageIndexes = [index - 1, index, index + 1].filter(
     i => i >= 0 && i < mediaArray.length,
@@ -1754,10 +1836,17 @@ export function Lightbox({
       ref={mergedDialogRef}
       onCancel={handleCancel}
       onKeyDown={e => {
-        handleKeyDown(e);
+        // The consumer's handler runs first, so it can prevent a shortcut.
         onKeyDownProp?.(e);
+        handleKeyDown(e);
       }}
-      aria-label={currentItem.alt || t('@astryx.lightbox.mediaViewer')}
+      // Custom items carry a required `label`; media items name the dialog
+      // by `alt`, falling back to a generic viewer label when unlabeled.
+      aria-label={
+        isCustomItem(currentItem)
+          ? currentItem.label
+          : currentItem.alt || t('@astryx.lightbox.mediaViewer')
+      }
       aria-describedby={
         isRenderable(currentItem.caption) ? captionId : undefined
       }
@@ -1868,7 +1957,7 @@ export function Lightbox({
                         isZoomTarget && styles.trackZoomTarget,
                         isTouch &&
                           !isZoomTarget &&
-                          !isVideo &&
+                          isImage &&
                           styles.imageWrapperDismissTarget,
                       )}>
                       {pageIndexes.map(i => (
