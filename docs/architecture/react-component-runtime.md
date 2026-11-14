@@ -372,7 +372,7 @@ those contracts.
   target helpers apart from the tracking runtime, so a group's static code
   finds its neighbours without loading gesture code. Gap: these modules still
   import the shared touch modules statically, so a page that renders them
-  carries the touch runtime in its first load: Slider
+  carries the touch runtime in its first load: AlertDialog (`useAlertMotion`), Slider
   (`sliderTouchController`), Chat (`useChatKeyboard`), and the date and time
   fields' wheels (`DateInput/PickerWheel`, `DateInput/wheelStrip`). Through
   the wheels, PowerSearch and Table carry it too.
