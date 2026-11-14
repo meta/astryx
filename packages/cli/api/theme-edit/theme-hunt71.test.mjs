@@ -161,20 +161,23 @@ describe('hunt71', () => {
     await themeEditUndo('c26', {cwd, thing: 'corners'});
   }, 240_000);
 
-  it('an entry with no source is damage new keeps aside, as the refusal says', async () => {
+  it('an entry with no source is read from its thing, and the next change saves it', async () => {
     await themeEditNew('l26', {cwd});
     const file = path.join(cwd, 'themes/l26/l26.settings.json');
     const j = JSON.parse(fs.readFileSync(file, 'utf8'));
     j.settings = [{thing: 'corners', value: 'x'}];
     fs.writeFileSync(file, JSON.stringify(j, null, 2));
     fs.rmSync(path.join(cwd, 'themes/l26/l26.history.json'), {force: true});
-    const r = await refusal(() =>
-      themeEditSet('l26', 'corners', 'pill', {cwd}),
+    const r = await themeEditSet('l26', 'corners', 'pill', {cwd});
+    expect(r.data.notes).toContain(
+      'corners was saved with no source, read as dial',
     );
-    expect(r.run.join(' ')).toMatch(/ new l26/);
-    await themeEditNew('l26', {cwd});
-    expect(
-      fs.existsSync(path.join(cwd, 'themes/l26/l26.settings.damaged.json')),
-    ).toBe(true);
+    expect(JSON.parse(fs.readFileSync(file, 'utf8')).settings).toEqual([
+      expect.objectContaining({
+        thing: 'corners',
+        value: 'pill',
+        source: 'dial',
+      }),
+    ]);
   }, 240_000);
 });
