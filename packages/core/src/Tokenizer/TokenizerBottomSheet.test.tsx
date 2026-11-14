@@ -979,7 +979,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     );
   });
 
-  it('announces the rows it lists, not the source count: a created value and a maxMenuItems cap (FR20; AR6)', async () => {
+  it('announces the rows it lists plus the matches past maxMenuItems: a created value and a cap (FR20; AR6)', async () => {
     const matches = Element.prototype.matches;
     const modalSpy = vi
       .spyOn(Element.prototype, 'matches')
@@ -1021,13 +1021,13 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       expect(region()).not.toHaveTextContent('0 results');
       // A query the cap applies to: the source has three matches, capped to
       // two rows, plus the created value's checked row, plus the create row
-      // the sheet offers for "en" — four entries listed, four announced (the
-      // source count would say two, or three uncapped).
+      // the sheet offers for "en" — four entries listed. The match the cap
+      // hides counts too, as the inline field counts it: five announced.
       fireEvent.change(screen.getByLabelText('Search Tags'), {
         target: {value: 'en'},
       });
       await screen.findByRole('button', {name: 'Add en'});
-      await waitFor(() => expect(region()).toHaveTextContent('4 results'));
+      await waitFor(() => expect(region()).toHaveTextContent('5 results'));
       expect(screen.getAllByRole('checkbox')).toHaveLength(3);
       expect(
         screen.queryByRole('checkbox', {name: 'Energizer'}),

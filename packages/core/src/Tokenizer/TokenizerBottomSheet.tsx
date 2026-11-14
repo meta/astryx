@@ -407,6 +407,9 @@ function TokenizerSheetContent<T extends SearchableItem>({
   // query survives the sheet's unmount between presentations (FR18).
   const [query, setQuery] = useState(initialQuery);
   const [sourceResults, setSourceResults] = useState<T[]>([]);
+  // Matches past `maxMenuItems` in the last answer. The result count names
+  // every match, not only the rows listed.
+  const [sourceHiddenCount, setSourceHiddenCount] = useState(0);
   const trimmedQueryForSearch = query.trim();
   // A query shorter than `minQueryLength` is never searched: no source rows,
   // no busy feedback, no empty state, no outcome announcement, as the inline
@@ -415,6 +418,7 @@ function TokenizerSheetContent<T extends SearchableItem>({
     trimmedQueryForSearch !== '' &&
     trimmedQueryForSearch.length < minQueryLength;
   const results = isBelowMinQuery ? EMPTY_RESULTS : sourceResults;
+  const hiddenMatchCount = isBelowMinQuery ? 0 : sourceHiddenCount;
   // Whether a query is one the source is asked about: empty (the bootstrap
   // set) or at least `minQueryLength`. Below that nothing is searched, so
   // nothing is pending and no outcome is owed. One rule for every way a query
@@ -552,6 +556,7 @@ function TokenizerSheetContent<T extends SearchableItem>({
       unanswered = null;
       if (seqRef.current === seq) {
         setSourceResults(items.slice(0, maxMenuItems));
+        setSourceHiddenCount(Math.max(0, items.length - maxMenuItems));
         setIsPending(false);
       }
     };
@@ -804,13 +809,15 @@ function TokenizerSheetContent<T extends SearchableItem>({
     announcedSearchIdRef.current = searchId;
     if (!isSettledEmpty && !isQueryEmpty) {
       // The rows the sheet lists for this query — the source's results,
-      // capped by `maxMenuItems`, selected items the source did not return,
-      // such as a created value, and the create row when it is offered — as
-      // the inline field announces the entries it shows (its create entry
-      // included), not the source's count.
+      // selected items the source did not return, such as a created value,
+      // and the create row when it is offered — plus the matches past
+      // `maxMenuItems`, as the inline field counts them.
       announce(
         t('@astryx.typeahead.resultCount', {
-          count: visibleItems.length + (createItem == null ? 0 : 1),
+          count:
+            visibleItems.length +
+            (createItem == null ? 0 : 1) +
+            hiddenMatchCount,
         }),
       );
     }
@@ -821,6 +828,7 @@ function TokenizerSheetContent<T extends SearchableItem>({
     isPending,
     isQueryEmpty,
     isSettledEmpty,
+    hiddenMatchCount,
     visibleItems.length,
     openReset.retireSearchId,
     searchId,
