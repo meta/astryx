@@ -216,8 +216,8 @@ then have contradictory winners.
   Astryx theme template sets a value that does. A theme built from a colour
   scale gets a generated `--color-border-control` held at 3:1 or more against
   its own surface and body
-  (`spec:AST-020` FR1; WCAG 2.2 SC 1.4.11). Other borders keep
-  `--color-border-emphasized` and their own roles (DEC-2).
+  (`spec:AST-020` FR1; WCAG 2.2 SC 1.4.11). Other borders keep their own
+  lighter roles (`--color-border` or `--color-border-emphasized`) (DEC-2).
 
 This record does not own:
 
@@ -318,8 +318,8 @@ decision).
 
 A field's edge is often the only cue to where it is, so form controls take a
 border role of their own, `--color-border-control`, held at 3:1 (INV13). Field
-shells and checkbox and radio boxes use it. Cards, dividers and every other
-surface keep the lighter `--color-border-emphasized` edge, so in Core's
+shells and checkbox and radio boxes use it. Cards, dividers and every other surface keep their own lighter edge
+(`--color-border` or `--color-border-emphasized`), so in Core's
 defaults and the theme templates only the controls darken. A theme built from
 a colour scale gets a generated control edge held at 3:1 against its surface
 and body.
