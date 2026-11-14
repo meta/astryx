@@ -142,7 +142,7 @@ async function triggers(page: Page, name: string) {
       return 0.2126 * r + 0.7152 * g + 0.0722 * b;
     };
     return Array.from(
-      document.querySelectorAll<HTMLElement>('#storybook-root button'),
+      document.querySelectorAll<HTMLButtonElement>('#storybook-root button'),
     )
       .filter(button => button.getAttribute('aria-label') === label)
       .map(button => {
