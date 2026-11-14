@@ -57,7 +57,17 @@ function dynamicRules(): CSSStyleRule[] {
   const dynamicSheet = document.querySelector<HTMLStyleElement>(
     'style[data-astryx-highlight-dynamic]',
   );
-  return Array.from(dynamicSheet?.sheet?.cssRules ?? []) as CSSStyleRule[];
+  // Each rule sits in its own `@layer astryx-base` block.
+  return Array.from(dynamicSheet?.sheet?.cssRules ?? []).flatMap(rule =>
+    'cssRules' in rule
+      ? Array.from((rule as CSSGroupingRule).cssRules)
+      : [rule],
+  ) as CSSStyleRule[];
+}
+
+/** The rule text as handed to the engine, inside the astryx-base layer. */
+function inBaseLayer(rule: string): string {
+  return `@layer astryx-base { ${rule} }`;
 }
 
 /**
@@ -119,10 +129,18 @@ describe('applyHighlightRangesChunked', () => {
 
     // One rule per type, with only the characters that need it escaped.
     expect(insertRule.mock.calls.map(([rule]) => rule)).toEqual([
-      `${highlightRule('astryx-keyword\\.control\\.sql')} { color: var(--color-syntax-keyword\\.control\\.sql, currentColor); }`,
-      `${highlightRule('astryx-_private')} { color: var(--color-syntax-_private, currentColor); }`,
-      `${highlightRule('astryx-キーワード')} { color: var(--color-syntax-キーワード, currentColor); }`,
-      `${highlightRule('astryx-9start')} { color: var(--color-syntax-9start, currentColor); }`,
+      inBaseLayer(
+        `${highlightRule('astryx-keyword\\.control\\.sql')} { color: var(--color-syntax-keyword\\.control\\.sql, currentColor); }`,
+      ),
+      inBaseLayer(
+        `${highlightRule('astryx-_private')} { color: var(--color-syntax-_private, currentColor); }`,
+      ),
+      inBaseLayer(
+        `${highlightRule('astryx-キーワード')} { color: var(--color-syntax-キーワード, currentColor); }`,
+      ),
+      inBaseLayer(
+        `${highlightRule('astryx-9start')} { color: var(--color-syntax-9start, currentColor); }`,
+      ),
     ]);
 
     cleanup();
@@ -152,7 +170,9 @@ describe('applyHighlightRangesChunked', () => {
     // escaped, one colour declaration, nothing of the payload's making.
     expect(insertRule).toHaveBeenCalledTimes(1);
     expect(insertRule).toHaveBeenCalledWith(
-      `${highlightRule(escapedName)} { color: var(--color-syntax-sel\\)\\,\\ body\\ \\{\\ background\\:\\ red\\ \\}\\ \\/\\*, currentColor); }`,
+      inBaseLayer(
+        `${highlightRule(escapedName)} { color: var(--color-syntax-sel\\)\\,\\ body\\ \\{\\ background\\:\\ red\\ \\}\\ \\/\\*, currentColor); }`,
+      ),
     );
 
     // And as parsed: the rule for this type keeps the payload inside the
@@ -190,7 +210,7 @@ describe('applyHighlightRangesChunked', () => {
 
     expect(insertRule).toHaveBeenCalledTimes(1);
     expect(insertRule).toHaveBeenCalledWith(
-      `${highlightRule(escapedName)} { color: ${escapedColor}; }`,
+      inBaseLayer(`${highlightRule(escapedName)} { color: ${escapedColor}; }`),
     );
 
     // As parsed: exactly one declaration, `color`, whose value is the
@@ -205,6 +225,26 @@ describe('applyHighlightRangesChunked', () => {
     expect(rule!.style.getPropertyValue('color')).toBe(escapedColor);
     expect(rule!.style.getPropertyValue('background')).toBe('');
     expect(rule!.style.getPropertyValue('--x')).toBe('');
+
+    cleanup();
+  });
+
+  it('adds the rule for an unknown token type inside the astryx-base layer', () => {
+    const type = 'layered-type';
+    const codeEl = createCodeElement(['line']);
+    const tokenLines: TokenLine[] = [[{type, start: 0, end: 4}]];
+
+    const mockStyle = document.createElement('style');
+    mockStyle.setAttribute('data-astryx-highlight-styles', '');
+    document.head.appendChild(mockStyle);
+    const insertRule = vi.spyOn(CSSStyleSheet.prototype, 'insertRule');
+
+    const cleanup = applyHighlightRangesChunked(codeEl, tokenLines);
+
+    expect(insertRule).toHaveBeenCalledTimes(1);
+    expect(insertRule).toHaveBeenCalledWith(
+      `@layer astryx-base { ${highlightRule('astryx-layered-type')} { color: var(--color-syntax-layered-type, currentColor); } }`,
+    );
 
     cleanup();
   });
