@@ -480,20 +480,12 @@ function hasParentCommit() {
 }
 
 /**
- * Runs one slice of the proof: the targets at `index` of every `count`, in
- * the scope {@link proofScope} chooses. In the affected scope the slice
- * proves the targets whose copy depends on a changed source file.
- * @param {{index: number, count: number, notRendered: Record<string, string>, project: string, all?: boolean, browser?: boolean}} options
+ * The change this run proves and the scope {@link proofScope} gives it: what
+ * every slice reads first, and what the Node legs' split reads to know whether
+ * the slices run at all (scripts/vitest-shard-sequencer.mjs).
+ * @param {{all?: boolean}} [options]
  */
-export async function runSlice({
-  index,
-  count,
-  notRendered,
-  project,
-  all = false,
-  browser = false,
-}) {
-  const start = Date.now();
+export function runScope({all = false} = {}) {
   const base = process.env.SWIZZLE_PROOF_BASE ?? 'HEAD^1';
   const changed = all ? null : changedPaths(base);
   const toolchain = changed && toolchainChange(changed, base);
@@ -510,6 +502,25 @@ export async function runSlice({
     hasParent: hasParentCommit(),
     all,
   });
+  return {base, changed, toolchain, relevant, scope};
+}
+
+/**
+ * Runs one slice of the proof: the targets at `index` of every `count`, in
+ * the scope {@link proofScope} chooses. In the affected scope the slice
+ * proves the targets whose copy depends on a changed source file.
+ * @param {{index: number, count: number, notRendered: Record<string, string>, project: string, all?: boolean, browser?: boolean}} options
+ */
+export async function runSlice({
+  index,
+  count,
+  notRendered,
+  project,
+  all = false,
+  browser = false,
+}) {
+  const start = Date.now();
+  const {base, changed, toolchain, relevant, scope} = runScope({all});
   if (scope.mode === 'none') {
     return {
       offered: null,
