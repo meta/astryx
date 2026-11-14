@@ -112,7 +112,12 @@ export function useChatComposerTokens({
   editableRef,
   onEmitChange,
 }: UseChatComposerTokensOptions): UseChatComposerTokensReturn {
-  return useChatComposerTokensInternal({editableRef, onEmitChange});
+  const {restoreValue: _restoreValue, ...tokens} =
+    useChatComposerTokensInternal({
+      editableRef,
+      onEmitChange,
+    });
+  return tokens;
 }
 
 // Draft restoration stays internal so the public token handle is unchanged.

@@ -2,11 +2,19 @@
 
 import {createRef, StrictMode, useLayoutEffect, useState} from 'react';
 import {describe, it, expect, vi, afterEach, beforeEach} from 'vitest';
-import {render, screen, fireEvent, waitFor, act} from '@testing-library/react';
+import {
+  render,
+  renderHook,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {ChatComposer} from './ChatComposer';
 import {useChatComposerContext} from './ChatContext';
 import {ChatComposerInput} from './ChatComposerInput';
+import {useChatComposerTokens} from './useChatComposerTokens';
 import type {
   ChatComposerTrigger,
   ChatComposerInputHandle,
@@ -66,6 +74,24 @@ function createCommandTrigger(
 // =============================================================================
 // Tests
 // =============================================================================
+
+describe('useChatComposerTokens', () => {
+  it('returns only the public token-management handle', () => {
+    const editableRef = createRef<HTMLDivElement>();
+    const {result} = renderHook(() =>
+      useChatComposerTokens({editableRef, onEmitChange: () => {}}),
+    );
+
+    expect(result.current).toEqual({
+      tokenPortals: [],
+      expandToken: expect.any(Function),
+      insertToken: expect.any(Function),
+      handleKeyDown: expect.any(Function),
+      handlePaste: expect.any(Function),
+      cleanupPortals: expect.any(Function),
+    });
+  });
+});
 
 describe('ChatComposerInput', () => {
   describe('basic rendering', () => {

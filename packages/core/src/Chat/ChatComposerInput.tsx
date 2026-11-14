@@ -560,11 +560,9 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
       pendingEchoValueRef.current = undefined;
       const wasFocused = document.activeElement === editable;
       restoreValueRef.current(controlledValue);
-      // Replacing the children collapses any Selection inside
-      // this editable to offset 0. If the user was focused (e.g. a programmatic
-      // insert from a slash-menu pick), restore the caret to the
-      // end of the new content so the next keystroke appends rather
-      // than prepends.
+      // Replacing the children moves any caret in the editable to offset 0.
+      // If the editable had focus, put the caret at the end.
+      // The next keystroke then appends.
       if (wasFocused) {
         placeCaretAtEnd(editable);
       }
