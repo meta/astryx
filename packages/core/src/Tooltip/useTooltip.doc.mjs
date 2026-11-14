@@ -67,6 +67,13 @@ export const docs = {
       default: 'false',
     },
     {
+      name: 'maxWidth',
+      type: 'number | string',
+      description:
+        "The widest the tooltip grows before its content wraps. A number is in pixels; a string is any CSS length, such as '24rem' or 'none'.",
+      default: '300',
+    },
+    {
       name: 'onShow',
       type: '() => void',
       description:
@@ -175,6 +182,8 @@ export const docsDense = {
     isOpen:
       'controlled open state: true force-show, false force-hide, undefined unmanaged.',
     isDefaultOpen: 'show on mount.',
+    maxWidth:
+      'widest before wrapping; number = px, string = CSS length. Default 300.',
     onShow: 'fires when tooltip becomes visible.',
     onHide: 'fires when tooltip hides.',
   },

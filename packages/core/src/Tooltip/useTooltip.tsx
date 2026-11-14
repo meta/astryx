@@ -59,6 +59,10 @@ import {
  */
 const HOVER_BRIDGE_DELAY = 100;
 
+const dynamicStyles = stylex.create({
+  contentMaxWidth: (maxWidth: string) => ({maxWidth}),
+});
+
 const styles = stylex.create({
   // Base container styles - inverted colors for high contrast
   container: {
@@ -168,6 +172,13 @@ export interface TooltipOptions {
    * The tooltip is still dismissible — this just opens it initially.
    */
   isDefaultOpen?: boolean;
+
+  /**
+   * The widest the tooltip grows before its content wraps. A number is in
+   * pixels; a string is any CSS length, such as `'24rem'` or `'none'`.
+   * @default 300
+   */
+  maxWidth?: number | string;
 
   /**
    * Callback fired when tooltip is shown. Under `isOpen={false}`, it reports
@@ -288,6 +299,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     isEnabled = true,
     isOpen,
     isDefaultOpen = false,
+    maxWidth,
     onShow,
     onHide,
   } = options;
@@ -975,7 +987,15 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         // clickable container around the trigger leaves the press alone while
         // document listeners still see it.
         // The hold's announcement reads this element's text.
-        <div ref={contentRefs} {...stylex.props(styles.content)}>
+        <div
+          ref={contentRefs}
+          {...stylex.props(
+            styles.content,
+            maxWidth != null &&
+              dynamicStyles.contentMaxWidth(
+                typeof maxWidth === 'number' ? `${maxWidth}px` : maxWidth,
+              ),
+          )}>
           {children}
         </div>,
         renderProps,
@@ -985,6 +1005,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       renderLayer,
       placement,
       alignment,
+      maxWidth,
       popoverXstyle,
       cancelHide,
       scheduleHide,

@@ -104,6 +104,34 @@ describe('Tooltip', () => {
     );
   });
 
+  it('caps the surface at 300px by default', () => {
+    render(
+      <Tooltip content="Tooltip text" isDefaultOpen>
+        <button type="button">Trigger</button>
+      </Tooltip>,
+    );
+    const content = screen.getByText('Tooltip text');
+    expect(getComputedStyle(content).maxWidth).toBe('300px');
+  });
+
+  it('takes a per-instance maxWidth in pixels or as a CSS length', () => {
+    const {rerender} = render(
+      <Tooltip content="Tooltip text" isDefaultOpen maxWidth={384}>
+        <button type="button">Trigger</button>
+      </Tooltip>,
+    );
+    const content = () => screen.getByText('Tooltip text');
+    // A per-instance width is a StyleX dynamic style: the value rides an
+    // inline custom property that the class reads.
+    expect(content().getAttribute('style')).toContain('--x-maxWidth: 384px');
+    rerender(
+      <Tooltip content="Tooltip text" isDefaultOpen maxWidth="none">
+        <button type="button">Trigger</button>
+      </Tooltip>,
+    );
+    expect(content().getAttribute('style')).toContain('--x-maxWidth: none');
+  });
+
   it('calls onOpenChange(true) when shown via hover', async () => {
     const onOpenChange = vi.fn();
     render(
