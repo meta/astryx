@@ -6,8 +6,9 @@
  * @input The `Core/Tokenizer` "Pre-selected Items" story in a built
  *   Storybook, its column sized to the field's content.
  * @output Real-engine proof that a focused, empty input after the tokens has
- *   room for its caret when the field has no width of its own, and that the
- *   room does not change the field's width.
+ *   room for its caret when the field has no width of its own: it takes its
+ *   text inset and a caret's width on the row, and the field keeps its
+ *   height.
  * @position Run with `pnpm test:a11y-contract`. Without a width, the field
  *   sizes to its content and its row has no spare room, so only a shipping
  *   layout engine shows whether the input's content box collapses to 0.
@@ -87,16 +88,20 @@ for (const direction of ['ltr', 'rtl'] as const) {
   }) => {
     const {field, input} = await openContentSized(page, direction);
     await expect(input).toHaveValue('');
-    const blurredWidth = (await field.boundingBox())?.width;
+    const blurredHeight = (await field.boundingBox())?.height;
 
     await input.focus();
     await settle(page);
 
     await expect(input).toBeFocused();
-    expect(await contentBoxWidth(page)).toBeGreaterThanOrEqual(1);
-    // The caret's room comes out of the row, not out of extra field width.
-    expect((await field.boundingBox())?.width).toBeCloseTo(
-      blurredWidth ?? NaN,
+    // Room for the caret, and no more: the input takes its text inset and a
+    // caret's width on the row.
+    const contentBox = await contentBoxWidth(page);
+    expect(contentBox).toBeGreaterThanOrEqual(1);
+    expect(contentBox).toBeLessThanOrEqual(3);
+    // The caret fits on the tokens' row, so the field keeps its height.
+    expect((await field.boundingBox())?.height).toBeCloseTo(
+      blurredHeight ?? NaN,
       0,
     );
   });
