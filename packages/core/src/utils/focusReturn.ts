@@ -4,14 +4,14 @@
  * @file focusReturn.ts
  * @input The document's current active element and the shared interaction
  *   modality.
- * @output Whether focus would be lost if a surface hid now; a focus move whose
- *   ring follows the last input; the focus return of a closed overlay, which
- *   never scrolls the page; and the one path that moves focus out of content a
- *   change removed or hid (`noteFocusWithin`, `moveFocusLeftBehind`).
- * @position Utility; used by overlays (BottomSheet, Dialog, DropdownMenu) that
- *   move focus programmatically, and by disclosures that hide focused
- *   content. isFocusDetached lives in isFocusDetached.ts, so the utils entry,
- *   which exports only it, does not reach this module.
+ * @output Focus ownership and availability through shadow hosts and frames
+ *   (`ownsFocus`, `isFocusUnclaimed`); lost-focus checks; focus moves that
+ *   follow the last input; scroll-free overlay focus return; and focus repair
+ *   for hidden or removed content (`noteFocusWithin`, `moveFocusLeftBehind`).
+ * @position Utility used by overlays (BottomSheet, Dialog, DropdownMenu),
+ *   disclosures, and useFocusAcrossSwap. isFocusDetached lives in
+ *   isFocusDetached.ts, so the utils entry, which exports only it, does not
+ *   reach this module.
  */
 
 import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
@@ -21,6 +21,58 @@ import {
   type InteractionModality,
 } from './interactionModality';
 import {isFocusDetached} from './isFocusDetached';
+import {isShadowRoot} from './nodeType';
+
+function focusRoot(node: Node): Document | ShadowRoot | null {
+  const root = node.getRootNode();
+  if (!('activeElement' in root)) {
+    return null;
+  }
+  return root as Document | ShadowRoot;
+}
+
+/** Whether the element owns focus through its shadow hosts and frames. Internal. */
+export function ownsFocus(element: Element): boolean {
+  // An iframe can retain activeElement after focus leaves its document.
+  const root = focusRoot(element);
+  if (!root || root.activeElement !== element) {
+    return false;
+  }
+  const owner = isShadowRoot(root) ? root.host : root.defaultView?.frameElement;
+  return owner == null || ownsFocus(owner);
+}
+
+/** Whether a replacement can take focus without displacing another owner. Internal. */
+export function isFocusUnclaimed(node: Node): boolean {
+  let root = focusRoot(node);
+  let surface: Element | null = null;
+  while (root) {
+    if (isShadowRoot(root)) {
+      if (root.activeElement != null) {
+        return (
+          surface != null &&
+          surface.contains(root.activeElement) &&
+          ownsFocus(root.host)
+        );
+      }
+      // A host fallback can be a caller's chosen focus target.
+      // Do not restore focus when that ownership is ambiguous.
+      surface = null;
+      root = focusRoot(root.host);
+    } else {
+      if (!isFocusLost(surface, root)) {
+        return false;
+      }
+      const frame = root.defaultView?.frameElement;
+      if (frame == null) {
+        return true;
+      }
+      surface = frame;
+      root = focusRoot(frame);
+    }
+  }
+  return false;
+}
 
 /**
  * True when focus would be lost if `surface` hid now: nothing is focused (see
