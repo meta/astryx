@@ -4869,7 +4869,7 @@ jobs:
           STORIES: ${{ steps.touched.outputs.changed_stories }}
         run: |
           if [ "$WIDE" = true ]; then
-            echo "Wide change ($COUNT components): add ci:run-visual, ci:run-a11y or ci:run-rtl to run the full suite."
+            echo "Wide change ($COUNT components): each label runs only its own full suite: ci:run-visual for Visual, ci:run-a11y for Accessibility, ci:run-rtl for RTL."
           else
             echo "No component changed; no component audit."
           fi
