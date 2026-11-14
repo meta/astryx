@@ -109,6 +109,7 @@ Each command declares what it does in a folder outside any project, and `astryx 
 | `hook`         | List hooks or print hook docs                                                                                    | `same`            |
 | `init`         | Initialize the design system in your project                                                                     | `own`             |
 | `integration`  | Author and verify an Astryx integration package                                                                  | by subcommand     |
+| `mcp`          | Serve every astryx command to an AI agent as a Model Context Protocol (MCP) tool, over stdio                     | `same`            |
 | `search`       | Search components, hooks, docs, templates, and themes in one ranked list                                         | `same`            |
 | `swizzle`      | Copy component source for customization                                                                          | `refuse`          |
 | `template`     | List, show, or scaffold page and block templates                                                                 | `same`            |

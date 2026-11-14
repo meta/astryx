@@ -940,6 +940,27 @@
         "outsideProject": "<text>"
       },
       {
+        "name": "mcp",
+        "description": "<text>",
+        "arguments": [],
+        "options": [],
+        "json": false,
+        "examples": [
+          "<text>"
+        ],
+        "exitCodes": [
+          {
+            "code": 0,
+            "when": "<text>"
+          },
+          {
+            "code": 1,
+            "when": "<text>"
+          }
+        ],
+        "outsideProject": "<text>"
+      },
+      {
         "name": "search",
         "description": "<text>",
         "arguments": [

@@ -194,6 +194,14 @@ const RUNNERS = {
     runs: SELF_DOCS,
     sites: ['import ./manifest.doc.mjs'],
   },
+  'clients/cli/commands/mcp.mjs': {
+    runs: SELF_DOCS,
+    sites: ['import ./mcp.doc.mjs'],
+  },
+  'clients/cli/lib/mcp-server.mjs': {
+    runs: "this CLI's own bin, once for each tool call an MCP client makes",
+    sites: ['child_process.spawn'],
+  },
   'clients/cli/commands/postinstall.mjs': {
     runs: SELF_DOCS,
     sites: ['import ./postinstall.doc.mjs'],

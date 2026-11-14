@@ -64,7 +64,8 @@ function, and the vocabulary that human-readable output may use.
   state, change files, contact the network, or produce a result field or effect
   that the function does not produce. A command that only groups subcommands is exempt, and so is a
   command that only describes the CLI itself, such as help, the version, or the
-  capability manifest. This requirement names `@astryxdesign/cli/api` because
+  capability manifest, and so is `astryx mcp`, which does no operation of its
+  own and runs other commands (`spec:AST-121` FR4). This requirement names `@astryxdesign/cli/api` because
   automation depends on it under `spec:AST-017` FR14.
 - **FR2 — The programmatic API is documented and tested.** Every function
   exported from `@astryxdesign/cli/api` MUST have reference documentation that

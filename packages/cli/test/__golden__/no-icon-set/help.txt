@@ -29,6 +29,7 @@ Commands:
   search [options] <query...>       <text>
   build [options] [query]           <text>
   doctor [options]                  <text>
+  mcp                               <text>
   manifest                          <text>
   help                              <text>
 

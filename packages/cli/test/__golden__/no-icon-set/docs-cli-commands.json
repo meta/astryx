@@ -181,6 +181,14 @@
             "summary": "<text>"
           },
           {
+            "route": "cli/commands/mcp",
+            "name": "mcp",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
             "route": "cli/commands/postinstall",
             "name": "postinstall",
             "package": "@astryxdesign/cli",

@@ -359,6 +359,8 @@ const commands = [
     path: './commands/experimental/index.mjs',
     register: 'registerExperimental',
   },
+  // Reads every command: its tools are the commands that answer with --json.
+  {name: 'mcp', path: './commands/mcp.mjs', register: 'registerMcp'},
   // Registered after every other command: the manifest lists the commands in
   // registration order.
   {name: 'manifest', path: './commands/manifest.mjs', register: 'registerManifest'},
@@ -368,8 +370,11 @@ const commands = [
 /** The name each registry entry registers, in registration order. */
 export const COMMAND_NAMES = Object.freeze(commands.map(cmd => cmd.name));
 
-/** Commands whose run reads every other command: the manifest lists them. */
-const READS_EVERY_COMMAND = new Set(['manifest']);
+/**
+ * Commands whose run reads every other command: the manifest lists them, and
+ * mcp serves them as tools.
+ */
+const READS_EVERY_COMMAND = new Set(['manifest', 'mcp']);
 
 /**
  * The commands a run of the bin loads. Commander dispatches a run to its
@@ -502,7 +507,9 @@ function listStoredCommands(program, rows) {
   });
 }
 
-const SETUP_NUDGE_EXEMPT = new Set(['init', 'agent-docs']);
+// `mcp` serves an agent until its client goes away: a line on stderr then
+// reaches no one.
+const SETUP_NUDGE_EXEMPT = new Set(['init', 'agent-docs', 'mcp']);
 
 /**
  * Is `cwd` inside the CLI's own source checkout while the CLI runs from it?
