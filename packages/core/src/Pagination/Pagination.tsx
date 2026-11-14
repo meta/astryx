@@ -5,7 +5,8 @@
 /**
  * @file Pagination.tsx
  * @input Uses React, StyleX, Button, Icon, Selector, Text; page number buttons delegate to Button,
- *   and getPageHref makes each Button control a link through Button's link mode.
+ *   and getPageHref makes each Button control a link through Button's link mode. A control
+ *   that Button replaces, as a link at a boundary, keeps focus through useFocusLeavingChange.
  *   Compact first/last buttons cancel the inside control gap with logical token margins.
  *   Prev/next and first/last chevrons mirror under RTL via the shared rtlStyles.mirror
  *   (CSS scaleX), not a JS direction read. The input and compact variants use the
@@ -24,7 +25,7 @@
  *   hasFirstLast, step, siblingCount, size, isDisabled, label, data-testid, xstyle
  */
 
-import {useOptimistic, useState, useTransition} from 'react';
+import {useEffect, useOptimistic, useRef, useState, useTransition} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
@@ -44,7 +45,13 @@ import {Text} from '../Text';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {useListFocus} from '../hooks/useListFocus';
 import {useMergedRefs} from '../hooks/useMergedRefs';
-import {focusForLastInput} from '../utils/focusReturn';
+import {LayoutChangeSnapshot} from '../motion/LayoutChangeSnapshot';
+import {
+  focusForLastInput,
+  moveFocusLeftBehind,
+  noteFocusWithin,
+} from '../utils/focusReturn';
+import {useFocusLeavingChange} from '../utils/useFocusLeavingChange';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {mergeProps, rtlStyles} from '../utils';
 import type {BaseProps} from '../BaseProps';
@@ -403,6 +410,34 @@ function navigatesHere(event: React.MouseEvent<HTMLElement>): boolean {
   );
 }
 
+/**
+ * A Button control of Pagination. Button replaces its element when the
+ * control starts or stops being a link: a link that becomes unavailable is a
+ * disabled button, and that button is a link when the control is available
+ * again. The document drops the focus of the element that leaves, so the
+ * element that replaces it takes that focus.
+ */
+function PaginationButton(props: React.ComponentProps<typeof Button>) {
+  const controlRef = useRef<HTMLButtonElement>(null);
+  const isLink = props.href != null;
+  const noteFocusBeforeReplacement = useFocusLeavingChange(
+    isLink,
+    () => noteFocusWithin(controlRef.current),
+    noted => {
+      moveFocusLeftBehind(noted, controlRef.current);
+    },
+  );
+  return (
+    <>
+      <LayoutChangeSnapshot
+        value={isLink}
+        onBeforeChange={noteFocusBeforeReplacement}
+      />
+      <Button {...props} ref={controlRef} />
+    </>
+  );
+}
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -509,6 +544,22 @@ export function Pagination({
   // Track the page optimistically so rapid prev/next clicks advance from the
   // in-flight target instead of stalling on the last committed page.
   const [optimisticPage, setOptimisticPage] = useOptimistic(page);
+  // A link click changes the page before the browser follows the link's URL.
+  // Previous and Next count from the page of the click until that click is
+  // over, so the browser follows the URL that was clicked.
+  const [clickedFromPage, setClickedFromPage] = useState<number | null>(null);
+  const linkPage = clickedFromPage ?? optimisticPage;
+  const countFromCurrentPage = () => setClickedFromPage(null);
+  const clickOverTimerRef = useRef<number | null>(null);
+  // Releases the timer that waits for the click to be over on unmount.
+  useEffect(
+    () => () => {
+      if (clickOverTimerRef.current != null) {
+        clearTimeout(clickOverTimerRef.current);
+      }
+    },
+    [],
+  );
   // A kept rejected entry widens the page box to fit the status icon beside
   // the typed text.
   const [isPageEntryRejected, setIsPageEntryRejected] = useState(false);
@@ -604,9 +655,8 @@ export function Pagination({
       : lower;
   };
 
-  // The props that make a Button control change to `target`, as a link when
-  // links are on. An unavailable control gets no URL. Its Button is disabled,
-  // so its click handler does not run.
+  // An unavailable control gets no URL. Its Button is disabled, so its click
+  // handler does not run.
   const controlProps = (target: number, isAvailable: boolean) => {
     const href = isAvailable ? pageHref(target) : undefined;
     return {
@@ -615,6 +665,17 @@ export function Pagination({
       onClick: (event: React.MouseEvent<HTMLElement>) => {
         // A link click that opens the URL elsewhere changes no page here.
         if (href == null || navigatesHere(event)) {
+          if (href != null) {
+            setClickedFromPage(linkPage);
+            if (clickOverTimerRef.current != null) {
+              clearTimeout(clickOverTimerRef.current);
+            }
+            // The browser follows the link before the next task starts.
+            clickOverTimerRef.current = window.setTimeout(() => {
+              clickOverTimerRef.current = null;
+              countFromCurrentPage();
+            }, 0);
+          }
           handlePageChange(target);
         }
       },
@@ -691,7 +752,7 @@ export function Pagination({
               }
               const isActive = item === optimisticPage;
               return (
-                <Button
+                <PaginationButton
                   key={item}
                   label={t('@astryx.pagination.goToPage', {page: item})}
                   aria-label={t('@astryx.pagination.goToPage', {
@@ -704,7 +765,7 @@ export function Pagination({
                   aria-current={isActive ? 'page' : undefined}
                   xstyle={isActive && styles.activePage}>
                   {item}
-                </Button>
+                </PaginationButton>
               );
             })}
           </>
@@ -904,9 +965,14 @@ export function Pagination({
           />
         </div>
       )}
-      <div {...stylex.props(styles.controls)}>
+      <div
+        {...stylex.props(styles.controls)}
+        // A key or pointer press can arrive before that task. The click that
+        // it starts counts from the current page too.
+        onKeyDownCapture={countFromCurrentPage}
+        onPointerDownCapture={countFromCurrentPage}>
         {showFirstLast && (
-          <Button
+          <PaginationButton
             label={firstLabel}
             tooltip={isDisabled || !hasPrevious ? undefined : firstLabel}
             variant="ghost"
@@ -925,7 +991,7 @@ export function Pagination({
           />
         )}
 
-        <Button
+        <PaginationButton
           label={previousLabel}
           tooltip={isDisabled || !hasPrevious ? undefined : previousLabel}
           variant="ghost"
@@ -937,14 +1003,14 @@ export function Pagination({
               xstyle={rtlStyles.mirror}
             />
           }
-          {...controlProps(clampPage(optimisticPage - step), hasPrevious)}
+          {...controlProps(clampPage(linkPage - step), hasPrevious)}
           isDisabled={isDisabled || !hasPrevious}
           isIconOnly
         />
 
         {renderIndicator()}
 
-        <Button
+        <PaginationButton
           label={nextLabel}
           tooltip={isDisabled || !hasNext ? undefined : nextLabel}
           variant="ghost"
@@ -956,13 +1022,13 @@ export function Pagination({
               xstyle={rtlStyles.mirror}
             />
           }
-          {...controlProps(clampPage(optimisticPage + step), hasNext)}
+          {...controlProps(clampPage(linkPage + step), hasNext)}
           isDisabled={isDisabled || !hasNext}
           isIconOnly
         />
 
         {showFirstLast && (
-          <Button
+          <PaginationButton
             label={lastLabel}
             tooltip={isDisabled || !hasNext ? undefined : lastLabel}
             variant="ghost"
