@@ -340,7 +340,8 @@ export function runConfigCodemod(
  * A codemod as `upgrade` runs it. Core codemods may also declare `mentions`,
  * internal to the CLI and not part of the codemod authoring type: the words a
  * file must say for the transform to change or report it. A file that says
- * none of them, spells none of them with an escape, and parses, is skipped.
+ * none of them and parses is skipped, unless it holds a backslash and its
+ * escapes or numeric character references spell one of them.
  * @typedef {import('../../authoring/codemod/type').CodemodEntry['codemod'] & {mentions?: string[]}} CoreCodemod
  */
 
@@ -412,8 +413,9 @@ function spelledTexts(source, filePath) {
  * Whether a codemod cannot change a source file, so its transform need not
  * run (stylesheets always run, whatever they parse as): the
  * codemod declares every word a file must say for it to act (`mentions`), the
- * file says none of them, not even through an escape, and the file parses, so
- * the transform would neither
+ * file says none of them (a file with a backslash, not even through its
+ * escapes or numeric character references), and the file parses, so the
+ * transform would neither
  * change it nor report it unparseable. A codemod that declares no words runs
  * on every file.
  * @param {CoreCodemod} codemod
@@ -429,7 +431,8 @@ function cannotChange(codemod, source, filePath, parser, j) {
   if (mentions.some(word => source.includes(word))) return false;
   // An escape (`\u0054ypeahead`, `'base\x2dtable'`, a line continuation) can
   // spell a word without its letters. A file with a backslash runs when the
-  // text its escapes spell says one of the words.
+  // text its escapes or numeric character references spell says one of the
+  // words.
   if (
     source.includes('\\') &&
     spelledTexts(source, filePath).some(text =>
