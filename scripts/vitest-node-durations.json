@@ -973,6 +973,7 @@
     "packages/cli/foundation/env/user-settings.test.mjs": 0,
     "packages/cli/foundation/fs/exact-codec.test.mjs": 0,
     "packages/cli/foundation/fs/file-protection.test.mjs": 0.1,
+    "packages/cli/foundation/fs/gather-cache.deps.test.mjs": 0.5,
     "packages/cli/foundation/fs/gather-cache.test.mjs": 0,
     "packages/cli/foundation/fs/jiti-cache.test.mjs": 0.3,
     "packages/cli/foundation/fs/kept-tree.test.mjs": 15.5,

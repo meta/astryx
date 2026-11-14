@@ -163,20 +163,6 @@ function keptEntries(tmp) {
 }
 
 /**
- * The file name of the one kept entry whose key holds `word`.
- * @param {ReturnType<typeof keptEntries>} entries
- * @param {string} word
- * @returns {string}
- */
-function entryNamed(entries, word) {
-  const names = [...entries]
-    .filter(([, entry]) => entry.key.includes(word))
-    .map(([name]) => name);
-  expect(names).toHaveLength(1);
-  return names[0];
-}
-
-/**
  * Each kept entry's inode, by file name: an entry gathered again is a new
  * file.
  * @param {ReturnType<typeof keptEntries>} entries

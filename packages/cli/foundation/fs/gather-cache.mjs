@@ -40,9 +40,11 @@
  *
  *   An entry stores only the states that the kept entries it builds on do
  *   not hold: it names each of them, at the version it read, and is used
- *   only while each is too. A run checks each kept entry once, so entries
- *   that read the same files (the component list, its replacements, the
- *   project's issues) check those files once.
+ *   only while each is still there at that version and holds. A run checks
+ *   each kept entry once, so entries that read the same files (the component
+ *   list, its replacements, the project's issues) check those files once. An
+ *   entry built on is marked as used after the entries built on it, so
+ *   eviction removes it after them.
  *
  *   The folder is `catalogs` in the user's cache folder (userCacheDir):
  *   created 0700, used only while it is a real folder owned by the user and
@@ -130,7 +132,7 @@ const UNSET = null;
  * variables only while the run is armed: from its start to the end of its
  * first gather, and during each later gather, or, in a run armed throughout
  * (`doctor`), to its end. Null outside a recorded run.
- * @type {{reads: Map<string, string>, env: Map<string, string | null>, arm: () => boolean, disarm: () => void, armedThroughout: boolean, realEnv: NodeJS.ProcessEnv} | null}
+ * @type {{reads: Map<string, string>, env: Map<string, string | null>, arm: () => boolean, disarm: () => void, armedThroughout: boolean, realEnv: NodeJS.ProcessEnv, confirmed: Confirmed} | null}
  */
 let run = null;
 
@@ -162,15 +164,14 @@ let gatherCode = null;
 let gatherDepth = 0;
 
 /**
- * The kept entries this process has read back or stored, by file: the
+ * The kept entries a recorded run has read back or stored, by file: the
  * version each holds, every state it stands for (its own and those of the
  * entries it builds on), and every entry it builds on, directly or not. A
  * later entry stores only the states none of them holds and names the ones it
  * builds on, so a run checks each state once. A kept entry is checked before
- * the run's command writes anything.
- * @type {Map<string, {version: string, stamps: [string, string][], under: Set<string>}>}
+ * the run's command writes anything; the record ends with the run.
+ * @typedef {Map<string, {version: string, stamps: [string, string][], under: Set<string>, deps: string[]}>} Confirmed
  */
-const confirmed = new Map();
 
 /**
  * The outcome of the last kept gather in this process: whether it was a hit,
@@ -423,7 +424,15 @@ export async function recordRun(fn, {armedThroughout = false} = {}) {
     }
   };
   if (!arm()) return fn();
-  run = {reads, env, arm, disarm, armedThroughout, realEnv};
+  run = {
+    reads,
+    env,
+    arm,
+    disarm,
+    armedThroughout,
+    realEnv,
+    confirmed: new Map(),
+  };
   try {
     return await recordReads(reads, fn, {exact: true});
   } finally {
@@ -602,41 +611,105 @@ function staleReason(stamps, env) {
 
 /**
  * The states of the kept entries an entry builds on, each found unchanged
- * once per process, or null when one is gone, holds another version, or
- * changed.
+ * once per run, with every entry under them and the files of the ones it
+ * names; or null when one is gone, holds another version, or changed.
  * @param {string} dir
  * @param {unknown} deps - [entry file name, version] pairs, as stored
+ * @param {Confirmed} confirmed - the entries already found unchanged
  * @param {Set<string>} [reading] - entries being checked, so a loop of
  *   entries that name each other is a miss
- * @returns {{stamps: [string, string][], under: Set<string>} | null}
+ * @returns {{stamps: [string, string][], under: Set<string>, direct: string[]} | null}
  */
-function builtOn(dir, deps, reading = new Set()) {
+function builtOn(dir, deps, confirmed, reading = new Set()) {
   if (!Array.isArray(deps)) return null;
-  /** @type {[string, string][]} */
-  const stamps = [];
+  /** @type {[string, string][][]} */
+  const lists = [];
   /** @type {Set<string>} */
   const under = new Set();
+  /** @type {string[]} */
+  const direct = [];
   for (const dep of deps) {
     if (!Array.isArray(dep) || typeof dep[0] !== 'string') return null;
     const file = path.join(dir, path.basename(dep[0]));
-    const entry = confirmedEntry(file, dep[1], reading);
+    const entry = confirmedEntry(file, dep[1], confirmed, reading);
     if (entry == null) return null;
-    stamps.push(...entry.stamps);
+    lists.push(entry.stamps);
+    direct.push(file);
     under.add(file);
     for (const below of entry.under) under.add(below);
   }
-  return {stamps, under};
+  return {stamps: mergeStates(...lists), under, direct};
+}
+
+/**
+ * States from several lists, one per path. Where one list holds a folder by
+ * its identity alone and another by its full stamp, the full stamp is kept,
+ * as a run keeps a folder it probed and then listed (read-record.mjs).
+ * @param {...[string, string][]} lists
+ * @returns {[string, string][]}
+ */
+function mergeStates(...lists) {
+  /** @type {Map<string, string>} */
+  const merged = new Map();
+  for (const list of lists) {
+    for (const [at, state] of list) {
+      const had = merged.get(at);
+      if (
+        had === undefined ||
+        (had.startsWith('dir:') && !state.startsWith('dir:'))
+      ) {
+        merged.set(at, state);
+      }
+    }
+  }
+  return [...merged];
+}
+
+/**
+ * Mark an entry as used now, and each kept entry it builds on as used a
+ * millisecond (the finest step of a file time set from a Date) after the
+ * latest entry built on it, so eviction, which removes the least recently
+ * used entries first, never removes an entry before one built on it.
+ * @param {string} file
+ * @param {Confirmed} confirmed
+ */
+function markUsed(file, confirmed) {
+  /** @type {Map<string, number>} */
+  const times = new Map();
+  /** @type {Set<string>} */
+  const onPath = new Set();
+  /**
+   * @param {string} at
+   * @param {number} time
+   */
+  const visit = (at, time) => {
+    if (onPath.has(at) || (times.get(at) ?? -Infinity) >= time) return;
+    times.set(at, time);
+    onPath.add(at);
+    for (const dep of confirmed.get(at)?.deps ?? []) visit(dep, time + 1);
+    onPath.delete(at);
+  };
+  visit(file, Date.now());
+  for (const [at, time] of times) {
+    try {
+      const when = new Date(time);
+      withoutRecording(() => fs.utimesSync(at, when, when));
+    } catch {
+      // An entry that cannot be touched is evicted sooner; nothing more.
+    }
+  }
 }
 
 /**
  * A kept entry at `version`, found unchanged as a hit finds it: read and
- * checked the first time this process meets it, after that from `confirmed`.
+ * checked the first time the run meets it, after that from `confirmed`.
  * @param {string} file
  * @param {unknown} version
+ * @param {Confirmed} confirmed
  * @param {Set<string>} reading
  * @returns {{version: string, stamps: [string, string][], under: Set<string>} | null}
  */
-function confirmedEntry(file, version, reading) {
+function confirmedEntry(file, version, confirmed, reading) {
   const known = confirmed.get(file);
   if (known) return known.version === version ? known : null;
   if (reading.has(file)) return null;
@@ -653,20 +726,15 @@ function confirmedEntry(file, version, reading) {
     ) {
       return null;
     }
-    const base = builtOn(path.dirname(file), stored.deps, reading);
+    const base = builtOn(path.dirname(file), stored.deps, confirmed, reading);
     if (base == null) return null;
     const entry = {
       version: stored.version,
-      stamps: [...base.stamps, ...stored.stamps],
+      stamps: mergeStates(base.stamps, stored.stamps),
       under: base.under,
+      deps: base.direct,
     };
     confirmed.set(file, entry);
-    try {
-      const now = new Date();
-      withoutRecording(() => fs.utimesSync(file, now, now));
-    } catch {
-      // An entry that cannot be touched is evicted sooner; nothing more.
-    }
     return entry;
   } catch {
     return null;
@@ -676,16 +744,17 @@ function confirmedEntry(file, version, reading) {
 }
 
 /**
- * The kept entries a new entry builds on: those this process has read back
- * or stored whose every state the run read too, as it holds them, largest
+ * The kept entries a new entry builds on: those the run has read back or
+ * stored whose every state the run read too, as it holds them, largest
  * first, each only when it holds a state the others do not. Never one that
  * builds on the new entry's own file. The new entry stores the rest of its
  * states itself.
  * @param {string} file - the new entry's file
  * @param {[string, string][]} stamps - every state the run read
+ * @param {Confirmed} confirmed
  * @returns {{deps: [string, string][], own: [string, string][], under: Set<string>}}
  */
-function chooseBase(file, stamps) {
+function chooseBase(file, stamps, confirmed) {
   const states = new Map(stamps);
   /** @type {Set<string>} */
   const covered = new Set();
@@ -776,15 +845,18 @@ async function gatherAt(key, load, codec, keep) {
     } else if (stored.key !== entryKey(key, id)) {
       reason = 'an entry for other inputs';
     } else {
-      // An entry this process already found unchanged, as one an earlier
-      // entry builds on, is not checked again.
+      // An entry the run already found unchanged, as one an earlier entry
+      // builds on, is not checked again. Outside a recorded run nothing is
+      // remembered from one gather to the next.
+      const confirmed = run?.confirmed ?? new Map();
       const known = confirmed.get(file);
       const seen =
         typeof stored.version === 'string' && known?.version === stored.version
           ? known
           : null;
       const own = seen ? null : staleReason(stored.stamps, stored.env);
-      const base = seen || own != null ? null : builtOn(dir, stored.deps);
+      const base =
+        seen || own != null ? null : builtOn(dir, stored.deps, confirmed);
       const stale =
         own ??
         (seen == null && base == null
@@ -797,8 +869,9 @@ async function gatherAt(key, load, codec, keep) {
       } else if (stale == null) {
         const entry = seen ?? {
           version: stored.version,
-          stamps: [...(base?.stamps ?? []), ...stored.stamps],
+          stamps: mergeStates(base?.stamps ?? [], stored.stamps),
           under: base?.under ?? new Set(),
+          deps: base?.direct ?? [],
         };
         confirmed.set(file, entry);
         const {stamps} = entry;
@@ -813,12 +886,7 @@ async function gatherAt(key, load, codec, keep) {
         }
         gatherCode = cliStates(stamps);
         lastOutcome = {hit: true, reason: 'unchanged'};
-        try {
-          const now = new Date();
-          withoutRecording(() => fs.utimesSync(file, now, now));
-        } catch {
-          // An entry that cannot be touched is evicted sooner; nothing more.
-        }
+        markUsed(file, confirmed);
         return value;
       } else if (stale != null) {
         reason = stale;
@@ -1067,7 +1135,7 @@ function store(dir, file, entry, value, codec) {
     const encoded = codec.encode(value);
     const stamps = [...run.reads].filter(([file]) => !inJitiCache(file));
     gatherCode = cliStates(stamps);
-    const {deps, own, under} = chooseBase(file, stamps);
+    const {deps, own, under} = chooseBase(file, stamps, run.confirmed);
     const version = randomBytes(12).toString('hex');
     const text = JSON.stringify({
       format: FORMAT,
@@ -1082,7 +1150,13 @@ function store(dir, file, entry, value, codec) {
     const temp = `${file}.${process.pid}.${Date.now()}.tmp`;
     fs.writeFileSync(temp, text, {mode: 0o600, flag: 'wx'});
     fs.renameSync(temp, file);
-    confirmed.set(file, {version, stamps, under});
+    run.confirmed.set(file, {
+      version,
+      stamps,
+      under,
+      deps: deps.map(([name]) => path.join(dir, name)),
+    });
+    markUsed(file, run.confirmed);
     evictOldest(dir, isEntry);
   } catch {
     // A gather that cannot be stored is gathered again next time.
