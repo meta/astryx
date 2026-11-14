@@ -52,6 +52,10 @@
     "Chat/useChatKeyboard.ts -> motion/animator.ts": {
       "why": "The composer's ride on the on-screen keyboard plays on the animator.",
       "removedBy": "touch-loader follow-up 9: Chat's keyboard ride comes with the touch loader"
+    },
+    "AlertDialog/useAlertMotion.ts -> motion/animator.ts": {
+      "why": "AlertDialog's touch motion builds its present and dismiss motion on the animator's motion engine.",
+      "removedBy": "touch-loader follow-up: AlertDialog's touch motion takes the motion engine from the touch loader"
     }
   }
 }
