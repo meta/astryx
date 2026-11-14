@@ -59,6 +59,7 @@ export function formatFor(files) {
  * @property {string} [page] - The page's path from its project's root, `/`-separated; outside a project, its path among the files it carries.
  * @property {string} [title] - The title given with --title, which a render again needs too.
  * @property {Record<string, string>} [packages] - The packages the page rendered with, by name: their versions.
+ * @property {Record<string, string>} [aliases] - Each path-alias import a carried module makes that cannot be a package name (`@/…`, `~/…`), as written (without a query), with the embedded path of the carried file it names, so a reverse where no alias names it still finds the file.
  * @property {{sha256: string, style?: string, text?: string}} [markup] - The page as rendered, so a reverse can tell what changed after the render: the SHA-256 of the markup in <body> and of the <style> element, and `text`, the base64 of the JSON `{title, runs}` (the title and the markup's runs of text in order). The text stays encoded so that a find-and-replace over the page's text cannot change the record too.
  */
 
@@ -93,6 +94,7 @@ export function sourceBlock(entry, files, record = {}) {
     ...(record.page ? {page: record.page} : {}),
     ...(record.title === undefined ? {} : {title: record.title}),
     ...(record.packages ? {packages: record.packages} : {}),
+    ...(record.aliases ? {aliases: record.aliases} : {}),
     files: files.map(f => ({
       path: f.path,
       sha256: sha256(f.bytes),

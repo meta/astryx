@@ -466,6 +466,23 @@ describe('pickStart on parts and edits (spec:AST-048/FR3)', () => {
     );
   });
 
+  it("starts from the family's template for the frame that holds the page", async () => {
+    expect(await start('notification settings in a modal')).toBe(
+      'settings-dialog',
+    );
+    expect(await start('a toggle in a modal on the settings page')).toBe(
+      'settings',
+    );
+    const pages = [
+      page('widget', 'Widget - Basic', 'A plain widget page.'),
+      page('widget-dialog', 'Widget - Dialog', 'A widget page in a dialog.'),
+    ];
+    const lead = (/** @type {string} */ idea) =>
+      pickStart(rankPages(idea, pages))?.name;
+    expect(lead('a widget in a dialog')).toBe('widget-dialog');
+    expect(lead('a widget with a toggle in a dialog')).toBe('widget');
+  });
+
   it('counts a frame only when it holds the page the idea names', async () => {
     const [catalog] = await shipped;
     /** @param {string} idea */
@@ -477,5 +494,47 @@ describe('pickStart on parts and edits (spec:AST-048/FR3)', () => {
       false,
     );
     expect(framed('a toggle in a modal on the settings page')).toBe(false);
+  });
+});
+
+describe('rankPages is a total order', () => {
+  const ideas = [
+    'code editor',
+    'item detail page',
+    'settings in a modal dialog',
+    'ide with a file tree',
+    'chat',
+    'inbox table with filters',
+  ];
+  /** @param {any[]} ranked */
+  const names = ranked => ranked.map(r => `${r.name}:${r.score}`);
+
+  it('ranks the same however the catalog is ordered', async () => {
+    const pages = await loadPageTemplates(REPO);
+    const reversed = [...pages].reverse();
+    const rotated = [...pages.slice(7), ...pages.slice(0, 7)];
+    for (const idea of ideas) {
+      const expected = names(rankPages(idea, pages));
+      expect(names(rankPages(idea, reversed))).toEqual(expected);
+      expect(names(rankPages(idea, rotated))).toEqual(expected);
+    }
+  });
+
+  it('breaks an exact tie by name, without the host locale', () => {
+    // Same words, same score: only the names differ, in case and in letters
+    // some locales move ("y" in Lithuanian, dotless "i" in Turkish).
+    const catalog = ['Yard-Board', 'ide-board', 'IDE-board', 'item-board'].map(
+      name => page(name, 'Tools', 'a board of cards'),
+    );
+    const order = rankPages('board of cards', catalog).map(r => r.name);
+    expect(order).toEqual([
+      'ide-board',
+      'IDE-board',
+      'item-board',
+      'Yard-Board',
+    ]);
+    expect(
+      rankPages('board of cards', [...catalog].reverse()).map(r => r.name),
+    ).toEqual(order);
   });
 });

@@ -92,6 +92,7 @@ export function registerExperimentalRender(group, program) {
           output: d.output,
           files: d.files.join(', '),
           ...(d.missing?.length ? {missing: d.missing.join(', ')} : {}),
+          ...(d.aliased ? {aliased: d.aliased.imports.map(a => `${a.import} (${a.file})`).join(', ')} : {}),
           ...(d.mode === 'rebuilt'
             ? {
                 components: (d.components ?? []).join(', ') || 'none',
@@ -111,6 +112,15 @@ export function registerExperimentalRender(group, program) {
           ? [
               text(
                 'The file had no embedded source, so the page was rebuilt from its Astryx markup: text and layout only. Review it before use.',
+              ),
+            ]
+          : []),
+        ...(d.aliased
+          ? [
+              text(
+                `The page imports ${d.aliased.imports.length === 1 ? 'a file' : 'files'} through a path alias this project does not have, so ${d.aliased.imports.length === 1 ? 'it' : 'they'} came back in the page's own layout. To build or render the page again, set the "paths" of ${d.aliased.config} (create it if it is not there) to: ${Object.entries(d.aliased.paths)
+                  .map(([key, targets]) => `${JSON.stringify(key)}: ${JSON.stringify(targets)}`)
+                  .join(', ')}.`,
               ),
             ]
           : []),

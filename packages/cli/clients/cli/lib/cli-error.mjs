@@ -66,6 +66,7 @@ import {
 import {levenshteinDistance} from '../../../foundation/text/levenshtein.mjs';
 import {doc as experimentalEditorDoc} from '../commands/experimental-theme-editor.doc.mjs';
 import {doc as experimentalPreviewDoc} from '../commands/experimental-theme-preview.doc.mjs';
+import {compareText} from '../../../foundation/text/compare-text.mjs';
 
 /**
  * Suggestion object — matches the shape used by API errors and the JSON
@@ -230,7 +231,7 @@ export function unknownSubcommandSuggestions(
   const ranked = [...names].sort(
     (a, b) =>
       levenshteinDistance(typed, a) - levenshteinDistance(typed, b) ||
-      a.localeCompare(b),
+      compareText(a, b),
   );
   return [
     ...elsewhere,

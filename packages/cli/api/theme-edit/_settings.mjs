@@ -85,6 +85,7 @@ import {
   baseThemeFile,
 } from './_project.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
 
 // The palette reads the tokens the own source sets through this module.
 setOwnTokenReader((cwd, slug) => ownSourceTokenValues(cwd, slug));
@@ -487,7 +488,7 @@ export function editedThemes(cwd, order = 'name') {
   };
   return names
     .map(d => ({d, t: when(d)}))
-    .sort((a, b) => b.t - a.t || a.d.localeCompare(b.d))
+    .sort((a, b) => b.t - a.t || compareText(a.d, b.d))
     .map(x => x.d);
 }
 

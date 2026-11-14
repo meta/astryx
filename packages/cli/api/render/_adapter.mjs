@@ -40,11 +40,12 @@ import {isAssetBytes, isAssetPath} from '../../foundation/render/assets.mjs';
 import {createFileProtectionResolver} from '../../foundation/fs/file-protection.mjs';
 import {publishNewFile} from '../../foundation/fs/publish-file.mjs';
 import {reachableFiles, receivingAliases} from '../../foundation/render/embedded-imports.mjs';
+import {pathsHomeFor} from '../../foundation/render/ts-paths.mjs';
 import {isAstryxMarkup} from '../../foundation/render/html-reader.mjs';
 import {rebuildPage} from '../../foundation/render/rebuild.mjs';
 import {cliVersion} from '../../foundation/integrations/cli-peer-version.mjs';
 import {assertWithin, PathSafetyError} from '../../foundation/fs/path-safety.mjs';
-import {climbsOut, isInside as liesInside, requireCoreDir} from '../../foundation/fs/paths.mjs';
+import {climbsOut, findPackageRoot, isInside as liesInside, requireCoreDir} from '../../foundation/fs/paths.mjs';
 import {runChoice} from '../../foundation/release/run-context.mjs';
 import {isAlive, pidSpace} from '../../foundation/release/cache.mjs';
 import {isServedPackage} from '../../foundation/render/served-packages.mjs';
@@ -403,18 +404,6 @@ function writeRestore(writes, folder, cwd, overwrite) {
   return true;
 }
 
-/**
- * The refusal for a restore whose new folder another run created first.
- * @param {string} folder
- * @param {string} cwd
- */
-const folderTaken = (folder, cwd) =>
-  new AstryxError(
-    `${shown(cwd, folder)} appeared while this restore ran; nothing was written. Restore into another folder with --out.`,
-    [],
-    ERROR_CODES.ERR_FILE_EXISTS,
-  );
-
 /** @param {unknown} e */
 function asAstryxError(e) {
   if (e instanceof RenderError) {
@@ -564,6 +553,72 @@ function refuseRunnable(files, cwd, input) {
       ERROR_CODES.ERR_INVALID_ARGUMENT,
     );
   }
+}
+
+/**
+ * The `paths` entry that lets an alias import find the file it came back
+ * as, from the folder the config resolves targets from: the part of the
+ * import that the file's path ends with becomes the `*`
+ * (`@/components/Header` in `report-restored/components/` gives `@/*` and
+ * `./report-restored/*`), else the import maps to its file.
+ * @param {string} spec
+ * @param {string} file absolute
+ * @param {string} base absolute
+ * @returns {[string, string]}
+ */
+function aliasEntry(spec, file, base) {
+  /** @param {string} p */
+  const fromBase = p => {
+    const rel = path.relative(base, p).split(path.sep).join('/');
+    return climbsOut(rel) ? rel : `./${rel}`;
+  };
+  const named = spec.split('/');
+  let held = path.relative(base, file).split(path.sep).join('/').replace(/\.[^./]+$/, '').split('/');
+  if (held.at(-1) === 'index' && named.at(-1) !== 'index') held = held.slice(0, -1);
+  let same = 0;
+  while (same < named.length - 1 && same < held.length && named[named.length - 1 - same] === held[held.length - 1 - same]) same++;
+  if (same === 0) return [spec, fromBase(file)];
+  const folder = fromBase(path.join(base, ...held.slice(0, held.length - same)));
+  return [`${named.slice(0, named.length - same).join('/')}/*`, folder === './' ? './*' : `${folder}/*`];
+}
+
+/**
+ * What a restore tells about the alias imports no alias of the receiving
+ * project names: the config the `paths` belong in (the one TypeScript reads
+ * for the page, else a new tsconfig.json at the project's root or the
+ * current folder), the whole `paths` it needs (its current entries and the
+ * new ones), and each import with its file.
+ * @param {{spec: string, file: string}[]} unaliased
+ * @param {string} page absolute: where the page lands
+ * @param {string} cwd
+ */
+function aliasedResult(unaliased, page, cwd) {
+  const home = pathsHomeFor(page, findPackageRoot(path.dirname(page)) ?? cwd);
+  /** @param {string} p */
+  const fromBase = p => {
+    const rel = path.relative(home.base, p).split(path.sep).join('/');
+    return climbsOut(rel) ? rel : `./${rel}`;
+  };
+  // The whole `paths` the config needs: the entries it has now (a `paths` of
+  // its own replaces inherited ones), then every target the imports need.
+  /** @type {Record<string, string[]>} */
+  const paths = {};
+  for (const pattern of home.current) paths[pattern.key] = pattern.targets.map(fromBase);
+  const entries = unaliased.map(({spec, file}) => aliasEntry(spec, file, home.base));
+  for (const [key, target] of entries) paths[key] = [...new Set([...(paths[key] ?? []), target])];
+  // TypeScript tries a pattern's targets in turn, so an import through a
+  // pattern with more than one target could reach another file first; each
+  // such import gets an entry of its own, which TypeScript reads before any
+  // pattern.
+  unaliased.forEach(({spec, file}, i) => {
+    const [key] = entries[i];
+    if (key !== spec && paths[key].length > 1) paths[spec] = [fromBase(file)];
+  });
+  return {
+    config: shown(cwd, home.config),
+    paths,
+    imports: unaliased.map(({spec, file}) => ({import: spec, file: shown(cwd, file)})),
+  };
 }
 
 /**
@@ -730,8 +785,11 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       }
     });
     // A restore without --out picks the first folder name no folder has.
-    // When another run takes that name first, this one takes the next: each
-    // name it loses exists from then on, so every pass picks a new one.
+    // When another run creates the new folder first, this one plans again:
+    // without --out it takes the next name; with --out its files go into the
+    // folder still new under it, or meet every check a restore into folders
+    // that exist meets. A folder that appears exists from then on, so every
+    // pass plans for a new one.
     for (;;) {
       // Without --out, the page and the files it imports come back into a new
       // folder beside the HTML file, named after it (`report.html` gives
@@ -755,7 +813,7 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       // Modules, stylesheets and JSON are written only when the page reaches
       // them through its own imports: one it never imports is not part of it,
       // whatever its name.
-      const {reached, missing} = reachableFiles(source.files, {aliases: receivingAliases(requested)});
+      const {reached, missing} = reachableFiles(source.files, {aliases: receivingAliases(requested), recorded: source.aliases});
       // A carried image, font or media file needs no import to be part of the
       // page (it may be named in markup, a stylesheet, JSON or a computed
       // path): the render's own list is the authority, so it is kept when its
@@ -763,12 +821,12 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       // extension), and goes where the layout puts it.
       for (const f of source.files) {
         if (reached.has(f.path) || !isAssetPath(f.path)) continue;
-        if (isAssetBytes(Buffer.from(f.base64, 'base64'))) reached.set(f.path, {relative: true, aliased: new Set()});
+        if (isAssetBytes(Buffer.from(f.base64, 'base64'))) reached.set(f.path, {relative: true, aliased: new Set(), unaliased: new Set()});
       }
       const stray = source.files.filter(f => !reached.has(f.path)).map(f => f.path);
       if (stray.length > 0) {
         throw new AstryxError(
-          `${shown(cwd, input)} carries ${stray.length === 1 ? 'a file' : 'files'} the page does not import, or that is not the image, font or media file its name says (${stray.join(', ')}), which a render never embeds; nothing was written. A file reached through a path alias needs the same alias in this project's tsconfig.json or jsconfig.json.`,
+          `${shown(cwd, input)} carries ${stray.length === 1 ? 'a file' : 'files'} the page does not reach through its imports here, or that is not the image, font or media file its name says (${stray.join(', ')}), which a render never embeds; nothing was written. A file the page imports through a path alias comes back where this project's tsconfig.json or jsconfig.json has that alias, and anywhere when the import cannot be a package name (\`@/…\`, \`~/…\`) and the CLI that rendered the file recorded it (as this one does).`,
           [],
           ERROR_CODES.ERR_RENDER_SOURCE_DAMAGED,
         );
@@ -797,6 +855,13 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       const home = folder ?? newFolderOf(requested);
       const within = (/** @type {string} */ file) => isInside(file, home);
       const target = path.join(anchor, path.basename(requested));
+      // The alias imports no alias here names: their files come back in the
+      // page's own layout, and the page needs the alias to build, in the config
+      // TypeScript reads for it.
+      const unaliased = [...reached]
+        .flatMap(([p, r]) => [...r.unaliased].map(spec => ({spec, file: placeFrom(p)})))
+        .sort((a, b) => (a.spec < b.spec ? -1 : a.spec > b.spec ? 1 : 0));
+      const aliased = unaliased.length === 0 ? null : aliasedResult(unaliased, requested, cwd);
       /** @type {{file: string, bytes: Buffer}[]} */
       const writes = [];
       const placed = new Set();
@@ -838,12 +903,7 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       refuseRunnable(writes.map(w => w.file), cwd, input);
       refuseExisting(writes.filter(w => !isInside(w.file, home)).map(w => w.file));
       refuseProtected(writes.map(w => w.file), cwd, home);
-      if (!writeRestore(writes, home, cwd, overwrite)) {
-        // Another run took the folder's name first: a restore without --out
-        // takes the next one.
-        if (output) throw folderTaken(/** @type {string} */ (home), cwd);
-        continue;
-      }
+      if (!writeRestore(writes, home, cwd, overwrite)) continue;
       const renderedBy = renderedByOf(source, html);
       const packages = packagesOf(source);
       const modules = writes
@@ -858,6 +918,7 @@ export function reverseToFile({cwd, input, output, overwrite}) {
         // the file does not carry (a file a render never embeds) is named.
         exact: missing.length === 0,
         ...(missing.length > 0 ? {missing} : {}),
+        ...(aliased ? {aliased} : {}),
         format: source.version,
         ...(renderedBy ? {renderedBy} : {}),
         ...(packages ? {packages} : {}),
@@ -897,7 +958,7 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       ERROR_CODES.ERR_RENDER_NOT_ASTRYX,
     );
   }
-  // As above: a name another run takes first exists from then on.
+  // As above: a folder another run creates first exists from then on.
   for (;;) {
     const folder = output ? null : restoreFolder(input);
     const target = output ?? path.join(/** @type {string} */ (folder), 'page.tsx');
@@ -912,10 +973,7 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       [path.dirname(target), path.dirname(input), cwd].find(d => resolvesCore(d)) ?? cwd;
     const rebuilt = rebuildPage(html, from);
     refuseProtected([target], cwd, home);
-    if (!writeRestore([{file: target, bytes: Buffer.from(rebuilt.source)}], home, cwd, overwrite)) {
-      if (output) throw folderTaken(/** @type {string} */ (home), cwd);
-      continue;
-    }
+    if (!writeRestore([{file: target, bytes: Buffer.from(rebuilt.source)}], home, cwd, overwrite)) continue;
     return {
       input: shown(cwd, input),
       mode: 'rebuilt',
