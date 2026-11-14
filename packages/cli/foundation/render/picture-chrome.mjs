@@ -83,7 +83,7 @@ fromBrowser.on('data', chunk => {
   }
 });
 
-const gone = new Promise((_, reject) =>
+const gone = new Promise((_, reject) => {
   browser.on('close', code =>
     reject(
       new Error(
@@ -91,9 +91,16 @@ const gone = new Promise((_, reject) =>
           `the browser stopped (exit ${code}) before the picture`,
       ),
     ),
-  ),
-);
+  );
+  // A browser that cannot be started at all (not there, not runnable).
+  browser.on('error', e => reject(e));
+});
 gone.catch(() => {});
+// A browser that ends early closes its pipes: a write to it then fails
+// with EPIPE. That is no error of its own: the browser's close (and its
+// stderr, which names the cause) is the reason given.
+toBrowser.on('error', () => {});
+fromBrowser.on('error', () => {});
 
 /**
  * One protocol call, answered or failed with the browser.

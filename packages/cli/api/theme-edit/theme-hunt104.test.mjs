@@ -235,6 +235,18 @@ describe('hunt104', () => {
   }, 240_000);
 
   it('the gate reads the whole value, a part only when the other lines carry the rest', () => {
+    // A keyword with a dash is one word: its typo is corrected; words
+    // with a space between are no typo of it.
+    expect(
+      readsTyped({
+        offered: 'not-allowed',
+        typed: 'not-alowed',
+        thing: 'cursor',
+      }),
+    ).toBe(true);
+    expect(
+      readsTyped({offered: 'pointer', typed: 'not pointer', thing: 'cursor'}),
+    ).not.toBe(true);
     expect(typedReading('0,5')).toBe('0.5');
     expect(typedReading('1,000')).toBe('1000');
     expect(readsTyped({offered: '5', typed: '0,5'})).toBe(false);

@@ -1073,7 +1073,9 @@ export function readsTyped({
         : Array.from({length: F.length}, (_, i) => T.length - F.length + i);
   }
   // (5) A typo, of a word or of a number's unit (16pxx is 16px).
-  if (T.length === 1 && typoOf(t, o)) return true;
+  // The typed value is one word, dashes and all (`not-alowed` is one
+  // keyword typed, not two words).
+  if (/^[a-z][a-z-]*$/.test(t) && typoOf(t, o)) return true;
   const typedUnit = /^(\d*\.?\d+)([a-z]+)$/.exec(t);
   const offeredUnit = /^(\d*\.?\d+)([a-z]+)$/.exec(o);
   if (
