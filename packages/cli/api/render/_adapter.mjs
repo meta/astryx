@@ -59,22 +59,56 @@ const shown = (cwd, file) => {
     : file;
 };
 
+/** Why a file cannot be read, in a few words, by its errno. */
+const READ_FAILURES = {EACCES: 'no permission', EPERM: 'no permission', EISDIR: 'it is a folder'};
+
 /**
- * Read a file the caller named, or throw ERR_FILE_NOT_FOUND.
+ * The error for an input the file system would not give: ERR_FILE_NOT_FOUND
+ * when nothing is there, ERR_READ_FAILED with the errno and its reason
+ * otherwise.
+ * @param {string} file absolute
+ * @param {string} cwd
+ * @param {unknown} e what the file system threw
+ */
+function inputFailure(file, cwd, e) {
+  const errno = /** @type {NodeJS.ErrnoException} */ (e).code;
+  if (errno === 'ENOENT' || errno === 'ENOTDIR') {
+    return new AstryxError(`${shown(cwd, file)} does not exist`, [], ERROR_CODES.ERR_FILE_NOT_FOUND);
+  }
+  const why = READ_FAILURES[/** @type {keyof typeof READ_FAILURES} */ (errno)];
+  return new AstryxError(
+    `${shown(cwd, file)} cannot be read${errno ? ` (${errno}${why ? `: ${why}` : ''})` : ''}; nothing was written.`,
+    [],
+    ERROR_CODES.ERR_READ_FAILED,
+  );
+}
+
+/**
+ * Read a file the caller named. A folder, a pipe or any other entry that is
+ * not a regular file is refused before it is opened, so nothing waits on it.
  * @param {string} file absolute
  * @param {string} cwd
  * @returns {Buffer}
  */
 function readInput(file, cwd) {
+  /** @type {fs.Stats} */
+  let stat;
   try {
-    if (!fs.statSync(file).isFile()) throw new Error('not a file');
-    return fs.readFileSync(file);
-  } catch {
+    stat = fs.statSync(file);
+  } catch (e) {
+    throw inputFailure(file, cwd, e);
+  }
+  if (!stat.isFile()) {
     throw new AstryxError(
-      `${shown(cwd, file)} does not exist`,
+      `${shown(cwd, file)} cannot be read (${stat.isDirectory() ? 'it is a folder' : 'it is not a regular file'}); nothing was written.`,
       [],
-      ERROR_CODES.ERR_FILE_NOT_FOUND,
+      ERROR_CODES.ERR_READ_FAILED,
     );
+  }
+  try {
+    return fs.readFileSync(file);
+  } catch (e) {
+    throw inputFailure(file, cwd, e);
   }
 }
 
