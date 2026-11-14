@@ -54,7 +54,6 @@ import {
   useOutsidePress,
 } from '../Layer/outsidePress';
 import {isImeKeyEvent} from '../utils/ime';
-import {isRtlElement} from '../hooks/isRtlElement';
 import {TypeaheadItem} from './TypeaheadItem';
 import {Icon} from '../Icon';
 import {Spinner} from '../Spinner';
@@ -607,11 +606,7 @@ function startsWithRows<T extends SearchableItem>(
 const useUnnamedActionWarning =
   process.env.NODE_ENV === 'production'
     ? () => {}
-    : (
-        isOpenGrid: boolean,
-        panelRef: React.RefObject<HTMLElement | null>,
-        results: ReadonlyArray<SearchableItem>,
-      ) => {
+    : (panelRef: React.RefObject<HTMLElement | null>) => {
         useEffect(() => {
           const isUnnamed = (control: HTMLElement | null) =>
             control != null &&
@@ -619,13 +614,12 @@ const useUnnamedActionWarning =
             !control.hasAttribute('aria-labelledby') &&
             (control.textContent ?? '').trim() === '' &&
             (control.getAttribute('title') ?? '').trim() === '';
-          const cells =
+          const actionCells =
             panelRef.current?.querySelectorAll<HTMLElement>(
               '[role="gridcell"] + [role="gridcell"]',
             ) ?? [];
           if (
-            isOpenGrid &&
-            Array.from(cells).some(cell =>
+            Array.from(actionCells).some(cell =>
               isUnnamed(cell.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)),
             )
           ) {
@@ -637,7 +631,7 @@ const useUnnamedActionWarning =
                 'action cell.',
             );
           }
-        }, [isOpenGrid, panelRef, results]);
+        });
       };
 
 function preventOptionFocus(event: React.MouseEvent) {
@@ -765,13 +759,12 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // highlight. Only on that row do the horizontal arrows move between cells:
   // after typing, or on a row the list highlighted by itself, they move the
   // caret.
-  const [gridCell, setGridCell] = useState<{
-    index: number;
-    isAction: boolean;
-  } | null>(null);
-  const isGridRowReached =
-    isGrid && highlightedIndex >= 0 && gridCell?.index === highlightedIndex;
-  const isActionCellActive = isGridRowReached && gridCell?.isAction === true;
+  const [gridRow, setGridRow] = useState(-1);
+  const [isOnAction, setIsOnAction] = useState(false);
+  // Up, Down, Home and End set the row; only a grid row has an action to
+  // reach, so the check needs no grid test of its own.
+  const isGridRowReached = gridRow === highlightedIndex;
+  const isActionCellActive = isGridRowReached && isOnAction;
   // Bumped whenever the rows are replaced rather than appended to, so the
   // highlighted-row scroll runs for a new list but not when a later list for
   // the same query appends rows below (spec:AST-092 FR6).
@@ -783,7 +776,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     setResults(next);
     setQueryEntryCount(entryCount);
     setListKey(key => key + 1);
-    setGridCell(null);
+    setGridRow(-1);
   }, []);
   // Highlight indexes count rows in displayed order (ungrouped first, then
   // groups), which is how the popup renders them.
@@ -817,7 +810,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
           ? -1
           : keptOrder.findIndex(item => item.id === highlightedId);
       setResults(kept);
-      setGridCell(null);
+      setGridRow(-1);
       setHighlightedIndex(
         keptIndex >= 0 ? keptIndex : keptOrder.length > 0 ? 0 : -1,
       );
@@ -1734,7 +1727,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // Handle input change
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      setGridCell(null);
+      setGridRow(-1);
       handleQueryChange(e.target.value);
     },
     [handleQueryChange],
@@ -2127,25 +2120,27 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
 
       const moveToRow = (index: number) => {
         setHighlightedIndex(index);
-        setGridCell({index, isAction: false});
+        setGridRow(index);
+        setIsOnAction(false);
       };
       // On a row the arrow keys reached, the horizontal arrows move between
-      // the row's two cells in visual order.
+      // the row's two cells in visual order: the inline-end arrow to an
+      // action, the other back to the option. A key that moves nothing keeps
+      // moving the caret.
       if (
         isGridRowReached &&
         (e.key === 'ArrowLeft' || e.key === 'ArrowRight')
       ) {
         const toAction =
           e.key ===
-          (isRtlElement(e.currentTarget) ? 'ArrowLeft' : 'ArrowRight');
-        if (
-          toAction !== isActionCellActive &&
-          (!toAction || displayedResults[highlightedIndex]?.action != null)
-        ) {
+            (getComputedStyle(e.currentTarget).direction === 'rtl'
+              ? 'ArrowLeft'
+              : 'ArrowRight') &&
+          displayedResults[highlightedIndex]?.action != null;
+        if (toAction !== isActionCellActive) {
           e.preventDefault();
-          setGridCell({index: highlightedIndex, isAction: toAction});
+          setIsOnAction(toAction);
         }
-        return;
       }
 
       switch (e.key) {
@@ -2385,7 +2380,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     };
   }, []);
 
-  useUnnamedActionWarning(isGrid && popover.isOpen, dropdownRef, results);
+  useUnnamedActionWarning(dropdownRef);
 
   const listbox = (
     <div
