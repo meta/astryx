@@ -109,6 +109,26 @@ describe('the pick model', () => {
     ).toBe('grid');
   });
 
+  it("reads the call model's tables when it carries none of its own", () => {
+    const shared = {...WEIGHTS, tables: PICK.tables, blend: WEIGHTS.blend};
+    const idea = 'charts and cards';
+    const own = weighStart(idea, RANKED, RANKED[0], CATALOG, {
+      weights: {...shared, pick: PICK},
+    });
+    const read = weighStart(idea, RANKED, RANKED[0], CATALOG, {
+      weights: {...shared, pick: {blend: PICK.blend}},
+    });
+    expect(read).toBe(own);
+    expect(
+      blendOrder(idea, RANKED, RANKED[0], CATALOG, {
+        ...shared,
+        pick: {blend: PICK.blend},
+      }),
+    ).toEqual(
+      blendOrder(idea, RANKED, RANKED[0], CATALOG, {...shared, pick: PICK}),
+    );
+  });
+
   it('never turns the app shell into a page', () => {
     const start = weighStart(
       'tweak the existing cards',
