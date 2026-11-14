@@ -60,8 +60,11 @@ answers (FR4), and what the server tells a client when it starts (FR5).
   that only holds subcommands declares no `outsideProject` and is no tool; `mcp`
   is no tool, and neither is a hidden command. The tool's name is the command's
   words joined by `_` (`theme build` is `theme_build`), its title is
-  `astryx <command>`, and its description is the command's own help line. The
-  tools list in the manifest's order. Two commands that give one tool name, or
+  `astryx <command>`, and its description is the command's own help line. An
+  experimental command's tool keeps its namespace: its name starts with
+  `experimental_` and its description with `[experimental]`, as the manifest
+  lists it under the `experimental` group (`spec:AST-017` FR27). The tools list
+  in the manifest's order. Two commands that give one tool name, or
   one command that gives two inputs one name, fail the CLI's tests.
 - **FR3 — A tool's inputs are its command's arguments and options, under their
   CLI names.** Each positional argument is the input of its name, required
