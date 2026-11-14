@@ -1300,6 +1300,27 @@ describe('render(): every write stays inside the current folder', () => {
   });
 });
 
+describe('render(): ordinary files named like configuration', () => {
+  it('carries modules and JSON data named config or ending in rc, and gives them back exactly', async () => {
+    put('names/config.ts', "export const site = {title: 'Named config'};\n");
+    put('names/lib/arc.ts', "export const arc = 'an arc';\n");
+    put('names/data/chart-config.json', '{"series": ["North", "South"]}\n');
+    put('names/data/config.json', '{"footer": "From config.json"}\n');
+    put(
+      'names/page.tsx',
+      "import {site} from './config';\nimport {arc} from './lib/arc';\nimport chart from './data/chart-config.json';\nimport config from './data/config.json';\nexport default function Page() {\n  return <main><h1>{site.title}</h1><p>{arc} {chart.series.join(' ')} {config.footer}</p></main>;\n}\n",
+    );
+    const result = /** @type {any} */ (await render('names/page.tsx', {cwd: dir}));
+    expect(result.data.files.sort()).toEqual(['config.ts', 'data/chart-config.json', 'data/config.json', 'lib/arc.ts', 'page.tsx']);
+    expect(result.data.warnings.filter((/** @type {any} */ w) => w.code === 'not-embedded')).toEqual([]);
+    const back = /** @type {any} */ (await render('names/page.html', {cwd: dir, reverse: true, out: 'names-back/page.tsx'}));
+    expect(back.data.exact).toBe(true);
+    for (const name of ['config.ts', 'lib/arc.ts', 'data/chart-config.json', 'data/config.json']) {
+      expect(fs.readFileSync(path.join(dir, 'names-back', name))).toEqual(fs.readFileSync(path.join(dir, 'names', name)));
+    }
+  }, 60_000);
+});
+
 describe('render --reverse: a received file may carry only what a render embeds', () => {
   /** @param {string} name @param {{path: string, text: string}[]} files */
   const crafted = async (name, files) => {
@@ -1317,6 +1338,8 @@ describe('render --reverse: a received file may carry only what a render embeds'
     ['the Astryx configuration', 'astryx.config.mjs', 'ERR_RENDER_SOURCE_DAMAGED'],
     ['the package manifest', 'package.json', 'ERR_RENDER_SOURCE_DAMAGED'],
     ['a TypeScript configuration', 'tsconfig.json', 'ERR_RENDER_SOURCE_DAMAGED'],
+    ['a TypeScript project configuration', 'tsconfig.app.json', 'ERR_RENDER_SOURCE_DAMAGED'],
+    ['a JSON tool configuration by its config name', 'renovate.config.json', 'ERR_RENDER_SOURCE_DAMAGED'],
     ['a package inside node_modules', 'node_modules/react/index.js', 'ERR_RENDER_SOURCE_DAMAGED'],
     ['a shell script', 'scripts/install.sh', 'ERR_RENDER_SOURCE_DAMAGED'],
     ['a climbing path', '../escape.css', 'ERR_PATH_TRAVERSAL'],
