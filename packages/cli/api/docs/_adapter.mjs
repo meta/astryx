@@ -21,6 +21,7 @@ import * as path from 'node:path';
 import {Project} from '../../foundation/config/project.mjs';
 import {
   DocsCatalog,
+  integrationDocsCatalog,
   isGuideRoute,
   mergeTopicReport,
 } from '../../foundation/discovery/docs-discovery.mjs';
@@ -411,17 +412,54 @@ export function projectTree(catalog, {fresh = false} = {}) {
 const cliTreeInputs = reusedWhileUnchanged(() => loadTreeInputs());
 
 /**
+ * The docs tree of a project that loads these integrations, as far as its
+ * routes, from the doc files alone: the CLI's own and each integration's,
+ * read as data where a doc holds only exported literals
+ * (docs-discovery.mjs integrationDocsCatalog). A project's icon sets are not
+ * in it.
+ * @param {Array<{name?: string, docs?: unknown} | null | undefined>} integrations
+ * @returns {Promise<DocsTree>}
+ */
+export async function integrationRouteTree(integrations) {
+  return routeTree(await integrationDocsCatalog(integrations));
+}
+
+/**
+ * The catalog's docs tree as far as its routes: the tree {@link projectTree}
+ * builds, before what integrations do to a placed guide's title and summary
+ * and before its summaries' links resolve, neither of which moves a node. A
+ * flat topic's file is read only for its category, which places it.
+ * @param {DocsCatalog} catalog
+ * @returns {Promise<DocsTree>}
+ */
+async function routeTree(catalog) {
+  const added = catalog.treeInputs;
+  const cli = await cliTreeInputs();
+  return buildDocsTree({
+    namespaces: [...cli.namespaces, ...added.flatMap(each => each.namespaces)],
+    docs: [...cli.docs, ...added.flatMap(each => each.guides)],
+    topics: await flatTopicInputs(catalog, {placement: true}),
+  });
+}
+
+/**
  * Every flat topic in the catalog, as the tree's topic levels read it.
  * @param {DocsCatalog} catalog
+ * @param {{placement?: boolean}} [options] `placement`: only what places a
+ *   topic is needed, so a topic's file is read only for a category its entry
+ *   does not carry
  * @returns {Promise<import('../../foundation/doc-compiler/tree.mjs').TreeTopicInput[]>}
  */
-async function flatTopicInputs(catalog) {
+async function flatTopicInputs(catalog, {placement = false} = {}) {
   /** @type {import('../../foundation/doc-compiler/tree.mjs').TreeTopicInput[]} */
   const topics = [];
   for (const entry of catalog.entries()) {
     const aliases = catalog.aliasesOf(entry);
     let {title, description, category} = entry;
-    if (title == null || description == null || category === undefined) {
+    if (
+      category === undefined ||
+      (!placement && (title == null || description == null))
+    ) {
       try {
         const file = await loadTopicFile(entry.path, null);
         title ??= file.doc?.title;

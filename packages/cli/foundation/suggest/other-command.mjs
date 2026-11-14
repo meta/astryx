@@ -409,16 +409,18 @@ export async function findOtherCommand(
         if (!docsRoutes || !docNamed(docsDirs, names, segment)) {
           return {docs: []};
         }
-        // The routes are kept with the index once a miss asks for them; where
-        // no index is kept, they are worked out now.
-        const routed = nameIndexKept()
-          ? await hintNameIndex(
-              cwd,
-              coreDir,
-              await integrationsOnce(),
-              docsRoutes,
-            )
-          : names;
+        // The routes are kept with the index once a miss asks for them, so
+        // an index read back with them already answers; where no index is
+        // kept, they are worked out now.
+        const routed =
+          names.routes == null && nameIndexKept()
+            ? await hintNameIndex(
+                cwd,
+                coreDir,
+                await integrationsOnce(),
+                docsRoutes,
+              )
+            : names;
         return {
           docs:
             routed.routes ?? (await docsRoutes(cwd, await integrationsOnce())),

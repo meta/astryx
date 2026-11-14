@@ -33,6 +33,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {listDir, listDirEntries} from '../fs/listing-cache.mjs';
 import {importDocModule} from '../doc-compiler/import.mjs';
+import {readLiteralDoc} from '../doc-compiler/literal-doc.mjs';
 import {CLI_PROVIDER_ID} from '../identity/providers.mjs';
 import {BUILTIN_DOCS_DIR, BUILTIN_TOPIC_FILE_RE} from './name-roots.mjs';
 import {parseReadableDoc} from '../doc-compiler/parse-readable.mjs';
@@ -136,7 +137,8 @@ export function discoverBuiltinTopics() {
 /**
  * The name an integration doc declares, and whether it is placed (has
  * `placement`, so it is no topic or root namespace), as docs discovery reads
- * the doc; null when the doc does not load or parse, or names nothing.
+ * the doc; null when the doc does not load or parse, or names nothing. A doc
+ * of exported literals is read as data ({@link readDocAsData}).
  *
  * @param {string} file an integration doc file
  * @returns {Promise<{name: string, placed: boolean} | null>}
@@ -145,7 +147,7 @@ export async function integrationDocDeclaration(file) {
   let doc;
   try {
     doc = /** @type {any} */ (
-      parseReadableDoc(await loadTopicModule(file), path.basename(file))
+      parseReadableDoc(await readDocAsData(file), path.basename(file))
     );
   } catch {
     return null;
@@ -189,6 +191,51 @@ export async function loadTopicModule(file) {
     );
   }
   return doc;
+}
+
+/**
+ * The doc `file` exports, as {@link loadTopicModule} gives it, read as data
+ * when the file holds only exported literals (../doc-compiler/literal-doc.mjs),
+ * so the read is the file alone; else imported.
+ * @param {string} file absolute path to a doc file
+ * @returns {Promise<unknown>} the authored doc value
+ */
+export async function readDocAsData(file) {
+  return readLiteralDoc(file) ?? loadTopicModule(file);
+}
+
+/**
+ * The CLI's own topics with what these integrations' docs add, in
+ * configured order, each package's docs read with `read` and withdrawn as
+ * the project's catalog withdraws them ({@link DocsCatalog#addDiscovered}).
+ * Icon sets and issues are the project's (config/project.mjs docs); this
+ * reads the doc files alone.
+ * @param {Array<{name?: string, docs?: unknown} | null | undefined>} integrations
+ * @param {{read?: (file: string) => Promise<unknown>}} [options] `read`: how
+ *   a doc file gives its value; {@link readDocAsData} by default
+ * @returns {Promise<DocsCatalog>}
+ */
+export async function integrationDocsCatalog(
+  integrations,
+  {read = readDocAsData} = {},
+) {
+  const catalog = DocsCatalog.fromBuiltins();
+  for (const [at, integration] of integrations.entries()) {
+    if (!integration?.docs) continue;
+    try {
+      catalog.addDiscovered(
+        await discoverIntegrationDocs(
+          /** @type {{name: string, docs: string}} */ (integration),
+          {read},
+        ),
+        {package: integration.name ?? '', rank: at + 1},
+      );
+    } catch {
+      // A package whose docs fail to read adds none, as the project's
+      // catalog withdraws it.
+    }
+  }
+  return catalog;
 }
 
 /** Every block kind a section may hold, with the fields each one requires. */
@@ -515,9 +562,14 @@ function isFolder(dir) {
  * against its package while the rest of the CLI keeps working.
  *
  * @param {{name: string, docs?: string, providerId?: string}} integration a loaded integration
+ * @param {{read?: (file: string) => Promise<unknown>}} [options] `read`: how
+ *   a doc file gives its value; {@link loadTopicModule} by default
  * @returns {Promise<{records: DocsTopicRecord[], errors: Error[], namespaces: import('../doc-compiler/tree.mjs').TreeNamespaceInput[], guides: import('../doc-compiler/tree.mjs').TreeDocInput[]}>}
  */
-export async function discoverIntegrationDocs(integration) {
+export async function discoverIntegrationDocs(
+  integration,
+  {read = loadTopicModule} = {},
+) {
   const docsDir = integration?.docs;
   /** @type {DocsTopicRecord[]} */
   const records = [];
@@ -556,7 +608,7 @@ export async function discoverIntegrationDocs(integration) {
   for (const file of files) {
     let doc;
     try {
-      doc = parseReadableDoc(await loadTopicModule(file), path.basename(file));
+      doc = parseReadableDoc(await read(file), path.basename(file));
     } catch (err) {
       errors.push(
         new Error(
@@ -972,6 +1024,42 @@ export class DocsCatalog {
    */
   get issues() {
     return this.#issues;
+  }
+
+  /**
+   * Add what one integration's docs discovery found
+   * ({@link discoverIntegrationDocs}): its topics and tree inputs, or, when
+   * any doc is unusable, none of them and each failure as an issue of the
+   * catalog. A partial contribution is the state where a `replaces` silently
+   * does nothing, so one unusable doc withdraws the package's docs.
+   * @param {Awaited<ReturnType<typeof discoverIntegrationDocs>>} discovered
+   * @param {{package: string, rank: number}} owner the package the catalog
+   *   names in an issue, and the integration's place in configured order
+   * @returns {import('../integrations/issue').AstryxIntegrationIssue[]} the
+   *   issues of the package's docs, in order
+   */
+  addDiscovered({records, errors, namespaces, guides}, {package: pkg, rank}) {
+    if (errors.length > 0) {
+      for (const e of errors) {
+        this.addIssue({package: pkg, message: e.message});
+      }
+      return errors.map(e => ({
+        code: 'invalid_doc',
+        severity: 'error',
+        message: e.message,
+      }));
+    }
+    /** @type {import('../integrations/issue').AstryxIntegrationIssue[]} */
+    const issues = [];
+    for (const record of records) {
+      const issue = this.add(record);
+      if (issue) issues.push(issue);
+    }
+    this.addTreeInputs({
+      namespaces: namespaces.map(input => ({...input, rank})),
+      guides: guides.map(input => ({...input, rank})),
+    });
+    return issues;
   }
 
   /**

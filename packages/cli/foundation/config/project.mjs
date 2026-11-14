@@ -1220,36 +1220,13 @@ export class Project {
         const pkg = this.#pkgLabel(integration);
         if (!integration?.docs) continue;
         try {
-          const {records, errors, namespaces, guides} =
-            await discoverIntegrationDocs(integration);
-          for (const e of errors) {
-            this.#pushIssue(pkg, {
-              code: 'invalid_doc',
-              severity: 'error',
-              message: e.message,
-            });
-          }
           // Any unusable doc withdraws the whole package's topics, matching
-          // how a bad template withdraws its package's templates: a partial
-          // docs contribution is the state where a `replaces` silently does
-          // nothing and a reader gets the topic it was meant to replace.
-          if (errors.length > 0) {
-            for (const e of errors) {
-              catalog.addIssue({
-                package: integration.name ?? pkg,
-                message: e.message,
-              });
-            }
-            continue;
-          }
-          for (const record of records) {
-            const issue = catalog.add(record);
-            if (issue) this.#pushIssue(pkg, issue);
-          }
-          catalog.addTreeInputs({
-            namespaces: namespaces.map(input => ({...input, rank})),
-            guides: guides.map(input => ({...input, rank})),
-          });
+          // how a bad template withdraws its package's templates.
+          const issues = catalog.addDiscovered(
+            await discoverIntegrationDocs(integration),
+            {package: integration.name ?? pkg, rank},
+          );
+          for (const issue of issues) this.#pushIssue(pkg, issue);
         } catch (err) {
           this.#pushIssue(pkg, {
             code: 'invalid_doc',

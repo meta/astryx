@@ -577,6 +577,7 @@ const LOADER_MODULES = {
     'GRAPH_BLOCK_TYPES',
     'GRAPH_ONLY_FIELDS',
     'integrationDocDeclaration',
+    'integrationDocsCatalog',
     'isGuideRoute',
     'mergeTopic',
     'mergeTopicReport',

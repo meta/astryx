@@ -37,7 +37,7 @@ export async function docsRoutesNow(cwd, integrations) {
   if (integrations.every(each => !each?.docs && !each?.iconSets)) {
     return storedCliRoutes() ?? (await cliDocsRoutesNow());
   }
-  return projectRoutesNow(cwd);
+  return projectRoutesNow(cwd, integrations);
 }
 
 /**
@@ -64,13 +64,28 @@ export async function cliDocsRoutesNow() {
 }
 
 /**
- * The project's routes, worked out now from its docs tree.
+ * The project's routes, worked out now from its docs tree. Without icon sets
+ * the tree's inputs are the CLI's own docs and the integrations' doc files,
+ * so only those are read: each doc of exported literals as data, any other
+ * imported. Icon sets join the tree only where the project's config opts in,
+ * so with one the project is loaded and its whole catalog read.
  * @param {string} cwd
+ * @param {Array<{docs?: unknown, iconSets?: unknown, name?: string} | null | undefined>} integrations
  * @returns {Promise<string[]>}
  */
-async function projectRoutesNow(cwd) {
-  const {loadDocsCatalog} = await import('./_adapter.mjs');
-  return routesOf(await loadDocsCatalog(cwd));
+async function projectRoutesNow(cwd, integrations) {
+  if (integrations.some(each => each?.iconSets)) {
+    const {loadDocsCatalog} = await import('./_adapter.mjs');
+    return routesOf(await loadDocsCatalog(cwd));
+  }
+  const [{integrationRouteTree}, {isExperimentalTreeNode}] = await Promise.all([
+    import('./_adapter.mjs'),
+    import('../../foundation/doc-compiler/tree.mjs'),
+  ]);
+  const tree = await integrationRouteTree(integrations);
+  return [...tree.nodes.values()]
+    .filter(node => !isExperimentalTreeNode(tree, node))
+    .map(node => node.route);
 }
 
 /**

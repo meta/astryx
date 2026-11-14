@@ -446,6 +446,107 @@ describe('the name index', () => {
   );
 
   it(
+    'keeps the docs routes under the doc files that define them, and what a code doc imports',
+    async () => {
+      const {hintNameIndex} = await import('./name-index.mjs');
+      const {docsRoutesLazily} =
+        await import('../../api/docs/_entry-names-lazily.mjs');
+      const routedDir = path.join(project, 'node_modules', '@acme', 'routed');
+      const docs = path.join(routedDir, 'docs');
+      fs.mkdirSync(path.join(routedDir, 'lib'), {recursive: true});
+      fs.mkdirSync(docs, {recursive: true});
+      fs.writeFileSync(
+        path.join(routedDir, 'package.json'),
+        JSON.stringify({name: '@acme/routed', version: '1.0.0'}),
+      );
+      // The manifest's own code defines no route.
+      fs.writeFileSync(
+        path.join(routedDir, 'lib', 'helper.mjs'),
+        'export const helper = 1;\n',
+      );
+      fs.writeFileSync(
+        path.join(routedDir, 'astryx.integration.mjs'),
+        "import './lib/helper.mjs';\nexport default {docs: './docs'};\n",
+      );
+      fs.writeFileSync(
+        path.join(docs, 'routed.doc.mjs'),
+        `export const docs = ${JSON.stringify({type: 'namespace', name: 'routed', title: 'Routed', summary: 'The routed kit.', slots: {guides: {title: 'Guides', accepts: {kinds: ['generic']}}}})};\n`,
+      );
+      /** @param {string} name */
+      const guide = name => ({
+        type: 'generic',
+        name,
+        title: `Routed ${name}`,
+        description: `How to ${name}.`,
+        placement: {parent: 'namespace:routed', slot: 'guides'},
+        sections: [{title: 'One', content: [{type: 'prose', text: 'One.'}]}],
+      });
+      // A doc of literals is read as data.
+      fs.writeFileSync(
+        path.join(docs, 'setup.doc.mjs'),
+        `export const docs = ${JSON.stringify(guide('setup'))};\n`,
+      );
+      // A doc whose name is code is imported, with what it imports.
+      const nameModule = path.join(routedDir, 'lib', 'name.mjs');
+      fs.writeFileSync(nameModule, "export const NAME = 'deploy';\n");
+      fs.writeFileSync(
+        path.join(docs, 'deploy.doc.mjs'),
+        `import {NAME} from '../lib/name.mjs';\nexport const docs = {...${JSON.stringify(guide('deploy'))}, name: NAME};\n`,
+      );
+      const integrations = [{name: '@acme/routed', docs}];
+      const routes = async () =>
+        (
+          await hintNameIndex(project, null, integrations, docsRoutesLazily)
+        ).routes?.filter(route => route.startsWith('routed'));
+      await sleep(SETTLE_WAIT_MS);
+      expect(await routes()).toEqual([
+        'routed',
+        'routed/deploy',
+        'routed/setup',
+      ]);
+      const first = keptIndex(docs);
+      const stamped = JSON.parse(fs.readFileSync(first.file, 'utf8'))
+        .stamps.map((/** @type {[string]} */ [at]) => at)
+        .filter((/** @type {string} */ at) => at.startsWith(routedDir));
+      expect(stamped).toEqual(
+        expect.arrayContaining([
+          docs,
+          path.join(docs, 'setup.doc.mjs'),
+          path.join(docs, 'deploy.doc.mjs'),
+          nameModule,
+        ]),
+      );
+      expect(
+        stamped.filter(
+          (/** @type {string} */ at) =>
+            !at.startsWith(docs) && at !== nameModule,
+        ),
+      ).toEqual([]);
+
+      // An edit of a file no route comes from keeps the index.
+      fs.writeFileSync(
+        path.join(routedDir, 'lib', 'helper.mjs'),
+        'export const helper = 2;\n',
+      );
+      expect(await routes()).toEqual([
+        'routed',
+        'routed/deploy',
+        'routed/setup',
+      ]);
+      expect(keptIndex(docs).ino).toBe(first.ino);
+
+      // An edit in place of what the code doc imports makes the index again.
+      // (A process imports a module once, so the new name shows in the next
+      // process.)
+      fs.writeFileSync(nameModule, "export const NAME = 'ship';\n");
+      await sleep(SETTLE_WAIT_MS);
+      await routes();
+      expect(keptIndex(docs).ino).not.toBe(first.ino);
+    },
+    SLOW,
+  );
+
+  it(
     'answers as before when the folder cannot be made',
     async () => {
       const blocked = path.join(TEMP_ROOT, 'blocked-cache');

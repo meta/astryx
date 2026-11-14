@@ -50,6 +50,7 @@ const INDEX_CODE = [
     '../discovery/cli-self-doc-names.mjs',
     '../discovery/docs-section-key.mjs',
     '../discovery/docs-discovery.mjs',
+    '../doc-compiler/literal-doc.mjs',
     '../doc-compiler/generated-levels.mjs',
     '../doc-compiler/tree.mjs',
     '../config/project.mjs',
@@ -116,9 +117,10 @@ export function nameIndexKept() {
 /**
  * The name index of the project at `cwd`, with Core at `coreDir` and these
  * integrations: the kept one while every folder it listed and every file it
- * read is unchanged, else made now and kept. Making it loads each integration
- * doc once, to keep the name it declares; what those loads read is checked
- * too. With `docsRoutes`, it also holds the project's docs routes: a kept
+ * read is unchanged, else made now and kept. Making it reads each integration
+ * doc once, to keep the name it declares: as data when the doc holds only
+ * exported literals, else by importing it, and what that import reads is
+ * checked too. With `docsRoutes`, it also holds the project's docs routes: a kept
  * index without them is made again with them, under the same key, so only a
  * miss that can name a route works them out, once. The kept gathers' folder
  * is made first where none exists (gather-cache.mjs makeGatherCacheDir), so
