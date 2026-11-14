@@ -34,7 +34,7 @@ import {
   $setTaskState,
   registerTaskListEditing,
   type TaskState,
-} from './markdownTaskList';
+} from '../markdownTaskList';
 
 /** Where one task item's checkbox goes, in the container's coordinates. */
 interface TaskPlacement {

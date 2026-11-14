@@ -385,7 +385,7 @@
     "packages/cli/api/render/render.templates.2.test.mjs": 31.2,
     "packages/cli/api/render/render.templates.3.test.mjs": 23.2,
     "packages/cli/api/render/render.templates.slices.test.mjs": 0.3,
-    "packages/cli/api/render/render.test.mjs": 128,
+    "packages/cli/api/render/render.test.mjs": 202.7,
     "packages/cli/api/search/_adapter.listings.test.mjs": 1.4,
     "packages/cli/api/search/_adapter.test.mjs": 4.1,
     "packages/cli/api/search/_doc-searcher.test.mjs": 2,
