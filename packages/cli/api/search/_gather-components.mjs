@@ -294,13 +294,13 @@ export async function gatherComponents(coreDir, cwd) {
 
 /**
  * Every component the project can use, Core's and its integrations', with the
- * keywords its own doc declares: the discovery and doc reads search's own
+ * keywords and category its own doc declares: the discovery and doc reads search's own
  * candidates use, without the import paths and prose a result carries. `build`
  * reads it to tell a part of a page from a page when its search was narrowed
  * away from components.
  * @param {string} coreDir
  * @param {string} cwd
- * @returns {Promise<{name: string, keywords: string[]}[]>}
+ * @returns {Promise<{name: string, keywords: string[], category: string}[]>}
  */
 export async function componentKeywords(coreDir, cwd) {
   /** @param {any} doc */

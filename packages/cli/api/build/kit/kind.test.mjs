@@ -127,6 +127,7 @@ describe('ideaKind and pickStart on the shipped catalog', () => {
     );
     expect(kind).toBe('page');
     expect(s).not.toBeNull();
+    expect(s?.family).not.toBe('Shell');
   });
 
   it('starts a single control made of records from the app shell', async () => {
