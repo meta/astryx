@@ -48,6 +48,14 @@ export const CONTAINER_PHRASE =
   /\b(?:in|inside|within)\s+(?:a|an|the)\s+([a-z-]+)(?:\s+([a-z-]+))?/gi;
 
 /**
+ * A place phrase: a preposition of place, then a determiner ("above the
+ * table", "into my dashboard"). CONTAINER_PHRASE is the narrower class of
+ * frames a page lives in ("in a modal"); this one names where a piece goes.
+ */
+export const PLACE_PHRASE =
+  /\b(?:to|into|onto|in|inside|within|on|above|below|beside|under|next to)\s+(?:the|a|an|my|our|this|each|every|existing)\b/i;
+
+/**
  * Where a phrase ends, for finding the word that heads it: punctuation and
  * the words that join phrases.
  */
