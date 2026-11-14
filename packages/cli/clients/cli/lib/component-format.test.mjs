@@ -384,6 +384,8 @@ describe('example kind', () => {
 });
 
 describe('prop descriptions in a component read', () => {
+  const long =
+    'Whether the details collapse. On by default, starting collapsed. `false` keeps them always visible, with no toggle and no animation, in every layout and at every size. `{defaultIsOpen: true}` starts open, and `{isOpen, onOpenChange}` makes it controlled, like any other collapsible region in the system.';
   const docs = {
     name: 'Notice',
     description: 'A notice.',
@@ -392,35 +394,49 @@ describe('prop descriptions in a component read', () => {
         name: 'collapsible',
         type: 'boolean',
         default: 'true',
-        description:
-          'Whether the details collapse. On by default; `false` keeps them always visible.',
+        description: long,
       },
       {name: 'title', type: 'string', description: 'The main message.'},
     ],
   };
+  const propsCommand = 'component Notice --props';
 
-  it('prints the first sentence and says where the whole text is', () => {
-    const out = formatFull(docs);
+  it('prints the first sentence and names the command that prints them whole', () => {
+    const out = formatFull(docs, {propsCommand});
 
     expect(out).toContain(
       '- `collapsible`: `boolean` = `true` - Whether the details collapse.\n',
     );
     expect(out).toContain('- `title`: `string` - The main message.');
     expect(out).toMatch(
-      /Each description's first sentence; `.* component Notice --props` prints them whole\./,
+      /Each prop description's first sentence; `.* component Notice --props` prints them whole\./,
     );
   });
 
   it('prints every description whole in the --props view', () => {
     expect(formatProps(docs, 'Notice')).toContain(
-      '- `collapsible`: `boolean` = `true` - Whether the details collapse. On by default; `false` keeps them always visible.',
+      `- \`collapsible\`: \`boolean\` = \`true\` - ${long}`,
     );
   });
 
-  it('prints no pointer when no description was shortened', () => {
-    const short = {...docs, props: [docs.props[1]]};
+  it('prints descriptions whole when the read names no --props command', () => {
+    const out = formatFull(docs);
 
-    expect(formatFull(short)).not.toContain('first sentence');
+    expect(out).toContain(long);
+    expect(out).not.toContain('first sentence');
+  });
+
+  it('prints descriptions whole when the cut saves less than the pointer costs', () => {
+    const short = {
+      ...docs,
+      props: [
+        {name: 'title', type: 'string', description: 'The message. Short.'},
+      ],
+    };
+    const out = formatFull(short, {propsCommand});
+
+    expect(out).toContain('- `title`: `string` - The message. Short.');
+    expect(out).not.toContain('first sentence');
   });
 });
 

@@ -2,6 +2,6 @@
 '@astryxdesign/cli': patch
 ---
 
-[feat] `astryx component <Name>` prints the first sentence of each prop's description, with one line saying that `astryx component <Name> --props` prints them whole. Sub-components and integration component reads through `astryx discover <package>/<Component>` do the same. The `--props` view and `--json` keep every description whole.
+[feat] `astryx component <Name>` prints the first sentence of each prop's description, under one line naming the command that prints them whole: the read's own selector and `--package` scope with `--props`, so it resolves to the same component. A read prints its descriptions whole when that line would cost more than the cut saves. The `--props` view, `--json` and `astryx discover` keep every description whole.
 
 @josephfarina
