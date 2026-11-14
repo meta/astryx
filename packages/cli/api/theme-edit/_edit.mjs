@@ -26,6 +26,7 @@ import {
   coversTyped,
   readsTyped,
   withoutCopyDebris,
+  baseWord,
 } from './_normal.mjs';
 import {
   AUTO_SPREAD,
@@ -501,13 +502,9 @@ async function newTheme(name, options) {
   // in other letters is the one meant, installed or not (its refusal then
   // offers the install, or the same new on no base).
   const have = LIKE.filter(b => baseInstalled(cwd, b));
-  // `@astryxdesign/theme-butter`, `theme-butter`, `Butter`: butter.
-  const baseName = (/** @type {unknown} */ v) =>
-    String(v)
-      .trim()
-      .toLowerCase()
-      .replace(/^@astryxdesign\/theme-/, '')
-      .replace(/^theme-/, '');
+  // `@astryxdesign/theme-butter`, `butterTheme`, `Butter`: butter (the one
+  // base reader, shared with set and the settings file).
+  const baseName = (/** @type {unknown} */ v) => baseWord(v);
   const likeFixed =
     like == null
       ? likeWord === 'none'
@@ -1575,6 +1572,27 @@ async function swappedThingValue(e, slug, thing, value, options) {
 }
 
 /**
+ * The theme and the context a line is checked against (set's own check, in
+ * memory), a saved entry not checked while the theme is read; null when
+ * the theme does not load.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {Partial<import('./_settings.mjs').Setting>} [skip]
+ */
+async function loadedForCheck(cwd, slug, skip) {
+  try {
+    const data = loadTheme(cwd, slug, skip);
+    const ctx = /** @type {import('./_settings.mjs').Ctx} */ (
+      await context(cwd)
+    );
+    ctx.base = await baseResolved(ctx.project, data.like);
+    return {data, ctx};
+  } catch {
+    return null;
+  }
+}
+
+/**
  * A refusal of a saved entry whose value the editor no longer accepts,
  * with the repair `set` offers for that value as typed (a typo, a unit, a
  * label read as set reads them) beside the undo: the line is followed as
@@ -1586,30 +1604,82 @@ async function swappedThingValue(e, slug, thing, value, options) {
  */
 async function withSavedRepair(e, slug, cwd) {
   const bad = /** @type {any} */ (e)?.damaged;
+  // The value as set reads a typed one: text, or a number written as JSON
+  // (`8` on corners is the 8 typed).
+  const saved =
+    typeof bad?.value === 'string'
+      ? bad.value
+      : typeof bad?.value === 'number' && Number.isFinite(bad.value)
+        ? String(bad.value)
+        : null;
   if (
     !(e instanceof AstryxError) ||
     !bad ||
-    typeof bad.value !== 'string' ||
+    saved == null ||
     ['mode', 'base'].includes(bad.thing)
   )
     return e;
-  const line = `${P} set ${slug} ${setArgs(bad, bad.value)}`;
-  const followed = await followChangeLine('set', slug, line, cwd, bad);
-  if (followed.why || followed.line === line) return e;
-  const read = readSetLine(followed.line, slug);
-  if (
-    !read ||
-    read.thing !== bad.thing ||
-    !allowedLine({offered: read.value, typed: bad.value, thing: read.thing})
-  )
-    return e;
+  // The thing as set reads it (`CORNERS`, `corners ` are corners).
+  const thing = String(normalizeEntry(String(bad.thing), saved).thing);
+  const line = `${P} set ${slug} ${setArgs({...bad, thing}, saved)}`;
+  // The lines set offers for the value, as for a typed one: each checked
+  // as set checks it, and offered only when they carry the saved value
+  // (the one gate; a family and its size may take two lines).
+  const loaded = await loadedForCheck(cwd, slug, bad);
+  if (!loaded) return e;
+  /** @type {string[]} */
+  let lines;
+  try {
+    checkSetting(
+      loaded.ctx,
+      slug,
+      structuredClone(loaded.data),
+      thing,
+      saved,
+      {on: bad.on, when: bad.when, state: bad.state, mode: bad.mode},
+      false,
+    );
+    lines = [line];
+  } catch (x) {
+    if (!(x instanceof AstryxError)) throw x;
+    lines = (x.suggestions ?? [])
+      .map(y => y.name)
+      .filter(n => n.startsWith(`${P} set ${slug} `));
+  }
+  /** @type {string[]} */
+  const working = [];
+  for (const l of lines) {
+    const followed = await followChangeLine('set', slug, l, cwd, bad);
+    if (!followed.why) working.push(followed.line);
+  }
+  const reads = working.map(l => {
+    const read = readSetLine(l, slug);
+    return read
+      ? readsTyped({
+          offered: read.value,
+          typed: saved,
+          thing: read.thing,
+          typedThing: thing,
+        })
+      : false;
+  });
+  const covered = coversTyped(reads, saved, thing);
+  const kept = working.filter(
+    (_, i) =>
+      reads[i] === true ||
+      (reads[i] && typeof reads[i] === 'object' && covered),
+  );
+  if (!kept.length) return e;
   const list = e.suggestions ?? [];
   // A set line the refusal already offers (the value cleaned) stands.
   if (list.some(x => x.name.startsWith(`${P} set ${slug} `))) return e;
   const at = list.findIndex(x => x.name.startsWith(`${P} undo ${slug} `));
   e.suggestions = [
     ...list.slice(0, at + 1),
-    {name: followed.line, reason: 'or set the value it holds, as set reads it'},
+    ...kept.map(name => ({
+      name,
+      reason: 'or set the value it holds, as set reads it',
+    })),
     ...list.slice(at + 1),
   ];
   return e;
@@ -1796,39 +1866,51 @@ function refuseStoredTokens(ctx, slug, data, skip) {
     }
   };
   const one = found && takes(found) ? found : null;
-  refuse(
-    E.ERR_THEME_INVALID,
-    `themes/${slug}/${slug}.settings.json: ${bad
-      .map(
-        b =>
-          `${describe(b.setting)} ${b.scope ? 'applies where the editor does not accept it' : 'holds a value the editor no longer accepts'} (${b.why})`,
-      )
-      .join('; ')}.`,
-    {
-      // Each undo runs while the others are still saved: an undo of one
-      // setting is never refused for another.
-      run: [
-        ...bad.slice(0, 5).map(b => `${P} undo ${slug} ${undoArgs(b.setting)}`),
-        // A value to set only for a token whose stored value has the wrong
-        // type; any other thing `set` would refuse, or read as a dial.
-        ...(one &&
-        one.fix &&
-        !one.scope &&
-        one.setting.source === 'token' &&
-        ctx.C.isToken(one.setting.thing)
-          ? [
-              // The value the check suggests for this value, else a stock
-              // one of the token's type.
-              `${P} set ${slug} ${one.setting.thing} ${quoteCommandArgument(String(one.fix))}${one.setting.mode ? ` --mode ${one.setting.mode}` : ''}`,
-            ]
-          : one && one.fix && one.setting.source === 'dial'
+  // One saved entry with no line of its own: the entry rides on the
+  // refusal, and the change offers set's repair for its value beside the
+  // undo (withSavedRepair).
+  try {
+    refuse(
+      E.ERR_THEME_INVALID,
+      `themes/${slug}/${slug}.settings.json: ${bad
+        .map(
+          b =>
+            `${describe(b.setting)} ${b.scope ? 'applies where the editor does not accept it' : 'holds a value the editor no longer accepts'} (${b.why})`,
+        )
+        .join('; ')}.`,
+      {
+        // Each undo runs while the others are still saved: an undo of one
+        // setting is never refused for another.
+        run: [
+          ...bad
+            .slice(0, 5)
+            .map(b => `${P} undo ${slug} ${undoArgs(b.setting)}`),
+          // A value to set only for a token whose stored value has the wrong
+          // type; any other thing `set` would refuse, or read as a dial.
+          ...(one &&
+          one.fix &&
+          !one.scope &&
+          one.setting.source === 'token' &&
+          ctx.C.isToken(one.setting.thing)
             ? [
-                `${P} set ${slug} ${one.setting.thing} ${quoteCommandArgument(one.fix)}`,
+                // The value the check suggests for this value, else a stock
+                // one of the token's type.
+                `${P} set ${slug} ${one.setting.thing} ${quoteCommandArgument(String(one.fix))}${one.setting.mode ? ` --mode ${one.setting.mode}` : ''}`,
               ]
-            : []),
-      ],
-    },
-  );
+            : one && one.fix && one.setting.source === 'dial'
+              ? [
+                  `${P} set ${slug} ${one.setting.thing} ${quoteCommandArgument(one.fix)}`,
+                ]
+              : []),
+        ],
+      },
+    );
+  } catch (e) {
+    throw Object.assign(/** @type {object} */ (e), {
+      aboutSaved: true,
+      ...(found && !(one && one.fix) ? {damaged: found.setting} : {}),
+    });
+  }
 }
 
 /**
@@ -2725,17 +2807,9 @@ async function workingLines(sub, slug, lines, cwd, typed, thing) {
  * @returns {Promise<{line: string, why: string | null, next?: import("../../foundation/response/base").Suggestion[]}>}
  */
 async function followChangeLine(sub, slug, line, cwd, skip) {
-  /** @type {import('./_settings.mjs').ThemeData} */
-  let data;
-  /** @type {import('./_settings.mjs').Ctx} */
-  let ctx;
-  try {
-    data = loadTheme(cwd, slug, skip);
-    ctx = /** @type {import('./_settings.mjs').Ctx} */ (await context(cwd));
-    ctx.base = await baseResolved(ctx.project, data.like);
-  } catch {
-    return {line, why: null};
-  }
+  const loaded = await loadedForCheck(cwd, slug, skip);
+  if (!loaded) return {line, why: null};
+  const {data, ctx} = loaded;
   const prefix = `${P} ${sub} ${slug} `;
   return followLine(
     line,
@@ -3031,9 +3105,15 @@ async function change(sub, slug, thing, value, options) {
     // carries the value typed (cleaned), never a stock value.
     throw misplacedFirst(
       carryTyped(
-        seen.ctx
-          ? vetSuggestions(e, seen.ctx, slug, seen.data)
-          : await vetLoadRefusal(e, options.cwd ?? process.cwd(), slug),
+        // A refusal of a saved entry gets set's repair for its value
+        // beside the undo.
+        await withSavedRepair(
+          seen.ctx
+            ? vetSuggestions(e, seen.ctx, slug, seen.data)
+            : await vetLoadRefusal(e, options.cwd ?? process.cwd(), slug),
+          slug,
+          options.cwd ?? process.cwd(),
+        ),
         sub,
         slug,
         oneEntry ? thing : typedThing,

@@ -62,7 +62,13 @@ import {
   WRAPPED_PARTS,
   CARD_LIKE,
 } from './_tables.mjs';
-import {booleanWord, cleanDialValue, typoLimit, typoNear} from './_normal.mjs';
+import {
+  baseWord,
+  booleanWord,
+  cleanDialValue,
+  typoLimit,
+  typoNear,
+} from './_normal.mjs';
 import {
   alphaOf,
   colorProblem,
@@ -706,12 +712,7 @@ export function fieldsMeant(data) {
   const mode = MODES.includes(typed)
     ? typed
     : (word ?? (typed ? near(typed, MODES) : null) ?? typed);
-  const likeTyped = String(data?.like ?? '')
-    .trim()
-    .toLowerCase()
-    // The package's name or the name with `theme` (theme-neutral,
-    // neutral-theme) is the base.
-    .replace(/^(@astryxdesign\/)?theme-|-theme$/g, '');
+  const likeTyped = baseWord(data?.like);
   const like = LIKE.includes(likeTyped)
     ? likeTyped
     : ((likeTyped ? near(likeTyped, LIKE) : null) ?? likeTyped);

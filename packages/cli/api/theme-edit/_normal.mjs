@@ -249,11 +249,18 @@ export function normalizeEntry(thing, value) {
   if (quotedThing) {
     t = quotedThing[2].trim();
     pasted = true;
-    // Its value in JSON's double quotes is the value (`"#e11d48"`); a font
-    // list keeps its own quotes.
-    if (typeof v === 'string' && !/font/i.test(t)) {
-      const jv = /^\s*"([^"]*)"\s*,?\s*$/.exec(v);
-      if (jv) v = jv[1];
+    // Its value in JSON's double quotes is the string they hold
+    // (`"#e11d48"`, `"Inter, serif"`): the quotes are JSON's, for a font
+    // too; a family that needs its own quotes is written inside the string
+    // (`"\"Open Sans\", serif"`).
+    if (typeof v === 'string') {
+      const jv = /^\s*("(?:[^"\\]|\\.)*")\s*,?\s*$/.exec(v);
+      if (jv)
+        try {
+          v = String(JSON.parse(jv[1]));
+        } catch {
+          // Not a JSON string: read as typed.
+        }
     }
   }
   // Dash-like characters where a token's two dashes go (an em or en dash,
@@ -814,6 +821,24 @@ export function modeWord(text) {
 }
 
 /**
+ * A base as written in any of its names: its package (`@astryxdesign/
+ * theme-neutral`, `theme-neutral`), its export (`neutralTheme`), or with
+ * the word theme (`neutral-theme`, `neutral theme`), in any case. The one
+ * reading `set`, `new` and the settings file share; the word as read (a
+ * base name or not).
+ * @param {unknown} v
+ * @returns {string}
+ */
+export function baseWord(v) {
+  return String(v ?? '')
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+    .toLowerCase()
+    .replace(/[\s_]+/g, '-')
+    .replace(/^(@astryxdesign\/)?theme-|-theme$/g, '');
+}
+
+/**
  * The one reading of a yes/no word, for a flag given a value (`--only=on`)
  * and a saved `only`: the documented spellings of yes and no, or a typo of
  * one of them (`ture`); null for any other word, which is neither.
@@ -1112,6 +1137,14 @@ export function readsTyped({
   )
     return true;
   if (numbersEqual(o, t)) return true;
+  // Two bare numbers typed with a comma between, offered as the slash pair
+  // a grammar takes (`16,9` is `16 / 9`): the comma separated them.
+  {
+    const pair = /^\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*$/.exec(
+      String(typed).replace(/^(["'])(.*)\1$/, '$2'),
+    );
+    if (pair && o.replace(/\s+/g, '') === `${pair[1]}/${pair[2]}`) return true;
+  }
   // (5) A typo of a documented word in a list, item by item (`Inter,
   // san-serif` is `Inter, sans-serif`; `sytem` is the system font).
   {
@@ -1156,7 +1189,15 @@ export function readsTyped({
     if (o === light && DIALS[key] && !key.startsWith('--')) return true;
   }
   // A base named by its package (@astryxdesign/theme-butter is butter).
-  if (key === 'base' && t.replace(/^(@astryxdesign\/)?theme-/, '') === o)
+  if (
+    key === 'base' &&
+    [
+      t,
+      String(typed)
+        .trim()
+        .replace(/^(["'])(.*)\1$/, '$2'),
+    ].some(x => baseWord(x) === o)
+  )
     return true;
   // (2) A documented reading of the whole value.
   const whole = [t, t.replace(/\s+/g, '-'), t.replace(/[\s-]+/g, '')];
