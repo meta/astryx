@@ -19,6 +19,7 @@ import {MODULE_EXTENSIONS} from './embedded-files.mjs';
 import postcss from 'postcss';
 import {matchPath, pathsFor} from './ts-paths.mjs';
 import {isAssetPath} from './assets.mjs';
+import {climbsOut} from '../fs/paths.mjs';
 
 /**
  * What a stylesheet's `@import` rules load, read with postcss so comments
@@ -244,7 +245,7 @@ export function reachableFiles(files, {aliases = []} = {}) {
         };
     for (const ref of scanned.assets) {
       const joined = path.posix.normalize(path.posix.join(path.posix.dirname(current), ref));
-      if (joined.startsWith('..')) continue;
+      if (climbsOut(joined)) continue;
       if (!byPath.has(joined)) {
         missing.add(joined);
         continue;
@@ -255,7 +256,7 @@ export function reachableFiles(files, {aliases = []} = {}) {
       const bare = spec.split('?')[0];
       if (bare.startsWith('./') || bare.startsWith('../')) {
         const joined = path.posix.normalize(path.posix.join(path.posix.dirname(current), bare));
-        const target = joined.startsWith('..') ? null : resolveIn(joined);
+        const target = climbsOut(joined) ? null : resolveIn(joined);
         if (!target) {
           missing.add(joined);
           continue;

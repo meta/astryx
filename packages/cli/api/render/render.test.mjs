@@ -2002,6 +2002,24 @@ describe('render(): a page outside a project', () => {
     const siteHtml = fs.readFileSync(path.join(tree, 'site/page.html'), 'utf8');
     expect(siteHtml).toContain('Note by alias');
     expect(siteHtml).toContain('src="data:image/png;base64,');
+    // A page that imports nothing above its own folder is named as it is
+    // listed among the files.
+    expect(siteHtml).toContain('Page: page.tsx\n');
+  }, 60_000);
+
+  it('keeps a page in a folder named like ..x whole: a file above it stays out, and is named', () => {
+    const tree = path.join(away, 'dots');
+    fs.mkdirSync(path.join(tree, '..x'), {recursive: true});
+    fs.mkdirSync(path.join(tree, 'shared'), {recursive: true});
+    fs.writeFileSync(path.join(tree, 'shared/Banner.tsx'), 'export function Banner() {\n  return <p>Banner above</p>;\n}\n');
+    fs.writeFileSync(path.join(tree, '..x/page.tsx'), "import {Banner} from '../shared/Banner';\nexport default function Page() {\n  return <main><Banner /></main>;\n}\n");
+    const run = runBin(tree, ['experimental', 'render', '..x/page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.files).toEqual(['page.tsx']);
+    expect(run.json.data.warnings.map((/** @type {any} */ w) => w.code)).toContain('not-embedded');
+    const back = runBin(path.join(tree, '..x'), ['experimental', 'render', '--reverse', 'page.html']);
+    expect(back.status).toBe(0);
+    expect(back.json.data).toMatchObject({mode: 'embedded', output: 'page-restored/page.tsx'});
   }, 60_000);
 
   it('loads one React outside a project, even when the folder holds its own copy', () => {

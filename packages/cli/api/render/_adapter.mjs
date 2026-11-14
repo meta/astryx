@@ -44,7 +44,7 @@ import {isAstryxMarkup} from '../../foundation/render/html-reader.mjs';
 import {rebuildPage} from '../../foundation/render/rebuild.mjs';
 import {cliVersion} from '../../foundation/integrations/cli-peer-version.mjs';
 import {assertWithin, PathSafetyError} from '../../foundation/fs/path-safety.mjs';
-import {requireCoreDir} from '../../foundation/fs/paths.mjs';
+import {climbsOut, isInside as liesInside, requireCoreDir} from '../../foundation/fs/paths.mjs';
 import {runChoice} from '../../foundation/release/run-context.mjs';
 import {isAlive, pidSpace} from '../../foundation/release/cache.mjs';
 import {isServedPackage} from '../../foundation/render/served-packages.mjs';
@@ -55,7 +55,7 @@ export {PAGE_EXTENSIONS, embeddedPathProblem};
 /** @param {string} cwd @param {string} file */
 const shown = (cwd, file) => {
   const rel = path.relative(cwd, file);
-  return rel && !rel.startsWith('..') && !path.isAbsolute(rel)
+  return rel && !climbsOut(rel) && !path.isAbsolute(rel)
     ? rel.split(path.sep).join('/')
     : file;
 };
@@ -157,11 +157,7 @@ function confined(file, cwd, what) {
  * @param {string} file absolute
  * @param {string | null} folder absolute
  */
-const isInside = (file, folder) => {
-  if (!folder) return false;
-  const rel = path.relative(folder, file);
-  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
-};
+const isInside = (file, folder) => Boolean(folder) && liesInside(file, /** @type {string} */ (folder));
 
 /**
  * Refuse, before anything is written, a write that reaches through a
@@ -690,7 +686,7 @@ export function reverseToFile({cwd, input, output, overwrite}) {
   /** A page is never written as a configuration, test, spec or story file. @param {string} file */
   const refuseConfigTarget = file => {
     const rel = path.relative(cwd, file).split(path.sep).join('/');
-    const where = rel.startsWith('..') || path.isAbsolute(rel) ? path.basename(file) : rel;
+    const where = climbsOut(rel) || path.isAbsolute(rel) ? path.basename(file) : rel;
     // Where the page lands must be a page module, and a name no tool takes
     // as its own (configuration, a runner's file): the same rules as any
     // file a restore writes.

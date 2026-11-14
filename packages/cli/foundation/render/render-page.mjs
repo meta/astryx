@@ -918,10 +918,16 @@ export async function renderPage(entry, options = {}) {
     }
   }
   // Paths are kept relative to the folder that holds every file: the page's
-  // folder, or an ancestor when the page imports from above it.
+  // folder, or an ancestor when the page imports from above it, but never one
+  // from which the page's own path holds a name a reverse refuses (a
+  // dot-folder): a file above that stays out of the file, and is named.
   let base = dir;
   for (const f of files) {
-    while (!isInside(f, base)) base = path.dirname(base);
+    while (!isInside(f, base)) {
+      const up = path.dirname(base);
+      if (up === base || embeddedPathProblem(path.relative(up, entry).split(path.sep).join('/'), {page: true})) break;
+      base = up;
+    }
   }
   // Page first, so the reader knows which file is the page. Only files a
   // rendered page may carry are embedded (see embedded-files.mjs).
@@ -963,7 +969,7 @@ export async function renderPage(entry, options = {}) {
       cli: options.version ?? null,
       format: formatFor(embedded),
       file,
-      page: path.relative(scope, entry).split(path.sep).join('/'),
+      page: projectOf(dir) ? path.relative(root, entry).split(path.sep).join('/') : embedded[0].path,
       restored: `${file.replace(/\.[^.]+$/, '')}-restored/${embedded[0].path}`,
       files: embedded.map(f => f.path),
       packages,
