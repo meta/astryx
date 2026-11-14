@@ -1137,6 +1137,50 @@ export const OverlayBesideKeyboard: Story = {
   },
 };
 
+/**
+ * A text field above a Selector whose field ends 300 px above the screen's
+ * end. On a phone, focus the field so that its software keyboard rises, then
+ * open the Selector. Its list flips above the Selector and ends above the
+ * keyboard. The keyboard must be shorter than 300 px, as an iPhone's is with
+ * its predictive bar off.
+ */
+export const FlippedOverlayBesideKeyboard: Story = {
+  parameters: {layout: 'fullscreen'},
+  render: () => {
+    const [name, setName] = useState('');
+    const [value, setValue] = useState<string | undefined>('Banana');
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 16,
+          padding: '96px 24px 0',
+        }}>
+        <TextInput label="Name" value={name} onChange={setName} />
+        <div style={{position: 'fixed', insetInline: 24, insetBlockEnd: 300}}>
+          <Selector
+            label="Fruit"
+            options={[
+              'Apple',
+              'Banana',
+              'Cherry',
+              'Date',
+              'Elderberry',
+              'Fig',
+              'Grape',
+              'Honeydew',
+              'Kiwi',
+            ]}
+            value={value}
+            onChange={v => setValue(v)}
+          />
+        </div>
+      </div>
+    );
+  },
+};
+
 // All variations
 export const AllVariations: Story = {
   render: () => {
