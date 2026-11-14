@@ -402,6 +402,55 @@ function mediaDeclarations(css: string, surface: 'dark' | 'light') {
   return declared;
 }
 
+/**
+ * The value a surface declares for `name` when exactly the media queries that
+ * `matches` accepts apply: the last declaration in source order whose
+ * enclosing queries all match.
+ */
+function surfaceValueWhen(
+  css: string,
+  surface: 'dark' | 'light',
+  name: string,
+  matches: (query: string) => boolean,
+): string | undefined {
+  const target = `[data-astryx-media="${surface}"]`;
+  const queries: (string | null)[] = [];
+  let value: string | undefined;
+  let start = 0;
+  for (let index = 0; index < css.length; index++) {
+    const char = css[index];
+    if (char === '{') {
+      const prelude = css.slice(start, index).trim();
+      if (prelude.startsWith('@media ')) {
+        queries.push(prelude.slice('@media '.length));
+      } else if (prelude.endsWith(target)) {
+        const end = css.indexOf('}', index);
+        const applies = queries.every(
+          query => query === null || matches(query),
+        );
+        if (applies) {
+          for (const line of css.slice(index + 1, end).split(';')) {
+            const colon = line.indexOf(':');
+            if (colon > 0 && line.slice(0, colon).trim() === name) {
+              value = line.slice(colon + 1).trim();
+            }
+          }
+        }
+        index = end;
+      } else {
+        queries.push(null);
+      }
+      start = index + 1;
+    } else if (char === '}') {
+      queries.pop();
+      start = index + 1;
+    } else if (char === ';' && queries.length === 0) {
+      start = index + 1;
+    }
+  }
+  return value;
+}
+
 describe('generateOnMediaCSS scheme-dependent replays', () => {
   const theme = defineTheme({
     name: 'media-scheme-replay',
@@ -519,6 +568,62 @@ describe('generateOnMediaCSS scheme-dependent replays', () => {
     expect(mediaDeclarations(css, 'dark')).not.toHaveProperty(
       '--color-background-surface',
     );
+  });
+
+  it('resolves a reference on a surface as the root does when two adaptation rules match', () => {
+    const overlapping = defineTheme({
+      name: 'media-scheme-replay-overlapping-rules',
+      tokens: {
+        '--color-accent': ['#111111', '#eeeeee'],
+        '--color-border-emphasized': 'var(--color-text-secondary)',
+        '--color-text-secondary': ['#555555', '#aaaaaa'],
+      },
+      adaptations: {
+        rules: [
+          {
+            when: {contrast: 'more'},
+            value: {tokens: {'--color-accent': '#ff0000'}},
+          },
+          {
+            when: {width: {below: 'lg'}},
+            value: {
+              tokens: {'--color-border-emphasized': 'var(--color-accent)'},
+            },
+          },
+        ],
+      },
+    });
+    const overlappingCss = generateOnMediaCSS(overlapping);
+    const contrast = (query: string) => query.includes('prefers-contrast');
+    const narrow = (query: string) => query.includes('width');
+    const valueWhen = (matches: (query: string) => boolean) =>
+      surfaceValueWhen(
+        overlappingCss,
+        'dark',
+        '--color-border-emphasized',
+        matches,
+      );
+    // One rule alone: the surface re-declares the value the root resolves.
+    expect(valueWhen(contrast)).toBe('var(--color-text-secondary)');
+    expect(valueWhen(narrow)).toBe(overlapping.tokens['--color-accent']);
+    // Both rules: the root resolves the reference to the first rule's accent.
+    // The surface must not restate the base accent over it.
+    expect(['inherit', '#ff0000']).toContain(
+      valueWhen(query => contrast(query) || narrow(query)),
+    );
+  });
+
+  it('does not re-declare a token that depends on the scheme only through a token the theme leaves unset', () => {
+    const referring = defineTheme({
+      name: 'media-scheme-replay-core-reference',
+      tokens: {'--color-border-emphasized': 'var(--color-text-secondary)'},
+    });
+    // Core resolves the secondary text color on the page root, so a surface
+    // re-declaration changes nothing after lowering. It only lets a value set
+    // between the theme root and the surface reach the surface.
+    expect(
+      mediaDeclarations(generateOnMediaCSS(referring), 'dark'),
+    ).not.toHaveProperty('--color-border-emphasized');
   });
 
   it('restates an adaptation value over the base replay under its query', () => {
