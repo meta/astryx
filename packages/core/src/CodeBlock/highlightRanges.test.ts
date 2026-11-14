@@ -209,6 +209,26 @@ describe('applyHighlightRangesChunked', () => {
     cleanup();
   });
 
+  it('adds the rule for an unknown token type inside the astryx-base layer', () => {
+    const type = 'layered-type';
+    const codeEl = createCodeElement(['line']);
+    const tokenLines: TokenLine[] = [[{type, start: 0, end: 4}]];
+
+    const mockStyle = document.createElement('style');
+    mockStyle.setAttribute('data-astryx-highlight-styles', '');
+    document.head.appendChild(mockStyle);
+    const insertRule = vi.spyOn(CSSStyleSheet.prototype, 'insertRule');
+
+    const cleanup = applyHighlightRangesChunked(codeEl, tokenLines);
+
+    expect(insertRule).toHaveBeenCalledTimes(1);
+    expect(insertRule).toHaveBeenCalledWith(
+      `@layer astryx-base { ${highlightRule('astryx-layered-type')} { color: var(--color-syntax-layered-type, currentColor); } }`,
+    );
+
+    cleanup();
+  });
+
   it('handles empty token lines', () => {
     const codeEl = createCodeElement(['', 'const x = 1;']);
     const tokenLines: TokenLine[] = [[], [{type: 'keyword', start: 0, end: 5}]];

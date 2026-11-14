@@ -59,6 +59,20 @@ describe('CodeBlock ::highlight() rules', () => {
     expect(seen).toEqual([true]);
   });
 
+  it('sit in the astryx-base layer, so theme and app syntax colours win over them', async () => {
+    const {CodeBlock} = await import('./CodeBlock');
+    render(
+      <CodeBlock code="const a = 1;" language="ts" highlightMode="ranges" />,
+    );
+    const text = document.head.querySelector(STYLE_SELECTOR)?.textContent ?? '';
+    // One layer block holds every injected rule, the :root fallbacks included.
+    expect(text.trim()).toMatch(/^@layer astryx-base \{[\s\S]*\}$/);
+    expect(text.indexOf(':root')).toBeGreaterThan(text.indexOf('@layer'));
+    expect(text.indexOf('::highlight(')).toBeGreaterThan(
+      text.indexOf('@layer'),
+    );
+  });
+
   it('are inserted once for many code blocks', async () => {
     const {CodeBlock} = await import('./CodeBlock');
     render(
