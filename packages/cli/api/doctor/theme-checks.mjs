@@ -154,6 +154,55 @@ function walkAst(value, visit) {
 }
 
 /**
+ * Whether a module renders a provider component: it imports `provider.export`
+ * from `provider.from` by name and uses that binding as a JSX element. An
+ * import alone, or a type-only one, renders nothing.
+ * @param {string} source
+ * @param {{export: string, from: string}} provider
+ */
+function rendersProvider(source, provider) {
+  if (!source.includes(provider.export) || !source.includes(provider.from))
+    return false;
+  let ast;
+  try {
+    ast = parseModule(source);
+  } catch {
+    return false;
+  }
+  /** @type {Set<string>} */
+  const locals = new Set();
+  walkAst(ast, node => {
+    if (
+      node.type !== 'ImportDeclaration' ||
+      node.importKind === 'type' ||
+      node.source?.value !== provider.from
+    )
+      return;
+    for (const specifier of node.specifiers ?? []) {
+      const imported =
+        specifier.imported?.name ?? specifier.imported?.value ?? null;
+      if (
+        specifier.type === 'ImportSpecifier' &&
+        specifier.importKind !== 'type' &&
+        imported === provider.export
+      )
+        locals.add(specifier.local.name);
+    }
+  });
+  if (locals.size === 0) return false;
+  let rendered = false;
+  walkAst(ast, node => {
+    if (
+      node.type === 'JSXOpeningElement' &&
+      node.name?.type === 'JSXIdentifier' &&
+      locals.has(node.name.name)
+    )
+      rendered = true;
+  });
+  return rendered;
+}
+
+/**
  * @param {string} source
  * @param {{runtimeOnly?: boolean}} [options] - skip type-only imports and
  *   re-exports, which the build erases
@@ -655,10 +704,17 @@ function definedThemeBase(init) {
  * is reported as unconfirmed, never as missing. The scan reads app source only
  * (no dependencies, build output, links or type-only imports) within the
  * bounded source walk, and executes nothing.
+ *
+ * A package theme whose integration names the provider component that wires
+ * its themes (its manifest's `themeProvider`) is wired when the app renders
+ * that component (`wiredBy`): the theme whose stylesheet the app imports, or
+ * the integration's only theme. A rendered provider with several themes and
+ * no stylesheet to tell them apart is unconfirmed, with the themes it may
+ * wire.
  * @param {string} cwd
  * @returns {Promise<{
- *   wired: Array<{slug: string, owner: string, file: string}>,
- *   unconfirmed: Array<{file: string}>,
+ *   wired: Array<{slug: string, owner: string, file: string, wiredBy?: string}>,
+ *   unconfirmed: Array<{file: string, wiredBy?: string, themes?: string[]}>,
  * }>}
  */
 export async function themeImportWiring(cwd) {
@@ -697,6 +753,12 @@ export async function themeImportWiring(cwd) {
   // package is installed (discovery also lists the CLI's bundled themes).
   /** @type {ResolvedAppTheme[]} */
   const themes = [];
+  /**
+   * The provider component each package theme's integration wires its themes
+   * with, by theme.
+   * @type {Map<ResolvedAppTheme, {export: string, from: string}>}
+   */
+  const providerOf = new Map();
   for (const theme of available) {
     let resolved;
     try {
@@ -710,9 +772,19 @@ export async function themeImportWiring(cwd) {
     }
     if (resolved.source === 'local' || installedDir(resolved.owner)) {
       themes.push(resolved);
+      if (theme.provider) providerOf.set(resolved, theme.provider);
     }
   }
   if (themes.length === 0) return none;
+  /** The providers the themes name, once each, with the themes each wires. */
+  /** @type {Map<string, {provider: {export: string, from: string}, themes: ResolvedAppTheme[], file: string | null}>} */
+  const providers = new Map();
+  for (const [theme, provider] of providerOf) {
+    const key = `${provider.export}\u0000${provider.from}`;
+    const entry = providers.get(key) ?? {provider, themes: [], file: null};
+    entry.themes.push(theme);
+    providers.set(key, entry);
+  }
   /**
    * The theme a `Theme` value's origin is, or null.
    * @param {{file: string, name: string} | null} origin
@@ -733,12 +805,14 @@ export async function themeImportWiring(cwd) {
     if (named.length === 1) return named[0];
     return owned.length === 1 ? owned[0] : null;
   };
-  /** @type {Map<string, {slug: string, owner: string, file: string}>} */
+  /** @type {Map<string, {slug: string, owner: string, file: string, wiredBy?: string}>} */
   const wired = new Map();
   const keyOf = (/** @type {ResolvedAppTheme} */ theme) =>
     `${theme.owner}\u0000${theme.slug}`;
   /** @type {Set<string>} */
   const unconfirmed = new Set();
+  /** @type {Array<{file: string, wiredBy: string, themes: string[]}>} */
+  const unconfirmedProviders = [];
   for (const file of listProjectSourceFiles(projectDir, '', {
     stylesheets: true,
   })) {
@@ -752,6 +826,10 @@ export async function themeImportWiring(cwd) {
     // its base to extend it, never to render it: it wires nothing.
     if (generatedThemeFile(source)) continue;
     const shown = relative(projectDir, file);
+    if (path.extname(file) !== '.css')
+      for (const entry of providers.values())
+        if (entry.file == null && rendersProvider(source, entry.provider))
+          entry.file = shown;
     const candidates = themes.filter(
       theme =>
         !wired.has(keyOf(theme)) &&
@@ -804,23 +882,62 @@ export async function themeImportWiring(cwd) {
       }
     }
   }
+  // A rendered provider wires its integration's theme: the one whose
+  // stylesheet the app imports, or the only one it has. With several and no
+  // stylesheet to tell them apart, which one it wires is not known.
+  for (const {provider, themes: owned, file} of providers.values()) {
+    if (file == null) continue;
+    const wiredBy = `${provider.export} from ${provider.from}`;
+    const imported = owned.filter(theme => wired.has(keyOf(theme)));
+    if (imported.length > 0) {
+      for (const theme of imported) {
+        const found =
+          /** @type {{slug: string, owner: string, file: string}} */ (
+            wired.get(keyOf(theme))
+          );
+        wired.set(keyOf(theme), {...found, wiredBy, file});
+      }
+    } else if (owned.length === 1) {
+      wired.set(keyOf(owned[0]), {
+        slug: owned[0].slug,
+        owner: owned[0].owner,
+        file,
+        wiredBy,
+      });
+    } else {
+      unconfirmedProviders.push({
+        file,
+        wiredBy,
+        themes: owned.map(theme => theme.slug),
+      });
+    }
+  }
   // In discovery order, so the report does not depend on the file walk.
   return {
     wired: themes.flatMap(theme => {
       const found = wired.get(keyOf(theme));
-      return found ? [found] : [];
+      return found ? [/** @type {any} */ (found)] : [];
     }),
-    unconfirmed: [...unconfirmed].sort().map(file => ({file})),
+    unconfirmed: [
+      ...[...unconfirmed].sort().map(file => ({file})),
+      ...unconfirmedProviders,
+    ],
   };
 }
 
 /**
  * The pass message's list of themes wired by import, each with the file that
  * imports it.
- * @param {Array<{slug: string, file: string}>} wired
+ * @param {Array<{slug: string, file: string, wiredBy?: string}>} wired
  */
 function wiredByImportList(wired) {
-  const shown = wired.slice(0, 5).map(({slug, file}) => `${slug} (${file})`);
+  const shown = wired
+    .slice(0, 5)
+    .map(({slug, file, wiredBy}) =>
+      wiredBy
+        ? `${slug} (wired by ${wiredBy} in ${file})`
+        : `${slug} (${file})`,
+    );
   const more = wired.length - shown.length;
   return more > 0 ? `${shown.join(', ')} and ${more} more` : shown.join(', ');
 }
@@ -835,7 +952,7 @@ function wiredByImportList(wired) {
  * reports the overall result of the app-theme checks.
  * @param {string} cwd
  * @param {DoctorCheck[]} appChecks - the checks {@link checkAppThemes} returned
- * @param {{wired: Array<{slug: string, file: string}>, unconfirmed: Array<{file: string}>}} [wiring] -
+ * @param {{wired: Array<{slug: string, file: string, wiredBy?: string}>, unconfirmed: Array<{file: string, wiredBy?: string, themes?: string[]}>}} [wiring] -
  *   what {@link themeImportWiring} returned
  * @returns {DoctorCheck}
  */
@@ -902,6 +1019,29 @@ export function checkThemes(
 
   const run = getCliInvocation(cwd);
   const packages = listDoctorThemePackages(cwd);
+  // A rendered provider that wires one of several themes, none of them told
+  // apart by an imported stylesheet: a theme is wired, but which one is not
+  // known.
+  const providerUnknown = wiring.unconfirmed.filter(entry => entry.wiredBy);
+  const traceUnknown = wiring.unconfirmed.filter(entry => !entry.wiredBy);
+  if (
+    wiredByImport.length === 0 &&
+    providerUnknown.length > 0 &&
+    !appPackageNamesTheme(cwd)
+  ) {
+    const shown = providerUnknown
+      .map(
+        entry =>
+          `${entry.file} renders ${entry.wiredBy}, which wires one of ${(entry.themes ?? []).join(', ')}`,
+      )
+      .join('; ');
+    return {
+      id: 'themes',
+      label,
+      status: 'info',
+      message: `${shown}; doctor could not tell which, because the app imports none of their stylesheets.`,
+    };
+  }
   if (packages.length === 0 && wiredByImport.length > 0) {
     return {
       id: 'themes',
@@ -928,13 +1068,13 @@ export function checkThemes(
       message: `Theme package(s) installed (${names}); wired by import: ${wiredByImportList(wiredByImport)}.`,
     };
   }
-  if (!appPackageNamesTheme(cwd) && wiring.unconfirmed.length > 0) {
-    const files = wiring.unconfirmed.map(({file}) => file).join(', ');
+  if (!appPackageNamesTheme(cwd) && traceUnknown.length > 0) {
+    const files = traceUnknown.map(({file}) => file).join(', ');
     return {
       id: 'themes',
       label,
       status: 'info',
-      message: `Theme package(s) installed (${names}); ${files} pass${wiring.unconfirmed.length === 1 ? 'es' : ''} a theme to Theme that doctor could not trace to a theme import, so it could not confirm which theme is wired.`,
+      message: `Theme package(s) installed (${names}); ${files} pass${traceUnknown.length === 1 ? 'es' : ''} a theme to Theme that doctor could not trace to a theme import, so it could not confirm which theme is wired.`,
       fix: `If no theme is applied, add one with \`${run} theme add <slug>\`.`,
     };
   }
@@ -953,6 +1093,31 @@ export function checkThemes(
     status: 'pass',
     message: `Theme package(s) installed (${names}); wired via package.json astryx.theme.`,
   };
+}
+
+/**
+ * The app-theme checks with what the wiring scan found: an app with no
+ * generated theme module whose theme its integration's provider wires is
+ * themed, so the `theme-management` check says so and offers no `theme add`.
+ * @param {DoctorCheck[]} appChecks - the checks {@link checkAppThemes} returned
+ * @param {{wired: Array<{slug: string, file: string, wiredBy?: string}>}} wiring -
+ *   what {@link themeImportWiring} returned
+ * @returns {DoctorCheck[]}
+ */
+export function withProviderWiring(appChecks, wiring) {
+  const byProvider = wiring.wired.filter(entry => entry.wiredBy);
+  if (byProvider.length === 0) return appChecks;
+  const shown = byProvider
+    .map(entry => `${entry.slug} is wired by ${entry.wiredBy} in ${entry.file}`)
+    .join('; ');
+  return appChecks.map(check => {
+    if (check.id !== 'theme-management') return check;
+    const {fix: _fix, ...rest} = check;
+    return {
+      ...rest,
+      message: `The CLI manages no themes: ${shown}, the provider its package wires its themes with.`,
+    };
+  });
 }
 
 /**

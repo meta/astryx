@@ -63,6 +63,9 @@
  * @property {boolean} [added] whether the app module records this theme
  * @property {boolean} [default] whether this is the app's default theme
  * @property {'bundled'|'package'|'local'} [source] where the theme source comes from
+ * @property {{export: string, from: string}} [wiredBy] the provider component
+ *   the owning integration wires its themes with (its manifest's
+ *   `themeProvider`): an app renders `export`, imported from `from`
  */
 
 /**

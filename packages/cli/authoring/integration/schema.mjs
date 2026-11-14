@@ -93,6 +93,20 @@ export const integrationBaseSchema = z.object({
   codemods: z.string().optional(),
   docs: z.string().optional(),
   themes: z.string().optional(),
+  // One provider component that wires every theme under `themes` into an
+  // app. Each theme's stylesheet stays the one its package exports.
+  themeProvider: z
+    .object({
+      export: z
+        .string()
+        .regex(
+          /^[A-Z_$][\w$]*$/u,
+          'themeProvider.export must name a component export',
+        ),
+      from: z.string().min(1, 'themeProvider.from must not be blank'),
+    })
+    .strict()
+    .optional(),
   // Experimental roots (spec:AST-017 FR27). An unknown key inside is
   // stripped, as unknown top-level keys are, so a newer CLI's experiment
   // never fails an older CLI's parse.

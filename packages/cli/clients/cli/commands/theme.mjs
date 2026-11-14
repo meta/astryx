@@ -651,11 +651,14 @@ function printThemeList(
           'maintained',
           'package',
           'source',
+          'wiredBy',
           'added',
           'default',
         ],
         layout: 'stacked',
         format: {
+          wiredBy: (/** @type {{export: string, from: string}} */ value) =>
+            `${value.export} from ${value.from}`,
           maintained: (/** @type {boolean} */ value) => (value ? 'yes' : 'no'),
           added: (/** @type {boolean} */ value) => (value ? 'yes' : 'no'),
           default: (/** @type {boolean} */ value) => (value ? 'yes' : 'no'),
