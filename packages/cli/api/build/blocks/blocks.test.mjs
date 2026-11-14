@@ -199,12 +199,13 @@ describe('pickBlocks', () => {
       },
     ];
     const own = ['ListPlain', 'TableBasic'];
-    const {names} = pickBlocks(
+    const {names, entries} = pickBlocks(
       'sparkline',
       {...signals(own), catalog},
       WEIGHTS,
     );
     expect(names[0]).toBe('CardSparkline');
+    expect(entries.get('CardSparkline')?.reason).toMatch(/sparkline/);
   });
 
   it('keeps build’s order when nothing in the request is known', () => {

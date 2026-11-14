@@ -709,7 +709,7 @@ export function pickBlocks(request, signals, weights, keep) {
       name,
       package: block.package ?? '',
       score: Math.max(1, Math.round(100 * Math.exp(x.score - max))),
-      reason: reasonFor(request, side, cat.blocks.get(name), weights),
+      reason: reasonFor(request, side, words, cat.blocks.get(name), weights),
       description: block.description ?? '',
       displayName: block.displayName,
       kind: 'block',
@@ -723,10 +723,11 @@ export function pickBlocks(request, signals, weights, keep) {
  * Why a block fits: the request words that tie it to its docs most.
  * @param {string} request
  * @param {{vector: Map<number, number>, projected: Float64Array}} side the request's side
- * @param {{vector: Map<number, number>, projected: Float64Array} | undefined} block
+ * @param {Map<string, number>} words the request's word vector for the plain overlap
+ * @param {{projected: Float64Array, words: Map<string, number>} | undefined} block
  * @param {BlockPickerWeights} weights
  */
-function reasonFor(request, side, block, weights) {
+function reasonFor(request, side, words, block, weights) {
   if (!block) return 'fits by meaning';
   const raw =
     String(request)
@@ -736,17 +737,20 @@ function reasonFor(request, side, block, weights) {
   const wordOf = new Map();
   for (const w of raw)
     if (!STOP.has(w) && !wordOf.has(stemOf(w))) wordOf.set(stemOf(w), w);
+  const {index} = vocabularyOf(weights);
   /** @type {[string, number][]} */
   const parts = [];
-  for (const [i, x] of side.vector) {
-    const term = weights.vocab[i];
+  for (const [term, x] of words) {
     if (term.includes('_')) continue;
-    const row = rowOf(weights, 'request', i);
-    let s = 0;
-    for (let k = 0; k < weights.dims; k++) s += row[k] * block.projected[k];
-    s =
-      x * s * weights.requestScale +
-      weights.lexical * x * (block.vector.get(i) ?? 0);
+    let s = weights.lexical * x * (block.words.get(term) ?? 0);
+    const i = index.get(term);
+    const v = i === undefined ? undefined : side.vector.get(i);
+    if (i !== undefined && v !== undefined) {
+      const row = rowOf(weights, 'request', i);
+      let dot = 0;
+      for (let k = 0; k < weights.dims; k++) dot += row[k] * block.projected[k];
+      s += v * dot * weights.requestScale;
+    }
     if (s > 0) parts.push([wordOf.get(term) ?? term, s]);
   }
   parts.sort((a, b) => b[1] - a[1]);
