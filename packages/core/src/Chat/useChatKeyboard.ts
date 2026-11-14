@@ -23,6 +23,7 @@ import {
   claimTapFocus,
   findTextEntryControl,
   getKeyboardHeight,
+  getKeyboardViewportHeight,
   isTextEntryControl,
   refuseFocusReveal,
   subscribeKeyboardHeight,
@@ -38,7 +39,6 @@ import {
 } from '../keyboard/keyboardTarget';
 import type {KeyboardTransition} from '../keyboard/keyboardModel';
 import {rideKeyboard} from '../keyboard/rideKeyboard';
-import {layoutViewportHeight} from '../utils/layoutViewport';
 import {
   useInteractionModalityTrackingFor,
   type InteractionModality,
@@ -230,8 +230,9 @@ export function useChatKeyboard({
       if (inset <= 0) {
         return 0;
       }
-      // In layout px, as the root's rect is, under a pinch zoom too.
-      const viewportBottom = layoutViewportHeight(win);
+      // In layout px, as the root's rect is, under a pinch zoom too. The
+      // keyboard module measured it with the keyboard height.
+      const viewportBottom = getKeyboardViewportHeight(win);
       const bottom = isSelfScrolling
         ? root.getBoundingClientRect().bottom
         : viewportBottom;
