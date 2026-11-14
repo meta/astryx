@@ -10,9 +10,7 @@ import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 const dirs = [];
 
 function project() {
-  const dir = fs.mkdtempSync(
-    path.join(REPO_ROOT, '.astryx-theme-imports-'),
-  );
+  const dir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-theme-imports-'));
   dirs.push(dir);
   fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"app"}\n');
   return dir;
@@ -167,7 +165,9 @@ describe('resolveThemeImports', () => {
     expect(() => resolveThemeImports(discovered(), {cwd: dir})).toThrow(
       expect.objectContaining({
         name: 'Error',
-        message: expect.stringContaining('npm install @acme/themes'),
+        message: expect.stringMatching(
+          /`(npm install|pnpm add|yarn add|bun add) @acme\/themes`/,
+        ),
       }),
     );
   });

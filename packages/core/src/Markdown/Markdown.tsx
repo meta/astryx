@@ -914,6 +914,8 @@ function useStableMarkdownSyntaxEntries(
   plugins: PreparedMarkdownPlugins | undefined,
 ): ReadonlyArray<MarkdownPluginEntry> | undefined {
   const identity = plugins?.syntaxIdentity ?? '';
+  // A discarded render can leave an entry here. The hook uses an entry only
+  // while its identity matches, so it replaces that entry.
   const syntaxEntriesRef = useRef<
     | {
         identity: string;
@@ -2318,6 +2320,10 @@ export function Markdown<
   // When not streaming, the hook returns children unchanged (no-op).
   const smoothedText = useStreamingText(children, isStreaming);
 
+  // A discarded render can change this cache, as it can change the option
+  // flags below. The parser reuses settled blocks only while the input starts
+  // with their text. So the output never shows text that only a discarded
+  // render had (Markdown.test.tsx: "a streamed render that React discards").
   const incrementalStateRef = useRef<IncrementalState<boolean>>(
     createIncrementalState<boolean>(),
   );
@@ -2472,6 +2478,10 @@ export function Markdown<
     return Math.min(Math.ceil(duration / tickMs), 12);
   }, [token]);
 
+  // Render writes these fade-in refs on purpose, an accepted exception to the
+  // runtime's ref rule. Text comes only from `smoothedText`. A render that
+  // React discards shifts the fade spans by the text it added. The "streamed
+  // text after a render React discards" tests pin why it is harmless.
   const prevBlocksRef = useRef<ReadonlyArray<RenderBlockNode>>([]);
   const prevInlineNodesRef = useRef<ReadonlyArray<RenderInlineNode>>([]);
   const boundariesRef = useRef<number[]>([]);
@@ -2483,6 +2493,7 @@ export function Markdown<
         ? countInlineTextLength(prevInlineNodesRef.current)
         : countBlockTextLength(prevBlocksRef.current);
     const next = computeBoundaries(boundariesRef.current, prevLen, maxSpans);
+    // Render writes this on purpose: see the fade-in refs' note above.
     boundariesRef.current = next;
     return next;
   }, [display, smoothedLen, maxSpans]);
@@ -2596,6 +2607,7 @@ export function Markdown<
     );
 
     // Store current inline nodes for next render's boundary calculation.
+    // Render writes this on purpose: see the fade-in refs' note above.
     prevInlineNodesRef.current = inlineNodes;
     prevBlocksRef.current = [];
 
@@ -2624,6 +2636,7 @@ export function Markdown<
   // Store current blocks for next render's boundary calculation.
   // This ref write is safe under StrictMode: both invocations produce the same
   // blocks (same smoothedText → same useMemo result), so both write the same value.
+  // Render writes this on purpose: see the fade-in refs' note above.
   prevBlocksRef.current = blocks;
   prevInlineNodesRef.current = [];
 

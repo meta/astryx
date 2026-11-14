@@ -31,6 +31,7 @@ import {Project} from '../../../foundation/config/project.mjs';
 import {warnOnIntegrationIssues} from '../../../foundation/integrations/integration-warnings.mjs';
 import {doc as componentCommand} from './component.doc.mjs';
 import {doc as componentFn} from '../../../api/component/component.doc.mjs';
+import {compareText} from '../../../foundation/text/compare-text.mjs';
 
 /**
  * The api layer's component() widens its return to `{type: string, data: unknown}`,
@@ -95,9 +96,16 @@ function summarize(result) {
  * @param {string} requestedName
  * @param {'full'|'compact'|'brief'} detail
  * @param {Awaited<ReturnType<typeof resolveTheme>>} themeData
+ * @param {string} [scopePackage] - the `--package` the read was scoped to
  * @returns {import('../formatters/index.mjs').Block[]}
  */
-function componentDetailBlocks(result, requestedName, detail, themeData) {
+function componentDetailBlocks(
+  result,
+  requestedName,
+  detail,
+  themeData,
+  scopePackage,
+) {
   const requested = (requestedName.split('/').pop() ?? requestedName).replace(
     /^XDS/,
     '',
@@ -110,6 +118,12 @@ function componentDetailBlocks(result, requestedName, detail, themeData) {
     result.data.replaces === requested
       ? result.data.name
       : requested;
+  // The command that prints this read's props whole names the read's own
+  // selector and scope, so it resolves to the same component.
+  const scope = scopePackage ? ` --package ${scopePackage}` : '';
+  const propsCommand = requestedName
+    ? `component ${requestedName}${scope} --props`
+    : null;
   switch (result.type) {
     case 'component.detail': {
       /** @type {import('../formatters/index.mjs').Block[]} */
@@ -126,12 +140,15 @@ function componentDetailBlocks(result, requestedName, detail, themeData) {
             )
           : detail === 'compact'
             ? code(
-                formatCompact(result.data, resolvedName, result.data.import),
+                formatCompact(result.data, resolvedName, result.data.import, {
+                  propsCommand,
+                }),
               )
             : code(
                 formatFull(result.data, {
                   themeData,
                   importHint: result.data.import,
+                  propsCommand,
                 }),
               ),
       );
@@ -380,7 +397,7 @@ export function registerComponent(program) {
           const firstGroup = Object.entries(groups)[0];
           const entries =
             options.category && firstGroup ? firstGroup[1] : Object.values(groups).flat();
-          const sorted = [...entries].sort((a, b) => a.name.localeCompare(b.name));
+          const sorted = [...entries].sort((a, b) => compareText(a.name, b.name));
 
           emit(
             options.category && firstGroup
@@ -425,6 +442,7 @@ export function registerComponent(program) {
                   row.selector,
                   detail,
                   themeData,
+                  options.package,
                 ),
               );
               continue;
@@ -472,6 +490,7 @@ export function registerComponent(program) {
               name ?? '',
               detail,
               themeData,
+              options.package,
             ),
           );
           break;

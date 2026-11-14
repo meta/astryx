@@ -35,6 +35,9 @@ verified_by:
     api/integration/add-contribution.test.mjs,
     api/integration/pack-check.test.mjs,
     api/integration/validate-integration.test.mjs,
+    api/integration/example-code.test.mjs,
+    api/integration/example-scope.test.mjs,
+    authoring/example/preview.test.mjs,
     foundation/integrations/cli-peer-version.test.mjs,
     api/theme/integration-themes.test.mjs,
     clients/cli/commands/upgrade.integration-policy.test.mjs,
@@ -135,7 +138,10 @@ and remains available through explicit Core package selection.
 - **INV4 — Human output is a projection of the JSON, produced only by the
   formatters.** `emit` accepts a renderer-produced `Block` and nothing else, so
   a stray string cannot reach stdout. Output is plain ASCII: no colour, no TTY
-  detection, no width wrapping, byte-for-byte identical printed or piped.
+  detection, no width wrapping, byte-for-byte identical printed or piped. A
+  projection may shorten a prose field to its first sentence; a command's
+  `--verbose`, where it has one, prints such a field whole, and `--json` carries
+  every field.
 - **INV5 — Text field names mirror JSON keys one to one.** The two views cannot
   drift, and every field stays greppable.
 - **INV6 — One command, one file.** A command is
@@ -235,7 +241,8 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   subcommand MUST keep its exit codes, and its JSON MAY change only by
   additions. Because builds fail on its findings, it MUST NOT report a finding
   the package's code does not contradict, other than the doc faults of DEC-8,
-  the doc-syntax findings of DEC-12 and the example findings of DEC-13:
+  the doc-syntax findings of DEC-12 and the example findings of DEC-13 and
+  DEC-14:
   a check that cannot judge an item lists it as not checked instead (DEC-7).
   A finding that would newly fail a build MUST first ship as a note marked
   `next` in `validate`'s `data.notes`, which fails nothing by default:
@@ -273,9 +280,10 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   canonicalises symlinks and rejects a NUL byte; an escape is
   `ERR_PATH_TRAVERSAL`. Bounded inputs are capped rather than trusted. The only
   writes outside a project or output folder are the per-user ones
-  `spec:AST-081` FR7 lists: releases and records in the per-user cache, the
-  settings and state files, and the computer-level skill file with its links or
-  copy in the home folder. None follows a link in its place, and none replaces
+  `spec:AST-081` FR7 lists: releases, records, kept search catalogs,
+  integration check results, template discovery's records, the component list, integrations' theme records, the docs not-found
+  hint's name summaries, doctor's docs checks and theme-wiring scan, and jiti's transpiled code in the per-user cache, the settings and state files, and the computer-level skill
+  file with its links or copy in the home folder. None follows a link in its place, and none replaces
   anything the CLI did not create.
 - **INV10a — Refusing a write outside its confined root is a compatible fix.**
   When a current record already confines the writes of a CLI operation (a
@@ -307,6 +315,9 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   it.** The `Project` seam loads each integration independently and records
   the failure, and the command's own work proceeds without that integration's
   contributions. The diagnostic command is the exception by purpose (INV29).
+  A command whose own module cannot load (a broken install) still answers
+  every run of it with the load error: whatever other options and words it
+  was given, it exits 1; `--help` prints its usage with the load error.
 - **INV29 — `astryx doctor` fails on a configured integration that cannot
   load.** An integration named in `astryx.config` that is not installed, has
   no manifest, or whose manifest throws or fails its schema is a failed
@@ -316,7 +327,8 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   `astryx.config` lists, including a package set aside for a provider-ID
   conflict and the package being authored when its own config names it (its
   load error is the outcome that counts). An installed integration the config
-  does not name stays informational. This invariant covers loading only; what
+  does not name stays informational: it never fails `doctor` (the broken
+  install INV14 reports is a warning). This invariant covers loading only; what
   `doctor` reports about the contributions of an integration that loads is
   owned by the checks that read them.
 - **INV12 — Human chatter never touches stdout in JSON mode.** `humanLog` and
@@ -391,7 +403,13 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   an npm alias or a non-semver protocol resolves like any other. A config entry
   keeps precedence over the same package autolinked, and a dependency whose
   manifest fails to load is dropped rather than raised as the consuming
-  project's issue. Outside a project, a hosted run also loads each integration
+  project's issue, with one exception: when the load failed because a package
+  the dependency requires of its consumers' install (a `dependencies` entry,
+  or a `peerDependencies` entry not marked optional) is missing, the install
+  is broken and the project can repair it, so the failure is that package's
+  `integration_error` issue. It is a warning only: exit codes and JSON shapes
+  are unchanged apart from the added issue entry. A dev or optional
+  dependency, or an undeclared one, never triggers it. Outside a project, a hosted run also loads each integration
   its host approves, by name, from the package root that serves it (INV30).
   Integrations installed for the computer (`spec:AST-081` FR12) contribute
   only outside a project, from the packages installed beside the global copy.
@@ -451,7 +469,9 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   outputs. The deprecated plain `theme add` keeps copying source until its scheduled
   cleanup. `theme eject` is the explicit source fork; it copies the complete
   theme directory and same-stem descriptor, with the local descriptor marked as
-  not maintained by the package owner.
+  not maintained by the package owner. The `theme targets` filter drops a
+  leading `.` and surrounding spaces, so a class selector as the output prints
+  it (`.astryx-switch`) matches.
 - **INV20 — A command's API subject has one layout.** A command's behavior lives
   in `api/<subject>/`. `<subject>.mjs` is the subject's entry, and `api/index.mjs`
   re-exports what it exports. A subject with more than one operation puts each in
@@ -640,7 +660,9 @@ updated in the same pull request when it moves an invariant:
 - changing which files hold the agent-docs block, how init finds the project
   root, where it refuses to write agent docs, or where it removes them (INV31);
 - adding a kind of gap-report destination, or changing who chooses one
-  (INV36).
+  (INV36);
+- changing what makes a component example run on its own, or what it may use
+  without importing (DEC-14).
 
 `pnpm check:cli-structure` enforces the layout. The contract tests listed in
 `verified_by` enforce the envelope, the exit codes, the error codes, and the
@@ -686,6 +708,13 @@ non-interactive guarantee.
   INV20 describes; each owns the `type` on its own envelope.
 - `api/<subject>/_adapter.mjs` — the subject's only access to the environment
   (INV21).
+- `authoring/example/preview.mjs` — `previewableExample`, the rule for whether
+  a component example runs on its own, which Doctor and preview tools share
+  (DEC-14).
+- `foundation/integrations/example-code.mjs` and
+  `api/integration/example-scope.mjs` — the scope a package's examples are
+  read against, which Doctor builds and `integrationExampleScope` returns
+  (DEC-14).
 
 ## Deciding specs
 
@@ -791,7 +820,7 @@ out, dropping `--strict`, also drops the check for every real fault. A check
 that cannot tell whether the code contradicts a doc lists the item as not
 checked, which `--strict` does not fail. The exceptions are the doc-quality
 findings of DEC-8, the doc-syntax findings of DEC-12 and the example findings
-of DEC-13.
+of DEC-13 and DEC-14.
 Rejected: reporting a doubtful item as a warning (`--strict` fails it).
 
 ### DEC-8 — The strict check fails on copied passages, fluff and stray pointers in docs
@@ -801,8 +830,8 @@ Rejected: reporting a doubtful item as a warning (`--strict` fails it).
 People and agents read integration docs on a budget. A fact written in two
 topics goes stale in one of them at the next edit, and padding costs every
 reader. So these doc-quality findings fail `--strict` by owner decision, as
-an exception to DEC-7, beside DEC-12's doc-syntax findings and DEC-13's
-example findings. A copied passage (a run of identical words, after
+an exception to DEC-7, beside DEC-12's doc-syntax findings and the example
+findings of DEC-13 and DEC-14. A copied passage (a run of identical words, after
 the filters for function-word runs and for boilerplate that three or more
 topics share) and a listed padding phrase (outside code and quotes) are exact
 matches. The density floor is a threshold, not a contradiction, and a section
@@ -910,6 +939,46 @@ Rejected: failing them in a patch (packages already running the check would
 break on an update), and per-package special cases (a package that needs one
 is a package the checks should cover).
 
+Amended for component examples by DEC-14.
+
+### DEC-14 — A component example runs on its own, by one exported rule
+
+**Decider:** `josephfarina`, `2026-11-13`, for one rule that Doctor and
+preview tools share; its details are the CLI maintainers' choice under that
+decision.
+
+A docs page or catalog shows a component example that is not
+`kind: 'setup'` as a live preview, so it must run on its own.
+`previewableExample(example, scope)` in `@astryxdesign/cli/authoring` is the
+one rule, and Doctor and preview tools read examples through it, so they
+agree on every example. `integrationExampleScope(pkg)` in
+`@astryxdesign/cli/api` returns the scope Doctor reads a package's examples
+with, as JSON: `ExampleScope` is the contract, so a catalog can store it and a
+preview tool read examples with it as Doctor does. It reads the example as a TSX module that renders
+its default export, else the JSX it ends with, else the last component it
+declares: a function or class, or `memo`, `forwardRef` or `lazy` called
+on one. The example may use, without importing them, the components its
+package documents, the components and hooks Core documents, React's
+exports, and the JavaScript and browser globals of the `globals` package;
+an element takes its name only from the example or those components, as a
+global such as `Image` is not a component. It may import the
+package, the packages the package declares in `dependencies`,
+`peerDependencies` and `optionalDependencies`, React, and Core. Server-only
+code is what `showcase_not_standalone` names, with the same declared
+packages; a module of the package that imports `server-only`; and an async
+component of the package. `validate` lists each example the rule refuses
+as a `next` note with its fix: `example_does_not_compile`,
+`example_renders_nothing`, `example_undefined_name`, `example_server_only`
+and `example_import_unresolvable`. Each fails `--strict --next` now and
+`--strict` from the next minor release (DEC-11). An example the check
+cannot judge, such as one whose names it cannot judge because Core's docs
+or React cannot be read beside the package, is listed as not checked
+(DEC-7).
+
+Rejected: every export of the package in scope without an import (an app
+that copies the example needs the import), and stand-in values for names
+an example leaves undefined (they hide what the preview shows).
+
 ## Verification
 
 | Invariant | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
@@ -917,11 +986,11 @@ is a package the checks should cover).
 | INV1      | `clients/cli/commands/interactive-guard.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                                                          | The subprocess hangs: `signal === 'SIGTERM'` and `status === null`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | INV2      | `clients/cli/commands/json-contract.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                                                              | `--json` stdout does not parse, or parses to a shape outside the two.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | INV3      | `foundation/response/error-codes.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                                                                 | A shipped code disappears, or an envelope carries an unregistered one.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| INV4      | `clients/cli/formatters/index.test.mjs`, type tests                                                                                                                                                                                                                                                                                                                                                                                                                        | `emit` accepts a bare string, or output varies between pipe and TTY.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| INV4      | `clients/cli/formatters/index.test.mjs`, `clients/cli/commands/search.test.mjs`, type tests                                                                                                                                                                                                                                                                                                                                                                                | `emit` accepts a bare string, output varies between pipe and TTY, or a field the text shortens is missing from `--verbose` or `--json`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | INV6      | `pnpm check:cli-structure`                                                                                                                                                                                                                                                                                                                                                                                                                                                 | A command's file or its doc is missing, or sits at the wrong path.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | INV8      | `clients/cli/cli-exit-codes.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                                                                      | The same condition exits differently with and without `--json`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | INV10b    | `api/upgrade/run/run.test.mjs` (a folder that installs Core without declaring it upgrades the project above it; a member its workspace lists and one that declares Astryx keep their own), `clients/cli/commands/upgrade.subfolder-path.test.mjs`                                                                                                                                                                                                                          | A folder that installs Core without declaring Astryx upgrades only itself, or a declaring folder or a listed member upgrades the project above it.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| INV14     | `foundation/integrations/autolink.test.mjs`, `foundation/config/project.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                          | An undeclared package contributes, or configured/local precedence changes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| INV14     | `foundation/integrations/autolink.test.mjs`, `foundation/config/project.test.mjs`, `foundation/integrations/missing-dependency.test.mjs`, `test/packed-gather-cache.records.test.mjs` (a declared but missing package)                                                                                                                                                                                                                                                     | An undeclared package contributes, or configured/local precedence changes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | INV15     | `api/integration/add-contribution.test.mjs`, `clients/cli/commands/integration-authoring.test.mjs`                                                                                                                                                                                                                                                                                                                                                                         | Dry-run/write paths differ, a writer clobbers bytes, or the new contribution is not discoverable.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | INV16     | `foundation/integrations/manifest-writer.test.mjs`, `api/integration/add-contribution.test.mjs`                                                                                                                                                                                                                                                                                                                                                                            | A writer invents package policy, replaces an author entry, or local bytes lose precedence.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | INV17     | `api/integration/pack-check.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                                                                      | Lifecycle output, packed files, identities, or public imports diverge without failing the gate.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |

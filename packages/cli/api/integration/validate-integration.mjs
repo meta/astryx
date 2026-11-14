@@ -50,6 +50,7 @@ import {integrationDocConsistency} from '../../foundation/discovery/doc-consiste
 import {
   integrationDocCommands,
   integrationDocTargets,
+  integrationExampleCode,
   projectUsesIconSets,
 } from './_adapter.mjs';
 import {
@@ -74,6 +75,7 @@ import {
 import {
   blockComponentsCheck,
   componentExamplesCheck,
+  packageListingCheck,
   componentDocNamesCheck,
   INVALID_CLI_COMMAND,
   isListedIssue,
@@ -88,6 +90,7 @@ import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
 import {cliPeerVersionProblem} from '../../foundation/integrations/cli-peer-version.mjs';
 import {publicImportIssues} from '../../foundation/integrations/public-imports.mjs';
 import {runChoice} from '../../foundation/release/run-context.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
 
 /** The running CLI is outside the package's `@astryxdesign/cli` peer range. */
 const CLI_PEER_VERSION = 'cli_peer_version';
@@ -253,7 +256,7 @@ async function findUnreachableContributionIssues(
     try {
       entries = fs
         .readdirSync(dir, {withFileTypes: true})
-        .sort((a, b) => a.name.localeCompare(b.name));
+        .sort((a, b) => compareText(a.name, b.name));
     } catch (err) {
       // One folder the user running astryx cannot read must not end the whole
       // validation: name it and keep checking the rest of the package.
@@ -292,7 +295,7 @@ async function findUnreachableContributionIssues(
       issues.push(
         warning(
           'unreachable_contribution',
-          `Found contribution metadata "${path.relative(packageDir, full)}" outside every declared integration root, so it contributes nothing. ${unreachableFix(context, full, stamp)}`,
+          `Found contribution metadata "${path.relative(packageDir, full).split(path.sep).join('/')}" outside every declared integration root, so it contributes nothing. ${unreachableFix(context, full, stamp)}`,
         ),
       );
     }
@@ -448,6 +451,7 @@ async function validateAtPackageDir(
       ? resolveRoot(manifest.experimental?.iconSets, 'experimental.iconSets')
       : undefined,
     issuesUrl: manifest.issuesUrl,
+    logo: manifest.logo,
     agentDocs: manifest.agentDocs,
     cliCommand: manifest.cliCommand,
     __cliCommandError: cliCommandError,
@@ -889,6 +893,16 @@ export async function validateIntegration(pkg, options = {}) {
   const examples = integration
     ? await componentExamplesCheck(integration)
     : undefined;
+  // Component doc examples that are not `kind: 'setup'` but cannot run on
+  // their own, by the rule a live preview uses.
+  const exampleCode = integration
+    ? await integrationExampleCode(integration)
+    : undefined;
+  // What a catalog needs to list the package: a logo, and an example of
+  // its components.
+  const listing = integration
+    ? packageListingCheck(integration, examples?.examples)
+    : undefined;
   const docNames = names?.[0].report;
   const blockComponents = names?.[1].report;
   // Notes fail nothing: a malformed `cliCommand`, and the findings added
@@ -913,6 +927,10 @@ export async function validateIntegration(pkg, options = {}) {
           each.notes.map(note => ({...note, next: true})),
         ),
         ...(examples?.notes ?? []).map(note => ({...note, next: true})),
+        ...(exampleCode?.notes ?? []).map(note => ({...note, next: true})),
+        // What a catalog needs to list the package is information only:
+        // these notes fail no check, under any flag.
+        ...(listing?.notes ?? []),
       ]
     : [];
   // The doc-syntax findings in the package's topics, as `next` notes with
@@ -926,6 +944,10 @@ export async function validateIntegration(pkg, options = {}) {
       })),
     );
   }
+  const assetsUnchecked = [
+    ...(examples?.unchecked ?? []),
+    ...(listing?.unchecked ?? []),
+  ];
   return {
     type: 'integration.validate',
     data: {
@@ -955,13 +977,13 @@ export async function validateIntegration(pkg, options = {}) {
       ...(result.found && result.olderCliNotes
         ? {olderCliNotes: result.olderCliNotes}
         : {}),
-      // Template assets npm could not place, when there are any.
-      ...(examples && examples.unchecked.length > 0
+      // Template assets and logos npm could not place, when there are any.
+      ...(assetsUnchecked.length > 0
         ? {
             exampleAssets: {
               status: 'checked',
               findings: [],
-              unchecked: examples.unchecked,
+              unchecked: assetsUnchecked,
             },
           }
         : {}),
@@ -980,6 +1002,16 @@ export async function validateIntegration(pkg, options = {}) {
       // What the public-import check could not judge: listed, never failed on.
       ...(result.found && result.publicImports
         ? {publicImports: result.publicImports}
+        : {}),
+      // Examples whose names could not be judged, when there are any.
+      ...(exampleCode && exampleCode.unchecked.length > 0
+        ? {
+            exampleCode: {
+              status: 'checked',
+              findings: [],
+              unchecked: exampleCode.unchecked,
+            },
+          }
         : {}),
     },
   };

@@ -63,10 +63,12 @@ permissions: {}
 # dispatches keep longer limits; macOS-only `test-native-swift` keeps 30). Split
 # a job that nears the limit (shard, scope, cache); do not raise it.
 #
-# There is no scope job. Each job that owns tests decides its own scope in its
-# first steps (.github/actions/test-scope: the PR's file list against the
-# base's trusted classifier) and skips its work, reporting success, when
-# nothing in its scope changed; anything undecidable runs everything.
+# Each job that owns tests decides its own scope in its first steps
+# (.github/actions/test-scope: the PR's file list against the base's trusted
+# classifier) and skips its work, reporting success, when nothing in its scope
+# changed; anything undecidable runs everything. The one scope job,
+# swizzle-proof-scope, reads the swizzle proof's own scope, so its eight legs
+# start only when the change proves a target.
 #
 # Visual, accessibility and RTL owners (pr-a11y*, visual-scout, pr-visual,
 # pr-rtl*) do not run on pull request updates (a shared primitive's dependent
@@ -148,6 +150,7 @@ jobs:
     steps:
       - name: Check out the admission action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/actions/ci-admission
           path: .ci-admission
@@ -160,11 +163,11 @@ jobs:
         timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 125 || 13 }}
         with:
           phase: room
-          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 17 }}
+          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 20 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
-          label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 5}'
+          label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 8}'
 
       # A run stopped for no room fails here, so a re-run of its failed jobs
       # waits again from this job, not from this look's result.
@@ -195,6 +198,7 @@ jobs:
 
       - name: Check out the admission action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/actions/ci-admission
           path: .ci-admission
@@ -214,11 +218,11 @@ jobs:
           started: ${{ needs.room.outputs.started }}
           looks: ${{ needs.room.outputs.looks }}
           next: ${{ needs.room.outputs.next }}
-          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 17 }}
+          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 20 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
-          label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 5}'
+          label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 8}'
 
       # A pull-request run that waited its longest while another started at
       # its longest wait is turned away (spec:AST-030 DEC-16): ci-full stops
@@ -399,6 +403,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
+        timeout-minutes: 10
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
@@ -476,6 +481,7 @@ jobs:
     steps:
       - name: Checkout merge-back candidate
         uses: actions/checkout@v7
+        timeout-minutes: 10
         with:
           fetch-depth: 0
 
@@ -586,6 +592,7 @@ jobs:
     steps:
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 3
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -643,6 +650,7 @@ jobs:
       # (spec:AST-030 FR13).
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -664,6 +672,7 @@ jobs:
         run: echo "Node-tooling PR — docsite generation is not an owned check"
 
       - uses: actions/checkout@v7
+        timeout-minutes: 8
         if: steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
 
       # Spec validation imports the canonical CLI discovery path, so the
@@ -792,6 +801,7 @@ jobs:
       NEXT_PUBLIC_DOCS_ACCESS_CHECK_ORIGIN: https://probe.example.test
     steps:
       - uses: actions/checkout@v7
+        timeout-minutes: 8
 
       - uses: ./.github/actions/setup
 
@@ -916,7 +926,7 @@ jobs:
       fail-fast: false
       # A pull request or merge-queue entry runs at most two legs at a time,
       # so many open pull requests cannot flood the organization's shared
-      # runner pool; the legs still all run, in two waves.
+      # runner pool; the legs still all run, in waves.
       max-parallel: 2
       matrix:
         shard: [1, 2, 3, 4]
@@ -931,6 +941,7 @@ jobs:
       # everything is in scope when it cannot decide.
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -957,6 +968,7 @@ jobs:
       - name: Check out the change for the tests that read its records
         if: matrix.shard == 1 && steps.scope.outputs.spec_only == 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           fetch-depth: 2
 
@@ -987,6 +999,7 @@ jobs:
       # Two commits: a pull request's merge commit and its base parent, the
       # diff a scoped run follows.
       - uses: actions/checkout@v7
+        timeout-minutes: 8
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         with:
           fetch-depth: 2
@@ -1089,10 +1102,13 @@ jobs:
       fail-fast: false
       # A pull request or merge-queue entry runs at most two legs at a time,
       # so many open pull requests cannot flood the organization's shared
-      # runner pool; the legs still all run, in two waves.
+      # runner pool; the legs still all run, in waves.
       max-parallel: 2
+      # Five legs keep each leg near nine minutes of the fifteen-minute
+      # limit; at four, a leg reached about thirteen and a half minutes of
+      # tests and hit the limit (scripts/vitest-node-durations.json).
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5]
     # Vitest runs one test file per CPU beyond the first, so the 2-core runner
     # ran this suite one file at a time (~23 min). Four cores give it three.
     runs-on: ubuntu-latest
@@ -1106,6 +1122,7 @@ jobs:
       # everything is in scope when it cannot decide.
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -1127,6 +1144,7 @@ jobs:
       - name: Check out the change for the tests that read its records
         if: matrix.shard == 1 && steps.scope.outputs.spec_only == 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           fetch-depth: 2
 
@@ -1155,6 +1173,7 @@ jobs:
           pnpm test:node "${READERS[@]}"
 
       - uses: actions/checkout@v7
+        timeout-minutes: 8
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
         with:
           fetch-depth: 2
@@ -1172,30 +1191,52 @@ jobs:
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
         run: pnpm -F @astryxdesign/core build
 
-      # Scoped like test-ui's run.
+      # Scoped like test-ui's run. The shard watchdog
+      # (scripts/vitest-shard-watchdog.mjs) fires a minute before the job's
+      # 15-minute limit, counted from the job's start (the runner's worker
+      # process starts with the job): a job the limit cancels keeps only part
+      # of its log, so it names the test files still running first. It also
+      # writes each file's seconds for the recorded-times check below.
       - name: Run this shard of the Node tests
+        id: node-tests
         env:
           SCOPED: ${{ github.event_name == 'pull_request' && steps.scope.outputs.vitest_full_suite == 'false' }}
+          VITEST_SHARD_TIMES_FILE: ${{ runner.temp }}/node-file-times.json
+          # The swizzle proof's slices run in their own job (swizzle-proof).
+          VITEST_SWIZZLE_PROOF_OWN_JOB: '1'
         run: |
+          started=$(ps -o etimes= -C Runner.Worker 2>/dev/null | sort -n | tail -1 | tr -d ' ')
+          VITEST_SHARD_WATCHDOG_SECONDS=$(( 14 * 60 - ${started:-180} ))
+          export VITEST_SHARD_WATCHDOG_SECONDS
+          WATCHDOG=(--reporter=default --reporter=github-actions --reporter=./scripts/vitest-shard-watchdog.mjs)
           if [ "$SCOPED" = true ]; then
-            .github/scripts/run-named.sh "Tests the change reaches" -- pnpm test:node --changed=HEAD^1 --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }}
-            # Tests no module graph relates to the change run too: guards
-            # that read sources, and tests that load a changed package from
-            # its build (by name or its dist/).
-            # The list goes through a file so a failing lister fails the step.
-            # The guard run leaves out the tests the run above already ran, so
-            # no test runs twice. Every leg splits the same reduced list, so a
-            # leg that cannot list them fails rather than split a different one.
-            .github/scripts/run-named.sh "List the tests the first run ran" -- pnpm exec vitest list --project node --changed=HEAD^1 --filesOnly --passWithNoTests --json="$RUNNER_TEMP/already-run.json"
-            .github/scripts/run-named.sh "List the tests that read source files" --stdout "$RUNNER_TEMP/fs-guards.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --already-run "$RUNNER_TEMP/already-run.json"
-            mapfile -t GUARDS < "$RUNNER_TEMP/fs-guards.txt"
-            if [ "${#GUARDS[@]}" -gt 0 ]; then
-              .github/scripts/run-named.sh "Tests that read source files" -- pnpm test:node --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${GUARDS[@]}"
+            # One run covers the tests the change reaches and the tests no
+            # module graph relates to it: guards that read sources, and tests
+            # that load a changed package from its build (by name or its
+            # dist/). In one run the legs balance both lists by recorded
+            # time, so a slow changed test does not land on top of a full
+            # share of guards.
+            # The lists go through files so a failing lister fails the step.
+            # Every leg splits the same list, so a leg that cannot list the
+            # tests fails rather than split a different one.
+            .github/scripts/run-named.sh "List the tests the change reaches" -- pnpm exec vitest list --project node --changed=HEAD^1 --filesOnly --passWithNoTests --json="$RUNNER_TEMP/reached.json"
+            .github/scripts/run-named.sh "List the tests to run" --stdout "$RUNNER_TEMP/node-tests.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --reached "$RUNNER_TEMP/reached.json"
+            mapfile -t TESTS < "$RUNNER_TEMP/node-tests.txt"
+            if [ "${#TESTS[@]}" -gt 0 ]; then
+              .github/scripts/run-named.sh "Tests the change reaches and tests that read source files" -- pnpm test:node --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${WATCHDOG[@]}" "${TESTS[@]}"
             fi
           else
-            pnpm test:node --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+            pnpm test:node --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${WATCHDOG[@]}"
           fi
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+
+      # A test file this change touches that now runs far past its recorded
+      # time fails here, naming both times, so the pull request that slows it
+      # updates the record before a later pull request's leg runs over its
+      # job limit. Files the change does not touch are not checked.
+      - name: Check the recorded times of the test files this change touches
+        if: always() && github.event_name == 'pull_request' && steps.node-tests.outcome != 'skipped'
+        run: node .github/scripts/node-time-drift.mjs --times "$RUNNER_TEMP/node-file-times.json" --changed HEAD^1
 
       # A Lab-only change may carry a Lab component's CLI discovery entry; the
       # committed list must match its generator (spec:AST-030 FR26).
@@ -1204,29 +1245,175 @@ jobs:
         # One Node-project test file: Vitest finds its project from the path.
         run: pnpm exec vitest run scripts/check-cli-official-packages.test.mjs --maxWorkers=1
 
-      # Theme-family compilation is owned by `theme-build`, not Build. Until
-      # that surface has an admitted dedicated lane, broad CI keeps its browser
-      # contract inside the existing Node test owner rather than `test-build`.
-      # One leg runs it.
+  # The Node project's browser contracts run in a job of their own, beside the
+  # Node legs: theme-family compilation (owned by `theme-build`, not Build,
+  # until that surface has an admitted lane of its own), offline-media's
+  # real-browser cases and the theme editor's render case. No Node leg runs a
+  # step the others don't, so the legs split the Node files evenly. Same scope
+  # as the Node tests; `test` requires it.
+  node-browser-contracts:
+    needs: [admission, heavy-ci]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (needs.admission.result == 'success' && (github.event_name != 'workflow_dispatch'))) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Check out the scope action
+        uses: actions/checkout@v7
+        timeout-minutes: 8
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Decide this job's scope
+        id: scope
+        uses: ./.test-scope/.github/actions/test-scope
+
+      - uses: actions/checkout@v7
+        timeout-minutes: 8
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        with:
+          fetch-depth: 2
+
+      - uses: ./.github/actions/setup
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+
+      - name: Build core package
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        run: pnpm -F @astryxdesign/core build
+
       - name: Install Playwright for theme-family contract
-        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         run: npx playwright install chromium
 
-      # The Node tests above run before any browser is installed, so they skip
-      # offline-media's real-browser cases. This step runs them once Chromium
-      # is in place, under the install's own condition; with
+      # The Node legs run without a browser, so they skip offline-media's
+      # real-browser cases. This step runs them once Chromium is in place,
+      # under the install's own condition; with
       # ASTRYX_OFFLINE_MEDIA_BROWSER set, a missing browser fails them.
       # ci-browser-gated-tests.test.mjs keeps this step after the install.
       - name: Offline-media browser cases
-        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         env:
           ASTRYX_OFFLINE_MEDIA_BROWSER: '1'
         # One Node-project test file: Vitest finds its project from the path.
         run: pnpm exec vitest run .github/scripts/lib/offline-media.test.mjs --maxWorkers=1
 
+      # theme-real-bases.test.mjs's text-direction render case skips in the
+      # Node legs, which run without a browser. This runs it in the
+      # pinned Chromium once that is in place; with ASTRYX_THEME_EDITOR_BROWSER
+      # set, a missing browser fails it.
+      - name: Theme editor browser case
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        env:
+          ASTRYX_THEME_EDITOR_BROWSER: '1'
+        run: pnpm exec vitest run packages/cli/api/theme-edit/theme-real-bases.test.mjs -t 'renders own and editor sides|names what it waited on' --maxWorkers=1
+
+      # The contract runs in the time the job's 15-minute limit leaves, less a
+      # minute, counted from the job's start: a contract that runs out of
+      # it fails by name with its last lines, before the limit cancels the job
+      # and cuts its log.
       - name: Run the theme-family contract
-        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
-        run: pnpm test:theme-family
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        run: |
+          started=$(ps -o etimes= -C Runner.Worker 2>/dev/null | sort -n | tail -1 | tr -d ' ')
+          if [ -z "$started" ]; then
+            echo "::warning title=Theme-family bound::the job's age could not be read; counting it as 3 minutes"
+          fi
+          left=$(( 14 * 60 - ${started:-180} ))
+          if [ "$left" -le 0 ]; then
+            echo "::error title=Theme-family contract out of time::the job reached 14 of its 15 minutes before the theme-family contract could start"
+            exit 1
+          fi
+          set +e
+          timeout "$left" pnpm test:theme-family 2>&1 | tee "$RUNNER_TEMP/theme-family.log"
+          rc=${PIPESTATUS[0]}
+          set -e
+          if [ "$rc" = 124 ]; then
+            echo "::error title=Theme-family contract stopped::still running after $left s, a minute before the job's 15-minute limit; its last lines: $(tail -n 3 "$RUNNER_TEMP/theme-family.log" | tr '\n' ' ')"
+          fi
+          exit "$rc"
+
+  # The swizzle proof (spec:AST-110 FR7) runs in legs of its own, one slice
+  # each, beside the Node legs rather than inside them. When a change reaches
+  # every copy, its slices take about 2,300 s of test time, more than the Node
+  # legs hold under their limit with the rest of the suite. This job reads the
+  # proof's scope first, with Node alone and nothing installed; the legs start
+  # only when the change proves a target, as each slice decides. `test`
+  # requires this job, and the legs whenever the scope is not `none`.
+  swizzle-proof-scope:
+    needs: [admission, heavy-ci]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (needs.admission.result == 'success' && (github.event_name != 'workflow_dispatch'))) }}
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      mode: ${{ steps.proof.outputs.mode }}
+    steps:
+      - name: Check out the scope action
+        uses: actions/checkout@v7
+        timeout-minutes: 8
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Decide this job's scope
+        id: scope
+        uses: ./.test-scope/.github/actions/test-scope
+
+      - uses: actions/checkout@v7
+        timeout-minutes: 8
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        with:
+          fetch-depth: 2
+
+      # A docsite-only or spec-only change runs no Node test, so no slice.
+      - name: Decide the proof's scope
+        id: proof
+        env:
+          SPECIALIZED: ${{ steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.spec_only == 'true' }}
+        run: |
+          if [ "$SPECIALIZED" = true ]; then
+            echo "Specialized PR lane: the swizzle proof proves no target"
+            echo 'mode=none' >> "$GITHUB_OUTPUT"
+          else
+            node packages/cli/test/swizzle-proof/scope.mjs
+          fi
+
+  swizzle-proof:
+    name: swizzle-proof (${{ matrix.slice }}/${{ strategy.job-total }})
+    needs: [admission, heavy-ci, swizzle-proof-scope]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (needs.admission.result == 'success' && (github.event_name != 'workflow_dispatch' && (needs.swizzle-proof-scope.outputs.mode == 'affected' || needs.swizzle-proof-scope.outputs.mode == 'all')))) }}
+    strategy:
+      fail-fast: false
+      # At most two legs at a time, as the Node legs, for the shared runner
+      # pool.
+      max-parallel: 2
+      # One leg per swizzle-proof.<n>.test.mjs file.
+      matrix:
+        slice: [1, 2, 3, 4, 5, 6, 7, 8]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        timeout-minutes: 8
+        with:
+          fetch-depth: 2
+
+      - uses: ./.github/actions/setup
+
+      - name: Build core package
+        run: pnpm -F @astryxdesign/core build
+
+      - name: Run this slice of the swizzle proof
+        run: pnpm test:node packages/cli/test/swizzle-proof/swizzle-proof.${{ matrix.slice }}.test.mjs
 
   # The one pre-job left: a runner must be picked before its job starts, so
   # this decides on a free slim runner whether native Swift changed, and
@@ -1245,6 +1432,7 @@ jobs:
     steps:
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 3
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -1286,6 +1474,7 @@ jobs:
         run: echo "No native Swift change in this scope."
 
       - uses: actions/checkout@v7
+        timeout-minutes: 8
         if: needs.native-swift-runner.outputs.applies == 'true'
 
       # The steps live in native-swift.sh, which is in the native Swift scope,
@@ -1321,6 +1510,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
+        timeout-minutes: 8
 
       - uses: ./.github/actions/setup
 
@@ -1374,6 +1564,9 @@ jobs:
         release-bump,
         test-ui,
         test-node,
+        node-browser-contracts,
+        swizzle-proof-scope,
+        swizzle-proof,
         test-build,
         test-native-swift,
         pr-interaction,
@@ -1427,6 +1620,7 @@ jobs:
 
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -1444,6 +1638,7 @@ jobs:
       # A release-branch pull request is spec-only by classification, but its
       # join still runs: it requires the release bump's own validation.
       - uses: actions/checkout@v7
+        timeout-minutes: 8
         if: steps.scope.outputs.spec_only != 'true' || steps.scope.outputs.release_bump == 'true'
 
       - name: Require expected test-owner outcomes
@@ -1457,6 +1652,10 @@ jobs:
           LAB_ONLY: ${{ steps.scope.outputs.lab_only }}
           TEST_UI_RESULT: ${{ needs.test-ui.result }}
           TEST_NODE_RESULT: ${{ needs.test-node.result }}
+          NODE_BROWSER_CONTRACTS_RESULT: ${{ needs.node-browser-contracts.result }}
+          SWIZZLE_PROOF_SCOPE_RESULT: ${{ needs.swizzle-proof-scope.result }}
+          SWIZZLE_PROOF_MODE: ${{ needs.swizzle-proof-scope.outputs.mode }}
+          SWIZZLE_PROOF_RESULT: ${{ needs.swizzle-proof.result }}
           TEST_BUILD_RESULT: ${{ needs.test-build.result }}
           TEST_NATIVE_SWIFT_RESULT: ${{ needs.test-native-swift.result }}
           PR_INTERACTION_RESULT: ${{ needs.pr-interaction.result }}
@@ -1492,6 +1691,7 @@ jobs:
     steps:
       - name: Check out the decision script
         uses: actions/checkout@v7
+        timeout-minutes: 3
         with:
           sparse-checkout: |
             .github/scripts/run-labels.cjs
@@ -1530,12 +1730,19 @@ jobs:
       short_hash: ${{ steps.release.outputs.short_hash || steps.urls.outputs.short_hash }}
       pr_number: ${{ steps.urls.outputs.pr_number }}
       lab_only: ${{ steps.scope.outputs.lab_only }}
+    env:
+      # A release interaction check compares a release candidate with
+      # release/interaction-check-base, a throwaway cut far behind main: an
+      # interaction-check/ branch in this repository, opened by the account the
+      # release tooling uses, into that base.
+      INTERACTION_CHECK_BASE: ${{ github.base_ref == 'release/interaction-check-base' && startsWith(github.head_ref, 'interaction-check/') && github.event.pull_request.user.login == 'cixzhang' && github.event.pull_request.head.repo.full_name == github.repository }}
     steps:
       # This job decides its own scope (no separate scope job): the step
       # reads the PR's file list and the base's trusted classifier, and
       # everything is in scope when it cannot decide.
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -1560,6 +1767,7 @@ jobs:
       - name: Checkout
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           # Component evidence artifacts are named for and reviewed at the PR
           # head, so build their Storybook bytes from that exact tree rather
@@ -1590,12 +1798,29 @@ jobs:
       # compared from them; it is built here only when Main kept no component
       # record for it. The lookup runs before the Storybook build so that build
       # can run beside it.
+      # Main's size records, the merge-base build and the API changes against
+      # an interaction check's throwaway base say nothing about the release
+      # candidate, so its merge base is not searched and they are skipped. Every
+      # other pull request still fails by name without a merge base.
+      - name: 'Interaction check: skip the merge-base comparisons'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request' && env.INTERACTION_CHECK_BASE == 'true'
+        run: echo "::notice title=Interaction check::The base is release/interaction-check-base, a throwaway cut far behind main. The merge base, main's size records, the merge-base build and the API changes against it are skipped."
+
       - name: Find the merge base
         id: merge-base
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request' && env.INTERACTION_CHECK_BASE != 'true'
         env:
           BASE_REF: ${{ github.base_ref }}
-        run: echo "sha=$(.github/scripts/merge-base.sh "$BASE_REF" 'the size comparisons' || true)" >> "$GITHUB_OUTPUT"
+        # Up to five deepens of 200 commits. A branch further behind fails
+        # here by name, instead of skipping main's size records and API
+        # surface without a word.
+        run: |
+          sha=$(.github/scripts/merge-base.sh "$BASE_REF" 'the size comparisons' 5 || true)
+          if [ -z "$sha" ]; then
+            echo "::error::Merge base not within 1000 commits of $BASE_REF: merge $BASE_REF into this branch."
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
       - name: Find main's size records for the merge base
         id: size-records
@@ -1930,9 +2155,10 @@ jobs:
         continue-on-error: true
         timeout-minutes: 2
         env:
-          BASE_REF: ${{ github.base_ref }}
+          # The merge base the size comparisons found, so both compare the same
+          # commit.
+          BASE_SHA: ${{ steps.merge-base.outputs.sha }}
         run: |
-          BASE_SHA=$(.github/scripts/merge-base.sh "$BASE_REF" 'the API changes' || true)
           [ -n "$BASE_SHA" ] || exit 0
           # Main's surface of the merge base, else the base built above,
           # reported here.
@@ -1983,6 +2209,7 @@ jobs:
       # everything is in scope when it cannot decide.
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -2004,6 +2231,7 @@ jobs:
       - name: Checkout
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
@@ -2109,6 +2337,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
@@ -2161,6 +2390,7 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
@@ -2216,6 +2446,7 @@ jobs:
       # Outside a pull request every audit applies in full.
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -2229,6 +2460,7 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
@@ -2328,35 +2560,34 @@ jobs:
         if: steps.scope.outputs.has_components == 'true'
         run: node .github/scripts/story-play-guard.js --storybook-dir apps/storybook/dist
 
-  # Browser accessibility specs get their own budget. The scoped axe sweep and
-  # the always-on Chromium guards consume most of a pull request's 15-minute
-  # job budget before these specs start; running beside them keeps both owners
-  # inside the budget without weakening the stable pr-a11y join.
-  pr-a11y-specs:
-    name: pr-a11y (browser specs ${{ matrix.leg }}/${{ strategy.job-total }})
+  # Plans the browser accessibility specs once: this pull request's component
+  # scope, the specs it selects and each leg's share, from the specs' recorded
+  # times. Only the legs it plans start, so a selection that needs one leg
+  # starts one. It fails here, by name, when even five legs would leave one
+  # past the time a leg's job has. A release check plans one leg with every
+  # spec.
+  pr-a11y-plan:
+    name: pr-a11y (plan the browser specs)
     needs: [build-storybook, run-labels]
     # A status check: heavy-ci, which skips on every run but an agent push,
     # is an ancestor (spec:AST-030 FR20); its skip must not skip this job.
     if: (((github.event_name == 'pull_request' && needs.run-labels.outputs.a11y == 'true') || (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'))) && !cancelled() && needs.build-storybook.result == 'success' && needs.run-labels.result == 'success'
     runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '2-core-ubuntu-arm' || 'ubuntu-24.04-arm' }}
-    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 360 || 15 }}
-    # A pull request's selection splits into up to three legs by recorded
-    # time, each about ten minutes or less on one worker; a leg the selection
-    # does not need stops after its count step. A release check runs every
-    # spec in one job.
-    strategy:
-      fail-fast: false
-      matrix:
-        leg: ${{ fromJSON(github.event_name == 'workflow_dispatch' && '[1]' || '[1, 2, 3]') }}
+    timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: read
+    outputs:
+      count: ${{ steps.legs.outputs.count || '0' }}
+      legs: ${{ steps.legs.outputs.legs || '[1]' }}
+      shares: ${{ steps.legs.outputs.shares || '[]' }}
     steps:
-      # This job decides its own component scope (no separate scope job):
-      # the step reads the PR's file list and the base's trusted classifiers.
-      # Outside a pull request every audit applies in full.
+      # This job decides the component scope (no separate scope job): the step
+      # reads the PR's file list and the base's trusted classifiers. Outside a
+      # pull request every audit applies in full.
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -2369,15 +2600,11 @@ jobs:
           component-audit: 'true'
 
       - name: Checkout
+        if: steps.scope.outputs.has_components == 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-
-      - name: Verify evidence checkout
-        if: (github.event_name == 'pull_request') && steps.scope.outputs.has_components == 'true'
-        env:
-          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD_SHA"
 
       - name: Setup Node and pnpm
         if: steps.scope.outputs.has_components == 'true'
@@ -2391,7 +2618,7 @@ jobs:
         with:
           name: pr-analysis
 
-      # Before the count: a pull request that changes a multi-component folder
+      # Before the plan: a pull request that changes a multi-component folder
       # (Chat, Layer, Chart and the like) resolves its components through the
       # built Storybook's story index.
       - name: Download Storybook artifact
@@ -2401,12 +2628,10 @@ jobs:
           name: storybook-${{ needs.build-storybook.outputs.short_hash }}
           path: apps/storybook/dist
 
-      # How many legs the selection needs, from the specs' recorded times, and
-      # this leg's share, which the run step reads. It runs before the
-      # Chromium install; listing the specs installs the workspace's
-      # dependencies. The runner, its routing lines and the
-      # times come from the merge commit. The merge commit's first parent is
-      # the base branch tip that it merges into.
+      # How many legs the selection needs and each leg's share. Listing the
+      # specs installs the workspace's dependencies. The runner, its routing
+      # lines and the times come from the merge commit. The merge commit's
+      # first parent is the base branch tip that it merges into.
       - name: Count this run's accessibility legs
         id: legs
         if: steps.scope.outputs.has_components == 'true'
@@ -2422,14 +2647,86 @@ jobs:
           git show "$WORKFLOW_SHA:scripts/lib/duration-split.mjs" > "$RUNNER_TEMP/a11y/scripts/lib/duration-split.mjs"
           BASE_SHA=$(git rev-parse "$WORKFLOW_SHA^1")
           export BASE_SHA
-          node "$runner" --count-legs ${{ strategy.job-total }} --leg ${{ matrix.leg }} --share-out "$RUNNER_TEMP/a11y-leg-share.json"
+          node "$runner" --count-legs ${{ github.event_name == 'workflow_dispatch' && 1 || 5 }}
 
-      - name: Leave the specs to the legs that have a share
-        if: steps.scope.outputs.has_components == 'true' && steps.legs.outputs.runs != 'true'
-        run: echo "This leg runs no accessibility specs (${{ steps.legs.outputs.count }} leg(s) planned for this selection)."
+  # Browser accessibility specs get their own budget. The scoped axe sweep and
+  # the always-on Chromium guards consume most of a pull request's 15-minute
+  # job budget before these specs start; running beside them keeps both owners
+  # inside the budget without weakening the stable pr-a11y join.
+  pr-a11y-specs:
+    name: pr-a11y (browser specs ${{ matrix.leg }}/${{ strategy.job-total }})
+    needs: [build-storybook, run-labels, pr-a11y-plan]
+    # A status check: heavy-ci, which skips on every run but an agent push,
+    # is an ancestor (spec:AST-030 FR20); its skip must not skip this job.
+    if: (((github.event_name == 'pull_request' && needs.run-labels.outputs.a11y == 'true') || (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'))) && !cancelled() && needs.build-storybook.result == 'success' && needs.run-labels.result == 'success' && needs.pr-a11y-plan.result == 'success'
+    runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '2-core-ubuntu-arm' || 'ubuntu-24.04-arm' }}
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 360 || 15 }}
+    # A pull request's selection splits into up to five legs by recorded time,
+    # each about ten minutes or less on one worker, and only the legs the plan
+    # needs start. A release check runs every spec in one job.
+    strategy:
+      fail-fast: false
+      matrix:
+        leg: ${{ fromJSON(needs.pr-a11y-plan.outputs.legs || '[1]') }}
+    env:
+      RUNS: ${{ needs.pr-a11y-plan.outputs.count >= matrix.leg }}
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      # A selection with no components plans no leg, but a matrix needs one:
+      # that leg stops here, before any checkout or install.
+      - name: Stop a leg the plan gave no share
+        if: env.RUNS != 'true'
+        run: echo "This selection runs no browser accessibility specs."
+
+      - name: Checkout
+        if: env.RUNS == 'true'
+        uses: actions/checkout@v7
+        timeout-minutes: 8
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Verify evidence checkout
+        if: (github.event_name == 'pull_request') && env.RUNS == 'true'
+        env:
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD_SHA"
+
+      - name: Setup Node and pnpm
+        if: env.RUNS == 'true'
+        uses: ./.github/actions/setup
+        with:
+          install: 'false'
+
+      - name: Download analysis artifact
+        if: env.RUNS == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: pr-analysis
+
+      - name: Download Storybook artifact
+        if: env.RUNS == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: storybook-${{ needs.build-storybook.outputs.short_hash }}
+          path: apps/storybook/dist
+
+      # This leg's share, from the plan, and the merge commit's runner.
+      - name: Write this leg's share
+        if: env.RUNS == 'true'
+        env:
+          SHARES: ${{ needs.pr-a11y-plan.outputs.shares }}
+          LEG: ${{ matrix.leg }}
+          WORKFLOW_SHA: ${{ github.sha }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/a11y/.github/scripts" "$RUNNER_TEMP/a11y/scripts/lib"
+          git fetch --quiet --no-tags --depth=2 origin "$WORKFLOW_SHA"
+          git show "$WORKFLOW_SHA:scripts/lib/duration-split.mjs" > "$RUNNER_TEMP/a11y/scripts/lib/duration-split.mjs"
+          node -e 'const shares = JSON.parse(process.env.SHARES); require("fs").writeFileSync(process.argv[1], JSON.stringify(shares[Number(process.env.LEG) - 1]) + "\n")' "$RUNNER_TEMP/a11y-leg-share.json"
 
       - name: Install Playwright
-        if: steps.scope.outputs.has_components == 'true' && steps.legs.outputs.runs == 'true'
+        if: env.RUNS == 'true'
         run: pnpm install --frozen-lockfile && npx playwright install chromium
 
       # The runner runs every spec playwright.config.ts matches whose own
@@ -2437,20 +2734,20 @@ jobs:
       # routing lines come from the merge commit these steps come from, so an
       # older PR head is routed by current policy while specs run at that head.
       - name: Run browser accessibility specs
-        if: (!cancelled()) && steps.scope.outputs.has_components == 'true' && steps.legs.outputs.runs == 'true'
+        if: (!cancelled()) && env.RUNS == 'true'
         env:
           ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           WORKFLOW_SHA: ${{ github.sha }}
-        # This leg runs exactly the share its count step planned, with the
-        # merge commit's runner, which the count step fetched.
+        # This leg runs exactly the share the plan gave it, with the merge
+        # commit's runner.
         run: |
           runner="$RUNNER_TEMP/a11y/.github/scripts/a11y-pr-contracts.mjs"
           git show "$WORKFLOW_SHA:.github/scripts/a11y-pr-contracts.mjs" > "$runner"
-          node "$runner" --share "$RUNNER_TEMP/a11y-leg-share.json" --leg ${{ steps.legs.outputs.leg }} --of ${{ steps.legs.outputs.count }}
+          node "$runner" --share "$RUNNER_TEMP/a11y-leg-share.json" --leg ${{ matrix.leg }} --of ${{ needs.pr-a11y-plan.outputs.count }}
 
       - name: Upload browser accessibility evidence
-        if: (!cancelled()) && steps.scope.outputs.has_components == 'true' && steps.legs.outputs.runs == 'true'
+        if: (!cancelled()) && env.RUNS == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: pr-a11y-evidence-${{ needs.build-storybook.outputs.short_hash }}-${{ matrix.leg }}
@@ -2464,7 +2761,7 @@ jobs:
 
   # Stable required context joining the scoped audit/guards and browser specs.
   pr-a11y:
-    needs: [pr-a11y-guards, pr-a11y-specs, run-labels]
+    needs: [pr-a11y-guards, pr-a11y-plan, pr-a11y-specs, run-labels]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (always() && ((github.event_name == 'pull_request' && needs.run-labels.outputs.a11y == 'true') || (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'))) }}
     runs-on: ubuntu-slim
     timeout-minutes: 5
@@ -2474,10 +2771,11 @@ jobs:
       - name: Require every accessibility owner
         env:
           GUARDS_RESULT: ${{ needs.pr-a11y-guards.result }}
+          PLAN_RESULT: ${{ needs.pr-a11y-plan.result }}
           SPECS_RESULT: ${{ needs.pr-a11y-specs.result }}
         run: |
-          if [ "$GUARDS_RESULT" != success ] || [ "$SPECS_RESULT" != success ]; then
-            echo "Accessibility owners did not all succeed: guards=$GUARDS_RESULT specs=$SPECS_RESULT"
+          if [ "$GUARDS_RESULT" != success ] || [ "$PLAN_RESULT" != success ] || [ "$SPECS_RESULT" != success ]; then
+            echo "Accessibility owners did not all succeed: guards=$GUARDS_RESULT plan=$PLAN_RESULT specs=$SPECS_RESULT"
             exit 1
           fi
 
@@ -2507,6 +2805,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
@@ -2649,6 +2948,7 @@ jobs:
     steps:
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 3
         with:
           sparse-checkout: |
             .github/actions/test-scope
@@ -2905,6 +3205,7 @@ jobs:
       # parent of the action, so the checkout's cone holds it).
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: |
             .github/actions/test-scope
@@ -3013,6 +3314,7 @@ jobs:
       - name: Check out the heavy-suite caps
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           path: .heavy-caps
           sparse-checkout: .github/actions/heavy-caps
@@ -3031,6 +3333,7 @@ jobs:
       - name: Checkout
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
@@ -3221,6 +3524,7 @@ jobs:
       # parent of the action, so the checkout's cone holds it).
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: |
             .github/actions/test-scope
@@ -3355,6 +3659,7 @@ jobs:
       - name: Check out the heavy-suite caps
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           path: .heavy-caps
           sparse-checkout: .github/actions/heavy-caps
@@ -3372,6 +3677,7 @@ jobs:
       - name: Checkout
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
@@ -3517,6 +3823,89 @@ jobs:
           path: ${{ runner.temp }}/webkit-weekly-verdict.json
           retention-days: 90
 
+  # The weekly run's WebKit accessibility contracts: the `.a11y.browser.spec.ts`
+  # files in playwright.config.ts's `webkit` project (spec:AST-030 DEC-24).
+  # Report-only: the specs cannot fail this job, and webkit-weekly-verdict does
+  # not read it, so a red holds no release. The report lists each failure with
+  # a command that runs it again, for the fix loop.
+  webkit-weekly-a11y:
+    needs: [webkit-weekly-request, build-storybook]
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.operation == 'webkit-weekly' && !cancelled() && needs.webkit-weekly-request.result == 'success' && needs.build-storybook.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The WebKit interaction legs' image: WebKit and its system libraries are
+    # already installed.
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.1-noble
+      options: --ipc=host
+    defaults:
+      run:
+        shell: bash
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        timeout-minutes: 8
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Trust the checkout in the container
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Setup Node and pnpm
+        uses: ./.github/actions/setup
+        with:
+          install: 'false'
+
+      - name: Download Storybook artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: storybook-${{ needs.build-storybook.outputs.short_hash }}
+          path: apps/storybook/dist
+
+      - name: Install Playwright WebKit
+        run: pnpm install --frozen-lockfile && npx playwright install webkit
+
+      # Report-only: a failing spec leaves this step red and the job green.
+      # llvmpipe's threads are capped at the container's CPU share, as in the
+      # WebKit interaction legs.
+      - name: Run the WebKit accessibility contracts
+        id: specs
+        continue-on-error: true
+        env:
+          A11Y_CONTRACT_WORKERS: '4'
+          PLAYWRIGHT_JSON_OUTPUT_NAME: webkit-a11y.json
+        run: |
+          LP_NUM_THREADS="$(nproc)"
+          if [ -r /sys/fs/cgroup/cpu.max ]; then
+            read -r quota period < /sys/fs/cgroup/cpu.max
+            if [ "$quota" != max ]; then
+              share=$(( (quota + period - 1) / period ))
+              if [ "$share" -lt "$LP_NUM_THREADS" ]; then LP_NUM_THREADS="$share"; fi
+            fi
+          fi
+          export LP_NUM_THREADS
+          pnpm exec playwright test --config playwright.config.ts --project webkit --reporter list,json --output webkit-a11y-output
+
+      - name: Report the WebKit accessibility results
+        if: always()
+        run: |
+          node .github/scripts/webkit-a11y-report.mjs webkit-a11y.json webkit-a11y-report
+          cat webkit-a11y-report/report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the WebKit accessibility report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: webkit-weekly-a11y-report
+          path: |
+            webkit-a11y-report
+            webkit-a11y-output
+          if-no-files-found: ignore
+          retention-days: 90
+
   # Build package test owner. The plugin's production CSS partition is a Build
   # integration contract: source inspection cannot prove which declaration
   # paints after Vite emits the final bundle. The `test-build` name makes that
@@ -3538,6 +3927,7 @@ jobs:
       # everything is in scope when it cannot decide.
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -3553,6 +3943,7 @@ jobs:
           echo "::notice title=Lab-only::Lab-only: Lab tests + Storybook build. This job's work is not required for a change only to the Lab package (spec:AST-030 FR26)."
 
       - uses: actions/checkout@v7
+        timeout-minutes: 8
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
 
       - name: Per-author heavy-suite caps
@@ -3622,6 +4013,7 @@ jobs:
       # Outside a pull request every audit applies in full.
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -3635,6 +4027,7 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v7
+        timeout-minutes: 8
 
       # Stable visual scope: Core and the non-private shipped themes take
       # part; canaryOnly packages do not. A change to the gate's probe fixture
@@ -3666,6 +4059,7 @@ jobs:
       - name: Check out the head's visual baseline
         if: steps.visual-scope.outputs.has_stable_visual == 'true' && steps.visual-scope.outputs.broad_stable_visual == 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           path: .head-visual-baseline
@@ -3753,6 +4147,7 @@ jobs:
       # Outside a pull request every audit applies in full.
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -3766,6 +4161,7 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v7
+        timeout-minutes: 8
 
       # Stable visual scope: Core and the non-private shipped themes take
       # part; canaryOnly packages do not. A change to the gate's probe fixture
@@ -3797,6 +4193,7 @@ jobs:
       - name: Check out the head's visual baseline
         if: github.event_name == 'pull_request' && steps.visual-scope.outputs.has_stable_visual == 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           path: .head-visual-baseline
@@ -4149,6 +4546,7 @@ jobs:
       # Outside a pull request every audit applies in full.
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -4162,6 +4560,7 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
@@ -4349,6 +4748,7 @@ jobs:
       # Outside a pull request every audit applies in full.
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -4362,6 +4762,7 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
@@ -4463,6 +4864,7 @@ jobs:
       # Outside a pull request every audit applies in full.
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 3
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -4475,6 +4877,7 @@ jobs:
           component-audit: 'true'
 
       - uses: actions/checkout@v7
+        timeout-minutes: 3
 
       - name: Download applicable RTL shard reports
         if: (steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true')
@@ -4520,6 +4923,7 @@ jobs:
       # decide a wide change.
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -4535,6 +4939,7 @@ jobs:
       # predates this check has none of its scripts at its own head.
       - name: Checkout
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           persist-credentials: false
 
@@ -4543,6 +4948,7 @@ jobs:
       # dropped a baseline entry would otherwise report that entry as new.
       - name: Check out the head's accessibility baseline
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           path: .head-baseline
@@ -4749,6 +5155,7 @@ jobs:
       # so the checkout's cone holds the marker).
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: |
             .github/actions/test-scope
@@ -4789,6 +5196,7 @@ jobs:
       - name: Check out the selection scripts
         if: steps.scope.outputs.applies == 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           persist-credentials: false
 
@@ -4877,6 +5285,7 @@ jobs:
       - name: Check out the head that built the Storybook
         if: steps.touched.outputs.contract_owners != '' || steps.specs.outputs.has_specs == 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
@@ -4971,6 +5380,7 @@ jobs:
     steps:
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 3
         with:
           sparse-checkout: |
             .github/actions/test-scope
@@ -4997,6 +5407,7 @@ jobs:
       - name: Check out the merge commit's sources
         if: steps.scope.outputs.applies == 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 3
         with:
           sparse-checkout: |
             .github
@@ -5056,6 +5467,7 @@ jobs:
     steps:
       - name: Check out the workflow's scripts
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: .github/scripts
           path: .test-scope
@@ -5082,6 +5494,7 @@ jobs:
       # build.
       - name: Check out the head that built the Storybook
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
@@ -5192,6 +5605,7 @@ jobs:
     steps:
       - name: Check out the scope action
         uses: actions/checkout@v7
+        timeout-minutes: 3
         with:
           sparse-checkout: .github/actions/test-scope
           path: .test-scope
@@ -5222,6 +5636,7 @@ jobs:
       - name: Check out the planner
         if: steps.scope.outputs.applies == 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 3
         with:
           persist-credentials: false
 
@@ -5322,6 +5737,7 @@ jobs:
       - name: Check out the scope action
         if: steps.leg.outputs.runs == 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           sparse-checkout: |
             .github/actions/test-scope
@@ -5339,6 +5755,7 @@ jobs:
       - name: Check out the head that built the Storybook
         if: steps.leg.outputs.runs == 'true'
         uses: actions/checkout@v7
+        timeout-minutes: 8
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false

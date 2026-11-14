@@ -12,6 +12,7 @@ const {canonicalRunUrl} = require('./spec-owner-decision.cjs');
 const {
   isCommandComment,
   reconcileSpecOwnerGate,
+  summarizeSpecTextChange,
 } = require('./spec-owner-reconcile.cjs');
 
 const head = 'abcdef1234567890abcdef1234567890abcdef12';
@@ -1530,6 +1531,135 @@ describe('spec owner workflow reconciliation', () => {
       );
     });
 
+    describe('when an approval carries to a pushed head', () => {
+      const codeWait = 'Waiting on code review: community contribution';
+      const asksForApproval =
+        /\(\+ spec approval\)|approve-spec|Waiting for human spec approval/;
+
+      function createPushedHarness() {
+        return createHarness({
+          author: 'contributor',
+          headContent: currentRecord,
+          contentAt: {[oldHead]: currentRecord},
+          comments: [ownerComment(`/approve-spec ${oldHead}`)],
+          codeGate: reviewGate(codeWait),
+        });
+      }
+
+      const reviewGateTexts = statuses =>
+        statuses
+          .filter(status => status.context === 'review-required')
+          .map(status => status.description);
+
+      it('asks for nothing and says the approval carried', async () => {
+        const harness = createPushedHarness();
+
+        await run(
+          harness,
+          context({runId: 100n, action: 'synchronize', author: 'contributor'}),
+        );
+
+        expect(latestGateStatus(harness.state)).toMatchObject({
+          state: 'success',
+          description: 'Mirrors review-required · spec ok (@cixzhang)',
+        });
+        expect(latestReviewGate(harness.state).description).toBe(codeWait);
+        for (const text of reviewGateTexts(published(harness.state))) {
+          expect(text).not.toMatch(asksForApproval);
+        }
+        expect(harness.state.summary).toMatch(
+          /^### Approval carried from 3333333; no action needed\.\n/,
+        );
+        expect(harness.state.summary).not.toContain('/approve-spec');
+      });
+
+      const runTexts = async (harness, runIt) => {
+        const before = harness.state.statuses.length;
+        await runIt();
+        return reviewGateTexts(
+          harness.state.statuses.slice(
+            0,
+            harness.state.statuses.length - before,
+          ),
+        );
+      };
+
+      it('asks for nothing while a later run checks the approval again', async () => {
+        const harness = createPushedHarness();
+        await run(
+          harness,
+          context({runId: 100n, action: 'synchronize', author: 'contributor'}),
+        );
+
+        const texts = await runTexts(harness, () =>
+          commentRun(harness, ownerComment(`/approve-spec ${head}`), 101n),
+        );
+
+        for (const text of texts) expect(text).not.toMatch(asksForApproval);
+        expect(latestReviewGate(harness.state).description).toBe(codeWait);
+      });
+
+      it('shows the approval as carried while a later run checks it, after code review', async () => {
+        const harness = createHarness({
+          author: 'contributor',
+          headContent: currentRecord,
+          contentAt: {[oldHead]: currentRecord},
+          comments: [ownerComment(`/approve-spec ${oldHead}`)],
+        });
+        await run(
+          harness,
+          context({runId: 100n, action: 'synchronize', author: 'contributor'}),
+        );
+        expect(latestReviewGate(harness.state).state).toBe('success');
+
+        const texts = await runTexts(harness, () =>
+          commentRun(harness, ownerComment(`/approve-spec ${head}`), 101n),
+        );
+
+        expect(texts).toContain('⏳ Spec approval carried (verifying)');
+        for (const text of texts) expect(text).not.toMatch(asksForApproval);
+        expect(latestReviewGate(harness.state)).toMatchObject({
+          state: 'success',
+          description:
+            '✅ Spec approved by @cixzhang · No code review required.',
+        });
+      });
+    });
+
+    it('says which spec sections changed since the approval', async () => {
+      const withRequirements = currentRecord.replace(
+        'The contract.',
+        [
+          '## Requirements',
+          '',
+          '- **FR1 — One.** Text.',
+          '- **FR2 — Two.** Text.',
+          '- **FR3 — Three.** Text.',
+        ].join('\n'),
+      );
+      const edited = withRequirements
+        .replace('- **FR1 — One.** Text.', '- **FR1 — One.** New text.')
+        .replace(
+          '- **FR3 — Three.** Text.',
+          '- **FR3 — Three.** Text.\n  More text.',
+        );
+      const harness = createHarness({
+        headContent: edited,
+        contentAt: {[oldHead]: withRequirements},
+        comments: [ownerComment(`/approve-spec ${oldHead}`)],
+      });
+
+      await run(harness, context({runId: 100n}));
+
+      expect(latestReviewGate(harness.state).description).toBe(waiting);
+      expect(harness.state.summary).toContain(
+        'Spec text changed since 3333333: architecture:owner-ready FR1, FR3 (+2 −1 lines).',
+      );
+      expect(harness.state.summary).toContain(
+        'Owners: approve once, after the last spec-text change.',
+      );
+    });
+
     it('resets an approval when the head drops an approved spec path', async () => {
       const dropped = 'docs/specs/dropped/spec.md';
       const harness = createHarness({
@@ -2073,5 +2203,47 @@ describe('a head that changes no knowledge record', () => {
       state: 'success',
       description: 'Mirrors review-required · spec ok',
     });
+  });
+});
+
+describe('the spec change summary', () => {
+  it('names each changed record and section, and counts lines', () => {
+    expect(
+      summarizeSpecTextChange([
+        {
+          path: 'docs/specs/AST-900/spec.md',
+          before: null,
+          after: '---\nid: spec:AST-900\n---\n\n# New\n',
+        },
+        {
+          path: 'docs/design/assets/flow.svg',
+          before: 'base64:AAA',
+          after: 'base64:BBB',
+        },
+        {path: 'docs/specs/AST-901/spec.md', before: 'same', after: 'same'},
+      ]),
+    ).toBe(
+      'spec:AST-900 front matter, New; docs/design/assets/flow.svg (+5 −0 lines)',
+    );
+  });
+
+  it('names a requirement id with a hyphen or a letter suffix', () => {
+    const before =
+      '## Requirements\n\n- **FR29b — One.** Text.\n- **DEC-14 — Two.** Text.\n';
+    expect(
+      summarizeSpecTextChange([
+        {
+          path: 'docs/specs/AST-901/spec.md',
+          before,
+          after: before.replace(/Text\./g, 'New.'),
+        },
+      ]),
+    ).toBe('docs/specs/AST-901/spec.md FR29b, DEC-14 (+2 −2 lines)');
+  });
+
+  it('says nothing when no text differs', () => {
+    expect(
+      summarizeSpecTextChange([{path: 'a/spec.md', before: 'x', after: 'x'}]),
+    ).toBeNull();
   });
 });

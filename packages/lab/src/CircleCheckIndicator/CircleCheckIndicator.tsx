@@ -66,9 +66,9 @@ const styles = stylex.create({
     opacity: 0.5,
   },
   // The press paints on the circle itself. The host's rounded-square layer
-  // would tint past the circle, so the host leaves it off here. A touch
-  // press arrives as `--_indicator-press-image`, which only a CheckboxInput
-  // row declares, so a menu row's own press never paints twice.
+  // would tint past the circle, so the host leaves it off here. A press the
+  // controller paints arrives as `--_indicator-press-image`, which only a
+  // CheckboxInput row declares, so a menu row's own press never paints twice.
   ownPress: {
     position: 'relative',
     '::after': {
@@ -79,20 +79,17 @@ const styles = stylex.create({
       pointerEvents: 'none',
       backgroundColor: {
         default: 'transparent',
+        // A press the controller does not paint. While the controller paints
+        // the row's press, the row hands down `--_indicator-active-press` as
+        // transparent and the image below paints it.
         [stylex.when.ancestor(':active', indicatorScope)]: {
-          default: colorVars['--color-overlay-pressed'],
+          default: `var(--_indicator-active-press, ${colorVars['--color-overlay-pressed']})`,
           '@media (pointer: coarse)': 'transparent',
         },
       },
-      // The image paints under a coarse pointer only, as CheckboxInput's own
-      // layer does. A held pen on a fine-pointer page already draws the
-      // `:active` fill, and the image would paint a second press. StyleX puts
-      // a constant media key in a later priority layer than a literal one. So
-      // the key stays literal.
-      backgroundImage: {
-        default: null,
-        '@media (pointer: coarse)': 'var(--_indicator-press-image, none)',
-      },
+      // The controller's press on every pointer, as CheckboxInput's own layer
+      // paints it.
+      backgroundImage: 'var(--_indicator-press-image, none)',
     },
   },
   checkmark: {

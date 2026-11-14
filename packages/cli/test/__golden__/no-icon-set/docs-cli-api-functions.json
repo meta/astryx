@@ -193,6 +193,14 @@
             "summary": "<text>"
           },
           {
+            "route": "cli/api/functions/integration-example-scope",
+            "name": "integration-example-scope",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
             "route": "cli/api/functions/integration-pack-check",
             "name": "integration-pack-check",
             "package": "@astryxdesign/cli",

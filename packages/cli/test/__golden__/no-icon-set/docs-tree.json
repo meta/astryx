@@ -564,6 +564,7 @@
       "debug-event",
       "gap-report-handler",
       "discover-source",
+      "example-scope",
       "codemod",
       "provider-identity",
       "authored-doc-graph-fields",
@@ -633,6 +634,7 @@
     "sections": [
       "pick-a-check",
       "run-every-check-in-ci",
+      "get-ready-to-list",
       "what-integration-verify-does"
     ],
     "mentions": []
@@ -1240,9 +1242,13 @@
     "type": "docs.detail",
     "sections": [
       "design-tokens",
-      "stylex-setup"
+      "stylex-setup",
+      "nextjs-webpack"
     ],
-    "mentions": []
+    "mentions": [
+      "/** @type {import('next').NextConfig} */\nconst nextConfig = {\n  experimental: {\n    optimizePackageImports: ['@astryxdesign/core'],\n  },\n};\n\nexport default nextConfig;",
+      "If your Next.js app builds with webpack (`next build --webpack`), add `@astryxdesign/core` to `experimental.optimizePackageImports`."
+    ]
   },
   "theme": {
     "type": "docs.detail",

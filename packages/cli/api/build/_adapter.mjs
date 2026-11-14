@@ -2,7 +2,8 @@
 
 /**
  * @file The build subject's environment access: the page templates a project
- * can scaffold, the components it can use, and the checked-in matcher weights.
+ * can scaffold, the components it can use, the checked-in matcher weights, and
+ * the block picker's per-block vectors kept between runs.
  *
  * @input Template and component discovery for `cwd` — the CLI's own templates
  *   and Core's components, plus any that the project's configured integrations
@@ -11,7 +12,8 @@
  *   keywords, command}`, where `command` is the `astryx template` command that
  *   selects exactly that template; blocks as search names them; components as
  *   `{name, keywords}`; the kit's matcher weights, the root's classifier
- *   weights, and the block picker's weights.
+ *   weights, and the block picker's weights; `keptBlockCatalog`, which keeps
+ *   the picker's per-block vectors beside the kept search catalog.
  * @position Beside build.mjs (api/build/). The kit leaf reads templates and
  *   components only through here, because a subject's `_adapter.mjs` is its
  *   only environment access. This adds no discovery of its own: templates come
@@ -19,11 +21,15 @@
  */
 
 import fs from 'node:fs';
+import {fileURLToPath} from 'node:url';
 
 import {discoverTemplates} from '../template/template.mjs';
 import {componentKeywords} from '../search/search.mjs';
 import {findCoreDir, requireCoreDir} from '../../foundation/fs/paths.mjs';
+import {persistedDerived} from '../../foundation/fs/gather-cache.mjs';
 import {analyzeTemplateNeeds} from '../../foundation/discovery/template-needs.mjs';
+import {extractComponents} from '../../foundation/discovery/template-adapter.mjs';
+import {isWordModel} from './kit/word-model.mjs';
 
 /**
  * Runs one build with a single directory listing per path: the kit resolves
@@ -43,6 +49,7 @@ export {withListingCache} from '../../foundation/fs/listing-cache.mjs';
  * @property {string} category The template's own `Family - Variant` label; empty when it declares none.
  * @property {string[]} keywords The ideas the page serves, as its own descriptor names them; empty when it declares none.
  * @property {string} filePath Absolute path to the template source file on disk.
+ * @property {string[]} components The components its page composes, read from its source on first use; empty when the source cannot be read.
  */
 
 /**
@@ -50,6 +57,8 @@ export {withListingCache} from '../../foundation/fs/listing-cache.mjs';
  * @typedef {object} ComponentWords
  * @property {string} name The component's name, e.g. `DateRangeInput`.
  * @property {string[]} keywords The keywords its own doc declares.
+ * @property {string} [category] The category its own doc files it under,
+ *   e.g. `Table & List`.
  */
 
 /**
@@ -95,18 +104,23 @@ export async function loadTemplates(cwd) {
   }
   const pages = templates
     .filter(t => t.type === 'page' && t.isReady !== false)
-    .map(t => ({
-      name: t.dirName,
-      displayName: t.displayName || t.name,
-      description: t.description || '',
-      package: t.package ?? '@astryxdesign/core',
-      category: t.category || '',
-      keywords: t.keywords ?? [],
-      filePath: t.filePath,
-      // The id `template()` resolves back to this entry: an active replacement
-      // owns the Core id it names, so that id selects it, not its own.
-      command: `astryx template ${t.replaces ?? t.dirName} --type page`,
-    }));
+    .map(t =>
+      withComponents(
+        {
+          name: t.dirName,
+          displayName: t.displayName || t.name,
+          description: t.description || '',
+          package: t.package ?? '@astryxdesign/core',
+          category: t.category || '',
+          keywords: t.keywords ?? [],
+          filePath: t.filePath,
+          // The id `template()` resolves back to this entry: an active
+          // replacement owns the Core id it names, so that id selects it.
+          command: `astryx template ${t.replaces ?? t.dirName} --type page`,
+        },
+        t.filePath,
+      ),
+    );
   const blocks = templates
     .filter(t => t.type === 'block')
     .map(t => ({
@@ -160,6 +174,30 @@ export function loadWeights() {
   return weights ?? null;
 }
 
+/** @type {{threshold: number, weights: Record<string, number>} | null | undefined} */
+let shellWeights;
+
+/**
+ * The fixed word table of the shell-start check (kit/shell.weights.json), read
+ * once. Null when the file is missing or unreadable.
+ * @returns {{threshold: number, weights: Record<string, number>} | null}
+ */
+export function loadShellWeights() {
+  if (shellWeights === undefined) {
+    try {
+      shellWeights = JSON.parse(
+        fs.readFileSync(
+          new URL('./kit/shell.weights.json', import.meta.url),
+          'utf8',
+        ),
+      );
+    } catch {
+      shellWeights = null;
+    }
+  }
+  return shellWeights ?? null;
+}
+
 /** @type {import('../../foundation/route/route.mjs').ClassifierWeights | undefined} */
 let treeWeights;
 
@@ -178,6 +216,28 @@ export function loadTreeWeights() {
 
 /** @type {import('./blocks/blocks.mjs').BlockPickerWeights | null | undefined} */
 let blockPicker;
+
+/**
+ * The files the block picker's per-block vectors are worked out from, besides
+ * the catalog text: its module, its weights, and search's word rules (the
+ * stopwords).
+ */
+const BLOCK_CATALOG_INPUTS = [
+  fileURLToPath(new URL('./blocks/blocks.mjs', import.meta.url)),
+  fileURLToPath(new URL('./blocks/blocks.weights.json', import.meta.url)),
+  fileURLToPath(new URL('../search/_query.mjs', import.meta.url)),
+];
+
+/**
+ * Keep the block picker's per-block vectors beside the kept search catalog
+ * (foundation/fs/gather-cache.mjs persistedDerived), keyed also by the files
+ * that work them out, so a later run with the same catalog text and code
+ * reads them back.
+ * @type {import('./blocks/blocks.mjs').KeepCatalog}
+ */
+export function keptBlockCatalog(key, compute, codec) {
+  return persistedDerived(key, compute, codec, BLOCK_CATALOG_INPUTS);
+}
 
 /**
  * The block picker's weights (blocks/blocks.weights.json), read once; null
@@ -211,28 +271,7 @@ export function loadBlockPicker() {
  */
 export function isWeightsFile(file) {
   const n = Array.isArray(file?.candidates) ? file.candidates.length : 0;
-  return (
-    n > 0 &&
-    Array.isArray(file.tables) &&
-    file.tables.length > 0 &&
-    file.tables.every(
-      (/** @type {any} */ t) =>
-        Array.isArray(t?.words) &&
-        Array.isArray(t.rows) &&
-        t.rows.length === t.words.length &&
-        t.rows.every(
-          (/** @type {any} */ r) => typeof r === 'string' && r.length === n,
-        ) &&
-        Array.isArray(t.bias) &&
-        t.bias.length === n &&
-        t.bias.every((/** @type {any} */ b) => Number.isFinite(b)) &&
-        Number.isFinite(t.clip) &&
-        Number.isFinite(t.step),
-    ) &&
-    Array.isArray(file.blend) &&
-    file.blend.length === 3 * (file.tables.length + 1) + 1 &&
-    file.blend.every((/** @type {any} */ x) => Number.isFinite(x))
-  );
+  return isWordModel(file, n);
 }
 
 /** The ranking coefficients the picker reads. */
@@ -311,4 +350,32 @@ export function templateSetupNotes(template, cwd) {
  */
 export function requireBuildCoreDir(cwd) {
   return requireCoreDir(cwd);
+}
+
+/**
+ * Adds a lazy, non-enumerable `components` getter to a page entry: the page's
+ * source is read and parsed only when a caller reads it, once, so loading the
+ * catalog stays cheap and the entry's own fields are unchanged.
+ * @template {object} T
+ * @param {T} entry
+ * @param {string | undefined} filePath
+ * @returns {T & {readonly components: string[]}}
+ */
+function withComponents(entry, filePath) {
+  /** @type {string[] | undefined} */
+  let components;
+  return /** @type {T & {readonly components: string[]}} */ (
+    Object.defineProperty(entry, 'components', {
+      get() {
+        if (components === undefined) {
+          try {
+            components = filePath ? extractComponents(filePath) : [];
+          } catch {
+            components = [];
+          }
+        }
+        return components;
+      },
+    })
+  );
 }
