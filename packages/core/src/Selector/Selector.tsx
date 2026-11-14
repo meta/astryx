@@ -130,6 +130,12 @@ const MOST_ROWS_THAT_FIT = 12;
 // Private runtime state. No app or theme sets it.
 const OVERLAY_MARGIN_PROPERTY = '--_selector-overlay-margin';
 
+/**
+ * The trigger's own list is open. A press does not scale the box then, so the
+ * list anchors to the box at rest.
+ */
+const LAYER_OPEN: string = ':has([aria-expanded="true"])';
+
 const styles = stylex.create({
   // Trigger container — the enhanced click target wrapping the combobox button and clear button as siblings
   triggerContainer: {
@@ -276,17 +282,20 @@ const styles = stylex.create({
       ':focus-within': 'none',
     },
     fontWeight: fontWeightVars['--font-weight-medium'],
-    transitionProperty:
-      'background-image, background-color, color, opacity, transform',
+    transitionProperty: {
+      default: 'background-image, background-color, color, opacity, transform',
+      // The press scale goes at once as the list opens.
+      [LAYER_OPEN]: 'background-image, background-color, color, opacity',
+    },
     transform: {
       default: 'scale(1)',
       // A mouse press; under a coarse pointer the touch press model writes
       // `data-astryx-press` instead (see interactionOverlay.stylex.ts).
-      ':active': {
+      [`:active:not(${LAYER_OPEN})`]: {
         default: 'scale(0.98)',
         '@media (pointer: coarse)': 'scale(1)',
       },
-      '[data-astryx-press="on"]': 'scale(0.98)',
+      [`[data-astryx-press="on"]:not(${LAYER_OPEN})`]: 'scale(0.98)',
     },
   },
   // Secondary is ghost's chrome with the resting fill of a secondary
@@ -309,15 +318,18 @@ const styles = stylex.create({
       ':focus-within': 'none',
     },
     fontWeight: fontWeightVars['--font-weight-medium'],
-    transitionProperty:
-      'background-image, background-color, color, opacity, transform',
+    transitionProperty: {
+      default: 'background-image, background-color, color, opacity, transform',
+      // The press scale goes at once as the list opens.
+      [LAYER_OPEN]: 'background-image, background-color, color, opacity',
+    },
     transform: {
       default: 'scale(1)',
-      ':active': {
+      [`:active:not(${LAYER_OPEN})`]: {
         default: 'scale(0.98)',
         '@media (pointer: coarse)': 'scale(1)',
       },
-      '[data-astryx-press="on"]': 'scale(0.98)',
+      [`[data-astryx-press="on"]:not(${LAYER_OPEN})`]: 'scale(0.98)',
     },
   },
   triggerGhostDisabled: {
@@ -1444,7 +1456,7 @@ export function Selector<T extends SelectorOptionType>(
 
   // Open dropdown on mount when isDefaultOpen is true and interaction is allowed.
   useEffect(() => {
-    if (isDefaultOpen && !isEffectivelyReadOnly) {
+    if (isDefaultOpen && !isDisabled && !isEffectivelyReadOnly) {
       surface.show();
     }
     // eslint-disable-next-line @eslint-react/exhaustive-deps -- mount-only: isDefaultOpen is not reactive
@@ -1517,7 +1529,6 @@ export function Selector<T extends SelectorOptionType>(
     surface.isOpen && !isLoading && filteredItems.length === 0;
   useAnnounceRenderedText(emptyStateRef, isPanelEmpty, searchQuery);
 
-  // Calculate offset to position selected item over trigger.
   const {marginBlockStart: rawMarginBlockStart, isPositioned: rawIsPositioned} =
     useSelectedItemOverlayMargin({
       isOpen: popover.isOpen && shouldOverlaySelectedItem,

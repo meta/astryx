@@ -1381,6 +1381,18 @@ function useLayerImplementation(
   // The gesture during which the browser last closed this layer on its own.
   // openNow reads it so that the same press cannot reopen the layer.
   const dismissedByGestureRef = useRef<number | null>(null);
+  // The trigger the layer was open for when the browser closed it. Only a
+  // show from that trigger is the dismissing press reopening it.
+  const dismissedTriggerRef = useRef<HTMLElement | null>(null);
+  // A hide the browser has started on its own (light dismiss, popover="auto"
+  // stack eviction, an Escape its close watcher answers), from `beforetoggle`
+  // until its `toggle`, with the trigger the layer was open for. `moved` is
+  // set when a show from another trigger reopens the layer during that hide.
+  const browserHideRef = useRef<{
+    popover: HTMLElement;
+    trigger: HTMLElement | null;
+    moved: boolean;
+  } | null>(null);
   const forgetDismissalRef = useRef<(() => void) | null>(null);
 
   // Stops the watch for pans outside the open layer (`watchesOutsidePans`).
@@ -1550,8 +1562,12 @@ function useLayerImplementation(
 
   const openNow = useCallback(() => {
     // Every caller lands here, so this is where the dismissing press is
-    // absorbed: opening now would reopen the popup that same press closed.
-    if (wasJustDismissed()) {
+    // absorbed: opening now from the same trigger would reopen the popup that
+    // press closed. A show from another trigger of the layer opens it there.
+    if (
+      wasJustDismissed() &&
+      dismissedTriggerRef.current === triggerRef.current
+    ) {
       return;
     }
     // A light-dismiss layer asked to show while a press's release is handled
@@ -1570,6 +1586,21 @@ function useLayerImplementation(
         }
       });
       return;
+    }
+    // A show from another trigger while the browser closes the layer for its
+    // old trigger: the layer moves to the new trigger. It opens there now, and
+    // the old trigger's close is not reported.
+    const browserHide = browserHideRef.current;
+    if (
+      browserHide != null &&
+      isOpenRef.current &&
+      browserHide.popover === popoverRef.current &&
+      browserHide.trigger !== triggerRef.current
+    ) {
+      browserHide.moved = true;
+      openedPopoverRef.current = null;
+      isOpenRef.current = false;
+      stopOutsidePanWatch();
     }
     // A context popover left over until React commits a previous hide must not
     // be reopened. The synchronous mount ref is the source of truth.
@@ -1973,10 +2004,12 @@ function useLayerImplementation(
       return;
     }
     dismissedByGestureRef.current = currentGesture();
+    dismissedTriggerRef.current = triggerRef.current;
     const view = doc.defaultView;
     let forgetTimer: number | null = null;
     const forget = () => {
       dismissedByGestureRef.current = null;
+      dismissedTriggerRef.current = null;
       doc.removeEventListener('click', scheduleForget, true);
       if (forgetTimer !== null) {
         view?.clearTimeout(forgetTimer);
@@ -2047,6 +2080,11 @@ function useLayerImplementation(
       if (isOpenRef.current) {
         observeBrowserHide(el);
         onCloseStartRef.current?.();
+        browserHideRef.current = {
+          popover: el,
+          trigger: triggerRef.current,
+          moved: false,
+        };
         // The browser's own close releases the name from its toggle event.
         return;
       }
@@ -2070,6 +2108,15 @@ function useLayerImplementation(
   const handleToggle = useCallback(
     (e: Event) => {
       const toggleEvent = e as ToggleEvent;
+      const browserHide = browserHideRef.current;
+      if (browserHide != null && browserHide.popover === e.currentTarget) {
+        browserHideRef.current = null;
+        // The layer moved to another trigger during the hide: it is open, and
+        // the old trigger's close is not reported.
+        if (browserHide.moved) {
+          return;
+        }
+      }
       if (toggleEvent.newState === 'closed' && isOpenRef.current) {
         openedPopoverRef.current = null;
         isOpenRef.current = false;
