@@ -4,6 +4,7 @@
 export const doc = {
   type: 'block',
   exampleFor: 'ChatDictationButton',
+  alsoExampleFor: ['useChatDictation'],
   name: 'ChatDictationButton — Basic',
   displayName: 'ChatDictationButton — Basic',
   description:
