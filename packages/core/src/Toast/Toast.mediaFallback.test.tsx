@@ -69,4 +69,14 @@ describe('Toast media side before measurement', () => {
     expect(media(withSurface('oklch(0.95 0.01 230)'), 'light')).toBe('dark');
     expect(media(withSurface('hsl(200 30% 95%)'), 'dark')).toBe('light');
   });
+
+  it('a translucent surface, another named color or an unread on-color starts from the color mode', () => {
+    expect(media(withSurface('rgba(244, 240, 232, 0.9)'), 'light')).toBe(
+      'dark',
+    );
+    expect(media(withSurface('ivory'), 'light')).toBe('dark');
+    expect(
+      media(withSurface('#f4f0e8', 'oklch(1 0 0)', '#111111'), 'light'),
+    ).toBe('dark');
+  });
 });

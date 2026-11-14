@@ -421,9 +421,9 @@ export function ToastSurface({
     onDismiss('manual');
   }, [onDismiss]);
 
-  // Before the surface is measured, pick the side from the theme's resolved
-  // surface by the measurement's rule. A surface parseColor cannot read
-  // falls back to the mode.
+  // Before the measurement, take the side from the theme's resolved surface by
+  // the measurement's rule. If the surface is translucent, or parseColor cannot
+  // read it or an on-color, use the mode.
   const {mode, tokens} = useTheme();
   const surface = parseColor(
     tokens[
