@@ -76,11 +76,16 @@ const probed = new Map();
 const gathered = await runWithDocPackageManager(pm, () =>
   recordReads(probed, () => recordReads(seen, () => gatherCandidates({cwd: project})), {exact: true}));
 if (gathered.coreSkipped != null) throw new Error('the gather found no Core: ' + gathered.coreSkipped);
+const path = await import('node:path');
+const within = (root, file) => {
+  const rel = path.relative(root, file);
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+};
 const packages = [${JSON.stringify(cli)}, ${JSON.stringify(core)}];
 const home = process.env.HOME;
 const uncovered = [...probed.keys()].filter(file =>
-  !(file === home || file.startsWith(home + '/')) &&
-  !packages.some(root => file === root || file.startsWith(root + '/')) &&
+  !within(home, file) &&
+  !packages.some(root => within(root, file)) &&
   !/\\.[cm]?js$/.test(file) &&
   !live.has(file));
 if (uncovered.length > 0) throw new Error('the gather reads paths outside the packages that the live check does not: ' + uncovered.join(', '));
@@ -104,7 +109,11 @@ process.stdout.write(JSON.stringify({
  * @returns {{pm: string, cli: Record<string, string>, core: Record<string, string>, value: any}}
  */
 function gather(project, cli, core, pm) {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-catalog-home-'));
+  // Real paths, as the gather reads them: a temp folder may sit behind a
+  // link (macOS's is).
+  const home = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-catalog-home-')),
+  );
   try {
     const run = spawnSync(
       process.execPath,
@@ -303,8 +312,8 @@ function withReferences(value, strings) {
 export function searchCatalogText() {
   // A leftover store would answer the gather below.
   fs.rmSync(SEARCH_CATALOG_FILE, {force: true});
-  const stage = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'astryx-search-catalog-'),
+  const stage = fs.realpathSync(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-search-catalog-')),
   );
   try {
     const modules = path.join(stage, 'node_modules', '@astryxdesign');
