@@ -53,6 +53,16 @@ export function characterCount(str: string): number {
  * character, so cost does not scale with the length of the string.
  */
 export function firstCharacter(str: string): string {
+  // Below U+0300 (ASCII, Latin-1, Latin Extended, IPA, spacing modifiers) no
+  // character starts a longer cluster. The cluster then ends after one code
+  // unit unless the next one can extend it: a combining mark, a joiner or a
+  // variation selector (all at U+0300 or above), or LF after CR. Most names
+  // take this path and skip the segmenter.
+  const first = str.charCodeAt(0);
+  const next = str.charCodeAt(1);
+  if (first < 0x300 && !(next >= 0x300) && !(first === 13 && next === 10)) {
+    return str[0];
+  }
   if (characterSegmenter) {
     const first = characterSegmenter.segment(str)[Symbol.iterator]().next();
     return first.done ? '' : first.value.segment;

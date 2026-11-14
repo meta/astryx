@@ -188,6 +188,10 @@ describe('Avatar', () => {
       ['R2 D2', 'RD'],
       ['3M', '3'],
       ['émile zola', 'ÉZ'],
+      ['e\u0301mile zola', 'E\u0301Z'],
+      ['José Ñúñez', 'JÑ'],
+      ['Đorđe Łukasz', 'ĐŁ'],
+      ['ǆungla Ǌegoš', 'ǄǊ'],
       ['😀 Ada', '😀A'],
       ['Ada (😀)', 'A😀'],
     ])('%s renders %s', (name, expected) => {

@@ -98,6 +98,15 @@ describe('columnUtils', () => {
       expect(capitalize('a')).toBe('A');
     });
 
+    it.each([
+      ['élan', 'Élan'],
+      ['e\u0301lan', 'E\u0301lan'],
+      ['ǆungla', 'Ǆungla'],
+      ['\u{1f600}smile', '\u{1f600}smile'],
+    ])('keeps the first character whole: %s', (input, expected) => {
+      expect(capitalize(input)).toBe(expected);
+    });
+
     it('uppercases an astral-plane letter without splitting it (#4759)', () => {
       // Deseret 𐐨 (U+10428) uppercases to 𐐀 (U+10400); charAt(0) would grab
       // half the surrogate pair and leave the string unchanged.
