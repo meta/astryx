@@ -99,7 +99,13 @@ describe('response-types EnumDoc names every field', () => {
   it('component.detail: the ownership fields and parentDoc', async () => {
     const res = await data(['component', 'HStack']);
     expect(res.type).toBe('component.detail');
-    const ownership = ['package', 'import', 'sourceAvailable', 'parentDoc'];
+    const ownership = [
+      'package',
+      'import',
+      'sourceAvailable',
+      'parentDoc',
+      'theme',
+    ];
     for (const f of ownership) expect(Object.keys(res.data)).toContain(f);
     expectNamed('component.detail', ownership);
     // The canonical response type declares parentDoc too.

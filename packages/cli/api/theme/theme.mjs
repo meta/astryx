@@ -29,4 +29,8 @@ export {
   themeListAvailable,
   themeListCopySources,
 } from './list/list.mjs';
-export {listThemes, resolveRecordedTheme} from './_adapter.mjs';
+export {
+  listThemes,
+  resolveActiveTheme,
+  resolveRecordedTheme,
+} from './_adapter.mjs';

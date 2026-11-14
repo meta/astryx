@@ -1,5 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/**
+ * @file Component documentation rendering, including custom theme annotations.
+ * @input Component docs and resolved theme metadata.
+ * @output Assertions for full, compact, and brief CLI documentation.
+ * @position Regression coverage for the component formatter.
+ */
+
 import {describe, it, expect} from 'vitest';
 import {
   formatBestPractices,
@@ -282,6 +289,57 @@ describe('formatBrief signature stays terse', () => {
     expect(signature).not.toContain('0|0.5|1|1.5|2|3|4|5|6|8|10');
     // But the prop is still named, so it is not lost.
     expect(formatBrief(docs, 'HStack', '')).toContain('gap');
+  });
+});
+
+describe('theme custom-variant annotation', () => {
+  // The theme lookup returns one list per component key, merged from a built
+  // module's `themeVariants` export and the theme object's own `variants`
+  // field; these tests pin the `*` annotation for that list.
+  const docs = {
+    name: 'Badge',
+    description: 'A badge.',
+    theming: {
+      targets: [{className: 'astryx-badge', visualProps: ['variant']}],
+    },
+    props: [
+      {
+        name: 'variant',
+        type: "'neutral' | 'info'",
+        description: 'Visual variant.',
+      },
+    ],
+  };
+  const themeData = {name: 'vartheme', variants: {badge: ['gray']}};
+
+  it('formatFull suffixes theme variants with * and prints the footnote', () => {
+    const out = formatFull(docs, {themeData});
+
+    // Core variants stay plain; the theme-added one is starred.
+    expect(out).toContain('neutral, info, gray*');
+    expect(out).toContain('_\\* = custom variant from vartheme theme_');
+  });
+
+  it('formatBrief appends the starred theme variants to the Targets line', () => {
+    const out = formatBrief(docs, 'Badge', '', {themeData});
+
+    expect(out).toContain('theme: gray*');
+  });
+
+  it('stays silent for a theme without custom values', () => {
+    const out = formatFull(docs, {
+      themeData: {name: 'vartheme', variants: null},
+    });
+
+    expect(out).toContain('neutral, info |');
+    expect(out).not.toContain('custom variant from');
+  });
+
+  it('stays silent for a theme whose custom values are empty', () => {
+    const out = formatFull(docs, {themeData: {name: 'vartheme', variants: {}}});
+
+    expect(out).toContain('neutral, info |');
+    expect(out).not.toContain('custom variant from');
   });
 });
 

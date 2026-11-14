@@ -1,6 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-/** @file Tests generated-record default resolution and released package-field fallback. */
+/**
+ * @file Tests generated-record default resolution, released package-field
+ * fallback, and the custom-variant metadata a built theme module exports.
+ */
 
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import * as fs from 'node:fs';
@@ -14,6 +17,7 @@ import {themeEject} from '../../../api/theme/eject/eject.mjs';
 import {themeUse} from '../../../api/theme/use/use.mjs';
 import {renderThemeModule} from '../../../foundation/config/theme-state.mjs';
 import {checkAppThemes} from '../../../api/doctor/theme-checks.mjs';
+import {component} from '../../../api/component/component.mjs';
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '../../../../..');
 
@@ -30,18 +34,18 @@ function fixture(pkg = {name: 'app'}) {
 function writeTheme(dir, filename, name) {
   fs.writeFileSync(
     path.join(dir, filename),
-    `module.exports = {name: '${name}', variants: {Button: ['${name}']}, fonts: {body: '${name}'}};\n`,
+    `module.exports = {${name}Theme: {name: '${name}', tokens: {}, fonts: {body: '${name}'}}, themeVariants: {button: {variant: ['${name}']}}};\n`,
   );
 }
 
-function writeGeneratedRecord(dir) {
+function writeGeneratedRecord(
+  dir,
+  moduleSource = "export const oceanTheme = {name: 'ocean', variants: {Button: ['ocean']}};\n",
+) {
   const sourceDir = path.join(dir, 'src', 'themes', 'ocean');
   fs.mkdirSync(sourceDir, {recursive: true});
   const moduleFile = path.join(sourceDir, 'ocean.js');
-  fs.writeFileSync(
-    moduleFile,
-    "export const oceanTheme = {name: 'ocean', variants: {Button: ['ocean']}};\n",
-  );
+  fs.writeFileSync(moduleFile, moduleSource);
   fs.writeFileSync(
     path.join(dir, 'src', 'astryx-themes.js'),
     renderThemeModule(
@@ -241,7 +245,7 @@ describe('resolveTheme package field', () => {
 
     expect(await resolveTheme(dir)).toEqual({
       name: 'legacy',
-      variants: {Button: ['legacy']},
+      variants: {button: ['legacy']},
       fonts: {body: 'legacy'},
     });
   });
@@ -502,6 +506,7 @@ describe('component output with a broken recorded theme', () => {
       expect(json.status, json.stderr).toBe(0);
       expect(() => JSON.parse(json.stdout)).not.toThrow();
       expect(JSON.parse(json.stdout).type).toBe('component.detail');
+      expect(JSON.parse(json.stdout).data.theme).toBeNull();
       expect(json.stderr).toBe('');
 
       const checks = await checkAppThemes(dir);
@@ -530,13 +535,24 @@ describe('component output with a broken recorded theme', () => {
       const text = runComponent(dir, args);
       expect(text.status, text.stderr).toBe(0);
       expect(text.stdout).not.toBe('');
-      expect(text.stderr).toContain('multi-theme package @acme/themes');
-      expect(text.stderr.match(/⚠ theme:/gu) ?? []).toHaveLength(1);
+      if (type === 'component.list') {
+        expect(text.stderr).toContain('multi-theme package @acme/themes');
+        expect(text.stderr.match(/⚠ theme:/gu) ?? []).toHaveLength(1);
+      } else {
+        // A view that prints no theme value does not load the theme.
+        expect(text.stderr).not.toContain('⚠ theme:');
+      }
       expect(text.stderr).not.toMatch(/\n\s+at /u);
 
       const json = runComponent(dir, ['--json', ...args]);
       expect(json.status, json.stderr).toBe(0);
-      expect(JSON.parse(json.stdout).type).toBe(type);
+      const parsed = JSON.parse(json.stdout);
+      expect(parsed.type).toBe(type);
+      if (type === 'component.list') {
+        expect(parsed.data.theme).toBeNull();
+      } else {
+        expect(parsed.data).not.toHaveProperty('theme');
+      }
       expect(json.stderr).toBe('');
     },
     30_000,
@@ -554,6 +570,29 @@ describe('component output with a broken recorded theme', () => {
       const json = runComponent(dir, ['--json', 'component', 'Button']);
       expect(json.status, json.stderr).toBe(0);
       expect(JSON.parse(json.stdout).type).toBe('component.detail');
+      // The built fixture carries a `variants` field on its theme object.
+      expect(JSON.parse(json.stdout).data.theme).toEqual({
+        name: 'ocean',
+        values: {Button: ['ocean']},
+      });
+      expect(json.stderr).toBe('');
+    },
+    30_000,
+  );
+
+  it.each([
+    ['props', ['component', 'Button', '--props']],
+    ['source', ['component', 'Button', '--source']],
+    ['showcase', ['component', 'Button', '--showcase']],
+    ['blocks', ['component', 'Button', '--blocks']],
+  ])(
+    'answers a %s read with a theme that throws, in text and JSON alike',
+    (projection, args) => {
+      const dir = brokenThemeProject('runtime');
+      const text = runComponent(dir, args);
+      expect(text.status, text.stderr).toBe(0);
+      const json = runComponent(dir, ['--json', ...args]);
+      expect(json.status, json.stderr).toBe(0);
       expect(json.stderr).toBe('');
     },
     30_000,
@@ -569,9 +608,149 @@ describe('component output with a broken recorded theme', () => {
     );
     expect(text.stderr).not.toMatch(/\n\s+at /u);
 
+    // The same condition exits the same way in JSON.
     const json = runComponent(dir, ['--json', 'component', 'Button']);
-    expect(json.status, json.stderr).toBe(0);
-    expect(JSON.parse(json.stdout).type).toBe('component.detail');
+    expect(json.status, json.stderr).toBe(1);
+    expect(JSON.parse(json.stdout)).toMatchObject({
+      code: 'ERR_THEME_LOAD',
+      error: 'Could not load the recorded theme: runtime theme boom',
+    });
     expect(json.stderr).toBe('');
+  });
+});
+
+describe('component() data.theme', () => {
+  /** A single-theme project whose built module exports custom values. */
+  function themedProject() {
+    const dir = fixture({
+      name: 'app',
+      type: 'module',
+      dependencies: {
+        '@acme/themes': '1.0.0',
+        '@astryxdesign/core': '*',
+      },
+    });
+    writePackageRecord(
+      dir,
+      ['ocean'],
+      {'./built': './dist/built.js', './theme.css': './dist/theme.css'},
+      {
+        'dist/built.js':
+          "export const oceanTheme = {name: 'ocean', __built: true, tokens: {}};\n" +
+          "export const themeVariants = {button: {variant: ['glass']}};\n",
+        'dist/theme.css': '.ocean {}\n',
+      },
+    );
+    installCore(dir);
+    return dir;
+  }
+
+  it('carries the theme name and its custom values on a detail read', async () => {
+    const result = await component('Button', {cwd: themedProject()});
+    expect(result.type).toBe('component.detail');
+    expect(/** @type {any} */ (result.data).theme).toEqual({
+      name: 'ocean',
+      values: {button: ['glass']},
+    });
+  });
+
+  it('carries the same theme on a list read and on each batch row', async () => {
+    const cwd = themedProject();
+    const expected = {name: 'ocean', values: {button: ['glass']}};
+    const list = await component(undefined, {cwd, list: true});
+    expect(/** @type {any} */ (list.data).theme).toEqual(expected);
+    // Each batch row is a detail read of its own.
+    const batch = /** @type {any} */ (
+      await component(['Button', 'Badge'], {cwd})
+    );
+    for (const row of batch.data.results) {
+      expect(row.result.data.theme).toEqual(expected);
+    }
+  });
+
+  it('is null without a configured theme', async () => {
+    const dir = fixture({
+      name: 'app',
+      dependencies: {'@astryxdesign/core': '*'},
+    });
+    installCore(dir);
+    const result = await component('Button', {cwd: dir});
+    expect(/** @type {any} */ (result.data).theme).toBeNull();
+  });
+
+  it('leaves the props, source, showcase and blocks reads without it', async () => {
+    const cwd = themedProject();
+    for (const option of ['props', 'source', 'showcase', 'blocks']) {
+      const result = await component('Button', {cwd, [option]: true});
+      expect(result.data).not.toHaveProperty('theme');
+    }
+  });
+
+  it('matches the JSON the component command prints', async () => {
+    const cwd = themedProject();
+    const json = runComponent(cwd, ['--json', 'component', 'Button']);
+    expect(json.status, json.stderr).toBe(0);
+    expect(JSON.parse(json.stdout).data.theme).toEqual(
+      /** @type {any} */ ((await component('Button', {cwd})).data).theme,
+    );
+    const text = runComponent(cwd, ['component', 'Button']);
+    expect(text.stdout).toContain('glass*');
+  });
+});
+
+describe('resolveTheme — custom variant metadata', () => {
+  /** @param {string} source */
+  function themeModule(source) {
+    const cwd = fixture({astryx: {theme: './theme.cjs'}});
+    fs.writeFileSync(path.join(cwd, 'theme.cjs'), source);
+    return cwd;
+  }
+
+  it('reads the themeVariants export beside the theme object', async () => {
+    const cwd = themeModule(`module.exports = {
+      acmeTheme: {name: 'acme', __built: true, tokens: {}},
+      themeVariants: {banner: {container: ['glass'], status: ['critical']}},
+    };`);
+
+    expect(await resolveTheme(cwd)).toEqual({
+      name: 'acme',
+      variants: {banner: ['glass', 'critical']},
+      fonts: null,
+    });
+  });
+
+  it("still reads the theme object's own variants field, merged without duplicates", async () => {
+    const cwd = themeModule(`module.exports = {
+      acmeTheme: {name: 'acme', tokens: {}, variants: {badge: ['gray'], banner: ['glass']}},
+      themeVariants: {banner: {container: ['glass'], status: ['critical']}},
+    };`);
+
+    expect((await resolveTheme(cwd))?.variants).toEqual({
+      banner: ['glass', 'critical'],
+      badge: ['gray'],
+    });
+  });
+
+  it('resolves variants to null for a module without the export', async () => {
+    const cwd = themeModule(`module.exports = {
+      acmeTheme: {name: 'acme', __built: true, tokens: {}},
+    };`);
+
+    expect((await resolveTheme(cwd))?.variants).toBeNull();
+  });
+
+  it('reads the themeVariants export from the generated record default', async () => {
+    const dir = fixture({name: 'app', type: 'module'});
+    writeGeneratedRecord(
+      dir,
+      "export const oceanTheme = {name: 'ocean', __built: true, tokens: {}};\n" +
+        "export const themeVariants = {banner: {container: ['glass'], status: ['critical']}};\n",
+    );
+
+    expect(await resolveTheme(dir)).toEqual({
+      name: 'ocean',
+      variants: {banner: ['glass', 'critical']},
+      fonts: null,
+    });
   });
 });

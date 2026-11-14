@@ -41,7 +41,7 @@ export const doc = {
     {
       value: 'component.list',
       description:
-        "The component catalog grouped by component group (each component's group field): `detail` (the level: names | compact | full) and `components`, the grouped map of names entries ({name, package, and optional canonical import for integrations}), brief entries ({name, package, description, import}), or a full ComponentDoc per entry with its package.",
+        "The component catalog grouped by component group (each component's group field): `detail` (the level: names | compact | full) and `components`, the grouped map of names entries ({name, package, and optional canonical import for integrations}), brief entries ({name, package, description, import}), or a full ComponentDoc per entry with its package. `theme` is the configured theme as {name, values}, where values lists the custom values it adds per component, or null without a theme.",
     },
     {
       value: 'component.batch',
@@ -51,7 +51,7 @@ export const doc = {
     {
       value: 'component.detail',
       description:
-        "One component's authored ComponentDoc plus ownership fields (package, the owner; import, the specifier; sourceAvailable, whether source exists) and parentDoc (present when the component is documented inside another component's doc, naming that doc). The envelope's package names the same owner.",
+        "One component's authored ComponentDoc plus ownership fields (package, the owner; import, the specifier; sourceAvailable, whether source exists) and parentDoc (present when the component is documented inside another component's doc, naming that doc). `theme` is the configured theme as {name, values}, where values lists the custom values it adds per component, or null without a theme. The envelope's package names the same owner.",
     },
     {
       value: 'component.detail.props',

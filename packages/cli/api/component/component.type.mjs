@@ -40,7 +40,21 @@
  *   - 'full'    -> ComponentDoc[]        (full authored doc per entry, plus its owner package)
  * @typedef {object} ComponentListResponse
  * @property {'component.list'} type
- * @property {ComponentListData} data
+ * @property {ComponentListData & ComponentThemeField} data
+ */
+
+/**
+ * The configured theme's custom values: its name and, by component key, the
+ * values it adds, the list the text view marks with `*`. The list merges a
+ * built module's `themeVariants` export (across props) and the theme object's
+ * own `variants` field. `null` when no theme is configured or the configured
+ * theme is not found.
+ * @typedef {{name: string | null; values: Record<string, string[]>} | null} ComponentTheme
+ */
+
+/**
+ * @typedef {object} ComponentThemeField
+ * @property {ComponentTheme} theme
  */
 
 /**
@@ -120,7 +134,7 @@
  * @typedef {object} ComponentDetailResponse
  * @property {'component.detail'} type
  * @property {string} package The npm package that owns the component.
- * @property {import('@astryxdesign/cli/authoring').ComponentDoc & ComponentOwnership & ComponentDetailScope} data
+ * @property {import('@astryxdesign/cli/authoring').ComponentDoc & ComponentOwnership & ComponentDetailScope & ComponentThemeField} data
  */
 
 /**

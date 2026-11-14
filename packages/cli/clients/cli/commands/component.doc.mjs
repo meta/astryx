@@ -24,7 +24,9 @@ export const doc = {
     'source, showcase, or example blocks. An integration component that replaces a Core ' +
     'component (its doc sets replaces, and its package declares the CLI range that turns ' +
     'replacement on) answers to the Core name in detail, batch, and list views; use ' +
-    '--package @astryxdesign/core for the original.',
+    '--package @astryxdesign/core for the original. With --json, a detail result, each ' +
+    "batch row's detail, and a list result carry data.theme: the configured theme's name and the custom values it adds " +
+    'by component (null without a theme), the same values the text marks with *.',
   fn: 'component',
   args: [
     {
@@ -95,7 +97,7 @@ export const doc = {
     {code: 0, when: 'success'},
     {
       code: 1,
-      when: 'unknown component, category, or package; more than 100 selectors; any batch row is unresolved; or @astryxdesign/core cannot be resolved',
+      when: 'unknown component, category, or package; more than 100 selectors; any batch row is unresolved; @astryxdesign/core cannot be resolved; or a detail, list, or batch read finds a recorded theme that throws while it loads',
     },
   ],
   related: ['search', 'hook', 'docs', 'template', 'swizzle'],
