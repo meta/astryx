@@ -3725,6 +3725,24 @@ export function compileTheme(ctx, data, base) {
       ]),
     );
   };
+  /**
+   * A part's shadow with the layers Core composes its own shadow from (the
+   * private variables in its resting declaration), over the theme's; a
+   * shadow of none keeps those layers alone. Any other part's is as given.
+   * @param {string} target @param {string} v
+   */
+  const withCoreShadowLayers = (target, v) => {
+    const at = ctx.C.MAP[target]?.at?.['box-shadow'] ?? {};
+    const rest = Object.entries(at).find(([k]) => !/:|selected=/.test(k))?.[1];
+    const layers = splitTop(String(rest ?? ''), ',')
+      .map(x => x.trim())
+      .filter(x => /^var\(\s*--_/.test(x));
+    const value = String(v).trim();
+    if (!layers.length || layers.every(l => value.includes(l))) return v;
+    return /^none$/i.test(value)
+      ? layers.join(', ')
+      : `${layers.join(', ')}, ${value}`;
+  };
   /** Whether the base theme's own rule for the part writes a radius. */
   const baseWritesRadius = (
     /** @type {string} */ target,
@@ -4387,6 +4405,11 @@ export function compileTheme(ctx, data, base) {
   };
   /** @param {Setting} s @param {string} target @param {string} prop @param {string} v */
   const putComp = (s, target, prop, v) => {
+    // A shadow on a part whose shadow Core composes from layers of its own
+    // (a card's selection ring and elevation) keeps those layers over the
+    // theme's: the theme's shadow is one more layer, never a list that
+    // drops the ring.
+    if (kebab(prop) === 'box-shadow') v = withCoreShadowLayers(target, v);
     const b = block(s, target);
     // A gradient background for one mode goes into the rule's block for
     // that mode as its image layers (with their positions, sizes and
