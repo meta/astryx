@@ -5,8 +5,8 @@
 /**
  * @file touchRuntimeModules.tsx
  * @input The shared touch modules: the animator, and the touch parts of
- *   SegmentedControl, Switch, Toast and Popover, which use the animator and
- *   the gesture host
+ *   SegmentedControl, Switch, Toast, Popover and action groups, which use the
+ *   animator and the gesture host
  * @output `touchRuntime`, the one object the touch loader publishes
  * @position Loaded only through `import()` in utils/touchRuntime.ts. No
  *   other module imports this file
@@ -29,6 +29,10 @@ import {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
 import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
 import {createPopoverSurfaceMotion} from '../Popover/popoverSurfaceMotion';
 import type {ToastSwipeClaimProps} from '../Toast/useToastGesture';
+import {
+  useActionGroupTracking,
+  type ActionGroupTrackingOptions,
+} from '../hooks/useActionGroupTracking';
 
 interface SegmentedMotionProps {
   readonly trackRef: RefObject<HTMLElement | null>;
@@ -127,8 +131,27 @@ function ToastSwipeClaim({
   return null;
 }
 
+interface ActionGroupTrackingProps {
+  readonly groupRef: RefObject<HTMLElement | null>;
+  readonly options: ActionGroupTrackingOptions;
+}
+
+/**
+ * An action group's press tracking: a held finger or pen slides across its
+ * actions. It renders nothing. It mounts once the runtime has loaded, so the
+ * first press it tracks is the first one after the load.
+ */
+function ActionGroupTracking({
+  groupRef,
+  options,
+}: ActionGroupTrackingProps): null {
+  useActionGroupTracking(groupRef, options);
+  return null;
+}
+
 /** What the touch loader publishes once the page has loaded it. */
 export const touchRuntime = {
+  ActionGroupTracking,
   animatorFor,
   createPopoverSurfaceMotion,
   SegmentedMotion,

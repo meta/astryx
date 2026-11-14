@@ -32,6 +32,13 @@ import {isTrackedByGroup} from '../privateAttributes/pressGroupItem.stylex';
 import {AlertDialog} from './AlertDialog';
 import {useImperativeAlertDialog} from './useImperativeAlertDialog';
 import {getFocusableElements} from '../hooks/useFocusTrap';
+import {__loadTouchRuntimeForTest} from '../utils/touchRuntime';
+
+// These cases drive the group's press tracking, which comes with the shared
+// touch runtime once the page has loaded it.
+beforeAll(async () => {
+  await __loadTouchRuntimeForTest();
+});
 
 // The gesture host reads `(pointer: coarse)` once per document and keeps that
 // query for the document's life: it gets this live one (see beforeAll), whose

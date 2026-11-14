@@ -18,7 +18,12 @@
  * ToggleButtonGroupTracking.test.tsx.
  */
 
-import type {RefCallback, RefObject} from 'react';
+import {
+  createElement,
+  type ReactNode,
+  type RefCallback,
+  type RefObject,
+} from 'react';
 import type {GestureTouch} from '../gestures/types';
 import {isPressGroupItem} from '../privateAttributes/pressGroupItem.stylex';
 import {groupGrowth} from '../utils/hitArea';
@@ -28,11 +33,8 @@ import {
   measureActions,
   type ActionGroupTarget,
 } from './actionGroupTracker';
-import {
-  measureNeighbours,
-  resolveNearestAction,
-  useActionGroupTracking,
-} from './useActionGroupTracking';
+import {measureNeighbours, resolveNearestAction} from './actionGroupNeighbours';
+import {useTouchRuntime} from '../utils/touchRuntime';
 
 /** What a member Button renders. The tracker keeps the marked ones. */
 const MEMBER_ELEMENTS = 'button, a[href]';
@@ -118,6 +120,12 @@ export interface GroupPressTracking {
    * containing block.
    */
   readonly hitAreaRef: RefCallback<HTMLElement>;
+  /**
+   * The touch runtime's press tracking, for the group to render after its
+   * element. It is `null` until the runtime has loaded; until then each
+   * member keeps its own press.
+   */
+  readonly trackingPart: ReactNode;
 }
 
 /** The pointers a group's press slides for: a finger and a pen. */
@@ -133,23 +141,34 @@ export function useGroupPressTracking(
   ref: RefObject<HTMLElement | null>,
   isEnabled: boolean,
 ): GroupPressTracking {
-  useActionGroupTracking(ref, {
-    itemSelector: MEMBER_ELEMENTS,
-    // A disabled member is the tracker's neighbour. A hidden member has no box,
-    // so it is no item.
-    isItem: member =>
-      isTrackedMember(member) && hasArea(member.getBoundingClientRect()),
-    pointerTypes: GROUP_PRESS_POINTERS,
-    highlightOnsetMs: 0,
-    highlightExpansion: 0,
-    resolveTarget: resolveNearestAction,
-    shouldTrack: touch => takesPress(ref.current, touch),
-    isEnabled,
-  });
+  // The tracking comes with the shared touch runtime, which loads after
+  // first paint.
+  const touchRuntime = useTouchRuntime();
+  const trackingPart =
+    touchRuntime == null
+      ? null
+      : createElement(touchRuntime.ActionGroupTracking, {
+          groupRef: ref,
+          options: {
+            itemSelector: MEMBER_ELEMENTS,
+            // A disabled member is the tracker's neighbour. A hidden member
+            // has no box, so it is no item.
+            isItem: (member: HTMLElement) =>
+              isTrackedMember(member) &&
+              hasArea(member.getBoundingClientRect()),
+            pointerTypes: GROUP_PRESS_POINTERS,
+            highlightOnsetMs: 0,
+            highlightExpansion: 0,
+            resolveTarget: resolveNearestAction,
+            shouldTrack: (touch: GestureTouch) =>
+              takesPress(ref.current, touch),
+            isEnabled,
+          },
+        });
   // A finger's target grows toward 44 px through the hit layer, not the
   // members. A finger just past a small member lands on the layer, and the
   // tracker picks that member. The shared watch grows a target only under a
   // coarse primary pointer.
   const hitAreaRef = useTouchHitArea(isEnabled, GROUP_HIT_AREA);
-  return {hitAreaRef};
+  return {hitAreaRef, trackingPart};
 }
