@@ -62,7 +62,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'tsx',
-          code: "import {VStack, HStack} from '@astryxdesign/core/Layout';\nimport {Card} from '@astryxdesign/core/Card';\nimport {Heading, Text} from '@astryxdesign/core/Text';\nimport {Badge} from '@astryxdesign/core/Badge';\n\nexport default function Page() {\n  return (\n    <VStack gap={5} padding={6}>\n      <HStack gap={2} vAlign=\"center\">\n        <Heading level={1}>Project Atlas</Heading>\n        <Badge label=\"At risk\" variant=\"warning\" />\n      </HStack>\n      <Card padding={5}>\n        <Text type=\"body\">38% of traffic is on the new stack.</Text>\n      </Card>\n    </VStack>\n  );\n}",
+          code: "import {VStack} from '@astryxdesign/core/VStack';\nimport {HStack} from '@astryxdesign/core/HStack';\nimport {Card} from '@astryxdesign/core/Card';\nimport {Heading} from '@astryxdesign/core/Heading';\nimport {Text} from '@astryxdesign/core/Text';\nimport {Badge} from '@astryxdesign/core/Badge';\n\nexport default function Page() {\n  return (\n    <VStack gap={5} padding={6}>\n      <HStack gap={2} vAlign=\"center\">\n        <Heading level={1}>Project Atlas</Heading>\n        <Badge label=\"At risk\" variant=\"warning\" />\n      </HStack>\n      <Card padding={5}>\n        <Text type=\"body\">38% of traffic is on the new stack.</Text>\n      </Card>\n    </VStack>\n  );\n}",
         },
         {
           type: 'prose',
@@ -72,7 +72,7 @@ export const docs = {
           type: 'list',
           style: 'unordered',
           items: [
-            'Readers open the file on phones and on wide screens. Put cards in a row with `<Grid columns={{minWidth: 220}}>`, which wraps to fewer columns on a narrow screen. Do not pick a layout with script, such as useMediaQuery: the file runs no script, so every reader gets the layout for a wide screen.',
+            'Readers open the file on phones and on wide screens. Put cards in a row with `<Grid columns={{minWidth: 220, max: 3}}>`, which drops to fewer columns on a narrow screen, down to one. Do not pick a layout with script, such as useMediaQuery: the file runs no script, so every reader, on any screen, gets the one layout that the query\u2019s server answer (false) picks.',
             'Each Table column keeps its share of the width at every size, so the column with the smallest share sets the table\u2019s minimum width: a column with 1 of 11 shares and the default 120 px floor makes the table at least 1,320 px wide, and a narrower screen scrolls it sideways. Give small columns a small floor: `width: proportional(1, {minWidth: 80})`.',
             'Charts use recharts: install it in the page\u2019s folder first (`{@pm install recharts}`). Size a chart with `<ResponsiveContainer width="100%" aspect={2.5}>`, and color each series with a theme variable, such as `stroke="var(--color-data-categorical-blue)"`, so it follows the theme too.',
             'Leave out controls that need a browser. Buttons, filters, tabs and menus show in the file but do nothing.',
