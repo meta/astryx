@@ -499,7 +499,9 @@ const QUESTIONS = [
   [
     'rounder corners but not on inputs',
     {
-      top: /^set q corners more && set q border-radius \S+ --on inputs$/,
+      // Each member that shows a radius of its own keeps it; a member that
+      // takes its corners from a part inside it gets no invented one.
+      top: /^set q corners more( && set q border-radius \S+ --on [a-z-]+ --only)+$/,
       adds: /text-input\.base\.borderRadius=/,
     },
   ],
