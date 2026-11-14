@@ -25,10 +25,9 @@ affects_consumer_docs: [cli, working-with-ai]
 An agent whose tools come from the Model Context Protocol (MCP), not from a
 shell, runs every `astryx` command through `astryx mcp` and gets exactly the
 answer that command gives with `--json`, for the project the server serves.
-The tools are the commands the CLI already defines, read from the same
-definitions as its help and its manifest, so a new command or option is a tool
-input with nothing else to change, and the server never answers from logic of
-its own.
+The tools are the CLI's own manifest (`astryx manifest --json`) in the shape
+MCP reads, so a new command or option is a tool input with nothing else to
+change, and the server never answers from logic of its own.
 
 This record owns what `astryx mcp` serves (FR1), which tools it lists and how
 each one is named (FR2), the inputs of a tool (FR3), what a tool call runs and
@@ -55,30 +54,35 @@ answers (FR4), and what the server tells a client when it starts (FR5).
   then it stops every command it started and exits 0. `astryx mcp --json` is
   refused before it serves, because standard output carries the protocol
   (`architecture:cli-surface` INV9).
-- **FR2 — One tool per command that answers with `--json`.** Each command
-  that supports `--json` and declares `outsideProject` is one tool. A group
-  that only holds subcommands declares no `outsideProject` and is no tool; `mcp`
-  is no tool, and neither is a hidden command. The tool's name is the command's
-  words joined by `_` (`theme build` is `theme_build`), its title is
-  `astryx <command>`, and its description is the command's own help line. An
-  experimental command's tool keeps its namespace: its name starts with
-  `experimental_` and its description with `[experimental]`, as the manifest
-  lists it under the `experimental` group (`spec:AST-017` FR27). The tools list
-  in the manifest's order. Two commands that give one tool name, or
-  one command that gives two inputs one name, fail the CLI's tests.
+- **FR2 — One tool per command that answers with `--json`.** The tools are
+  the CLI's manifest: each command the manifest lists as supporting `--json`,
+  with an `outsideProject`, is one tool. A group that only holds subcommands
+  has no `outsideProject` and is no tool; `mcp` does not support `--json` and is
+  no tool, and neither is a command the manifest leaves out. The tool's name is
+  the command's words joined by `_` (`theme build` is `theme_build`), its title
+  is `astryx <command>`, and its description is the command's description in
+  the manifest. An experimental command's tool keeps its namespace: its name
+  starts with `experimental_` and its description with `[experimental]`, as the
+  manifest lists it under the `experimental` group (`spec:AST-017` FR27). The
+  tools list in the manifest's order. Two commands that give one tool name, or
+  one command that gives two inputs one name, fail the CLI's tests. The
+  published package serves the manifest it stores, so the server loads no
+  command module to list its tools.
 - **FR3 — A tool's inputs are its command's arguments and options, under their
-  CLI names.** Each positional argument is the input of its name, required
-  when the command requires it, and a list when the argument is variadic. Each
-  option is the input of its long flag without the leading dashes: a flag that
-  takes no value is a boolean; an option that takes a value is a string,
-  limited to the choices its `CommandDoc` declares; an option that takes several
-  values, or collects one value each time it is given, is a list; an option
-  whose value is optional is a boolean or a string. Every root option except
-  `--json` and `--version` is an input of every tool, as the CLI accepts it on
-  every command. The input `cwd` names the folder the command runs in, inside
-  the folder the server serves. An input that the tool does not declare reaches
-  the command as `--<name>`, so the command answers it as it answers that
-  option on a command line.
+  CLI names.** Each positional argument is the input of its name, required when
+  the command requires it, and a list when the argument is variadic. Each option
+  is the input of its long flag without the leading dashes: a flag that takes no
+  value is a boolean; an option that takes a value is a string, limited to the
+  choices the manifest lists for it; an option that takes several values, or
+  whose default is a list (it collects one value each time it is given), is a
+  list; an option whose value is optional is a boolean or a string. The input of
+  an argument or a command option carries the description the manifest gives it,
+  and the server instructions describe the root options once (FR5). Every root
+  option except `--json` and `--version` is an input of every tool, as the CLI
+  accepts it on every command. The input `cwd` names the folder the command runs
+  in, inside the folder the server serves. An input that the tool does not
+  declare reaches the command as `--<name>`, so the command answers it as it
+  answers that option on a command line.
 - **FR4 — A tool call runs its command and answers with the command's output,
   unchanged.** A call runs the same copy of the CLI as a separate process, with
   the command's words, the options it was given, `--json`, then `--` and the
@@ -139,24 +143,25 @@ answers (FR4), and what the server tells a client when it starts (FR5).
 
 ## Verification
 
-| Contract | Verification                          | Representative states                                                                                                                                        | Mutation or failure expectation                                             |
-| -------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
-| FR1      | `clients/cli/lib/mcp-server.test.mjs` | a known and an unknown protocol version; the client closing with a call running; `--json`; the real bin                                                      | answering another version, a stray stdout line, or a run left running fails |
-| FR2      | `clients/cli/lib/mcp-tools.test.mjs`  | every manifest command; groups; `mcp`; experimental commands                                                                                                 | a missing, extra or renamed tool fails                                      |
-| FR3      | `clients/cli/lib/mcp-tools.test.mjs`  | every argument, option and root option of every tool, parsed back through the CLI's own program; a value that starts with a dash; a list given as one string | an input that parses to another value, or a flag with no input, fails       |
-| FR4      | `clients/cli/lib/mcp-server.test.mjs` | a call through the real bin compared byte for byte with the command run directly; a non-zero exit; standard error; a cancelled call                          | any change to the output, or an answer to a cancelled call, fails           |
-| FR5      | `clients/cli/lib/mcp-tools.test.mjs`  | the instructions with and without agent docs in reach                                                                                                        | a root option missing from the instructions fails                           |
+| Contract | Verification                                                          | Representative states                                                                                                                                        | Mutation or failure expectation                                             |
+| -------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
+| FR1      | `clients/cli/lib/mcp-server.test.mjs`                                 | a known and an unknown protocol version; the client closing with a call running; `--json`; the real bin                                                      | answering another version, a stray stdout line, or a run left running fails |
+| FR2      | `clients/cli/lib/mcp-tools.test.mjs`, `test/packed-manifest.test.mjs` | every manifest command; groups; `mcp`; experimental commands; the packed package's stored manifest                                                           | a missing, extra or renamed tool fails                                      |
+| FR3      | `clients/cli/lib/mcp-tools.test.mjs`                                  | every argument, option and root option of every tool, parsed back through the CLI's own program; a value that starts with a dash; a list given as one string | an input that parses to another value, or a flag with no input, fails       |
+| FR4      | `clients/cli/lib/mcp-server.test.mjs`                                 | a call through the real bin compared byte for byte with the command run directly; a non-zero exit; standard error; a cancelled call                          | any change to the output, or an answer to a cancelled call, fails           |
+| FR5      | `clients/cli/lib/mcp-tools.test.mjs`                                  | the instructions with and without agent docs in reach                                                                                                        | a root option missing from the instructions fails                           |
 
 ## Decision log
 
-### DEC-1 — The tools are the CLI's command definitions, never a list of their own
+### DEC-1 — The tools are the CLI's manifest, never a list of their own
 
 **Reference:** `spec:AST-121/DEC-1`
 **Decider:** josephfarina (proposed), 2026-11-14
 
-Every tool, name and input comes from the Commander program that prints help
-and the manifest, so the server and the CLI cannot disagree, and a command
-needs no MCP work when it is added or changed.
+Every tool, name and input comes from the manifest, the CLI's description of
+itself, which is built from the same command definitions as its help, so the
+server and the CLI cannot disagree, and a command needs no MCP work when it is
+added or changed.
 
 Rejected: a chosen set of tools, such as a search tool and a get tool, which
 answers from logic of its own and drifts from the CLI.

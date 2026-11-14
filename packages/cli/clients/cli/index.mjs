@@ -371,8 +371,9 @@ const commands = [
 export const COMMAND_NAMES = Object.freeze(commands.map(cmd => cmd.name));
 
 /**
- * Commands whose run reads every other command: the manifest lists them, and
- * mcp serves them as tools.
+ * Commands whose run reads every other command, through the manifest: the
+ * manifest lists them, and mcp serves them as tools. With a stored manifest
+ * (the published package), they read it and load no other command.
  */
 const READS_EVERY_COMMAND = new Set(['manifest', 'mcp']);
 
@@ -382,8 +383,8 @@ const READS_EVERY_COMMAND = new Set(['manifest', 'mcp']);
  * same way. It returns that one command, no command for a run that only
  * prints the version, or null for every command. These runs load every
  * command: the root help when no stored list ships (a checkout; the published
- * package prints it from the list, see `printsRootHelp`), the manifest
- * when no stored manifest ships (the published package reads its own),
+ * package prints it from the list, see `printsRootHelp`), the manifest and
+ * mcp when no stored manifest ships (the published package reads its own),
  * `help <command>`, an unknown word, and a flag the root does not declare.
  * They print or read the whole list.
  *
@@ -398,7 +399,7 @@ export function commandsForArgs(program, argv) {
     // Commander reads a lone `-` as an operand, as it reads any word.
     if (arg.length < 2 || arg[0] !== '-') {
       return commands.some(cmd => cmd.name === arg) &&
-        (!READS_EVERY_COMMAND.has(arg) || (arg === 'manifest' && storedManifest() != null))
+        (!READS_EVERY_COMMAND.has(arg) || storedManifest() != null)
         ? new Set([arg])
         : null;
     }
