@@ -17,6 +17,7 @@ const broad = {
   RELEASE_BUMP_RESULT: 'skipped',
   TEST_UI_RESULT: 'success',
   TEST_NODE_RESULT: 'success',
+  NODE_BROWSER_CONTRACTS_RESULT: 'success',
   SWIZZLE_PROOF_SCOPE_RESULT: 'success',
   SWIZZLE_PROOF_MODE: 'none',
   SWIZZLE_PROOF_RESULT: 'skipped',
@@ -55,6 +56,9 @@ describe('pull-request test join', () => {
     for (const [name, value] of [
       ['TEST_UI_RESULT', 'failure'],
       ['TEST_NODE_RESULT', 'cancelled'],
+      ['NODE_BROWSER_CONTRACTS_RESULT', 'failure'],
+      ['NODE_BROWSER_CONTRACTS_RESULT', 'skipped'],
+      ['NODE_BROWSER_CONTRACTS_RESULT', null],
       ['SWIZZLE_PROOF_SCOPE_RESULT', 'failure'],
       ['SWIZZLE_PROOF_SCOPE_RESULT', 'skipped'],
       ['SWIZZLE_PROOF_SCOPE_RESULT', null],

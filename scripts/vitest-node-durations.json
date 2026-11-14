@@ -1221,14 +1221,5 @@
     "scripts/vitest-setup-node.test.mjs": 0,
     "scripts/vitest-shard-sequencer.test.mjs": 0.7,
     "scripts/vitest-shard-watchdog.test.mjs": 12
-  },
-  "legOneSteps": {
-    "Check out the change for the tests that read its records": 0,
-    "List the tests that read a changed record": 0,
-    "Lab-only: CLI official-packages check": 0,
-    "Install Playwright for theme-family contract": 9,
-    "Offline-media browser cases": 17,
-    "Theme editor browser case": 30,
-    "Run the theme-family contract": 42
   }
 }

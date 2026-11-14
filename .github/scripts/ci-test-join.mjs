@@ -16,6 +16,7 @@
 const requiredSuccess = [
   ['test-ui', process.env.TEST_UI_RESULT],
   ['test-node', process.env.TEST_NODE_RESULT],
+  ['node-browser-contracts', process.env.NODE_BROWSER_CONTRACTS_RESULT],
   ['swizzle-proof-scope', process.env.SWIZZLE_PROOF_SCOPE_RESULT],
   ['test-build', process.env.TEST_BUILD_RESULT],
   ['test-native-swift', process.env.TEST_NATIVE_SWIFT_RESULT],

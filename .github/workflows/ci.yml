@@ -163,7 +163,7 @@ jobs:
         timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 125 || 13 }}
         with:
           phase: room
-          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 19 }}
+          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 20 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
@@ -218,7 +218,7 @@ jobs:
           started: ${{ needs.room.outputs.started }}
           looks: ${{ needs.room.outputs.looks }}
           next: ${{ needs.room.outputs.next }}
-          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 19 }}
+          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 20 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
@@ -1202,11 +1202,6 @@ jobs:
         env:
           SCOPED: ${{ github.event_name == 'pull_request' && steps.scope.outputs.vitest_full_suite == 'false' }}
           VITEST_SHARD_TIMES_FILE: ${{ runner.temp }}/node-file-times.json
-          # The split gives the first leg its own later steps' time
-          # (scripts/vitest-node-durations.json legOneSteps), under those
-          # steps' scope condition. Every leg sets the same value, so every
-          # leg computes the same split.
-          VITEST_LEG_ONE_RESERVE: "${{ steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && '1' || '0' }}"
           # The swizzle proof's slices run in their own job (swizzle-proof).
           VITEST_SWIZZLE_PROOF_OWN_JOB: '1'
         run: |
@@ -1250,42 +1245,78 @@ jobs:
         # One Node-project test file: Vitest finds its project from the path.
         run: pnpm exec vitest run scripts/check-cli-official-packages.test.mjs --maxWorkers=1
 
-      # Theme-family compilation is owned by `theme-build`, not Build. Until
-      # that surface has an admitted dedicated lane, broad CI keeps its browser
-      # contract inside the existing Node test owner rather than `test-build`.
-      # One leg runs it.
+  # The Node project's browser contracts run in a job of their own, beside the
+  # Node legs: theme-family compilation (owned by `theme-build`, not Build,
+  # until that surface has an admitted lane of its own), offline-media's
+  # real-browser cases and the theme editor's render case. In a Node leg they
+  # took a share no split could book: the leg ran its share of the Node files
+  # and these on top. Same scope as the Node tests; `test` requires it.
+  node-browser-contracts:
+    needs: [admission, heavy-ci]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (needs.admission.result == 'success' && (github.event_name != 'workflow_dispatch'))) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Check out the scope action
+        uses: actions/checkout@v7
+        timeout-minutes: 8
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Decide this job's scope
+        id: scope
+        uses: ./.test-scope/.github/actions/test-scope
+
+      - uses: actions/checkout@v7
+        timeout-minutes: 8
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        with:
+          fetch-depth: 2
+
+      - uses: ./.github/actions/setup
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+
+      - name: Build core package
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        run: pnpm -F @astryxdesign/core build
+
       - name: Install Playwright for theme-family contract
-        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         run: npx playwright install chromium
 
-      # The Node tests above run before any browser is installed, so they skip
-      # offline-media's real-browser cases. This step runs them once Chromium
-      # is in place, under the install's own condition; with
+      # The Node legs run without a browser, so they skip offline-media's
+      # real-browser cases. This step runs them once Chromium is in place,
+      # under the install's own condition; with
       # ASTRYX_OFFLINE_MEDIA_BROWSER set, a missing browser fails them.
       # ci-browser-gated-tests.test.mjs keeps this step after the install.
       - name: Offline-media browser cases
-        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         env:
           ASTRYX_OFFLINE_MEDIA_BROWSER: '1'
         # One Node-project test file: Vitest finds its project from the path.
         run: pnpm exec vitest run .github/scripts/lib/offline-media.test.mjs --maxWorkers=1
 
       # theme-real-bases.test.mjs's text-direction render case skips in the
-      # shard above, before any browser is installed. This runs it in the
+      # Node legs, which run without a browser. This runs it in the
       # pinned Chromium once that is in place; with ASTRYX_THEME_EDITOR_BROWSER
       # set, a missing browser fails it.
       - name: Theme editor browser case
-        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         env:
           ASTRYX_THEME_EDITOR_BROWSER: '1'
         run: pnpm exec vitest run packages/cli/api/theme-edit/theme-real-bases.test.mjs -t 'renders own and editor sides|names what it waited on' --maxWorkers=1
 
       # The contract runs in the time the job's 15-minute limit leaves, less a
-      # minute, counted as the Node shard counts it: a contract that runs out of
+      # minute, counted from the job's start: a contract that runs out of
       # it fails by name with its last lines, before the limit cancels the job
       # and cuts its log.
       - name: Run the theme-family contract
-        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         run: |
           started=$(ps -o etimes= -C Runner.Worker 2>/dev/null | sort -n | tail -1 | tr -d ' ')
           if [ -z "$started" ]; then
@@ -1533,6 +1564,7 @@ jobs:
         release-bump,
         test-ui,
         test-node,
+        node-browser-contracts,
         swizzle-proof-scope,
         swizzle-proof,
         test-build,
@@ -1620,6 +1652,7 @@ jobs:
           LAB_ONLY: ${{ steps.scope.outputs.lab_only }}
           TEST_UI_RESULT: ${{ needs.test-ui.result }}
           TEST_NODE_RESULT: ${{ needs.test-node.result }}
+          NODE_BROWSER_CONTRACTS_RESULT: ${{ needs.node-browser-contracts.result }}
           SWIZZLE_PROOF_SCOPE_RESULT: ${{ needs.swizzle-proof-scope.result }}
           SWIZZLE_PROOF_MODE: ${{ needs.swizzle-proof-scope.outputs.mode }}
           SWIZZLE_PROOF_RESULT: ${{ needs.swizzle-proof.result }}
