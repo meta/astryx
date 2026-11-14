@@ -612,10 +612,13 @@ async function answer(subject, options, cwd) {
     ...unknown,
     ...(empty
       ? {
-          hint: results.length
-            ? `No command does all of "${t}" on ${env.slug}; the lines above say why.`
-            : `No match for "${t}". Name the part (header, nav links, card, button, banner, input...) and what to change (text color, background, gradient, corners, border, shadow, spacing, bold), in English.`,
+          hint: `${
+            results.length
+              ? `No command does all of "${t}" on ${env.slug}; the lines above say why.`
+              : `No match for "${t}". Name the part (header, nav links, card, button, banner, input...) and what to change (text color, background, gradient, corners, border, shadow, spacing, bold), in English.`
+          } See ${HOW} --help for the asks it understands.`,
           run: [
+            `${HOW} --help`,
             `${HOW} --list parts`,
             `${HOW} "rounder buttons"`,
             `${HOW} colors`,

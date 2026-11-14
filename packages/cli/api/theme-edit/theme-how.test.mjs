@@ -4294,7 +4294,9 @@ describe('how lookups', () => {
     const {data} = await themeEditHow('make it look like Apple', {cwd});
     expect(data.results).toEqual([]);
     expect(data.hint).toMatch(/No match/);
-    expect(data.run[0]).toContain('--list parts');
+    // The help that lists the asks it understands comes first.
+    expect(data.run[0]).toMatch(/ how --help$/);
+    expect(data.run[1]).toContain('--list parts');
   });
 });
 
