@@ -434,7 +434,7 @@ function pageChanges(source, html, modules) {
   const head = renderedHeadOf(html);
   const text = recordedText(recorded);
   const titleNow = head.title === null ? null : asParsed(decode(head.title));
-  const titleEdited = typeof text?.title === 'string' && titleNow !== text.title;
+  const titleEdited = typeof text?.title === 'string' && titleNow !== asParsed(text.title);
   const stylesEdited = typeof recorded.style === 'string' ? head.style === null || sha256(asParsed(head.style)) !== recorded.style : undefined;
   const markupEdited = now === null || sha256(now) !== recorded.sha256;
   const styles = stylesEdited === undefined ? {} : {stylesEdited};

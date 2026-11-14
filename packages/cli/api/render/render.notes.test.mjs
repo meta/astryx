@@ -228,9 +228,13 @@ describe('render --reverse says what changed after the render', () => {
       expect(result.data).toMatchObject({exact: true, edited: false, stylesEdited: false});
     }
     // An edit in such a copy is still one.
-    put('line-ends-edited.html', html.replace(/\n/g, '\r\n').replace('Q3 report', 'Q4 report'));
+    put('line-ends-edited.html', editBody(html.replace(/\n/g, '\r\n'), body => body.replace('Q3 report', 'Q4 report')));
     const edited = /** @type {any} */ (await render('line-ends-edited.html', {cwd: dir, reverse: true, out: 'line-ends-edited-back/report.tsx'}));
     expect(edited.data.edits).toEqual([{was: 'Q3 report', now: 'Q4 report', file: 'line-ends-edited-back/report.tsx', line: 7}]);
+    // A title given with a CR in it (from a CR LF file) reads the same.
+    await render('src/report.tsx', {cwd: dir, out: 'cr-title.html', title: 'Quarterly\r'});
+    const titled = /** @type {any} */ (await render('cr-title.html', {cwd: dir, reverse: true, out: 'cr-title-back/report.tsx'}));
+    expect(titled.data).toMatchObject({exact: true, edited: false});
   });
 
   it('reports text added and removed after the render, and an edit with no text change', async () => {
