@@ -48,9 +48,12 @@ export function partitionByDuration(
   files,
   count,
   seconds,
-  {legOneSeconds = 0} = {},
+  {legOneSeconds = 0, idle = new Set()} = {},
 ) {
-  const cost = costOf(files, seconds);
+  const recorded = costOf(files, seconds);
+  // A file that runs no test in this run (the swizzle-proof slices when the
+  // change reaches no component) costs only its import.
+  const cost = file => (idle.has(file) ? 0 : recorded(file));
   // Every file also costs its import and transform, which its recorded time
   // leaves out; without it the hundreds of files recorded at 0 s would all go
   // to one leg.
@@ -113,25 +116,68 @@ export function readDurations(file = DURATIONS) {
   }
 }
 
-/** Seconds per Node test file from Vitest's default reporter lines. */
+/**
+ * A Node leg's job name, as `gh run view --log` starts each of its lines: a
+ * pull request's `test-node (2/5)` or a Main run's `test-node (2)`.
+ */
+const NODE_LEG_JOB = /^test-node \(\d+(?:\/\d+)?\)$/;
+
+/**
+ * Seconds per Node test file from Vitest's default reporter lines. A whole
+ * run's log (`gh run view --log`) names each line's job in its first
+ * tab-separated column: only the Node legs' lines count, since other jobs (the
+ * build job runs its own `--project node` tests, which the Node legs skip)
+ * would book time no leg spends. A single leg's own log has no job column.
+ */
 export function recordDurations(text) {
   const seconds = {};
   // Colour codes arrive as escape bytes, or, in `gh run view --log` output,
   // spelled out as `^[[…m`.
   const plain = text.replace(/(?:\x1b|\^\[)\[[0-9;]*m/g, '');
   for (const line of plain.split('\n')) {
+    const columns = line.split('\t');
+    if (columns.length >= 3 && !NODE_LEG_JOB.test(columns[0])) continue;
     const match =
       /[✓❯×]\s+\|?node\|?\s+(\S+\.(?:test|spec)\.[cm]?[jt]sx?)\s+\(\d+ tests?[^)]*\)\s+(\d+(?:\.\d+)?)(ms|s)\s*$/.exec(
         line,
       );
-    if (!match) continue;
-    const value = Number(match[2]) / (match[3] === 'ms' ? 1000 : 1);
-    seconds[match[1]] = Math.round(value * 10) / 10;
+    if (match) {
+      const value = Number(match[2]) / (match[3] === 'ms' ? 1000 : 1);
+      seconds[match[1]] = Math.round(value * 10) / 10;
+      continue;
+    }
+    // A file whose every test skips in the leg costs the leg nothing: it is
+    // recorded at 0, so a time another job gave it never stays booked.
+    const skipped =
+      /↓\s+\|?node\|?\s+(\S+\.(?:test|spec)\.[cm]?[jt]sx?)\s+\((\d+) tests? \| (\d+) skipped\)/.exec(
+        line,
+      );
+    if (skipped && skipped[2] === skipped[3]) seconds[skipped[1]] = 0;
   }
   return seconds;
 }
 
 const SWIZZLE_PROOF = /(^|\/)swizzle-proof\.\d+\.test\.mjs$/;
+
+/**
+ * The swizzle-proof slices among `files` that prove nothing in this run: every
+ * slice reads the same scope first (packages/cli/test/swizzle-proof/proof.mjs
+ * runScope), and in the scope `none` it runs no target. Their recorded time is
+ * the time they take when a change reaches them, so without this the legs that
+ * hold them would finish early while the other legs carry the rest.
+ * @param {string[]} files
+ * @returns {Promise<Set<string>>}
+ */
+export async function idleSwizzleSlices(files) {
+  const slices = files.filter(file => SWIZZLE_PROOF.test(file));
+  if (slices.length === 0) return new Set();
+  const {runScope} = await import(
+    pathToFileURL(path.join(ROOT, 'packages/cli/test/swizzle-proof/proof.mjs'))
+      .href
+  );
+  const {scope} = runScope({all: process.env.SWIZZLE_PROOF_ALL === '1'});
+  return new Set(scope.mode === 'none' ? slices : []);
+}
 
 /**
  * The record after a run. The run's times replace those files' times; files
@@ -176,9 +222,11 @@ export default class DurationShardSequencer extends BaseSequencer {
     const others = specs.filter(spec => spec.project.name !== PROJECT);
     const legOneSeconds =
       process.env.VITEST_LEG_ONE_RESERVE === '1' ? readLegOneSeconds() : 0;
+    const files = node.map(relative);
     const mine = new Set(
-      partitionByDuration(node.map(relative), count, readDurations(), {
+      partitionByDuration(files, count, readDurations(), {
         legOneSeconds,
+        idle: await idleSwizzleSlices(files),
       })[index - 1],
     );
     return [
