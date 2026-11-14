@@ -414,6 +414,60 @@ export function makeCompiler(project, parts) {
   }
 
   /**
+   * The color stops of a background made of gradients, or null when any
+   * layer is an image or any stop has no color the editor can name.
+   * @param {string} v
+   * @returns {string[] | null}
+   */
+  function gradientStops(v) {
+    /** Split at commas outside parentheses. @param {string} x */
+    const top = x => {
+      /** @type {string[]} */
+      const out = [];
+      let depth = 0;
+      let from = 0;
+      for (let i = 0; i < x.length; i++) {
+        if (x[i] === '(') depth++;
+        else if (x[i] === ')') depth--;
+        else if (x[i] === ',' && depth === 0) {
+          out.push(x.slice(from, i).trim());
+          from = i + 1;
+        }
+      }
+      out.push(x.slice(from).trim());
+      return out.filter(Boolean);
+    };
+    /** @type {string[]} */
+    const stops = [];
+    for (const layer of top(v)) {
+      const m =
+        /^(?:repeating-)?(?:linear|radial|conic)-gradient\((.*)\)$/s.exec(
+          layer,
+        );
+      if (!m) {
+        // A layer that is one color (the shorthand's last) is a stop too.
+        if (/url\(|gradient\(/.test(layer)) return null;
+        stops.push(layer);
+        continue;
+      }
+      for (const arg of top(m[1])) {
+        // The direction, shape or position comes first, with no color.
+        if (
+          /^(to\b|at\b|from\b|-?[\d.]+(deg|turn|rad|grad)\b|circle\b|ellipse\b|closest|farthest)/.test(
+            arg,
+          )
+        )
+          continue;
+        // A stop is its color and up to two positions after it.
+        const color = arg.replace(/(\s+-?[\d.]+(%|px|rem|em)?)+$/, '').trim();
+        if (!color || /^-?[\d.]+(%|px|rem|em)?$/.test(color)) continue;
+        stops.push(color);
+      }
+    }
+    return stops.length ? stops : null;
+  }
+
+  /**
    * Text that this theme made unreadable: every real text-on-background pair,
    * in each mode, below 4.5:1 now but not as low in the base theme. Also
    * the values this theme set that have no fixed color to check (a
@@ -463,9 +517,30 @@ export function makeCompiler(project, parts) {
         continue;
       for (const m of modes) {
         const fg = value(p, 'fg', m);
-        const bg = value(p, 'bg', m);
-        if (/gradient|url\(/.test(String(bg))) continue;
-        const pair = drawn(fg, bg, m);
+        const whole = value(p, 'bg', m);
+        // A gradient is measured at each of its color stops, the worst one
+        // counting; an image, or a stop with no fixed color, is not checked.
+        const stops = /gradient|url\(/.test(String(whole))
+          ? gradientStops(String(whole))
+          : [whole];
+        if (!stops) {
+          if (whole !== baseValue(p, 'bg', m)) unchecked.add(String(whole));
+          continue;
+        }
+        const measured = stops.map(stop => ({stop, pair: drawn(fg, stop, m)}));
+        if (stops.length > 1 && measured.some(x => !x.pair)) {
+          if (whole !== baseValue(p, 'bg', m)) unchecked.add(String(whole));
+          continue;
+        }
+        const worst = measured.reduce((a, b) =>
+          a.pair &&
+          b.pair &&
+          ratio(b.pair[0], b.pair[1]) < ratio(a.pair[0], a.pair[1])
+            ? b
+            : a,
+        );
+        const bg = worst.stop;
+        const pair = worst.pair;
         if (!pair) {
           for (const [v, side] of /** @type {const} */ ([
             [fg, 'fg'],
@@ -500,9 +575,11 @@ export function makeCompiler(project, parts) {
               : (p.fg.tokens[0] ?? String(fg)),
           bgPart: p.bg.target,
           bg:
-            bg !== baseValue(p, 'bg', m)
-              ? String(bg)
-              : (p.bg.tokens[0] ?? String(bg)),
+            stops.length > 1
+              ? `${bg}, a stop of its gradient`
+              : bg !== baseValue(p, 'bg', m)
+                ? String(bg)
+                : (p.bg.tokens[0] ?? String(bg)),
         });
       }
     }

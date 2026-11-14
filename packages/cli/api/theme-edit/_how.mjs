@@ -33,6 +33,7 @@ import {
   editedThemes,
   loadTheme,
   nearest,
+  partComponentDocs,
   refuse,
   themeSourceParseError,
   themeSourceProblem,
@@ -919,6 +920,9 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
     kind: 'part',
     subject,
     component: target.component ?? null,
+    // What the part is, from its component's doc (a side nav heading is the
+    // product or account heading at the top, not a section title).
+    is: partComponentDocs(ctx, key).at(-1)?.doc.description || null,
     components,
     recorded,
     group,
