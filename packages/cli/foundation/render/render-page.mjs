@@ -23,7 +23,7 @@ import {fork, spawnSync} from 'node:child_process';
 import {builtinModules} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import postcss from 'postcss';
-import {assetDataUri, isAssetBytes, isAssetPath, RenderAssetError} from './assets.mjs';
+import {assetDataUri, isAssetBytes, isAssetPath, MAX_ASSET_BYTES, RenderAssetError} from './assets.mjs';
 import {classesIn, cutCss, layerOrderOf} from './css-cut.mjs';
 import {RENDER_FORMAT, sha256, sourceBlock} from './source-block.mjs';
 import {embeddedPathProblem} from './embedded-files.mjs';
@@ -84,6 +84,20 @@ function projectRootOf(dir) {
     const up = path.dirname(d);
     if (up === d) return dir;
     d = up;
+  }
+}
+
+/**
+ * The first bytes of a file, enough to tell its format.
+ * @param {string} file
+ */
+function headOf(file) {
+  const fd = fs.openSync(file, 'r');
+  try {
+    const head = Buffer.alloc(4096);
+    return head.subarray(0, fs.readSync(fd, head, 0, head.length, 0));
+  } finally {
+    fs.closeSync(fd);
   }
 }
 
@@ -828,22 +842,37 @@ export async function renderPage(entry, options = {}) {
     const rel = path.relative(root, asset);
     if (rel.startsWith('..') || path.isAbsolute(rel) || rel.split(path.sep).includes('node_modules')) return;
     if (files.includes(asset) || notCarried.has(asset)) return;
-    if (!isAssetBytes(fs.readFileSync(asset))) {
+    /** @param {string} why */
+    const leaveOut = why => {
       notCarried.add(asset);
       warnings.push({
         code: 'not-embedded',
-        message: `${path.relative(dir, asset).split(path.sep).join('/')} is ${how} but not carried in the file: its bytes are not a known image, font or media format, so --reverse cannot give it back.`,
+        message: `${path.relative(dir, asset).split(path.sep).join('/')} is ${how} but not carried in the file: ${why}, so --reverse cannot give it back.`,
       });
+    };
+    // The same limit as a file the page shows, which a render inlines.
+    if (fs.statSync(asset).size > MAX_ASSET_BYTES) {
+      leaveOut(`it is larger than ${MAX_ASSET_BYTES / 1048576} MB, the most a rendered page carries of one file`);
+      return;
+    }
+    if (!isAssetBytes(headOf(asset))) {
+      leaveOut('its bytes are not a known image, font or media format');
       return;
     }
     files.push(asset);
   };
   for (const asset of ctx.localAssets) carryAsset(asset, 'shown inline');
-  // An image or font that a carried module's strings or a carried stylesheet
-  // name by a relative path belongs to the page even when this render did
-  // not show it (a branch the page did not take, a rule no element uses):
-  // --reverse reads the same names to tell whether every file came back.
-  for (const file of files.filter(f => /\.(?:[cm]?[jt]sx?|css)$/i.test(f))) {
+  // A carried module or stylesheet can name an image, font or media file by
+  // a relative path. --reverse expects each such file back, also when this
+  // render does not show it.
+  let named = dir;
+  for (const f of files) {
+    while (path.relative(named, f).startsWith('..')) named = path.dirname(named);
+  }
+  const carriedText = files.filter(
+    f => /\.(?:[cm]?[jt]sx?|css)$/i.test(f) && (f === entry || !embeddedPathProblem(path.relative(named, f).split(path.sep).join('/'))),
+  );
+  for (const file of carriedText) {
     let text;
     try {
       text = fs.readFileSync(file, 'utf8');

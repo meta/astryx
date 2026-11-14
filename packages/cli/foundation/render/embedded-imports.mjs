@@ -237,7 +237,7 @@ export function reachableFiles(files, {aliases = []} = {}) {
     // Images and fonts a module or stylesheet names by a relative path are
     // part of the page too.
     const scanned = isModule
-      ? scanModule(source, current)
+      ? {imports: importSpecifiers(source, current), assets: assetRefsOf(source, current)}
       : {
           // A stylesheet's own `@import`s count as imports.
           // A stylesheet's own relative `@import`s count as imports (read
@@ -249,7 +249,7 @@ export function reachableFiles(files, {aliases = []} = {}) {
             // carries one, else a package's.
             .filter(ref => ref.startsWith('.') || byPath.has(path.posix.normalize(path.posix.join(path.posix.dirname(current), ref))))
             .map(ref => (ref.startsWith('.') ? ref : `./${ref}`)),
-          assets: assetRefsIn(source),
+          assets: assetRefsOf(source, current),
         };
     for (const ref of scanned.assets) {
       const joined = path.posix.normalize(path.posix.join(path.posix.dirname(current), ref));

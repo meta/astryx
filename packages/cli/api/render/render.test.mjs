@@ -482,6 +482,19 @@ describe('render(): every write stays inside the current folder', () => {
     expect(again.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('missing-asset');
   }, 60_000);
 
+  it('leaves out a named image larger than a render carries, and says so', async () => {
+    put('named-big/huge.png', Buffer.concat([PNG, Buffer.alloc(9 * 1024 * 1024)]));
+    put('named-big/icons.ts', "export const icons = {big: './huge.png'};\n");
+    put('named-big/page.tsx', "import {icons} from './icons';\nexport default function Page() {\n  return <p>{Object.keys(icons).join(', ')}</p>;\n}\n");
+    const result = /** @type {any} */ (await render('named-big/page.tsx', {cwd: dir}));
+    expect(result.data.files).not.toContain('huge.png');
+    expect(result.data.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({code: 'not-embedded', message: expect.stringContaining('huge.png is named in icons.ts but not carried in the file: it is larger than 8 MB')}),
+      ]),
+    );
+  }, 60_000);
+
   it('carries an image a module or a stylesheet names that the page did not show, and gives every file back', async () => {
     put('named/img/shown.png', PNG);
     put('named/img/other.png', PNG);
