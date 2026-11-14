@@ -71,6 +71,18 @@ export function assetRefsIn(text) {
 }
 
 /**
+ * The images, fonts and media a carried file names by a relative path: in a
+ * module's strings, or in a stylesheet. A render carries each one that
+ * exists, and {@link reachableFiles} expects each one back.
+ * @param {string} source
+ * @param {string} file its path; a `.css` file is read as a stylesheet
+ * @returns {string[]}
+ */
+export function assetRefsOf(source, file) {
+  return /\.css$/i.test(file) ? assetRefsIn(source) : scanModule(source, file).assets;
+}
+
+/**
  * One module's imports, and the relative asset paths its strings name
  * (`<img src="./logo.png">`, `url(./bg.png)` in a style).
  * @param {string} source
@@ -216,7 +228,7 @@ export function reachableFiles(files, {aliases = []} = {}) {
     // Images and fonts a module or stylesheet names by a relative path are
     // part of the page too.
     const scanned = isModule
-      ? scanModule(source, current)
+      ? {imports: importSpecifiers(source, current), assets: assetRefsOf(source, current)}
       : {
           // A stylesheet's own `@import`s count as imports.
           // A stylesheet's own relative `@import`s count as imports (read
@@ -228,7 +240,7 @@ export function reachableFiles(files, {aliases = []} = {}) {
             // carries one, else a package's.
             .filter(ref => ref.startsWith('.') || byPath.has(path.posix.normalize(path.posix.join(path.posix.dirname(current), ref))))
             .map(ref => (ref.startsWith('.') ? ref : `./${ref}`)),
-          assets: assetRefsIn(source),
+          assets: assetRefsOf(source, current),
         };
     for (const ref of scanned.assets) {
       const joined = path.posix.normalize(path.posix.join(path.posix.dirname(current), ref));
