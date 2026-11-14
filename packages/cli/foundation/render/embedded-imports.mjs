@@ -13,12 +13,11 @@
  * @position foundation/render — used by the render subject's adapter
  */
 
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {babelParse as parse} from '../runtime/lazy-dependencies.mjs';
-import {PAGE_EXTENSIONS} from './embedded-files.mjs';
+import {MODULE_EXTENSIONS} from './embedded-files.mjs';
 import postcss from 'postcss';
-import {matchPath, readPathsIn} from './ts-paths.mjs';
+import {matchPath, pathsFor} from './ts-paths.mjs';
 import {isAssetPath} from './assets.mjs';
 
 /**
@@ -43,7 +42,7 @@ export function cssImports(css) {
 }
 
 /** Extensions an extensionless import may stand for, in resolution order. */
-const RESOLVE_EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js', '.mjs', '.json'];
+const RESOLVE_EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js', '.mjs', '.mts', '.cts', '.cjs', '.json'];
 
 /**
  * The string specifiers one module imports.
@@ -132,22 +131,14 @@ function scanModule(source, file) {
 }
 
 /**
- * The path aliases (`compilerOptions.paths`) of the project that holds
- * `dir`, by TypeScript's rules (see ts-paths.mjs).
- * @param {string} dir
+ * The path aliases (`compilerOptions.paths`) that TypeScript reads for a page
+ * written at `file`, by its rules (see ts-paths.mjs). The file and its
+ * folders need not exist yet.
+ * @param {string} file absolute
  * @returns {import('./ts-paths.mjs').PathPattern[]}
  */
-export function receivingAliases(dir) {
-  let d = dir;
-  while (!fs.existsSync(d) && path.dirname(d) !== d) d = path.dirname(d);
-  for (;;) {
-    const found = readPathsIn(d);
-    if (found) return found;
-    if (fs.existsSync(path.join(d, 'package.json'))) return [];
-    const up = path.dirname(d);
-    if (up === d) return [];
-    d = up;
-  }
+export function receivingAliases(file) {
+  return pathsFor(file);
 }
 
 /**
@@ -217,7 +208,7 @@ export function reachableFiles(files, {aliases = []} = {}) {
   while (queue.length > 0) {
     const current = /** @type {string} */ (queue.shift());
     const ext = path.posix.extname(current).toLowerCase();
-    const isModule = PAGE_EXTENSIONS.includes(ext);
+    const isModule = MODULE_EXTENSIONS.includes(ext);
     if (!isModule && ext !== '.css') continue;
     const entry = byPath.get(current);
     if (!entry) continue;

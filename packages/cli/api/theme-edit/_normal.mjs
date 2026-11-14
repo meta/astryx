@@ -9,6 +9,7 @@
  * @position packages/cli/api/theme-edit — pure helpers, no environment access
  */
 
+import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {DIALS} from './_tables.mjs';
 
 /**
@@ -158,7 +159,16 @@ export function escapesMeant(thing, value) {
     try {
       j = JSON.parse(t);
     } catch {
-      return v;
+      // A list in single quotes, as a JS config writes it (`['Inter',
+      // 'serif']`): read like the JSON one.
+      const items =
+        /^\[\s*('(?:[^'\\]|\\.)*'\s*(?:,\s*'(?:[^'\\]|\\.)*'\s*)*),?\s*\]$/.exec(
+          t,
+        );
+      if (!items) return v;
+      j = [...items[1].matchAll(/'((?:[^'\\]|\\.)*)'/g)].map(x =>
+        x[1].replace(/\\(.)/g, '$1'),
+      );
     }
     /** @param {any} x */
     const text = x =>
@@ -531,7 +541,7 @@ export function colorPair(value) {
       .replace(/^(["'])(.*)\1$/, '$2')
       .trim();
   const labeled =
-    /^\{?\s*["']?(light|dark)["']?\s*[:=]\s*(.+?)\s*[;,]\s*["']?(light|dark)["']?\s*[:=]\s*(.+?)\s*;?\s*\}?$/i.exec(
+    /^\{?\s*["']?(light|dark)["']?\s*[:=]\s*(.+?)\s*(?:[;,]\s*|\s+)["']?(light|dark)["']?\s*[:=]\s*(.+?)\s*;?\s*\}?$/i.exec(
       v,
     );
   if (labeled && labeled[1].toLowerCase() !== labeled[3].toLowerCase()) {
@@ -610,3 +620,42 @@ export function carriesTyped(offered, typed) {
 export const offersTyped = (offered, typed) =>
   !STOCK_VALUES.has(String(offered).toLowerCase()) ||
   carriesTyped(offered, typed);
+
+/**
+ * Whether a typed word is a typo of a word: both words of four letters or
+ * more, within one edit for a typed word of five letters or fewer and two
+ * for a longer one (`nnone` is none, `normall` normal; `line` is no none).
+ * @param {string} typed
+ * @param {string} word
+ */
+export function typoOf(typed, word) {
+  const t = String(typed).trim().toLowerCase();
+  const w = String(word).trim().toLowerCase();
+  return (
+    /^[a-z][a-z-]{3,}$/.test(t) && /^[a-z][a-z-]{3,}$/.test(w) && typoNear(t, w)
+  );
+}
+
+/**
+ * The edits a typo of a typed word may hold: one for a word of five letters
+ * or fewer, two for a longer one. Every typo reading of the editor (a value,
+ * a setting, a part, a state, a theme or token name) uses this limit.
+ * @param {string} typed
+ */
+export const typoLimit = typed => (String(typed).trim().length <= 5 ? 1 : 2);
+
+/**
+ * Whether `word` is within the typo limit of `typed` (two letters swapped
+ * count as one edit, as typed: flxe is flex).
+ * @param {string} typed
+ * @param {string} word
+ */
+export function typoNear(typed, word) {
+  const t = String(typed).trim().toLowerCase();
+  const limit = typoLimit(t);
+  return (
+    levenshteinDistance(t, String(word).trim().toLowerCase(), limit, {
+      swaps: true,
+    }) <= limit
+  );
+}

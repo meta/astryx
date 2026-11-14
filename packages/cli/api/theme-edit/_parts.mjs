@@ -31,7 +31,7 @@ import {
 import {SAMPLE_PAGE, elementNames, pageSource} from './_catalog.mjs';
 
 /** Bump when the shape of the cached part data changes. */
-const PART_DATA_VERSION = 5;
+const PART_DATA_VERSION = 6;
 
 /**
  * @typedef {object} PartRecord
@@ -40,6 +40,7 @@ const PART_DATA_VERSION = 5;
  * @property {Record<string, string[]>} inside - tokens read by unnamed elements inside the part -> properties
  * @property {Record<string, string[]>} attrs - data attributes seen on the part
  * @property {string[]} contains - parts rendered inside it
+ * @property {Record<string, Record<string, string>>} [inline] - state -> property -> the token Core paints it with as an inline style in that state, which outranks any theme rule
  */
 
 /**
@@ -475,6 +476,79 @@ export async function partData(project) {
 }
 
 /**
+ * Add the paint Core writes as an inline style when it sets a theme state
+ * at run time (a table row's selection wash, set by the selection plugin
+ * beside the row's `selected` state): something the server render never
+ * shows. A built module under a component's folder that writes a state's
+ * attribute (`themeDataAttributes({selected: 'selected'})`) and an inline
+ * property from a color token (`el.style.backgroundColor = …` with
+ * `colorVars['--color-accent-muted']`) paints that state with it, on each
+ * of the component's targets that lists the state.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {Record<string, PartRecord>} map
+ */
+function addInlineStatePaint(project, map) {
+  const dist = path.join(project.coreDir, 'dist');
+  /** @param {string} dir @returns {string[]} */
+  const modules = dir => {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, {withFileTypes: true});
+    } catch {
+      return [];
+    }
+    return entries.flatMap(e =>
+      e.isDirectory()
+        ? modules(path.join(dir, e.name))
+        : e.name.endsWith('.js')
+          ? [path.join(dir, e.name)]
+          : [],
+    );
+  };
+  for (const [name, info] of Object.entries(project.components)) {
+    const folder = info.importPath?.split('/').pop();
+    if (!folder || folder !== name) continue;
+    const withStates = info.targets.filter(t => t.states.length);
+    if (!withStates.length) continue;
+    for (const file of modules(path.join(dist, folder))) {
+      const source = fs.readFileSync(file, 'utf8');
+      const states = [
+        ...source.matchAll(
+          /themeDataAttributes\(\{\s*([\w-]+):\s*'\1'\s*\}\)/g,
+        ),
+      ].map(m => m[1]);
+      if (!states.length) continue;
+      const props = [
+        ...source.matchAll(/\.style\.([a-z][A-Za-z]*)\s*=(?!=)/g),
+      ].map(m => m[1].replace(/[A-Z]/g, c => `-${c.toLowerCase()}`));
+      const colorTokens = [
+        ...source.matchAll(/colorVars\[['"](--color-[\w-]+)['"]\]/g),
+      ].map(m => m[1]);
+      if (!props.length || colorTokens.length !== 1) continue;
+      for (const t of withStates) {
+        const key = t.className.replace(/^astryx-/, '');
+        const rec = map[key];
+        if (!rec) continue;
+        for (const state of states.filter(st => t.states.includes(st)))
+          for (const prop of props) {
+            (rec.inline ??= {})[state] = {
+              ...rec.inline?.[state],
+              [prop]: colorTokens[0],
+            };
+            const own = (rec.own[prop] ??= {tokens: {}, values: []});
+            own.tokens[colorTokens[0]] = [
+              ...new Set([
+                ...(own.tokens[colorTokens[0]] ?? []),
+                `${state}=${state}`,
+              ]),
+            ];
+          }
+      }
+    }
+  }
+}
+
+/**
  * Build the part data: render the catalog, then walk its markup.
  * @param {import('./_project.mjs').ThemeProject} project
  * @returns {Promise<PartData>}
@@ -498,6 +572,7 @@ async function buildPartData(project) {
   }
   const tokens = new Set(Object.keys(project.core.tokenDefaults ?? {}));
   const result = walkMarkup(markup, declarations(css), tokens);
+  addInlineStatePaint(project, result.map);
   return {
     version: PART_DATA_VERSION,
     coreKey: project.coreKey,

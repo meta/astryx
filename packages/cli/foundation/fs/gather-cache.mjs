@@ -31,7 +31,9 @@
  *   entries are `search`, `build`, `component`, `template`, `theme`,
  *   `discover`, `docs` and `doctor`. The first such run on a machine makes the
  *   folder and keeps its gathers at once, so the next run (most often the same
- *   session's next command) uses them; doctor never makes it. Only a published CLI stores anything:
+ *   session's next command) uses them; doctor never makes it. A run through
+ *   the host entry keeps them too, keyed on what the host passed
+ *   (hostInputs). Only a published CLI stores anything:
  *   its build id (clients/cli/build-id.generated.json, written at `prepack`)
  *   names its exact code, so a checkout, whose code may change between runs
  *   under the same version, always gathers.
@@ -50,11 +52,13 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {isDeepStrictEqual} from 'node:util';
-import {CLI_ROOT} from './paths.mjs';
+import {CLI_ROOT, realDir} from './paths.mjs';
 import {mayHaveIntegrations} from '../integrations/may-have-integrations.mjs';
 import {currentUid, isPrivateDir} from '../env/private-dir.mjs';
 import {userCacheDir} from '../env/user-dirs.mjs';
 import {jitiCacheDir} from './jiti-cache.mjs';
+import {hostedRun} from '../runtime/package-root.mjs';
+import {cliDoor} from '../env/cli-command.mjs';
 import {CACHE_LIMIT_BYTES, evictOldest} from './cache-eviction.mjs';
 import {
   fileStamp,
@@ -529,7 +533,27 @@ function entryKey(key, id) {
     process.platform,
     process.arch,
     ...key,
+    hostInputs(),
   ]);
+}
+
+/**
+ * What a host passed that decides a gather, or null outside a hosted run: its
+ * package sets, by real path and in its order, the integrations it approves,
+ * and the command it runs the CLI as, which kept findings print. A run reads
+ * only some of a package set's files, so their stamps cannot tell a hosted
+ * run from a run of the bin in the same folder, and no file holds the
+ * command. The run's folder is in each gather's own key.
+ * @returns {{roots: string[], integrations: string[], door: string | null} | null}
+ */
+function hostInputs() {
+  const hosted = hostedRun();
+  if (hosted == null) return null;
+  return {
+    roots: hosted.roots.map(root => withoutRecording(() => realDir(root))),
+    integrations: [...hosted.integrations],
+    door: cliDoor() ?? null,
+  };
 }
 
 /**

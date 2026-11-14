@@ -253,13 +253,14 @@ describe('rankPages structure signals', () => {
     ),
   ];
 
-  it('doubles a container word and lets it carry the start', () => {
+  it('doubles a container word, but a frame around a part is no start evidence', () => {
+    // The modal holds the draft history, a part, not a settings page.
     const ranked = rankPages(
       'draft history in a modal with delete row actions',
       catalog,
     );
     expect(ranked[0].name).toBe('dialog-panel');
-    expect(ranked[0].containerMatched).toBe(true);
+    expect(ranked[0].containerMatched).toBe(false);
   });
 
   it('counts only an overlay frame as a container', () => {
@@ -355,6 +356,43 @@ describe('ideaKind: a part of a page, told by the components the system ships', 
     expect(kind('reuse the existing tooltip on the chart')).toBe('edit');
   });
 
+  it('takes an idea that opens with "add" as an edit', () => {
+    expect(kind('add a filter row above the table')).toBe('edit');
+    expect(kind('add a date picker to the settings page')).toBe('edit');
+    // A head that names a page, or a new page, is still a page; "add" inside
+    // an idea opens nothing.
+    expect(kind('add a settings page')).toBe('page');
+    expect(kind('add a new settings page')).toBe('page');
+    expect(kind('a settings page where admins add users')).toBe('page');
+  });
+
+  it('takes an "add" idea that says nowhere the piece goes as before', () => {
+    expect(kind('add a settings page to the app')).toBe('page');
+    expect(kind('add a settings page')).toBe('page');
+    expect(kind('add a data table to my app')).toBe('page');
+    expect(kind('add a tooltip to my app')).toBe('part');
+    expect(kind('add a settings page to my project')).toBe('page');
+    expect(kind('add a data table with filters to my website')).toBe('page');
+    expect(kind('add a data table with filters')).toBe('page');
+    expect(kind('add a tooltip')).toBe('part');
+  });
+
+  it('names a component in an "add" place only by its head word', () => {
+    const own = [page('table', 'Table - Basic', 'Rows.')];
+    const parts = [component('ChatToolCalls', ['tool']), component('Banner')];
+    expect(ideaKind('add a task board to my tool', own, parts)).toBe('page');
+    expect(ideaKind('add a banner to the tool calls', own, parts)).toBe('edit');
+  });
+
+  it('names a template in an "add" place only by its whole name', () => {
+    const own = [page('product-detail', 'Content - Detail', 'One product.')];
+    const parts = [component('Banner')];
+    expect(ideaKind('add a task board to my product', own, parts)).toBe('page');
+    expect(
+      ideaKind('add a banner to the product detail page', own, parts),
+    ).toBe('edit');
+  });
+
   it('does not take "existing" that names no page or part as an edit', () => {
     expect(kind('a new settings page inspired by the existing one')).toBe(
       'page',
@@ -423,8 +461,21 @@ describe('pickStart on parts and edits (spec:AST-048/FR3)', () => {
   });
 
   it('still starts a whole page from its template', async () => {
-    expect(
-      await start('saved drafts in a modal with resume and delete row actions'),
-    ).toBe('settings-dialog');
+    expect(await start('a checkout form in a dialog')).toBe(
+      'form-wizard-dialog',
+    );
+  });
+
+  it('counts a frame only when it holds the page the idea names', async () => {
+    const [catalog] = await shipped;
+    /** @param {string} idea */
+    const framed = idea =>
+      rankPages(idea, catalog).find(r => r.name === 'settings-dialog')
+        ?.containerMatched;
+    expect(framed('notification settings in a modal')).toBe(true);
+    expect(framed('settings page with an avatar upload in a modal')).toBe(
+      false,
+    );
+    expect(framed('a toggle in a modal on the settings page')).toBe(false);
   });
 });

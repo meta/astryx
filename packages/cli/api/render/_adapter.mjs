@@ -15,6 +15,7 @@ import {createRequire} from 'node:module';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
+  MODULE_EXTENSIONS,
   PAGE_EXTENSIONS,
   RenderError,
   renderPage,
@@ -59,22 +60,56 @@ const shown = (cwd, file) => {
     : file;
 };
 
+/** Why a file cannot be read, in a few words, by its errno. */
+const READ_FAILURES = {EACCES: 'no permission', EPERM: 'no permission', EISDIR: 'it is a folder'};
+
 /**
- * Read a file the caller named, or throw ERR_FILE_NOT_FOUND.
+ * The error for an input the file system would not give: ERR_FILE_NOT_FOUND
+ * when nothing is there, ERR_READ_FAILED with the errno and its reason
+ * otherwise.
+ * @param {string} file absolute
+ * @param {string} cwd
+ * @param {unknown} e what the file system threw
+ */
+function inputFailure(file, cwd, e) {
+  const errno = /** @type {NodeJS.ErrnoException} */ (e).code;
+  if (errno === 'ENOENT' || errno === 'ENOTDIR') {
+    return new AstryxError(`${shown(cwd, file)} does not exist`, [], ERROR_CODES.ERR_FILE_NOT_FOUND);
+  }
+  const why = READ_FAILURES[/** @type {keyof typeof READ_FAILURES} */ (errno)];
+  return new AstryxError(
+    `${shown(cwd, file)} cannot be read${errno ? ` (${errno}${why ? `: ${why}` : ''})` : ''}; nothing was written.`,
+    [],
+    ERROR_CODES.ERR_READ_FAILED,
+  );
+}
+
+/**
+ * Read a file the caller named. A folder, a pipe or any other entry that is
+ * not a regular file is refused before it is opened, so nothing waits on it.
  * @param {string} file absolute
  * @param {string} cwd
  * @returns {Buffer}
  */
 function readInput(file, cwd) {
+  /** @type {fs.Stats} */
+  let stat;
   try {
-    if (!fs.statSync(file).isFile()) throw new Error('not a file');
-    return fs.readFileSync(file);
-  } catch {
+    stat = fs.statSync(file);
+  } catch (e) {
+    throw inputFailure(file, cwd, e);
+  }
+  if (!stat.isFile()) {
     throw new AstryxError(
-      `${shown(cwd, file)} does not exist`,
+      `${shown(cwd, file)} cannot be read (${stat.isDirectory() ? 'it is a folder' : 'it is not a regular file'}); nothing was written.`,
       [],
-      ERROR_CODES.ERR_FILE_NOT_FOUND,
+      ERROR_CODES.ERR_READ_FAILED,
     );
+  }
+  try {
+    return fs.readFileSync(file);
+  } catch (e) {
+    throw inputFailure(file, cwd, e);
   }
 }
 
@@ -438,7 +473,7 @@ export async function renderToFile({cwd, input, output, title}) {
   try {
     const set = servedSet(input);
     try {
-      page = await renderPage(input, {title, version: cliVersion(), served: set && 'dir' in set ? set : null, output});
+      page = await renderPage(input, {title, version: cliVersion(), served: set && 'dir' in set ? set : null, output, cwd});
     } catch (e) {
       // A page that needs the Core the CLI could not obtain says why.
       const missing = /** @type {any} */ (e)?.code === 'ERR_RENDER_MISSING_DEPENDENCY' ? /** @type {any} */ (e).detail?.package : null;
@@ -724,7 +759,7 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       // Modules, stylesheets and JSON are written only when the page reaches
       // them through its own imports: one it never imports is not part of it,
       // whatever its name.
-      const {reached, missing} = reachableFiles(source.files, {aliases: receivingAliases(path.dirname(requested))});
+      const {reached, missing} = reachableFiles(source.files, {aliases: receivingAliases(requested)});
       // A carried image, font or media file needs no import to be part of the
       // page (it may be named in markup, a stylesheet, JSON or a computed
       // path): the render's own list is the authority, so it is kept when its
@@ -818,7 +853,7 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       // The files whose text a page shows: its modules and the JSON data
       // they import.
       const texts = writes
-        .filter(w => [...PAGE_EXTENSIONS, '.json'].includes(path.extname(w.file).toLowerCase()))
+        .filter(w => [...MODULE_EXTENSIONS, '.json'].includes(path.extname(w.file).toLowerCase()))
         .map(w => ({file: shown(cwd, w.file), text: w.bytes.toString('utf8')}));
       return {
         input: shown(cwd, input),
