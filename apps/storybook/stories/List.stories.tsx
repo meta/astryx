@@ -931,16 +931,19 @@ function ReorderDemo({
   initial,
   pinned = [],
   edge,
+  listStyle,
 }: {
   initial: ReadonlyArray<string>;
   pinned?: ReadonlyArray<string>;
-  edge?: 'padded' | 'flush';
+  edge?: (typeof EDGES)[number];
+  listStyle?: 'decimal';
 }) {
   const [rows, setRows] = useState(initial);
   return (
     <List
       hasDividers
       edge={edge}
+      listStyle={listStyle}
       reorderable={createReorderable({
         onReorder: ({key, to}) => setRows(current => moveKey(current, key, to)),
         isReorderable: key => !pinned.includes(key as string),
@@ -989,6 +992,46 @@ export const ReorderFlush: Story = {
         story:
           'With `edge="flush"` the rows have no side padding, so each ' +
           "reorder handle ends at the row's edge, inside the list.",
+      },
+    },
+  },
+};
+
+/**
+ * Reorderable lists in Cards, one per edge treatment, and a numbered list.
+ */
+export const ReorderInCard: Story = {
+  render: () => (
+    <div {...stylex.props(edgeStoryStyles.grid)}>
+      {EDGES.map(edge => (
+        <Card key={edge} data-edge={edge}>
+          <VStack gap={3}>
+            <Heading level={3}>{`edge="${edge}"`}</Heading>
+            <ReorderDemo initial={['Inbox', 'Sent', 'Drafts']} edge={edge} />
+          </VStack>
+        </Card>
+      ))}
+      <Card data-edge="numbered">
+        <VStack gap={3}>
+          <Heading level={3}>listStyle="decimal"</Heading>
+          <ReorderDemo
+            initial={['Inbox', 'Sent', 'Drafts']}
+            pinned={['Sent']}
+            listStyle="decimal"
+          />
+        </VStack>
+      </Card>
+    </div>
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "A handle that shows on hover hangs before its row's text. The " +
+          "list takes that room from the card's padding, and its rows move " +
+          'in by the room the padding lacks, so the card never cuts a ' +
+          "handle. Under outset and bleed, whose rows reach the card's " +
+          'padding edge, and after a list marker, the handle sits in its row.',
       },
     },
   },

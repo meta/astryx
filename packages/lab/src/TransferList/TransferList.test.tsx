@@ -254,10 +254,10 @@ describe('TransferList', () => {
       const rowButtons = within(nameRow as HTMLLIElement).getAllByRole(
         'button',
       );
-      // The row's action, then List's reorder handle at the row's end.
-      expect(rowButtons[0]).toHaveAccessibleName('Remove Name');
-      expect(rowButtons[1]).toHaveAccessibleName('Reorder Name');
-      expect(rowButtons[1]).toHaveAttribute('data-astryx-list-reorder');
+      // List's reorder handle at the row's start, then the row's action.
+      expect(rowButtons[0]).toHaveAccessibleName('Reorder Name');
+      expect(rowButtons[0]).toHaveAttribute('data-astryx-list-reorder');
+      expect(rowButtons[1]).toHaveAccessibleName('Remove Name');
     });
 
     it('keeps support metadata out of rows while retaining search and groups', async () => {
@@ -745,6 +745,25 @@ describe('TransferList', () => {
       expect(screen.queryByRole('button', {name: 'Reorder Name'})).toBeNull();
       await user.clear(screen.getByRole('searchbox'));
       expect(screen.getByRole('button', {name: 'Reorder Name'})).toBeVisible();
+    });
+
+    it("keeps the selected panel's heading in place while a search pauses reordering", async () => {
+      const user = userEvent.setup();
+      render(
+        <ControlledTransferList
+          initialValue={['name', 'owner', 'status']}
+          hasSearch
+        />,
+      );
+      // The panel's heading: the label element with an id, which names the
+      // panel.
+      const heading = () =>
+        screen
+          .getAllByText('Selected columns')
+          .find(element => element.id !== '')?.parentElement;
+      const before = heading()?.className;
+      await user.type(screen.getByRole('searchbox'), 'n');
+      expect(heading()?.className).toBe(before);
     });
 
     it('reports each move so the owner keeps the shown rows in the order the list shows, around a value without an option', async () => {

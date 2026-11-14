@@ -8,15 +8,16 @@
  *   ListContext's `reorder`), the translator, theme tokens and the theme's
  *   `list-reorder-handle` icon slot
  * @output `ListReorderHandle`, `ListReorderRowName`, `reorderRowStyle` and
- *   `UNREAD_HANDLE_NAME`. The handle ends a reorderable List row. A finger
+ *   `UNREAD_HANDLE_NAME`. The handle starts a reorderable List row. A finger
  *   held still on it drags it, and so does a pen where the primary pointer is
  *   coarse. A mouse, or a pen where it is fine, drags it at once. It is also a
  *   toggle (`aria-pressed`): a click, Space or Enter turns its row's reorder
  *   mode on and off. The row name serves a row without one, and the style a
  *   row that has one
  * @position Part of the reorder machinery that createReorderable carries.
- *   ListItem renders it, from the List's context, at the end of each row
- *   that can move
+ *   ListItem renders it, from the List's context, at the start of each row
+ *   that can move. It shows while its row is hovered or holds the focus,
+ *   and always under a coarse pointer
  *
  * On iOS 26.2 (measured), a finger held still on a table's reorder control
  * for the scroll view's content-touch delay (150 ms) claims the drag. A flick
@@ -44,7 +45,13 @@ import {
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import * as stylex from '@stylexjs/stylex';
-import {colorVars, focusVars, typeScaleVars} from '../theme/tokens.stylex';
+import type {StyleXStyles} from '@stylexjs/stylex';
+import {
+  colorVars,
+  focusVars,
+  spacingVars,
+  typeScaleVars,
+} from '../theme/tokens.stylex';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {
   ownRingContainerStyles,
@@ -55,6 +62,7 @@ import {reorderingHandleStyles} from '../privateAttributes/reordering.stylex';
 import {reorderLineStyles} from '../privateAttributes/reorderLine.stylex';
 import {useTouchHitArea} from '../utils/touchHitArea';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
+import {styles as revealStyles} from '../hooks/containerReveal.stylex';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -85,6 +93,12 @@ registerEnglishFallback(english);
 const HANDLE_SIZE = 28;
 /** The grip's side, the `sm` icon size: the handle's share of its row's height. */
 const GRIP_SIZE = '1rem';
+/**
+ * How far a hanging handle sits before its row's text, px: its own side and
+ * a small clearance. The grip's edge then sits 8 px from the text.
+ * SYNC: List/List.tsx REORDER_GUTTER.
+ */
+const REORDER_HANDLE_HANG = HANDLE_SIZE + 2;
 
 /** The grip when the theme maps nothing to `list-reorder-handle`. */
 const GRIP_FALLBACK = {icon: 'drag', size: 'sm'} as const;
@@ -94,8 +108,7 @@ const styles = stylex.create({
     // Centred on its row, with the grip in its middle. It takes only the
     // grip's height in the row's layout (the negative block margins). So a
     // compact row stays compact. The handle and its focus ring reach past
-    // that into the row's padding, never past it. They go no further than the
-    // row's own inline inset, so a flush row's handle stays inside the clip.
+    // that into the row's padding, never past it.
     position: 'relative',
     alignSelf: 'center',
     display: 'flex',
@@ -105,12 +118,22 @@ const styles = stylex.create({
     width: HANDLE_SIZE,
     height: HANDLE_SIZE,
     marginBlock: `calc((${GRIP_SIZE} - ${HANDLE_SIZE}px) / 2)`,
-    marginInlineEnd: 'calc(-1 * min(8px, var(--_item-inset-inline, 8px)))',
+    // Where it shows only on hover or focus (a fine primary pointer), it hangs
+    // before the row's text and takes no width, so the text keeps its place.
+    // The end margin gives back the row's gap after it. Where it always
+    // shows (a coarse pointer), it takes its place in the row.
+    marginInlineStart: {
+      default: -REORDER_HANDLE_HANG,
+      '@media (pointer: coarse)': 0,
+    },
+    marginInlineEnd: {
+      default: `calc(${REORDER_HANDLE_HANG - HANDLE_SIZE}px - ${spacingVars['--spacing-2']})`,
+      '@media (pointer: coarse)': 0,
+    },
     padding: 0,
     borderWidth: 0,
     borderRadius: 4,
-    // The ring sits inside the handle: the handle reaches the row's inline
-    // end, and the list clips what passes it.
+    // The ring sits inside the handle, so a flush row's list never clips it.
     outlineOffset: {
       default: '0',
       ':focus-visible': `calc(-1 * ${focusVars['--focus-outline-width']})`,
@@ -152,14 +175,27 @@ const styles = stylex.create({
       '@media (pointer: coarse)': 'transparent',
     },
   },
+  // It takes its place in the row where hanging cannot work: after a list
+  // marker, which it would cover, and in a row that reaches its container's
+  // padding edge, where nothing past the row keeps it.
+  inRowPlace: {
+    marginInlineStart: 0,
+    marginInlineEnd: 0,
+  },
   // Presses on the grip land on the handle.
   grip: {
     pointerEvents: 'none',
   },
-  // The row's own child, in a row without end content. It ends the row, as
-  // the end slot would. It aligns as the row's `align` would align that slot.
-  inRow: {
-    marginInlineStart: 'auto',
+  // Shown while its row is hovered or holds the focus (the row is the reveal
+  // container), and always in reorder mode. It keeps its place while hidden.
+  // A disabled row dims its label and end content to half. The handle is
+  // outside them, so it dims itself to match.
+  reveal: {
+    opacity: {
+      default: 'var(--_reveal-opacity, 1)',
+      ':is([aria-pressed="true"])': 1,
+      ':is([aria-disabled="true"])': 'calc(0.5 * var(--_reveal-opacity, 1))',
+    },
   },
   // `start`: at the top of the row's content.
   inRowStart: {
@@ -175,10 +211,14 @@ const styles = stylex.create({
 });
 
 /**
- * The style of a row that ends with a handle, which ListItem applies. Its
- * ring on focus within stays off for the handle, which rings itself.
+ * The style of a row that starts with a handle, which ListItem applies. Its
+ * ring on focus within stays off for the handle, which rings itself. The row
+ * is the container that reveals its handle.
  */
-export const reorderRowStyle = ownRingContainerStyles.focusWithin;
+export const reorderRowStyle = [
+  ownRingContainerStyles.focusWithin,
+  revealStyles.container,
+] as StyleXStyles;
 
 /** The insertion line's thickness, px (the engine centres it on a gap). */
 export const INSERTION_LINE_THICKNESS = 2;
@@ -233,6 +273,7 @@ export function ListReorderHandle({
   rowLabel,
   rowLabelledBy,
   rowAlign,
+  isInRow = false,
 }: ListReorderHandleProps) {
   const ref = useRef<HTMLButtonElement>(null);
   const t = useComponentTranslator();
@@ -381,9 +422,11 @@ export function ListReorderHandle({
       }}
       {...focusOutlineProps.focusVisible(
         styles.handle,
+        revealStyles.revealLayoutPreserved,
+        styles.reveal,
         reorderingHandleStyles.cursor,
         touchHitAreaStyles.layer,
-        rowAlign != null && styles.inRow,
+        isInRow && styles.inRowPlace,
         rowAlign === 'start' && styles.inRowStart,
         rowAlign === 'first-line' && styles.inRowFirstLine,
       )}>

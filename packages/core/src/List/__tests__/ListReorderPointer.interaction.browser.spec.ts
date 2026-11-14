@@ -112,6 +112,42 @@ function strokeDown(
   }));
 }
 
+test("in a Card, a handle that shows on hover stays inside the card: a padded or flush list reaches into the card's padding, and outset and bleed rows keep the handle in the row", async ({
+  page,
+}) => {
+  await openStory(page, storybook(), 'core-list--reorder-in-card');
+  for (const edge of ['padded', 'flush', 'outset', 'bleed']) {
+    const card = page.locator(`[data-edge="${edge}"]`);
+    const row = card.getByRole('listitem').first();
+    await row.hover();
+    const handle = row.getByRole('button', {name: 'Reorder Inbox'});
+    const [cardBox, rowBox, handleBox, label] = await Promise.all([
+      card.boundingBox(),
+      row.boundingBox(),
+      handle.boundingBox(),
+      row.getByText('Inbox').boundingBox(),
+    ]);
+    if (
+      cardBox == null ||
+      rowBox == null ||
+      handleBox == null ||
+      label == null
+    ) {
+      throw new Error(`no layout for edge="${edge}"`);
+    }
+    const border = await card.evaluate(element =>
+      parseFloat(getComputedStyle(element).borderInlineStartWidth),
+    );
+    // The handle's box holds its focus ring, so the card cuts neither.
+    expect(handleBox.x, edge).toBeGreaterThanOrEqual(cardBox.x + border - 0.5);
+    expect(handleBox.x + handleBox.width, edge).toBeLessThanOrEqual(label.x);
+    if (edge === 'outset' || edge === 'bleed') {
+      // Rows that reach the card's padding edge keep their handles inside.
+      expect(handleBox.x, edge).toBeGreaterThanOrEqual(rowBox.x - 0.5);
+    }
+  }
+});
+
 test('a mouse drags a row from its handle at once, where the primary pointer is fine', async ({
   browser,
 }) => {

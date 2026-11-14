@@ -655,9 +655,10 @@ test.describe('a row that reorders and has a menu', () => {
     if (box == null) {
       throw new Error('no row');
     }
+    // The middle of the row, clear of the handle that starts it.
     const held = await holdStill(
       page,
-      {x: box.x + 40, y: box.y + box.height / 2},
+      {x: box.x + box.width / 2, y: box.y + box.height / 2},
       800,
     );
     expect(held.picked).toBe(false);
@@ -699,6 +700,8 @@ test('a flush row keeps its handle inside the list', async ({page}) => {
   if (handleBox == null || listBox == null) {
     throw new Error('no handle or list');
   }
+  // The handle starts the row, inside the list.
+  expect(handleBox.x).toBeGreaterThanOrEqual(listBox.x - 0.5);
   expect(handleBox.x + handleBox.width).toBeLessThanOrEqual(
     listBox.x + listBox.width + 0.5,
   );

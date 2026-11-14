@@ -122,7 +122,7 @@ export const docs = {
       name: 'reorderable',
       type: 'Reorderable<T>',
       description:
-        "Makes the selected options reorderable: pass the object createReorderable makes. Each selected row ends with a reorder handle: on a touch screen hold the handle for a moment, then drag; a mouse drags at once; a tap, a click, Space or Enter on a handle turns on reorder mode for its row, in which each arrow key (or each move in the hint below the handle) moves it a place, and Escape, Done or another activation ends the mode, keeping the moves. The object's isReorderable(value) says which values move: one it rejects has no handle, and at either end of the selected list it also keeps the others from moving past it. In immediate behavior each move goes to the object's onReorder({key, to}); in staged behavior the selector moves its draft instead, so Cancel drops the move with the draft and Apply commits it through onChange. Reordering pauses while a search filters the panel. Without it, the selected options keep their order.",
+        "Makes the selected options reorderable: pass the object createReorderable makes. Each selected row starts with a reorder handle: on a touch screen hold the handle for a moment, then drag; a mouse drags at once; a tap, a click, Space or Enter on a handle turns on reorder mode for its row, in which each arrow key (or each move in the hint below the handle) moves it a place, and Escape, Done or another activation ends the mode, keeping the moves. The object's isReorderable(value) says which values move: one it rejects has no handle, and at either end of the selected list it also keeps the others from moving past it. In immediate behavior each move goes to the object's onReorder({key, to}); in staged behavior the selector moves its draft instead, so Cancel drops the move with the draft and Apply commits it through onChange. Reordering pauses while a search filters the panel. Without it, the selected options keep their order.",
     },
     {
       name: 'hasSelectAll',
@@ -346,7 +346,7 @@ export const docs = {
           name: 'reorderable',
           type: 'Reorderable<T>',
           description:
-            'Makes the selected options reorderable through a handle at the end of each row: pass the object createReorderable makes. Its isReorderable(value) decides which options move (one it rejects at either end of the list also keeps the others from moving past it), and each move goes to its onReorder({key, to}), to being the index of the value in value after the move. Without it, the selected options keep their order.',
+            'Makes the selected options reorderable through a handle at the start of each row: pass the object createReorderable makes. Its isReorderable(value) decides which options move (one it rejects at either end of the list also keeps the others from moving past it), and each move goes to its onReorder({key, to}), to being the index of the value in value after the move. Without it, the selected options keep their order.',
         },
         {
           name: 'hasSelectAll',
@@ -756,7 +756,7 @@ export const docsDense = {
     searchLabel: 'Accessible search label.',
     searchPlaceholder: 'Search placeholder.',
     reorderable:
-      'createReorderable object for a trailing reorder handle (touch hold, mouse drag, keys); its isReorderable says which values move; staged moves change the draft; paused while searching.',
+      'createReorderable object for a leading reorder handle (touch hold, mouse drag, keys); its isReorderable says which values move; staged moves change the draft; paused while searching.',
     hasSelectAll: 'Add all transfer-enabled available options.',
     hasClear: 'Remove all transfer-enabled selected options.',
     renderOption: 'Custom row content.',
