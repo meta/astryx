@@ -378,16 +378,19 @@ export function RadioList({
       }
       const group = groupRef.current;
       const from = e.target;
+      // A RadioList inside another one's option bubbles its key presses to the
+      // outer group. Each group acts only on its own radios.
       if (
         group == null ||
         !(from instanceof HTMLInputElement) ||
-        from.type !== 'radio'
+        from.type !== 'radio' ||
+        from.name !== name
       ) {
         return;
       }
       const others = Array.from(
         group.querySelectorAll<HTMLInputElement>('input[type="radio"]'),
-      ).filter(radio => radio !== from && radio.name === from.name);
+      ).filter(radio => radio !== from && radio.name === name);
       if (others.length === 0) {
         return;
       }
@@ -407,7 +410,7 @@ export function RadioList({
         }
       }, 0);
     },
-    [],
+    [name],
   );
 
   return (

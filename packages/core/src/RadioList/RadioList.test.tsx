@@ -1130,9 +1130,6 @@ describe('RadioList', () => {
   });
 });
 
-// jsdom cannot emulate forced-colors rendering, so this asserts that the
-// compiled output includes the forced-colors rule; visual behavior needs
-// manual verification under Windows High Contrast.
 describe('one Tab stop', () => {
   it('takes the other radios out of the Tab order for one Tab press', () => {
     vi.useFakeTimers();
@@ -1155,6 +1152,39 @@ describe('one Tab stop', () => {
       vi.runAllTimers();
       expect(sms).not.toHaveAttribute('tabindex');
       expect(push).not.toHaveAttribute('tabindex');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("restores a nested group's radios after a Tab press in it", () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <RadioList label="Plan" value="team" onChange={() => {}}>
+          <RadioListItem label="Solo" value="solo" />
+          <RadioListItem
+            label="Team"
+            value="team"
+            endContent={
+              <RadioList label="Seats" value="ten" onChange={() => {}}>
+                <RadioListItem label="Five" value="five" />
+                <RadioListItem label="Ten" value="ten" />
+              </RadioList>
+            }
+          />
+        </RadioList>,
+      );
+      const five = screen.getByRole('radio', {name: 'Five'});
+      const ten = screen.getByRole('radio', {name: 'Ten'});
+      const solo = screen.getByRole('radio', {name: 'Solo'});
+      five.focus();
+      fireEvent.keyDown(five, {key: 'Tab'});
+      expect(ten.tabIndex).toBe(-1);
+      expect(solo).not.toHaveAttribute('tabindex');
+      vi.runAllTimers();
+      expect(ten).not.toHaveAttribute('tabindex');
+      expect(solo).not.toHaveAttribute('tabindex');
     } finally {
       vi.useRealTimers();
     }
@@ -1193,6 +1223,9 @@ describe('one Tab stop', () => {
   });
 });
 
+// jsdom cannot emulate forced-colors rendering, so this asserts that the
+// compiled output includes the forced-colors rule; visual behavior needs
+// manual verification under Windows High Contrast.
 describe('forced colors (WCAG 1.4.11)', () => {
   it('compiles a forced-colors fill so the selected dot survives Windows High Contrast', () => {
     render(

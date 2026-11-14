@@ -87,7 +87,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   status, invalid and required state, and the `radio-list` target.
 - The shared radio name, the selected value, and `onChange`.
 - Group disabled and the group disabled-reason tooltip.
-- The entry Tab stop when nothing is selected.
+- The entry Tab stop when nothing is selected, and the exit Tab stop from any
+  of its radios.
 - Where base, `container*`, and `control*` props land.
 
 **Does not own / non-goals**
@@ -149,8 +150,9 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ### Performance and resources
 
-- **PR1 — Entry handling.** FR4 runs only on focus events with an empty `value`
-  and adds no global listener.
+- **PR1 — Entry and exit handling.** FR4's entry handling runs only on focus
+  events with an empty `value`. Its exit handling runs only on a Tab key press
+  from one of the group's own radios. Neither adds a global listener.
 
 ## Accessibility contract
 
