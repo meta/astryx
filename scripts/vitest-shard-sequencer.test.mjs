@@ -14,6 +14,7 @@ import DurationShardSequencer, {
   recordLegOneSteps,
   readDurations,
   recordDurations,
+  idleSwizzleSlices,
 } from './vitest-shard-sequencer.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -322,6 +323,39 @@ describe('duration-balanced Node legs', () => {
       [slice]: 300,
       'unreached.test.mjs': 50,
     });
+  });
+
+  it('books a file that runs no test this run at its import alone, so the heavy files spread across the legs', () => {
+    const slices = Array.from(
+      {length: 4},
+      (_, i) =>
+        `packages/cli/test/swizzle-proof/swizzle-proof.${i + 1}.test.mjs`,
+    );
+    const heavy = Array.from({length: 8}, (_, i) => `heavy-${i}.test.mjs`);
+    const light = Array.from({length: 200}, (_, i) => `light-${i}.test.mjs`);
+    const seconds = {
+      ...Object.fromEntries(slices.map(f => [f, 340])),
+      ...Object.fromEntries(heavy.map(f => [f, 150])),
+      ...Object.fromEntries(light.map(f => [f, 1])),
+    };
+    const files = [...slices, ...heavy, ...light];
+    const heavyPerLeg = legs =>
+      legs.map(leg => leg.filter(f => heavy.includes(f)).length);
+    // Booked as if they ran, the slices take four legs and the heavy files
+    // pile into the fifth.
+    expect(
+      Math.max(...heavyPerLeg(partitionByDuration(files, 5, seconds))),
+    ).toBeGreaterThan(2);
+    // Booked as idle, the heavy files spread: no leg takes more than two.
+    const legs = partitionByDuration(files, 5, seconds, {
+      idle: new Set(slices),
+    });
+    expect(Math.max(...heavyPerLeg(legs))).toBeLessThanOrEqual(2);
+    expect(legs.flat().sort()).toEqual([...files].sort());
+  });
+
+  it('reads no swizzle-proof scope when no slice is in the run', async () => {
+    expect([...(await idleSwizzleSlices(['a.test.mjs']))]).toEqual([]);
   });
 
   it("reads a whole run's log by its Node legs alone", () => {

@@ -48,9 +48,12 @@ export function partitionByDuration(
   files,
   count,
   seconds,
-  {legOneSeconds = 0} = {},
+  {legOneSeconds = 0, idle = new Set()} = {},
 ) {
-  const cost = costOf(files, seconds);
+  const recorded = costOf(files, seconds);
+  // A file that runs no test in this run (the swizzle-proof slices when the
+  // change reaches no component) costs only its import.
+  const cost = file => (idle.has(file) ? 0 : recorded(file));
   // Every file also costs its import and transform, which its recorded time
   // leaves out; without it the hundreds of files recorded at 0 s would all go
   // to one leg.
@@ -157,6 +160,26 @@ export function recordDurations(text) {
 const SWIZZLE_PROOF = /(^|\/)swizzle-proof\.\d+\.test\.mjs$/;
 
 /**
+ * The swizzle-proof slices among `files` that prove nothing in this run: every
+ * slice reads the same scope first (packages/cli/test/swizzle-proof/proof.mjs
+ * runScope), and in the scope `none` it runs no target. Their recorded time is
+ * the time they take when a change reaches them, so without this the legs that
+ * hold them would finish early while the other legs carry the rest.
+ * @param {string[]} files
+ * @returns {Promise<Set<string>>}
+ */
+export async function idleSwizzleSlices(files) {
+  const slices = files.filter(file => SWIZZLE_PROOF.test(file));
+  if (slices.length === 0) return new Set();
+  const {runScope} = await import(
+    pathToFileURL(path.join(ROOT, 'packages/cli/test/swizzle-proof/proof.mjs'))
+      .href
+  );
+  const {scope} = runScope({all: process.env.SWIZZLE_PROOF_ALL === '1'});
+  return new Set(scope.mode === 'none' ? slices : []);
+}
+
+/**
  * The record after a run. The run's times replace those files' times; files
  * the run did not reach keep their earlier times; a swizzle-proof slice keeps
  * the largest time seen; a file that no longer exists leaves the record.
@@ -199,9 +222,11 @@ export default class DurationShardSequencer extends BaseSequencer {
     const others = specs.filter(spec => spec.project.name !== PROJECT);
     const legOneSeconds =
       process.env.VITEST_LEG_ONE_RESERVE === '1' ? readLegOneSeconds() : 0;
+    const files = node.map(relative);
     const mine = new Set(
-      partitionByDuration(node.map(relative), count, readDurations(), {
+      partitionByDuration(files, count, readDurations(), {
         legOneSeconds,
+        idle: await idleSwizzleSlices(files),
       })[index - 1],
     );
     return [
