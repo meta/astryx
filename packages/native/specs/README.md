@@ -1,30 +1,43 @@
-# Native component specs
+# Native specs
 
-One short spec per native component, per language, kept beside the core
-component's spec in its folder under `docs/specs/components/`, so
-`docs/specs/components/TabList/` holds `TabList.spec.md` and
-`TabList.swift.spec.md` side by side. The rules live in
+Every native spec is a standard knowledge record
+([`architecture:knowledge-contracts`](../../../docs/architecture/knowledge-contracts.md)
+INV27). The rules live in
 [AST-093 (Native component guidelines)](../../../docs/specs/AST-093-native-component-guidelines/spec.md),
 which applies [AST-082 (Native-first surfaces)](../../../docs/specs/AST-082-native-first-surfaces/spec.md).
+
+- **A native component's spec** sits beside the core component's spec in its
+  folder under `docs/specs/components/`, so `docs/specs/components/TabList/`
+  holds `TabList.spec.md` and `TabList.swift.spec.md` side by side:
+  `docs/specs/components/<ComponentRoot>/<Name>.<language>.spec.md`. It is a
+  `component` record
+  with id `component:swift/<Name>` and `platform_of: component:<Name>`, built
+  from
+  [`docs/templates/knowledge/component-spec.md`](../../../docs/templates/knowledge/component-spec.md).
+  It states only what the platform adds or must do differently; the core
+  record keeps the shared contract.
+- **Rules shared by a language's components** are architecture records in
+  `specs/<language>/<slug>.spec.md`, with id
+  `architecture:native-<language>-<slug>`, built from
+  [`docs/templates/knowledge/architecture.md`](../../../docs/templates/knowledge/architecture.md).
 
 ```text
 packages/native/
 ├── specs/
-│   ├── TEMPLATE.md            # copy this for a new component spec
 │   └── swift/                 # rules shared by every Swift component
-│       └── library/           # rules every Swift component or build step shares
+│       └── <slug>.spec.md     # architecture:native-swift-<slug>
 └── apple/Sources/Astryx/
     └── <Name>/                # one folder per component, named as core's
         └── <Name>.swift       # declares <Name> in the Astryx module
 
 docs/specs/components/
 └── <ComponentRoot>/           # the folder core keeps the component in
-    ├── <Name>.spec.md         # the core contract
-    └── <Name>.swift.spec.md   # the Swift spec, e.g. Button.swift.spec.md
+    ├── <Name>.spec.md         # the core contract, component:<Name>
+    └── <Name>.swift.spec.md   # component:swift/<Name>
 ```
 
 Swift comes first. Kotlin and other languages get their own directory when
-their first component starts.
+their first shared rule starts.
 
 ## The three guidelines, in order
 
@@ -44,10 +57,9 @@ the same everywhere. A native spec never renames or changes it.
 
 ## Adding a spec
 
-1. Copy `TEMPLATE.md` to the core component's folder under
-   `docs/specs/components/` as `<Name>.<language>.spec.md`, for Swift
-   `docs/specs/components/<ComponentRoot>/<Name>.swift.spec.md`.
-2. Fill every section. Write "None" rather than deleting one.
+1. Copy the template for the record's kind from `docs/templates/knowledge/` to
+   the location above, and fill its frontmatter and every section.
+2. Run the rubric in `docs/contributing/spec-writing.md`.
 3. Open a pull request that changes only files under `packages/native/` and
    native specs. A spec can land on its own or with the component it describes.
 

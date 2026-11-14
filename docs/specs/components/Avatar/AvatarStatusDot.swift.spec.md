@@ -36,7 +36,7 @@ system_specs: [spec:AST-082, spec:AST-093]
 | Builder impact          | An app puts the dot in the avatar's trailing closure with a label. A custom icon inside the dot has no Swift form.                                                                                              |
 | Compatibility/readiness | Additive: a new view, generated `AvatarStatusDotProps`, and core's name-with-status message in the Swift string catalogs. Draft; built and tested on macOS and the iOS Simulator; device captures are attached. |
 | Review checks           | Reject a status shown by color alone, a dot that resizes or moves the avatar, a dot that VoiceOver reads separately inside an avatar, or a color that is not a theme token.                                     |
-| Governing rules         | `spec:AST-082` FR4, FR7; `spec:AST-093` FR1–FR5; the Swift component API, slots (S4), theme environment, and accessibility (X1, X6) records under `packages/native/specs/swift/library/`.                       |
+| Governing rules         | `spec:AST-082` FR4, FR7; `spec:AST-093` FR1–FR5; the Swift component API, slots (S4), theme environment, and accessibility (X1, X6) records under `packages/native/specs/swift/`.                               |
 
 This table is a review projection; the body below is authoritative.
 

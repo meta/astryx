@@ -1,14 +1,25 @@
-# Augmentable variants (Swift)
+---
+schema_version: 1
+template_version: 3
+kind: architecture
+id: architecture:native-swift-augmentable-variants
+authority: current
+archive_reason: null
+superseded_by: null
+approved_by: cixzhang
+approved_at: 2026-10-24
+owners: [cixzhang]
+applies_to: [packages/native/]
+verified_by: [.github/scripts/native-swift.sh]
+deciding_specs:
+  [spec:AST-082/FR4, spec:AST-082/FR10, spec:AST-082/FR18, spec:AST-093/FR4]
+---
 
-- Status: draft
-- Relation: applies the native form of the AST-082 FR4 rule for augmentable
-  props (`docs/specs/AST-082-native-first-surfaces/spec.md`, FR4 as amended) (a string-backed value with built-in constants, extended by the theme
-  generator, that decodes any name and draws an unknown name in the base look)
-  to Swift, and extends `packages/native/specs/swift/library/theme-generator.md`.
-  Native style data comes from `defineNativeTheme` platform entries (AST-082
-  FR10, FR18; AST-093 FR4).
+# Augmentable variants architecture (Swift)
 
-## Summary
+<!-- Describe the system, not the project: present tense, what it does. No proposals, history, pull requests, or research in the record; see docs/contributing/spec-writing.md and report its rubric results in the pull request. -->
+
+## Purpose
 
 A brand that adds its own button or badge variant gets the same variant name on
 iOS: an iOS developer writes `Button("Save", variant: .primaryMuted)`, it
@@ -16,7 +27,16 @@ compiles because the theme declares it, and the person using the app sees it
 styled as the brand's native theme defines it. A variant name nothing styles
 draws the component's base look, with no value style, instead of failing.
 
-## Requirements
+## System model
+
+This record applies the native form of the AST-082 FR4 rule for augmentable
+props (`docs/specs/AST-082-native-first-surfaces/spec.md`, FR4 as amended) (a
+string-backed value with built-in constants, extended by the theme generator,
+that decodes any name and draws an unknown name in the base look) to Swift, and
+extends `architecture:native-swift-theme-generator`. Native style data comes
+from `defineNativeTheme` platform entries (AST-082 FR10, FR18; AST-093 FR4).
+
+## Boundaries and invariants
 
 - **V1 — An augmentable prop is an open, string-backed type.** For every prop
   the platform's contract keeps that the core contract marks augmentable, the contract generator emits a
@@ -68,7 +88,27 @@ ExpressibleByStringLiteral` holding the web value as its raw string, instead
   only what V3 carries: paint, shape, font, and padding, never behavior. Name,
   role, and state come from the core contract, as for built-ins.
 
-## Acceptance checks
+## Change coupling
+
+A change to the Swift code or build step this record governs is reviewed against
+its requirements, and a change to a record it builds on is reviewed for its
+effect here. The checks under Verification prove the record stays current.
+
+## Owning code
+
+- `packages/native/src/contract/` — the contract generator, which emits each augmentable prop as an open, string-backed type.
+- `packages/native/apple/Sources/AstryxNative/Generated/` — the generated variant types.
+- `packages/native/scripts/` — the theme generator, which extends each augmentable type with a theme's own variants.
+- `packages/native/apple/Sources/Astryx/` — the views that draw them.
+
+## Deciding specs
+
+- `spec:AST-082/FR4`
+- `spec:AST-082/FR10`
+- `spec:AST-082/FR18`
+- `spec:AST-093/FR4`
+
+## Verification
 
 | Requirement | Check                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
