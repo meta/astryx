@@ -1204,15 +1204,10 @@ function DropdownMenuPopover({
     }
   }, [controlledIsOpen, isControlled, popover]);
 
-  // Move focus into the menu only after the layer has committed open. Keyboard
-  // opens use the APG menu-button pattern; pointer opens preserve a row that
-  // was already reached and otherwise focus the first enabled item. The
-  // last-input focus helper keeps pointer focus from looking like a keyboard
-  // selection.
-  // A row that the pointer reached before this frame keeps focus, so a held
-  // press continues to act on the row under the pointer. The menu remains the
-  // fallback when no item is focusable (e.g. all disabled), mirroring the
-  // submenu flyout fallback.
+  // Move focus into the menu only after the layer has committed open. A row
+  // the pointer reached before this frame keeps focus, so a held press acts on
+  // the row under the pointer. The menu is the fallback when no row can take
+  // focus (e.g. all disabled), as in the sub-menu flyout.
   useEffect(() => {
     if (!popover.isOpen || !shouldFocusOnOpenRef.current) {
       return;
@@ -1814,7 +1809,7 @@ function DropdownMenuPopover({
                 hasRegions && styles.menuInFrame,
                 // Between a header and a footer the menu is a Tab stop, so
                 // keyboard focus on it must be visible (the base style removes
-                // the ring for the pointer-open focus target).
+                // the ring for the menu's no-row fallback focus).
                 hasRegions &&
                   isMenuKeyboardFocused &&
                   focusOutlineStyles.focusVisible,
