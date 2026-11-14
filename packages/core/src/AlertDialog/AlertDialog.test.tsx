@@ -479,6 +479,29 @@ describe('AlertDialog', () => {
     });
   });
 
+  it('keeps inline emphasis and links in the description it announces', () => {
+    render(
+      <AlertDialog
+        {...defaultProps}
+        description={
+          <>
+            Change from <strong>Default</strong> to{' '}
+            <strong>Professional only</strong>. <a href="#policy">Policy</a>
+          </>
+        }
+      />,
+    );
+    const dialog = screen.getByRole('alertdialog');
+    const description = document.getElementById(
+      dialog.getAttribute('aria-describedby') ?? '',
+    );
+    expect(description).toHaveTextContent(
+      'Change from Default to Professional only. Policy',
+    );
+    expect(description?.querySelectorAll('strong')).toHaveLength(2);
+    expect(description?.querySelector('a')).toHaveAttribute('href', '#policy');
+  });
+
   describe('aria', () => {
     it('marks the action button busy while loading', () => {
       render(<AlertDialog {...defaultProps} isActionLoading />);

@@ -136,9 +136,10 @@ export const docs = {
     },
     {
       name: 'description',
-      type: 'string',
+      type: 'ReactNode',
       required: true,
-      description: 'Consequence description. Linked via aria-describedby.',
+      description:
+        'Consequence description. Linked via aria-describedby. Takes inline content (emphasis, links, entity names); no block content such as lists or paragraphs.',
     },
     {
       name: 'actionLabel',
