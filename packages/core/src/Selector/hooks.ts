@@ -5,8 +5,8 @@
 /**
  * @file hooks.ts
  * @input Uses untransformed DOM layout geometry from the Selector's outer
- *   anchor, listbox, and selected option, and the layer runtime's keyboard
- *   inset
+ *   anchor, listbox, and selected option, the open listbox's resize reports,
+ *   and the layer runtime's keyboard inset
  * @output Hooks for Selector. useSelectedItemOffset and useCombobox are
  *   public, exported from the Selector entry point. CommandPalette also uses
  *   useCombobox, and so do products with a combobox over their own text field
@@ -18,6 +18,7 @@
  */
 
 import {useCallback, useState} from 'react';
+import {flushSync} from 'react-dom';
 import {enabledEdgeIndex} from '../utils/enabledEdgeIndex';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
@@ -28,6 +29,7 @@ import {
 import {LAYER_KEYBOARD_INSET_PROPERTY} from '../Layer/useLayerKeyboardClearance';
 import {isImeKeyEvent} from '../utils/ime';
 import {layoutViewportHeight} from '../utils/layoutViewport';
+import {observeResizeAfterLayout} from '../utils/sharedResizeObserver';
 import type {RefObject} from 'react';
 import type {SelectorOptionData} from './types';
 
@@ -74,6 +76,14 @@ interface SelectedItemPlacement {
   anchorBottom: number;
   /** The listbox's layout height, px. */
   listboxHeight: number;
+  /** The anchor's top edge, viewport px. */
+  anchorTop: number;
+  /** The listbox's clamped top, viewport px. */
+  clampedTop: number;
+  /** The layer's margin at the viewport's block end, which the clamp keeps. */
+  gutter: number;
+  /** Whether the browser placed the layer above its anchor (a flip). */
+  isAboveAnchor: boolean;
 }
 
 /**
@@ -134,6 +144,7 @@ function measureSelectedItem(
     ? listbox.closest<HTMLElement>('[popover]')
     : null;
   let blockEndGutter = 0;
+  let isAboveAnchor = false;
   if (layer != null) {
     const layerStyle = getComputedStyle(layer);
     blockEndGutter = Math.max(
@@ -141,6 +152,13 @@ function measureSelectedItem(
       parseFloat(layerStyle.marginBlockStart) || 0,
       parseFloat(layerStyle.marginBlockEnd) || 0,
     );
+    // The position area's block keyword names the side the browser chose:
+    // its block-start side once a fallback flipped the layer. An engine
+    // without anchor positioning reads an empty string here.
+    const [blockArea = ''] = layerStyle
+      .getPropertyValue('position-area')
+      .split(' ');
+    isAboveAnchor = /start$|^top$/.test(blockArea);
   }
   const viewportHeight = window.innerHeight;
   const maxTop = Math.max(0, viewportHeight - listboxHeight - blockEndGutter);
@@ -155,6 +173,10 @@ function measureSelectedItem(
     offset: clampedOffset,
     anchorBottom: anchorRect.bottom,
     listboxHeight,
+    anchorTop: anchorRect.top,
+    clampedTop,
+    gutter: blockEndGutter,
+    isAboveAnchor,
   };
 }
 
@@ -233,6 +255,24 @@ export function useSelectedItemOverlayMargin({
 }: UseSelectedItemOffsetOptions): SelectedItemOverlayMargin {
   const [marginBlockStart, setMarginBlockStart] = useState<string>();
   const [isPositioned, setIsPositioned] = useState(false);
+  const [listboxResizes, setListboxResizes] = useState(0);
+
+  // The open list measures again when its own box resizes. An option that
+  // grows or shrinks moves the selected row. The report comes before paint.
+  // The commit is synchronous, so no frame shows the old margin.
+  useIsomorphicLayoutEffect(() => {
+    const listbox = listboxRef.current;
+    if (!isOpen || listbox == null) {
+      return;
+    }
+    // The measuring Effect already runs in this commit, so the observation
+    // skips the report at registration.
+    const stop = observeResizeAfterLayout(listbox, () => {
+      // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the margin must change before the frame paints
+      flushSync(() => setListboxResizes(count => count + 1));
+    });
+    return stop ?? undefined;
+  }, [isOpen, listboxRef]);
 
   // Syncs the overlay's margin with the open list's layout: its selected
   // item, its anchor and the viewport.
@@ -246,20 +286,45 @@ export function useSelectedItemOverlayMargin({
           {countsLayerGutter: true},
         )
       : null;
-    let margin: string | undefined;
+    let belowAnchor: string | undefined;
+    let aboveAnchor: string | undefined;
     if (placement != null) {
-      const {offset, anchorBottom, listboxHeight} = placement;
+      const {offset, anchorTop, anchorBottom, listboxHeight, gutter} =
+        placement;
+      const viewport = layoutViewportHeight(window);
       // The room below the anchor for the list, in the keyboard inset's
       // layout px. With no keyboard the inset falls back to the room itself.
       // The keyboard term is then 0, and the measured shift stands.
-      const room = layoutViewportHeight(window) - listboxHeight - anchorBottom;
-      margin = `min(${-offset}px, max(${-anchorBottom}px, calc(${room}px - var(${LAYER_KEYBOARD_INSET_PROPERTY}, ${room}px))))`;
+      const room = viewport - listboxHeight - anchorBottom;
+      belowAnchor = `min(${-offset}px, max(${-anchorBottom}px, calc(${room}px - var(${LAYER_KEYBOARD_INSET_PROPERTY}, ${room}px))))`;
+      // A flip swaps the block margins, so this margin sets the list's end
+      // from the anchor's top. It puts the list's top at the clamped top, or
+      // lifts the list's end above a software keyboard. The list's top stays
+      // below the gutter.
+      const flipped = anchorTop - placement.clampedTop - listboxHeight;
+      const keyboardEnd = anchorTop - viewport;
+      aboveAnchor = `min(${anchorTop - listboxHeight - gutter}px, max(${flipped}px, calc(${keyboardEnd}px + var(${LAYER_KEYBOARD_INSET_PROPERTY}, 0px))))`;
     }
+    // At the open, the browser picks the layer's side after this margin
+    // applies. The margin below the anchor always fits there, so the layer
+    // opens below its anchor, where the runtime caps it above a keyboard. A
+    // layer that the browser flips while the list is open stays flipped, so
+    // it gets the flipped margin.
+    const isFlippedWhileOpen = placement?.isAboveAnchor === true;
     // eslint-disable-next-line @eslint-react/set-state-in-effect -- selector popover position is derived from DOM layout
-    setMarginBlockStart(margin);
+    setMarginBlockStart(previous =>
+      previous != null && isFlippedWhileOpen ? aboveAnchor : belowAnchor,
+    );
     // eslint-disable-next-line @eslint-react/set-state-in-effect -- selector popover position is derived from DOM layout
     setIsPositioned(isOpen);
-  }, [isOpen, selectedItemIndex, listboxId, listboxRef, anchorRef]);
+  }, [
+    isOpen,
+    selectedItemIndex,
+    listboxId,
+    listboxRef,
+    anchorRef,
+    listboxResizes,
+  ]);
 
   // The list moves over its trigger in the commit that applies the margin.
   // The runtime skips its read at the show (`writesEntranceSide`), so the

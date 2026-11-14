@@ -16,6 +16,9 @@
  */
 
 export {
+  LAYER_KEYBOARD_CAP_PROPERTY,
+  LAYER_KEYBOARD_INSET_PROPERTY,
+  LAYER_KEYBOARD_OVERFLOW_PROPERTY,
   keyboardLiftStyle,
   useLayerKeyboardClearance,
 } from './useLayerKeyboardClearance';

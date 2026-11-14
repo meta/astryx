@@ -863,6 +863,29 @@ describe('Selector', () => {
       });
     });
 
+    it('opens the selected-item overlay without a flush inside its commit', async () => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        const user = userEvent.setup();
+        render(
+          <Selector
+            label="Fruit"
+            options={OPTIONS}
+            value="Banana"
+            onChange={() => {}}
+          />,
+        );
+
+        await user.click(screen.getByRole('combobox'));
+        await screen.findByRole('listbox', {hidden: true});
+        // The list's resize report at registration runs inside the open's
+        // commit, where React cannot flush and warns.
+        expect(error.mock.calls.flat().join(' ')).not.toContain('flushSync');
+      } finally {
+        error.mockRestore();
+      }
+    });
+
     it('stays flush in the default selected-item overlay', async () => {
       const restoreRects = mockSelectorRects();
       const user = userEvent.setup();

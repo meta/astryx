@@ -279,9 +279,14 @@ export function useLayerKeyboardClearance(
       }
       // The cap holds the block-start edge: below its trigger the top stays
       // and the bottom comes up. Placed above its trigger the layer holds its
-      // bottom instead, which a shorter box cannot lift: leave it as it is.
+      // bottom instead, which a shorter box cannot lift: leave it as it is,
+      // unless it is stopped against the top gutter where shrinking its box
+      // allows it to lift clear of the keyboard.
       const limit = viewport - inset - LAYER_KEYBOARD_CLEARANCE_PX;
-      if (settledBox(layer).bottom > limit + 1) {
+      const topGutter =
+        parseFloat(win.getComputedStyle(layer).marginBlockStart) || 0;
+      const isStoppedAtGutter = box.top <= topGutter + 1;
+      if (settledBox(layer).bottom > limit + 1 && !isStoppedAtGutter) {
         commitCap(null);
         return false;
       }
