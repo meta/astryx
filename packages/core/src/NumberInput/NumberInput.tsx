@@ -5,13 +5,14 @@
 /**
  * @file NumberInput.tsx
  * @input Uses React, useId, useState, useMemo, useCallback, useEffect, Field, Icon, InputGroupContext
- * @output Exports NumberInput component, NumberInputProps, NumberInputEntryError; optional steppers are hidden on coarse pointers, and a held one repeats into the draft
+ * @output Exports NumberInput component, NumberInputProps, NumberInputEntryError, EntryErrorBehavior; optional steppers are hidden on coarse pointers, and a held one repeats into the draft
  * @position Core implementation; consumed by index.ts, tested by NumberInput.test.tsx
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/NumberInput/numberParser.ts (locale-aware parsing)
  * - /packages/core/src/NumberInput/numberInputCommit.ts (draft commit policy)
  * - /packages/core/src/Field/useEntryErrorReport.ts (rejection status, alert, and report)
+ * - /packages/core/src/Field/useValueReplacesEntry.ts (when a new value replaces a kept draft)
  * - /packages/core/src/NumberInput/NumberInput.doc.mjs (props table, features, implementation notes)
  * - /packages/core/src/NumberInput/NumberInput.test.tsx (tests for new/changed behavior)
  * - /packages/core/src/NumberInput/index.ts (exports if types change)
@@ -229,6 +230,8 @@ export type {
   InputStatus as NumberInputStatus,
   InputStatusType as NumberInputStatusType,
 } from '../Field';
+export type {EntryErrorBehavior} from '../FormLayout/FormLayoutContext';
+import type {EntryErrorBehavior} from '../FormLayout/FormLayoutContext';
 import {isImeKeyEvent, mergeProps, mergeRefs} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {
@@ -249,6 +252,7 @@ import {
   isSameEntryError,
   useEntryErrorReport,
 } from '../Field/useEntryErrorReport';
+import {useValueReplacesEntry} from '../Field/useValueReplacesEntry';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
 import {
   registerEnglishFallback,
@@ -408,6 +412,22 @@ interface NumberInputPropsBase extends Omit<
    * ```
    */
   onEntryErrorChange?: (error: NumberInputEntryError | null) => void;
+  /**
+   * When the field shows its own entry error: typed text that it rejects,
+   * which `onEntryErrorChange` reports. It sets when the error shows, not when
+   * validation runs, so it is not React Aria's `validationBehavior` (native
+   * versus ARIA validation). It does not change a caller's `status`.
+   *
+   * A typed number is complete only at Enter or blur, so both values behave
+   * the same: `'complete'` and `'blur-or-enter'` show the message,
+   * `aria-invalid`, the invalid styling, the announcement, and the
+   * `onEntryErrorChange` report together at Enter or blur, never while a
+   * person types. An edit that makes the text valid or empty clears the error
+   * at once.
+   *
+   * @default the nearest FormLayout's `defaultEntryErrorBehavior`, else `'complete'`
+   */
+  entryErrorBehavior?: EntryErrorBehavior;
   /**
    * How the status message is placed relative to the input.
    * - 'attached': message overlaps directly below the input (bordered treatment)
@@ -677,6 +697,9 @@ export function NumberInput({
   labelIcon,
   status,
   onEntryErrorChange,
+  // Both values show a typed number's rejection only at Enter or blur. The
+  // field reads neither the prop nor a form default.
+  entryErrorBehavior: _entryErrorBehavior,
   statusVariant = 'attached',
   size: sizeProp,
   onChange,
@@ -746,8 +769,7 @@ export function NumberInput({
   }
   const [isFocused, setIsFocused] = useState(false);
 
-  // The rejection that the field shows. A number has no fixed length, so a
-  // draft is complete only at commit, and only Enter or blur shows one.
+  // A number has no fixed length, so only Enter or blur shows a rejection.
   const [shownRejection, setShownRejection] =
     useState<NumberInputEntryError | null>(null);
   // While blur keeps a rejected draft, a hidden input posts the committed
@@ -767,25 +789,16 @@ export function NumberInput({
     setShownRejection(null);
     setIsDraftKeptAtBlur(false);
   }
-  // A new value replaces a rejected or blur-kept draft. A value that changes
-  // at the commit that shows the rejection keeps the draft.
-  const [rendered, setRendered] = useState({value, rejection: shownRejection});
+  // A new value replaces a rejected or blur-kept draft. Each Enter or blur
+  // that keeps a draft sets a new rejection, so a value that arrives with it
+  // keeps the draft.
+  const isValueReplacing = useValueReplacesEntry(value, shownRejection);
   let isDraftReplaced = false;
-  if (
-    !Object.is(rendered.value, value) ||
-    rendered.rejection !== shownRejection
-  ) {
-    setRendered({value, rejection: shownRejection});
-    if (
-      !Object.is(rendered.value, value) &&
-      (shownRejection !== null || isDraftKeptAtBlur) &&
-      rendered.rejection === shownRejection
-    ) {
-      setPendingInput(null);
-      setShownRejection(null);
-      setIsDraftKeptAtBlur(false);
-      isDraftReplaced = true;
-    }
+  if (isValueReplacing && (shownRejection !== null || isDraftKeptAtBlur)) {
+    setPendingInput(null);
+    setShownRejection(null);
+    setIsDraftKeptAtBlur(false);
+    isDraftReplaced = true;
   }
   // New rules judge a rejected draft again, unless a new value replaced it in
   // the same update.

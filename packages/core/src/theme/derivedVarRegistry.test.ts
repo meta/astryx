@@ -142,6 +142,7 @@ const STRUCTURAL_VARS = new Set([
   // not inherit them. Runtime state, never authored by a theme.
   '--_sheet-scrim-opacity',
   '--_sheet-scrim-duration',
+  '--_sheet-scrim-easing',
 ]);
 
 /**
