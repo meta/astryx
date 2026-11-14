@@ -115,11 +115,42 @@ test.describe('color-mode blocks', () => {
     }
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
-    const pressed = await ghost
-      .first()
-      .evaluate(element => getComputedStyle(element).backgroundColor);
+    // Button eases its background: wait for the pressed value.
+    await expect(ghost.first()).toHaveCSS('background-color', PRESSED);
     await page.mouse.up();
-    expect(pressed).toBe(PRESSED);
+  });
+
+  test('weigh the same on a surface as at the root, so explicit props win alike', async ({
+    page,
+  }) => {
+    await openStory(page);
+    const read = async (id: string) =>
+      page.locator(`[data-case="${id}"]`).evaluate(root => {
+        const style = (probe: string) => {
+          const element = root.querySelector(`[data-probe="${probe}"] > *`);
+          if (!element) {
+            throw new Error(`no ${probe}`);
+          }
+          const c = getComputedStyle(element);
+          return {size: c.fontSize, color: c.color, weight: c.fontWeight};
+        };
+        return {
+          text: style('explicit-text'),
+          heading: style('explicit-heading'),
+          plain: style('plain-text'),
+        };
+      });
+    const root = await read('explicit-root');
+    const surface = await read('explicit-surface');
+    expect(surface.text).toEqual(root.text);
+    // The heading's color is the surface's own text token; its weight and
+    // size are the explicit and level values in both.
+    expect(surface.heading.weight).toBe(root.heading.weight);
+    expect(surface.heading.size).toBe(root.heading.size);
+    expect(root.heading.weight).toBe('700');
+    // Text with no explicit props takes the block in both.
+    expect(root.plain.size).toBe('30px');
+    expect(surface.plain.size).toBe('30px');
   });
 
   test('follow the system preference for a mode that is neither', async ({
@@ -134,16 +165,21 @@ test.describe('color-mode blocks', () => {
     }
   });
 
-  test('follow the nearest of alternating surfaces', async ({page}) => {
+  test('follow a surface as the onDark and onLight overrides do', async ({
+    page,
+  }) => {
     await openStory(page);
-    for (const [id, dark] of [
-      ['alternating-dark', true],
-      ['alternating-light', false],
-      ['alternating-dark-again', true],
-    ] as const) {
+    // A surface inside the root decides there.
+    const first = await shown(page, 'alternating-dark');
+    expect(first.ghost).toBe(MAGENTA);
+    expect(first.plain).not.toBe(GREEN);
+    // A light surface inside it takes the light block. It also sits inside
+    // the dark surface, so the dark block applies too, as onDark does; where
+    // both set a property, the light block, written later, wins.
+    for (const id of ['alternating-light', 'alternating-dark-again']) {
       const inner = await shown(page, id);
-      expect(inner.ghost === MAGENTA, id).toBe(dark);
-      expect(inner.plain === GREEN, id).toBe(!dark);
+      expect(inner.plain, id).toBe(GREEN);
+      expect(inner.ghost, id).toBe(MAGENTA);
     }
   });
 

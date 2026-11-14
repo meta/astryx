@@ -5,8 +5,8 @@
  * @input A theme file whose component overrides hold `@light` and `@dark`
  *   blocks, built by the CLI against the compiled `@astryxdesign/core`
  * @output Assertions that the built stylesheet carries each block as rules
- *   for its mode only (the theme root's mode, the system preference, the
- *   nearest media surface), with pseudo-classes and pseudo-elements after the
+ *   for its mode only (the theme root's mode, the system preference, a media
+ *   surface), with pseudo-classes and pseudo-elements after the
  *   mode conditions, and nothing for a theme without blocks
  * @position Build evidence for color-mode blocks
  *   (`architecture:theme-compilation` INV18)
@@ -74,7 +74,7 @@ describe('theme build with color-mode blocks', () => {
       /@media \(prefers-color-scheme: dark\) \{\s*:is\(\.astryx-button\[data-variant="ghost"\]\):where\(:scope:not\(\[data-theme="light"\], \[data-theme="dark"\]\) \*\)/,
     );
     expect(css).toMatch(
-      /@scope \(\[data-astryx-media="dark"\]\) to \(\[data-astryx-media="light"\]\) \{\s*:is\(\.astryx-button\[data-variant="ghost"\]\) \{\s*background-color: #ff00ff;/,
+      /:is\(\.astryx-button\[data-variant="ghost"\]\):where\(:scope \[data-astryx-media="dark"\] \*\) \{\s*background-color: #ff00ff;/,
     );
     expect(css).toContain(
       `${ghost}:where(:scope[data-theme="dark"] *)${OUTSIDE_SURFACES}:hover`,
@@ -91,7 +91,7 @@ describe('theme build with color-mode blocks', () => {
       button: {'variant:ghost': {backgroundColor: 'transparent'}},
     });
     expect(css).not.toMatch(
-      /prefers-color-scheme|data-theme=|data-astryx-media="(dark|light)"\]\) to/,
+      /prefers-color-scheme|data-theme=|:scope \[data-astryx-media/,
     );
   });
 });

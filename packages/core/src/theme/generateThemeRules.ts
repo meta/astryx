@@ -1381,12 +1381,24 @@ function generateComponentRules(
         const props: [string, string][] = [];
         const nested: [string, StyleBlock][] = [];
         for (const [prop, value] of Object.entries(block)) {
-          if (typeof value === 'object') {
-            nested.push([prop, value]);
-          } else if (
-            acceptDeclaration(toKebabCase(prop), `${value}`, location, sink)
+          const isObject = value !== null && typeof value === 'object';
+          // A pseudo-class override or a color-mode block nests. Anything
+          // else is a declaration as written, so the boundary check reports
+          // one that cannot be a declaration, such as a misspelled block key.
+          if (
+            isObject &&
+            (prop.startsWith(':') ||
+              (withModes && (prop === '@light' || prop === '@dark')))
           ) {
-            props.push([prop, `${value}`]);
+            nested.push([prop, value]);
+            continue;
+          }
+          const text =
+            typeof value === 'object' && value !== null
+              ? JSON.stringify(value)
+              : `${value}`;
+          if (acceptDeclaration(toKebabCase(prop), text, location, sink)) {
+            props.push([prop, text]);
           }
         }
         const finalProps = expandComponentDeclarations(
@@ -1422,15 +1434,21 @@ function generateComponentRules(
         }
         // Color-mode blocks follow the rules they refine at the same weight,
         // so in their mode they win over the style key's own values, and in
-        // the other mode they write nothing.
-        for (const [mode, modeStyles] of nested) {
-          if (mode !== '@light' && mode !== '@dark') {
+        // the other mode they write nothing. Dark comes before light, as the
+        // onDark and onLight surface overrides do.
+        for (const name of ['dark', 'light'] as const) {
+          const modeStyles = nested.find(([key]) => key === `@${name}`)?.[1];
+          if (!modeStyles) {
             continue;
           }
-          const name = mode.slice(1) as MediaSurface;
-          const modeLocation = `${location}[${JSON.stringify(mode)}]`;
           const modeEmit = (at: string, modeWrap: (rule: string) => string) =>
-            emit(modeStyles, at, modeLocation, modeWrap, false);
+            emit(
+              modeStyles,
+              at,
+              `${location}[${JSON.stringify(`@${name}`)}]`,
+              modeWrap,
+              false,
+            );
           if (surface) {
             // A media surface fixes the mode: only its own block applies.
             if (surface === name) {
@@ -1438,24 +1456,24 @@ function generateComponentRules(
             }
             continue;
           }
-          const other = name === 'dark' ? 'light' : 'dark';
-          // The theme root decides where no surface lies between it and the
-          // element; the nearest surface decides inside one.
-          const inRoot = (root: string) =>
-            `:is(${selector}):where(${root} *):where(:not(:scope [data-${dataAttrNamespace}-media] *))`;
-          modeEmit(inRoot(`:scope[${THEME_MODE_ATTR}="${name}"]`), wrap);
+          // The theme root decides outside media surfaces. Inside one, the
+          // surface decides as the onDark and onLight overrides do: by an
+          // ancestor condition, at the root's weight.
+          const inside = (ancestor: string) =>
+            `:is(${selector}):where(${ancestor} *)`;
+          const outsideSurfaces = `:where(:not(:scope [data-${dataAttrNamespace}-media] *))`;
           modeEmit(
-            inRoot(
+            `${inside(`:scope[${THEME_MODE_ATTR}="${name}"]`)}${outsideSurfaces}`,
+            wrap,
+          );
+          modeEmit(
+            `${inside(
               `:scope:not([${THEME_MODE_ATTR}="light"], [${THEME_MODE_ATTR}="dark"])`,
-            ),
+            )}${outsideSurfaces}`,
             rule =>
               wrap(`  @media (prefers-color-scheme: ${name}) {\n${rule}\n  }`),
           );
-          modeEmit(`:is(${selector})`, rule =>
-            wrap(
-              `  @scope (${mediaSelector(name)}) to (${mediaSelector(other)}) {\n${rule}\n  }`,
-            ),
-          );
+          modeEmit(inside(`:scope ${mediaSelector(name)}`), wrap);
         }
       };
       emit(

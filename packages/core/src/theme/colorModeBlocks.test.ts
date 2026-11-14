@@ -35,10 +35,12 @@ describe('color-mode blocks', () => {
     expect(out).toContain(
       `@media (prefers-color-scheme: dark) {\n  :is(.astryx-button):where(:scope:not([data-theme="light"], [data-theme="dark"]) *)${outsideSurfaces} {`,
     );
-    // A surface decides up to the nearest surface of the other mode.
+    // Inside a media surface, the surface decides as the onDark and onLight
+    // overrides do, at the same weight as the root's rule.
     expect(out).toContain(
-      '@scope ([data-astryx-media="dark"]) to ([data-astryx-media="light"]) {\n  :is(.astryx-button) {',
+      ':is(.astryx-button):where(:scope [data-astryx-media="dark"] *) {',
     );
+    expect(out).not.toContain('@scope ([data-astryx-media');
     // The mode rules are component rules, after the block's own rule.
     expect(out).not.toMatch(/^\s*:where\(/m);
     expect(out.indexOf('background-color: blue')).toBeGreaterThan(
@@ -80,6 +82,50 @@ describe('color-mode blocks', () => {
     );
     expect(out).not.toMatch(/:is\([^)]*::placeholder/);
     expect(out).toMatch(/--_button-radius: 2px/);
+  });
+
+  it('writes the dark block before the light one, as the surface overrides go', () => {
+    const out = css({
+      button: {
+        base: {'@light': {color: 'black'}, '@dark': {color: 'white'}},
+      },
+    });
+    const surface = (mode: string) =>
+      out.indexOf(
+        `:is(.astryx-button):where(:scope [data-astryx-media="${mode}"] *)`,
+      );
+    expect(surface('dark')).toBeGreaterThan(-1);
+    expect(surface('light')).toBeGreaterThan(surface('dark'));
+  });
+
+  it('compiles the rest of the theme past a null value, as written', () => {
+    const out = css({
+      button: {
+        base: {color: null, backgroundColor: 'red'} as unknown as Record<
+          string,
+          string
+        >,
+      },
+    });
+    expect(out).toContain('background-color: red');
+  });
+
+  it('reports a nested key that is neither a pseudo-class nor a mode block', () => {
+    const warnings: string[] = [];
+    const out = generateThemeCSS(
+      defineTheme({
+        name: 'modes',
+        components: {
+          button: {
+            base: {backgroundColor: 'red', '@Dark': {color: 'white'}},
+          },
+        },
+      }),
+      warnings,
+    ).component;
+    expect(out).toContain('background-color: red');
+    expect(out).not.toContain('color: white');
+    expect(warnings.join('\n')).toMatch(/@Dark|@-dark/);
   });
 
   it('writes a block of a surface its own mode only', () => {
