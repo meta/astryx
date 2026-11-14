@@ -15,6 +15,7 @@ import {render, screen} from '@testing-library/react';
 import * as stylex from '@stylexjs/stylex';
 import {Table} from './Table';
 import {TableHeaderCell} from './TableHeaderCell';
+import {useTableColumnResize} from './plugins/columnResize/useTableColumnResize';
 import type {TableColumn} from './types';
 
 // =============================================================================
@@ -198,6 +199,27 @@ describe('TableHeaderCell', () => {
     );
     expect(container.querySelector('tbody strong')).toHaveTextContent('Alice');
     expect(headerCellDeclarations(container)).toContain('position: sticky');
+  });
+
+  it('keeps the header sticky when column resize is enabled', () => {
+    function ResizableStickyTable() {
+      const resize = useTableColumnResize<User>({
+        columns: columns as TableColumn<Record<string, unknown>>[],
+      });
+      return (
+        <Table
+          hasStickyHeader
+          data={users}
+          columns={columns}
+          plugins={{resize}}
+        />
+      );
+    }
+
+    const {container} = render(<ResizableStickyTable />);
+    const header = container.querySelector('thead th') as HTMLElement;
+    expect(header.style.position).toBe('sticky');
+    expect(header.style.insetBlockStart).toBe('0');
   });
 
   it('draws the bottom divider even when the table has dividers off', () => {

@@ -34,7 +34,7 @@ import {
 } from './tableContextMenu';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
-import {tableStickyCellStyles} from './plugins/stickyColumns/useTableStickyColumns';
+import {tableStickyCellStyles} from './tableStickyCell.stylex';
 
 /** Props for TableHeaderCell — `<th>` wrapper with context-aware styling */
 export interface TableHeaderCellProps extends BaseProps<HTMLTableCellElement> {
@@ -112,6 +112,7 @@ const headerMenuCellStyles = stylex.create({
 
 const stickyHeaderStyles = stylex.create({
   cell: {
+    position: 'sticky',
     insetBlockStart: 0,
     zIndex: 2,
     // Sticky-column surfaces allow their shadow to bleed; header labels still
@@ -195,6 +196,9 @@ export function TableHeaderCell({
     contextMenuActions,
     ctx && hasContextMenu ? headerTriggerStyles.unpositioned : undefined,
   );
+  const mergedStyle = ctx?.hasStickyHeader
+    ? {position: 'sticky' as const, insetBlockStart: 0, ...incomingStyle}
+    : incomingStyle;
 
   return (
     <th
@@ -204,7 +208,7 @@ export function TableHeaderCell({
         themeProps('table-header-cell', {density: ctx?.density}),
         stylex.props(...mergeXStyle(cellStyles, xstyle)),
         incomingClassName,
-        incomingStyle,
+        mergedStyle,
       )}>
       {content}
     </th>

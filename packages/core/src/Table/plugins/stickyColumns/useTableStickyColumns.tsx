@@ -25,7 +25,7 @@ import {
 import * as stylex from '@stylexjs/stylex';
 import {registerCountIndependentPlugin} from '../../tableRowContextUsage';
 
-import {colorVars, durationVars, easeVars} from '../../../theme/tokens.stylex';
+import {colorVars} from '../../../theme/tokens.stylex';
 import type {
   TableColumn,
   TablePlugin,
@@ -45,6 +45,13 @@ import {
 import {collapsedBottom} from '../../rowDivider';
 import {GLIDING_ATTRIBUTE, PINNED_ATTRIBUTE} from '../../glidingDivider';
 import {useTheme, useThemeName} from '../../../theme/useTheme';
+import {tableStickyCellGlidingStyles} from '../../../privateAttributes/cellGliding.stylex';
+import {tableStickyPinnedCarryStyles} from '../../../privateAttributes/tablePinned.stylex';
+import {
+  tableStickyCellStyles,
+  tableStickyHeaderCellStyles,
+  tableStickyBodyCellStyles,
+} from '../../tableStickyCell.stylex';
 
 // =============================================================================
 // Config
@@ -225,109 +232,17 @@ function resolveStickySide(
 const SHADOW_VAR_START = '--table-sticky-shadow-start';
 const SHADOW_VAR_END = '--table-sticky-shadow-end';
 
-// A pinned cell draws its own row divider. With collapsed borders the table
-// paints every border at its cell's static place: a sticky cell moves, its
-// border does not, so without this the line under a pinned column would be
-// whichever scrolled cell's border passes beneath it, and missing where that
-// cell has none. The cell's ::before (already the row overlay's layer) extends
-// over the cell's border area, covers whatever the table painted there with
-// the pinned base, and draws the divider in the cell's own border color and
-// style (inherited, so a theme, a token switch or an app's rule on the cell,
-// `:hover` included, carries over in CSS) at the cell's divider width
-// (TableCell.tsx). Where another border wins the collapse instead (an app's
-// border on the row, or the next row's top border), it is read after each
-// commit and on resize and carried as the cell's `carry` state
-// (syncPinnedDividers).
 /** Spread into a pinned cell's props: the attribute the divider sync finds. */
 const PINNED_PROPS: Record<string, string> = {[PINNED_ATTRIBUTE]: ''};
 const CARRY = 'carry';
-const CARRYING = '[data-astryx-table-pinned="carry"]';
 // The cell's own border wins at another width than its divider's: only the
 // width is carried, and style and colour keep inheriting from the cell.
 const CARRY_WIDTH = 'width';
-const CELL_GLIDING = '[data-astryx-cell-gliding]';
-// Same names as glidingDivider.ts: StyleX cannot read an imported constant.
+// Same names as the shared sticky-cell styles: StyleX cannot read an imported
+// constant, and the divider synchronizer writes these custom properties.
 const PINNED_DIVIDER_WIDTH = '--_table-row-divider-app-width';
 const PINNED_DIVIDER_STYLE = '--_table-row-divider-app-style';
 const PINNED_DIVIDER_COLOR = '--_table-row-divider-app-color';
-const PINNED_BASE = `var(--table-sticky-background, ${colorVars['--color-background-card']})`;
-const DIVIDER_WIDTH = `var(${PINNED_DIVIDER_WIDTH}, var(--_table-row-divider-width, 0px))`;
-// The row's divider, carried on the row while it glides (glidingDivider.ts):
-// it outranks the cell's own carry, which it would otherwise inherit under.
-const GLIDE_WIDTH = `var(--_table-row-glide-width, ${DIVIDER_WIDTH})`;
-
-const stickyStyles = stylex.create({
-  cell: {
-    position: 'sticky',
-    // Opaque base (overridable; defaults to the card token, the common
-    // container) so scrolled content doesn't show through the pinned column.
-    backgroundColor: `var(--table-sticky-background, ${colorVars['--color-background-card']})`,
-    // Replay the row's overlay on a ::before layer (above the base, below text)
-    // so the pinned column mirrors the row's striping/hover exactly via
-    // --table-row-overlay. Transitions background-COLOR (not background-image)
-    // so hover stays smooth at rest, not just when GPU-promoted while scrolled.
-    '::before': {
-      content: '""',
-      position: 'absolute',
-      inset: 0,
-      zIndex: -1,
-      pointerEvents: 'none',
-      backgroundColor: 'var(--table-row-overlay, transparent)',
-      // The divider: the layer reaches the bottom of the cell's border area,
-      // paints the pinned base there (hiding the table's static border and any
-      // scrolled cell's border), then the divider over it.
-      marginBottom: {
-        default: `calc(-1 * ${DIVIDER_WIDTH})`,
-        [CELL_GLIDING]: `calc(-1 * ${GLIDE_WIDTH})`,
-      },
-      borderBottomWidth: {default: DIVIDER_WIDTH, [CELL_GLIDING]: GLIDE_WIDTH},
-      // While its row glides the cell's own border is transparent: the
-      // divider is the row's, carried for the glide (glidingDivider.ts).
-      borderBottomStyle: {
-        default: 'inherit',
-        [CARRYING]: `var(${PINNED_DIVIDER_STYLE}, solid)`,
-        [CELL_GLIDING]: 'var(--_table-row-glide-style, solid)',
-      },
-      borderBottomColor: {
-        default: 'inherit',
-        [CARRYING]: `var(${PINNED_DIVIDER_COLOR}, ${colorVars['--color-border']})`,
-        [CELL_GLIDING]: `var(--_table-row-glide-color, ${colorVars['--color-border']})`,
-      },
-      backgroundImage: `linear-gradient(${PINNED_BASE}, ${PINNED_BASE})`,
-      backgroundSize: {
-        default: `100% ${DIVIDER_WIDTH}`,
-        [CELL_GLIDING]: `100% ${GLIDE_WIDTH}`,
-      },
-      backgroundPosition: 'bottom',
-      backgroundRepeat: 'no-repeat',
-      backgroundOrigin: 'border-box',
-      backgroundClip: 'border-box',
-      transitionProperty: 'background-color',
-      transitionDuration: durationVars['--duration-fast'],
-      transitionTimingFunction: easeVars['--ease-standard'],
-    },
-    // padding-box keeps the base off the cell's collapsed divider border.
-    backgroundClip: 'padding-box',
-    // Sticky cells need visible overflow so the shadow ::after can bleed out.
-    overflow: 'visible',
-  },
-  headerCell: {
-    // Header cells stack above body cells; both stack above non-sticky cells.
-    zIndex: 3,
-  },
-  bodyCell: {
-    zIndex: 1,
-  },
-});
-
-/**
- * The opaque pinned-cell layer is also the header's moving surface when a
- * table combines sticky columns with a sticky header. Keeping one layer for
- * both cases prevents two divider pseudo-elements from competing at their
- * intersection.
- */
-export const tableStickyCellStyles = stickyStyles.cell;
-
 // Soft drop shadow over the scrolling region (a standard sticky-column shadow treatment).
 // border-collapse tables don't paint box-shadow on cells in Chromium, so it's a
 // ::after gradient strip just past the pinned edge (visible thanks to the cell's
@@ -697,7 +612,7 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
         // resize plugin also writes inline style on header cells).
         //
         // `position` belongs inline for the same reason, and used not to be:
-        // it was left to `stickyStyles.cell`, which put it in the same xstyle
+        // it was left to the shared sticky-cell xstyle, which put it in the same
         // array the resize plugin appends `position: relative` to for its
         // handle's containing block. Whichever plugin was appended later won,
         // so a pinned column silently stopped pinning depending on the order
@@ -717,8 +632,10 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
           },
           xstyle: [
             ...props.xstyle,
-            stickyStyles.cell,
-            stickyStyles.headerCell,
+            tableStickyCellStyles,
+            tableStickyCellGlidingStyles.cell,
+            tableStickyPinnedCarryStyles.cell,
+            tableStickyHeaderCellStyles,
             side.edge === 'start' ? shadowStyles.start : shadowStyles.end,
           ],
         };
@@ -746,8 +663,10 @@ export function useTableStickyColumns<T extends Record<string, unknown>>(
           },
           xstyle: [
             ...props.xstyle,
-            stickyStyles.cell,
-            stickyStyles.bodyCell,
+            tableStickyCellStyles,
+            tableStickyCellGlidingStyles.cell,
+            tableStickyPinnedCarryStyles.cell,
+            tableStickyBodyCellStyles,
             side.edge === 'start' ? shadowStyles.start : shadowStyles.end,
           ],
         };
