@@ -145,9 +145,9 @@ needs the evidence that `spec:AST-042` FR3 asks for.
 
 ## Output: keep answers short
 
-An agent reads every byte a command prints, on every call, and the default
-text is what it reads. Before you add to an answer, think about what an agent
-does with each line. Keep the text short without losing anything it needs
+An agent that does not pass `--json` reads every byte a command prints, on
+every call. Before you add to an answer, think about what an agent does with
+each line. Keep the text short without losing anything it needs
 (`architecture:cli-surface` INV4 and INV5, `spec:AST-017` FR13):
 
 - **Shorten prose, never drop a field.** A long prose field may print its first
@@ -162,10 +162,10 @@ does with each line. Keep the text short without losing anything it needs
 - **Say a shared label once.** A label that applies to a run of items (Do and
   Don't, a package) goes on one line above the run, with a blank line between
   runs so each run stays its own Markdown list.
-- **Prefer a list to a wide table** when most cells would be empty. Keep a
-  yes/no value that readers count in its own column: a marker such as
-  `(optional)` inside prose can collide with the same word in a description.
-- **Keep table rules short** (`|---|---|`); a rule carries no information.
+- **Prefer records or a list to a table.** `spec:AST-042` FR3 admits no table
+  drawn from characters. Keep a yes/no value that readers count as its own
+  field, not a marker inside prose: `(optional)` inside prose can collide with
+  the same word in a description.
 - **Test the change with agents.** A shorter answer is a behavior change, and
   so is a longer one. Give agents with no context the same tasks with the old
   and the new output, and keep the change when every task comes out the same
