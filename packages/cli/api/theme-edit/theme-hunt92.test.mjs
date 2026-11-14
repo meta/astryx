@@ -126,15 +126,16 @@ const CASES =
       'background',
       'url(a.png), red, blue',
       {on: 'button'},
-      [/ set b background 'url\(a\.png\), red' --on button$/],
-      / background none/,
+      // A layer left out is part of the value: how, never a subset.
+      [/ how background$/],
+      / background none|url\(a\.png\), red'/,
     ],
     [
       'background',
       'red,,blue',
       {on: 'button'},
-      [/ set b background (red|blue) --on button$/],
-      / background none/,
+      [/ how background$/],
+      / background none|background (red|blue) /,
     ],
     // A reset typed with a typo is that reset, corrected.
     // A typo within the one limit: two letters swapped are one edit; a

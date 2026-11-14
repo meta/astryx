@@ -65,6 +65,7 @@ import {
   keywordWordsFor,
   framesOf,
 } from './words.mjs';
+import {namedOutright, tieReading} from './weights.mjs';
 import {compareText} from '../../../foundation/text/compare-text.mjs';
 
 /**
@@ -135,8 +136,10 @@ const START_SCORE = 10;
 const START_TERMS = 2;
 
 /**
- * Rank page templates against an idea, best first. Ties go to the template
- * with the shorter id (the family's broader page), then by name.
+ * Rank page templates against an idea, best first. An exact tie goes to a
+ * family's base template ahead of a variant; templates still tied are ordered
+ * by how strongly each one's own descriptor answers the idea, then by how
+ * typical of its family it is, then by name (`settleTies`).
  *
  * @param {string} query
  * @param {PageTemplate[]} pages
@@ -289,13 +292,58 @@ export function rankPages(query, pages) {
         matched,
       };
     })
-    .sort(
-      (a, b) =>
-        b.score - a.score ||
-        a.name.split('-').length - b.name.split('-').length ||
-        compareText(a.name, b.name),
-    );
-  return baseFirst(ranked);
+    .sort((a, b) => b.score - a.score || Number(b.base) - Number(a.base));
+  return baseFirst(settleTies(ranked, query, pages));
+}
+
+/**
+ * Order each run of templates the ranker scores exactly the same (and that
+ * are all bases or all variants), whatever their families: first the one the
+ * idea names by its whole name (`namedOutright`), then by how strongly each
+ * one's own descriptor answers the idea (`tieReading`), then by how typical of
+ * its family it is, then by name. The catalog's order never decides, and
+ * neither does the host's locale.
+ * @param {RankedPage[]} ranked sorted by score, then base first
+ * @param {string} query
+ * @param {PageTemplate[]} pages
+ * @returns {RankedPage[]}
+ */
+function settleTies(ranked, query, pages) {
+  const out = [];
+  for (let i = 0; i < ranked.length;) {
+    let j = i + 1;
+    while (
+      j < ranked.length &&
+      ranked[j].score === ranked[i].score &&
+      ranked[j].base === ranked[i].base
+    )
+      j++;
+    const run = ranked.slice(i, j);
+    if (run.length > 1) {
+      const reading = tieReading(
+        run.map(r => r.name),
+        query,
+        pages,
+      );
+      const named = namedOutright(
+        run.map(r => r.name),
+        query,
+        pages,
+      );
+      const at = new Map(run.map((r, k) => [r, reading[k]]));
+      const outright = new Map(run.map((r, k) => [r, named[k]]));
+      run.sort(
+        (a, b) =>
+          Number(outright.get(b)) - Number(outright.get(a)) ||
+          Number(at.get(b)) - Number(at.get(a)) ||
+          b.typical - a.typical ||
+          compareText(a.name, b.name),
+      );
+    } else run.sort((a, b) => compareText(a.name, b.name));
+    out.push(...run);
+    i = j;
+  }
+  return out;
 }
 
 /**

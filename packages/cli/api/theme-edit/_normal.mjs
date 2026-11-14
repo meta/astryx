@@ -10,7 +10,8 @@
  */
 
 import {DIALS, wordTable} from './_tables.mjs';
-import {namedColorHex} from './_color.mjs';
+import {colorProblem, hex, parseColor} from './_color.mjs';
+import {sameKindValues} from './_css.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 
 /**
@@ -652,137 +653,218 @@ export const DENSITY_WORDS = wordTable(
 );
 
 /**
- * The words of a typed value, as a repair may carry them: lower case, with
- * quotes, escapes (`\u0020`), a `#` or `0x` before a hex, and a unit after
- * a number taken off; and each run of neighbor words joined (`dark red` is
- * also `darkred`).
+ * A typed value as the repair gate reads it, in one reading: escapes and
+ * full-width characters as the characters they are, a letter O inside a
+ * number as a zero, a comma between digits as a decimal point (or before
+ * exactly three digits, after a whole number other than 0, a thousands
+ * mark), and without what is not the value: quotes and braces around it, a
+ * label before it (`accent: red`), a flag inside it (`--mode dark`) or a
+ * flag's label after it (`mode: dark`), copy debris (`;`, `!important`,
+ * comments), and the axes of a Google Fonts family spec (`Inter:wght@400`
+ * is the family Inter).
  * @param {string} typed
- * @returns {Set<string>}
+ * @returns {string}
  */
-function typedWords(typed) {
-  const text = String(typed)
+export function typedReading(typed) {
+  let t = String(typed ?? '')
     .replace(/\\(?:u\{?([0-9a-f]{4,6})\}?|x([0-9a-f]{2}))/gi, (_, u, x) =>
       String.fromCodePoint(parseInt(u ?? x, 16)),
     )
+    .replace(/\\(?=[#"' ])/g, '')
+    .normalize('NFKC')
+    .trim();
+  t = t
+    .replace(
+      /\s+--(mode|state|on|when)(?:\s*=\s*|\s+)("[^"]*"|'[^']*'|\S+)/gi,
+      '',
+    )
+    .replace(
+      /\s+(mode|theme|state|part|on|variant|size|when)\s*[:=]\s*[a-z][a-z0-9:-]*\s*;?\s*$/i,
+      '',
+    );
+  t = withoutCopyDebris(t)
+    // A flag's label before the value (`state=hover 4px`).
+    .replace(
+      /^(mode|theme|state|part|on|variant|size|when)\s*[:=]\s*[a-z][a-z0-9:-]*\s+(?=\S)/i,
+      '',
+    );
+  const spec = /^([a-z][a-z +]*):(?:ital,)?(?:wght|ital)@/i.exec(t);
+  if (spec) t = spec[1].replace(/\+/g, ' ');
+  t = colorPair(t)
+    ? t
+    : t.replace(
+        /^\s*\{?\s*["']?(?:--)?[a-z][a-z0-9 _-]*["']?\s*[:=](?!\/\/)\s*/i,
+        '',
+      );
+  t = t
+    .replace(/["']?\s*\}\s*$/, '')
+    .replace(
+      /^(["'`\u201C\u2018\u300C\u300E\u00AB])(.*?)(["'`\u201D\u2019\u300D\u300F\u00BB])$/,
+      '$2',
+    )
+    .replace(/,\s*$/, '')
+    .trim();
+  t = commaNumbers(
+    t
+      .replace(/(\d)([oO]+)(?![a-z])/g, (_, d, os) => d + '0'.repeat(os.length))
+      // A dot after a number's digits (`18.`, `16.px`) is no part of it, and
+      // a unit split off by a space (`20 px`) is its number's.
+      .replace(/(\d)\.(?=[a-z%]|\s|$)/gi, '$1')
+      .replace(/(\d)\s+(px|rem|em|pt|%)(?![a-z])/gi, '$1$2'),
+  )
+    .replace(/\b0x([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})\b/gi, '#$1')
     .toLowerCase();
-  const words = text.match(/[a-z0-9.%]+/g) ?? [];
+  // An app's own variable with a fallback (`var(--brand, #e11d48)`) is the
+  // fallback; Tailwind's arbitrary value (`rounded-[12px]`) is the value.
+  t = t
+    .replace(/^var\(\s*--[a-z0-9-]+\s*,\s*(.+)\)$/, '$1')
+    .replace(/^[a-z]+(?:-[a-z]+)?-\[(.+)\]$/, '$1');
+  // A light and a dark color typed as a pair (`light: red; dark: blue`,
+  // `red / blue`) is that light-dark() pair.
+  const pair = colorPair(t);
+  return pair ? `light-dark(${pair.light}, ${pair.dark})` : t;
+}
+
+/**
+ * A text with each comma between digits, outside parentheses, read as a
+ * number mark: before exactly three digits after a whole number other than
+ * 0 (`1,000`), a thousands mark; otherwise (`1,5`, `0,500`) a decimal
+ * point. Inside a function (`rgb(255,0,0)`) a comma separates arguments.
+ * @param {string} text
+ * @returns {string}
+ */
+export function commaNumbers(text) {
+  // Only outside parentheses: inside a function (`rgb(255,0,0)`,
+  // `cubic-bezier(0,0,1,1)`) a comma separates its arguments.
+  let depth = 0;
+  let out = '';
+  let plain = '';
+  const flush = () => {
+    out += plain.replace(/(\d+),(\d+)(?![\d.,])/g, (_, a, b) =>
+      b.length === 3 && !/^0+$/.test(a) ? `${a}${b}` : `${a}.${b}`,
+    );
+    plain = '';
+  };
+  for (const c of String(text)) {
+    if (c === '(') {
+      if (depth === 0) flush();
+      depth += 1;
+    }
+    if (depth > 0) out += c;
+    else plain += c;
+    if (c === ')' && depth > 0) depth -= 1;
+  }
+  flush();
+  return out;
+}
+
+/** The CSS functions a value is written in, whose names carry no value. */
+const FORM =
+  /\b(?:light-dark|var|calc|(?:repeating-)?(?:linear|radial|conic)-gradient)\(/g;
+
+/**
+ * The tokens of a value: its words and numbers in order, the names of the
+ * functions it is written in out.
+ * @param {string} text already read (typedReading) or as offered
+ * @returns {string[]}
+ */
+function tokensOf(text) {
+  return (
+    String(text)
+      .toLowerCase()
+      .replace(FORM, '(')
+      .match(/[a-z0-9.%]+/g) ?? []
+  );
+}
+
+/** @param {string} w */
+const numberOf = w => {
+  const m = /^(\d*\.?\d+(?:e[+-]?\d+)?)(px|rem|em|pt|%)?$/.exec(w);
+  return m ? {n: Number(m[1]), unit: m[2] ?? ''} : null;
+};
+
+/**
+ * Whether two tokens are one: the same word, or the same number with a
+ * unit added or taken off (`1.5` and `1.5px`; the vet checks the setting
+ * takes it).
+ * @param {string} a @param {string} b
+ */
+const sameToken = (a, b) => {
+  if (a === b) return true;
+  const x = numberOf(a);
+  const y = numberOf(b);
+  return Boolean(x && y && x.n === y.n && (!x.unit || !y.unit));
+};
+
+/**
+ * The numbers one typed token may be read as, each exact: as it is, rem or
+ * em in px (x16), pt in px (x4/3), a percent as a share of one or of the
+ * 16px base size, a share of one as a percent.
+ * @param {string} w
+ * @returns {Set<string>}
+ */
+function numberReadings(w) {
+  const r2 = (/** @type {number} */ x) => String(Math.round(x * 100) / 100);
+  const m = numberOf(w);
   /** @type {Set<string>} */
   const out = new Set();
-  const add = (/** @type {string} */ w) => {
-    out.add(w);
-    out.add(w.replace(/^0x/, ''));
-    const n = /^([0-9.]+)(px|rem|em|%)?$/.exec(w);
-    if (n) out.add(n[1]);
-  };
-  words.forEach(add);
-  for (let i = 0; i < words.length; i += 1)
-    for (let j = i + 2; j <= Math.min(words.length, i + 4); j += 1)
-      out.add(words.slice(i, j).join(''));
+  if (!m) return out;
+  out.add(r2(m.n));
+  if (m.unit === 'rem' || m.unit === 'em') out.add(r2(m.n * 16));
+  if (m.unit === 'pt') out.add(r2((m.n * 4) / 3));
+  if (m.unit === '%') {
+    out.add(r2(m.n / 100));
+    out.add(r2((m.n * 16) / 100));
+  }
+  if (!m.unit && m.n > 0 && m.n < 1) out.add(r2(m.n * 100));
   return out;
 }
 
 /**
- * Whether a suggested value carries what was typed: each of its words and
- * numbers is a word of the typed text (cleaned: case, quotes, escapes), or
- * neighbor words of it joined, apart from a unit added to a bare number
- * and the words of the CSS form it is written in (`light-dark()`, `var()`,
- * `calc()`). A word only inside a typed word does not count (`round` is not
- * in `rounded-lg`, `red` is not `darkred`).
+ * Whether the numbers of `offered` are the numbers of the whole typed
+ * value written another exact way: position by position (numberReadings),
+ * or one number that is a calc() of the typed lengths worked out. The rest
+ * of `offered` is units and form words only.
  * @param {string} offered
- * @param {string} typed
+ * @param {string} t the typed value, read
  */
-export function carriesTyped(offered, typed) {
-  const have = typedWords(typed);
-  // The words of the CSS form a value is written in.
-  const FORM = new Set([
-    'light',
-    'dark',
-    'var',
-    'calc',
-    'px',
-    'rem',
-    'em',
-    'linear',
-    'radial',
-    'conic',
-    'gradient',
-  ]);
-  return (
-    String(offered)
-      .toLowerCase()
-      .match(/[a-z0-9.%]+/g) ?? []
-  )
-    .map(w => w.replace(/^([0-9.]+)(px|rem|em)$/, '$1'))
-    .filter(w => !FORM.has(w))
-    .every(w => have.has(w));
-}
-
-/**
- * Whether a repair may offer `offered` for `typed`: only through the
- * allowlist of exact readings that keep the meaning. The value carries
- * what was typed (quotes, labels, debris and a unit's absence aside), or
- * is the documented reading of the word typed (a Tailwind radius class, a
- * property word, a weight word, a density word, a share of one as a
- * percent, rounding said with a negation as square). Anything else (a
- * stock example, a reset, a nearest spelling) is not offered.
- * @param {string} offered
- * @param {string} typed
- */
-export function allowedOffer(offered, typed) {
-  const o = String(offered)
-    .trim()
-    .replace(/^(["'])(.*)\1$/, '$2')
-    .toLowerCase();
-  const t = String(typed)
-    .trim()
-    .replace(/^(["'])(.*)\1$/, '$2')
-    .replace(/;+\s*$/, '')
-    .trim()
-    .toLowerCase();
-  if (carriesTyped(o, t)) return true;
-  const key = t.replace(/^[a-z-]+\s*:\s*/, '');
-  // A documented reading of the whole value or of one of its words.
-  const keys = [
-    key,
-    key.replace(/\s+/g, '-'),
-    key.replace(/[\s-]+/g, ''),
-    ...key.split(/\s+/),
-  ];
-  if (keys.some(k => READINGS.get(k)?.has(o))) return true;
-  if (numbersEqual(o, t)) return true;
-  // An rgb() color typed, as its opaque hex.
-  const rgb = /rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/.exec(t);
+function numbersEqual(offered, t) {
+  const NUM = /[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?/gi;
+  const rest = offered
+    .replace(NUM, '')
+    .replace(/px|rem|em|%|[\s(),/*+-]|calc|var/g, '');
+  const want = offered.match(NUM)?.map(w => Math.abs(Number(w))) ?? [];
+  if (!want.length || rest) return false;
+  const r2 = (/** @type {number} */ x) => String(Math.round(x * 100) / 100);
+  const typedNumbers = (
+    t.match(/\d*\.?\d+(?:e[+-]?\d+)?(?:px|rem|em|pt|%)?/gi) ?? []
+  ).map(numberReadings);
+  // The typed value is numbers only (any words in it are read elsewhere).
   if (
-    rgb &&
-    o ===
-      `#${rgb
-        .slice(1, 4)
-        .map(x => Math.min(255, Number(x)).toString(16).padStart(2, '0'))
-        .join('')}`
+    tokensOf(t).every(w => numberOf(w)) &&
+    typedNumbers.length === want.length &&
+    want.every((w, i) => typedNumbers[i].has(r2(w)))
   )
     return true;
-  // A CSS color name typed, as its hex.
-  if (
-    /^#[0-9a-f]{3,8}$/.test(o) &&
-    (t.match(/[a-z]+/g) ?? []).some(w => namedColorHex(w) === o)
-  )
-    return true;
-  // A radius at or below zero is square; at or past half, or 1000px, pill.
-  const len = /^([+-]?\d*\.?\d+)(px|%)?$/.exec(key);
-  if (len) {
-    const n = Number(len[1]);
-    if (o === 'square' && n <= 0) return true;
-    if (o === 'pill' && ((len[2] === '%' && n >= 50) || n >= 1000)) return true;
+  if (want.length !== 1) return false;
+  const inner = /^\s*calc\(([^()]*)\)\s*$/i.exec(t)?.[1];
+  if (!inner) return false;
+  const scale =
+    /^\s*(\d*\.?\d+)\s*(px|rem|em)?\s*([*/])\s*(\d*\.?\d+)\s*$/i.exec(inner);
+  if (scale) {
+    const a = Number(scale[1]) * (/r?em/i.test(scale[2] ?? '') ? 16 : 1);
+    return (
+      r2(scale[3] === '*' ? a * Number(scale[4]) : a / Number(scale[4])) ===
+      r2(want[0])
+    );
   }
-
-  // Rounding said with a negation (not round, unrounded, rounded-none).
-  if (
-    o === 'square' &&
-    /round/.test(key) &&
-    /(^|[\s-])(not|no|non|without|never|less)([\s-]|$)|^un|-none$/.test(key)
-  )
-    return true;
-  return false;
+  if (/[*/]/.test(inner)) return false;
+  let total = 0;
+  for (const m of inner.matchAll(/([+-]?)\s*(\d*\.?\d+)\s*(px|rem|em)?/gi)) {
+    const x = Number(m[2]) * (/r?em/i.test(m[3] ?? '') ? 16 : 1);
+    total += m[1] === '-' ? -x : x;
+  }
+  return r2(total) === r2(want[0]);
 }
 
 /**
@@ -858,9 +940,8 @@ const names = (things, key) =>
   );
 
 /**
- * Values a setting documents as its own fallback or other direction, which
- * a refusal may offer whatever was typed: no base, the modes, a step the
- * other way.
+ * Values a setting documents as its own fallback, which a refusal may
+ * offer whatever was typed: no base, the modes.
  * @type {Record<string, string[]>}
  */
 const DECLARED_VALUES = wordTable({
@@ -868,53 +949,246 @@ const DECLARED_VALUES = wordTable({
   mode: ['both', 'light-only', 'dark-only'],
 });
 
+/** The dials with a scale, which `more` and `less` step. */
+const SCALED_DIALS = Object.keys(DIALS).filter(d =>
+  String(DIALS[d].values ?? '')
+    .split('|')
+    .includes('more'),
+);
+
 /**
- * The one gate a suggested line's value goes through. Its value comes from
- * one of the declared sources: (1) the value typed, under the exact
- * transformations of allowedOffer; (2) a documented table registered with
- * documentReadings or documentNumericTable; (3) the theme's own saved
- * values (a keep or unlock line); (4) the setting's documented fallback or
- * other-direction step; (5) the correction of a typo of the value typed
- * (typoOf: underlin is underline).
- * @param {{offered: string, typed: string, thing: string, saved?: string}} line
+ * What a suggested value reads of the typed value: `true` when it is the
+ * whole value under one of the gate's declared sources, an array of the
+ * typed tokens it carries when it carries only part of them (one setting
+ * of a value that holds several, as `Inter 600` holds a family and a
+ * weight), or `false` when it reads nothing typed.
+ *
+ * The declared sources: (1) the value typed, under the exact readings of
+ * typedReading, sameToken and numbersEqual, the words joined into a CSS
+ * color name (`dark red` is darkred), or the color the typed color is
+ * (rgb() as its hex, a see-through color opaque); (2) a documented table
+ * registered with documentReadings, documentNumericTable or documentRange;
+ * (3) the theme's own saved value of the line's setting, for a setting
+ * other than the one typed (a keep or unlock line); (4) the setting's
+ * documented fallback, or a step (`more`, `less`) on a dial with a scale,
+ * offered for that dial or one of its tokens; (5) the correction of a
+ * typo (typoOf). Several values of one kind typed for a setting that takes
+ * one (`1.5 2`) may be read as the first.
+ * @param {{offered: string, typed: string, thing?: string, typedThing?: string, saved?: Map<string, string[]>, mode?: string}} line
+ * @returns {true | number[] | false}
  */
-export function allowedLine({offered, typed, thing, saved = ''}) {
+export function readsTyped({
+  offered,
+  typed,
+  thing = '',
+  typedThing = '',
+  saved,
+  mode = '',
+}) {
   const o = String(offered)
     .trim()
     .replace(/^(["'])(.*)\1$/, '$2')
     .toLowerCase();
-  if (allowedOffer(o, typed)) return true;
-  if (saved && allowedOffer(o, saved)) return true;
+  const t = typedReading(typed);
   const key = String(thing).toLowerCase();
-  if (Object.hasOwn(DECLARED_VALUES, key) && DECLARED_VALUES[key].includes(o))
+  const typedKey = String(typedThing || thing).toLowerCase();
+  const T = tokensOf(t);
+  const O = tokensOf(o);
+  // (1) The value typed.
+  if (
+    O.length &&
+    O.length === T.length &&
+    O.every((w, i) => sameToken(w, T[i]))
+  )
     return true;
-  const t = String(typed).trim().toLowerCase();
-  // A step (more, less) is worked out from the theme as it is: the value
-  // it gives is the theme's own, never a stock one.
-  if (/(^|\s)(more|less)$/.test(t)) return true;
-  // A number typed for a setting with a documented numeric table, read as
-  // the rung nearest it (900 is the heavy weight, 1.3 the editorial type
-  // scale, 101 the most vivid 100).
-  for (const {things, table, domain} of NUMERIC_TABLES)
-    if (names(things, key))
-      for (const m of t.matchAll(/\d*\.?\d+/g)) {
-        const n = Number(m[0]);
-        if (n < domain[0] || n > domain[1]) continue;
+  if (O.length === 1 && T.length > 1 && O[0] === T.join('')) return true;
+  if (numbersEqual(o, t)) return true;
+  const color = parseColor(t);
+  if (
+    /^#[0-9a-f]{3,8}$/.test(o) &&
+    (color ? hex(color) === o : colorProblem(t)?.opaque === o)
+  )
+    return true;
+  // One half of a light and a dark pair: for the line that sets that mode,
+  // or, as the light one, for a color dial, which makes both modes from
+  // one color.
+  const half = /^light-dark\(\s*([^,()]+?)\s*,\s*([^,()]+?)\s*\)$/.exec(t);
+  if (half) {
+    const [light, dark] = [half[1], half[2]];
+    const only = /^(light|dark)-only$/.exec(saved?.get('mode')?.[0] ?? '')?.[1];
+    const shown = mode || only || '';
+    if (shown === 'dark' ? o === dark : shown === 'light' ? o === light : false)
+      return true;
+    if (o === light && DIALS[key] && !key.startsWith('--')) return true;
+  }
+  // A base named by its package (@astryxdesign/theme-butter is butter).
+  if (key === 'base' && t.replace(/^(@astryxdesign\/)?theme-/, '') === o)
+    return true;
+  // (2) A documented reading of the whole value.
+  const whole = [t, t.replace(/\s+/g, '-'), t.replace(/[\s-]+/g, '')];
+  if (whole.some(k => READINGS.get(k)?.has(o))) return true;
+  // A scale factor written as the dial's help writes it (x0.75) is that
+  // number.
+  const n = T.length === 1 ? numberOf(T[0].replace(/^x(?=\.?\d)/, '')) : null;
+  if (n) {
+    for (const {things, table, domain} of NUMERIC_TABLES)
+      if (names(things, key) && n.n >= domain[0] && n.n <= domain[1]) {
         const [rung] = table.reduce((a, b) =>
-          Math.abs(b[1] - n) < Math.abs(a[1] - n) ? b : a,
+          Math.abs(b[1] - n.n) < Math.abs(a[1] - n.n) ? b : a,
         );
         if (rung === o) return true;
       }
-  // A number past a documented range, as the end it passed.
-  for (const {things, min, max} of RANGES)
-    if (names(things, key))
-      for (const m of t.matchAll(/-?\d*\.?\d+/g)) {
-        const n = Number(m[0]);
-        if ((n > max && o === String(max)) || (n < min && o === String(min)))
+    for (const {things, min, max} of RANGES)
+      if (names(things, key))
+        if (
+          (n.n > max && o === String(max)) ||
+          (n.n < min && o === String(min))
+        )
           return true;
-      }
-  return typoOf(t, o);
+    // A radius at or below zero is square; at or past half, or 1000px, pill.
+    const signed = Number(/^-?\d*\.?\d+/.exec(t)?.[0] ?? NaN);
+    if (key === 'corners' && o === 'square' && signed <= 0) return true;
+    if (
+      key === 'corners' &&
+      o === 'pill' &&
+      ((n.unit === '%' && n.n >= 50) || n.n >= 1000)
+    )
+      return true;
+  }
+  // Rounding said with a negation (not round, unrounded, rounded-none).
+  if (
+    o === 'square' &&
+    /round/.test(t) &&
+    /(^|[\s-])(not|no|non|without|never|less)([\s-]|$)|^un|-none$/.test(t)
+  )
+    return true;
+  // (3) A saved value of the line's own setting, never the one typed.
+  if (
+    key &&
+    key !== typedKey &&
+    saved?.get(key)?.some(v => typedReading(v) === o)
+  )
+    return true;
+  // (4) A documented fallback; a step on a dial with a scale.
+  if (Object.hasOwn(DECLARED_VALUES, key) && DECLARED_VALUES[key].includes(o))
+    return true;
+  if (
+    /^(more|less)$/.test(t) &&
+    SCALED_DIALS.includes(typedKey) &&
+    (key === typedKey || key.startsWith('--'))
+  )
+    return true;
+  // A CSS font shorthand typed for a font family setting is its family:
+  // what follows the size (`italic 700 16px/1.4 Georgia, serif`).
+  // For the setting typed (the font dial, a family token) that is the
+  // whole reading; for one longhand of a part's font it is the family's
+  // part, beside the lines for the other longhands.
+  if (/^font(-family)?$|^--font-family/.test(key)) {
+    const family = /(?:^|\s)\d*\.?\d+(?:px|rem|em|pt|%)(?:\/\S+)?\s+(.+)$/.exec(
+      t,
+    )?.[1];
+    const F = family ? tokensOf(family) : [];
+    if (F.length && F.length === O.length && O.every((w, i) => w === F[i]))
+      return key === typedKey
+        ? true
+        : Array.from({length: F.length}, (_, i) => T.length - F.length + i);
+  }
+  // (5) A typo, of a word or of a number's unit (16pxx is 16px).
+  // The typed value is one word, dashes and all (`not-alowed` is one
+  // keyword typed, not two words).
+  if (/^[a-z][a-z-]*$/.test(t) && typoOf(t, o)) return true;
+  const typedUnit = /^(\d*\.?\d+)([a-z]+)$/.exec(t);
+  const offeredUnit = /^(\d*\.?\d+)([a-z]+)$/.exec(o);
+  if (
+    typedUnit &&
+    offeredUnit &&
+    typedUnit[1] === offeredUnit[1] &&
+    // A unit is a short word: one edit, two letters swapped as one.
+    levenshteinDistance(typedUnit[2], offeredUnit[2], 1, {swaps: true}) <= 1
+  )
+    return true;
+  // Several values of one kind for a setting that takes one: the first
+  // (the one reading the repair that offers it uses, sameKindValues).
+  const same = sameKindValues(t);
+  if (same) {
+    const first = tokensOf(same.items[0]);
+    if (first.length === O.length && O.every((w, i) => sameToken(w, first[i])))
+      return true;
+  }
+  // Part of the value: a run of its tokens, or a documented reading of one.
+  // (currentcolor stands for the color another line of the refusal sets:
+  // the shape of a border in both modes, its color in one.)
+  const part = O.filter(w => w !== 'currentcolor');
+  if (part.length && part.length < T.length)
+    for (const same of [
+      (/** @type {string} */ a, /** @type {string} */ b) => a === b,
+      sameToken,
+    ])
+      for (let i = 0; i + part.length <= T.length; i += 1)
+        if (part.every((w, j) => same(w, T[i + j])))
+          return Array.from({length: part.length}, (_, j) => i + j);
+  for (const [i, w] of T.entries()) {
+    if (T.length < 2) break;
+    if (READINGS.get(w)?.has(o)) return [i];
+    const m = numberOf(w);
+    if (m)
+      for (const {things, table, domain} of NUMERIC_TABLES)
+        if (names(things, key) && m.n >= domain[0] && m.n <= domain[1]) {
+          const [rung] = table.reduce((a, b) =>
+            Math.abs(b[1] - m.n) < Math.abs(a[1] - m.n) ? b : a,
+          );
+          if (rung === o) return [i];
+        }
+  }
+  return false;
 }
+
+/**
+ * Whether the lines of one refusal, taken together, carry the whole typed
+ * value: each reads it whole, or the parts they carry cover every typed
+ * token. A part alone (`all` for `all 200`, `bold` for `extra bold`) is not
+ * offered.
+ * @param {Array<true | number[] | false>} reads
+ * @param {string} typed
+ */
+export function coversTyped(reads, typed) {
+  const T = tokensOf(typedReading(typed));
+  // By token, counted: two lines may each carry one of two equal words
+  // (`normal normal 16px serif`).
+  /** @type {Map<string, number>} */
+  const carried = new Map();
+  for (const r of reads)
+    if (Array.isArray(r))
+      for (const i of r) carried.set(T[i], (carried.get(T[i]) ?? 0) + 1);
+  /** @type {Map<string, number>} */
+  const typedCount = new Map();
+  for (const w of T) typedCount.set(w, (typedCount.get(w) ?? 0) + 1);
+  return [...typedCount].every(([w, n]) => (carried.get(w) ?? 0) >= n);
+}
+
+/**
+ * Whether a repair may offer `offered` as the whole typed value (the gate,
+ * with no setting named).
+ * @param {string} offered
+ * @param {string} typed
+ */
+export const offersTyped = (offered, typed) =>
+  readsTyped({offered, typed}) === true;
+
+/**
+ * Whether the values a refusal offers for one setting carry what was typed
+ * (see readsTyped and coversTyped).
+ * @param {string[]} offered
+ * @param {string} typed
+ */
+export function offersAllTyped(offered, typed) {
+  const reads = offered.map(o => readsTyped({offered: o, typed}));
+  if (reads.includes(false)) return false;
+  return reads.every(r => r === true) || coversTyped(reads, typed);
+}
+
+/** The gate's word for the whole typed value (tests and old callers). */
+export const carriesTyped = offersTyped;
 
 documentReadings([
   ['more', 'less'],
@@ -927,79 +1201,11 @@ documentReadings(Object.entries(WEIGHT_WORDS).map(([w, n]) => [n, w]));
 documentReadings(Object.entries(DENSITY_WORDS));
 
 /**
- * Whether every number of `offered` is a number of `typed` written another
- * exact way: other digits (full-width), a comma for the decimal point, an
- * exponent, rem or em as px (x16), pt as px (x4/3), a percent as a share
- * of one, or a share of one as a percent. The rest of `offered` is units
- * and form words only.
- * @param {string} offered
- * @param {string} typed
+ * Whether a repair line may offer `offered` as the whole typed value (see
+ * readsTyped).
+ * @param {{offered: string, typed: string, thing?: string, typedThing?: string, saved?: Map<string, string[]>, mode?: string}} line
  */
-function numbersEqual(offered, typed) {
-  const NUM = /[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?/gi;
-  const rest = offered
-    .replace(NUM, '')
-    .replace(/px|rem|em|%|[\s(),/*+-]|calc|var/g, '');
-  const want = offered.match(NUM);
-  if (!want || rest) return false;
-  // A letter O written for a zero inside a number (7OO) is the zero.
-  const nfkc = typed
-    .normalize('NFKC')
-    .replace(/(\d)([oO]+)/g, (_, d, os) => d + '0'.repeat(os.length));
-  // A comma is a decimal point (1,5rem), or before three digits a
-  // thousands mark (1,000): both readings.
-  const text = `${nfkc.replace(/(\d),(\d)/g, '$1.$2')} ${nfkc.replace(/(\d),(\d{3})\b/g, '$1$2')}`;
-  /** @type {Set<string>} */
-  const have = new Set();
-  const r2 = (/** @type {number} */ x) => String(Math.round(x * 100) / 100);
-  for (const m of text.matchAll(
-    /([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)\s*(px|rem|em|pt|%)?/gi,
-  )) {
-    const n = Number(m[1]);
-    if (!Number.isFinite(n)) continue;
-    const unit = (m[2] ?? '').toLowerCase();
-    have.add(r2(n));
-    if (unit === 'rem' || unit === 'em') have.add(r2(n * 16));
-    if (unit === 'pt') have.add(r2((n * 4) / 3));
-    // A percent as a share of one, or of the 16px base size.
-    if (unit === '%') {
-      have.add(r2(n / 100));
-      have.add(r2((n * 16) / 100));
-    }
-    if (!unit && n > 0 && n < 1) have.add(r2(n * 100));
-  }
-  // A calc() of lengths that adds and subtracts only, worked out in px.
-  const sum = /^\s*calc\(([^()]*)\)/i.exec(nfkc);
-  // One length times or over a plain number (calc(4px*2)).
-  const scale = sum
-    ? /^\s*(\d*\.?\d+)\s*(px|rem|em)?\s*([*/])\s*(\d*\.?\d+)\s*$/i.exec(sum[1])
-    : null;
-  if (scale) {
-    const a = Number(scale[1]) * (/r?em/i.test(scale[2] ?? '') ? 16 : 1);
-    have.add(
-      r2(scale[3] === '*' ? a * Number(scale[4]) : a / Number(scale[4])),
-    );
-  }
-  if (sum && !/[*/]/.test(sum[1])) {
-    let total = 0;
-    for (const m of sum[1].matchAll(/([+-]?)\s*(\d*\.?\d+)\s*(px|rem|em)?/gi)) {
-      const x = Number(m[2]) * (/r?em/i.test(m[3] ?? '') ? 16 : 1);
-      total += m[1] === '-' ? -x : x;
-    }
-    have.add(r2(total));
-  }
-  return want.every(
-    w => have.has(r2(Math.abs(Number(w)))) || have.has(r2(Number(w))),
-  );
-}
-
-/**
- * Whether a repair may offer `offered` for `typed`: the one gate every
- * suggested value goes through (the allowlist above).
- * @param {string} offered
- * @param {string} typed
- */
-export const offersTyped = (offered, typed) => allowedOffer(offered, typed);
+export const allowedLine = line => readsTyped(line) === true;
 
 /**
  * Whether a typed word is a typo of a word: both words of four letters or
@@ -1017,12 +1223,17 @@ export function typoOf(typed, word) {
 }
 
 /**
- * The edits a typo of a typed word may hold: one for a word of five letters
- * or fewer, two for a longer one. Every typo reading of the editor (a value,
- * a setting, a part, a state, a theme or token name) uses this limit.
+ * The edits a typo of a typed word may hold: none for a word under four
+ * letters (leading dashes aside), so only that word in other letters is
+ * near it; one for a word of five letters or fewer; two for a longer one.
+ * Every typo reading of the editor (a value, a setting, a part, a state, a
+ * theme or token name) uses this limit.
  * @param {string} typed
  */
-export const typoLimit = typed => (String(typed).trim().length <= 5 ? 1 : 2);
+export const typoLimit = typed => {
+  const n = String(typed).trim().replace(/^-+/, '').length;
+  return n < 4 ? 0 : n <= 5 ? 1 : 2;
+};
 
 /**
  * Whether `word` is within the typo limit of `typed` (two letters swapped

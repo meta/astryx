@@ -1,0 +1,107 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+
+# Stops pull-request runs for a head that is no longer the pull request's head
+# (spec:AST-030 FR16). A re-run takes a concurrency group of its own, so a new
+# push does not cancel it, and a re-run of an old head would otherwise build
+# for a commit nobody merges. ci.yml runs it in `room`, in the three required
+# joins, and in the `superseded-runs` job:
+#
+# - It reads the pull request's current head once.
+# - `superseded` is 'true' when this run's own head is not the current head.
+#   `room` and the joins read only that, with a read-only token: `room` stops
+#   the run before it waits, and each join fails with the reason as it
+#   reports, so a required context never passes for a superseded head.
+# - With `cancel: true` (the `superseded-runs` job, which alone holds
+#   `actions: write`), it also cancels each unfinished run of this workflow
+#   for this pull request whose head is not the current head. The run for the
+#   current head so cancels a re-run of an older head that is still in
+#   flight, and a run for an older head cancels itself.
+# - A fork's token is read-only, so a fork's run cancels nothing.
+# - It never fails: a failed lookup starts the run, and a failed cancel is
+#   logged.
+
+name: Superseded runs
+description: Cancels pull-request runs whose head is no longer the pull request's head.
+
+inputs:
+  cancel:
+    description: "'true' cancels this pull request's unfinished runs for a superseded head."
+    required: false
+    default: 'false'
+
+outputs:
+  superseded:
+    description: "'true' when this run's head is no longer the pull request's head."
+    value: ${{ steps.sweep.outputs.superseded }}
+
+runs:
+  using: composite
+  steps:
+    - id: sweep
+      uses: actions/github-script@v9
+      env:
+        CANCEL: ${{ inputs.cancel }}
+      with:
+        retries: 3
+        script: |
+          const pr = context.payload.pull_request;
+          core.setOutput('superseded', 'false');
+          if (context.eventName !== 'pull_request' || pr == null) return;
+          const {owner, repo} = context.repo;
+
+          let current;
+          try {
+            current = (await github.rest.pulls.get({owner, repo, pull_number: pr.number})).data.head.sha;
+          } catch (error) {
+            core.warning(`Could not read the pull request's head, so the run starts: ${error.message}`);
+            return;
+          }
+          if (pr.head.sha !== current) {
+            core.setOutput('superseded', 'true');
+            core.notice(`This run's head ${pr.head.sha} is no longer the pull request's head ${current}.`, {title: 'Superseded head'});
+          }
+          if (process.env.CANCEL !== 'true') return;
+          if (pr.head.repo?.full_name !== `${owner}/${repo}`) {
+            core.info("A fork's token is read-only, so this run cancels no run.");
+            return;
+          }
+
+          // The workflow file this run comes from, as a listed run names it.
+          const workflowPath = process.env.GITHUB_WORKFLOW_REF.split('@')[0].slice(`${owner}/${repo}/`.length);
+          const workflowFile = workflowPath.split('/').pop();
+          let runs;
+          try {
+            // This workflow's unfinished runs for the branch are its newest,
+            // so the first page holds them.
+            runs = (
+              await github.rest.actions.listWorkflowRuns({
+                owner,
+                repo,
+                workflow_id: workflowFile,
+                event: 'pull_request',
+                branch: pr.head.ref,
+                per_page: 100,
+              })
+            ).data.workflow_runs;
+          } catch (error) {
+            core.warning(`Could not list this pull request's runs: ${error.message}`);
+            return;
+          }
+          const stale = runs.filter(
+            run =>
+              run.status !== 'completed' &&
+              run.path === workflowPath &&
+              run.head_repository?.full_name === `${owner}/${repo}` &&
+              run.pull_requests.some(p => p.number === pr.number) &&
+              run.head_sha !== current,
+          );
+          // This run last, so it cancels the others before it stops.
+          stale.sort((a, b) => (a.id === context.runId) - (b.id === context.runId));
+          for (const run of stale) {
+            try {
+              await github.rest.actions.cancelWorkflowRun({owner, repo, run_id: run.id});
+              core.notice(`Cancelled run ${run.id}, attempt ${run.run_attempt}, for superseded head ${run.head_sha}.`);
+            } catch (error) {
+              core.warning(`Could not cancel run ${run.id}: ${error.message}`);
+            }
+          }

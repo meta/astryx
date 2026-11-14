@@ -31,6 +31,7 @@ import {
   numbersIn,
   propertyGrammar,
   takesPercentage,
+  sameKindValues,
 } from './_css.mjs';
 import {calcVars, coreFallback, multipliedTokens} from './_parts.mjs';
 import {
@@ -93,6 +94,7 @@ import {
   lengthPx,
   radiusAt,
   radiusTokenOf,
+  cornerParts,
   focusStateOf,
   valueProblem,
   partComponentDocs,
@@ -105,6 +107,7 @@ import {
   partRuleTokens,
   cssFamily,
   familySpaces,
+  baseTextPx,
   fontsourcePackageOf,
 } from './_settings.mjs';
 import {isColorToken} from './_compiler.mjs';
@@ -126,6 +129,7 @@ import {
   documentNumericTable,
   documentRange,
   withoutCopyDebris,
+  commaNumbers,
 } from './_normal.mjs';
 
 export {
@@ -653,7 +657,7 @@ function mathSpaced(v) {
 function numberMeant(v, name, ok) {
   const t = v.trim();
   const plain = typedPlain(t).replace(/(\d)\.$/, '$1');
-  const comma = plain.replace(/^([+-]?\d+),(\d+)/, '$1.$2');
+  const comma = commaNumbers(plain);
   const tries = [
     /^[\doO.]+$/.test(plain) && /\d/.test(plain)
       ? plain.replace(/[oO]/g, '0')
@@ -1796,14 +1800,21 @@ function propertyProblem(prop, value) {
         ? withPx.replace(/(^|[\s/(,])-(?=\.?\d)/g, '$1')
         : null) ??
       (takes(joined) && joined !== v ? joined : null) ??
-      // Several values on a property that takes one (padding-top with four):
-      // the first of them, when it is one the property takes. Not when the
-      // rest are words (`2 spacing units` is no 2px).
+      // A comma between digits is a decimal point (1,5rem is 1.5rem), never
+      // a split into layers.
+      (takes(commaNumbers(v)) && commaNumbers(v) !== v
+        ? commaNumbers(v)
+        : null) ??
+      // Several values of one kind on a property that takes one
+      // (padding-top with four lengths): the first as typed, with px only
+      // when the property takes no bare number. Never one value of a
+      // shorthand of several kinds (`all 200` for transition).
       (() => {
-        const all = splitTop((withPx ?? joined).trim(), ' ');
-        if (all.slice(1).some(x => /^[a-z]/i.test(x))) return null;
-        const first = all[0];
-        return pxFits && first && first !== v && takes(first) ? first : null;
+        const same = sameKindValues(v);
+        if (!same) return null;
+        const first = same.items[0];
+        const px = same.kind === '' ? `${first}px` : null;
+        return takes(first) ? first : pxFits && px && takes(px) ? px : null;
       })() ??
       (near && takes(near) ? near : null) ??
       // Layers typed with one too many or an empty one (`url(a.png), red,
@@ -1919,6 +1930,28 @@ documentReadings(TEXT_SIZE.map(([name, px]) => [name, `${px}px`]));
 documentReadings(Object.entries(HEADING_TRACKING));
 // `bold` given a no (false, off) is the normal weight.
 documentReadings(['false', 'off', 'no', 'none'].map(w => [w, 'normal']));
+/**
+ * The CSS absolute-size keywords that are no text-size rung, as the px
+ * CSS gives each at a 16px root.
+ */
+const CSS_SIZE_KEYWORDS = wordTable(
+  /** @type {Record<string, number>} */ ({
+    'xx-small': 9,
+    'x-small': 10,
+    'x-large': 24,
+    'xx-large': 32,
+    'xxx-large': 48,
+  }),
+);
+documentReadings(
+  Object.entries(CSS_SIZE_KEYWORDS)
+    .filter(([, px]) => px >= 10 && px <= 32)
+    .map(([w, px]) => [w, String(px)]),
+);
+// A weight word read as the headings rung its number is nearest.
+documentReadings(
+  Object.entries(WEIGHT_WORDS).map(([w, n]) => [w, weightRung(Number(n))]),
+);
 /** Words for no rounding: corners square. */
 const NO_ROUNDING = ['0', '0%', 'none', 'sharp', 'zero', 'no', 'flat'];
 /** Words for no space: spacing's tightest rung. */
@@ -2057,6 +2090,37 @@ function oneModeOfTheme(data) {
 }
 
 /**
+ * The states `set` takes on a part: the ones its doc lists and the ones
+ * every part takes, less any a change in it is refused for while the same
+ * change without it passes (a state that never applies there). `how` lists
+ * these, and a state that is not one names them.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {any} data
+ * @param {string} part
+ * @returns {string[]}
+ */
+export function settableStates(ctx, slug, data, part) {
+  const t = ctx.project.target.get(part);
+  if (!t) return [];
+  const takes = (/** @type {string | undefined} */ state) => {
+    try {
+      checkSetting(ctx, slug, data, 'opacity', '1', {
+        on: part,
+        ...(state ? {state} : {}),
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const plain = takes(undefined);
+  return [...new Set([...t.states, ...COMMON_STATES])].filter(
+    state => !plain || takes(state),
+  );
+}
+
+/**
  * Check one setting and give it back ready to store, or refuse. What it
  * accepts, the settings loader takes too: the loader's own check runs last,
  * so a saved setting never blocks the theme.
@@ -2165,11 +2229,16 @@ export function checkSetting(
   ) {
     const family = familyWeight[1].trim();
     const w = familyWeight[2].toLowerCase().replace('-', '');
-    const word = /^\d+$/.test(w)
-      ? Object.keys(HEADING_WEIGHTS).find(k => HEADING_WEIGHTS[k] === w)
+    // The headings rung nearest the weight, in any form the weight table
+    // reads (ExtraBold is heavy, 900 is heavy).
+    const number = /^\d+$/.test(w)
+      ? Number(w)
       : HEADING_WEIGHTS[w] !== undefined
-        ? w
-        : null;
+        ? Number(HEADING_WEIGHTS[w])
+        : WEIGHT_WORDS[w] !== undefined
+          ? Number(WEIGHT_WORDS[w])
+          : null;
+    const word = number != null ? weightRung(number) : null;
     refuse(
       E.ERR_THEME_BAD_VALUE,
       `"${value.trim()}" puts a weight after the family, so the browser reads one family named that and falls back. ${thing} takes the family (${family}); a weight is set with headings, font-weight or a --font-weight-* token.`,
@@ -2219,8 +2288,22 @@ export function checkSetting(
     )
   ) {
     const pair = colorPair(value);
-    if (pair && !colorProblem(pair.light) && !colorProblem(pair.dark))
+    if (pair && !colorProblem(pair.light) && !colorProblem(pair.dark)) {
+      // A theme with one mode shows one half: that half is the line, as
+      // for a color token.
+      const only = oneModeOfTheme(data);
+      if (only)
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          `"${value}" is a light and a dark color; this theme is ${only} only, so it shows the ${only} one.`,
+          {
+            run: [
+              setLine(slug, thing, pair[only], {...flags, mode: undefined}),
+            ],
+          },
+        );
       value = `light-dark(${pair.light}, ${pair.dark})`;
+    }
   }
   if (
     !unset &&
@@ -2857,12 +2940,18 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         .toLowerCase(),
     )
   )
+    // A token takes no keyword in any mode (it would be left empty), so for
+    // a token only the color is offered.
     refuse(
       E.ERR_THEME_NO_MODE,
-      `"${String(v).trim()}" is a CSS keyword, which applies in both modes, so it takes no --mode. Give the ${s.mode} color, or set ${thing} ${String(v).trim()} for both modes.`,
+      String(thing).startsWith('--')
+        ? `"${String(v).trim()}" is a CSS keyword, which applies in both modes, so it takes no --mode; and a token never takes one. Give the ${s.mode} color.`
+        : `"${String(v).trim()}" is a CSS keyword, which applies in both modes, so it takes no --mode. Give the ${s.mode} color, or set ${thing} ${String(v).trim()} for both modes.`,
       {
         run: [
-          `${P} set ${slug} ${thing} ${String(v).trim()}${onFlag}${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}`,
+          String(thing).startsWith('--')
+            ? `${HOW} ${thing}`
+            : `${P} set ${slug} ${thing} ${String(v).trim()}${onFlag}${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}`,
         ],
       },
     );
@@ -2899,7 +2988,15 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         (x.when ?? null) === (s.when ?? null) &&
         (x.state ?? null) === (s.state ?? null),
     );
-  if (s.mode && data.mode !== 'both' && !unset && !sameModeEntry)
+  if (s.mode && data.mode !== 'both' && !unset && !sameModeEntry) {
+    // What takes no --mode in any theme (a size, a font, a keyword) is
+    // refused for that, with the command that drops --mode: a theme with
+    // both modes would refuse it too, so its mode is no way out.
+    try {
+      checkSetting(ctx, slug, {...data, mode: 'both'}, thing, v, flags);
+    } catch (e) {
+      if (/** @type {any} */ (e)?.code === E.ERR_THEME_NO_MODE) throw e;
+    }
     refuse(
       E.ERR_THEME_NO_MODE,
       `This theme is ${data.mode}; --mode is for themes with both modes.`,
@@ -2914,11 +3011,14 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         ],
       },
     );
+  }
   if ((s.when || s.state) && !s.on)
     refuse(E.ERR_MISSING_ARGUMENT, '--when and --state need --on <part>.', {
       run: [`${HOW} --list parts`],
     });
-  if (s.only) {
+  // --only is checked on a part this Core has; a part in other letters or
+  // misspelt gets the part's own refusal first, with --only kept.
+  if (s.only && (!s.on || TARGET.has(s.on) || FAMILIES[s.on])) {
     const fam = s.on ? familyOf(s.on) : null;
     if (!fam || FAMILIES[/** @type {string} */ (s.on)])
       refuse(
@@ -3040,16 +3140,22 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
             run: [setLine(slug, thing, v, {...s, on: named}, unset)],
           },
         );
+      // A plural or another case names the part it means; a typo of one
+      // part leads with the same command on that part.
+      const near = nearest(s.on.toLowerCase().replace(/s$/, ''), [
+        ...TARGET.keys(),
+        ...Object.keys(FAMILIES),
+      ]);
+      const typo = near.filter(n => typoOf(lower, n));
       refuse(
         E.ERR_THEME_UNKNOWN_PART,
         `"${s.on}" is not a part you can style.`,
         {
-          // A plural or another case names the part it means.
-          didYouMean: nearest(s.on.toLowerCase().replace(/s$/, ''), [
-            ...TARGET.keys(),
-            ...Object.keys(FAMILIES),
-          ]),
+          didYouMean: near,
           run: [
+            ...(typo.length === 1
+              ? [setLine(slug, thing, v, {...s, on: typo[0]}, unset)]
+              : []),
             `${HOW} --list parts ${quoteCommandArgument(lower.replace(/s$/, '').split('-')[0] || 'button')}`,
             `${HOW} ${quoteCommandArgument(s.on)}`,
           ],
@@ -3153,7 +3259,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     if (s.state && !states.includes(s.state))
       refuse(
         E.ERR_THEME_UNKNOWN_STATE,
-        `"${s.state}" is not a state of ${s.on}. States: ${states.join(', ')}.`,
+        `"${s.state}" is not a state of ${s.on}. States: ${settableStates(ctx, slug, data, s.on).join(', ') || 'none'}.`,
         {
           ...(meant ? {didYouMean: [meant]} : {}),
           run: [
@@ -3565,7 +3671,14 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           ...Object.keys(HEADING_WEIGHTS),
           ...Object.keys(HEADING_TRACKING),
         ];
-        const weight = /^\d+(\.\d+)?$/.test(lower) ? Number(lower) : null;
+        // A weight word (extra bold, ultra-bold) is its number, read as
+        // the rung nearest it (800 is heavy).
+        const weightWord = WEIGHT_WORDS[lower.replace(/[\s-]+/g, '')];
+        const weight = /^\d+(\.\d+)?$/.test(lower)
+          ? Number(lower)
+          : weightWord
+            ? Number(weightWord)
+            : null;
         const meant =
           words.find(w => w === lower) ??
           (weight != null ? weightRung(weight) : nearest(lower, words)[0]);
@@ -3638,10 +3751,16 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         (s.on && typeof def !== 'number' ? own('') : undefined) ??
         def;
       const at = L.findIndex(([n]) => n === cur);
+      const stepped = at + (v === 'more' ? 1 : -1);
+      if (at >= 0 && stepped >= 0 && stepped < L.length) return L[stepped][0];
+      // At the last rung that way, a step goes nowhere: refused as every
+      // dial refuses it at its end, with the other way.
       if (at >= 0)
-        return L[
-          Math.max(0, Math.min(L.length - 1, at + (v === 'more' ? 1 : -1)))
-        ][0];
+        refuse(
+          E.ERR_THEME_NO_EFFECT,
+          `${thing} is already at its ${v === 'more' ? 'largest' : 'smallest'} step, ${L[at][0]}${s.on ? ` on ${s.on}` : ''}, so "${v}" has nowhere to go.`,
+          {run: [setLine(slug, thing, v === 'more' ? 'less' : 'more', s)]},
+        );
       // A size between rungs steps to the next rung that way, never past it.
       const px =
         typeof cur === 'number'
@@ -3669,7 +3788,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         );
         refuse(
           E.ERR_THEME_BAD_VALUE,
-          `${thing} is ${typeof cur === 'number' ? `${cur}px` : cur}, already ${v === 'more' ? 'above' : 'below'} its ${v === 'more' ? 'largest' : 'smallest'} step (${edge[0]}, ${edge[1]}px), so "${v}" has nowhere to go.${atEnd ? ` It is also the ${v === 'more' ? 'largest' : 'smallest'} size ${thing} takes (${lo} to ${hi}); the base font size token takes any size.` : ' Give an exact size.'}`,
+          `${thing} is ${typeof cur === 'number' ? `${cur}px` : cur}, already ${Math.abs(px - edge[1]) < 0.01 ? 'at' : v === 'more' ? 'above' : 'below'} its ${v === 'more' ? 'largest' : 'smallest'} step (${edge[0]}, ${edge[1]}px), so "${v}" has nowhere to go.${atEnd ? ` It is also the ${v === 'more' ? 'largest' : 'smallest'} size ${thing} takes (${lo} to ${hi}); the base font size token takes any size.` : ' Give an exact size.'}`,
           {
             run: atEnd
               ? [
@@ -4038,7 +4157,10 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
             })(),
           },
         );
-      if (step) s.value = ladder(TEXT_SIZE, 'medium');
+      // With no text-size setting yet, a step starts from the size the base
+      // theme's body text shows (past the last rung, it asks for a size).
+      if (step)
+        s.value = ladder(TEXT_SIZE, ctx.base ? baseTextPx(ctx.base) : 'medium');
       else if (
         /^\d+\.\d+$/.test(v.trim()) &&
         Number(v) >= 10 &&
@@ -4057,7 +4179,11 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           E.ERR_THEME_BAD_VALUE,
           `text-size takes ${DIALS['text-size'].values} (a number is the body size in pixels, 10 to 32), not "${v}".`,
           (() => {
-            // A rung in other letter case (Medium) or with px is that rung.
+            // A rung in other letter case (Medium) or with px is that rung;
+            // a CSS size keyword (x-large) is the size CSS gives it.
+            const keyword = CSS_SIZE_KEYWORDS[v.trim().toLowerCase()];
+            if (keyword != null && keyword >= 10 && keyword <= 32)
+              return {run: [`${P} set ${slug} text-size ${keyword}`]};
             const near =
               TEXT_SIZE.find(([n]) => n === v.trim().toLowerCase())?.[0] ??
               nearest(
@@ -4712,7 +4838,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
         const instead = /reads: ([^.]+)\./.exec(
           String(/** @type {any} */ (hard[0][1])?.message ?? ''),
         )?.[1];
-        s.note = `${readers.length ? `${readers.join(', ')} read ${thing} and take this change; ` : ''}the editor's render of ${hard.map(([t]) => t).join(', ')} did not read it${instead ? ` (${hard[0][0]} reads ${instead})` : ''}, so those stay as they were; each part is rendered once, with its default props, so a variant that reads it may be missed`;
+        s.note = `${readers.length ? `${readers.join(', ')} read ${thing} and take this change; ` : ''}the editor's render of ${hard.map(([t]) => t).join(', ')} did not read it${instead ? ` (${hard[0][0]} reads ${instead})` : ''}, so those stay as they were; each part is rendered with its default props, each variant value and each look flag, so a state or a combination that reads it may be missed`;
       }
       if (!s.note && recorded.length) {
         const fed = C.feeds(recorded[0][0], thing);
@@ -4750,7 +4876,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
       // token is set as asked, and the result says nothing was seen
       // reading it.
       else if (r)
-        s.note = `no part the editor rendered reads ${thing} (each part is rendered once, with its default props, so a variant that reads it may be missed); it is set as asked, and reaches any part that reads it`;
+        s.note = `no part the editor rendered reads ${thing} (each part is rendered with its default props, each variant value and each look flag, so a state or a combination that reads it may be missed); it is set as asked, and reaches any part that reads it`;
     }
     return s;
   }
@@ -5135,25 +5261,25 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
     // value set for both modes); with none to keep, the setting would
     // change that mode too. Without a state, the other mode keeps the
     // part's plain color.
+    /** Whether a part keeps a value of its own in the other mode. */
+    const keepsOther = (/** @type {string} */ t) =>
+      Boolean(partDefault(ctx, t, camel(prop), s.when, s.state)) ||
+      // The base theme's own value there (in the state, else at rest) is
+      // what the other mode keeps.
+      [`:${s.state}`, null].some(st =>
+        baseRuleHas(
+          ctx.project.cwd,
+          data.like,
+          t,
+          s.when ?? 'base',
+          st,
+          camel(prop),
+        ),
+      );
+    const cannotKeep =
+      s.mode && s.state ? partsOf(ctx, s).filter(t => !keepsOther(t)) : [];
     if (
-      s.mode &&
-      s.state &&
-      !partsOf(ctx, s).every(
-        t =>
-          partDefault(ctx, t, camel(prop), s.when, s.state) ||
-          // The base theme's own value there (in the state, else at rest)
-          // is what the other mode keeps.
-          [`:${s.state}`, null].some(st =>
-            baseRuleHas(
-              ctx.project.cwd,
-              data.like,
-              t,
-              s.when ?? 'base',
-              st,
-              camel(prop),
-            ),
-          ),
-      ) &&
+      cannotKeep.length &&
       !data.settings.some(
         x =>
           x.thing === prop &&
@@ -5162,16 +5288,30 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           x.state === s.state &&
           x.mode !== s.mode,
       )
-    )
+    ) {
+      const flagsTail = `${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}`;
+      // The part named keeps its own when only other members of its group
+      // cannot: --only writes it alone, its mode kept.
+      const onlyThis =
+        s.on &&
+        !cannotKeep.includes(s.on) &&
+        familyOf(s.on) &&
+        AUTO_SPREAD.includes(/** @type {string} */ (familyOf(s.on)));
       refuse(
         E.ERR_THEME_NO_MODE,
-        `${s.on} has no ${prop}${s.state ? ` when ${s.state}` : ''}${s.when ? ` for ${s.when}` : ''} of its own for the ${s.mode === 'light' ? 'dark' : 'light'} mode to keep, so a ${s.mode}-only value would change it too. Set it for both modes.`,
+        `${cannotKeep.slice(0, 3).join(', ')}${cannotKeep.length > 3 ? ` and ${cannotKeep.length - 3} more` : ''} ${cannotKeep.length > 1 ? 'have' : 'has'} no ${prop}${s.state ? ` when ${s.state}` : ''}${s.when ? ` for ${s.when}` : ''} of ${cannotKeep.length > 1 ? 'their' : 'its'} own for the ${s.mode === 'light' ? 'dark' : 'light'} mode to keep, so a ${s.mode}-only value would change it too.${onlyThis ? ` ${s.on} has one: set it alone with --only.` : ' Set it for both modes.'}`,
         {
           run: [
-            `${P} set ${slug} ${prop} ${quoteCommandArgument(v)} --on ${s.on}${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}`,
+            ...(onlyThis
+              ? [
+                  `${P} set ${slug} ${prop} ${quoteCommandArgument(v)} --on ${s.on} --only${flagsTail} --mode ${s.mode}`,
+                ]
+              : []),
+            `${P} set ${slug} ${prop} ${quoteCommandArgument(v)} --on ${s.on}${flagsTail}`,
           ],
         },
       );
+    }
     return s;
   }
   // A property written with _ or spaces, a trailing colon, or in camel
@@ -5258,6 +5398,13 @@ function refuseInvisibleCorners(ctx, slug, s, data) {
   if (ctx.unchecked) return;
   const parts = partsOf(ctx, s);
   if (!parts.length || parts.some(t => ctx.C.showsCorners(t))) return;
+  // The corners dial on a part whose corners are drawn by parts of its own
+  // inside it (a date-time input's date and time boxes) rounds those.
+  if (
+    s.thing === 'corners' &&
+    parts.some(t => cornerParts(ctx, t).some(x => x !== t))
+  )
+    return;
   // An edge the theme gives the part itself shows its corners too.
   const edged = data.settings.some(
     x =>

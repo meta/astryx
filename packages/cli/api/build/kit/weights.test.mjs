@@ -3,7 +3,7 @@
 import {describe, expect, it} from 'vitest';
 
 import {isWeightsFile} from '../_adapter.mjs';
-import {SHELL, stem, weighStart, weightWords} from './weights.mjs';
+import {SHELL, blendOrder, stem, weighStart, weightWords} from './weights.mjs';
 
 // A made-up table for tests only: three page templates and the app shell.
 const CANDIDATES = [SHELL, 'board', 'charts', 'grid'];
@@ -261,6 +261,63 @@ describe('weighStart', () => {
     });
   });
 
+  describe('an exact tie between templates with ids of different lengths', () => {
+    // The family's base and its variants are told apart by the ranker's base
+    // flag, not by how many parts an id has.
+    const catalog = [
+      ...CATALOG,
+      {
+        name: 'list-alpha',
+        displayName: 'Plain List',
+        category: 'Lists - Plain',
+        description: 'A plain list of records.',
+      },
+      {
+        name: 'list-with-reading-pane',
+        displayName: 'List with Reading Pane',
+        category: 'Lists - Pane',
+        description: 'A list of records with a reading pane beside it.',
+        keywords: ['reading pane'],
+      },
+    ];
+    const variant = (/** @type {string} */ name) => ({
+      ...page(name, 5, 'Lists'),
+      base: false,
+    });
+
+    it('settles a tie between two variants by their descriptors', () => {
+      const tied = [
+        variant('list-alpha'),
+        variant('list-with-reading-pane'),
+        ...RANKED,
+      ];
+      const start = weighStart(
+        'a list of orders with a reading pane',
+        tied,
+        tied[0],
+        catalog,
+        {weights: WEIGHTS},
+      );
+      expect(start).toBe('list-with-reading-pane');
+    });
+
+    it("keeps the family's base ahead of a tied variant", () => {
+      const tied = [
+        page('list-alpha', 5, 'Lists'),
+        variant('list-with-reading-pane'),
+        ...RANKED,
+      ];
+      const start = weighStart(
+        'a list of orders with a reading pane',
+        tied,
+        tied[0],
+        catalog,
+        {weights: WEIGHTS},
+      );
+      expect(start).toBe('list-alpha');
+    });
+  });
+
   describe('a template the tables do not list (cold start)', () => {
     // A made-up family the tables have never seen, described only by its own
     // descriptor, next to listed templates with descriptors of their own.
@@ -466,5 +523,98 @@ describe('isWeightsFile', () => {
     ).toBe(false);
     expect(isWeightsFile({version: 1})).toBe(false);
     expect(isWeightsFile(null)).toBe(false);
+  });
+});
+
+describe('an exact tie in the pick model', () => {
+  // The pick table scores `board` and `grid` the same, and the ranker ties
+  // them too (and starts neither), so the blend gives both exactly the same
+  // score.
+  const catalog = [
+    {
+      name: 'board',
+      displayName: 'Kanban board',
+      category: 'Board - Kanban',
+      description: 'cards in lanes',
+    },
+    {
+      name: 'charts',
+      displayName: 'Charts',
+      category: 'Charts - Basic',
+      description: 'a chart',
+    },
+    {
+      name: 'grid',
+      displayName: 'Card grid',
+      category: 'Grid - Cards',
+      description: 'cards in a grid',
+    },
+  ];
+  const ranked = [
+    page('board', 1, 'Board'),
+    page('grid', 1, 'Grid'),
+    page('charts', 0, 'Charts'),
+  ];
+  const weights = {
+    ...WEIGHTS,
+    pick: {
+      tables: [table({[stem('cards')]: [0, 2, 0, 2]})],
+      blend: [1, 0, 0, 0.5, 0, 0, 0],
+    },
+  };
+
+  it('goes to the template whose own descriptor names more of the idea', () => {
+    const order = blendOrder(
+      'cards laid out in a grid',
+      ranked,
+      null,
+      catalog,
+      weights,
+    );
+    expect(order?.slice(0, 2)).toEqual(['grid', 'board']);
+  });
+
+  it('does not depend on the order of the candidates in the weights file', () => {
+    // Only the rank features count here, so an order-based rank of the tied
+    // pair would decide the start.
+    const byRank = {
+      ...weights,
+      pick: {...weights.pick, blend: [0, 1, 0, 0, 1, 0, 0]},
+    };
+    const reversedByRank = {
+      ...byRank,
+      candidates: [SHELL, 'grid', 'charts', 'board'],
+      tables: WEIGHTS.tables.map(t => ({
+        ...t,
+        bias: [t.bias[0], t.bias[3], t.bias[2], t.bias[1]],
+        rows: t.rows.map(r => r[0] + r[3] + r[2] + r[1]),
+      })),
+    };
+    const idea = 'cards laid out in a grid';
+    expect(
+      blendOrder(idea, ranked, null, catalog, reversedByRank)?.slice(0, 2),
+    ).toEqual(blendOrder(idea, ranked, null, catalog, byRank)?.slice(0, 2));
+    const reversed = {
+      ...weights,
+      candidates: [SHELL, 'grid', 'charts', 'board'],
+      tables: WEIGHTS.tables.map(t => ({
+        ...t,
+        bias: [t.bias[0], t.bias[3], t.bias[2], t.bias[1]],
+        rows: t.rows.map(r => r[0] + r[3] + r[2] + r[1]),
+      })),
+      pick: {
+        ...weights.pick,
+        tables: [table({[stem('cards')]: [0, 2, 0, 2]})],
+      },
+    };
+    expect(
+      blendOrder(
+        'cards laid out in a grid',
+        ranked,
+        null,
+        catalog,
+        reversed,
+      )?.slice(0, 2),
+    ).toEqual(['grid', 'board']);
   });
 });

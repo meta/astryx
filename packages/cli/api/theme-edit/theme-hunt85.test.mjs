@@ -51,7 +51,7 @@ vi.mock('./_preview.mjs', async importOriginal => {
           'hex',
         ),
       );
-      return {ok: true, file: path.relative(project.cwd, png), cut: true};
+      return {ok: true, file: path.relative(project.cwd, png)};
     },
   };
 });
@@ -72,27 +72,27 @@ afterAll(() => {
   if (cwd) removeLinkedFixture(cwd);
 });
 
-/** A stand-in browser: notes its arguments, then sleeps. */
-function sleepyBrowser() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-fake-chrome-'));
-  const bin = path.join(dir, 'chrome');
-  fs.writeFileSync(bin, `#!/bin/sh\necho "$@" > "${dir}/args"\nsleep 30\n`, {
-    mode: 0o755,
-  });
-  return {dir, bin};
+/** A stand-in picture script: notes its temp folder, then hangs. */
+function sleepyScript() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-fake-picture-'));
+  const script = path.join(dir, 'picture.mjs');
+  fs.writeFileSync(
+    script,
+    `import * as fs from 'node:fs';\nimport * as os from 'node:os';\nfs.mkdirSync(os.tmpdir() + '/profile');\nfs.writeFileSync(process.argv[2], os.tmpdir());\nsetInterval(() => {}, 1000);\n`,
+  );
+  return {dir, script};
 }
 
 describe('the browser run', () => {
-  it('a browser stopped at the bound is said to have timed out, and its profile folder goes', async () => {
-    const {dir, bin} = sleepyBrowser();
+  it('a run stopped at the bound is said to have timed out, and its temp folder goes', async () => {
+    const {dir, script} = sleepyScript();
+    const record = path.join(dir, 'temp');
     try {
-      const r = await runBrowser(bin, ['--screenshot=x.png'], 500);
+      const r = await runBrowser(script, [record], 1500);
       expect(r.timedOut).toBe(true);
-      const profile = /--user-data-dir=(\S+)/.exec(
-        fs.readFileSync(path.join(dir, 'args'), 'utf8'),
-      )?.[1];
-      expect(profile).toBeTruthy();
-      expect(fs.existsSync(String(profile))).toBe(false);
+      const temp = fs.readFileSync(record, 'utf8');
+      expect(temp).not.toBe(os.tmpdir());
+      expect(fs.existsSync(temp)).toBe(false);
     } finally {
       fs.rmSync(dir, {recursive: true, force: true});
     }
@@ -122,13 +122,14 @@ describe('pictures', () => {
     }
   }, 240_000);
 
-  it('from a subfolder, the picture note names every picture with its full path', async () => {
+  it('from a subfolder, every picture is named with its full path', async () => {
     const r = /** @type {any} */ (
       await themeEditShow('t', {cwd: path.join(cwd, 'src/app'), png: true})
     );
-    const note = String(r.data.pictureProblem ?? '');
-    expect(note).toContain(path.join(cwd, 'themes/t/preview-dark.png'));
-    expect(note).not.toMatch(/(^|[\s(,])themes\//);
+    expect(r.data.pictures).toContain(
+      path.join(cwd, 'themes/t/preview-dark.png'),
+    );
+    expect(r.data.pictureProblem).toBeNull();
   }, 240_000);
 });
 

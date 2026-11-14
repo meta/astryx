@@ -34,9 +34,10 @@ import {
   loadTheme,
   nearest,
   refuse,
+  themeSourceParseError,
   themeSourceProblem,
 } from './_settings.mjs';
-import {ASPECTS, checkSetting} from './_check.mjs';
+import {ASPECTS, settableStates} from './_check.mjs';
 import {MODAL} from './_compiler.mjs';
 import {PALETTE_DIALS, mappingRows, paletteFiles} from './_palette.mjs';
 import {requireProject, context} from './_context.mjs';
@@ -249,7 +250,9 @@ async function answer(subject, options, cwd) {
     }
     // A theme whose source no longer extends its settings takes no setting:
     // an answer would suggest commands that cannot run.
-    const broken = themeSourceProblem(cwd, options.theme);
+    const broken =
+      themeSourceParseError(cwd, options.theme) ??
+      (await themeSourceProblem(cwd, options.theme));
     if (broken)
       refuse(
         E.ERR_THEME_INVALID,
@@ -807,25 +810,7 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
     ctx.project.target.get(key)
   );
   const group = familyOf(key);
-  // Only the states set takes on this part (it refuses one that never
-  // applies there).
-  // Only the states set takes on this part: a state is dropped when the
-  // same change without it passes and with it is refused.
-  const takes = (/** @type {string | undefined} */ st) => {
-    try {
-      checkSetting(ctx, env.slug, env.data, 'opacity', '1', {
-        on: key,
-        ...(st ? {state: st} : {}),
-      });
-      return true;
-    } catch {
-      return false;
-    }
-  };
-  const plainOk = takes(undefined);
-  const states = [...new Set([...target.states, ...COMMON_STATES])].filter(
-    st => !plainOk || takes(st),
-  );
+  const states = settableStates(ctx, env.slug, env.data, key);
   const reads = Object.fromEntries(
     Object.keys(GROUPS).map(g => [
       g,

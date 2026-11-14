@@ -101,7 +101,9 @@ describe('the measured check: answers that fooled the step check', () => {
       // The group, or each member that shows a value of its own.
       expect(
         r.commands.some(c =>
-          /border-radius \S+ --on (inputs|text-input)/.test(c),
+          /(border-radius|--radius-[a-z]+) \S+ --on (inputs|text-input)/.test(
+            c,
+          ),
         ),
       ).toBe(true);
     },
@@ -120,7 +122,7 @@ describe('words for except', () => {
     async q => {
       expect(
         (await answer(q)).commands.some(c =>
-          /^set q border-radius \S+ --on card$/.test(c),
+          /^set q (border-radius|--radius-[a-z]+) \S+ --on card$/.test(c),
         ),
       ).toBe(true);
     },

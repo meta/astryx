@@ -260,7 +260,9 @@ describe('clear asks it used to drop', () => {
       needsBase(test);
       const {commands} = await answer('bold white text in the header');
       expect(commands.some(c => /font-weight 700/.test(c))).toBe(true);
-      expect(commands.some(c => /color '#ffffff'/.test(c))).toBe(true);
+      expect(
+        commands.some(c => /color(-text-primary)? '#ffffff'/.test(c)),
+      ).toBe(true);
     },
     T,
   );

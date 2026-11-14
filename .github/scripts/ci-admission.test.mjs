@@ -90,7 +90,12 @@ describe('where runs wait', () => {
       "${{ needs.room.outputs.attempt == github.run_attempt && 'rest' || 'whole' }}",
     );
     expect(needsOf(admission)).toEqual(['room']);
-    expect(room.permissions).toEqual({actions: 'read', contents: 'read'});
+    // Room reads the pull request's head (superseded-runs.test.mjs).
+    expect(room.permissions).toEqual({
+      actions: 'read',
+      contents: 'read',
+      'pull-requests': 'read',
+    });
     // The rest of the wait carries on from where room left off.
     for (const key of ['fits', 'started', 'looks', 'next'])
       expect(wait.with[key]).toBe(`\${{ needs.room.outputs.${key} }}`);
@@ -309,10 +314,13 @@ describe('where runs wait', () => {
         name: 'Stop when CI is full at the longest wait',
       }),
     ]);
-    // Room's only other steps: its checkout, and its stop when it found no
-    // room (above).
+    // Room's only other steps: its checkout, its head check and stop for a
+    // superseded head (superseded-runs.test.mjs), and its stop when it found
+    // no room (above).
     expect(ci.jobs.room.steps.filter(step => step.name !== STEP)).toEqual([
       expect.objectContaining({uses: 'actions/checkout@v7'}),
+      expect.objectContaining({name: "Check the pull request's head"}),
+      expect.objectContaining({name: 'Stop for a superseded head'}),
       expect.objectContaining({name: 'Stop when CI is full'}),
     ]);
   });
@@ -572,7 +580,7 @@ describe('the shared count', () => {
       const checkout = job.steps.find(step =>
         String(step.uses ?? '').startsWith('actions/checkout'),
       );
-      expect(checkout.with['sparse-checkout']).toBe(
+      expect(checkout.with['sparse-checkout'].split('\n')).toContain(
         '.github/actions/ci-admission',
       );
     }

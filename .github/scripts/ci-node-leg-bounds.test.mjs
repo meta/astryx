@@ -55,12 +55,13 @@ describe('the Node legs inside their job limit', () => {
   });
 
   it("end door-conformance's slowest hook at least two minutes inside the job limit", () => {
+    // The three door-conformance test files share one hook.
     const source = fs.readFileSync(
-      path.join(root, 'packages/cli/host/door-conformance.test.mjs'),
+      path.join(root, 'packages/cli/test-utils/door-conformance.mjs'),
       'utf8',
     );
     const bound =
-      /beforeAll\(async \(\) => \{[\s\S]*?\n {2}\}, (\d+) \* 60_000\);/.exec(
+      /beforeAll\(async \(\) => \{[\s\S]*?\n {2,}\}, (\d+) \* 60_000\);/.exec(
         source,
       );
     expect(bound, 'the beforeAll bound').not.toBeNull();
