@@ -4,11 +4,12 @@
 
 /**
  * @file useChatKeyboard.ts
- * @input React refs, the keyboard module's height, focus routes and layout
+ * @input React refs, the keyboard module's reports, focus routes and layout
  *   guide, the stream scroll's lock, the motion engine, the touch query and
- *   layout viewport height
+ *   layout viewport height. Also the input stream's touch ends and scroll ends
  * @output Exports useChatKeyboard: the lift for ChatLayout's dock and message
- *   area, and the refs for its dock, message area and composer region
+ *   area, and the refs for its dock, message area and composer region. It
+ *   also tells whether a focus call in the composer skips the browser's reveal
  * @position ChatLayout's keyboard behavior (Chat/ChatLayout.tsx); internal
  *
  * The composer sits on the keyboard, as in Messages on iOS. Where the layout
@@ -17,15 +18,27 @@
  * SYNC: update Chat/ChatLayout.tsx, ChatLayout.doc.mjs and keyboard/README.md
  */
 
-import {useRef, useState, useSyncExternalStore, type RefObject} from 'react';
+import {
+  useCallback,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type RefObject,
+} from 'react';
 import {createMotionEngine, type Animator} from '../motion/animator';
 import {
   claimTapFocus,
   findTextEntryControl,
+  followsDockDeficit,
+  getDockRevealVersion,
   getKeyboardHeight,
+  getKeyboardPan,
+  isDockLeftCovered,
   isTextEntryControl,
   refuseFocusReveal,
+  subscribeDockReveal,
   subscribeKeyboardHeight,
+  subscribeViewportRest,
 } from '../keyboard/keyboardHeight';
 import {
   getKeyboardLayoutGuide,
@@ -39,6 +52,7 @@ import {
 import type {KeyboardTransition} from '../keyboard/keyboardModel';
 import {rideKeyboard} from '../keyboard/rideKeyboard';
 import {layoutViewportHeight} from '../utils/layoutViewport';
+import {subscribeInput} from '../utils/inputStream';
 import {
   useInteractionModalityTrackingFor,
   type InteractionModality,
@@ -84,6 +98,11 @@ export interface UseChatKeyboardResult {
    * focus on it.
    */
   composerRef: RefObject<HTMLDivElement | null>;
+  /**
+   * Whether a focus call in the composer skips the browser's reveal: false
+   * where the browser keeps the composer above the keyboard itself.
+   */
+  isKeyboardSurface: boolean;
 }
 
 // The lift the layout shows: a store the ride's end and keyboard reports
@@ -197,6 +216,13 @@ export function useChatKeyboard({
     liftStore.get,
   );
   const liftRef = useRef(0);
+  // What the window's browser does with the fixed dock, from the keyboard
+  // module: the effects below follow it.
+  const dockRevealVersion = useSyncExternalStore(
+    subscribeDockReveal,
+    getDockRevealVersion,
+    getDockRevealVersion,
+  );
   // Set while the guide's ride is under way: the layout waits for it. Each
   // ride's number, so only the latest one hands its translate back.
   const ridingRef = useRef(false);
@@ -205,6 +231,14 @@ export function useChatKeyboard({
   // (null: the transcript did not ride), until the layout takes them over.
   const dockTargetRef = useRef<number | null>(null);
   const messagesTargetRef = useRef<number | null>(null);
+  // Set while the dock's translate carries a change of the pan's cover that
+  // the layout has not taken yet.
+  const panPendingRef = useRef(false);
+  // Fingers on the screen: while one is down, the reader still moves the pan,
+  // however slowly. The input stream's getDownPresses cannot serve. The
+  // browser cancels a finger's pointer once its touch starts to scroll, and
+  // the stream drops the press then.
+  const fingersRef = useRef(0);
   // Whether the transcript followed its newest message, and where it was
   // scrolled, just before the layout's last change.
   const atEndRef = useRef(false);
@@ -225,10 +259,18 @@ export function useChatKeyboard({
     // A sticky dock rests at the root's bottom edge, which may sit above or
     // below the layout viewport's; a fixed dock rests at the viewport's.
     // While a keyboard is up the dock rises until it clears the keyboard's
-    // cover; without one it rests where the layout puts it.
+    // cover; without one it rests where the layout puts it. Where the browser
+    // keeps the reveal, the keyboard module decides the fixed dock's lift. It
+    // is the part of the cover that the browser's pan leaves.
+    const leavesReveal = leavesRevealToBrowser(win, scrollRef.current);
     const liftFor = (inset: number) => {
       if (inset <= 0) {
         return 0;
+      }
+      if (leavesReveal) {
+        return followsDockDeficit(win)
+          ? Math.max(0, inset - (getKeyboardPan(win) ?? 0))
+          : 0;
       }
       // In layout px, as the root's rect is, under a pinch zoom too.
       const viewportBottom = layoutViewportHeight(win);
@@ -250,12 +292,39 @@ export function useChatKeyboard({
         return;
       }
       const next = liftFor(getKeyboardHeight(win));
-      if (Math.abs(next - liftRef.current) < 0.5) {
+      const moves = Math.abs(next - liftRef.current) >= 0.5;
+      // The layout takes over the translate a followed pan left.
+      if (panPendingRef.current) {
+        panPendingRef.current = false;
+        dockTargetRef.current = moves ? liftRef.current - next : null;
+        if (!moves) {
+          dock.animator.set({y: 0});
+        }
+      }
+      if (!moves) {
         return;
       }
       atEndRef.current = isAtEnd();
       scrollBeforeRef.current = scrollRef.current?.scrollTop ?? 0;
       liftStore.set(next);
+    };
+    // While the dock follows the cover a pan leaves, a report moves only the
+    // dock's translate, from the keyboard module's numbers. The layout takes
+    // the lift when the last finger lifts. After a fling, it takes it again
+    // when the fling comes to rest.
+    const followPan = (height: number) => {
+      const target = liftRef.current - liftFor(height);
+      if (Math.abs(target) < 0.5) {
+        if (panPendingRef.current) {
+          panPendingRef.current = false;
+          dockTargetRef.current = null;
+          dock.animator.set({y: 0});
+        }
+        return;
+      }
+      panPendingRef.current = true;
+      dockTargetRef.current = target;
+      dock.animator.set({y: target});
     };
 
     // The ride plays the curve the guide publishes with each transition: the
@@ -326,17 +395,71 @@ export function useChatKeyboard({
         : undefined;
     // A height change the guide has no ride for, as for a resize or a
     // rotation, takes its lift at once. This listener comes after the guide's,
-    // so a ride claims the change first.
+    // so a ride claims the change first. Where the browser keeps the reveal,
+    // a pan changes the lift too.
     let reportedHeight = getKeyboardHeight(win);
+    let reportedPan = getKeyboardPan(win);
     const unsubscribeHeight = subscribeKeyboardHeight(win, event => {
-      if (event.type === 'viewport' && event.height !== reportedHeight) {
-        reportedHeight = event.height;
+      if (event.type !== 'viewport') {
+        return;
+      }
+      const changed = event.height !== reportedHeight;
+      const pan = getKeyboardPan(win);
+      reportedHeight = event.height;
+      // A keyboard hide ends any touch this effect may not have heard end.
+      if (event.height <= 0) {
+        fingersRef.current = 0;
+      }
+      const isPanStill = pan === reportedPan;
+      reportedPan = pan;
+      if (leavesReveal && event.height > 0 && followsDockDeficit(win)) {
+        // A report that finds the pan where it was, with no finger down: the
+        // pan is at rest.
+        if (
+          !changed &&
+          isPanStill &&
+          fingersRef.current === 0 &&
+          panPendingRef.current
+        ) {
+          commit();
+        } else {
+          followPan(event.height);
+        }
+      } else if (changed || leavesReveal) {
         commit();
       }
     });
+    // A scroll that comes to rest, the visual viewport's included, or a lifted
+    // finger hands a followed pan's lift to the layout.
+    const rest = () => {
+      if (panPendingRef.current) {
+        commit();
+      }
+    };
+    const onTouchStart = (event: Event) => {
+      fingersRef.current = (event as Partial<TouchEvent>).touches?.length ?? 1;
+    };
+    const onTouchEnd = (event: Event) => {
+      fingersRef.current = (event as Partial<TouchEvent>).touches?.length ?? 0;
+      if (fingersRef.current === 0) {
+        rest();
+      }
+    };
+    const stopRest = leavesReveal
+      ? [
+          subscribeInput(win, 'touchstart', onTouchStart),
+          subscribeInput(win, 'touchend', onTouchEnd),
+          subscribeInput(win, 'touchcancel', onTouchEnd),
+          subscribeInput(win, 'scrollend', rest),
+          subscribeViewportRest(win, rest),
+        ]
+      : [];
     // Mounted under a keyboard that is already up: take its place at once.
     commit();
     return () => {
+      for (const stop of stopRest) {
+        stop();
+      }
       unsubscribeHeight();
       unsubscribe?.();
       ridingRef.current = false;
@@ -349,6 +472,7 @@ export function useChatKeyboard({
     dock.animator,
     messages.animator,
     liftStore,
+    dockRevealVersion,
   ]);
 
   // Synchronizes the dock's and the transcript's translates, and the
@@ -403,7 +527,8 @@ export function useChatKeyboard({
     if (
       !touchPresentation.isTouch ||
       composer == null ||
-      !followsKeyboard(win)
+      !followsKeyboard(win) ||
+      leavesRevealToBrowser(win, scrollRef.current)
     ) {
       return undefined;
     }
@@ -411,12 +536,14 @@ export function useChatKeyboard({
       claim: editableToClaim,
       deliver: deliverTap,
     });
-  }, [touchPresentation.isTouch]);
+  }, [touchPresentation.isTouch, scrollRef, dockRevealVersion]);
 
   // A browser that reveals the composer itself pans the visual viewport after
   // the keyboard's report, while the composer still rides up. Chrome 124 on
   // Android pans by the keyboard's whole height. The keyboard module's
-  // reveal-pan watch puts the pan back, so the page does not move.
+  // reveal-pan watch puts the pan back, so the page does not move. With no
+  // layout guide, in a page that scrolls the document, the watch also decides
+  // at each show whether the browser pans to the dock. It keeps that pan.
   // Synchronizes the keyboard module's reports, under a finger only.
   useIsomorphicLayoutEffect(() => {
     const composer = composerRef.current;
@@ -428,7 +555,9 @@ export function useChatKeyboard({
     ) {
       return undefined;
     }
-    const pans = watchPans(win, focused => composer.contains(focused));
+    const pans = watchPans(win, focused => composer.contains(focused), {
+      dock: isUnguidedDocument(win, scrollRef.current),
+    });
     const unsubscribe = subscribeKeyboardHeight(win, event => {
       if (event.type === 'viewport') {
         pans.report(event.height);
@@ -438,7 +567,7 @@ export function useChatKeyboard({
       unsubscribe();
       pans.stop();
     };
-  }, [touchPresentation.isTouch]);
+  }, [touchPresentation.isTouch, scrollRef]);
 
   // Synchronizes the keyboard module's focus takeover, and the region's group
   // role, with the touch presentation. Every other move into the composer's
@@ -453,7 +582,8 @@ export function useChatKeyboard({
     if (
       !touchPresentation.isTouch ||
       composer == null ||
-      !followsKeyboard(win)
+      !followsKeyboard(win) ||
+      leavesRevealToBrowser(win, scrollRef.current)
     ) {
       return undefined;
     }
@@ -473,14 +603,61 @@ export function useChatKeyboard({
       stopTakeover();
       composer.removeAttribute('role');
     };
-  }, [touchPresentation.isTouch, readModality]);
+  }, [touchPresentation.isTouch, readModality, scrollRef, dockRevealVersion]);
+
+  // A focus call skips the browser's reveal only where ChatLayout keeps the
+  // composer above the keyboard itself. The server has no keyboard profile.
+  const readKeyboardSurface = useCallback(() => {
+    const scroller = scrollRef.current;
+    const win = scroller?.ownerDocument.defaultView;
+    return win == null || !leavesRevealToBrowser(win, scroller);
+  }, [scrollRef]);
+  const isKeyboardSurface = useSyncExternalStore(
+    subscribeDockReveal,
+    readKeyboardSurface,
+    readKeyboardSurfaceOnServer,
+  );
 
   return {
     lift,
     dockRef: dock.ref,
     messagesRef: messages.ref,
     composerRef,
+    isKeyboardSurface,
   };
+}
+
+const readKeyboardSurfaceOnServer = () => true;
+
+// A page that scrolls the document, in a browser with no layout guide: there
+// the browser may reveal the fixed dock itself.
+function isUnguidedDocument(win: Window, scroller: Element | null): boolean {
+  return isDocumentScroller(scroller) && keyboardProfileOf(win) !== 'chromium';
+}
+
+/**
+ * Whether the browser keeps focus and the composer's reveal. That is a page
+ * that scrolls the document, in a browser with no layout guide. It holds
+ * until a keyboard show finds the fixed dock left covered. Safari on iOS pans
+ * the visual viewport to the dock, and a lift would add to that pan. Firefox
+ * for Android can leave it covered: from then on, the layout keeps the
+ * composer above the keyboard itself.
+ */
+function leavesRevealToBrowser(win: Window, scroller: Element | null): boolean {
+  return isUnguidedDocument(win, scroller) && !isDockLeftCovered(win);
+}
+
+// The document's root and body both scroll the page.
+function isDocumentScroller(scroller: Element | null): boolean {
+  if (scroller == null) {
+    return false;
+  }
+  const doc = scroller.ownerDocument;
+  return (
+    scroller === doc.scrollingElement ||
+    scroller === doc.documentElement ||
+    scroller === doc.body
+  );
 }
 
 /** A compositor animator for one element, bound through a stable callback ref. */

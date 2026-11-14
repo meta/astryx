@@ -148,7 +148,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: "On a phone, the components that respond to the on-screen keyboard, a fully expanded `height='tall'` BottomSheet and ChatLayout's composer, measure it the same way: the layout viewport's height minus the visual viewport's height times its scale. Where the visual viewport shrinks for the keyboard, as in Safari on iOS in the browser and as a home-screen app, in Firefox for Android and in Chrome on Android, they keep the focused field and the surface around it above the keyboard and leave the page where it was. If Firefox for Android pans to the field, they put the page back within a couple of frames.",
+          text: "On a phone, the components that respond to the on-screen keyboard, a fully expanded `height='tall'` BottomSheet and ChatLayout's composer, measure it the same way: the layout viewport's height minus the visual viewport's height times its scale. Where the visual viewport shrinks for the keyboard, as in Safari on iOS in the browser and as a home-screen app, in Firefox for Android and in Chrome on Android, they keep the focused field and the surface around it above the keyboard and leave the page where it was. If Firefox for Android pans to the field, they put the page back within a couple of frames. One exception applies when ChatLayout's scrollRef names the document. Safari on iOS then reveals the composer itself and keeps its focus. In another browser without the VirtualKeyboard API, each show before that keeps the browser\u2019s pan to the composer. The first keyboard show that leaves the composer covered waits a short time before the composer rises.",
         },
         {
           type: 'prose',

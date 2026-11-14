@@ -478,7 +478,7 @@ export function ChatLayout({
           {/* The composer's region. Under a finger in a top-level page,
               useChatKeyboard makes it a group with no name, where focus rests
               after the keyboard's Done. Elsewhere it is a plain container. */}
-          <KeyboardSurfaceContext value={true}>
+          <KeyboardSurfaceContext value={keyboard.isKeyboardSurface}>
             <div
               ref={keyboard.composerRef}
               {...stylex.props(

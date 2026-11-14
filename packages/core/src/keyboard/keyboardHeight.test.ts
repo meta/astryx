@@ -28,11 +28,13 @@ import {
   findTextEntryControl,
   focusAtPoint,
   getKeyboardHeight,
+  getKeyboardPan,
   isKeyboardMeasurable,
   isTextEntryControl,
   measureKeyboardHeight,
   refuseFocusReveal,
   subscribeKeyboardHeight,
+  subscribeViewportRest,
   watchRevealPan,
   type KeyboardHeightEvent,
 } from './keyboardHeight';
@@ -915,6 +917,90 @@ describe('the browser\u2019s own reveal pan (FR4)', () => {
     expect(touched).toEqual(['first', 'second', 'second']);
     second.stop();
     expect(remove.mock.calls.map(([type]) => type)).toEqual(['touchstart']);
+  });
+
+  it('with the dock option off, reports and listens exactly as without it', () => {
+    const runs: boolean[][] = [];
+    for (const options of [{}, {dock: false}]) {
+      const add = vi.spyOn(window, 'addEventListener');
+      const region = document.createElement('div');
+      const field = document.createElement('textarea');
+      region.append(field);
+      document.body.append(region);
+      const watch = watchRevealPan(window, {
+        owns: focused => region.contains(focused),
+        ...options,
+      });
+      field.focus();
+      viewport.offsetTop = 0;
+      viewport.height = window.innerHeight - 300;
+      watch.report();
+      const seen = [watch.isRevealPan(300), watch.dockReport(300)];
+      viewport.offsetTop = 300;
+      seen.push(watch.isRevealPan(300), watch.dockReport(300));
+      document.dispatchEvent(new Event('touchstart'));
+      seen.push(watch.isRevealPan(300));
+      runs.push(seen);
+      expect(add.mock.calls.map(([type]) => type)).toEqual(['touchstart']);
+      watch.stop();
+      add.mockRestore();
+      document.body.replaceChildren();
+    }
+    expect(runs[1]).toEqual(runs[0]);
+    expect(runs[0]).toEqual([false, false, true, false, false]);
+  });
+
+  it('with the dock option, listens for wheels through the shared input stream', () => {
+    const add = vi.spyOn(window, 'addEventListener');
+    const remove = vi.spyOn(window, 'removeEventListener');
+    const first = watchRevealPan(window, {owns: () => true, dock: true});
+    const second = watchRevealPan(window, {owns: () => true, dock: true});
+    expect(add.mock.calls.map(([type]) => type).sort()).toEqual([
+      'touchstart',
+      'wheel',
+    ]);
+    first.stop();
+    expect(remove).not.toHaveBeenCalled();
+    second.stop();
+    expect(remove.mock.calls.map(([type]) => type).sort()).toEqual([
+      'touchstart',
+      'wheel',
+    ]);
+  });
+});
+
+describe('the visual viewport\u2019s rest', () => {
+  it('shares one scroll-end listener on the visual viewport among its callers', () => {
+    const add = vi.spyOn(viewport, 'addEventListener');
+    const remove = vi.spyOn(viewport, 'removeEventListener');
+    const heard: string[] = [];
+    const stopFirst = subscribeViewportRest(window, () => heard.push('first'));
+    const stopSecond = subscribeViewportRest(window, () =>
+      heard.push('second'),
+    );
+    expect(add.mock.calls.map(([type]) => type)).toEqual(['scrollend']);
+    viewport.dispatchEvent(new Event('scrollend'));
+    expect(heard).toEqual(['first', 'second']);
+    stopFirst();
+    expect(remove).not.toHaveBeenCalled();
+    stopSecond();
+    expect(remove.mock.calls.map(([type]) => type)).toEqual(['scrollend']);
+  });
+});
+
+describe('the visual viewport\u2019s pan with each report', () => {
+  it('is read with the report\u2019s height, and is none under a pinch zoom', () => {
+    const stop = subscribeKeyboardHeight(window, () => {});
+    viewport.offsetTop = 120;
+    viewport.dispatchEvent(new Event('scroll'));
+    expect(getKeyboardPan(window)).toBe(120);
+    // No report yet: the reader sees the last report's pan.
+    viewport.offsetTop = 200;
+    expect(getKeyboardPan(window)).toBe(120);
+    viewport.scale = 2;
+    viewport.dispatchEvent(new Event('scroll'));
+    expect(getKeyboardPan(window)).toBeNull();
+    stop();
   });
 });
 
