@@ -6,6 +6,7 @@
  */
 
 import {spawn, spawnSync} from 'node:child_process';
+import {randomUUID} from 'node:crypto';
 import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
 import * as os from 'node:os';
@@ -222,15 +223,22 @@ describe('render(): every write takes its place in one step', () => {
       child.on('close', code => resolve({code, out}));
     });
 
-  it('renders one page to one file from many processes at once: every run succeeds and the file is whole', async () => {
-    // A large image makes each write long enough for the runs to overlap.
-    put('big.png', Buffer.concat([PNG, Buffer.alloc(6_000_000, 7)]));
-    put('big-page.tsx', "import big from './big.png';\nexport default function Big() {\n  return <img src={big} alt=\"\" />;\n}\n");
-    const runs = await Promise.all(Array.from({length: 8}, () => cliRun(['experimental', 'render', 'big-page.tsx', '--out', 'shared.html'])));
-    expect(runs.map(r => r.code)).toEqual(Array(8).fill(0));
-    const {readSourceBlock} = await import('../../foundation/render/source-block.mjs');
-    expect('source' in readSourceBlock(fs.readFileSync(path.join(dir, 'shared.html'), 'utf8'))).toBe(true);
-  }, 120_000);
+  it('replaces a rendered file in one step: a reader that has the old file open keeps reading all of it', async () => {
+    put('swap-a.tsx', 'export default function A() {\n  return <p>First page</p>;\n}\n');
+    put('swap-b.tsx', 'export default function B() {\n  return <p>Second page</p>;\n}\n');
+    await render('swap-a.tsx', {cwd: dir, out: 'swap.html'});
+    const file = path.join(dir, 'swap.html');
+    const before = fs.readFileSync(file);
+    const fd = fs.openSync(file, 'r');
+    try {
+      await render('swap-b.tsx', {cwd: dir, out: 'swap.html'});
+      const held = Buffer.alloc(before.length + 1);
+      expect(held.subarray(0, fs.readSync(fd, held, 0, held.length, 0))).toEqual(before);
+    } finally {
+      fs.closeSync(fd);
+    }
+    expect(fs.readFileSync(file, 'utf8')).toContain('Second page');
+  }, 60_000);
 
   it('restores one file from many processes at once: each run gets a folder of its own, whole', async () => {
     const runs = await Promise.all(Array.from({length: 8}, () => cliRun(['experimental', 'render', '--reverse', 'page.html'])));
@@ -289,6 +297,37 @@ describe('render(): every write takes its place in one step', () => {
     }
     expect(refused?.code).toBe('ERR_WRITE_FAILED');
     expect(refused.message).toBe('Could not write locked/page.html: locked does not take a new file (EACCES); nothing was written.');
+  }, 60_000);
+
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'a restore with --overwrite replaces a file this user cannot write, as it did',
+    async () => {
+      const solo = 'export default function Solo() {\n  return <p>Solo</p>;\n}\n';
+      put('solo.tsx', solo);
+      await render('solo.tsx', {cwd: dir});
+      const file = put('read-only-back/solo.tsx', 'old\n');
+      fs.chmodSync(file, 0o444);
+      await render('solo.html', {cwd: dir, reverse: true, out: 'read-only-back/solo.tsx', overwrite: true});
+      expect(fs.readFileSync(file, 'utf8')).toBe(solo);
+    },
+    60_000,
+  );
+
+  it('removes a temporary that a stopped run on this computer left beside its target, and keeps any other', async () => {
+    const host = os.hostname();
+    // A process id no system gives out, so its run is gone.
+    const left = path.join(dir, `.stale.html.tmp-${host}-999999999-${randomUUID()}`);
+    const running = path.join(dir, `.stale.html.tmp-${host}-${process.pid}-${randomUUID()}`);
+    const leftFolder = path.join(dir, `.page-restored.tmp-${host}-999999999-${randomUUID()}`);
+    for (const temporary of [left, running]) fs.writeFileSync(temporary, 'part of a file');
+    put(path.relative(dir, path.join(leftFolder, 'page.tsx')), 'part of a folder');
+    await render('page.tsx', {cwd: dir, out: 'stale.html'});
+    const restored = /** @type {any} */ (await render('page.html', {cwd: dir, reverse: true}));
+    expect(fs.existsSync(left)).toBe(false);
+    expect(fs.existsSync(leftFolder)).toBe(false);
+    expect(fs.existsSync(running)).toBe(true);
+    fs.rmSync(running);
+    fs.rmSync(path.join(dir, path.dirname(restored.data.output)), {recursive: true});
   }, 60_000);
 
   it('leaves no temporary file or folder behind', () => {

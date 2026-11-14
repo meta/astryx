@@ -8,6 +8,7 @@
  */
 
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {createRequire} from 'node:module';
@@ -43,6 +44,7 @@ import {cliVersion} from '../../foundation/integrations/cli-peer-version.mjs';
 import {assertWithin, PathSafetyError} from '../../foundation/fs/path-safety.mjs';
 import {requireCoreDir} from '../../foundation/fs/paths.mjs';
 import {runChoice} from '../../foundation/release/run-context.mjs';
+import {isAlive} from '../../foundation/release/cache.mjs';
 import {isServedPackage} from '../../foundation/render/served-packages.mjs';
 import {hostedRun, recordResolved} from '../../foundation/runtime/package-root.mjs';
 
@@ -183,11 +185,42 @@ function refuseProtected(files, cwd, newFolder = null) {
 }
 
 /**
- * A hidden temporary name beside a file or folder, as the CLI's other writers
- * name theirs.
- * @param {string} file absolute
+ * The start of the hidden temporary names a run on this computer gives a
+ * file or folder beside its target, before the run's process id.
+ * @param {string} target absolute
  */
-const temporaryBeside = file => path.join(path.dirname(file), `.${path.basename(file)}.tmp-${randomUUID()}`);
+const temporaryPrefix = target => `.${path.basename(target)}.tmp-${os.hostname()}-`;
+
+/**
+ * A hidden temporary name beside a file or folder, as the CLI's other writers
+ * name theirs, with this computer's name and this process's id, so a later
+ * run can tell when the run that made it is gone.
+ * @param {string} target absolute
+ */
+const temporaryBeside = target => path.join(path.dirname(target), `${temporaryPrefix(target)}${process.pid}-${randomUUID()}`);
+
+/**
+ * Remove the temporaries that runs on this computer left beside a target
+ * when they stopped between their write and their rename: those whose
+ * process no longer runs. A temporary of a run that still runs, or of a run
+ * on another computer, stays.
+ * @param {string} target absolute
+ */
+function removeStaleTemporaries(target) {
+  const prefix = temporaryPrefix(target);
+  let names;
+  try {
+    names = fs.readdirSync(path.dirname(target));
+  } catch {
+    return;
+  }
+  for (const name of names) {
+    if (!name.startsWith(prefix)) continue;
+    const pid = /^(\d+)-[0-9a-f-]{36}$/.exec(name.slice(prefix.length))?.[1];
+    if (pid === undefined || isAlive(Number(pid))) continue;
+    fs.rmSync(path.join(path.dirname(target), name), {recursive: true, force: true});
+  }
+}
 
 /**
  * The topmost folder on the way to `file` that does not exist yet, or null
@@ -222,15 +255,16 @@ function writeFailure(e, temporary, folder, cwd) {
  * Write one file in one step: its bytes go to a temporary file beside it,
  * which then takes its name. A reader, or another run at the same time, sees
  * the old whole file or the new one, never part of one, and a run stopped
- * part-way leaves the old file as it was. A file this user cannot write is
- * not replaced, and a replaced file keeps its permission bits.
+ * part-way leaves the old file as it was; the next write to the file removes
+ * the temporary that run left.
  * @param {string} file absolute
  * @param {string | Buffer} content
  * @param {string} cwd
- * @param {{replace: boolean}} options `replace`: an existing file may be
- *   replaced; without it, a file that appeared since the checks stays
+ * @param {{replace: boolean, mode?: number}} options `replace`: an existing
+ *   file may be replaced; without it, a file that appeared since the checks
+ *   stays. `mode`: the permission bits the file gets
  */
-function writeOutput(file, content, cwd, {replace}) {
+function writeOutput(file, content, cwd, {replace, mode}) {
   /** @type {string | null} */
   let temporary = null;
   try {
@@ -245,10 +279,10 @@ function writeOutput(file, content, cwd, {replace}) {
     if (existing?.isDirectory()) {
       throw Object.assign(new Error(`EISDIR: illegal operation on a directory, open '${file}'`), {code: 'EISDIR'});
     }
-    if (existing) fs.accessSync(file, fs.constants.W_OK);
+    removeStaleTemporaries(file);
     temporary = temporaryBeside(file);
     fs.writeFileSync(temporary, content, {flag: 'wx'});
-    if (existing) fs.chmodSync(temporary, existing.mode & 0o7777);
+    if (mode !== undefined) fs.chmodSync(temporary, mode);
     if (replace) fs.renameSync(temporary, file);
     else publishNewFile(temporary, file);
   } catch (e) {
@@ -273,14 +307,16 @@ function writeOutput(file, content, cwd, {replace}) {
  * Write a new folder and every file in it, all or nothing, in one step: the
  * files go into a temporary folder beside it, which then takes the folder's
  * name. A run stopped part-way leaves no folder behind, so running it again
- * works, and of two runs that pick the same name, one gets it and the other
- * learns that it is taken.
+ * works (and removes the temporary folder that run left), and of two runs
+ * that pick the same name, one gets it and the other learns that it is
+ * taken.
  * @param {string} folder absolute; does not exist yet
  * @param {{file: string, bytes: Buffer}[]} writes absolute targets inside `folder`
  * @param {string} cwd
  * @returns {boolean} false when the folder appeared before this run could take its name
  */
 function writeFolder(folder, writes, cwd) {
+  removeStaleTemporaries(folder);
   const staging = temporaryBeside(folder);
   let current = folder;
   try {
@@ -425,7 +461,21 @@ export async function renderToFile({cwd, input, output, title}) {
       ERROR_CODES.ERR_FILE_EXISTS,
     );
   }
-  writeOutput(output, page.html, cwd, {replace: true});
+  // A render never replaces an HTML file this user cannot write, and the file
+  // it replaces keeps its permission bits.
+  const existingMode = fs.statSync(output, {throwIfNoEntry: false})?.mode;
+  if (existingMode !== undefined) {
+    try {
+      fs.accessSync(output, fs.constants.W_OK);
+    } catch (e) {
+      throw new AstryxError(
+        `Could not write ${shown(cwd, output)}: ${/** @type {Error} */ (e).message}; nothing was written.`,
+        [],
+        ERROR_CODES.ERR_WRITE_FAILED,
+      );
+    }
+  }
+  writeOutput(output, page.html, cwd, {replace: true, ...(existingMode === undefined ? {} : {mode: existingMode & 0o7777})});
   return {
     input: shown(cwd, input),
     output: shown(cwd, output),
@@ -477,13 +527,17 @@ function refuseRunnable(files, cwd, input) {
 /**
  * The new folder a restore without --out writes into: beside the HTML file,
  * named after it (`report.html` gives `report-restored/`, then
- * `report-restored-2/` when that exists).
+ * `report-restored-2/` when that exists). A name already taken is never
+ * written again, so a temporary folder a stopped run left for it goes.
  * @param {string} input absolute
  */
 function restoreFolder(input) {
   const stem = path.basename(input).replace(/\.[^.]+$/, '');
   let folder = path.join(path.dirname(input), `${stem}-restored`);
-  for (let n = 2; fs.existsSync(folder); n++) folder = path.join(path.dirname(input), `${stem}-restored-${n}`);
+  for (let n = 2; fs.existsSync(folder); n++) {
+    removeStaleTemporaries(folder);
+    folder = path.join(path.dirname(input), `${stem}-restored-${n}`);
+  }
   return folder;
 }
 
