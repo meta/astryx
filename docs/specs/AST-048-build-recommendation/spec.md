@@ -77,7 +77,11 @@ own ranking and output, and template owners own what each template is.
   app shell (FR2) when it gives no page. The blocks and components in the kit
   carry the part itself. A request that changes a page the builder already has
   starts from the app shell (FR2): the page is the builder's to keep (FR9), and
-  no template scaffolds it. One exception: when the start would be the app
+  no template scaffolds it. A request that adds something to a place that names
+  no page, only the app or product as a whole, changes no page the builder has:
+  when the thing it adds names a page family or a page template, it is a new
+  page and starts from that template, and otherwise it is a part with no page
+  and starts from the app shell. One exception: when the start would be the app
   shell, search matched no template directly, and build's fixed shell-start
   decision reads the request as a whole page (DEC-10), the start is the
   best-ranked page template even when the request reads as a part. A request
