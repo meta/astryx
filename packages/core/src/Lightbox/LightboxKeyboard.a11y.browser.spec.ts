@@ -1,5 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y always
+// @pr-a11y scope ^packages/core/src/Lightbox/ ^apps/storybook/stories/Lightbox
 
 /**
  * @file LightboxKeyboard.a11y.browser.spec.ts
@@ -33,7 +33,9 @@ test.afterAll(async () => {
 // Opens the gallery story at its second photo ("2 / 4").
 async function openGallery(page: Page, direction: 'ltr' | 'rtl') {
   // The story's photos are remote; the keys do not need them to load.
-  await page.route(/picsum\.photos/, async route => route.abort());
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
+    route.abort(),
+  );
   await page.goto(
     `${storybook.origin}/iframe.html?id=core-lightbox--gallery&viewMode=story${
       direction === 'rtl' ? '&globals=direction:rtl' : ''
@@ -125,7 +127,9 @@ test('Tab and Shift+Tab wrap inside an open gallery', async ({page}) => {
 test('Tab and Shift+Tab wrap inside an open single image, zoomed or not', async ({
   page,
 }) => {
-  await page.route(/picsum\.photos/, async route => route.abort());
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
+    route.abort(),
+  );
   await page.goto(
     `${storybook.origin}/iframe.html?id=core-lightbox--with-zoom&viewMode=story`,
   );
@@ -143,7 +147,7 @@ test('+ zooms and is announced inside the viewer, and 0 returns to the fitted si
   page,
 }) => {
   // A local picture stands in for the remote photo, so the zoom has a size.
-  await page.route(/picsum\.photos/, async route =>
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
     route.fulfill({
       contentType: 'image/svg+xml',
       body: '<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800"><rect width="1200" height="800" fill="#5b7f6a"/></svg>',
@@ -171,7 +175,9 @@ test('+ zooms and is announced inside the viewer, and 0 returns to the fitted si
 test('an arrow key pressed on "more" pages, and focus stays in the viewer for the next arrow', async ({
   page,
 }) => {
-  await page.route(/picsum\.photos/, async route => route.abort());
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
+    route.abort(),
+  );
   await page.goto(
     `${storybook.origin}/iframe.html?id=core-lightbox--gallery-with-captions&viewMode=story`,
   );
@@ -193,7 +199,9 @@ test('an arrow key pressed on "more" pages, and focus stays in the viewer for th
 
 // Opens the zoomable gallery whose first caption runs past two lines.
 async function openCaptionGallery(page: Page) {
-  await page.route(/picsum\.photos/, async route => route.abort());
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
+    route.abort(),
+  );
   await page.goto(
     `${storybook.origin}/iframe.html?id=core-lightbox--gallery-with-captions&viewMode=story`,
   );

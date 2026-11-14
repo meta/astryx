@@ -1283,6 +1283,21 @@ export const CustomContent: StoryObj = {
           }}
         />
         <Button
+          label="Two lines"
+          variant="ghost"
+          onClick={() => {
+            toast({
+              body: (
+                <Stack direction="vertical" gap={0}>
+                  <Text weight="semibold">Upload complete</Text>
+                  <Text>3 files uploaded</Text>
+                </Stack>
+              ),
+              renderContent: renderProductContent,
+            });
+          }}
+        />
+        <Button
           label="Without renderContent"
           variant="ghost"
           onClick={() => {

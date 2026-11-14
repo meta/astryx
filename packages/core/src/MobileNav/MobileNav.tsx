@@ -81,6 +81,8 @@ import {themeProps} from '../utils/themeProps';
 import {matchesMediaQuery} from '../utils/coarsePointer';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {isRtlElement} from '../hooks/isRtlElement';
+import {useIsHydrating} from '../hooks/useIsHydrating';
 import {useScrollLock} from '../hooks/useScrollLock';
 import {useFocusRegionContainment} from '../hooks/useFocusTrap';
 import {
@@ -549,38 +551,53 @@ export function MobileNav({
   // open/close effect below, so it measures the scrollbar gutter before
   // showModal() can hide the scrollbar.
   useScrollLock(isOpen);
-  // Resolved side — computed from trigger position when side='auto'
-  const [resolvedSide, setResolvedSide] = useState<'start' | 'end'>(
-    side === 'auto' ? 'end' : side,
-  );
-
-  // Resolve which edge the drawer slides from. Deliberately its own effect,
-  // declared before the open/close effect below so the trigger is still the
-  // active element when `side='auto'` reads it. Keeping it out of that effect
-  // is what stops a `side` change during a close from re-arming the delay: the
-  // CSS hold runs from the commit that started the slide-out and does not
-  // restart, so a fresh full delay could land after the drawer had already
-  // stopped being rendered — #4290 again.
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    if (side === 'auto') {
-      const trigger = document.activeElement as HTMLElement | null;
-      if (trigger && trigger !== document.body) {
+  // For side='auto', the edge is resolved while rendering the transition to
+  // open (or to `auto` while open). An Effect would commit the default `end`
+  // first, so the drawer would slide in from the wrong edge. An explicit
+  // `side` is used directly.
+  const [autoSide, setAutoSide] = useState<'start' | 'end'>('end');
+  const [wasAutoOpen, setWasAutoOpen] = useState(false);
+  const isAutoOpen = isOpen && side === 'auto';
+  // Hydration must not read focus or layout; resolve after it.
+  const canReadDom = !useIsHydrating();
+  if (canReadDom && isAutoOpen !== wasAutoOpen) {
+    setWasAutoOpen(isAutoOpen);
+    if (isAutoOpen) {
+      // The opener is the focused element. If a tap left no focus, or focus is
+      // already inside this dialog (a server-open drawer, where showModal()
+      // ran before this render), fall back to the element whose
+      // `aria-controls` names this dialog.
+      const active = document.activeElement as HTMLElement | null;
+      const hasOpenerFocus =
+        active !== null &&
+        active !== document.body &&
+        !dialogRef.current?.contains(active);
+      const dialogIds = [dialogId, dialogRef.current?.id, rest.id];
+      const trigger =
+        hasOpenerFocus && active
+          ? active
+          : Array.from(
+              // eslint-disable-next-line @eslint-react/purity -- runs only on the closed-to-open render. Never on the server or while hydrating.
+              document.querySelectorAll<HTMLElement>('[aria-controls]'),
+            ).find(el =>
+              (el.getAttribute('aria-controls') ?? '')
+                .split(/\s+/)
+                .some(token => token !== '' && dialogIds.includes(token)),
+            );
+      if (trigger) {
         const rect = trigger.getBoundingClientRect();
         const triggerCenter = rect.left + rect.width / 2;
-        // eslint-disable-next-line @eslint-react/set-state-in-effect -- side is resolved from trigger layout immediately before showModal()
-        setResolvedSide(
-          triggerCenter < window.innerWidth / 2 ? 'start' : 'end',
-        );
+        const half = window.innerWidth / 2;
+        // An opener in the inline-start half opens the drawer at the start. A
+        // centred opener opens it at the end in both directions.
+        const isInStartHalf = isRtlElement(trigger)
+          ? triggerCenter > half
+          : triggerCenter < half;
+        setAutoSide(isInStartHalf ? 'start' : 'end');
       }
-    } else {
-      // eslint-disable-next-line @eslint-react/set-state-in-effect -- side prop changes must update the open dialog placement
-      setResolvedSide(side);
     }
-  }, [isOpen, side]);
+  }
+  const resolvedSide = side === 'auto' ? autoSide : side;
 
   // Open/close the dialog via showModal()/close()
   // close() is delayed so the slide-out transition can play.
