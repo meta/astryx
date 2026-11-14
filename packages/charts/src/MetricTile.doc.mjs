@@ -1,0 +1,185 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+/** @type {import('@astryxdesign/cli/authoring').ComponentDoc} */
+
+export const docs = {
+  name: 'MetricTile',
+  displayName: 'MetricTile',
+  group: 'Charts',
+  category: 'Data Visualization',
+  keywords: ['metric', 'kpi', 'stat', 'tile', 'dashboard', 'delta'],
+
+  theming: {
+    targets: [{className: 'astryx-metric-tile', visualProps: ['size']}],
+  },
+
+  usage: {
+    description:
+      'MetricTile is a KPI tile: a label, a large headline value, an optional sentiment-aware delta, a supporting description, and a trend slot for a small trend chart, such as a `Chart` with one `line` mark. Use it for dashboard headline metrics instead of hand-rolling label/value layouts.',
+    bestPractices: [
+      {
+        guidance: true,
+        description:
+          'Pass a pre-formatted value string (like "2.4M") and keep the delta to one compact change statement.',
+      },
+      {
+        guidance: true,
+        description:
+          'Set sentiment explicitly for inverted metrics where down is good (error rate, latency) so the color matches the meaning.',
+      },
+      {
+        guidance: false,
+        description:
+          'Put charts or interactive content other than a small trend graphic in the trend slot.',
+      },
+    ],
+    accessibility: [
+      {
+        name: 'Delta direction',
+        category: 'Semantics',
+        criterion: '1.1.1 Non-text Content',
+        requirement: 'Built in',
+        states: ['Delta shown'],
+        description:
+          'The delta glyph is decorative; its direction is announced to screen readers as text after the delta value.',
+      },
+      {
+        name: 'Delta color',
+        category: 'Color contrast',
+        criterion: '1.4.1 Use of Color',
+        requirement: 'Built in',
+        states: ['Delta shown'],
+        description:
+          'The direction glyph and its announced text follow the movement direction, not an overridden sentiment: with a sentiment override, only the color says whether the move is good. Never rely on color alone to carry sentiment.',
+      },
+    ],
+    anatomy: [
+      {
+        name: 'Label',
+        required: true,
+        description: 'Metric name shown above the value.',
+      },
+      {
+        name: 'Value',
+        required: true,
+        description: 'Headline metric rendered large with tabular numerals.',
+      },
+      {
+        name: 'Delta',
+        required: false,
+        description:
+          'Direction glyph plus colored change text next to the value.',
+      },
+      {
+        name: 'Description',
+        required: false,
+        description: 'Muted supporting line under the value.',
+      },
+      {
+        name: 'Trend',
+        required: false,
+        description:
+          'Trend graphic below the text content, e.g. a small trend chart.',
+      },
+    ],
+  },
+
+  props: [
+    {
+      name: 'label',
+      type: 'string',
+      description: 'Metric name shown above the value.',
+      required: true,
+    },
+    {
+      name: 'value',
+      type: 'ReactNode',
+      description:
+        'The headline metric. Pass a pre-formatted string like "1.2M".',
+      required: true,
+    },
+    {
+      name: 'delta',
+      type: 'MetricTileDelta',
+      description:
+        'Change indicator: pre-formatted text, a direction, and an optional sentiment override.',
+    },
+    {
+      name: 'description',
+      type: 'string',
+      description: 'Muted supporting line under the value.',
+    },
+    {
+      name: 'trend',
+      type: 'ReactNode',
+      description:
+        'Trend graphic rendered below the text content, e.g. a small trend chart.',
+    },
+    {
+      name: 'size',
+      type: "'sm' | 'md' | 'lg'",
+      description: 'Size variant controlling the value font size.',
+      default: "'md'",
+    },
+    {
+      name: 'ref',
+      type: 'Ref<HTMLDivElement>',
+      description: 'Ref forwarded to the root element.',
+    },
+    {
+      name: 'xstyle',
+      type: 'StyleXStyles',
+      description:
+        'StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value, not an inline style object like style={{}}.',
+    },
+    {
+      name: 'className',
+      type: 'string',
+      description: 'CSS class name appended to the root element.',
+    },
+    {
+      name: 'style',
+      type: 'CSSProperties',
+      description:
+        'Inline styles merged onto the root element after the component styles.',
+    },
+  ],
+
+  examples: [
+    {
+      label: 'Metric with delta and trend',
+      code: `import {MetricTile, Chart, line} from '@astryxdesign/charts';
+
+const trendRows = [4, 7, 5, 9, 6, 11].map((value, index) => ({
+  index: index + 1,
+  value,
+}));
+
+<MetricTile
+  label="Total requests"
+  value="2.4M"
+  delta={{value: '+12.4%', direction: 'up'}}
+  description="vs. previous 30 days"
+  trend={
+    <Chart
+      data={trendRows}
+      xKey="index"
+      series={[line('value')]}
+      height={48}
+      margin={{top: 4, right: 0, bottom: 4, left: 0}}
+      title="Request trend"
+    />
+  }
+/>;`,
+    },
+    {
+      label: 'Inverted metric',
+      code: `<MetricTile
+  label="Error rate"
+  value="0.42%"
+  delta={{value: '-0.08%', direction: 'down', sentiment: 'positive'}}
+  description="vs. previous 7 days"
+/>;`,
+    },
+  ],
+};

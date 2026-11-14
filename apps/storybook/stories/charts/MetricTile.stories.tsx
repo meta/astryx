@@ -1,0 +1,59 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+import type {Meta, StoryObj} from '@storybook/react';
+import {MetricTile, Chart, line} from '@astryxdesign/charts';
+
+const meta: Meta<typeof MetricTile> = {
+  title: 'Charts/MetricTile',
+  component: MetricTile,
+};
+export default meta;
+
+const trendData = [4, 7, 5, 9, 6, 11, 8, 13, 10, 15];
+const trendRows = trendData.map((value, index) => ({index: index + 1, value}));
+
+export const WithTrend: StoryObj<typeof MetricTile> = {
+  render: () => (
+    <div style={{width: 280}}>
+      <MetricTile
+        label="Total requests"
+        value="2.4M"
+        delta={{value: '+12.4%', direction: 'up'}}
+        description="vs. previous 30 days"
+        trend={
+          <Chart
+            data={trendRows}
+            xKey="index"
+            series={[line('value')]}
+            height={48}
+            margin={{top: 4, right: 0, bottom: 4, left: 0}}
+            title="Request trend"
+          />
+        }
+      />
+    </div>
+  ),
+};
+
+export const InvertedDelta: StoryObj<typeof MetricTile> = {
+  render: () => (
+    <div style={{width: 280}}>
+      <MetricTile
+        label="Error rate"
+        value="0.42%"
+        delta={{value: '-0.08%', direction: 'down', sentiment: 'positive'}}
+        description="vs. previous 7 days"
+      />
+    </div>
+  ),
+};
+
+export const Sizes: StoryObj<typeof MetricTile> = {
+  render: () => (
+    <div style={{display: 'flex', gap: 24}}>
+      <MetricTile label="Active users" value="18,204" size="sm" />
+      <MetricTile label="Active users" value="18,204" size="md" />
+      <MetricTile label="Active users" value="18,204" size="lg" />
+    </div>
+  ),
+};
