@@ -417,9 +417,10 @@ function pagePlugin(filename) {
         const query = spec.includes('?') ? spec.slice(spec.indexOf('?') + 1) : '';
         const target = isAliased(raw) ? resolveAlias(raw) : raw;
         if (query && (target.startsWith('.') || path.isAbsolute(target))) {
-          // A query asks for what Vite gives by itself: `?raw` the file's text,
-          // `?inline` a stylesheet's text (not injected) or an asset's data,
-          // `?url` an asset's address. Any other asks a bundler plugin.
+          // `?raw` gives the file's text and `?inline` a stylesheet's text (not
+          // added to the page), as Vite does by itself. Any other query loads
+          // the file as it loads without one: an image, font or media file as
+          // its address (`?url`, `?inline`, `?w=400`), a module as itself.
           const file = path.resolve(dir, target);
           const local = p.node.specifiers.find((/** @type {any} */ s) => s.type === 'ImportDefaultSpecifier');
           if (query === 'raw' || (query === 'inline' && /\.css$/i.test(target))) {
@@ -435,13 +436,6 @@ function pagePlugin(filename) {
               p.remove();
             }
             return;
-          }
-          if (!((query === 'url' || query === 'inline') && isAssetPath(target))) {
-            const err = new Error(
-              `${path.basename(filename)} imports ${spec}, which a bundler plugin makes and a render cannot: a render loads \`?raw\` imports, images, fonts and media with \`?url\` or \`?inline\`, and stylesheets with \`?inline\`, as Vite does by itself. Import the file without \`?${query}\`, as its address or its text.`,
-            );
-            /** @type {any} */ (err).renderCode = 'ERR_RENDER_FAILED';
-            throw err;
           }
         }
         if (!bare.startsWith('.') && !path.isAbsolute(bare) && !isAliased(bare)) {

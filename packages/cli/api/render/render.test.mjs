@@ -1498,19 +1498,17 @@ describe('render(): imports with a query, as Vite gives them', () => {
     expect(back.data.exact).toBe(true);
   }, 60_000);
 
-  it('refuses a query only a bundler plugin answers, naming it, instead of failing inside React', async () => {
-    put('queries/logo.svg', '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8"/></svg>\n');
-    put('queries/svgr.tsx', "import Logo from './logo.svg?react';\nexport default function Page() {\n  return <Logo />;\n}\n");
-    /** @type {any} */
-    let refused;
-    try {
-      await render('queries/svgr.tsx', {cwd: dir});
-    } catch (e) {
-      refused = e;
-    }
-    expect(refused?.code).toBe('ERR_RENDER_FAILED');
-    expect(refused.message).toContain('./logo.svg?react');
-    expect(refused.message).toContain('bundler plugin');
+  it('loads a file with any other query as it loads without one: an image as its address, a module as itself', async () => {
+    put('queries/w.ts', "export const label = 'from the worker module';\n");
+    put(
+      'queries/others.tsx',
+      "import a from './dot.png?w=400';\nimport b from './dot.png?no-inline';\nimport c from './dot.png?url&inline';\nimport * as w from './w.ts?worker';\nexport default function Page() {\n  return <main><img src={a} alt=\"\" /><img src={b} alt=\"\" /><img src={c} alt=\"\" /><p>{w.label}</p></main>;\n}\n",
+    );
+    const result = /** @type {any} */ (await render('queries/others.tsx', {cwd: dir}));
+    const html = fs.readFileSync(path.join(dir, 'queries/others.html'), 'utf8');
+    expect(html.match(/src="data:image\/png;base64,/g)).toHaveLength(3);
+    expect(html).toContain('from the worker module');
+    expect(result.data.files.sort()).toEqual(['dot.png', 'others.tsx', 'w.ts']);
   }, 60_000);
 });
 

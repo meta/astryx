@@ -2,6 +2,6 @@
 '@astryxdesign/cli': patch
 ---
 
-[fix] `astryx experimental render` loads imports with a Vite query as Vite does by itself: `?raw` gives the file's text, `?inline` a stylesheet's text (not added to the page) or an image's data, and `?url` an image's address; the files come back from `--reverse`. A query only a bundler plugin answers, such as `?react`, is refused with `ERR_RENDER_FAILED`, naming the import, where the render failed inside React ("Invalid tag") or could not load the file at all.
+[fix] `astryx experimental render` gives an import with `?raw` the file's text, and a stylesheet imported with `?inline` its text (not added to the page), as Vite does by itself. It used to give a JSON file's object for `?raw`, fail on a text file such as `notes.txt?raw`, and refuse a stylesheet with `?inline` as CSS Modules. Any other query loads the file as it loads without one, as before: an image, font or media file as its address (`?url`, `?inline`, `?w=400`), a module as itself. `--reverse` gives back the files the render carries; a `?raw` file of a kind a render never carries, such as `notes.md`, is named in a `not-embedded` warning.
 
 @josephfarina
