@@ -63,7 +63,7 @@ description: Waits until a CI run's jobs fit under CI's ceiling.
 
 inputs:
   peak:
-    description: The most jobs this run holds at once.
+    description: The most jobs this run holds at once, with each `leg-widths` matrix at its tight width.
     required: true
   main:
     description: "'true' for a main full check or release re-check, which does not wait for other main runs."
@@ -303,7 +303,8 @@ runs:
               const fits = others + peak <= CI_CEILING && !mainWaiting;
               core.setOutput('fits', String(fits));
               if (fits) {
-                const wide = others + peak + widen <= CI_CEILING;
+                // A run with no widening matrix has no full width to take.
+                const wide = widen > 0 && others + peak + widen <= CI_CEILING;
                 core.setOutput('wide', String(wide));
                 core.info(`Room under the CI ceiling: about ${others} other jobs + ${peak} <= ${CI_CEILING}.${widen === 0 ? '' : wide ? ` Legs run at full width: + ${widen} <= ${CI_CEILING}.` : ` Legs run at tight width: + ${widen} > ${CI_CEILING}.`}`);
                 return;

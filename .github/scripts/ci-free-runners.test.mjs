@@ -164,9 +164,11 @@ describe('runner labels', () => {
     // test-node runs the width admission picks: two when CI is tight
     // (ci-admission.test.mjs).
     const widths = JSON.parse(
-      ci.jobs.admission.steps.find(step => step.with?.['leg-widths']).with[
-        'leg-widths'
-      ],
+      /\|\| '(.*)' \}\}$/.exec(
+        ci.jobs.admission.steps.find(step => step.with?.['leg-widths']).with[
+          'leg-widths'
+        ],
+      )[1],
     );
     expect(widths['test-node'].tight).toBe(2);
     expect(ci.jobs['test-node'].strategy['max-parallel']).toBe(

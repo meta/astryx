@@ -126,9 +126,11 @@ jobs:
   # no CI (FR17); the required contexts still report through their own status
   # rules. Neither fails, so each job's own condition decides exactly as before,
   # except for a pull-request run CI is full for, which ci-full stops. `peak` is
-  # the most jobs a run holds at once: a release-check's from its legs, a pull
-  # request's from its measured most plus the suites its labels opt into
-  # (ci-admission.test.mjs). A pull request waits at most twelve minutes in all,
+  # the most jobs a run holds at once with its widening matrices at tight
+  # width: a release-check's from its legs, a pull request's from its measured
+  # most plus the suites its labels opt into (ci-admission.test.mjs). At full
+  # width a pull-request run holds `peak` plus those matrices' extra legs
+  # (`leg-widths`). A pull request waits at most twelve minutes in all,
   # inside the fifteen-minute job budget.
   room:
     # Finds room for the run's first job, its Storybook build, and records
@@ -189,7 +191,8 @@ jobs:
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
           label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 8}'
-          leg-widths: '{"test-node": {"tight": 2, "full": 5}, "swizzle-proof": {"tight": 2, "full": 8}}'
+          # A dispatch runs neither widening matrix.
+          leg-widths: '${{ github.event_name == ''workflow_dispatch'' && ''{}'' || ''{"test-node": {"tight": 2, "full": 5}, "swizzle-proof": {"tight": 2, "full": 8}}'' }}'
 
       # A run stopped for no room fails here, so a re-run of its failed jobs
       # waits again from this job, not from this look's result.
@@ -248,7 +251,8 @@ jobs:
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
           label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 8}'
-          leg-widths: '{"test-node": {"tight": 2, "full": 5}, "swizzle-proof": {"tight": 2, "full": 8}}'
+          # A dispatch runs neither widening matrix.
+          leg-widths: '${{ github.event_name == ''workflow_dispatch'' && ''{}'' || ''{"test-node": {"tight": 2, "full": 5}, "swizzle-proof": {"tight": 2, "full": 8}}'' }}'
 
       # Runs when the widening matrices start at full width, and skips at
       # tight width, so another run's count reads the width this run took

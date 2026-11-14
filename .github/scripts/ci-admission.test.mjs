@@ -530,10 +530,15 @@ describe('peaks', () => {
     // `peak`, and `full` legs when it also fits with each matrix's extra legs
     // (`leg-widths`). Its `max-parallel` reads admission's choice, so the
     // legs it starts are the legs admission counted.
-    const widths = JSON.parse(stepOf(ci.jobs.admission).with['leg-widths']);
-    expect(stepOf(ci.jobs.room).with['leg-widths']).toBe(
-      stepOf(ci.jobs.admission).with['leg-widths'],
-    );
+    const value = stepOf(ci.jobs.admission).with['leg-widths'];
+    expect(stepOf(ci.jobs.room).with['leg-widths']).toBe(value);
+    // A dispatch runs neither matrix, so it widens nothing.
+    const [, dispatch, pull] =
+      /^\$\{\{ github\.event_name == 'workflow_dispatch' && '(.*?)' \|\| '(.*)' \}\}$/.exec(
+        value,
+      );
+    expect(dispatch).toBe('{}');
+    const widths = JSON.parse(pull);
     expect(Object.keys(widths).sort()).toEqual(['swizzle-proof', 'test-node']);
     for (const [id, width] of Object.entries(widths)) {
       expect(ci.jobs[id].strategy['max-parallel'], id).toBe(
@@ -1974,8 +1979,10 @@ describe('ci admission', () => {
     });
 
     it('leaves a run with no widening matrix as before', async () => {
+      // A dispatch passes no widening matrix: it takes no full width, so its
+      // admission skips the full-width step.
       const plain = await admit({active: prs(5), peak: 12});
-      expect(plain.outputs).toMatchObject({fits: 'true', wide: 'true'});
+      expect(plain.outputs).toMatchObject({fits: 'true', wide: 'false'});
       expect(plain.info.at(-2)).not.toContain('Legs run');
     });
 
