@@ -396,13 +396,19 @@ describe('Node-tooling CI routing', () => {
         'Install Playwright for theme-family contract',
         'npx playwright install chromium',
       ],
-      ['Run the theme-family contract', 'pnpm test:theme-family'],
+      [
+        'Run the theme-family contract',
+        // Bounded by the time the job's limit leaves, less a minute.
+        'timeout "$left" pnpm test:theme-family',
+      ],
     ]);
     for (const [name, command] of familyCommands) {
       const ownerStep = step(ci.jobs['test-node'], name);
       // One leg of the sharded Node lane owns the theme-family contract.
       expect(ownerStep.if).toBe(`matrix.shard == 1 && ${BROAD_ONLY}`);
-      expect(ownerStep.run).toBe(command);
+      if (command.startsWith('timeout'))
+        expect(ownerStep.run).toContain(command);
+      else expect(ownerStep.run).toBe(command);
       expect(step(ci.jobs['test-build'], name)).toBeUndefined();
     }
   });
@@ -607,38 +613,41 @@ describe('Node-tooling CI routing', () => {
       true,
       '::warning title=Merge base not built::Building the merge base failed or timed out; the API changes are not compared.',
     ],
-  ])('collects a merge base that %s', (_label, marker, needSizes, kept, message) => {
-    const wait = step(
-      ci.jobs['build-storybook'],
-      "Wait for the merge base's sizes",
-    );
-    expect(wait.env.NEED_SIZES).toBe(
-      "${{ steps.component-download.outcome != 'success' }}",
-    );
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'base-build-'));
-    try {
-      fs.mkdirSync(path.join(root, '.component-size-base'));
-      fs.writeFileSync(
-        path.join(root, '.component-size-base/component-size.json'),
-        '{}',
+  ])(
+    'collects a merge base that %s',
+    (_label, marker, needSizes, kept, message) => {
+      const wait = step(
+        ci.jobs['build-storybook'],
+        "Wait for the merge base's sizes",
       );
-      fs.writeFileSync(path.join(root, 'base-build.log'), 'log\n');
-      fs.writeFileSync(path.join(root, marker), '');
-      const out = execFileSync('bash', ['-e', '-c', wait.run], {
-        cwd: root,
-        encoding: 'utf8',
-        env: {...process.env, NEED_SIZES: needSizes},
-      });
-      expect(out).toContain(message);
-      expect(
-        fs.existsSync(
+      expect(wait.env.NEED_SIZES).toBe(
+        "${{ steps.component-download.outcome != 'success' }}",
+      );
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'base-build-'));
+      try {
+        fs.mkdirSync(path.join(root, '.component-size-base'));
+        fs.writeFileSync(
           path.join(root, '.component-size-base/component-size.json'),
-        ),
-      ).toBe(kept);
-    } finally {
-      fs.rmSync(root, {recursive: true, force: true});
-    }
-  });
+          '{}',
+        );
+        fs.writeFileSync(path.join(root, 'base-build.log'), 'log\n');
+        fs.writeFileSync(path.join(root, marker), '');
+        const out = execFileSync('bash', ['-e', '-c', wait.run], {
+          cwd: root,
+          encoding: 'utf8',
+          env: {...process.env, NEED_SIZES: needSizes},
+        });
+        expect(out).toContain(message);
+        expect(
+          fs.existsSync(
+            path.join(root, '.component-size-base/component-size.json'),
+          ),
+        ).toBe(kept);
+      } finally {
+        fs.rmSync(root, {recursive: true, force: true});
+      }
+    },
+  );
 
   it("compares the merge base's API surface from main's kept record, or from a base built for its sizes", () => {
     const main = load('.github/workflows/deploy.yml');
