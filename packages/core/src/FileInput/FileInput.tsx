@@ -154,7 +154,7 @@ const styles = stylex.create({
     borderWidth: borderVars['--border-width'],
     borderStyle: 'dashed',
     borderColor: {
-      default: colorVars['--color-border-emphasized'],
+      default: colorVars['--color-border-control'],
       ':focus-within': colorVars['--color-accent'],
     },
     borderRadius: radiusVars['--radius-element'],
@@ -189,7 +189,7 @@ const styles = stylex.create({
     // Keeps the :focus-within border: a focused disabled trigger still shows
     // focus (spec:AST-085 FR6).
     borderColor: {
-      default: colorVars['--color-border-emphasized'],
+      default: colorVars['--color-border-control'],
       ':focus-within': colorVars['--color-accent'],
     },
   },
@@ -205,7 +205,7 @@ const styles = stylex.create({
     borderWidth: borderVars['--border-width'],
     borderStyle: 'solid',
     borderColor: {
-      default: colorVars['--color-border-emphasized'],
+      default: colorVars['--color-border-control'],
       ':focus-within': colorVars['--color-accent'],
     },
     borderRadius: radiusVars['--radius-element'],
@@ -236,7 +236,7 @@ const styles = stylex.create({
     // Keeps the :focus-within border: a focused disabled trigger still shows
     // focus (spec:AST-085 FR6).
     borderColor: {
-      default: colorVars['--color-border-emphasized'],
+      default: colorVars['--color-border-control'],
       ':focus-within': colorVars['--color-accent'],
     },
   },

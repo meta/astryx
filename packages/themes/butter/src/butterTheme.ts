@@ -250,6 +250,7 @@ export const butterTheme = defineTheme({
     // Border — softer taupe card outline (emphasized) in light mode.
     '--color-border': [neutral.light[85], withAlpha(neutral.dark[90], '1a')],
     '--color-border-emphasized': [neutral.light[75], neutral.dark[60]],
+    '--color-border-control': [neutral.light[60], neutral.dark[55]],
 
     // Effects
     '--color-skeleton': [neutral.light[85], neutral.dark[35]],

@@ -99,6 +99,9 @@ export const colorDefaults = {
   // Border
   '--color-border': 'light-dark(#05365919, #F2F4F619)',
   '--color-border-emphasized': 'light-dark(#CCD3DB, #494D53)',
+  // The edge of a field shell and of a checkbox or radio box. It holds 3:1
+  // against the surface and the page body.
+  '--color-border-control': 'light-dark(#878D95, #666A70)',
 
   // Effects
   '--color-skeleton': 'light-dark(#CCD3DB, #5A5E66)',

@@ -230,6 +230,7 @@ export const stoneTheme = defineTheme({
     // Border
     '--color-border': [neutral.light[90], withAlpha(neutral.dark[95], '1a')],
     '--color-border-emphasized': [neutral.light[55], neutral.dark[40]],
+    '--color-border-control': [neutral.light[55], neutral.dark[50]],
 
     // Effects
     '--color-skeleton': [neutral.light[85], neutral.dark[40]],
