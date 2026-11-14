@@ -130,7 +130,7 @@ export const docs = {
       name: 'rel',
       type: 'string',
       description:
-        'HTML rel attribute when rendered as a link (e.g. "noopener noreferrer").',
+        'HTML rel attribute when rendered as a link. With target="_blank", noopener noreferrer is added beside your own tokens.',
     },
   ],
 
