@@ -11,7 +11,6 @@
  */
 
 import {firstSentence} from '../../../foundation/text/string-utils.mjs';
-import {FOUNDATION, FRAME} from './signals.mjs';
 
 /**
  * Fewer offerable results than this and the kit says how to look further.
@@ -99,8 +98,8 @@ export function kitAnswer(
       pages: signals.pages,
       blocks: list,
       domain: signals.domain,
-      frame: FRAME,
-      foundation: FOUNDATION,
+      frame: signals.frame,
+      foundation: signals.foundation,
       hint,
     },
   });

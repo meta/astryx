@@ -39,7 +39,7 @@
  *
  * @typedef {object} HookListResponse
  * @property {'hook.list'} type
- * @property {string} package `@astryxdesign/core`, the only package that ships hooks.
+ * @property {string} package The run's base: `@astryxdesign/core`, or the active base when it is not Core.
  * @property {HookListData} data
  */
 

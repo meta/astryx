@@ -316,7 +316,9 @@ export function registerBuild(program) {
               ),
             ]
           : []),
-        record({frame, foundation}),
+        ...(frame.length + foundation.length
+          ? [record({frame, foundation})]
+          : []),
       );
 
       // Last, so it is the line the reader leaves with — and only when the kit
