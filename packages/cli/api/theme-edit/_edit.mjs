@@ -155,6 +155,7 @@ import {
   stampSheet,
 } from './_context.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {readThemeState} from '../../foundation/config/theme-state.mjs';
 import {
   formatCliCommand,
   getCliInvocation,
@@ -1189,18 +1190,63 @@ async function keepPreviewRoute(ctx, slug) {
 }
 
 /**
+ * The app's theme state (the themes `theme add` put into its theme
+ * module), or null when it cannot be read.
+ * @param {string} cwd
+ */
+function appThemeState(cwd) {
+  try {
+    return readThemeState(cwd);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether the app lists the theme (`theme add` put it into its module).
+ * @param {string} cwd
+ * @param {string} slug
+ */
+const appListsTheme = (cwd, slug) =>
+  Object.hasOwn(appThemeState(cwd)?.themes ?? {}, slug);
+
+/**
+ * For a theme `theme add` put into the app: the app's theme module gives
+ * the app each theme's one color mode, written when the theme was added,
+ * so a change of mode needs `theme add` again. Null for a theme the app
+ * does not list (its mode is the app's own <Theme mode>).
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {'light' | 'dark' | null} now the one mode it has now
+ * @returns {string | null}
+ */
+function addedModeNote(cwd, slug, now) {
+  const state = appThemeState(cwd);
+  if (!state || !Object.hasOwn(state.themes, slug)) return null;
+  const module = path
+    .relative(cwd, state.module.path)
+    .split(path.sep)
+    .join('/');
+  return `${module}, the app's theme module, gives the app ${slug}'s mode as it was when ${slug} was added; run \`theme add ${slug}\` to write it again, and the app ${now ? `shows ${slug} in ${now} mode` : 'follows the system again'}`;
+}
+
+/**
  * What a change of mode asks of the app's wiring: a one-mode theme is
  * given its mode by the app's <Theme>, and one back to both modes no longer.
+ * @param {string} cwd
  * @param {string} slug
  * @param {string | undefined} before
  * @param {string | undefined} after
  * @returns {string[]}
  */
-function modeWiringNotes(slug, before, after) {
-  const one = (/** @type {string | undefined} */ m) =>
+function modeWiringNotes(cwd, slug, before, after) {
+  /** @param {string | undefined} m @returns {'light' | 'dark' | null} */
+  const one = m =>
     m === 'light-only' ? 'light' : m === 'dark-only' ? 'dark' : null;
   const [was, now] = [one(before), one(after)];
   if (was === now) return [];
+  const added = addedModeNote(cwd, slug, now);
+  if (added) return [added];
   return [
     ...(was
       ? [
@@ -2662,9 +2708,25 @@ async function changeOnce(
               ]
             : []),
           ...otherModeNotes(data),
+          // A theme the app lists takes its mode from the app's theme
+          // module: `theme add` writes it again.
+          ...(s.thing === 'mode' && before !== data.mode
+            ? [
+                addedModeNote(
+                  cwd,
+                  slug,
+                  data.mode === 'light-only'
+                    ? 'light'
+                    : data.mode === 'dark-only'
+                      ? 'dark'
+                      : null,
+                ),
+              ].filter(x => x !== null)
+            : []),
           // Back to both modes: a mode the app's <Theme> was given for the
           // one-mode theme pins it still.
           ...(s.thing === 'mode' &&
+          !appListsTheme(cwd, slug) &&
           data.mode === 'both' &&
           (before === 'light-only' || before === 'dark-only')
             ? [
@@ -2673,6 +2735,7 @@ async function changeOnce(
             : []),
           // Core has no mode inside a theme: the app's <Theme> is given it.
           ...(s.thing === 'mode' &&
+          !appListsTheme(cwd, slug) &&
           (data.mode === 'light-only' || data.mode === 'dark-only')
             ? [
                 `the app shows ${slug} in ${data.mode === 'light-only' ? 'light' : 'dark'} mode when its <Theme> is given mode="${data.mode === 'light-only' ? 'light' : 'dark'}" (<Theme theme={…} mode="${data.mode === 'light-only' ? 'light' : 'dark'}">), as the preview does; the theme keeps both halves of its colors, so a toast or a lightbox Core draws in the other mode stays readable`,
@@ -3415,7 +3478,8 @@ async function changeOnce(
     );
     notes.push(...unsetColorNotes(data, base, slug));
   }
-  if (s.thing === 'font' && sub === 'set')
+  // A font set (the dial, or a part's own font-family): how it loads.
+  if ((s.thing === 'font' || s.thing === 'font-family') && sub === 'set')
     notes.unshift(...fontNotes(ctx, {...data, settings: [s]}));
   if (s.thing === 'type' || s.thing === 'headings')
     for (const [m, why] of maskedSettings(data, ctx))
@@ -3724,7 +3788,7 @@ export async function themeEditShow(theme, options = {}) {
     if (brokenSource)
       refuse(
         E.ERR_THEME_INVALID,
-        `${theme}.js could not be read, and it cannot be built again: ${brokenSource}. Put back the import of ${camel(theme)}Settings from './${theme}.settings', extends: ${camel(theme)}Settings and name: '${theme}' in ${shown(cwd, f.ts)}, then run show again.`,
+        `${theme}.js could not be read, and it cannot be built again: ${brokenSource.problem}. ${brokenSource.fix} Then run show again.`,
         {
           run: [`cat ${quoteCommandArgument(shown(cwd, f.ts))}`],
         },
@@ -3880,7 +3944,7 @@ export async function themeEditShow(theme, options = {}) {
         ...(unreadable ? [unreadable] : []),
         ...(brokenSource
           ? [
-              `${brokenSource}, so settings cannot take effect; put back the import, extends and name lines in ${theme}.theme.ts${/no longer names the theme/.test(brokenSource) ? ` (a copy of another theme's source still names that theme: change its name to '${theme}')` : ''}`,
+              `${brokenSource.problem}, so settings cannot take effect. ${brokenSource.fix}`,
             ]
           : []),
         // A setting the theme file wins over is not live: no contrast
@@ -4884,7 +4948,7 @@ async function undoTheme(theme, options) {
     );
   if (current && current.mode !== prev.mode) {
     undone.push(`mode ${current.mode} is back to ${prev.mode}`);
-    undone.push(...modeWiringNotes(theme, current.mode, prev.mode));
+    undone.push(...modeWiringNotes(cwd, theme, current.mode, prev.mode));
   }
   // The page most about what the step reverted: Colors for a color,
   // Components for a part setting, else Overview.

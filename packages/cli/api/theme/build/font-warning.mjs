@@ -217,13 +217,19 @@ export function collectUnloadedFonts(resolvedTheme) {
  *
  * @param {string} themeName
  * @param {string[]} families
+ * @param {(families: string[]) => string} [recipe] the caller's own way to
+ *   load them, in place of the generic recipe
  * @returns {string}
  */
-export function formatFontLoadingHelp(themeName, families) {
+export function formatFontLoadingHelp(
+  themeName,
+  families,
+  recipe = fontLoadingRecipe,
+) {
   const named = families.map(f => `"${f}"`).join(', ');
   return `
 [note] Theme "${themeName}" names fonts it does not load: ${named}
-${fontLoadingRecipe(families)}`;
+${recipe(families)}`;
 }
 
 /**
@@ -231,16 +237,21 @@ ${fontLoadingRecipe(families)}`;
  * do not load, with the themes that name it, then one recipe for all of them.
  *
  * @param {Array<{family: string, themes: string[]}>} entries
+ * @param {(families: string[]) => string} [recipe] the caller's own way to
+ *   load them, in place of the generic recipe
  * @returns {string}
  */
-export function formatBatchFontLoadingHelp(entries) {
+export function formatBatchFontLoadingHelp(
+  entries,
+  recipe = fontLoadingRecipe,
+) {
   const named = entries
     .map(({family, themes}) => `  "${family}" (${themes.join(', ')})`)
     .join('\n');
   return `
 [note] The built themes name fonts they do not load:
 ${named}
-${fontLoadingRecipe(entries.map(entry => entry.family))}`;
+${recipe(entries.map(entry => entry.family))}`;
 }
 
 /**

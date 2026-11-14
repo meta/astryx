@@ -250,13 +250,17 @@ async function answer(subject, options, cwd) {
     }
     // A theme whose source no longer extends its settings takes no setting:
     // an answer would suggest commands that cannot run.
-    const broken =
-      themeSourceParseError(cwd, options.theme) ??
-      (await themeSourceProblem(cwd, options.theme));
+    const parseError = themeSourceParseError(cwd, options.theme);
+    const broken = parseError
+      ? {
+          problem: parseError,
+          fix: `Fix themes/${options.theme}/${options.theme}.theme.ts.`,
+        }
+      : await themeSourceProblem(cwd, options.theme);
     if (broken)
       refuse(
         E.ERR_THEME_INVALID,
-        `${broken}, so settings cannot take effect and no command here would change the theme. Put back the import, extends and name lines in themes/${options.theme}/${options.theme}.theme.ts, then ask again.`,
+        `${broken.problem}, so settings cannot take effect and no command here would change the theme. ${broken.fix} Then ask again.`,
         {run: [`${P} show ${options.theme}`]},
       );
   }

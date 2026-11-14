@@ -59,6 +59,7 @@ import {
   screenshot,
 } from './_preview.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {namedFontFamilies} from '../theme/build/font-warning.mjs';
 
 const E = ERROR_CODES;
 
@@ -582,6 +583,23 @@ export function fontNotes(ctx, data) {
     notes.push(
       `"${named}" is not a system font and no package loads it: the app must load it, or it falls back. If Fontsource publishes it, ${installLine(ctx.project.cwd, [fontsourcePackageOf(named)])} installs its package, which the previews and the app copy then load.${near ? ` The closest open font is ${near}: ${P} set ${data.name} font ${near}${s.on ? ` --on ${s.on}` : ''}` : ''}`,
     );
+  }
+  // A part's own font (font-family --on a part) loads the same way: an
+  // installed package is in the list above; a missing one is named.
+  for (const s of data.settings) {
+    if (s.thing !== 'font-family' || typeof s.value !== 'string') continue;
+    for (const family of namedFontFamilies(s.value)) {
+      const pkg = fontsourcePackageOf(family);
+      if (
+        packages.some(x => x.pkg === pkg) ||
+        isDesktopFamily(family) ||
+        oneSystemOf(family)
+      )
+        continue;
+      notes.push(
+        `"${family}"${s.on ? ` (the font of ${s.on})` : ''} is not a system font and no package loads it: the app must load it, or it falls back. If Fontsource publishes it, ${installLine(ctx.project.cwd, [pkg])} installs its package, which the previews and the app copy then load.`,
+      );
+    }
   }
   return notes;
 }
