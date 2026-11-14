@@ -72,6 +72,15 @@ const CASES =
       / '2s ease'/,
     ],
     // Several values of one kind: the first as typed, no unit added.
+    // ...with their sign, read by the one reading the repair and the gate
+    // share.
+    [
+      'margin-top',
+      '-4px -8px',
+      {on: 'card'},
+      [/ set b margin-top -4px --on card$/],
+      / how margin-top$/,
+    ],
     [
       'line-height',
       '1.5 2',

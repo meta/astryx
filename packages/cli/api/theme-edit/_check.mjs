@@ -31,6 +31,7 @@ import {
   numbersIn,
   propertyGrammar,
   takesPercentage,
+  sameKindValues,
 } from './_css.mjs';
 import {calcVars, coreFallback, multipliedTokens} from './_parts.mjs';
 import {
@@ -1809,18 +1810,10 @@ function propertyProblem(prop, value) {
       // when the property takes no bare number. Never one value of a
       // shorthand of several kinds (`all 200` for transition).
       (() => {
-        const all = splitTop(v.trim(), ' ');
-        /** @param {string} x */
-        const kind = x =>
-          /^[+-]?(?:\d+\.?\d*|\.\d+)(px|rem|em|%)?$/i.exec(x)?.[1] ??
-          (/^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(x) ? '' : null);
-        if (
-          all.length < 2 ||
-          all.some(x => kind(x) === null || kind(x) !== kind(all[0]))
-        )
-          return null;
-        const first = all[0];
-        const px = kind(first) === '' ? `${first}px` : null;
+        const same = sameKindValues(v);
+        if (!same) return null;
+        const first = same.items[0];
+        const px = same.kind === '' ? `${first}px` : null;
         return takes(first) ? first : pxFits && px && takes(px) ? px : null;
       })() ??
       (near && takes(near) ? near : null) ??

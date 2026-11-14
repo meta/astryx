@@ -11,6 +11,7 @@
 
 import {DIALS, wordTable} from './_tables.mjs';
 import {colorProblem, hex, parseColor} from './_color.mjs';
+import {sameKindValues} from './_css.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 
 /**
@@ -1106,15 +1107,11 @@ export function readsTyped({
     levenshteinDistance(typedUnit[2], offeredUnit[2], 1, {swaps: true}) <= 1
   )
     return true;
-  // Several values of one kind for a setting that takes one: the first.
-  const items = itemsOf(t);
-  const kind = (/** @type {string} */ x) =>
-    /^var\(/.test(x) ? 'var' : (numberOf(x)?.unit ?? null);
-  if (
-    items.length > 1 &&
-    items.every(x => kind(x) !== null && kind(x) === kind(items[0]))
-  ) {
-    const first = tokensOf(items[0]);
+  // Several values of one kind for a setting that takes one: the first
+  // (the one reading the repair that offers it uses, sameKindValues).
+  const same = sameKindValues(t);
+  if (same) {
+    const first = tokensOf(same.items[0]);
     if (first.length === O.length && O.every((w, i) => sameToken(w, first[i])))
       return true;
   }
@@ -1144,29 +1141,6 @@ export function readsTyped({
         }
   }
   return false;
-}
-
-/**
- * The space-separated items of a value, a function's parentheses kept
- * whole (`var(--a) var(--b)` is two items).
- * @param {string} text
- * @returns {string[]}
- */
-function itemsOf(text) {
-  /** @type {string[]} */
-  const out = [];
-  let depth = 0;
-  let now = '';
-  for (const c of String(text).trim()) {
-    if (c === '(') depth += 1;
-    if (c === ')') depth -= 1;
-    if (/\s/.test(c) && depth === 0) {
-      if (now) out.push(now);
-      now = '';
-    } else now += c;
-  }
-  if (now) out.push(now);
-  return out;
 }
 
 /**
