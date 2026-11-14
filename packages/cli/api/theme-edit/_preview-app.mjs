@@ -63,6 +63,7 @@ import {template} from '../template/template.mjs';
 import {
   analyzeTemplateNeeds,
   extractImportedPackages,
+  parsedSpecifiers,
 } from '../../foundation/discovery/template-needs.mjs';
 import {detectStylingSystem} from '../../foundation/agent-docs/agent-docs.mjs';
 import {requireProject, context} from './_context.mjs';
@@ -73,6 +74,7 @@ import {
 } from '../../foundation/env/package-manager.mjs';
 import {sha256} from '../../foundation/render/source-block.mjs';
 import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
 
 const E = ERROR_CODES;
 
@@ -179,11 +181,9 @@ function layoutImportsSheet(cwd, app, sheet, dir = app) {
     } catch {
       return false;
     }
-    if (sheet.test(text)) return true;
-    for (const m of text.matchAll(
-      /(?:import|@import)\s*(?:[^'"]*from\s*)?(?:url\()?['"]([^'"]+)['"]/g,
-    )) {
-      const spec = m[1];
+    const specs = importSpecifiers(file, text);
+    if (specs.some(spec => sheet.test(spec))) return true;
+    for (const spec of specs) {
       // An alias the tsconfig sets; else `@/` is the src folder or the
       // project root.
       const alias = aliases.find(a => spec.startsWith(a.prefix));
@@ -207,6 +207,25 @@ function layoutImportsSheet(cwd, app, sheet, dir = app) {
     return false;
   };
   return starts.some(start => reads(start, 0));
+}
+
+/**
+ * The modules a file imports, from its import statements: a script's
+ * through the shared reader of import statements (its syntax tree, so a
+ * comment or a string says nothing), or the `@import` rules of a stylesheet
+ * (comments left out).
+ * @param {string} file
+ * @param {string} text
+ * @returns {string[]}
+ */
+function importSpecifiers(file, text) {
+  if (/\.(css|scss)$/.test(file))
+    return [
+      ...text
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .matchAll(/@import\s+(?:url\()?\s*['"]([^'"]+)['"]/g),
+    ].map(m => m[1]);
+  return parsedSpecifiers(text);
 }
 
 /**
@@ -238,55 +257,19 @@ function tsconfigAliases(cwd) {
 }
 
 /**
- * A note when the app never imports Core's stylesheet, or null: without
- * it, components render unstyled, and some show nothing. Read from the
- * files of the routes folder and src/ (best effort).
+ * A note when the preview's layouts never import Core's stylesheet, or
+ * null: without it, components render unstyled, and some show nothing.
+ * Judged by the real import statements of the layouts over the preview and
+ * the files they import, never by text in a comment or in a file the route
+ * does not reach.
  * @param {string} cwd
  * @param {{dir: string, app: string | null}} at
  * @returns {string | null}
  */
 function coreStylesheetMissing(cwd, at) {
   if (!at.app) return null;
-  const SHEET = /@astryxdesign\/core\/astryx\.css/;
-  let seen = 0;
-  /** @param {string} folder @returns {boolean} */
-  const imports = folder => {
-    /** @type {fs.Dirent[]} */
-    let entries;
-    try {
-      entries = fs.readdirSync(folder, {withFileTypes: true});
-    } catch {
-      return false;
-    }
-    for (const e of entries) {
-      const full = path.join(folder, e.name);
-      if (e.isDirectory()) {
-        if (
-          e.name === 'node_modules' ||
-          e.name.startsWith('.') ||
-          full === at.dir
-        )
-          continue;
-        if (imports(full)) return true;
-      } else if (
-        /\.(tsx|ts|jsx|js|mjs|css|scss)$/.test(e.name) &&
-        ++seen < 2000
-      )
-        try {
-          if (SHEET.test(fs.readFileSync(full, 'utf8'))) return true;
-        } catch {
-          // Unreadable: skip it.
-        }
-    }
-    return false;
-  };
-  const src = path.join(cwd, 'src');
-  if (
-    imports(at.app) ||
-    (at.app.startsWith(src + path.sep) ? false : imports(src)) ||
-    layoutImportsSheet(cwd, at.app, SHEET, at.dir)
-  )
-    return null;
+  const SHEET = /^@astryxdesign\/core\/astryx\.css$/;
+  if (layoutImportsSheet(cwd, at.app, SHEET, at.dir)) return null;
   const layout = ['tsx', 'ts', 'jsx', 'js']
     .map(x => path.join(at.app ?? '', `layout.${x}`))
     .find(f => fs.existsSync(f));
@@ -586,6 +569,21 @@ function reservedFolder(cwd, dir) {
   if (segs[0] === 'pages' || (segs[0] === 'src' && segs[1] === 'pages'))
     return 'Next serves every file under the Pages Router folder (pages/ or src/pages/) as a public page; this preview needs the App Router (app/ or src/app/)';
   return null;
+}
+
+/**
+ * The compile of an editor theme as it runs from the folder the command ran
+ * in: an editor theme compiles from the app root, so from a subfolder the
+ * line goes there first.
+ * @param {string} cwd the app root
+ * @param {string} slug
+ */
+function compileFromHere(cwd, slug) {
+  const line = `${P.replace(/ editor$/, '')} compile ${shown(cwd, themeFiles(cwd, slug).ts)}`;
+  const up = path.relative(process.cwd(), cwd);
+  return up && path.resolve(process.cwd()) !== path.resolve(cwd)
+    ? `cd ${quoteCommandArgument(up.split(path.sep).join('/'))} && ${line}`
+    : line;
 }
 
 /**
@@ -999,7 +997,12 @@ function checkPlacement(cwd, dir, where, retry) {
   if (served && app !== served)
     refuse(
       E.ERR_INVALID_ARGUMENT,
-      `${where} is in ${shown(cwd, app)}/, and Next serves ${shown(cwd, served)}/ instead when both are there.`,
+      // Next serves the root app/ when both are there: a preview in src/app/
+      // under a root app/ is not served, and a new root app/ beside the
+      // app's src/app/ would hide the whole app.
+      path.resolve(app) === path.join(path.resolve(cwd), 'app')
+        ? `${where} would make ${shown(cwd, app)}/ beside ${shown(cwd, served)}/, and Next serves the root app/ when both are there, so the whole app in ${shown(cwd, served)}/ would stop being served.`
+        : `${where} is in ${shown(cwd, app)}/, and Next serves ${shown(cwd, served)}/ instead when both are there.`,
       {
         run: fs.existsSync(path.join(dir, PREVIEW_DATA))
           ? [
@@ -1010,9 +1013,7 @@ function checkPlacement(cwd, dir, where, retry) {
     );
   const exts = readNextConfig(cwd).pageExtensions;
   if (exts && !exts.includes('tsx')) {
-    let free = 'theme-app';
-    for (let n = 2; fs.existsSync(path.join(cwd, free)); n++)
-      free = `theme-app-${n}`;
+    const free = freeAppFolder(cwd);
     refuse(
       E.ERR_INVALID_ARGUMENT,
       `next.config sets pageExtensions to ${exts.join(', ')}, so Next does not serve page.tsx, the route file the preview writes.`,
@@ -1031,9 +1032,7 @@ function checkPlacement(cwd, dir, where, retry) {
       !rootLayouts.length &&
       !fs.readdirSync(served).some(f => /^layout\.(tsx|ts|jsx|js)$/.test(f)))
   ) {
-    let free = 'theme-app';
-    for (let n = 2; fs.existsSync(path.join(cwd, free)); n++)
-      free = `theme-app-${n}`;
+    const free = freeAppFolder(cwd);
     refuse(
       E.ERR_INVALID_ARGUMENT,
       `${shown(cwd, served ?? app)}/ has no root layout (no layout.tsx in it or in a route group)${served ? '' : ' and is not there yet'}, so Next cannot build a page in ${where}.`,
@@ -1183,11 +1182,11 @@ function previewDir(cwd, where, opts = {}) {
   const candidates = routes.map(r => path.join(r, 'theme-preview'));
   const known = candidates.find(d => fs.existsSync(path.join(d, PREVIEW_DATA)));
   if (!known && opts.retry) {
-    // A preview added with --path is recorded with its theme, so a later
-    // command finds it without the flag instead of starting a second one.
-    const recorded = [
-      ...new Set(editedThemes(cwd).flatMap(t => recordedPreviews(cwd, t))),
-    ].filter(d => fs.existsSync(path.join(d, PREVIEW_DATA)));
+    // A preview added with --path is recorded with its theme, and one
+    // renamed by hand is found in the routes folders (as list, remove and
+    // see find it), so a later command uses it instead of starting a second
+    // one.
+    const recorded = allPreviews(cwd);
     if (recorded.length === 1) {
       inProjectOrRefuse(cwd, recorded[0], retry);
       if (opts.write)
@@ -1226,14 +1225,15 @@ function previewDir(cwd, where, opts = {}) {
         ? `No app routes folder here (app/ or src/app/); the Next ${apps.length > 1 ? 'apps' : 'app'} below ${apps.length > 1 ? 'are' : 'is'} ${apps.map(a => `${shown(cwd, a.root)}/`).join(', ')}.`
         : 'No app routes folder here (app/ or src/app/), so there is no app to put the preview in.',
       {
+        // Each app's own folder is where a preview command for it runs.
         run: [
           ...apps
             .slice(0, 3)
             .map(
               a =>
-                `${PREVIEW} add --path ${quoteCommandArgument(shown(cwd, path.join(a.routes, 'theme-preview')))}`,
+                `cd ${quoteCommandArgument(shown(cwd, a.root))} && ${PREVIEW} add`,
             ),
-          `${PREVIEW} app theme-app  # a new starter app with the preview in it`,
+          `${PREVIEW} app ${quoteCommandArgument(freeAppFolder(cwd))}  # a new starter app with the preview in it`,
         ],
       },
     );
@@ -1241,6 +1241,18 @@ function previewDir(cwd, where, opts = {}) {
   inProjectOrRefuse(cwd, dir, retry);
   if (opts.write) checkPlacement(cwd, dir, `${shownDir(cwd, dir)}/`, retry);
   return {dir, app: appOf(dir)};
+}
+
+/**
+ * A folder name for a new starter app that is free in `cwd`: theme-app, else
+ * theme-app-2, theme-app-3 and so on.
+ * @param {string} cwd
+ */
+function freeAppFolder(cwd) {
+  let free = 'theme-app';
+  for (let n = 2; fs.existsSync(path.join(cwd, free)); n++)
+    free = `theme-app-${n}`;
+  return free;
 }
 
 /**
@@ -1277,7 +1289,7 @@ function nextAppsUnder(cwd) {
     }
   };
   walk(cwd, 1);
-  return out.sort((a, b) => a.root.localeCompare(b.root));
+  return out.sort((a, b) => compareText(a.root, b.root));
 }
 
 /**
@@ -1300,7 +1312,7 @@ export function addWiring(cwd, slug, mode = 'system') {
       : [
           `${slug} is ${mode}-only: give the <Theme> that theme add's wiring puts in the app root mode="${mode}" (<Theme theme={…} mode="${mode}">); the theme keeps both halves of its colors, so a toast or a lightbox Core draws in the other mode stays readable`,
         ]),
-    `every set and undo builds the theme and its app copy again, so the app takes each change; after editing ${shown(cwd, themeFiles(cwd, slug).ts)} by hand, ${P.replace(/ editor$/, '')} compile ${shown(cwd, themeFiles(cwd, slug).ts)} builds both again`,
+    `every set and undo builds the theme and its app copy again, so the app takes each change; after editing ${shown(cwd, themeFiles(cwd, slug).ts)} by hand, ${compileFromHere(cwd, slug)} builds both again`,
   ];
 }
 
@@ -1353,7 +1365,7 @@ export function appWiring(ctx, slug, data) {
           `${appModule} (written by theme add and use) stays as it is: to keep its themes too, merge them in your own file ({...themes, ${JSON.stringify(slug)}: ${name}}), never in ${appModule}, which add, use and remove write again`,
         ]
       : []),
-    `every set and undo builds ${shown(cwd, themeFiles(cwd, slug).js)} and ${shown(cwd, themeFiles(cwd, slug).css)} again, so the app takes each change; after editing ${shown(cwd, themeFiles(cwd, slug).ts)} by hand, ${P.replace(/ editor$/, '')} compile ${shown(cwd, themeFiles(cwd, slug).ts)} builds it again`,
+    `every set and undo builds ${shown(cwd, themeFiles(cwd, slug).js)} and ${shown(cwd, themeFiles(cwd, slug).css)} again, so the app takes each change; after editing ${shown(cwd, themeFiles(cwd, slug).ts)} by hand, ${compileFromHere(cwd, slug)} builds it again`,
   ];
 }
 
@@ -1507,7 +1519,7 @@ export default function Home() {
  */
 function planStarterApp(cwd, where, extra, dependencies, slug = null) {
   const again = (/** @type {string | null} */ p) =>
-    `${PREVIEW} app ${quoteCommandArgument(p ?? 'theme-app')}${slug == null ? '' : ` --theme ${quoteCommandArgument(slug)}`}`;
+    `${PREVIEW} app ${quoteCommandArgument(p ?? freeAppFolder(cwd))}${slug == null ? '' : ` --theme ${quoteCommandArgument(slug)}`}`;
   checkFolderName(where, 'The app folder', again);
   /** @type {string} */
   let root;
@@ -1548,9 +1560,7 @@ function planStarterApp(cwd, where, extra, dependencies, slug = null) {
         ? `${shownDir(cwd, t)}/ differs from it only in case, and on macOS and Windows they are one folder`
         : null)(sameCaseSibling(root));
   if (why) {
-    let free = 'theme-app';
-    for (let n = 2; fs.existsSync(path.join(cwd, free)); n++)
-      free = `theme-app-${n}`;
+    const free = freeAppFolder(cwd);
     refuse(
       E.ERR_INVALID_ARGUMENT,
       `${name} is no place for a new app: ${why}.`,
@@ -1609,7 +1619,7 @@ function planStarterApp(cwd, where, extra, dependencies, slug = null) {
           file,
           text:
             key === 'package.json'
-              ? starterPackageJson(text, dependencies)
+              ? starterPackageJson(text, dependencies, starterName(cwd, root))
               : key === 'src/app/page.tsx'
                 ? STARTER_HOME
                 : key === 'src/app/layout.tsx'
@@ -1642,18 +1652,34 @@ function starterLayout(text) {
 }
 
 /**
- * The starter's package.json with the Astryx packages pinned to this CLI's
- * release, and `dependencies` added.
+ * The new app's package name, from its folder's path in the project: two
+ * starter apps in one workspace never share a name, which would break the
+ * whole workspace's install.
+ * @param {string} cwd the project root
+ * @param {string} root the new app's folder
+ */
+function starterName(cwd, root) {
+  const rel = (path.relative(cwd, root) || path.basename(root))
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return `astryx-theme-preview-${rel || 'app'}`;
+}
+
+/**
+ * The starter's package.json with its name, the Astryx packages pinned to
+ * this CLI's release, and `dependencies` added.
  * @param {string} text
  * @param {Record<string, string>} dependencies
+ * @param {string} name the package name
  */
-function starterPackageJson(text, dependencies) {
+function starterPackageJson(text, dependencies, name) {
   const pinned = text.replaceAll('{{astryxVersion}}', cliVersion());
-  if (!Object.keys(dependencies).length) return pinned;
   const pkg = JSON.parse(pinned);
+  pkg.name = name;
   pkg.dependencies = Object.fromEntries(
     Object.entries({...pkg.dependencies, ...dependencies}).sort(([a], [b]) =>
-      a.localeCompare(b),
+      compareText(a, b),
     ),
   );
   return `${JSON.stringify(pkg, null, 2)}\n`;
@@ -3224,8 +3250,11 @@ function dirFlag(cwd, dir) {
  */
 export async function refreshPreviewRoute(cwd, slug) {
   const at = previewDir(cwd, undefined, {optional: true});
+  // The same previews `see` names: the usual folder, the recorded ones,
+  // and any in the routes folders that wear the theme (a folder renamed by
+  // hand, or one whose record was lost).
   const dirs = [
-    ...new Set([...(at ? [at.dir] : []), ...recordedPreviews(cwd, slug)]),
+    ...new Set([...(at ? [at.dir] : []), ...themePreviews(cwd, slug)]),
   ];
   let changed = false;
   /** @type {string[]} */
@@ -3468,11 +3497,7 @@ export function seeLine(cwd, slug, focus, notChecked = null, extra = {}) {
   const handEdited = [];
   /** Previews whose record is damaged. @type {string[]} */
   const damaged = [];
-  // The previews recorded for the theme, and any found in the routes
-  // folders that wear it (a folder renamed by hand), as remove finds them.
-  const dirs = [
-    ...new Set([...recordedPreviews(cwd, slug), ...previewsIn(cwd)]),
-  ];
+  const dirs = themePreviews(cwd, slug);
   for (const dir of dirs) {
     /** @type {any} */
     let data;
@@ -3624,6 +3649,52 @@ function skipReason(s) {
 }
 
 /**
+ * Up to `n` of these page templates that this app can show: each one's
+ * packages installed and no StyleX compiler needed, as add itself checks.
+ * The only pages a suggestion names.
+ * @param {string} cwd
+ * @param {string} appRoot the app whose packages a page needs
+ * @param {string[]} ids in order of preference
+ * @param {number} n
+ * @returns {Promise<string[]>}
+ */
+async function showablePages(cwd, appRoot, ids, n) {
+  /** @type {string[]} */
+  const out = [];
+  for (const id of ids) {
+    if (out.length >= n) break;
+    try {
+      const shownTemplate = /** @type {any} */ (
+        await template(id, {cwd, type: 'page'})
+      );
+      const needs = pageNeeds(appRoot, shownTemplate.data.source);
+      if (
+        !needs.missingPackages.length &&
+        !needs.notInstalled.length &&
+        !needs.stylexCompiler
+      )
+        out.push(id);
+    } catch {
+      // A template that does not load is not suggested.
+    }
+  }
+  return out;
+}
+
+/**
+ * The page a refusal's example adds: the first page template this app can
+ * show (app frames left out), or null when there is none.
+ * @param {string} cwd
+ * @returns {Promise<string | null>}
+ */
+async function examplePage(cwd) {
+  const pages = (await pageTemplates(cwd))
+    .filter(t => !/^Shell\b/.test(t.category ?? ''))
+    .map(t => t.id);
+  return (await showablePages(cwd, appRootOf(cwd, cwd), pages, 1))[0] ?? null;
+}
+
+/**
  * The page templates for a description, best first, each with why: the
  * build ranking's picks, then the template search's, so a page the app
  * cannot show has a next match. App frames (the Shell templates) are left
@@ -3635,9 +3706,10 @@ function skipReason(s) {
  * @param {string} cwd
  * @param {string[]} notes notes for the result
  * @param {string} flags the caller's other flags, for the suggestions
+ * @param {string | null} [appRoot] the app whose packages a page needs
  * @returns {Promise<Array<{name: string, displayName: string, why: string}>>}
  */
-async function rankedPages(words, cwd, notes, flags) {
+async function rankedPages(words, cwd, notes, flags, appRoot = null) {
   const kit =
     /** @type {import('../build/build.type.mjs').BuildKitResponse} */ (
       await build(words, {cwd})
@@ -3721,15 +3793,8 @@ async function rankedPages(words, cwd, notes, flags) {
   const label = name => listed.find(t => t.id === name)?.name ?? name;
   const suggest = (/** @type {string[]} */ list) =>
     list.slice(0, 3).map(n => `${PREVIEW} add --template ${n}${flags}`);
-  // With no page close, a few pages that need nothing more, and the list.
-  const fallback = [
-    ...suggest(
-      ['dashboard', 'settings', 'login'].filter(id =>
-        listed.some(t => t.id === id),
-      ),
-    ),
-    formatCliCommand('template --list --type page', cwd),
-  ];
+  /** @param {string[]} ids */
+  const showableOf = ids => showablePages(cwd, appRoot ?? cwd, ids, 3);
   // No page relates when the ranking fell back to a frame with no direct
   // match, and no page the search found matches three words of the request
   // or two fifths of them.
@@ -3754,19 +3819,32 @@ async function rankedPages(words, cwd, notes, flags) {
         !found.some(
           (/** @type {any} */ r) => !frames.has(r.name) && termsMatched(r) >= 2,
         )));
-  if (unrelated)
+  if (unrelated) {
+    // With no page close, a few pages this app can show, and the list.
+    const offered = await showableOf(
+      pages.length
+        ? pages
+        : [
+            ...['dashboard', 'settings', 'login'],
+            ...listed.map(t => t.id),
+          ].filter(
+            (id, i, all) =>
+              all.indexOf(id) === i &&
+              listed.some(t => t.id === id) &&
+              !frames.has(id),
+          ),
+    );
     refuse(
       E.ERR_NOT_FOUND,
       `No page template relates to "${words}". Name a page to add it anyway.`,
       {
-        run: pages.length
-          ? [
-              ...suggest(pages),
-              formatCliCommand('template --list --type page', cwd),
-            ]
-          : fallback,
+        run: [
+          ...suggest(offered),
+          formatCliCommand('template --list --type page', cwd),
+        ],
       },
     );
+  }
   if (skippedFrames.length)
     notes.push(
       `left out ${skippedFrames.join(', ')}: app frames, not pages (add one with --template <id>)`,
@@ -4232,10 +4310,15 @@ async function addPreview(description, options, box) {
   const said = (description ?? '').trim();
   const named =
     options.template == null ? null : String(options.template).trim();
+  // A refusal's example is a page this app can show.
+  const example = async () => {
+    const id = await examplePage(cwd);
+    return id ? [`${PREVIEW} add --template ${id}${tf}${pf}`] : [];
+  };
   if (named === '')
     refuse(E.ERR_INVALID_ARGUMENT, '--template needs a page template id.', {
       run: [
-        `${PREVIEW} add --template dashboard${tf}${pf}`,
+        ...(await example()),
         formatCliCommand('template --list --type page', cwd),
       ],
     });
@@ -4256,9 +4339,9 @@ async function addPreview(description, options, box) {
       E.ERR_INVALID_ARGUMENT,
       `--top takes 1, 2 or 3, not "${String(options.top)}".`,
       {
-        run: [
-          `${PREVIEW} add ${quoteCommandArgument(said || 'a sales dashboard')} --top 2${tf}${pf}`,
-        ],
+        run: said
+          ? [`${PREVIEW} add ${quoteCommandArgument(said)} --top 2${tf}${pf}`]
+          : await example(),
       },
     );
   if (options.top != null && !said)
@@ -4268,11 +4351,12 @@ async function addPreview(description, options, box) {
         ? '--top says how many ranked pages to add; --template names one page, so drop --top.'
         : '--top says how many pages to add for a description, and there is none.',
       {
-        run: [
+        run:
           named != null
-            ? `${PREVIEW} add --template ${quoteCommandArgument(named)}${tf}${pf}`
-            : `${PREVIEW} add 'a sales dashboard' --top ${String(options.top)}${tf}${pf}`,
-        ],
+            ? [
+                `${PREVIEW} add --template ${quoteCommandArgument(named)}${tf}${pf}`,
+              ]
+            : await example(),
       },
     );
   /** @type {string[]} */
@@ -4295,7 +4379,7 @@ async function addPreview(description, options, box) {
     );
   }
   const retry = (/** @type {string | null} */ p) =>
-    `${PREVIEW} add${said ? ` ${quoteCommandArgument(said)}` : ''}${named != null ? ` --template ${quoteCommandArgument(named)}` : ''}${tf}${p == null ? '' : ` --path ${quoteCommandArgument(p)}`}`;
+    `${PREVIEW} add${said ? ` ${quoteCommandArgument(said)}` : ''}${named != null ? ` --template ${quoteCommandArgument(named)}` : ''}${options.top != null ? ` --top ${quoteCommandArgument(String(options.top))}` : ''}${tf}${p == null ? '' : ` --path ${quoteCommandArgument(p)}`}`;
   const at = previewDir(cwd, options.path, {write: true, retry});
   const recovered = recoverPreview(cwd, at.dir);
   if (recovered) notes.push(recovered);
@@ -4335,6 +4419,8 @@ async function addPreview(description, options, box) {
     wornTheme(cwd, options.theme, againWith, without);
     data.theme = options.theme;
   } else if (data.theme && !fs.existsSync(themeFiles(cwd, data.theme).dir)) {
+    // Not gone when the route imports it from outside this project folder.
+    refuseThemeAway(cwd, at.dir, data.theme, retry);
     const themes = editedThemes(cwd);
     data.theme = themes.length === 1 ? themes[0] : null;
     notes.push(
@@ -4437,7 +4523,7 @@ async function addPreview(description, options, box) {
     const flags = `${tf}${pf}`;
     const picks = explicit
       ? [await namedTemplate(cwd, /** @type {string} */ (named), flags)]
-      : await rankedPages(words, cwd, notes, flags);
+      : await rankedPages(words, cwd, notes, flags, appRootOf(cwd, at.dir));
     for (const [i, pick] of picks.entries()) {
       if (add.length >= (explicit ? 1 : top)) break;
       const shownTemplate =
@@ -4641,10 +4727,17 @@ async function addPreview(description, options, box) {
     } catch {
       // A theme that does not load is reported where it is used.
     }
-  if (again)
-    notes.push(
-      `a default page's id brings back the default pages that are missing, as ${PREVIEW} add does`,
+  // What happened: only the page asked for; the others come with a bare
+  // add.
+  if (again) {
+    const stillMissing = DEFAULT_IDS.filter(
+      id => !data.pages.some(p => p.id === id),
     );
+    if (stillMissing.length)
+      notes.push(
+        `only ${askedId} was added; ${PREVIEW} add with no page brings back the other default pages that are missing (${stillMissing.join(', ')})`,
+      );
+  }
   notes.push(...typeScriptNotes(cwd, at.dir, added));
   if (
     askedId === COLORS_PAGE.id &&
@@ -5012,7 +5105,9 @@ export async function themeEditPreviewList(options = {}) {
   /** @type {string[]} */
   const notes = [];
   const themeMissing = Boolean(
-    data?.theme && !fs.existsSync(themeFiles(cwd, data.theme).dir),
+    data?.theme &&
+    !fs.existsSync(themeFiles(cwd, data.theme).dir) &&
+    !(at && themeElsewhere(cwd, at.dir, data.theme)),
   );
   if (at && fs.existsSync(path.join(at.dir, PENDING)))
     notes.push(
@@ -5101,7 +5196,118 @@ export async function themeEditPreviewList(options = {}) {
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditPreviewRemoveResponse>}
  */
 export async function themeEditPreviewRemove(page, options = {}) {
-  return reportingRecovery(box => removePreview(page, options, box));
+  try {
+    return await reportingRecovery(box => removePreview(page, options, box));
+  } catch (e) {
+    // Removing a page needs the theme the route wears; removing the whole
+    // preview needs none. Every refusal over a theme that does not load
+    // names it, wherever the theme was read.
+    const err = /** @type {any} */ (e);
+    const pf =
+      options.path != null
+        ? ` --path ${quoteCommandArgument(options.path)}`
+        : '';
+    const whole = `${PREVIEW} remove${pf}`;
+    if (
+      page != null &&
+      [E.ERR_THEME_INVALID, E.ERR_UNKNOWN_THEME, E.ERR_THEME_LOAD].includes(
+        err?.code,
+      ) &&
+      !(err.suggestions ?? []).some((/** @type {any} */ x) => x?.name === whole)
+    )
+      err.suggestions = [
+        {
+          name: whole,
+          reason:
+            'do this instead: removes the whole preview, which needs no theme',
+        },
+        ...(err.suggestions ?? []),
+      ];
+    throw e;
+  }
+}
+
+/**
+ * Refuse a preview command run in a project folder below the one that holds
+ * the theme the preview wears (a workspace app run from its own folder): the
+ * theme is not gone, and no command rewrites it away. The refusal names
+ * the same command, run from the folder that holds the theme.
+ * @param {string} cwd
+ * @param {string} dir the preview folder
+ * @param {string} slug the theme the preview wears
+ * @param {Retry} again the same command, with every argument it was given,
+ *   for a --path
+ */
+function refuseThemeAway(cwd, dir, slug, again) {
+  const away = themeElsewhere(cwd, dir, slug);
+  if (!away) return;
+  const root = path.dirname(path.dirname(away));
+  refuse(
+    E.ERR_INVALID_ARGUMENT,
+    `The preview wears ${slug}, whose theme folder is ${away}/, outside this project folder (${cwd}). Run the command from the folder that holds themes/${slug}/.`,
+    {
+      run: [
+        `cd ${quoteCommandArgument(root)} && ${again(path.relative(root, dir))}`,
+      ],
+    },
+  );
+}
+
+/**
+ * The theme folder a preview's route imports when it is outside this
+ * project's themes/ (a workspace app run from its own folder, its themes at
+ * the workspace root), or null.
+ * @param {string} cwd
+ * @param {string} dir the preview folder
+ * @param {string} slug
+ * @returns {string | null}
+ */
+function themeElsewhere(cwd, dir, slug) {
+  if (fs.existsSync(themeFiles(cwd, slug).dir)) return null;
+  /** @type {string} */
+  let route;
+  try {
+    route = fs.readFileSync(path.join(dir, 'page.tsx'), 'utf8');
+  } catch {
+    return null;
+  }
+  const esc = slug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const m = new RegExp(`['"]([^'"]*themes/${esc})/${esc}[^'"]*['"]`).exec(
+    route,
+  );
+  if (!m || !m[1].startsWith('.')) return null;
+  const found = path.resolve(dir, m[1]);
+  return fs.existsSync(path.join(found, `${slug}.settings.json`))
+    ? found
+    : null;
+}
+
+/**
+ * The previews a theme may have: the ones recorded with it (added with
+ * --path) and every preview in the routes folders (one renamed by hand, or
+ * one whose record was lost). The one list `see`, a change's refresh and
+ * the preview commands read; each reads a preview's record for its theme.
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {string[]}
+ */
+function themePreviews(cwd, slug) {
+  return [...new Set([...recordedPreviews(cwd, slug), ...previewsIn(cwd)])];
+}
+
+/**
+ * Every preview in the app, of any editor theme: the previews of each, by
+ * {@link themePreviews}, that are there.
+ * @param {string} cwd
+ * @returns {string[]}
+ */
+function allPreviews(cwd) {
+  return [
+    ...new Set([
+      ...editedThemes(cwd).flatMap(t => themePreviews(cwd, t)),
+      ...previewsIn(cwd),
+    ]),
+  ].filter(d => fs.existsSync(path.join(d, PREVIEW_DATA)));
 }
 
 /**
@@ -5355,6 +5561,7 @@ async function removePreview(page, options, box) {
     const wore = data.theme;
     /** @type {string | null} */
     let gone = null;
+    if (wore) refuseThemeAway(cwd, at.dir, wore, retry);
     if (wore && !fs.existsSync(themeFiles(cwd, wore).dir)) {
       gone = wore;
       data.theme = null;
@@ -5390,26 +5597,10 @@ async function removePreview(page, options, box) {
     let planned;
     /** @type {Awaited<ReturnType<typeof routeTheme>>} */
     let theme;
-    try {
-      theme = await routeTheme(cwd, at.dir, data, {build: false});
-      planned = await routeWrites(cwd, at.dir, data, theme, {gone});
-    } catch (e) {
-      const err = /** @type {any} */ (e);
-      if (
-        [E.ERR_THEME_INVALID, E.ERR_UNKNOWN_THEME, E.ERR_THEME_LOAD].includes(
-          err?.code,
-        )
-      )
-        err.suggestions = [
-          {
-            name: `${PREVIEW} remove${pf}`,
-            reason:
-              'do this instead: removes the whole preview, which needs no theme',
-          },
-          ...(err.suggestions ?? []),
-        ];
-      throw e;
-    }
+    // A theme that does not load is refused with the whole-preview remove
+    // named (themeEditPreviewRemove adds it to every such refusal).
+    theme = await routeTheme(cwd, at.dir, data, {build: false});
+    planned = await routeWrites(cwd, at.dir, data, theme, {gone});
     const elsewhere = `${PREVIEW} remove${pf}`;
     /** @type {Map<string, {rel: string, text: string, keepHash?: boolean}>} */
     const writes = new Map(move.writes.map(w => [w.rel, w]));
