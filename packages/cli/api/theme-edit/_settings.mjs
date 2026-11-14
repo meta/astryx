@@ -62,6 +62,7 @@ import {
   WRAPPED_PARTS,
   CARD_LIKE,
 } from './_tables.mjs';
+import {TOP_BAR_COMPONENTS} from './_catalog.mjs';
 import {
   baseWord,
   booleanWord,
@@ -6948,6 +6949,39 @@ export async function contrastProblems(ctx, data, res) {
       );
     }
   }
+  // Text of a part that sits in the app's top bar (one the census saw inside
+  // the header region, or one the preview's own top bar draws) is measured
+  // over the header's background too: a see-through background of its own
+  // shows the header through it, not the page.
+  /** @type {TextPair[]} */
+  const headerPairs = [];
+  const HEADER = 'app-shell-header';
+  const census = /** @type {any} */ (ctx).parts;
+  const grounds = [
+    ...new Map(
+      census.pairs
+        .filter((/** @type {TextPair} */ p) => p.bg.target === HEADER)
+        .map((/** @type {TextPair} */ p) => [
+          p.bg.tokens.join('+') || p.bg.raw,
+          p.bg,
+        ]),
+    ).values(),
+  ];
+  const inHeader = new Set([
+    ...(census.map[HEADER]?.contains ?? []),
+    ...TOP_BAR_COMPONENTS.map(kebab).filter(t => ctx.project.target.has(t)),
+  ]);
+  // A pair is in the top bar when the part whose background it sits on is
+  // one there too (a segmented item on its control's track), or it paints
+  // none of its own.
+  for (const p of census.pairs)
+    if (
+      inHeader.has(p.text) &&
+      p.bg.target !== HEADER &&
+      (p.bg.target == null || inHeader.has(p.bg.target))
+    )
+      for (const over of grounds)
+        headerPairs.push({...p, text: `${p.text} in the ${HEADER}`, over});
   const {problems, more, unchecked} = ctx.C.contrast(
     value,
     baseValue,
@@ -6960,12 +6994,12 @@ export async function contrastProblems(ctx, data, res) {
       page: m =>
         res[/** @type {'light' | 'dark'} */ (m)]['--color-background-body'],
     },
-    variantPairs,
+    [...variantPairs, ...headerPairs],
   );
   return [
     ...problems.map(
       x =>
-        `text in ${x.part} ("${x.sample}") is ${x.ratio}:1 in ${x.mode} (${x.fg} on ${x.bgPart ?? 'the page'}'s ${x.bg}); text needs 4.5:1`,
+        `text in ${x.part} ("${x.sample}") is ${x.ratio}:1 in ${x.mode} (${x.fg} on ${x.bgPart ?? 'the page'}'s ${x.bg}${x.over ? ` over ${x.over}` : ''}); text needs 4.5:1`,
     ),
     ...(more
       ? [`and ${more} more text pair${more > 1 ? 's' : ''} below 4.5:1`]
