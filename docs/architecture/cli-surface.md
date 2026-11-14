@@ -938,7 +938,9 @@ Amended for component examples by DEC-14.
 
 ### DEC-14 — A component example runs on its own, by one exported rule
 
-**Decider:** `josephfarina`, `2026-11-13`
+**Decider:** `josephfarina`, `2026-11-13`, for one rule that Doctor and
+preview tools share; its details are the CLI maintainers' choice under that
+decision.
 
 A docs page or catalog shows a component example that is not
 `kind: 'setup'` as a live preview, so it must run on its own.
