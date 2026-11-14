@@ -126,16 +126,21 @@ describe('hunt41 N3: a suggested new name is free and valid', () => {
 
 describe('hunt41 N4: a base typed as its package name', () => {
   it('stays that base, with its install line when it is not installed', async () => {
-    for (const like of [
-      '@astryxdesign/theme-butter',
-      'theme-butter',
-      'BUTTER',
-    ]) {
+    for (const like of ['@astryxdesign/theme-butter', 'theme-butter']) {
       const err = await refusal(() => themeEditNew('b', {cwd, like}));
       expect(err.run.join('\n'), like).toMatch(/ new b --like butter$/m);
       expect(err.run[0], like).toMatch(
         /(npm install|(pnpm|yarn|bun) add) @astryxdesign\/theme-butter$/,
       );
+    }
+    // The base in any case is that base (the one case rule): the same
+    // refusal as butter itself, its install line first.
+    for (const like of ['butter', 'BUTTER']) {
+      const err = await refusal(() => themeEditNew('b', {cwd, like}));
+      expect(err.run[0], like).toMatch(
+        /(npm install|(pnpm|yarn|bun) add) @astryxdesign\/theme-butter$/,
+      );
+      expect(err.run.join('\n'), like).toMatch(/ new b$/m);
     }
     for (const v of [
       'butter',

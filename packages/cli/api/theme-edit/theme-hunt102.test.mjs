@@ -83,9 +83,15 @@ describe('compile refuses a source that no longer carries its settings', () => {
         );
       }
       expect(fs.existsSync(path.join(cwd, 'themes/s8/brand.css'))).toBe(false);
+      // The theme it extends is another one: the settings never apply.
       fs.writeFileSync(
         src,
-        good.replace('extends: s8Settings', 'extends: undefined'),
+        good
+          .replace(
+            'export const',
+            "const other = defineTheme({name: 'other', tokens: {}});\nexport const",
+          )
+          .replace('extends: s8Settings', 'extends: other'),
       );
       const r = compile('themes/s8/s8.theme.ts');
       expect(r.status).not.toBe(0);

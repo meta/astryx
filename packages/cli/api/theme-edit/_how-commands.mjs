@@ -60,7 +60,7 @@ export const EXAMPLE_THEME = 'my-theme';
  * @property {import('./_settings.mjs').ThemeData} data
  * @property {{light: Record<string, string>, dark: Record<string, string>}} base
  * @property {{light: Record<string, string>, dark: Record<string, string>}} [own] - The theme's own values: the base's with its settings applied.
- * @property {(steps: Step[]) => {ok: true} | {ok: false, why: string}} check
+ * @property {(steps: Step[]) => {ok: true} | {ok: false, why: string, run?: string[]}} check
  * @property {(steps: Step[], intent: MeasureIntent) => string | null} measure the measured check: why the built result does not do what the question asks, or null
  */
 
@@ -238,11 +238,18 @@ export async function howTheme(ctx, cwd, name) {
           };
         return {ok: true};
       } catch (e) {
-        if (e instanceof AstryxError)
+        if (e instanceof AstryxError) {
+          // The command the refusal names to run instead, when it names
+          // one ("set t text-size 18").
+          const run = (e.suggestions ?? [])
+            .filter(x => /^do this instead/.test(String(x.reason ?? '')))
+            .map(x => String(x.name));
           return {
             ok: false,
             why: e.message.replace(/ Nothing was changed\.$/, ''),
+            ...(run.length ? {run} : {}),
           };
+        }
         throw e;
       }
     },
@@ -264,6 +271,7 @@ export async function howTheme(ctx, cwd, name) {
  * @property {boolean} [bound] the question gives a bound ("smaller than 24px"): a space is checked against it too
  * @property {boolean} [contrast] the words ask about contrast ("too light to read"): text in dark mode moves the other way
  * @property {string[]} [than] parts the question compares against ("darker than the page"): a color moves past theirs
+ * @property {'more' | 'less'} [saturation] the colors asked more or less saturated ("more colorful", "more muted")
  * @property {boolean} [literal] a mode is named with lighter or darker: borders and the shared text color move as written
  * @property {'more' | 'less' | null} [shadowDir] the way a shadow's strength moves ("darker shadows": more)
  */
@@ -419,6 +427,21 @@ function painted(v, toks, mode) {
     parseColor(resolveIn('var(--color-background-body)', toks, mode)) ??
     (mode === 'dark' ? [0, 0, 0] : [255, 255, 255]);
   return rgb.slice(0, 3).map((x, i) => x * a + page[i] * (1 - a));
+}
+
+/**
+ * A color's HSL saturation, 0 to 1, or null when it does not read.
+ * @param {string | number[] | null} v a color, or its RGB
+ */
+function saturationOf(v) {
+  const rgb = Array.isArray(v) ? v : v == null ? null : parseColor(v);
+  if (!rgb) return null;
+  const [r, g, b] = rgb.map(x => x / 255);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  const d = max - min;
+  return d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
 }
 
 /** @param {number[]} c */
@@ -836,6 +859,38 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
         return `${tok} would move the other way in ${mode} mode (${before} to ${after})`;
     }
   }
+  // "more colorful", "more muted": the accent colors the theme shows (the
+  // accent and the text and icons drawn in it) move that way in saturation
+  // together, in each mode shown (a step that dulls them is not more
+  // colorful). A muted wash is a surface drawn from them, as saturated as
+  // the page under it lets it be, so it is not counted.
+  if (intent.saturation)
+    for (const mode of /** @type {Array<'light' | 'dark'>} */ (
+      visible ? [visible] : ['light', 'dark']
+    )) {
+      let x = 0;
+      let y = 0;
+      let n = 0;
+      for (const tok of Object.keys(tw[mode])) {
+        if (!/^--color-(?:text-|icon-)?accent$/.test(tok)) continue;
+        // (As it paints over the page.)
+        const a = saturationOf(
+          painted(resolveIn(`var(${tok})`, tn[mode], mode), tn[mode], mode),
+        );
+        const b = saturationOf(
+          painted(resolveIn(`var(${tok})`, tw[mode], mode), tw[mode], mode),
+        );
+        if (a == null || b == null) continue;
+        x += a;
+        y += b;
+        n++;
+      }
+      if (
+        n &&
+        (intent.saturation === 'more' ? x < y - 0.02 * n : x > y + 0.02 * n)
+      )
+        return `the accent colors would get ${intent.saturation === 'more' ? 'duller' : 'more saturated'} in ${mode} mode`;
+    }
   if (!shadowMoved && steps.some(st => familyOf(st.thing) === 'shadow'))
     return 'the shadows would look the same as they do now (a shadow color at full strength gets no stronger; a bigger or blurrier shadow can)';
   return null;
@@ -931,18 +986,23 @@ export function exampleStep(example) {
  * Keep the alternatives that pass, and render them for the theme.
  * @param {HowTheme} env
  * @param {Step[][]} options each a list of steps run in order
- * @returns {{commands: string[], refused: Array<{command: string, why: string}>}}
+ * @returns {{commands: string[], refused: Array<{command: string, why: string, run?: string[]}>}}
  */
 export function checked(env, options) {
   /** @type {string[]} */
   const commands = [];
-  /** @type {Array<{command: string, why: string}>} */
+  /** @type {Array<{command: string, why: string, run?: string[]}>} */
   const refused = [];
   for (const steps of options) {
     const text = steps.map(st => render(st, env.slug));
     const r = env.check(steps);
     if (r.ok) commands.push(...text.filter(c => !commands.includes(c)));
-    else refused.push({command: text.join(' && '), why: r.why});
+    else
+      refused.push({
+        command: text.join(' && '),
+        why: r.why,
+        ...(r.run ? {run: r.run} : {}),
+      });
   }
   return {commands, refused};
 }
