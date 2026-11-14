@@ -72,8 +72,10 @@ function ensureDynamicHighlightType(tokenType: string): void {
   const name = CSS.escape(`astryx-${tokenType}`);
   const colorVar = `var(${CSS.escape(`--color-syntax-${tokenType}`)}, currentColor)`;
   try {
+    // The rule goes in the astryx-base layer, as the static rules do, so
+    // theme and app syntax colours win over it.
     dynamicStyleSheet.insertRule(
-      `.astryx-code-block code::highlight(${name}), .astryx-codeeditor code::highlight(${name}) { color: ${colorVar}; }`,
+      `@layer astryx-base { .astryx-code-block code::highlight(${name}), .astryx-codeeditor code::highlight(${name}) { color: ${colorVar}; } }`,
     );
   } catch {
     // An engine that still refuses the rule costs that type its colour
