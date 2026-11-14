@@ -150,7 +150,7 @@ describe('padding on real base themes', () => {
     expect(reset).not.toMatch(/--astryx-card-padding-inline-start/);
   }, 240_000);
 
-  it("lets the own source's padding on a part win over an editor padding there, base and variant (parts40)", async ctx => {
+  it("lets the own source's padding on a part win over an editor padding there, base and variant", async ctx => {
     if (unbuilt) {
       console.warn(`skipped: ${unbuilt}`);
       return ctx.skip();
@@ -206,7 +206,7 @@ describe('padding on real base themes', () => {
     );
   }, 240_000);
 
-  it('keeps control sizes apart and in order at every spacing step, the plain scale unless two would meet (parts41)', async ctx => {
+  it('keeps control sizes apart and in order at every spacing step, the plain scale unless two would meet', async ctx => {
     if (unbuilt) {
       console.warn(`skipped: ${unbuilt}`);
       return ctx.skip();
@@ -244,7 +244,7 @@ describe('padding on real base themes', () => {
     }
   }, 240_000);
 
-  it('reads an own-source padding edited since the last build, so the set and its note agree (11490)', async ctx => {
+  it('reads an own-source padding edited since the last build, so the set and its note agree', async ctx => {
     if (unbuilt) {
       console.warn(`skipped: ${unbuilt}`);
       return ctx.skip();
@@ -273,7 +273,7 @@ describe('padding on real base themes', () => {
     expect(ruleOf('ed', '.astryx-card')).not.toMatch(/20px/);
   }, 240_000);
 
-  describe('parts42', () => {
+  describe('one-mode colors, kept sizes and own padding sides', () => {
     /** @param {string} slug @param {string} mine */
     const ownEdit = (slug, mine) => {
       const ts = path.join(cwd, 'themes', slug, `${slug}.theme.ts`);

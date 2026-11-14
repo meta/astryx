@@ -384,7 +384,16 @@ export function makeCompiler(project, parts) {
   function variantValues(target) {
     const comp = TARGET.get(target)?.component;
     const info = comp ? project.components[comp] : undefined;
+    // The component named like the part (Heading for heading) owns its
+    // values before any other component whose docs name the same class.
+    const pascal = target.replace(/(^|-)([a-z0-9])/g, (_, __, ch) =>
+      ch.toUpperCase(),
+    );
+    const own = project.components?.[pascal]?.targets?.find(
+      (/** @type {any} */ x) => x.className === `astryx-${target}`,
+    );
     const t =
+      own ??
       info?.targets.find(x => x.className === `astryx-${target}`) ??
       info?.targets[0];
     const fromDocs = t?.values ?? {};
