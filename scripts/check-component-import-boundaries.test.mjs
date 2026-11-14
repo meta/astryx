@@ -12,7 +12,9 @@
  *   touch module or of a capability module fails; an entry that reaches a
  *   module its "Must not reach" row lists fails with the chain and the cost,
  *   past an allowlisted crossing too; a row for an entry the check does not
- *   build fails; a row a pull request removes or loosens is reported
+ *   build or a module that does not exist fails; a folder row leaves out the
+ *   base modules in surface folders; a row a pull request removes or loosens
+ *   is reported
  * @position Node test beside scripts/check-component-import-boundaries.mjs
  */
 
@@ -31,6 +33,7 @@ import {
   loosenedRows,
   matchesModule,
   measureEntry,
+  moduleExists,
   parseAllowlist,
   parseMustNotReach,
   rowsByCrossing,
@@ -440,6 +443,7 @@ describe('the "Must not reach" table', () => {
       [textResult],
       [row(['Text'], ['gestures/'])],
       ['Text'],
+      {boundaries: BOUNDARIES, exists: () => true},
     );
     expect(verdict.ok).toBe(false);
     expect(verdict.reached).toHaveLength(1);
@@ -472,6 +476,7 @@ describe('the "Must not reach" table', () => {
       [textResult],
       [row(['Text'], ['motion/animator', 'keyboard/'])],
       ['Text'],
+      {boundaries: BOUNDARIES, exists: () => true},
     );
     expect(verdict.ok).toBe(true);
     expect(verdict.held).toEqual([
@@ -489,6 +494,7 @@ describe('the "Must not reach" table', () => {
       [{entryName: 'Text', ...violationsOf('Text', graph)}],
       [row(['Text'], ['gestures/'])],
       ['Text'],
+      {boundaries: BOUNDARIES, exists: () => true},
     );
     expect(verdict.ok).toBe(true);
   });
@@ -498,11 +504,64 @@ describe('the "Must not reach" table', () => {
       [textResult],
       [row(['Txet'], ['gestures/'])],
       ['Text'],
+      {boundaries: BOUNDARIES, exists: () => true},
     );
     expect(verdict.ok).toBe(false);
     expect(verdict.unknownEntries.map(({entryName}) => entryName)).toEqual([
       'Txet',
     ]);
+  });
+
+  it('fails a row that names a module the source does not have', () => {
+    const verdict = findMustNotReach(
+      [textResult],
+      [row(['Text'], ['gestures/', 'motion/animatr'])],
+      ['Text'],
+      {
+        boundaries: BOUNDARIES,
+        exists: name => name !== 'motion/animatr',
+      },
+    );
+    expect(verdict.ok).toBe(false);
+    expect(verdict.missingModules.map(({module}) => module)).toEqual([
+      'motion/animatr',
+    ]);
+    const report = formatReport(compareWithAllowlist(rowsByCrossing([]), []), {
+      mustNotReach: verdict,
+    });
+    expect(report).toContain('`motion/animatr` matches nothing');
+  });
+
+  it("finds Core's modules and folders, and not a misspelled one", () => {
+    expect(moduleExists('gestures/')).toBe(true);
+    expect(moduleExists('motion/animator')).toBe(true);
+    expect(moduleExists('List/listReorderEngine')).toBe(true);
+    expect(moduleExists('Tooltip')).toBe(true);
+    expect(moduleExists('motion/animatr')).toBe(false);
+    expect(moduleExists('motion/animator/')).toBe(false);
+  });
+
+  it('leaves the base modules in surface folders out of a folder match', () => {
+    const graph = graphOf('Button/__entry__.mjs', {
+      'Button/__entry__.mjs': {imports: [['Button/Button.tsx']]},
+      'Button/Button.tsx': {imports: [['Layer/layerScopedContext.ts']]},
+      'Layer/layerScopedContext.ts': {},
+    });
+    const result = {entryName: 'Button', ...violationsOf('Button', graph)};
+    const folder = findMustNotReach(
+      [result],
+      [row(['Button'], ['Layer'])],
+      ['Button'],
+      {boundaries: BOUNDARIES, exists: () => true},
+    );
+    expect(folder.ok).toBe(true);
+    const exact = findMustNotReach(
+      [result],
+      [row(['Button'], ['Layer/layerScopedContext'])],
+      ['Button'],
+      {boundaries: BOUNDARIES, exists: () => true},
+    );
+    expect(exact.ok).toBe(false);
   });
 
   it('matches a folder with a trailing slash, and a module or its folder otherwise', () => {
@@ -670,6 +729,7 @@ describe('the build', () => {
         },
       ],
       ['Label'],
+      {boundaries: BOUNDARIES, exists: () => true},
     );
     expect(verdict.ok).toBe(false);
     expect(verdict.reached[0].hits.map(({chain}) => chain)).toEqual([

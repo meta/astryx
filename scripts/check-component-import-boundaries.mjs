@@ -585,17 +585,41 @@ export function matchesModule(name, pattern) {
   return name === pattern || name.startsWith(`${pattern}/`);
 }
 
+/** Whether a "Must not reach" module or folder exists in Core's source. */
+export function moduleExists(pattern, root = REPO) {
+  const base = path.join(root, CORE_SRC, pattern.replace(/\/$/, ''));
+  if (pattern.endsWith('/')) {
+    return fs.existsSync(base) && fs.statSync(base).isDirectory();
+  }
+  if (fs.existsSync(base) && fs.statSync(base).isDirectory()) return true;
+  return ['.ts', '.tsx', '.js', '.mjs'].some(extension =>
+    fs.existsSync(`${base}${extension}`),
+  );
+}
+
 /**
  * Holds each entry's eager graph against the "Must not reach" rows. A row
- * fails for an entry that reaches a listed module; a row naming an entry
- * the check does not build fails too, since it holds nothing.
+ * fails for an entry that reaches a listed module. A row that names an entry
+ * the check does not build, or a module that does not exist, fails too,
+ * since it holds nothing. A folder match leaves out the base modules that
+ * live in surface folders.
  */
-export function findMustNotReach(results, rows, entryNames) {
+export function findMustNotReach(
+  results,
+  rows,
+  entryNames,
+  {boundaries = CORE_BOUNDARIES, exists = moduleExists} = {},
+) {
   const byEntry = new Map(results.map(result => [result.entryName, result]));
   const reached = [];
   const unknownEntries = [];
+  const missingModules = [];
   const held = [];
+  const isBase = name => boundaries.baseModulesInSurfaceFolders.includes(name);
   for (const row of rows) {
+    for (const pattern of row.modules) {
+      if (!exists(pattern)) missingModules.push({row, module: pattern});
+    }
     for (const entryName of row.entries) {
       if (!entryNames.includes(entryName)) {
         unknownEntries.push({row, entryName});
@@ -603,16 +627,24 @@ export function findMustNotReach(results, rows, entryNames) {
       }
       const result = byEntry.get(entryName);
       const hits = (result?.eagerReach ?? []).filter(item =>
-        row.modules.some(pattern => matchesModule(item.name, pattern)),
+        row.modules.some(
+          pattern =>
+            matchesModule(item.name, pattern) &&
+            (item.name === pattern || !isBase(item.name)),
+        ),
       );
       if (hits.length > 0) reached.push({row, entryName, hits});
       else held.push({row, entryName});
     }
   }
   return {
-    ok: reached.length === 0 && unknownEntries.length === 0,
+    ok:
+      reached.length === 0 &&
+      unknownEntries.length === 0 &&
+      missingModules.length === 0,
     reached,
     unknownEntries,
+    missingModules,
     held,
   };
 }
@@ -836,6 +868,17 @@ export function formatReport(
     for (const {row, entryName} of mustNotReach.unknownEntries) {
       lines.push(
         `    - ${entryName} (${row.modules.map(name => `\`${name}\``).join(', ')}): add it to the entry list or fix the row in ${RECORD}.`,
+      );
+    }
+    lines.push('');
+  }
+  if (mustNotReach && mustNotReach.missingModules.length > 0) {
+    lines.push(
+      '"Must not reach" rows that name a module Core\'s source does not have:',
+    );
+    for (const {row, module} of mustNotReach.missingModules) {
+      lines.push(
+        `    - ${row.entries.join(', ')}: \`${module}\` matches nothing: fix the row in ${RECORD}.`,
       );
     }
     lines.push('');
