@@ -18,6 +18,7 @@ verified_by:
     packages/core/src/List/__tests__/ListTouchHitArea.interaction.browser.spec.ts,
     packages/core/src/List/__tests__/ListDividers.interaction.browser.spec.ts,
     packages/core/src/List/listLayoutUpdates.test.tsx,
+    scripts/list-layout-engine-bundle.test.mjs,
     packages/core/src/List/__tests__/ListUpdates.interaction.browser.spec.ts,
     packages/core/src/List/__tests__/ListReorder.test.tsx,
     packages/core/src/List/__tests__/ListReorderLayout.test.tsx,
@@ -195,7 +196,9 @@ Consumer migration instructions belong in consumer docs and release notes.
   listener, state, Effect, or render pass. Deprecation warnings are dev-only.
 - **PR2 — Motion only where it applies.** FR11 adds no listener, observer,
   measurement, or animation under a fine pointer, and FR12 measures rows only
-  with a handle. Every motion runs on transform and opacity.
+  with a handle. Every motion runs on transform and opacity. FR12's layout
+  calls come with the handle, so a List given no handle loads no layout-motion
+  code (`architecture:component-import-boundaries` INV7).
 
 ## Accessibility contract
 

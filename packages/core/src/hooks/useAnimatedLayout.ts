@@ -15,6 +15,10 @@
 import {useMemo, type RefObject} from 'react';
 import {
   createAnimatedLayout,
+  holdLayoutExit,
+  landLayoutGlideSideways,
+  playLayoutChange,
+  reportLayoutChange,
   type AnimatedLayout,
 } from '../motion/animatedLayout';
 
@@ -53,8 +57,16 @@ export function useAnimatedLayout({
 }: UseAnimatedLayoutOptions): AnimatedLayout {
   // The container is read when a change runs, so the handle stays stable
   // across renders and a later ref assignment is still seen.
+  // The handle carries the calls a List makes, so a List given no handle
+  // loads none of them.
   return useMemo(
-    () => createAnimatedLayout(() => containerRef.current),
+    () =>
+      createAnimatedLayout(() => containerRef.current, {
+        reportLayoutChange,
+        playLayoutChange,
+        holdLayoutExit,
+        landLayoutGlideSideways,
+      }),
     [containerRef],
   );
 }
