@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {useState} from 'react';
+import {useState, type ReactNode} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {Lightbox, useLightbox} from '@astryxdesign/core/Lightbox';
 import {SAMPLE_IMAGES} from './assets/samples/samples';
@@ -398,6 +398,47 @@ export const CaptionEndingInShortBlock: Story = {
       </>
     );
   },
+};
+
+const LONG_CAPTION_HEAD =
+  'A winding path through the forest, past the old mill and down to the river, where the trail turns back toward the village. In autumn the beeches along it turn copper, and on a clear morning you can see the church spire from the bridge before the path climbs the last hill';
+
+/** The gallery's args, with `caption` as its first, long caption. */
+function longCaptionArgs(caption: ReactNode): Story['args'] {
+  return {media: [{...GALLERY_MEDIA[0], caption}, GALLERY_MEDIA[1]]};
+}
+
+/**
+ * The long caption ending in a flex row, a block with a layout of its own. It
+ * narrows beside the toggle's place.
+ */
+export const GalleryWithFlexRowCaptionFixture: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  args: longCaptionArgs(
+    <>
+      {LONG_CAPTION_HEAD}
+      <span style={{display: 'flex', columnGap: 8}}>
+        <span>home</span>
+        <span>again.</span>
+      </span>
+    </>,
+  ),
+  render: GalleryWithCaptions.render,
+};
+
+/**
+ * The long caption ending in a block that clips its overflow. It narrows
+ * beside the toggle's place too.
+ */
+export const GalleryWithClippedBlockCaptionFixture: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  args: longCaptionArgs(
+    <>
+      {LONG_CAPTION_HEAD}
+      <span style={{display: 'block', overflow: 'hidden'}}>home again.</span>
+    </>,
+  ),
+  render: GalleryWithCaptions.render,
 };
 
 /**

@@ -2197,3 +2197,123 @@ test('no caption read follows a write in the same resize delivery, from opening 
   );
   expect(wideReads).toEqual([]);
 });
+
+// Captions whose last block has a layout of its own: a flex row, and a block
+// that clips its overflow. Such a block narrows beside the toggle's place, so
+// "less" takes a line of its own only where it does not fit beside the last
+// line, as with plain text.
+const FIT_CASES = [
+  {
+    name: 'a caption ending in a flex row',
+    story: 'core-lightbox--gallery-with-flex-row-caption-fixture',
+  },
+  {
+    name: 'a caption ending in a block that clips its overflow',
+    story: 'core-lightbox--gallery-with-clipped-block-caption-fixture',
+  },
+];
+
+for (const {name, story} of FIT_CASES) {
+  test(`an open caption that widens to one line fewer gives "less" a line of its own only where it does not fit beside the last line (${name})`, async ({
+    page,
+  }) => {
+    await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route => {
+      const id =
+        /\/sample-([a-z]+)-/.exec(route.request().url())?.[1] ?? 'forest';
+      await route.fulfill({
+        contentType: 'image/svg+xml',
+        body: photoSvg(COLORS[id] ?? '#888'),
+      });
+    });
+    const narrow = {width: 360, height: 874};
+    await page.setViewportSize(narrow);
+    await openStory(page, storybook(), story);
+    await page
+      .getByRole('button', {name: 'Open gallery with captions'})
+      .click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('button', {name: 'more'}).click();
+    await expect(dialog.getByRole('button', {name: 'less'})).toBeVisible();
+    await frames(page, 4);
+    const read = async () =>
+      dialog.evaluate(element => {
+        const caption = element.querySelector(
+          '[data-current] [data-lightbox-caption]',
+        ) as HTMLElement;
+        const text = caption.querySelector('.astryx-text') as HTMLElement;
+        const flow = text.firstElementChild as HTMLElement;
+        const place = flow.firstElementChild as HTMLElement;
+        const toggle = caption.querySelector('button') as HTMLElement;
+        const lineHeight = parseFloat(getComputedStyle(text).lineHeight);
+        // Every line of the caption is a line of the flow, whatever it holds.
+        // The place floats outside it.
+        const flowBox = flow.getBoundingClientRect();
+        const toggleBox = toggle.getBoundingClientRect();
+        const toggleMiddle = (toggleBox.top + toggleBox.bottom) / 2;
+        const placeBottom = place.getBoundingClientRect().bottom;
+        // The open caption keeps its last line in place and grows upward, so
+        // only the flow's own height compares two layouts.
+        const flowLines = () =>
+          Math.round(flow.getBoundingClientRect().height / lineHeight);
+        const shownLines = flowLines();
+        // Layout itself says whether "less" fits: lay out the text alone, then
+        // with the place shown beside its last line. A place that fits there
+        // moves no word to a new line.
+        const {display, webkitBoxOrient, webkitLineClamp} = place.style;
+        place.style.display = 'none';
+        const lines = flowLines();
+        place.style.display = '-webkit-box';
+        place.style.webkitBoxOrient = 'vertical';
+        place.style.webkitLineClamp = String(lines);
+        const besideLines = flowLines();
+        place.style.display = display;
+        place.style.webkitBoxOrient = webkitBoxOrient;
+        place.style.webkitLineClamp = webkitLineClamp;
+        return {
+          lines,
+          isBeside:
+            Math.abs(toggleMiddle - (flowBox.bottom - lineHeight / 2)) <=
+            lineHeight / 2,
+          // The place keeps the end of the line that "less" is on clear.
+          isOnPlace:
+            Math.abs(toggleMiddle - (placeBottom - lineHeight / 2)) <=
+            lineHeight / 2,
+          fits: besideLines === lines,
+          // Beside the last line or below it, the place moves no word.
+          isPushing: shownLines > lines,
+          toggleLeft: toggleBox.left,
+        };
+      });
+    const {lines: narrowLines} = await read();
+    // Each wider width that leaves the text one line fewer than at 360 px,
+    // reached in one step from a width with all the lines. There the count
+    // depends on whether "less" fits beside the last line.
+    const misplaced: string[] = [];
+    let checked = 0;
+    for (let width = narrow.width + 2; width <= 720; width += 2) {
+      await page.setViewportSize({width, height: narrow.height});
+      await frames(page, 3);
+      const facts = await read();
+      // At every width, "less" sits on the line its place keeps clear, and
+      // the place moves no word of the text.
+      if (!facts.isOnPlace || facts.isPushing) {
+        misplaced.push(`${width} px: ${JSON.stringify(facts)}`);
+      }
+      if (facts.lines < narrowLines - 1) {
+        break;
+      }
+      // No line fewer yet: this width is as good a start as 360 px.
+      if (facts.lines === narrowLines) {
+        continue;
+      }
+      checked += 1;
+      if (facts.isBeside !== facts.fits) {
+        misplaced.push(`${width} px: ${JSON.stringify(facts)}`);
+      }
+      await page.setViewportSize(narrow);
+      await frames(page, 3);
+    }
+    expect(checked).toBeGreaterThan(0);
+    expect(misplaced).toEqual([]);
+  });
+}
