@@ -748,6 +748,49 @@ describe('NumberInput', () => {
       expect(onChange).not.toHaveBeenCalledWith(1500);
     });
 
+    it('keeps an en-US group character typed key by key as typed', () => {
+      const onChange = vi.fn();
+      render(<GroupedField locale="en-US" value={null} onChange={onChange} />);
+      const input = screen.getByRole('spinbutton');
+      fireEvent.focus(input);
+      for (const draft of ['1', '1,', '1,2', '1,23', '1,234', '1,2345']) {
+        fireEvent.input(input, {target: {value: draft}});
+        expect(input).toHaveValue(draft);
+      }
+      fireEvent.blur(input);
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('keeps a de-DE decimal typed key by key as typed', () => {
+      const onChange = vi.fn();
+      render(<GroupedField locale="de-DE" value={null} onChange={onChange} />);
+      const input = screen.getByRole('spinbutton');
+      fireEvent.focus(input);
+      for (const draft of ['3', '3.', '3.1', '3.14', '3.141', '3.1415']) {
+        fireEvent.input(input, {target: {value: draft}});
+        expect(input).toHaveValue(draft);
+      }
+      fireEvent.input(input, {target: {value: '3.14159'}});
+      expect(input).toHaveValue('3.14159');
+      fireEvent.blur(input);
+      expect(onChange).toHaveBeenCalledWith(3.14159);
+    });
+
+    it('regroups again once the typed group character is deleted', () => {
+      render(<GroupedField locale="en-US" value={null} />);
+      const input = screen.getByRole('spinbutton');
+      fireEvent.focus(input);
+      for (const draft of ['1', '1,', '1,2', '1,23', '1,234', '1,2345']) {
+        fireEvent.input(input, {target: {value: draft}});
+      }
+      fireEvent.input(input, {
+        target: {value: '12345', selectionStart: 1, selectionEnd: 1},
+      });
+      expect(input).toHaveValue('12345');
+      fireEvent.input(input, {target: {value: '123456'}});
+      expect(input).toHaveValue('123,456');
+    });
+
     it('deletes the digit beyond a separator on Backspace', () => {
       render(<GroupedField locale="en-US" />);
       const input = screen.getByRole<HTMLInputElement>('spinbutton');

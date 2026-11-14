@@ -4,7 +4,7 @@
  * @file numberParser.ts
  * @input Text a person typed or pasted, plus the resolved BCP 47 locale
  * @output Exports parseLocaleNumber, formatEditableNumber, formatPercent,
- *   formatGroupedEditableNumber, groupEditableDraft, and
+ *   formatGroupedEditableNumber, groupEditableDraft, holdsTypedGroup, and
  *   deleteDigitAcrossGroupSeparator
  * @position Internal number reading and writing for NumberInput, and the
  *   percentage ProgressBar writes; not part of the public surface
@@ -593,6 +593,33 @@ function hasOnlyFieldGrouping(
 }
 
 /**
+ * True when the integer run of `text` holds a group character the person
+ * typed. An edit that inserts one sets it, and it carries forward from the
+ * previous draft until the run holds no group character. Without it, a typed
+ * en-US `1,234` or de-DE `3.141` looks like the field's own grouping.
+ */
+export function holdsTypedGroup(
+  text: string,
+  locale?: Locale,
+  previousText?: string,
+  previousHoldsTypedGroup = false,
+): boolean {
+  const {group, hasGrouping} = getLocaleNumberSymbols(locale);
+  if (!hasGrouping || group === '') {
+    return false;
+  }
+  const {runStart, runEnd} = findIntegerRun(text, group);
+  if (!text.slice(runStart, runEnd).includes(group)) {
+    return false;
+  }
+  return (
+    previousHoldsTypedGroup ||
+    (previousText !== undefined &&
+      insertedByEdit(previousText, text).includes(group))
+  );
+}
+
+/**
  * Group separators belong only in the integer run. A sign, a decimal mark, or
  * any other character stays where the person typed it. A group character that
  * is not on a grouping boundary stays too: it may be a decimal (de-DE `1.5`)
@@ -602,12 +629,17 @@ function hasOnlyFieldGrouping(
  * a draft whose separators were all the field's own regroups even though it
  * shifted those separators off their boundaries (en-US `1,500` then `0` is
  * `15,000`, Backspace at the end of `1,500,000` is `150,000`).
+ *
+ * With `previousHoldsTypedGroup` (see `holdsTypedGroup`), a draft that still
+ * holds a group character the person typed stays as typed, even once three
+ * digits follow it (en-US `1,234` then `5` stays `1,2345`).
  */
 export function groupEditableDraft(
   text: string,
   caret: number,
   locale?: Locale,
   previousText?: string,
+  previousHoldsTypedGroup = false,
 ): GroupedEditableDraft {
   const clampedCaret = Math.max(0, Math.min(caret, text.length));
   const {group, primaryGroupSize, secondaryGroupSize, hasGrouping} =
@@ -630,6 +662,13 @@ export function groupEditableDraft(
     previousText !== undefined &&
     insertedByEdit(previousText, text).includes(group)
   ) {
+    return {text, caret: clampedCaret};
+  }
+
+  // A group character typed earlier is still in the run. Once three digits
+  // follow it, it sits on a grouping boundary and looks like the field's own,
+  // so only the carried flag tells them apart.
+  if (previousHoldsTypedGroup && run.includes(group)) {
     return {text, caret: clampedCaret};
   }
 
