@@ -221,6 +221,15 @@ describe('render --reverse says what changed after the render', () => {
     ]);
   });
 
+  it('names the JSON file that holds an edited run of text', async () => {
+    put('json-edit/data.json', '{"regions": ["North", "South"]}\n');
+    put('json-edit/page.tsx', "import data from './data.json';\nexport default function Page() {\n  return <ul>{data.regions.map(r => <li key={r}>{r}</li>)}</ul>;\n}\n");
+    await render('json-edit/page.tsx', {cwd: dir, out: 'json-edit.html'});
+    put('json-edit-edited.html', editBody(read('json-edit.html'), body => body.replace('>North<', '>North America<')));
+    const result = /** @type {any} */ (await render('json-edit-edited.html', {cwd: dir, reverse: true, out: 'json-edit-back/page.tsx'}));
+    expect(result.data.edits).toEqual([{was: 'North', now: 'North America', file: 'json-edit-back/data.json', line: 1}]);
+  });
+
   it('reports text added and removed after the render, and an edit with no text change', async () => {
     put('added.html', editBody(html, body => body.replace('</main>', '<p>Footnote</p></main>').replace('Revenue grew in every region.', '')));
     const added = /** @type {any} */ (await render('added.html', {cwd: dir, reverse: true, out: 'added-back/report.tsx'}));

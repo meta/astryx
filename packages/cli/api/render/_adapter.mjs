@@ -584,10 +584,10 @@ function packagesOf(source) {
  * it is the page as rendered.
  * @param {import('../../foundation/render/source-block.mjs').EmbeddedSource} source
  * @param {string} html
- * @param {{file: string, text: string}[]} modules the restored modules, as shown to the caller
+ * @param {{file: string, text: string}[]} texts the restored modules and JSON files, as shown to the caller
  * @returns {{edited?: boolean, stylesEdited?: boolean, edits?: import('./render.type.mjs').RenderEdit[], moreEdits?: number}}
  */
-function pageChanges(source, html, modules) {
+function pageChanges(source, html, texts) {
   const recorded = source.markup;
   if (!recorded || typeof recorded.sha256 !== 'string') return {};
   const now = renderedMarkupOf(html);
@@ -611,7 +611,7 @@ function pageChanges(source, html, modules) {
     edits: all.map(edit => ({
       was: edit.was === null ? null : clip(edit.was),
       now: edit.now === null ? null : clip(edit.now),
-      ...((edit.was && locate(edit.was, modules)) || {}),
+      ...((edit.was && locate(edit.was, texts)) || {}),
     })),
     ...(more > 0 ? {moreEdits: more} : {}),
   };
@@ -811,8 +811,10 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       }
       const renderedBy = renderedByOf(source, html);
       const packages = packagesOf(source);
-      const modules = writes
-        .filter(w => PAGE_EXTENSIONS.includes(path.extname(w.file).toLowerCase()))
+      // The files whose text a page shows: its modules and the JSON data
+      // they import.
+      const texts = writes
+        .filter(w => [...PAGE_EXTENSIONS, '.json'].includes(path.extname(w.file).toLowerCase()))
         .map(w => ({file: shown(cwd, w.file), text: w.bytes.toString('utf8')}));
       return {
         input: shown(cwd, input),
@@ -827,7 +829,7 @@ export function reverseToFile({cwd, input, output, overwrite}) {
         ...(renderedBy ? {renderedBy} : {}),
         ...(packages ? {packages} : {}),
         ...(typeof source.title === 'string' ? {title: source.title} : {}),
-        ...pageChanges(source, html, modules),
+        ...pageChanges(source, html, texts),
       };
     }
   }
