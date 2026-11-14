@@ -38,7 +38,8 @@ export async function loadTemplateIconSets(cwd) {
 
 /**
  * The unknown-template suggestions with the command that reads a component,
- * hook or docs topic of exactly that name in them, in the place
+ * hook or docs topic matching that name (exact, folded or last segment) in
+ * them, the list keeping its length, in the place
  * foundation/suggest/other-command.mjs gives it. The suggestions stay as they
  * are when no such entry exists or the check fails. The hint's modules load
  * only on this path.

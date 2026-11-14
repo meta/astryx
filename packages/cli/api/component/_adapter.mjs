@@ -909,8 +909,9 @@ export async function withExampleBlockPointer(error, dirName, {coreDir, cwd}) {
 }
 
 /**
- * When `error` is the unknown-component error for a name that is exactly a
- * hook, template or docs topic, returns the same error with the command that
+ * When `error` is the unknown-component error for a name that matches a hook,
+ * template or docs topic (exact, folded or last segment, as
+ * foundation/suggest/other-command.mjs ranks it), returns the same error with the command that
  * reads that entry among its suggestions, in the place
  * foundation/suggest/other-command.mjs gives it. Returns `error` unchanged
  * otherwise, and when the check fails.

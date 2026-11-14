@@ -4,9 +4,12 @@
  * @file The lookup commands' shared not-found hint.
  *
  * When `component`, `hook`, `template` or `docs` finds no entry for a name
- * that is exactly an entry another of those commands reads, its first
- * suggestion is that command. The list never grows: the hint takes the last
- * suggestion's place, or is the only suggestion when the list is empty.
+ * that matches an entry another of those commands reads (exact, folded or
+ * last segment; a better tier wins, then command order, and for docs routes
+ * the fewest segments, then tree order), that command joins the suggestions
+ * right after the own suggestions matching at its tier or a better one. The
+ * list never grows: the last suggestion drops, a hint that would come last is
+ * left out, and the hint is the only suggestion when the list is empty.
  *
  * @input  made-up names, and a project whose stand-in Core ships a made-up
  *   hook and whose integration ships a made-up component, template and docs

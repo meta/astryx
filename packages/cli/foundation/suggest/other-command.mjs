@@ -2,9 +2,18 @@
 
 /**
  * @file The lookup commands' shared hint: when `astryx component`, `hook`,
- * `template` or `docs` finds no entry for a name, and the name is exactly an
+ * `template` or `docs` finds no entry for a name, and the name matches an
  * entry another of those commands reads, the not-found error suggests that
- * command first (`astryx hook useHotkeys`).
+ * command (`astryx hook useHotkeys`). A name matches at one of four tiers,
+ * best first: exact (the whole name, any case), folded (without spaces and
+ * hyphens, a hook with or without `use`), last segment (of a path name, exact
+ * or folded), and word cover (every word of the name); only the first three
+ * give a hint. A better tier wins; inside a tier, commands win in
+ * {@link LOOKUP_COMMANDS} order, and docs routes with the fewest segments
+ * first, then in tree order. The hint goes right after the command's own
+ * suggestions that match at its tier or a better one, and the list never
+ * grows: the last suggestion drops, and a hint that would come last is left
+ * out.
  *
  * @input  the name the lookup did not find, the command that looked, and the
  *   project's Core folder, integrations, templates and docs routes
