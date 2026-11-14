@@ -38,6 +38,8 @@ import {makeCompiler} from './_compiler.mjs';
 import {openProject, installLine} from './_project.mjs';
 import {partData} from './_parts.mjs';
 import {writeWhole} from './_palette.mjs';
+import {assetRef, CSS_URL} from '../../foundation/render/render-page.mjs';
+import {MAX_ASSET_BYTES} from '../../foundation/render/assets.mjs';
 import {typoNear} from './_normal.mjs';
 import {
   fontOf,
@@ -164,7 +166,8 @@ async function derivedVars(coreDir) {
 const isRenderFailure = e =>
   e instanceof AstryxError &&
   (e.code === E.ERR_RENDER_FAILED ||
-    e.code === E.ERR_RENDER_MISSING_DEPENDENCY);
+    e.code === E.ERR_RENDER_MISSING_DEPENDENCY ||
+    e.code === E.ERR_RENDER_ASSET_TOO_LARGE);
 
 /**
  * The app a folder belongs to: the nearest folder at or above it whose
@@ -598,6 +601,60 @@ export function familiesNothingLoads(ctx, data, packages) {
       oneSystemOf(family)
     );
   });
+}
+
+/**
+ * What the previews (preview.html, sheet.html and their pictures) cannot
+ * show of the images and files the theme's built stylesheet names: a
+ * remote file (a page opened from disk loads no network), a file that is
+ * not there, one that is not a regular file, and one too large to carry.
+ * Read from the built stylesheet with the renderer's own reader, so a
+ * preview rendered before says it too.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @returns {string[]}
+ */
+export function themeImageNotes(ctx, slug) {
+  const file = themeFiles(ctx.project.cwd, slug).css;
+  /** @type {string} */
+  let css;
+  try {
+    css = fs.readFileSync(file, 'utf8');
+  } catch {
+    return [];
+  }
+  const at = {dir: path.dirname(file), root: ctx.project.cwd};
+  const where = shown(ctx.project.cwd, at.dir);
+  /** @type {Map<string, string>} */
+  const notes = new Map();
+  for (const m of css.matchAll(new RegExp(CSS_URL.source, 'g'))) {
+    const named = assetRef(m[2], at);
+    if (!named || notes.has(named.ref)) continue;
+    if (named.kind === 'remote')
+      notes.set(
+        named.ref,
+        `${named.ref} is loaded from the network: the app loads it, but the previews (preview.html, sheet.html and their pictures) cannot, and show the theme without it.`,
+      );
+    else if (named.kind === 'missing')
+      notes.set(
+        named.ref,
+        `${named.ref} was not found beside the theme (${where}/), so neither the previews nor the app show it.`,
+      );
+    else if (named.kind === 'not-file')
+      notes.set(
+        named.ref,
+        `${named.ref} is not a regular file (a pipe, a device or a folder), so the previews do not read it and show the theme without it.`,
+      );
+    else {
+      const bytes = fs.statSync(named.file).size;
+      if (bytes > MAX_ASSET_BYTES)
+        notes.set(
+          named.ref,
+          `${shown(ctx.project.cwd, named.file)} is ${(bytes / 1048576).toFixed(1)} MB, more than the ${MAX_ASSET_BYTES / 1048576} MB a preview page carries per file; a smaller copy shows in the previews too.`,
+        );
+    }
+  }
+  return [...notes.values()];
 }
 
 /**

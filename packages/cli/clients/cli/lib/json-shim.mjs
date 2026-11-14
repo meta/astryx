@@ -635,7 +635,8 @@ export function handleCommanderError(err) {
   // option reader: the option meant, with the command that works.
   const read =
     code === 'commander.unknownOption' ||
-    code === 'commander.optionMissingArgument'
+    code === 'commander.optionMissingArgument' ||
+    code === 'commander.excessArguments'
       ? unknownOptionReader(/** @type {any} */ (err)?.[REJECTED_COMMAND], code)
       : undefined;
   const suggestions = read?.suggestions ?? usageSuggestion(err, code);

@@ -820,7 +820,7 @@ describe('experimental theme preview app outside a project (own)', () => {
   );
 
   it(
-    'writes nothing for a theme that is not there',
+    'writes nothing for a theme, and names the missing app first',
     async () => {
       const r = await answer(
         [
@@ -837,7 +837,9 @@ describe('experimental theme preview app outside a project (own)', () => {
       );
       expect(r.status).toBe(1);
       expect(r.written).toEqual([]);
-      expect(r.kind).toBe('ERR_UNKNOWN_THEME');
+      // A theme is one of an app's own: with no app here, the app finder's
+      // answer comes first.
+      expect(r.kind).toBe('ERR_PROJECT_REQUIRED');
     },
     SLOW,
   );

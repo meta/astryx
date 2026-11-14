@@ -3712,9 +3712,19 @@ async function examplePage(cwd) {
  * @param {string[]} notes notes for the result
  * @param {string} flags the caller's other flags, for the suggestions
  * @param {string | null} [appRoot] the app whose packages a page needs
+ * @param {{typed: string, why: string} | null} [cut] a long description
+ *   cut to its first words: as typed, and the sentence saying so, for a
+ *   refusal
  * @returns {Promise<Array<{name: string, displayName: string, why: string}>>}
  */
-async function rankedPages(words, cwd, notes, flags, appRoot = null) {
+async function rankedPages(
+  words,
+  cwd,
+  notes,
+  flags,
+  appRoot = null,
+  cut = null,
+) {
   const kit =
     /** @type {import('../build/build.type.mjs').BuildKitResponse} */ (
       await build(words, {cwd})
@@ -3841,7 +3851,9 @@ async function rankedPages(words, cwd, notes, flags, appRoot = null) {
     );
     refuse(
       E.ERR_NOT_FOUND,
-      `No page template relates to "${words}". Name a page to add it anyway.`,
+      cut
+        ? `No page template relates to "${cut.typed}". ${cut.why}: put the words that name the page first, or name a page to add it anyway.`
+        : `No page template relates to "${words}". Name a page to add it anyway.`,
       {
         run: [
           ...suggest(offered),
@@ -4148,6 +4160,8 @@ const BASE_THEMES = path.join(CLI_PACKAGE, 'assets', 'templates', 'themes');
  * @param {string} flags the caller's other flags
  * @param {() => Promise<readonly string[]>} [defaults] the default pages it
  *   can add now, which a typo may name (asked only for a refusal)
+ * @param {string | null} [appRoot] the app whose packages a page needs: a
+ *   typo names only a page template it can add now
  * @returns {Promise<{name: string, displayName: string, why: string}>}
  */
 async function namedTemplate(
@@ -4155,6 +4169,7 @@ async function namedTemplate(
   id,
   flags,
   defaults = async () => DEFAULT_PAGE_IDS,
+  appRoot = null,
 ) {
   const pages = await pageTemplates(cwd);
   // Page ids are lowercase: LOGIN names login.
@@ -4186,9 +4201,13 @@ async function namedTemplate(
   const other = all.find(t => t.id === id);
   // Every page --template adds now is a candidate: the default pages it can
   // add (which the template list never shows) and the page templates.
-  const near = [...(await defaults()), ...pages.map(t => t.id)].filter(n =>
-    typoNear(id, n),
-  );
+  // A page template the app cannot add now (a package it needs is missing)
+  // is never offered: following it would be refused.
+  const nearPages = pages.map(t => t.id).filter(n => typoNear(id, n));
+  const near = [
+    ...(await defaults()).filter(n => typoNear(id, n)),
+    ...(await showablePages(cwd, appRoot ?? cwd, nearPages, nearPages.length)),
+  ];
   refuse(
     E.ERR_UNKNOWN_TEMPLATE,
     other
@@ -4411,6 +4430,8 @@ async function addPreview(description, options, box) {
   const notes = [];
   let words = said;
   const allWords = said ? said.split(/\s+/) : [];
+  /** A description cut to its first words: as typed, and what was read. @type {{typed: string, why: string} | null} */
+  let cut = null;
   if (allWords.length > MAX_WORDS) {
     const seen = new Set();
     words = allWords
@@ -4425,6 +4446,10 @@ async function addPreview(description, options, box) {
     notes.push(
       `the description has ${allWords.length} words; the first ${MAX_WORDS} different ones picked the page`,
     );
+    cut = {
+      typed: said ?? '',
+      why: `Only the first ${MAX_WORDS} different words of a description are read, and this one has ${allWords.length}`,
+    };
   }
   const retry = (/** @type {string | null} */ p) =>
     `${PREVIEW} add${said ? ` ${quoteCommandArgument(said)}` : ''}${named != null ? ` --template ${quoteCommandArgument(named)}` : ''}${options.top != null ? ` --top ${quoteCommandArgument(String(options.top))}` : ''}${tf}${p == null ? '' : ` --path ${quoteCommandArgument(p)}`}`;
@@ -4598,9 +4623,17 @@ async function addPreview(description, options, box) {
             /** @type {string} */ (named),
             flags,
             addable,
+            appRootOf(cwd, at.dir),
           ),
         ]
-      : await rankedPages(words, cwd, notes, flags, appRootOf(cwd, at.dir));
+      : await rankedPages(
+          words,
+          cwd,
+          notes,
+          flags,
+          appRootOf(cwd, at.dir),
+          cut,
+        );
     for (const [i, pick] of picks.entries()) {
       if (add.length >= (explicit ? 1 : top)) break;
       const shownTemplate =
@@ -4647,7 +4680,7 @@ async function addPreview(description, options, box) {
   if (!add.length)
     refuse(
       E.ERR_DEP_MISSING,
-      `No page was added: ${skipped.map(s => `the ${s.page} page ${s.reason}`).join('; ')}.`,
+      `No page was added: ${skipped.map(s => `the ${s.page} page ${s.reason}`).join('; ')}.${cut ? ` ${cut.why}, so the pages were picked from those: put the words that name the page first.` : ''}`,
       {
         run: [
           ...new Set(runs),
@@ -4870,6 +4903,10 @@ export async function themeEditPreviewApp(dir, options = {}) {
     );
   options = {...options, theme: themeArg(options.theme)};
   const slug = options.theme ?? null;
+  // A theme the app wears is one of an app's own: from a folder that is no
+  // app (a workspace root), the one app finder's answer (the `cd` to the
+  // app) comes first, never a "no such theme".
+  if (slug != null) requireProject(cwd);
   const theme =
     slug == null
       ? null

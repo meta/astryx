@@ -173,6 +173,7 @@ import {
   context,
   pictures,
   fontNotes,
+  themeImageNotes,
   styledChanges,
   previewAfter,
   checkSection,
@@ -5129,6 +5130,9 @@ function misplacedFirst(e, slug, data) {
 function renderFix(ctx, cwd) {
   if (ctx.uncheckedCode === 'ERR_RENDER_MISSING_DEPENDENCY')
     return [installLine(cwd, ['react', 'react-dom'])];
+  // A file too large to carry is named by the message, which says the fix
+  // (a smaller copy): no command leads to it.
+  if (ctx.uncheckedCode === 'ERR_RENDER_ASSET_TOO_LARGE') return [];
   if (reactCopies(ctx.project)) return [copiesLine(cwd, 'react')];
   return [`${getCliInvocation(cwd)} doctor`];
 }
@@ -5455,6 +5459,8 @@ export async function themeEditShow(theme, options = {}) {
             !ownMasked.some(d => x.includes(` for ${d},`)),
         ),
         ...fontNotes(ctx, data),
+        // Images and files of the theme the previews cannot show.
+        ...themeImageNotes(ctx, theme),
         ...ownSourceMaskNotes(
           ctx,
           cwd,
