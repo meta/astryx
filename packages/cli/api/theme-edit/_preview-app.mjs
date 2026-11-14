@@ -4935,6 +4935,8 @@ export async function themeEditPreviewApp(dir, options = {}) {
     // The whole folder, tokens/ included, as bytes: a font or a picture
     // there must arrive as it is.
     const recorded = readWrittenRecord(cwd, slug);
+    /** Links in the theme folder: never read through, so left out, and named. @type {string[]} */
+    const links = [];
     /** @param {string} rel */
     const copyDir = rel => {
       for (const entry of fs.readdirSync(path.join(from.dir, rel), {
@@ -4942,6 +4944,12 @@ export async function themeEditPreviewApp(dir, options = {}) {
       })) {
         const sub = path.join(rel, entry.name);
         if (entry.isDirectory()) copyDir(sub);
+        else if (
+          entry.isSymbolicLink() &&
+          !(rel === '' && skip.has(entry.name)) &&
+          !(rel === '' && isEditorPage(entry.name, recorded))
+        )
+          links.push(shown(cwd, path.join(from.dir, sub)));
         else if (
           entry.isFile() &&
           !(rel === '' && skip.has(entry.name)) &&
@@ -4959,6 +4967,10 @@ export async function themeEditPreviewApp(dir, options = {}) {
       }
     };
     copyDir('');
+    if (links.length)
+      notes.push(
+        `left out ${links.join(', ')}: ${links.length === 1 ? 'a link' : 'links'}, which the editor never reads through; put a copy of the file there to bring it along`,
+      );
     // A source file of the theme that imports a file outside its folder
     // would not build in the new app, where that file is not: refused,
     // naming the import, before anything is written.

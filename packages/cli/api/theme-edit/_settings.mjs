@@ -8078,10 +8078,10 @@ export function refuseLinks(cwd, slug) {
   link(f.root);
   link(f.dir);
   // Only the files the editor reads or writes: a link to a file of the
-  // user's (notes, a mockup) is theirs, and is left alone. A picture is
-  // never written over a file that is not the editor's (a link included):
-  // that picture is skipped and named, so a link at a picture's name
-  // refuses nothing.
+  // user's (notes, a mockup) is theirs, and is left alone. A link at a
+  // picture's name (to a file or to nothing) is never written through or
+  // replaced: that one picture is skipped and named (`pictures`), so it
+  // refuses nothing here.
   const recorded = readWrittenRecord(cwd, slug);
   const own = (/** @type {string} */ n) =>
     (isEditorFile(slug, n, recorded) && !n.endsWith('.png')) ||

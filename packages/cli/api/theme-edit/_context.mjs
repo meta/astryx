@@ -424,19 +424,34 @@ export async function pictures(project, shots, modes) {
       ? slug
       : null;
   };
+  /** A link at a path, whether or not what it points to is there. @param {string} p */
+  const isLink = p => {
+    try {
+      return Boolean(
+        fs.lstatSync(p, {throwIfNoEntry: false})?.isSymbolicLink(),
+      );
+    } catch {
+      return false;
+    }
+  };
   // A picture is written only over a picture the editor took, unchanged
   // since: a file of the user's by that name (a screenshot of the same
-  // size included) blocks every picture, and is named.
+  // size included) blocks every picture, and is named. A link at a
+  // picture's name (to a file or to nothing) is never written through or
+  // replaced: that one picture is skipped and named, the others are taken.
   const blocked = shots
     .flatMap(({png}) => modes.map(m => outOf(png, m)))
     .filter(out => {
       const slug = themeOf(out);
       return (
         Boolean(slug) &&
+        !isLink(out) &&
         fs.existsSync(out) &&
         !editorWrote(project.cwd, /** @type {string} */ (slug), out)
       );
     });
+  /** Pictures skipped for a link at their name. @type {string[]} */
+  const linked = [];
   if (blocked.length)
     return {
       files,
@@ -445,6 +460,10 @@ export async function pictures(project, shots, modes) {
   for (const {html, png} of shots) {
     for (const m of modes) {
       const out = outOf(png, m);
+      if (isLink(out)) {
+        linked.push(out);
+        continue;
+      }
       // Taken under a name of its own and moved into place once whole: a
       // run stopped while the browser runs leaves no picture at the real
       // name (one the next run would read as a file of yours). A part left
@@ -527,9 +546,28 @@ export async function pictures(project, shots, modes) {
       if (r.note && !notes.includes(r.note)) notes.push(r.note);
     }
   }
+  if (linked.length) {
+    const rels = linked.map(f =>
+      path.relative(project.cwd, f).split(path.sep).join('/'),
+    );
+    const target = (/** @type {string} */ f) => {
+      try {
+        const to = fs.readlinkSync(f);
+        return fs.existsSync(f)
+          ? ` (to ${to})`
+          : ` (to ${to}, which does not exist)`;
+      } catch {
+        return '';
+      }
+    };
+    notes.unshift(
+      `${linked.map((f, i) => `${rels[i]}${target(f)}`).join(', ')} ${linked.length === 1 ? 'is a link' : 'are links'}, and a picture is never written through or over a link, so ${linked.length === 1 ? 'that picture was' : 'those pictures were'} not taken${files.length ? `; ${files.join(', ')} ${files.length === 1 ? 'was' : 'were'} taken` : ''}`,
+    );
+  }
   return {
     files,
-    // Pictures were taken; a note says why an earlier browser did not.
+    // Pictures were taken; a note says why an earlier browser did not, and
+    // which pictures a link at their name kept out.
     problem: notes.join('; ') || null,
   };
 }
