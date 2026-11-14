@@ -498,6 +498,14 @@ describe('Item', () => {
     expect(followed).not.toHaveBeenCalled();
   });
 
+  it('does not follow a List link row’s link for a click in content the caller portals out of the row', () => {
+    const {followed} = linkRow(
+      createPortal(<span data-testid="portaled">Portaled</span>, document.body),
+    );
+    fireEvent.click(screen.getByTestId('portaled'), {detail: 1});
+    expect(followed).not.toHaveBeenCalled();
+  });
+
   it('under a finger, does not follow a List link row’s link on the click that ends a text selection in it', () => {
     const {followed, row} = linkRow();
     // Present first: the same tap with no selection follows the link.
