@@ -13,7 +13,15 @@
 import * as stylex from '@stylexjs/stylex';
 import {act, render} from '@testing-library/react';
 import {useLayoutEffect, useState} from 'react';
-import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  beforeAll,
+} from 'vitest';
 import {
   coarsePrimaryPointer,
   pointerQuery,
@@ -23,6 +31,16 @@ import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {Button} from '../Button/Button';
 import {DropdownMenu} from '../DropdownMenu/DropdownMenu';
 import {ButtonGroup} from './ButtonGroup';
+import {
+  __loadTouchRuntimeForTest,
+  __resetTouchRuntimeForTest,
+} from '../utils/touchRuntime';
+
+// These cases drive the group's press tracking, which comes with the shared
+// touch runtime once the page has loaded it.
+beforeAll(async () => {
+  await __loadTouchRuntimeForTest();
+});
 
 interface Point {
   x: number;
@@ -428,6 +446,24 @@ describe('ButtonGroup tracks a held pointer across its buttons (family:action-gr
       expect(onAllow).not.toHaveBeenCalled();
     });
   }
+
+  it('tracks no slide before the touch runtime loads: each button keeps its own press', async () => {
+    __resetTouchRuntimeForTest();
+    try {
+      const {a, b, c, onA, onB, onC} = mount();
+      const f = finger();
+      f.down(a, centerOf(A));
+      expect(paintOf(a)).toBeNull();
+      f.move(a, centerOf(C));
+      f.up(a, centerOf(C));
+      expect(onC).not.toHaveBeenCalled();
+      expect(onB).not.toHaveBeenCalled();
+      expect([paintOf(a), paintOf(b), paintOf(c)]).toEqual([null, null, null]);
+      void onA;
+    } finally {
+      await __loadTouchRuntimeForTest();
+    }
+  });
 
   it('runs the button a finger lifts on, once, through its own click, after sliding there from another (FR1, FR2)', () => {
     const {a, b, c, onA, onB, onC} = mount();

@@ -5,8 +5,8 @@
 /**
  * @file AlertDialog.tsx
  * @input Uses React, StyleX, Dialog, Layout, Heading, Text, Button, the
- *   action-group tracking (hooks/useActionGroupTracking), the press-group
- *   context (hooks/pressGroupContext), the group pointers
+ *   action-group tracking from the shared touch runtime (utils/touchRuntime),
+ *   the press-group context (hooks/pressGroupContext), the group pointers
  *   (hooks/useGroupPressTracking) and the touch motion (useAlertMotion)
  * @output Exports AlertDialog component, AlertDialogProps type
  * @position Core implementation; consumed by index.ts, tested by AlertDialog.test.tsx
@@ -43,7 +43,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/AlertDialog/AlertDialog.generated';
-import {useActionGroupTracking} from '../hooks/useActionGroupTracking';
+import {useTouchRuntime} from '../utils/touchRuntime';
 import {PressGroupContext} from '../hooks/pressGroupContext';
 import {GROUP_PRESS_POINTERS} from '../hooks/useGroupPressTracking';
 import {alertController} from '../motion/uikit/alert';
@@ -237,15 +237,24 @@ export function AlertDialog({
   // marker from its first render. So the tracker is its only painter.
   const actionsRef = useRef<HTMLElement>(null);
   const isTracking = isOpen && isInline !== true && isTouch;
-  useActionGroupTracking(actionsRef, {
-    // The actions row holds only the two buttons.
-    itemSelector: 'button',
-    highlightOnsetMs: alertController.actions.highlightOnsetMs,
-    highlightExpansion: alertController.actions.highlightExpansion,
-    // A mouse press acts as a native button's under any presentation.
-    pointerTypes: GROUP_PRESS_POINTERS,
-    isEnabled: isTracking,
-  });
+  // The tracking comes with the shared touch runtime, which loads after
+  // first paint. Until then each action keeps its own press.
+  const touchRuntime = useTouchRuntime();
+  const trackingPart =
+    touchRuntime == null ? null : (
+      <touchRuntime.ActionGroupTracking
+        groupRef={actionsRef}
+        options={{
+          // The actions row holds only the two buttons.
+          itemSelector: 'button',
+          highlightOnsetMs: alertController.actions.highlightOnsetMs,
+          highlightExpansion: alertController.actions.highlightExpansion,
+          // A mouse press acts as a native button's under any presentation.
+          pointerTypes: GROUP_PRESS_POINTERS,
+          isEnabled: isTracking,
+        }}
+      />
+    );
 
   const buttonActionStyle = [
     styles.action,
@@ -327,6 +336,7 @@ export function AlertDialog({
                   : [cancelButton, actionButton]}
               </PressGroupContext>
             </Stack>
+            {trackingPart}
           </LayoutFooter>
         }
       />

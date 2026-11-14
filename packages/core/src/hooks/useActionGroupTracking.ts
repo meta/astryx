@@ -25,7 +25,6 @@ import {lockSelection} from '../utils/selectionLock';
 import type {GestureTouch, PointerKind} from '../gestures/types';
 import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
 import {UIKIT_PRESS} from '../motion/uikit/gestures';
-import {INTERACTIVE_SELECTOR, resolveHitTarget} from '../utils/hitArea';
 import {isIosWebKit} from '../utils/touchQueries';
 import {
   createActionGroupTracker,
@@ -94,59 +93,9 @@ const PRESS = UIKIT_PRESS;
 
 const NO_TARGETS: ReadonlyArray<ActionGroupTarget> = [];
 
-/**
- * The action under a finger: the nearest enabled action whose target, grown
- * toward 44 px, holds the point. A neighbour counts for nearness but
- * resolves to none. So nothing highlights over a disabled action, and no
- * grown target reaches into another member.
- */
-export function resolveNearestAction(
-  x: number,
-  y: number,
-  targets: ReadonlyArray<ActionGroupTarget>,
-  neighbours: ReadonlyArray<ActionGroupTarget>,
-): HTMLElement | null {
-  const index = resolveHitTarget(
-    x,
-    y,
-    neighbours.length === 0 ? targets : [...targets, ...neighbours],
-  );
-  return index >= 0 && index < targets.length ? targets[index].element : null;
-}
+import {measureNeighbours, resolveNearestAction} from './actionGroupNeighbours';
 
-/**
- * The members inside `root` that a finger must not reach through, with their
- * boxes: the disabled actions and every member the group does not track.
- */
-export function measureNeighbours(
-  root: HTMLElement | null,
-  {
-    itemSelector,
-    isItem,
-  }: Pick<ActionGroupTrackingOptions, 'itemSelector' | 'isItem'>,
-): ReadonlyArray<ActionGroupTarget> {
-  if (root == null) {
-    return NO_TARGETS;
-  }
-  const isTracked = (element: HTMLElement) =>
-    element.matches(itemSelector) && isItem?.(element) !== false;
-  const neighbours: ActionGroupTarget[] = [];
-  for (const element of root.querySelectorAll<HTMLElement>(
-    `${itemSelector}, ${INTERACTIVE_SELECTOR}`,
-  )) {
-    // A tracked action is a neighbour only when it is disabled. An untracked
-    // member inside a tracked action is part of that action.
-    const host = element.parentElement?.closest<HTMLElement>(itemSelector);
-    const isNeighbour = isTracked(element)
-      ? element.matches(DISABLED_SELECTOR)
-      : host == null || !root.contains(host) || !isTracked(host);
-    if (isNeighbour) {
-      const {left, top, right, bottom} = element.getBoundingClientRect();
-      neighbours.push({element, left, top, right, bottom});
-    }
-  }
-  return neighbours;
-}
+export {measureNeighbours, resolveNearestAction};
 
 /** The ref handed to the recognizer while tracking is off: no element. */
 const DETACHED: RefObject<Element | null> = {current: null};

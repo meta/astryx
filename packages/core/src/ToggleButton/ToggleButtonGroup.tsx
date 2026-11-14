@@ -266,7 +266,10 @@ export function ToggleButtonGroup(props: ToggleButtonGroupProps): ReactNode {
     [selectedValues, toggle, size, isDisabled, tracksPress],
   );
   const groupRef = useRef<HTMLDivElement>(null);
-  const {hitAreaRef} = useGroupPressTracking(groupRef, tracksPress);
+  const {hitAreaRef, trackingPart} = useGroupPressTracking(
+    groupRef,
+    tracksPress,
+  );
   // A caller's `ref` reaches the root, like the other host props. The
   // group's own refs join it.
   const callerRef = (
@@ -298,6 +301,7 @@ export function ToggleButtonGroup(props: ToggleButtonGroupProps): ReactNode {
             reads the group). Any other child keeps its own press. */}
         <PressGroupContext value={null}>{children}</PressGroupContext>
       </div>
+      {trackingPart}
     </ToggleButtonGroupContext>
   );
 }

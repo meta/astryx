@@ -14,7 +14,15 @@
 import * as stylex from '@stylexjs/stylex';
 import {createRef, type Ref} from 'react';
 import {act, render} from '@testing-library/react';
-import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  beforeAll,
+} from 'vitest';
 import {
   coarsePrimaryPointer,
   pointerQuery,
@@ -24,6 +32,13 @@ import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {Button} from '../Button/Button';
 import {ToggleButton} from './ToggleButton';
 import {ToggleButtonGroup} from './ToggleButtonGroup';
+import {__loadTouchRuntimeForTest} from '../utils/touchRuntime';
+
+// These cases drive the group's press tracking, which comes with the shared
+// touch runtime once the page has loaded it.
+beforeAll(async () => {
+  await __loadTouchRuntimeForTest();
+});
 
 interface Point {
   x: number;
