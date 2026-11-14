@@ -391,7 +391,7 @@ const QUESTIONS = [
     'remove shadows from cards',
     {
       top: /^set q box-shadow none --on card$/,
-      adds: /card\.base\.boxShadow=none/,
+      adds: /card\.base\.boxShadow=var\(--_card-ring,0 0 transparent\), var\(--_card-elevation,0 0 transparent\)(?!,)/,
     },
   ],
   [
@@ -718,7 +718,7 @@ const QUESTIONS = [
     'Schatten auf Karten entfernen',
     {
       top: /^set q box-shadow none --on card$/,
-      adds: /card\.base\.boxShadow=none/,
+      adds: /card\.base\.boxShadow=var\(--_card-ring,0 0 transparent\), var\(--_card-elevation,0 0 transparent\)(?!,)/,
     },
   ],
   [
@@ -801,7 +801,7 @@ describe('how commands, run by set', () => {
     for (const [question, want] of /** @type {Array<[string, RegExp]>} */ ([
       [
         'remove shadows from cards',
-        /\.astryx-card[^{]*\{[^}]*box-shadow:\s*none/,
+        /\.astryx-card[^{]*\{[^}]*box-shadow:\s*var\(--_card-ring,0 0 transparent\), var\(--_card-elevation,0 0 transparent\);/,
       ],
       [
         'make the toggle switch blue when on',
@@ -1004,7 +1004,7 @@ const QUESTIONS_2 = [
     'turn off the shadow on hover for cards',
     {
       top: /^set q box-shadow none --on card --state hover$/,
-      adds: /card\.base\.:hover\.boxShadow=none/,
+      adds: /card\.base\.:hover\.boxShadow=var\(--_card-ring,0 0 transparent\), var\(--_card-elevation,0 0 transparent\)(?!,)/,
     },
   ],
   [
@@ -1144,7 +1144,7 @@ const QUESTIONS_2 = [
     'card shadow: 0 1px 3px rgb(0 0 0 / 0.1)',
     {
       top: /^set q box-shadow '0 1px 3px rgb\(0 0 0 \/ 0\.1\)' --on card$/,
-      adds: /card\.base\.boxShadow=0 1px 3px/,
+      adds: /card\.base\.boxShadow=var\(--_card-ring,0 0 transparent\), var\(--_card-elevation,0 0 transparent\), 0 1px 3px/,
     },
   ],
   [
@@ -1291,7 +1291,8 @@ const QUESTIONS_2 = [
   [
     'swap the accent and the danger colors',
     {
-      top: /^set q accent '#[0-9a-f]{6}' && set q danger '#[0-9a-f]{6}'$/i,
+      // (Dark mode swaps too: each dark token takes the other's.)
+      top: /^set q accent '#[0-9a-f]{6}' && set q danger '#[0-9a-f]{6}'( && set q --color-accent '#[0-9a-f]{6}' --mode dark && set q --color-error '#[0-9a-f]{6}' --mode dark)?$/i,
       adds: /--color-accent/,
     },
   ],
@@ -1531,7 +1532,7 @@ const QUESTIONS_3 = [
     '- rounder buttons\n- no shadow on cards',
     {
       top: /^set q corners more --on button && set q box-shadow none --on card$/,
-      adds: /button\.base\.--radius-element=12px[\s\S]*card\.base\.boxShadow=none/,
+      adds: /button\.base\.--radius-element=12px[\s\S]*card\.base\.boxShadow=var\(--_card-ring,0 0 transparent\), var\(--_card-elevation,0 0 transparent\)(?!,)/,
     },
   ],
   [
@@ -1658,14 +1659,14 @@ const QUESTIONS_3 = [
     'replace the shadow on cards with a border',
     {
       top: /^set q box-shadow none --on card && set q border '1px solid var\(--color-border\)' --on card$/,
-      adds: /card\.base\.boxShadow=none[\s\S]*card\.base\.border=1px solid/,
+      adds: /card\.base\.boxShadow=var\(--_card-ring,0 0 transparent\), var\(--_card-elevation,0 0 transparent\)(?!,)[\s\S]*card\.base\.border=1px solid/,
     },
   ],
   [
     'switch off the shadow on cards with a border',
     {
       top: /^set q box-shadow none --on card && set q border '1px solid var\(--color-border\)' --on card$/,
-      adds: /card\.base\.boxShadow=none/,
+      adds: /card\.base\.boxShadow=var\(--_card-ring,0 0 transparent\), var\(--_card-elevation,0 0 transparent\)(?!,)/,
     },
   ],
   [
@@ -1833,7 +1834,9 @@ describe('how answers pass-3 questions', () => {
       ],
       [
         '- rounder buttons\n- no shadow on cards',
-        [/card[^{]*\{[^}]*box-shadow:\s*none/],
+        [
+          /card[^{]*\{[^}]*box-shadow:\s*var\(--_card-ring,0 0 transparent\), var\(--_card-elevation,0 0 transparent\);/,
+        ],
       ],
       [
         'buttons have letter-spacing 0.02em and font-weight 500',
@@ -1896,7 +1899,7 @@ const QUESTIONS_F = [
     'flat cards',
     {
       top: /^set q box-shadow none --on card$/,
-      adds: /card\.base\.boxShadow=none/,
+      adds: /card\.base\.boxShadow=var\(--_card-ring,0 0 transparent\), var\(--_card-elevation,0 0 transparent\)(?!,)/,
     },
   ],
   [
@@ -2198,7 +2201,12 @@ describe('how answers final-pass questions', () => {
     fs.cpSync(dir, keep, {recursive: true});
     const css = () => fs.readFileSync(path.join(dir, 'pf.css'), 'utf8');
     for (const [question, want] of /** @type {Array<[string, RegExp[]]>} */ ([
-      ['flat cards', [/card[^{]*\{[^}]*box-shadow:\s*none/]],
+      [
+        'flat cards',
+        [
+          /card[^{]*\{[^}]*box-shadow:\s*var\(--_card-ring,0 0 transparent\), var\(--_card-elevation,0 0 transparent\);/,
+        ],
+      ],
       ['Use 0.75rem border radius everywhere', [/--radius-element:\s*12px/]],
       ['Make the link color #2563eb', [/--color-text-accent:[^;]*#2563eb/i]],
       [
@@ -3042,7 +3050,9 @@ describe('how answers final-4 questions', () => {
       ['card border 0 0 2px', [/card[^{]*\{[^}]*border-width:\s*0 0 2px/]],
       [
         'shadow opacity 0.2 on cards',
-        [/card[^{]*\{[^}]*box-shadow:\s*0 1px 3px rgb\(0 0 0 \/ 0\.2\)/],
+        [
+          /card[^{]*\{[^}]*box-shadow:\s*var\(--_card-ring,0 0 transparent\), var\(--_card-elevation,0 0 transparent\), 0 1px 3px rgb\(0 0 0 \/ 0\.2\)/,
+        ],
       ],
       [
         'heading color red',
@@ -3531,12 +3541,11 @@ describe('how answers final-8 questions', () => {
 const QUESTIONS_O = [
   [
     'make buttons 2px rounder',
-    /^set q border-radius 'max\(0px, calc\(var\(--radius-element\) \+ 2px\)\)' --on button$/,
+    // A button's radius set writes as its corner token, which cannot read
+    // itself: the length now, plus the amount.
+    /^set q border-radius 10px --on button$/,
   ],
-  [
-    'make buttons 2px sharper',
-    /^set q border-radius 'max\(0px, calc\(var\(--radius-element\) - 2px\)\)' --on button$/,
-  ],
+  ['make buttons 2px sharper', /^set q border-radius 6px --on button$/],
   ['make buttons 4px wider', null, /not a change by 4px/],
   [
     'all corners like the buttons',
@@ -3678,10 +3687,7 @@ describe('how reads rem and em amounts and more comparatives as a change', () =>
     want,
     text,
   ] of /** @type {Array<[string, RegExp | null, RegExp?]>} */ ([
-    [
-      'make buttons 0.5rem rounder',
-      /^set q border-radius 'max\(0px, calc\(var\(--radius-element\) \+ 8px\)\)' --on button$/,
-    ],
+    ['make buttons 0.5rem rounder', /^set q border-radius 16px --on button$/],
     [
       'card padding 8px roomier',
       /^set q padding '?[\d. px]+'? --on card$/,
