@@ -8,4 +8,9 @@
  */
 
 /** Exit codes for each way the host ends without sending an answer. */
-export const HOST_EXIT = {disconnected: 70, timeout: 71, noChannel: 72};
+export const HOST_EXIT = {
+  disconnected: 70,
+  timeout: 71,
+  noChannel: 72,
+  sendFailed: 73,
+};

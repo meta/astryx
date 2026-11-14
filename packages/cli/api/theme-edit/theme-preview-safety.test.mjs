@@ -779,8 +779,13 @@ describe('pass 2', () => {
     await themeEditPreviewAdd(undefined, {cwd, theme: 'brand'});
     fs.appendFileSync(path.join(cwd, ROUTE, '_pages/colors.tsx'), '// MINE\n');
     const r = await themeEditSet('brand', 'accent', '#e11d48', {cwd});
+    // Named, with why it was left and what to do.
     expect(/** @type {any} */ (r.data).previewStale).toEqual([
-      `${ROUTE}/_pages/colors.tsx`,
+      expect.stringMatching(
+        new RegExp(
+          `^${ROUTE}/_pages/colors\\.tsx \\(changed by hand, so it does not follow this change: move it out of ${ROUTE}/`,
+        ),
+      ),
     ]);
     await themeEditSet('brand', 'accent', '#7c3aed', {cwd});
   }, 180_000);

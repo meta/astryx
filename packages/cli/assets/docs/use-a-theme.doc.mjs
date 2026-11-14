@@ -127,7 +127,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: "Use [light, dark] tuples in token values for automatic mode switching. Use mode='system' (default) on Theme to follow OS preference.",
+          text: "Use [light, dark] tuples in token values for automatic mode switching. Use mode='system' (default) on Theme to follow OS preference. A theme with one color mode (its built module exports `colorModes`) is listed in the generated module's `themeModes`, and the wiring `theme add` prints passes `mode={themeModes[defaultThemeSlug] ?? 'system'}`, so the selected theme shows its own mode.",
         },
         {
           type: 'code',
