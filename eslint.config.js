@@ -988,7 +988,7 @@ export default defineConfig(
         {
           allowlist: staticTouchRuntimeAllowlist,
           root: import.meta.dirname,
-          optInFolders: ['SnapPaging'],
+          optInFolders: ['SnapPaging', 'Swipe'],
         },
       ],
     },
