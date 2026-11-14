@@ -100,6 +100,7 @@
  *   | 'ERR_RENDER_FAILED'
  *   | 'ERR_RENDER_NOT_ASTRYX'
  *   | 'ERR_RENDER_SOURCE_DAMAGED'
+ *   | 'ERR_RENDER_NEWER_FORMAT'
  *   | 'ERR_THEME_BAD_VALUE'
  *   | 'ERR_THEME_NO_MODE'
  *   | 'ERR_THEME_UNKNOWN_PART'
@@ -331,6 +332,12 @@ export const ERROR_CODES = Object.freeze({
    * was written.
    */
   ERR_RENDER_SOURCE_DAMAGED: 'ERR_RENDER_SOURCE_DAMAGED',
+  /**
+   * `render --reverse` was given a file in a newer render format than this
+   * CLI reads. Nothing was written. The message names the CLI version that
+   * wrote the file, which reads it.
+   */
+  ERR_RENDER_NEWER_FORMAT: 'ERR_RENDER_NEWER_FORMAT',
   /**
    * A value does not fit what it sets: not a color for a color token, not a size for a size, a step (`more`/`less`) on something that is not a dial, or a word a dial does not take. Nothing was changed. Raised only by `experimental theme`.
    */

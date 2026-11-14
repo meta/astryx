@@ -477,16 +477,6 @@
     "spec quote",
     "spec:AST-002/DEC-1"
   ],
-  "packages/core/src/Item/ItemSwipeLayer.tsx": [
-    "AST-057",
-    "FR1",
-    "FR2",
-    "FR2",
-    "INV11",
-    "architecture:theme-tokens",
-    "spec quote",
-    "spec:AST-085"
-  ],
   "packages/core/src/Layer/LayerProvider.tsx": ["FR6", "spec:AST-059"],
   "packages/core/src/Layer/clampInlineSize.ts": ["FR7", "spec:AST-059"],
   "packages/core/src/Layer/layerInset.ts": [
