@@ -253,13 +253,14 @@ describe('rankPages structure signals', () => {
     ),
   ];
 
-  it('doubles a container word and lets it carry the start', () => {
+  it('doubles a container word, but a frame around a part is no start evidence', () => {
+    // The modal holds the draft history, a part, not a settings page.
     const ranked = rankPages(
       'draft history in a modal with delete row actions',
       catalog,
     );
     expect(ranked[0].name).toBe('dialog-panel');
-    expect(ranked[0].containerMatched).toBe(true);
+    expect(ranked[0].containerMatched).toBe(false);
   });
 
   it('counts only an overlay frame as a container', () => {
@@ -423,8 +424,21 @@ describe('pickStart on parts and edits (spec:AST-048/FR3)', () => {
   });
 
   it('still starts a whole page from its template', async () => {
-    expect(
-      await start('saved drafts in a modal with resume and delete row actions'),
-    ).toBe('settings-dialog');
+    expect(await start('a checkout form in a dialog')).toBe(
+      'form-wizard-dialog',
+    );
+  });
+
+  it('counts a frame only when it holds the page the idea names', async () => {
+    const [catalog] = await shipped;
+    /** @param {string} idea */
+    const framed = idea =>
+      rankPages(idea, catalog).find(r => r.name === 'settings-dialog')
+        ?.containerMatched;
+    expect(framed('notification settings in a modal')).toBe(true);
+    expect(framed('settings page with an avatar upload in a modal')).toBe(
+      false,
+    );
+    expect(framed('a toggle in a modal on the settings page')).toBe(false);
   });
 });

@@ -49,6 +49,7 @@ import {
   dialValueFits,
   newFlagList,
   editorCompileProblem,
+  editorFollowCompile,
   editorBuildExtra,
   editorLoadedFonts,
   editorColorModes,
@@ -797,6 +798,24 @@ function defineGroup(parent, doc) {
 }
 
 /**
+ * A preview command's result, once it is in: this client owns its process,
+ * so a stop that lands while the result is printed is held, and a printed
+ * ok never ends with exit 130. The API itself leaves no listener behind.
+ * @template T
+ * @param {Promise<T>} result
+ * @returns {Promise<T>}
+ */
+async function resultStands(result) {
+  const r = await result;
+  for (const sig of /** @type {const} */ (['SIGINT', 'SIGTERM']))
+    if (!process.listeners(sig).includes(heldStop)) process.on(sig, heldStop);
+  return r;
+}
+
+/** A stop after a preview command finished: its result stands. */
+function heldStop() {}
+
+/**
  * Register `theme` and its subcommands under the `experimental` group.
  * @param {import('commander').Command} group the `experimental` command
  * @param {import('commander').Command} program the root program
@@ -1048,13 +1067,15 @@ export function registerExperimentalTheme(group, program) {
           program,
           () =>
             previewFlagsOnce('add', ['theme', 'template', 'top', 'path']) ??
-            themeEditPreviewAdd([words ?? []].flat().join(' ') || undefined, {
-              cwd: process.cwd(),
-              theme: o.theme,
-              template: o.template,
-              top: o.top,
-              path: o.path,
-            }),
+            resultStands(
+              themeEditPreviewAdd([words ?? []].flat().join(' ') || undefined, {
+                cwd: process.cwd(),
+                theme: o.theme,
+                template: o.template,
+                top: o.top,
+                path: o.path,
+              }),
+            ),
           r => {
             const {matched, skipped, ...rest} = r.data;
             return [
@@ -1095,10 +1116,12 @@ export function registerExperimentalTheme(group, program) {
           program,
           () =>
             previewFlagsOnce('app', ['theme']) ??
-            themeEditPreviewApp(dir, {
-              cwd: process.cwd(),
-              theme: o.theme,
-            }),
+            resultStands(
+              themeEditPreviewApp(dir, {
+                cwd: process.cwd(),
+                theme: o.theme,
+              }),
+            ),
           r => [
             `[ok] new app in ${r.data.folder} with the theme preview`,
             ...project(/** @type {any} */ (r.data)),
@@ -1179,7 +1202,9 @@ export function registerExperimentalTheme(group, program) {
           program,
           () =>
             previewFlagsOnce('remove', ['path']) ??
-            themeEditPreviewRemove(page, {cwd: process.cwd(), path: o.path}),
+            resultStands(
+              themeEditPreviewRemove(page, {cwd: process.cwd(), path: o.path}),
+            ),
           r => [
             r.data.pages.length
               ? `[ok] removed ${page} from the theme preview`
@@ -1325,6 +1350,7 @@ export function registerExperimentalTheme(group, program) {
       build: 'compile',
       explain: editorThemeRefusal,
       preflight: editorCompileProblem,
+      follow: editorFollowCompile,
       missingSource: editorMissingSource,
       template: editorThemeTemplate,
       hold: editorThemeHold,

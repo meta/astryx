@@ -178,6 +178,39 @@ export function keywordWordsFor(units, words) {
   );
 }
 
+/**
+ * What each frame of an idea holds: for every container phrase ("settings in
+ * a modal", "in a settings modal"), the frame's terms with the words that
+ * name what sits in it: the head of the phrase right before the container
+ * phrase, and the container phrase's own other words. In "a toggle in a modal
+ * on the settings page" the modal holds the toggle, not the settings page.
+ * @param {string} query
+ * @returns {Map<string, Set<string>>} frame term -> terms it holds
+ */
+export function framesOf(query) {
+  const text = String(query);
+  /** @type {Map<string, Set<string>>} */
+  const held = new Map();
+  for (const m of text.matchAll(CONTAINER_PHRASE)) {
+    const frames = terms(`${m[1]} ${m[2] ?? ''}`).filter(t =>
+      OVERLAY_FRAMES.has(t),
+    );
+    if (frames.length === 0) continue;
+    const before = text.slice(0, m.index).toLowerCase().split(PHRASE_END);
+    const lead = terms(before[before.length - 1] ?? '');
+    const holds = new Set([
+      ...lead.slice(-1),
+      ...terms(`${m[1]} ${m[2] ?? ''}`).filter(t => !OVERLAY_FRAMES.has(t)),
+    ]);
+    for (const f of frames) {
+      const set = held.get(f) ?? new Set();
+      for (const t of holds) set.add(t);
+      held.set(f, set);
+    }
+  }
+  return held;
+}
+
 /** @param {string} text */
 export const normalized = text =>
   (

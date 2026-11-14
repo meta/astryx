@@ -7,11 +7,8 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {configDefaults} from 'vitest/config';
 import DurationShardSequencer, {
   DURATIONS,
-  LEG_PARALLELISM,
   mergeRecord,
   partitionByDuration,
-  readLegOneSeconds,
-  recordLegOneSteps,
   readDurations,
   recordDurations,
   idleSwizzleSlices,
@@ -25,13 +22,9 @@ const total = leg => leg.reduce((sum, file) => sum + recorded[file], 0);
 const slowest = [...files].sort((a, b) => recorded[b] - recorded[a]);
 
 describe('duration-balanced Node legs', () => {
-  // The Node shard step sets the leg-one switch, and Main's release re-check
-  // sets SWIZZLE_PROOF_ALL, for their own runs; these tests set both
-  // themselves, so they read the same in those runs as anywhere else.
-  beforeEach(() => {
-    vi.stubEnv('VITEST_LEG_ONE_RESERVE', '0');
-    vi.stubEnv('SWIZZLE_PROOF_ALL', '');
-  });
+  // Main's release re-check sets SWIZZLE_PROOF_ALL for its own run; these
+  // tests set it themselves, so they read the same there as anywhere else.
+  beforeEach(() => vi.stubEnv('SWIZZLE_PROOF_ALL', ''));
   afterEach(() => vi.unstubAllEnvs());
 
   it('balances a slow changed test with the guards when one run lists both', () => {
@@ -190,31 +183,6 @@ describe('duration-balanced Node legs', () => {
           .sort(),
       ).toEqual(expected[index]);
       expect(leg.filter(item => item.project.name === 'ui')).toHaveLength(3);
-    }
-  });
-
-  it("gives the first leg its own steps' recorded time when the switch is set", async () => {
-    vi.stubEnv('VITEST_LEG_ONE_RESERVE', '1');
-    expect(readLegOneSeconds()).toBeGreaterThan(0);
-    const node = slowest.slice(0, 40).map(file => ({
-      project: {name: 'node'},
-      moduleId: path.join(ROOT, file),
-    }));
-    const count = 5;
-    const files = node.map(item => path.relative(ROOT, item.moduleId));
-    const expected = partitionByDuration(files, count, recorded, {
-      legOneSeconds: readLegOneSeconds(),
-      idle: await idleSwizzleSlices(files),
-    });
-    for (let index = 1; index <= count; index += 1) {
-      const sequencer = new DurationShardSequencer({
-        config: {root: ROOT, shard: {index, count}},
-      });
-      expect(
-        (await sequencer.shard(node))
-          .map(item => path.relative(ROOT, item.moduleId))
-          .sort(),
-      ).toEqual(expected[index - 1]);
     }
   });
 
@@ -407,41 +375,6 @@ describe('duration-balanced Node legs', () => {
     expect(recordDurations(log)).toEqual({
       'packages/cli/a.test.mjs': 1.2,
       'packages/cli/b.test.mjs': 0.8,
-    });
-  });
-
-  it("leaves the first leg its own steps' time, in file time", () => {
-    const files = Array.from({length: 60}, (_, i) => `f${i}.test.mjs`);
-    const seconds = Object.fromEntries(files.map(f => [f, 20]));
-    const sum = leg => leg.reduce((total, f) => total + seconds[f], 0);
-    const even = partitionByDuration(files, 5, seconds).map(sum);
-    expect(Math.max(...even) - Math.min(...even)).toBeLessThanOrEqual(20);
-    const legs = partitionByDuration(files, 5, seconds, {
-      legOneSeconds: 100,
-    }).map(sum);
-    const others = legs.slice(1).reduce((a, b) => a + b, 0) / 4;
-    // 100 s of steps is 100 x LEG_PARALLELISM s of file time, within a file.
-    expect(others - legs[0]).toBeGreaterThan(100 * LEG_PARALLELISM - 40);
-    expect(others - legs[0]).toBeLessThan(100 * LEG_PARALLELISM + 40);
-  });
-
-  it("records the seconds of the first leg's own steps from a job log", () => {
-    const log = [
-      'test-node (1/5)\tInstall Playwright for theme-family contract\t2026-11-13T18:41:58.0000000Z ##[group]Run npx playwright install chromium',
-      'test-node (1/5)\tInstall Playwright for theme-family contract\t2026-11-13T18:42:07.0000000Z done',
-      'test-node (1/5)\tRun the theme-family contract\t2026-11-13T18:42:24.0000000Z ##[group]Run',
-      'test-node (1/5)\tRun the theme-family contract\t2026-11-13T18:43:06.0000000Z Theme family cascade guard passed.',
-      'test-node (2/5)\tRun the theme-family contract\t2026-11-13T18:00:00.0000000Z another leg',
-    ].join('\n');
-    expect(
-      recordLegOneSteps(log, [
-        'Install Playwright for theme-family contract',
-        'Run the theme-family contract',
-        'Offline-media browser cases',
-      ]),
-    ).toEqual({
-      'Install Playwright for theme-family contract': 9,
-      'Run the theme-family contract': 42,
     });
   });
 
