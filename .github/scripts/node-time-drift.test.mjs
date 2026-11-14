@@ -7,6 +7,10 @@ import {
   RATIO,
   drifted,
   legFactor,
+  NEW_FILE_S,
+  unrecorded,
+  withRenames,
+  parseNameStatus,
 } from './node-time-drift.mjs';
 
 const CHANGES = 'packages/cli/test/packed-gather-cache.changes.test.mjs';
@@ -128,5 +132,72 @@ describe('the recorded-time check for the test files a change touches', () => {
 
   it('skips a changed file with no recorded time (the legs count it as the median)', () => {
     expect(drifted({'new.test.mjs': 400}, {}, ['new.test.mjs'])).toEqual([]);
+  });
+
+  describe('a changed test file with no recorded time', () => {
+    const NEW = 'packages/cli/api/theme-edit/theme-how.test.mjs';
+
+    it('fails when it ran more than NEW_FILE_S in an unslowed leg, naming the one entry to add', () => {
+      const {recorded, measured} = leg(8, 40, 1);
+      measured[NEW] = 120;
+      // The drift check alone passes it: it has no record to fall behind.
+      expect(drifted(measured, recorded, [NEW])).toEqual([]);
+      expect(unrecorded(measured, recorded, [NEW])).toEqual([
+        {file: NEW, measured: 120, factor: 1, suggested: 120},
+      ]);
+    });
+
+    it('takes out the leg slowdown: 120 s in a leg running 2x passes, 150 s fails at 75 s', () => {
+      const {recorded, measured} = leg(8, 40, 2);
+      measured[NEW] = 2 * NEW_FILE_S;
+      expect(unrecorded(measured, recorded, [NEW])).toEqual([]);
+      measured[NEW] = 150;
+      expect(unrecorded(measured, recorded, [NEW])).toEqual([
+        {file: NEW, measured: 150, factor: 2, suggested: 75},
+      ]);
+    });
+
+    it('passes a short new file, and never reports a file the change does not touch', () => {
+      const {recorded, measured} = leg(8, 40, 1);
+      measured[NEW] = 40;
+      measured['packages/cli/other-unrecorded.test.mjs'] = 200;
+      expect(unrecorded(measured, recorded, [NEW])).toEqual([]);
+    });
+
+    it("carries a renamed file's old record, so a rename is checked for drift, not as new", () => {
+      const {recorded, measured} = leg(8, 40, 1);
+      const OLD = 'packages/cli/api/theme-edit/theme-how-old.test.mjs';
+      recorded[OLD] = 100;
+      measured[NEW] = 120;
+      const view = withRenames(recorded, [[OLD, NEW]]);
+      expect(view[NEW]).toBe(100);
+      expect(unrecorded(measured, view, [NEW])).toEqual([]);
+      expect(drifted(measured, view, [NEW])).toEqual([]);
+    });
+
+    it('counts a rename from a name with no record as unrecorded', () => {
+      const {recorded, measured} = leg(8, 40, 1);
+      measured[NEW] = 120;
+      const view = withRenames(recorded, [
+        ['packages/cli/never-recorded.test.mjs', NEW],
+      ]);
+      expect(unrecorded(measured, view, [NEW])).toHaveLength(1);
+    });
+
+    it('reads changed paths and renames from git diff --name-status -M', () => {
+      expect(
+        parseNameStatus(
+          `M\tpackages/a.test.mjs\nA\t${NEW}\nR087\tpackages/old.test.mjs\tpackages/new.test.mjs\nD\tpackages/gone.test.mjs\n`,
+        ),
+      ).toEqual({
+        changed: [
+          'packages/a.test.mjs',
+          NEW,
+          'packages/new.test.mjs',
+          'packages/gone.test.mjs',
+        ],
+        renames: [['packages/old.test.mjs', 'packages/new.test.mjs']],
+      });
+    });
   });
 });
