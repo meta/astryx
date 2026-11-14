@@ -41,7 +41,9 @@ import {LOCKFILES} from './same-beside-lockfiles.mjs';
  * What gathers the catalog in the working folder with the CLI copy at `cli`,
  * with docs' commands spelled for `pm` (the project's own when null), and
  * prints it with that package manager and the state of each file and folder
- * of the two packages it read.
+ * of the two packages it read. It fails when the gather reads a path in the
+ * project (other than code it loads) that the run's live steps do not: the
+ * lookup of the project's Core and the check that the project adds nothing.
  * @param {string} cli
  * @param {string} core
  * @param {string | null} pm
@@ -54,13 +56,25 @@ function gatherRunner(cli, core, pm) {
 const {selfAuditInputs} = await import(${at('foundation/discovery/stored-self-audit.mjs')});
 const {projectAddsToCatalog} = await import(${at('foundation/discovery/stored-search-catalog.mjs')});
 const {docPackageManager, runWithDocPackageManager} = await import(${at('foundation/env/package-manager.mjs')});
-const {gatherCandidates, encodeStoredCatalog} = await import(${at('api/search/_adapter.mjs')});
+const {gatherCandidates, encodeStoredCatalog, requireSearchCoreDir, resolveSearchCore} = await import(${at('api/search/_adapter.mjs')});
 const project = process.cwd();
-if (projectAddsToCatalog(project)) throw new Error('the probe project adds to a catalog');
+const live = new Map();
+const adds = await recordReads(live, async () => {
+  resolveSearchCore(undefined, requireSearchCoreDir, project);
+  return projectAddsToCatalog(project);
+});
+if (adds) throw new Error('the probe project adds to a catalog');
 const pm = ${JSON.stringify(pm)} ?? docPackageManager(project);
 const seen = new Map();
 const gathered = await runWithDocPackageManager(pm, () => recordReads(seen, () => gatherCandidates({cwd: project})));
 if (gathered.coreSkipped != null) throw new Error('the gather found no Core: ' + gathered.coreSkipped);
+const packages = [${JSON.stringify(cli)}, ${JSON.stringify(core)}];
+const uncovered = [...seen.keys()].filter(file =>
+  (file === project || file.startsWith(project + '/')) &&
+  !packages.some(root => file === root || file.startsWith(root + '/')) &&
+  !/\\.[cm]?js$/.test(file) &&
+  !live.has(file));
+if (uncovered.length > 0) throw new Error('the gather reads paths of the project the live check does not: ' + uncovered.join(', '));
 process.stdout.write(JSON.stringify({
   pm,
   cli: selfAuditInputs(seen.keys(), {root: ${JSON.stringify(cli)}}),

@@ -18,10 +18,11 @@
  *   gathers. The project's side is checked live on every run, never stored:
  *   the run is not hosted, no integration can load (mayHaveIntegrations:
  *   no Astryx config, no integration manifest in the project or its declared
- *   dependencies, and the run is inside a project), and no installed package
- *   declares Astryx docs or blocks (discoverExternalPackages). Those are the
- *   only ways a project adds to a catalog; the generator proves the gather
- *   reads nothing else of the project that changes it.
+ *   dependencies, and the run is inside a project), no installed package
+ *   declares Astryx docs or blocks (discoverExternalPackages), and the
+ *   project's local themes root holds no theme folder. The generator checks
+ *   that every path in the project the gather reads is one this check, or
+ *   the lookup of the project's Core, reads too.
  *
  *   The file holds two lines. The first is the header (StoredCatalogHeader).
  *   The second is the body (StoredCatalogBody), whose text may hold
@@ -32,12 +33,17 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {CLI_ROOT, discoverExternalPackages} from '../fs/paths.mjs';
+import {
+  CLI_ROOT,
+  discoverExternalPackages,
+  findPackageRoot,
+} from '../fs/paths.mjs';
 import {mayHaveIntegrations} from '../integrations/may-have-integrations.mjs';
 import {hostedRun} from '../runtime/package-root.mjs';
 import {docPackageManager} from '../env/package-manager.mjs';
 import {inputsUnchanged} from './stored-self-audit.mjs';
 import {CORE_FOLDER_SKIP} from './stored-component-list.mjs';
+import {discoverLocalThemes} from './theme-discovery.mjs';
 
 /** Where the stored catalog is written at `prepack`. */
 export const SEARCH_CATALOG_FILE = path.join(
@@ -78,8 +84,9 @@ export const AT = '\0at';
 
 /**
  * Whether the project in `cwd` can add anything to a catalog: an integration
- * that can load, or an installed package that declares Astryx docs or blocks.
- * A hosted run reads the host's packages, so it counts as adding.
+ * that can load, an installed package that declares Astryx docs or blocks,
+ * or a local theme. A hosted run reads the host's packages, so it counts as
+ * adding.
  * @param {string} cwd
  * @returns {boolean}
  */
@@ -87,8 +94,30 @@ export function projectAddsToCatalog(cwd) {
   return (
     hostedRun() != null ||
     mayHaveIntegrations(cwd) ||
-    discoverExternalPackages(cwd).length > 0
+    discoverExternalPackages(cwd).length > 0 ||
+    holdsLocalThemes(findPackageRoot(cwd) ?? cwd)
   );
+}
+
+/**
+ * Whether the project's local themes root holds a theme folder, valid or not,
+ * found as the project's theme list finds them (discoverLocalThemes).
+ * @param {string} projectDir
+ * @returns {boolean}
+ */
+function holdsLocalThemes(projectDir) {
+  let broken = false;
+  try {
+    const found = discoverLocalThemes(projectDir, undefined, {
+      onFolderError: () => {
+        broken = true;
+      },
+    });
+    return found.length > 0 || broken;
+  } catch {
+    // A root discovery cannot read is a project the store cannot stand for.
+    return true;
+  }
 }
 
 /**

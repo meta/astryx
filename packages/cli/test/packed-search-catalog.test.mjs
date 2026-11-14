@@ -73,7 +73,7 @@ afterAll(() => {
  * @param {string[]} args
  * @param {Record<string, string>} [extraEnv]
  */
-function run(cliRoot, args, extraEnv = {}) {
+function run(cliRoot, args, extraEnv = {}, cwd = project) {
   const env = {...process.env, NO_COLOR: '1', COLUMNS: '100', ...extraEnv};
   for (const key of Object.keys(env)) {
     if (key.startsWith('VITEST')) delete env[key];
@@ -81,13 +81,16 @@ function run(cliRoot, args, extraEnv = {}) {
   const result = spawnSync(
     process.execPath,
     [path.join(cliRoot, 'clients', 'cli', 'bin', 'astryx.mjs'), ...args],
-    {cwd: project, encoding: 'utf8', env, maxBuffer: 256 * 1024 * 1024},
+    {cwd, encoding: 'utf8', env, maxBuffer: 256 * 1024 * 1024},
   );
   return {status: result.status, stdout: result.stdout, stderr: result.stderr};
 }
 
-/** Whether the packed CLI's store answers for the project now. */
-function storeAnswers() {
+/**
+ * Whether the packed CLI's store answers for the project in `cwd` now.
+ * @param {string} [cwd]
+ */
+function storeAnswers(cwd = project) {
   const at = pathToFileURL(
     path.join(packed, 'foundation/discovery/stored-search-catalog.mjs'),
   ).href;
@@ -99,7 +102,7 @@ function storeAnswers() {
       `const {storedSearchCatalog} = await import(${JSON.stringify(at)});
 process.stdout.write(String(storedSearchCatalog(${JSON.stringify(core)}, process.cwd()) != null));`,
     ],
-    {cwd: project, encoding: 'utf8'},
+    {cwd, encoding: 'utf8'},
   );
   if (result.status !== 0) throw new Error(result.stderr);
   return result.stdout === 'true';
@@ -241,6 +244,35 @@ describe('the stored search catalog', () => {
       fs.rmSync(external, {recursive: true, force: true});
     }
     expect(storeAnswers()).toBe(true);
+  }, 120_000);
+
+  it('is not used where the project holds a local theme, whose search finds it', () => {
+    // A project of its own, with the same installed packages, so the theme
+    // the eject writes stays out of the other cases.
+    const themed = fs.mkdtempSync(path.join(work, 'themed-'));
+    fs.copyFileSync(
+      path.join(project, 'package.json'),
+      path.join(themed, 'package.json'),
+    );
+    fs.symlinkSync(
+      path.join(project, 'node_modules'),
+      path.join(themed, 'node_modules'),
+      'dir',
+    );
+    expect(storeAnswers(themed)).toBe(true);
+    const eject = run(
+      packed,
+      ['theme', 'eject', 'neutral', 'src/themes/house'],
+      {},
+      themed,
+    );
+    expect(eject.status, eject.stderr).toBe(0);
+    expect(storeAnswers(themed)).toBe(false);
+    const ask = ['search', 'house', '--type', 'theme', '--json'];
+    const answer = run(packed, ask, {}, themed);
+    expect(answer.status, answer.stderr).toBe(0);
+    expect(answer.stdout).toContain('"house"');
+    expect(answer).toEqual(run(CLI_ROOT, ask, {}, themed));
   }, 120_000);
 
   it('misses after an in-place edit to a shipped doc, template or Core file, and shows the edit', () => {
