@@ -12,6 +12,7 @@ import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet, themeEditShow} from './theme-edit.mjs';
 import {carriesTyped, offersTyped} from './_edit.mjs';
+import {offersAllTyped} from './_normal.mjs';
 import {escapesMeant} from './_normal.mjs';
 import {
   makeLinkedFixture,
@@ -95,11 +96,16 @@ describe('a repair carries the value typed, never a stock value', () => {
     } catch (e) {
       err = e;
     }
-    for (const s of err?.suggestions ?? []) {
-      const v = valueSet(s.name, thing);
-      if (v == null || MAPPED.some(re => re.test(s.name))) continue;
-      expect(offersTyped(v, value), `${s.name} for ${value}`).toBe(true);
-    }
+    // The values offered for the setting, taken together, carry what was
+    // typed (one value may carry part when the others carry the rest).
+    const values = (err?.suggestions ?? [])
+      .filter((/** @type {any} */ s) => !MAPPED.some(re => re.test(s.name)))
+      .map((/** @type {any} */ s) => valueSet(s.name, thing))
+      .filter((/** @type {any} */ v) => v != null);
+    if (values.length)
+      expect(offersAllTyped(values, value), `${values} for ${value}`).toBe(
+        true,
+      );
   });
 
   it.each([

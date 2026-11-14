@@ -215,9 +215,11 @@ folder that is not a project, and its docs have to say which.
    `cwd` being in a project carries the same sentence in its description.
 3. **Add a who-answers row** when a change touches which copy of the CLI
    answers (an install layout, a door, a hand-off rule): one row in the global
-   and project table of `spec:AST-081` and its test in
-   `packages/cli/test/global-local.test.mjs`, named with the row's number
-   (`G12 …`); a test there fails on a gap in the row numbers.
+   and project table of `spec:AST-081` and its test in the
+   `packages/cli/test/global-local*.test.mjs` file that holds its number range
+   (rows G1 to G15 in `global-local.test.mjs`, then `global-local.rows-16-39`
+   and `global-local.rows-40-58`), named with the row's number (`G12 …`); a
+   test there fails on a gap in the row numbers.
 4. **Quote, never paraphrase, what the CLI prints.** A terminal line shown on a
    global-mode page must be one the CLI prints; `test/global-mode-docs.test.mjs`
    builds those lines from the CLI's own strings.
