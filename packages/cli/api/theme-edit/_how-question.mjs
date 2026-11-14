@@ -8152,6 +8152,27 @@ export function draftAnswer(ctx, env, question) {
         };
       }
       case 'background': {
+        // A state Core paints with an inline style from a token (a selected
+        // table row's wash): that token, on the part in that state.
+        const inlinePart = on ? one(on) : null;
+        const inlineToken =
+          inlinePart && f.state
+            ? C.MAP[inlinePart]?.inline?.[f.state]?.['background-color']
+            : null;
+        const inlineColor = inlineToken ? colorFor(c, 'fill') : null;
+        if (inlinePart && inlineToken && inlineColor)
+          return {
+            text: `the background${where}: ${inlineToken}, which Core paints ${inlinePart} with when ${f.state}`,
+            options: [
+              [
+                set(inlineToken, inlineColor, {
+                  on: inlinePart,
+                  state: f.state,
+                  ...modeOf(c),
+                }),
+              ],
+            ],
+          };
         if (/\bstripe[sd]?\b|\bstriped\b|\bzebra\b/.test(c.text))
           return {
             text: 'striped rows need a style on every other row, and set has no condition for that; a row background colors every row',

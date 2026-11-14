@@ -119,6 +119,29 @@ describe('new', () => {
 });
 
 describe('refusals', () => {
+  it('refuses a background on a selected table row, which Core paints inline, and points to the token it reads', async () => {
+    const before = settingsOf('t');
+    const r = await refusal(() =>
+      themeEditSet('t', 'background', '#dbeafe', {
+        cwd,
+        on: 'table-row',
+        state: 'selected',
+      }),
+    );
+    expect(r.code).toBe('ERR_THEME_NO_EFFECT');
+    expect(r.message).toContain('inline style from --color-accent-muted');
+    expect(r.run).toContain(
+      "astryx experimental theme editor set t --color-accent-muted '#dbeafe' --on table-row --state selected",
+    );
+    expect(settingsOf('t')).toBe(before);
+    await themeEditSet('t', '--color-accent-muted', '#dbeafe', {
+      cwd,
+      on: 'table-row',
+      state: 'selected',
+    });
+    await themeEditUndo('t', {cwd});
+  });
+
   it('refuses a token the part never reads and names the property that works; nothing is written', async () => {
     const before = settingsOf('t');
     const r = await refusal(() =>

@@ -4289,6 +4289,28 @@ function checkOne(ctx, slug, data, thing, value, flags, unset) {
           },
         );
     }
+    // A state Core paints at run time with an inline style (a selected table
+    // row's wash) outranks any theme rule for that property: the token the
+    // inline style reads is what changes it.
+    if (s.state && !unset) {
+      const family =
+        prop === 'background' || prop === 'background-color'
+          ? 'background-color'
+          : prop;
+      const inline = partsOf(ctx, s)
+        .map(t => [t, ctx.C.MAP[t]?.inline?.[s.state ?? '']?.[family]])
+        .find(([, tok]) => tok);
+      if (inline)
+        refuse(
+          E.ERR_THEME_NO_EFFECT,
+          `Core paints ${inline[0]}'s ${family} when ${s.state} as an inline style from ${inline[1]}, which no theme rule can replace; set ${inline[1]} on ${inline[0]} when ${s.state} instead.`,
+          {
+            run: [
+              `${P} set ${slug} ${inline[1]} ${quoteCommandArgument(v)} --on ${inline[0]} --state ${s.state}${s.mode ? ` --mode ${s.mode}` : ''}`,
+            ],
+          },
+        );
+    }
     // Text, headings and links take their color from the color prop.
     const textParts = COLOR_PROP_PARTS;
     // A heading's color is written as the text color tokens its color prop
