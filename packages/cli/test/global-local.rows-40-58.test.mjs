@@ -604,9 +604,7 @@ describe.skipIf(!POSIX)(
       expect(
         fs.existsSync(path.join(pc.home, '.agents', 'skills', 'astryx')),
       ).toBe(false);
-      expect(
-        fs.existsSync(path.join(pc.home, '.config', 'astryx', 'state.json')),
-      ).toBe(false);
+      expect(fs.existsSync(path.join(pc.configDir, 'state.json'))).toBe(false);
     });
 
     it.skipIf(process.platform === 'win32')(
