@@ -1626,6 +1626,43 @@ describe('render(): every write stays inside the current folder', () => {
   });
 });
 
+describe('render(): imports with a query, as Vite gives them', () => {
+  it('gives ?raw the file text, ?inline a stylesheet text, ?url an image address, and gives the files back', async () => {
+    put('queries/notes.css', '.note { color: teal; --note-marker: 1; }\n');
+    put('queries/dot.png', PNG);
+    put('queries/data.json', '{"a": 1}\n');
+    put(
+      'queries/page.tsx',
+      "import sheet from './notes.css?inline';\nimport text from './data.json?raw';\nimport * as whole from './data.json?raw';\nimport {default as named} from './data.json?raw';\nimport dot from './dot.png?url';\nexport default function Page() {\n  return <main><pre className=\"note\">{sheet}</pre><pre>{text}</pre><pre>{whole.default === text && named === text ? 'every import gets the text' : 'no'}</pre><img src={dot} alt=\"\" /></main>;\n}\n",
+    );
+    const result = /** @type {any} */ (await render('queries/page.tsx', {cwd: dir}));
+    const html = fs.readFileSync(path.join(dir, 'queries/page.html'), 'utf8');
+    expect(html).toContain('.note { color: teal; --note-marker: 1; }');
+    expect(html).toContain('every import gets the text');
+    expect(html).toContain('{&quot;a&quot;: 1}');
+    expect(html).toContain('src="data:image/png;base64,');
+    // A stylesheet imported with ?inline is text, not a sheet of the page:
+    // the class it styles is used, and no rule of it is in the page's styles.
+    expect(html.match(/<style[^>]*>([\s\S]*?)<\/style>/)?.[1]).not.toContain('--note-marker');
+    expect(result.data.files.sort()).toEqual(['data.json', 'dot.png', 'notes.css', 'page.tsx']);
+    const back = /** @type {any} */ (await render('queries/page.html', {cwd: dir, reverse: true, out: 'queries-back/page.tsx'}));
+    expect(back.data.exact).toBe(true);
+  }, 60_000);
+
+  it('loads a file with any other query as it loads without one: an image as its address, a module as itself', async () => {
+    put('queries/w.ts', "export const label = 'from the worker module';\n");
+    put(
+      'queries/others.tsx',
+      "import a from './dot.png?w=400';\nimport b from './dot.png?no-inline';\nimport c from './dot.png?url&inline';\nimport * as w from './w.ts?worker';\nexport default function Page() {\n  return <main><img src={a} alt=\"\" /><img src={b} alt=\"\" /><img src={c} alt=\"\" /><p>{w.label}</p></main>;\n}\n",
+    );
+    const result = /** @type {any} */ (await render('queries/others.tsx', {cwd: dir}));
+    const html = fs.readFileSync(path.join(dir, 'queries/others.html'), 'utf8');
+    expect(html.match(/src="data:image\/png;base64,/g)).toHaveLength(3);
+    expect(html).toContain('from the worker module');
+    expect(result.data.files.sort()).toEqual(['dot.png', 'others.tsx', 'w.ts']);
+  }, 60_000);
+});
+
 describe('render --reverse: a received file may carry only what a render embeds', () => {
   /** @param {string} name @param {{path: string, text: string}[]} files */
   const crafted = async (name, files) => {
