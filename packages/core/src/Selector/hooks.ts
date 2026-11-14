@@ -286,34 +286,35 @@ export function useSelectedItemOverlayMargin({
           {countsLayerGutter: true},
         )
       : null;
-    let margin: string | undefined;
+    let belowAnchor: string | undefined;
+    let aboveAnchor: string | undefined;
     if (placement != null) {
-      const {offset, anchorTop, anchorBottom, listboxHeight} = placement;
+      const {offset, anchorTop, anchorBottom, listboxHeight, gutter} =
+        placement;
       const viewport = layoutViewportHeight(window);
-      // The browser flipped the layer above its anchor, and its swapped
-      // margins set the list's end from the anchor's top. This margin puts
-      // the list's top at the clamped top.
+      // The room below the anchor for the list, in the keyboard inset's
+      // layout px. With no keyboard the inset falls back to the room itself.
+      // The keyboard term is then 0, and the measured shift stands.
+      const room = viewport - listboxHeight - anchorBottom;
+      belowAnchor = `min(${-offset}px, max(${-anchorBottom}px, calc(${room}px - var(${LAYER_KEYBOARD_INSET_PROPERTY}, ${room}px))))`;
+      // A flip swaps the block margins, so this margin sets the list's end
+      // from the anchor's top. It puts the list's top at the clamped top, or
+      // lifts the list's end above a software keyboard. The list's top stays
+      // below the gutter.
       const flipped = anchorTop - placement.clampedTop - listboxHeight;
-      if (
-        placement.isAboveAnchor &&
-        anchorBottom + flipped + listboxHeight + placement.gutter > viewport
-      ) {
-        // Below the anchor, that margin would not fit, so the layer stays
-        // flipped. Like the margin below, it keeps the list's end above a
-        // software keyboard, and its top on screen.
-        const keyboardEnd = anchorTop - viewport;
-        margin = `min(${anchorTop - listboxHeight}px, max(${flipped}px, calc(${keyboardEnd}px + var(${LAYER_KEYBOARD_INSET_PROPERTY}, 0px))))`;
-      } else {
-        // Otherwise this margin brings the layer back below its anchor. The
-        // room there for the list is in the keyboard inset's layout px. With
-        // no keyboard the inset falls back to the room itself. The keyboard
-        // term is then 0, and the measured shift stands.
-        const room = viewport - listboxHeight - anchorBottom;
-        margin = `min(${-offset}px, max(${-anchorBottom}px, calc(${room}px - var(${LAYER_KEYBOARD_INSET_PROPERTY}, ${room}px))))`;
-      }
+      const keyboardEnd = anchorTop - viewport;
+      aboveAnchor = `min(${anchorTop - listboxHeight - gutter}px, max(${flipped}px, calc(${keyboardEnd}px + var(${LAYER_KEYBOARD_INSET_PROPERTY}, 0px))))`;
     }
+    // At the open, the browser picks the layer's side after this margin
+    // applies. The margin below the anchor always fits there, so the layer
+    // opens below its anchor, where the runtime caps it above a keyboard. A
+    // layer that the browser flips while the list is open stays flipped, so
+    // it gets the flipped margin.
+    const isFlippedWhileOpen = placement?.isAboveAnchor === true;
     // eslint-disable-next-line @eslint-react/set-state-in-effect -- selector popover position is derived from DOM layout
-    setMarginBlockStart(margin);
+    setMarginBlockStart(previous =>
+      previous != null && isFlippedWhileOpen ? aboveAnchor : belowAnchor,
+    );
     // eslint-disable-next-line @eslint-react/set-state-in-effect -- selector popover position is derived from DOM layout
     setIsPositioned(isOpen);
   }, [
