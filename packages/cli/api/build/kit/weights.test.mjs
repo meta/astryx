@@ -100,9 +100,18 @@ describe('the pick model', () => {
     expect(start).toBeNull();
   });
 
-  it('is ignored when its shape does not match the file', () => {
+  it.each([
+    ['a blend of the wrong length', {...PICK, blend: [1]}],
+    [
+      'a bias that is not a number',
+      {
+        ...PICK,
+        tables: [{...PICK.tables[0], bias: PICK.tables[0].bias.map(() => 'x')}],
+      },
+    ],
+  ])('is ignored when it has %s', (_, pick) => {
     const start = weighStart('charts and cards', RANKED, RANKED[0], CATALOG, {
-      weights: {...WEIGHTS, pick: {...PICK, blend: [1]}},
+      weights: {...WEIGHTS, pick},
     });
     expect(start).toBe(
       weighStart('charts and cards', RANKED, RANKED[0], CATALOG, {
