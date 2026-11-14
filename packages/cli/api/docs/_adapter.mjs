@@ -18,6 +18,7 @@
  */
 
 import * as path from 'node:path';
+import {deserialize, serialize} from 'node:v8';
 import {Project} from '../../foundation/config/project.mjs';
 import {
   DocsCatalog,
@@ -88,7 +89,8 @@ import {
   listTemplates,
   templateFilesNaming,
 } from '../../foundation/discovery/template-adapter.mjs';
-import {findCoreDir} from '../../foundation/fs/paths.mjs';
+import {persistedGather} from '../../foundation/fs/gather-cache.mjs';
+import {CLI_ROOT, findCoreDir} from '../../foundation/fs/paths.mjs';
 import {reusedWhileUnchanged} from '../../foundation/fs/read-record.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
@@ -419,8 +421,33 @@ export function projectTree(catalog, {fresh = false} = {}) {
   return tree;
 }
 
-/** The CLI's own tree files, loaded again after one of them changes. */
-const cliTreeInputs = reusedWhileUnchanged(() => loadTreeInputs());
+/**
+ * The CLI's own tree files, kept between runs and loaded again after one of
+ * them changes. They are the same for every project this copy of the CLI
+ * runs in, so the copy's folder is the whole key.
+ */
+const keptTreeInputs = reusedWhileUnchanged(() =>
+  persistedGather(['docs-tree-inputs', CLI_ROOT], loadTreeInputs, TREE_INPUTS),
+);
+
+/**
+ * The CLI's own tree files, read from the files themselves, never from the
+ * kept copy: doctor checks what the files say.
+ */
+const readTreeInputs = reusedWhileUnchanged(() => loadTreeInputs());
+
+/** @typedef {Awaited<ReturnType<typeof loadTreeInputs>>} TreeInputs */
+
+/**
+ * The kept form of the tree inputs: Node's structured serialization, which
+ * gives back every field as it was, `undefined` ones too, where JSON would
+ * drop them.
+ * @type {{encode: (inputs: TreeInputs) => string, decode: (stored: string) => TreeInputs}}
+ */
+const TREE_INPUTS = {
+  encode: inputs => serialize(inputs).toString('base64'),
+  decode: stored => deserialize(Buffer.from(stored, 'base64')),
+};
 
 /**
  * Every flat topic in the catalog, as the tree's topic levels read it.
@@ -467,7 +494,7 @@ async function flatTopicInputs(catalog) {
  */
 async function buildProjectTree(catalog, fresh) {
   const added = catalog.treeInputs;
-  const cli = await cliTreeInputs({fresh});
+  const cli = fresh ? await readTreeInputs({fresh}) : await keptTreeInputs();
   const result = buildDocsTree({
     namespaces: [...cli.namespaces, ...added.flatMap(each => each.namespaces)],
     docs: [...cli.docs, ...added.flatMap(each => each.guides)],

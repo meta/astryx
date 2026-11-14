@@ -23,7 +23,8 @@
  *   discovery (foundation/discovery/theme-discovery.mjs) for each
  *   integration's themes,
  *   by `doctor` (api/doctor/_adapter.mjs) for its file-only docs checks and
- *   its theme-wiring scan,
+ *   its theme-wiring scan, by the docs adapter (api/docs/_adapter.mjs) for
+ *   the CLI's own docs tree, which `docs` and `search` read,
  *   in a run that records modules and variables to its end, and, through
  *   `persistedSummary`, by kept-tree.mjs for the docs not-found hint's
  *   summaries of folder trees, each kept while every path it stamped is
@@ -918,6 +919,10 @@ async function gatherAt(key, load, codec, keep) {
   const value = await load();
   if (run && armed && keep(value)) {
     withoutRecording(() => store(dir, file, entryKey(key, id), value, codec));
+  } else {
+    // A value worked out from a gather that is not kept is not kept either.
+    // The code a gather inside this one recorded did not build this one.
+    gatherCode = null;
   }
   return value;
 }
