@@ -19,16 +19,8 @@ import {VStack} from '@astryxdesign/core/Layout';
 import {Section} from '@astryxdesign/core/Section';
 import {TabList, Tab} from '@astryxdesign/core/TabList';
 import {Carousel} from '@astryxdesign/core/Carousel';
-import {Button} from '@astryxdesign/core/Button';
-import {Icon} from '@astryxdesign/core/Icon';
-import {generatePageRange} from '@astryxdesign/core/Pagination';
-import {
-  colorVars,
-  fontWeightVars,
-  sizeVars,
-  spacingVars,
-  typeScaleVars,
-} from '@astryxdesign/core/theme/tokens.stylex';
+import {Pagination} from '@astryxdesign/core/Pagination';
+import {typeScaleVars} from '@astryxdesign/core/theme/tokens.stylex';
 import {layout} from '../layout.stylex';
 import {
   changelogPagePath,
@@ -48,33 +40,13 @@ const styles = stylex.create({
     [typeScaleVars['--text-body-size']]: '1rem', // 16px
     [typeScaleVars['--text-body-leading']]: '1.75', // 28px line box
   },
-  // The page links look like the Pagination component's page buttons.
   pages: {
     alignSelf: 'center',
-    display: 'flex',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacingVars['--spacing-1'],
-    minWidth: 0,
-  },
-  currentPage: {
-    backgroundColor: colorVars['--color-neutral'],
-    fontWeight: fontWeightVars['--font-weight-medium'],
-  },
-  pageGap: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: sizeVars['--size-element-md'],
-    minHeight: sizeVars['--size-element-md'],
-    color: colorVars['--color-text-secondary'],
-    fontSize: typeScaleVars['--text-label-size'],
-    userSelect: 'none',
   },
 });
 
 const ignoreTabChange = (_name: string) => undefined;
+const ignorePageChange = (_page: number) => undefined;
 
 /**
  * The link of a package tab. A tab is view state of the changelog: it replaces
@@ -179,61 +151,20 @@ export function ChangelogNotes({
   slug,
   defaultSlug,
 }: ChangelogNotesProps) {
-  const pageHref = (target: number) =>
-    changelogPagePath(slug, target, defaultSlug);
-  const hasNewer = page > 1;
-  const hasOlder = page < pageCount;
-
   return (
     <VStack gap={8}>
       <Markdown headingLevelStart={2}>{markdown}</Markdown>
       {pageCount > 1 && (
-        <nav
-          aria-label="Older and newer releases"
-          {...stylex.props(styles.pages)}>
-          <Button
-            label="Go to previous page"
-            tooltip={hasNewer ? 'Go to previous page' : undefined}
-            variant="ghost"
-            icon={<Icon icon="chevronLeft" size="md" />}
-            isIconOnly
-            isDisabled={!hasNewer}
-            href={hasNewer ? pageHref(page - 1) : undefined}
-            as={ReleasePageLink}
-          />
-          {generatePageRange(page, pageCount, 1).map((item, index, range) =>
-            item === '...' ? (
-              <span
-                key={`gap-${range[index - 1]}-${range[index + 1]}`}
-                aria-hidden="true"
-                {...stylex.props(styles.pageGap)}>
-                …
-              </span>
-            ) : (
-              <Button
-                key={item}
-                label={`Go to page ${item}`}
-                aria-label={`Go to page ${item}`}
-                variant="ghost"
-                href={pageHref(item)}
-                as={ReleasePageLink}
-                aria-current={item === page ? 'page' : undefined}
-                xstyle={item === page && styles.currentPage}>
-                {item}
-              </Button>
-            ),
-          )}
-          <Button
-            label="Go to next page"
-            tooltip={hasOlder ? 'Go to next page' : undefined}
-            variant="ghost"
-            icon={<Icon icon="chevronRight" size="md" />}
-            isIconOnly
-            isDisabled={!hasOlder}
-            href={hasOlder ? pageHref(page + 1) : undefined}
-            as={ReleasePageLink}
-          />
-        </nav>
+        // Each page control is a link to that page: the link navigates.
+        <Pagination
+          label="Older and newer releases"
+          page={page}
+          totalPages={pageCount}
+          getPageHref={target => changelogPagePath(slug, target, defaultSlug)}
+          as={ReleasePageLink}
+          onChange={ignorePageChange}
+          xstyle={styles.pages}
+        />
       )}
     </VStack>
   );

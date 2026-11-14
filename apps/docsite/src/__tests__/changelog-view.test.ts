@@ -24,7 +24,6 @@ vi.mock('next/link', () => ({
     replace,
     scroll,
     prefetch,
-    'aria-current': ariaCurrent,
     'aria-label': ariaLabel,
   }: {
     children: ReactNode;
@@ -32,7 +31,6 @@ vi.mock('next/link', () => ({
     replace?: boolean;
     scroll?: boolean;
     prefetch?: boolean;
-    'aria-current'?: string;
     'aria-label'?: string;
   }) =>
     createElement(
@@ -42,7 +40,6 @@ vi.mock('next/link', () => ({
         'data-replace': String(replace),
         'data-scroll': String(scroll),
         'data-prefetch': String(prefetch),
-        'aria-current': ariaCurrent,
         'aria-label': ariaLabel,
       },
       children,
@@ -100,62 +97,50 @@ type LinkLike = (props: {
   href: string;
   to: string;
   children: ReactNode;
-  'aria-current'?: string;
   'aria-label'?: string;
 }) => ReactNode;
 
-vi.mock('@astryxdesign/core/Button', () => ({
-  Button: ({
+// A stand-in for the Pagination component: its landmark, the page and page
+// count it gets, and one link for each page, made from the URL function and
+// the link component it gets.
+vi.mock('@astryxdesign/core/Pagination', () => ({
+  Pagination: ({
     label,
-    children,
-    href,
+    page,
+    totalPages,
+    getPageHref,
     as: LinkComponent,
-    isDisabled,
-    'aria-current': ariaCurrent,
+    onChange,
   }: {
     label: string;
-    children?: ReactNode;
-    href?: string;
+    page: number;
+    totalPages: number;
+    getPageHref: (page: number) => string;
     as: LinkLike;
-    isDisabled?: boolean;
-    'aria-current'?: string;
+    onChange?: (page: number) => void;
   }) =>
-    href != null && isDisabled !== true
-      ? createElement(LinkComponent, {
+    createElement(
+      'nav',
+      {
+        'aria-label': label,
+        'data-page': page,
+        'data-total-pages': totalPages,
+        'data-has-on-change': String(typeof onChange === 'function'),
+      },
+      Array.from({length: totalPages}, (_, index) => {
+        const href = getPageHref(index + 1);
+        return createElement(LinkComponent, {
+          key: href,
           href,
           to: href,
-          'aria-current': ariaCurrent,
-          'aria-label': label,
-          children: children ?? label,
-        })
-      : createElement('button', {'aria-disabled': 'true'}, label),
-}));
-
-vi.mock('@astryxdesign/core/Icon', () => ({
-  Icon: () => null,
-}));
-
-// The component's own page range, cut down: the first page, the pages beside
-// the current one, and the last page, with a gap where pages are left out.
-vi.mock('@astryxdesign/core/Pagination', () => ({
-  generatePageRange: (page: number, pageCount: number) => {
-    const shown = [1, page - 1, page, page + 1, pageCount].filter(
-      (each, index, all) =>
-        each >= 1 && each <= pageCount && all.indexOf(each) === index,
-    );
-    return shown.flatMap((each, index) =>
-      index > 0 && each - (shown[index - 1] ?? each) > 1
-        ? ['...', each]
-        : [each],
-    );
-  },
+          'aria-label': `Go to page ${index + 1}`,
+          children: index + 1,
+        });
+      }),
+    ),
 }));
 
 vi.mock('@astryxdesign/core/theme/tokens.stylex', () => ({
-  colorVars: {},
-  fontWeightVars: {},
-  sizeVars: {},
-  spacingVars: {},
   typeScaleVars: {
     '--text-body-size': '--text-body-size',
     '--text-body-leading': '--text-body-leading',
@@ -252,59 +237,36 @@ describe('ChangelogNotes', () => {
 
     expect(html).toContain('# 0.0.9');
     expect(html.indexOf('</article>')).toBeLessThan(html.indexOf('<nav'));
-    expect(html).toContain('<nav aria-label="Older and newer releases">');
+    expect(html).toContain('<nav aria-label="Older and newer releases"');
   });
 
   it('has no page navigation when the releases fit on one page', () => {
     expect(renderNotes(1, 1)).not.toContain('<nav');
   });
 
+  it('gives the page navigation the current page and the page count', () => {
+    const html = renderNotes(2, 9);
+
+    expect(html).toContain('data-page="2"');
+    expect(html).toContain('data-total-pages="9"');
+    expect(html).toContain('data-has-on-change="true"');
+  });
+
   it("makes each page a link to that page of the package's releases", () => {
-    expect(pageLinks(renderNotes(2, 9))).toEqual([
-      'Go to previous page -> /changelog/cli',
+    expect(pageLinks(renderNotes(2, 3))).toEqual([
       'Go to page 1 -> /changelog/cli',
       'Go to page 2 -> /changelog/cli/2',
       'Go to page 3 -> /changelog/cli/3',
-      'Go to page 9 -> /changelog/cli/9',
-      'Go to next page -> /changelog/cli/3',
     ]);
-  });
-
-  it('marks the current page and shows a gap for the pages it leaves out', () => {
-    const html = renderNotes(2, 9);
-
-    expect(html.match(/aria-current="page"/g)).toHaveLength(1);
-    expect(html).toMatch(
-      /<a href="\/changelog\/cli\/2"[^>]*aria-current="page"[^>]*>2<\/a>/,
-    );
-    expect(html).toContain('<span aria-hidden="true">…</span>');
   });
 
   it('replaces the history entry and does not prefetch a page', () => {
     const links = renderNotes(2, 3).match(/<a [^>]*>/g) ?? [];
 
-    expect(links.length).toBeGreaterThan(0);
+    expect(links).toHaveLength(3);
     for (const link of links) {
       expect(link).toContain('data-replace="true"');
       expect(link).toContain('data-prefetch="false"');
     }
-  });
-
-  it('has no link past either end of the releases', () => {
-    const first = renderNotes(1, 3);
-    expect(pageLinks(first)).not.toContain(
-      'Go to previous page -> /changelog/cli',
-    );
-    expect(first).toContain(
-      '<button aria-disabled="true">Go to previous page</button>',
-    );
-
-    const last = renderNotes(3, 3);
-    expect(pageLinks(last).some(link => link.startsWith('Go to next'))).toBe(
-      false,
-    );
-    expect(last).toContain(
-      '<button aria-disabled="true">Go to next page</button>',
-    );
   });
 });
