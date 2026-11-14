@@ -173,6 +173,34 @@ describe('Markdown', () => {
     expect(second.className).toContain('astryx-markdown-paragraph');
   });
 
+  describe('table column alignment', () => {
+    // A declared alignment has to be written out even when it names the side a
+    // cell would otherwise take: `text-align` inherits, so a `:---` column left
+    // unstyled follows whatever the table is nested in instead of the source.
+    it('applies every declared alignment, and leaves an undeclared column alone', () => {
+      const {container} = render(
+        <Markdown>
+          {[
+            '| a | b | c | d |',
+            '| :-- | :-: | --: | --- |',
+            '| 1 | 2 | 3 | 4 |',
+          ].join('\n')}
+        </Markdown>,
+      );
+      const headers = Array.from(container.querySelectorAll('th'));
+      const cells = Array.from(container.querySelectorAll('td'));
+      for (const row of [headers, cells]) {
+        expect(row[0]).toHaveStyle({textAlign: 'start'});
+        expect(row[1]).toHaveStyle({textAlign: 'center'});
+        expect(row[2]).toHaveStyle({textAlign: 'end'});
+      }
+      // An undeclared column keeps taking the table's own default — the header
+      // cell's `start`, and nothing of its own on the body cell.
+      expect(headers[3]).toHaveStyle({textAlign: 'start'});
+      expect(getComputedStyle(cells[3] as Element).textAlign).toBe('');
+    });
+  });
+
   describe('base props', () => {
     // BaseProps documents that data-*, aria-* and role are kept; the root
     // dropped everything but data-testid.

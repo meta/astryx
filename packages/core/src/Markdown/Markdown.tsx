@@ -1378,7 +1378,10 @@ function tableCellSideStyles(
     align === 'center' && cellAlignStyles.center,
     align === 'right' &&
       (isAgainstTable ? cellAlignStyles.start : cellAlignStyles.end),
-    align === 'left' && isAgainstTable && cellAlignStyles.end,
+    // `text-align` inherits. A declared `:---` cell writes `start`, so it does
+    // not follow an ancestor's alignment.
+    align === 'left' &&
+      (isAgainstTable ? cellAlignStyles.end : cellAlignStyles.start),
     isAgainstTable && markdownTableCellStyles.ruleOnTableEnd,
   ];
 }
