@@ -28,14 +28,32 @@ const REPO_ROOT = path.resolve(CLI_ROOT, '..', '..');
 const SIZES_FILE = path.join(CLI_ROOT, 'test', 'output-sizes.json');
 const UPDATE = process.env.UPDATE_OUTPUT_SIZES === '1';
 
-/** Growth past the recorded size that still passes. */
+/**
+ * Growth past the recorded size that still passes. A new prop or a reworded
+ * sentence adds 1 to 2% to a component read; a new section, a repeated label
+ * on every item or a longer default adds more, and those are what this catches
+ * before they add up release after release.
+ */
 const GROW = 0.05;
-/** Shrink below the recorded size that still passes without a new record. */
+/**
+ * Shrink below the recorded size that still passes without a new record.
+ * Smaller changes are wording; a larger one is a shortening, and recording it
+ * keeps the answer from growing back to its old size.
+ */
 const SHRINK = 0.1;
-/** Slack in bytes, so a one-word change to a short answer passes. */
+/**
+ * Slack in bytes, about one short sentence, so a short answer such as a hook
+ * read or an error does not fail on a one-word change.
+ */
 const SLACK = 64;
 
-/** Bytes a default answer of each kind may print. */
+/**
+ * Bytes a default answer of each kind may print. A read is one artifact an
+ * agent keeps beside its code; a list is scanned to pick one item; a report
+ * says what one run did or found; an error names what went wrong and the next
+ * step. An answer that needs more prints the first part and the command that
+ * prints the rest.
+ */
 const BUDGET = {
   read: 16 * 1024,
   list: 12 * 1024,
