@@ -27,6 +27,7 @@ import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {oneColorMode, themeBuildForReport} from '../theme/build/build.mjs';
 import {
+  MODE_WORDS,
   AUTO_SPREAD,
   CORNERS,
   DIALS,
@@ -1265,14 +1266,6 @@ export function settingsProblem(
   }
   return null;
 }
-
-/** How a hand-written entry mode reads, in any case: null when it means nothing. */
-const MODE_WORDS = /** @type {Record<string, 'light' | 'dark'>} */ ({
-  light: 'light',
-  day: 'light',
-  dark: 'dark',
-  night: 'dark',
-});
 
 /**
  * Read each entry's mode and source as the editor writes them: a mode in

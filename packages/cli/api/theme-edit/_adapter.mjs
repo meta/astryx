@@ -921,18 +921,11 @@ export async function editorFollowCompile(err, cwd) {
     return r.source ? r : null;
   };
   const COMPILE = {group: 'experimental theme', build: 'compile'};
-  /** @param {string} p */
-  const real = p => {
-    let at = path.resolve(p);
-    const rest = [];
-    while (!fs.existsSync(at) && path.dirname(at) !== at) {
-      rest.unshift(path.basename(at));
-      at = path.dirname(at);
-    }
-    return path.join(fs.realpathSync(at), ...rest);
-  };
   const inside = (/** @type {string} */ p) => {
-    const rel = path.relative(real(cwd), real(p));
+    const rel = path.relative(
+      realPathOf(path.resolve(cwd)),
+      realPathOf(path.resolve(p)),
+    );
     return !rel.startsWith('..') && !path.isAbsolute(rel);
   };
   let line = first.name;

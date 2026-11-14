@@ -102,13 +102,15 @@ const drop = t => {
 
 describe('an entry mode written in other words', () => {
   it(
-    'Dark, night, Light and day are read as dark or light, said in a note, and saved that way by the next change',
+    'Dark, night, dark-mode, Light, day and Light-Mode are read as dark or light, said in a note, and saved that way by the next change',
     () => {
       for (const [typed, read] of [
         ['Dark', 'dark'],
         ['night', 'dark'],
         ['Light', 'light'],
         ['day', 'light'],
+        ['dark-mode', 'dark'],
+        ['Light-Mode', 'light'],
       ]) {
         drop('m');
         add('m', {

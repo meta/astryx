@@ -35,6 +35,7 @@ import {
 } from './_css.mjs';
 import {calcVars, coreFallback, multipliedTokens} from './_parts.mjs';
 import {
+  MODE_WORDS,
   AUTO_SPREAD,
   COLOR_PROP_PARTS,
   COLOR_PROPS,
@@ -1838,15 +1839,6 @@ function baseReads(ctx, like, token) {
   }
 }
 
-/** Mode words a value may be labeled with, and the mode each means. */
-const MODE_WORDS = /** @type {Record<string, 'light' | 'dark'>} */ ({
-  light: 'light',
-  'light-mode': 'light',
-  day: 'light',
-  dark: 'dark',
-  'dark-mode': 'dark',
-  night: 'dark',
-});
 /** State words a value may be labeled with. */
 const STATE_WORDS = [
   'hover',

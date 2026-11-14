@@ -792,3 +792,17 @@ for (const table of [
   DESIGN,
 ])
   Object.setPrototypeOf(table, null);
+
+/**
+ * Mode words a value or a saved entry may be labeled with, and the mode
+ * each means: `set` reads a typed label by it, and loading reads a saved
+ * entry's mode by it.
+ */
+export const MODE_WORDS = /** @type {Record<string, 'light' | 'dark'>} */ ({
+  light: 'light',
+  'light-mode': 'light',
+  day: 'light',
+  dark: 'dark',
+  'dark-mode': 'dark',
+  night: 'dark',
+});
