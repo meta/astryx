@@ -63,9 +63,10 @@ afterAll(() => {
  * Run a CLI in the project.
  * @param {string} cliRoot
  * @param {string[]} args
+ * @param {Record<string, string>} [extraEnv]
  */
-function run(cliRoot, args) {
-  const env = {...process.env, NO_COLOR: '1', COLUMNS: '100'};
+function run(cliRoot, args, extraEnv = {}) {
+  const env = {...process.env, NO_COLOR: '1', COLUMNS: '100', ...extraEnv};
   for (const key of Object.keys(env)) {
     if (key.startsWith('VITEST')) delete env[key];
   }
@@ -122,6 +123,25 @@ describe('the stored component list', () => {
       expect(stored, ask.join(' ')).toEqual(run(CLI_ROOT, ask));
     }
   }, 240_000);
+
+  // Only where Node carries Czech collation data.
+  it.skipIf(Intl.Collator.supportedLocalesOf(['cs']).length === 0)(
+    "prints groups in the running locale's order, as a live read does",
+    () => {
+      // Czech collates "ch" after "h": the stored list, written in another
+      // locale's order, prints in this one's.
+      const czech = {LANG: 'cs_CZ.UTF-8', LC_ALL: 'cs_CZ.UTF-8'};
+      for (const ask of [
+        ['component', '--list', '--json'],
+        ['component', '--list', '--detail', 'compact', '--json'],
+      ]) {
+        expect(run(packed, ask, czech), ask.join(' ')).toEqual(
+          run(CLI_ROOT, ask, czech),
+        );
+      }
+    },
+    240_000,
+  );
 
   it('misses after an in-place edit to an installed Core file, and shows the edit', () => {
     const doc = path.join(core, 'src', 'Button', 'Button.doc.mjs');
