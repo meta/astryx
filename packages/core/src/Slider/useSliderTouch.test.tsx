@@ -33,6 +33,7 @@ import {
   it,
   onTestFinished,
   vi,
+  beforeAll,
 } from 'vitest';
 import {Slider} from './Slider';
 import {getGestureHost} from '../gestures/GestureHost';
@@ -40,6 +41,16 @@ import {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
 import {projectDistance} from '../motion/projection';
 import type * as HapticsModule from '../gestures/haptics';
 import {slider as UIKIT_SLIDER} from '../motion/uikit/slider';
+import {
+  __loadTouchRuntimeForTest,
+  __resetTouchRuntimeForTest,
+} from '../utils/touchRuntime';
+
+// The thumbs' pans, the lift and the coast come with the shared touch runtime
+// once the page has loaded it.
+beforeAll(async () => {
+  await __loadTouchRuntimeForTest();
+});
 
 /** The control's stubbed layout: 300 px long at x = 0 (or y = 0). */
 const LENGTH = 300;
@@ -453,6 +464,35 @@ describe('Slider touch presentation (UISlider tracking)', () => {
     dragThumb(hitOf(thumb), {x: 150, y: 12}, {dy: 60});
     expect(states).toContain('across:began');
     detachAcross();
+  });
+
+  it('before the touch runtime loads, a finger drag on a thumb moves nothing and a mouse press on it changes no value', async () => {
+    __resetTouchRuntimeForTest();
+    try {
+      stubMatchMedia(true);
+      stubControlGeometry();
+      const onChange = vi.fn();
+      await renderTouch(<Controlled initial={50} onChange={onChange} />);
+      const thumb = screen.getByRole('slider');
+      const hit = hitOf(thumb);
+      const start = nextStart();
+      touch('touchstart', hit, {id: 1, x: 150, y: 12}, start);
+      touch('touchmove', hit, {id: 1, x: 220, y: 12}, start + 60);
+      touch('touchend', hit, {id: 1, x: 220, y: 12}, start + 120);
+      expect(onChange).not.toHaveBeenCalled();
+      fireEvent.pointerDown(thumb, {
+        pointerId: 2,
+        pointerType: 'mouse',
+        button: 0,
+        buttons: 1,
+        clientX: 200,
+        clientY: 12,
+      });
+      expect(onChange).not.toHaveBeenCalled();
+      expect(thumb).toHaveAttribute('aria-valuenow', '50');
+    } finally {
+      await __loadTouchRuntimeForTest();
+    }
   });
 
   it('a tap on the thumb changes nothing and reports one onChangeEnd', async () => {
