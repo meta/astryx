@@ -33,7 +33,7 @@
  * @typedef {object} RenderEdit
  * @property {string | null} was - The text as rendered; null for text added after the render.
  * @property {string | null} now - The text the file holds now; null for text removed after the render.
- * @property {string} [file] - The restored module that holds the text as rendered, when it appears there exactly once.
+ * @property {string} [file] - The restored module or JSON file that holds the text as rendered, when it appears exactly once across them.
  * @property {number} [line] - The line of `file` where that text starts.
  */
 
