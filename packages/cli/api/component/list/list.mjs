@@ -25,7 +25,6 @@ import {
 import {EXACT_CODEC} from '../../../foundation/fs/exact-codec.mjs';
 import {persistedGather} from '../../../foundation/fs/gather-cache.mjs';
 import {CLI_ROOT, discoverExternalPackages, realDir} from '../../../foundation/fs/paths.mjs';
-import {hostedRun} from '../../../foundation/runtime/package-root.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {AstryxError} from '../../error.mjs';
 import {
@@ -177,7 +176,6 @@ export async function componentList(coreDir, opts) {
         realDir(cwd),
         coreDir,
         CLI_ROOT,
-        hostedRun()?.integrations ?? [],
         category ?? null,
         detail,
         zh,

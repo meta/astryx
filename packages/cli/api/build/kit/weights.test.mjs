@@ -73,6 +73,54 @@ const RANKED = [
   page('top-nav', 0, 'Shell'),
 ];
 
+describe('the pick model', () => {
+  // The pick model reads "grid" for "cards"; the call model reads "charts".
+  const PICK = {
+    tables: [table({[stem('cards')]: [0, 0, 0, 3]})],
+    blend: [1, 0, 0, 0.5, 0, 0, 0],
+  };
+
+  it('chooses which page starts once the call model calls a page', () => {
+    const start = weighStart('charts and cards', RANKED, RANKED[0], CATALOG, {
+      weights: {...WEIGHTS, pick: PICK},
+    });
+    expect(start).toBe('grid');
+  });
+
+  it('never turns the app shell into a page', () => {
+    const start = weighStart(
+      'tweak the existing cards',
+      RANKED,
+      null,
+      CATALOG,
+      {
+        weights: {...WEIGHTS, pick: PICK},
+      },
+    );
+    expect(start).toBeNull();
+  });
+
+  it.each([
+    ['a blend of the wrong length', {...PICK, blend: [1]}],
+    [
+      'a bias that is not a number',
+      {
+        ...PICK,
+        tables: [{...PICK.tables[0], bias: PICK.tables[0].bias.map(() => 'x')}],
+      },
+    ],
+  ])('is ignored when it has %s', (_, pick) => {
+    const start = weighStart('charts and cards', RANKED, RANKED[0], CATALOG, {
+      weights: {...WEIGHTS, pick},
+    });
+    expect(start).toBe(
+      weighStart('charts and cards', RANKED, RANKED[0], CATALOG, {
+        weights: WEIGHTS,
+      }),
+    );
+  });
+});
+
 describe('weighStart', () => {
   it('lets the word weights outvote the ranker', () => {
     const start = weighStart(

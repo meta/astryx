@@ -1,9 +1,11 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Word weights for `build`'s START (spec:AST-048): a checked-in table of
- * per-template word weights, blended with the page ranker's own scores, picks
- * the template an idea starts from.
+ * @file Word weights for `build`'s START (spec:AST-048): checked-in tables of
+ * per-template word weights, blended with the page ranker's own scores, pick
+ * the template an idea starts from. The call model (the file's top-level
+ * tables and blend) decides page or app shell; an optional pick model
+ * (`pick`) chooses which page once the call model calls a page.
  *
  * @input An idea, the ranker's output for it (`rankPages`, `pickStart`), the
  *   project's ready page templates, and the weights (`weights.json` beside this
@@ -21,6 +23,7 @@
 
 import {STOPWORDS} from '../../search/search.mjs';
 import {keywordUnits, keywordWordsFor} from './words.mjs';
+import {isWordModel} from './word-model.mjs';
 
 /** The app shell, as one candidate. */
 export const SHELL = 'SHELL';
@@ -161,7 +164,33 @@ export function weightWords(idea) {
  * @property {WeightTable[]} tables
  * @property {number[]} blend three numbers per member (the tables, in order,
  *   with the ranker second), then one for `SHELL`
+ * @property {{tables: WeightTable[], blend: number[]}} [pick] the pick
+ *   model: its own tables and blend numbers, used only to choose which page
+ *   starts once the call model (the top-level tables and blend) has called a
+ *   page. Without it, one model does both.
  */
+
+/**
+ * Whether the weights file carries a well-formed pick model. A malformed
+ * `pick` block is ignored, so one model then does both decisions.
+ * @param {WeightsFile} weights
+ * @returns {boolean}
+ */
+const hasPickModel = weights =>
+  isWordModel(weights.pick, weights.candidates.length);
+
+/**
+ * The pick model of a weights file: its `pick` tables and blend when present,
+ * else the file's own.
+ * @param {WeightsFile} weights
+ * @returns {WeightsFile}
+ */
+const pickModel = weights => {
+  const pick = weights.pick;
+  return pick && hasPickModel(weights)
+    ? {...weights, tables: pick.tables, blend: pick.blend}
+    : weights;
+};
 
 /**
  * A table's score for every candidate.
@@ -470,6 +499,30 @@ function fullerOfTie(name, idea, ranked, cands, catalog) {
 }
 
 /**
+ * The pick model's best ready, non-shell template, or null when it has none.
+ * @param {string} idea
+ * @param {import('./rank.mjs').RankedPage[]} ranked
+ * @param {import('./rank.mjs').RankedPage | null} pick
+ * @param {DescribedTemplate[]} catalog
+ * @param {WeightsFile} weights
+ * @returns {string | null}
+ */
+function bestPage(idea, ranked, pick, catalog, weights) {
+  const {cands, scores} = blend(
+    idea,
+    ranked,
+    pick,
+    catalog,
+    pickModel(weights),
+  );
+  let at = -1;
+  for (let c = 0; c < cands.length; c++) {
+    if (cands[c] !== SHELL && (at < 0 || scores[c] > scores[at])) at = c;
+  }
+  return at < 0 ? null : cands[at];
+}
+
+/**
  * Every ready, non-shell template in the blend's own order, best first: the
  * order the page start is chosen from, so the alternatives build names beside
  * the start come from the same ranking. Null without weights.
@@ -482,7 +535,13 @@ function fullerOfTie(name, idea, ranked, cands, catalog) {
  */
 export function blendOrder(idea, ranked, pick, catalog, weights) {
   if (!weights) return null;
-  const {cands, scores} = blend(idea, ranked, pick, catalog, weights);
+  const {cands, scores} = blend(
+    idea,
+    ranked,
+    pick,
+    catalog,
+    pickModel(weights),
+  );
   return cands
     .map((c, i) => ({c, s: scores[i], i}))
     .filter(x => x.c !== SHELL)
@@ -556,7 +615,8 @@ export function weighStart(
     return fullerOfTie(kept, idea, ranked, cands, catalog);
   }
   const top = best(() => true);
-  if (top !== SHELL) return top;
+  if (top !== SHELL)
+    return bestPage(idea, ranked, pick, catalog, weights) ?? top;
   // An idea that asks for a new page keeps the ranker's template rather than
   // the shell.
   if (newPage && kept) return kept;
@@ -564,8 +624,9 @@ export function weighStart(
 }
 
 /**
- * The blend's scores: the app shell's, and the best non-shell template with
- * its score and the runner-up's. Null without weights.
+ * The call model's scores: the app shell's, the best non-shell template's and
+ * the runner-up's, with the page to start from (the pick model's choice when
+ * the file has one, else the call model's best page). Null without weights.
  * @param {string} idea
  * @param {import('./rank.mjs').RankedPage[]} ranked
  * @param {import('./rank.mjs').RankedPage | null} pick
@@ -584,7 +645,9 @@ export function blendSummary(idea, ranked, pick, catalog, weights) {
   rest.sort((x, y) => y.score - x.score || x.i - y.i);
   return {
     shell,
-    best: rest[0]?.name ?? null,
+    best: hasPickModel(weights)
+      ? bestPage(idea, ranked, pick, catalog, weights)
+      : (rest[0]?.name ?? null),
     bestScore: rest[0]?.score ?? 0,
     secondScore: rest[1]?.score ?? 0,
   };
