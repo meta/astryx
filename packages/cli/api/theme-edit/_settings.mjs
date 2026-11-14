@@ -31,7 +31,10 @@ import {
   oneColorMode,
   themeBuildForReport,
 } from '../theme/build/build.mjs';
-import {namedFontFamilies} from '../theme/build/font-warning.mjs';
+import {
+  fontShorthandFamilyList,
+  namedFontFamilies,
+} from '../theme/build/font-warning.mjs';
 import {declarationValues} from '../../foundation/fonts/font-stylesheet.mjs';
 import {
   MODE_WORDS,
@@ -5924,10 +5927,11 @@ export const settingsThemeName = slug => `${slug}-settings`;
  * Why a theme's source cannot carry its settings, with the step that puts
  * it right; null when it carries them. The theme is the export a build of
  * the source reads, loaded as the build loads it: it must be named for the
- * theme, and the theme it extends (after every spread and repeated key)
- * must be the settings theme. Null for a source that does not parse (its
+ * theme, and the settings module's own export must be in the chain of
+ * themes it extends (after every spread and repeated key), the very object,
+ * not a theme named like it. Null for a source that does not parse (its
  * parse error is its own finding), and for one that imports the settings
- * but does not load (the build names that failure).
+ * but does not load (outputsDrift and the build report that).
  * @param {string} cwd
  * @param {string} slug
  * @returns {Promise<{problem: string, fix: string} | null>}
@@ -5959,11 +5963,23 @@ export async function themeSourceProblem(cwd, slug) {
     problem: `${slug}.theme.ts does not import ./${slug}.settings`,
     fix: putBack,
   };
-  /** @type {{theme: any, exportName: string, parent: any}} */
+  /** @type {{theme: any, exportName: string, extendsBase?: boolean}} */
   let loaded;
   try {
-    loaded = await loadThemeExport(f.ts, {cwd});
+    loaded = await loadThemeExport(f.ts, {
+      cwd,
+      // The settings module's own export, by identity: a theme merely
+      // named like it is not it.
+      base: {
+        file: path.join(f.dir, `${slug}.settings.ts`),
+        exportName: settings,
+        specifiers: ['', '.ts', '.js'].map(x => `./${slug}.settings${x}`),
+      },
+    });
   } catch {
+    // A source that does not load is the build's own finding
+    // (outputsDrift and every build report it); one that does not import
+    // the settings says that first.
     return importsSettings ? null : notImported;
   }
   if (loaded.theme?.name !== slug) {
@@ -5993,7 +6009,7 @@ export async function themeSourceProblem(cwd, slug) {
           fix: putBack,
         };
   }
-  if (loaded.parent?.name !== settingsThemeName(slug))
+  if (!loaded.extendsBase)
     return importsSettings
       ? {
           problem: `${slug}.theme.ts no longer extends ${settings}`,
@@ -6549,11 +6565,10 @@ export async function outputsDrift(ctx, slug) {
       ? `${name} was missing`
       : `${name} differs from what the settings build, after an edit by hand or by another tool`;
   } catch (e) {
-    // A theme source that does not load is named by its own checks; any
-    // other failure means the outputs could not be compared: built again.
+    // The outputs could not be compared (the source does not load, or
+    // anything else): the theme is built again, and a build that fails
+    // says why. Nothing records the source as built.
     const err = /** @type {any} */ (e);
-    if (err instanceof AstryxError && err.code === ERROR_CODES.ERR_THEME_LOAD)
-      return null;
     return `the outputs could not be checked (${String(err?.message ?? e)
       .split('\n')[0]
       .slice(0, 160)})`;
@@ -8336,7 +8351,7 @@ export function fontsourcePackageOf(family) {
 
 /**
  * The font families the theme's last build names (its `--font-family-*`
- * tokens and every part's `font-family`), by lowercase name; null before the
+ * tokens, every part's `font-family`, and a `font` shorthand's families), by lowercase name; null before the
  * theme has been built.
  * @param {Ctx} ctx
  * @param {string} slug
@@ -8352,12 +8367,13 @@ export function builtFontFamilies(ctx, slug) {
   }
   /** @type {Map<string, string>} */
   const out = new Map();
-  // Every family the build writes: the font tokens, and a part's own
-  // font-family.
-  for (const value of declarationValues(
-    css,
-    /^(--font-family-.*|font-family)$/,
-  ))
+  // Every family the build writes: the font tokens, a part's own
+  // font-family, and the families a `font` shorthand names last.
+  const lists = [
+    ...declarationValues(css, /^(--font-family-.*|font-family)$/),
+    ...declarationValues(css, /^font$/).map(fontShorthandFamilyList),
+  ];
+  for (const value of lists)
     for (const family of namedFontFamilies(value))
       if (!out.has(family.toLowerCase())) out.set(family.toLowerCase(), family);
   return out;

@@ -1651,7 +1651,7 @@ function appCopyTheme(root, file) {
  * copy.
  * @param {string} file the path as given
  * @param {string} cwd
- * @param {{check: boolean, upToDate?: boolean, out?: string}} opts
+ * @param {{check: boolean, upToDate?: boolean, out?: string, iconsSpecifier?: string}} opts
  *   `upToDate`: the check's own verdict on the theme's outputs
  * @returns {Promise<Record<string, unknown> | null>}
  */
@@ -1667,6 +1667,14 @@ export async function editorBuildExtra(file, cwd, opts) {
     const skipped = outSkipsCopy(root, slug, cwd, opts);
     if (skipped) return {appCopySkipped: skipped};
   }
+  // Every set and show builds the theme again from its source, without
+  // --icons-specifier: said, with the change that keeps it.
+  if (opts.iconsSpecifier && !opts.check)
+    return {
+      warnings: [
+        `${slug} is a theme the editor made: every set and show builds it again from themes/${slug}/${slug}.theme.ts without --icons-specifier, which puts the theme's own import of the registry back. To keep this one, import the registry from its package in ${slug}.theme.ts.`,
+      ],
+    };
   if (opts.check) {
     // A theme output that is stale is the check's own finding (it names
     // the file); the copy is compared only with a current build.

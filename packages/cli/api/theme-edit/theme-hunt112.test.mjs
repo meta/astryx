@@ -173,7 +173,7 @@ describe('fonts follow every family the build writes', () => {
     }
   }, 240_000);
 
-  it("compile names an editor theme's font package, in the runner form, in text and JSON", async () => {
+  it("compile names an editor theme's font package, in text and JSON", async () => {
     await themeEditNew('x10', {cwd});
     await themeEditSet('x10', 'font', 'geist', {cwd});
     const json = compileJson('themes/x10/x10.theme.ts');
