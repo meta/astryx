@@ -835,8 +835,7 @@ function settled(stamps) {
  * A summary of files and folders, made at once, kept as an entry beside the
  * gathers, in or out of a recorded run: the stored value while every path
  * `make` stamped has the stamp it was stored with (the CLI's own files are
- * covered by the build id instead: inCliBuild; an installed package's files,
- * by its own package.json: coveredStamps), else the one
+ * covered by the build id instead: inCliBuild), else the one
  * `make` gives now, which is stored unless a stamp is younger than
  * {@link SUMMARY_SETTLE_MS}. The folder, the build id, the Yarn Plug'n'Play
  * rule, the 0600 rename write and the eviction are those of a kept gather;
@@ -943,9 +942,9 @@ function storedSummary({file, entry}) {
 /**
  * Whether `file` is one of the installed CLI's own files: under its folder,
  * outside the node_modules folder inside it. A summary is kept only by an
- * installed CLI, under its build id (summaryAt), and an installed package's
- * files stay as published, so the build id covers them; a package placed in
- * that node_modules folder is not part of the build.
+ * installed CLI, under its build id (summaryAt), which names the exact code
+ * of that build, so the build id covers its files; a package placed in that
+ * node_modules folder is not part of the build.
  * @param {string} file
  * @returns {boolean}
  */
@@ -957,89 +956,19 @@ function inCliBuild(file) {
 }
 
 /**
- * The folder of the installed package `file` belongs to, or null: the
- * package folder right below the last node_modules folder on its path (a
- * scoped one included), when that folder's real path is inside a node_modules
- * folder too (a package manager placed it: npm's copy, pnpm's store entry)
- * and it holds a package.json. A package linked from elsewhere, such as a
- * workspace's own, is no installed package: its files keep their own stamps,
- * as do a node_modules folder's own entries (`.bin`, `.package-lock.json`).
- * @param {string} file
- * @param {Map<string, boolean>} installed - Each package folder's answer, kept
- *   for the call.
- * @returns {string | null}
- */
-function installedPackageOf(file, installed) {
-  const parts = file.split(path.sep);
-  const at = parts.lastIndexOf('node_modules');
-  if (at === -1) return null;
-  const name = parts[at + 1];
-  if (!name || name.startsWith('.')) return null;
-  const end = name.startsWith('@') ? at + 3 : at + 2;
-  if (parts.length < end) return null;
-  const root = parts.slice(0, end).join(path.sep);
-  let isInstalled = installed.get(root);
-  if (isInstalled === undefined) {
-    isInstalled = withoutRecording(() => {
-      try {
-        return (
-          fs.realpathSync(root).split(path.sep).includes('node_modules') &&
-          fs.statSync(path.join(root, 'package.json')).isFile()
-        );
-      } catch {
-        return false;
-      }
-    });
-    installed.set(root, isInstalled);
-  }
-  return isInstalled ? root : null;
-}
-
-/**
- * `stamps`, with each file and folder of an installed package
- * (installedPackageOf) left out and that package's package.json stamped in
- * their place: a package manager rewrites it whenever it installs, upgrades
- * or reinstalls the package, and leaves the package's other files as
- * published, so its stamp stands for the package's name, version and
- * contents. The package.json stamp is taken now; the summary is stored only
- * once every stamp has settled.
- * @param {[string, string][]} stamps
- * @returns {[string, string][]}
- */
-function coveredStamps(stamps) {
-  /** @type {Map<string, boolean>} */
-  const installed = new Map();
-  /** @type {Set<string>} */
-  const packages = new Set();
-  /** @type {[string, string][]} */
-  const kept = [];
-  for (const stamp of stamps) {
-    const root = installedPackageOf(stamp[0], installed);
-    if (root === null) kept.push(stamp);
-    else packages.add(root);
-  }
-  for (const root of packages) {
-    const manifest = path.join(root, 'package.json');
-    kept.push([manifest, withoutRecording(() => fileStamp(manifest))]);
-  }
-  return kept;
-}
-
-/**
  * Keep `value` at `at` with its stamps, unless a stamp is too young or the
  * value does not read back the same. Silent on any failure. A file in jiti's
  * cache is not kept as a stamp, as for a kept gather (inJitiCache), nor is
  * one of the CLI's own files: the build id in the summary's key covers them
- * (inCliBuild), so a new build makes the summary again. An installed package
- * is kept by its package.json alone (coveredStamps).
+ * (inCliBuild), so a new build makes the summary again. Every other file,
+ * an installed package's included, keeps its own stamp: an edit in place
+ * makes the summary again.
  * @param {{dir: string, file: string, entry: string}} at
  * @param {unknown} value
  * @param {[string, string][]} made the stamps the summary was made with
  */
 function storeSummary({dir, file, entry}, value, made) {
-  const stamps = coveredStamps(
-    made.filter(([at]) => !inJitiCache(at) && !inCliBuild(at)),
-  );
+  const stamps = made.filter(([at]) => !inJitiCache(at) && !inCliBuild(at));
   if (!settled(stamps)) return;
   withoutRecording(() => {
     try {

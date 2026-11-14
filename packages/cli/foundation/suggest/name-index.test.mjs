@@ -2,13 +2,14 @@
 
 /**
  * @file The not-found hint's one name index: a project's first miss makes
- * the kept gathers' folder and keeps the index there, later misses reuse it,
- * adding, renaming or removing a doc, a template or an integration shows in
- * the very next hint, a new CLI build makes it again, and an installed
- * package (Core, an integration) is kept by its package.json (an upgrade or
- * reinstall makes it again) while a linked one is stamped file by file. The index is kept
- * only by an installed CLI with a build id, so the CLI's root is set to an
- * installed-looking folder with one.
+ * the kept gathers' folder in the per-user cache folder, never in the
+ * project, and keeps the index there; later misses read it back; adding,
+ * renaming or removing a doc, a template or an integration shows in the very
+ * next hint; a new CLI build makes it again; every file of a package,
+ * installed or linked, keeps its own stamp, so an edit in place shows at
+ * once; and a folder that cannot be made or written leaves the hint as it is.
+ * The index is kept only by an installed CLI with a build id, so the CLI's
+ * root is set to an installed-looking folder with one.
  *
  * @input a project whose one integration ships a component, a template and a
  *   docs topic
@@ -176,6 +177,37 @@ const keptIndexes = () =>
     : 0;
 
 /**
+ * The kept name index whose key holds `part`: its file and inode. A read-back
+ * touches the file in place; storing writes a new file over it by a rename,
+ * so an unchanged inode means the last miss read the index back.
+ * @param {string} part
+ * @returns {{file: string, ino: number}}
+ */
+const keptIndex = part => {
+  const files = fs
+    .readdirSync(STORE)
+    .filter(name => name.startsWith('gather-') && name.endsWith('.json'))
+    .map(name => path.join(STORE, name))
+    .filter(file => {
+      const entry = JSON.parse(fs.readFileSync(file, 'utf8'));
+      const key = JSON.stringify(entry.key);
+      return entry.summary && key.includes('hint-names') && key.includes(part);
+    });
+  expect(files).toHaveLength(1);
+  return {file: files[0], ino: fs.statSync(files[0]).ino};
+};
+
+/**
+ * Every path under `dir`, by path from it, sorted.
+ * @param {string} dir
+ * @returns {string[]}
+ */
+const treeOf = dir =>
+  /** @type {string[]} */ (fs.readdirSync(dir, {recursive: true}))
+    .map(String)
+    .sort();
+
+/**
  * The hint `astryx hook <name>` gives, with the integrations as they are on
  * the disk now, or with `integrations` when given.
  * @param {string} name
@@ -199,14 +231,25 @@ describe('the name index', () => {
     'makes the kept folder on the first miss and keeps one index there',
     async () => {
       expect(fs.existsSync(STORE)).toBe(false);
+      const projectTree = treeOf(project);
       await sleep(SETTLE_WAIT_MS);
       expect(await hint('GlintCard')).toBe('astryx component GlintCard');
+      // The folder is the per-user cache folder's own; the project is as it
+      // was.
       expect(fs.statSync(STORE).mode & 0o777).toBe(0o700);
+      expect(treeOf(CACHE)).toEqual(
+        expect.arrayContaining(['astryx', path.join('astryx', 'catalogs')]),
+      );
+      expect(treeOf(project)).toEqual(projectTree);
       expect(keptIndexes()).toBe(1);
+      // The second miss reads the index back.
+      const kept = keptIndex(project);
+      expect(await hint('zorbletwobble')).toBeNull();
+      expect(keptIndex(project).ino).toBe(kept.ino);
       // A later miss, of any name, reads the same index.
       expect(await hint('glint-guide')).toBe('astryx docs glint-guide');
-      expect(await hint('zorbletwobble')).toBeNull();
       expect(keptIndexes()).toBe(1);
+      expect(treeOf(project)).toEqual(projectTree);
     },
     SLOW,
   );
@@ -263,7 +306,7 @@ describe('the name index', () => {
   );
 
   it(
-    "keeps an installed Core by its package.json, and a linked Core's files each",
+    'stamps each file of an installed Core, as of a linked one',
     async () => {
       const {hintNameIndex} = await import('./name-index.mjs');
       /**
@@ -315,21 +358,18 @@ describe('the name index', () => {
       expect((await hintNameIndex(project, installed, [])).core).toContain(
         'tglimmer',
       );
-      const stamped = keptPaths(installed);
-      expect(stamped).toContain(path.join(installed, 'package.json'));
       expect(
-        stamped.filter(at => at.startsWith(path.join(installed, 'src'))),
-      ).toEqual([]);
+        keptPaths(installed).filter(at =>
+          at.startsWith(path.join(installed, 'src')),
+        ),
+      ).not.toEqual([]);
 
-      // A Core upgrade rewrites its package.json: the index is made again.
+      // A folder added in place, with no reinstall and the same
+      // package.json, shows at once.
       fs.mkdirSync(path.join(installed, 'src', 'Sparkle'));
       fs.writeFileSync(
         path.join(installed, 'src', 'Sparkle', 'Sparkle.tsx'),
         'export function Sparkle() { return null; }\n',
-      );
-      fs.writeFileSync(
-        path.join(installed, 'package.json'),
-        JSON.stringify({name: '@astryxdesign/core', version: '1.1.0'}),
       );
       expect((await hintNameIndex(project, installed, [])).core).toContain(
         'tsparkle',
@@ -356,7 +396,7 @@ describe('the name index', () => {
   );
 
   it(
-    'keeps an installed integration by its package.json: a reinstall shows an edit',
+    'shows an in-place edit of an installed integration at once, then reads the new index back',
     async () => {
       const {hintNameIndex} = await import('./name-index.mjs');
       const docs = path.join(project, 'node_modules', '@acme', 'shiny', 'docs');
@@ -378,18 +418,70 @@ describe('the name index', () => {
         ).docs[0].map(entry => entry.declared?.name);
       await sleep(SETTLE_WAIT_MS);
       expect(await names()).toEqual(['shiny-guide']);
-      // An edit in place, with no reinstall, keeps the kept index.
+      const first = keptIndex(docs);
+      expect(JSON.parse(fs.readFileSync(first.file, 'utf8')).stamps).toEqual(
+        expect.arrayContaining([
+          [path.join(docs, 'shiny-guide.doc.mjs'), expect.any(String)],
+        ]),
+      );
+      // The second miss reads it back.
+      expect(await names()).toEqual(['shiny-guide']);
+      expect(keptIndex(docs).ino).toBe(first.ino);
+      // An edit in place, with no reinstall and the same package.json, shows
+      // at once.
       fs.writeFileSync(
         path.join(docs, 'shiny-guide.doc.mjs'),
         doc('glossy-guide'),
       );
-      expect(await names()).toEqual(['shiny-guide']);
-      // A reinstall rewrites its package.json: the index is made again.
-      fs.writeFileSync(
-        manifest,
-        JSON.stringify({name: '@acme/shiny', version: '1.0.1'}),
-      );
       expect(await names()).toEqual(['glossy-guide']);
+      // Once its stamps settle, the new index is kept and read back.
+      await sleep(SETTLE_WAIT_MS);
+      expect(await names()).toEqual(['glossy-guide']);
+      const remade = keptIndex(docs);
+      expect(remade.ino).not.toBe(first.ino);
+      expect(await names()).toEqual(['glossy-guide']);
+      expect(keptIndex(docs).ino).toBe(remade.ino);
+    },
+    SLOW,
+  );
+
+  it(
+    'answers as before when the folder cannot be made',
+    async () => {
+      const blocked = path.join(TEMP_ROOT, 'blocked-cache');
+      // A file where the cache folder would go: nothing can be made under it.
+      fs.writeFileSync(blocked, '');
+      process.env.XDG_CACHE_HOME = blocked;
+      try {
+        const projectTree = treeOf(project);
+        expect(await hint('GlintCard')).toBe('astryx component GlintCard');
+        expect(await hint('zorbletwobble')).toBeNull();
+        expect(fs.statSync(blocked).isFile()).toBe(true);
+        expect(treeOf(project)).toEqual(projectTree);
+      } finally {
+        process.env.XDG_CACHE_HOME = CACHE;
+      }
+    },
+    SLOW,
+  );
+
+  it.skipIf(process.getuid?.() === 0)(
+    'answers as before when the folder cannot be written',
+    async () => {
+      const readOnly = path.join(TEMP_ROOT, 'read-only-cache');
+      const store = path.join(readOnly, 'astryx', 'catalogs');
+      fs.mkdirSync(store, {recursive: true, mode: 0o700});
+      fs.chmodSync(store, 0o500);
+      process.env.XDG_CACHE_HOME = readOnly;
+      try {
+        await sleep(SETTLE_WAIT_MS);
+        expect(await hint('GlintCard')).toBe('astryx component GlintCard');
+        expect(await hint('zorbletwobble')).toBeNull();
+        expect(fs.readdirSync(store)).toEqual([]);
+      } finally {
+        fs.chmodSync(store, 0o700);
+        process.env.XDG_CACHE_HOME = CACHE;
+      }
     },
     SLOW,
   );

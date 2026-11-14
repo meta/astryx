@@ -39,9 +39,13 @@ export function resolveCoreDir(cwd) {
 
 /**
  * Resolve a single hook's authored doc by name, or throw ERR_UNKNOWN_HOOK with
- * fuzzy (levenshtein) suggestions, led by the command that reads a component,
- * template or docs topic of exactly that name when one exists. Shared by the detail and detail.params
- * leaves, which both start from a resolved hook doc.
+ * fuzzy (levenshtein) suggestions. When the name matches a component,
+ * template or docs topic exactly, folded or by its last segment, the
+ * suggestions also hold the command that reads it: right after the
+ * suggestions that match the name at its tier or a better one
+ * (foundation/suggest/other-command.mjs withOtherCommand), the list keeping
+ * its length. Shared by the detail and detail.params leaves, which both start
+ * from a resolved hook doc.
  * @param {string} coreDir
  * @param {string} name
  * @param {{zh?: boolean, lang?: string|null, cwd?: string}} [opts]

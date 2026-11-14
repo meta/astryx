@@ -398,7 +398,9 @@ works on is `spec:AST-040` FR9's.
     folder only the user can
     reach (made `0700` by the first run that keeps a gather: `search` or
     `build`, or another of those commands where an integration can load,
-    never `doctor`; that run keeps its gathers at once; used only while it is
+    never `doctor`; that run keeps its gathers at once; a lookup command's
+    not-found path may create the per-user catalogs folder to keep its name
+    index; used only while it is
     a real folder the user owns and others cannot open, never where the
     system has no user ids), each
     kept value used only while every input its gather read is unchanged; a

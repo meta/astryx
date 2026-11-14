@@ -55,6 +55,10 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     expect(plain).toContain(
       "the lookup commands' not-found hint's name summaries",
     );
+    // The row names the one other command that can make the folder.
+    expect(plain).toContain(
+      "A lookup command's not-found path may create the folder to keep its name index.",
+    );
     // The bound on the folder, and on jiti's folder beside it.
     expect(plain).toContain('at most 64 MB');
     expect(plain).toContain(path.join(tmp, 'astryx', 'jiti'));

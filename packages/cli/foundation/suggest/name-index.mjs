@@ -9,9 +9,9 @@
  * gathers' store under one stamp set: every folder it listed and every file
  * it read. While all of them keep their stamps, a miss reads the index and
  * stats those paths, and nothing else. The CLI's own files are covered by its
- * build id, and each installed package's (Core's, an integration's, a
- * dependency's) by its package.json; a linked package keeps a stamp of each
- * file (gather-cache.mjs).
+ * build id; every other file, an installed package's (Core's, an
+ * integration's, a dependency's) included, keeps its own stamp
+ * (gather-cache.mjs).
  *
  * @input Core's folder, the integrations the project loads, the CLI's own
  *   folders
