@@ -14,12 +14,23 @@ import {spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import {fileURLToPath, pathToFileURL} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {render} from '../api/render/render.mjs';
-import {readSourceBlock, recordedText, renderedHeadOf, renderedMarkupOf} from '../foundation/render/source-block.mjs';
+import {
+  readSourceBlock,
+  recordedText,
+  renderedHeadOf,
+  renderedMarkupOf,
+} from '../foundation/render/source-block.mjs';
 import {template} from '../api/template/template.mjs';
 import {ensureBuiltOnce} from '../clients/cli/commands/ensure-core-built.mjs';
 import {makeLinkedFixture, removeLinkedFixture} from './linked-fixture.mjs';
+
+/** The preload that gives a page process a fixed clock. */
+const FIXED_CLOCK = fileURLToPath(
+  new URL('./fixed-clock.mjs', import.meta.url),
+);
 
 /**
  * Builds a theme package's dist when it has none. Slices run in parallel
@@ -58,37 +69,59 @@ function buildThemeOnce(themeDir) {
  * @returns {Promise<string | null>}
  */
 async function roundTrip(home, id) {
-  const html = fs.readFileSync(path.join(home, 'templates', id, 'page.html'), 'utf8');
+  const html = fs.readFileSync(
+    path.join(home, 'templates', id, 'page.html'),
+    'utf8',
+  );
   const block = readSourceBlock(html);
-  if (!block.found || !('source' in block)) return 'the rendered file has no embedded source';
+  if (!block.found || !('source' in block))
+    return 'the rendered file has no embedded source';
   const {source} = block;
   const back = /** @type {any} */ (
-    await render(`templates/${id}/page.html`, {cwd: home, reverse: true, out: `back/${id}/page.tsx`})
+    await render(`templates/${id}/page.html`, {
+      cwd: home,
+      reverse: true,
+      out: `back/${id}/page.tsx`,
+    })
   ).data;
-  if (back.mode !== 'embedded' || back.exact !== true || back.edited !== false) {
+  if (
+    back.mode !== 'embedded' ||
+    back.exact !== true ||
+    back.edited !== false
+  ) {
     return `reverse: mode ${back.mode}, exact ${back.exact}, edited ${back.edited}`;
   }
   for (const [i, f] of source.files.entries()) {
     const written = fs.readFileSync(path.join(home, back.files[i]));
-    if (!written.equals(Buffer.from(f.base64, 'base64'))) return `reverse: ${back.files[i]} differs from the embedded ${f.path}`;
+    if (!written.equals(Buffer.from(f.base64, 'base64')))
+      return `reverse: ${back.files[i]} differs from the embedded ${f.path}`;
   }
   const page = fs.readFileSync(path.join(home, 'templates', id, 'page.tsx'));
-  if (!page.equals(fs.readFileSync(path.join(home, back.output)))) return 'reverse: the page differs from the template source';
+  if (!page.equals(fs.readFileSync(path.join(home, back.output))))
+    return 'reverse: the page differs from the template source';
   // A hand edit of one run of text in the markup is reported, and names the
   // old text. The run is one that appears once in the markup, edited there.
   const markup = renderedMarkupOf(html) ?? '';
   const runs = source.markup ? (recordedText(source.markup)?.runs ?? []) : [];
   const run = runs.find(r => markup.split(r).length === 2);
-  if (!run) return 'edit: no run of text appears exactly once in the markup, so no hand edit was tried';
+  if (!run)
+    return 'edit: no run of text appears exactly once in the markup, so no hand edit was tried';
   const at = html.indexOf(markup);
   fs.writeFileSync(
     path.join(home, 'templates', id, 'edited.html'),
     `${html.slice(0, at)}${markup.replace(run, `${run} (edited)`)}${html.slice(at + markup.length)}`,
   );
   const edited = /** @type {any} */ (
-    await render(`templates/${id}/edited.html`, {cwd: home, reverse: true, out: `edited/${id}/page.tsx`})
+    await render(`templates/${id}/edited.html`, {
+      cwd: home,
+      reverse: true,
+      out: `edited/${id}/page.tsx`,
+    })
   ).data;
-  if (edited.edited !== true || !edited.edits?.some((/** @type {any} */ e) => e.was === run)) {
+  if (
+    edited.edited !== true ||
+    !edited.edits?.some((/** @type {any} */ e) => e.was === run)
+  ) {
     return `edit: ${JSON.stringify(run)} changed, reported edited ${edited.edited} with ${JSON.stringify(edited.edits)}`;
   }
   /** @param {string} page @param {string} out */
@@ -96,20 +129,18 @@ async function roundTrip(home, id) {
     await render(page, {cwd: home, out});
     return fs.readFileSync(path.join(home, out), 'utf8');
   };
-  let again = await markupOf(`back/${id}/page.tsx`, `back/${id}/page.html`);
-  if (renderedMarkupOf(again) !== renderedMarkupOf(html)) {
-    // The markup is compared only where the original renders it the same
-    // from one render to the next: a page that shows the time, or anything
-    // else that changes, cannot be, and its files and styles still are.
-    const before = renderedMarkupOf(await markupOf(`templates/${id}/page.tsx`, `templates/${id}/before.html`));
-    again = await markupOf(`back/${id}/page.tsx`, `back/${id}/page.html`);
-    const after = renderedMarkupOf(await markupOf(`templates/${id}/page.tsx`, `templates/${id}/after.html`));
-    if (before === after && renderedMarkupOf(again) !== before) return 'render again: the markup differs';
-  }
+  const again = await markupOf(`back/${id}/page.tsx`, `back/${id}/page.html`);
+  if (renderedMarkupOf(again) !== renderedMarkupOf(html))
+    return 'render again: the markup differs';
   const againBlock = readSourceBlock(again);
-  if (renderedHeadOf(again).style !== renderedHeadOf(html).style) return 'render again: the styles differ';
-  const sums = (/** @type {any} */ b) => ('source' in b ? b.source.files.map((/** @type {any} */ f) => f.sha256).join() : '');
-  if (sums(againBlock) !== sums(block)) return 'render again: the carried files differ';
+  if (renderedHeadOf(again).style !== renderedHeadOf(html).style)
+    return 'render again: the styles differ';
+  const sums = (/** @type {any} */ b) =>
+    'source' in b
+      ? b.source.files.map((/** @type {any} */ f) => f.sha256).join()
+      : '';
+  if (sums(againBlock) !== sums(block))
+    return 'render again: the carried files differ';
   return null;
 }
 
@@ -187,20 +218,34 @@ export function describeTemplateSlice(slice, count) {
         );
       /** @type {string[]} */
       const failed = [];
-      for (let i = 0; i < ids.length; i += 4) {
-        await Promise.all(
-          ids.slice(i, i + 4).map(async id => {
-            try {
-              await render(`templates/${id}/page.tsx`, {cwd: home});
-              const problem = await roundTrip(home, id);
-              if (problem) failed.push(`${id}: ${problem}`);
-            } catch (e) {
-              failed.push(
-                `${id}: ${/** @type {any} */ (e).code} ${/** @type {any} */ (e).message}`,
-              );
-            }
-          }),
-        );
+      // Every page process the renders start reads one fixed clock, so a
+      // page that shows the time renders the same markup each time.
+      const nodeOptions = process.env.NODE_OPTIONS;
+      process.env.NODE_OPTIONS = [
+        nodeOptions,
+        `--import=${pathToFileURL(FIXED_CLOCK).href}`,
+      ]
+        .filter(Boolean)
+        .join(' ');
+      try {
+        for (let i = 0; i < ids.length; i += 4) {
+          await Promise.all(
+            ids.slice(i, i + 4).map(async id => {
+              try {
+                await render(`templates/${id}/page.tsx`, {cwd: home});
+                const problem = await roundTrip(home, id);
+                if (problem) failed.push(`${id}: ${problem}`);
+              } catch (e) {
+                failed.push(
+                  `${id}: ${/** @type {any} */ (e).code} ${/** @type {any} */ (e).message}`,
+                );
+              }
+            }),
+          );
+        }
+      } finally {
+        if (nodeOptions === undefined) delete process.env.NODE_OPTIONS;
+        else process.env.NODE_OPTIONS = nodeOptions;
       }
       expect(failed).toEqual([]);
     }, 900_000);
