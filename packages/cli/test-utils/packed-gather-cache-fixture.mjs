@@ -319,8 +319,40 @@ export function templatesEntries(tmp) {
 }
 
 /**
+ * Whether a kept file holds the CLI's own docs tree inputs, not a catalog.
+ * @param {string} file
+ * @returns {boolean}
+ */
+export function docsTreeEntry(file) {
+  try {
+    const {key} = readKept(file);
+    return JSON.parse(key)[5] === 'docs-tree-inputs';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The kept CLI docs tree inputs in a temp folder's cache folder.
+ * @param {string} tmp
+ * @returns {Map<string, number>} name to inode
+ */
+export function docsTreeEntries(tmp) {
+  const dir = path.join(tmp, CACHE_NAME);
+  /** @type {Map<string, number>} */
+  const out = new Map();
+  if (!fs.existsSync(dir)) return out;
+  for (const name of fs.readdirSync(dir)) {
+    const file = path.join(dir, name);
+    if (docsTreeEntry(file)) out.set(name, fs.statSync(file).ino);
+  }
+  return out;
+}
+
+/**
  * The kept catalogs in a temp folder's cache: each file's inode and time
- * (a value derived from a catalog, search's entry table, is not a catalog).
+ * (a value derived from a catalog, search's entry table, is not a catalog;
+ * nor is the CLI's own docs tree, which every project shares).
  * @param {string} tmp
  * @returns {Map<string, {ino: number, mtimeMs: number}>}
  */
@@ -331,7 +363,12 @@ export function entries(tmp) {
   if (!fs.existsSync(dir)) return out;
   for (const name of fs.readdirSync(dir)) {
     const file = path.join(dir, name);
-    if (derivedEntry(file) || issuesEntry(file) || templatesEntry(file))
+    if (
+      derivedEntry(file) ||
+      issuesEntry(file) ||
+      templatesEntry(file) ||
+      docsTreeEntry(file)
+    )
       continue;
     const {ino, mtimeMs} = fs.statSync(file);
     out.set(name, {ino, mtimeMs});
