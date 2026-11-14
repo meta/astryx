@@ -786,6 +786,70 @@ describe('useOverflow when the observer reports a resize (component:OverflowList
     }
   });
 
+  it('measures each of two lists on one parent when only one of them measured the new width', async () => {
+    const parent = document.createElement('div');
+    let contentWidth = 160;
+    Object.defineProperty(parent, 'clientWidth', {get: () => contentWidth});
+    parent.getBoundingClientRect = () => ({width: 160, height: 60}) as DOMRect;
+    const boxA = document.createElement('div');
+    const boxB = document.createElement('div');
+    parent.append(boxA, boxB);
+    document.body.appendChild(parent);
+    vi.stubGlobal('getComputedStyle', () => ({
+      paddingLeft: '0px',
+      paddingRight: '0px',
+    }));
+    try {
+      const listA = renderHook(() =>
+        useOverflow(4, {gap: 10, behavior: 'observeParent'}),
+      );
+      const listB = renderHook(() =>
+        useOverflow(4, {gap: 10, behavior: 'observeParent'}),
+      );
+      await act(async () => {
+        listA.result.current.measureRef(mockMeasure([50, 50, 50, 50], 30));
+        listA.result.current.containerRef(boxA);
+        listB.result.current.measureRef(mockMeasure([50, 50, 50, 50], 30));
+        listB.result.current.containerRef(boxB);
+      });
+      expect(listA.result.current.visibleCount).toBe(2);
+      expect(listB.result.current.visibleCount).toBe(2);
+
+      // The parent narrows. A commit re-measures list A only, before the
+      // browser reports the new width.
+      contentWidth = 100;
+      await act(async () => {
+        listA.result.current.measureRef(mockMeasure([50, 50, 50, 50], 30));
+      });
+      expect(listA.result.current.visibleCount).toBe(1);
+      expect(listB.result.current.visibleCount).toBe(2);
+
+      const actGlobal = globalThis as {IS_REACT_ACT_ENVIRONMENT?: boolean};
+      const wasActEnvironment = actGlobal.IS_REACT_ACT_ENVIRONMENT;
+      actGlobal.IS_REACT_ACT_ENVIRONMENT = false;
+      try {
+        latestObserverCallback?.(
+          [
+            {
+              target: parent,
+              borderBoxSize: [{inlineSize: 160, blockSize: 60}],
+              contentBoxSize: [{inlineSize: 100, blockSize: 60}],
+            } as unknown as ResizeObserverEntry,
+          ],
+          {} as ResizeObserver,
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+      } finally {
+        actGlobal.IS_REACT_ACT_ENVIRONMENT = wasActEnvironment;
+      }
+      // List B never measured the narrow parent, so the report measures it.
+      expect(listB.result.current.visibleCount).toBe(1);
+    } finally {
+      parent.remove();
+    }
+  });
+
   it('renders after paint when a multi-row fold changes the rows the list fills', async () => {
     const {result} = renderHook(() => useOverflow(6, {gap: 10, maxRows: 2}));
     const box = resizableBox(120);

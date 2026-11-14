@@ -64,7 +64,9 @@ Consumer syntax and examples belong in `OverflowList.doc.mjs`.
 - Migration decision: test timing only: a test that fires a mocked
   ResizeObserver callback awaits the update before asserting, and a test that
   asserts right after a synchronous render awaits one microtask first (FR7),
-  for example with `await act(async () => {})`; no API changes.
+  for example with `await act(async () => {})`. Under fake timers that also
+  fake `queueMicrotask`, the test flushes them too, for example with
+  `vi.runAllTicks()`. No API changes.
 
 Consumer migration instructions belong in consumer docs and release notes.
 

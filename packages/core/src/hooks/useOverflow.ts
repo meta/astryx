@@ -141,7 +141,9 @@ function measurePending(): void {
 }
 
 /**
- * The size of each observed element that its list last measured from:
+ * The size of each element that a list observes, as that list last measured
+ * from it. Each list keeps its own record, because lists that share an
+ * observed parent do not all measure in the same commit:
  * - `'border'`: the element's border box, for the list's own box and its
  *   measure copy.
  * - `'content'`: the width of the parent's content box, for a list that
@@ -151,19 +153,19 @@ type MeasuredSize =
   | {box: 'border'; width: number; height: number}
   | {box: 'content'; width: number};
 
-const measuredSizes = new WeakMap<Element, MeasuredSize>();
+type MeasuredSizes = WeakMap<Element, MeasuredSize>;
 
 /**
  * Records the border box of an element that a list observes, as the list
  * measures. The list reads its layout at the same time, so the layout is
  * current and the read costs no extra layout.
  */
-function recordBorderBox(element: Element | null): void {
+function recordBorderBox(sizes: MeasuredSizes, element: Element | null): void {
   if (element == null || typeof element.getBoundingClientRect !== 'function') {
     return;
   }
   const {width, height} = element.getBoundingClientRect();
-  measuredSizes.set(element, {box: 'border', width, height});
+  sizes.set(element, {box: 'border', width, height});
 }
 
 /**
@@ -172,8 +174,11 @@ function recordBorderBox(element: Element | null): void {
  * such a report for each element it starts to observe, after the list's first
  * measurement has rendered.
  */
-function isMeasuredSize(entry: ResizeObserverEntry): boolean {
-  const recorded = measuredSizes.get(entry.target);
+function isMeasuredSize(
+  sizes: MeasuredSizes,
+  entry: ResizeObserverEntry,
+): boolean {
+  const recorded = sizes.get(entry.target);
   if (recorded == null) {
     return false;
   }
@@ -200,10 +205,14 @@ function isMeasuredSize(entry: ResizeObserverEntry): boolean {
  * React commits the ref, so it counts as a commit. A later report of the
  * size the list measured changes nothing, so it measures nothing.
  */
-function observeForOverflow(element: Element, measure: Measure): () => void {
+function observeForOverflow(
+  element: Element,
+  measure: Measure,
+  sizes: MeasuredSizes,
+): () => void {
   let isRegistering = true;
   const unobserve = observeResize(element, entry => {
-    if (!isRegistering && isMeasuredSize(entry)) {
+    if (!isRegistering && isMeasuredSize(sizes, entry)) {
       return;
     }
     scheduleMeasure(measure, isRegistering ? 'commit' : 'resize');
@@ -383,6 +392,7 @@ export function useOverflowInternal(
   const observeParent = behavior === 'observeParent';
 
   const [visibleCount, setVisibleCount] = useState(itemCount);
+  const [measuredSizes] = useState<MeasuredSizes>(() => new WeakMap());
   const [rows, setRows] = useState(1);
   const [rowHeight, setRowHeight] = useState(0);
   // The values last written to state. A measurement that matches them writes
@@ -439,9 +449,9 @@ export function useOverflowInternal(
         measuredSizes.set(parent, {box: 'content', width: availableWidth});
       } else {
         availableWidth = container.offsetWidth;
-        recordBorderBox(container);
+        recordBorderBox(measuredSizes, container);
       }
-      recordBorderBox(measure);
+      recordBorderBox(measuredSizes, measure);
 
       const allChildren = Array.from(measure.children) as HTMLElement[];
 
@@ -543,6 +553,7 @@ export function useOverflowInternal(
       collapseFrom,
       observeParent,
       apply,
+      measuredSizes,
     ],
   );
 
@@ -574,11 +585,12 @@ export function useOverflowInternal(
         unobserveContainerRef.current = observeForOverflow(
           target,
           measureLatest,
+          measuredSizes,
         );
         observedElRef.current = target;
       }
     },
-    [measureLatest, observeParent],
+    [measureLatest, measuredSizes, observeParent],
   );
 
   const measureRef = useCallback(
@@ -592,10 +604,14 @@ export function useOverflowInternal(
         return;
       }
 
-      unobserveMeasureRef.current = observeForOverflow(el, measureLatest);
+      unobserveMeasureRef.current = observeForOverflow(
+        el,
+        measureLatest,
+        measuredSizes,
+      );
       observedMeasureElRef.current = el;
     },
-    [measureLatest],
+    [measureLatest, measuredSizes],
   );
 
   // Syncs the visible count with the rendered layout. It measures again after
