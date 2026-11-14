@@ -340,7 +340,8 @@ export function runConfigCodemod(
  * A codemod as `upgrade` runs it. Core codemods may also declare `mentions`,
  * internal to the CLI and not part of the codemod authoring type: the words a
  * file must say for the transform to change or report it. A file that says
- * none of them, holds no backslash, and parses, is skipped.
+ * none of them and parses is skipped, unless it holds a backslash and its
+ * escapes or numeric character references spell one of them.
  * @typedef {import('../../authoring/codemod/type').CodemodEntry['codemod'] & {mentions?: string[]}} CoreCodemod
  */
 
@@ -353,11 +354,68 @@ export function runConfigCodemod(
 const parsedOnce = new Map();
 
 /**
+ * What the escapes of a file with a backslash can spell, by file, while its
+ * text is the same: each file is decoded once for every codemod that reads it.
+ * @type {Map<string, {source: string, spelled: string[]}>}
+ */
+const spelledOnce = new Map();
+
+/**
+ * One JavaScript escape: `\u{…}`, `\uXXXX`, `\xXX`, a legacy octal escape, a
+ * line continuation, or any other escaped character.
+ */
+const JS_ESCAPE =
+  /\\(?:u\{([0-9a-fA-F]+)\}|u([0-9a-fA-F]{4})|x([0-9a-fA-F]{2})|([0-3][0-7]{0,2}|[4-7][0-7]?)|(\r\n|[\n\r\u2028\u2029])|([\s\S]))/g;
+
+/** One numeric character reference, which JSX text and attributes decode. */
+const NUMERIC_REFERENCE = /&#(?:[xX]([0-9a-fA-F]+)|([0-9]+));?/g;
+
+/** @type {Record<string, string>} */
+const CONTROL_ESCAPES = {b: '\b', f: '\f', n: '\n', r: '\r', t: '\t', v: '\v'};
+
+/** @param {number} code */
+const fromCode = code => (code <= 0x10ffff ? String.fromCodePoint(code) : '');
+
+/**
+ * The texts that a file's escapes spell: the source with every JavaScript
+ * escape decoded (in strings, templates and identifiers, and line
+ * continuations), and the source with every numeric character reference
+ * decoded (in JSX). A word that the file spells with an escape is in one of
+ * them.
+ * @param {string} source
+ * @param {string} filePath
+ * @returns {string[]}
+ */
+function spelledTexts(source, filePath) {
+  let known = spelledOnce.get(filePath);
+  if (known?.source !== source) {
+    const escapes = source.replace(
+      JS_ESCAPE,
+      (_, brace, u4, x2, octal, lineEnd, other) => {
+        if (brace !== undefined) return fromCode(parseInt(brace, 16));
+        if (u4 !== undefined) return String.fromCharCode(parseInt(u4, 16));
+        if (x2 !== undefined) return String.fromCharCode(parseInt(x2, 16));
+        if (octal !== undefined) return String.fromCharCode(parseInt(octal, 8));
+        if (lineEnd !== undefined) return '';
+        return CONTROL_ESCAPES[other] ?? other;
+      },
+    );
+    const references = source.replace(NUMERIC_REFERENCE, (_, hex, decimal) =>
+      fromCode(hex !== undefined ? parseInt(hex, 16) : parseInt(decimal, 10)),
+    );
+    known = {source, spelled: [escapes, references]};
+    spelledOnce.set(filePath, known);
+  }
+  return known.spelled;
+}
+
+/**
  * Whether a codemod cannot change a source file, so its transform need not
  * run (stylesheets always run, whatever they parse as): the
  * codemod declares every word a file must say for it to act (`mentions`), the
- * file says none of them and holds no backslash (no escape can spell one),
- * and the file parses, so the transform would neither
+ * file says none of them (a file with a backslash, not even through its
+ * escapes or numeric character references), and the file parses, so the
+ * transform would neither
  * change it nor report it unparseable. A codemod that declares no words runs
  * on every file.
  * @param {CoreCodemod} codemod
@@ -371,9 +429,18 @@ function cannotChange(codemod, source, filePath, parser, j) {
   const {mentions} = codemod;
   if (!Array.isArray(mentions) || mentions.length === 0) return false;
   if (mentions.some(word => source.includes(word))) return false;
-  // An escape (`\u0054ypeahead`, `'base\x2dtable'`, a line continuation)
-  // can spell a word without its letters: such a file always runs.
-  if (source.includes('\\')) return false;
+  // An escape (`\u0054ypeahead`, `'base\x2dtable'`, a line continuation) can
+  // spell a word without its letters. A file with a backslash runs when the
+  // text its escapes or numeric character references spell says one of the
+  // words.
+  if (
+    source.includes('\\') &&
+    spelledTexts(source, filePath).some(text =>
+      mentions.some(word => text.includes(word)),
+    )
+  ) {
+    return false;
+  }
   const key = `${parser}\0${filePath}`;
   let known = parsedOnce.get(key);
   if (known?.source !== source) {
@@ -420,6 +487,19 @@ export function runCodeCodemod(
   const declinedCandidates = [];
   /** @type {Array<{filePath: string, relativePath: string, result: string}>} */
   const candidates = [];
+  // One jscodeshift per parser for all the files: binding a parser builds a
+  // new copy of jscodeshift's helpers, and the copies are all alike.
+  /** @type {Map<string, any>} */
+  const bound = new Map();
+  /** @param {string} parser */
+  const boundTo = parser => {
+    let j = bound.get(parser);
+    if (j == null) {
+      j = jscodeshift.withParser(parser);
+      bound.set(parser, j);
+    }
+    return j;
+  };
 
   // Transform and validate every candidate before any write. This lets a
   // protection source changed by this entry govern every other staged output.
@@ -432,7 +512,7 @@ export function runCodeCodemod(
       const source =
         contents?.get(filePath) ?? fs.readFileSync(filePath, 'utf-8');
       const parser = ext === '.tsx' || ext === '.ts' ? 'tsx' : 'babel';
-      const j = jscodeshift.withParser(parser);
+      const j = boundTo(parser);
       // Only source files: a stylesheet can happen to parse as JavaScript
       // (`a.b` then `{ color: white; }`), yet its transform still changes it.
       if (

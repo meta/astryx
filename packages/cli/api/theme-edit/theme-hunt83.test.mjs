@@ -74,23 +74,23 @@ describe('own-source token values', () => {
     expect(css('num')).not.toMatch(/--radius-page:\s*12;/);
   }, 240_000);
 
-  it('checks a font family token, and takes a family list as Core quotes it', async () => {
+  it('checks a font family token as set does', async () => {
     await withOwn('ff', "  tokens: {'--font-family-body': '12px'},");
     const c = await compile('ff');
     expect(c.status).toBe(1);
     expect(c.stdout + c.stderr).toContain('--font-family-body');
     await withOwn(
       'ffok',
-      `  tokens: {'--font-family-body': '"Georgia, serif"', '--font-family-heading': '"Open Sans", sans-serif'},`,
+      `  tokens: {'--font-family-heading': '"Open Sans", sans-serif'},`,
     );
     await themeEditShow('ffok', {cwd});
     expect((await compile('ffok')).status).toBe(0);
   }, 240_000);
 
-  it('checks each half of a [light, dark] pair', async () => {
+  it('checks a [light, dark] pair as the build writes it', async () => {
     await withOwn('pr', "  tokens: {'--color-accent': ['banana', 'red']},");
     const s = await refusal(() => themeEditShow('pr', {cwd}));
-    expect(s.message).toMatch(/--color-accent: "banana".*its light half/);
+    expect(s.message).toMatch(/--color-accent: "light-dark\(banana, red\)"/);
     const c = await compile('pr');
     expect(c.status).toBe(1);
     expect(css('pr')).not.toContain('banana');
@@ -101,13 +101,13 @@ describe('own-source token values', () => {
     await themeEditShow('prok', {cwd});
   }, 240_000);
 
-  it('reads a computed key that is text, and names one it cannot read as not checked', async () => {
+  it('judges a computed key by the token the build gives it', async () => {
     await withOwn('ck', "  tokens: {['--radius-page']: 'banana'},");
     const s = await refusal(() => themeEditShow('ck', {cwd}));
     expect(s.message).toMatch(/--radius-page: "banana"/);
     await withOwn('cu', "  tokens: {[String('--radius-page')]: 'banana'},");
     const u = await refusal(() => themeEditShow('cu', {cwd}));
-    expect(u.message).toMatch(/is computed.*has not checked its value/);
+    expect(u.message).toMatch(/--radius-page: "banana"/);
   }, 240_000);
 
   it('names the line that sets the token, not a comment that mentions it', async () => {

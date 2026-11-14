@@ -669,7 +669,9 @@ layers use Layer rendering without joining Escape/platform dismissal.
   FR9). A `focus: 'blur'` hold, the default, keeps the shield and makes the
   content inert at once, as a leaving AlertDialog (`component:AlertDialog`
   FR7) and a closing BottomSheetSwitcher step (`component:BottomSheet` FR9)
-  are for their dismissal. The component
+  are for their dismissal. A blur hold leaves a nested layer, its path, and a
+  child live region live, such as a toast viewport that a leaving alert
+  hosts. The component
   still decides where focus returns. A component that holds input uses this hold rather
   than building its own. It is separate from INV14's presentation hold, which
   keeps a layer's chosen presentation.
@@ -867,8 +869,14 @@ it on the surface inside the layer and run no layout while it plays.
   on.
 - `Layer/presentationHold.ts` owns the presentation hold: a layer's chosen
   presentation, held from the open until its close settles (INV14).
-- `Layer/inputHold.ts` owns the input hold, and `Layer/holdEntranceInput.ts`
-  its use by layers that enter through CSS (INV16).
+- `Layer/inputHold.ts` owns the input hold that a touch presentation places
+  while it enters or leaves (`spec:AST-094` FR35), and
+  `Layer/holdEntranceInput.ts` its use by layers that enter through CSS
+  (INV16). A blur dismissal hold leaves a nested layer, its path, and a
+  child live region live. It finds a nested layer with `hasLayerRootWithin`, a reader of
+  the layer-root owner (`architecture:public-component-api` INV23). The
+  owner's other readers test an element or its ancestors, and the hold asks
+  whether a subtree holds a layer root.
 - `Layer/layerStack.ts`, `Layer/useLayerDismissal.ts`, and
   `Layer/LayerDepthContext.tsx` own current registration, presence, ordering, and
   Escape/platform routing. The stack, the modal outlet registry, the gesture

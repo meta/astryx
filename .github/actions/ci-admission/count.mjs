@@ -25,6 +25,21 @@ export const BUDGET_FLOOR = 1500;
 // A step that uses the admission action is named this; a waiting run is found
 // by it.
 export const STEP = 'Wait for room under the CI ceiling';
+// ci.yml's admission job runs a step of this name when the run starts its
+// widening matrices at full width, and skips it at tight width.
+export const WIDE_STEP = 'Run the legs at full width';
+
+/**
+ * The leg width a run's admission picked, read from its jobs: 'full',
+ * 'tight', or null while admission has not decided.
+ */
+export function legWidth(jobs) {
+  const step = jobs
+    .flatMap(job => job.steps ?? [])
+    .find(item => item.name === WIDE_STEP);
+  if (step?.status !== 'completed') return null;
+  return step.conclusion === 'success' ? 'full' : 'tight';
+}
 // A pull-request run yields to a waiting `main` run for the first fifteen
 // minutes of that wait. After that the `main` run still counts its whole
 // peak, so a pull-request run starts only when it fits beside it
@@ -39,17 +54,20 @@ export const AT_LIMIT_SPACING_MS = 10 * 60_000;
 export const AT_LIMIT_SLACK_MS = 30_000;
 // The most jobs a run holds at once, by workflow: ci.yml's release-check and
 // Main's runs (a push's fast checks or a unit run) from their `peak`
-// (ci-admission.test.mjs), a pull-request ci.yml run from its measured most,
-// every other workflow's run one or two slim jobs.
+// (ci-admission.test.mjs), a pull-request ci.yml run from its measured most
+// at the leg width its admission picked: `peak` at tight width, plus each
+// `leg-widths` job's `full - tight` at full width or while undecided. Every
+// other workflow's run holds one or two slim jobs.
 // One line per workflow: ci-admission.test.mjs reads each estimate from it.
 // prettier-ignore
 const ESTIMATE = {
-  '.github/workflows/ci.yml': run => (run.event === 'workflow_dispatch' ? 39 : 18),
+  '.github/workflows/ci.yml': (run, jobs) => (run.event === 'workflow_dispatch' ? 39 : legWidth(jobs) === 'tight' ? 21 : 30),
   '.github/workflows/deploy.yml': run => (run.event === 'push' ? 4 : 14),
   '.github/workflows/review-signal.yml': () => 2,
   '.github/workflows/audits-at-head.yml': () => 10,
 };
-export const estimate = run => (ESTIMATE[run.path] ?? (() => 1))(run);
+export const estimate = (run, jobs = []) =>
+  (ESTIMATE[run.path] ?? (() => 1))(run, jobs);
 // Jobs always counted for small, unadmitted workflows: they peaked at twenty
 // at once in a day's runs and rose by fourteen within two minutes in
 // ninety-nine looks of a hundred (spec:AST-030 DEC-16).
@@ -197,7 +215,7 @@ export async function countLook({
         .filter(Number.isFinite);
       const admittedAt = ended.length > 0 ? Math.max(...ended) : NaN;
       const fresh = Date.now() - admittedAt < JUST_ADMITTED_MS;
-      const holds = fresh ? Math.max(live, estimate(run)) : live;
+      const holds = fresh ? Math.max(live, estimate(run, jobs)) : live;
       large += holds;
       counted.push(
         `${short(run)} ${run.id} ${run.event}: ${holds}${fresh && holds > live ? ` (admitted just now, ${live} live)` : ' live'}`,

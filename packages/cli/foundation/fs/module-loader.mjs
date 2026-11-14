@@ -41,7 +41,8 @@ const requireFromHere = createRequire(import.meta.url);
  * need it, so a run that reads neither never loads it.
  * @type {typeof import('jiti').createJiti}
  */
-const createJiti = (...args) => requireFromHere('jiti').createJiti(...args);
+export const createJiti = (...args) =>
+  requireFromHere('jiti').createJiti(...args);
 function getJiti() {
   if (!jitiInstance) {
     jitiInstance = createJiti(import.meta.url, jitiCacheOptions());

@@ -19,6 +19,10 @@ import {existsCaseExact} from '../fs/paths.mjs';
 import {CORE_PROVIDER_ID} from '../identity/providers.mjs';
 import {loadComponentDoc} from './component-loader.mjs';
 import {
+  checkedComponentList,
+  storedComponentList,
+} from './stored-component-list.mjs';
+import {
   HAS_COMPUTED,
   moduleExportSource,
   moduleExportsName,
@@ -26,6 +30,7 @@ import {
 } from './module-exports.mjs';
 import {inspectPackageExport, sourceExportTarget} from './package-exports.mjs';
 import {babelParser} from '../runtime/lazy-dependencies.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 const SKIP_DIRS = new Set(['hooks', 'utils', '__tests__', 'node_modules']);
 
@@ -371,9 +376,15 @@ export function familyMember(docs, name) {
 export function discoverComponents(coreDir) {
   // The component matcher calls this for each name it resolves, so one
   // operation reads the docs once. Each caller gets its own copy to change.
-  const found = oncePerListing(`components\0${coreDir}`, () =>
-    readComponentGroups(coreDir),
-  );
+  // The Core the CLI was published with, unchanged, has its list stored.
+  const found = oncePerListing(`components\0${coreDir}`, () => {
+    const stored = storedComponentList(coreDir)?.groups;
+    return stored
+      ? inGroupOrder(
+          Object.entries(stored).map(([key, values]) => ({key, values})),
+        )
+      : readComponentGroups(coreDir);
+  });
   return Object.fromEntries(
     Object.entries(found).map(([key, names]) => [key, [...names]]),
   );
@@ -530,14 +541,22 @@ function readComponentGroups(coreDir, keep = () => true, tops) {
   for (const name of ungrouped) {
     entries.push({key: name, values: [name]});
   }
-  entries.sort((a, b) => a.key.localeCompare(b.key));
+  return inGroupOrder(entries);
+}
 
+/**
+ * Groups as one record, keys in the fixed text order (`compareText`), so a
+ * live read and the list stored at publish print alike on every host.
+ * @param {Array<{key: string, values: string[]}>} entries
+ * @returns {Record<string, string[]>}
+ */
+function inGroupOrder(entries) {
+  entries.sort((a, b) => compareText(a.key, b.key));
   /** @type {Record<string, string[]>} */
   const ordered = {};
   for (const {key, values} of entries) {
     ordered[key] = values;
   }
-
   return ordered;
 }
 
@@ -795,6 +814,10 @@ function caseSpelledComponentSource(srcDir, name) {
  * @returns {string}
  */
 export function resolveImportPath(coreDir, componentName) {
+  const stored = checkedComponentList(coreDir)?.imports;
+  if (stored && Object.hasOwn(stored, componentName)) {
+    return stored[componentName];
+  }
   const srcDir = path.join(coreDir, 'src');
   const exportKeys = exportKeysOf(coreDir);
 
@@ -1013,7 +1036,7 @@ export function discoverExternalComponentsGrouped(docsDir) {
   for (const name of ungrouped) {
     entries.push({key: name, values: [name]});
   }
-  entries.sort((a, b) => a.key.localeCompare(b.key));
+  entries.sort((a, b) => compareText(a.key, b.key));
 
   /** @type {Record<string, string[]>} */
   const ordered = {};

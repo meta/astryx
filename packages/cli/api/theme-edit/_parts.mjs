@@ -31,7 +31,19 @@ import {
 import {SAMPLE_PAGE, elementNames, pageSource} from './_catalog.mjs';
 
 /** Bump when the shape of the cached part data changes. */
-const PART_DATA_VERSION = 5;
+const PART_DATA_VERSION = 7;
+
+/**
+ * Flags that change what a component does or whether it shows, not how it
+ * looks: the catalog never turns them on (disabled has its own entry).
+ */
+const LIFECYCLE_FLAGS = new Set([
+  'isDisabled',
+  'isOpen',
+  'isDefaultOpen',
+  'hasAutoFocus',
+  'isHidden',
+]);
 
 /**
  * @typedef {object} PartRecord
@@ -40,6 +52,7 @@ const PART_DATA_VERSION = 5;
  * @property {Record<string, string[]>} inside - tokens read by unnamed elements inside the part -> properties
  * @property {Record<string, string[]>} attrs - data attributes seen on the part
  * @property {string[]} contains - parts rendered inside it
+ * @property {Record<string, Record<string, string>>} [inline] - state -> property -> the token Core paints it with as an inline style in that state, which outranks any theme rule
  */
 
 /**
@@ -178,7 +191,8 @@ export function isItemOf(project, name) {
  * A component's catalog entries, all from its doc: its demo props
  * ({@link demoProps}), then once per value of each visual prop with a
  * closed set of values (`variant`, `status`, `color`, and a number union
- * such as a heading's level), and its checked and disabled states. An
+ * such as a heading's level), its checked and disabled states, and each look
+ * flag (`isStriped`) turned on. An
  * overlay the playground shows in place renders open; on a page people
  * see, once, as some of its variants size the window, not the card.
  * @param {import('./_project.mjs').ThemeProject} project
@@ -244,6 +258,17 @@ export function catalogVariants(project, name, cap, opts = {}) {
       if (n !== base[p])
         variants.push({label: `${p} ${n}`, props: {...base, [p]: n}});
   }
+  // Each look flag the doc names (`isStriped`, `hasHover`), turned on, so
+  // the styles Core gives only under it are read too: a table row's hover
+  // and stripes come from its table's flags.
+  for (const [p, doc] of Object.entries(info.props ?? {}))
+    if (
+      /^(is|has)[A-Z]/.test(p) &&
+      !LIFECYCLE_FLAGS.has(p) &&
+      String(/** @type {any} */ (doc)?.type ?? '').trim() === 'boolean' &&
+      base[p] !== true
+    )
+      variants.push({label: p, props: {...base, [p]: true}});
   return variants.slice(0, cap);
 }
 
@@ -474,6 +499,129 @@ export async function partData(project) {
   return data;
 }
 
+/** The tokens Core's indicator focus ring is drawn from, per property. */
+const RING_TOKENS = {
+  'outline-width': '--focus-outline-width',
+  'outline-style': '--focus-outline-style',
+  'outline-color': '--focus-outline-color',
+};
+
+/**
+ * Add the focus ring a control draws on its indicator at focus time (Core's
+ * `useIndicatorFocusRing`, used by a control whose input is visually
+ * hidden): an inline style the server render never shows, read from the
+ * focus outline tokens on the control's own `-indicator` part.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {Record<string, PartRecord>} map
+ */
+function addIndicatorRings(project, map) {
+  for (const [name, info] of Object.entries(project.components)) {
+    const at = info.importPath?.split('/').pop();
+    let source;
+    try {
+      source = at
+        ? fs.readFileSync(
+            path.join(project.coreDir, 'dist', at, `${name}.js`),
+            'utf8',
+          )
+        : '';
+    } catch {
+      continue;
+    }
+    if (!source.includes('useIndicatorFocusRing')) continue;
+    for (const t of info.targets) {
+      const key = t.className.replace(/^astryx-/, '');
+      if (!key.endsWith('-indicator')) continue;
+      const rec = (map[key] ??= {
+        own: {},
+        inside: {},
+        attrs: {},
+        contains: [],
+      });
+      for (const [prop, token] of Object.entries(RING_TOKENS)) {
+        const p = (rec.own[prop] ??= {tokens: {}, values: []});
+        p.tokens[token] = [
+          ...new Set([...(p.tokens[token] ?? []), ':focus-visible']),
+        ];
+        if (!p.values.includes(`var(${token})`)) p.values.push(`var(${token})`);
+      }
+    }
+  }
+}
+
+/**
+ * Add the paint Core writes as an inline style when it sets a theme state
+ * at run time (a table row's selection wash, set by the selection plugin
+ * beside the row's `selected` state): something the server render never
+ * shows. A built module under a component's folder that writes a state's
+ * attribute (`themeDataAttributes({selected: 'selected'})`) and an inline
+ * property from a color token (`el.style.backgroundColor = …` with
+ * `colorVars['--color-accent-muted']`) paints that state with it, on each
+ * of the component's targets that lists the state.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {Record<string, PartRecord>} map
+ */
+function addInlineStatePaint(project, map) {
+  const dist = path.join(project.coreDir, 'dist');
+  /** @param {string} dir @returns {string[]} */
+  const modules = dir => {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, {withFileTypes: true});
+    } catch {
+      return [];
+    }
+    return entries.flatMap(e =>
+      e.isDirectory()
+        ? modules(path.join(dir, e.name))
+        : e.name.endsWith('.js')
+          ? [path.join(dir, e.name)]
+          : [],
+    );
+  };
+  for (const [name, info] of Object.entries(project.components)) {
+    const folder = info.importPath?.split('/').pop();
+    if (!folder || folder !== name) continue;
+    const withStates = info.targets.filter(t => t.states.length);
+    if (!withStates.length) continue;
+    for (const file of modules(path.join(dist, folder))) {
+      const source = fs.readFileSync(file, 'utf8');
+      const states = [
+        ...source.matchAll(
+          /themeDataAttributes\(\{\s*([\w-]+):\s*'\1'\s*\}\)/g,
+        ),
+      ].map(m => m[1]);
+      if (!states.length) continue;
+      const props = [
+        ...source.matchAll(/\.style\.([a-z][A-Za-z]*)\s*=(?!=)/g),
+      ].map(m => m[1].replace(/[A-Z]/g, c => `-${c.toLowerCase()}`));
+      const colorTokens = [
+        ...source.matchAll(/colorVars\[['"](--color-[\w-]+)['"]\]/g),
+      ].map(m => m[1]);
+      if (!props.length || colorTokens.length !== 1) continue;
+      for (const t of withStates) {
+        const key = t.className.replace(/^astryx-/, '');
+        const rec = map[key];
+        if (!rec) continue;
+        for (const state of states.filter(st => t.states.includes(st)))
+          for (const prop of props) {
+            (rec.inline ??= {})[state] = {
+              ...rec.inline?.[state],
+              [prop]: colorTokens[0],
+            };
+            const own = (rec.own[prop] ??= {tokens: {}, values: []});
+            own.tokens[colorTokens[0]] = [
+              ...new Set([
+                ...(own.tokens[colorTokens[0]] ?? []),
+                `${state}=${state}`,
+              ]),
+            ];
+          }
+      }
+    }
+  }
+}
+
 /**
  * Build the part data: render the catalog, then walk its markup.
  * @param {import('./_project.mjs').ThemeProject} project
@@ -498,6 +646,8 @@ async function buildPartData(project) {
   }
   const tokens = new Set(Object.keys(project.core.tokenDefaults ?? {}));
   const result = walkMarkup(markup, declarations(css), tokens);
+  addInlineStatePaint(project, result.map);
+  addIndicatorRings(project, result.map);
   return {
     version: PART_DATA_VERSION,
     coreKey: project.coreKey,

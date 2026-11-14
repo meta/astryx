@@ -701,9 +701,11 @@ describe('preview app', () => {
       const wrong = await refusal(() =>
         themeEditPreviewApp('fb', {cwd, theme: 'fux'}),
       );
-      expect(wrong.run).toEqual([
-        'astryx experimental theme preview app fb --theme fox',
-      ]);
+      // A three-letter name is a typo of no theme (the shared typo rule),
+      // so no other theme is guessed for it.
+      expect(wrong.run).not.toContainEqual(
+        expect.stringMatching(/--theme fox$/),
+      );
     } finally {
       fs.rmSync(path.join(cwd, 'fa'), {recursive: true, force: true});
       fs.rmSync(path.join(cwd, 'themes/fox'), {recursive: true, force: true});
