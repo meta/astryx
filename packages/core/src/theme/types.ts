@@ -49,9 +49,9 @@ export interface TypographyRole {
  *
  * - `scale` controls the geometric type scale (base size + ratio)
  * - `body`, `heading`, `code` declare fonts, fallbacks, weights per role
- * - `heading` with no `family` of its own takes `body`'s whole font list
- *   (its family and fallbacks); with a `family`, it takes its own
- *   `fallbacks` only, and `fallbacks` with no `family` build nothing
+ * - a heading with no `family` takes the body's whole font list; with its
+ *   own `family`, only its own `fallbacks`; `fallbacks` with no `family`
+ *   build nothing
  *
  * Font loading is the consumer's responsibility. Add a <link> or @import
  * for your fonts before rendering the theme.
@@ -71,7 +71,11 @@ export interface TypographyConfig {
   scale?: {base: number; ratio: number};
   /** Body text font configuration */
   body?: TypographyRole;
-  /** Heading font configuration. Inherits family/fallbacks/url from body if omitted. */
+  /**
+   * Heading font configuration. With no `family`, the heading takes the
+   * body's whole font list; with its own `family`, only its own
+   * `fallbacks`.
+   */
   heading?: TypographyRole;
   /** Code/monospace font configuration */
   code?: TypographyRole;
