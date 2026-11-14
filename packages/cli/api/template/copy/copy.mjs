@@ -15,7 +15,6 @@ import {
   assertWithin,
   isFilePathArg,
   PathSafetyError,
-  projectRelativePath,
 } from '../../../foundation/fs/path-safety.mjs';
 import {AstryxError, writeFailed} from '../../error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
@@ -42,7 +41,7 @@ import {
 export function templateCopy(
   match,
   {
-    targetPath: givenPath,
+    targetPath,
     cwd,
     overwrite = false,
     iconSets = NO_ICON_SETS,
@@ -54,30 +53,6 @@ export function templateCopy(
       `No source file found for template "${match.dirName}"`,
       undefined,
       ERROR_CODES.ERR_NO_SOURCE,
-    );
-  }
-
-  // An absolute path inside the project is the same write as its relative
-  // form. Outside the project there is nothing to write, so the refusal names
-  // a place inside the project and the print that writes nothing.
-  const targetPath = projectRelativePath(givenPath, cwd);
-  if (targetPath === null) {
-    const folder = path.posix.join(
-      'src',
-      match.type === 'block' ? 'components' : 'pages',
-      match.dirName,
-    );
-    throw new AstryxError(
-      `Invalid template target path "${givenPath}": it is outside the project root (${path.resolve(cwd)}). ` +
-        'The template is written only inside the project. Give a path inside it, or print the source.',
-      [
-        {
-          name: `${command} ${folder}`,
-          reason: `write the ${match.type} inside the project`,
-        },
-        {name: command, reason: 'print the source and write nothing'},
-      ],
-      ERROR_CODES.ERR_PATH_TRAVERSAL,
     );
   }
 
@@ -93,21 +68,46 @@ export function templateCopy(
 
   // Path-safety: the guard sees the file that will be written, not only its
   // directory — a symlink at that name would otherwise carry the write
-  // outside the project root. Runs BEFORE any mkdir/write.
+  // outside the project root. Runs BEFORE any mkdir/write. An absolute path
+  // inside the project is the same write as its relative form.
   let outputFilePath;
   try {
     outputFilePath = assertWithin(fileTarget, cwd, {
+      allowAbsolute: true,
       label: 'template target path',
     });
   } catch (err) {
-    if (err instanceof PathSafetyError) {
+    if (!(err instanceof PathSafetyError)) throw err;
+    // Outside the project there is nothing to write, so the refusal names a
+    // place inside the project and the print that writes nothing.
+    if (
+      path.isAbsolute(targetPath) &&
+      err.code === ERROR_CODES.ERR_PATH_TRAVERSAL &&
+      !err.viaSymlink
+    ) {
+      const folder = path.posix.join(
+        'src',
+        match.type === 'block' ? 'components' : 'pages',
+        match.dirName,
+      );
       throw new AstryxError(
-        err.message,
-        undefined,
+        `Invalid template target path "${targetPath}": it is outside the project root (${path.resolve(cwd)}). ` +
+          'The template is written only inside the project. Give a path inside it, or print the source.',
+        [
+          {
+            name: `${command} ${folder}`,
+            reason: `write the ${match.type} inside the project`,
+          },
+          {name: command, reason: 'print the source and write nothing'},
+        ],
         ERROR_CODES.ERR_PATH_TRAVERSAL,
       );
     }
-    throw err;
+    throw new AstryxError(
+      err.message,
+      undefined,
+      ERROR_CODES.ERR_PATH_TRAVERSAL,
+    );
   }
   const outputDir = path.dirname(outputFilePath);
   const outputFileName = path.basename(outputFilePath);
@@ -171,7 +171,7 @@ export function templateCopy(
       notes,
       missingPackages: missing,
       installCommand,
-      ...(targetPath === givenPath ? {} : {givenPath}),
+      ...(path.isAbsolute(targetPath) ? {givenPath: targetPath} : {}),
       ...(icons ? {icons} : {}),
     },
   };

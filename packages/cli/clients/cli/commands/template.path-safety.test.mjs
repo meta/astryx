@@ -46,12 +46,20 @@ describe('template path safety', () => {
     fs.mkdirSync(cwd, {recursive: true});
     const absTarget = path.join(tmpDir, 'absolute-out');
 
-    const err = await templateApi('blank', {targetPath: absTarget, cwd}).catch(e => e);
+    const err = await templateApi('blank', {targetPath: absTarget, cwd}).catch(
+      e => e,
+    );
     expect(err.code).toBe('ERR_PATH_TRAVERSAL');
     expect(err.message).toMatch(/outside the project root/i);
     expect(err.suggestions).toEqual([
-      {name: 'astryx template blank src/pages/blank', reason: 'write the page inside the project'},
-      {name: 'astryx template blank', reason: 'print the source and write nothing'},
+      {
+        name: 'astryx template blank src/pages/blank',
+        reason: 'write the page inside the project',
+      },
+      {
+        name: 'astryx template blank',
+        reason: 'print the source and write nothing',
+      },
     ]);
 
     expect(fs.existsSync(absTarget)).toBe(false);
@@ -77,7 +85,10 @@ describe('template path safety', () => {
   it('writes an absolute targetPath inside the project as its relative form', async () => {
     const cwd = path.join(tmpDir, 'project');
     fs.mkdirSync(cwd, {recursive: true});
-    const relative = await templateApi('blank', {targetPath: 'src/pages/rel', cwd});
+    const relative = await templateApi('blank', {
+      targetPath: 'src/pages/rel',
+      cwd,
+    });
     const absolute = await templateApi('blank', {
       targetPath: path.join(cwd, 'src', 'pages', 'abs'),
       cwd,
@@ -86,15 +97,18 @@ describe('template path safety', () => {
     expect(absolute.data.outputDir).toBe(path.join('src', 'pages', 'abs'));
     expect(absolute.data.givenPath).toBe(path.join(cwd, 'src', 'pages', 'abs'));
     expect(relative.data).not.toHaveProperty('givenPath');
-    expect(fs.readFileSync(path.join(cwd, 'src/pages/abs/page.tsx'), 'utf8')).toBe(
-      fs.readFileSync(path.join(cwd, 'src/pages/rel/page.tsx'), 'utf8'),
-    );
+    expect(
+      fs.readFileSync(path.join(cwd, 'src/pages/abs/page.tsx'), 'utf8'),
+    ).toBe(fs.readFileSync(path.join(cwd, 'src/pages/rel/page.tsx'), 'utf8'));
   });
 
   it('writes an absolute file path inside the project to that file', async () => {
     const cwd = path.join(tmpDir, 'project');
     fs.mkdirSync(cwd, {recursive: true});
-    const result = await templateApi('blank', {targetPath: path.join(cwd, 'app', 'home.tsx'), cwd});
+    const result = await templateApi('blank', {
+      targetPath: path.join(cwd, 'app', 'home.tsx'),
+      cwd,
+    });
     expect(result.data.outputDir).toBe('app');
     expect(result.data.fileName).toBe('home.tsx');
     expect(fs.statSync(path.join(cwd, 'app', 'home.tsx')).isFile()).toBe(true);
@@ -103,7 +117,10 @@ describe('template path safety', () => {
   it('accepts the project root itself, given as an absolute path', async () => {
     const cwd = path.join(tmpDir, 'project');
     fs.mkdirSync(cwd, {recursive: true});
-    const result = await templateApi('blank', {targetPath: cwd + path.sep, cwd});
+    const result = await templateApi('blank', {
+      targetPath: cwd + path.sep,
+      cwd,
+    });
     expect(result.data.outputDir).toBe('.');
     expect(fs.existsSync(path.join(cwd, 'page.tsx'))).toBe(true);
   });
@@ -120,7 +137,9 @@ describe('template path safety', () => {
       cwd: real,
     });
     expect(viaLink.data.outputDir).toBe(path.join('src', 'dash'));
-    expect(fs.existsSync(path.join(real, 'src', 'dash', 'page.tsx'))).toBe(true);
+    expect(fs.existsSync(path.join(real, 'src', 'dash', 'page.tsx'))).toBe(
+      true,
+    );
 
     // And the other way round: cwd through the link, the path through the real folder.
     const viaReal = await templateApi('blank', {
@@ -128,7 +147,55 @@ describe('template path safety', () => {
       cwd: link,
     });
     expect(viaReal.data.outputDir).toBe(path.join('src', 'other'));
-    expect(fs.existsSync(path.join(real, 'src', 'other', 'page.tsx'))).toBe(true);
+    expect(fs.existsSync(path.join(real, 'src', 'other', 'page.tsx'))).toBe(
+      true,
+    );
+  });
+
+  it('reads a symlinked project folder the same way in every caller', async () => {
+    const {refusedOutput} = await import('../../../api/theme/build/build.mjs');
+    const real = path.join(tmpDir, 'real-project');
+    const link = path.join(tmpDir, 'linked-project');
+    const outside = path.join(tmpDir, 'outside');
+    fs.mkdirSync(real, {recursive: true});
+    fs.mkdirSync(outside, {recursive: true});
+    fs.symlinkSync(real, link, 'dir');
+    fs.symlinkSync(outside, path.join(real, 'escape'), 'dir');
+
+    /** @param {Promise<unknown> | (() => unknown)} run */
+    const verdict = async run => {
+      try {
+        await (typeof run === 'function' ? run() : run);
+        return 'written';
+      } catch (err) {
+        return err.code;
+      }
+    };
+    let n = 0;
+    for (const [cwd, other] of [
+      [real, link],
+      [link, real],
+    ]) {
+      for (const [sub, expected] of [
+        ['src', 'written'],
+        ['escape', 'ERR_PATH_TRAVERSAL'],
+      ]) {
+        n += 1;
+        const dir = path.join(other, sub, `t${n}`);
+        expect(
+          await verdict(templateApi('blank', {targetPath: dir, cwd})),
+        ).toBe(expected);
+        expect(
+          await verdict(
+            templateApi(undefined, {cdn: path.join(dir, 'p.html'), cwd}),
+          ),
+        ).toBe(expected);
+        expect(refusedOutput(path.join(dir, 'theme.css'), cwd)).toBe(
+          expected !== 'written',
+        );
+      }
+    }
+    expect(fs.readdirSync(outside)).toEqual([]);
   });
 
   it('refuses an absolute path inside the project that a symlink carries outside', async () => {
@@ -159,14 +226,21 @@ describe('template path safety', () => {
     const cwd = path.join(tmpDir, 'project');
     fs.mkdirSync(cwd, {recursive: true});
 
-    const inside = await templateApi(undefined, {cdn: path.join(cwd, 'public', 'demo.html'), cwd});
+    const inside = await templateApi(undefined, {
+      cdn: path.join(cwd, 'public', 'demo.html'),
+      cwd,
+    });
     expect(inside.data.path).toBe(path.join('public', 'demo.html'));
     expect(fs.existsSync(path.join(cwd, 'public', 'demo.html'))).toBe(true);
 
     const outsidePath = path.join(tmpDir, 'demo.html');
-    const err = await templateApi(undefined, {cdn: outsidePath, cwd}).catch(e => e);
+    const err = await templateApi(undefined, {cdn: outsidePath, cwd}).catch(
+      e => e,
+    );
     expect(err.code).toBe('ERR_PATH_TRAVERSAL');
-    expect(err.suggestions[0].name).toBe('astryx template --cdn cdn.template.html');
+    expect(err.suggestions[0].name).toBe(
+      'astryx template --cdn cdn.template.html',
+    );
     expect(fs.existsSync(outsidePath)).toBe(false);
   });
 
@@ -175,7 +249,8 @@ describe('template path safety', () => {
     fs.mkdirSync(cwd, {recursive: true});
 
     // Use a real template name from the discovered set.
-    const {discoverTemplates} = await import('../../../api/template/template.mjs');
+    const {discoverTemplates} =
+      await import('../../../api/template/template.mjs');
     const all = await discoverTemplates();
     const page = all.find(t => t.type === 'page');
     if (!page) {
@@ -202,9 +277,14 @@ describe('template path safety', () => {
 describe('template path text output', () => {
   it('says an absolute path inside the project was written as its relative path', async () => {
     const cwd = fs.realpathSync(fs.mkdtempSync(path.join(tmpDir, 'cli-')));
-    const result = await runCli(['template', 'blank', path.join(cwd, 'src', 'dash')], cwd);
+    const result = await runCli(
+      ['template', 'blank', path.join(cwd, 'src', 'dash')],
+      cwd,
+    );
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain(`Copied template to ${path.join('src', 'dash')}/page.tsx`);
+    expect(result.stdout).toContain(
+      `Copied template to ${path.join('src', 'dash')}/page.tsx`,
+    );
     expect(result.stdout).toContain(
       `${path.join(cwd, 'src', 'dash')} is inside the project, so it was written as its relative path, ${path.join('src', 'dash')}.`,
     );
@@ -216,8 +296,12 @@ describe('template path text output', () => {
     const result = await runCli(['template', 'blank', scratch], cwd);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('is outside the project root');
-    expect(result.stderr).toMatch(/template blank src\/pages\/blank\s+\(write the page inside the project\)/);
-    expect(result.stderr).toMatch(/template blank\s+\(print the source and write nothing\)/);
+    expect(result.stderr).toMatch(
+      /template blank src\/pages\/blank\s+\(write the page inside the project\)/,
+    );
+    expect(result.stderr).toMatch(
+      /template blank\s+\(print the source and write nothing\)/,
+    );
     expect(fs.existsSync(scratch)).toBe(false);
   }, 60_000);
 });

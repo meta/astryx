@@ -23,7 +23,6 @@ import {CLI_ROOT, findCoreDir} from '../../../foundation/fs/paths.mjs';
 import {
   assertWithin,
   PathSafetyError,
-  projectRelativePath,
 } from '../../../foundation/fs/path-safety.mjs';
 import {stripCopyrightHeader} from '../../../foundation/text/copyright-header.mjs';
 import {getXdsVersion} from '../../../foundation/agent-docs/agent-docs.mjs';
@@ -31,7 +30,11 @@ import {AstryxError} from '../../error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 
 /** The annotated CDN starter that ships with the CLI. */
-export const CDN_TEMPLATE_SRC = path.join(CLI_ROOT, 'assets', 'cdn.template.html');
+export const CDN_TEMPLATE_SRC = path.join(
+  CLI_ROOT,
+  'assets',
+  'cdn.template.html',
+);
 
 /** Where it lands when the caller does not say. */
 export const CDN_TEMPLATE_DEFAULT_PATH = 'cdn.template.html';
@@ -63,23 +66,26 @@ export function templateCdn(options = {}) {
   ];
   // An absolute path inside the project is the same write as its relative
   // form.
-  const relativeTarget = projectRelativePath(targetPath, cwd);
-  if (relativeTarget === null) {
+  let resolved;
+  try {
+    resolved = assertWithin(targetPath, cwd, {
+      allowAbsolute: true,
+      label: 'cdn template path',
+    });
+  } catch (err) {
+    if (!(err instanceof PathSafetyError)) throw err;
+    const outside =
+      path.isAbsolute(targetPath) &&
+      err.code === ERROR_CODES.ERR_PATH_TRAVERSAL &&
+      !err.viaSymlink;
     throw new AstryxError(
-      `Invalid cdn template path "${targetPath}": it is outside the project root (${path.resolve(cwd)}). ` +
-        'The page is written only inside the project.',
+      outside
+        ? `Invalid cdn template path "${targetPath}": it is outside the project root (${path.resolve(cwd)}). ` +
+            'The page is written only inside the project.'
+        : err.message,
       inside,
       ERROR_CODES.ERR_PATH_TRAVERSAL,
     );
-  }
-  let resolved;
-  try {
-    resolved = assertWithin(relativeTarget, cwd, {label: 'cdn template path'});
-  } catch (err) {
-    if (err instanceof PathSafetyError) {
-      throw new AstryxError(err.message, inside, ERROR_CODES.ERR_PATH_TRAVERSAL);
-    }
-    throw err;
   }
 
   const relative = path.relative(cwd, resolved) || targetPath;
@@ -95,7 +101,9 @@ export function templateCdn(options = {}) {
     };
   }
 
-  const source = stripCopyrightHeader(fs.readFileSync(CDN_TEMPLATE_SRC, 'utf-8'));
+  const source = stripCopyrightHeader(
+    fs.readFileSync(CDN_TEMPLATE_SRC, 'utf-8'),
+  );
   const contents = source.replaceAll(CDN_VERSION_PLACEHOLDER, version);
   fs.mkdirSync(path.dirname(resolved), {recursive: true});
   fs.writeFileSync(resolved, contents);

@@ -9,7 +9,6 @@ import {
   sanitizeName,
   isFilePathArg,
   PathSafetyError,
-  projectRelativePath,
 } from './path-safety.mjs';
 
 let tmpDir;
@@ -45,23 +44,33 @@ describe('assertWithin', () => {
 
   it('rejects ../ traversal', () => {
     expect(() => assertWithin('../escaped', tmpDir)).toThrow(PathSafetyError);
-    expect(() => assertWithin('../escaped', tmpDir)).toThrow(/traversal|outside/i);
+    expect(() => assertWithin('../escaped', tmpDir)).toThrow(
+      /traversal|outside/i,
+    );
   });
 
   it('rejects deep ../../ traversal', () => {
-    expect(() => assertWithin('a/b/../../../c', tmpDir)).toThrow(PathSafetyError);
+    expect(() => assertWithin('a/b/../../../c', tmpDir)).toThrow(
+      PathSafetyError,
+    );
   });
 
   it('reports an escape with the registered ERR_PATH_TRAVERSAL code', () => {
     // An uncaught guard error reaches the JSON envelope with this code as-is.
-    expect(rejectionCode(() => assertWithin('../escaped', tmpDir))).toBe('ERR_PATH_TRAVERSAL');
+    expect(rejectionCode(() => assertWithin('../escaped', tmpDir))).toBe(
+      'ERR_PATH_TRAVERSAL',
+    );
     expect(
-      rejectionCode(() => assertWithin('/etc/passwd', tmpDir, {allowAbsolute: true})),
+      rejectionCode(() =>
+        assertWithin('/etc/passwd', tmpDir, {allowAbsolute: true}),
+      ),
     ).toBe('ERR_PATH_TRAVERSAL');
   });
 
   it('rejects absolute paths by default', () => {
-    expect(() => assertWithin('/tmp/elsewhere', tmpDir)).toThrow(/absolute paths are not allowed/i);
+    expect(() => assertWithin('/tmp/elsewhere', tmpDir)).toThrow(
+      /absolute paths are not allowed/i,
+    );
   });
 
   it('accepts absolute paths inside root when allowAbsolute', () => {
@@ -181,12 +190,18 @@ describe('assertWithin — symlink escape (realpath guard)', () => {
     fs.symlinkSync(outside, path.join(root, 'link'));
     // path.resolve is lexical and would pass this; the realpath check must catch it.
     expect(() => assertWithin('link/evil.txt', root)).toThrow(PathSafetyError);
-    expect(() => assertWithin('link/evil.txt', root)).toThrow(/outside|symlink|traversal/i);
-    expect(rejectionCode(() => assertWithin('link/evil.txt', root))).toBe('ERR_PATH_TRAVERSAL');
+    expect(() => assertWithin('link/evil.txt', root)).toThrow(
+      /outside|symlink|traversal/i,
+    );
+    expect(rejectionCode(() => assertWithin('link/evil.txt', root))).toBe(
+      'ERR_PATH_TRAVERSAL',
+    );
   });
 
   it('still accepts a legit non-existent nested path inside root', () => {
-    expect(assertWithin('a/b/c.txt', root)).toBe(path.join(root, 'a', 'b', 'c.txt'));
+    expect(assertWithin('a/b/c.txt', root)).toBe(
+      path.join(root, 'a', 'b', 'c.txt'),
+    );
   });
 
   it('rejects a NUL byte in the path', () => {
@@ -196,18 +211,27 @@ describe('assertWithin — symlink escape (realpath guard)', () => {
   it('rejects a dangling symlink whose target is outside root', () => {
     // A write through the link would create the missing target outside root.
     fs.symlinkSync(path.join(outside, 'created.txt'), path.join(root, 'leaf'));
-    expect(rejectionCode(() => assertWithin('leaf', root))).toBe('ERR_PATH_TRAVERSAL');
+    expect(rejectionCode(() => assertWithin('leaf', root))).toBe(
+      'ERR_PATH_TRAVERSAL',
+    );
   });
 
   it('rejects a path through a dangling directory symlink that points outside root', () => {
     fs.symlinkSync(path.join(outside, 'missing-dir'), path.join(root, 'dir'));
-    expect(rejectionCode(() => assertWithin('dir/evil.txt', root))).toBe('ERR_PATH_TRAVERSAL');
+    expect(rejectionCode(() => assertWithin('dir/evil.txt', root))).toBe(
+      'ERR_PATH_TRAVERSAL',
+    );
   });
 
   it('follows a chain of links that ends in a dangling target outside root', () => {
-    fs.symlinkSync(path.join(outside, 'missing.txt'), path.join(root, 'second'));
+    fs.symlinkSync(
+      path.join(outside, 'missing.txt'),
+      path.join(root, 'second'),
+    );
     fs.symlinkSync('second', path.join(root, 'first'));
-    expect(rejectionCode(() => assertWithin('first', root))).toBe('ERR_PATH_TRAVERSAL');
+    expect(rejectionCode(() => assertWithin('first', root))).toBe(
+      'ERR_PATH_TRAVERSAL',
+    );
   });
 
   it('accepts a dangling symlink whose target stays inside root', () => {
@@ -222,49 +246,107 @@ describe('assertWithin — symlink escape (realpath guard)', () => {
   });
 });
 
-describe('projectRelativePath', () => {
-  it('returns a relative path unchanged', () => {
-    expect(projectRelativePath('src/pages/x', tmpDir)).toBe('src/pages/x');
-    expect(projectRelativePath('../x', tmpDir)).toBe('../x');
-  });
+describe('assertWithin allowAbsolute', () => {
+  const opts = {allowAbsolute: true};
 
   it('reads an absolute path inside the root as its relative form', () => {
-    expect(projectRelativePath(path.join(tmpDir, 'src', 'x'), tmpDir)).toBe(
-      path.join('src', 'x'),
+    expect(assertWithin(path.join(tmpDir, 'src', 'x'), tmpDir, opts)).toBe(
+      path.join(tmpDir, 'src', 'x'),
     );
-    expect(projectRelativePath(tmpDir, tmpDir)).toBe('.');
+    expect(assertWithin(tmpDir, tmpDir, opts)).toBe(tmpDir);
   });
 
-  it('keeps a trailing separator, which marks a folder', () => {
-    expect(projectRelativePath(path.join(tmpDir, 'out.tsx') + path.sep, tmpDir)).toBe(
-      'out.tsx' + path.sep,
-    );
-  });
-
-  it('gives null for an absolute path outside the root', () => {
-    expect(projectRelativePath(path.dirname(tmpDir), tmpDir)).toBeNull();
-    expect(projectRelativePath(`${tmpDir}-scratch`, tmpDir)).toBeNull();
-    expect(projectRelativePath(path.join(tmpDir, '..', 'x'), tmpDir)).toBeNull();
+  it('refuses an absolute path outside the root as a lexical escape', () => {
+    for (const outside of [
+      path.dirname(tmpDir),
+      `${tmpDir}-scratch`,
+      path.join(tmpDir, '..', 'x'),
+    ]) {
+      let err;
+      try {
+        assertWithin(outside, tmpDir, opts);
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeInstanceOf(PathSafetyError);
+      expect(err.code).toBe('ERR_PATH_TRAVERSAL');
+      expect(err.viaSymlink).toBe(false);
+    }
   });
 
   it('keeps a folder whose name starts with two dots inside the root', () => {
-    expect(projectRelativePath(path.join(tmpDir, '..cache'), tmpDir)).toBe('..cache');
+    expect(assertWithin(path.join(tmpDir, '..cache'), tmpDir, opts)).toBe(
+      path.join(tmpDir, '..cache'),
+    );
   });
 
-  it('follows a symlinked root on either side', () => {
+  it('reads a symlinked root the same way from either side', () => {
     const real = path.join(tmpDir, 'real');
     const link = path.join(tmpDir, 'link');
     fs.mkdirSync(real);
     fs.symlinkSync(real, link, 'dir');
-    expect(projectRelativePath(path.join(link, 'a'), real)).toBe('a');
-    expect(projectRelativePath(path.join(real, 'a'), link)).toBe('a');
+    expect(assertWithin(path.join(link, 'a'), real, opts)).toBe(
+      path.join(real, 'a'),
+    );
+    expect(assertWithin(path.join(real, 'a'), link, opts)).toBe(
+      path.join(link, 'a'),
+    );
+    expect(assertWithin(path.join(link, 'a', 'b.tsx'), real, opts)).toBe(
+      path.join(real, 'a', 'b.tsx'),
+    );
+  });
+
+  it('refuses an in-root symlink escape the same way from either side', () => {
+    const real = path.join(tmpDir, 'real');
+    const link = path.join(tmpDir, 'link');
+    const outside = path.join(tmpDir, 'outside');
+    fs.mkdirSync(real);
+    fs.mkdirSync(outside);
+    fs.symlinkSync(real, link, 'dir');
+    fs.symlinkSync(outside, path.join(real, 'escape'), 'dir');
+    /** @param {() => unknown} fn */
+    const refusal = fn => {
+      try {
+        fn();
+        return 'accepted';
+      } catch (err) {
+        return `${err.code}:${err.viaSymlink}`;
+      }
+    };
+    const expected = 'ERR_PATH_TRAVERSAL:true';
+    for (const [target, root] of [
+      [path.join(real, 'escape', 'x'), real],
+      [path.join(link, 'escape', 'x'), real],
+      [path.join(real, 'escape', 'x'), link],
+      [path.join(link, 'escape', 'x'), link],
+    ]) {
+      expect(refusal(() => assertWithin(target, root, opts))).toBe(expected);
+    }
+    expect(refusal(() => assertWithin(path.join('escape', 'x'), link))).toBe(
+      expected,
+    );
+  });
+
+  it('refuses an absolute path that a symlink outside the root leads in from', () => {
+    const real = path.join(tmpDir, 'real');
+    fs.mkdirSync(real);
+    fs.symlinkSync(path.join(tmpDir), path.join(real, 'up'), 'dir');
+    expect(
+      rejectionCode(() => assertWithin(path.join(real, 'up', 'x'), real, opts)),
+    ).toBe('ERR_PATH_TRAVERSAL');
   });
 
   it.runIf(process.platform === 'win32')('reads Windows drive paths', () => {
     const root = path.join(tmpDir, 'proj');
-    expect(projectRelativePath(path.join(root, 'src'), root)).toBe('src');
-    expect(projectRelativePath(root.replace(/\\/g, '/') + '/src', root)).toBe('src');
+    expect(assertWithin(path.join(root, 'src'), root, opts)).toBe(
+      path.join(root, 'src'),
+    );
+    expect(assertWithin(root.replace(/\\/g, '/') + '/src', root, opts)).toBe(
+      path.join(root, 'src'),
+    );
     const otherDrive = /^[Cc]:/.test(root) ? 'D:\\proj\\src' : 'C:\\proj\\src';
-    expect(projectRelativePath(otherDrive, root)).toBeNull();
+    expect(rejectionCode(() => assertWithin(otherDrive, root, opts))).toBe(
+      'ERR_PATH_TRAVERSAL',
+    );
   });
 });
