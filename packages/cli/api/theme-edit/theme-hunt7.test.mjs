@@ -269,11 +269,12 @@ describe('dials and part properties (final 3)', () => {
           themeEditSet('l5', 'corners', 'banana', {
             cwd,
             on: 'button',
-            state: 'hover',
+            when: 'size:sm',
           }),
         )
       ).run[0],
-    ).toMatch(/--on button --state hover$/);
+      // Nothing near banana: how, never a stock rung.
+    ).toMatch(/ how corners$/);
     fs.rmSync(path.join(cwd, 'themes/l5'), {recursive: true, force: true});
   }, 240_000);
 

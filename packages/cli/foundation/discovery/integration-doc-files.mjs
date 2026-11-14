@@ -40,6 +40,7 @@ import {discoverIntegrationTemplatesForOne} from './template-adapter.mjs';
 import {discoverThemeDirectory} from './theme-discovery.mjs';
 import {discoverIconSetDirectory} from './icon-set-discovery.mjs';
 import {rootProblem} from '../integrations/validate-contributions.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 /** @typedef {import('./doc-types.mjs').DocFile} DocFile */
 /** @typedef {import('./doc-types.mjs').DocRoot} DocRoot */
@@ -176,7 +177,7 @@ export async function integrationDocFiles(integration) {
   return {
     files: [...owners]
       .map(([file, {root}]) => ({path: file, root}))
-      .sort((a, b) => a.path.localeCompare(b.path)),
+      .sort((a, b) => compareText(a.path, b.path)),
     unread,
     fixtures,
   };

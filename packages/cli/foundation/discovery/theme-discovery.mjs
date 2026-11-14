@@ -17,46 +17,28 @@
  */
 
 import * as fs from 'node:fs';
-import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {lowerDoc} from '../doc-compiler/compile.mjs';
 import {packageSource} from '../doc-compiler/source.mjs';
-import {CLI_ROOT} from '../fs/paths.mjs';
+import {CLI_ROOT, realDir} from '../fs/paths.mjs';
+import {persistedGather} from '../fs/gather-cache.mjs';
+import {EXACT_CODEC} from '../fs/exact-codec.mjs';
 import {listDirEntries} from '../fs/listing-cache.mjs';
 import {formatCliCommand} from '../env/package-manager.mjs';
 import {LOCAL_THEME_ROOT} from '../config/theme-state.mjs';
 import {assertWithin, PathSafetyError} from '../fs/path-safety.mjs';
 import {THEME_MODULE_EXTENSIONS} from './theme-module-extensions.mjs';
+import {babelParser, jscodeshift} from '../runtime/lazy-dependencies.mjs';
+import {
+  readStore,
+  storedKey,
+  STORED_DOCS_FILE,
+} from '../doc-compiler/stored-docs.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 export const BUNDLED_THEME_PACKAGE = '@astryxdesign/cli';
 export const THEMES_DIR = path.join(CLI_ROOT, 'assets', 'templates', 'themes');
 export const THEME_DOC_SUFFIX = '.doc.mjs';
-
-const require = createRequire(import.meta.url);
-
-/** @type {typeof import('@babel/parser') | undefined} */
-let babelParser;
-/** @type {any} */
-let jscodeshiftApi;
-
-/**
- * The descriptor parser, loaded when the first descriptor is read.
- * @returns {typeof import('@babel/parser')}
- */
-function descriptorParser() {
-  babelParser ??= require('@babel/parser');
-  return /** @type {typeof import('@babel/parser')} */ (babelParser);
-}
-
-/**
- * The theme source parser, loaded when the first integration theme source is
- * checked. Bundled themes never need it.
- * @returns {any}
- */
-function sourceParser() {
-  jscodeshiftApi ??= require('jscodeshift');
-  return jscodeshiftApi;
-}
 
 /**
  * @typedef {object} DiscoveredTheme
@@ -169,9 +151,11 @@ class ThemeRuntimeExportError extends Error {}
  * Every string specifier a module imports, re-exports, or imports dynamically.
  * @param {string} file
  * @param {any} jscodeshift
+ * @param {{withRequire?: boolean}} [options] `withRequire`: also
+ *   `require('./x')` and TypeScript `import x = require('./x')`
  * @returns {string[]}
  */
-function moduleSpecifiers(file, jscodeshift) {
+function moduleSpecifiers(file, jscodeshift, {withRequire = false} = {}) {
   const parser = /\.(?:ts|tsx|mts|cts)$/u.test(file) ? 'tsx' : 'babel';
   const j = jscodeshift.withParser(parser);
   const root = j(fs.readFileSync(file, 'utf-8'));
@@ -207,6 +191,23 @@ function moduleSpecifiers(file, jscodeshift) {
       specifiers.push(importPath.node.source.value);
     }
   });
+  if (withRequire) {
+    // CommonJS `require('./x')` and TypeScript `import x = require('./x')`.
+    root.find(j.CallExpression).forEach((/** @type {any} */ callPath) => {
+      const {callee, arguments: args} = callPath.node;
+      if (
+        callee?.type === 'Identifier' &&
+        callee.name === 'require' &&
+        typeof args?.[0]?.value === 'string'
+      )
+        specifiers.push(args[0].value);
+    });
+    root.find(j.TSImportEqualsDeclaration).forEach((/** @type {any} */ p) => {
+      const ref = p.node.moduleReference;
+      const value = ref?.expression?.value ?? ref?.argument?.value;
+      if (typeof value === 'string') specifiers.push(value);
+    });
+  }
 
   return specifiers;
 }
@@ -214,10 +215,12 @@ function moduleSpecifiers(file, jscodeshift) {
 /**
  * Every module a theme source file imports or re-exports, as written.
  * @param {string} file
+ * @param {{withRequire?: boolean}} [options] `withRequire`: also
+ *   `require('./x')` and TypeScript `import x = require('./x')`.
  * @returns {string[]}
  */
-export function themeFileImports(file) {
-  return moduleSpecifiers(file, sourceParser());
+export function themeFileImports(file, options = {}) {
+  return moduleSpecifiers(file, jscodeshift(), options);
 }
 
 /**
@@ -680,13 +683,24 @@ export function readStaticDescriptorValue(
     /** @type {{value: Record<string, any>} | {error: unknown}} */
     let read;
     try {
+      const source = fs.readFileSync(docPath, 'utf-8');
+      // A descriptor Astryx ships was read at publish, by the hash of its
+      // text (scripts/generate-stored-docs.mjs): the same text reads the
+      // same value without parsing. Any other text, or a store that cannot
+      // be read, is parsed.
+      let stored;
+      try {
+        stored = readStore(STORED_DOCS_FILE).get(
+          descriptorStoreKey(source, typeName, data),
+        );
+      } catch {
+        stored = undefined;
+      }
       read = {
-        value: readDescriptorSource(
-          fs.readFileSync(docPath, 'utf-8'),
-          label,
-          typeName,
-          data,
-        ),
+        value:
+          stored != null && typeof stored === 'object'
+            ? stored
+            : readDescriptorSource(source, label, typeName, data),
       };
     } catch (error) {
       read = {error};
@@ -699,17 +713,42 @@ export function readStaticDescriptorValue(
 }
 
 /**
+ * The typed descriptors read statically, each with whether plain data is
+ * accepted: what scripts/generate-stored-docs.mjs reads at publish.
+ * @type {ReadonlyArray<[string, boolean]>}
+ */
+export const STATIC_DESCRIPTOR_TYPES = [
+  ['ThemeDoc', false],
+  ['IconSetDoc', false],
+  ['IconDefinitionDoc', true],
+];
+
+/**
+ * Where a descriptor's statically read value is stored at publish: by the
+ * hash of its text, the type it is read as, and whether plain data counts.
+ * @param {string} source
+ * @param {string} typeName
+ * @param {boolean} data
+ * @returns {string}
+ */
+export function descriptorStoreKey(source, typeName, data) {
+  return `descriptor:${typeName}:${data ? 'data' : 'object'}:${storedKey(source)}`;
+}
+
+/**
+ * The static value a descriptor's source default-exports (see
+ * {@link readStaticDescriptorValue}); throws when it is not one.
  * @param {string} source
  * @param {string} label
  * @param {string} typeName
  * @param {boolean} [data]
  * @returns {Record<string, any>}
  */
-function readDescriptorSource(source, label, typeName, data = false) {
+export function readDescriptorSource(source, label, typeName, data = false) {
   /** @type {any} */
   let ast;
   try {
-    ast = descriptorParser().parse(source, {
+    ast = babelParser().parse(source, {
       sourceType: 'module',
       tokens: true,
       createParenthesizedExpressions: true,
@@ -1290,7 +1329,7 @@ export function discoverUnmigratedThemeCopies(
     .filter(entry => entry.isDirectory() && !isIgnoredThemeEntry(entry.name))
     .map(entry => unmigratedThemeCopy(path.join(root, entry.name)))
     .filter(copy => copy !== null)
-    .sort((a, b) => a.slug.localeCompare(b.slug));
+    .sort((a, b) => compareText(a.slug, b.slug));
 }
 
 /** @param {string[]} files */
@@ -1396,7 +1435,7 @@ export function discoverThemeDirectory(
   }
   const directories = rootEntries
     .filter(entry => entry.isDirectory())
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => compareText(a.name, b.name));
 
   for (const directory of directories) {
     const slug = directory.name;
@@ -1514,11 +1553,11 @@ export function discoverThemeDirectory(
           )
           .filter(file => file !== docPath),
       );
-      const jscodeshift = sourceParser();
+      const codeshift = jscodeshift();
       try {
         validateThemeModuleGraph(
           entryPath,
-          jscodeshift,
+          codeshift,
           sourceDir,
           allowedFiles,
           owner,
@@ -1529,7 +1568,7 @@ export function discoverThemeDirectory(
           !moduleExportsName(
             entryPath,
             exportName,
-            jscodeshift,
+            codeshift,
             sourceDir,
             allowedFiles,
           )
@@ -1660,7 +1699,7 @@ export function unreadThemeFolders(themeRoot, {packageDir, packageName} = {}) {
   for (const file of modules) {
     let specifiers;
     try {
-      specifiers = moduleSpecifiers(file, sourceParser());
+      specifiers = moduleSpecifiers(file, jscodeshift());
     } catch {
       continue;
     }
@@ -1745,18 +1784,39 @@ export function discoverLocalThemes(
   }));
 }
 
+/** An integration's discovered themes, kept exactly, with the shape they need. */
+const THEMES_CODEC = {
+  ...EXACT_CODEC,
+  valid: (/** @type {any} */ themes) =>
+    Array.isArray(themes) &&
+    themes.every(
+      theme =>
+        theme != null &&
+        typeof theme.slug === 'string' &&
+        typeof theme.exportName === 'string',
+    ),
+};
+
 /**
  * @param {import('../integrations/integrations.mjs').LoadedIntegration} integration
  * @returns {Promise<DiscoveredTheme[]>}
  */
 export async function discoverIntegrationThemes(integration) {
   if (!integration.themes) return [];
-  return discoverThemeDirectory(integration.themes, integration.name).map(
-    theme => ({
-      ...theme,
-      packageDir: integration.__packageDir,
-      packageExports: integration.__packageExports,
-      source: /** @type {const} */ ('package'),
-    }),
+  const themesDir = integration.themes;
+  // Kept between runs while every file and module it read is unchanged; the
+  // live fields below are added after, as on a fresh read.
+  const found = /** @type {DiscoveredTheme[]} */ (
+    await persistedGather(
+      ['integration-themes', realDir(themesDir), integration.name ?? null],
+      async () => discoverThemeDirectory(themesDir, integration.name),
+      THEMES_CODEC,
+    )
   );
+  return found.map(theme => ({
+    ...theme,
+    packageDir: integration.__packageDir,
+    packageExports: integration.__packageExports,
+    source: /** @type {const} */ ('package'),
+  }));
 }

@@ -25,7 +25,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: '`integration add component` creates the normal doc for one public component. Keep the generated identity and import, then replace its sample text and props with the component\'s real public contract.',
+          text: "`integration add component` creates the normal doc for one public component. Keep the generated identity and import, then replace its sample text and props with the component's real public contract.",
         },
         {
           type: 'code',
@@ -149,9 +149,22 @@ export default {
           code: `examples: [
   {
     label: 'Automatic rotation',
-    code: '<AcmeCarousel slides={slides} interval={5000} />',
+    code: '<AcmeCarousel slides={["/one.jpg", "/two.jpg"]} interval={5000} />',
+  },
+  {
+    label: 'Wrap the app',
+    kind: 'setup',
+    code: '<AcmeCarouselProvider locale={locale}>{children}</AcmeCarouselProvider>',
   },
 ],`,
+        },
+        {
+          type: 'prose',
+          text: "An example's `kind` is `'demo'` by default: it runs on its own, so a docs site may show it as a live preview. Set `kind: 'setup'` for code that cannot run on its own, such as an app setup file, a server route, or a snippet that uses variables defined elsewhere; it is always shown as code only.",
+        },
+        {
+          type: 'prose',
+          text: "A demo runs on its own when its code compiles as a TSX module, ends with the JSX it renders (or declares a component, or default-exports one), and imports only the package, the packages it declares, React and Core: no relative path, and no code that runs only on a server. Every name it uses must be defined in it or imported, except the components the package documents, the components and hooks Core documents, React's exports, and browser globals such as `window`. A sample value is enough: `const viewer = {name: 'Ada'};`. `{@command doctor integration validate}` lists each demo that does not run on its own, with the fix.",
         },
       ],
     },

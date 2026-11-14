@@ -42,6 +42,7 @@ export type {
   TokenName,
   TokenValue,
   ComponentStyleMap,
+  StyleBlock,
   StyleOverrides,
 } from './defineTheme';
 

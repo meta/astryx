@@ -119,6 +119,34 @@ describe('new', () => {
 });
 
 describe('refusals', () => {
+  it('refuses a background on a selected table row, which Core paints inline, and points to the token it reads', async () => {
+    const before = settingsOf('t');
+    const r = await refusal(() =>
+      themeEditSet('t', 'background', '#dbeafe', {
+        cwd,
+        on: 'table-row',
+        state: 'selected',
+      }),
+    );
+    expect(r.code).toBe('ERR_THEME_NO_EFFECT');
+    expect(r.message).toContain(
+      "By default Core paints table-row's background-color when selected as an inline style from --color-accent-muted",
+    );
+    expect(r.message).toContain(
+      'only where the component is set not to paint it (such as a table with its row highlight off) does a selected background-color apply',
+    );
+    expect(r.run).toContain(
+      "astryx experimental theme editor set t --color-accent-muted '#dbeafe' --on table-row --state selected",
+    );
+    expect(settingsOf('t')).toBe(before);
+    await themeEditSet('t', '--color-accent-muted', '#dbeafe', {
+      cwd,
+      on: 'table-row',
+      state: 'selected',
+    });
+    await themeEditUndo('t', {cwd});
+  });
+
   it('refuses a token the part never reads and names the property that works; nothing is written', async () => {
     const before = settingsOf('t');
     const r = await refusal(() =>
@@ -206,9 +234,8 @@ describe('refusals', () => {
       themeEditSet('t', 'box-shadow', 'none', {cwd}),
     );
     expect(r.code).toBe('ERR_MISSING_ARGUMENT');
-    expect(r.run[0]).toBe(
-      'astryx experimental theme editor set t box-shadow none --on card',
-    );
+    // No part was named and box-shadow has no theme-wide dial: how.
+    expect(r.run[0]).toBe('astryx experimental theme editor how box-shadow');
   });
 });
 

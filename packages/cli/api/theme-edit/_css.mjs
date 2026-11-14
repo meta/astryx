@@ -9,6 +9,7 @@
  */
 
 import {createRequire} from 'node:module';
+import {wordTable} from './_tables.mjs';
 
 const require = createRequire(import.meta.url);
 
@@ -58,17 +59,117 @@ let names = null;
 export function cssProperties() {
   if (names) return names;
   const mdn = mdnProperties();
+  const current = syntaxPatches().properties;
   names = new Set([
     ...Object.keys(csstree().lexer.properties).filter(
-      k => !k.startsWith('-') && mdn[k] && mdn[k].status !== 'obsolete',
+      k =>
+        !k.startsWith('-') &&
+        mdn[k] &&
+        // MDN marks a renamed property obsolete (font-stretch is font-width
+        // now); one the current specifications still define, as browsers
+        // ship it, stays.
+        (mdn[k].status !== 'obsolete' || k in current),
     ),
     ...NOT_IN_MDN_YET,
   ]);
   return names;
 }
 
+/**
+ * The current specifications' grammar, as patches to css-tree's: the
+ * ranges MDN's data leaves out (`line-height` takes `<number [0,∞]>`).
+ * @returns {{properties: Record<string, string>, types: Record<string, string>, atrules: Record<string, unknown>}}
+ */
+const syntaxPatches = () =>
+  require('@csstools/css-syntax-patches-for-csstree').next;
+
+/** @type {any} */
+let patched = null;
+/** css-tree's lexer with the current specifications' grammar. */
+const currentLexer = () => (patched ??= csstree().fork(syntaxPatches()).lexer);
+
+/** @type {Map<string, Set<string>>} */
+const longhandCache = new Map();
+
+/**
+ * Every longhand a shorthand sets, through shorthands inside it (border
+ * sets border-color, so border-top-color), as MDN's data lists them; empty
+ * for a property that is no shorthand.
+ * @param {string} prop
+ * @returns {Set<string>}
+ */
+export function longhandsOf(prop) {
+  const cached = longhandCache.get(prop);
+  if (cached) return cached;
+  /** @type {Set<string>} */
+  const out = new Set();
+  longhandCache.set(prop, out);
+  const computed = /** @type {any} */ (mdnProperties()[prop])?.computed;
+  if (Array.isArray(computed))
+    for (const p of computed) {
+      if (typeof p !== 'string' || p === prop) continue;
+      out.add(p);
+      for (const q of longhandsOf(p)) out.add(q);
+    }
+  return out;
+}
+
+/**
+ * Whether setting `a` sets `b` too: `b` is one of `a`'s longhands, or a
+ * shorthand whose every longhand `a` sets (border covers border-top).
+ * overflow-wrap is no part of overflow, nor transform-origin of transform.
+ * @param {string} a
+ * @param {string} b
+ */
+export function coversProperty(a, b) {
+  if (a === b) return false;
+  const of = longhandsOf(a);
+  if (of.has(b)) return true;
+  const sub = longhandsOf(b);
+  return sub.size > 0 && [...sub].every(x => of.has(x));
+}
+
 /** What a var() or env() may stand for while the rest of a value is matched. */
 const VAR_STANDS_FOR = ['0', '1px', '1ms', 'red', 'ease', 'serif', '0 0 red'];
+
+/**
+ * The value as it reads when each variable is unset: every `var(--x, f)`
+ * replaced by its fallback `f`; null when no var() has one.
+ * @param {string} value
+ * @returns {string | null}
+ */
+export function withFallbacks(value) {
+  let any = false;
+  /** @param {string} v @returns {string} */
+  const pass = v => {
+    const at = v.search(/var\(/i);
+    if (at < 0) return v;
+    let depth = 0;
+    let comma = -1;
+    let end = -1;
+    for (let i = at + 4; i < v.length; i++) {
+      const c = v[i];
+      if (c === '(') depth++;
+      else if (c === ')') {
+        if (depth === 0) {
+          end = i;
+          break;
+        }
+        depth--;
+      } else if (c === ',' && depth === 0 && comma < 0) comma = i;
+    }
+    if (end < 0) return v;
+    if (comma < 0) return v.slice(0, end + 1) + pass(v.slice(end + 1));
+    any = true;
+    return (
+      v.slice(0, at) +
+      pass(v.slice(comma + 1, end).trim()) +
+      pass(v.slice(end + 1))
+    );
+  };
+  const out = pass(value);
+  return any ? out : null;
+}
 
 /**
  * Whether a value matches a property's grammar, as css-tree reads it. A
@@ -134,6 +235,17 @@ export function matchType(type, value) {
  */
 function matchWith(value, match) {
   const {lexer, parse} = csstree();
+  // A color function holding a variable (color-mix(…, var(--x))) is a
+  // color whatever the variable holds: it is matched as one, so a value
+  // with many of them is read like the same value with plain colors.
+  for (let i = 0; i < 4; i++) {
+    const next = value.replace(
+      /\b(?:color-mix|light-dark|rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\)/gi,
+      m => (/\bvar\(/i.test(m) ? 'red' : m),
+    );
+    if (next === value) break;
+    value = next;
+  }
   const vars =
     value.match(/(?:var|env)\([^()]*(?:\([^()]*\)[^()]*)*\)/gi) ?? [];
   /** @param {string} v */
@@ -162,7 +274,16 @@ function matchWith(value, match) {
       return null;
     }
   }
-  if (vars.length > 3) return null;
+  // Many variables: each stands for the same kind of value at once.
+  if (vars.length > 3) {
+    for (const stand of VAR_STANDS_FOR) {
+      let v = value;
+      for (const x of vars) v = v.replace(x, stand);
+      const ast = tryOne(v);
+      if (ast) return ast;
+    }
+    return null;
+  }
   /** @param {string} v @param {number} i @returns {any | null} */
   const fill = (v, i) => {
     if (i === vars.length) return tryOne(v);
@@ -178,7 +299,8 @@ function matchWith(value, match) {
 /**
  * Whether a value that matches a property's grammar is still below a range
  * the specs set and css-tree's data does not carry: a `<line-width>` (a
- * border or outline width) and a duration are never negative.
+ * border or outline width) and a duration are never negative, nor is any
+ * number the current specifications' grammar ranges at 0 or more.
  * @param {string} property
  * @param {string} value
  */
@@ -208,6 +330,19 @@ export function belowRange(property, value) {
     numbersIn(ast).some(n => n.value < 0 && ['s', 'ms'].includes(n.unit))
   )
     below = true;
+  // A negative number the current grammar's range refuses (`line-height
+  // -1`, `gap -2px`).
+  // Only the sign decides: the same value with every number made positive
+  // must match the current grammar.
+  if (!below && numbersIn(ast).some(n => n.value < 0)) {
+    const lexer = currentLexer();
+    const positive = parse(value.replace(/(^|[\s(,/])-(?=\.?\d)/g, '$1'), {
+      context: 'value',
+    });
+    below =
+      Boolean(lexer.matchProperty(property, ast).error) &&
+      !lexer.matchProperty(property, positive).error;
+  }
   return below;
 }
 
@@ -299,15 +434,17 @@ const UNIT_TYPES = /** @type {Record<string, string>} */ (
   )
 );
 /** A value of each type, to match where a math function stands. */
-const TYPE_SAMPLES = /** @type {Record<string, string>} */ ({
-  number: '1',
-  percent: '1%',
-  length: '1px',
-  time: '1s',
-  angle: '1deg',
-  frequency: '1hz',
-  resolution: '1dppx',
-});
+const TYPE_SAMPLES = wordTable(
+  /** @type {Record<string, string>} */ ({
+    number: '1',
+    percent: '1%',
+    length: '1px',
+    time: '1s',
+    angle: '1deg',
+    frequency: '1hz',
+    resolution: '1dppx',
+  }),
+);
 
 /**
  * The type of a sum (or of the arguments of min(), max(), clamp()):
@@ -513,10 +650,15 @@ export function numbersIn(ast) {
   csstree().walk(ast, {
     enter(/** @type {any} */ node) {
       if (node.type === 'Function') fns.push(node.name.toLowerCase());
-      if (node.type === 'Dimension' || node.type === 'Number')
+      if (
+        node.type === 'Dimension' ||
+        node.type === 'Number' ||
+        node.type === 'Percentage'
+      )
         out.push({
           value: Number(node.value),
-          unit: (node.unit ?? '').toLowerCase(),
+          unit:
+            node.type === 'Percentage' ? '%' : (node.unit ?? '').toLowerCase(),
           fn: fns.at(-1) ?? null,
         });
     },
@@ -565,6 +707,40 @@ export function keywordsOf(prop) {
   return [...words];
 }
 
+/** @type {string[] | null} */
+let generics = null;
+
+/**
+ * The CSS generic font families (serif, math, ui-rounded …), as the
+ * grammar's `<generic-family>` type lists them; non-standard ones left out.
+ * @returns {string[]}
+ */
+export function genericFamilies() {
+  if (generics) return generics;
+  const t = csstree();
+  const seen = new Set();
+  /** @type {Set<string>} */
+  const words = new Set();
+  /** @param {any} syntax */
+  const walk = syntax => {
+    if (!syntax) return;
+    t.definitionSyntax.walk(syntax, (/** @type {any} */ n) => {
+      if (n.type === 'Keyword') {
+        if (!n.name.startsWith('-')) words.add(n.name);
+      } else if (
+        n.type === 'Type' &&
+        !n.name.startsWith('-') &&
+        !seen.has(n.name)
+      ) {
+        seen.add(n.name);
+        walk(currentLexer().types[n.name]?.syntax);
+      }
+    });
+  };
+  walk(currentLexer().types['generic-family']?.syntax);
+  return (generics = [...words]);
+}
+
 /**
  * A value the property takes, to put in a suggestion: its initial value
  * from MDN's data (a shorthand's first longhand's).
@@ -583,13 +759,64 @@ export function initialOf(prop) {
     : null;
 }
 
+/**
+ * One CSS number, percentage or dimension, read by css-tree's tokenizer as
+ * the browser reads it (`1.5e0`, `+1.5`, `15E-1`, `1.5EM`; never `50.%`),
+ * or null for anything else.
+ * @param {string} value
+ * @returns {{value: number, unit: string} | null}
+ */
+export function cssNumber(value) {
+  /** @type {any} */
+  let ast;
+  try {
+    ast = csstree().parse(value.trim(), {context: 'value'});
+  } catch {
+    return null;
+  }
+  const nodes = ast.children?.toArray?.() ?? [];
+  if (nodes.length !== 1) return null;
+  const [n] = nodes;
+  if (n.type === 'Number') return {value: Number(n.value), unit: ''};
+  if (n.type === 'Percentage') return {value: Number(n.value), unit: '%'};
+  if (n.type === 'Dimension')
+    return {value: Number(n.value), unit: String(n.unit).toLowerCase()};
+  return null;
+}
+
+/**
+ * A value split at `sep` outside brackets: `a(b, c), d` by `,` is
+ * [`a(b, c)`, ` d`]. A space separator also splits runs of spaces.
+ * @param {string} v
+ * @param {',' | ' ' | '/'} sep
+ * @returns {string[]}
+ */
+export function splitTop(v, sep) {
+  /** @type {string[]} */
+  const out = [];
+  let depth = 0;
+  let cur = '';
+  for (const c of v) {
+    if (c === '(') depth++;
+    if (c === ')') depth--;
+    if (depth === 0 && (sep === ' ' ? /\s/.test(c) : c === sep)) {
+      if (cur.trim() || sep === ',') out.push(cur);
+      cur = '';
+    } else cur += c;
+  }
+  if (cur.trim() || sep === ',') out.push(cur);
+  return out.filter(x => sep === ',' || x.trim());
+}
+
 /** The longhand each type of the `font` grammar sets, where css-tree names a type, not a property. */
-const FONT_TYPE_LONGHAND = /** @type {Record<string, string>} */ ({
-  'font-variant-css2': 'font-variant-caps',
-  'font-width-css3': 'font-stretch',
-  'font-stretch-absolute': 'font-stretch',
-  'system-family-name': 'system',
-});
+const FONT_TYPE_LONGHAND = wordTable(
+  /** @type {Record<string, string>} */ ({
+    'font-variant-css2': 'font-variant-caps',
+    'font-width-css3': 'font-stretch',
+    'font-stretch-absolute': 'font-stretch',
+    'system-family-name': 'system',
+  }),
+);
 
 /**
  * The parts of a CSS `font` value, by the longhand each sets, as written:
@@ -602,15 +829,90 @@ const FONT_TYPE_LONGHAND = /** @type {Record<string, string>} */ ({
  */
 export function fontShorthandParts(value) {
   const {lexer, parse, generate} = csstree();
-  const word = value.trim().toLowerCase();
-  if (/^[a-z-]+$/.test(word))
-    for (const prop of [
-      'font-weight',
-      'font-style',
-      'font-variant-caps',
-      'font-stretch',
-    ])
-      if (keywordsOf(prop).includes(word)) return {[prop]: word};
+  // Words that are each one longhand's keyword, size or weight (`bold`,
+  // `italic bold`, `bold 1rem`) are those longhands, in any order before the
+  // size; after the size the rest is the family (`1rem bold` names a family
+  // called bold), as CSS reads it.
+  const LONGHANDS = [
+    'font-weight',
+    'font-style',
+    'font-variant-caps',
+    'font-stretch',
+    'font-size',
+  ];
+  // A lone generic family (math, fangsong) is a family, though a longhand
+  // may share the word (font-size: math).
+  if (genericFamilies().includes(value.trim().toLowerCase()))
+    return {'font-family': value.trim()};
+  if (!value.includes(',')) {
+    /** @type {Record<string, string>} */
+    const each = {};
+    const words = splitTop(value.trim(), ' ');
+    let all = true;
+    // `normal` fits several longhands: every other word is placed first,
+    // then each `normal` takes the first longhand still free.
+    const normals = words.filter(w => w.toLowerCase() === 'normal').length;
+    // A normal after the size is part of the family, read below.
+    const sizeAt = words.findIndex(
+      w => matchValue('font-size', w.split('/')[0]) && !/^[a-z-]+$/i.test(w),
+    );
+    if (
+      sizeAt >= 0 &&
+      words.slice(sizeAt + 1).some(w => w.toLowerCase() === 'normal')
+    )
+      all = false;
+    for (const w of words.filter(x => x.toLowerCase() !== 'normal')) {
+      if (!all) break;
+      const lower = w.toLowerCase();
+      // After the size, the rest is the family (16px bold names a family
+      // called bold): the grammar below reads it.
+      if ('font-size' in each) {
+        all = false;
+        break;
+      }
+      // A size with its line height (1rem/1.5).
+      const slash = /^([^/]+)\/([^/]+)$/.exec(w);
+      if (
+        slash &&
+        !('font-size' in each) &&
+        matchValue('font-size', slash[1]) &&
+        matchValue('line-height', slash[2])
+      ) {
+        each['font-size'] = slash[1];
+        each['line-height'] = slash[2];
+        continue;
+      }
+      const takers = LONGHANDS.filter(p => keywordsOf(p).includes(lower));
+      const keyword = takers.find(p => !(p in each));
+      // A part given twice (bold bold, bold lighter, italic oblique) is no
+      // font value.
+      if (takers.length && !keyword) return {repeat: lower, part: takers[0]};
+      const prop =
+        keyword ??
+        ['font-size', 'font-weight'].find(
+          p => !(p in each) && !/^[a-z-]+$/i.test(w) && matchValue(p, w),
+        );
+      if (!prop) {
+        all = false;
+        break;
+      }
+      each[prop] = /^[a-z-]+$/i.test(w) ? lower : w;
+    }
+    for (let n = 0; all && n < normals; n += 1) {
+      const free = LONGHANDS.find(
+        p => !(p in each) && keywordsOf(p).includes('normal'),
+      );
+      if (!free)
+        return {
+          repeat: 'normal',
+          part: LONGHANDS.filter(p => keywordsOf(p).includes('normal')).join(
+            ', ',
+          ),
+        };
+      each[free] = 'normal';
+    }
+    if (all && words.length) return each;
+  }
   /** @type {any} */
   let ast;
   try {
@@ -697,4 +999,98 @@ export function takesPercentage(prop) {
   walk(propertyGrammar(prop));
   percentCache.set(prop, found);
   return found;
+}
+
+/** The generic font families CSS names, which are never quoted. */
+const GENERIC_FAMILIES = new Set([
+  'serif',
+  'sans-serif',
+  'monospace',
+  'cursive',
+  'fantasy',
+  'system-ui',
+  'math',
+  'emoji',
+  'fangsong',
+  'ui-serif',
+  'ui-sans-serif',
+  'ui-monospace',
+  'ui-rounded',
+]);
+
+/**
+ * A font family list with its missing commas put back, read with css-tree:
+ * within one comma-separated entry, a quoted family next to another quoted
+ * family or a generic one (`"Open Sans" serif`) is two families. Returns the
+ * list as CSS writes it (`"Open Sans", serif`), or null when nothing is
+ * missing, the value does not parse, or a family would hold a quote.
+ * @param {string} value
+ * @returns {string | null}
+ */
+export function familyListMeant(value) {
+  const {parse} = csstree();
+  /** @type {any} */
+  let ast;
+  try {
+    ast = parse(value, {context: 'value'});
+  } catch {
+    return null;
+  }
+  /** @type {Array<Array<{type: string, value: string}>>} */
+  const entries = [[]];
+  let ok = true;
+  ast.children.forEach((/** @type {any} */ n) => {
+    if (n.type === 'Operator' && n.value === ',') entries.push([]);
+    else if (n.type === 'String' || n.type === 'Identifier')
+      entries[entries.length - 1].push({
+        type: n.type,
+        value: n.type === 'String' ? n.value : n.name,
+      });
+    else ok = false;
+  });
+  if (!ok) return null;
+  /** @type {string[]} */
+  const families = [];
+  let changed = false;
+  for (const entry of entries) {
+    if (!entry.length) return null;
+    // One family: a quoted name alone, or a run of bare words.
+    if (
+      entry.length === 1 ||
+      entry.every(
+        x =>
+          x.type === 'Identifier' &&
+          !GENERIC_FAMILIES.has(x.value.toLowerCase()),
+      )
+    ) {
+      families.push(
+        entry.length === 1 && entry[0].type === 'String'
+          ? JSON.stringify(entry[0].value)
+          : entry.map(x => x.value).join(' '),
+      );
+      continue;
+    }
+    // A quoted name or a generic family ends a family: the comma between
+    // them was left out.
+    changed = true;
+    /** @type {string[]} */
+    let words = [];
+    const flush = () => {
+      if (words.length) families.push(words.join(' '));
+      words = [];
+    };
+    for (const x of entry) {
+      if (x.type === 'String') {
+        flush();
+        families.push(JSON.stringify(x.value));
+      } else if (GENERIC_FAMILIES.has(x.value.toLowerCase())) {
+        flush();
+        families.push(x.value);
+      } else words.push(x.value);
+    }
+    flush();
+  }
+  // A family that would hold a quote (escaped) is never a suggestion.
+  if (!changed || families.some(f => f.includes('\\'))) return null;
+  return families.join(', ');
 }

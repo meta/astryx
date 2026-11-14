@@ -8,9 +8,9 @@
  * @output the same response with the same results, maybe in a new order
  * @position api/search; rankWith (_main-searcher.mjs) runs it after
  * orderMatches, with the weights the adapter loads (loadSearchData) through
- * build's own loader. The fit is build's block-picker match
- * (build/blocks/blocks.mjs) with its shipped weights, so an entry the weights
- * never saw is scored from its own docs the same way. Without readable
+ * build's own loader. The fit is the block picker's `matchOf`
+ * (build/blocks/blocks.mjs) over the shipped weights' vocabulary, so an entry
+ * the weights never saw is scored from its own docs the same way. Without readable
  * weights the order stays.
  */
 

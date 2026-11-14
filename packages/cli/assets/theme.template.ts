@@ -281,6 +281,10 @@ export const myTheme = defineTheme({
   //   'variant:ghost+size:sm'   intersection of two
   //   'checked'                 a state the component reflects
   //   ':hover' / ':focus-visible' / ':disabled' — nested inside any of the above
+  //   '@light' / '@dark'        a block inside any of the above that applies
+  //                             only in that color mode (properties and
+  //                             ':hover' etc. as above); the other mode is
+  //                             left as written
   //
   // Write ordinary CSS properties: `borderRadius` and `padding` expand into
   // the component's internal vars for you, concentric radius math included.
@@ -300,6 +304,8 @@ export const myTheme = defineTheme({
         // Interaction states live inside the same block.
         ':hover': {transform: 'translateY(-1px)'},
         ':active': {transform: 'translateY(0)'},
+        // A value for one color mode only — any property, not just a colour:
+        // '@dark': {fontWeight: 'var(--font-weight-medium)'},
       },
       'variant:ghost': {borderWidth: '1px', borderStyle: 'solid'},
       'variant:destructive+size:sm': {letterSpacing: '0.02em'},

@@ -54,6 +54,8 @@ import {
   isJsonMode,
   jsonError as _jsonError,
   humanWarn,
+  outputCaptured,
+  writeAllSync,
 } from '../../../foundation/response/json.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {setOutcome} from '../../../foundation/debug/index.mjs';
@@ -64,6 +66,7 @@ import {
 import {levenshteinDistance} from '../../../foundation/text/levenshtein.mjs';
 import {doc as experimentalEditorDoc} from '../commands/experimental-theme-editor.doc.mjs';
 import {doc as experimentalPreviewDoc} from '../commands/experimental-theme-preview.doc.mjs';
+import {compareText} from '../../../foundation/text/compare-text.mjs';
 
 /**
  * Suggestion object — matches the shape used by API errors and the JSON
@@ -129,18 +132,22 @@ export function cliError(message, options = {}) {
   // Human mode: prefix "Error:" and print suggestions on subsequent lines.
   // Use console.error directly — we always want stderr for errors regardless
   // of the JSON-mode flag (we already handled JSON above).
-  console.error(`Error: ${message}`);
+  const lines = [`Error: ${message}`];
   if (suggestions?.length) {
-    console.error('');
+    lines.push('');
     for (const s of suggestions) {
       // A suggested command stays bare in JSON and is prefixed here.
       const name = /^astryx(\s|$)/.test(s.name)
         ? formatCliCommand(s.name)
         : s.name;
       const tag = s.reason ? `  ${name}  (${s.reason})` : `  ${name}`;
-      console.error(tag);
+      lines.push(tag);
     }
   }
+  // Written whole before a hard exit: output still queued for a slow pipe
+  // would be cut at 64 KiB. A soft exit lets the stream drain on its own.
+  if (hard && !outputCaptured(2)) writeAllSync(2, `${lines.join('\n')}\n`);
+  else for (const line of lines) console.error(line);
 
   if (hard) {
     process.exit(exitCode);
@@ -224,7 +231,7 @@ export function unknownSubcommandSuggestions(
   const ranked = [...names].sort(
     (a, b) =>
       levenshteinDistance(typed, a) - levenshteinDistance(typed, b) ||
-      a.localeCompare(b),
+      compareText(a, b),
   );
   return [
     ...elsewhere,

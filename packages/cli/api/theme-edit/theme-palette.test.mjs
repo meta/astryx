@@ -358,7 +358,9 @@ describe('color dials through the palette generator', () => {
       themeEditSet('p', 'vibrancy', '60', {cwd}),
     );
     expect(none.code).toBe('ERR_THEME_NO_EFFECT');
-    expect(none.run[0]).toContain('set p accent');
+    // No stock color is offered: the color is the user's to pick.
+    expect(none.run.join(' ')).not.toMatch(/#7c3aed/);
+    expect(none.run[0]).toMatch(/how accent|set p accent/);
     await themeEditSet('p', 'accent', '#7c3aed', {cwd});
     const before = read('tokens/p.palette.ts');
     const r = await themeEditSet('p', 'vibrancy', '80', {cwd});
@@ -759,17 +761,18 @@ describe('every color decision is generator config', () => {
     );
   });
 
-  it('writes one mode for a one-mode theme and keeps the author fields the dials do not own', () => {
+  it('writes both modes for a one-mode theme too and keeps the author fields the dials do not own', () => {
+    // A one-mode theme keeps both halves: its mode is the one the app's
+    // <Theme> is given, and a region Core draws in the other mode (a toast,
+    // a lightbox) reads the other half.
     const light = plan([{thing: 'accent', value: '#60a5fa'}], {
       mode: 'light-only',
     });
-    expect(light.config.modeStrategy).toBe('light-only');
+    expect(light.config.modeStrategy).toBe('light-and-dark');
     expect(
       Object.keys(/** @type {any} */ (light.candidate.palette.accent)),
-    ).not.toContain('dark');
-    expect(light.pal.tokens['--color-accent'].dark).toEqual(
-      light.pal.tokens['--color-accent'].light,
-    );
+    ).toContain('dark');
+    expect(light.pal.tokens['--color-accent'].dark.color).toBeTruthy();
     const authored = {
       modeStrategy: 'light-only',
       neutralProfile: 'warm-v1',
@@ -1077,14 +1080,14 @@ describe('every color decision is generator config', () => {
       ],
       {
         config: {
-          darkChromaTaper: {edgeMultiplier: 0.5},
+          notes: 'brand colors from the style guide',
           neutralProfile: 'warm-v1',
           families: [],
         },
       },
     );
     const notes = pal.notes.join(' ');
-    expect(notes).toContain('does not read darkChromaTaper');
+    expect(notes).toContain('does not read notes');
     expect(notes).toContain('neutralProfile warm-v1 changes nothing here');
     expect(paletteNotes(pal, 'accent', 'x').join(' ')).toContain(
       'is outside the colors every screen shows (sRGB)',
@@ -1218,14 +1221,19 @@ describe('color settings, refused well', () => {
     ]) {
       const r = await refusal(() => themeEditSet('p', thing, '#64748b', {cwd}));
       expect(r.code, thing).toBe('ERR_THEME_UNKNOWN_THING');
+      // p sets no color, so `vibrancy 60` would be refused: it is left
+      // out, and the dial is named.
       expect(r.run[0], thing).toBe(
-        `astryx experimental theme editor set p ${rest}`,
+        rest === 'vibrancy 60'
+          ? 'vibrancy'
+          : `astryx experimental theme editor set p ${rest}`,
       );
     }
+    // A hex a digit short: no digit is made up.
     expect(
       (await refusal(() => themeEditSet('p', 'accent', '#ff000', {cwd})))
         .run[0],
-    ).toBe("astryx experimental theme editor set p accent '#ff0000'");
+    ).toBe('astryx experimental theme editor how accent');
     const inputs = await refusal(() =>
       themeEditSet('p', 'info', 'blue', {cwd, on: 'inputs'}),
     );
@@ -1738,14 +1746,17 @@ describe('chaos round 4', () => {
       ).toBe('ERR_THEME_BAD_VALUE');
   });
 
-  it('lists what the dropped mode loses when a theme becomes one-mode', async () => {
+  it('keeps both halves when a theme becomes one-mode, and says where its mode goes', async () => {
+    // The theme's colors stay as they were; its mode is the one the app's
+    // <Theme> is given.
     await themeEditNew('m', {cwd});
     await themeEditSet('m', 'accent', '#0d9488', {cwd});
     const dark = await themeEditSet('m', 'mode', 'dark-only', {cwd});
-    expect(dark.data.changedTokens.some(x => /\(light\): /.test(x))).toBe(true);
+    expect(dark.data.changedTokens).toEqual([]);
+    expect(dark.data.notes.join(' ')).toContain('mode="dark"');
     await themeEditUndo('m', {cwd, thing: 'mode'});
     const light = await themeEditSet('m', 'mode', 'light-only', {cwd});
-    expect(light.data.changedTokens.some(x => /\(dark\): /.test(x))).toBe(true);
+    expect(light.data.notes.join(' ')).toContain('mode="light"');
     fs.rmSync(path.join(cwd, 'themes', 'm'), {recursive: true, force: true});
   });
 
@@ -1829,7 +1840,7 @@ describe('a palette an earlier editor wrote', () => {
       fs
         .readFileSync(ts, 'utf8')
         .replace(
-          /"--color-accent": palette\.accent\.dark\[[\d.]+\],/,
+          /"--color-accent": \[\s*palette\.accent\.light\[[\d.]+\],\s*palette\.accent\.dark\[[\d.]+\],?\s*\],/,
           '"--color-accent": [palette.accent.light[50], palette.accent.dark[70]],',
         )
         .replace(/^\/\/ Module [0-9a-f]{16}\.\n/m, ''),
@@ -1916,10 +1927,10 @@ describe('colors final-3', () => {
     expect(v.run?.[0] ?? JSON.stringify(v)).toContain('--font-family-body');
     const geist = await themeEditSet('p', 'font', 'geist-sans', {cwd});
     expect(geist.data.setting.value).toBe('geist');
-    const medium = await refusal(() =>
-      themeEditSet('p', 'text-size', 'Medium', {cwd}),
-    );
-    expect(JSON.stringify(medium)).toContain('text-size medium');
+    // A dial's own word in any case is that word.
+    const medium = await themeEditSet('p', 'text-size', 'Medium', {cwd});
+    expect(medium.data.setting.value).toBe('medium');
+    await themeEditUndo('p', {cwd, thing: 'text-size'});
     await themeEditUndo('p', {cwd, thing: 'font'});
   });
 
@@ -2121,8 +2132,10 @@ describe('colors11: refusals name a command that works', () => {
         themeEditSet('p', prop, 'banana', {cwd, on: 'card'}),
       );
       expect(r.run.length, prop).toBeGreaterThan(0);
+      // A color it can read from the value, else what the property
+      // takes: never a stock color the value did not hold.
       expect(r.run[0], prop).toMatch(
-        new RegExp(` set p ${prop} \\S+ --on card$`),
+        new RegExp(`( set p ${prop} \\S+ --on card| how ${prop})$`),
       );
     }
   });
@@ -2258,5 +2271,1381 @@ describe('colors13', () => {
       themeEditSet('p', 'accent', 'color-mix(in hsl, red, blue)', {cwd}),
     );
     expect(odd.message).toContain('give the mixed color itself');
+  });
+});
+
+describe('colors14', () => {
+  it('suggests longhands set takes, and refuses negatives the current grammar does', async () => {
+    const r = await refusal(() =>
+      themeEditSet('p', 'font', 'condensed', {cwd, on: 'card'}),
+    );
+    const run = r.run.find(x => /font-stretch condensed --on card$/.test(x));
+    expect(run).toBeTruthy();
+    await themeEditSet('p', 'font-stretch', 'condensed', {cwd, on: 'card'});
+    await themeEditUndo('p', {cwd, thing: 'font-stretch', on: 'card'});
+    for (const [prop, value] of [
+      ['line-height', '-1'],
+      ['line-height', '-10px'],
+      ['gap', '-2px'],
+    ]) {
+      const bad = await refusal(() =>
+        themeEditSet('p', prop, value, {cwd, on: 'card'}),
+      );
+      expect(bad.code, `${prop} ${value}`).toBe('ERR_THEME_BAD_VALUE');
+      expect(bad.run[0], prop).toMatch(new RegExp(` set p ${prop} \\d`));
+    }
+    await themeEditSet('p', 'margin', '-4px', {cwd, on: 'card'});
+    await themeEditUndo('p', {cwd, thing: 'margin', on: 'card'});
+    for (const [value, prop] of [
+      ['small', 'font-size'],
+      ['x-large', 'font-size'],
+      ['larger', 'font-size'],
+      ['1rem', 'font-size'],
+      ['700', 'font-weight'],
+    ]) {
+      const runs = (
+        await refusal(() => themeEditSet('p', 'font', value, {cwd, on: 'card'}))
+      ).run;
+      expect(
+        runs.some(x => x.includes(` ${prop} ${value} --on card`)),
+        value,
+      ).toBe(true);
+      expect(runs.join(' '), value).not.toContain(`font-family ${value}`);
+    }
+  });
+
+  it('refuses a color-mix() share past 100%, and reads mixes, relative colors and equal halves', async () => {
+    for (const [thing, on] of [
+      ['--color-accent'],
+      ['background-color', 'card'],
+    ])
+      expect(
+        (
+          await refusal(() =>
+            themeEditSet('p', thing, 'color-mix(in srgb, red 150%, blue)', {
+              cwd,
+              ...(on ? {on} : {}),
+            }),
+          )
+        ).code,
+        thing,
+      ).toBe('ERR_THEME_BAD_VALUE');
+    const dial = await refusal(() =>
+      themeEditSet('p', 'accent', 'color-mix(in srgb, red 150%, blue)', {cwd}),
+    );
+    expect(dial.run[0]).toContain('#ff0000');
+    for (const value of ['rgb(from red r g b)', 'light-dark(red, red)']) {
+      await themeEditSet('p', 'accent', value, {cwd});
+      await themeEditUndo('p', {cwd, thing: 'accent'});
+    }
+    const lab = await refusal(() =>
+      themeEditSet('p', 'accent', 'color-mix(in lab, red, blue)', {cwd}),
+    );
+    expect(lab.run[0]).not.toContain('#7c3aed');
+    expect(lab.message).toContain('give the mixed color itself');
+  });
+});
+
+describe('colors15', () => {
+  it('refuses negative percentages, and reads any CSS percentage as a mix share', async () => {
+    for (const [prop, value] of [
+      ['line-height', '-50%'],
+      ['gap', '-10%'],
+      ['font-stretch', '-10%'],
+    ])
+      expect(
+        (await refusal(() => themeEditSet('p', prop, value, {cwd, on: 'card'})))
+          .code,
+        `${prop} ${value}`,
+      ).toBe('ERR_THEME_BAD_VALUE');
+    for (const share of ['5e1%', '+50%', 'calc(50%)']) {
+      await themeEditSet(
+        'p',
+        '--color-accent',
+        `color-mix(in srgb, red ${share}, blue)`,
+        {cwd},
+      );
+      await themeEditUndo('p', {cwd, thing: '--color-accent'});
+    }
+    await themeEditSet('p', 'accent', 'color-mix(in srgb, red 1e2%, blue)', {
+      cwd,
+    });
+    await themeEditUndo('p', {cwd, thing: 'accent'});
+  });
+
+  it('takes a line height token as a number only, as Core multiplies it', async () => {
+    for (const [value, unitless] of [
+      ['1.5em', '1.5'],
+      ['150%', '1.5'],
+      ['normal', null],
+    ]) {
+      const r = await refusal(() =>
+        themeEditSet('p', '--text-body-leading', value, {cwd}),
+      );
+      expect(r.code, value).toBe('ERR_THEME_BAD_VALUE');
+      if (unitless)
+        expect(r.run[0], value).toMatch(
+          new RegExp(`--text-body-leading ${unitless}$`),
+        );
+    }
+    await themeEditSet('p', '--text-body-leading', '1.5', {cwd});
+    await themeEditUndo('p', {cwd, thing: '--text-body-leading'});
+  });
+
+  it('suggests the headings word meant, the font a role keeps, and text sizes the dial takes', async () => {
+    // A word in any case is the word itself.
+    for (const value of ['BOLD', 'Tight']) {
+      const r = await themeEditSet('p', 'headings', value, {cwd});
+      expect(r.data.setting.value, value).toBe(value.toLowerCase());
+      await themeEditUndo('p', {cwd, thing: 'headings'});
+    }
+    for (const [value, word] of [
+      ['700', 'bold'],
+      ['800', 'heavy'],
+      ['900', 'heavy'],
+    ]) {
+      const r = await refusal(() =>
+        themeEditSet('p', 'headings', value, {cwd}),
+      );
+      expect(r.run[0], value).toMatch(new RegExp(` headings ${word}$`));
+    }
+    await themeEditSet('p', 'font', 'georgia', {cwd, on: 'body'});
+    await themeEditSet('p', 'font', 'georgia', {cwd, on: 'heading'});
+    const masked = await themeEditSet('p', 'font', 'verdana', {cwd});
+    const said = masked.data.notes.join(' ');
+    expect(said).not.toContain('already shows');
+    expect(said).toContain('undo p font --on body');
+    for (const thing of ['font', 'font', 'font'])
+      await themeEditUndo('p', {cwd, thing}).catch(() => {});
+    const comic = await themeEditSet('p', 'font', 'Comic Sans MS', {cwd});
+    expect(comic.data.notes.join(' ')).not.toContain('not a system font');
+    await themeEditSet('p', 'text-size', '32', {cwd});
+    const more = await refusal(() =>
+      themeEditSet('p', 'text-size', 'more', {cwd}),
+    );
+    expect(more.run[0]).toContain('--font-size-base');
+    await themeEditSet('p', 'text-size', '31', {cwd});
+    const more31 = await refusal(() =>
+      themeEditSet('p', 'text-size', 'more', {cwd}),
+    );
+    expect(more31.run[0]).toMatch(/ text-size 32$/);
+  });
+
+  it('maps every keyword of a font value on a part to its longhand', async () => {
+    const r = await refusal(() =>
+      themeEditSet('p', 'font', 'italic bold', {cwd, on: 'card'}),
+    );
+    expect(r.run.some(x => /font-style italic --on card$/.test(x))).toBe(true);
+    expect(r.run.some(x => /font-weight bold --on card$/.test(x))).toBe(true);
+    expect(r.run.join(' ')).not.toContain('font-family');
+    const sized = await refusal(() =>
+      themeEditSet('p', 'font', '1rem bold', {cwd, on: 'card'}),
+    );
+    expect(sized.run.some(x => /font-size 1rem --on card$/.test(x))).toBe(true);
+    // A keyword after the size is the family, as CSS reads it.
+    expect(sized.run.some(x => /font-family bold --on card$/.test(x))).toBe(
+      true,
+    );
+    expect(sized.run.join(' ')).not.toContain('font-weight bold');
+  });
+});
+
+describe('colors16', () => {
+  it('keeps weight keywords on weight tokens, and a theme saved with one editable', async () => {
+    await themeEditSet('p', '--font-weight-bold', 'bold', {cwd});
+    await themeEditSet('p', 'corners', 'pill', {cwd});
+    await themeEditUndo('p', {cwd, thing: 'corners'});
+    for (const v of ['normal', 'bolder', 'lighter', '7e2', '+700'])
+      await themeEditSet('p', '--font-weight-bold', v, {cwd});
+    await themeEditUndo('p', {cwd, thing: '--font-weight-bold'});
+  });
+
+  it('reads CSS numbers as the browser does, and only multiplied tokens refuse units', async () => {
+    for (const v of ['1.5e0', '+1.5', '15E-1']) {
+      await themeEditSet('p', '--text-body-leading', v, {cwd});
+      await themeEditUndo('p', {cwd, thing: '--text-body-leading'});
+    }
+    const em = await refusal(() =>
+      themeEditSet('p', '--text-body-leading', '1.5EM', {cwd}),
+    );
+    expect(em.run[0]).toMatch(/--text-body-leading 1\.5$/);
+    for (const share of ['50.%', '5.e1%'])
+      expect(
+        (
+          await refusal(() =>
+            themeEditSet(
+              'p',
+              '--color-accent',
+              `color-mix(in srgb, red ${share}, blue)`,
+              {cwd},
+            ),
+          )
+        ).code,
+        share,
+      ).toBe('ERR_THEME_BAD_VALUE');
+  });
+
+  it('splits size with line height and math, and refuses a part named twice', async () => {
+    for (const [value, want] of [
+      [
+        '1rem/1.5',
+        [/font-size 1rem --on card$/, /line-height 1\.5 --on card$/],
+      ],
+      [
+        'italic 1rem/1.5',
+        [/font-style italic --on card$/, /line-height 1\.5 --on card$/],
+      ],
+      ['calc(1rem + 2px)', [/font-size 'calc\(1rem \+ 2px\)' --on card$/]],
+    ]) {
+      const r = await refusal(() =>
+        themeEditSet('p', 'font', value, {cwd, on: 'card'}),
+      );
+      for (const w of want)
+        expect(
+          r.run.some(x => w.test(x)),
+          `${value} ${w}`,
+        ).toBe(true);
+      expect(r.run.join(' '), value).not.toContain('font-family');
+    }
+    const twice = await refusal(() =>
+      themeEditSet('p', 'font', 'bold bold', {cwd, on: 'card'}),
+    );
+    expect(twice.message).toContain('twice');
+    // After the size, the rest is the family; more normals than parts that
+    // take it are named as such.
+    const familyAfter = await refusal(() =>
+      themeEditSet('p', 'font', '16px bold', {cwd, on: 'card'}),
+    );
+    expect(familyAfter.run.join('\n')).toMatch(/ font-family bold --on card/);
+    const five = await refusal(() =>
+      themeEditSet('p', 'font', 'normal normal normal normal normal', {
+        cwd,
+        on: 'card',
+      }),
+    );
+    expect(five.message).toContain(
+      'gives normal more times than the parts that take it (font-weight, font-style, font-variant-caps, font-stretch)',
+    );
+    // Another word for a part already given is the same part twice.
+    for (const value of ['bold lighter', 'italic oblique']) {
+      const again = await refusal(() =>
+        themeEditSet('p', 'font', value, {cwd, on: 'card'}),
+      );
+      expect(again.message, value).toContain('twice');
+      expect(again.run.join(' '), value).not.toContain(
+        `font-family '${value}'`,
+      );
+    }
+    expect(twice.run.join(' ')).not.toContain("font-family 'bold bold'");
+    // normal is a keyword of several parts: each is the next of them, never
+    // the same part twice.
+    const normal = await refusal(() =>
+      themeEditSet('p', 'font', 'normal normal 16px serif', {cwd, on: 'card'}),
+    );
+    expect(normal.message).not.toContain('twice');
+    // Every other word is placed first: normal takes what is left.
+    const normalBold = await refusal(() =>
+      themeEditSet('p', 'font', 'normal bold', {cwd, on: 'card'}),
+    );
+    expect(normalBold.run.join(' ')).not.toContain('font-family');
+    expect(
+      normalBold.run.some((/** @type {string} */ x) =>
+        / font-weight bold --on card$/.test(x),
+      ),
+    ).toBe(true);
+    expect(
+      normal.run.some((/** @type {string} */ x) =>
+        / font-size 16px --on card$/.test(x),
+      ),
+    ).toBe(true);
+    expect(
+      normal.run.some((/** @type {string} */ x) =>
+        / font-family serif --on card$/.test(x),
+      ),
+    ).toBe(true);
+  });
+});
+
+describe('colors17', () => {
+  it('checks a var() fallback against the token, and reads sizes and channels as CSS does', async () => {
+    for (const [thing, value] of [
+      ['--text-body-leading', 'var(--nope, 1.5em)'],
+      ['--text-body-leading', 'var(--nope, red)'],
+      ['--font-weight-bold', 'var(--nope, 1.5em)'],
+      ['--color-accent', 'var(--nope, 12px)'],
+      ['--radius-element', '1.px'],
+      ['--radius-element', '50.%'],
+      ['--color-accent', 'rgb(255. 0 0)'],
+      ['--color-accent', 'hsl(120. 50% 20%)'],
+    ])
+      expect(
+        (await refusal(() => themeEditSet('p', thing, value, {cwd}))).code,
+        `${thing} ${value}`,
+      ).toBe('ERR_THEME_BAD_VALUE');
+    const dot = await refusal(() =>
+      themeEditSet('p', '--radius-element', '16.px', {cwd}),
+    );
+    expect(dot.run[0]).toMatch(/--radius-element 16px$/);
+    for (const value of ['+4px', '4e+1px', 'var(--nope, 4px)']) {
+      await themeEditSet('p', '--radius-element', value, {cwd});
+      await themeEditUndo('p', {cwd, thing: '--radius-element'});
+    }
+  });
+
+  it('suggests the vibrancy meant, and none with no color to saturate', async () => {
+    const none = await refusal(() =>
+      themeEditSet('p', 'vibrancy', '70%', {cwd}),
+    );
+    expect(none.code).toBe('ERR_THEME_NO_EFFECT');
+    await themeEditSet('p', 'accent', '#7c3aed', {cwd});
+    expect(
+      (await themeEditSet('p', 'vibrancy', 'MORE', {cwd})).data.setting.value,
+    ).toMatch(/^\d+$/);
+    await themeEditUndo('p', {cwd, thing: 'vibrancy'});
+    for (const [value, want] of [
+      ['70%', '70'],
+      ['7e1', '70'],
+    ]) {
+      const r = await refusal(() =>
+        themeEditSet('p', 'vibrancy', value, {cwd}),
+      );
+      expect(r.run[0], value).toMatch(new RegExp(` vibrancy ${want}$`));
+    }
+    await themeEditUndo('p', {cwd, thing: 'accent'});
+  });
+
+  it('carries weights to phones, formats heading weights, and keeps sizes and weights out of the font dial', async () => {
+    const r = await themeEditSet('p', 'headings', 'heavy', {cwd});
+    expect(JSON.stringify(r.data)).not.toContain('[object Object]');
+    await themeEditSet('p', '--text-body-weight', '600', {cwd});
+    const css = read('p.css');
+    const phone = css.slice(css.indexOf('pointer: coarse'));
+    expect(phone).toMatch(/--text-heading-1-weight:\s*800/);
+    expect(phone).toMatch(/--text-body-weight:\s*600/);
+    await themeEditUndo('p', {cwd, thing: '--text-body-weight'});
+    await themeEditUndo('p', {cwd, thing: 'headings'});
+    for (const [value, on, want] of [
+      ['16px', undefined, /--font-size-base 16px$/],
+      ['bold', 'heading', / headings bold$/],
+      [
+        'italic 700 16px/1.4 Georgia, serif',
+        undefined,
+        / font 'Georgia, serif'$/,
+      ],
+    ]) {
+      const f = await refusal(() =>
+        themeEditSet('p', 'font', value, {cwd, ...(on ? {on} : {})}),
+      );
+      expect(f.code, value).toBe('ERR_THEME_BAD_VALUE');
+      expect(
+        f.run.some(x => want.test(x)),
+        `${value} ${f.run}`,
+      ).toBe(true);
+    }
+    await themeEditSet('p', 'font', 'georgia', {cwd});
+    await themeEditUndo('p', {cwd, thing: 'font'});
+  });
+});
+
+describe('hunt22', () => {
+  it('reads undo values in either quote style and spacing, names the headings half set, and tells a new theme from a lost history', async () => {
+    await themeEditNew('h22', {cwd, mode: 'dark-only'});
+    const fresh = await refusal(() =>
+      themeEditUndo('h22', {cwd, thing: 'mode'}),
+    );
+    expect(fresh.message).toContain('no saved change');
+    expect(fresh.message).not.toContain('does not reach back');
+    await themeEditSet('h22', 'corners', 'pill', {cwd});
+    await themeEditUndo('h22', {cwd});
+    const undone = await refusal(() =>
+      themeEditUndo('h22', {cwd, thing: 'mode'}),
+    );
+    expect(undone.message).toContain('was never changed');
+    await themeEditSet('h22', 'headings', 'tight', {cwd});
+    const half = await refusal(() =>
+      themeEditUndo('h22', {cwd, thing: 'headings', value: 'bold'}),
+    );
+    expect(half.message).toContain('only the headings tracking half');
+    await themeEditUndo('h22', {cwd, thing: 'headings'});
+    await themeEditSet(
+      'h22',
+      '--font-family-body',
+      `'Inter Tight', sans-serif`,
+      {cwd},
+    );
+    await themeEditUndo('h22', {
+      cwd,
+      thing: '--font-family-body',
+      value: `"Inter Tight",sans-serif`,
+    });
+    const mistyped = await refusal(() =>
+      themeEditSet('h22', 'base', 'p', {cwd}),
+    );
+    expect(mistyped.message).toContain('p is a theme made here');
+    fs.rmSync(path.join(cwd, 'themes', 'h22'), {recursive: true, force: true});
+  });
+});
+
+describe('colors19', () => {
+  it('checks each var() fallback in a part value against the property', async () => {
+    for (const [prop, value, on] of [
+      ['padding', 'var(--nope, red)', 'card'],
+      ['font-weight', 'calc(var(--nope, 1px))', 'text'],
+    ])
+      expect(
+        (await refusal(() => themeEditSet('p', prop, value, {cwd, on}))).code,
+        `${prop} ${value}`,
+      ).toBe('ERR_THEME_BAD_VALUE');
+    await themeEditSet('p', 'padding', 'var(--nope, 4px)', {cwd, on: 'card'});
+    await themeEditUndo('p', {cwd, thing: 'padding', on: 'card'});
+  });
+
+  it('suggests the size meant, and the nearest text size', async () => {
+    for (const [value, want] of [
+      ['16 px', '16px'],
+      ['1,5rem', '1.5rem'],
+      ['16pxx', '16px'],
+    ]) {
+      const r = await refusal(() =>
+        themeEditSet('p', '--font-size-base', value, {cwd}),
+      );
+      expect(r.run[0], value).toMatch(
+        new RegExp(`--font-size-base ${want.replace('.', '\\.')}$`),
+      );
+    }
+    for (const [value, want] of [
+      ['20 px', '20'],
+      ['125%', '20'],
+      ['40', '32'],
+      ['3px', '10'],
+    ]) {
+      const r = await refusal(() =>
+        themeEditSet('p', 'text-size', value, {cwd}),
+      );
+      expect(r.run[0], value).toMatch(new RegExp(` text-size ${want}$`));
+    }
+  });
+
+  it('reports a hand-edited font dial set would refuse, and never builds it', async () => {
+    await themeEditNew('f19', {cwd});
+    await themeEditSet('f19', 'font', 'georgia', {cwd});
+    const file = path.join(cwd, 'themes', 'f19', 'f19.settings.json');
+    const saved = fs.readFileSync(file, 'utf8');
+    fs.writeFileSync(file, saved.replace('"georgia"', '"inherit"'));
+    const r = await refusal(() =>
+      themeEditSet('f19', 'corners', 'pill', {cwd}),
+    );
+    expect(r.message).toContain('inherit');
+    fs.rmSync(path.join(cwd, 'themes', 'f19'), {recursive: true, force: true});
+  });
+});
+
+describe('parts24', () => {
+  it('replaces only the longhands a shorthand really sets', async () => {
+    for (const [long, longValue, short, shortValue] of [
+      ['overflow-wrap', 'anywhere', 'overflow', 'hidden'],
+      ['transform-origin', 'top left', 'transform', 'scale(1.1)'],
+      ['outline-offset', '2px', 'outline', '1px solid red'],
+      ['flex-direction', 'column', 'flex', '1'],
+      ['background-blend-mode', 'multiply', 'background', 'red'],
+      ['text-decoration-skip-ink', 'none', 'text-decoration', 'underline'],
+    ]) {
+      await themeEditSet('p', long, longValue, {cwd, on: 'button'});
+      await themeEditSet('p', short, shortValue, {cwd, on: 'button'});
+      const shown = await themeEditShow('p', {cwd});
+      expect(
+        JSON.stringify(shown.data).includes(long),
+        `${short} kept ${long}`,
+      ).toBe(true);
+      await themeEditUndo('p', {cwd, thing: short, on: 'button'});
+      await themeEditUndo('p', {cwd, thing: long, on: 'button'});
+    }
+    await themeEditSet('p', 'padding-top', '12px', {cwd, on: 'button'});
+    await themeEditSet('p', 'padding', '4px', {cwd, on: 'button'});
+    expect(
+      JSON.stringify((await themeEditShow('p', {cwd})).data),
+    ).not.toContain('padding-top');
+    await themeEditUndo('p', {cwd, thing: 'padding', on: 'button'});
+  });
+
+  it('keeps a background on variants when a blend mode comes later', async () => {
+    const {findOverrides} = await import('./_settings.mjs');
+    const lifted = findOverrides(
+      '.astryx-button[data-variant="destructive"] { background: var(--color-error-muted); }',
+      {
+        components: {
+          button: {
+            base: {background: 'red', backgroundBlendMode: 'multiply'},
+          },
+        },
+      },
+    );
+    expect(lifted.map(x => x.prop)).toContain('background');
+  });
+
+  it('reads plural parts, and keeps a hint value', async () => {
+    for (const [plural, part] of [
+      ['cards', 'card'],
+      ['dialogs', 'dialog'],
+      ['tabs', 'tab'],
+    ]) {
+      const r = await refusal(() =>
+        themeEditSet('p', 'opacity', '0.9', {cwd, on: plural}),
+      );
+      expect(r.run[0], plural).toMatch(new RegExp(`--on ${part}$`));
+    }
+    const shadow = await refusal(() =>
+      themeEditSet('p', 'shadow', 'none', {cwd, on: 'card'}),
+    );
+    expect(shadow.run[0]).toMatch(/box-shadow none --on card$/);
+    const rounded = await refusal(() =>
+      themeEditSet('p', 'rounded', '8px', {cwd, on: 'card'}),
+    );
+    expect(rounded.run[0]).toMatch(/corners 8px --on card$/);
+    const bold = await refusal(() =>
+      themeEditSet('p', 'bold', 'false', {cwd, on: 'button'}),
+    );
+    expect(bold.run[0]).toMatch(/font-weight normal --on button$/);
+  });
+});
+
+describe('parts28', () => {
+  /** The card's padding variables in the built CSS, by side. */
+  const cardSides = (/** @type {string} */ selector = '.astryx-card') => {
+    const css = read('p.css');
+    /** @type {Record<string, string>} */
+    const out = {};
+    const at =
+      css.indexOf(`${selector} {`) >= 0
+        ? css.indexOf(`${selector} {`)
+        : css.indexOf(`${selector}{`);
+    const body = css.slice(at, css.indexOf('}', at));
+    for (const m of body.matchAll(
+      /--astryx-card-padding(-[a-z-]+)?:\s*([^;]+);/g,
+    ))
+      out[m[1] ?? 'all'] = m[2].trim();
+    return out;
+  };
+
+  it('writes each side of a card padding exactly, whatever Core splits', async () => {
+    for (const [value, want] of [
+      ['clamp(12px, 2vw, 24px)', {all: 'clamp(12px, 2vw, 24px)'}],
+      [
+        'calc(4px + 2px) 8px',
+        {
+          '-block-start': 'calc(4px + 2px)',
+          '-block-end': 'calc(4px + 2px)',
+          '-inline-start': '8px',
+          '-inline-end': '8px',
+        },
+      ],
+      [
+        // The shorthand is physical: its left and right are per direction.
+        '4px 8px 12px 16px',
+        {
+          '-block-start': '4px',
+          '-block-end': '12px',
+        },
+      ],
+    ]) {
+      await themeEditSet('p', 'padding', value, {cwd, on: 'card'});
+      const sides = cardSides();
+      for (const [k, v] of Object.entries(want))
+        expect(sides[k], `${value} ${k}`).toBe(v);
+      expect(JSON.stringify(sides), value).not.toMatch(/: \+|"\+"/);
+      if (value === '4px 8px 12px 16px') {
+        const ltr = cardSides('.astryx-card:where(:dir(ltr))');
+        const rtl = cardSides('.astryx-card:where(:dir(rtl))');
+        expect([ltr['-inline-start'], ltr['-inline-end']]).toEqual([
+          '16px',
+          '8px',
+        ]);
+        expect([rtl['-inline-start'], rtl['-inline-end']]).toEqual([
+          '8px',
+          '16px',
+        ]);
+      }
+      await themeEditUndo('p', {cwd, thing: 'padding', on: 'card'});
+    }
+  });
+
+  it('reaches a variant after a side set for every variant', async () => {
+    await themeEditSet('p', 'padding-top', '12px', {cwd, on: 'card'});
+    await themeEditSet('p', 'padding', '4px', {
+      cwd,
+      on: 'card',
+      when: 'variant:muted',
+    });
+    const sides = cardSides('.astryx-card[data-variant="muted"]');
+    for (const k of [
+      '-block-start',
+      '-block-end',
+      '-inline-start',
+      '-inline-end',
+    ])
+      expect(sides[k], k).toBe('4px');
+    await themeEditUndo('p', {
+      cwd,
+      thing: 'padding',
+      on: 'card',
+      when: 'variant:muted',
+    });
+    await themeEditUndo('p', {cwd, thing: 'padding-top', on: 'card'});
+  });
+
+  it('gives each card corner its own radius, and the content inside one radius', async () => {
+    for (const [value, corners, inner] of [
+      ['12px 12px 0 0', ['12px', '12px', '0', '0'], '12px'],
+      [
+        '10px / 20px',
+        ['10px 20px', '10px 20px', '10px 20px', '10px 20px'],
+        '10px',
+      ],
+    ]) {
+      await themeEditSet('p', 'border-radius', value, {cwd, on: 'card'});
+      const css = read('p.css');
+      const at = css.indexOf('.astryx-card {');
+      const body = css.slice(at, css.indexOf('}', at));
+      ['top-left', 'top-right', 'bottom-right', 'bottom-left'].forEach((c, i) =>
+        expect(body, `${value} ${c}`).toContain(
+          `border-${c}-radius: ${corners[i]};`,
+        ),
+      );
+      expect(body, value).toContain(`--_card-radius: ${inner};`);
+      expect(body, value).not.toContain(`--_card-radius: ${value};`);
+      await themeEditUndo('p', {cwd, thing: 'border-radius', on: 'card'});
+    }
+  });
+});
+
+describe('parts30', () => {
+  it('lets a variant longhand or shorthand win over a lifted base value', async () => {
+    const {findOverrides} = await import('./_settings.mjs');
+    // The lift itself is unchanged: the base value reaches the variant.
+    expect(
+      findOverrides(
+        '.astryx-button[data-variant="destructive"] { border-color: var(--x); }',
+        {components: {button: {base: {border: '2px solid red'}}}},
+      ).map(x => x.prop),
+    ).toEqual(['border']);
+    for (const [base, when, prop, value, want] of [
+      [
+        'border',
+        'variant:destructive',
+        'border-color',
+        'blue',
+        /border-color:\s*blue/,
+      ],
+    ]) {
+      await themeEditSet('p', base, '2px solid red', {cwd, on: 'button'});
+      await themeEditSet('p', prop, value, {cwd, on: 'button', when});
+      const css = read('p.css');
+      const at = css.indexOf('.astryx-button[data-variant="destructive"]');
+      if (at >= 0) {
+        const body = css.slice(at, css.indexOf('}', at));
+        const lifted = body.search(/border:/);
+        const own = body.search(want);
+        if (lifted >= 0) expect(lifted, body).toBeLessThan(own);
+      }
+      await themeEditUndo('p', {cwd, thing: prop, on: 'button', when});
+      await themeEditUndo('p', {cwd, thing: base, on: 'button'});
+    }
+  });
+
+  it('maps card physical sides to Core side variables, and resolves keywords', async () => {
+    await themeEditSet('p', 'padding-left', '20px', {cwd, on: 'card'});
+    await themeEditSet('p', 'padding', '8px', {cwd, on: 'card'});
+    const css = read('p.css');
+    const at = css.indexOf('.astryx-card {');
+    const body = css.slice(at, css.indexOf('}', at));
+    expect(body).not.toMatch(/padding-left:/);
+    // The later padding replaced the side, as for any longhand.
+    await themeEditUndo('p', {cwd, thing: 'padding', on: 'card'});
+    await themeEditSet('p', 'padding', 'initial', {cwd, on: 'card'});
+    const css2 = read('p.css');
+    const at2 = css2.indexOf('.astryx-card {');
+    // initial leaves the variable without a value: Core's own default.
+    expect(css2.slice(at2, css2.indexOf('}', at2))).toMatch(
+      /--astryx-card-padding[a-z-]*:\s*initial/,
+    );
+    await themeEditUndo('p', {cwd, thing: 'padding', on: 'card'});
+    // inherit leaves it to Core's default too (parts40), and says so.
+    const inherit = await themeEditSet('p', 'padding', 'inherit', {
+      cwd,
+      on: 'card',
+    });
+    expect(inherit.data.notes.join(' ')).toMatch(
+      /inherit means card's own default padding from Core/,
+    );
+    await themeEditUndo('p', {cwd, thing: 'padding', on: 'card'});
+  });
+
+  it('keeps a variant margin side and a variant radius over the lifted base values', async () => {
+    for (const [part, base, baseValue, when, prop, value, own] of [
+      [
+        'button',
+        'margin',
+        '3px',
+        'size:sm',
+        'margin-top',
+        '9px',
+        /margin-top:\s*9px/,
+      ],
+      [
+        'card',
+        'border-radius',
+        '8px',
+        'variant:muted',
+        'border-radius',
+        '1px 20px',
+        /border-top-left-radius:\s*1px|border-radius:\s*1px 20px/,
+      ],
+    ]) {
+      await themeEditSet('p', base, baseValue, {cwd, on: part});
+      await themeEditSet('p', prop, value, {cwd, on: part, when});
+      const css = read('p.css');
+      const [k, wv] = when.split(':');
+      const at = css.indexOf(`.astryx-${part}[data-${k}="${wv}"]`);
+      expect(at, `${part} ${when}`).toBeGreaterThanOrEqual(0);
+      const body = css.slice(at, css.indexOf('}', at));
+      const mine = body.search(own);
+      expect(mine, body).toBeGreaterThanOrEqual(0);
+      const lifted = body.search(
+        new RegExp(`(^|[;{\\s])${base}:\\s*${baseValue}`),
+      );
+      if (lifted >= 0) expect(lifted, body).toBeLessThan(mine);
+      await themeEditUndo('p', {cwd, thing: prop, on: part, when});
+      await themeEditUndo('p', {cwd, thing: base, on: part});
+    }
+  });
+});
+
+describe('colors32', () => {
+  it('suggests the token value meant, not a stock one', async () => {
+    for (const [thing, value, want] of [
+      ['--font-size-base', '18px;', /--font-size-base 18px$/],
+      ['--color-accent', '＃7c3aed', /--color-accent '#7c3aed'$/],
+      ['--font-weight-bold', '"700"', /--font-weight-bold 700$/],
+      [
+        '--font-family-body',
+        'Font Awesome 6 Free',
+        /--font-family-body '"Font Awesome 6 Free"'$/,
+      ],
+    ]) {
+      const r = await refusal(() => themeEditSet('p', thing, value, {cwd}));
+      expect(r.run[0], `${thing} ${value}`).toMatch(want);
+    }
+    const part = await refusal(() =>
+      themeEditSet('p', 'font-family', 'Font Awesome 6 Free', {
+        cwd,
+        on: 'card',
+      }),
+    );
+    expect(part.run[0]).toContain('"Font Awesome 6 Free"');
+  });
+
+  it('saves a fractional text size as the whole pixel it builds, and says so', async () => {
+    const r = await themeEditSet('p', 'text-size', '15.5', {cwd});
+    expect(r.data.notes.join(' ')).toContain('saved as 16');
+    await themeEditUndo('p', {cwd, thing: 'text-size'});
+  });
+});
+
+describe('parts33', () => {
+  /** @param {string} selector */
+  const blockOf = selector => {
+    const css = read('p.css');
+    const at = css.indexOf(`${selector} {`);
+    return at < 0 ? '' : css.slice(at, css.indexOf('}', at));
+  };
+
+  it('replaces a physical side by a later logical shorthand, and a group side by a later part padding', async () => {
+    await themeEditSet('p', 'padding-left', '20px', {cwd, on: 'card'});
+    await themeEditSet('p', 'padding-inline', '8px', {cwd, on: 'card'});
+    const shown = JSON.stringify((await themeEditShow('p', {cwd})).data);
+    expect(shown).not.toContain('padding-left');
+    await themeEditUndo('p', {cwd, thing: 'padding-inline', on: 'card'});
+    await themeEditSet('p', 'padding-left', '20px', {cwd, on: 'containers'});
+    await themeEditSet('p', 'padding', '8px', {cwd, on: 'card'});
+    const card = blockOf('.astryx-card');
+    expect(card).toMatch(
+      /--astryx-card-padding-inline-start:\s*8px|--astryx-card-padding:\s*8px/,
+    );
+    expect(card).not.toMatch(/padding-inline-start:\s*20px/);
+    await themeEditUndo('p', {cwd, thing: 'padding', on: 'card'});
+    await themeEditUndo('p', {cwd, thing: 'padding-left', on: 'containers'});
+  });
+
+  it("keeps the part's own inner radius over a group radius in the same block", async () => {
+    await themeEditSet('p', 'border-radius', '8px', {cwd, on: 'containers'});
+    await themeEditSet('p', 'border-radius', '1px 20px', {cwd, on: 'card'});
+    const card = blockOf('.astryx-card');
+    expect(card).toContain('--_card-radius: 1px;');
+    expect(card).not.toContain('--_card-radius: 8px;');
+    await themeEditUndo('p', {cwd, thing: 'border-radius', on: 'card'});
+    await themeEditUndo('p', {cwd, thing: 'border-radius', on: 'containers'});
+  });
+
+  it('keeps one logical side logical, off the whole-box variable, where Core copies the whole padding', async () => {
+    await themeEditSet('p', 'padding-inline-start', '5px', {
+      cwd,
+      on: 'dropdown-menu',
+    });
+    const box = blockOf('.astryx-dropdown-menu');
+    expect(box).not.toMatch(/--_dropdown-menu-padding:\s*5px/);
+    // Each direction gets its own side, off the whole-box variable.
+    expect(blockOf('.astryx-dropdown-menu:where(:dir(ltr))')).toMatch(
+      /padding-left:\s*5px/,
+    );
+    expect(blockOf('.astryx-dropdown-menu:where(:dir(rtl))')).toMatch(
+      /padding-right:\s*5px/,
+    );
+    await themeEditUndo('p', {
+      cwd,
+      thing: 'padding-inline-start',
+      on: 'dropdown-menu',
+    });
+  });
+
+  it('resolves a keyword on each logical side of a card', async () => {
+    await themeEditSet('p', 'padding-block-start', 'initial', {
+      cwd,
+      on: 'card',
+    });
+    // initial leaves the side without a value: Core's own default for it.
+    const card = blockOf('.astryx-card');
+    expect(card).toMatch(/--astryx-card-padding-block-start:\s*initial/);
+    await themeEditUndo('p', {cwd, thing: 'padding-block-start', on: 'card'});
+  });
+});
+
+describe('parts34', () => {
+  /** @param {string} selector */
+  const blockOf = selector => {
+    const css = read('p.css');
+    const at = css.indexOf(`${selector} {`);
+    return at < 0 ? '' : css.slice(at, css.indexOf('}', at));
+  };
+
+  it("refuses a composer padding (parts39: only Core's private variable reaches the box), and what paints its wrapper", async () => {
+    const pad = await refusal(() =>
+      themeEditSet('p', 'padding', '5px', {cwd, on: 'chat-composer'}),
+    );
+    expect(pad.code).toBe('ERR_THEME_NO_EFFECT');
+    expect(pad.run[0]).toMatch(/how chat-composer$/);
+    for (const [prop, value, when] of [
+      ['background', '#f3f4f6'],
+      ['box-shadow', 'none'],
+      ['padding-left', '5px'],
+      ['padding', '5px', 'density:compact'],
+    ])
+      expect(
+        (
+          await refusal(() =>
+            themeEditSet('p', prop, value, {
+              cwd,
+              on: 'chat-composer',
+              ...(when ? {when} : {}),
+            }),
+          )
+        ).code,
+        `${prop} ${when ?? ''}`,
+      ).toBe('ERR_THEME_BAD_VALUE');
+  });
+});
+
+describe('r19 (1) / parts35: a card physical side is its side in each direction', () => {
+  it('writes a card padding-left as the inline-start variable left-to-right and the inline-end right-to-left', async () => {
+    await themeEditSet('p', 'padding-left', '20px', {cwd, on: 'card'});
+    const css = read('p.css');
+    const rule = (/** @type {string} */ sel) => {
+      const at = css.indexOf(`${sel} {`);
+      return at < 0 ? '' : css.slice(at, css.indexOf('}', at));
+    };
+    expect(rule('.astryx-card:where(:dir(ltr))')).toMatch(
+      /--astryx-card-padding-inline-start:\s*20px/,
+    );
+    expect(rule('.astryx-card:where(:dir(rtl))')).toMatch(
+      /--astryx-card-padding-inline-end:\s*20px/,
+    );
+    expect(rule('.astryx-card')).not.toMatch(/(^|[;{\s])padding-left:/);
+    await themeEditUndo('p', {cwd, thing: 'padding-left', on: 'card'});
+  });
+});
+
+describe('r19b (1): a card physical side beside other sides', () => {
+  it('writes padding-left as its side after another side, with a keyword, and with math', async () => {
+    for (const [first, value, want] of [
+      [['padding-top', '12px'], '20px', '20px'],
+      [null, 'initial', 'initial'],
+      [null, '0', '0px'],
+      [null, 'calc(4px + 2px)', 'calc(4px + 2px)'],
+    ]) {
+      if (first) await themeEditSet('p', first[0], first[1], {cwd, on: 'card'});
+      await themeEditSet('p', 'padding-left', value, {cwd, on: 'card'});
+      const css = read('p.css');
+      const at = css.indexOf('.astryx-card:where(:dir(ltr)) {');
+      const body = css.slice(at, css.indexOf('}', at));
+      expect(body, value).toContain(
+        `--astryx-card-padding-inline-start: ${want};`,
+      );
+      expect(css, value).not.toContain('padding-left-start');
+      await themeEditUndo('p', {cwd, thing: 'padding-left', on: 'card'});
+      if (first) await themeEditUndo('p', {cwd, thing: first[0], on: 'card'});
+    }
+  });
+});
+
+describe('r19d: per-direction sides under a state, and later paddings that cover them', () => {
+  /** @param {string} selector */
+  const blockOf = selector => {
+    const css = read('p.css');
+    const at = css.indexOf(`${selector} {`);
+    return at < 0 ? '' : css.slice(at, css.indexOf('}', at));
+  };
+
+  it('writes a logical side under a state as one rule per direction', async () => {
+    const r = await themeEditSet('p', 'padding-inline-start', '5px', {
+      cwd,
+      on: 'dropdown-menu',
+      state: 'hover',
+    });
+    expect(JSON.stringify(r.data)).not.toContain('[object Object]');
+    const css = read('p.css');
+    expect(css).toMatch(
+      /\.astryx-dropdown-menu:hover:dir\(ltr\)[^{]*\{[^}]*padding-left:\s*5px/,
+    );
+    expect(css).toMatch(
+      /\.astryx-dropdown-menu:hover:dir\(rtl\)[^{]*\{[^}]*padding-right:\s*5px/,
+    );
+    await themeEditUndo('p', {
+      cwd,
+      thing: 'padding-inline-start',
+      on: 'dropdown-menu',
+      state: 'hover',
+    });
+  });
+
+  it('lets a later padding or physical side replace an earlier per-direction side', async () => {
+    for (const [later, value] of [
+      ['padding', '8px'],
+      ['padding-left', '9px'],
+    ]) {
+      await themeEditSet('p', 'padding-inline-start', '5px', {
+        cwd,
+        on: 'dropdown-menu',
+      });
+      await themeEditSet('p', later, value, {cwd, on: 'dropdown-menu'});
+      expect(
+        blockOf('.astryx-dropdown-menu:where(:dir(ltr))'),
+        later,
+      ).not.toMatch(/padding-left:\s*5px/);
+      await themeEditUndo('p', {cwd, thing: later, on: 'dropdown-menu'});
+      await themeEditUndo('p', {
+        cwd,
+        thing: 'padding-inline-start',
+        on: 'dropdown-menu',
+      }).catch(() => {});
+    }
+  });
+
+  it('on a card, the later of a physical and a logical side wins in each direction, in either order', async () => {
+    await themeEditSet('p', 'padding-left', '20px', {cwd, on: 'card'});
+    await themeEditSet('p', 'padding-inline-start', '6px', {cwd, on: 'card'});
+    // Left-to-right the later inline-start wins; right-to-left the left is
+    // the inline-end, which stays.
+    expect(blockOf('.astryx-card')).toMatch(
+      /--astryx-card-padding-inline-start:\s*6px/,
+    );
+    expect(blockOf('.astryx-card:where(:dir(rtl))')).toMatch(
+      /--astryx-card-padding-inline-end:\s*20px/,
+    );
+    await themeEditUndo('p', {cwd, thing: 'padding-inline-start', on: 'card'});
+    await themeEditUndo('p', {cwd, thing: 'padding-left', on: 'card'}).catch(
+      () => {},
+    );
+    await themeEditSet('p', 'padding-inline-start', '6px', {cwd, on: 'card'});
+    await themeEditSet('p', 'padding-left', '20px', {cwd, on: 'card'});
+    expect(blockOf('.astryx-card:where(:dir(ltr))')).toMatch(
+      /--astryx-card-padding-inline-start:\s*20px/,
+    );
+    expect(blockOf('.astryx-card:where(:dir(rtl))')).toMatch(
+      /--astryx-card-padding-inline-start:\s*6px/,
+    );
+    expect(blockOf('.astryx-card:where(:dir(rtl))')).toMatch(
+      /--astryx-card-padding-inline-end:\s*20px/,
+    );
+    await themeEditUndo('p', {cwd, thing: 'padding-left', on: 'card'});
+    await themeEditUndo('p', {cwd, thing: 'padding-inline-start', on: 'card'});
+  });
+
+  it('keeps an earlier physical side on a menu under a later per-direction side', async () => {
+    await themeEditSet('p', 'padding-left', '20px', {cwd, on: 'context-menu'});
+    await themeEditSet('p', 'padding-inline-start', '6px', {
+      cwd,
+      on: 'context-menu',
+    });
+    expect(blockOf('.astryx-context-menu')).toMatch(
+      /(^|[;{\s])padding-left:\s*20px/,
+    );
+    expect(blockOf('.astryx-context-menu:where(:dir(ltr))')).toMatch(
+      /padding-left:\s*6px/,
+    );
+    await themeEditUndo('p', {
+      cwd,
+      thing: 'padding-inline-start',
+      on: 'context-menu',
+    });
+    await themeEditUndo('p', {cwd, thing: 'padding-left', on: 'context-menu'});
+  });
+});
+
+describe('parts35: one padding model', () => {
+  /** @param {string} selector */
+  const at = selector => read('p.css').indexOf(`${selector} {`);
+  /** @param {string} selector */
+  const ruleOf = selector => {
+    const css = read('p.css');
+    const i = css.indexOf(`${selector} {`);
+    return i < 0 ? '' : css.slice(i, css.indexOf('}', i));
+  };
+
+  it('lets a variant padding out-rank a base physical side in both directions', async () => {
+    await themeEditSet('p', 'padding-left', '20px', {cwd, on: 'card'});
+    await themeEditSet('p', 'padding', '8px', {
+      cwd,
+      on: 'card',
+      when: 'variant:muted',
+    });
+    const muted = '.astryx-card[data-variant="muted"]';
+    const variant = ruleOf(muted);
+    for (const k of ['inline-start', 'inline-end', 'block-start', 'block-end'])
+      expect(variant, k).toMatch(
+        new RegExp(`--astryx-card-padding-${k}:\\s*8px`),
+      );
+    // Same weight as the base's direction rules, and after them.
+    expect(at(muted)).toBeGreaterThan(at('.astryx-card:where(:dir(rtl))'));
+    await themeEditUndo('p', {
+      cwd,
+      thing: 'padding',
+      on: 'card',
+      when: 'variant:muted',
+    });
+    await themeEditUndo('p', {cwd, thing: 'padding-left', on: 'card'});
+  });
+
+  it('puts the base before a variant set earlier, and its direction rules before a state', async () => {
+    await themeEditSet('p', 'padding', '3px', {
+      cwd,
+      on: 'dropdown-menu',
+      state: 'hover',
+    });
+    await themeEditSet('p', 'padding-inline-start', '9px', {
+      cwd,
+      on: 'dropdown-menu',
+    });
+    // The base's direction rule keeps the base's weight (:where), so the
+    // state's rule out-ranks it wherever it comes.
+    const css0 = read('p.css');
+    expect(css0).toContain('.astryx-dropdown-menu:where(:dir(ltr)) {');
+    expect(css0).toContain('.astryx-dropdown-menu:hover');
+    await themeEditUndo('p', {
+      cwd,
+      thing: 'padding-inline-start',
+      on: 'dropdown-menu',
+    });
+    await themeEditUndo('p', {
+      cwd,
+      thing: 'padding',
+      on: 'dropdown-menu',
+      state: 'hover',
+    });
+    await themeEditSet('p', 'padding', '8px', {
+      cwd,
+      on: 'card',
+      when: 'variant:muted',
+    });
+    await themeEditSet('p', 'padding-inline-start', '9px', {cwd, on: 'card'});
+    expect(at('.astryx-card[data-variant="muted"]')).toBeGreaterThan(
+      at('.astryx-card'),
+    );
+    await themeEditUndo('p', {cwd, thing: 'padding-inline-start', on: 'card'});
+    await themeEditUndo('p', {
+      cwd,
+      thing: 'padding',
+      on: 'card',
+      when: 'variant:muted',
+    });
+  });
+
+  it('pads a clickable card as a card', async () => {
+    await themeEditSet('p', 'padding', '7px', {cwd, on: 'clickable-card'});
+    const rule = ruleOf('.astryx-clickable-card');
+    expect(rule).toMatch(/--astryx-card-padding-inline-start:\s*7px/);
+    expect(rule).not.toMatch(/(^|[;{\s])padding:\s*7px/);
+    await themeEditUndo('p', {cwd, thing: 'padding', on: 'clickable-card'});
+  });
+
+  it('refuses every chat composer padding (parts39), whatever its value', async () => {
+    // The box reads its padding only from a variable of Core's own, which a
+    // theme cannot set; a padding property would pad the wrapper.
+    for (const value of ['4px', '4px 8px', 'var(--spacing-3)', 'max(4px, 1vw)'])
+      expect(
+        (
+          await refusal(() =>
+            themeEditSet('p', 'padding', value, {cwd, on: 'chat-composer'}),
+          )
+        ).code,
+        value,
+      ).toBe('ERR_THEME_NO_EFFECT');
+  });
+});
+
+describe('parts36', () => {
+  /** @param {string} selector */
+  const ruleOf = selector => {
+    const css = read('p.css');
+    const i = css.indexOf(`${selector} {`);
+    return i < 0 ? '' : css.slice(i, css.indexOf('}', i));
+  };
+  const SIDES = ['block-start', 'block-end', 'inline-start', 'inline-end'];
+
+  it('resets a plain card inside a clickable card or a variant that sets its sides, never copying a value', async () => {
+    // Custom properties inherit: a plain card nested in a padded clickable
+    // card (or a default card in a muted one) gets each side reset on its
+    // own class, so Core's own fallback holds; the card's base copies no
+    // theme's value.
+    for (const [on, when, narrow] of [
+      ['clickable-card', undefined, '.astryx-clickable-card'],
+      ['card', 'variant:muted', '.astryx-card[data-variant="muted"]'],
+    ]) {
+      await themeEditSet('p', 'padding', '7px', {
+        cwd,
+        on,
+        ...(when ? {when} : {}),
+      });
+      const css = read('p.css');
+      const reset = ruleOf(`.astryx-card:where(${narrow} *)`);
+      for (const k of SIDES)
+        expect(reset, `${on} ${k}`).toMatch(
+          new RegExp(`--astryx-card-padding-${k}:\\s*initial`),
+        );
+      expect(ruleOf('.astryx-card')).not.toMatch(
+        /--astryx-card-padding-block-start:/,
+      );
+      expect(ruleOf(narrow)).not.toMatch(/--astryx-card-padding:\s*7px/);
+      expect(css.indexOf(`.astryx-card:where(${narrow} *)`)).toBeGreaterThan(
+        -1,
+      );
+      await themeEditUndo('p', {
+        cwd,
+        thing: 'padding',
+        on,
+        ...(when ? {when} : {}),
+      });
+    }
+  });
+
+  it('takes one length where Core reads the padding inside calc(), on every such part', async () => {
+    for (const [prop, on] of [
+      ['padding', 'segmented-control'],
+      ['padding', 'dropdown-menu'],
+      ['padding-inline', 'item'],
+    ])
+      expect(
+        (await refusal(() => themeEditSet('p', prop, '4px 8px', {cwd, on})))
+          .code,
+        `${prop} ${on}`,
+      ).toBe('ERR_THEME_BAD_VALUE');
+    const group = await refusal(() =>
+      themeEditSet('p', 'padding', '0', {cwd, on: 'menus'}),
+    );
+    expect(group.code).toBe('ERR_THEME_BAD_VALUE');
+    expect(group.run[0]).toMatch(/padding 0px --on menus$/);
+    for (const value of [
+      'var(--spacing-2)',
+      'calc(var(--spacing-2) + 2px)',
+      'max(4px, 1vw)',
+    ]) {
+      await themeEditSet('p', 'padding', value, {
+        cwd,
+        on: 'segmented-control',
+      });
+      await themeEditUndo('p', {
+        cwd,
+        thing: 'padding',
+        on: 'segmented-control',
+      });
+    }
+    const keeps = await refusal(() =>
+      themeEditSet('p', 'padding', 'var(--spacing-2) var(--spacing-3)', {
+        cwd,
+        on: 'segmented-control',
+      }),
+    );
+    expect(keeps.run[0]).toMatch(
+      /padding 'var\(--spacing-2\)' --on segmented-control$/,
+    );
+  });
+
+  it('takes a state padding on a card through the padding model', async () => {
+    await themeEditSet('p', 'padding', '5px', {
+      cwd,
+      on: 'card',
+      state: 'hover',
+    });
+    const css = read('p.css');
+    expect(css).toMatch(
+      /\.astryx-card:hover[^{]*\{[^}]*--astryx-card-padding-inline-start:\s*5px/,
+    );
+    await themeEditUndo('p', {
+      cwd,
+      thing: 'padding',
+      on: 'card',
+      state: 'hover',
+    });
+  });
+});
+
+describe('parts37', () => {
+  /** @param {string} selector */
+  const ruleOf = selector => {
+    const css = read('p.css');
+    const i = css.indexOf(`${selector} {`);
+    return i < 0 ? '' : css.slice(i, css.indexOf('}', i));
+  };
+
+  it("writes a section padding as its whole padding, so a nested section keeps its parent's", async () => {
+    await themeEditSet('p', 'padding', '20px', {cwd, on: 'section'});
+    const rule = ruleOf('.astryx-section');
+    expect(rule).toMatch(/--astryx-section-padding:\s*20px/);
+    expect(rule).not.toMatch(/--astryx-section-padding-(block|inline)-/);
+    await themeEditUndo('p', {cwd, thing: 'padding', on: 'section'});
+    // A hover-only padding writes the hover sides and resets nested
+    // sections; the plain section's base gets nothing.
+    await themeEditSet('p', 'padding', '20px', {
+      cwd,
+      on: 'section',
+      state: 'hover',
+    });
+    expect(ruleOf('.astryx-section')).not.toMatch(/--astryx-section-padding/);
+    await themeEditUndo('p', {
+      cwd,
+      thing: 'padding',
+      on: 'section',
+      state: 'hover',
+    });
+  });
+
+  it('writes padding 0 as a length on every part Core reads it inside calc()', async () => {
+    for (const on of ['card', 'section', 'dialog', 'drawer', 'bottom-sheet']) {
+      await themeEditSet('p', 'padding', '0', {cwd, on});
+      const rule = ruleOf(`.astryx-${on}`);
+      expect(rule, on).toMatch(new RegExp(`--astryx-${on}-padding:\\s*0px`));
+      expect(rule, on).not.toMatch(/:\s*0;/);
+      await themeEditUndo('p', {cwd, thing: 'padding', on});
+    }
+  });
+
+  it('refuses at the next set a hand edit that set would refuse', async () => {
+    await themeEditNew('h37', {cwd});
+    const file = path.join(cwd, 'themes', 'h37', 'h37.settings.json');
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    data.settings.push({
+      thing: 'padding',
+      value: '4px 8px',
+      source: 'property',
+      on: 'chat-composer',
+    });
+    fs.writeFileSync(file, JSON.stringify(data, null, 2));
+    const r = await refusal(() =>
+      themeEditSet('h37', 'corners', 'pill', {cwd}),
+    );
+    expect(r.message).toContain('4px 8px');
+    expect(r.run.join(' ')).toMatch(/undo h37 padding --on chat-composer/);
+    fs.rmSync(path.join(cwd, 'themes', 'h37'), {recursive: true, force: true});
+  });
+
+  it('copies no padding onto the plain card for a clickable card hover padding', async () => {
+    // A card padding from the user's own theme source (or a variant they
+    // wrote) is not overridden: the plain card's base gets no padding
+    // variable, only the reset for cards nested in a clickable card.
+    await themeEditSet('p', 'padding', '5px', {
+      cwd,
+      on: 'clickable-card',
+      state: 'hover',
+    });
+    expect(ruleOf('.astryx-card')).not.toMatch(/--astryx-card-padding/);
+    expect(read('p.css')).toMatch(
+      /\.astryx-card:where\(\.astryx-clickable-card:hover \*\)/,
+    );
+    await themeEditUndo('p', {
+      cwd,
+      thing: 'padding',
+      on: 'clickable-card',
+      state: 'hover',
+    });
+  });
+});
+
+describe('parts38', () => {
+  /** @param {string} selector */
+  const ruleOf = selector => {
+    const css = read('p.css');
+    const i = css.indexOf(`${selector} {`);
+    return i < 0 ? '' : css.slice(i, css.indexOf('}', i));
+  };
+
+  it("writes a card padding so Core lowers it with the base theme's: the later wins", async () => {
+    // The base theme (neutral here, as every bundled theme) gives the card
+    // padding var(--spacing-3); the editor's padding must replace it.
+    await themeEditSet('p', 'padding', '20px', {cwd, on: 'card'});
+    const rule = ruleOf('.astryx-card');
+    expect(rule).toMatch(/--astryx-card-padding:\s*20px/);
+    expect(rule).not.toMatch(/--astryx-card-padding:\s*var\(--spacing-3\)/);
+    await themeEditUndo('p', {cwd, thing: 'padding', on: 'card'});
+  });
+
+  it('lets a clickable card win over a card physical side in each direction', async () => {
+    await themeEditSet('p', 'padding-left', '30px', {cwd, on: 'card'});
+    await themeEditSet('p', 'padding', '7px', {cwd, on: 'clickable-card'});
+    const css = read('p.css');
+    for (const dir of ['ltr', 'rtl']) {
+      const card = css.indexOf(`.astryx-card:where(:dir(${dir})) {`);
+      const clickable = css.indexOf(
+        `.astryx-clickable-card:where(:dir(${dir})) {`,
+      );
+      expect(clickable, dir).toBeGreaterThan(card);
+      expect(ruleOf(`.astryx-clickable-card:where(:dir(${dir}))`), dir).toMatch(
+        /--astryx-card-padding-inline-start:\s*7px/,
+      );
+    }
+    await themeEditUndo('p', {cwd, thing: 'padding', on: 'clickable-card'});
+    await themeEditUndo('p', {cwd, thing: 'padding-left', on: 'card'});
+  });
+
+  it('writes a zero with an exponent as 0px, and names the default initial means', async () => {
+    await themeEditSet('p', 'padding', '0e0', {cwd, on: 'drawer'});
+    expect(ruleOf('.astryx-drawer')).toMatch(/--astryx-drawer-padding:\s*0px/);
+    await themeEditUndo('p', {cwd, thing: 'padding', on: 'drawer'});
+    const r = await themeEditSet('p', 'padding', 'initial', {cwd, on: 'card'});
+    expect(r.data.notes.join(' ')).toMatch(
+      /initial means card's own default padding from Core/,
+    );
+    await themeEditUndo('p', {cwd, thing: 'padding', on: 'card'});
+  });
+
+  it('refuses a hand-edited padding on another part when this command sets padding too', async () => {
+    await themeEditNew('h38', {cwd});
+    await themeEditSet('h38', 'padding', '3px', {cwd, on: 'segmented-control'});
+    const file = path.join(cwd, 'themes', 'h38', 'h38.settings.json');
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    data.settings[data.settings.length - 1].value = '2px 6px';
+    fs.writeFileSync(file, JSON.stringify(data, null, 2));
+    const r = await refusal(() =>
+      themeEditSet('h38', 'padding', '4px', {cwd, on: 'card'}),
+    );
+    expect(r.message).toContain('2px 6px');
+    fs.rmSync(path.join(cwd, 'themes', 'h38'), {recursive: true, force: true});
   });
 });

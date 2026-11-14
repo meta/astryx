@@ -31,14 +31,16 @@ import {
 import {SAMPLE_PAGE, elementNames, pageSource} from './_catalog.mjs';
 
 /** Bump when the shape of the cached part data changes. */
-const PART_DATA_VERSION = 4;
+const PART_DATA_VERSION = 6;
 
 /**
  * @typedef {object} PartRecord
  * @property {Record<string, {tokens: Record<string, string[]>, values: string[]}>} own - property -> tokens (with conditions) and raw values
+ * @property {Record<string, Record<string, string>>} [at] - property -> the value under each condition, private variables resolved
  * @property {Record<string, string[]>} inside - tokens read by unnamed elements inside the part -> properties
  * @property {Record<string, string[]>} attrs - data attributes seen on the part
  * @property {string[]} contains - parts rendered inside it
+ * @property {Record<string, Record<string, string>>} [inline] - state -> property -> the token Core paints it with as an inline style in that state, which outranks any theme rule
  */
 
 /**
@@ -118,7 +120,7 @@ export function demoProps(project, name) {
       // A doc that declares no props of its own name is a family page,
       // not a component the Core exports.
       !Object.keys(info.props ?? {}).length ||
-      (info.subComponentOf && isItemOf(project, name)))
+      needsParent(project, name))
   )
     return null;
   const props = given ?? {};
@@ -142,6 +144,22 @@ export function demoProps(project, name) {
     }
   }
   return props;
+}
+
+/**
+ * Whether a part works only inside its parent: its parent lists it as an
+ * item, or it is a piece of its parent by name (TableBody of Table) and
+ * its doc gives no playground of its own.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {string} name
+ */
+export function needsParent(project, name) {
+  const info = project.components[name];
+  const parent = info?.subComponentOf;
+  if (!parent) return false;
+  if (isItemOf(project, name)) return true;
+  const own = info.defaults && typeof info.defaults === 'object';
+  return !own && name.startsWith(parent) && name !== parent;
 }
 
 /**
@@ -172,14 +190,25 @@ export function isItemOf(project, name) {
  */
 export function catalogVariants(project, name, cap, opts = {}) {
   const info = project.components[name];
-  const demo = demoProps(project, name);
-  if (!demo) return [];
-  if (info.opens && opts.shown)
-    return [
-      {label: '', props: 'isOpen' in demo ? demo : {...demo, isOpen: true}},
-    ];
-  const base =
-    info.opens && !('isOpen' in demo) ? {...demo, isOpen: true} : demo;
+  const own = demoProps(project, name);
+  if (!own) return [];
+  // No demo takes focus as it mounts: on a page of many, each would pull
+  // the page to itself.
+  /** @type {Record<string, unknown>} */
+  const demo = {
+    ...own,
+    ...(info.props?.hasAutoFocus ? {hasAutoFocus: false} : {}),
+    ...(info.props?.autoFocus && own.autoFocus ? {autoFocus: false} : {}),
+  };
+  // An overlay shown open, named, as a dialog must be.
+  /** @param {Record<string, unknown>} d @returns {Record<string, unknown>} */
+  const opened = d => ({
+    ...d,
+    ...('isOpen' in d ? {} : {isOpen: true}),
+    ...(info.props?.label && d.label == null ? {label: `${name} example`} : {}),
+  });
+  if (info.opens && opts.shown) return [{label: '', props: opened(demo)}];
+  const base = info.opens ? opened(demo) : demo;
   const values = info.targets[0]?.values ?? {};
   const variants = [{label: '', props: base}];
   for (const p of ['variant', 'status', 'color'])
@@ -447,6 +476,79 @@ export async function partData(project) {
 }
 
 /**
+ * Add the paint Core writes as an inline style when it sets a theme state
+ * at run time (a table row's selection wash, set by the selection plugin
+ * beside the row's `selected` state): something the server render never
+ * shows. A built module under a component's folder that writes a state's
+ * attribute (`themeDataAttributes({selected: 'selected'})`) and an inline
+ * property from a color token (`el.style.backgroundColor = …` with
+ * `colorVars['--color-accent-muted']`) paints that state with it, on each
+ * of the component's targets that lists the state.
+ * @param {import('./_project.mjs').ThemeProject} project
+ * @param {Record<string, PartRecord>} map
+ */
+function addInlineStatePaint(project, map) {
+  const dist = path.join(project.coreDir, 'dist');
+  /** @param {string} dir @returns {string[]} */
+  const modules = dir => {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, {withFileTypes: true});
+    } catch {
+      return [];
+    }
+    return entries.flatMap(e =>
+      e.isDirectory()
+        ? modules(path.join(dir, e.name))
+        : e.name.endsWith('.js')
+          ? [path.join(dir, e.name)]
+          : [],
+    );
+  };
+  for (const [name, info] of Object.entries(project.components)) {
+    const folder = info.importPath?.split('/').pop();
+    if (!folder || folder !== name) continue;
+    const withStates = info.targets.filter(t => t.states.length);
+    if (!withStates.length) continue;
+    for (const file of modules(path.join(dist, folder))) {
+      const source = fs.readFileSync(file, 'utf8');
+      const states = [
+        ...source.matchAll(
+          /themeDataAttributes\(\{\s*([\w-]+):\s*'\1'\s*\}\)/g,
+        ),
+      ].map(m => m[1]);
+      if (!states.length) continue;
+      const props = [
+        ...source.matchAll(/\.style\.([a-z][A-Za-z]*)\s*=(?!=)/g),
+      ].map(m => m[1].replace(/[A-Z]/g, c => `-${c.toLowerCase()}`));
+      const colorTokens = [
+        ...source.matchAll(/colorVars\[['"](--color-[\w-]+)['"]\]/g),
+      ].map(m => m[1]);
+      if (!props.length || colorTokens.length !== 1) continue;
+      for (const t of withStates) {
+        const key = t.className.replace(/^astryx-/, '');
+        const rec = map[key];
+        if (!rec) continue;
+        for (const state of states.filter(st => t.states.includes(st)))
+          for (const prop of props) {
+            (rec.inline ??= {})[state] = {
+              ...rec.inline?.[state],
+              [prop]: colorTokens[0],
+            };
+            const own = (rec.own[prop] ??= {tokens: {}, values: []});
+            own.tokens[colorTokens[0]] = [
+              ...new Set([
+                ...(own.tokens[colorTokens[0]] ?? []),
+                `${state}=${state}`,
+              ]),
+            ];
+          }
+      }
+    }
+  }
+}
+
+/**
  * Build the part data: render the catalog, then walk its markup.
  * @param {import('./_project.mjs').ThemeProject} project
  * @returns {Promise<PartData>}
@@ -470,6 +572,7 @@ async function buildPartData(project) {
   }
   const tokens = new Set(Object.keys(project.core.tokenDefaults ?? {}));
   const result = walkMarkup(markup, declarations(css), tokens);
+  addInlineStatePaint(project, result.map);
   return {
     version: PART_DATA_VERSION,
     coreKey: project.coreKey,
@@ -477,6 +580,108 @@ async function buildPartData(project) {
     rendered: (markup.match(/<section data-cat=/g) ?? []).length,
     items: all.length,
   };
+}
+
+/**
+ * The value Core falls back to where its stylesheet reads a variable
+ * (`var(--astryx-card-padding, var(--spacing-4))` gives `var(--spacing-4)`),
+ * or null when it gives none.
+ * @param {any} project
+ * @param {string} name
+ * @returns {string | null}
+ */
+export function coreFallback(project, name) {
+  /** @type {string} */
+  let css;
+  try {
+    css = fs.readFileSync(
+      project.req.resolve('@astryxdesign/core/astryx.css'),
+      'utf8',
+    );
+  } catch {
+    return null;
+  }
+  const at = css.indexOf(`var(${name},`);
+  if (at < 0) return null;
+  let depth = 0;
+  const from = at + `var(${name},`.length;
+  for (let j = from; j < css.length; j++) {
+    if (css[j] === '(') depth++;
+    else if (css[j] === ')') {
+      if (depth === 0) return css.slice(from, j).trim();
+      depth--;
+    }
+  }
+  return null;
+}
+
+/** @type {Map<string, Set<string>>} */
+const calcCache = new Map();
+
+/**
+ * The variables Core's stylesheet reads inside a calc() (a composer's
+ * padding in its send button's radius): only one length works there.
+ * Empty with no stylesheet.
+ * @param {any} project
+ * @returns {Set<string>}
+ */
+export function calcVars(project) {
+  /** @type {string} */
+  let file;
+  try {
+    file = project.req.resolve('@astryxdesign/core/astryx.css');
+  } catch {
+    return new Set();
+  }
+  const cached = calcCache.get(file);
+  if (cached) return cached;
+  const css = fs.readFileSync(file, 'utf8');
+  /** @type {Set<string>} */
+  const out = new Set();
+  for (let i = css.indexOf('calc('); i >= 0; i = css.indexOf('calc(', i + 5)) {
+    let depth = 0;
+    let j = i + 4;
+    for (; j < css.length; j++) {
+      if (css[j] === '(') depth++;
+      else if (css[j] === ')' && --depth === 0) break;
+    }
+    for (const m of css.slice(i, j).matchAll(/var\((--[a-z0-9_-]+)/gi))
+      out.add(m[1].toLowerCase());
+  }
+  calcCache.set(file, out);
+  return out;
+}
+
+/** @type {Map<string, Set<string>>} */
+const multipliedCache = new Map();
+
+/**
+ * The tokens Core's stylesheet multiplies by another value inside calc()
+ * (`var(--text-body-size) * var(--text-body-leading)`): a unit there makes
+ * the declaration invalid. Empty with no stylesheet.
+ * @param {any} project
+ * @returns {Set<string>}
+ */
+export function multipliedTokens(project) {
+  /** @type {string} */
+  let file;
+  try {
+    file = project.req.resolve('@astryxdesign/core/astryx.css');
+  } catch {
+    return new Set();
+  }
+  const cached = multipliedCache.get(file);
+  if (cached) return cached;
+  const css = fs.readFileSync(file, 'utf8');
+  /** @type {Set<string>} */
+  const out = new Set();
+  // Each side of a `*` on its own, so `a * b * c` names all three.
+  for (const m of css.matchAll(/var\((--[a-z0-9-]+)\)(?=\s*\*)/gi))
+    out.add(m[1].toLowerCase());
+  for (const m of css.matchAll(/\*\s*var\((--[a-z0-9-]+)\)/gi))
+    out.add(m[1].toLowerCase());
+  multipliedCache.set(file, out);
+  return out;
 }
 
 /**
@@ -538,6 +743,24 @@ function expand(v, env, tokens, seen = new Set(), depth = 0) {
 }
 
 /**
+ * A value with the private variables set on the element or its ancestors
+ * put in (a variable with no fallback only), so it reads public tokens and
+ * literal values alone where it can.
+ * @param {string} v
+ * @param {Record<string, string>} env
+ * @param {Set<string>} tokens
+ * @param {number} [depth]
+ * @returns {string}
+ */
+function resolvePrivate(v, env, tokens, depth = 0) {
+  if (depth > 8) return v;
+  const out = v.replace(/var\((--[a-zA-Z0-9_-]+)\)/g, (m, name) =>
+    !tokens.has(name) && env[name] != null ? env[name] : m,
+  );
+  return out === v ? v : resolvePrivate(out, env, tokens, depth + 1);
+}
+
+/**
  * Walk server-rendered markup: for each element, its classes' declarations
  * become what its part reads; text records the color pair it sits on.
  * @param {string} html
@@ -546,7 +769,7 @@ function expand(v, env, tokens, seen = new Set(), depth = 0) {
  * @returns {{map: Record<string, PartRecord>, pairs: TextPair[]}}
  */
 export function walkMarkup(html, decls, tokens) {
-  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>}>} */
+  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>}>} */
   const map = {};
   /** @type {Array<{env: Record<string, string>, target: string | null, fg: PaintSide | null, bg: PaintSide | null}>} */
   const stack = [{env: {}, target: null, fg: null, bg: null}];
@@ -597,6 +820,7 @@ export function walkMarkup(html, decls, tokens) {
     if (target) {
       const T = (map[target] ??= {
         own: {},
+        at: {},
         inside: {},
         attrs: {},
         contains: new Set(),
@@ -613,6 +837,11 @@ export function walkMarkup(html, decls, tokens) {
         const cond = [cond0, d.cond].filter(Boolean).join(' ');
         if (ownsTarget) {
           const P = (T.own[d.prop] ??= {tokens: {}, values: new Set()});
+          (T.at[d.prop] ??= {})[cond || 'always'] ??= resolvePrivate(
+            d.value,
+            env,
+            tokens,
+          );
           P.values.add(
             d.value.length > 80 ? `${d.value.slice(0, 80)}...` : d.value,
           );
@@ -663,6 +892,7 @@ export function walkMarkup(html, decls, tokens) {
           },
         ]),
       ),
+      at: v.at,
       inside: Object.fromEntries(
         Object.entries(v.inside).map(([k, s]) => [k, [...s]]),
       ),

@@ -5,7 +5,8 @@
  *
  * Authoring is a pure data contract: TYPES authors write plain objects against,
  * and PARSERS the CLI calls to turn `unknown` into the typed shape (or throw a
- * readable error) at the load boundary. Zod is an implementation detail sealed
+ * readable error) at the load boundary. `previewableExample` reads a doc
+ * example as the module a live preview runs, or says why it cannot run. Zod is an implementation detail sealed
  * inside each parser — it is never exported here and never appears in a public
  * type. There are no `create*` factories: author a plain object and stamp its
  * `type` directly.
@@ -39,3 +40,4 @@ export {parseIconSet, parseIconSetData} from './doctypes/icon-set/parse.mjs';
 /** @experimental Icon definitions may change or be removed in a patch release. */
 export {parseIconDefinition} from './doctypes/icon-definition/parse.mjs';
 export {parseLegacyDoc} from './doctypes/legacy.mjs';
+export {previewableExample} from './example/preview.mjs';

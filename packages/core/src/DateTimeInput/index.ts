@@ -19,5 +19,6 @@ export type {
   DateTimeInputStatus,
   DateTimeInputStatusType,
   DateInputEntryError,
+  EntryErrorBehavior,
   ISODateTimeString,
 } from './DateTimeInput';
