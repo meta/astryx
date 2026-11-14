@@ -10,14 +10,13 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
-import {maskLayers} from './_settings.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
 } from '../../test-utils/linked-fixture.mjs';
 import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
 import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
-import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
+import {modeValue, refusal} from '../../test-utils/theme-edit-fixture.mjs';
 
 vi.mock('./_preview.mjs', async importOriginal =>
   (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
@@ -136,23 +135,42 @@ describe('the page background', () => {
         mode: 'dark',
       },
     );
-    const rule = ruleOf('p3', '.astryx-app-shell');
-    expect(rule).toContain(
-      'linear-gradient(light-dark(#ffffff, transparent), light-dark(#ddeeff, transparent))',
-    );
-    expect(rule).toContain(
-      'linear-gradient(light-dark(transparent, #000000), light-dark(transparent, #112233))',
-    );
+    const css = cssOf('p3');
+    expect(
+      modeValue(css, '.astryx-app-shell', 'background-image', 'light'),
+    ).toBe('linear-gradient(#ffffff, #ddeeff)');
+    expect(
+      modeValue(css, '.astryx-app-shell', 'background-image', 'dark'),
+    ).toBe('linear-gradient(#000000, #112233)');
   }, 240_000);
 
-  it('keeps an earlier both-mode gradient in the other mode', () => {
-    expect(
-      maskLayers('linear-gradient(red, #000) 0 0 / 4px 4px, #fff', 'dark'),
-    ).toEqual([
-      'linear-gradient(light-dark(transparent, red), light-dark(transparent, #000)) 0 0 / 4px 4px',
-      'linear-gradient(light-dark(transparent, #fff), light-dark(transparent, #fff))',
-    ]);
-  });
+  it('keeps an earlier both-mode gradient in the other mode', async ctx => {
+    if (needBases(ctx)) return;
+    await themeEditNew('p4', {cwd, like: 'neutral'});
+    await themeEditSet('p4', 'background', 'linear-gradient(red, #000)', {
+      cwd,
+      on: 'card',
+    });
+    await themeEditSet(
+      'p4',
+      'background',
+      'linear-gradient(#fff, #eee) 0 0 / 4px 4px, #fff',
+      {cwd, on: 'card', mode: 'dark'},
+    );
+    const css = cssOf('p4');
+    expect(modeValue(css, '.astryx-card', 'background', 'light')).toBe(
+      'linear-gradient(red, #000)',
+    );
+    expect(modeValue(css, '.astryx-card', 'background-image', 'dark')).toBe(
+      'linear-gradient(#fff, #eee)',
+    );
+    expect(modeValue(css, '.astryx-card', 'background-size', 'dark')).toBe(
+      '4px 4px',
+    );
+    expect(modeValue(css, '.astryx-card', 'background-color', 'dark')).toBe(
+      '#fff',
+    );
+  }, 240_000);
 });
 
 describe('background values with many variables', () => {

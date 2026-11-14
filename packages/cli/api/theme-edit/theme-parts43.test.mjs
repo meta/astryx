@@ -19,7 +19,7 @@ import {
 } from '../../test-utils/linked-fixture.mjs';
 import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
 import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
-import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
+import {modeValue, refusal} from '../../test-utils/theme-edit-fixture.mjs';
 
 vi.mock('./_preview.mjs', async importOriginal =>
   (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
@@ -74,6 +74,14 @@ describe('one-mode backgrounds on parts whose variants have their own', () => {
   /** @param {string} slug @param {string} sel */
   const bgOf = (slug, sel) =>
     /background-color: ([^;]+);/.exec(ruleOf(slug, sel))?.[1];
+  /**
+   * The background color each mode gets from the theme on a selector.
+   * @param {string} slug @param {string} sel
+   */
+  const bgModes = (slug, sel) => ({
+    light: modeValue(cssOf(slug), sel, 'background-color', 'light'),
+    dark: modeValue(cssOf(slug), sel, 'background-color', 'dark'),
+  });
   /** Every hover rule of the button and badge, as written. @param {string} slug */
   const hoverRules = slug =>
     (
@@ -89,17 +97,17 @@ describe('one-mode backgrounds on parts whose variants have their own', () => {
       on: 'button',
       mode: 'light',
     });
-    // The base theme's own value (destructive), Core's (primary), and a
-    // variant Core paints nothing on (ghost) stays transparent.
-    expect(bgOf('m5n', '.astryx-button[data-variant="destructive"]')).toBe(
-      'light-dark(#eeeeee, var(--color-error-muted))',
-    );
-    expect(bgOf('m5n', '.astryx-button[data-variant="primary"]')).toBe(
-      'light-dark(#eeeeee, var(--color-accent))',
-    );
-    expect(bgOf('m5n', '.astryx-button[data-variant="ghost"]')).toBe(
-      'light-dark(#eeeeee, transparent)',
-    );
+    // Light takes the color on every variant; dark keeps what each variant
+    // had: the base theme's own value (destructive), else nothing the
+    // theme writes, so Core's applies (primary, ghost).
+    expect(
+      bgModes('m5n', '.astryx-button[data-variant="destructive"]'),
+    ).toEqual({light: '#eeeeee', dark: 'var(--color-error-muted)'});
+    for (const name of ['primary', 'ghost'])
+      expect(
+        bgModes('m5n', `.astryx-button[data-variant="${name}"]`),
+        name,
+      ).toEqual({light: '#eeeeee', dark: undefined});
     // The part's own rule carries no variant's color.
     expect(ruleOf('m5n', '.astryx-button')).not.toMatch(/#eeeeee/);
     // No hover rule takes the resting color.
@@ -114,12 +122,13 @@ describe('one-mode backgrounds on parts whose variants have their own', () => {
       on: 'button',
       mode: 'light',
     });
-    expect(bgOf('m5b', '.astryx-button[data-variant="destructive"]')).toBe(
-      'light-dark(#eeeeee, #ffb09b)',
-    );
-    expect(bgOf('m5b', '.astryx-button[data-variant="secondary"]')).toBe(
-      'light-dark(#eeeeee, transparent)',
-    );
+    expect(
+      bgModes('m5b', '.astryx-button[data-variant="destructive"]'),
+    ).toEqual({light: '#eeeeee', dark: '#ffb09b'});
+    expect(bgModes('m5b', '.astryx-button[data-variant="secondary"]')).toEqual({
+      light: '#eeeeee',
+      dark: 'transparent',
+    });
     // Butter's own secondary hover still shows, in both modes.
     expect(
       bgOf(
@@ -135,11 +144,11 @@ describe('one-mode backgrounds on parts whose variants have their own', () => {
       mode: 'light',
     });
     expect(
-      bgOf(
+      bgModes(
         'm5b',
         '.astryx-button[data-variant="secondary"]:hover:where(:not(:disabled,[aria-disabled="true"]))',
       ),
-    ).toBe('light-dark(#dddddd, #fdee8c14)');
+    ).toEqual({light: '#dddddd', dark: '#fdee8c14'});
   }, 240_000);
 
   for (const [first, second] of [
@@ -158,9 +167,10 @@ describe('one-mode backgrounds on parts whose variants have their own', () => {
           mode,
         });
       for (const name of ['primary', 'secondary', 'ghost', 'destructive'])
-        expect(bgOf(slug, `.astryx-button[data-variant="${name}"]`)).toBe(
-          'light-dark(#eeeeee, #222222)',
-        );
+        expect(
+          bgModes(slug, `.astryx-button[data-variant="${name}"]`),
+          name,
+        ).toEqual({light: '#eeeeee', dark: '#222222'});
     }, 240_000);
 
   it("keeps a variant's own background as the other half of a later one-mode background", async ctx => {
@@ -176,9 +186,14 @@ describe('one-mode backgrounds on parts whose variants have their own', () => {
       on: 'button',
       mode: 'light',
     });
-    const rule = ruleOf('m5v', '.astryx-button[data-variant="primary"]');
-    expect(rule).toMatch(/background-color: light-dark\(#eeeeee, #ff0000\)/);
-    expect(rule).not.toMatch(/background:/);
+    expect(bgModes('m5v', '.astryx-button[data-variant="primary"]')).toEqual({
+      light: '#eeeeee',
+      dark: undefined,
+    });
+    // The variant's own red stays its color in dark.
+    expect(ruleOf('m5v', '.astryx-button[data-variant="primary"]')).toMatch(
+      /background: #ff0000/,
+    );
   }, 240_000);
 
   it("keeps the part's earlier color for both modes as each variant's other half", async ctx => {
@@ -190,11 +205,22 @@ describe('one-mode backgrounds on parts whose variants have their own', () => {
       on: 'button',
       mode: 'light',
     });
-    for (const name of ['primary', 'secondary', 'ghost', 'destructive'])
+    for (const name of ['primary', 'secondary', 'ghost', 'destructive']) {
+      const sel = `.astryx-button[data-variant="${name}"]`;
       expect(
-        ruleOf('m5p', `.astryx-button[data-variant="${name}"]`),
+        modeValue(cssOf('m5p'), sel, 'background-color', 'light'),
         name,
-      ).toMatch(/background-color: light-dark\(#eeeeee, #123456\)/);
+      ).toBe('#eeeeee');
+      // Dark keeps the part's color: the variant's own rule holds it where
+      // the base theme styles the variant, else the part's rule does.
+      const css = cssOf('m5p');
+      expect(
+        modeValue(css, sel, 'background', 'dark') ??
+          modeValue(css, sel, 'background-color', 'dark') ??
+          modeValue(css, '.astryx-button', 'background', 'dark'),
+        name,
+      ).toBe('#123456');
+    }
   }, 240_000);
 
   for (const [like, names] of /** @type {Array<[string, string[]]>} */ ([
@@ -211,13 +237,20 @@ describe('one-mode backgrounds on parts whose variants have their own', () => {
         on: 'button',
         mode: 'light',
       });
+      const css = cssOf(slug);
       for (const name of names) {
-        const rule = ruleOf(slug, `.astryx-button[data-variant="${name}"]`);
-        const at = rule.indexOf(
-          'background-color: light-dark(#eeeeee, #123456)',
+        const sel = `.astryx-button[data-variant="${name}"]`;
+        // The light rule comes after the variant's own rule (where the base
+        // theme gives one), which holds the part's plain color for dark.
+        const own = css.indexOf(`${sel} {`);
+        const light = css.indexOf(
+          `:is(${sel}):where(:scope[data-theme="light"] *)`,
         );
-        expect(at, name).toBeGreaterThan(-1);
-        expect(rule.slice(at), name).not.toMatch(/background:/);
+        expect(light, name).toBeGreaterThan(-1);
+        expect(light, name).toBeGreaterThan(own);
+        expect(modeValue(css, sel, 'background-color', 'light'), name).toBe(
+          '#eeeeee',
+        );
       }
     }, 240_000);
 
@@ -383,9 +416,14 @@ describe('one-mode backgrounds on parts whose variants have their own', () => {
     const primary = ruleOf('m5g', '.astryx-button[data-variant="primary"]');
     expect(primary).toMatch(/linear-gradient\(#ff0000, #0000ff\)/);
     expect(primary).not.toMatch(/#eeeeee/);
-    expect(ruleOf('m5g', '.astryx-button[data-variant="destructive"]')).toMatch(
-      /light-dark\(#eeeeee, /,
-    );
+    expect(
+      modeValue(
+        cssOf('m5g'),
+        '.astryx-button[data-variant="destructive"]',
+        'background-color',
+        'light',
+      ),
+    ).toBe('#eeeeee');
     expect(r.data.notes.join(' ')).toMatch(
       /button variant:primary keeps its own background image/,
     );
@@ -396,17 +434,22 @@ describe('one-mode backgrounds on parts whose variants have their own', () => {
     await themeEditNew('m5o', {cwd, like: 'neutral'});
     await themeEditSet('m5o', 'mode', 'light-only', {cwd});
     await themeEditSet('m5o', 'background', '#eeeeee', {cwd, on: 'button'});
-    expect(bgOf('m5o', '.astryx-button[data-variant="destructive"]')).toBe(
-      'light-dark(#eeeeee, var(--color-error-muted))',
-    );
+    expect(
+      bgModes('m5o', '.astryx-button[data-variant="destructive"]'),
+    ).toEqual({light: '#eeeeee', dark: 'var(--color-error-muted)'});
     expect(ruleOf('m5o', '.astryx-button')).not.toMatch(/#eeeeee/);
     // A badge's text: each variant keeps its own dark text.
     await themeEditSet('m5o', 'color', '#222222', {cwd, on: 'badge'});
     expect(
-      /[\s;{]color: ([^;]+);/.exec(
-        ruleOf('m5o', '.astryx-badge[data-variant="red"]'),
-      )?.[1],
-    ).toBe('light-dark(#222222, var(--color-text-red))');
+      ['light', 'dark'].map(m =>
+        modeValue(
+          cssOf('m5o'),
+          '.astryx-badge[data-variant="red"]',
+          'color',
+          /** @type {'light' | 'dark'} */ (m),
+        ),
+      ),
+    ).toEqual(['#222222', 'var(--color-text-red)']);
   }, 240_000);
 });
 
@@ -636,9 +679,9 @@ describe('runs and notes', () => {
       'linear-gradient(#ff0000, #0000ff)',
       {cwd, on: 'card', mode: 'dark'},
     );
-    expect(ruleOf('r3', '.astryx-card')).toContain(
-      'linear-gradient(light-dark(transparent, #ff0000), light-dark(transparent, #0000ff))',
-    );
+    expect(
+      modeValue(cssOf('r3'), '.astryx-card', 'background-image', 'dark'),
+    ).toBe('linear-gradient(#ff0000, #0000ff)');
   }, 240_000);
 
   it('says the corners show on the other corners when the own source sets one', async ctx => {

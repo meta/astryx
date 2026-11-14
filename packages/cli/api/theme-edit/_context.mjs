@@ -54,12 +54,16 @@ import {
 } from './_settings.mjs';
 import {
   SHOWCASE_GROUPS,
+  copyFontsCss,
   newPictureRun,
   renderPreview,
   screenshot,
 } from './_preview.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
-import {namedFontFamilies} from '../theme/build/font-warning.mjs';
+import {
+  fontKey,
+  importedFontFamilies,
+} from '../../foundation/fonts/font-stylesheet.mjs';
 
 const E = ERROR_CODES;
 
@@ -584,22 +588,32 @@ export function fontNotes(ctx, data) {
       `"${named}" is not a system font and no package loads it: the app must load it, or it falls back. If Fontsource publishes it, ${installLine(ctx.project.cwd, [fontsourcePackageOf(named)])} installs its package, which the previews and the app copy then load.${near ? ` The closest open font is ${near}: ${P} set ${data.name} font ${near}${s.on ? ` --on ${s.on}` : ''}` : ''}`,
     );
   }
-  // A part's own font (font-family --on a part) loads the same way: an
-  // installed package is in the list above; a missing one is named.
-  for (const s of data.settings) {
-    if (s.thing !== 'font-family' || typeof s.value !== 'string') continue;
-    for (const family of namedFontFamilies(s.value)) {
-      const pkg = fontsourcePackageOf(family);
-      if (
-        packages.some(x => x.pkg === pkg) ||
-        isDesktopFamily(family) ||
-        oneSystemOf(family)
-      )
-        continue;
-      notes.push(
-        `"${family}"${s.on ? ` (the font of ${s.on})` : ''} is not a system font and no package loads it: the app must load it, or it falls back. If Fontsource publishes it, ${installLine(ctx.project.cwd, [pkg])} installs its package, which the previews and the app copy then load.`,
-      );
-    }
+  // Every other family the build writes that nothing loads (a part's own
+  // font, a font token, a family the theme's own source sets) is named
+  // once, with the package that would load it: the same built families
+  // the app copy and the previews load fonts for.
+  /** @type {Set<string>} */
+  const loaded = new Set();
+  for (const spec of copyFontsCss(ctx, data.name, data))
+    for (const f of importedFontFamilies(spec, ctx.project.cwd)) loaded.add(f);
+  const dialFamilies = new Set(
+    data.settings
+      .filter(s => s.thing === 'font')
+      .map(s => fontKey(fontOf(s.value).family)),
+  );
+  for (const family of built?.values() ?? []) {
+    const key = fontKey(family);
+    if (
+      loaded.has(key) ||
+      dialFamilies.has(key) ||
+      packages.some(x => fontKey(x.family) === key) ||
+      isDesktopFamily(family) ||
+      oneSystemOf(family)
+    )
+      continue;
+    notes.push(
+      `"${family}" is not a system font and no package loads it: the app must load it, or it falls back. If Fontsource publishes it, ${installLine(ctx.project.cwd, [fontsourcePackageOf(family)])} installs its package, which the previews and the app copy then load.`,
+    );
   }
   return notes;
 }
@@ -651,21 +665,37 @@ export function styledChanges(before, after, base) {
           typeof baseValue !== 'object' &&
           plain(baseValue) === plain(now);
         const where = `${target}${key === 'base' ? '' : ` ${key}`}`;
-        // A block (a state, `:hover`) lists each property it changes.
+        // A block (a state, `:hover`, a mode block, a state inside a mode
+        // block) lists each property it changes, under its path.
+        /**
+         * @param {string} path @param {any} xs @param {any} ys @param {any} shownIn
+         */
+        const blockLines = (path, xs, ys, shownIn) => {
+          for (const p of new Set([
+            ...Object.keys(xs ?? {}),
+            ...Object.keys(ys ?? {}),
+          ])) {
+            const was = xs?.[p];
+            const now = ys?.[p];
+            if (JSON.stringify(was) === JSON.stringify(now)) continue;
+            if (
+              (now && typeof now === 'object') ||
+              (was && typeof was === 'object')
+            ) {
+              blockLines(`${path} ${p}`, was ?? {}, now ?? {}, shownIn?.[p]);
+              continue;
+            }
+            if (repeatsBase(was, now, shownIn?.[p])) continue;
+            out.push(
+              `${where} ${path}: ${cssName(p)} ${now === undefined ? '(removed)' : String(now)}`,
+            );
+          }
+        };
         if (
           (y[prop] && typeof y[prop] === 'object') ||
           (x[prop] && typeof x[prop] === 'object')
         ) {
-          const xs = x[prop] ?? {};
-          const ys = y[prop] ?? {};
-          for (const p of new Set([...Object.keys(xs), ...Object.keys(ys)]))
-            if (
-              JSON.stringify(xs[p]) !== JSON.stringify(ys[p]) &&
-              !repeatsBase(xs[p], ys[p], shown?.[p])
-            )
-              out.push(
-                `${where} ${prop}: ${cssName(p)} ${ys[p] === undefined ? '(removed)' : String(ys[p])}`,
-              );
+          blockLines(prop, x[prop] ?? {}, y[prop] ?? {}, shown);
           continue;
         }
         if (repeatsBase(x[prop], y[prop], shown)) continue;

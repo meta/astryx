@@ -1305,7 +1305,9 @@ export function previewRouteSource({
     '      <AppShell',
     '        height="fill"',
     '        topNav={',
-    `          <TopNav label="Theme preview" heading={<strong>{${JSON.stringify(name)}}</strong>} endContent={`,
+    // Core's own heading, as an app's top bar draws it, so a setting on the
+    // header (its text color) shows here as it does in the app.
+    `          <TopNav label="Theme preview" heading={<TopNavHeading heading={${JSON.stringify(name)}} />} endContent={`,
     ...(mode.length ? mode : ['          null']),
     '          } />',
     '        }',
@@ -1330,7 +1332,7 @@ export function previewRouteSource({
     "import * as React from 'react';",
     "import {AppShell} from '@astryxdesign/core/AppShell';",
     "import {SideNav, SideNavItem} from '@astryxdesign/core/SideNav';",
-    "import {TopNav} from '@astryxdesign/core/TopNav';",
+    "import {TopNav, TopNavHeading} from '@astryxdesign/core/TopNav';",
     ...(theme
       ? [
           // The mode switch only for a theme with both modes: an import the

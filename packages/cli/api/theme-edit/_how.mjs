@@ -33,6 +33,7 @@ import {
   editedThemes,
   loadTheme,
   nearest,
+  partComponentDocs,
   refuse,
   themeSourceParseError,
   themeSourceProblem,
@@ -906,7 +907,9 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
   const extra = {};
   if (!recorded && !ctx.unchecked) {
     const {commands} = checked(env, [
-      [{verb: 'set', thing: 'background', value: '#f3f4f6', on: key}],
+      // (A fill of one color is the background color: the shorthand would
+      // clear the image Core draws its hover tint with.)
+      [{verb: 'set', thing: 'background-color', value: '#f3f4f6', on: key}],
       [{verb: 'set', thing: 'color', value: '#111827', on: key}],
       [{verb: 'set', thing: 'border-radius', value: '8px', on: key}],
     ]);
@@ -919,6 +922,9 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
     kind: 'part',
     subject,
     component: target.component ?? null,
+    // What the part is, from its component's doc (a side nav heading is the
+    // product or account heading at the top, not a section title).
+    is: partComponentDocs(ctx, key).at(-1)?.doc.description || null,
     components,
     recorded,
     group,

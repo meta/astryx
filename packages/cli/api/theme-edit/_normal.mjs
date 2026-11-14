@@ -9,7 +9,7 @@
  * @position packages/cli/api/theme-edit — pure helpers, no environment access
  */
 
-import {DIALS, wordTable} from './_tables.mjs';
+import {DIALS, FONTS, OPEN_FONTS, fontStack, wordTable} from './_tables.mjs';
 import {colorProblem, hex, parseColor} from './_color.mjs';
 import {sameKindValues} from './_css.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
@@ -757,7 +757,9 @@ export function commaNumbers(text, thousands = false) {
   let out = '';
   let plain = '';
   const flush = () => {
-    out += plain.replace(/(\d+),(\d+)(?![\d.,])/g, (_, a, b) =>
+    // (A number starts a word: the digits of a hex color or of a word
+    // before a comma are no number.)
+    out += plain.replace(/(?<![\w#.])(\d+),(\d+)(?![\d.,])/g, (_, a, b) =>
       thousands && b.length === 3 && !/^0+$/.test(a) ? `${a}${b}` : `${a}.${b}`,
     );
     plain = '';
@@ -781,6 +783,56 @@ export function commaNumbers(text, thousands = false) {
  */
 export const weightSetting = thing =>
   /^(font-weight|headings)$|^--font-weight/.test(String(thing).toLowerCase());
+
+/**
+ * The one mode a word names, or null: light or dark, written as a mode
+ * value names one (`dark-only`), with the word mode (`darkmode`, `dark
+ * mode`, `mode dark`), or as a word for it (night, day). The `--mode` flag
+ * of set and undo reads it.
+ * @param {unknown} text
+ * @returns {'light' | 'dark' | null}
+ */
+export function modeWord(text) {
+  const w = String(text ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, '-');
+  const m = /^(?:(light|dark)(?:-?only|-?mode)?|mode-?(light|dark))$/.exec(w);
+  if (m) return /** @type {'light' | 'dark'} */ (m[1] ?? m[2]);
+  return (
+    /** @type {Record<string, 'light' | 'dark'>} */ ({
+      night: 'dark',
+      nighttime: 'dark',
+      dim: 'dark',
+      black: 'dark',
+      day: 'light',
+      daytime: 'light',
+      bright: 'light',
+      white: 'light',
+    })[w] ?? null
+  );
+}
+
+/**
+ * The one reading of a yes/no word, for a flag given a value (`--only=on`)
+ * and a saved `only`: the documented spellings of yes and no, or a typo of
+ * one of them (`ture`); null for any other word, which is neither.
+ * @param {unknown} word
+ * @returns {boolean | null}
+ */
+export function booleanWord(word) {
+  if (typeof word === 'boolean') return word;
+  const w = String(word ?? '')
+    .trim()
+    .toLowerCase();
+  const YES = ['true', 'yes', 'y', 'on', '1'];
+  const NO = ['false', 'no', 'n', 'off', '0'];
+  if (YES.includes(w)) return true;
+  if (NO.includes(w)) return false;
+  const near = [...YES, ...NO].filter(x => x.length > 3 && typoNear(w, x));
+  const read = [...new Set(near.map(x => YES.includes(x)))];
+  return read.length === 1 ? read[0] : null;
+}
 
 /** The CSS functions a value is written in, whose names carry no value. */
 const FORM =
@@ -953,6 +1005,22 @@ export function documentNumericTable(
 const RANGES = [];
 
 /**
+ * The documented words a typed word may be a typo of, item by item in a
+ * list (the CSS generic families, the font presets), registered where each
+ * list is defined.
+ * @type {Set<string>}
+ */
+const TYPO_WORDS = new Set();
+
+/**
+ * Register documented words a typed list item may be a typo of.
+ * @param {Iterable<string>} words
+ */
+export function documentTypoWords(words) {
+  for (const w of words) TYPO_WORDS.add(String(w).toLowerCase());
+}
+
+/**
  * Register a setting's documented range with the repair allowlist.
  * @param {string[]} things as for documentNumericTable
  * @param {number} min
@@ -1044,6 +1112,31 @@ export function readsTyped({
   )
     return true;
   if (numbersEqual(o, t)) return true;
+  // (5) A typo of a documented word in a list, item by item (`Inter,
+  // san-serif` is `Inter, sans-serif`; `sytem` is the system font).
+  {
+    const ti = t.split(',').map(x => x.trim());
+    const oi = o.split(',').map(x => x.trim());
+    const bare = (/** @type {string} */ x) => x.replace(/[\s_-]+/g, '');
+    const same = (/** @type {string} */ a, /** @type {string} */ b) => {
+      const A = tokensOf(a);
+      const B = tokensOf(b);
+      return A.length === B.length && A.every((w, i) => sameToken(w, B[i]));
+    };
+    if (
+      ti.length === oi.length &&
+      oi.some((x, i) => !same(x, ti[i])) &&
+      oi.every(
+        (x, i) =>
+          same(x, ti[i]) ||
+          (TYPO_WORDS.has(x) &&
+            (bare(x) === bare(ti[i]) ||
+              typoNear(ti[i], x) ||
+              typoNear(bare(ti[i]), bare(x)))),
+      )
+    )
+      return true;
+  }
   const color = parseColor(t);
   if (
     /^#[0-9a-f]{3,8}$/.test(o) &&
@@ -1105,11 +1198,20 @@ export function readsTyped({
     /(^|[\s-])(not|no|non|without|never|less)([\s-]|$)|^un|-none$/.test(t)
   )
     return true;
-  // (3) A saved value of the line's own setting, never the one typed.
+  // (3) A saved value of the line's own setting, never the one typed: as
+  // saved, or under the readings a typed value has (`blod` saved for
+  // headings is bold, as set reads it).
   if (
     key &&
     key !== typedKey &&
-    saved?.get(key)?.some(v => typedReading(v) === o)
+    saved
+      ?.get(key)
+      ?.some(
+        v =>
+          typedReading(v) === o ||
+          readsTyped({offered: o, typed: v, thing: key, typedThing: key}) ===
+            true,
+      )
   )
     return true;
   // (4) A documented fallback; a step on a dial with a scale.
@@ -1292,6 +1394,13 @@ documentReadings(Object.values(PROPERTY_WORDS).flatMap(m => Object.entries(m)));
 documentReadings(Object.entries(WEIGHT_WORDS));
 documentReadings(Object.entries(WEIGHT_WORDS).map(([w, n]) => [n, w]));
 documentReadings(Object.entries(DENSITY_WORDS));
+// A font dial word as a part's font-family is the stack it stands for.
+documentReadings(
+  [...Object.keys(FONTS), ...Object.keys(OPEN_FONTS)].map(w => [
+    w,
+    /** @type {string} */ (fontStack(w)),
+  ]),
+);
 
 /**
  * Whether a repair line may offer `offered` as the whole typed value (see

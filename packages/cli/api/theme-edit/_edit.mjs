@@ -74,7 +74,6 @@ import {
   buildTheme,
   staleBuild,
   EDITOR_SUFFIXES,
-  madeByEditor,
   outputsDrift,
   kebab,
   camel,
@@ -84,6 +83,8 @@ import {
   settingsEntriesOk,
   entriesReadable,
   readAsMeant,
+  editorMadeFolder,
+  builtOnBase,
   dialWordOf,
   onBuiltIn,
   readFields,
@@ -112,6 +113,7 @@ import {
   folderIsEmpty,
   dialValueFits,
   holdAfterBuild,
+  setArgs,
 } from './_settings.mjs';
 import {checkSetting, normalizeEntry, storedProblems} from './_check.mjs';
 import {MODAL, isColorToken} from './_compiler.mjs';
@@ -178,23 +180,18 @@ const E = ERROR_CODES;
  * for that name, the source only exactly as it writes it); `keep` is every
  * other file, which is never touched. Null when the editor did not make
  * the folder. System files (.DS_Store) are in neither.
+ * @param {string} cwd
  * @param {string} dir
  * @param {string} slug
  * @param {boolean} [damaged] its settings are there but not valid JSON
  * @returns {{clear: string[], keep: string[]} | null}
  */
-function editorLeftovers(dir, slug, damaged = false) {
+function editorLeftovers(cwd, dir, slug, damaged = false) {
   // The editor made this folder: a stopped `new` left its marker, the
   // generated settings module (which carries the editor's header) is there
   // without its settings, or its settings are there but damaged (kept
   // aside by `new`, so neither cleared nor kept here).
-  const marked = fs.existsSync(path.join(dir, NEW_MARKER));
-  if (
-    !marked &&
-    !damaged &&
-    !madeByEditor(path.join(dir, `${slug}.settings.ts`))
-  )
-    return null;
+  if (!damaged && !editorMadeFolder(cwd, slug)) return null;
   /** @type {string[]} */
   const clear = [];
   /** @type {string[]} */
@@ -292,6 +289,191 @@ function putBack(kept, tokensDir) {
  */
 
 export async function themeEditNew(name, options = {}) {
+  try {
+    return await newTheme(name, options);
+  } catch (e) {
+    throw await vetNewLines(
+      e,
+      options.cwd ?? process.cwd(),
+      options.settings ?? {},
+    );
+  }
+}
+
+/**
+ * Every `new` a refusal offers, checked as `new` checks its options (in
+ * memory, nothing written) before it is offered: a dial value the line
+ * gives in place of one typed passes only as an exact reading of what was
+ * typed (never a stock value); a flag `new` refuses is left out, and the
+ * reason names it; a line that is still refused is not offered. The one
+ * gate for `new` lines, as set's lines have theirs.
+ * @param {unknown} e
+ * @param {string} cwd
+ * @param {Record<string, string | string[] | undefined>} typed the dial options given
+ * @returns {Promise<unknown>}
+ */
+async function vetNewLines(e, cwd, typed) {
+  if (!(e instanceof AstryxError) || !(e.suggestions ?? []).length) return e;
+  const prefix = `${P} new `;
+  /** @type {import('./_settings.mjs').Ctx | null} */
+  let ctx = null;
+  try {
+    ctx = /** @type {import('./_settings.mjs').Ctx} */ (await context(cwd));
+  } catch {
+    return e;
+  }
+  /** @param {string} line */
+  const read = line => {
+    const args = splitCommand(line.slice(prefix.length));
+    if (!args || !args.length || args[0].startsWith('-')) return null;
+    const [slug, ...rest] = args;
+    /** @type {Array<[string, string]>} */
+    const flags = [];
+    let like = /** @type {string | undefined} */ (undefined);
+    let png = false;
+    for (let j = 0; j < rest.length; j += 1) {
+      const m = /^--([a-z-]+)$/.exec(rest[j]);
+      if (m?.[1] === 'png') png = true;
+      else if (m && rest[j + 1] != null) {
+        const v = rest[(j += 1)];
+        if (m[1] === 'like') like = v;
+        else flags.push([m[1], v]);
+      } else return null;
+    }
+    return {slug, like, png, flags};
+  };
+  /**
+   * The refusal `new` gives these flags, or null.
+   * @param {string} slug @param {string | undefined} like
+   * @param {Array<[string, string]>} flags @param {boolean} png
+   */
+  const problem = async (slug, like, flags, png) => {
+    /** @type {Record<string, string | string[]>} */
+    const settings = {};
+    for (const [k, v] of flags) {
+      const had = settings[k];
+      settings[k] = had == null ? v : [...[had].flat(), v];
+    }
+    const base = like && like !== 'none' ? like : undefined;
+    try {
+      /** @type {any} */ (ctx).base = await baseResolved(
+        /** @type {any} */ (ctx).project,
+        base,
+      );
+    } catch {
+      /** @type {any} */ (ctx).base = await baseResolved(
+        /** @type {any} */ (ctx).project,
+        undefined,
+      );
+    }
+    try {
+      applyNewSettings(
+        /** @type {any} */ (ctx),
+        slug,
+        {name: slug, ...(base ? {like: base} : {}), mode: 'both', settings: []},
+        settings,
+        png,
+        like,
+      );
+      return null;
+    } catch (err) {
+      if (err instanceof AstryxError) return err;
+      throw err;
+    }
+  };
+  // A light and a dark color typed as one value is read as that pair.
+  const typedValues = (/** @type {string} */ k) =>
+    [typed[k]]
+      .flat()
+      .filter(v => v != null)
+      .map(String)
+      .map(v => {
+        const pair = colorPair(v) ?? modeColorsOf(v);
+        return pair.light && pair.dark
+          ? `light-dark(${pair.light}, ${pair.dark})`
+          : v;
+      });
+  /** @type {Array<{name: string, reason?: string}>} */
+  const out = [];
+  for (const x of e.suggestions ?? []) {
+    const line = x.name.startsWith(prefix) ? read(x.name) : null;
+    if (!line) {
+      out.push(x);
+      continue;
+    }
+    /** @type {string[]} */
+    const untyped = [];
+    /** @type {string[]} */
+    const refused = [];
+    const shown = (/** @type {[string, string]} */ [k, v]) =>
+      `--${k} ${quoteCommandArgument(v)}`;
+    // A value in place of one typed is offered only as an exact reading of
+    // what was typed.
+    const lineMode = line.flags.find(([k]) => k === 'mode')?.[1];
+    const typedOnly = line.flags.filter(f => {
+      const was = typedValues(f[0]);
+      const ok =
+        !was.length ||
+        was.includes(f[1]) ||
+        was.some(t =>
+          allowedLine({
+            offered: f[1],
+            typed: t,
+            thing: f[0],
+            ...(lineMode ? {saved: new Map([['mode', [lineMode]]])} : {}),
+          }),
+        );
+      if (!ok) untyped.push(shown(f));
+      return ok;
+    });
+    // Each flag in turn is kept when new still takes the line with it, so a
+    // flag new refuses (alone, or beside one kept before it) is left out.
+    /** @type {Array<[string, string]>} */
+    const flags = [];
+    for (const f of typedOnly)
+      if (await problem(line.slug, line.like, [...flags, f], false))
+        refused.push(shown(f));
+      else flags.push(f);
+    if (await problem(line.slug, line.like, flags, line.png)) continue;
+    const dropped = [
+      ...(untyped.length
+        ? [`${untyped.join(' and ')} (not what was typed)`]
+        : []),
+      ...(refused.length
+        ? [`${refused.join(' and ')}, which new refuses`]
+        : []),
+    ];
+    const name = `${prefix}${line.slug}${newFlags(
+      line.like,
+      Object.fromEntries(
+        flags.reduce((/** @type {Map<string, string[]>} */ m, [k, v]) => {
+          m.set(k, [...(m.get(k) ?? []), v]);
+          return m;
+        }, new Map()),
+      ),
+      line.png,
+    )}`;
+    if (out.some(y => y.name === name)) continue;
+    out.push(
+      dropped.length
+        ? {
+            name,
+            reason: `do this instead, without ${dropped.join('; and without ')}`,
+          }
+        : {...x, name},
+    );
+  }
+  e.suggestions = out;
+  return e;
+}
+
+/**
+ * {@link themeEditNew}'s work.
+ * @param {string} name
+ * @param {import('./theme-edit.type.mjs').ThemeEditNewOptions} options
+ * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditNewResponse>}
+ */
+async function newTheme(name, options) {
   const {cwd = process.cwd(), png = false, settings = {}} = options;
   // --like reads a base in any case, by the one case rule of every dial
   // (`set <theme> base Neutral` is neutral); `--like none` builds on no
@@ -492,7 +674,7 @@ export async function themeEditNew(name, options = {}) {
   // after every argument is checked. Anything else in the folder, or a
   // folder without the marker, is never touched.
   const left = fs.existsSync(f.dir)
-    ? editorLeftovers(f.dir, name, damaged)
+    ? editorLeftovers(cwd, f.dir, name, damaged)
     : null;
   const holdsOther =
     fs.existsSync(f.dir) &&
@@ -751,12 +933,13 @@ async function followNewLine(e, ctx, slug, data) {
     },
     isNew,
   );
-  if (followed.line === first.name) return e;
+  // A line that is still refused is never offered as the fix.
+  if (followed.line === first.name || followed.why) return e;
   e.suggestions = [
     {
       ...first,
       name: followed.line,
-      reason: `do this instead: every flag fixed${followed.why ? `, but this still needs a fix: ${followed.why}` : ''}`,
+      reason: 'do this instead: every flag fixed',
     },
     ...(e.suggestions ?? []).filter(
       x => x !== first && x.name !== followed.line,
@@ -911,11 +1094,22 @@ function newFlags(like, settings, png) {
 function asNewRefusal(e, slug, settings, like, png = false, at = null) {
   if (!(e instanceof AstryxError)) return e;
   const setPrefix = `${P} set ${slug} `;
-  e.suggestions = (e.suggestions ?? []).map(s => {
+  /** @type {string[]} */
+  const after = [];
+  /** @type {Array<import('../../foundation/response/base').Suggestion | null>} */
+  const mapped = (e.suggestions ?? []).map(s => {
     if (s.name === `${P} set --help`) return {...s, name: `${P} new --help`};
     if (!s.name.startsWith(setPrefix)) return s;
+    const words = splitCommand(s.name.slice(setPrefix.length)) ?? [];
     const [thing, ...rest] = s.name.slice(setPrefix.length).split(' ');
     if (thing.startsWith('--') || !DIALS[thing]) return s;
+    // A set with its own scope (`corners pill --on button`) is no option of
+    // new: it is a change to make once the theme is made (said in the
+    // message below).
+    if (words.length !== 2) {
+      after.push(s.name);
+      return null;
+    }
     const fixed = unquoteWord(rest.join(' '));
     // Only the refused value changes: a dial given several values
     // (--headings tight --headings BOLD) keeps the others, in order.
@@ -930,6 +1124,12 @@ function asNewRefusal(e, slug, settings, like, png = false, at = null) {
       name: `${P} new ${slug}${newFlags(like, {...settings, [thing]: next}, png)}`,
     };
   });
+  e.suggestions = mapped.filter(x => x != null);
+  if (after.length)
+    e.message = e.message.replace(
+      /( Nothing was changed\.)?$/,
+      ` Once ${slug} is made, ${after.slice(0, 2).join(' or ')} does that.$1`,
+    );
   // A refused value with nothing to put in its place: the same new
   // without it, every other option kept.
   if (at && !e.suggestions.some(x => x.name.startsWith(`${P} new `))) {
@@ -943,6 +1143,23 @@ function asNewRefusal(e, slug, settings, like, png = false, at = null) {
     });
   }
   return e;
+}
+
+/**
+ * The color for each mode a value names in words (`light #111111 dark
+ * #eeeeee`, `dark: navy`): the one reading of a light and a dark color
+ * typed for a color dial on `new`.
+ * @param {string} typed
+ * @returns {Record<string, string>}
+ */
+function modeColorsOf(typed) {
+  /** @type {Record<string, string>} */
+  const pair = {};
+  for (const m of typed.matchAll(
+    /\b(light|dark)\b\s*(?:mode\s*)?[:=]?\s*(#[0-9a-f]{3,8}\b|[a-z]+\([^)]*\)|[a-z]+)/gi,
+  ))
+    pair[m[1].toLowerCase()] = m[2];
+  return pair;
 }
 
 /**
@@ -973,12 +1190,7 @@ function newColorPair(e, slug, settings, like, png, thing, typed) {
       name: `${P} new ${slug}${newFlags(like, {...settings, [thing]: undefined}, png)}`,
       reason: `without --${thing} ${quoteCommandArgument(typed)}`,
     });
-  /** @type {Record<string, string>} */
-  const pair = {};
-  for (const m of typed.matchAll(
-    /\b(light|dark)\b\s*(?:mode\s*)?[:=]?\s*(#[0-9a-f]{3,8}\b|[a-z]+\([^)]*\)|[a-z]+)/gi,
-  ))
-    pair[m[1].toLowerCase()] = m[2];
+  const pair = modeColorsOf(typed);
   if (!pair.light && !pair.dark) return e;
   const mode = String(
     Array.isArray(settings.mode) ? settings.mode[0] : (settings.mode ?? 'both'),
@@ -1304,11 +1516,16 @@ export async function themeEditSet(theme, thing, value, options = {}) {
  * @returns {Promise<unknown>}
  */
 async function swappedThingValue(e, slug, thing, value, options) {
+  // The thing named no setting, or the value names one itself (`neutral
+  // base`: a color dial given the base dial's name).
   if (
     !(e instanceof AstryxError) ||
-    e.code !== E.ERR_THEME_UNKNOWN_THING ||
     !value ||
-    !slugOk(slug)
+    !slugOk(slug) ||
+    !(
+      e.code === E.ERR_THEME_UNKNOWN_THING ||
+      (DIALS[value.trim().toLowerCase()] && e.code === E.ERR_THEME_BAD_VALUE)
+    )
   )
     return e;
   const line = `${P} set ${slug} ${[
@@ -1327,15 +1544,106 @@ async function swappedThingValue(e, slug, thing, value, options) {
     line,
     options.cwd ?? process.cwd(),
   );
-  if (followed.why) return e;
+  // The swapped reading holds only when set takes the value typed as the
+  // setting, with the scope typed, and the line carries the thing typed
+  // as its value (the one gate): never a sample command from a refusal of
+  // the swapped line (`bold` is no setting, and no part was named). A line
+  // that works once a step is done (an install) is offered after that step.
+  const read = readSetLine(followed.line, slug);
+  if (
+    !read ||
+    read.thing.toLowerCase() !== String(value).trim().toLowerCase() ||
+    (read.flags?.on ?? undefined) !== (options.on ?? undefined) ||
+    !allowedLine({offered: read.value, typed: String(thing), thing: read.thing})
+  )
+    return e;
+  const why = `do this instead: ${value} is the setting and ${thing} its value`;
+  if (!readyLines(followed, why).length) return e;
   e.suggestions = [
-    {
-      name: followed.line,
-      reason: `do this instead: ${value} is the setting and ${thing} its value`,
-    },
+    ...readyLines(followed, why),
     ...(e.suggestions ?? []).filter(x => x.name !== followed.line),
   ];
   return e;
+}
+
+/**
+ * A refusal of a saved entry whose value the editor no longer accepts,
+ * with the repair `set` offers for that value as typed (a typo, a unit, a
+ * label read as set reads them) beside the undo: the line is followed as
+ * set takes it, with the saved entry not checked while the theme is read,
+ * and offered only when it carries the saved value (the one gate).
+ * @param {unknown} e
+ * @param {string} slug
+ * @param {string} cwd
+ */
+async function withSavedRepair(e, slug, cwd) {
+  const bad = /** @type {any} */ (e)?.damaged;
+  if (
+    !(e instanceof AstryxError) ||
+    !bad ||
+    typeof bad.value !== 'string' ||
+    ['mode', 'base'].includes(bad.thing)
+  )
+    return e;
+  const line = `${P} set ${slug} ${setArgs(bad, bad.value)}`;
+  const followed = await followChangeLine('set', slug, line, cwd, bad);
+  if (followed.why || followed.line === line) return e;
+  const read = readSetLine(followed.line, slug);
+  if (
+    !read ||
+    read.thing !== bad.thing ||
+    !allowedLine({offered: read.value, typed: bad.value, thing: read.thing})
+  )
+    return e;
+  const list = e.suggestions ?? [];
+  // A set line the refusal already offers (the value cleaned) stands.
+  if (list.some(x => x.name.startsWith(`${P} set ${slug} `))) return e;
+  const at = list.findIndex(x => x.name.startsWith(`${P} undo ${slug} `));
+  e.suggestions = [
+    ...list.slice(0, at + 1),
+    {name: followed.line, reason: 'or set the value it holds, as set reads it'},
+    ...list.slice(at + 1),
+  ];
+  return e;
+}
+
+/**
+ * A `set` or `undo` command line as set or undo takes it (a repair either
+ * offers folded in, see followChangeLine), or null when it is refused with
+ * no repair: the check every offered line passes, for lines the CLI builds
+ * (a flag written with a value).
+ * @param {'set' | 'undo'} sub
+ * @param {string} line the whole command, `astryx experimental theme editor set <theme> …`
+ * @param {string} cwd
+ * @returns {Promise<string | null>}
+ */
+export async function checkedChangeLine(sub, line, cwd) {
+  const slug = splitCommand(line.slice(`${P} ${sub} `.length))?.[0];
+  if (!line.startsWith(`${P} ${sub} `) || !slug) return null;
+  const followed = await followChangeLine(sub, slug, line, cwd);
+  return followed.why ? null : followed.line;
+}
+
+/**
+ * The lines that carry out a followed line: itself when it works; when its
+ * own refusal offers it after a step (an install), that step and then the
+ * line; else nothing.
+ * @param {{line: string, why: string | null, next?: import('../../foundation/response/base').Suggestion[]}} followed
+ * @param {string} reason
+ * @returns {import('../../foundation/response/base').Suggestion[]}
+ */
+function readyLines(followed, reason) {
+  if (!followed.why) return [{name: followed.line, reason}];
+  const at = (followed.next ?? []).findIndex(x => x.name === followed.line);
+  return at > 0
+    ? [
+        ...(followed.next ?? []).slice(0, at),
+        {
+          name: followed.line,
+          reason: `then ${reason.replace(/^do this instead: /, '')}`,
+        },
+      ]
+    : [];
 }
 
 /**
@@ -1387,15 +1695,18 @@ async function swappedOrder(e, sub, words, options) {
       lineOf([moved[1], moved[0]]),
       cwd,
     );
+  const ready = readyLines(
+    followed,
+    `do this instead: ${theme} is the theme, so it comes first`,
+  );
+  // With the theme first and still refused, that refusal's reason and its
+  // own next commands: never a `new` of the setting's name.
+  if (!ready.length && followed.why)
+    e.message = `${e.message.replace(/\s*Nothing was changed\.$/, '')} With ${theme} first: ${followed.why}. Nothing was changed.`;
   e.suggestions = [
-    ...(followed.why
-      ? []
-      : [
-          {
-            name: followed.line,
-            reason: `do this instead: ${theme} is the theme, so it comes first`,
-          },
-        ]),
+    ...(ready.length
+      ? ready
+      : (followed.next ?? []).filter(x => !x.name.startsWith(`${P} new `))),
     ...(e.suggestions ?? []).filter(
       x => x.name !== followed.line && !x.name.startsWith(`${P} new `),
     ),
@@ -2069,10 +2380,13 @@ function looseObject(text) {
  * @param {import('./_settings.mjs').ThemeData} [data] the theme, whose saved
  *   values a keep line may carry
  */
-function carryTyped(e, sub, slug, thing, typed, data) {
+function carryTyped(e, sub, slug, thing, typed, data, cwd = process.cwd()) {
   if (
     sub !== 'set' ||
     !(e instanceof AstryxError) ||
+    // A refusal about what the settings file holds: its lines carry the
+    // saved value (checked where they are made), not the typed one.
+    /** @type {any} */ (e).aboutSaved ||
     typeof typed !== 'string' ||
     !e.suggestions?.length
   )
@@ -2091,7 +2405,15 @@ function carryTyped(e, sub, slug, thing, typed, data) {
   const saved = new Map();
   for (const x of data?.settings ?? [])
     saved.set(x.thing, [...(saved.get(x.thing) ?? []), String(x.value ?? '')]);
-  if (data?.like) saved.set('base', [data.like]);
+  // The base the theme was built on is a saved value of its base too (the
+  // module's header holds it when the file's base is damaged).
+  const builtOn = builtOnBase(cwd, slug);
+  saved.set(
+    'base',
+    /** @type {string[]} */ (
+      [data?.like, builtOn].filter(b => typeof b === 'string' && b !== '')
+    ),
+  );
   if (data?.mode) saved.set('mode', [data.mode]);
   const reads = e.suggestions.map(x => {
     const m = head.exec(x.name);
@@ -2250,15 +2572,17 @@ async function workingLines(sub, slug, lines, cwd, typed, thing) {
  * @param {string} slug
  * @param {string} line
  * @param {string} cwd
- * @returns {Promise<{line: string, why: string | null}>}
+ * @param {Partial<import('./_settings.mjs').Setting>} [skip] a saved entry
+ *   the line replaces, whose value is not checked when the theme is read
+ * @returns {Promise<{line: string, why: string | null, next?: import("../../foundation/response/base").Suggestion[]}>}
  */
-async function followChangeLine(sub, slug, line, cwd) {
+async function followChangeLine(sub, slug, line, cwd, skip) {
   /** @type {import('./_settings.mjs').ThemeData} */
   let data;
   /** @type {import('./_settings.mjs').Ctx} */
   let ctx;
   try {
-    data = loadTheme(cwd, slug);
+    data = loadTheme(cwd, slug, skip);
     ctx = /** @type {import('./_settings.mjs').Ctx} */ (await context(cwd));
     ctx.base = await baseResolved(ctx.project, data.like);
   } catch {
@@ -2286,6 +2610,7 @@ async function followChangeLine(sub, slug, line, cwd) {
         return sub === 'undo' && !data.settings.some(x => keyOf(x) === keyOf(s))
           ? new AstryxError(
               `${slug} does not set ${describe({...s, value: '?'}).replace(' = ?', '')}`,
+              [{name: `${P} show ${slug}`, reason: 'see what it sets'}],
             )
           : null;
       } catch (e) {
@@ -2293,7 +2618,25 @@ async function followChangeLine(sub, slug, line, cwd) {
         throw e;
       }
     },
-    name => name.startsWith(prefix),
+    name => {
+      if (!name.startsWith(prefix)) return false;
+      // A repair passes the one input gate: it adds no scope that was not
+      // typed (never a stock part), and a value in place of the one typed
+      // is an exact reading of it.
+      const toSet = (/** @type {string} */ l) =>
+        sub === 'undo' ? l.replace(`${P} undo `, `${P} set `) : l;
+      const was = readSetLine(toSet(line), slug);
+      const next = readSetLine(toSet(name), slug);
+      if (!was || !next) return true;
+      const scopes = /** @type {const} */ (['on', 'when', 'state', 'mode']);
+      if (scopes.some(k => next.flags[k] != null && was.flags[k] == null))
+        return false;
+      return (
+        sub === 'undo' ||
+        next.value === was.value ||
+        allowedLine({offered: next.value, typed: was.value, thing: next.thing})
+      );
+    },
   );
 }
 
@@ -2323,6 +2666,9 @@ async function change(sub, slug, thing, value, options) {
         : /^\s*\{?\s*["']/.test(thing) && /["']\s*:/.test(String(value))
           ? `${thing}:${value}`
           : null;
+  // A pasted object of one entry is that entry, as read below: its repair
+  // carries the entry's value, and how names its setting.
+  let oneEntry = false;
   if (objectText != null) {
     /** @type {any} */
     let obj = null;
@@ -2331,6 +2677,9 @@ async function change(sub, slug, thing, value, options) {
     } catch {
       // Not an object: read as typed.
     }
+    oneEntry = Boolean(
+      obj && typeof obj === 'object' && Object.keys(obj).length === 1,
+    );
     if (obj && typeof obj === 'object' && Object.keys(obj).length > 1)
       refuse(
         E.ERR_INVALID_ARGUMENT,
@@ -2539,9 +2888,10 @@ async function change(sub, slug, thing, value, options) {
           : await vetLoadRefusal(e, options.cwd ?? process.cwd(), slug),
         sub,
         slug,
-        typedThing,
-        typedValue,
+        oneEntry ? thing : typedThing,
+        oneEntry ? value : typedValue,
         seen.data ?? savedAsWritten(options.cwd ?? process.cwd(), slug),
+        options.cwd ?? process.cwd(),
       ),
       seen.data?.name ?? slug,
       seen.data,
@@ -2583,7 +2933,13 @@ async function changeOnce(
     // source means nothing.
     ...(sub === 'undo' ? {removing: true} : {}),
   });
-  const data = loadTheme(cwd, slug, target);
+  /** @type {import('./_settings.mjs').ThemeData} */
+  let data;
+  try {
+    data = loadTheme(cwd, slug, target);
+  } catch (e) {
+    throw await withSavedRepair(e, slug, cwd);
+  }
   /** @type {string[]} */
   // A damaged mode or base the command does not set itself is read as
   // meant, or goes back to its default, so the theme loads again.
@@ -2770,12 +3126,29 @@ async function changeOnce(
             ...data.settings.map(x => x.thing.toLowerCase()),
           ]).length > 0;
         const steps = readHistory(themeFiles(cwd, slug).history).steps.length;
+        // The setting whose scope is the one typed (no --on: the whole
+        // theme's) leads; with none of that scope, the message says so and
+        // the others are listed after it.
+        const sameScope = (/** @type {any} */ x) =>
+          (x.on ?? null) === (flags.on ?? null) &&
+          (x.when ?? null) === (flags.when ?? null) &&
+          (x.state ?? null) === (flags.state ?? null) &&
+          (x.mode ?? null) === (flags.mode ?? null);
+        const ordered = [
+          ...matches.filter(sameScope),
+          ...matches.filter(x => !sameScope(x)),
+        ];
+        const scoped = flags.on || flags.when || flags.state || flags.mode;
         throw new AstryxError(
-          e.message,
+          matches.length && !matches.some(sameScope) && scoped
+            ? `${e.message.replace(/\s*Nothing was changed\.$/, '')} ${slug} sets ${matches[0].thing} only where these lines name. Nothing was changed.`
+            : e.message,
           matches.length
-            ? matches.slice(0, 5).map(x => ({
+            ? ordered.slice(0, 5).map(x => ({
                 name: `${P} undo ${slug} ${undoArgs(x)}`,
-                reason: 'do this instead',
+                reason: sameScope(x)
+                  ? 'do this instead'
+                  : `do this instead: ${describe({...x, value: '?'}).replace(' = ?', '')}`,
               }))
             : [
                 steps && !nearSetting
@@ -2833,24 +3206,6 @@ async function changeOnce(
   // this change's to report.
   const notesBefore = new Set(buildNotes(ctx));
   if (sub === 'set' && (s.thing === 'base' || s.thing === 'mode')) {
-    // A built-in base this project has not installed: install it, then the
-    // same set, whichever letters it was typed in.
-    if (
-      s.thing === 'base' &&
-      s.value !== 'none' &&
-      !baseInstalled(cwd, s.value)
-    )
-      refuse(
-        E.ERR_UNKNOWN_THEME,
-        `The ${s.value} theme is not installed, so ${slug} cannot build on it. Install @astryxdesign/theme-${s.value}, then set the base again, or build on no theme.`,
-        {
-          run: [
-            installLine(cwd, [`@astryxdesign/theme-${s.value}`]),
-            `${P} set ${slug} base ${s.value}`,
-            `${P} set ${slug} base none`,
-          ],
-        },
-      );
     const before = s.thing === 'base' ? (data.like ?? 'none') : data.mode;
     if (s.thing === 'base') {
       if (s.value === 'none') delete data.like;
@@ -3658,8 +4013,14 @@ async function changeOnce(
     );
     notes.push(...unsetColorNotes(data, base, slug));
   }
-  // A font set (the dial, or a part's own font-family): how it loads.
-  if ((s.thing === 'font' || s.thing === 'font-family') && sub === 'set')
+  // A font set (the dial, a part's own font-family, a font token): how
+  // it loads.
+  if (
+    (s.thing === 'font' ||
+      s.thing === 'font-family' ||
+      /^--font-family-/.test(s.thing)) &&
+    sub === 'set'
+  )
     notes.unshift(...fontNotes(ctx, {...data, settings: [s]}));
   if (s.thing === 'type' || s.thing === 'headings')
     for (const [m, why] of maskedSettings(data, ctx))
@@ -4805,14 +5166,7 @@ function colorFiles(slug) {
  */
 export async function themeEditUndo(theme, options = {}) {
   try {
-    return await undoTheme(theme, options).catch(async e => {
-      throw await swappedOrder(
-        e,
-        'undo',
-        [theme, options.thing, options.value],
-        options,
-      );
-    });
+    return await undoTheme(theme, options);
   } catch (e) {
     // A theme name typed in another form (tTheme, T, brand_dark, themes/t):
     // the same undo with the theme's name comes first, never a look at the
@@ -4866,7 +5220,13 @@ export async function themeEditUndo(theme, options = {}) {
         ];
       }
     }
-    throw e;
+    // Then the theme typed after the setting (`undo corners t`).
+    throw await swappedOrder(
+      e,
+      'undo',
+      [theme, options.thing, options.value],
+      options,
+    );
   }
 }
 

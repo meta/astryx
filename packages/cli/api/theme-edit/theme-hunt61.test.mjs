@@ -142,7 +142,7 @@ describe('hunt61b: headers and titles', () => {
       // A surface word: the app header part.
       [
         'header background dark',
-        /^set q background '#[0-9a-f]{6}' --on app-shell-header$/,
+        /^set q background-color '#[0-9a-f]{6}' --on app-shell-header$/,
       ],
       ['the header bar border thicker', / --on app-shell-header$/],
       // The clause starts after the last break: a full stop or semicolon too.
@@ -172,7 +172,9 @@ describe('hunt61c: clause breaks and comparisons', () => {
       {cwd, theme: 'q'},
     );
     const all = (data.results ?? []).flatMap(r => r.commands).join('\n');
-    expect(all).toMatch(/background '#[0-9a-f]{6}' --on app-shell-header/);
+    expect(all).toMatch(
+      /background-color '#[0-9a-f]{6}' --on app-shell-header/,
+    );
     expect(all).not.toMatch(/--on heading\b/);
   }, 120_000);
 

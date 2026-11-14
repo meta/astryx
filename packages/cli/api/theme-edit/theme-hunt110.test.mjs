@@ -83,7 +83,8 @@ describe('wrong writes that are no longer accepted', () => {
       expect(first).toContain(
         "set n background-color 'var(--color-error-muted)' --on button --when variant:destructive --state hover --mode light",
       );
-      expect(first.some(c => /^set n background '/.test(c))).toBe(false);
+      // (Never the shorthand, which would clear Core's tint.)
+      expect(first.filter(c => /^set n background '/.test(c))).toEqual([]);
     },
     T,
   );
@@ -102,12 +103,19 @@ describe('wrong writes that are no longer accepted', () => {
     T,
   );
   it(
-    'a focus except the inputs cannot keep leaves the plain answer out too',
+    'a focus except on the inputs keeps the focused fill in each mode',
     async test => {
       needsBases(test);
-      expect(
-        (await answer('make inputs darker except when focused')).first,
-      ).toEqual([]);
+      // Each mode's change goes in that mode's block, so the focused input
+      // keeps its own fill in each mode.
+      const {first} = await answer('make inputs darker except when focused');
+      for (const m of ['light', 'dark'])
+        expect(
+          first.some(c =>
+            new RegExp(`--on inputs --state focus-within --mode ${m}$`).test(c),
+          ),
+          m,
+        ).toBe(true);
     },
     T,
   );
@@ -123,19 +131,22 @@ describe('wrong writes that are no longer accepted', () => {
         "set b color 'var(--color-on-accent)' --on button --when variant:secondary",
       );
       expect(first).toContain(
-        "set b background 'var(--color-accent)' --on button --when variant:secondary",
+        "set b background-color 'var(--color-accent)' --on button --when variant:secondary",
       );
     },
     T,
   );
   it(
-    'a one-mode card shadow is refused: the card draws its ring in both modes',
+    'a one-mode card shadow keeps the light card as it is',
     async test => {
       needsBases(test);
+      // (The card shows no shadow at rest; its selection ring is a state.)
       expect(
         (await answer('card shadow 0 4px 12px #00000080 in dark mode', 'b'))
           .first,
-      ).toEqual([]);
+      ).toEqual([
+        "set b box-shadow '0 4px 12px light-dark(transparent, #00000080)' --on card",
+      ]);
     },
     T,
   );
