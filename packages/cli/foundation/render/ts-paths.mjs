@@ -19,6 +19,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {findNodeModulesPackage} from '../fs/paths.mjs';
 
 /**
  * @typedef {object} PathPattern
@@ -68,13 +69,71 @@ function readJsonc(file) {
   }
 }
 
+/** The conditions TypeScript matches in a package's `exports` for a config. */
+const CONFIG_CONDITIONS = ['require', 'types', 'node', 'default'];
+
+/**
+ * The target an `exports` value gives under the config conditions: a path,
+ * the first matching condition of an object, the first that resolves of a
+ * list.
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+function conditionTarget(value) {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const target = conditionTarget(item);
+      if (target) return target;
+    }
+    return null;
+  }
+  if (value && typeof value === 'object') {
+    for (const [condition, item] of Object.entries(value)) {
+      if (!CONFIG_CONDITIONS.includes(condition)) continue;
+      const target = conditionTarget(item);
+      if (target) return target;
+    }
+  }
+  return null;
+}
+
+/**
+ * Where a package's `exports` send a subpath (`.` or `./base`): its own key,
+ * else the pattern with one `*` whose part before the star is longest, the
+ * star taking the rest.
+ * @param {unknown} exports
+ * @param {string} subpath
+ * @returns {string | null}
+ */
+function exportTarget(exports, subpath) {
+  const keyed = exports && typeof exports === 'object' && !Array.isArray(exports) && Object.keys(exports).some(k => k.startsWith('.'));
+  /** @type {Record<string, unknown>} */
+  const map = keyed ? /** @type {Record<string, unknown>} */ (exports) : {'.': exports};
+  if (Object.hasOwn(map, subpath)) return conditionTarget(map[subpath]);
+  /** @type {{key: string, before: string, star: string} | null} */
+  let best = null;
+  for (const key of Object.keys(map)) {
+    const at = key.indexOf('*');
+    if (at < 0 || key.indexOf('*', at + 1) >= 0) continue;
+    const before = key.slice(0, at);
+    const after = key.slice(at + 1);
+    if (subpath.length < key.length - 1 || !subpath.startsWith(before) || !subpath.endsWith(after)) continue;
+    if (!best || before.length > best.before.length) best = {key, before, star: subpath.slice(before.length, subpath.length - after.length)};
+  }
+  if (!best) return null;
+  const target = conditionTarget(map[best.key]);
+  return target === null ? null : target.split('*').join(best.star);
+}
+
 /**
  * The config file an `extends` entry names, from the folder of the config
  * that writes it, as TypeScript finds it: a path (`.json` may be left off);
- * or a package's config: a path inside the package (as its `exports` map it,
- * else as written, `.json` may be left off), else the file its package.json
- * names in `tsconfig`, else its `tsconfig.json`. A package's `main` is code,
- * never its config.
+ * or a package's config, in the nearest `node_modules` that has it: where
+ * its `exports` send the subpath (`.` for the package alone), else the
+ * subpath as written (`.json` may be left off), else the file its
+ * package.json names in `tsconfig`, else its `tsconfig.json`. A package's
+ * `main` is code, never its config.
  * @param {unknown} spec
  * @param {string} fromDir
  * @returns {string | null}
@@ -88,20 +147,15 @@ function extendedFile(spec, fromDir) {
   const scoped = spec.startsWith('@');
   const name = parts.slice(0, scoped ? 2 : 1).join('/');
   const sub = parts.slice(scoped ? 2 : 1).join('/');
-  for (let d = fromDir; ; d = path.dirname(d)) {
-    const dir = path.join(d, 'node_modules', name);
-    if (fs.existsSync(dir)) {
-      const pkg = readJsonc(path.join(dir, 'package.json')) ?? {};
-      if (sub) {
-        const mapped = pkg.exports && typeof pkg.exports === 'object' ? pkg.exports[`./${sub}`] : undefined;
-        const target = typeof mapped === 'string' ? mapped : typeof mapped?.default === 'string' ? mapped.default : null;
-        return jsonFile(path.join(dir, target ?? sub));
-      }
-      if (typeof pkg.tsconfig === 'string') return jsonFile(path.join(dir, pkg.tsconfig));
-      return jsonFile(path.join(dir, 'tsconfig.json'));
-    }
-    if (path.dirname(d) === d) return null;
+  const found = findNodeModulesPackage(fromDir, name);
+  if (!found) return null;
+  const pkg = readJsonc(path.join(found.packageDir, 'package.json')) ?? {};
+  if (pkg.exports !== undefined && pkg.exports !== null) {
+    const target = exportTarget(pkg.exports, sub ? `./${sub}` : '.');
+    return target === null ? null : jsonFile(path.join(found.packageDir, target));
   }
+  if (sub) return jsonFile(path.join(found.packageDir, sub));
+  return jsonFile(path.join(found.packageDir, typeof pkg.tsconfig === 'string' ? pkg.tsconfig : 'tsconfig.json'));
 }
 
 /**
