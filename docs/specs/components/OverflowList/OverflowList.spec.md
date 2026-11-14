@@ -217,13 +217,19 @@ The hidden measurement copy is implementation structure, not consumer anatomy.
 ## Decision log
 
 - **DEC-1 — Lists measure together after the commit.** Every list mounted or
-  changed in one commit measures after that commit and before the frame paints,
-  so a page that mounts many lists pays for one layout instead of one per
-  list, and the first painted frame is the same. The collapse and
-  `onOverflowChange` land in a microtask after the commit, not inside it.
+  changed in one commit measures after that commit and before the frame paints.
+  When other components write to the page in the same commit, the lists read
+  their sizes after those writes together, so the page lays out once for them
+  instead of once per list, and the first painted frame is the same. The
+  collapse and `onOverflowChange` land in a microtask after the commit, not
+  inside it.
   Rejected: measuring only when a list scrolls into view, because the browser
   reports visibility after a paint, so a list scrolling in would show one
   frame uncollapsed.
+
+  **Decider:** `cixzhang`, `2026-11-06`
+
+  > It improves reflow to batch then yes
 
 ## Open questions
 
