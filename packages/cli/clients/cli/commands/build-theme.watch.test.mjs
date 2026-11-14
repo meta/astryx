@@ -447,8 +447,9 @@ describe('theme build --watch', () => {
           }
         },
       });
-      // Queue a change behind the rebuild in progress (debounce is 100 ms).
-      fs.writeFileSync(themeFile, `${slow}// queued\n`);
+      // Queue a change without truncating the source: the rebuild may still
+      // be loading it when its "rebuilding" line arrives (debounce is 100 ms).
+      fs.appendFileSync(themeFile, '// queued\n');
       // Let the 100 ms debounce queue the change. This is not a deadline: a slow
       // runner can only leave the change unqueued, never fail the test.
       await new Promise(resolve => setTimeout(resolve, 500));
