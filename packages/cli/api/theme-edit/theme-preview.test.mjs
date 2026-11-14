@@ -205,6 +205,44 @@ describe('preview add', () => {
     ).toEqual([]);
   }, 120_000);
 
+  it('writes a one-mode route that imports only what it draws, and says what leaving out --theme does', async () => {
+    await themeEditNew('lo', {
+      cwd,
+      like: 'neutral',
+      settings: {mode: 'light-only'},
+    });
+    const dir = path.join(cwd, 'src/app/lo');
+    try {
+      await themeEditPreviewAdd(undefined, {
+        cwd,
+        theme: 'lo',
+        path: 'src/app/lo',
+      });
+      const route = read('src/app/lo/page.tsx');
+      expect(route).not.toContain('SegmentedControl');
+      expect(
+        typeErrors(dir, false, {
+          noUncheckedIndexedAccess: true,
+          noUnusedLocals: true,
+        }),
+      ).toEqual([]);
+      // With a preview that wears lo, leaving out --theme keeps lo.
+      const r = await refusal(() =>
+        themeEditPreviewAdd(undefined, {
+          cwd,
+          theme: 'neutral',
+          path: 'src/app/lo',
+        }),
+      );
+      expect(r.message).toContain(
+        'leave out --theme and the preview keeps wearing lo',
+      );
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+      fs.rmSync(path.join(cwd, 'themes/lo'), {recursive: true, force: true});
+    }
+  }, 240_000);
+
   it('adds a Colors page once the theme has generated colors, and keeps it in step', async () => {
     const dir = path.join(cwd, 'src/app/theme-preview');
     const page = 'src/app/theme-preview/_pages/colors.tsx';
@@ -548,7 +586,8 @@ describe('preview options and errors', () => {
         theme: null,
         themeMissing: false,
         pages: [],
-        notes: [],
+        // No preview, and add would refuse here: the note says why.
+        notes: [expect.stringContaining('preview add refuses this folder')],
       });
     } finally {
       fs.rmSync(bare, {recursive: true, force: true});
@@ -687,6 +726,16 @@ describe('preview app', () => {
       'half\n',
     );
     const r = await themeEditPreviewApp('themed', {cwd, theme: 'brand'});
+    // The copied build was made on this project's base theme (the fixture's
+    // is 0.0.0): the new app installs that version, and says so.
+    expect(
+      JSON.parse(read('themed/package.json')).dependencies[
+        '@astryxdesign/theme-neutral'
+      ],
+    ).toBe('0.0.0');
+    expect(r.data.notes.join(' ')).toContain(
+      "the new app installs @astryxdesign/theme-neutral 0.0.0, the versions this project has and brand's build was made on",
+    );
     expect(read('themed/themes/brand/tokens/brand.palette.ts')).toBe(
       read('themes/brand/tokens/brand.palette.ts'),
     );

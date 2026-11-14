@@ -63,6 +63,7 @@ const page = (name, score, family) => ({
   familyNamed: false,
   containerMatched: false,
   matched: new Set(),
+  typical: 0,
 });
 /** A ranker output that prefers `charts`. */
 const RANKED = [
@@ -123,6 +124,71 @@ describe('weighStart', () => {
       weights: WEIGHTS,
     });
     expect(start).toBe('fresh');
+  });
+
+  describe('an exact tie among templates the tables do not list', () => {
+    // Two made-up templates of one family that the ranker scores the same.
+    // Only their own descriptors tell them apart.
+    const catalog = [
+      ...CATALOG,
+      {
+        name: 'list-alpha',
+        displayName: 'Plain List',
+        category: 'Lists - Plain',
+        description: 'A plain list of records.',
+      },
+      {
+        name: 'list-pane',
+        displayName: 'List with Reading Pane',
+        category: 'Lists - Pane',
+        description: 'A list of records with a reading pane beside it.',
+        keywords: ['reading pane'],
+      },
+    ];
+    const tied = [
+      page('list-alpha', 5, 'Lists'),
+      page('list-pane', 5, 'Lists'),
+      ...RANKED,
+    ];
+
+    it('starts from the tied template whose descriptor names the idea', () => {
+      const start = weighStart(
+        'a list of orders with a reading pane',
+        tied,
+        tied[0],
+        catalog,
+        {weights: WEIGHTS},
+      );
+      expect(start).toBe('list-pane');
+    });
+
+    it('keeps the pick when the ranker does not tie', () => {
+      const ahead = [page('list-alpha', 6, 'Lists'), ...tied.slice(1)];
+      const start = weighStart(
+        'a list of orders with a reading pane',
+        ahead,
+        ahead[0],
+        catalog,
+        {weights: WEIGHTS},
+      );
+      expect(start).toBe('list-alpha');
+    });
+
+    it('falls back to the most typical tied template when no descriptor tells them apart', () => {
+      const typical = [
+        {...page('list-alpha', 5, 'Lists'), typical: 0.2},
+        {...page('list-pane', 5, 'Lists'), typical: 0.8},
+        ...RANKED,
+      ];
+      const start = weighStart(
+        'a list of orders',
+        typical,
+        typical[0],
+        catalog,
+        {weights: WEIGHTS},
+      );
+      expect(start).toBe('list-pane');
+    });
   });
 
   describe('a template the tables do not list (cold start)', () => {

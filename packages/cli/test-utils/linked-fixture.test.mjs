@@ -45,6 +45,13 @@ describe('makeLinkedFixture', () => {
       removeLinkedFixture(dir);
     }
     expect(fs.existsSync(root)).toBe(false);
+    // Removal takes the links, not the packages they point at.
+    expect(
+      fs.existsSync(path.join(import.meta.dirname, '../../core/package.json')),
+    ).toBe(true);
+    expect(
+      fs.existsSync(path.join(import.meta.dirname, '../package.json')),
+    ).toBe(true);
   });
 
   it('refuses to remove a directory it did not make', () => {

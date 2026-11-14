@@ -10,7 +10,7 @@ import {spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
-import {themeEditNew, themeEditSet} from './theme-edit.mjs';
+import {themeEditNew, themeEditSet, themeEditUndo} from './theme-edit.mjs';
 import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
 import {
   makeLinkedFixture,
@@ -83,15 +83,21 @@ describe('final 8', () => {
     expect(r.data.setting.state).toBe('focus-within');
   }, 240_000);
 
-  it('F8-5: padding in a state on an inputs member suggests --only', async () => {
-    const r = await refusal(() =>
-      themeEditSet('s', 'padding', '4px', {
-        cwd,
-        on: 'date-input',
-        state: 'hover',
-      }),
-    );
-    expect(r.run[0]).toMatch(/--on date-input --state hover --only$/);
+  it('F8-5 (now parts36): padding in a state on an inputs member is taken for the group', async () => {
+    // A state padding reaches a member Core expands (number-input) through
+    // the padding model, so the group setting needs no --only any more.
+    const r = await themeEditSet('s', 'padding', '4px', {
+      cwd,
+      on: 'date-input',
+      state: 'hover',
+    });
+    expect(r.data.setting.state).toBe('hover');
+    await themeEditUndo('s', {
+      cwd,
+      thing: 'padding',
+      on: 'date-input',
+      state: 'hover',
+    });
   });
 
   it('F8-1: a radius for one mode is refused as not a color, with a run that works', async () => {

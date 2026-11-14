@@ -14,6 +14,7 @@ import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {AstryxError} from '../error.mjs';
+import {EDITOR_STAMP, withPngText} from './_png.mjs';
 import {
   findDeclaredWorkspaceRoot,
   findNodeModulesPackage,
@@ -43,8 +44,12 @@ import {
   modesOf,
   nearest,
   refuse,
+  adoptOlderPicture,
+  editorWrote,
+  recordWritten,
   themeFiles,
   refuseThemesNotFolder,
+  shown,
 } from './_settings.mjs';
 import {SHOWCASE_GROUPS, renderPreview, screenshot} from './_preview.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
@@ -382,24 +387,128 @@ export async function pictures(project, shots, modes) {
   const files = [];
   /** @type {string[]} */
   const cut = [];
+  /** @param {string} png @param {'light' | 'dark'} m */
+  const outOf = (png, m) =>
+    modes.length > 1 && m === 'dark' ? png.replace(/\.png$/, '-dark.png') : png;
+  /** The theme a picture's folder is, when it is a theme folder. @param {string} out */
+  const themeOf = out => {
+    const slug = path.basename(path.dirname(out));
+    return path.resolve(path.dirname(out)) ===
+      path.resolve(themeFiles(project.cwd, slug).dir)
+      ? slug
+      : null;
+  };
+  // A picture is written only over a picture the editor took, unchanged
+  // since: a file of the user's by that name blocks every picture, and is
+  // named.
+  /** Pictures an older editor took, now recorded. @type {string[]} */
+  const adopted = [];
+  const blocked = shots
+    .flatMap(({png}) => modes.map(m => outOf(png, m)))
+    .filter(out => {
+      const slug = themeOf(out);
+      if (!slug || !fs.existsSync(out) || editorWrote(project.cwd, slug, out))
+        return false;
+      if (adoptOlderPicture(project.cwd, slug, out)) {
+        adopted.push(path.relative(project.cwd, out));
+        return false;
+      }
+      return true;
+    });
+  if (blocked.length)
+    return {
+      files,
+      problem: `${blocked.map(f => path.relative(project.cwd, f)).join(', ')} ${blocked.length === 1 ? 'is a file' : 'are files'} the editor did not write (or changed since it did), so no picture was taken and ${blocked.length === 1 ? 'it is' : 'they are'} left as ${blocked.length === 1 ? 'it is' : 'they are'}`,
+    };
   for (const {html, png} of shots) {
     for (const m of modes) {
-      const out =
-        modes.length > 1 && m === 'dark'
-          ? png.replace(/\.png$/, '-dark.png')
-          : png;
-      const r = await screenshot(project, html, out, m);
-      if (!r.ok) return {files, problem: r.reason};
+      const out = outOf(png, m);
+      // Taken under a name of its own and moved into place once whole: a
+      // run stopped while the browser runs leaves no picture at the real
+      // name (one the next run would read as a file of yours). A part left
+      // by a run stopped before is cleared.
+      const part = path.join(
+        path.dirname(out),
+        `.${path.basename(out, '.png')}.part-${process.pid}.png`,
+      );
+      for (const n of fs.existsSync(path.dirname(out))
+        ? fs.readdirSync(path.dirname(out))
+        : [])
+        if (n.startsWith(`.${path.basename(out, '.png')}.part-`)) {
+          // Only a file is a part: a folder by that name is left alone.
+          const p = path.join(path.dirname(out), n);
+          try {
+            if (fs.lstatSync(p).isFile()) fs.rmSync(p, {force: true});
+          } catch {
+            // Gone already.
+          }
+        }
+      // A folder (or anything else) where this run's part goes: no
+      // picture, the path named, never a crash after a saved change.
+      if (fs.existsSync(part) && !fs.lstatSync(part).isFile())
+        return {
+          files,
+          problem: `${path.relative(project.cwd, part)} is a folder, where --png writes a picture before moving it into place, so no picture was taken; move it out of ${path.relative(project.cwd, path.dirname(out))}/`,
+        };
+      // A folder it cannot write gets no picture: named before the browser
+      // starts, never read as a browser that failed.
+      try {
+        fs.accessSync(path.dirname(out), fs.constants.W_OK);
+      } catch (e) {
+        return {
+          files,
+          problem: `${path.relative(project.cwd, path.dirname(out))}/ cannot be written (${/** @type {any} */ (e)?.code ?? 'no access'}), so no picture was taken; fix its permissions, then run the command again`,
+        };
+      }
+      const r = await screenshot(project, html, part, m);
+      if (!r.ok) {
+        fs.rmSync(part, {force: true});
+        return {files, problem: r.reason};
+      }
+      try {
+        fs.renameSync(part, out);
+      } catch (e) {
+        fs.rmSync(part, {force: true});
+        return {
+          files,
+          problem: `the picture could not be moved into ${path.relative(project.cwd, out)} (${/** @type {any} */ (e)?.code ?? e})`,
+        };
+      }
+      r.file = path.relative(project.cwd, out).split(path.sep).join('/');
       files.push(r.file);
+      // A picture in a theme folder is recorded as the editor's, so a later
+      // change removes it and never a picture of the user's.
+      const slug = themeOf(out);
+      if (slug) {
+        // Stamped with the editor's mark and the theme, then recorded.
+        try {
+          fs.writeFileSync(
+            out,
+            withPngText(fs.readFileSync(out), EDITOR_STAMP, slug),
+          );
+        } catch {
+          // An unstamped picture is still recorded below.
+        }
+        recordWritten(project.cwd, slug, [out]);
+      }
       if (r.cut) cut.push(r.file);
     }
   }
+  const adoptedNote = adopted.length
+    ? `${adopted.join(', ')} ${adopted.length === 1 ? 'was' : 'were'} taken by an earlier version of the editor and ${adopted.length === 1 ? 'is' : 'are'} now recorded as its own`
+    : null;
   return {
     files,
     // A picture of the window shows the top of a longer page only.
-    problem: cut.length
-      ? `${cut.join(', ')} show${cut.length === 1 ? 's' : ''} the top 2400 pixels of the page only (Chrome takes the window, not the whole page); open the .html beside ${cut.length === 1 ? 'it' : 'them'} to see all of it, or install Playwright (${installLine(project.cwd, ['playwright'])}) for whole-page pictures`
-      : null,
+    problem:
+      [
+        adoptedNote,
+        cut.length
+          ? `${cut.join(', ')} show${cut.length === 1 ? 's' : ''} the top 2400 pixels of the page only (Chrome takes the window, not the whole page); open the .html beside ${cut.length === 1 ? 'it' : 'them'} to see all of it, or install Playwright (${installLine(project.cwd, ['playwright'])}) for whole-page pictures`
+          : null,
+      ]
+        .filter(Boolean)
+        .join('; ') || null,
   };
 }
 
@@ -481,11 +590,21 @@ export function fontNotes(ctx, data) {
  * What a change did to part styles (component settings), one line each.
  * @param {any} before
  * @param {any} after
+ * @param {any} [base] the base theme, whose own values a write that repeats them does not change
  * @returns {string[]}
  */
-export function styledChanges(before, after) {
+export function styledChanges(before, after, base) {
   /** @type {string[]} */
   const out = [];
+  /** A value as CSS reads it, for comparing. @param {any} v */
+  const plain = v =>
+    (Array.isArray(v) && v.length === 2
+      ? `light-dark(${v[0]}, ${v[1]})`
+      : String(v ?? '')
+    )
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
   const a = before?.components ?? {};
   const b = after?.components ?? {};
   for (const target of new Set([...Object.keys(a), ...Object.keys(b)])) {
@@ -502,6 +621,14 @@ export function styledChanges(before, after) {
           : p.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`);
       for (const prop of new Set([...Object.keys(x), ...Object.keys(y)])) {
         if (JSON.stringify(x[prop]) === JSON.stringify(y[prop])) continue;
+        // Writing what the base theme already shows there changes nothing.
+        const shown = base?.components?.[target]?.[key]?.[prop];
+        if (
+          x[prop] === undefined &&
+          shown !== undefined &&
+          plain(shown) === plain(y[prop])
+        )
+          continue;
         const where = `${target}${key === 'base' ? '' : ` ${key}`}`;
         // A state block (`:hover`) lists each property it changes.
         if (
@@ -574,6 +701,7 @@ export async function previewAfter(ctx, slug, data, png) {
   /** @type {string | null} */
   let preview = null;
   let cause = ctx.unchecked ?? null;
+  const f0 = themeFiles(ctx.project.cwd, slug);
   try {
     preview = await renderPreview(ctx, slug, data);
   } catch (e) {
@@ -583,12 +711,31 @@ export async function previewAfter(ctx, slug, data, png) {
       ? renderCause(ctx.project, /** @type {Error} */ (e).message)
       : ['ENOSPC', 'EACCES', 'EPERM', 'EROFS', 'EIO'].includes(code)
         ? `preview.html could not be written (${code === 'ENOSPC' ? 'the disk is full' : code}), so it still shows the theme as it was`
-        : `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
+        : // A folder (or another thing) where preview.html goes: the page
+          // was rendered, and could not be written there.
+          code === ERROR_CODES.ERR_WRITE_FAILED ||
+            (fs.existsSync(f0.preview) && !fs.statSync(f0.preview).isFile())
+          ? `preview.html could not be written (${shown(ctx.project.cwd, f0.preview)} is ${fs.existsSync(f0.preview) && fs.statSync(f0.preview).isDirectory() ? 'a folder' : 'in the way'}; move it, then run ${P} show ${slug}), so it still shows the theme as it was`
+          : `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
   }
   const f = themeFiles(ctx.project.cwd, slug);
   // The sheet of every component is made by show only: after a change it
   // says, at its top, that it shows the theme as it was.
   const sheetStale = markSheetStale(f.sheet, slug, ctx.project.cwd);
+  // Section sheets the editor made (they carry its stamp) go out of date the
+  // same way; any other file is left as it is.
+  const sectionsStale = (
+    fs.existsSync(f.dir) ? fs.readdirSync(f.dir) : []
+  ).filter(n => {
+    if (!/^sheet-[a-z-]+\.html$/.test(n)) return false;
+    const file = path.join(f.dir, n);
+    try {
+      if (!SHEET_STAMP.test(fs.readFileSync(file, 'utf8'))) return false;
+    } catch {
+      return false;
+    }
+    return markSheetStale(file, slug, ctx.project.cwd);
+  });
   const shots =
     png && preview
       ? await pictures(
@@ -602,11 +749,23 @@ export async function previewAfter(ctx, slug, data, png) {
     pictures: shots.files,
     pictureProblem: shots.problem,
     notChecked: notChecked(cause),
-    ...(sheetStale
+    ...(sheetStale && !sectionsStale.length
       ? {
           sheetStale: `sheet.html shows ${slug} as it was before this change; ${P} show ${slug} makes it again`,
         }
-      : {}),
+      : sectionsStale.length
+        ? {
+            sheetStale: `${[...(sheetStale ? ['sheet.html'] : []), ...sectionsStale].join(', ')} show ${slug} as it was before this change; ${[
+              ...(sheetStale
+                ? [`${P} show ${slug} makes sheet.html again`]
+                : []),
+              ...sectionsStale.map(
+                n =>
+                  `${P} show ${slug} --section ${n.replace(/^sheet-|\.html$/g, '')} makes ${n} again`,
+              ),
+            ].join(', ')}`,
+          }
+        : {}),
   };
 }
 
@@ -693,7 +852,10 @@ function markSheetStale(file, slug, cwd) {
     return false;
   }
   if (html.includes(STALE_MARK)) return true;
-  const banner = `${STALE_MARK}<div style="position:sticky;top:0;z-index:9999;padding:8px 12px;background:#fff3cd;color:#3d2c00;font:14px system-ui,sans-serif;border-bottom:1px solid #e0c870">This sheet shows ${slug} as it was before the last change. Run ${P} show ${slug} to make it again.</div>`;
+  // A section's sheet is made again by its own show.
+  const section = /^sheet-([a-z-]+)\.html$/.exec(path.basename(file))?.[1];
+  const again = `${P} show ${slug}${section ? ` --section ${section}` : ''}`;
+  const banner = `${STALE_MARK}<div style="position:sticky;top:0;z-index:9999;padding:8px 12px;background:#fff3cd;color:#3d2c00;font:14px system-ui,sans-serif;border-bottom:1px solid #e0c870">This sheet shows ${slug} as it was before the last change. Run ${again} to make it again.</div>`;
   const at = html.search(/<body[^>]*>/i);
   const next =
     at < 0 ? banner + html : html.replace(/<body[^>]*>/i, m => `${m}${banner}`);

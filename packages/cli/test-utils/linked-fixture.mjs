@@ -39,7 +39,15 @@ export function makeLinkedFixture(prefix, packages) {
   for (const name of packages) {
     const link = path.join(root, 'node_modules', name);
     fs.mkdirSync(path.dirname(link), {recursive: true});
-    fs.symlinkSync(packageDir(name), link, 'dir');
+    // A Windows directory symlink needs Developer Mode or an elevated shell,
+    // so without one every fixture fails with EPERM. A junction needs
+    // neither. It resolves and is removed like a symlink, and it takes the
+    // absolute target that packageDir gives.
+    fs.symlinkSync(
+      packageDir(name),
+      link,
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
   }
   const dir = path.join(root, 'project');
   fs.mkdirSync(dir);

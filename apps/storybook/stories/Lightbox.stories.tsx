@@ -3,6 +3,7 @@
 import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {Lightbox, useLightbox} from '@astryxdesign/core/Lightbox';
+import {SAMPLE_IMAGES} from './assets/samples/samples';
 
 const meta: Meta<typeof Lightbox> = {
   title: 'Core/Lightbox',
@@ -13,20 +14,20 @@ const meta: Meta<typeof Lightbox> = {
 export default meta;
 type Story = StoryObj<typeof Lightbox>;
 
-const SAMPLE_IMAGE = 'https://picsum.photos/id/10/1200/800';
+const SAMPLE_IMAGE = SAMPLE_IMAGES.forest1200x800;
 const GALLERY_MEDIA = [
   {
-    src: 'https://picsum.photos/id/10/1200/800',
+    src: SAMPLE_IMAGES.forest1200x800,
     alt: 'Forest path',
     caption: 'A winding path through the forest',
   },
-  {src: 'https://picsum.photos/id/15/1200/800', alt: 'Mountain lake'},
+  {src: SAMPLE_IMAGES.lake1200x800, alt: 'Mountain lake'},
   {
-    src: 'https://picsum.photos/id/20/1200/800',
+    src: SAMPLE_IMAGES.beach1200x800,
     alt: 'Beach sunset',
     caption: 'Golden hour at the beach',
   },
-  {src: 'https://picsum.photos/id/25/1200/800', alt: 'City skyline'},
+  {src: SAMPLE_IMAGES.city1200x800, alt: 'City skyline'},
 ];
 
 export const Default: Story = {
@@ -128,7 +129,7 @@ export const WithZoom: Story = {
   },
 };
 
-/** Zoom on a photo with a caption, which sits under the fitted photo. */
+/** Zoom on a photo with a caption, in the caption band a gallery's pages use. */
 export const ZoomWithCaption: Story = {
   render: () => {
     const [isOpen, setIsOpen] = useState(false);
@@ -234,6 +235,33 @@ export const GalleryKeepsIndex: Story = {
           media={GALLERY_MEDIA}
           index={0}
           onIndexChange={() => {}}
+          hasZoom
+        />
+      </>
+    );
+  },
+};
+
+/**
+ * A single photo whose caption runs long. As on a gallery's page, two lines
+ * cut it short and "more" shows it all.
+ */
+export const SingleWithLongCaption: Story = {
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <>
+        <button onClick={() => setIsOpen(true)}>
+          Open single photo with a long caption
+        </button>
+        <Lightbox
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          media={{
+            ...GALLERY_MEDIA[0],
+            caption:
+              'A winding path through the forest, past the old mill and down to the river, where the trail turns back toward the village. In autumn the beeches along it turn copper, and on a clear morning you can see the church spire from the bridge before the path climbs the last hill home.',
+          }}
           hasZoom
         />
       </>
