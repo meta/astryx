@@ -270,6 +270,15 @@ describe('parts named once for two removals, the page, steps', () => {
         'no shadow and rounder corners on cards',
         ['set q box-shadow none --on card', 'set q corners more --on card'],
       ],
+      // Every removal lead reads the same: "without", "remove the".
+      [
+        'without shadows and rounder corners on cards',
+        ['set q box-shadow none --on card', 'set q corners more --on card'],
+      ],
+      [
+        'remove the border and bigger padding on cards',
+        ['set q border none --on card', 'set q spacing more --on card'],
+      ],
       [
         'no border and bigger padding on cards',
         ['set q border none --on card', 'set q spacing more --on card'],
@@ -409,4 +418,12 @@ describe('value questions', () => {
     },
     T,
   );
+});
+
+describe('mode words', () => {
+  it('a typed word such as constructor is never a mode', async () => {
+    const {MODE_WORDS} = await import('./_tables.mjs');
+    expect(Object.getPrototypeOf(MODE_WORDS)).toBe(null);
+    expect(MODE_WORDS.constructor).toBeUndefined();
+  });
 });
