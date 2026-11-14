@@ -4,25 +4,17 @@
 
 /**
  * @file Pagination.tsx
- * @input Uses React, StyleX, Button, Icon, Selector, Text; page number buttons delegate to Button,
- *   and getPageHref makes each Button control a link through Button's link mode. A control
- *   that Button replaces, as a link at a boundary, keeps focus through useFocusLeavingChange.
- *   Compact first/last buttons cancel the inside control gap with logical token margins.
- *   Prev/next and first/last chevrons mirror under RTL via the shared rtlStyles.mirror
- *   (CSS scaleX), not a JS direction read. The input and compact variants use the
- *   chevronsLeft/chevronsRight (first/last) icons.
- * @output Exports Pagination component, PaginationProps, PaginationVariant, PaginationSize types
+ * @input React, StyleX, Button, Icon, NumberInput, Selector, and Text. Button renders each
+ *   control, as a link with getPageHref. useFocusAcrossSwap keeps focus on a control whose
+ *   element Button replaces. rtlStyles.mirror mirrors the chevrons under RTL in CSS.
+ * @output Exports Pagination, generatePageRange, PaginationProps, PaginationVariant, PaginationSize
  * @position Core implementation; consumed by index.ts, tested by Pagination.test.tsx
  *
  * SYNC: When modified, update these files to stay in sync:
- * - /packages/core/src/Pagination/Pagination.test.tsx (tests for new/changed behavior)
- * - /packages/core/src/Pagination/index.ts (exports if types change)
- * - /apps/storybook/stories/Pagination.stories.tsx (storybook stories)
- * - /packages/cli/assets/templates/blocks/components/Pagination/ (showcase blocks)
- *
- * Last synced props: page, onChange, changeAction, getPageHref, as, totalItems, totalPages,
- *   hasMore, pageSize, pageSizeOptions, onPageSizeChange, variant, pageLabel,
- *   hasFirstLast, step, siblingCount, size, isDisabled, label, data-testid, xstyle
+ * - /packages/core/src/Pagination/Pagination.test.tsx
+ * - /packages/core/src/Pagination/index.ts
+ * - /apps/storybook/stories/Pagination.stories.tsx
+ * - /packages/cli/assets/templates/blocks/components/Pagination/
  */
 
 import {useEffect, useOptimistic, useRef, useState, useTransition} from 'react';
@@ -45,13 +37,8 @@ import {Text} from '../Text';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {useListFocus} from '../hooks/useListFocus';
 import {useMergedRefs} from '../hooks/useMergedRefs';
-import {LayoutChangeSnapshot} from '../motion/LayoutChangeSnapshot';
-import {
-  focusForLastInput,
-  moveFocusLeftBehind,
-  noteFocusWithin,
-} from '../utils/focusReturn';
-import {useFocusLeavingChange} from '../utils/useFocusLeavingChange';
+import {focusForLastInput} from '../utils/focusReturn';
+import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {mergeProps, rtlStyles} from '../utils';
 import type {BaseProps} from '../BaseProps';
@@ -414,28 +401,11 @@ function navigatesHere(event: React.MouseEvent<HTMLElement>): boolean {
  * A Button control of Pagination. Button replaces its element when the
  * control starts or stops being a link: a link that becomes unavailable is a
  * disabled button, and that button is a link when the control is available
- * again. The document drops the focus of the element that leaves, so the
- * element that replaces it takes that focus.
+ * again. The element that replaces a focused one takes its focus.
  */
 function PaginationButton(props: React.ComponentProps<typeof Button>) {
-  const controlRef = useRef<HTMLButtonElement>(null);
-  const isLink = props.href != null;
-  const noteFocusBeforeReplacement = useFocusLeavingChange(
-    isLink,
-    () => noteFocusWithin(controlRef.current),
-    noted => {
-      moveFocusLeftBehind(noted, controlRef.current);
-    },
-  );
-  return (
-    <>
-      <LayoutChangeSnapshot
-        value={isLink}
-        onBeforeChange={noteFocusBeforeReplacement}
-      />
-      <Button {...props} ref={controlRef} />
-    </>
-  );
+  const ref = useFocusAcrossSwap<HTMLButtonElement>();
+  return <Button {...props} ref={ref} />;
 }
 
 // =============================================================================

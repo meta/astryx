@@ -12,7 +12,8 @@
  *   that was activated, and that a Button control that becomes unavailable
  *   while it holds focus keeps that focus: a button stays the same element,
  *   and a page link's focus goes to the disabled button that replaces it and
- *   back to the link when the control is available again
+ *   back to the link when the control is available again, with the ring after
+ *   a key press and not after a pointer press
  *   (component:Pagination FR13, FR17, FR19; spec:AST-085 FR4).
  * @position Run with `pnpm test:a11y-contract`.
  */
@@ -130,6 +131,23 @@ test('a Next link that reaches the last page keeps focus on the button that repl
   await expect(
     landmark.getByRole('link', {name: 'Go to next page'}),
   ).toHaveCount(0);
+});
+
+test('a Next link that a pointer click takes to the last page keeps focus without the ring', async ({
+  page,
+}) => {
+  const landmark = await openStory(page, 'core-pagination--page-links-dots');
+  const next = landmark.getByLabel('Go to next page');
+  for (let target = 2; target <= 8; target += 1) {
+    await next.click();
+    await expect(page).toHaveURL(new RegExp(`#page-${target}$`));
+  }
+  const nextButton = landmark.getByRole('button', {name: 'Go to next page'});
+  await expect(nextButton).toHaveAttribute('aria-disabled', 'true');
+  await expect(nextButton).toBeFocused();
+  expect(
+    await nextButton.evaluate(node => node.matches(':focus-visible')),
+  ).toBe(false);
 });
 
 test('a Previous link that reaches the first page keeps focus on the button that replaces it', async ({
