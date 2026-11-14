@@ -113,8 +113,11 @@ export function readDurations(file = DURATIONS) {
   }
 }
 
-/** A Node leg's job name, as `gh run view --log` starts each of its lines. */
-const NODE_LEG_JOB = /^test-node \(\d+\/\d+\)$/;
+/**
+ * A Node leg's job name, as `gh run view --log` starts each of its lines: a
+ * pull request's `test-node (2/5)` or a Main run's `test-node (2)`.
+ */
+const NODE_LEG_JOB = /^test-node \(\d+(?:\/\d+)?\)$/;
 
 /**
  * Seconds per Node test file from Vitest's default reporter lines. A whole

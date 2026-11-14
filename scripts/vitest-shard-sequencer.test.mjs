@@ -329,10 +329,15 @@ describe('duration-balanced Node legs', () => {
     // times are no leg's.
     const log = [
       'test-node (1/5)\tRun tests\t2026-11-13T22:53:30.36Z  ✓  node  packages/cli/a.test.mjs (4 tests) 1200ms',
+      // A Main run's Node legs carry no total.
+      'test-node (2)\tRun tests\t2026-11-13T22:53:30.36Z  ✓  node  packages/cli/b.test.mjs (2 tests) 800ms',
       'test-build\tRun tests\t2026-11-13T22:53:30.36Z  ✓  node  packages/build/src/next.turbopack.test.mjs (10 tests) 109318ms',
       'build-storybook\tRun tests\t2026-11-13T22:53:30.36Z  ✓  node  packages/x/y.browser.test.mjs (1 test) 300ms',
     ].join('\n');
-    expect(recordDurations(log)).toEqual({'packages/cli/a.test.mjs': 1.2});
+    expect(recordDurations(log)).toEqual({
+      'packages/cli/a.test.mjs': 1.2,
+      'packages/cli/b.test.mjs': 0.8,
+    });
   });
 
   it("leaves the first leg its own steps' time, in file time", () => {
