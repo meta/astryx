@@ -441,6 +441,14 @@ const ROLE_COLOR_TOKENS = wordTable(
 );
 
 /**
+ * The page's color named as a value (a gradient's stop): after from, to,
+ * into or and, "the page color" or "the page background" is the color the
+ * page is painted with, not the page as a part to change.
+ */
+const PAGE_COLOR_REF =
+  /(?<=\b(?:from|to|into|and)\s+)(?:the |my )?page(?:'s)? (?:colou?r|background)\b/;
+
+/**
  * The theme colors a clause names, as the colors they are painted with,
  * with where each starts ("the accent", "the danger color", "error").
  * @param {string} c a clause, lower-case
@@ -449,6 +457,9 @@ const ROLE_COLOR_TOKENS = wordTable(
 function roleColorsFound(c) {
   /** @type {Array<[number, string]>} */
   const found = [];
+  // "from the page color to …": the color the page is painted with.
+  for (const m of c.matchAll(new RegExp(PAGE_COLOR_REF.source, 'g')))
+    found.push([m.index ?? 0, 'var(--color-background-body)']);
   // ("primary" names a color only with "color": "primary buttons" is a
   // variant.)
   for (const m of c.matchAll(
@@ -1167,6 +1178,24 @@ function boundOf(t) {
     limit: Number(word[2]) * (word[3] === 'rem' ? 16 : 1),
     said: word[0],
   };
+}
+
+/**
+ * The way the words ask a size to move beside a bound they give ("bigger
+ * but no taller than 40px" grows; "no bigger than 12px" alone names none),
+ * or null: a growing or shrinking word outside the bound's own words.
+ * @param {string} t
+ * @returns {'more' | 'less' | null}
+ */
+function ownWay(t) {
+  const bound = boundOf(t);
+  if (!bound) return null;
+  const rest = t.replace(bound.said, ' ');
+  const up =
+    /\b(bigger|larger|more|rounder|wider|taller|thicker|roomier)\b/.test(rest);
+  const down =
+    /\b(smaller|less|sharper|narrower|shorter|thinner|tighter)\b/.test(rest);
+  return up && !down ? 'more' : down && !up ? 'less' : null;
 }
 
 /**
@@ -1917,6 +1946,9 @@ function clausesOf(q, partWords) {
       )
       // "when I tab to a link": the key, not the tab part.
       .replace(/\b(i |we |you )?tab(bing)? (to|through|into)\b/g, ' ')
+      // "from the page color to …": the page's color as a value (a stop),
+      // never the page as a part to change (PAGE_COLOR_REF).
+      .replace(PAGE_COLOR_REF, ' ')
       .replace(/\bvar\([^)]*\)|--[a-z][\w-]*/g, ' ')
       .replace(/\b[a-z]+(?:-[a-z]+)+\b/g, m =>
         cssProperties().has(m) ? ' ' : m,
@@ -3517,6 +3549,12 @@ export function draftAnswer(ctx, env, question) {
     // before it, in the same clause.
     .replace(
       /\s*,?\s*\bbut\s+(?=(?:at (?:most|least)|no (?:more|less|bigger|smaller|larger|wider|taller|rounder) than|not (?:more|less) than|(?:a )?(?:max|min)(?:imum)? of)\b)/gi,
+      ' ',
+    )
+    // "the accent color but lighter": a way after "but" with nothing else
+    // is a way of the value before it, in the same clause.
+    .replace(
+      /\s*,?\s*\bbut\s+(?=(?:(?:a )?(?:bit|little|touch|lot)\s+|slightly\s+|much\s+)?(?:lighter|darker|brighter|paler|deeper|warmer|cooler)\s*(?:$|[,;.!]))/gi,
       ' ',
     )
     // "cards, buttons or inputs": a comma list of parts ending in "or" names
@@ -5297,18 +5335,21 @@ export function draftAnswer(ctx, env, question) {
             ? 'more'
             : null,
       // A bound gives the way to move, unless the clause moves by an amount
-      // ("2 steps rounder but at most 12px"), which the bound only limits.
+      // ("2 steps rounder but at most 12px") or names its own way beside
+      // the bound ("bigger but no taller than 40px"), which the bound only
+      // limits.
       dir:
         boundOf(c0.text) &&
         !/\b(?:\w+ steps?|\d*\.?\d+\s*(?:px|rem))\s+(?:more|less|\w+er)\b/.test(
           c0.text,
-        )
+        ) &&
+        !ownWay(c0.text)
           ? boundOf(c0.text)?.up
             ? /** @type {'more'} */ ('more')
             : /** @type {'less'} */ ('less')
           : comparing
             ? null
-            : c0.dir,
+            : (ownWay(c0.text) ?? c0.dir),
       // (A bound such as "no bigger than 4px" is a target, never a
       // removal.)
       zero:
@@ -6497,12 +6538,41 @@ export function draftAnswer(ctx, env, question) {
       // (Steps with a bound are held to it by the steps answer.)
       if (bound && prop && c.parts.length && !/\b\w+ steps?\b/.test(c.text)) {
         const {up, strict, limit, said} = bound;
+        // The direction the words ask, beside the bound (ownWay).
+        const way = ownWay(c.text);
+        const grows = way === 'more';
+        const shrinks = way === 'less';
         for (const p of c.parts) {
           seenPart(p.on);
-          const now = partPropNow(p.on, prop);
+          // The body text is the base text size, which text-size sets (as
+          // the unbounded answer reads it), never a part named body.
+          const bodyText = p.on === 'body' && prop === 'font-size';
+          const now = bodyText
+            ? current('--font-size-base')
+            : partPropNow(p.on, prop);
           const m = /^(\d*\.?\d+)(px|rem)?/.exec(String(now ?? ''));
           const nowPx = m ? Number(m[1]) * (m[2] === 'rem' ? 16 : 1) : null;
           const {noState: _n, ...f} = flagsFor(c, p);
+          /** The step that writes a px value for this part. @param {number} px */
+          const write = px =>
+            bodyText ? set('text-size', String(px)) : set(prop, `${px}px`, f);
+          const name = bodyText ? 'the body text size' : `${prop} on ${p.on}`;
+          // Already past the bound the way the words ask ("rounder but at
+          // most 16px" at 42px): nothing is written, never a move the
+          // other way.
+          const wantsUp = grows && !shrinks;
+          const wantsDown = shrinks && !grows;
+          if (
+            nowPx != null &&
+            ((wantsUp && !up && nowPx >= limit) ||
+              (wantsDown && up && nowPx <= limit))
+          ) {
+            push({
+              text: `${bodyText ? `the body text size is ${now}` : `${p.on} has ${prop} ${now}`} now, already ${nowPx === limit ? 'at' : wantsUp ? 'past' : 'below'} ${limit}px, so ${wantsUp ? 'growing' : 'shrinking'} it ${said} leaves nothing to change`,
+              options: [],
+            });
+            continue;
+          }
           // An amount with the bound ("8px more but at most 20px"): the
           // amount, held to the bound.
           const amt =
@@ -6527,8 +6597,8 @@ export function draftAnswer(ctx, env, question) {
             }
             const v = `${target}px`;
             const d = {
-              text: `${prop} on ${p.on} ${amt[0]} ${said}: ${v} (now ${now})`,
-              options: [[set(prop, v, f)]],
+              text: `${name} ${amt[0]} ${said}: ${v} (now ${now})`,
+              options: [[write(target)]],
             };
             push(d);
             recordTop(c, d.options[0] ?? []);
@@ -6545,15 +6615,9 @@ export function draftAnswer(ctx, env, question) {
                 : nowPx <= limit);
           // A direction with a bound the other way ("bigger but no more than
           // 20px"): the next value of the theme's own scale for it in the
-          // asked direction, held to the bound.
-          const grows =
-            /\b(bigger|larger|more|rounder|wider|taller|thicker|roomier)\b/.test(
-              c.text,
-            );
-          const shrinks =
-            /\b(smaller|less|sharper|narrower|shorter|thinner|tighter)\b/.test(
-              c.text,
-            );
+          // asked direction, held to the bound; a property with no scale of
+          // the theme's own (height) goes to the bound itself, the most the
+          // ask allows.
           if (inside && nowPx != null && (up ? shrinks : grows)) {
             const scale = /** @type {Record<string, RegExp>} */ ({
               padding: /^--spacing-/,
@@ -6578,16 +6642,20 @@ export function draftAnswer(ctx, env, question) {
                   ),
                 ].sort((x, y) => x - y)
               : [];
-            const next = up
-              ? rungs.filter(x => x < nowPx).pop()
-              : rungs.find(x => x > nowPx);
+            const next = !scale
+              ? limit
+              : up
+                ? rungs.filter(x => x < nowPx).pop()
+                : rungs.find(x => x > nowPx);
             if (next != null) {
               const target = up ? Math.max(next, limit) : Math.min(next, limit);
               if (target !== nowPx) {
                 const v = `${target}px`;
                 const d = {
-                  text: `${prop} on ${p.on}, one step ${up ? 'down' : 'up'} the theme's scale ${said}: ${v} (now ${now})`,
-                  options: [[set(prop, v, f)]],
+                  text: scale
+                    ? `${name}, one step ${up ? 'down' : 'up'} the theme's scale ${said}: ${v} (now ${now})`
+                    : `${name} ${said}: ${v}, the most the ask allows, as ${prop} has no scale of the theme's own (now ${now})`,
+                  options: [[write(target)]],
                 };
                 push(d);
                 recordTop(c, d.options[0] ?? []);
@@ -6602,10 +6670,13 @@ export function draftAnswer(ctx, env, question) {
             });
             continue;
           }
-          const v = `${Math.max(0, Math.round(strict ? (up ? limit * 1.25 : limit * 0.8) : limit))}px`;
+          const px = Math.max(
+            0,
+            Math.round(strict ? (up ? limit * 1.25 : limit * 0.8) : limit),
+          );
           const d = {
-            text: `${prop} on ${p.on} ${said}: ${v}${now ? ` (now ${now})` : ''}`,
-            options: [[set(prop, v, f)]],
+            text: `${name} ${said}: ${px}px${now ? ` (now ${now})` : ''}`,
+            options: [[write(px)]],
           };
           push(d);
           recordTop(c, d.options[0] ?? []);
@@ -6674,9 +6745,11 @@ export function draftAnswer(ctx, env, question) {
     // same color as the button background", "dialog background match the
     // card background": that color property of the other part, onto the
     // first part's property the words name; the other part is not changed.
+    // ("the dialog background the same as cards": a color property named
+    // before "the same as" is the color compared.)
     {
       const cmp =
-        /\b(?:(?:the )?same colou?r as|match(?:es|ing)?|colou?red like)\s+(?:the\s+|my\s+)?/.exec(
+        /\b(?:(?:the )?same (?:colou?r )?as|match(?:es|ing)?|colou?red like)\s+(?:the\s+|my\s+)?/.exec(
           c.text,
         );
       const ordered = cmp ? inOrder() : [];
@@ -10747,6 +10820,34 @@ export function draftAnswer(ctx, env, question) {
             Boolean(roleTok && c.dir)) &&
           !/#[0-9a-f]{3,8}\b|\(/.test(c.text);
         const color = recolor ? null : colorFor(c, 'text');
+        // A theme color with a way ("the accent color but lighter"): that
+        // color as it is in each mode, made lighter or darker there, on
+        // the part (a link: the accent text token it reads, as "darker
+        // links" steps it).
+        const ref = /^var\((--[a-z0-9-]+)\)$/.exec(color ?? '')?.[1];
+        if (ref && /\b(light|dark)er\b/.test(noMode(c.text))) {
+          const lighter = /\blighter\b/.test(noMode(c.text));
+          const amount = colorAmount(c.text, 0.2);
+          const viaLink = on === 'link' && ref === '--color-text-accent';
+          const steps = perMode(
+            ref,
+            viaLink ? ref : 'color',
+            viaLink ? (f.state ? {on, state: f.state} : {}) : f,
+            (now, m) =>
+              shiftKeepAlpha(
+                now,
+                lighter ? amount : -amount,
+                current('--color-background-body', m),
+              ),
+            c,
+          );
+          if (steps.length)
+            return {
+              text: `text color${where}: ${ref} made ${lighter ? 'lighter' : 'darker'}${viaLink ? ' (the token a link reads; it also colors other accent text)' : ''}${modesSaid(steps)}`,
+              options: [steps],
+              sequence: steps.length > 1,
+            };
+        }
         const tok =
           roleTok ??
           (/\bsecondary\b/.test(c.text)
@@ -12170,11 +12271,15 @@ export function draftAnswer(ctx, env, question) {
             current('--color-background-body', m),
           ),
         );
+        // Each of the color's own tokens moves the way asked, its text and
+        // icons too (the color is what was named): the check reads them as
+        // written, never by contrast with the page.
         if (steps.length)
           return {
             text: `${dial}, ${lighter ? 'lighter' : 'darker'}: each of its colors in each mode ${env.slug} shows, from its own value (${ownWhy})`,
             options: [steps],
             sequence: steps.length > 1,
+            intent: {...intentOf(c, []), literal: true},
           };
       }
       if (c.mode && modal) {
@@ -12632,8 +12737,37 @@ export function draftAnswer(ctx, env, question) {
         ? `${v}${qMode ? ` in ${qMode} mode` : ''}${vWord ? ` (${vWord})` : ''}`
         : null;
     };
+    // The page is painted with the body tokens, as the change path reads
+    // it (--color-background-body for its background, the main text token
+    // for its text), in each mode it shows.
+    const pageToken =
+      named === 'page'
+        ? asked === 'color'
+          ? '--color-text-primary'
+          : /color|background/.test(asked)
+            ? '--color-background-body'
+            : null
+        : null;
+    const pageNow = () => {
+      if (!pageToken) return null;
+      const modes = /** @type {Array<'light' | 'dark'>} */ (
+        qMode
+          ? [qMode]
+          : env.data.mode === 'dark-only'
+            ? ['dark']
+            : env.data.mode === 'light-only'
+              ? ['light']
+              : ['light', 'dark']
+      );
+      const vals = modes
+        .map(m => [m, current(pageToken, m)])
+        .filter(([, v]) => v);
+      return vals.length
+        ? `${vals.map(([m, v]) => `${v}${modes.length > 1 || qMode ? ` in ${m} mode` : ''}`).join(', ')} (${pageToken}, which paints the page)`
+        : null;
+    };
     const now = named
-      ? (variantNow() ?? partPropNow(named, asked) ?? anyRead())
+      ? (pageNow() ?? variantNow() ?? partPropNow(named, asked) ?? anyRead())
       : null;
     result.splice(0, result.length, {
       text: named
@@ -12642,7 +12776,13 @@ export function draftAnswer(ctx, env, question) {
           : `${named} has no ${asked} of its own that how can read; ${HOW} ${named} lists what it reads`
         : `how changes a theme; ${P} show ${env.slug} lists what it has now`,
       options: [],
-      lookup: named ? `${HOW} ${named}` : `${P} show ${env.slug}`,
+      // (The page's lookup is the token it is painted with: `how page` is
+      // the CSS property page.)
+      lookup: pageToken
+        ? `${HOW} ${pageToken}`
+        : named
+          ? `${HOW} ${named}`
+          : `${P} show ${env.slug}`,
     });
     return {parts: partsSeen, aspects: aspectsSeen, drafts: result};
   }
