@@ -160,6 +160,7 @@ import {
   baseResolved,
   copiesLine,
   installLine,
+  themeCacheRoot,
 } from './_project.mjs';
 import {reactMissing} from './_parts.mjs';
 import {
@@ -2908,6 +2909,60 @@ async function followChangeLine(sub, slug, line, cwd, skip) {
 }
 
 /**
+ * The record of the last change command refused for a theme, kept in the
+ * project's theme cache: the command and when it was refused.
+ * @param {string} cwd
+ * @param {string} slug
+ */
+const refusedFile = (cwd, slug) => {
+  const root = themeCacheRoot(cwd);
+  return root ? path.join(root, 'refused', `${slug}.json`) : null;
+};
+
+/**
+ * Note a change command refused for a theme that exists, so a later undo
+ * can say the refused command changed nothing. Best effort: a cache that
+ * cannot be written leaves the note out.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {string} command the command as typed, after the CLI name
+ */
+function noteRefused(cwd, slug, command) {
+  try {
+    if (!slugOk(slug) || !fs.existsSync(themeFiles(cwd, slug).settings)) return;
+    const file = refusedFile(cwd, slug);
+    if (!file) return;
+    fs.mkdirSync(path.dirname(file), {recursive: true});
+    fs.writeFileSync(file, JSON.stringify({at: Date.now(), command}));
+  } catch {
+    // No note.
+  }
+}
+
+/**
+ * The change command refused for a theme since its last change (the
+ * history's last write), or null.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {string} history the theme's history file
+ * @returns {string | null}
+ */
+function refusedAfter(cwd, slug, history) {
+  try {
+    const file = refusedFile(cwd, slug);
+    if (!file) return null;
+    const note = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return typeof note?.command === 'string' &&
+      typeof note.at === 'number' &&
+      note.at > fs.statSync(history).mtimeMs
+      ? note.command
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * @param {'set' | 'undo'} sub
  * @param {string} slug
  * @param {string} thing
@@ -3097,6 +3152,23 @@ async function change(sub, slug, thing, value, options) {
     }
     return r;
   } catch (e) {
+    // A refused change changed nothing: noted, for a later undo to say so.
+    if (e instanceof AstryxError)
+      noteRefused(
+        options.cwd ?? process.cwd(),
+        slug,
+        [
+          `${P.replace(/^astryx /, '')} ${sub} ${slug}`,
+          ...[typedThing, typedValue]
+            .filter(w => w != null && w !== '')
+            .map(w => quoteCommandArgument(String(w))),
+          ...(options.on ? [`--on ${options.on}`] : []),
+          ...(options.when ? [`--when ${options.when}`] : []),
+          ...(options.state ? [`--state ${options.state}`] : []),
+          ...(options.mode ? [`--mode ${options.mode}`] : []),
+          ...(options.only ? ['--only'] : []),
+        ].join(' '),
+      );
     // A theme name one letter off an existing theme, or typed in other
     // letters or as a path (T, ./t, themes/t): the same command with that
     // name comes first, never a bare look at the theme that drops the change.
@@ -5699,6 +5771,9 @@ async function undoTheme(theme, options) {
     if (!repair.length) repair = [`${P} new ${theme}`];
   }
   const f = themeFiles(cwd, theme);
+  // A change command refused since the last change changed nothing: this
+  // undo takes back the change before it, and says so.
+  const refusedSince = refusedAfter(cwd, theme, f.history);
   const {steps: history, dropped} = readHistory(f.history);
   if (!history.length && dropped)
     refuse(
@@ -5852,11 +5927,42 @@ async function undoTheme(theme, options) {
       ? 'components'
       : 'overview';
   const p = await previewAndRoute(ctx, theme, prev, png, focus, 'undo');
+  // What the step took back, for the headline: each setting, base and mode
+  // it changed, in one line.
+  /** @type {string[]} */
+  const took = [];
+  for (const [k, s] of was) {
+    const back = now.get(k);
+    if (!back) took.push(describe(s));
+    else if (back.value !== s.value)
+      took.push(`${describe(s)} (back to ${back.value})`);
+  }
+  if (current)
+    for (const [k, s] of now)
+      if (!was.has(k)) took.push(`the removal of ${describe(s)}`);
+  if (current && (current.like ?? 'none') !== (prev.like ?? 'none'))
+    took.push(
+      `base ${current.like ?? 'none'} (back to ${prev.like ?? 'none'})`,
+    );
+  if (current && current.mode !== prev.mode)
+    took.push(`mode ${current.mode} (back to ${prev.mode})`);
+  const undid =
+    took.length === 0
+      ? 'the last change'
+      : took.length === 1
+        ? took[0]
+        : `${took.length} changes: ${took.join('; ')}`;
   return {
     type: 'themeEdit.undo',
     data: {
       theme,
       action: 'step',
+      undid,
+      ...(refusedSince
+        ? {
+            refusedBefore: `the last command (${refusedSince}) was refused and changed nothing, so this undid the change before it`,
+          }
+        : {}),
       undone,
       settings: prev.settings.length,
       stepsLeft: stepsLeft,

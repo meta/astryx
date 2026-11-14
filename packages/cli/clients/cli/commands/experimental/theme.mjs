@@ -1449,7 +1449,9 @@ export function registerExperimentalTheme(group, program) {
             r =>
               r.data.action === 'step'
                 ? [
-                    `[ok] ${r.data.theme}: undid the last change`,
+                    // What was undone is in the headline, so a tail of
+                    // the output keeps it.
+                    `[ok] ${r.data.theme}: undid ${/** @type {any} */ (r.data).undid ?? 'the last change'}${/** @type {any} */ (r.data).refusedBefore ? ` (${/** @type {any} */ (r.data).refusedBefore})` : ''}`,
                     ...project(/** @type {any} */ (r.data)),
                   ]
                 : changeBlocks(
