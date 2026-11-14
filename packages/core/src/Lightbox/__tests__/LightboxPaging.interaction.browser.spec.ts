@@ -69,10 +69,10 @@ function photoSvg(color: string): string {
 }
 
 const COLORS: Record<string, string> = {
-  '10': '#d22',
-  '15': '#2a2',
-  '20': '#22d',
-  '25': '#d80',
+  forest: '#d22',
+  lake: '#2a2',
+  beach: '#22d',
+  city: '#d80',
 };
 
 interface Gallery {
@@ -97,8 +97,9 @@ async function openGallery(
     trigger: triggerName = 'Open gallery with zoom',
   } = {},
 ): Promise<Gallery> {
-  await page.route('https://picsum.photos/**', async route => {
-    const id = /\/id\/(\d+)\//.exec(route.request().url())?.[1] ?? '10';
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route => {
+    const id =
+      /\/sample-([a-z]+)-/.exec(route.request().url())?.[1] ?? 'forest';
     await route.fulfill({
       contentType: 'image/svg+xml',
       body: photoSvg(COLORS[id] ?? '#888'),
@@ -735,7 +736,7 @@ async function openVideoGallery(page: Page) {
         body: Buffer.from(SHORT_WEBM, 'base64'),
       }),
   );
-  await page.route('https://picsum.photos/**', async route =>
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
     route.fulfill({contentType: 'image/svg+xml', body: photoSvg('#888')}),
   );
   // Without zoom the gallery's viewport is no Zoom button, so this opens the
@@ -1696,8 +1697,9 @@ test('opening a gallery on a clamped caption lays out no more than opening one w
   browserName,
 }) => {
   test.skip(browserName !== 'chromium', 'rendering traces are Chromium-only');
-  await page.route('https://picsum.photos/**', async route => {
-    const id = /\/id\/(\d+)\//.exec(route.request().url())?.[1] ?? '10';
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route => {
+    const id =
+      /\/sample-([a-z]+)-/.exec(route.request().url())?.[1] ?? 'forest';
     await route.fulfill({
       contentType: 'image/svg+xml',
       body: photoSvg(COLORS[id] ?? '#888'),
@@ -1836,8 +1838,9 @@ for (const viewport of [
         errors.push(event.message);
       });
     });
-    await page.route('https://picsum.photos/**', async route => {
-      const id = /\/id\/(\d+)\//.exec(route.request().url())?.[1] ?? '10';
+    await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route => {
+      const id =
+        /\/sample-([a-z]+)-/.exec(route.request().url())?.[1] ?? 'forest';
       await route.fulfill({
         contentType: 'image/svg+xml',
         body: photoSvg(COLORS[id] ?? '#888'),
@@ -1921,8 +1924,9 @@ test("the caption toggle's width comes from its own delivery, never from a read 
       },
     });
   });
-  await page.route('https://picsum.photos/**', async route => {
-    const id = /\/id\/(\d+)\//.exec(route.request().url())?.[1] ?? '10';
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route => {
+    const id =
+      /\/sample-([a-z]+)-/.exec(route.request().url())?.[1] ?? 'forest';
     await route.fulfill({
       contentType: 'image/svg+xml',
       body: photoSvg(COLORS[id] ?? '#888'),
@@ -2100,8 +2104,9 @@ test('no caption read follows a write in the same resize delivery, from opening 
       return computed.call(this, element, pseudo);
     };
   });
-  await page.route('https://picsum.photos/**', async route => {
-    const id = /\/id\/(\d+)\//.exec(route.request().url())?.[1] ?? '10';
+  await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route => {
+    const id =
+      /\/sample-([a-z]+)-/.exec(route.request().url())?.[1] ?? 'forest';
     await route.fulfill({
       contentType: 'image/svg+xml',
       body: photoSvg(COLORS[id] ?? '#888'),

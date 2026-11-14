@@ -17,6 +17,7 @@
  */
 
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import {fork, spawnSync} from 'node:child_process';
 import {builtinModules} from 'node:module';
@@ -309,7 +310,43 @@ function hostEndError(/** @type {number | null} */ code) {
   if (code === HOST_EXIT.timeout) {
     return new RenderError('ERR_RENDER_TIMEOUT', "The page's process stopped at its own time limit before this process read an answer.", {reason: 'host-timeout', exit: code});
   }
+  if (code === HOST_EXIT.sendFailed) {
+    return new RenderError('ERR_RENDER_FAILED', "The page's process could not send its answer to this process.", {reason: 'send-failed', exit: code});
+  }
   return new RenderError('ERR_RENDER_FAILED', `The page's process ended without an answer (exit ${code}).`, {reason: 'host-ended', exit: code});
+}
+
+/**
+ * The error for a host that ended with no answer reaching this process, from
+ * the state it left in its per-run file: an answer it sent that never
+ * arrived, or the stage it ended in.
+ * @param {number | null} code
+ * @param {string | undefined} stateFile
+ */
+function noMessageError(code, stateFile) {
+  if (code !== 0 && code !== null && Object.values(HOST_EXIT).includes(code)) return hostEndError(code);
+  /** @type {any} */
+  let saved = null;
+  try {
+    saved = stateFile ? JSON.parse(fs.readFileSync(stateFile, 'utf8')) : null;
+  } catch {
+    // No readable state: fall back to the bare message below.
+  }
+  if (!saved) return hostEndError(code);
+  const detail = {exit: code, stage: saved.stage, elapsedMs: saved.elapsedMs, rssMb: saved.rssMb, freeMb: saved.freeMb, ...(saved.stderrTail ? {stderrTail: saved.stderrTail} : {})};
+  if (saved.answered === 'sent') {
+    return new RenderError('ERR_RENDER_FAILED', `The page's process sent its answer, but this process did not receive it (exit ${code}).`, {reason: 'answer-lost', ...detail});
+  }
+  if (saved.answered === 'sending') {
+    return new RenderError('ERR_RENDER_FAILED', `The page's process ended while it sent its answer (exit ${code}).`, {reason: 'ended-while-sending', ...detail});
+  }
+  const seconds = Math.round((saved.elapsedMs ?? 0) / 1000);
+  const last = saved.stderrTail ? ` Its last output: ${String(saved.stderrTail).split('\n').at(-1)}` : '';
+  return new RenderError(
+    'ERR_RENDER_FAILED',
+    `The page's process ended without an answer (exit ${code}) while ${saved.stage}, after ${seconds} seconds, with ${saved.freeMb} MB of memory free.${last}`,
+    {reason: 'host-ended', ...detail},
+  );
 }
 
 /**
@@ -322,11 +359,12 @@ function hostEndError(/** @type {number | null} */ code) {
  *   native crash ended the host
  */
 function runWorker(input, timeoutMs) {
-  return new Promise((resolve, reject) => {
+  return withHostStateFile(stateFile => {
     const data = {
       ...input,
       served: input.served ? {dir: input.served.dir, integrations: [...input.served.integrations]} : null,
       timeoutMs,
+      stateFile,
     };
     const host = fork(fileURLToPath(new URL('./page-host.mjs', import.meta.url)), [JSON.stringify(data)], {
       // Never the CLI's own flags (such as --input-type).
@@ -334,6 +372,52 @@ function runWorker(input, timeoutMs) {
       stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
       serialization: 'advanced',
     });
+    return awaitHost(host, {timeoutMs, withoutSegmenter: input.withoutSegmenter, stateFile});
+  });
+}
+
+/**
+ * Run `use` with a state file for one host in a new folder under the system's
+ * temporary folder, never in the project, and remove the folder after. The
+ * state file only explains a failure: without a temporary folder, `use` gets
+ * none and the render runs without it.
+ * @template T
+ * @param {(stateFile: string | undefined) => Promise<T>} use
+ * @param {{makeTempDir?: (prefix: string) => string}} [options]
+ * @returns {Promise<T>}
+ */
+export async function withHostStateFile(
+  use,
+  {makeTempDir = prefix => fs.mkdtempSync(prefix)} = {},
+) {
+  /** @type {string} */
+  let dir;
+  try {
+    dir = makeTempDir(path.join(os.tmpdir(), 'astryx-render-'));
+  } catch {
+    // No temporary folder (missing or read-only): render without the state file.
+    return use(undefined);
+  }
+  try {
+    return await use(path.join(dir, 'host-state.json'));
+  } finally {
+    try {
+      fs.rmSync(dir, {recursive: true, force: true, maxRetries: 3});
+    } catch {
+      // Best effort: a removal that fails (a file still held open) never
+      // replaces the render's own result.
+    }
+  }
+}
+
+/**
+ * The page's answer from its host process, or the reason it has none.
+ * @param {import('node:child_process').ChildProcess} host
+ * @param {{timeoutMs: number, withoutSegmenter: boolean, stateFile?: string}} options
+ * @returns {Promise<any>}
+ */
+export function awaitHost(host, {timeoutMs, withoutSegmenter, stateFile}) {
+  return new Promise((resolve, reject) => {
     let settled = false;
     /** @param {() => void} settle */
     const finish = settle => {
@@ -379,8 +463,8 @@ function runWorker(input, timeoutMs) {
       finish(() => {
         const crash = crashOf(code, signal);
         if (crash) resolve({crashed: crash});
-        else if (signal) reject(crashError(signal, {crashed: false, withoutSegmenter: input.withoutSegmenter}));
-        else reject(hostEndError(code));
+        else if (signal) reject(crashError(signal, {crashed: false, withoutSegmenter}));
+        else reject(noMessageError(code, stateFile));
       });
     });
   });

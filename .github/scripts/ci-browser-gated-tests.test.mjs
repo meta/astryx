@@ -33,6 +33,8 @@ const WORKFLOWS = Object.fromEntries(
 const OFFLINE_MEDIA_TEST = '.github/scripts/lib/offline-media.test.mjs';
 const CDN_BROWSER_TEST = '.github/scripts/lib/cdn-page-render.browser.test.mjs';
 const RTL_D7_TEST = '.github/scripts/rtl-audit-coarse-hit.browser.test.mjs';
+const THEME_REAL_BASES_TEST =
+  'packages/cli/api/theme-edit/theme-real-bases.test.mjs';
 const INSTALLS_CHROMIUM = /\bplaywright install(?: --with-deps)? chromium\b/;
 const BROWSER_SWITCH = /process\.env\.(ASTRYX_[A-Z_]+_BROWSER) === '1'/;
 // A suite declared at the start of a line, so a fixture string in a test
@@ -166,6 +168,35 @@ describe('browser-gated script tests in the workflows', () => {
     expect(run.step.run).toBe(
       `pnpm exec vitest run ${OFFLINE_MEDIA_TEST} --maxWorkers=1`,
     );
+  });
+
+  it("runs theme-real-bases' text-direction render case in the Node test job, after the browser install, with the browser required", () => {
+    const source = fs.readFileSync(
+      path.join(root, THEME_REAL_BASES_TEST),
+      'utf8',
+    );
+    // It renders in the Chromium Playwright pins, never a system browser.
+    expect(source).toContain("createRequire(import.meta.url)('playwright')");
+    expect(source).not.toMatch(/chromium-browser|google-chrome|--dump-dom/);
+    expect(
+      browserStepProblems(THEME_REAL_BASES_TEST, source, WORKFLOWS),
+    ).toEqual([]);
+    const [run, ...more] = stepsRunning(THEME_REAL_BASES_TEST, WORKFLOWS);
+    expect(more).toEqual([]);
+    expect(run.jobName).toBe('test-node');
+    expect(run.step.env).toEqual({ASTRYX_THEME_EDITOR_BROWSER: '1'});
+    expect(run.step.run).toContain(
+      "-t 'renders own and editor sides|names what it waited on'",
+    );
+    // The case cannot vanish from both runs: the Node shard skips it by name
+    // (it.runIf on the switch), and this step, with the switch set, runs it.
+    expect(source).toContain(
+      "const BROWSER_STEP = process.env.ASTRYX_THEME_EDITOR_BROWSER === '1';",
+    );
+    expect(source).toMatch(
+      /it\.runIf\(BROWSER_STEP\)\(\s*'renders own and editor sides in each text direction \(butter\)'/,
+    );
+    expect(source).not.toContain('the render check did not run');
   });
 
   it('runs the CDN page render cases in the CLI smoke test, beside the CDN smoke test', () => {
