@@ -91,10 +91,22 @@ async function roundTrip(home, id) {
   if (edited.edited !== true || !edited.edits?.some((/** @type {any} */ e) => e.was === run)) {
     return `edit: ${JSON.stringify(run)} changed, reported edited ${edited.edited} with ${JSON.stringify(edited.edits)}`;
   }
-  await render(`back/${id}/page.tsx`, {cwd: home, out: `back/${id}/page.html`});
-  const again = fs.readFileSync(path.join(home, 'back', id, 'page.html'), 'utf8');
+  /** @param {string} page @param {string} out */
+  const markupOf = async (page, out) => {
+    await render(page, {cwd: home, out});
+    return fs.readFileSync(path.join(home, out), 'utf8');
+  };
+  let again = await markupOf(`back/${id}/page.tsx`, `back/${id}/page.html`);
+  if (renderedMarkupOf(again) !== renderedMarkupOf(html)) {
+    // A page that shows the time renders differently a minute later, so the
+    // page that came back must render as the original renders right beside
+    // it: a render of the original just before and just after.
+    const before = renderedMarkupOf(await markupOf(`templates/${id}/page.tsx`, `templates/${id}/before.html`));
+    again = await markupOf(`back/${id}/page.tsx`, `back/${id}/page.html`);
+    const after = renderedMarkupOf(await markupOf(`templates/${id}/page.tsx`, `templates/${id}/after.html`));
+    if (renderedMarkupOf(again) !== before && renderedMarkupOf(again) !== after) return 'render again: the markup differs';
+  }
   const againBlock = readSourceBlock(again);
-  if (renderedMarkupOf(again) !== renderedMarkupOf(html)) return 'render again: the markup differs';
   if (renderedHeadOf(again).style !== renderedHeadOf(html).style) return 'render again: the styles differ';
   const sums = (/** @type {any} */ b) => ('source' in b ? b.source.files.map((/** @type {any} */ f) => f.sha256).join() : '');
   if (sums(againBlock) !== sums(block)) return 'render again: the carried files differ';
