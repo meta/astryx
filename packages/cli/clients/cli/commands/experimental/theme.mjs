@@ -115,7 +115,6 @@ const cmd = line => {
     .join(stem);
 };
 /** The project's invocation of a command line (cmd, under a name an action's own `cmd` parameter does not hide). */
-const cliLine = (/** @type {string} */ line) => cmd(line);
 
 /**
  * Print blocks, a blank line between them, with this project's run prefix
@@ -918,38 +917,38 @@ export function registerExperimentalTheme(group, program) {
               const value = stray.includes('=')
                 ? stray.slice(stray.indexOf('=') + 1)
                 : args[at + 1];
-              return cliError(
+              // Thrown, as every refusal inside run is: run prints it once
+              // (a refusal printed here and then caught again by run would
+              // print twice where exit does not end the process).
+              throw new AstryxError(
                 `new takes the base theme as --like, not --base.`,
-                {
-                  suggestions: value
-                    ? [
-                        {
-                          name: cliLine(
-                            `${EDITOR} new ${quoteCommandArgument(name)}${newFlagLine({...o, like: value})}`,
-                          ),
-                          reason: 'do this instead',
-                        },
-                      ]
-                    : [
-                        {
-                          name: cliLine(`${EDITOR} new --help`),
-                          reason: 'every option it takes',
-                        },
-                      ],
-                  code: ERROR_CODES.ERR_INVALID_OPTION,
-                },
+                value
+                  ? [
+                      {
+                        name: `${EDITOR} new ${quoteCommandArgument(name)}${newFlagLine({...o, like: value})}`,
+                        reason: 'do this instead',
+                      },
+                    ]
+                  : [
+                      {
+                        name: `${EDITOR} new --help`,
+                        reason: 'every option it takes',
+                      },
+                    ],
+                ERROR_CODES.ERR_INVALID_OPTION,
               );
             }
             if (stray)
-              return cliError(`unknown option '${stray}'.`, {
-                suggestions: [
+              throw new AstryxError(
+                `unknown option '${stray}'.`,
+                [
                   {
-                    name: cliLine(`${EDITOR} new --help`),
+                    name: `${EDITOR} new --help`,
                     reason: 'every option it takes',
                   },
                 ],
-                code: ERROR_CODES.ERR_INVALID_OPTION,
-              });
+                ERROR_CODES.ERR_INVALID_OPTION,
+              );
             // A word after the name is never dropped without a word.
             const extra = (cmd?.args ?? []).slice(1);
             if (extra.length) {

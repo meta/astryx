@@ -6,28 +6,32 @@
  * setting, `only` written as text, several bad `new` flags in one line,
  * show's and new's unknown options, reserved names, corners in rem, dial
  * words in capitals, a thing and value in one word, a missing theme name,
- * and the compile line from a subfolder. Every suggestion is followed.
+ * and the compile line from a subfolder. Every suggestion is followed. The
+ * CLI runs in process (the real program, no Node start per call).
  *
  * @position api/theme-edit — tests
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {spawnSync} from 'node:child_process';
-import {fileURLToPath} from 'node:url';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew} from './theme-edit.mjs';
 import {splitCommand} from './_vet.mjs';
+import {runCli} from '../../test-utils/run-cli.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
 } from '../../test-utils/linked-fixture.mjs';
 import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
 
-const BIN = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '../../clients/cli/bin/astryx.mjs',
+// The renders are stood in for: these tests are about names, flags,
+// saved entries and refusals, not the rendered pages.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    await importOriginal(),
+  ),
 );
+
 const T = 240_000;
 const ED = ['experimental', 'theme', 'editor'];
 
@@ -44,24 +48,20 @@ afterAll(() => {
 });
 
 /**
- * Run the CLI with --json; the envelope it prints.
+ * Run the CLI with --json, in process (the real program, no Node start per
+ * call); the envelope it prints.
  * @param {string[]} args
  * @param {string} [at]
  * @returns {any}
  */
-const cli = (args, at = cwd) => {
-  const r = spawnSync(process.execPath, [BIN, ...args, '--json'], {
-    cwd: at,
-    encoding: 'utf8',
-  });
-  return JSON.parse(r.stdout);
-};
+const cli = async (args, at = cwd) =>
+  JSON.parse((await runCli([...args, '--json'], at)).stdout);
 
 /**
  * Run a suggested command as printed (from `experimental` on).
  * @param {string} line
  */
-const follow = line => {
+const follow = async line => {
   const args = splitCommand(line.slice(line.indexOf('experimental ')));
   if (!args) throw new Error(`cannot read ${line}`);
   return cli(args);
@@ -85,11 +85,11 @@ const edit = (t, fn) => {
 describe('a missing theme name in an app with one theme', () => {
   it(
     'show and undo name that theme, and show of it works',
-    () => {
-      const show = cli([...ED, 'show']);
+    async () => {
+      const show = await cli([...ED, 'show']);
       expect(show.suggestions[0].name).toMatch(/ editor show t$/);
-      expect(follow(show.suggestions[0].name).error).toBeUndefined();
-      const undo = cli([...ED, 'undo']);
+      expect((await follow(show.suggestions[0].name)).error).toBeUndefined();
+      const undo = await cli([...ED, 'undo']);
       expect(undo.suggestions[0].name).toMatch(/ editor undo t$/);
       expect(
         undo.suggestions.some((/** @type {any} */ x) => /</.test(x.name)),
@@ -102,15 +102,15 @@ describe('a missing theme name in an app with one theme', () => {
 describe('the theme typed after the setting', () => {
   it(
     'set names the set with the theme first, never a new theme, and it works',
-    () => {
-      const r = cli([...ED, 'set', '--color-accent', '#123457', 't']);
+    async () => {
+      const r = await cli([...ED, 'set', '--color-accent', '#123457', 't']);
       expect(r.suggestions[0].name).toMatch(
         / editor set t --color-accent '#123457'$/,
       );
       expect(
         r.suggestions.some((/** @type {any} */ x) => / new /.test(x.name)),
       ).toBe(false);
-      expect(follow(r.suggestions[0].name).error).toBeUndefined();
+      expect((await follow(r.suggestions[0].name)).error).toBeUndefined();
       expect(settings('t')).toContainEqual(
         expect.objectContaining({thing: '--color-accent', value: '#123457'}),
       );
@@ -123,10 +123,10 @@ describe('the theme typed after the setting', () => {
 
   it(
     'undo names the undo with the theme first, and it works',
-    () => {
-      const r = cli([...ED, 'undo', '--color-accent', 't']);
+    async () => {
+      const r = await cli([...ED, 'undo', '--color-accent', 't']);
       expect(r.suggestions[0].name).toMatch(/ editor undo t --color-accent$/);
-      expect(follow(r.suggestions[0].name).error).toBeUndefined();
+      expect((await follow(r.suggestions[0].name)).error).toBeUndefined();
       expect(settings('t')).not.toContainEqual(
         expect.objectContaining({thing: '--color-accent'}),
       );
@@ -138,22 +138,24 @@ describe('the theme typed after the setting', () => {
 describe('only written by hand', () => {
   it(
     '"false" and "true" as text are read as what they say, noted, and saved as such',
-    () => {
+    async () => {
       expect(
-        cli([
-          ...ED,
-          'set',
-          't',
-          'border',
-          '1px solid red',
-          '--on',
-          'text-input',
-        ]).error,
+        (
+          await cli([
+            ...ED,
+            'set',
+            't',
+            'border',
+            '1px solid red',
+            '--on',
+            'text-input',
+          ])
+        ).error,
       ).toBeUndefined();
       edit('t', s => {
         s.find(x => x.thing === 'border').only = 'false';
       });
-      const r = cli([...ED, 'set', 't', 'spacing', 'roomy']);
+      const r = await cli([...ED, 'set', 't', 'spacing', 'roomy']);
       expect(r.error).toBeUndefined();
       expect(r.data.notes).toContain(
         'border was saved with only "false", read as false',
@@ -165,7 +167,7 @@ describe('only written by hand', () => {
         s.find(x => x.thing === 'border').only = 'TRUE';
       });
       expect(
-        cli([...ED, 'set', 't', 'spacing', 'compact']).error,
+        (await cli([...ED, 'set', 't', 'spacing', 'compact'])).error,
       ).toBeUndefined();
       expect(
         settings('t').find((/** @type {any} */ x) => x.thing === 'border').only,
@@ -176,18 +178,18 @@ describe('only written by hand', () => {
 
   it(
     'any other value is refused, nothing written, with the undo of that entry, which works',
-    () => {
+    async () => {
       edit('t', s => {
         s.find(x => x.thing === 'border').only = 'no';
       });
       const before = fs.readFileSync(file('t'), 'utf8');
-      const r = cli([...ED, 'set', 't', 'spacing', 'roomy']);
+      const r = await cli([...ED, 'set', 't', 'spacing', 'roomy']);
       expect(r.error).toContain('border has only "no", not true or false');
       expect(fs.readFileSync(file('t'), 'utf8')).toBe(before);
       expect(r.suggestions[0].name).toMatch(
         / editor undo t border --on text-input$/,
       );
-      expect(follow(r.suggestions[0].name).error).toBeUndefined();
+      expect((await follow(r.suggestions[0].name)).error).toBeUndefined();
       expect(settings('t')).not.toContainEqual(
         expect.objectContaining({thing: 'border'}),
       );
@@ -202,10 +204,10 @@ describe('only written by hand', () => {
 describe('undo of vibrancy', () => {
   it(
     'says the default vibrancy applies now',
-    () => {
-      cli([...ED, 'set', 't', 'accent', '#7c3aed']);
-      cli([...ED, 'set', 't', 'vibrancy', '80']);
-      const r = cli([...ED, 'undo', 't', 'vibrancy']);
+    async () => {
+      await cli([...ED, 'set', 't', 'accent', '#7c3aed']);
+      await cli([...ED, 'set', 't', 'vibrancy', '80']);
+      const r = await cli([...ED, 'undo', 't', 'vibrancy']);
       expect(r.data.now).toBe('the default vibrancy, 50');
     },
     T,
@@ -215,8 +217,8 @@ describe('undo of vibrancy', () => {
 describe('new with several bad dial flags', () => {
   it(
     'leads with one new that fixes or drops every bad flag, and it works',
-    () => {
-      const r = cli([
+    async () => {
+      const r = await cli([
         ...ED,
         'new',
         'b8',
@@ -233,7 +235,7 @@ describe('new with several bad dial flags', () => {
       expect(line).toContain('--corners pill');
       expect(line).toContain('--spacing roomy');
       expect(line).not.toContain('#zzz');
-      expect(follow(line).error).toBeUndefined();
+      expect((await follow(line)).error).toBeUndefined();
       expect(settings('b8')).toEqual(
         expect.arrayContaining([
           expect.objectContaining({thing: 'corners', value: 'pill'}),
@@ -246,8 +248,8 @@ describe('new with several bad dial flags', () => {
 
   it(
     '--base is read as --like, with the other flags kept',
-    () => {
-      const r = cli([
+    async () => {
+      const r = await cli([
         ...ED,
         'new',
         'b9',
@@ -260,7 +262,7 @@ describe('new with several bad dial flags', () => {
       expect(r.suggestions[0].name).toMatch(
         / editor new b9 --like none --corners round$/,
       );
-      expect(follow(r.suggestions[0].name).error).toBeUndefined();
+      expect((await follow(r.suggestions[0].name)).error).toBeUndefined();
       expect(settings('b9')).toContainEqual(
         expect.objectContaining({thing: 'corners', value: 'round'}),
       );
@@ -272,21 +274,25 @@ describe('new with several bad dial flags', () => {
 describe('show with an option it does not take', () => {
   it(
     'names a show that works, the nearest option, and its help',
-    () => {
+    async () => {
       for (const flag of ['--foo', '--png=false', '--secton']) {
-        const r = cli([...ED, 'show', 't', flag]);
+        const r = await cli([...ED, 'show', 't', flag]);
         expect(r.code, flag).toBe('ERR_INVALID_OPTION');
         expect(r.suggestions[0].name, flag).toMatch(/ editor show t$/);
         expect(r.suggestions[1].name).toMatch(/ editor show --help$/);
       }
-      expect(cli([...ED, 'show', 't', '--secton']).error).toContain(
+      expect((await cli([...ED, 'show', 't', '--secton'])).error).toContain(
         'did you mean --section?',
       );
       expect(
-        cli([...ED, 'show', 't', '--png=true']).suggestions[0].name,
+        (await cli([...ED, 'show', 't', '--png=true'])).suggestions[0].name,
       ).toMatch(/ editor show t --png$/);
       expect(
-        follow(cli([...ED, 'show', 't', '--foo']).suggestions[0].name).error,
+        (
+          await follow(
+            (await cli([...ED, 'show', 't', '--foo'])).suggestions[0].name,
+          )
+        ).error,
       ).toBeUndefined();
     },
     T,
@@ -296,9 +302,9 @@ describe('show with an option it does not take', () => {
 describe('reserved names', () => {
   it(
     'com0 and lpt0 are refused by a rule that lists them',
-    () => {
+    async () => {
       for (const n of ['com0', 'lpt0']) {
-        const r = cli([...ED, 'new', n]);
+        const r = await cli([...ED, 'new', n]);
         expect(r.error, n).toContain('com0-com9, lpt0-lpt9');
       }
     },
@@ -309,8 +315,8 @@ describe('reserved names', () => {
 describe('corners', () => {
   it(
     'a rem is read as px and said so',
-    () => {
-      const r = cli([...ED, 'set', 't', 'corners', '0.375rem']);
+    async () => {
+      const r = await cli([...ED, 'set', 't', 'corners', '0.375rem']);
       expect(r.error).toBeUndefined();
       expect(r.data.notes).toContain('corners 0.375rem is saved as 6px');
       expect(settings('t')).toContainEqual(
@@ -325,10 +331,10 @@ describe('corners', () => {
 
   it(
     'a bare number is refused with the px line, which works',
-    () => {
-      const r = cli([...ED, 'set', 't', 'corners', '10']);
+    async () => {
+      const r = await cli([...ED, 'set', 't', 'corners', '10']);
       expect(r.suggestions[0].name).toMatch(/ editor set t corners 10px$/);
-      expect(follow(r.suggestions[0].name).error).toBeUndefined();
+      expect((await follow(r.suggestions[0].name)).error).toBeUndefined();
     },
     T,
   );
@@ -337,14 +343,14 @@ describe('corners', () => {
 describe('dial words in any case', () => {
   it(
     'every dial takes its words in capitals',
-    () => {
+    async () => {
       for (const [thing, typed, saved] of [
         ['spacing', 'ROOMY', 'roomy'],
         ['buttons', 'SOLID', 'solid'],
         ['headings', 'BOLD', 'bold'],
         ['mode', 'BOTH', 'both'],
       ]) {
-        const r = cli([...ED, 'set', 't', thing, typed]);
+        const r = await cli([...ED, 'set', 't', thing, typed]);
         expect(r.error, typed).toBeUndefined();
         expect(r.data.setting.value, typed).toBe(saved);
       }
@@ -356,13 +362,13 @@ describe('dial words in any case', () => {
 describe('a thing and its value in one word', () => {
   it(
     'is read as the two, flags kept',
-    () => {
-      expect(cli([...ED, 'set', 't', 'corners pill']).data.setting).toEqual(
-        expect.objectContaining({thing: 'corners', value: 'pill'}),
-      );
+    async () => {
       expect(
-        cli([...ED, 'set', 't', 'background-color red', '--on', 'card']).data
-          .setting,
+        (await cli([...ED, 'set', 't', 'corners pill'])).data.setting,
+      ).toEqual(expect.objectContaining({thing: 'corners', value: 'pill'}));
+      expect(
+        (await cli([...ED, 'set', 't', 'background-color red', '--on', 'card']))
+          .data.setting,
       ).toEqual(
         expect.objectContaining({
           thing: 'background-color',
@@ -378,23 +384,24 @@ describe('a thing and its value in one word', () => {
 describe('the compile line from a subfolder', () => {
   it(
     'runs from the folder the command ran in',
-    () => {
+    async () => {
       const sub = path.join(cwd, 'src', 'app');
       fs.mkdirSync(sub, {recursive: true});
-      const r = cli([...ED, 'show', 't'], sub);
+      const r = await cli([...ED, 'show', 't'], sub);
       const text = JSON.stringify(r.data.wiring);
       const m =
         /by hand, (cd [^&]+ && )?\S+ (experimental theme compile \S+)/.exec(
           text,
         );
       expect(m?.[1]).toBe('cd ../.. && ');
-      const run = spawnSync(
-        'sh',
-        [
-          '-c',
-          `${m?.[1] ?? ''}"${process.execPath}" "${BIN}" ${m?.[2]} --check`,
-        ],
-        {cwd: sub, encoding: 'utf8'},
+      // The line runs where its `cd` leads, as printed.
+      const at = path.resolve(
+        sub,
+        /cd ([^&]+?) &&/.exec(m?.[1] ?? '')?.[1] ?? '.',
+      );
+      const run = await runCli(
+        [...(splitCommand(m?.[2] ?? '') ?? []), '--check'],
+        at,
       );
       expect(run.status, run.stderr).toBe(0);
     },
