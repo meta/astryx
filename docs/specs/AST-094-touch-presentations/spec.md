@@ -1110,7 +1110,7 @@ Motion that FR45 moves, by component. Each component's record carries its own li
 | SegmentedControl            | Selection slide on a click, a key or a program change without a touch presentation             | The theme's duration and easing                          | Unchanged: the theme's curve                                                                                                                                         |
 | SegmentedControl            | A mouse's or a pen's drag release                                                              | Slides on the theme's duration                           | Settles on a spring from the release velocity                                                                                                                        |
 
-Until the shared touch runtime has loaded (FR43; `architecture:react-component-runtime` INV13), the Switch and SegmentedControl rows play none of this: they change at once, with no spring, lift or followed drag.
+Until the shared touch runtime has loaded (FR43; `architecture:react-component-runtime` INV13), the Switch and SegmentedControl rows under a touch presentation, Switch's lift and both mouse and pen drag rows play none of this: those changes land at once, with no spring, lift or followed drag. Without a touch presentation, a Switch change keeps the theme's curve, and a SegmentedControl change runs the segments' own transition with no slide.
 
 ## Verification
 
