@@ -238,6 +238,21 @@ but acceptance alone is best effort, not a compatibility promise.
   unchanged and tightens automatically when the shared contract becomes
   authoritative; it is not a permanent adaptation exemption or an extension
   point.
+- **INV16 — An internal part earns a target by what a person sees.** An
+  element that has no target earns one when it paints theme-controlled output
+  (INV4) and a person sees it as its own part, such as a Stepper connector
+  segment, the text box inside a TextInput, or a header-cell button. It gets
+  an anatomy row and a target under INV2–INV7. A shipped theme that reaches the
+  element with structural CSS is evidence for the request, not the reason. An
+  element created only for layout, events, or measurement does not earn one
+  (DEC-1).
+- **INV17 — Every layer has one shared surface target.** The painted surface of
+  every layer (a popover, a menu, a combobox list, a hover card, a tooltip, a
+  dialog, a drawer, and a sheet) carries one family-owned `layer-surface`
+  target (INV13). A theme gives every layer one radius, background, border, and
+  shadow treatment there. A component's own target still applies after it, so a
+  component can differ from the shared treatment. Core's default look does not
+  change (DEC-2).
 
 ## Approved deprecated-surface removal
 
@@ -436,6 +451,33 @@ how themes become output, or the design rationale for a component's appearance.
   compatibility-path removal is breaking. This record owns the exact deprecated
   theming cohort and its approved 0.7.0 removal window.
 
+### DEC-1 — Internal parts earn targets by what people see
+
+**Decider:** pending
+
+A theme author who needs to restyle a part people can see, such as a stepper
+connector, has no target for it and writes structural CSS that breaks silently
+on the next internal change. INV16 gives that part a target, judged by what a
+person sees, so requests are decided by one test.
+
+Rejected: a target for every painting element, which turns internal structure
+into permanent API. Rejected: no new targets, which keeps structural CSS as the
+only route.
+
+### DEC-2 — One surface target for every layer
+
+**Decider:** pending
+
+A design lead who asks for every floating surface to look the same today has to
+theme each layer family separately, because only the Popover family shares a
+surface class. INV17 adds one shared target for every layer, with component
+targets applied after it. Defaults stay as they are, so elevation differences
+between a menu and a dialog remain until a theme changes them.
+
+Rejected: one shared surface token set for every layer, which changes default
+elevations. Rejected: no shared target, which leaves app and Astryx layers to
+drift.
+
 ## Verification
 
 | Invariant    | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Failure signal                                                                                                                                                                                                        |
@@ -450,6 +492,7 @@ how themes become output, or the design rationale for a component's appearance.
 | INV12, INV13 | Canonical-only runtime emission and discovery, removed-alias rejection, complete codemod mapping/tests, canonical maintained-theme/template inventory, and family-owner fixtures                                                                                                                                                                                                                                                                                                                                                | A removed alias is emitted or discovered, the migration mapping is incomplete, canonical targets change, removed compatibility metadata survives, or ownership stays implicit                                         |
 | INV14        | Component contract, owner review, focused no-match fallback test, and structural `extensibleAxes.test.ts` coverage with its explicit artwork-axis exemption list                                                                                                                                                                                                                                                                                                                                                                | An ineligible axis opens, a missing rule changes behavior unpredictably, the map/reflection/docs wiring drifts, or an artwork axis gains reflection or loses its exemption                                            |
 | INV15        | Shared root/adaptation component-validation fixtures covering finite, open, enrolled, and unresolved domains                                                                                                                                                                                                                                                                                                                                                                                                                    | Root and adaptation disagree, a valid open value requires a root style, a rule conditionally enrolls a custom value, or unresolved behavior becomes adaptation-specific                                               |
+| INV16, INV17 | Theming-target metadata tests plus real-browser checks: a theme that styles `layer-surface` on a Popover, a DropdownMenu, a HoverCard, a Tooltip, a Dialog, and a BottomSheet, with and without a component target override                                                                                                                                                                                                                                                                                                     | A layer that ignores `layer-surface`, a component target that loses to it, or a changed default look                                                                                                                  |
 
 Known conformance and verification gaps:
 
