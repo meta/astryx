@@ -31,7 +31,9 @@ import {
 } from './_normal.mjs';
 import {
   AUTO_SPREAD,
+  COMMON_STATES,
   CORNERS,
+  CSS_PSEUDO_CLASSES,
   DIALS,
   FAMILIES,
   FONT_ROLES,
@@ -2008,20 +2010,21 @@ export async function editorStoredRefusal(root, slug) {
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
- * @returns {Promise<Array<{token: string, value: string, why: string, line: number | null, file?: string | null}>>}
+ * @returns {Promise<Array<{token: string, key?: string, value: string, why: string, line: number | null, file?: string | null}>>}
  */
 async function ownTokenProblems(ctx, slug, data) {
   const {cwd} = ctx.project;
-  /** @type {Array<{token: string, value: string, why: string, line: number | null, file?: string | null}>} */
+  /** @type {Array<{token: string, key?: string, value: string, why: string, line: number | null, file?: string | null}>} */
   const out = [];
   const known = ctx.project.core.tokenDefaults;
   /**
    * @param {string} token
    * @param {string} value
    * @param {ReadonlySet<string>} [reads] custom properties the theme sets where the value is read
+   * @param {Record<string, string>} [flags] set's flags, such as the part a property is on
    * @returns {string | null}
    */
-  const refused = (token, value, reads) => {
+  const refused = (token, value, reads, flags = {}) => {
     try {
       checkSetting(
         ctx,
@@ -2029,7 +2032,7 @@ async function ownTokenProblems(ctx, slug, data) {
         {...data, settings: []},
         token,
         value,
-        {},
+        flags,
         false,
         {
           reads,
@@ -2061,6 +2064,18 @@ async function ownTokenProblems(ctx, slug, data) {
       x => x.token === token && x.kind !== 'scoped' && x.kind !== 'chain',
     );
     return e ? atOf(e) : {line: tokensLine, file: null};
+  };
+  /** A scope path as the file writes it (`adaptations.rules[0].value`). @param {string[]} path */
+  const labelOf = path => path.join('.').replace(/\.(\d+)(?=\.|$)/g, '[$1]');
+  /** Where a field or a block's own key is written. @param {string} scope @param {string} key */
+  const whereKey = (scope, key) => {
+    const e = entries.find(
+      x =>
+        (x.kind === 'field' || x.kind === 'key') &&
+        (x.scope ?? '') === scope &&
+        x.key === key,
+    );
+    return e ? atOf(e) : null;
   };
   /** Where a scoped token's value comes from. @param {string} scope @param {string} token */
   const whereIn = (scope, token) => {
@@ -2119,6 +2134,31 @@ async function ownTokenProblems(ctx, slug, data) {
   const input = loaded?.input;
   if (!input || typeof input !== 'object') return out;
   const named = new Set(out.map(b => b.token));
+  // Core refuses the input itself, naming the path of what it refuses
+  // (`defineTheme("t").adaptations.rules[0].when.pointr is not
+  // supported.`): its message, at the line that writes that path.
+  const coreSays =
+    /defineTheme\("([^"]*)"\)((?:\.[A-Za-z_$][\w$]*|\[\d+\]|\["[^"]*"\])+) ([^\n]*)/.exec(
+      loaded?.error?.message ?? '',
+    );
+  if (coreSays) {
+    const steps = [
+      ...coreSays[2].matchAll(/\.([A-Za-z_$][\w$]*)|\[(\d+)\]|\["([^"]*)"\]/g),
+    ].map(m => m[1] ?? m[2] ?? m[3]);
+    const key = /** @type {string} */ (steps.at(-1));
+    const scope = steps.slice(0, -1).join('.');
+    const at =
+      whereKey(scope, key) ??
+      (scope ? whereIn(scope, key) : null) ??
+      whereKey('', String(steps[0]));
+    out.push({
+      token: labelOf(steps),
+      key,
+      value: '',
+      why: `Core refuses the theme: ${labelOf(steps)} ${coreSays[3].replace(/\.+$/, '')}`,
+      ...(at ?? {line: null, file: null}),
+    });
+  }
   /**
    * Why a token's value is refused, or null. Any token, a design token or
    * the theme's own, takes text or a pair of two texts; any other value
@@ -2173,9 +2213,34 @@ async function ownTokenProblems(ctx, slug, data) {
    * @param {unknown} value
    * @param {string} file
    * @param {ReadonlySet<string>} reads custom properties the theme sets where the value is read
+   * @param {string | undefined} component the part, as the components map names it
    * @returns {string | null}
    */
-  const judgeProperty = (prop, value, file, reads) => {
+  const judgeProperty = (prop, value, file, reads, component) => {
+    // A family list is read as set reads one for that part (a comma
+    // missing before a generic family, a quoted generic, a dial word).
+    if (
+      typeof value === 'string' &&
+      prop === 'font-family' &&
+      component &&
+      ctx.project.target.has(component)
+    ) {
+      const why = refused(prop, value, reads, {on: component});
+      if (why) return why;
+    }
+    // A var() of a custom property the theme's own page sets reads the
+    // text it gives: the property must take that text there.
+    if (typeof value === 'string')
+      for (const m of value.matchAll(/var\(\s*(--[a-z0-9-]+)\s*\)/gi)) {
+        const text = ownText.get(m[1]);
+        if (
+          text === undefined ||
+          /\bvar\(/i.test(text) ||
+          matchValue(prop, value.replace(m[0], text))
+        )
+          continue;
+        return `${prop} does not take ${JSON.stringify(text)}, which ${m[1]} holds (${file} sets it), so the browser would drop it`;
+      }
     if (typeof value === 'string')
       return propertyValueProblem(ctx, prop, value, known, reads);
     if (typeof value === 'number')
@@ -2200,13 +2265,32 @@ async function ownTokenProblems(ctx, slug, data) {
     node && typeof node === 'object' && !Array.isArray(node)
       ? Object.keys(node).filter(k => k.startsWith('--'))
       : [];
-  /** A scope path as the file writes it (`adaptations.rules[0].value`). @param {string[]} path */
-  const labelOf = path => path.join('.').replace(/\.(\d+)(?=\.|$)/g, '[$1]');
   /** The camelCase name of each CSS property, for a misspelled one. */
   const camelNames = () =>
     [...cssProperties()].map(p =>
       p.replace(/-([a-z])/g, (_m, c) => c.toUpperCase()),
     );
+  /**
+   * The part a components key names (`card`), or null when Core themes no
+   * such part: Core reads a components key as the part's own key.
+   * @param {string} name
+   * @returns {string | null}
+   */
+  const targetKey = name => (ctx.project.target.has(name) ? name : null);
+  /**
+   * The text the theme's own page gives each custom property it sets (its
+   * tokens and local tokens), for a part property that reads one.
+   * @type {Map<string, string>}
+   */
+  const ownText = new Map(
+    [
+      ...Object.entries(input.tokens ?? {}),
+      ...Object.entries(input.localTokens ?? {}),
+    ].filter(
+      (/** @type {[string, unknown]} */ [k, v]) =>
+        typeof v === 'string' && !(k in known),
+    ),
+  );
   /**
    * Judge one block of what a theme gives: its tokens and local tokens,
    * its parts, its onDark and onLight surfaces, and each adaptation rule's
@@ -2230,24 +2314,65 @@ async function ownTokenProblems(ctx, slug, data) {
      * @param {string} key
      * @param {string} why
      * @param {string} [value]
+     * @param {{line: number | null, file: string | null} | null} [loc] where it is written, when known
      */
-    const refuse = (at, key, why, value = '') => {
+    const refuse = (at, key, why, value = '', loc = null) => {
       const scope = at.join('.');
       const label = labelOf(at);
       out.push({
         token: `${prefix}${label ? `${label} ` : ''}${key}`.trim(),
+        key,
         value,
         why,
-        ...(at.length || prefix ? where(scope, key) : whereOf(key)),
+        ...(loc ?? (at.length || prefix ? where(scope, key) : whereOf(key))),
       });
     };
+    // A field the block's kind does not take (Core's own input fields, read
+    // from its types): the build reads nothing from it.
+    const surface =
+      path.length > 0 && ['onDark', 'onLight'].includes(String(path.at(-1)));
+    const takes =
+      path.length === 0
+        ? ctx.project.inputFields?.theme
+        : surface
+          ? ctx.project.inputFields?.surface
+          : undefined;
+    if (takes)
+      for (const k of Object.keys(block)) {
+        if (takes.includes(k)) continue;
+        const near = nearest(
+          k,
+          takes.filter(f => !f.startsWith('__')),
+        )[0];
+        refuse(
+          path,
+          k,
+          `${k} is no field ${path.length ? `${labelOf(path)} takes` : 'defineTheme takes'}, so the build reads nothing from it${near ? `; did you mean ${near}?` : ''}`,
+          '',
+          prefix ? null : whereKey(path.join('.'), k),
+        );
+      }
     /**
      * A custom property and its value, wherever a block sets one.
      * @param {string[]} at @param {string} k @param {unknown} v @param {Set<string>} here
      * @param {boolean} dropsUndefined
+     * @param {boolean} [designMap] a `tokens` map, which overrides design tokens
      */
-    const token = (at, k, v, here, dropsUndefined) => {
+    const token = (at, k, v, here, dropsUndefined, designMap = false) => {
       const loc = at.length || prefix ? where(at.join('.'), k) : whereOf(k);
+      // A tokens map overrides design tokens; a name one typo from one is
+      // that token misspelled, which the build writes as a property
+      // nothing reads (the theme's own go in localTokens).
+      if (designMap && !(k in known)) {
+        const near = nearest(k, Object.keys(known))[0];
+        if (near)
+          return refuse(
+            at,
+            k,
+            `"${k}" is not a design token, so the build writes a custom property nothing reads; did you mean ${near}? A custom property of the theme's own goes in localTokens`,
+            asWritten(v),
+          );
+      }
       if (k.startsWith('--_'))
         return refuse(
           at,
@@ -2274,15 +2399,78 @@ async function ownTokenProblems(ctx, slug, data) {
       // and the exported theme's are named by token alone.
       const top = path.length === 0 && map === 'tokens';
       const at = top && !prefix ? [] : [...path, map];
-      for (const [k, v] of Object.entries(m)) token(at, k, v, reads, top);
+      for (const [k, v] of Object.entries(m))
+        token(at, k, v, reads, top, map === 'tokens');
     }
     /** A part's style block. @param {any} node @param {string[]} at @param {Set<string>} outer @param {number} depth */
     const part = (node, at, outer, depth) => {
       if (!node || typeof node !== 'object' || depth > 12) return;
       const here = new Set([...outer, ...varsIn(node)]);
+      const named = at[at.lastIndexOf('components') + 1];
+      const component = named ? (targetKey(named) ?? undefined) : undefined;
+      const target = component ? ctx.project.target.get(component) : undefined;
+      // The public custom properties the part's component reads.
+      const partVars = target
+        ? (ctx.project.vars ?? []).filter(x => x.component === target.component)
+        : [];
       for (const [k, v] of Object.entries(node)) {
+        if (k.startsWith('--') && component && v !== undefined) {
+          const own = partVars.find(x => x.name === k);
+          // A variable named for the part that the part does not read.
+          if (!own && k.startsWith(`--${component}-`) && !(k in known)) {
+            const near = nearest(
+              k,
+              partVars.map(x => x.name),
+            )[0];
+            refuse(
+              at,
+              k,
+              `${k} is no variable ${component} reads (${partVars.map(x => x.name).join(', ') || 'it reads none'}), so the build writes a custom property that never applies${near ? `; did you mean ${near}?` : ''}`,
+              asWritten(v),
+            );
+            continue;
+          }
+          // A part variable that defaults to a design token takes what
+          // that token takes.
+          const reads = own
+            ? /^var\(\s*(--[a-z0-9-]+)\s*\)$/i.exec(own.default)?.[1]
+            : undefined;
+          if (reads && reads in known) {
+            const loc = where(at.join('.'), k);
+            const why = judge(reads, v, fileName(loc), here);
+            if (why)
+              refuse(
+                at,
+                k,
+                `${k} defaults to var(${reads}), so it takes what ${reads} takes: ${why.replace(/\.+$/, '')}`,
+                asWritten(v),
+              );
+            continue;
+          }
+        }
         if (k.startsWith('--')) {
           token(at, k, v, here, false);
+          continue;
+        }
+        // A pseudo-class no browser knows: a rule that never applies.
+        const pseudo = /^:([a-z-]+)/i.exec(k)?.[1]?.toLowerCase();
+        if (
+          pseudo &&
+          !k.startsWith('::') &&
+          !CSS_PSEUDO_CLASSES.has(pseudo) &&
+          !pseudo.startsWith('-')
+        ) {
+          const states = [...(target?.states ?? []), ...COMMON_STATES];
+          const near =
+            nearest(pseudo, states)[0] ??
+            nearest(pseudo, [...CSS_PSEUDO_CLASSES])[0];
+          refuse(
+            at,
+            k,
+            `${k} is no pseudo-class a browser knows, so the build writes a selector that never matches${near ? `; did you mean :${near}?` : ''}`,
+            '',
+            whereKey(at.join('.'), k),
+          );
           continue;
         }
         if (v && typeof v === 'object' && !Array.isArray(v)) {
@@ -2311,14 +2499,42 @@ async function ownTokenProblems(ctx, slug, data) {
           );
           continue;
         }
-        const why = judgeProperty(prop, v, fileName(loc), here);
+        const why = judgeProperty(prop, v, fileName(loc), here, component);
         if (why) refuse(at, prop, why, typeof v === 'string' ? v : '');
       }
     };
     const components = block.components;
     if (components && typeof components === 'object')
-      for (const [name, styles] of Object.entries(components))
+      for (const [name, styles] of Object.entries(components)) {
+        if (styles === undefined) continue;
+        if (!targetKey(name)) {
+          // A part's class (`.astryx-card`) names it the way a stylesheet
+          // does; the components map names it by its key (`card`).
+          const byClass = [...ctx.project.target.values()].find(
+            t => `.${t.className}` === name,
+          )?.key;
+          const near =
+            byClass ?? nearest(name, [...ctx.project.target.keys()])[0];
+          refuse(
+            [...path, 'components'],
+            name,
+            `${name} is no component Core themes, so the build writes nothing for it${byClass ? `; the components map names a part by its key: ${byClass}` : near ? `; did you mean ${near}?` : ''}`,
+            '',
+            prefix ? null : whereKey([...path, 'components'].join('.'), name),
+          );
+          continue;
+        }
+        // A component's entries are style keys, each holding a block.
+        if (styles && typeof styles === 'object')
+          for (const [key, block] of Object.entries(styles))
+            if (block !== undefined && (!block || typeof block !== 'object'))
+              refuse(
+                [...path, 'components', name],
+                key,
+                `${name}'s entries are style keys (such as base) that each hold a block of properties, and ${key} holds ${describeValue(block)}, which the build cannot read as one: write it inside a style key, such as base: {${key}: ${JSON.stringify(block)}}`,
+              );
         part(styles, [...path, 'components', name], reads, 0);
+      }
     for (const surface of ['onDark', 'onLight'])
       judgeBlock(block[surface], [...path, surface], reads, where, prefix);
     const rules = block.adaptations?.rules;
@@ -2362,12 +2578,49 @@ async function ownTokenProblems(ctx, slug, data) {
   const typo = entries.filter(e => e.kind === 'typography');
   /** @type {Set<string>} */
   const flagged = new Set();
+  const typeFields = ctx.project.inputFields;
+  /**
+   * The keys Core reads at a place in the typography block, or null where
+   * it does not say: its fields, a role's, the scale's, the heading levels
+   * a role's weights takes.
+   * @param {string[]} path
+   * @returns {string[] | null}
+   */
+  const typographyTakes = path =>
+    !typeFields
+      ? null
+      : path.length === 0
+        ? typeFields.typography
+        : path.length === 1 && path[0] === 'scale'
+          ? typeFields.scale
+          : path.length === 1
+            ? typeFields.role
+            : path.length === 2 && path[1] === 'weights'
+              ? typeFields.levels
+              : null;
   /** @param {any} node @param {string[]} path */
   const fields = (node, path) => {
     if (!node || typeof node !== 'object') return;
+    const takes = typographyTakes(path);
     for (const [k, v] of Object.entries(node)) {
       const key = [...path, k].join('.');
       if (v === undefined) continue;
+      if (takes && !takes.includes(k)) {
+        const levels = path.at(-1) === 'weights';
+        const near = levels ? undefined : nearest(k, takes)[0];
+        const e = typo.find(x => x.key === key || x.key.startsWith(`${key}.`));
+        flagged.add(path[0] ?? k);
+        out.push({
+          token: `typography.${key}`,
+          key: k,
+          value: '',
+          why: levels
+            ? `${k} is no heading level: Core reads weights for levels ${takes.join(', ')}, so typography.${key} builds nothing`
+            : `${k} is no field ${path.length ? `typography.${path.join('.')} takes` : 'typography takes'} (${takes.join(', ')}), so Core builds nothing from it${near ? `; did you mean ${near}?` : ''}`,
+          ...(e ? atOf(e) : {line: null, file: null}),
+        });
+        continue;
+      }
       if (v && typeof v === 'object' && !Array.isArray(v))
         fields(v, [...path, k]);
       else {
@@ -2410,21 +2663,28 @@ async function ownTokenProblems(ctx, slug, data) {
       }
     }
   const scale = input.typography?.scale;
-  if (
-    scale &&
-    typeof scale === 'object' &&
-    scale.base === undefined &&
-    !flagged.has('scale')
-  ) {
-    flagged.add('scale');
-    const e = typo.find(x => x.key.startsWith('scale.')) ?? typo[0];
-    out.push({
-      token: 'typography.scale',
-      value: '',
-      why: 'the type scale is given no base, and Core reads the sizes from the base and the ratio together: add the body size in pixels, such as scale: {base: 16, ratio: …}',
-      ...(e ? atOf(e) : {line: null, file: null}),
-    });
-  }
+  for (const [field, add] of /** @type {const} */ ([
+    ['base', 'the body size in pixels, such as scale: {base: 16, ratio: …}'],
+    ['ratio', 'the step between sizes, such as scale: {base: …, ratio: 1.2}'],
+  ]))
+    if (
+      scale &&
+      typeof scale === 'object' &&
+      scale[field] === undefined &&
+      !flagged.has('scale')
+    ) {
+      flagged.add('scale');
+      const e =
+        typo.find(x => x.key === 'scale') ??
+        typo.find(x => x.key.startsWith('scale.')) ??
+        typo[0];
+      out.push({
+        token: 'typography.scale',
+        value: '',
+        why: `the type scale is given no ${field}, and Core reads the sizes from the base and the ratio together: add ${add}`,
+        ...(e ? atOf(e) : {line: null, file: null}),
+      });
+    }
   const tokens = loaded?.theme?.tokens;
   if (input.typography && tokens && typeof tokens === 'object') {
     /** @param {string} role */
@@ -2466,12 +2726,22 @@ async function ownTokenProblems(ctx, slug, data) {
         continue;
       // A token Core leaves as the base theme writes it is the base's.
       if (loaded?.base.get(token) === value) continue;
-      const at = atOf(owner);
+      // A family token is built from the family and its fallbacks: the
+      // fallbacks are named when they alone are refused.
+      const role = /^--font-family-([a-z]+)$/.exec(token)?.[1];
+      const fallbacks = role ? input.typography?.[role]?.fallbacks : undefined;
+      const fallbackEntry =
+        typeof fallbacks === 'string' &&
+        judge(token, fallbacks, fileName(atOf(owner)), pageVars)
+          ? typo.find(e => e.key === `${role}.fallbacks`)
+          : undefined;
+      const field = fallbackEntry ?? owner;
+      const at = atOf(field);
       const why = judge(token, value, fileName(at), pageVars);
       if (why) {
         reported.add(owner);
         out.push({
-          token: `typography.${owner.key} (builds ${token})`,
+          token: `typography.${field.key} (builds ${token})`,
           value: asWritten(value),
           why,
           ...at,
@@ -2580,16 +2850,15 @@ async function ownTokenRefusal(ctx, slug, data) {
   if (!bad.length) return null;
   const own = `themes/${slug}/${slug}.theme.ts`;
   const file = bad[0].file ?? own;
+  const list = `${bad
+    .slice(0, 3)
+    .map(
+      b =>
+        `${b.token}${b.value ? `: "${b.value}"` : ''}${b.file ? ` (in ${b.file}${b.line ? `, line ${b.line}` : ''})` : b.line ? ` (line ${b.line})` : ''}: ${b.why.replace(/\.+$/, '')}`,
+    )
+    .join('; ')}${bad.length > 3 ? `; and ${bad.length - 3} more` : ''}`;
   return new AstryxError(
-    `${own} gives ${bad.length === 1 ? 'a token a value' : `${bad.length} tokens values`} the editor refuses, which the build would write as it is: ${bad
-      .slice(0, 3)
-      .map(
-        b =>
-          `${b.token}${b.value ? `: "${b.value}"` : ''}${b.file ? ` (in ${b.file}${b.line ? `, line ${b.line}` : ''})` : b.line ? ` (line ${b.line})` : ''}: ${b.why.replace(/\.+$/, '')}`,
-      )
-      .join(
-        '; ',
-      )}${bad.length > 3 ? `; and ${bad.length - 3} more` : ''}. Change it in ${file}. Nothing was changed.`,
+    `${own} gives ${bad.length === 1 ? 'a value' : `${bad.length} values`} the editor refuses, since the build would not apply ${bad.length === 1 ? 'it' : 'them'} as written: ${list}${/[?!]$/.test(list) ? '' : '.'} Change it in ${file}. Nothing was changed.`,
     [
       bad[0].line
         ? {
@@ -2597,7 +2866,7 @@ async function ownTokenRefusal(ctx, slug, data) {
             reason: 'see the line that sets it',
           }
         : {
-            name: `grep -n -- ${quoteCommandArgument(bad[0].token)} ${quoteCommandArgument(file)}`,
+            name: `grep -n -- ${quoteCommandArgument(bad[0].key ?? bad[0].token)} ${quoteCommandArgument(file)}`,
             reason: 'see the line',
           },
     ],

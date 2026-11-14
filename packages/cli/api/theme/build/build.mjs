@@ -3161,7 +3161,15 @@ function themeLoadReason(error) {
     // Node's "Require stack" names absolute paths; the package is the fact.
     return `Cannot find module '${missing}'.\nThe theme imports ${missing}, which is not installed. Install it, then build again.`;
   }
-  return `${message}\nMake sure all imports in the theme file are resolvable.`;
+  // A module that did not resolve: the import hint. Any other failure (the
+  // theme's own code, or Core refusing its input) is told as it is.
+  const unresolved =
+    /^(?:ERR_MODULE_NOT_FOUND|MODULE_NOT_FOUND)$/.test(
+      String(/** @type {any} */ (error).code ?? ''),
+    ) || /Cannot (?:find|resolve) (?:module|package)/.test(message);
+  return unresolved
+    ? `${message}\nMake sure all imports in the theme file are resolvable.`
+    : message;
 }
 
 /** A theme module that loaded but exports no theme object. */

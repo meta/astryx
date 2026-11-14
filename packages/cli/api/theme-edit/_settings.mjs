@@ -1867,9 +1867,13 @@ export function valueProblem(s) {
  * `localTokens`) starts; a `scoped` entry is a token one sets, with its
  * scope path (`components.button.base`). A `duplicate` entry names a
  * second `tokens` key (with every line); a
- * `typography` entry is one typography field (its dotted key and value);
+ * `typography` entry is one typography field (its dotted key and value;
+ * `block` when it holds fields); a `field` entry is a field the theme
+ * gives defineTheme; a `key` entry is a block's own key in a scope (a
+ * style key, a pseudo-class, a surface's tokens), with its scope path;
  * an `unresolved` entry says the map holds something only a build reads.
- * @typedef {{token: string | null, key: string, line: number | null, kind: 'text' | 'number' | 'pair' | 'object' | 'other' | 'duplicate' | 'typography' | 'unresolved' | 'scope' | 'scoped' | 'chain', scope?: string, theme?: string, value?: any, halves?: Array<string | number | undefined>, lines?: Array<number | null>, file?: string, overridden?: boolean, expression?: boolean, notToken?: boolean}} OwnTokenEntry
+ * A chain theme defined in another file carries that `file`.
+ * @typedef {{token: string | null, key: string, line: number | null, kind: 'text' | 'number' | 'pair' | 'object' | 'other' | 'duplicate' | 'typography' | 'unresolved' | 'scope' | 'scoped' | 'chain' | 'field' | 'key', scope?: string, theme?: string, value?: any, halves?: Array<string | number | undefined>, lines?: Array<number | null>, file?: string, overridden?: boolean, expression?: boolean, notToken?: boolean, block?: boolean}} OwnTokenEntry
  */
 
 /**
@@ -1922,7 +1926,9 @@ function ownPageTokens(
       ? node.value
       : node?.type === 'Identifier'
         ? node.name
-        : null;
+        : node?.type === 'NumericLiteral'
+          ? String(node.value)
+          : null;
   /** @param {any} node @returns {string | null} */
   const textOf = node =>
     node?.type === 'StringLiteral'
@@ -2039,8 +2045,121 @@ function ownPageTokens(
           });
       }
     }
+  const dir = path.dirname(themeFiles(cwd, slug).ts);
+  /**
+   * The file a relative import names, as the build resolves it; null for
+   * a package or a file that is not there.
+   * @param {string} from
+   * @returns {string | null}
+   */
+  const localFile = from => {
+    if (!from.startsWith('.')) return null;
+    const base = path.resolve(dir, from);
+    return (
+      ['', '.ts', '.mts', '.tsx', '.js', '.mjs', '.json', '/index.ts']
+        .map(x => base + x)
+        .find(f => {
+          try {
+            return fs.statSync(f).isFile();
+          } catch {
+            return false;
+          }
+        }) ?? null
+    );
+  };
+  // A theme the exported one extends that a file beside it defines
+  // (`import {mid} from './mid'`): its call and each token its literal
+  // tokens map sets, with that file.
+  if (detail) {
+    const here = new Set(
+      detail.filter(e => e.kind === 'chain').map(e => e.theme),
+    );
+    for (const st of ast.program.body) {
+      if (st.type !== 'ImportDeclaration') continue;
+      const file = localFile(String(st.source?.value ?? ''));
+      if (!file || file.endsWith('.json')) continue;
+      /** @type {any} */
+      let other;
+      try {
+        other = parseModule(fs.readFileSync(file, 'utf8'), {
+          sourceType: 'module',
+          plugins: ['typescript'],
+        });
+      } catch {
+        continue;
+      }
+      /** @param {any} node */
+      const each = node => {
+        if (!node || typeof node !== 'object') return;
+        if (
+          node.type === 'CallExpression' &&
+          node.callee?.type === 'Identifier' &&
+          node.callee.name === 'defineTheme' &&
+          node.arguments?.[0]?.type === 'ObjectExpression'
+        ) {
+          const obj = node.arguments[0];
+          /** @param {string} key */
+          const prop = key =>
+            obj.properties.find(
+              (/** @type {any} */ p) =>
+                p.type === 'ObjectProperty' &&
+                !p.computed &&
+                keyOf(p.key) === key,
+            );
+          const theme = textOf(prop('name')?.value);
+          if (theme && !here.has(theme)) {
+            here.add(theme);
+            detail.push({
+              token: null,
+              key: theme,
+              kind: 'chain',
+              theme,
+              file,
+              line: node.loc?.start?.line ?? null,
+            });
+            const map = prop('tokens')?.value;
+            for (const p of map?.type === 'ObjectExpression'
+              ? map.properties
+              : []) {
+              const k = p.type === 'ObjectProperty' ? keyOf(p.key) : null;
+              if (k?.startsWith('--'))
+                detail.push({
+                  token: k,
+                  key: k,
+                  kind: 'chain',
+                  theme,
+                  file,
+                  line: p.loc?.start?.line ?? null,
+                });
+            }
+          }
+        }
+        for (const [k, v] of Object.entries(node)) {
+          if (k === 'loc') continue;
+          if (Array.isArray(v)) v.forEach(each);
+          else if (v && typeof v === 'object' && v.type) each(v);
+        }
+      };
+      each(other.program);
+    }
+  }
   const def = unwrap(chosen.call.arguments[0]);
   if (def?.type !== 'ObjectExpression') return out;
+  // Each field the theme gives defineTheme, with its line, so a field
+  // defineTheme does not take is named where it is written.
+  if (detail)
+    for (const p of def.properties) {
+      const k =
+        p.type === 'ObjectProperty' && !p.computed ? keyOf(p.key) : null;
+      if (k)
+        detail.push({
+          token: null,
+          key: k,
+          kind: 'field',
+          scope: '',
+          line: p.loc?.start?.line ?? null,
+        });
+    }
   // JavaScript keeps the last of two `tokens` keys: that one is read, and
   // both are named.
   const tokensProps = def.properties.filter(
@@ -2109,7 +2228,18 @@ function ownPageTokens(
               scope: at.join('.'),
               line: q.loc?.start?.line ?? null,
             });
-          else walk(q.value, [...at, k], depth + 1);
+          else {
+            // A block's own key (a style key, a pseudo-class, onDark's
+            // tokens), by its scope path and line.
+            detail.push({
+              token: null,
+              key: k,
+              kind: 'key',
+              scope: at.join('.'),
+              line: q.loc?.start?.line ?? null,
+            });
+            walk(q.value, [...at, k], depth + 1);
+          }
         }
       };
       walk(p.value, [scope], 0);
@@ -2131,8 +2261,16 @@ function ownPageTokens(
         const k = keyOf(p.key);
         if (!k) continue;
         const v = unwrap(p.value);
-        if (v?.type === 'ObjectExpression') walk(v, [...at, k]);
-        else
+        if (v?.type === 'ObjectExpression') {
+          detail.push({
+            token: null,
+            key: [...at, k].join('.'),
+            kind: 'typography',
+            line: p.loc?.start?.line ?? null,
+            block: true,
+          });
+          walk(v, [...at, k]);
+        } else
           detail.push({
             token: null,
             key: [...at, k].join('.'),
@@ -2162,7 +2300,6 @@ function ownPageTokens(
   const tokensProp = tokensProps[tokensProps.length - 1];
   if (!tokensProp) return out;
   let unresolved = false;
-  const dir = path.dirname(themeFiles(cwd, slug).ts);
   /**
    * The object a name imported from a file beside the theme gives (`import
    * {mine} from './mine'`, a default import of a .json file), read from
@@ -2178,25 +2315,7 @@ function ownPageTokens(
       );
       const from = String(st.source?.value ?? '');
       if (!spec || !from.startsWith('.')) continue;
-      const base = path.resolve(dir, from);
-      const file = [
-        '',
-        '.ts',
-        '.mts',
-        '.tsx',
-        '.js',
-        '.mjs',
-        '.json',
-        '/index.ts',
-      ]
-        .map(x => base + x)
-        .find(f => {
-          try {
-            return fs.statSync(f).isFile();
-          } catch {
-            return false;
-          }
-        });
+      const file = localFile(from);
       if (!file) return null;
       try {
         const text = fs.readFileSync(file, 'utf8');

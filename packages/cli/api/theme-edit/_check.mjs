@@ -1614,6 +1614,58 @@ function checkTypedValue(
       );
     return;
   }
+  // A var() naming a design token inside a function or a list
+  // (`color-mix(in srgb, var(--radius-element) 50%, red)`, `calc(var(--x) *
+  // 2)`, `0 1px 2px var(--spacing-4)`): the value read with an example of
+  // that token's kind must still be this token's kind. It is refused when
+  // an example of another kind would be, which names the kind the place
+  // takes.
+  if (type !== 'other') {
+    /** @param {string} sample */
+    const holds = sample => {
+      try {
+        checkTypedValue(
+          type,
+          sample,
+          name,
+          TOKENS,
+          typeOf,
+          slug,
+          readers,
+          multiplied,
+        );
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    /** One design token of each kind, for an example of that kind. @type {Map<string, string>} */
+    const ofKind = new Map();
+    for (const t of Object.keys(TOKENS)) {
+      const k = typeOf(t);
+      if (k !== 'other' && !ofKind.has(k)) ofKind.set(k, t);
+    }
+    for (const m of value.matchAll(
+      /var\(\s*(--[a-z0-9-]+)\s*(?:,[^()]*)?\)/gi,
+    )) {
+      const token = m[1];
+      if (!(token in TOKENS)) continue;
+      const kind = typeOf(token);
+      if (kind === 'other' || kind === type) continue;
+      if (holds(value.replace(m[0], exampleOf(kind, token)))) continue;
+      const takes = [...ofKind].find(
+        ([k, t]) => k !== kind && holds(value.replace(m[0], exampleOf(k, t))),
+      )?.[0];
+      if (takes)
+        refuse(
+          E.ERR_THEME_BAD_VALUE,
+          `${name} is a ${type}; in "${value}", ${token} sits where a ${takes} goes, and ${token} is a ${kind}, so the browser would drop the value.`,
+          {
+            run: [`${HOW} --list tokens ${takes}`],
+          },
+        );
+    }
+  }
   if (type === 'color' && !isFixedColor(value)) bad('a color', null);
   if (type === 'size' && !isSize(value, name)) {
     // The token's own default is never offered as a repair: only a size
