@@ -1650,45 +1650,54 @@ test("two pages on, a rotation keeps a zoomed photo's centre point", async ({
  * listener to its bubble listener. React commits a discrete input in a
  * microtask after its root's listener, so that commit falls inside. A layout
  * there is one that script forced, by reading geometry the browser had not laid
- * out yet.
+ * out yet. Trace marks bound the window. Chromium coarsens `performance.now()`
+ * to 100 µs, with jitter, and a button's activation lays out the commit's
+ * changes within that time after the bubble listener. That layout is the
+ * frame's own, done early.
  */
 async function taskLayouts(
   page: Page,
   type: 'click' | 'keydown',
   act: () => Promise<unknown>,
 ): Promise<{layouts: number; events: string[]}> {
-  await page.evaluate(eventType => {
-    const at = () => performance.timeOrigin + performance.now();
-    const marks = {from: 0, to: 0};
-    (window as unknown as {__task: typeof marks}).__task = marks;
-    document.addEventListener(
-      eventType,
-      () => {
-        marks.from = at();
-      },
-      {capture: true, once: true},
-    );
-    document.addEventListener(
-      eventType,
-      () => {
-        marks.to = at();
-      },
-      {once: true},
-    );
-  }, type);
-  const trace = await traceRendering(page, async () => {
-    await act();
-    await page.waitForTimeout(100);
-  });
-  const task = await page.evaluate(
-    () => (window as unknown as {__task: {from: number; to: number}}).__task,
+  const tag = `task-${Math.random().toString(36).slice(2, 8)}`;
+  await page.evaluate(
+    ({eventType, name}) => {
+      document.addEventListener(
+        eventType,
+        () => {
+          performance.mark(`${name}:from`);
+        },
+        {capture: true, once: true},
+      );
+      document.addEventListener(
+        eventType,
+        () => {
+          performance.mark(`${name}:to`);
+        },
+        {once: true},
+      );
+    },
+    {eventType: type, name: tag},
   );
-  expect(task.to).toBeGreaterThan(task.from);
+  const trace = await traceRendering(
+    page,
+    async () => {
+      await act();
+      await page.waitForTimeout(100);
+    },
+    {keepEvents: true},
+  );
+  const markAt = (name: string) =>
+    trace.mainThread?.find(e => e.name === name)?.t ?? Number.NaN;
+  const from = markAt(`${tag}:from`);
+  const to = markAt(`${tag}:to`);
+  expect(to).toBeGreaterThan(from);
   return {
-    layouts: countBetween(trace, task.from, task.to).Layout ?? 0,
+    layouts: countBetween(trace, from, to).Layout ?? 0,
     events: trace.events
-      .filter(e => e.t >= task.from && e.t <= task.to)
-      .map(e => `${e.name}@${(e.t - task.from).toFixed(1)}`),
+      .filter(e => e.t >= from && e.t <= to)
+      .map(e => `${e.name}@${(e.t - from).toFixed(1)}`),
   };
 }
 
@@ -1733,6 +1742,47 @@ test('opening a gallery on a clamped caption lays out no more than opening one w
     JSON.stringify({captioned, plain}),
   ).toBeLessThanOrEqual(plain.layouts);
 });
+
+// The tap's one forced layout holds too for a caption whose block has its own
+// generated content, which the fit check cannot measure.
+const TAP_CASES = [
+  {name: 'a plain caption', story: 'core-lightbox--gallery-with-captions'},
+  {
+    name: 'a paragraph caption with generated words after its text',
+    story: 'core-lightbox--gallery-with-paragraph-words-caption-fixture',
+  },
+];
+
+for (const {name, story} of TAP_CASES) {
+  test(`a tap on "more" takes exactly one forced layout (${name})`, async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'rendering traces are Chromium-only');
+    await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route => {
+      const id =
+        /\/sample-([a-z]+)-/.exec(route.request().url())?.[1] ?? 'forest';
+      await route.fulfill({
+        contentType: 'image/svg+xml',
+        body: photoSvg(COLORS[id] ?? '#888'),
+      });
+    });
+    await openStory(page, storybook(), story);
+    await page
+      .getByRole('button', {name: 'Open gallery with captions'})
+      .click();
+    const dialog = page.getByRole('dialog');
+    const more = dialog.getByRole('button', {name: 'more'});
+    await expect(more).toBeVisible();
+    await frames(page, 2);
+    const tap = await taskLayouts(page, 'click', async () => more.click());
+    await expect(dialog.getByRole('button', {name: 'less'})).toBeVisible();
+    // The band cannot grow from its own resize report without looping, so the
+    // tap lays the open caption out once, and "less" is placed before the
+    // first frame.
+    expect(tap.layouts, JSON.stringify(tap)).toBe(1);
+  });
+}
 
 /**
  * Logs every geometry read of an element inside a caption in the task of the
@@ -1953,6 +2003,472 @@ test("the caption toggle's width comes from its own delivery, never from a read 
   );
   expect(reads).toEqual([]);
 });
+
+// Captions with no block of their own generated content. With it, the frame
+// that shrinks a caption reads the result, as before.
+const CAPTION_STORIES = [
+  {name: 'a plain caption', story: 'core-lightbox--gallery-with-captions'},
+  {
+    name: 'a paragraph caption',
+    story: 'core-lightbox--gallery-with-paragraph-caption-fixture',
+  },
+  {
+    name: 'a centred paragraph caption',
+    story: 'core-lightbox--gallery-with-centered-paragraph-caption-fixture',
+  },
+];
+
+// A block's own generated content has no node the fit check can measure.
+// Neither has room under the last line of text, such as a paragraph's bottom
+// padding or two trailing line breaks. So for those captions the frame reads
+// the caption once after its write, one forced layout, as on main.
+const SHRINK_CASES = [
+  ...CAPTION_STORIES.map(({name, story}) => ({
+    name,
+    story,
+    expectedReads: [] as string[],
+  })),
+  {
+    name: 'a paragraph caption with generated words after its text',
+    story: 'core-lightbox--gallery-with-paragraph-words-caption-fixture',
+    expectedReads: ['clientHeight'],
+  },
+  {
+    name: 'a paragraph caption with bottom padding',
+    story:
+      'core-lightbox--gallery-with-bottom-padded-paragraph-caption-fixture',
+    expectedReads: ['clientHeight'],
+  },
+  {
+    name: 'a caption ending in two line breaks',
+    story: 'core-lightbox--gallery-with-trailing-break-caption-fixture',
+    expectedReads: ['clientHeight'],
+  },
+];
+
+for (const {name, story, expectedReads} of SHRINK_CASES) {
+  test(`${expectedReads.length === 0 ? 'no caption read follows' : 'exactly one caption read follows'} a write in the same frame callback as an open caption widens to fewer lines (${name})`, async ({
+    page,
+  }) => {
+    // A read after a write in one frame callback forces a layout before the
+    // browser's own. A transform or an opacity changes no layout, so it counts
+    // as no write.
+    await page.addInitScript(() => {
+      const reads: string[] = [];
+      (window as unknown as {__frameReads: string[]}).__frameReads = reads;
+      let isInFrame = false;
+      let hasWritten = false;
+      const nativeFrame = window.requestAnimationFrame.bind(window);
+      window.requestAnimationFrame = callback =>
+        nativeFrame(time => {
+          isInFrame = true;
+          hasWritten = false;
+          try {
+            callback(time);
+          } finally {
+            isInFrame = false;
+          }
+        });
+      const noteWrite = () => {
+        if (isInFrame) {
+          hasWritten = true;
+        }
+      };
+      const setters: [object, string][] = [
+        [Element.prototype, 'className'],
+        [HTMLElement.prototype, 'hidden'],
+        [Node.prototype, 'textContent'],
+        [CharacterData.prototype, 'data'],
+      ];
+      for (const [proto, name] of setters) {
+        const own = Object.getOwnPropertyDescriptor(proto, name);
+        if (own?.set == null) {
+          continue;
+        }
+        const set = own.set;
+        Object.defineProperty(proto, name, {
+          ...own,
+          set(this: unknown, value: unknown) {
+            noteWrite();
+            set.call(this, value);
+          },
+        });
+      }
+      const compositorOnly = new Set([
+        'translate',
+        'scale',
+        'rotate',
+        'transform',
+        'opacity',
+      ]);
+      const methods: [Record<string, unknown>, string][] = [
+        [
+          Element.prototype as unknown as Record<string, unknown>,
+          'setAttribute',
+        ],
+        [
+          Element.prototype as unknown as Record<string, unknown>,
+          'removeAttribute',
+        ],
+        [
+          CSSStyleDeclaration.prototype as unknown as Record<string, unknown>,
+          'setProperty',
+        ],
+        [
+          CSSStyleDeclaration.prototype as unknown as Record<string, unknown>,
+          'removeProperty',
+        ],
+      ];
+      for (const [proto, name] of methods) {
+        const method = proto[name] as (
+          ...args: unknown[]
+        ) => string | undefined;
+        proto[name] = function (
+          this: unknown,
+          ...args: unknown[]
+        ): string | undefined {
+          if (
+            !(this instanceof CSSStyleDeclaration) ||
+            !compositorOnly.has(String(args[0]))
+          ) {
+            noteWrite();
+          }
+          return method.apply(this, args);
+        };
+      }
+      const note = (name: string, node: unknown) => {
+        const element =
+          node instanceof Element
+            ? node
+            : node instanceof Node
+              ? node.parentElement
+              : null;
+        if (
+          isInFrame &&
+          hasWritten &&
+          element?.closest('[data-lightbox-caption]') != null
+        ) {
+          reads.push(name);
+        }
+      };
+      const getters: [object, string][] = [
+        [HTMLElement.prototype, 'offsetWidth'],
+        [HTMLElement.prototype, 'offsetHeight'],
+        [Element.prototype, 'clientWidth'],
+        [Element.prototype, 'clientHeight'],
+        [Element.prototype, 'scrollWidth'],
+        [Element.prototype, 'scrollHeight'],
+      ];
+      for (const [proto, name] of getters) {
+        const own = Object.getOwnPropertyDescriptor(proto, name);
+        if (own?.get == null) {
+          continue;
+        }
+        const get = own.get as (this: Element) => number;
+        Object.defineProperty(proto, name, {
+          configurable: true,
+          get(this: Element): number {
+            note(name, this);
+            return get.call(this);
+          },
+        });
+      }
+      const rect = Element.prototype.getBoundingClientRect;
+      Element.prototype.getBoundingClientRect = function (this: Element) {
+        note('getBoundingClientRect', this);
+        return rect.call(this);
+      };
+    });
+    await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route => {
+      const id =
+        /\/sample-([a-z]+)-/.exec(route.request().url())?.[1] ?? 'forest';
+      await route.fulfill({
+        contentType: 'image/svg+xml',
+        body: photoSvg(COLORS[id] ?? '#888'),
+      });
+    });
+    await page.setViewportSize({width: 402, height: 874});
+    await openStory(page, storybook(), story);
+    await page
+      .getByRole('button', {name: 'Open gallery with captions'})
+      .click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('button', {name: 'more'})).toBeVisible();
+    await frames(page, 2);
+    await dialog.getByRole('button', {name: 'more'}).click();
+    await expect(dialog.getByRole('button', {name: 'less'})).toBeVisible();
+    await frames(page, 4);
+    // A phone turned on its side: the open caption needs fewer lines, which
+    // wait for the next frame.
+    await page.setViewportSize({width: 874, height: 402});
+    await frames(page, 6);
+    await expect(dialog.getByRole('button', {name: 'less'})).toBeVisible();
+    const reads = await page.evaluate(
+      () => (window as unknown as {__frameReads: string[]}).__frameReads,
+    );
+    expect(reads).toEqual(expectedReads);
+  });
+}
+
+// The plain caption again, in a same-origin iframe's document, whose elements
+// are not this window's, as in a Picture-in-Picture window. Then captions whose
+// last line holds more than text or holds hidden text, a paragraph with its own
+// generated content, a padded paragraph, an end-aligned one, and two captions
+// right to left, where the place sits at the left. Last, content that takes
+// room no text node measures: a clipped chip, an inline or a contents element's
+// generated words, a float, a list marker, a text indent, a drop cap. Then
+// layouts the check does not measure: a flex row, a clipped block, a
+// justified last line and an offset element. Last, room under the last line
+// of text: bottom padding, a bottom rule, two line breaks, an empty
+// inline-block.
+const FIT_CASES: {
+  name: string;
+  story: string;
+  isInFrame?: boolean;
+  isRtl?: boolean;
+}[] = [
+  ...CAPTION_STORIES,
+  {
+    name: 'a plain caption in a second document',
+    story: 'core-lightbox--gallery-with-captions-in-frame-fixture',
+    isInFrame: true,
+  },
+  {
+    name: 'a caption ending in an image',
+    story: 'core-lightbox--gallery-with-image-caption-fixture',
+  },
+  {
+    name: 'a caption ending in a block image',
+    story: 'core-lightbox--gallery-with-block-image-caption-fixture',
+  },
+  {
+    name: 'a caption ending in end padding and an end border',
+    story: 'core-lightbox--gallery-with-padded-end-caption-fixture',
+  },
+  {
+    name: 'a caption ending in an end margin',
+    story: 'core-lightbox--gallery-with-margin-end-caption-fixture',
+  },
+  {
+    name: 'a caption ending in generated content',
+    story: 'core-lightbox--gallery-with-generated-content-caption-fixture',
+  },
+  {
+    name: 'a caption ending in visually hidden text',
+    story: 'core-lightbox--gallery-with-visually-hidden-caption-fixture',
+  },
+  {
+    name: 'a paragraph caption with a generated glyph after its text',
+    story: 'core-lightbox--gallery-with-paragraph-glyph-caption-fixture',
+  },
+  {
+    name: 'a paragraph caption with generated words after its text',
+    story: 'core-lightbox--gallery-with-paragraph-words-caption-fixture',
+  },
+  {
+    name: 'a caption ending in an inline-block element',
+    story: 'core-lightbox--gallery-with-inline-block-caption-fixture',
+  },
+  {
+    name: 'a paragraph caption with start padding',
+    story: 'core-lightbox--gallery-with-padded-paragraph-caption-fixture',
+  },
+  {
+    name: 'an end-aligned paragraph caption ending in end padding',
+    story: 'core-lightbox--gallery-with-end-aligned-paragraph-caption-fixture',
+  },
+  {
+    name: 'a plain caption, right to left',
+    story: 'core-lightbox--gallery-with-captions',
+    isRtl: true,
+  },
+  {
+    name: 'a paragraph caption with start padding, right to left',
+    story: 'core-lightbox--gallery-with-padded-paragraph-caption-fixture',
+    isRtl: true,
+  },
+  {
+    name: 'a caption ending in a clipped chip',
+    story: 'core-lightbox--gallery-with-clipped-chip-caption-fixture',
+  },
+  {
+    name: 'a caption ending in an inline element with generated words',
+    story: 'core-lightbox--gallery-with-inline-words-caption-fixture',
+  },
+  {
+    name: 'a caption inside a contents element with generated words',
+    story: 'core-lightbox--gallery-with-contents-words-caption-fixture',
+  },
+  {
+    name: 'a caption whose last paragraph starts with a float',
+    story: 'core-lightbox--gallery-with-float-caption-fixture',
+  },
+  {
+    name: 'a caption whose last block is a list item with its marker inside',
+    story: 'core-lightbox--gallery-with-inside-marker-caption-fixture',
+  },
+  {
+    name: 'a caption whose last paragraph has a text indent',
+    story: 'core-lightbox--gallery-with-indented-paragraph-caption-fixture',
+  },
+  {
+    name: 'a caption whose last paragraph starts with a drop cap',
+    story: 'core-lightbox--gallery-with-drop-cap-caption-fixture',
+  },
+  {
+    name: 'a caption ending in a flex row',
+    story: 'core-lightbox--gallery-with-flex-row-caption-fixture',
+  },
+  {
+    name: 'a caption ending in a block that clips its overflow',
+    story: 'core-lightbox--gallery-with-clipped-block-caption-fixture',
+  },
+  {
+    name: 'a paragraph caption with its last line justified',
+    story: 'core-lightbox--gallery-with-justified-last-line-caption-fixture',
+  },
+  {
+    name: 'a caption ending in an element with a relative offset',
+    story: 'core-lightbox--gallery-with-offset-end-caption-fixture',
+  },
+  {
+    name: 'a paragraph caption with bottom padding',
+    story:
+      'core-lightbox--gallery-with-bottom-padded-paragraph-caption-fixture',
+  },
+  {
+    name: 'a paragraph caption with bottom padding and a bottom rule',
+    story: 'core-lightbox--gallery-with-bottom-rule-paragraph-caption-fixture',
+  },
+  {
+    name: 'a caption ending in two line breaks',
+    story: 'core-lightbox--gallery-with-trailing-break-caption-fixture',
+  },
+  {
+    name: 'a caption ending in an empty inline-block',
+    story:
+      'core-lightbox--gallery-with-trailing-empty-inline-block-caption-fixture',
+  },
+];
+
+for (const {name, story, isInFrame = false, isRtl = false} of FIT_CASES) {
+  test(`an open caption that widens to one line fewer gives "less" a line of its own only where it does not fit beside the last line (${name})`, async ({
+    page,
+  }) => {
+    await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route => {
+      const id =
+        /\/sample-([a-z]+)-/.exec(route.request().url())?.[1] ?? 'forest';
+      await route.fulfill({
+        contentType: 'image/svg+xml',
+        body: photoSvg(COLORS[id] ?? '#888'),
+      });
+    });
+    const narrow = {width: 360, height: 874};
+    await page.setViewportSize(narrow);
+    if (isRtl) {
+      // Storybook's direction global sets the story's `dir` (and its
+      // providers'); openStory has no globals.
+      await page.goto(
+        `${storybook()}/iframe.html?id=${story}&viewMode=story&globals=direction:rtl`,
+      );
+      await page.locator('#storybook-root > *').first().waitFor();
+      await frames(page, 2);
+    } else {
+      await openStory(page, storybook(), story);
+    }
+    const root = isInFrame ? page.frameLocator('iframe') : page;
+    await root
+      .getByRole('button', {name: 'Open gallery with captions'})
+      .click();
+    const dialog = root.getByRole('dialog');
+    await dialog.getByRole('button', {name: 'more'}).click();
+    await expect(dialog.getByRole('button', {name: 'less'})).toBeVisible();
+    await frames(page, 4);
+    expect(await dialog.evaluate(el => getComputedStyle(el).direction)).toBe(
+      isRtl ? 'rtl' : 'ltr',
+    );
+    const read = async () =>
+      dialog.evaluate(element => {
+        const caption = element.querySelector(
+          '[data-current] [data-lightbox-caption]',
+        ) as HTMLElement;
+        const text = caption.querySelector('.astryx-text') as HTMLElement;
+        const flow = text.firstElementChild as HTMLElement;
+        const place = flow.firstElementChild as HTMLElement;
+        const toggle = caption.querySelector('button') as HTMLElement;
+        const lineHeight = parseFloat(getComputedStyle(text).lineHeight);
+        // Every line of the caption is a line of the flow, whatever it holds:
+        // text, images or generated content. The place floats outside it.
+        const flowBox = flow.getBoundingClientRect();
+        const toggleBox = toggle.getBoundingClientRect();
+        const toggleMiddle = (toggleBox.top + toggleBox.bottom) / 2;
+        const placeBottom = place.getBoundingClientRect().bottom;
+        // The open caption keeps its last line in place and grows upward, so
+        // only the flow's own height compares two layouts.
+        const flowLines = () =>
+          Math.round(flow.getBoundingClientRect().height / lineHeight);
+        const shownLines = flowLines();
+        // Layout itself says whether "less" fits: lay out the text alone, then
+        // with the place shown beside its last line. A place that fits there
+        // moves no word to a new line.
+        const {display, webkitBoxOrient, webkitLineClamp} = place.style;
+        place.style.display = 'none';
+        const lines = flowLines();
+        place.style.display = '-webkit-box';
+        place.style.webkitBoxOrient = 'vertical';
+        place.style.webkitLineClamp = String(lines);
+        const besideLines = flowLines();
+        place.style.display = display;
+        place.style.webkitBoxOrient = webkitBoxOrient;
+        place.style.webkitLineClamp = webkitLineClamp;
+        return {
+          lines,
+          isBeside:
+            Math.abs(toggleMiddle - (flowBox.bottom - lineHeight / 2)) <=
+            lineHeight / 2,
+          // The place keeps the end of the line that "less" is on clear.
+          isOnPlace:
+            Math.abs(toggleMiddle - (placeBottom - lineHeight / 2)) <=
+            lineHeight / 2,
+          fits: besideLines === lines,
+          // Beside the last line or below it, the place moves no word.
+          isPushing: shownLines > lines,
+          toggleLeft: toggleBox.left,
+        };
+      });
+    const {lines: narrowLines} = await read();
+    // Each wider width that leaves the text one line fewer than at 360 px,
+    // reached in one step from a width with all the lines. There the count
+    // depends on whether "less" fits beside the last line.
+    const misplaced: string[] = [];
+    let checked = 0;
+    for (let width = narrow.width + 2; width <= 720; width += 2) {
+      await page.setViewportSize({width, height: narrow.height});
+      await frames(page, 3);
+      const facts = await read();
+      // At every width, "less" sits on the line its place keeps clear, and
+      // the place moves no word of the text.
+      if (!facts.isOnPlace || facts.isPushing) {
+        misplaced.push(`${width} px: ${JSON.stringify(facts)}`);
+      }
+      if (facts.lines < narrowLines - 1) {
+        break;
+      }
+      // No line fewer yet: this width is as good a start as 360 px.
+      if (facts.lines === narrowLines) {
+        continue;
+      }
+      checked += 1;
+      if (facts.isBeside !== facts.fits) {
+        misplaced.push(`${width} px: ${JSON.stringify(facts)}`);
+      }
+      await page.setViewportSize(narrow);
+      await frames(page, 3);
+    }
+    expect(checked).toBeGreaterThan(0);
+    expect(misplaced).toEqual([]);
+  });
+}
 
 test('no caption read follows a write in the same resize delivery, from opening through "more", "less" and paging', async ({
   page,
