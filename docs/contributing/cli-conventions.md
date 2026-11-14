@@ -145,8 +145,9 @@ needs the evidence that `spec:AST-042` FR3 asks for.
 
 ## Output: keep answers short
 
-An agent pays for every byte a command prints, on every call, and the default
-text is what it reads. Keep that text short without losing anything it needs
+An agent reads every byte a command prints, on every call, and the default
+text is what it reads. Before you add to an answer, think about what an agent
+does with each line. Keep the text short without losing anything it needs
 (`architecture:cli-surface` INV4 and INV5, `spec:AST-017` FR13):
 
 - **Shorten prose, never drop a field.** A long prose field may print its first
@@ -165,20 +166,10 @@ text is what it reads. Keep that text short without losing anything it needs
   yes/no value that readers count in its own column: a marker such as
   `(optional)` inside prose can collide with the same word in a description.
 - **Keep table rules short** (`|---|---|`); a rule carries no information.
-- **Check the change with agents.** A shorter answer is a behavior change. Give
-  agents with no context the same tasks with the old and the new output, and
-  keep the change only when every task comes out the same or better.
-
-`packages/cli/test/output-size.test.mjs` guards the most-read answers. It
-runs each on Core's catalog and compares its size with the size recorded in
-`packages/cli/test/output-sizes.json`. It fails when an answer grows more than
-5%, when it shrinks more than 10% (record the new size so the answer cannot
-grow back unnoticed), and when an answer that fit its kind's budget passes it:
-a read 16 KiB, a list 12 KiB, a report 4 KiB, an error 2 KiB. When a size
-changes on purpose, record it with
-`UPDATE_OUTPUT_SIZES=1 pnpm exec vitest run --project node packages/cli/test/output-size.test.mjs`
-and say why in the pull request. A new command that agents read often adds a
-case.
+- **Test the change with agents.** A shorter answer is a behavior change, and
+  so is a longer one. Give agents with no context the same tasks with the old
+  and the new output, and keep the change when every task comes out the same
+  or better.
 
 ## Errors: every failure carries a code
 
@@ -283,8 +274,8 @@ change.
 - [ ] No `console.log`; all human output goes through the formatters, with no
       hand-padded columns.
 - [ ] Text field names match the JSON keys.
-- [ ] `output-size.test.mjs` passes; any size you recorded has its reason in
-      the pull request.
+- [ ] You read the default text as an agent would, and tested any change to
+      its length with agents.
 - [ ] Exit code is the same with and without `--json`.
 - [ ] The composition matrix is closed: every pair composes with a test, is
       refused with a message, or cannot co-occur.

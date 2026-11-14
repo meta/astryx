@@ -17,9 +17,9 @@ nested `AGENTS.md`.
   `packages/cli/assets/docs/`.
 - Contributors: read `CONTRIBUTING.md` and the relevant guidance linked from
   `docs/README.md`.
-- CLI output: an agent reads every byte a command prints. Keep default answers
-  short as `docs/contributing/cli-conventions.md` ("Output: keep answers
-  short") says, and keep `packages/cli/test/output-size.test.mjs` green.
+- CLI output: an agent reads every byte a command prints. Think about how long
+  an answer is, and test a change with agents, as
+  `docs/contributing/cli-conventions.md` ("Output: keep answers short") says.
 - Pull requests: choose one primary intent and use its template under
   `.github/PULL_REQUEST_TEMPLATE/`; read `docs/contributing/pull-requests.md`
   before opening or reviewing a mixed change. Before you request review, run
