@@ -20,6 +20,7 @@ import postcss from 'postcss';
 import {builtinModules} from 'node:module';
 import {matchPath, pathsFor} from './ts-paths.mjs';
 import {isAssetPath} from './assets.mjs';
+import {climbsOut} from '../fs/paths.mjs';
 
 /** A name npm gives a package, scoped or not (older names may have capitals). */
 const PACKAGE_NAME = /^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9-][\w.-]*$/i;
@@ -269,7 +270,7 @@ export function reachableFiles(files, {aliases = [], recorded} = {}) {
         };
     for (const ref of scanned.assets) {
       const joined = path.posix.normalize(path.posix.join(path.posix.dirname(current), ref));
-      if (joined.startsWith('..')) continue;
+      if (climbsOut(joined)) continue;
       if (!byPath.has(joined)) {
         missing.add(joined);
         continue;
@@ -280,7 +281,7 @@ export function reachableFiles(files, {aliases = [], recorded} = {}) {
       const bare = spec.split('?')[0];
       if (bare.startsWith('./') || bare.startsWith('../')) {
         const joined = path.posix.normalize(path.posix.join(path.posix.dirname(current), bare));
-        const target = joined.startsWith('..') ? null : resolveIn(joined);
+        const target = climbsOut(joined) ? null : resolveIn(joined);
         if (!target) {
           missing.add(joined);
           continue;

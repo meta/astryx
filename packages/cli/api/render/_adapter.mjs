@@ -45,7 +45,7 @@ import {isAstryxMarkup} from '../../foundation/render/html-reader.mjs';
 import {rebuildPage} from '../../foundation/render/rebuild.mjs';
 import {cliVersion} from '../../foundation/integrations/cli-peer-version.mjs';
 import {assertWithin, PathSafetyError} from '../../foundation/fs/path-safety.mjs';
-import {findPackageRoot, requireCoreDir} from '../../foundation/fs/paths.mjs';
+import {climbsOut, findPackageRoot, isInside as liesInside, requireCoreDir} from '../../foundation/fs/paths.mjs';
 import {runChoice} from '../../foundation/release/run-context.mjs';
 import {isAlive, pidSpace} from '../../foundation/release/cache.mjs';
 import {isServedPackage} from '../../foundation/render/served-packages.mjs';
@@ -56,7 +56,7 @@ export {PAGE_EXTENSIONS, embeddedPathProblem};
 /** @param {string} cwd @param {string} file */
 const shown = (cwd, file) => {
   const rel = path.relative(cwd, file);
-  return rel && !rel.startsWith('..') && !path.isAbsolute(rel)
+  return rel && !climbsOut(rel) && !path.isAbsolute(rel)
     ? rel.split(path.sep).join('/')
     : file;
 };
@@ -158,11 +158,7 @@ function confined(file, cwd, what) {
  * @param {string} file absolute
  * @param {string | null} folder absolute
  */
-const isInside = (file, folder) => {
-  if (!folder) return false;
-  const rel = path.relative(folder, file);
-  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
-};
+const isInside = (file, folder) => Boolean(folder) && liesInside(file, /** @type {string} */ (folder));
 
 /**
  * Refuse, before anything is written, a write that reaches through a
@@ -574,7 +570,7 @@ function aliasEntry(spec, file, base) {
   /** @param {string} p */
   const fromBase = p => {
     const rel = path.relative(base, p).split(path.sep).join('/');
-    return rel.startsWith('..') ? rel : `./${rel}`;
+    return climbsOut(rel) ? rel : `./${rel}`;
   };
   const named = spec.split('/');
   let held = path.relative(base, file).split(path.sep).join('/').replace(/\.[^./]+$/, '').split('/');
@@ -601,7 +597,7 @@ function aliasedResult(unaliased, page, cwd) {
   /** @param {string} p */
   const fromBase = p => {
     const rel = path.relative(home.base, p).split(path.sep).join('/');
-    return rel.startsWith('..') ? rel : `./${rel}`;
+    return climbsOut(rel) ? rel : `./${rel}`;
   };
   // The whole `paths` the config needs: the entries it has now (a `paths` of
   // its own replaces inherited ones), then every target the imports need.
@@ -745,7 +741,7 @@ export function reverseToFile({cwd, input, output, overwrite}) {
   /** A page is never written as a configuration, test, spec or story file. @param {string} file */
   const refuseConfigTarget = file => {
     const rel = path.relative(cwd, file).split(path.sep).join('/');
-    const where = rel.startsWith('..') || path.isAbsolute(rel) ? path.basename(file) : rel;
+    const where = climbsOut(rel) || path.isAbsolute(rel) ? path.basename(file) : rel;
     // Where the page lands must be a page module, and a name no tool takes
     // as its own (configuration, a runner's file): the same rules as any
     // file a restore writes.

@@ -56,7 +56,7 @@ export function formatFor(files) {
  * optional: files from older CLIs have none of them.
  * @typedef {object} RenderRecord
  * @property {string} [cli] - The version of the CLI that rendered the file.
- * @property {string} [page] - The page's path from its project's root, `/`-separated.
+ * @property {string} [page] - The page's path from its project's root, `/`-separated; outside a project, its path among the files it carries.
  * @property {string} [title] - The title given with --title, which a render again needs too.
  * @property {Record<string, string>} [packages] - The packages the page rendered with, by name: their versions.
  * @property {Record<string, string>} [aliases] - Each path-alias import a carried module makes that cannot be a package name (`@/…`, `~/…`), as written (without a query), with the embedded path of the carried file it names, so a reverse where no alias names it still finds the file.
