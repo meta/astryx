@@ -18,7 +18,10 @@
  */
 
 import {useRef, useState, useSyncExternalStore, type RefObject} from 'react';
-import {createMotionEngine, type Animator} from '../motion/animator';
+import {
+  createDeferredMotionEngine,
+  type DeferredMotionEngine,
+} from '../utils/deferredMotionEngine';
 import {
   claimTapFocus,
   findTextEntryControl,
@@ -268,12 +271,20 @@ export function useChatKeyboard({
       const atEnd = isAtEnd();
       dockTargetRef.current = target;
       messagesTargetRef.current = atEnd ? target : null;
-      if (!transition.animated) {
+      // The ride's motion comes with the shared touch runtime, which loads
+      // after first paint. Until then the dock moves with the layout at once.
+      const dockEngine = dock.animator.engine();
+      const messagesEngine = messages.animator.engine();
+      if (
+        !transition.animated ||
+        dockEngine == null ||
+        messagesEngine == null
+      ) {
         rideRef.current += 1;
         ridingRef.current = false;
-        dock.animator.set({y: target});
+        dock.animator.setY(target);
         if (atEnd) {
-          messages.animator.set({y: target});
+          messages.animator.setY(target);
         }
         commit();
         return;
@@ -286,12 +297,12 @@ export function useChatKeyboard({
       const ride = rideRef.current;
       // On the keyboard's own motion: Gboard's slide.
       const rides = [
-        rideKeyboard(dock.animator, shown, transition)?.finished ??
+        rideKeyboard(dockEngine, shown, transition)?.finished ??
           Promise.resolve(true),
       ];
       if (atEnd) {
         rides.push(
-          rideKeyboard(messages.animator, shown, transition)?.finished ??
+          rideKeyboard(messagesEngine, shown, transition)?.finished ??
             Promise.resolve(true),
         );
       }
@@ -368,7 +379,7 @@ export function useChatKeyboard({
     // A ride that ended hands its translate (its target) to the layout; a
     // change no ride covered (a resize) is the layout's alone.
     if (dockTarget != null) {
-      dock.animator.set({y: dockTarget + moved});
+      dock.animator.setY(dockTarget + moved);
     }
     const scroller = scrollRef.current;
     if (scroller == null) {
@@ -378,7 +389,7 @@ export function useChatKeyboard({
     // ride's translate goes before the scroll is set. Otherwise the scroll
     // can stop past the content's end, and the sticky dock rises to meet it.
     if (messagesTarget != null) {
-      messages.animator.set({y: 0});
+      messages.animator.setY(0);
     }
     if (atEndRef.current) {
       scrollToBottom({behavior: 'instant'});
@@ -387,7 +398,7 @@ export function useChatKeyboard({
     // where it was before the layout changed.
     const shifted = scroller.scrollTop - scrollBeforeRef.current;
     if (messagesTarget != null && Math.abs(messagesTarget + shifted) >= 0.5) {
-      messages.animator.set({y: messagesTarget + shifted});
+      messages.animator.setY(messagesTarget + shifted);
     }
   }, [lift, scrollRef, dock.animator, messages.animator, scrollToBottom]);
 
@@ -486,10 +497,10 @@ export function useChatKeyboard({
 /** A compositor animator for one element, bound through a stable callback ref. */
 function useElementAnimator(): {
   readonly ref: (element: HTMLElement | null) => void;
-  readonly animator: Animator;
+  readonly animator: DeferredMotionEngine;
 } {
   const [result] = useState(() => {
-    const animator = createMotionEngine(null);
+    const animator = createDeferredMotionEngine();
     return {
       animator,
       ref: (element: HTMLElement | null) => animator.attach(element),

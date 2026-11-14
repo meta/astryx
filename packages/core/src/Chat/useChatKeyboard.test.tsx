@@ -14,7 +14,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  beforeAll,
+} from 'vitest';
 import {act, fireEvent, render, screen} from '@testing-library/react';
 import {ChatComposer} from './ChatComposer';
 import {ChatLayout} from './ChatLayout';
@@ -22,6 +30,16 @@ import {editableToClaim} from './useChatKeyboard';
 import {getKeyboardLayoutGuide} from '../keyboard/keyboardLayoutGuide';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import {__focusTakeoverCallersForTest} from '../keyboard/keyboardHeight';
+import {
+  __loadTouchRuntimeForTest,
+  __resetTouchRuntimeForTest,
+} from '../utils/touchRuntime';
+
+// The dock's ride on the keyboard comes with the shared touch runtime once the
+// page has loaded it.
+beforeAll(async () => {
+  await __loadTouchRuntimeForTest();
+});
 
 // jsdom dates events on the epoch clock, but a browser dates them on
 // performance.now()'s, which the keyboard guide reads them against.
@@ -309,6 +327,27 @@ describe('ChatLayout and the software keyboard', () => {
     expect(layoutLift(dockOf(container))).toBe(0);
     expect(keyboardRoom(messagesOf())).toBe(0);
     expect(dockOf(container).style.translate).toBe('');
+  });
+
+  it('moves the dock at once with no ride before the touch runtime loads', async () => {
+    __resetTouchRuntimeForTest();
+    try {
+      stubChromeKeyboard();
+      const {container} = renderLayout();
+      const field = screen.getByRole('textbox', {name: 'Message'});
+      act(() => field.focus());
+      report(window.innerHeight - 300);
+      await settle();
+      act(() => field.blur());
+      // No ride plays: the dock is at the guide's target in the same task.
+      expect(dockOf(container).style.translate).toBe('0px 300px');
+      report(window.innerHeight);
+      await settle();
+      expect(layoutLift(dockOf(container))).toBe(0);
+      expect(dockOf(container).style.translate).toBe('none');
+    } finally {
+      await __loadTouchRuntimeForTest();
+    }
   });
 
   it('keeps the lift when the page is pinch-zoomed past 2x with the keyboard up', async () => {

@@ -16,8 +16,8 @@
  */
 
 import {canVibrate, playHaptic} from '../gestures/haptics';
-import type {Animator, MotionCurve} from '../motion/animator';
-import {getTouchRuntime} from '../utils/touchRuntime';
+import type {MotionCurve} from '../motion/animator';
+import {createDeferredMotionEngine} from '../utils/deferredMotionEngine';
 import {reducedMotionFade} from '../motion/reducedMotion';
 import {picker} from '../motion/uikit/picker';
 import {
@@ -135,43 +135,17 @@ function now(): number {
 export function createWheelStrip(initialLayout: WheelLayout): WheelStrip {
   // The animator comes with the shared touch runtime, which loads after first
   // paint. Until then the strip is placed directly, and every move lands at
-  // once. The strip takes the animator at its first call after the load.
-  const placed = createPlacedStrip();
-  let engine: Animator | null = null;
-  const motionEngine = (): Animator | null => {
-    if (engine == null) {
-      const create = getTouchRuntime()?.createMotionEngine;
-      if (create != null) {
-        engine = create(null);
-        if (placed.element != null) {
-          engine.attach(placed.element);
-        }
-        engine.set({y: placed.y}, {promote: false});
-      }
-    }
-    return engine;
-  };
+  // once.
+  const strip = createDeferredMotionEngine();
   const animator = {
     get element(): HTMLElement | null {
-      return motionEngine()?.element ?? placed.element;
+      return strip.element;
     },
-    get: (property: 'y', time?: number): number =>
-      motionEngine()?.get(property, time) ?? placed.y,
-    set: (values: {y: number}, options?: {promote?: boolean}): void => {
-      const current = motionEngine();
-      if (current == null) {
-        placed.set(values.y);
-      } else {
-        current.set(values, options);
-      }
-    },
-    attach: (element: HTMLElement | null): void => {
-      placed.attach(element);
-      motionEngine()?.attach(element);
-    },
-    dispose: (): void => {
-      engine?.dispose();
-    },
+    get: (_property: 'y', time?: number): number => strip.getY(time),
+    set: (values: {y: number}, options?: {promote?: boolean}): void =>
+      strip.setY(values.y, options),
+    attach: (element: HTMLElement | null): void => strip.attach(element),
+    dispose: (): void => strip.dispose(),
   };
   let layout = initialLayout;
   let running: Running | null = null;
@@ -333,7 +307,7 @@ export function createWheelStrip(initialLayout: WheelLayout): WheelStrip {
       stop();
       dragPrevious = null;
       const element = animator.element;
-      const motionNow = motionEngine();
+      const motionNow = strip.engine();
       // What Reduce Motion makes of a transition: null while motion plays.
       // Momentum is never substituted.
       const fade = momentum ? null : reducedMotionFade(element, {touchRelease});
@@ -377,42 +351,6 @@ export function createWheelStrip(initialLayout: WheelLayout): WheelStrip {
     dispose() {
       stop();
       animator.dispose();
-    },
-  };
-}
-
-/**
- * The strip before the touch runtime loads: placed by its `translate`, as the
- * animator writes it, so the animator takes over from the same place.
- */
-function createPlacedStrip(): {
-  readonly element: HTMLElement | null;
-  readonly y: number;
-  attach(element: HTMLElement | null): void;
-  set(y: number): void;
-} {
-  let element: HTMLElement | null = null;
-  let y = 0;
-  const write = () => {
-    if (element != null) {
-      const shown = Number(y.toFixed(3));
-      element.style.translate = shown === 0 ? 'none' : `0px ${shown}px`;
-    }
-  };
-  return {
-    get element() {
-      return element;
-    },
-    get y() {
-      return y;
-    },
-    attach(next) {
-      element = next;
-      write();
-    },
-    set(next) {
-      y = next;
-      write();
     },
   };
 }
