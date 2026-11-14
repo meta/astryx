@@ -26,6 +26,7 @@ import {logger} from '../logger.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {cssUnescape} from '../../foundation/text/css-escape.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
+import {coreVarValues} from './_parts.mjs';
 import {
   loadThemeExport,
   loadThemeInput,
@@ -3884,16 +3885,35 @@ export function compileTheme(ctx, data, base) {
   /**
    * A part's shadow with the layers Core composes its own shadow from (the
    * private variables in its resting declaration), over the theme's; a
-   * shadow of none keeps those layers alone. Any other part's is as given.
+   * shadow of none keeps Core's marks alone (a selection ring), never its
+   * elevation, which is a shadow too. Any other part's is as given.
    * @param {string} target @param {string} v
    */
   const withCoreShadowLayers = (target, v) => {
     const at = ctx.C.MAP[target]?.at?.['box-shadow'] ?? {};
     const rest = Object.entries(at).find(([k]) => !/:|selected=/.test(k))?.[1];
+    // Core's own layer that is only ever a shared shadow (a card's
+    // elevation) is the part's shadow; any other (a selection ring) is a
+    // mark of Core's own, kept in every case.
+    const isElevation = (/** @type {string} */ layer) => {
+      const name = /^var\(\s*(--_[a-z0-9-]+)/.exec(layer)?.[1];
+      const values = name ? coreVarValues(ctx.project, name) : [];
+      return (
+        values.length > 0 &&
+        values.every(x =>
+          /^(?:var\(\s*--shadow-[a-z0-9-]+\s*\)|0 0 transparent|none)$/.test(x),
+        )
+      );
+    };
+    const value = String(v).trim();
+    // (No shadow takes Core's elevation out too; a shadow of the theme's
+    // sits over it.)
     const layers = splitTop(String(rest ?? ''), ',')
       .map(x => x.trim())
-      .filter(x => /^var\(\s*--_/.test(x));
-    const value = String(v).trim();
+      .filter(
+        x =>
+          /^var\(\s*--_/.test(x) && !(/^none$/i.test(value) && isElevation(x)),
+      );
     if (!layers.length || layers.every(l => value.includes(l))) return v;
     return /^none$/i.test(value)
       ? layers.join(', ')

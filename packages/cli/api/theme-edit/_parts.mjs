@@ -707,6 +707,41 @@ export function coreFallback(project, name) {
   return null;
 }
 
+/** @type {Map<string, string>} */
+const coreCssCache = new Map();
+
+/**
+ * Every value Core's stylesheet gives a variable of its own (a card's
+ * `--_card-elevation` is a shared shadow at each elevation; its
+ * `--_card-ring` is a colored ring), deduplicated. Empty with no
+ * stylesheet.
+ * @param {any} project
+ * @param {string} name
+ * @returns {string[]}
+ */
+export function coreVarValues(project, name) {
+  /** @type {string} */
+  let file;
+  try {
+    file = project.req.resolve('@astryxdesign/core/astryx.css');
+  } catch {
+    return [];
+  }
+  let css = coreCssCache.get(file);
+  if (css == null) {
+    css = fs.readFileSync(file, 'utf8');
+    coreCssCache.set(file, css);
+  }
+  const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return [
+    ...new Set(
+      [...css.matchAll(new RegExp(`${esc}\\s*:\\s*([^;}]+)`, 'g'))].map(m =>
+        m[1].trim(),
+      ),
+    ),
+  ];
+}
+
 /** @type {Map<string, Set<string>>} */
 const calcCache = new Map();
 
