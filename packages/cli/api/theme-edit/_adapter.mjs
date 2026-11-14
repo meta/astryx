@@ -94,7 +94,11 @@ setAfterBuild(writeAppCopy);
 import {LOCAL_THEME_ROOT} from '../../foundation/config/theme-state.mjs';
 
 export {parsePoints} from './_how.mjs';
-export {newFlagList, checkedChangeLine as editorCheckedLine} from './_edit.mjs';
+export {
+  newFlagList,
+  checkedChangeLine as editorCheckedLine,
+  checkedNewLines as editorCheckedNewLines,
+} from './_edit.mjs';
 import {themeEditHow as howAt} from './_how.mjs';
 
 /**
