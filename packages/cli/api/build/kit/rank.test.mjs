@@ -538,3 +538,31 @@ describe('rankPages is a total order', () => {
     ).toEqual(order);
   });
 });
+
+describe('an exact tie the idea settles by name', () => {
+  // Both ids carry "steps" and "flow", so the ranker ties them; only the
+  // vertical one composes the progress rail the idea mentions.
+  const catalog = [
+    {
+      ...page('steps-flow', 'Steps - Flow', 'one step at a time'),
+      displayName: 'Steps Flow',
+    },
+    {
+      ...page(
+        'steps-flow-vertical',
+        'Steps - Flow Vertical',
+        'one step at a time',
+      ),
+      displayName: 'Vertical Flow',
+      components: ['ProgressRail'],
+    },
+  ];
+  const idea = 'steps flow page with a progress rail';
+
+  it('goes to the template the idea names by its whole name', () => {
+    const ranked = rankPages(idea, catalog);
+    expect(ranked[0].score).toBe(ranked[1].score);
+    expect(ranked[0].name).toBe('steps-flow');
+    expect(rankPages(idea, [...catalog].reverse())[0].name).toBe('steps-flow');
+  });
+});
