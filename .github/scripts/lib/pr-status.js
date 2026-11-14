@@ -477,11 +477,11 @@ function notRunLine({jobs, a11yReport, visualVerdict, touched = null}) {
     return false;
   });
   if (notRun.length === 0) return '';
-  const labels = notRun.map(suite => `\`${SUITE_LABELS[suite.id]}\``);
-  const list =
-    labels.length === 1
-      ? labels[0]
-      : `${labels.slice(0, -1).join(', ')} or ${labels.at(-1)}`;
+  // Each label runs only its own suite, so each names the suite it runs.
+  const labels = notRun.map(
+    suite => `\`${SUITE_LABELS[suite.id]}\` for ${suite.label}`,
+  );
+  const list = labels.join(', ');
   // Too wide for the touched-components check: it says so, and names only
   // the suites that did not run. A narrower change's touched components were
   // checked, so the labels run the full suites.
@@ -500,7 +500,7 @@ function notRunLine({jobs, a11yReport, visualVerdict, touched = null}) {
               ', ',
             )}${foundations.length > 3 ? `, and ${foundations.length - 3} more` : ''})`
         : `Wide change (${num(touched.componentCount)} components)`;
-    return `${why}: add ${list} to run ${labels.length === 1 ? 'it' : 'them'}.\n\n`;
+    return `${why}: add ${list}.\n\n`;
   }
   // Claim the touched check only when it produced a result.
   const checked = (touched?.components || []).some(component =>
@@ -509,10 +509,10 @@ function notRunLine({jobs, a11yReport, visualVerdict, touched = null}) {
     ),
   );
   if (touched && checked)
-    return `Touched components checked; add ${list} to run the full suite${labels.length === 1 ? '' : 's'}.\n\n`;
+    return `Touched components checked; for the full suite${labels.length === 1 ? '' : 's'}, add ${list}.\n\n`;
   if (touched)
-    return `Touched components identified; checks did not run. Add ${list} to run ${labels.length === 1 ? 'it' : 'them'}.\n\n`;
-  return `Not run on this PR: add ${list} to run ${labels.length === 1 ? 'it' : 'them'}.\n\n`;
+    return `Touched components identified; checks did not run. Add ${list}.\n\n`;
+  return `Not run on this PR: add ${list}.\n\n`;
 }
 
 // The API report step's own renderer (scripts/api-report/changes.mjs), so
