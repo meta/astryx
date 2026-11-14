@@ -63,7 +63,6 @@ import * as path from 'node:path';
 import {createRequire, isBuiltin} from 'node:module';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {babelParse as parse} from '../../../foundation/runtime/lazy-dependencies.mjs';
-import {createJiti} from 'jiti';
 import {jitiCacheOptions} from '../../../foundation/fs/jiti-cache.mjs';
 import {
   formatCliCommand,
@@ -111,6 +110,15 @@ import {
 import {generateFamilyCSS, resolveThemeFamily} from './family.mjs';
 import {resolveIconImports} from './icon-imports.mjs';
 import {generatedMark} from '../../theme-edit/_marks.mjs';
+
+const requireFromHere = createRequire(import.meta.url);
+
+/**
+ * jiti, loaded on first use: every command that imports the CLI's API reaches
+ * this module, and only a theme build loads a theme through jiti.
+ * @type {typeof import('jiti').createJiti}
+ */
+const createJiti = (...args) => requireFromHere('jiti').createJiti(...args);
 
 // Import shared theme processing from core. `astryx theme build` MUST produce the
 // exact same CSS as the `<Theme>` runtime, so it has exactly one generation
