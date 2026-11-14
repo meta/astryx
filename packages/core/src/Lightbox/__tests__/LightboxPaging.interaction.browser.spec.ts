@@ -2018,9 +2018,10 @@ const CAPTION_STORIES = [
   },
 ];
 
-// A block's own generated content has no node the fit check can measure. So
-// for that caption the frame reads the caption once after its write, one
-// forced layout, as on main.
+// A block's own generated content has no node the fit check can measure.
+// Neither has room under the last line of text, such as a paragraph's bottom
+// padding or two trailing line breaks. So for those captions the frame reads
+// the caption once after its write, one forced layout, as on main.
 const SHRINK_CASES = [
   ...CAPTION_STORIES.map(({name, story}) => ({
     name,
@@ -2030,6 +2031,17 @@ const SHRINK_CASES = [
   {
     name: 'a paragraph caption with generated words after its text',
     story: 'core-lightbox--gallery-with-paragraph-words-caption-fixture',
+    expectedReads: ['clientHeight'],
+  },
+  {
+    name: 'a paragraph caption with bottom padding',
+    story:
+      'core-lightbox--gallery-with-bottom-padded-paragraph-caption-fixture',
+    expectedReads: ['clientHeight'],
+  },
+  {
+    name: 'a caption ending in two line breaks',
+    story: 'core-lightbox--gallery-with-trailing-break-caption-fixture',
     expectedReads: ['clientHeight'],
   },
 ];
@@ -2206,7 +2218,9 @@ for (const {name, story, expectedReads} of SHRINK_CASES) {
 // room no text node measures: a clipped chip, an inline or a contents element's
 // generated words, a float, a list marker, a text indent, a drop cap. Then
 // layouts the check does not measure: a flex row, a clipped block, a
-// justified last line and an offset element.
+// justified last line and an offset element. Last, room under the last line
+// of text: bottom padding, a bottom rule, two line breaks, an empty
+// inline-block.
 const FIT_CASES: {
   name: string;
   story: string;
@@ -2316,6 +2330,24 @@ const FIT_CASES: {
   {
     name: 'a caption ending in an element with a relative offset',
     story: 'core-lightbox--gallery-with-offset-end-caption-fixture',
+  },
+  {
+    name: 'a paragraph caption with bottom padding',
+    story:
+      'core-lightbox--gallery-with-bottom-padded-paragraph-caption-fixture',
+  },
+  {
+    name: 'a paragraph caption with bottom padding and a bottom rule',
+    story: 'core-lightbox--gallery-with-bottom-rule-paragraph-caption-fixture',
+  },
+  {
+    name: 'a caption ending in two line breaks',
+    story: 'core-lightbox--gallery-with-trailing-break-caption-fixture',
+  },
+  {
+    name: 'a caption ending in an empty inline-block',
+    story:
+      'core-lightbox--gallery-with-trailing-empty-inline-block-caption-fixture',
   },
 ];
 

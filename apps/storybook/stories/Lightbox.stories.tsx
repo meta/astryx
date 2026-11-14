@@ -728,6 +728,61 @@ export const GalleryWithOffsetEndCaptionFixture: Story = {
   render: GalleryWithCaptions.render,
 };
 
+/**
+ * The paragraph caption with bottom padding, which leaves room under its last
+ * line of text.
+ */
+export const GalleryWithBottomPaddedParagraphCaptionFixture: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  args: longCaptionArgs(
+    <p style={{paddingBlockEnd: 16}}>{LONG_CAPTION_HEAD} home again.</p>,
+  ),
+  render: GalleryWithCaptions.render,
+};
+
+/**
+ * The paragraph caption with bottom padding and a bottom rule under it.
+ */
+export const GalleryWithBottomRuleParagraphCaptionFixture: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  args: longCaptionArgs(
+    <p style={{paddingBlockEnd: 16, borderBlockEnd: '1px solid'}}>
+      {LONG_CAPTION_HEAD} home again.
+    </p>,
+  ),
+  render: GalleryWithCaptions.render,
+};
+
+/**
+ * The long caption ending in two line breaks, which leave its last line empty.
+ */
+export const GalleryWithTrailingBreakCaptionFixture: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  args: longCaptionArgs(
+    <>
+      {LONG_CAPTION_HEAD} home again.
+      <br />
+      <br />
+    </>,
+  ),
+  render: GalleryWithCaptions.render,
+};
+
+/**
+ * The long caption ending in an empty inline-block, which takes a line of its
+ * own where it does not fit after the text.
+ */
+export const GalleryWithTrailingEmptyInlineBlockCaptionFixture: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  args: longCaptionArgs(
+    <>
+      {LONG_CAPTION_HEAD} home.{' '}
+      <span style={{display: 'inline-block', inlineSize: 24}} />
+    </>,
+  ),
+  render: GalleryWithCaptions.render,
+};
+
 const FRAME_DOCUMENT = '<!doctype html><html><head></head><body></body></html>';
 
 /** Copy the page's style sheets into the frame, as an app does. */
