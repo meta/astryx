@@ -57,7 +57,7 @@ describe('the Node legs inside their job limit', () => {
   it("end door-conformance's slowest hook at least two minutes inside the job limit", () => {
     // The three door-conformance test files share one hook.
     const source = fs.readFileSync(
-      path.join(root, 'packages/cli/host/door-conformance.shared.mjs'),
+      path.join(root, 'packages/cli/test-utils/door-conformance.mjs'),
       'utf8',
     );
     const bound =

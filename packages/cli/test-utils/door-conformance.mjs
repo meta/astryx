@@ -14,7 +14,8 @@
  *
  * @input the command docs' examples
  * @output `describeDoorConformance(folder)`, one folder's tests
- * @position packages/cli/host; each door-conformance.*.test.mjs calls it once
+ * @position packages/cli/test-utils; each host/door-conformance.*.test.mjs calls
+ *   it once
  */
 
 import {spawn} from 'node:child_process';
@@ -28,7 +29,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CLI_ROOT = path.resolve(HERE, '..');
 const CORE_ROOT = path.resolve(CLI_ROOT, '../core');
 const BIN = path.join(CLI_ROOT, 'clients', 'cli', 'bin', 'astryx.mjs');
-const HOST_URL = pathToFileURL(path.join(HERE, 'index.mjs')).href;
+const HOST_URL = pathToFileURL(path.join(CLI_ROOT, 'host', 'index.mjs')).href;
 const COMMANDS = path.join(CLI_ROOT, 'clients', 'cli', 'commands');
 const VERSION = JSON.parse(
   fs.readFileSync(path.join(CLI_ROOT, 'package.json'), 'utf8'),
@@ -38,7 +39,11 @@ const PREVIOUS_MINOR = `${MAJOR}.${Math.max(MINOR - 1, 0)}.0`;
 /** How long one run may take before it counts as hung. */
 const RUN_TIMEOUT_MS = 90_000;
 
-/** Split an example's command line the way a shell would, quotes included. */
+/**
+ * Split an example's command line the way a shell would, quotes included.
+ * @param {string} line
+ * @returns {string[]}
+ */
 function splitArgs(line) {
   const out = [];
   let current = '';

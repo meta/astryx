@@ -13,7 +13,7 @@
  * @position packages/cli/test; each global-local.*.test.mjs imports it
  */
 
-import {afterAll, afterEach, beforeAll, it} from 'vitest';
+import {afterAll, afterEach, beforeAll} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {spawnSync} from 'node:child_process';

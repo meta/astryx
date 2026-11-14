@@ -24,7 +24,6 @@ import {
 import {
   CLI_VERSION,
   installCore,
-  project,
   tempDir,
   writeJson,
 } from '../test-utils/release-fixtures.mjs';

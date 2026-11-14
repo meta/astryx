@@ -15,7 +15,7 @@ import {describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {spawn, spawnSync} from 'node:child_process';
+import {spawn} from 'node:child_process';
 import {
   globalCli,
   placeCli,

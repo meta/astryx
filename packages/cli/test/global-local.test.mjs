@@ -31,7 +31,6 @@ import {
   DOCTOR_RUN_FROM_PROJECT,
   POSIX,
   RUN_FROM_PROJECT,
-  available,
   computer,
   filesIn,
   globalState,
