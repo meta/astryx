@@ -521,8 +521,9 @@ they are separately named.
   inside the fifteen-minute job budget (DEC-17). Node legs, here and on a pull
   request, split the files by their recorded test time rather than by count, so
   the slowest files never share a leg and the slowest single file sets the
-  floor; a file with no recorded time counts as the ninetieth percentile of the
-  recorded times, and which files run never depends on the times. A pull
+  floor. In the Node legs, a file with no recorded time counts as the ninetieth
+  percentile of the recorded times, and which files run never depends on the
+  times. A pull
   request runs as many Node legs as the recorded times need for every leg to
   end inside its job budget, at most eight; a suite that needs more fails every
   Node leg with the reason. A dispatch may name `sha`, a commit in `main`'s
