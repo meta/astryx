@@ -188,16 +188,34 @@ export type TokenValue = string | [light: string, dark: string];
  * press, and under a coarse primary pointer it applies while Astryx believes
  * the press, not on the touch or through a scroll.
  *
+ * The `@light` and `@dark` keys hold a style block (properties and
+ * pseudo-class overrides) that applies only where the element's color mode is
+ * that mode: the mode `Theme` resolves from its own `mode`, the system
+ * preference, or a `MediaTheme` surface. In the other mode the block writes
+ * nothing, so every other rule applies there as it would without it. Use it
+ * for a value that is not a color, or to leave the other mode untouched; a
+ * color that differs per mode can also be one `light-dark()` value.
+ *
  * @example
  * ```ts
  * {
  *   borderColor: '#8F9296',
  *   ':hover': { borderColor: 'color-mix(in srgb, #8F9296, black 20%)' },
  *   ':focus-visible': { outline: '2px solid var(--color-accent)' },
+ *   '@dark': { backgroundImage: 'linear-gradient(#141821, #1d2533)' },
  * }
  * ```
  */
-export type StyleOverrides = Record<string, string | Record<string, string>>;
+export type StyleOverrides = Record<
+  string,
+  string | Record<string, string> | StyleBlock
+>;
+
+/**
+ * A style block: CSS properties and pseudo-class overrides, as in a style
+ * key's value. A color-mode key (`@light`, `@dark`) of a style key holds one.
+ */
+export type StyleBlock = Record<string, string | Record<string, string>>;
 
 /**
  * Component style overrides.
