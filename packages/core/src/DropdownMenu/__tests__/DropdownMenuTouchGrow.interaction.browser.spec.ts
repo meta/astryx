@@ -11,7 +11,8 @@
  *   page content, which opens the menu at its lift, grows it too, and so does
  *   a held finger. The grow follows Popover's path and timing, frame by
  *   frame. Under Reduce Motion a finger's close fades the menu out where it
- *   stands. A mouse keeps the layer's own entrance. On a phone the menu opens
+ *   stands. A close copy draws the rows where the open menu drew them. A
+ *   mouse keeps the layer's own entrance. On a phone the menu opens
  *   beside its trigger.
  * @position Evidence for DropdownMenu's touch grow (Popover's surface
  *   motion); which opens grow is unit-tested in
@@ -364,6 +365,56 @@ test("under Reduce Motion, a finger's close fades the menu out where it stands, 
       });
     }
   }
+});
+
+test("a finger's close copy draws the menu's rows where the open menu drew them", async ({
+  page,
+}) => {
+  const story = await openOnPhone(
+    page,
+    'core-dropdownmenu--default',
+    'Actions',
+  );
+  await story.driver.tap(story.center);
+  const surface = page.locator(MENU_SURFACE).first();
+  await expect
+    .poll(async () => {
+      const frame = await readFrame(surface);
+      return Math.min(frame.scaleX, frame.scaleY, frame.opacity);
+    })
+    .toBeCloseTo(1, 3);
+  await frames(page, 4);
+  const row = page.getByRole('menuitem').first();
+  const label = (await row.textContent())?.trim() ?? '';
+  const open = await row.getByText(label, {exact: true}).first().boundingBox();
+  const viewport = page.viewportSize();
+  if (open == null || viewport == null || label === '') {
+    throw new Error('the open menu has no first row');
+  }
+
+  const copy = page.locator(EXIT_COPY);
+  const hold = await armHold(page, undefined, {
+    judges: {target: copy, property: 'opacity'},
+    newOnly: true,
+  });
+  await story.driver.tap({x: 8, y: viewport.height - 8});
+  await hold.held();
+  // The close starts from the open menu's frame.
+  await seekAnimations(page, 0);
+  const copied = await copy
+    .getByText(label, {exact: true})
+    .first()
+    .boundingBox();
+  await releaseAnimations(page, {finish: true});
+
+  if (copied == null) {
+    throw new Error('the close copy has no first row');
+  }
+  // The copy is drawn where the menu was drawn.
+  expect(copied.x).toBeCloseTo(open.x, 0);
+  expect(copied.y).toBeCloseTo(open.y, 0);
+  expect(copied.width).toBeCloseTo(open.width, 0);
+  expect(copied.height).toBeCloseTo(open.height, 0);
 });
 
 test("a mouse keeps the layer's own entrance", async ({page}) => {
