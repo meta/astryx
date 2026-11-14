@@ -7,12 +7,14 @@
  * `const NAME = createSwipe(X)` defined once. `X` is an object literal whose
  * `leading` and `trailing` are array literals of object literals, or a
  * conditional whose branches are such objects or nullish. The definition goes
- * to module scope when the options read only module bindings. It goes into
+ * to module scope when every value outside a handler is fixed at import: a
+ * literal, a JSX element, an import or a module `const`. It goes into
  * `useMemo` in the enclosing component or hook when they read its props or
  * state. A `useState` or `useReducer` setter and a ref are stable, so they stay
- * out of the dependencies. On a `ListItem`, a handler that reads the row's own
- * `itemKey` value takes `itemKey` from `onActivate` instead. Where it cannot
- * move the options, `createSwipe` stays on the row with a TODO. Each entry
+ * out of the dependencies. On a `ListItem`, a handler that compares the row's
+ * own `itemKey` value with `===` or `!==` takes `itemKey` from `onActivate`
+ * instead. Where it cannot move the options, `createSwipe` stays on the row
+ * with a TODO. Each entry
  * with no `id` takes one from its static label, then its handler's name, then
  * its side and place with a TODO. Rows with the same options in one place
  * share one definition. A `swipeBehavior={B}` joins the options; a static
@@ -70,6 +72,12 @@ const PLACE_COMMENT =
   ' TODO(astryx upgrade): define this swipe once, at module scope or in ' +
   'useMemo, and read the row from the itemKey that onActivate receives ' +
   '(AST-057 DEC-10). Its actions read values this codemod cannot move. ';
+const ITEM_PLACE_COMMENT =
+  ' TODO(astryx upgrade): define this swipe once, at module scope or in ' +
+  'useMemo (AST-057 DEC-10). Its actions read values this codemod cannot ' +
+  'move, and an Item passes no itemKey to onActivate. So define it where ' +
+  'those values live: move the row into a component of its own, or use a ' +
+  'ListItem with an itemKey. ';
 const SWIPE_PROPS = new Set(['swipe', 'swipeActions', 'swipeBehavior']);
 const FUNCTION_TYPES = new Set([
   'FunctionDeclaration',
@@ -587,6 +595,162 @@ function statementIn(body, path) {
 }
 
 /**
+ * The statement of `body` that holds a row. A body this codemod wrapped in a
+ * block holds the row in a new `return`, which the row's path predates, so
+ * the row is then found by its node.
+ * @param {any} j @param {any[]} body @param {any} path
+ */
+function statementHolding(j, body, path) {
+  return (
+    statementIn(body, path) ??
+    body.find(
+      (/** @type {any} */ statement) =>
+        j(statement)
+          .find(j.Node)
+          .filter((/** @type {any} */ p) => p.node === path.node)
+          .size() > 0,
+    ) ??
+    null
+  );
+}
+
+/** Nodes that run code where they are evaluated. */
+const RUNS_CODE = new Set([
+  'CallExpression',
+  'OptionalCallExpression',
+  'NewExpression',
+  'TaggedTemplateExpression',
+  'AwaitExpression',
+  'YieldExpression',
+  'AssignmentExpression',
+  'UpdateExpression',
+  'ImportExpression',
+  'MemberExpression',
+  'OptionalMemberExpression',
+]);
+
+/** Globals whose value never changes. */
+const FIXED_GLOBALS = new Set(['undefined', 'NaN', 'Infinity']);
+
+/**
+ * Whether a swipe's options hold only values that stay the same where its
+ * definition goes. At module scope (`owner` null), each value outside a
+ * handler is a literal, a JSX element, or a name bound by an import, a module
+ * `const`, or a function or class declaration. In `useMemo` in `owner`, the
+ * owner's locals count too, since each becomes a dependency, and so does a
+ * call or a property read on one, such as `t('archive')` with a `t` from
+ * `useTranslation()`. Any other call, construction, property read or global
+ * such as `window` runs or reads at render, so a definition would freeze it:
+ * at module scope once, at import; in `useMemo` until a dependency changes.
+ * A handler's body runs when the action fires, so it may read anything.
+ * @param {any} j @param {any} objectPath @param {Set<any>} created @param {any} owner
+ */
+function fixedWhereDefined(j, objectPath, created, owner = null) {
+  const object = objectPath.node;
+  const inHandler = (/** @type {any} */ p) => {
+    for (let q = p.parent; q != null && q.node !== object; q = q.parent) {
+      if (FUNCTION_TYPES.has(q.node.type) || q.node.type === 'ObjectMethod') {
+        return true;
+      }
+    }
+    return false;
+  };
+  let fixed = true;
+  /** Whether a member read reads a namespace import, which never changes. */
+  const readsNamespace = (/** @type {any} */ p) => {
+    let node = p.node;
+    while (
+      (node.type === 'MemberExpression' ||
+        node.type === 'OptionalMemberExpression') &&
+      !node.computed
+    ) {
+      node = unwrap(node.object);
+    }
+    if (node?.type !== 'Identifier') {
+      return false;
+    }
+    const bindings = p.scope?.lookup(node.name)?.getBindings()[node.name] ?? [];
+    return (
+      bindings.length > 0 &&
+      bindings.every(
+        (/** @type {any} */ b) =>
+          b.parent?.node?.type === 'ImportNamespaceSpecifier',
+      )
+    );
+  };
+  /** Whether a name is one of the owner's locals: a dependency of its memo. */
+  const ownerLocal = (/** @type {any} */ p, /** @type {string} */ name) =>
+    owner != null && p.scope?.lookup(name)?.path.node === owner;
+  /** The identifier a chain of member reads and calls starts from, or null. */
+  const chainStart = (/** @type {any} */ node) => {
+    let current = unwrap(node);
+    while (
+      current?.type === 'MemberExpression' ||
+      current?.type === 'OptionalMemberExpression' ||
+      current?.type === 'CallExpression' ||
+      current?.type === 'OptionalCallExpression'
+    ) {
+      current = unwrap(
+        current.type === 'CallExpression' ||
+          current.type === 'OptionalCallExpression'
+          ? current.callee
+          : current.object,
+      );
+    }
+    return current?.type === 'Identifier' ? current : null;
+  };
+  j(objectPath)
+    .find(j.Node)
+    .forEach((/** @type {any} */ p) => {
+      if (!fixed || created.has(p.node) || inHandler(p) || inType(p, object)) {
+        return;
+      }
+      if (RUNS_CODE.has(p.node.type)) {
+        const isRead =
+          p.node.type === 'MemberExpression' ||
+          p.node.type === 'OptionalMemberExpression';
+        const isCall =
+          p.node.type === 'CallExpression' ||
+          p.node.type === 'OptionalCallExpression';
+        const start = isRead || isCall ? chainStart(p.node) : null;
+        fixed =
+          (isRead && readsNamespace(p)) ||
+          (start != null && ownerLocal(p, start.name));
+        return;
+      }
+      if (p.node.type !== 'Identifier' || !isReference(p)) {
+        return;
+      }
+      if (ownerLocal(p, p.node.name)) {
+        return;
+      }
+      const scope = p.scope?.lookup(p.node.name);
+      if (scope == null) {
+        fixed = FIXED_GLOBALS.has(p.node.name);
+        return;
+      }
+      fixed = (scope.getBindings()[p.node.name] ?? []).every(
+        (/** @type {any} */ binding) => {
+          const declarator = binding.parent?.node;
+          const statement = binding.parent?.parent?.node;
+          return (
+            declarator?.type === 'ImportSpecifier' ||
+            declarator?.type === 'ImportDefaultSpecifier' ||
+            declarator?.type === 'ImportNamespaceSpecifier' ||
+            declarator?.type === 'FunctionDeclaration' ||
+            declarator?.type === 'ClassDeclaration' ||
+            (declarator?.type === 'VariableDeclarator' &&
+              declarator.id === binding.node &&
+              statement?.type === 'VariableDeclaration' &&
+              statement.kind === 'const')
+          );
+        },
+      );
+    });
+  return fixed;
+}
+
+/**
  * Whether a statement returns from its function.
  * @param {any} node
  * @returns {boolean}
@@ -619,14 +783,38 @@ function returns(node) {
   );
 }
 
+/**
+ * Whether a call wraps `fn` as a component: `memo(fn)` or `forwardRef(fn)`,
+ * named or on a namespace, with `fn` as its first argument. A callback of any
+ * other call, such as `rows.map(…)` or `useCallback(…)`, is not a component.
+ * @param {any} call @param {any} fn
+ */
+function wrapsComponent(call, fn) {
+  const callee = unwrap(call.callee);
+  const name =
+    callee?.type === 'Identifier'
+      ? callee.name
+      : callee?.type === 'MemberExpression' && !callee.computed
+        ? callee.property?.name
+        : null;
+  return (
+    (name === 'memo' || name === 'forwardRef') &&
+    unwrap(call.arguments?.[0]) === fn
+  );
+}
+
 /** A function's name, or the name of the variable it is assigned to. */
 function functionName(/** @type {any} */ path) {
   if (path.node.id?.name) {
     return path.node.id.name;
   }
+  let node = path.node;
   let parent = path.parent;
-  // memo(...) and forwardRef(...) wrap a component.
-  while (parent?.node.type === 'CallExpression') {
+  while (
+    parent?.node.type === 'CallExpression' &&
+    wrapsComponent(parent.node, node)
+  ) {
+    node = parent.node;
     parent = parent.parent;
   }
   return parent?.node.type === 'VariableDeclarator' &&
@@ -682,9 +870,11 @@ function isStable(scope, name) {
 /**
  * Where a swipe's options can be built once: at module scope when they read
  * only module bindings declared before the row's statement, or in `useMemo` in
- * the component or hook whose bindings they read. Null when neither works: a
- * `this`, a binding of an inner function such as a map callback, or a
- * binding declared after the row's statement or after an early return.
+ * the component or hook whose bindings they read. Either way, they hold only
+ * values that stay the same there (`fixedWhereDefined`). Null when neither
+ * works: a `this`, a binding of an inner function such as a map callback, a
+ * binding declared after the row's statement or after an early return, or a
+ * value read at render.
  * @param {any} j @param {any} root @param {any} rowPath @param {any} objectPath @param {Set<any>} created
  * @returns {{kind: 'module'} | {kind: 'memo', owner: any, deps: string[]} | null}
  */
@@ -748,7 +938,9 @@ function placementOf(j, root, rowPath, objectPath, created) {
         }
       }
     }
-    return row == null ? null : {kind: 'module'};
+    return row == null || !fixedWhereDefined(j, objectPath, created)
+      ? null
+      : {kind: 'module'};
   }
   const owner = local[0].scope.path;
   const fn = owner.node;
@@ -765,7 +957,8 @@ function placementOf(j, root, rowPath, objectPath, created) {
       fn.params.some((/** @type {any} */ param) => within(b.node, param)),
     );
   const statements = fn.body.type === 'BlockStatement' ? fn.body.body : null;
-  const row = statements == null ? null : statementIn(statements, rowPath);
+  const row =
+    statements == null ? null : statementHolding(j, statements, rowPath);
   if (statements != null) {
     const index = statements.indexOf(row);
     if (row == null || statements.slice(0, index).some(returns)) {
@@ -792,6 +985,9 @@ function placementOf(j, root, rowPath, objectPath, created) {
       deps.push(r.name);
     }
   }
+  if (!fixedWhereDefined(j, objectPath, created, fn)) {
+    return null;
+  }
   return {kind: 'memo', owner: fn, deps};
 }
 
@@ -812,8 +1008,7 @@ function insertDefinition(j, root, placement, rowPath, declaration) {
     return;
   }
   const body = owner.body.body;
-  const row = statementIn(body, rowPath);
-  // A body this codemod made holds the row in its last statement.
+  const row = statementHolding(j, body, rowPath);
   body.splice(
     row == null ? body.length - 1 : body.indexOf(row),
     0,
@@ -1017,9 +1212,10 @@ function chainRoot(node) {
 }
 
 /**
- * Makes each handler that takes nothing and reads the row's own `itemKey`
- * value take `itemKey` from `onActivate` instead. A `ListItem` passes its
- * `itemKey` to `onActivate`, so the swipe no longer closes over the row.
+ * Makes each handler that takes nothing and compares the row's own `itemKey`
+ * value with `===` or `!==` take `itemKey` from `onActivate` instead. A
+ * `ListItem` passes its `itemKey` to `onActivate`, so the swipe no longer
+ * closes over the row.
  * @param {any} j @param {any} rowPath @param {any} objectPath
  * @param {Array<[string, any[]]>} sides @param {any} keyAttribute @param {Set<any>} created
  */
@@ -1064,6 +1260,21 @@ function readItemKey(j, rowPath, objectPath, sides, keyAttribute, created) {
         )
         .paths();
       if (reads.length === 0) {
+        continue;
+      }
+      // `itemKey` is `string | number | undefined`. Compared with `===` or
+      // `!==` it type-checks wherever the row's own key did; passed on, as in
+      // `remove(itemKey)`, it can fail where the key's own type passed. So a
+      // handler that reads the key any other way keeps its closure, and the
+      // row keeps `createSwipe` with a TODO.
+      const compared = reads.every((/** @type {any} */ p) => {
+        const parent = p.parent?.node;
+        return (
+          parent?.type === 'BinaryExpression' &&
+          (parent.operator === '===' || parent.operator === '!==')
+        );
+      });
+      if (!compared) {
         continue;
       }
       for (const p of reads) {
@@ -1183,6 +1394,8 @@ export default function transformer(file, api) {
         behaviorValue == null ? null : staticString(behaviorValue);
       const keyAttribute =
         resolved.component === 'ListItem' ? named('itemKey') : null;
+      const placeComment =
+        resolved.component === 'ListItem' ? PLACE_COMMENT : ITEM_PLACE_COMMENT;
       rewrites.push(() => {
         const create = ensureCreateImport(j, root);
         let expression = unwrap(value);
@@ -1208,7 +1421,7 @@ export default function transformer(file, api) {
           let replacement;
           if (placement == null) {
             replacement = j.callExpression(j.identifier(create), [object]);
-            addComment(j, actions, PLACE_COMMENT);
+            addComment(j, actions, placeComment);
             if (positional) {
               addComment(j, actions, NAME_COMMENT);
             }
