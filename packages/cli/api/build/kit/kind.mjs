@@ -78,16 +78,58 @@ export function ideaKind(query, pages, components) {
   const head = (text.split(HEAD_END)[0] ?? '').replace(CONTAINER_PHRASE, m =>
     containersOf(m).size > 0 ? ' ' : m,
   );
-  const words = (head.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter(
-    w => w.length >= 2,
-  );
-  const noun = stem(words[words.length - 1] ?? '');
+  const noun = lastNoun(head);
   if (familyWords.has(noun)) return 'page';
   const pieces = (text.match(/,/g) ?? []).length + 1;
   if (pieces >= PAGE_PIECES) return 'page';
-  return components.some(c => componentTerms(c).includes(noun))
+  const namesPart = (/** @type {string} */ word) =>
+    components.some(c => componentTerms(c).includes(word));
+  if (!namesPart(noun)) return 'page';
+  // A part noun that ends the head on "of" holds what the idea is made of: "a
+  // list of orders" is a page of records, "a toolbar of buttons" is buttons.
+  // A page family anywhere after "of" names where the part goes ("the footer
+  // of a dashboard", "a list of settings toggles"), so the part stays a part.
+  if (!endsOnOf(text)) return 'part';
+  const phrase = madeOf(text);
+  return terms(phrase).some(t => familyWords.has(t)) ||
+    namesPart(lastNoun(phrase))
     ? 'part'
     : 'page';
+}
+
+/**
+ * The stem of a phrase's last word.
+ * @param {string} phrase
+ * @returns {string}
+ */
+function lastNoun(phrase) {
+  const words = (phrase.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter(
+    w => w.length >= 2,
+  );
+  return stem(words[words.length - 1] ?? '');
+}
+
+/**
+ * Whether an idea's head ends on "of" ("a list of orders").
+ * @param {string} text
+ * @returns {boolean}
+ */
+function endsOnOf(text) {
+  return text.match(HEAD_END)?.[0].toLowerCase() === 'of';
+}
+
+/**
+ * What a head that ends on "of" is made of: the phrase after "of", up to the
+ * next head end, without an overlay frame.
+ * @param {string} text
+ * @returns {string}
+ */
+function madeOf(text) {
+  const end = text.match(HEAD_END);
+  const rest = text.slice((end?.index ?? 0) + (end?.[0].length ?? 0));
+  return (rest.split(HEAD_END)[0] ?? '').replace(CONTAINER_PHRASE, m =>
+    containersOf(m).size > 0 ? ' ' : m,
+  );
 }
 
 /**
