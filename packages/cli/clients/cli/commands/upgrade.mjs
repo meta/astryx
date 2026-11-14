@@ -13,7 +13,7 @@
  */
 
 import {jsonOut, jsonError} from '../../../foundation/response/json.mjs';
-import {emit, section, records} from '../formatters/index.mjs';
+import {emit, section, text} from '../formatters/index.mjs';
 import {logger} from '../../../api/logger.mjs';
 import {AstryxError} from '../../../api/error.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
@@ -25,6 +25,34 @@ import {NO_RESULT_SET, resultSet} from '../../../foundation/debug/index.mjs';
 /**
  * @param {import('commander').Command} program
  */
+/**
+ * The codemod list as text: a header naming how many there are and the
+ * package when they share one, then each version with one line per codemod,
+ * its name and title, and `(optional)` on the ones that run only on request.
+ * A codemod from another package names its package on its line.
+ * @param {import('../../../api/upgrade/upgrade.type.mjs').UpgradeListResponse['data']} codemods
+ * @returns {string}
+ */
+function formatCodemodList(codemods) {
+  const packages = new Set(codemods.map(c => c.package));
+  const shared = packages.size === 1 ? [...packages][0] : null;
+  const lines = [
+    `${codemods.length} codemod${codemods.length === 1 ? '' : 's'}${shared ? ` from ${shared}` : ''}, oldest first:`,
+  ];
+  let version = '';
+  for (const c of codemods) {
+    if (c.version !== version) {
+      version = c.version;
+      lines.push(version);
+    }
+    const pkg = shared ? '' : ` (${c.package})`;
+    lines.push(
+      `  ${c.name}: ${c.title}${c.optional ? ' (optional)' : ''}${pkg}`,
+    );
+  }
+  return lines.join('\n');
+}
+
 export function registerUpgrade(program) {
   const cmd = defineCommand(program, upgradeCommand, {
     fn: upgradeFn,
@@ -79,12 +107,12 @@ export function registerUpgrade(program) {
         if (json) jsonOut(result);
         else if (result.type === 'upgrade.list') {
           // Render the list from the result, not the API logger, so the text
-          // carries the same fields the JSON does (name, title, version, optional).
+          // carries the same fields the JSON does. One line per codemod under
+          // its version: the list gains a line per codemod each release, not a
+          // five-line record.
           emit(
             section('Available codemods'),
-            records(result.data, {
-              fields: ['name', 'package', 'title', 'version', 'optional'],
-            }),
+            text(formatCodemodList(result.data)),
           );
         }
 
