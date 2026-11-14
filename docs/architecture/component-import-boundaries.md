@@ -190,8 +190,14 @@ one pending load per module, caches a success, and resets after a failure.
   import) or a deferred load (DEC-1, DEC-4). A pull request that adds or grows
   an optional feature reports that page's first-load gzip delta. A pull
   request that grows a shared module reports the first-load gzip delta, for
-  apps that do not use the new code, on the docs, form, menu and table
-  reference pages. Default behavior, CSS (`spec:AST-080` DEC-4 governs it),
+  apps that do not use the new code, on the four reference pages. Each
+  reference page is a production app bundle of the built packages that
+  imports exactly these Core components: the docs page Text, Heading, Link,
+  Card, Divider and List; the form page Button, IconButton, TextInput,
+  CheckboxInput, Text, Heading and Card; the menu page DropdownMenu,
+  ContextMenu, Button and Text; and the table page Table, Text and Button. A
+  pull request whose shared module none of these pages reaches adds a page
+  that imports a component that reaches it. Default behavior, CSS (`spec:AST-080` DEC-4 governs it),
   tests, stories, docs and generated files are outside this rule (DEC-5).
 
 ### Allowlist
@@ -376,4 +382,4 @@ stays invisible.
 | INV6       | Tests with a rejecting loader                                                                                                                                                                                                                                                          | The page unmounts or the trigger stops working; a held intent survives; a suppressed native behavior does not return; a later intent does not retry                                                                                                        |
 | INV8       | `scripts/touch-support-bundle.test.mjs` extended over lazy chunks: two deferred surfaces and one base component on one page                                                                                                                                                            | A second copy of a touch module on one page; an `import()` whose target is a touch module; a touch module in an entry's eager graph only for a deferred surface                                                                                            |
 | INV9       | The check's own tests: a stale allowlist row, an unlisted crossing, and the printed import chain                                                                                                                                                                                       | A crossing passes unlisted; a stale row passes; a failure without its import chain                                                                                                                                                                         |
-| INV10      | The per-page first-load report on the docs, form, menu and table reference pages, base against head, for a page that renders each changed component without its optional feature                                                                                                       | An unused optional feature adds more than 0.3 KB gzip of first-load JavaScript, or a pull request that grows a shared module reports no per-page delta                                                                                                     |
+| INV10      | The per-page first-load report on INV10's four reference pages (docs, form, menu, table, each defined by its component set), base against head, for a page that renders each changed component without its optional feature                                                            | An unused optional feature adds more than 0.3 KB gzip of first-load JavaScript, or a pull request that grows a shared module reports no per-page delta                                                                                                     |
