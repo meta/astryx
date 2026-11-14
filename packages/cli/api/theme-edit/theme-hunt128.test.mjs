@@ -233,6 +233,29 @@ describe('words of a flag value typed unquoted on new', () => {
         expect((await follow(names(r)[0])).error).toBeUndefined();
         drop('n2');
       }
+      // With the option typed before the name, the name ends its value: a
+      // word after the name is never put into it.
+      const before = await cli([...ED, 'new', '--font', 'Open', 'Sans', 'n2']);
+      for (const n of names(before)) expect(n).not.toMatch(/--font '?Open n2/);
+      expect(names(before)[0]).toMatch(/ editor new sans-n2 --font Open$/);
+    },
+    T,
+  );
+});
+
+describe('the public new', () => {
+  it(
+    'always makes the theme: checking alone is no option of it',
+    async () => {
+      const r = await themeEditNew('n3', {
+        cwd,
+        .../** @type {any} */ ({check: true}),
+      });
+      expect(r?.data.theme).toBe('n3');
+      expect(fs.existsSync(path.join(cwd, 'themes/n3/n3.settings.json'))).toBe(
+        true,
+      );
+      drop('n3');
     },
     T,
   );

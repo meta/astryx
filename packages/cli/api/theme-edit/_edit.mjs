@@ -307,7 +307,8 @@ function putBack(kept, tokensDir) {
 
 export async function themeEditNew(name, options = {}) {
   try {
-    // Without `check`, newTheme makes the theme and answers it.
+    // The public call always makes the theme: only checkedNewLines asks
+    // for the checks alone.
     return /** @type {import('./theme-edit.type.mjs').ThemeEditNewResponse} */ (
       await newTheme(name, options)
     );
@@ -519,13 +520,15 @@ async function vetNewLines(e, cwd, typed, like) {
 }
 
 /**
- * {@link themeEditNew}'s work; with `check`, its checks only (null when
- * they pass, nothing written).
+ * {@link themeEditNew}'s work; with `check` (an argument of its own, never
+ * one of the public options), its checks only (null when they pass,
+ * nothing written).
  * @param {string} name
- * @param {import('./theme-edit.type.mjs').ThemeEditNewOptions & {check?: boolean}} options
+ * @param {import('./theme-edit.type.mjs').ThemeEditNewOptions} options
+ * @param {{check?: boolean}} [mode]
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditNewResponse | null>}
  */
-async function newTheme(name, options) {
+async function newTheme(name, options, {check = false} = {}) {
   const {cwd = process.cwd(), png = false, settings = {}} = options;
   // --like reads a base in any case, by the one case rule of every dial
   // (`set <theme> base Neutral` is neutral); `--like none` builds on no
@@ -785,7 +788,7 @@ async function newTheme(name, options) {
   }
   // Checked only (checkedNewLines): every check has passed, and nothing
   // is written.
-  if (options.check) return null;
+  if (check) return null;
   applyNewSettings(ctx, name, data, settings, png, likeFixed ?? undefined);
   if (left?.keep.some(p => path.basename(p) === `${name}.theme.ts`))
     await refuseThemeSource(cwd, name);
@@ -1738,7 +1741,7 @@ async function withSavedRepair(e, slug, cwd) {
  */
 export async function checkedNewLines(line, name, options) {
   try {
-    await newTheme(name, {...options, check: true});
+    await newTheme(name, options, {check: true});
     return [{name: line, reason: 'do this instead'}];
   } catch (e) {
     const vetted = await vetNewLines(

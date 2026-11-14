@@ -1258,8 +1258,11 @@ export function registerExperimentalTheme(group, program) {
                   if (open && !w.includes('=')) i += 1;
                   continue;
                 }
+                // The name ends the value of an option typed before it: a
+                // word after the name is never more of that value.
                 if (!named) {
                   named = true;
+                  open = null;
                   continue;
                 }
                 if (open) {
