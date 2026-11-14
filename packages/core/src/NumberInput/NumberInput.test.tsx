@@ -686,6 +686,34 @@ describe('NumberInput', () => {
       expect(onChange).toHaveBeenCalledWith(1.5);
     });
 
+    it('keeps a vi-VN decimal typed after a grouped number as typed', () => {
+      const onChange = vi.fn();
+      render(<GroupedField locale="vi-VN" value={1500} onChange={onChange} />);
+      const input = screen.getByRole('spinbutton');
+      fireEvent.focus(input);
+      expect(input).toHaveValue('1.500');
+      fireEvent.input(input, {target: {value: '1.500.'}});
+      expect(input).toHaveValue('1.500.');
+      fireEvent.input(input, {target: {value: '1.500.5'}});
+      expect(input).toHaveValue('1.500.5');
+      fireEvent.blur(input);
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('keeps an en-US group character typed after a grouped number as typed', () => {
+      const onChange = vi.fn();
+      render(<GroupedField locale="en-US" value={1500} onChange={onChange} />);
+      const input = screen.getByRole('spinbutton');
+      fireEvent.focus(input);
+      expect(input).toHaveValue('1,500');
+      fireEvent.input(input, {target: {value: '1,500,'}});
+      expect(input).toHaveValue('1,500,');
+      fireEvent.input(input, {target: {value: '1,500,5'}});
+      expect(input).toHaveValue('1,500,5');
+      fireEvent.blur(input);
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
     it('deletes the digit beyond a separator on Backspace', () => {
       render(<GroupedField locale="en-US" />);
       const input = screen.getByRole<HTMLInputElement>('spinbutton');
