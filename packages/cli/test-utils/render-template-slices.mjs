@@ -74,16 +74,22 @@ async function roundTrip(home, id) {
   }
   const page = fs.readFileSync(path.join(home, 'templates', id, 'page.tsx'));
   if (!page.equals(fs.readFileSync(path.join(home, back.output)))) return 'reverse: the page differs from the template source';
-  // A hand edit of one run of text is reported, and names the old text.
-  const run = source.markup ? recordedText(source.markup)?.runs.find(r => html.split(r).length === 2) : undefined;
-  if (run) {
-    fs.writeFileSync(path.join(home, 'templates', id, 'edited.html'), html.replace(run, `${run} (edited)`));
-    const edited = /** @type {any} */ (
-      await render(`templates/${id}/edited.html`, {cwd: home, reverse: true, out: `edited/${id}/page.tsx`})
-    ).data;
-    if (edited.edited !== true || !edited.edits?.some((/** @type {any} */ e) => e.was === run)) {
-      return `edit: ${JSON.stringify(run)} changed, reported edited ${edited.edited} with ${JSON.stringify(edited.edits)}`;
-    }
+  // A hand edit of one run of text in the markup is reported, and names the
+  // old text. The run is one that appears once in the markup, edited there.
+  const markup = renderedMarkupOf(html) ?? '';
+  const runs = source.markup ? (recordedText(source.markup)?.runs ?? []) : [];
+  const run = runs.find(r => markup.split(r).length === 2);
+  if (!run) return 'edit: no run of text appears exactly once in the markup, so no hand edit was tried';
+  const at = html.indexOf(markup);
+  fs.writeFileSync(
+    path.join(home, 'templates', id, 'edited.html'),
+    `${html.slice(0, at)}${markup.replace(run, `${run} (edited)`)}${html.slice(at + markup.length)}`,
+  );
+  const edited = /** @type {any} */ (
+    await render(`templates/${id}/edited.html`, {cwd: home, reverse: true, out: `edited/${id}/page.tsx`})
+  ).data;
+  if (edited.edited !== true || !edited.edits?.some((/** @type {any} */ e) => e.was === run)) {
+    return `edit: ${JSON.stringify(run)} changed, reported edited ${edited.edited} with ${JSON.stringify(edited.edits)}`;
   }
   await render(`back/${id}/page.tsx`, {cwd: home, out: `back/${id}/page.html`});
   const again = fs.readFileSync(path.join(home, 'back', id, 'page.html'), 'utf8');
