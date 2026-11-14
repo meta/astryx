@@ -460,5 +460,9 @@
       "packages/core/src/Kbd/Kbd.tsx": "sha256:e64111634e63600c9a145f18b6e3e2a947bf3b39185ffbdffb0db3578d5e4f24",
       "packages/core/src/Kbd/index.ts": "sha256:9e1e3942034e17a48c67b4a46161e8c44af9c16360a8d42e5fbb570135a975c2"
     }
+  },
+  {
+    "component": "core/MobileNavToggle",
+    "reason": "MobileNavToggle is one icon-only ghost Button. Its default `menu` glyph is three horizontal bars, symmetric about the block axis, so it has nothing to mirror; caller `children` replace that glyph and are the caller's content. It positions, orders, scrolls, drags and animates nothing along the inline axis, and its only keyboard behavior is the native button activation. Where it sits in a bar is the placing component's layout (AppShell's mobile top bar, TopNav's mobile bar, or the caller's own row), and it renders nothing at the audit's desktop width."
   }
 ]

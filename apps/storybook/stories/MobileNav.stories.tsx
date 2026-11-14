@@ -2,7 +2,9 @@
 
 import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
-import {MobileNav} from '@astryxdesign/core/MobileNav';
+import {MobileNav, MobileNavToggle} from '@astryxdesign/core/MobileNav';
+import {AppShell} from '@astryxdesign/core/AppShell';
+import {HStack} from '@astryxdesign/core/Layout';
 import {
   SideNav,
   SideNavHeading,
@@ -130,11 +132,7 @@ export const WithSideNavChildren: Story = {
           />
         </SideNavSection>
         <SideNavSection title="Settings">
-          <SideNavItem
-            label="General"
-            icon={Cog6ToothIcon}
-            href="/settings"
-          />
+          <SideNavItem label="General" icon={Cog6ToothIcon} href="/settings" />
         </SideNavSection>
       </>
     );
@@ -186,11 +184,7 @@ export const ResponsivePattern: Story = {
           />
         </SideNavSection>
         <SideNavSection title="Settings">
-          <SideNavItem
-            label="General"
-            icon={Cog6ToothIcon}
-            href="/settings"
-          />
+          <SideNavItem label="General" icon={Cog6ToothIcon} href="/settings" />
           <SideNavItem label="Team" icon={UserGroupIcon} href="/team" />
         </SideNavSection>
       </>
@@ -222,9 +216,7 @@ export const ResponsivePattern: Story = {
           header={
             <SideNavHeading
               icon={
-                <NavIcon
-                  icon={<CubeIcon style={{width: 16, height: 16}} />}
-                />
+                <NavIcon icon={<CubeIcon style={{width: 16, height: 16}} />} />
               }
               heading="My App"
               headingHref="/"
@@ -291,11 +283,7 @@ export const CustomWidth: Story = {
               isSelected
               href="/dashboard"
             />
-            <SideNavItem
-              label="Projects"
-              icon={FolderIcon}
-              href="/projects"
-            />
+            <SideNavItem label="Projects" icon={FolderIcon} href="/projects" />
           </SideNavSection>
         </MobileNav>
       </>
@@ -328,11 +316,7 @@ export const WithoutTitle: Story = {
               isSelected
               href="/dashboard"
             />
-            <SideNavItem
-              label="Projects"
-              icon={FolderIcon}
-              href="/projects"
-            />
+            <SideNavItem label="Projects" icon={FolderIcon} href="/projects" />
           </SideNavSection>
         </MobileNav>
       </>
@@ -390,4 +374,47 @@ export const TallHeader: Story = {
       </>
     );
   },
+};
+
+// =============================================================================
+// Toggle In App Shell
+// =============================================================================
+
+/**
+ * A MobileNavToggle the page places itself, with its own label and icon.
+ * `mobileNav={{hasToggle: false}}` removes AppShell's own toggle. Below the
+ * mobile breakpoint the toggle opens the drawer AppShell renders; above it,
+ * the toggle renders nothing and the side nav shows inline.
+ */
+export const ToggleInAppShell: Story = {
+  name: 'Toggle In App Shell',
+  parameters: {layout: 'fullscreen', pageFrame: true},
+  render: () => (
+    <AppShell
+      contentPadding={4}
+      mobileNav={{hasToggle: false}}
+      sideNav={
+        <SideNav>
+          <SideNavSection title="Main" isHeaderHidden>
+            <SideNavItem
+              label="Dashboard"
+              icon={HomeIcon}
+              isSelected
+              href="#"
+            />
+            <SideNavItem label="Projects" icon={FolderIcon} href="#" />
+            <SideNavItem label="Settings" icon={Cog6ToothIcon} href="#" />
+          </SideNavSection>
+        </SideNav>
+      }>
+      <HStack gap={3} vAlign="center">
+        <MobileNavToggle label="Open menu">
+          <Icon icon="viewColumns" data-testid="custom-toggle-icon" />
+        </MobileNavToggle>
+        <Text type="body" weight="bold">
+          Page title
+        </Text>
+      </HStack>
+    </AppShell>
+  ),
 };
