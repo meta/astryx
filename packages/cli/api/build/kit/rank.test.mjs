@@ -370,6 +370,8 @@ describe('ideaKind: a part of a page, told by the components the system ships', 
     expect(kind('add a settings page')).toBe('page');
     expect(kind('add a data table to my app')).toBe('page');
     expect(kind('add a tooltip to my app')).toBe('part');
+    expect(kind('add a settings page to my project')).toBe('page');
+    expect(kind('add a data table with filters to my website')).toBe('page');
     expect(kind('add a data table with filters')).toBe('page');
     expect(kind('add a tooltip')).toBe('part');
   });

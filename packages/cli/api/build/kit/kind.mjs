@@ -82,7 +82,7 @@ export function ideaKind(query, pages, components) {
   const text = String(query);
   const familyWords = familyWordsOf(pages);
   if (changesExistingPage(text, familyWords, components)) return 'edit';
-  if (addsToPage(text, familyWords)) return 'edit';
+  if (addsToPage(text, familyWords, pages, components)) return 'edit';
   // The head's last word, page words included: "calendar" is the noun of "a
   // calendar", "page" the noun of "a calendar page". An overlay frame names
   // where the thing lives, not the thing: "drafts" is the noun of "drafts in
@@ -105,39 +105,66 @@ export function ideaKind(query, pages, components) {
 /**
  * Whether an idea adds a piece to a page the builder already has: it opens
  * with "add", says where the piece goes with a place phrase that names
- * something ("above the table", "to the settings page"; not "to my app"),
- * the piece before that phrase names no page ("add a dashboard to the app"
+ * something build knows (a page family, a page template or a component:
+ * "above the table", "to the settings page"; not "to my project"), the
+ * piece's head names no page ("add a dashboard with a chart to my project"
  * is a new page), and it asks for no new page.
  * @param {string} text
  * @param {Map<string, string>} familyWords
+ * @param {PageTemplate[]} pages
+ * @param {ComponentWords[]} components
  * @returns {boolean}
  */
-function addsToPage(text, familyWords) {
+function addsToPage(text, familyWords, pages, components) {
   if (!ADDS.test(text)) return false;
   const place = text.match(PLACE_PHRASE);
   if (!place || place.index === undefined) return false;
-  const piece = text.slice(0, place.index);
+  const piece = text.slice(0, place.index).split(HEAD_END)[0] ?? '';
   const target =
     text.slice(place.index + place[0].length).split(HEAD_END)[0] ?? '';
+  const known = new Set([
+    ...familyWords.keys(),
+    ...pages.flatMap(templateTerms),
+    ...components.flatMap(componentTerms),
+  ]);
   return (
-    terms(target).length > 0 &&
-    !namesPage(piece, familyWords) &&
+    terms(target).some(t => known.has(t)) &&
+    !namesPage(piece, familyWords, pages) &&
     !asksNewPage(text.toLowerCase().split(PHRASE_END), familyWords)
   );
 }
 
 /**
  * Whether a phrase names a page: it ends on a page family word ("add a
- * dashboard") or on a word search drops, such as "page" ("add a settings
- * page").
+ * dashboard"), on a word search drops, such as "page" ("add a settings
+ * page"), or on a page template's own name ("add a kanban board").
  * @param {string} phrase
  * @param {Map<string, string>} familyWords
+ * @param {PageTemplate[]} pages
  * @returns {boolean}
  */
-function namesPage(phrase, familyWords) {
+function namesPage(phrase, familyWords, pages) {
   const words = phrase.toLowerCase().match(/[a-z0-9]+/g) ?? [];
   const last = words[words.length - 1] ?? '';
-  return familyWords.has(stem(last)) || terms(last).length === 0;
+  if (familyWords.has(stem(last)) || terms(last).length === 0) return true;
+  const named = new Set(terms(phrase));
+  return pages.some(page => {
+    const name = templateTerms(page);
+    return (
+      name.length > 0 &&
+      name.includes(stem(last)) &&
+      name.every(t => named.has(t))
+    );
+  });
+}
+
+/**
+ * The terms of a page template's own name: "kanban-board" is kanban, board.
+ * @param {PageTemplate} page
+ * @returns {string[]}
+ */
+function templateTerms(page) {
+  return terms(page.name.replace(/-/g, ' '));
 }
 
 /**
