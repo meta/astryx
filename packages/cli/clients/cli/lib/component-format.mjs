@@ -478,35 +478,31 @@ export function formatFull(docs, options = {}) {
       // Generate defineTheme example with canonical component selectors only.
       const exampleTargets = docs.theming.targets;
       if (exampleTargets.length > 0) {
-        const exampleLines = ['Override in defineTheme:\n```ts\ncomponents: {'];
-        const rootTarget = exampleTargets[0];
-        const rootKey = targetKey(rootTarget);
-        exampleLines.push(`  '${rootKey}': {`);
-        exampleLines.push(`    base: { /* CSS properties */ },`);
-        if (rootTarget.visualProps?.length) {
-          const firstVariant = rootTarget.visualProps[0];
-          exampleLines.push(
-            `    '${firstVariant}:value': { /* variant-specific */ },`,
-          );
-        }
-        if (rootTarget.states?.length) {
-          const firstState = rootTarget.states[0];
-          exampleLines.push(`    '${firstState}': { /* state-specific */ },`);
-        }
-        exampleLines.push(`  },`);
-        if (exampleTargets.length > 1) {
-          const subTarget = exampleTargets[1];
-          const subKey = targetKey(subTarget);
-          exampleLines.push(`  '${subKey}': {`);
-          exampleLines.push(`    base: { /* CSS properties */ },`);
-          if (subTarget.states?.length) {
-            const firstState = subTarget.states[0];
-            exampleLines.push(`    '${firstState}': { /* state-specific */ },`);
+        /**
+         * One override entry: the target's key with its base, and its first
+         * variant and state key when it has them.
+         * @param {any} target
+         * @param {boolean} withVariant
+         */
+        const entry = (target, withVariant) => {
+          const keys = ['base: {/* CSS properties */}'];
+          if (withVariant && target.visualProps?.length) {
+            keys.push(
+              `'${target.visualProps[0]}:value': {/* variant-specific */}`,
+            );
           }
-          exampleLines.push(`  },`);
+          if (target.states?.length) {
+            keys.push(`'${target.states[0]}': {/* state-specific */}`);
+          }
+          return `'${targetKey(target)}': {${keys.join(', ')}}`;
+        };
+        const entries = [entry(exampleTargets[0], true)];
+        if (exampleTargets.length > 1) {
+          entries.push(entry(exampleTargets[1], false));
         }
-        exampleLines.push('}\n```\n');
-        sections.push(exampleLines.join('\n'));
+        sections.push(
+          `Override in defineTheme: \`components: {${entries.join(', ')}}\`\n`,
+        );
       }
     }
 
@@ -548,25 +544,17 @@ export function formatFull(docs, options = {}) {
           : docs.theming.componentKey || '';
         const derivedExamples = docs.theming.derived
           .filter((/** @type {any} */ d) => d.vars?.length)
-          .map((/** @type {any} */ d) => `      ${d.property}: '...',`)
-          .join('\n');
+          .map((/** @type {any} */ d) => `${d.property}: '...'`);
         const expandExamples = docs.theming.derived
           .filter((/** @type {any} */ d) => d.expand === 'container')
           .map(
             (/** @type {any} */ d) =>
-              `      ${d.property}: '...',  // expands to container layout tokens`,
-          )
-          .join('\n');
-        const allExamples = [derivedExamples, expandExamples]
-          .filter(Boolean)
-          .join('\n');
-        if (allExamples) {
+              `${d.property}: '...' /* expands to container layout tokens */`,
+          );
+        const allExamples = [...derivedExamples, ...expandExamples];
+        if (allExamples.length) {
           sections.push(
-            'Some properties are set via standard CSS in component overrides:\n```ts\ncomponents: {\n  ' +
-              varsKey +
-              ': {\n    base: {\n' +
-              allExamples +
-              '\n    },\n  },\n}\n```\n',
+            `Some properties are set via standard CSS in component overrides: \`components: {${varsKey}: {base: {${allExamples.join(', ')}}}}\`\n`,
           );
         }
       }

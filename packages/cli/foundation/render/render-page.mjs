@@ -25,7 +25,7 @@ import {fileURLToPath} from 'node:url';
 import postcss from 'postcss';
 import {assetDataUri, isAssetBytes, isAssetPath, RenderAssetError} from './assets.mjs';
 import {classesIn, cutCss, layerOrderOf} from './css-cut.mjs';
-import {RENDER_FORMAT, sha256, sourceBlock} from './source-block.mjs';
+import {RENDER_FORMAT, asParsed, sha256, sourceBlock} from './source-block.mjs';
 import {embeddedPathProblem} from './embedded-files.mjs';
 import {isServedPackage, resolveServed} from './served-packages.mjs';
 import {CHART_CSS} from './charts.mjs';
@@ -890,8 +890,8 @@ export async function renderPage(entry, options = {}) {
       ...(options.title === undefined ? {} : {title: options.title}),
       packages,
       markup: {
-        sha256: sha256(markup),
-        style: sha256(style),
+        sha256: sha256(asParsed(markup)),
+        style: sha256(asParsed(style)),
         text: Buffer.from(JSON.stringify({title, runs: textRuns(markup)})).toString('base64'),
       },
     };
