@@ -47,7 +47,7 @@ import {
   WRAPPED_PARTS,
   CARD_LIKE,
 } from './_tables.mjs';
-import {cleanDialValue, typoLimit} from './_normal.mjs';
+import {cleanDialValue, typoLimit, typoNear} from './_normal.mjs';
 import {
   alphaOf,
   colorProblem,
@@ -504,7 +504,14 @@ export const shown = (cwd, f) =>
 export function nearest(x, list, n = 3) {
   // A phrase that negates a word (not round, no caps, unbold,
   // rounded-none) never has that word as its nearest: it asks the opposite.
-  if (negates(x)) return [];
+  // A typo of a listed keyword that itself starts with no- or not-
+  // (`not-alowed` for not-allowed, `no-repat` for no-repeat) is no
+  // negation: it is read as a typo.
+  if (
+    negates(x) &&
+    ![...list].some(c => /^(no|not)-/.test(c) && typoNear(x, c))
+  )
+    return [];
   // Within the editor's one typo limit (typoLimit), nearest by edit
   // distance first (brand-drak is brand-dark, not brand); a name one holds
   // inside the other is near too, after the close ones.

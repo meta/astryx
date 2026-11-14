@@ -146,6 +146,29 @@ const CASES =
       [/ set b display flex --on card$/],
       / display flow/,
     ],
+    // A typo of a keyword that starts with no- or not- is read as a typo;
+    // a real negation is still never given the word it negates.
+    [
+      'cursor',
+      'not-alowed',
+      {on: 'button'},
+      [/ set b cursor not-allowed --on button$/],
+      null,
+    ],
+    [
+      'background-repeat',
+      'no-repat',
+      {on: 'card'},
+      [/ set b background-repeat no-repeat --on card$/],
+      null,
+    ],
+    [
+      'cursor',
+      'not pointer',
+      {on: 'button'},
+      [/ how cursor$/],
+      / cursor (pointer|not-allowed) /,
+    ],
     // A short word two edits from a reset is no typo of it.
     [
       'border-style',
@@ -293,7 +316,7 @@ const CORPUS = PROPS.flatMap(p =>
   WORDS.map(w => /** @type {[string, string]} */ ([p, w])),
 );
 
-describe('hunt92', () => {
+describe('repairs offer only what was typed', () => {
   it.each(CASES)(
     '%s %s %j offers what was typed',
     async (thing, value, flags, lines, never) => {
