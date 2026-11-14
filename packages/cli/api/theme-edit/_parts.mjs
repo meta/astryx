@@ -31,7 +31,7 @@ import {
 import {SAMPLE_PAGE, elementNames, pageSource} from './_catalog.mjs';
 
 /** Bump when the shape of the cached part data changes. */
-const PART_DATA_VERSION = 7;
+const PART_DATA_VERSION = 9;
 
 /**
  * Flags that change what a component does or whether it shows, not how it
@@ -52,7 +52,7 @@ const LIFECYCLE_FLAGS = new Set([
  * @property {Record<string, string[]>} inside - tokens read by unnamed elements inside the part -> properties
  * @property {Record<string, string[]>} attrs - data attributes seen on the part
  * @property {string[]} contains - parts rendered inside it
- * @property {Record<string, Record<string, string>>} [inline] - state -> property -> the token Core paints it with as an inline style in that state, which outranks any theme rule
+ * @property {Record<string, Record<string, string>>} [inline] - state ('' for always) -> property -> the token Core paints it with as an inline style, which no theme rule can replace
  */
 
 /**
@@ -238,6 +238,12 @@ export function catalogVariants(project, name, cap, opts = {}) {
   // The states the doc names that a prop sets: checked (a boolean value)
   // and disabled. The label says the state shown.
   const states = new Set(info.targets.flatMap(t => t.states ?? []));
+  // A value the doc lists beside true and false (a checkbox's
+  // 'indeterminate'): rendered too, so the look Core gives it is read.
+  if (states.has('checked'))
+    for (const word of literals(info.props?.value?.type ?? ''))
+      if (word !== 'true' && word !== 'false')
+        variants.push({label: word, props: {...base, value: word}});
   if (states.has('checked') && info.props?.value?.type.startsWith('boolean')) {
     const on = base.value !== true;
     variants.push({
@@ -510,7 +516,11 @@ const RING_TOKENS = {
  * Add the focus ring a control draws on its indicator at focus time (Core's
  * `useIndicatorFocusRing`, used by a control whose input is visually
  * hidden): an inline style the server render never shows, read from the
- * focus outline tokens on the control's own `-indicator` part.
+ * focus outline tokens. The tokens are read by the indicator always (it
+ * never takes focus itself, so no state reaches the ring), and the outline
+ * properties are painted inline, which no theme rule can replace. The
+ * indicator is the control's own `-indicator` target, or for a part of
+ * another component (a radio list's item), that component's.
  * @param {import('./_project.mjs').ThemeProject} project
  * @param {Record<string, PartRecord>} map
  */
@@ -529,9 +539,20 @@ function addIndicatorRings(project, map) {
       continue;
     }
     if (!source.includes('useIndicatorFocusRing')) continue;
-    for (const t of info.targets) {
-      const key = t.className.replace(/^astryx-/, '');
-      if (!key.endsWith('-indicator')) continue;
+    /** @param {import('./_project.mjs').ComponentInfo | undefined} c */
+    const indicators = c =>
+      (c?.targets ?? [])
+        .map(t => t.className.replace(/^astryx-/, ''))
+        .filter(k => k.endsWith('-indicator'));
+    const own = indicators(info);
+    const keys = own.length
+      ? own
+      : indicators(
+          info.subComponentOf
+            ? project.components[info.subComponentOf]
+            : undefined,
+        );
+    for (const key of keys) {
       const rec = (map[key] ??= {
         own: {},
         inside: {},
@@ -539,11 +560,8 @@ function addIndicatorRings(project, map) {
         contains: [],
       });
       for (const [prop, token] of Object.entries(RING_TOKENS)) {
-        const p = (rec.own[prop] ??= {tokens: {}, values: []});
-        p.tokens[token] = [
-          ...new Set([...(p.tokens[token] ?? []), ':focus-visible']),
-        ];
-        if (!p.values.includes(`var(${token})`)) p.values.push(`var(${token})`);
+        rec.inside[token] = [...new Set([...(rec.inside[token] ?? []), prop])];
+        (rec.inline ??= {})[''] = {...rec.inline?.[''], [prop]: token};
       }
     }
   }
@@ -878,10 +896,21 @@ export function walkMarkup(html, decls, tokens) {
     const dataAttrs = Object.fromEntries(
       [
         ...attrs.matchAll(
-          /data-(variant|status|size|selected|state|elevation|tone|color|level|weight)="([^"]*)"/g,
+          /data-(variant|status|size|selected|state|elevation|tone|color|level|weight|checked)="([^"]*)"/g,
         ),
       ].map(x => [x[1], x[2]]),
     );
+    // The place another component puts a part in (the current page's
+    // button in a pagination, a pressed toggle) is a condition of what that
+    // component styles it with there, never the part's look at rest. A part
+    // that marks the place with a theme state of its own (a selected tab)
+    // is conditioned by that state already.
+    const ownState = ['selected', 'checked', 'state'].some(k => k in dataAttrs);
+    const context = ownState
+      ? []
+      : [...attrs.matchAll(/\baria-(current|pressed)="([^"]*)"/g)]
+          .filter(x => x[2] !== 'false')
+          .map(x => `${x[1]}=${x[2]}`);
     const parent = stack[stack.length - 1];
     const env = {...parent.env};
     const own = cls.flatMap(c => decls.get(c) ?? []);
@@ -892,8 +921,11 @@ export function walkMarkup(html, decls, tokens) {
     );
     const target = named[0]?.slice(7) ?? parent.target;
     const ownsTarget = named.length > 0;
-    if (target) {
-      const T = (map[target] ??= {
+    // An element can carry several targets (a shell's side nav region is a
+    // layout panel too): its declarations are each one's own.
+    for (const t of ownsTarget ? named.map(c => c.slice(7)) : [target]) {
+      if (!t) continue;
+      const T = (map[t] ??= {
         own: {},
         at: {},
         inside: {},
@@ -903,12 +935,22 @@ export function walkMarkup(html, decls, tokens) {
       if (ownsTarget)
         for (const [k, v] of Object.entries(dataAttrs))
           (T.attrs[k] ??= new Set()).add(v);
-      const cond0 = Object.entries(dataAttrs)
-        .map(([k, v]) => `${k}=${v}`)
-        .join(',');
+      const cond0 = [
+        ...Object.entries(dataAttrs).map(([k, v]) => `${k}=${v}`),
+        ...context,
+      ].join(',');
       for (const d of own) {
         if (d.prop.startsWith('--')) continue;
-        const toks = expand(d.value, env, tokens);
+        // An inherited background reads what its parent paints.
+        const inherited =
+          ownsTarget &&
+          d.prop === 'background-color' &&
+          /^inherit$/i.test(d.value.trim())
+            ? parent.bg?.tokens
+            : null;
+        const toks = inherited
+          ? new Set(inherited)
+          : expand(d.value, env, tokens);
         const cond = [cond0, d.cond].filter(Boolean).join(' ');
         if (ownsTarget) {
           const P = (T.own[d.prop] ??= {tokens: {}, values: new Set()});
@@ -938,14 +980,13 @@ export function walkMarkup(html, decls, tokens) {
       }
       if (d.prop === 'background-color') {
         const t = [...expand(d.value, env, tokens)];
-        if (t.length || !/transparent/.test(d.value))
+        if (t.length || !/transparent|^\s*inherit\s*$/i.test(d.value))
           bg = {target, tokens: t, raw: t.length ? null : d.value};
       }
     }
-    if (ownsTarget && target)
+    for (const t of ownsTarget ? named.map(c => c.slice(7)) : [])
       for (const anc of stack)
-        if (anc.target && anc.target !== target)
-          map[anc.target].contains.add(target);
+        if (anc.target && anc.target !== t) map[anc.target].contains.add(t);
     if (!selfClose && !VOID.has(tag.toLowerCase()))
       stack.push({env, target, fg, bg});
   }
