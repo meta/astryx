@@ -951,6 +951,21 @@ export function shadowAlphaScaled(value, k, mode = null) {
   );
 }
 
+/**
+ * An example value of the right kind for a property, as words.
+ * @param {string} prop
+ */
+function exampleOf(prop) {
+  if (/colou?r|^background$|^fill$|^stroke$/.test(prop))
+    return 'a color such as #2563eb';
+  if (/weight/.test(prop)) return 'a weight such as 700';
+  if (/opacity/.test(prop)) return 'a number from 0 to 1 such as 0.8';
+  if (/family/.test(prop)) return 'a font such as Georgia, serif';
+  if (/shadow/.test(prop))
+    return 'a shadow such as 0 2px 8px rgb(0 0 0 / 0.15)';
+  return 'a length such as 16px';
+}
+
 /** A keep step for a part the change does not reach. */
 const UNTOUCHED = /** @type {const} */ ('untouched');
 
@@ -4205,6 +4220,9 @@ export function draftAnswer(ctx, env, question) {
    */
   const withMode = (d, c) => {
     if (!c?.mode || !d.options.length) return d;
+    // A value that already holds the mode's change in its light-dark()
+    // halves (a shadow's colors in one mode) needs no --mode.
+    if (/** @type {any} */ (d).modeInValue) return d;
     if (d.options.every(o => o.every(st => st.thing === 'mode'))) return d;
     if (env.data.mode !== 'both') {
       const only = env.data.mode === 'light-only' ? 'light' : 'dark';
@@ -4320,6 +4338,14 @@ export function draftAnswer(ctx, env, question) {
       subjects: c0.parts.map(x => x.on),
       keep: [...keep, ...prohibited],
       mode: /** @type {'light' | 'dark' | null} */ (c0.mode ?? null),
+      shadowDir: /\bshadows?\b/.test(c0.text)
+        ? /\b(darker|stronger|heavier|deeper|bigger|more)\b/.test(c0.text) &&
+          !/\b(lighter|softer|subtler|weaker|smaller|less|blur)\b/.test(c0.text)
+          ? /** @type {'more'} */ ('more')
+          : /\b(lighter|softer|subtler|weaker|fainter|less)\b/.test(c0.text)
+            ? /** @type {'less'} */ ('less')
+            : null
+        : null,
       contrast:
         /\b(contrast|too (?:light|dark|faint|pale)|can'?t (?:read|see)|hard to (?:read|see)|readab\w*|legib\w*|washed out)\b/.test(
           `${c0.text} ${String(question)
@@ -4549,6 +4575,60 @@ export function draftAnswer(ctx, env, question) {
                 .filter(st => /^background/.test(st.thing) && st.on)
                 .map(st => keepAsIs({...st, thing: 'color'}, p))
             : []),
+          // A part kept from a spacing change: each spacing property its
+          // plain rule reads (or the base theme sets on it), at the value it
+          // shows now; the part's spacing setting alone does not hold a gap
+          // or height read from the shared tokens.
+          ...(!p.when &&
+          !p.state &&
+          prior.steps.some(st => /^(spacing|--spacing-)/.test(st.thing))
+            ? (() => {
+                /** @type {Map<string, string>} */
+                const now = new Map();
+                const baseOwn =
+                  /** @type {any} */ (env.base).components?.[one(p.on)]?.base ??
+                  {};
+                for (const [k, v] of Object.entries(baseOwn)) {
+                  const prop = k.replace(/[A-Z]/g, m => `-${m.toLowerCase()}`);
+                  if (/^(padding|gap)/.test(prop))
+                    now.set(
+                      prop,
+                      String(v).replace(
+                        /var\(\s*(--[a-z0-9-]+)\s*\)/g,
+                        (m, t) => resolvedValue(t) || m,
+                      ),
+                    );
+                }
+                for (const g of ['spacing', 'size'])
+                  for (const r of C.partReads(one(p.on), g) ?? []) {
+                    if (
+                      !r.when.some(
+                        w =>
+                          w === '' ||
+                          /^variant=(default|primary)$/.test(w) ||
+                          /^size=md$/.test(w),
+                      )
+                    )
+                      continue;
+                    for (const prop of r.props)
+                      if (
+                        /^(padding-block|padding-inline|gap|height|min-height)$/.test(
+                          prop,
+                        ) &&
+                        !now.has(prop) &&
+                        !(prop.startsWith('padding') && now.has('padding'))
+                      )
+                        now.set(prop, resolvedValue(r.token) ?? '');
+                  }
+                return [...now]
+                  .filter(
+                    ([, v]) =>
+                      v && /^[\d.]+(px|rem|em)( [\d.]+(px|rem|em))*$/.test(v),
+                  )
+                  .slice(0, 4)
+                  .map(([prop, v]) => set(prop, v, {on: p.on}));
+              })()
+            : []),
           ...(p.on === 'heading' &&
           /^level:/.test(p.when ?? '') &&
           prior.steps.some(st => st.thing === 'color')
@@ -4641,7 +4721,7 @@ export function draftAnswer(ctx, env, question) {
         text:
           c.named.prop === 'font-size'
             ? 'a font size of 0 hides the text; give a size above 0'
-            : `"${c.named.bad}" is not a value ${c.named.prop} takes; give a length such as 16px`,
+            : `"${c.named.bad}" is not a value ${c.named.prop} takes; give ${exampleOf(c.named.prop)}`,
         options: [],
       });
       continue;
@@ -6004,6 +6084,18 @@ export function draftAnswer(ctx, env, question) {
         textPin('--color-text-primary'),
         flags,
       );
+    // A border width kept from a whole-theme change: the width the part
+    // shows now (its own, else the token it reads), written out.
+    if (st.thing === '--border-width' || st.thing === 'border-width') {
+      const read = C.partReads(one(p.on), 'border').find(r =>
+        r.props.includes('border-width'),
+      );
+      if (!read && !partValue(p.on, 'border-width')) return UNTOUCHED;
+      const now =
+        partValue(p.on, 'border-width') ??
+        (read ? resolvedValue(read.token) || current(read.token) : null);
+      return now ? set('border-width', now, flags) : null;
+    }
     // A filter (a hover darkening) kept on a variant: the filter it has now
     // in that state, none when it has none.
     if (st.thing === 'filter')
@@ -7094,25 +7186,28 @@ export function draftAnswer(ctx, env, question) {
               text: 'raised panels: a soft shadow, no border (the surfaces dial)',
               options: [[set('surfaces', 'raised')]],
             };
-          const shades = soft
-            ? [
-                '0 1px 2px rgb(0 0 0 / 0.05)',
-                '0 2px 6px rgb(0 0 0 / 0.07)',
-                '0 6px 16px rgb(0 0 0 / 0.1)',
-              ]
-            : [
-                '0 2px 4px rgb(0 0 0 / 0.12)',
-                '0 6px 14px rgb(0 0 0 / 0.18)',
-                '0 14px 32px rgb(0 0 0 / 0.26)',
-              ];
+          // Each shared shadow from its own layers: the alpha of its colors
+          // scaled (bigger: its blur), in both modes or only the one named
+          // (only that half of each light-dark() color), the rest kept.
+          const bigger = /\b(bigger|larger|deeper|longer)\b/.test(c.text);
+          const k = exactFactor(c.text) ?? (soft ? 0.6 : 1.5);
+          const steps = ['--shadow-low', '--shadow-med', '--shadow-high']
+            .filter(t => t in TOKENS)
+            .map(t => {
+              const now = current(t);
+              if (!now || now === 'none') return null;
+              const v =
+                bigger && !c.mode
+                  ? blurScaled(now, soft ? 0.67 : 1.5)
+                  : shadowAlphaScaled(now, k, c.mode ?? null);
+              return v && v !== now ? set(t, v) : null;
+            })
+            .filter(st => st != null);
           return {
-            text: `${soft ? 'softer' : 'stronger'} shadows everywhere: the three shared shadow tokens, light to strong`,
-            options: [
-              ['--shadow-low', '--shadow-med', '--shadow-high']
-                .filter(t => t in TOKENS)
-                .map((t, i) => set(t, shades[i], modeOf(c))),
-            ],
+            text: `${soft ? 'softer' : 'stronger'} shadows everywhere: each shared shadow from its own layers, ${bigger && !c.mode ? 'its blur scaled' : `its colors' alpha ×${k}`}${c.mode ? ` in ${c.mode} mode only` : ' in both modes'}`,
+            options: steps.length ? [/** @type {Step[]} */ (steps)] : [],
             sequence: true,
+            ...(c.mode ? {modeInValue: true} : {}),
           };
         }
         // The shadow the part shows now: its own, else the token it reads.
@@ -7171,11 +7266,18 @@ export function draftAnswer(ctx, env, question) {
           const i = shadowOwn ? -1 : LADDER.indexOf(String(shadowTok));
           const next = i >= 0 ? LADDER[i + (up ? 1 : -1)] : undefined;
           const bigger = /\b(bigger|larger)\b/.test(c.text);
-          const value = next
-            ? `var(${next})`
-            : bigger
-              ? blurScaled(shadowNow, up ? 1.5 : 0.67)
-              : shadowAlphaScaled(shadowNow, up ? 1.5 : 0.6);
+          // "50% lighter / darker": its colors' alpha by that much.
+          const pctS = /(\d{1,3})\s?%/.exec(c.text);
+          const value = pctS
+            ? shadowAlphaScaled(
+                shadowNow,
+                up ? 1 + Number(pctS[1]) / 100 : 1 - Number(pctS[1]) / 100,
+              )
+            : next
+              ? `var(${next})`
+              : bigger
+                ? blurScaled(shadowNow, up ? 1.5 : 0.67)
+                : shadowAlphaScaled(shadowNow, up ? 1.5 : 0.6);
           const moved =
             value && value !== shadowNow
               ? value
@@ -8649,6 +8751,31 @@ export function draftAnswer(ctx, env, question) {
                   options: [[set('background-color', 'transparent', f)]],
                 };
         }
+        // "the button gradient darker": the part's own gradient, each color
+        // stop stepped that way (angle, stops and positions kept).
+        if (
+          on &&
+          design === 'gradient' &&
+          /\b(darker|darken|lighter|lighten|brighter|deeper)\b/.test(c.text)
+        ) {
+          const ownGrad = [
+            partValue(on, 'background'),
+            partValue(on, 'background-image'),
+          ].find(v => /gradient\(/.test(String(v ?? '')));
+          if (ownGrad) {
+            const lighter = /\b(lighter|lighten|brighter)\b/.test(c.text);
+            const amount = colorAmount(c.text, 0.15);
+            const stepped = String(ownGrad).replace(
+              /#[0-9a-f]{3,8}\b|\b(?:rgba?|hsla?|oklch)\([^)]*\)/gi,
+              m => shiftKeepAlpha(m, lighter ? amount : -amount) ?? m,
+            );
+            if (stepped !== ownGrad)
+              return {
+                text: `the gradient${where}, each color ${lighter ? 'lighter' : 'darker'} (now ${ownGrad})`,
+                options: [[set('background', stepped, f)]],
+              };
+          }
+        }
         if (!on && c.neg && /\bgradients?\b/.test(c.text)) {
           const grads = env.data.settings.filter(x =>
             /gradient\(/.test(x.value),
@@ -8832,8 +8959,25 @@ export function draftAnswer(ctx, env, question) {
           // A fill of the theme's own on the part comes first.
           const ownFill =
             partValue(on, 'background-color') ?? partValue(on, 'background');
-          const ownShifted =
-            ownFill && parseColor(ownFill)
+          // An own fill in both modes ("light-dark(#fff, #111)"): each half
+          // stepped from its own color.
+          const pair =
+            /^light-dark\(\s*([^,()]+(?:\([^()]*\))?)\s*,\s*([^()]+(?:\([^()]*\))?)\s*\)$/.exec(
+              String(ownFill ?? '').trim(),
+            );
+          const ownShifted = pair
+            ? (() => {
+                const l = shiftKeepAlpha(
+                  pair[1].trim(),
+                  lighter ? amount : -amount,
+                );
+                const dk = shiftKeepAlpha(
+                  pair[2].trim(),
+                  lighter ? amount : -amount,
+                );
+                return l && dk ? `light-dark(${l}, ${dk})` : null;
+              })()
+            : ownFill && parseColor(ownFill)
               ? shiftKeepAlpha(ownFill, lighter ? amount : -amount)
               : null;
           if (ownShifted && !f.state)

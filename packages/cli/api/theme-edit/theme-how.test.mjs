@@ -1891,7 +1891,9 @@ const QUESTIONS_F = [
   ],
   [
     'the shadows are too strong',
-    {top: /^set q --shadow-low '0 1px 2px rgb\(0 0 0 \/ 0\.05\)'/},
+    // Each shared shadow from its own layers, its colors fainter (both
+    // modes kept), never a stock light-mode set.
+    {top: /^set q --shadow-low '.*light-dark\(/},
   ],
   [
     'card shadows too strong',

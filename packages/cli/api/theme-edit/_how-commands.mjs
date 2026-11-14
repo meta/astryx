@@ -355,6 +355,30 @@ const isForeground = (name, contrast = false) =>
   !/background|surface|fill|accent|overlay/.test(name) &&
   (/border|outline/.test(name) || (contrast && /text|^color$|on-/.test(name)));
 
+/**
+ * How strong a shadow reads: the sum of its colors' alphas; 0 for none.
+ * @param {string} v
+ */
+function shadowStrength(v) {
+  if (!v || /^none$/.test(v.trim())) return 0;
+  let sum = 0;
+  for (const m of v.matchAll(
+    /\/\s*([\d.]+)(%?)\s*\)|rgba\([^)]*,\s*([\d.]+)\s*\)/g,
+  ))
+    sum += m[3] != null ? Number(m[3]) : Number(m[1]) / (m[2] ? 100 : 1);
+  return sum;
+}
+
+/** The alpha of a color (1 when it has none), or null. @param {string} v */
+function alphaIn(v) {
+  const s = String(v).trim();
+  const h = /^#[0-9a-f]{6}([0-9a-f]{2})$/i.exec(s);
+  if (h) return parseInt(h[1], 16) / 255;
+  const f = /\/\s*([\d.]+)(%?)\s*\)$/.exec(s);
+  if (f) return Number(f[1]) / (f[2] ? 100 : 1);
+  return parseColor(s) ? 1 : null;
+}
+
 /** @param {number[]} c */
 const luminance = c => c[0] * 0.299 + c[1] * 0.587 + c[2] * 0.114;
 
@@ -478,6 +502,14 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
         b.has('base||border-radius')
       )
         continue;
+      // A padding side under a kept padding shorthand follows the shorthand
+      // (the part's own padding covers every side).
+      if (/\|padding-/.test(k)) {
+        const sh = b.get('base||padding');
+        const was = a.get('base||padding');
+        if (sh && was && sh.light === was.light && sh.dark === was.dark)
+          continue;
+      }
       if (o.light !== v.light || o.dark !== v.dark)
         return `it would change ${part} (${k.split('|').filter(Boolean).join(' ')}), which the question keeps as it is`;
     }
@@ -535,6 +567,26 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
           continue;
         }
         if (before == null) continue;
+        // A shadow's strength moves the way asked, in each mode.
+        if (fam === 'shadow' && intent.shadowDir) {
+          const x = shadowStrength(after);
+          const y = shadowStrength(before);
+          if (Math.abs(x - y) > 1e-6 && (intent.shadowDir === 'more') !== x > y)
+            return `${part}'s ${prop} would get ${intent.shadowDir === 'more' ? 'weaker' : 'stronger'} in ${mode} mode`;
+          continue;
+        }
+        // "more transparent": the color's alpha goes down, "more opaque" up.
+        if (fam === 'color' && intent.opacityDir) {
+          const x = alphaIn(after);
+          const y = alphaIn(before);
+          if (
+            x != null &&
+            y != null &&
+            Math.abs(x - y) > 1e-3 &&
+            (intent.opacityDir === 'more') !== x > y
+          )
+            return `${part}'s ${prop} would get ${intent.opacityDir === 'more' ? 'more' : 'less'} see-through in ${mode} mode`;
+        }
         if (fam === 'color' && intent.lighter != null) {
           // A part's color, in every variant and state it shows (a step on
           // the plain rule reaches the variants that take it), in each mode
@@ -624,6 +676,25 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
         const n = measureNumber(after);
         if (!/^(none|transparent|0)$/.test(after) && n !== 0)
           return `${tok} would be ${after} in ${mode} mode, not none`;
+        continue;
+      }
+      if (fam === 'shadow' && intent.shadowDir) {
+        const x = shadowStrength(after);
+        const y = shadowStrength(before);
+        if (Math.abs(x - y) > 1e-6 && (intent.shadowDir === 'more') !== x > y)
+          return `${tok} would get ${intent.shadowDir === 'more' ? 'weaker' : 'stronger'} in ${mode} mode`;
+        continue;
+      }
+      if (fam === 'color' && intent.opacityDir) {
+        const x = alphaIn(after);
+        const y = alphaIn(before);
+        if (
+          x != null &&
+          y != null &&
+          Math.abs(x - y) > 1e-3 &&
+          (intent.opacityDir === 'more') !== x > y
+        )
+          return `${tok} would get ${intent.opacityDir === 'more' ? 'more' : 'less'} see-through in ${mode} mode`;
         continue;
       }
       if (fam === 'color' && intent.lighter != null) {
