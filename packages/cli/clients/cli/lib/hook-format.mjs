@@ -64,7 +64,7 @@ function formatParamsTable(params) {
   /** @type {string[]} */
   const lines = [];
   lines.push('| Param | Type | Default | Description |');
-  lines.push('|-------|------|---------|-------------|');
+  lines.push('|---|---|---|---|');
   for (const p of params) {
     const def = p.default ? `\`${mdCell(p.default)}\`` : '-';
     const req = p.required ? ' **(required)**' : '';
@@ -85,7 +85,7 @@ function formatReturnsTable(returns) {
   /** @type {string[]} */
   const lines = [];
   lines.push('| Field | Type | Description |');
-  lines.push('|-------|------|-------------|');
+  lines.push('|---|---|---|');
   for (const r of returns) {
     lines.push(
       `| \`${mdCell(r.name)}\` | \`${mdCell(r.type)}\` | ${mdCell(r.description)} |`,
