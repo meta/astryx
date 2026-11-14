@@ -23,6 +23,7 @@ import {
   keptTmp,
   hasModuleHooks,
 } from '../test-utils/packed-gather-cache-fixture.mjs';
+import {moduleRecorder} from '../test-utils/module-recorder.mjs';
 
 usePackedCli();
 
@@ -57,91 +58,40 @@ const COLUMNS = {
 const NOTABLE_RISE = 0.05;
 
 /**
- * Write the module hook and the preload that count what a run loads and
- * reads, into `dir`.
- * @param {string} dir
- */
-function counter(dir) {
-  fs.mkdirSync(dir, {recursive: true});
-  const loads = path.join(dir, 'loads.txt');
-  const tally = path.join(dir, 'tally.json');
-  const hook = path.join(dir, 'hook.mjs');
-  fs.writeFileSync(
-    hook,
-    [
-      "import {appendFileSync} from 'node:fs';",
-      'export async function load(url, context, nextLoad) {',
-      '  const result = await nextLoad(url, context);',
-      `  if (url.startsWith('file:')) appendFileSync(${JSON.stringify(loads)}, url + '\\n');`,
-      '  return result;',
-      '}',
-      '',
-    ].join('\n'),
-  );
-  const preload = path.join(dir, 'preload.mjs');
-  fs.writeFileSync(
-    preload,
-    [
-      "import fs from 'node:fs';",
-      "import Module, {register, syncBuiltinESMExports} from 'node:module';",
-      "import {isAbsolute} from 'node:path';",
-      "import {pathToFileURL} from 'node:url';",
-      'const tally = {fileReads: 0, folderReads: 0, pathChecks: 0};',
-      'const count = (names, key) => {',
-      '  for (const name of names) {',
-      '    const original = fs[name];',
-      '    const counted = function (...args) {',
-      '      tally[key] += 1;',
-      '      return original.apply(this, args);',
-      '    };',
-      '    fs[name] = Object.assign(counted, original);',
-      '  }',
-      '};',
-      "count(['readFileSync', 'readFile'], 'fileReads');",
-      "count(['readdirSync', 'readdir', 'opendirSync'], 'folderReads');",
-      "count(['statSync', 'lstatSync', 'existsSync', 'realpathSync', 'accessSync'], 'pathChecks');",
-      'syncBuiltinESMExports();',
-      // Async module hooks do not see CommonJS require calls: note each
-      // CommonJS module as it loads.
-      'const load = Module.prototype.load;',
-      'Module.prototype.load = function (file, ...rest) {',
-      `  if (isAbsolute(file)) fs.appendFileSync(${JSON.stringify(loads)}, pathToFileURL(file).href + '\\n');`,
-      '  return load.call(this, file, ...rest);',
-      '};',
-      `register(${JSON.stringify(pathToFileURL(hook).href)});`,
-      `process.on('exit', () => fs.writeFileSync(${JSON.stringify(tally)}, JSON.stringify(tally)));`,
-      '',
-    ].join('\n'),
-  );
-  return {preload, loads, tally};
-}
-
-/**
  * One warm run's counts: the case runs once to fill the kept catalogs, then
- * again with the counter.
+ * again with the module recorder counting what it loads and reads.
  * @param {string} id
  * @param {string[]} args
  */
 function measure(id, args) {
   const tmp = keptTmp(`cost-${id}`);
-  const first = run(args, {tmp, json: false});
+  // One search path for every run, with no `astryx` on it: doctor checks each
+  // folder on the path for one, so the count would follow the machine's.
+  const bin = path.join(work, 'cost', 'bin');
+  fs.mkdirSync(bin, {recursive: true});
+  const first = run(args, {tmp, json: false, env: {PATH: bin}});
   expect(first.status, `${id}: ${first.stderr}`).toBe(0);
-  const {preload, loads, tally} = counter(path.join(work, 'cost', id));
+  const {preload, loads, counts} = moduleRecorder(path.join(work, 'cost', id), {
+    countFs: true,
+  });
   const warm = run(args, {
     tmp,
     json: false,
-    env: {NODE_OPTIONS: `--import ${pathToFileURL(preload).href}`},
+    env: {PATH: bin, NODE_OPTIONS: `--import ${pathToFileURL(preload).href}`},
   });
   expect(warm.status, `${id}: ${warm.stderr}`).toBe(0);
   const urls = new Set(
-    fs.readFileSync(loads, 'utf8').split('\n').filter(Boolean),
+    fs
+      .readFileSync(loads, 'utf8')
+      .split('\n')
+      .filter(url => url.startsWith('file:')),
   );
   let moduleBytes = 0;
   for (const url of urls) moduleBytes += fs.statSync(fileURLToPath(url)).size;
   return {
     modules: urls.size,
     moduleBytes,
-    ...JSON.parse(fs.readFileSync(tally, 'utf8')),
+    ...JSON.parse(fs.readFileSync(counts, 'utf8')),
   };
 }
 

@@ -992,7 +992,7 @@
     "packages/cli/test/authoring-self-docs-match-types.test.mjs": 12.4,
     "packages/cli/test/authoring-types.test.mjs": 0,
     "packages/cli/test/cli-strict-guard.test.mjs": 0,
-    "packages/cli/test/command-cost.test.mjs": 17.5,
+    "packages/cli/test/command-cost.test.mjs": 41.6,
     "packages/cli/test/compile-cache.test.mjs": 8.1,
     "packages/cli/test/core-doc-quality.test.mjs": 4.3,
     "packages/cli/test/core-doc-types.test.mjs": 7.4,
