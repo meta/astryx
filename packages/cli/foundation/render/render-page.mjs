@@ -27,6 +27,7 @@ import {assetDataUri, isAssetBytes, isAssetPath, RenderAssetError} from './asset
 import {classesIn, cutCss, layerOrderOf} from './css-cut.mjs';
 import {RENDER_FORMAT, sha256, sourceBlock} from './source-block.mjs';
 import {embeddedPathProblem} from './embedded-files.mjs';
+import {aliasOnly} from './embedded-imports.mjs';
 import {isServedPackage, resolveServed} from './served-packages.mjs';
 import {CHART_CSS} from './charts.mjs';
 import {HOST_EXIT} from './host-exit.mjs';
@@ -891,7 +892,7 @@ export async function renderPage(entry, options = {}) {
     const aliases = {};
     for (const {spec, file: named} of /** @type {{spec: string, file: string}[]} */ (message.aliasImports ?? []).sort((a, b) => (a.spec < b.spec ? -1 : a.spec > b.spec ? 1 : 0))) {
       const rel = carried.get(path.resolve(named));
-      if (rel) aliases[spec] = rel;
+      if (rel && aliasOnly(spec)) aliases[spec] = rel;
     }
     const record = {
       ...(facts.cli ? {cli: facts.cli} : {}),

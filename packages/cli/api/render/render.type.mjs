@@ -55,12 +55,13 @@
  */
 
 /**
- * An import the restored page makes through a path alias that no alias in the
- * receiving project names.
+ * The imports a restored page makes through a path alias that no alias in
+ * the receiving project names, and the `paths` entries that let them build.
  * @experimental May change or be removed in a patch release.
  * @typedef {object} RenderAliased
- * @property {string} import - The import as the page writes it (`@/components/Header`).
- * @property {string} file - The file it came back as, from the current folder.
+ * @property {string} config - The tsconfig.json or jsconfig.json the entries belong in, from the current folder: the one TypeScript reads for the page, else a new one at the project's root (or the current folder outside a project).
+ * @property {Record<string, string[]>} paths - The entries to add to its `paths` (`{"@/*": ["./report-restored/*"]}`), relative to its `baseUrl`, else to its folder.
+ * @property {{import: string, file: string}[]} imports - Each import as the page writes it (`@/components/Header`), with the file it came back as, from the current folder.
  */
 
 /**
@@ -75,7 +76,7 @@
  * @property {string[]} data.files - Every file written, page first.
  * @property {boolean} data.exact - Whether the page and every file it imports came back exactly as rendered.
  * @property {string[]} [data.missing] - Embedded only: relative imports the file did not carry (files a render never embeds), so the restored page needs them before it renders.
- * @property {RenderAliased[]} [data.aliased] - Embedded only: the imports the page makes through a path alias that no alias here names, each with the file it came back as. Those files come back in the page's own layout inside the new folder, and the page needs the alias (in tsconfig.json or jsconfig.json) to build or render again.
+ * @property {RenderAliased} [data.aliased] - Embedded only: the imports the page makes through a path alias that no alias here names. Their files come back in the page's own layout inside the new folder, and the page needs the alias to build or render again: `config` names the tsconfig.json or jsconfig.json TypeScript reads for the page (or the new one to create), `paths` the entries to add to its `paths`, and `imports` each import with the file it came back as.
  * @property {string[]} [data.components] - Rebuilt only: the components the page uses.
  * @property {number} [data.elements] - Rebuilt only: how many component elements were rebuilt.
  * @property {string[]} [data.unknown] - Rebuilt only: Astryx class names no installed component claims; their content is kept as plain elements.

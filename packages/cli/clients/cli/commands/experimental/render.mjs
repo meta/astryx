@@ -28,32 +28,6 @@ import {doc as renderFn} from '../../../../api/render/render.doc.mjs';
 const kb = n => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} KB`);
 
 /**
- * The `paths` entries that let the restored page's alias imports find the
- * files they came back as: the part of each import its file's path ends with
- * becomes the `*` (`@/components/Header` in `report-restored/components/` gives
- * `"@/*": ["./report-restored/*"]`), else the import maps to its file.
- * @param {{import: string, file: string}[]} aliased
- * @returns {string[]}
- */
-function aliasPaths(aliased) {
-  const entries = new Set();
-  for (const {import: spec, file} of aliased) {
-    const named = spec.split('/');
-    let held = file.replace(/\.[^./]+$/, '').split('/');
-    if (held.at(-1) === 'index' && named.at(-1) !== 'index') held = held.slice(0, -1);
-    let same = 0;
-    while (same < named.length - 1 && same < held.length && named[named.length - 1 - same] === held[held.length - 1 - same]) same++;
-    const folder = held.slice(0, held.length - same).join('/');
-    entries.add(
-      same === 0
-        ? `"${spec}": ["./${file}"]`
-        : `"${named.slice(0, named.length - same).join('/')}/*": ["${folder ? `./${folder}/*` : './*'}"]`,
-    );
-  }
-  return [...entries];
-}
-
-/**
  * Register `render` under the `experimental` group.
  * @param {import('commander').Command} group the `experimental` command
  * @param {import('commander').Command} program the root program
@@ -118,7 +92,7 @@ export function registerExperimentalRender(group, program) {
           output: d.output,
           files: d.files.join(', '),
           ...(d.missing?.length ? {missing: d.missing.join(', ')} : {}),
-          ...(d.aliased?.length ? {aliased: d.aliased.map(a => `${a.import} (${a.file})`).join(', ')} : {}),
+          ...(d.aliased ? {aliased: d.aliased.imports.map(a => `${a.import} (${a.file})`).join(', ')} : {}),
           ...(d.mode === 'rebuilt'
             ? {
                 components: (d.components ?? []).join(', ') || 'none',
@@ -141,10 +115,12 @@ export function registerExperimentalRender(group, program) {
               ),
             ]
           : []),
-        ...(d.aliased?.length
+        ...(d.aliased
           ? [
               text(
-                `The page imports ${d.aliased.length === 1 ? 'a file' : 'files'} through a path alias this project does not have, so ${d.aliased.length === 1 ? 'it' : 'they'} came back in the page's own layout. To build or render the page again, add to the "paths" of your tsconfig.json or jsconfig.json: ${aliasPaths(d.aliased).join(', ')}.`,
+                `The page imports ${d.aliased.imports.length === 1 ? 'a file' : 'files'} through a path alias this project does not have, so ${d.aliased.imports.length === 1 ? 'it' : 'they'} came back in the page's own layout. To build or render the page again, add to the "paths" of ${d.aliased.config} (create it if it is not there): ${Object.entries(d.aliased.paths)
+                  .map(([key, targets]) => `${JSON.stringify(key)}: ${JSON.stringify(targets)}`)
+                  .join(', ')}.`,
               ),
             ]
           : []),

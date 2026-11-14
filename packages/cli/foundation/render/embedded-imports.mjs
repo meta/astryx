@@ -17,8 +17,27 @@ import * as path from 'node:path';
 import {babelParse as parse} from '../runtime/lazy-dependencies.mjs';
 import {PAGE_EXTENSIONS} from './embedded-files.mjs';
 import postcss from 'postcss';
+import {builtinModules} from 'node:module';
 import {matchPath, pathsFor} from './ts-paths.mjs';
 import {isAssetPath} from './assets.mjs';
+
+/** A name npm gives a package, scoped or not (older names may have capitals). */
+const PACKAGE_NAME = /^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9-][\w.-]*$/i;
+
+/**
+ * Whether only a path alias can resolve an import: its name cannot be a
+ * package's or a Node built-in's (`@/components/Header`, `~/lib/data` and
+ * `#utils` cannot; `react`, `@acme/ui` and `fs` can). A received file's
+ * record of alias imports counts only for these, so it can never remap a
+ * package for the reader.
+ * @param {string} spec
+ */
+export function aliasOnly(spec) {
+  if (spec.startsWith('node:')) return false;
+  const segments = spec.split('/');
+  const name = spec.startsWith('@') ? segments.slice(0, 2).join('/') : segments[0];
+  return !PACKAGE_NAME.test(name) && !builtinModules.includes(name);
+}
 
 /**
  * What a stylesheet's `@import` rules load, read with postcss so comments
@@ -317,7 +336,7 @@ export function reachableFiles(files, {aliases = [], recorded} = {}) {
       }
       // No alias here names it, but the render recorded the carried file it
       // named: that file comes back in the page's own layout.
-      const sent = recorded && typeof recorded === 'object' && Object.hasOwn(recorded, bare) ? /** @type {Record<string, unknown>} */ (recorded)[bare] : undefined;
+      const sent = aliasOnly(bare) && recorded && typeof recorded === 'object' && Object.hasOwn(recorded, bare) ? /** @type {Record<string, unknown>} */ (recorded)[bare] : undefined;
       if (typeof sent === 'string' && byPath.has(sent)) {
         const {r, fresh} = reach(sent);
         r.relative = true;

@@ -35,6 +35,7 @@ import {embeddedPathProblem, runnerPicksUp} from '../../foundation/render/embedd
 import {isAssetBytes, isAssetPath} from '../../foundation/render/assets.mjs';
 import {createFileProtectionResolver} from '../../foundation/fs/file-protection.mjs';
 import {reachableFiles, receivingAliases} from '../../foundation/render/embedded-imports.mjs';
+import {pathsHomeFor} from '../../foundation/render/ts-paths.mjs';
 import {isAstryxMarkup} from '../../foundation/render/html-reader.mjs';
 import {rebuildPage} from '../../foundation/render/rebuild.mjs';
 import {cliVersion} from '../../foundation/integrations/cli-peer-version.mjs';
@@ -375,6 +376,69 @@ function refuseRunnable(files, cwd, input) {
 }
 
 /**
+ * The `paths` entry that lets an alias import find the file it came back
+ * as, from the folder the config resolves targets from: the part of the
+ * import that the file's path ends with becomes the `*`
+ * (`@/components/Header` in `report-restored/components/` gives `@/*` and
+ * `./report-restored/*`), else the import maps to its file.
+ * @param {string} spec
+ * @param {string} file absolute
+ * @param {string} base absolute
+ * @returns {[string, string]}
+ */
+function aliasEntry(spec, file, base) {
+  /** @param {string} p */
+  const fromBase = p => {
+    const rel = path.relative(base, p).split(path.sep).join('/');
+    return rel.startsWith('..') ? rel : `./${rel}`;
+  };
+  const named = spec.split('/');
+  let held = path.relative(base, file).split(path.sep).join('/').replace(/\.[^./]+$/, '').split('/');
+  if (held.at(-1) === 'index' && named.at(-1) !== 'index') held = held.slice(0, -1);
+  let same = 0;
+  while (same < named.length - 1 && same < held.length && named[named.length - 1 - same] === held[held.length - 1 - same]) same++;
+  if (same === 0) return [spec, fromBase(file)];
+  const folder = fromBase(path.join(base, ...held.slice(0, held.length - same)));
+  return [`${named.slice(0, named.length - same).join('/')}/*`, folder === './' ? './*' : `${folder}/*`];
+}
+
+/**
+ * What a restore tells about the alias imports no alias of the receiving
+ * project names: the config the `paths` entries belong in (the one
+ * TypeScript reads for the page, else a new tsconfig.json at the project's
+ * root or the current folder), the entries, and each import with its file.
+ * @param {{spec: string, file: string}[]} unaliased
+ * @param {string} page absolute: where the page lands
+ * @param {string} cwd
+ */
+function aliasedResult(unaliased, page, cwd) {
+  let root = path.dirname(page);
+  while (!fs.existsSync(root) && path.dirname(root) !== root) root = path.dirname(root);
+  for (let d = root; ; d = path.dirname(d)) {
+    if (fs.existsSync(path.join(d, 'package.json'))) {
+      root = d;
+      break;
+    }
+    if (path.dirname(d) === d) {
+      root = cwd;
+      break;
+    }
+  }
+  const home = pathsHomeFor(page, root);
+  /** @type {Record<string, string[]>} */
+  const paths = {};
+  for (const {spec, file} of unaliased) {
+    const [key, target] = aliasEntry(spec, file, home.base);
+    paths[key] ??= [target];
+  }
+  return {
+    config: shown(cwd, home.config),
+    paths,
+    imports: unaliased.map(({spec, file}) => ({import: spec, file: shown(cwd, file)})),
+  };
+}
+
+/**
  * The new folder a restore without --out writes into: beside the HTML file,
  * named after it (`report.html` gives `report-restored/`, then
  * `report-restored-2/` when that exists).
@@ -581,10 +645,12 @@ export function reverseToFile({cwd, input, output, overwrite}) {
     };
     const target = path.join(anchor, path.basename(requested));
     // The alias imports no alias here names: their files come back in the
-    // page's own layout, and the page needs the alias to build.
-    const aliased = [...reached]
-      .flatMap(([p, r]) => [...r.unaliased].map(spec => ({import: spec, file: shown(cwd, placeFrom(p))})))
-      .sort((a, b) => (a.import < b.import ? -1 : a.import > b.import ? 1 : 0));
+    // page's own layout, and the page needs the alias to build, in the config
+    // TypeScript reads for it.
+    const unaliased = [...reached]
+      .flatMap(([p, r]) => [...r.unaliased].map(spec => ({spec, file: placeFrom(p)})))
+      .sort((a, b) => (a.spec < b.spec ? -1 : a.spec > b.spec ? 1 : 0));
+    const aliased = unaliased.length === 0 ? null : aliasedResult(unaliased, requested, cwd);
     /** @type {{file: string, bytes: Buffer}[]} */
     const writes = [];
     const placed = new Set();
@@ -639,7 +705,7 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       // the file does not carry (a file a render never embeds) is named.
       exact: missing.length === 0,
       ...(missing.length > 0 ? {missing} : {}),
-      ...(aliased.length > 0 ? {aliased} : {}),
+      ...(aliased ? {aliased} : {}),
       format: source.version,
       ...(renderedBy ? {renderedBy} : {}),
       ...(packages ? {packages} : {}),
