@@ -303,6 +303,47 @@ function declaredComponent(node) {
 }
 
 /**
+ * Whether a statement is a block that holds only comments, as a `{/* … *\/}`
+ * line between JSX elements parses at the top level.
+ * @param {any} node
+ */
+const isCommentBlock = node =>
+  node?.type === 'BlockStatement' &&
+  node.body.length === 0 &&
+  (node.directives ?? []).length === 0;
+
+/**
+ * Where the JSX a list of statements ends with begins: the first of the
+ * trailing JSX statements and comment-only blocks between or after them. The
+ * list's length when it does not end with JSX.
+ * @param {any[]} body
+ */
+function trailingMarkupStart(body) {
+  let start = body.length;
+  while (
+    start > 0 &&
+    (isJsxStatement(body[start - 1]) || isCommentBlock(body[start - 1]))
+  ) {
+    start -= 1;
+  }
+  while (start < body.length && isCommentBlock(body[start])) start += 1;
+  return start;
+}
+
+/**
+ * A trailing JSX statement as a fragment child: the element, or the comment
+ * a comment-only block holds (`{/* … *\/}` is a JSX child too).
+ * @param {string} code
+ * @param {any} node
+ * @param {number} [offset] where `code` starts in the example's code
+ * @returns {Piece}
+ */
+function markupPiece(code, node, offset = 0) {
+  const part = isJsxStatement(node) ? node.expression : node;
+  return {text: code.slice(part.start, part.end), from: offset + part.start};
+}
+
+/**
  * @typedef {object} ExampleModule
  * @property {string} module
  * @property {boolean} renders
@@ -333,14 +374,11 @@ function moduleFor(code) {
     if (body.some(isDefaultExport)) {
       return {module: code, renders: true, toExample: samePosition};
     }
-    let markupFrom = body.length;
-    while (markupFrom > 0 && isJsxStatement(body[markupFrom - 1])) {
-      markupFrom -= 1;
-    }
+    const markupFrom = trailingMarkupStart(body);
     if (markupFrom < body.length) {
       const markup = body
         .slice(markupFrom)
-        .map(node => piece(code, node.expression));
+        .map(node => markupPiece(code, node));
       return composed(
         code,
         program.directives,
@@ -373,10 +411,9 @@ function moduleFor(code) {
 /**
  * Code that ends with sibling elements, split where the parser says one
  * element ends and the next begins: the statements before them, and each
- * element, in order. Comments between and after the elements are dropped
- * with the rest of what the parser skips. Null when the code fails to parse
- * for any other reason, or when something other than an element follows
- * the first sibling.
+ * element, in order, with a `{/* … *\/}` line between them kept as a JSX
+ * child. Null when the code fails to parse for any other reason, or when
+ * something other than an element follows the first sibling.
  * @param {string} code
  * @returns {{directives: any[], statements: any[], elements: Piece[]} | null}
  */
@@ -394,13 +431,10 @@ function trailingSiblings(code) {
     if ('ast' in whole) {
       if (offset === 0) return null;
       const body = /** @type {any[]} */ (whole.ast.program.body);
-      if (!body.every(isJsxStatement)) return null;
-      for (const node of body) {
-        elements.push({
-          text: rest.slice(node.expression.start, node.expression.end),
-          from: offset + node.expression.start,
-        });
+      if (!body.every(node => isJsxStatement(node) || isCommentBlock(node))) {
+        return null;
       }
+      for (const node of body) elements.push(markupPiece(rest, node, offset));
       return {directives, statements, elements};
     }
     const error = whole.error;
@@ -414,18 +448,19 @@ function trailingSiblings(code) {
     const segment = tryParse(rest.slice(0, error.pos));
     if (!('ast' in segment)) return null;
     const body = /** @type {any[]} */ (segment.ast.program.body);
-    const last = body.at(-1);
-    if (!isJsxStatement(last)) return null;
+    if (!isJsxStatement(body.at(-1))) return null;
+    const markupFrom = offset === 0 ? trailingMarkupStart(body) : 0;
     if (offset === 0) {
       directives = segment.ast.program.directives;
-      statements = body.slice(0, -1);
-    } else if (body.length !== 1) {
+      statements = body.slice(0, markupFrom);
+    } else if (
+      !body.every(node => isJsxStatement(node) || isCommentBlock(node))
+    ) {
       return null;
     }
-    elements.push({
-      text: rest.slice(last.expression.start, last.expression.end),
-      from: offset + last.expression.start,
-    });
+    for (const node of body.slice(markupFrom)) {
+      elements.push(markupPiece(rest, node, offset));
+    }
     offset += error.pos;
   }
 }
@@ -479,6 +514,11 @@ const MODULE_SCOPE = new Set([
  * @returns {ExampleModule}
  */
 function composed(code, directives, statements, element) {
+  // The component takes a name the example's code does not use, so no
+  // import or declaration of the example can clash with it.
+  const used = new Set(code.match(/\bExample\d*\b/gu) ?? []);
+  let name = 'Example';
+  for (let count = 2; used.has(name); count += 1) name = `Example${count}`;
   /** @type {Piece[]} */
   const prelude = directives.map(node => piece(code, node));
   /** @type {Piece[]} */
@@ -499,7 +539,7 @@ function composed(code, directives, statements, element) {
     ...assembled([
       ...joined(prelude, '\n'),
       prelude.length > 0 ? '\n\n' : '',
-      'export default function Example() {\n',
+      `export default function ${name}() {\n`,
       ...joined(inside, '\n'),
       inside.length > 0 ? '\n' : '',
       'return (\n',

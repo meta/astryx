@@ -118,6 +118,49 @@ describe('previewableExample', () => {
     );
   });
 
+  it('keeps a JSX comment line between and after sibling elements', () => {
+    expect(
+      moduleOf('<Text>One</Text>\n{/* a note */}\n<Text>Two</Text>'),
+    ).toContain(
+      'return (\n<>\n<Text>One</Text>\n{/* a note */}\n<Text>Two</Text>\n</>\n);',
+    );
+    expect(
+      moduleOf(
+        '<Text>One</Text>;\n{/* a note */}\n<Text>Two</Text>;\n{/* the end */}',
+      ),
+    ).toContain(
+      'return (\n<>\n<Text>One</Text>\n{/* a note */}\n<Text>Two</Text>\n{/* the end */}\n</>\n);',
+    );
+    expect(
+      moduleOf(
+        '<Text>One</Text>\n<Text>Two</Text>\n{/* a note */}\n<Text>Three</Text>',
+      ),
+    ).toContain(
+      'return (\n<>\n<Text>One</Text>\n<Text>Two</Text>\n{/* a note */}\n<Text>Three</Text>\n</>\n);',
+    );
+    expect(
+      moduleOf(
+        'const label = "Go";\n<Text>One</Text>\n{/* a note */}\n<Text>{label}</Text>\n<Text>Three</Text>',
+      ),
+    ).toContain(
+      'const label = "Go";\nreturn (\n<>\n<Text>One</Text>\n{/* a note */}\n<Text>{label}</Text>\n<Text>Three</Text>\n</>\n);',
+    );
+  });
+
+  it('names its component so that no name of the example clashes with it', () => {
+    const imported = moduleOf(
+      "import {Example} from '@acme/widgets';\n<Example />",
+    );
+    expect(imported).toContain('export default function Example2() {');
+    const declared = moduleOf(
+      'const Example = () => <AcmeCard />;\nconst Example2 = Example;\n<Example2 />',
+    );
+    expect(declared).toContain('export default function Example3() {');
+    expect(moduleOf('<AcmeCard />')).toContain(
+      'export default function Example() {',
+    );
+  });
+
   it('reports sibling elements followed by other code as not compiling', () => {
     const [problem] = problemsOf(
       '<Text>One</Text>\n<Text>Two</Text>\nconst x = 1;',
