@@ -20,7 +20,9 @@ import {
 import {OVERRIDES} from './_part-words.mjs';
 import {
   DESIGN,
+  DENSITY,
   DIALS,
+  densityWords,
   HEADING_WEIGHTS,
   P,
   FAMILIES,
@@ -32,7 +34,7 @@ import {
   isSystemFamily,
   wordTable,
 } from './_tables.mjs';
-import {PALETTE_DIALS, isGraySeed, seedOf} from './_palette.mjs';
+import {PALETTE_DIALS, isGraySeed, seedOf, vibrancyMoves} from './_palette.mjs';
 import {
   cornerParts,
   focusStateOf,
@@ -380,7 +382,9 @@ const THEME_COLOR_WORDS = /** @type {Array<[RegExp, string, string]>} */ ([
   // "a light tint of the accent": the accent mixed with see-through, so the
   // fill beneath shows (never the full accent).
   [
-    /\b(?:light|soft|pale|subtle|faint) (?:tint|wash) of (?:the )?(?:accent|brand|primary)(?: colou?r)?\b/,
+    // (A tint with the accent, or the accent at a low strength, is the
+    // same see-through wash.)
+    /\b(?:light|soft|pale|subtle|faint) (?:tint|wash) of (?:the )?(?:accent|brand|primary)(?: colou?r)?\b|\btint(?:ed|s)?\b.*\bwith (?:the |an? )?(?:accent|brand|primary)(?: colou?r)?\b|\b(?:accent|brand|primary)(?: colou?r)? at (?:a )?(?:low|light|soft|faint|subtle) (?:strength|opacity|alpha|intensity)\b/,
     'color-mix(in srgb, var(--color-accent) 15%, transparent)',
     'var(--color-text-accent)',
   ],
@@ -1175,6 +1179,15 @@ function dialRung(text) {
 
 /** What keeps a thing as it is, after it ("cards as they are"). */
 const KEEP_TAIL = String.raw`(?:as (?:they are|it is|is|before)|alone|the same|unchanged|untouched)`;
+/** The thing a keep names ("the inputs"). */
+const KEEP_OBJECT = String.raw`(?:the\s+|my\s+|all\s+)?([a-z][a-z -]*?)`;
+/**
+ * The one grammar of a keep: "keep the cards as they are", "leave inputs
+ * alone", "don't touch the dialogs" (to the end of its clause). Its one
+ * group is the thing kept. keepsAsExcept reads it beside an ask; a line
+ * that is only a keep is a prohibition (EXCLUDE).
+ */
+const KEEP_PHRASE = String.raw`(?:please\s+)?(?:(?:keep|leave)\s+${KEEP_OBJECT}\s+${KEEP_TAIL}\b|(?:don'?t|do not|never)\s+(?:touch|change)\s+${KEEP_OBJECT}(?=\s*(?:$|[,;.!?])))`;
 /**
  * Every keep in a question, wherever it stands, read as one except list
  * after the ask: "make buttons rounder, but keep cards as they are" and
@@ -1191,21 +1204,15 @@ function keepsAsExcept(question) {
   const kept = [];
   const SEP = String.raw`(?:^|\s*[,;]\s*|\s+)(?:(?:and|but|then)\s+)?`;
   let rest = String(question)
-    .replace(
-      new RegExp(
-        String.raw`${SEP}(?:please\s+)?(?:keep|leave)\s+(?:the\s+|my\s+|all\s+)?([a-z][a-z -]*?)\s+${KEEP_TAIL}\b`,
-        'gi',
-      ),
-      (_m, x) => {
-        kept.push(x.trim());
-        return ' ';
-      },
-    )
+    .replace(new RegExp(`${SEP}${KEEP_PHRASE}`, 'gi'), (_m, x, y) => {
+      kept.push(String(x ?? y).trim());
+      return ' ';
+    })
     // "…, but keep the inputs": a keep after "but" with nothing after its
     // object is a keep too.
     .replace(
       new RegExp(
-        String.raw`(?:\s*[,;]\s*|\s+)but\s+(?:keep|leave)\s+(?:the\s+|my\s+|all\s+)?([a-z][a-z -]*?)\s*(?=$|[,;.!?])`,
+        String.raw`(?:\s*[,;]\s*|\s+)but\s+(?:keep|leave)\s+${KEEP_OBJECT}\s*(?=$|[,;.!?])`,
         'gi',
       ),
       (_m, x) => {
@@ -1658,9 +1665,9 @@ function aspectsOf(text) {
   if (/\bline ?height|\bleading\b|\bline spacing\b/.test(c)) add('leading');
   if (
     !a.includes('tracking') &&
-    /\b(padding|spacing|space|spaced|gaps?|margins?|room(y|ier)?|airy|breathing|dense|denser|density|compact|tight(er)?|cramped|crowded|spacious|packed)\b/.test(
-      c,
-    )
+    new RegExp(
+      `\\b(?:padding|spacing|space|spaced|gaps?|margins?|room|breathing|density|${densityWords('roomy', 'dense', 'crowded')})\\b`,
+    ).test(c)
   )
     add('spacing');
   if (
@@ -1805,6 +1812,8 @@ function clausesOf(q, partWords) {
       ' & ',
     ),
   );
+  // "rows tinted with the accent": the color after a fill word is that
+  // fill's color, one ask; "with" is a break elsewhere.
   // "swap X and Y" is one ask.
   const pieces = (
     /\bswap\b/.test(lists)
@@ -1813,7 +1822,7 @@ function clausesOf(q, partWords) {
   )
     .split(
       // A font stack ("Georgia, serif") is one value, not two asks.
-      /;|\.(?=\s|$)|,(?![^(]*\))(?!\s*(?:serif|sans-serif|monospace|system-ui|cursive|fantasy|ui-[a-z-]+)\b)|\b(?:and|with|but|then|plus|also|y|et|und|и)\b|\bwhile\b|(?=\bexcept\b)/,
+      /;|\.(?=\s|$)|,(?![^(]*\))(?!\s*(?:serif|sans-serif|monospace|system-ui|cursive|fantasy|ui-[a-z-]+)\b)|\b(?:and|but|then|plus|also|y|et|und|и)\b|(?<!\b(?:tint(?:ed|s)?|paint(?:ed|s)?|wash(?:ed|es)?)(?:\s+[a-z-]+){0,3}\s+)\bwith\b|\bwhile\b|(?=\bexcept\b)/,
     )
     .map(s => s.trim())
     .filter(Boolean);
@@ -1927,10 +1936,12 @@ function clausesOf(q, partWords) {
       ) &&
       !/\bno (wait|longer)\b/.test(negText);
     // "too X" asks for less X: too sharp is rounder, too heavy is lighter.
-    const tooLess =
-      /\btoo (big|large|round|rounded|roundy|bubbly|shadowy|bold|heavy|thick|dark|spacious|airy|bright|loud|strong|harsh|aggressive|intense|garish|saturated|much|wide|tall)\b/;
-    const tooMore =
-      /\btoo (small|cramped|tight|crowded|faded|light|thin|sharp|square|boxy|pointy|subtle|weak|narrow|dim|low|short)\b/;
+    const tooLess = new RegExp(
+      `\\btoo (?:big|large|round|rounded|roundy|bubbly|shadowy|bold|heavy|thick|dark|bright|loud|strong|harsh|aggressive|intense|garish|saturated|much|wide|tall|${densityWords('roomy')})\\b`,
+    );
+    const tooMore = new RegExp(
+      `\\btoo (?:small|faded|light|thin|sharp|square|boxy|pointy|subtle|weak|narrow|dim|low|short|${densityWords('dense', 'crowded')})\\b`,
+    );
     // "half again", "a third again": more by that share, never less.
     const dir =
       /\bnot (\w+ ){0,2}enough\b|\b(half|a third|a quarter|1\/2|1\/3|1\/4) again\b/.test(
@@ -1942,13 +1953,13 @@ function clausesOf(q, partWords) {
           ? 'less'
           : tooMore.test(text)
             ? 'more'
-            : /\b(less|fewer|smaller|lower|reduce|decrease|shrink|minimi[sz]e|scale down|trim|softer|lighter|lighten|thinner|narrower|shorter|tight(en|er)?|dense(r)?|denser|compact|sharper|squarer|subtler|tone down|dimmer|halve|half|halved|least|minimum|min|minimal|barely|as little)\b|\bcut\b.*\bin half\b|\bx ?0?\.\d+\b|\b(knock|turn|dial|bring|tone)\b.*\bdown\b/.test(
-                  text,
-                )
+            : new RegExp(
+                  `\\b(?:less|fewer|smaller|lower|reduce|decrease|shrink|minimi[sz]e|scale down|trim|softer|lighter|lighten|thinner|narrower|shorter|tighten|sharper|squarer|subtler|tone down|dimmer|halve|half|halved|least|minimum|min|minimal|barely|as little|${densityWords('dense')})\\b|\\bcut\\b.*\\bin half\\b|\\bx ?0?\\.\\d+\\b|\\b(?:knock|turn|dial|bring|tone)\\b.*\\bdown\\b`,
+                ).test(text)
               ? 'less'
-              : /\b(more|bigger|larger|higher|increase|stronger|thicker|wider|taller|rounder|roomier|airy|spacious|bolder|heavier|darker|darken|warmer|cooler|loosen|open up|twice|double|a bit|a little|slightly|much)\b/.test(
-                    text,
-                  )
+              : new RegExp(
+                    `\\b(?:more|bigger|larger|higher|increase|stronger|thicker|wider|taller|rounder|bolder|heavier|darker|darken|warmer|cooler|loosen|open up|twice|double|a bit|a little|slightly|much|${densityWords('roomy')})\\b`,
+                  ).test(text)
                 ? 'more'
                 : null;
     /** @type {Record<string, string>} */
@@ -2925,8 +2936,11 @@ export function draftAnswer(ctx, env, question) {
   };
   // "don't touch the buttons", "leave the corners": an exclusion. It writes
   // nothing, and it gives nothing to the clause after it.
-  const EXCLUDE =
-    /^\s*(?:(?:please )?(?:don'?t|do not|never) (?:touch|change|make)|[\w -]+ (?:should|must|shall)(?:n'?t| not) (?:be|get|look|become)\b(?! (?:so|too|this|that) \w)|leave(?! (?:the )?(?:dark|light) mode\b)|keep (?:the )?[\w -]+ (?:alone|as is|as it is|as they are|unchanged|untouched|the same))\b/i;
+  // (A keep, by the one keep grammar, or a prohibition of a change.)
+  const EXCLUDE = new RegExp(
+    String.raw`^\s*(?:${KEEP_PHRASE}|(?:please )?(?:don'?t|do not|never) (?:touch|change|make)\b|[\w -]+ (?:should|must|shall)(?:n'?t| not) (?:be|get|look|become)\b(?! (?:so|too|this|that) \w)|leave\b(?! (?:the )?(?:dark|light) mode\b))`,
+    'i',
+  );
   const blocked = (/** @type {string} */ x) =>
     EXCLUDE.test(x) ||
     (!/^\s*(?:please )?(?:can|could) (?:the|my|our|all) [\w -]+ be\b|^\s*(?:can|could) i (?:get|have)\b/i.test(
@@ -3044,7 +3058,7 @@ export function draftAnswer(ctx, env, question) {
     )
     // "too airy", "headings too thin", "not bright enough": the other way.
     .replace(
-      /\btoo (airy|spacious|roomy|loose|spread out)\b/gi,
+      new RegExp(`\\btoo (?:${densityWords('roomy')})\\b`, 'gi'),
       'tighter spacing',
     )
     .replace(
@@ -3587,9 +3601,26 @@ export function draftAnswer(ctx, env, question) {
     )
     // "buttons shouldn't be so small": an ask the other way.
     .replace(
-      /\b([a-z][a-z -]*?) (?:shouldn'?t|should not) be (?:so|this|that|too) (small|big|large|round|rounded|dark|light|thin|thick|tight|cramped)\b/gi,
-      (_m, part, adj) =>
-        `make ${part} ${/** @type {Record<string, string>} */ ({small: 'bigger', big: 'smaller', large: 'smaller', round: 'sharper', rounded: 'sharper', dark: 'lighter', light: 'darker', thin: 'thicker', thick: 'thinner', tight: 'roomier', cramped: 'roomier'})[adj.toLowerCase()]}`,
+      new RegExp(
+        `\\b([a-z][a-z -]*?) (?:shouldn'?t|should not) be (?:so|this|that|too) (small|big|large|round|rounded|dark|light|thin|thick|${densityWords('roomy', 'dense', 'crowded')})\\b`,
+        'gi',
+      ),
+      (_m, part, adj) => {
+        const a = adj.toLowerCase();
+        const OTHER = /** @type {Record<string, string>} */ ({
+          small: 'bigger',
+          big: 'smaller',
+          large: 'smaller',
+          round: 'sharper',
+          rounded: 'sharper',
+          dark: 'lighter',
+          light: 'darker',
+          thin: 'thicker',
+          thick: 'thinner',
+        });
+        const roomy = /** @type {readonly string[]} */ (DENSITY.roomy);
+        return `make ${part} ${OTHER[a] ?? (roomy.includes(a) ? 'tighter' : 'roomier')}`;
+      },
     )
     // "remove the padding and border from cards": two removals.
     .replace(
@@ -4221,9 +4252,9 @@ export function draftAnswer(ctx, env, question) {
     const next = clauses[i + 1];
     const describes =
       /\b(is|are|feels?|looks|seems?|fails?)\b/.test(c.text) &&
-      /\b(too|so|very|really|kind of|feels?|seems?|fails?|cramped|flat|heavy|crowded|cluttered|busy|boring|bland|dull|harsh|loud|weak|hard|ugly|off)\b/.test(
-        c.text,
-      ) &&
+      new RegExp(
+        `\\b(?:too|so|very|really|kind of|feels?|seems?|fails?|flat|heavy|cluttered|busy|boring|bland|dull|harsh|loud|weak|hard|ugly|off|${densityWords('crowded')})\\b`,
+      ).test(c.text) &&
       !/\d/.test(c.text) &&
       !/^(make|set|use|give|add|remove|change|put)\b/.test(c.text) &&
       !/#[0-9a-f]{3,8}\b|\(/.test(c.text) &&
@@ -4776,7 +4807,7 @@ export function draftAnswer(ctx, env, question) {
    * @param {Clause} c
    * @returns {string[] | null}
    */
-  const gradientStops = c => {
+  const clauseGradientColors = c => {
     const named = colorsWritten(c.text);
     // One color named ("a red gradient") runs to a lighter shade of it: the
     // gradient is always of the colors the words name.
@@ -6640,8 +6671,13 @@ export function draftAnswer(ctx, env, question) {
       continue;
     }
     // "2px rounder", "8px larger", "4px wider": a change too.
-    const COMPARATIVE =
-      'more|less|bigger|smaller|rounder|sharper|squarer|larger|wider|narrower|taller|shorter|thicker|thinner|higher|lower|tighter|looser|roomier|airier|denser|bolder|heavier|lighter';
+    const COMPARATIVE = `more|less|bigger|smaller|rounder|sharper|squarer|larger|wider|narrower|taller|shorter|thicker|thinner|higher|lower|bolder|heavier|lighter|${densityWords(
+      'roomy',
+      'dense',
+    )
+      .split('|')
+      .filter(w => /er$/.test(w))
+      .join('|')}`;
     // A weight moved by a number ("100 bolder"): set takes the new weight.
     const weightDelta = /\b(\d{2,3}) (bolder|heavier|lighter|thinner)\b/.exec(
       c.text,
@@ -6671,10 +6707,14 @@ export function draftAnswer(ctx, env, question) {
         Math.round(
           Number(delta[1] ?? delta[3]) * (unit === 'px' ? 1 : 16) * 100,
         ) / 100;
-      const down =
-        /\b(decrease|reduce|less|smaller|minus|subtract|subtracting|lower|shrink|sharper|squarer|narrower|shorter|thinner|tighter|denser|lighter)\b/.test(
-          c.text,
-        );
+      const down = new RegExp(
+        `\\b(?:decrease|reduce|less|smaller|minus|subtract|subtracting|lower|shrink|sharper|squarer|narrower|shorter|thinner|lighter|${densityWords(
+          'dense',
+        )
+          .split('|')
+          .filter(w => /er$/.test(w))
+          .join('|')})\\b`,
+      ).test(c.text);
       const cornerAsk =
         c.aspects.includes('corners') ||
         /\b(rounder|sharper|squarer)\b/.test(c.text);
@@ -8130,7 +8170,10 @@ export function draftAnswer(ctx, env, question) {
       // "a blue gradient", "gradient from #fff to #eef": a gradient of the
       // colors named (one color runs to a lighter shade of it).
       if (/\bgradients?\b/.test(c.text)) {
-        const stops = gradientStops(c) ?? [color, shift(color, 0.35) ?? color];
+        const stops = clauseGradientColors(c) ?? [
+          color,
+          shift(color, 0.35) ?? color,
+        ];
         return {
           text: `the page background: a gradient of ${stops.join(' to ')} on app-shell (the page behind your parts)`,
           options: [
@@ -9306,14 +9349,17 @@ export function draftAnswer(ctx, env, question) {
         const gap = /\b(gaps?|between)\b/.test(c.text);
         // The way the words give, if any.
         const way =
-          /\b(cramped|crowded|airy|spacious|roomy)\b/.test(c.text) ||
-          c.dir === 'more'
+          new RegExp(`\\b(?:${densityWords('roomy', 'crowded')})\\b`).test(
+            c.text,
+          ) || c.dir === 'more'
             ? 'more'
-            : c.dir === 'less' || /\b(dense|compact|tight)\b/.test(c.text)
+            : c.dir === 'less' ||
+                new RegExp(`\\b(?:${densityWords('dense')})\\b`).test(c.text)
               ? 'less'
               : null;
         const value =
-          /\b(dense|compact)\b/.test(c.text) && !c.dir
+          new RegExp(`\\b(?:${densityWords('dense')})\\b`).test(c.text) &&
+          !c.dir
             ? 'compact'
             : (c.neg || /\b(zero|no|none|without)\b/.test(c.text)) &&
                 /\b(padding|spac(e|es|ing)|gaps?|margins?)\b/.test(c.text) &&
@@ -10773,7 +10819,7 @@ export function draftAnswer(ctx, env, question) {
             ],
           };
         // "a blue to purple gradient": the colors named, never a sample.
-        const named = design === 'gradient' ? gradientStops(c) : null;
+        const named = design === 'gradient' ? clauseGradientColors(c) : null;
         if (named)
           return {
             text: `a gradient of ${named.join(' to ')}${where}`,
@@ -11269,8 +11315,12 @@ export function draftAnswer(ctx, env, question) {
           : dim.test(t) || (/\bless\b/.test(t) && !/\bmore\b/.test(t));
       const step = set('vibrancy', less ? 'less' : 'more');
       const colored = (/** @type {string} */ v) => !isGraySeed(seedOf(v));
+      // A color dial counts when the step changes the shades made from it
+      // (a warm gray has a little hue to take out), as set measures it.
       const hasColor = env.data.settings.some(
-        x => PALETTE_DIALS.includes(x.thing) && colored(x.value),
+        x =>
+          PALETTE_DIALS.includes(x.thing) &&
+          vibrancyMoves(x.thing, seedOf(x.value), 0, 100),
       );
       const help =
         'vibrancy sets how saturated every generated color is (0 is gray, 100 the most vivid, 50 the default)';

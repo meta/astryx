@@ -115,6 +115,39 @@ export const CORNERS = [
   ['round', 16],
   ['pill', 9999],
 ];
+/**
+ * The density words, the one table every reading of room uses: words for
+ * more room (roomy), for less (dense), and complaints that there is too
+ * little (crowded). An ask names the density it wants; after "too" the
+ * word names the density there is, so the change goes the other way.
+ */
+export const DENSITY = /** @type {const} */ ({
+  roomy: [
+    'airy',
+    'airier',
+    'spacious',
+    'roomy',
+    'roomier',
+    'loose',
+    'looser',
+    'relaxed',
+    'comfortable',
+    'sparse',
+    'generous',
+    'spread out',
+  ],
+  dense: ['dense', 'denser', 'compact', 'tight', 'tighter', 'condensed'],
+  crowded: ['cramped', 'crowded', 'packed'],
+});
+
+/**
+ * The density words of the kinds given, as one alternation for a regular
+ * expression.
+ * @param {...keyof typeof DENSITY} kinds
+ */
+export const densityWords = (...kinds) =>
+  kinds.flatMap(k => DENSITY[k]).join('|');
+
 /** @type {Array<[string, number]>} */
 export const SPACING = [
   ['tight', 0.75],
@@ -459,8 +492,7 @@ export const DIALS = wordTable({
       'set my spacing more',
       'set my spacing roomy --on card',
     ],
-    words:
-      'spacing space room roomy airy dense density compact tight padding gap gaps margin breathing cramped spread spacious',
+    words: `spacing space room density padding gap gaps margin breathing spread ${densityWords('roomy', 'dense', 'crowded').replace(/\|/g, ' ')}`,
   },
   accent: {
     help: 'The main brand color: primary buttons, links, selection and the focus ring. From the one color the editor generates its shades, light and dark, and points the accent tokens at them: --color-accent, --color-on-accent, --color-text-accent, --color-icon-accent, --color-accent-muted and --focus-outline-color. The fill keeps the exact color you gave in light, and in dark too when text on it reads at 4.5:1 and it stands out from the dark page at 3:1; otherwise dark mode uses shade 70, where the official themes put a dark fill, or the shade nearest it that passes both, and the result says so. Text on the fill is the neutral color\'s white or near-black (pure white or black without a neutral color), whichever reads on it. The fill never moves: when no text reads on it, or a pale fill does not stand out from the light page, the result says so. Other tokens move to a nearby shade when they must read: text at 4.5:1, the focus ring at 3:1. `how colors` explains it; the Colors preview page (`preview add`) shows every shade. For an exact color, set the token itself (set my --color-accent "#7c3aed"): an exact token always wins over the generated colors.',
@@ -749,9 +781,11 @@ export const THING_HINTS = wordTable({
     const w = v.trim().toLowerCase();
     const rung = SPACING.some(([n]) => n === w)
       ? w
-      : /^(airy|loose|relaxed|comfortable|open|sparse|generous)$/.test(w)
+      : new RegExp(`^(?:${densityWords('roomy')})$`).test(w)
         ? 'roomy'
-        : /^(dense|cramped|condensed|packed|small|less)$/.test(w)
+        : new RegExp(
+              `^(?:${densityWords('dense', 'crowded')}|small|less)$`,
+            ).test(w)
           ? 'compact'
           : null;
     return [
