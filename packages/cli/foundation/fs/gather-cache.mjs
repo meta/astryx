@@ -18,8 +18,10 @@
  *   template and component replacement passes), which `component`,
  *   `template`, `theme`, `discover` and `search` report, by template
  *   discovery (foundation/discovery/template-adapter.mjs) for its records, by
- *   the component list (api/component/list/list.mjs), by theme discovery
- *   (foundation/discovery/theme-discovery.mjs) for each integration's themes,
+ *   the component list (api/component/list/list.mjs) and component
+ *   replacement (foundation/discovery/component-replacement.mjs), by theme
+ *   discovery (foundation/discovery/theme-discovery.mjs) for each
+ *   integration's themes,
  *   by `doctor` (api/doctor/_adapter.mjs) for its file-only docs checks and
  *   its theme-wiring scan,
  *   in a run that records modules and variables to its end, and, through
