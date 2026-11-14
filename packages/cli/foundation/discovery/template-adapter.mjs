@@ -1788,11 +1788,17 @@ function missingTemplateSourceFix(docPath, sourcePath) {
  * rules as {@link discoverIntegrationTemplates} (same-stem source required,
  * page|block type required); broken templates are recorded in `errors` rather
  * than thrown. Exposed for `doctor integration validate` and template authoring checks.
+ * With `keep`, only the template docs whose ids `keep` accepts are read, so
+ * the lookup commands' not-found hint checks a few ids as discovery does.
  *
  * @param {{name?: string, __spec?: string, __autolinked?: boolean, templates?: string}} integration
+ * @param {(id: string) => boolean} [keep]
  * @returns {Promise<{templates: DiscoveredTemplate[], errors: TemplateDiscoveryError[]}>}
  */
-export async function discoverIntegrationTemplatesForOne(integration) {
+export async function discoverIntegrationTemplatesForOne(
+  integration,
+  keep = () => true,
+) {
   /** @type {DiscoveredTemplate[]} */
   const templates = [];
   /** @type {TemplateDiscoveryError[]} */
@@ -1810,6 +1816,7 @@ export async function discoverIntegrationTemplatesForOne(integration) {
       .slice(0, -suffix.length)
       .split(path.sep)
       .join('/');
+    if (!keep(id)) continue;
 
     const sourcePath = docPath.slice(0, -suffix.length) + '.tsx';
     if (!fs.existsSync(sourcePath)) {

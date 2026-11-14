@@ -31,6 +31,7 @@ import {packageSource} from './source.mjs';
 import {renderTokens} from './links.mjs';
 import {createDocId} from '../identity/provider-identity.mjs';
 import {CLI_PROVIDER_ID} from '../identity/providers.mjs';
+import {KIND_GROUPS, TOPIC_LEVELS, topicLevel} from './generated-levels.mjs';
 
 export {routeSegment};
 
@@ -42,36 +43,6 @@ const CLI_PROVIDER = '@astryxdesign/cli';
 
 /** One route segment: lowercase letters and digits joined by single hyphens. */
 export const ROUTE_SEGMENT_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-
-/**
- * The generated level that `groupBy: 'kind'` makes for each kind: its route
- * segment, title, and summary.
- * @type {Readonly<Record<string, {segment: string, title: string, summary: string}>>}
- */
-export const KIND_GROUPS = Object.freeze({
-  command: {
-    segment: 'commands',
-    title: 'Commands',
-    summary: 'Every command and subcommand.',
-  },
-  function: {
-    segment: 'functions',
-    title: 'Functions',
-    summary: 'Every function: its signature, parameters, returns, and errors.',
-  },
-  schema: {
-    segment: 'schemas',
-    title: 'Schemas',
-    summary: 'Data shapes, field by field.',
-  },
-  enum: {
-    segment: 'enums',
-    title: 'Enums',
-    summary:
-      'Every fixed list of values, such as error codes and response types.',
-  },
-  generic: {segment: 'guides', title: 'Guides', summary: 'Every guide.'},
-});
 
 /**
  * @typedef {import('../../authoring/doctypes/namespace/type').NamespaceDoc} NamespaceDoc
@@ -132,34 +103,7 @@ export const KIND_GROUPS = Object.freeze({
  *   topics it replaced, directly or through a chain
  */
 
-/**
- * The generated levels that hold the flat topics, by category
- * (spec:AST-046 FR12). A topic keeps its own name as its route; its level is
- * only where it sits. Readers see these titles in a topic's path, so each is
- * a plain name for what the topics are.
- */
-export const TOPIC_LEVELS = Object.freeze({
-  guides: Object.freeze({
-    route: 'guides',
-    title: 'Guides',
-    summary:
-      'Guides that stand on their own: getting started, principles, theming, and working with AI. Each topic keeps its own name; open one by it.',
-  }),
-  foundations: Object.freeze({
-    route: 'foundations',
-    title: 'Foundations',
-    summary:
-      'Color, elevation, icons, illustrations, motion, shape, and spacing: the visual foundations every component builds on. Each topic keeps its own name; open one by it.',
-  }),
-});
-
-/**
- * The generated level a flat topic sits in.
- * @param {string | null | undefined} category
- * @returns {'guides' | 'foundations'}
- */
-export const topicLevel = category =>
-  category === 'foundations' ? 'foundations' : 'guides';
+export {KIND_GROUPS, TOPIC_LEVELS, topicLevel};
 
 /**
  * @typedef {object} TreeNode

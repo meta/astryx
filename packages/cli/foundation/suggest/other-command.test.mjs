@@ -261,6 +261,9 @@ let tmpDir;
  * DazzleDeck and dazzle-deck, the page template plonk, the block
  * glint-row-list, the component VexaPanel with the block
  * parts/Vexa/VexaShowcase named "Vexa Panel", and the docs topic glint-row.
+ * Its docs tree adds the namespace snerd with the guide snerd/blivet-setup.
+ * The template docs phantom-strip (no source) and broken-slab (does not
+ * load) are files `astryx template` does not list.
  */
 function scaffold() {
   fs.writeFileSync(
@@ -365,6 +368,41 @@ function scaffold() {
     );
   }
   fs.writeFileSync(
+    path.join(pkgDir, 'docs', 'snerd.doc.mjs'),
+    `export default ${JSON.stringify({
+      type: 'namespace',
+      name: 'snerd',
+      title: 'Snerd',
+      summary: 'Everything about Snerd.',
+      slots: {guides: {title: 'Guides', accepts: {kinds: ['generic']}}},
+    })};\n`,
+  );
+  fs.writeFileSync(
+    path.join(pkgDir, 'docs', 'blivet-setup.doc.mjs'),
+    `export default ${JSON.stringify({
+      type: 'generic',
+      name: 'blivet-setup',
+      title: 'Blivet setup',
+      description: 'Set up a blivet.',
+      placement: {parent: 'namespace:snerd', slot: 'guides'},
+      sections: [
+        {title: 'Overview', content: [{type: 'prose', text: 'Set it up.'}]},
+      ],
+    })};\n`,
+  );
+  fs.writeFileSync(
+    path.join(pkgDir, 'templates', 'phantom-strip.doc.mjs'),
+    "export default {type: 'block', name: 'Phantom strip', description: 'A strip.'};\n",
+  );
+  fs.writeFileSync(
+    path.join(pkgDir, 'templates', 'broken-slab.doc.mjs'),
+    "throw new Error('broken');\n",
+  );
+  fs.writeFileSync(
+    path.join(pkgDir, 'templates', 'broken-slab.tsx'),
+    'export default function Fixture() { return null; }\n',
+  );
+  fs.writeFileSync(
     path.join(pkgDir, 'docs', 'quoxle-guide.doc.mjs'),
     `export default ${JSON.stringify({
       type: 'generic',
@@ -450,6 +488,11 @@ const PAIRS = /** @type {const} */ ([
   ['docs', 'dazzle-deck', 'astryx template dazzle-deck'],
   ['hook', 'glint-row', 'astryx docs glint-row'],
   ['hook', 'GlintRow', 'astryx component GlintRow'],
+  ['hook', 'snerd', 'astryx docs snerd'],
+  ['hook', 'blivet-setup', 'astryx docs snerd/blivet-setup'],
+  ['component', 'BlivetSetup', 'astryx docs snerd/blivet-setup'],
+  ['template', 'blivet setup', 'astryx docs snerd/blivet-setup'],
+  ['template', 'snerd/blivet-setup', 'astryx docs snerd/blivet-setup'],
 ]);
 
 describe("each lookup's not-found error for another command's entry", () => {
@@ -519,6 +562,48 @@ describe("each lookup's not-found error for another command's entry", () => {
       // `glint-row-list` only carries the typed words; the component folds.
       const words = await LOOKUPS.template('Glint Row');
       expect(words.suggestions[0].name).toBe('astryx component GlintRow');
+    },
+    SLOW,
+  );
+
+  it(
+    'names only templates `astryx template` lists',
+    async () => {
+      for (const id of ['phantom-strip', 'broken-slab']) {
+        expect((await LOOKUPS.template(id)).code).toBe(CODES.template);
+        for (const from of /** @type {const} */ ([
+          'component',
+          'hook',
+          'docs',
+        ])) {
+          const error = await LOOKUPS[from](id);
+          expect(error.code, `${from} ${id}`).toBe(CODES[from]);
+          expect(
+            (error.suggestions ?? []).some(
+              (/** @type {{name: string}} */ s) =>
+                s.name === `astryx template ${id}`,
+            ),
+            `${from} ${id}`,
+          ).toBe(false);
+        }
+      }
+    },
+    SLOW,
+  );
+
+  it(
+    'names every docs route, and the hint it names reads',
+    async () => {
+      for (const [from, typed] of /** @type {const} */ ([
+        ['hook', 'blivet-setup'],
+        ['component', 'snerd'],
+      ])) {
+        const error = await LOOKUPS[from](typed);
+        const route = error.suggestions[0].name.replace(/^astryx docs /, '');
+        await expect(
+          docs(route, undefined, {cwd: tmpDir}),
+        ).resolves.toBeDefined();
+      }
     },
     SLOW,
   );

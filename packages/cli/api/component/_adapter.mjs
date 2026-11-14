@@ -59,6 +59,7 @@ import {
   linkComponentDoc,
   loadDocsCatalog,
 } from '../docs/_adapter.mjs';
+import {docsEntryNames} from '../docs/_entry-names.mjs';
 import {
   findOtherCommand,
   withOtherCommand,
@@ -935,6 +936,7 @@ export async function withOtherCommandHint(
       cwd,
       coreDir,
       integrations: loadedIntegrations,
+      docsNames: docsEntryNames,
     });
     if (!hint) return error;
     return new AstryxError(

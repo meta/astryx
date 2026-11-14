@@ -94,12 +94,16 @@ export async function resolveHookDoc(
  */
 async function withOtherCommandHint(name, suggestions, {coreDir, cwd}) {
   try {
-    const {findOtherCommand, withOtherCommand} =
-      await import('../../foundation/suggest/other-command.mjs');
+    const [{findOtherCommand, withOtherCommand}, {docsEntryNames}] =
+      await Promise.all([
+        import('../../foundation/suggest/other-command.mjs'),
+        import('../docs/_entry-names.mjs'),
+      ]);
     const hint = await findOtherCommand(name, {
       from: 'hook',
       cwd,
       coreDir,
+      docsNames: docsEntryNames,
     });
     return withOtherCommand(suggestions, hint, name, {from: 'hook'});
   } catch {

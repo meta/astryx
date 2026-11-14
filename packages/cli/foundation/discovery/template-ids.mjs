@@ -10,8 +10,8 @@
  * @output ids, suffixes and folders; whether a template id folds to the name
  * @position foundation/discovery: read by template discovery
  *   (./template-adapter.mjs), which re-exports the ids, and by the lookup
- *   commands' not-found hint (../suggest/other-command.mjs), which needs no
- *   template doc
+ *   commands' not-found hint (../suggest/other-command.mjs), which reads an
+ *   integration's template doc only when its file names can match
  */
 
 import * as fs from 'node:fs';
@@ -131,7 +131,9 @@ const FOLD_FILE = fileURLToPath(
  * kept summary of file names: `blocks` false means {@link coreTemplateIds}
  * gives no block id that folds to it, and `listed` says whether any of the
  * integrations ships a template doc whose id ({@link integrationTemplateIds})
- * or the id's last segment folds to it.
+ * or the id's last segment folds to it. Discovery lists a template only when
+ * its doc has its same-stem `.tsx` source beside it, so a doc without one
+ * counts for neither.
  * @param {Array<{templates?: string}>} integrations
  * @param {string} wanted a folded name
  * @returns {{blocks: boolean, listed: boolean}}
@@ -153,10 +155,13 @@ export function templateFilesNaming(integrations, wanted) {
       trees.map(({folders}, at) => {
         const folded = new Set();
         for (const {rel, entries} of folders) {
-          for (const {name, isDir} of entries) {
-            if (isDir) continue;
+          const files = new Set(
+            entries.flatMap(({name, isDir}) => (isDir ? [] : [name])),
+          );
+          for (const name of files) {
             const suffix = matchedTemplateSuffix(name);
-            if (!suffix) continue;
+            if (!suffix || !files.has(`${name.slice(0, -suffix.length)}.tsx`))
+              continue;
             // Core's block ids are stems; an integration's are paths.
             const id =
               at === 0

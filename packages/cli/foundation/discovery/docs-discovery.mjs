@@ -181,15 +181,39 @@ export function builtinDocNamesWhere(keep) {
 }
 
 /**
- * The names `keep` accepts among the topics and root namespaces these
- * integration docs declare: each doc without `placement`, by the name its
- * text gives. A doc that does not load or parse names nothing.
+ * Whether a doc the CLI ships has a name `keep` accepts, by its file name: a
+ * flat topic, or any namespace or guide of its docs tree, since a tree file
+ * is named after its doc.
+ *
+ * @param {(name: string) => boolean} keep
+ * @returns {boolean}
+ */
+export function builtinDocNamed(keep) {
+  if (Object.keys(discoverBuiltinTopics()).some(keep)) return true;
+  const tree = path.join(BUILTIN_DOCS_DIR, 'tree');
+  if (!fs.existsSync(tree)) return false;
+  return listDir(tree).some(file => {
+    const stem = /^([\w-]+)\.doc\.mjs$/u.exec(file)?.[1];
+    return stem != null && keep(stem);
+  });
+}
+
+/**
+ * The names `keep` accepts among the names these integration docs declare,
+ * by the name each doc's text gives: by default only the topics and root
+ * namespaces, the docs without `placement`; with `placed`, every doc. A doc
+ * that does not load or parse names nothing.
  *
  * @param {string[]} files integration doc files
  * @param {(name: string) => boolean} keep
+ * @param {{placed?: boolean}} [options]
  * @returns {Promise<string[]>}
  */
-export async function integrationDocNamesWhere(files, keep) {
+export async function integrationDocNamesWhere(
+  files,
+  keep,
+  {placed = false} = {},
+) {
   /** @type {string[]} */
   const names = [];
   for (const file of files) {
@@ -201,7 +225,9 @@ export async function integrationDocNamesWhere(files, keep) {
     } catch {
       continue;
     }
-    if (doc?.placement != null || typeof doc?.name !== 'string') continue;
+    if ((!placed && doc?.placement != null) || typeof doc?.name !== 'string') {
+      continue;
+    }
     if (keep(doc.name)) names.push(doc.name);
   }
   return names;

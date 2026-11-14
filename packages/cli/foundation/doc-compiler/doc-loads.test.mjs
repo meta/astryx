@@ -530,6 +530,7 @@ const LOADER_MODULES = {
   // loadTopicModule hands back a topic's raw doc.
   'foundation/discovery/docs-discovery.mjs': [
     'BUILTIN_DOCS_PACKAGE',
+    'builtinDocNamed',
     'builtinDocNamesWhere',
     'DocsCatalog',
     'discoverBuiltinTopics',
