@@ -1,4 +1,9 @@
 {
   "$comment": "Imports that put the shared touch runtime in a Core component's first load today (architecture:react-component-runtime INV13 gap line). Each stays allowed until the change in removedBy lands. The list only shrinks: no-static-touch-runtime.test.mjs fails when an entry no longer reaches the runtime.",
-  "entries": {}
+  "entries": {
+    "AlertDialog/useAlertMotion.ts -> motion/animator.ts": {
+      "why": "AlertDialog's touch motion builds its present and dismiss motion on the animator's motion engine.",
+      "removedBy": "touch-loader follow-up: AlertDialog's touch motion takes the motion engine from the touch loader"
+    }
+  }
 }
