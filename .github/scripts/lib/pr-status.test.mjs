@@ -217,11 +217,7 @@ describe('buildComponentTable', () => {
           results: {visual: 'not-run', a11y: 'pass', rtl: 'pass'},
         },
       ]),
-      visualVerdict: {
-        status: 'ok',
-        changes: [],
-        context: {scope: 'touched'},
-      },
+      visualVerdict: {status: 'ok', changes: [], context: {scope: 'touched'}},
     });
     expect(table).toMatch(/^\| \[New\][^\n]* \| — · ✓ · ✓ \|$/m);
     expect(table).not.toMatch(/^\| \[lab\/Sketch\][^\n]* \| ✓/m);
@@ -251,9 +247,7 @@ describe('buildComponentTable', () => {
       analysis: {
         baseSha: 'a'.repeat(40),
         modifiedComponents: ['Card'],
-        componentStats: {
-          Card: {package: '@astryxdesign/lab', linesOfCode: 9},
-        },
+        componentStats: {Card: {package: '@astryxdesign/lab', linesOfCode: 9}},
       },
       origin: '',
     });
@@ -617,10 +611,7 @@ describe('apiChangesLine', () => {
 
   it('is absent when no package has a change, or without a file', () => {
     expect(
-      apiChangesLine({
-        version: 1,
-        packages: [pkg('core', []), pkg('lab', [])],
-      }),
+      apiChangesLine({version: 1, packages: [pkg('core', []), pkg('lab', [])]}),
     ).toBe('');
     expect(apiChangesLine(null)).toBe('');
   });

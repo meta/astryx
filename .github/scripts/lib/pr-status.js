@@ -335,11 +335,7 @@ function visualShots(verdict) {
     ...[...(verdict.changes || [])]
       .sort((a, b) => Number(b.diffPixels ?? 0) - Number(a.diffPixels ?? 0))
       .map(change => ({...change, kinds: ['before', 'after', 'diff']})),
-    ...(verdict.added || []).map(key => ({
-      key,
-      name: key,
-      kinds: ['after'],
-    })),
+    ...(verdict.added || []).map(key => ({key, name: key, kinds: ['after']})),
     ...(verdict.removed || []).map(key => ({
       key,
       name: key,
