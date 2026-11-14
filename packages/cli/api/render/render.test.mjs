@@ -2364,6 +2364,49 @@ console.log(JSON.stringify({inside, outside}));
   }, 60_000);
 });
 
+describe('render(): media queries asked in JavaScript', () => {
+  it("names each media query the page asks with Core's hook or matchMedia, and says to fold the layout with CSS", async () => {
+    put(
+      'screen-query.tsx',
+      `import {useEffect, useState} from 'react';
+import {useMediaQuery} from '@astryxdesign/core/hooks';
+function useDark() {
+  const [dark, setDark] = useState(false);
+  useEffect(() => setDark(window.matchMedia(\`(prefers-color-scheme: dark)\`).matches), []);
+  return dark;
+}
+export default function Page() {
+  const narrow = useMediaQuery('(max-width: 768px)');
+  const alsoNarrow = useMediaQuery('(max-width: 768px)');
+  const dark = useDark();
+  return <main>{narrow && alsoNarrow ? 'One column' : 'Two columns'}{dark ? ' dark' : ''}</main>;
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('screen-query.tsx', {cwd: dir}));
+    const warnings = result.data.warnings.filter((/** @type {any} */ w) => w.code === 'screen-query');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0].message).toBe(
+      "The page asks matchMedia('(prefers-color-scheme: dark)'), useMediaQuery('(max-width: 768px)') in JavaScript, which this file never runs: readers on every screen get its server answer, so fold the layout with CSS: Grid columns={{minWidth}}, or a StyleX @media or @container style.",
+    );
+  }, 60_000);
+
+  it('says nothing for a page that asks no media query, or calls a function of its own named like the hook', async () => {
+    put(
+      'no-screen-query.tsx',
+      `function useMediaQuery(query: string) {
+  return query.length > 100;
+}
+export default function Page() {
+  return <main>{useMediaQuery('(max-width: 768px)') ? 'narrow' : 'wide'}</main>;
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('no-screen-query.tsx', {cwd: dir}));
+    expect(result.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('screen-query');
+  }, 60_000);
+});
+
 describe('render(): charts', () => {
   const DATA = "const data = [{d: 'a', v: 1}, {d: 'b', v: 3}, {d: 'c', v: 2}];";
 

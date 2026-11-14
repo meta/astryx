@@ -50,7 +50,7 @@ export {MODULE_EXTENSIONS, PAGE_EXTENSIONS} from './embedded-files.mjs';
 
 /**
  * @typedef {object} RenderWarning
- * @property {'dropped-children' | 'remote-asset' | 'missing-asset' | 'page-output' | 'page-script' | 'no-astryx-styles' | 'chart-size' | 'not-embedded' | 'node-crash'} code - What kind of problem.
+ * @property {'dropped-children' | 'remote-asset' | 'missing-asset' | 'page-output' | 'page-script' | 'no-astryx-styles' | 'chart-size' | 'screen-query' | 'not-embedded' | 'node-crash'} code - What kind of problem.
  * @property {string} message - What happened and what to do, in one sentence.
  */
 
@@ -1016,6 +1016,17 @@ export async function renderPage(entry, options = {}) {
     warnings.push({
       code: 'dropped-children',
       message: `<${t.component}> on line ${t.line} did not render the text "${t.text.length > 60 ? `${t.text.slice(0, 57)}...` : t.text}" it was given; it takes that text through a prop (often label=), so check its props.`,
+    });
+  }
+  // The file runs no script, so a media query the page asks in JavaScript
+  // keeps the answer it got on the server, whatever the reader's screen.
+  const screenQueries = [
+    ...new Set(/** @type {{call: string}[]} */ (message.screenQueries ?? []).map(q => q.call)),
+  ];
+  if (screenQueries.length > 0) {
+    warnings.push({
+      code: 'screen-query',
+      message: `The page asks ${screenQueries.join(', ')} in JavaScript, which this file never runs: readers on every screen get its server answer, so fold the layout with CSS: Grid columns={{minWidth}}, or a StyleX @media or @container style.`,
     });
   }
   // A chart the render did not draw is an empty box: a ResponsiveContainer
