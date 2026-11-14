@@ -619,7 +619,15 @@ const QUESTIONS = [
       adds: /:active\.transform=scale/,
     },
   ],
-  ['selected table row light blue', {parts: ['table-row'], top: null}],
+  [
+    'selected table row light blue',
+    {
+      parts: ['table-row'],
+      // Core paints the selected wash inline from this token.
+      top: /^set q --color-accent-muted '#[0-9a-f]{6}' --on table-row --state selected$/,
+      adds: /table-row\.selected\.--color-accent-muted=#/,
+    },
+  ],
   ['dark mode only', {top: /^set q mode dark-only$/, adds: /mode=dark-only/}],
   [
     'make dark mode text less bright',

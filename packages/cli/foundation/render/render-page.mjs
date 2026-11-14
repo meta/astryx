@@ -23,11 +23,11 @@ import {fork, spawnSync} from 'node:child_process';
 import {builtinModules} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import postcss from 'postcss';
-import {assetDataUri, isAssetBytes, isAssetPath, RenderAssetError} from './assets.mjs';
+import {assetDataUri, isAssetBytes, isAssetPath, MAX_ASSET_BYTES, RenderAssetError} from './assets.mjs';
 import {classesIn, cutCss, layerOrderOf} from './css-cut.mjs';
-import {RENDER_FORMAT, asParsed, sha256, sourceBlock} from './source-block.mjs';
+import {asParsed, formatFor, sha256, sourceBlock} from './source-block.mjs';
 import {embeddedPathProblem} from './embedded-files.mjs';
-import {aliasOnly} from './embedded-imports.mjs';
+import {aliasOnly, assetRefsOf} from './embedded-imports.mjs';
 import {isServedPackage, resolveServed} from './served-packages.mjs';
 import {CHART_CSS} from './charts.mjs';
 import {HOST_EXIT} from './host-exit.mjs';
@@ -38,7 +38,7 @@ import {findNodeModulesPackage} from '../fs/paths.mjs';
 /** How long one page may take to render before it is stopped. */
 export const RENDER_TIMEOUT_MS = 60_000;
 
-export {PAGE_EXTENSIONS} from './embedded-files.mjs';
+export {MODULE_EXTENSIONS, PAGE_EXTENSIONS} from './embedded-files.mjs';
 
 /**
  * @typedef {object} RenderWarning
@@ -83,6 +83,33 @@ function projectOf(dir) {
   for (let d = dir; ; d = path.dirname(d)) {
     if (fs.existsSync(path.join(d, 'package.json'))) return d;
     if (path.dirname(d) === d) return null;
+  }
+}
+
+/**
+ * Whether a path names a file. A name the system cannot look up (a segment
+ * too long, a folder it may not read) names none.
+ * @param {string} file
+ */
+function isFileAt(file) {
+  try {
+    return fs.statSync(file).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The first bytes of a file, enough to tell its format.
+ * @param {string} file
+ */
+function headOf(file) {
+  const fd = fs.openSync(file, 'r');
+  try {
+    const head = Buffer.alloc(4096);
+    return head.subarray(0, fs.readSync(fd, head, 0, head.length, 0));
+  } finally {
+    fs.closeSync(fd);
   }
 }
 
@@ -834,20 +861,64 @@ export async function renderPage(entry, options = {}) {
     if (rel.startsWith('..') || path.isAbsolute(rel) || rel.split(path.sep).includes('node_modules')) continue;
     if (!files.includes(sheet)) files.push(sheet);
   }
-  for (const asset of ctx.localAssets) {
+  /** Assets named in a warning already, so each is named once. @type {Set<string>} */
+  const notCarried = new Set();
+  /**
+   * Carry an image, font or media file of the project's own. It is carried
+   * only when its bytes are a known image, font or media format, the same
+   * test --reverse applies, so the file always comes back.
+   * @param {string} asset absolute
+   * @param {string} how how the page uses it, for the warning
+   */
+  const carryAsset = (asset, how) => {
     const rel = path.relative(scope, asset);
-    if (rel.startsWith('..') || path.isAbsolute(rel) || rel.split(path.sep).includes('node_modules')) continue;
-    if (files.includes(asset)) continue;
-    // Carried only when its bytes are a known image, font or media format,
-    // the same test --reverse applies, so the file always comes back.
-    if (!isAssetBytes(fs.readFileSync(asset))) {
+    if (rel.startsWith('..') || path.isAbsolute(rel) || rel.split(path.sep).includes('node_modules')) return;
+    if (files.includes(asset) || notCarried.has(asset)) return;
+    /** @param {string} why */
+    const leaveOut = why => {
+      notCarried.add(asset);
       warnings.push({
         code: 'not-embedded',
-        message: `${path.relative(dir, asset).split(path.sep).join('/')} is shown inline but not carried in the file: its bytes are not a known image, font or media format, so --reverse cannot give it back.`,
+        message: `${path.relative(dir, asset).split(path.sep).join('/')} is ${how} but not carried in the file: ${why}, so --reverse cannot give it back.`,
       });
-      continue;
+    };
+    // The same limit as a file the page shows, which a render inlines.
+    if (fs.statSync(asset).size > MAX_ASSET_BYTES) {
+      leaveOut(`it is larger than ${MAX_ASSET_BYTES / 1048576} MB, the most a rendered page carries of one file`);
+      return;
+    }
+    if (!isAssetBytes(headOf(asset))) {
+      leaveOut('its bytes are not a known image, font or media format');
+      return;
     }
     files.push(asset);
+  };
+  for (const asset of ctx.localAssets) carryAsset(asset, 'shown inline');
+  // A carried module or stylesheet can name an image, font or media file by
+  // a relative path. --reverse expects each such file back, also when this
+  // render does not show it, when it lies inside the folder that holds the
+  // carried files (a name that climbs out of it is not the page's file).
+  let named = dir;
+  for (const f of files) {
+    while (path.relative(named, f).startsWith('..')) named = path.dirname(named);
+  }
+  const carriedText = files.filter(
+    f => /\.(?:[cm]?[jt]sx?|css)$/i.test(f) && (f === entry || !embeddedPathProblem(path.relative(named, f).split(path.sep).join('/'))),
+  );
+  for (const file of carriedText) {
+    let text;
+    try {
+      text = fs.readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    for (const ref of assetRefsOf(text, file)) {
+      const asset = path.resolve(path.dirname(file), ref);
+      if (path.relative(named, asset).startsWith('..')) continue;
+      if (isFileAt(asset)) {
+        carryAsset(asset, `named in ${path.relative(dir, file).split(path.sep).join('/')}`);
+      }
+    }
   }
   // Paths are kept relative to the folder that holds every file: the page's
   // folder, or an ancestor when the page imports from above it.
@@ -893,7 +964,7 @@ export async function renderPage(entry, options = {}) {
     const file = path.basename(options.output);
     const facts = {
       cli: options.version ?? null,
-      format: RENDER_FORMAT,
+      format: formatFor(embedded),
       file,
       page: path.relative(root, entry).split(path.sep).join('/'),
       restored: `${file.replace(/\.[^.]+$/, '')}-restored/${embedded[0].path}`,
