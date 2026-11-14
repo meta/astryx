@@ -40,10 +40,14 @@ import {
 } from '../theme/build/build.mjs';
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
-import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import * as edit from './_edit.mjs';
-import {baseInstalled, installLine, themeCacheRoot} from './_project.mjs';
+import {
+  baseInstalled,
+  installLine,
+  packageInstalled,
+  themeCacheRoot,
+} from './_project.mjs';
 import * as preview from './_preview-app.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
@@ -1838,16 +1842,9 @@ export async function editorLoadedFonts(file, cwd) {
     for (const f of importedFontFamilies(spec, from)) loaded.add(f);
   // A family the build names whose @fontsource package is installed: the
   // copy written after this build imports that package (copyFontsCss).
-  const req = createRequire(path.join(root, 'package.json'));
   /** @param {string} family */
-  const installed = family => {
-    try {
-      req.resolve(`${fontsourcePackageOf(family)}/package.json`);
-      return true;
-    } catch {
-      return false;
-    }
-  };
+  const installed = family =>
+    packageInstalled(root, fontsourcePackageOf(family));
   return family => loaded.has(fontKey(family)) || installed(family);
 }
 

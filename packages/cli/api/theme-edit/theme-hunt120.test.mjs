@@ -11,9 +11,15 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {spawnSync} from 'node:child_process';
-import {fileURLToPath} from 'node:url';
-import {afterAll, beforeAll, beforeEach, describe, expect, it} from 'vitest';
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import {themeEditNew} from './theme-edit.mjs';
 import {splitCommand} from './_vet.mjs';
 import {
@@ -24,11 +30,16 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {runCli} from '../../test-utils/run-cli.mjs';
 
-const BIN = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '../../clients/cli/bin/astryx.mjs',
+// The renders are stood in for: these tests are about settings, files and
+// messages, not the rendered pages.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    await importOriginal(),
+  ),
 );
+
 const T = 240_000;
 const ED = ['experimental', 'theme', 'editor'];
 
@@ -58,11 +69,8 @@ beforeEach(() => {
  * @param {string[]} args
  * @returns {any}
  */
-const cli = args => {
-  const r = spawnSync(process.execPath, [BIN, ...args, '--json'], {
-    cwd,
-    encoding: 'utf8',
-  });
+const cli = async args => {
+  const r = await runCli([...args, '--json'], cwd);
   return JSON.parse(r.stdout);
 };
 
@@ -70,10 +78,10 @@ const cli = args => {
  * Run a suggested editor command as printed (from `experimental` on).
  * @param {string} line
  */
-const follow = line => {
+const follow = async line => {
   const args = splitCommand(line.slice(line.indexOf('experimental ')));
   if (!args) throw new Error(`cannot read ${line}`);
-  return cli(args);
+  return await cli(args);
 };
 
 const file = () => path.join(cwd, 'themes/t/t.settings.json');
@@ -91,10 +99,10 @@ const drop = name =>
 describe('the lines new offers', () => {
   it(
     'with no name: a free new name, never the theme here',
-    () => {
-      const r = cli([...ED, 'new']);
+    async () => {
+      const r = await cli([...ED, 'new']);
       expect(r.suggestions[0].name).toMatch(/ editor new my-theme$/);
-      expect(follow(r.suggestions[0].name).error).toBeUndefined();
+      expect((await follow(r.suggestions[0].name)).error).toBeUndefined();
       drop('my-theme');
     },
     T,
@@ -102,8 +110,8 @@ describe('the lines new offers', () => {
 
   it(
     'a font never typed is not offered; the same new without it works',
-    () => {
-      const r = cli([
+    async () => {
+      const r = await cli([
         ...ED,
         'new',
         'n2',
@@ -118,7 +126,7 @@ describe('the lines new offers', () => {
         / editor new n2 --like neutral$/.test(x.name),
       );
       expect(line).toBeTruthy();
-      expect(follow(line.name).error).toBeUndefined();
+      expect((await follow(line.name)).error).toBeUndefined();
       drop('n2');
     },
     T,
@@ -126,8 +134,8 @@ describe('the lines new offers', () => {
 
   it(
     'a value of another dial is never offered as the refused one; the message names the set for after',
-    () => {
-      const r = cli([
+    async () => {
+      const r = await cli([
         ...ED,
         'new',
         'n3',
@@ -138,7 +146,7 @@ describe('the lines new offers', () => {
       ]);
       expect(r.error).toContain('set n3 corners pill --on button');
       expect(r.suggestions[0].name).toMatch(/ editor new n3 --like neutral$/);
-      expect(follow(r.suggestions[0].name).error).toBeUndefined();
+      expect((await follow(r.suggestions[0].name)).error).toBeUndefined();
       drop('n3');
     },
     T,
@@ -146,17 +154,17 @@ describe('the lines new offers', () => {
 
   it(
     'on a name that exists, the copy carries only flags new takes',
-    () => {
+    async () => {
       for (const flags of [
         ['--text-size', '99'],
         ['--headings', 'bold', '--headings', 'heavy'],
       ]) {
-        const r = cli([...ED, 'new', 't', '--like', 'neutral', ...flags]);
+        const r = await cli([...ED, 'new', 't', '--like', 'neutral', ...flags]);
         const copy = r.suggestions.find((/** @type {any} */ x) =>
           / editor new t-2 /.test(x.name),
         );
         expect(copy, flags.join(' ')).toBeTruthy();
-        expect(follow(copy.name).error, copy.name).toBeUndefined();
+        expect((await follow(copy.name)).error, copy.name).toBeUndefined();
         drop('t-2');
       }
     },
@@ -165,19 +173,23 @@ describe('the lines new offers', () => {
 
   it(
     'a built-in theme among the extra words is the base',
-    () => {
+    async () => {
       for (const words of [
         ['t3', 'like', 'neutral'],
         ['neutral', 't3'],
       ]) {
-        const r = cli([...ED, 'new', ...words]);
+        const r = await cli([...ED, 'new', ...words]);
         expect(r.suggestions[0].name, words.join(' ')).toMatch(
           / editor new t3 --like neutral$/,
         );
       }
       expect(
-        follow(cli([...ED, 'new', 't3', 'like', 'neutral']).suggestions[0].name)
-          .error,
+        (
+          await follow(
+            (await cli([...ED, 'new', 't3', 'like', 'neutral'])).suggestions[0]
+              .name,
+          )
+        ).error,
       ).toBeUndefined();
       drop('t3');
     },
@@ -188,7 +200,7 @@ describe('the lines new offers', () => {
 describe('options written loosely', () => {
   it(
     'set, undo and new name the option meant and give the command that works',
-    () => {
+    async () => {
       const cases = [
         [
           ['set', 't', 'border', '1px solid red', '--On', 'card'],
@@ -209,14 +221,22 @@ describe('options written loosely', () => {
         ],
       ];
       for (const [args, want] of cases) {
-        const r = cli([...ED, ...args]);
+        const r = await cli([...ED, ...args]);
         expect(r.error, args.join(' ')).toContain('did you mean');
         expect(r.suggestions[0].name, args.join(' ')).toMatch(want);
-        expect(follow(r.suggestions[0].name).error).toBeUndefined();
+        expect((await follow(r.suggestions[0].name)).error).toBeUndefined();
       }
       // The undo line is checked as undo checks it: --only does not fit
       // card, so the line that works leaves it out.
-      const u = cli([...ED, 'undo', 't', 'border', '--on', 'card', '--olny']);
+      const u = await cli([
+        ...ED,
+        'undo',
+        't',
+        'border',
+        '--on',
+        'card',
+        '--olny',
+      ]);
       expect(u.error).toContain('did you mean --only?');
       expect(u.suggestions[0].name).toMatch(/ editor undo t border --on card$/);
     },
@@ -227,23 +247,23 @@ describe('options written loosely', () => {
 describe('words in the other order', () => {
   it(
     'a token after its value, and neutral base, lead with the set that works',
-    () => {
-      const tok = cli([...ED, 'set', 't', '4px', '--radius-element']);
+    async () => {
+      const tok = await cli([...ED, 'set', 't', '4px', '--radius-element']);
       expect(tok.suggestions[0].name).toMatch(
         / editor set t --radius-element 4px$/,
       );
-      expect(follow(tok.suggestions[0].name).error).toBeUndefined();
-      const base = cli([...ED, 'set', 't', 'neutral', 'base']);
+      expect((await follow(tok.suggestions[0].name)).error).toBeUndefined();
+      const base = await cli([...ED, 'set', 't', 'neutral', 'base']);
       expect(base.suggestions[0].name).toMatch(/ editor set t base neutral$/);
-      expect(follow(base.suggestions[0].name).error).toBeUndefined();
+      expect((await follow(base.suggestions[0].name)).error).toBeUndefined();
     },
     T,
   );
 
   it(
     'a repair never adds a part that was not typed',
-    () => {
-      const r = cli([...ED, 'set', 't', 'heading', 'bold']);
+    async () => {
+      const r = await cli([...ED, 'set', 't', 'heading', 'bold']);
       for (const x of r.suggestions)
         expect(x.name, x.name).not.toMatch(/--on /);
     },
@@ -254,13 +274,13 @@ describe('words in the other order', () => {
 describe('a damaged base', () => {
   it(
     'is set back to the base the theme was built on, which keeps its look',
-    () => {
+    async () => {
       edit(d => {
         d.like = 'my-base';
       });
-      const r = cli([...ED, 'show', 't']);
+      const r = await cli([...ED, 'show', 't']);
       expect(r.suggestions[0].name).toMatch(/ editor set t base neutral$/);
-      expect(follow(r.suggestions[0].name).error).toBeUndefined();
+      expect((await follow(r.suggestions[0].name)).error).toBeUndefined();
       expect(data().like).toBe('neutral');
     },
     T,
@@ -270,13 +290,13 @@ describe('a damaged base', () => {
 describe('a font dial word on a part', () => {
   it(
     'gives the family stack it stands for, never the word as a family',
-    () => {
-      const r = cli([...ED, 'set', 't', 'font', 'mono', '--on', 'card']);
+    async () => {
+      const r = await cli([...ED, 'set', 't', 'font', 'mono', '--on', 'card']);
       expect(r.suggestions[0].name).toContain(
         `font-family 'ui-monospace, "SF Mono", Menlo, Consolas, monospace' --on card`,
       );
-      expect(follow(r.suggestions[0].name).error).toBeUndefined();
-      const word = cli([
+      expect((await follow(r.suggestions[0].name)).error).toBeUndefined();
+      const word = await cli([
         ...ED,
         'set',
         't',
@@ -286,7 +306,7 @@ describe('a font dial word on a part', () => {
         'card',
       ]);
       expect(word.error).toContain('is a font dial word, not a family');
-      expect(follow(word.suggestions[0].name).error).toBeUndefined();
+      expect((await follow(word.suggestions[0].name)).error).toBeUndefined();
     },
     T,
   );
@@ -295,16 +315,16 @@ describe('a font dial word on a part', () => {
 describe('a theme whose settings files are both gone', () => {
   it(
     'is the editor’s: new makes it again on its base, and undo then steps back',
-    () => {
-      cli([...ED, 'set', 't', 'corners', 'pill']);
-      cli([...ED, 'set', 't', 'accent', '#7c3aed']);
+    async () => {
+      await cli([...ED, 'set', 't', 'corners', 'pill']);
+      await cli([...ED, 'set', 't', 'accent', '#7c3aed']);
       fs.rmSync(file());
       fs.rmSync(path.join(cwd, 'themes/t/t.settings.ts'));
-      const r = cli([...ED, 'show', 't']);
+      const r = await cli([...ED, 'show', 't']);
       expect(r.error).toContain('the editor made it');
       expect(r.suggestions[0].name).toMatch(/ editor new t --like neutral$/);
-      expect(follow(r.suggestions[0].name).error).toBeUndefined();
-      expect(cli([...ED, 'undo', 't']).error).toBeUndefined();
+      expect((await follow(r.suggestions[0].name)).error).toBeUndefined();
+      expect((await cli([...ED, 'undo', 't'])).error).toBeUndefined();
       expect(data().settings).toContainEqual(
         expect.objectContaining({thing: 'corners', value: 'pill'}),
       );
@@ -316,7 +336,7 @@ describe('a theme whose settings files are both gone', () => {
 describe('a part saved in other letters or as a one-item list', () => {
   it(
     'is that part: beside the same setting it is listed twice, and its keep line works',
-    () => {
+    async () => {
       for (const on of ['Card', ['card']]) {
         fs.writeFileSync(file(), fresh);
         edit(d => {
@@ -325,12 +345,15 @@ describe('a part saved in other letters or as a one-item list', () => {
             {thing: 'color', value: 'red', source: 'property', on},
           ];
         });
-        const r = cli([...ED, 'show', 't']);
+        const r = await cli([...ED, 'show', 't']);
         expect(r.error, JSON.stringify(on)).toContain('listed twice');
         const keep = r.suggestions.find((/** @type {any} */ x) =>
           / editor set t color blue --on card$/.test(x.name),
         );
-        expect(follow(keep.name).error, JSON.stringify(on)).toBeUndefined();
+        expect(
+          (await follow(keep.name)).error,
+          JSON.stringify(on),
+        ).toBeUndefined();
         expect(data().settings).toEqual([
           expect.objectContaining({value: 'blue', on: 'card'}),
         ]);
@@ -343,12 +366,12 @@ describe('a part saved in other letters or as a one-item list', () => {
 describe('undo of a misspelt setting', () => {
   it(
     'leads with the setting of the scope typed',
-    () => {
-      cli([...ED, 'set', 't', 'corners', 'pill', '--on', 'button']);
-      cli([...ED, 'set', 't', 'corners', 'small']);
-      const r = cli([...ED, 'undo', 't', 'cornrs']);
+    async () => {
+      await cli([...ED, 'set', 't', 'corners', 'pill', '--on', 'button']);
+      await cli([...ED, 'set', 't', 'corners', 'small']);
+      const r = await cli([...ED, 'undo', 't', 'cornrs']);
       expect(r.suggestions[0].name).toMatch(/ editor undo t corners$/);
-      expect(follow(r.suggestions[0].name).error).toBeUndefined();
+      expect((await follow(r.suggestions[0].name)).error).toBeUndefined();
       expect(data().settings).toEqual([
         expect.objectContaining({thing: 'corners', on: 'button'}),
       ]);
@@ -360,11 +383,11 @@ describe('undo of a misspelt setting', () => {
 describe('undo with the theme typed after the setting', () => {
   it(
     'gives the reason with the theme first and a command that works',
-    () => {
-      const r = cli([...ED, 'undo', 'corners', 't']);
+    async () => {
+      const r = await cli([...ED, 'undo', 'corners', 't']);
       expect(r.error).toContain('With t first: t does not set corners');
       expect(r.suggestions[0].name).toMatch(/ editor show t$/);
-      expect(follow(r.suggestions[0].name).error).toBeUndefined();
+      expect((await follow(r.suggestions[0].name)).error).toBeUndefined();
     },
     T,
   );
@@ -373,8 +396,8 @@ describe('undo with the theme typed after the setting', () => {
 describe('a base and its dial in the other order, not installed', () => {
   it(
     'leads with the install, then the set',
-    () => {
-      const r = cli([...ED, 'set', 't', 'butter', 'base']);
+    async () => {
+      const r = await cli([...ED, 'set', 't', 'butter', 'base']);
       expect(r.suggestions[0].name).toMatch(
         /(npm install|(pnpm|yarn|bun) add) @astryxdesign\/theme-butter$/,
       );

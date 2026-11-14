@@ -1813,14 +1813,17 @@ export function writeAppCopyAt(cwd, slug, fontsCss) {
       : dir;
     const at = fs.existsSync(failed) ? failed : path.dirname(failed);
     const rel = path.relative(cwd, at).split(path.sep).join('/');
-    COPY_FAILED.set(
-      failKey,
-      code === 'EACCES' || code === 'EPERM' || code === 'EROFS'
+    const unwritable =
+      code === 'EACCES' || code === 'EPERM' || code === 'EROFS';
+    COPY_FAILED.set(failKey, {
+      why: unwritable
         ? `${rel} is not writable (${code})`
         : code === 'ENOSPC'
           ? `the disk is full (${code})`
           : `${rel} could not be written (${code})`,
-    );
+      // A folder that was not writable, to see whether it still is.
+      ...(unwritable ? {folder: at} : {}),
+    });
     return null;
   }
   COPY_FAILED.delete(failKey);
@@ -1845,10 +1848,7 @@ export function writeAppCopyAt(cwd, slug, fontsCss) {
  * @returns {{appCopyStale?: string}}
  */
 export function appCopyStale(cwd, slug) {
-  const blocker =
-    appCopyBlocker(cwd, slug) ??
-    COPY_FAILED.get(`${path.resolve(cwd)}\0${slug}`) ??
-    null;
+  const blocker = appCopyBlocker(cwd, slug) ?? copyFailure(cwd, slug) ?? null;
   return blocker
     ? {
         appCopyStale: `the app copy in src/themes/${slug}/ was not updated: ${blocker}. The app keeps the theme as it was until that is out of the way; then any set or show writes it.`,
@@ -1984,8 +1984,36 @@ export function appCopyBlocker(cwd, slug) {
 /** The build outputs of a theme, by their ending after `<theme>`. */
 const APP_COPY_BUILT = ['.css', '.css.d.ts', '.js', '.d.ts', '.variants.d.ts'];
 
-/** Why the last write of a theme's app copy failed, by app and theme. @type {Map<string, string>} */
+/**
+ * Why the last write of a theme's app copy failed, by app and theme, and
+ * the folder that was not writable when that was why.
+ * @type {Map<string, {why: string, folder?: string}>}
+ */
 const COPY_FAILED = new Map();
+
+/**
+ * Why the last write of a theme's app copy failed, while that still holds:
+ * a folder that was not writable and is now is no reason any more (a
+ * process that runs several commands, as an API caller does, reads the
+ * folder as it is now).
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {string | null}
+ */
+function copyFailure(cwd, slug) {
+  const key = `${path.resolve(cwd)}\0${slug}`;
+  const failed = COPY_FAILED.get(key);
+  if (!failed) return null;
+  if (failed.folder)
+    try {
+      fs.accessSync(failed.folder, fs.constants.W_OK);
+      COPY_FAILED.delete(key);
+      return null;
+    } catch {
+      // Still not writable.
+    }
+  return failed.why;
+}
 
 /** App copies written for the first time in this process, by app and theme. @type {Map<string, string[]>} */
 const FIRST_COPIES = new Map();

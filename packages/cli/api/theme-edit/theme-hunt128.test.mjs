@@ -12,9 +12,15 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {spawnSync} from 'node:child_process';
-import {fileURLToPath} from 'node:url';
-import {afterAll, beforeAll, beforeEach, describe, expect, it} from 'vitest';
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import {themeEditNew} from './theme-edit.mjs';
 import {splitCommand} from './_vet.mjs';
 import {
@@ -25,11 +31,16 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {runCli} from '../../test-utils/run-cli.mjs';
 
-const BIN = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '../../clients/cli/bin/astryx.mjs',
+// The renders are stood in for: these tests are about settings, files and
+// messages, not the rendered pages.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    await importOriginal(),
+  ),
 );
+
 const T = 240_000;
 const ED = ['experimental', 'theme', 'editor'];
 
@@ -59,11 +70,8 @@ beforeEach(() => {
  * @param {string[]} args
  * @returns {any}
  */
-const cli = args => {
-  const r = spawnSync(process.execPath, [BIN, ...args, '--json'], {
-    cwd,
-    encoding: 'utf8',
-  });
+const cli = async args => {
+  const r = await runCli([...args, '--json'], cwd);
   return JSON.parse(r.stdout);
 };
 
@@ -71,10 +79,10 @@ const cli = args => {
  * Run a suggested editor command as printed (from `experimental` on).
  * @param {string} line
  */
-const follow = line => {
+const follow = async line => {
   const args = splitCommand(line.slice(line.indexOf('experimental ')));
   if (!args) throw new Error(`cannot read ${line}`);
-  return cli(args);
+  return await cli(args);
 };
 
 const file = () => path.join(cwd, 'themes/t/t.settings.json');
@@ -95,20 +103,20 @@ const names = r => (r.suggestions ?? []).map((/** @type {any} */ x) => x.name);
 describe('a settings file new does not remake', () => {
   it(
     'a setting listed twice offers its keep and remove lines, never a new that is refused',
-    () => {
+    async () => {
       edit(d => {
         d.settings = [
           {thing: 'corners', value: 'pill', source: 'dial'},
           {thing: 'corners', value: 'square', source: 'dial'},
         ];
       });
-      const r = cli([...ED, 'set', 't', '--spacing-4', '12px']);
+      const r = await cli([...ED, 'set', 't', '--spacing-4', '12px']);
       expect(r.error).not.toContain(' new ');
       for (const n of names(r)) expect(n, n).not.toMatch(/ editor new /);
       const keep = names(r).find((/** @type {string} */ n) =>
         / set t corners pill$/.test(n),
       );
-      expect(follow(keep).error).toBeUndefined();
+      expect((await follow(keep)).error).toBeUndefined();
       expect(data().settings).toEqual([
         expect.objectContaining({thing: 'corners', value: 'pill'}),
       ]);
@@ -118,13 +126,13 @@ describe('a settings file new does not remake', () => {
 
   it(
     'a lifted field that is no list of text is dropped, and the change goes through',
-    () => {
+    async () => {
       for (const lifted of ['x', [1]]) {
         fs.writeFileSync(file(), fresh);
         edit(d => {
           d.lifted = lifted;
         });
-        const r = cli([...ED, 'set', 't', 'corners', 'pill']);
+        const r = await cli([...ED, 'set', 't', 'corners', 'pill']);
         expect(r.error, JSON.stringify(lifted)).toBeUndefined();
         const after = data().lifted;
         expect(
@@ -140,8 +148,8 @@ describe('a settings file new does not remake', () => {
 describe('values new repairs as set does', () => {
   it(
     'a color named in two words never adds a mode, and the line that works leads',
-    () => {
-      const r = cli([
+    async () => {
+      const r = await cli([
         ...ED,
         'new',
         'u',
@@ -154,7 +162,7 @@ describe('values new repairs as set does', () => {
       expect(names(r)[0]).toMatch(
         / editor new u --like neutral --accent darkblue$/,
       );
-      expect(follow(names(r)[0]).error).toBeUndefined();
+      expect((await follow(names(r)[0])).error).toBeUndefined();
       drop('u');
     },
     T,
@@ -162,9 +170,17 @@ describe('values new repairs as set does', () => {
 
   it(
     'one word of the value is never a did-you-mean; what the setting takes is named',
-    () => {
+    async () => {
       for (const v of ['light red', 'navy blue']) {
-        const r = cli([...ED, 'new', 'u', '--like', 'neutral', '--accent', v]);
+        const r = await cli([
+          ...ED,
+          'new',
+          'u',
+          '--like',
+          'neutral',
+          '--accent',
+          v,
+        ]);
         for (const x of r.suggestions)
           if (x.reason === 'did you mean') expect.fail(`${v}: ${x.name}`);
         expect(names(r), v).toContainEqual(
@@ -177,8 +193,8 @@ describe('values new repairs as set does', () => {
 
   it(
     'a hex without its # keeps the accent in the line',
-    () => {
-      const r = cli([
+    async () => {
+      const r = await cli([
         ...ED,
         'new',
         'w',
@@ -190,7 +206,7 @@ describe('values new repairs as set does', () => {
       expect(names(r)[0]).toMatch(
         / editor new w --like neutral --accent '#ff0000'$/,
       );
-      expect(follow(names(r)[0]).error).toBeUndefined();
+      expect((await follow(names(r)[0])).error).toBeUndefined();
       drop('w');
     },
     T,
@@ -200,16 +216,21 @@ describe('values new repairs as set does', () => {
 describe('words of a flag value typed unquoted on new', () => {
   it(
     'belong to that value, never to the name, and the line is checked',
-    () => {
+    async () => {
       const cases = [
         [['--font', 'Open', 'Sans'], / editor new n2 --font 'Open Sans'$/],
         [['--accent', 'dark', 'blue'], / editor new n2 --accent darkblue$/],
         [['--text-size', '16', 'px'], / editor new n2 --text-size 16$/],
       ];
       for (const [flags, want] of cases) {
-        const r = cli([...ED, 'new', 'n2', .../** @type {string[]} */ (flags)]);
+        const r = await cli([
+          ...ED,
+          'new',
+          'n2',
+          .../** @type {string[]} */ (flags),
+        ]);
         expect(names(r)[0], flags.join(' ')).toMatch(want);
-        expect(follow(names(r)[0]).error).toBeUndefined();
+        expect((await follow(names(r)[0])).error).toBeUndefined();
         drop('n2');
       }
     },
@@ -220,8 +241,8 @@ describe('words of a flag value typed unquoted on new', () => {
 describe('options of show and preview', () => {
   it(
     'show never guesses past the one typo limit, and its line runs',
-    () => {
-      const r = cli([...ED, 'show', 't', '--pgn']);
+    async () => {
+      const r = await cli([...ED, 'show', 't', '--pgn']);
       expect(r.error).not.toContain('did you mean');
       expect(names(r)[0]).toMatch(/ editor show t$/);
     },
@@ -230,8 +251,8 @@ describe('options of show and preview', () => {
 
   it(
     'preview names the option meant with the command, or its help',
-    () => {
-      const r = cli([
+    async () => {
+      const r = await cli([
         'experimental',
         'theme',
         'preview',
@@ -241,7 +262,7 @@ describe('options of show and preview', () => {
       ]);
       expect(r.error).toContain('did you mean --path?');
       expect(names(r)[0]).toMatch(/ theme preview list --path x$/);
-      const s = cli([
+      const s = await cli([
         'experimental',
         'theme',
         'preview',
@@ -260,8 +281,8 @@ describe('options of show and preview', () => {
 describe('a base that is not installed', () => {
   it(
     'leads with the install, then the set, and never offers no base to a theme on one',
-    () => {
-      const r = cli([...ED, 'set', 't', 'base', 'stone']);
+    async () => {
+      const r = await cli([...ED, 'set', 't', 'base', 'stone']);
       expect(r.suggestions[0].name).toMatch(/@astryxdesign\/theme-stone$/);
       expect(r.suggestions[0].reason).toBe('install it');
       expect(r.suggestions[1].name).toMatch(/ editor set t base stone$/);
@@ -275,8 +296,8 @@ describe('a base that is not installed', () => {
 describe('a part and its variant in other letters', () => {
   it(
     'gives the line with both read as set reads them',
-    () => {
-      const r = cli([
+    async () => {
+      const r = await cli([
         ...ED,
         'set',
         't',
@@ -290,7 +311,7 @@ describe('a part and its variant in other letters', () => {
       expect(names(r)[0]).toMatch(
         / editor set t color red --on button --when variant:primary$/,
       );
-      expect(follow(names(r)[0]).error).toBeUndefined();
+      expect((await follow(names(r)[0])).error).toBeUndefined();
     },
     T,
   );
@@ -299,12 +320,14 @@ describe('a part and its variant in other letters', () => {
 describe('a corners size saved in rem', () => {
   it(
     'is read as the px set saves it as, and a step goes one rung up from it',
-    () => {
+    async () => {
       edit(d => {
         d.settings = [{thing: 'corners', value: '0.5rem', source: 'dial'}];
       });
-      expect(cli([...ED, 'show', 't']).error).toBeUndefined();
-      expect(cli([...ED, 'set', 't', 'corners', 'more']).error).toBeUndefined();
+      expect((await cli([...ED, 'show', 't'])).error).toBeUndefined();
+      expect(
+        (await cli([...ED, 'set', 't', 'corners', 'more'])).error,
+      ).toBeUndefined();
       expect(data().settings).toEqual([
         expect.objectContaining({thing: 'corners', value: 'medium'}),
       ]);

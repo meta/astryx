@@ -106,6 +106,7 @@ import {
   baseResolved,
   baseThemeFile,
   installLine,
+  packageInstalled,
 } from './_project.mjs';
 import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
@@ -8600,14 +8601,7 @@ export function fontPackages(ctx, data, {forNewApp = false} = {}) {
   /** @type {Array<{pkg: string, family: string, installed: boolean, of: Setting | null}>} */
   const out = [];
   /** @param {string} pkg */
-  const isInstalled = pkg => {
-    try {
-      ctx.project.req.resolve(`${pkg}/package.json`);
-      return true;
-    } catch {
-      return false;
-    }
-  };
+  const isInstalled = pkg => packageInstalled(ctx.project.cwd, pkg);
   /** An open font's package, which a new app installs. @param {string} pkg */
   const isOpen = pkg => Object.values(OPEN_FONTS).some(f => f.pkg === pkg);
   /** Whether a package loads its family where the fonts go. @param {string} pkg */
