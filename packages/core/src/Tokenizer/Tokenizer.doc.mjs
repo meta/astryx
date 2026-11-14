@@ -213,7 +213,7 @@ export const docs = {
       name: 'query',
       type: 'string',
       description:
-        'The typed query. When set, the field is controlled: it shows this text and reports every change through onChangeQuery, including a pick, a clear, and entering edit mode. Hold this value after a pick to keep the text. A change from outside does not move focus, and it does not open the listbox or announce a result count unless the field has focus. When the field is focused, clearing this value closes the listbox as emptying the field does.',
+        'The typed query. When set, the field is controlled: it shows this text and reports every change through onChangeQuery, including a pick, a clear, and entering edit mode. Hold this value after a pick to keep the text. A change from outside does not move focus, and it does not open the listbox or announce a result count unless the field has focus. Clearing this value while the field is focused does what emptying the field does: the listbox closes, or shows the focus entries with hasEntriesOnFocus.',
     },
     {
       name: 'defaultQuery',
@@ -624,7 +624,7 @@ export const docsZh = {
       name: 'query',
       type: 'string',
       description:
-        '已输入的查询。设置后字段为受控：显示该文本，并通过 onChangeQuery 报告每一次变更（包括选择、清除和进入编辑），以便受控用法保持同步。选择后继续传入该值即可保留文本。从外部设置查询不会移动焦点；字段未聚焦时不会打开列表框，也不会播报结果数量。字段聚焦时将查询清空会关闭列表框，与用户清空输入相同。',
+        '已输入的查询。设置后字段为受控：显示该文本，并通过 onChangeQuery 报告每一次变更（包括选择、清除和进入编辑），以便受控用法保持同步。选择后继续传入该值即可保留文本。从外部设置查询不会移动焦点；字段未聚焦时不会打开列表框，也不会播报结果数量。字段聚焦时将查询清空，效果与用户清空输入相同：列表框关闭，或在设置 hasEntriesOnFocus 时显示聚焦条目。',
     },
     {
       name: 'defaultQuery',
