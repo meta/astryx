@@ -146,6 +146,31 @@ describe('component examples that cannot run on their own', () => {
     );
   });
 
+  it('reads a Node built-in that only devDependencies install as server-only, as the showcase check does', async () => {
+    write({
+      'package.json': manifest({
+        dependencies: {buffer: '^6.0.0'},
+        devDependencies: {events: '^3.3.0'},
+      }),
+      'components/AcmeCard.doc.mjs': componentDoc('AcmeCard', [
+        {
+          label: 'Bytes',
+          code: "import {Buffer} from 'buffer';\n<AcmeCard title={Buffer.from('hi').toString()} />",
+        },
+        {
+          label: 'Events',
+          code: "import {EventEmitter} from 'events';\nconst bus = new EventEmitter();\n<AcmeCard onSave={() => bus.emit('save')} />",
+        },
+      ]),
+    });
+
+    const {notes} = await exampleNotes();
+    expect(notes.map(note => note.code)).toEqual(['example_server_only']);
+    expect(notes[0].message).toContain(
+      'example "Events" imports \'events\', which runs only on a server',
+    );
+  });
+
   it('reports an example that renders an async server component of the package', async () => {
     write({
       'components/AcmeTheme.tsx':

@@ -76,6 +76,32 @@ const ALWAYS_IMPORTABLE = ['react', '@astryxdesign/core'];
 /** The specifier the `React` namespace binds from. */
 const REACT = 'react';
 
+/** The package.json fields whose packages an app installs with a package. */
+const INSTALLED_WITH = [
+  'dependencies',
+  'peerDependencies',
+  'optionalDependencies',
+];
+
+/**
+ * The packages an app gets when it installs a package: those its package.json
+ * declares in `dependencies`, `peerDependencies` and `optionalDependencies`.
+ * `devDependencies` are installed only where the package is developed.
+ * @param {unknown} manifest a parsed package.json
+ * @returns {string[]}
+ */
+export function packagesInstalledWith(manifest) {
+  const fields = /** @type {Record<string, unknown>} */ (
+    manifest !== null && typeof manifest === 'object' ? manifest : {}
+  );
+  return INSTALLED_WITH.flatMap(field => {
+    const value = fields[field];
+    return value !== null && typeof value === 'object'
+      ? Object.keys(value)
+      : [];
+  });
+}
+
 /**
  * Whether an import names code a browser cannot run: a server-only module,
  * or a Node built-in the package does not install from npm under that name
@@ -242,34 +268,49 @@ function declaredComponent(node) {
 }
 
 /**
+ * @typedef {object} ExampleModule
+ * @property {string} module
+ * @property {boolean} renders
+ * @property {(position: number) => number | null} toExample the position in
+ *   the example's code that a position in `module` comes from, or null for
+ *   text the module adds around it
+ */
+
+/** @param {number} position */
+const samePosition = position => position;
+
+/**
  * The module an example's code stands for, before its scope names are
  * imported: the code itself when it default-exports what it renders; the
  * code plus a default export of the last component it declares; or, for
  * code that ends with JSX, a component whose body is the code before that
  * JSX and which returns it (several sibling elements become one fragment).
+ * Directives, imports and re-exports stay at module scope; a declaration the
+ * code exports moves into the component without its `export`.
  * @param {string} code
- * @returns {{module: string, renders: boolean} | {error: any}}
+ * @returns {ExampleModule | {error: any}}
  */
 function moduleFor(code) {
   const parsed = tryParse(code);
   if ('ast' in parsed) {
-    const body = /** @type {any[]} */ (parsed.ast.program.body);
-    if (body.some(isDefaultExport)) return {module: code, renders: true};
+    const program = parsed.ast.program;
+    const body = /** @type {any[]} */ (program.body);
+    if (body.some(isDefaultExport)) {
+      return {module: code, renders: true, toExample: samePosition};
+    }
     let markupFrom = body.length;
     while (markupFrom > 0 && isJsxStatement(body[markupFrom - 1])) {
       markupFrom -= 1;
     }
     if (markupFrom < body.length) {
-      const text = (/** @type {any} */ node) =>
-        code.slice(node.start, node.end);
-      const head = body.slice(0, markupFrom);
       const markup = body
         .slice(markupFrom)
-        .map(node => code.slice(node.expression.start, node.expression.end));
+        .map(node => piece(code, node.expression));
       return composed(
-        head.filter(node => node.type === 'ImportDeclaration').map(text),
-        head.filter(node => node.type !== 'ImportDeclaration').map(text),
-        markup.length === 1 ? markup[0] : fragment(markup.join('\n')),
+        code,
+        program.directives,
+        body.slice(0, markupFrom),
+        markup.length === 1 ? markup : fragment(markup),
       );
     }
     const component = body.map(declaredComponent).filter(Boolean).at(-1);
@@ -277,9 +318,10 @@ function moduleFor(code) {
       return {
         module: `${code}\n\nexport default ${component};\n`,
         renders: true,
+        toExample: samePosition,
       };
     }
-    return {module: code, renders: false};
+    return {module: code, renders: false, toExample: samePosition};
   }
   // Sibling elements at the end do not parse as statements. They start on a
   // line of their own, at the first column, and run to the end of the code.
@@ -290,18 +332,13 @@ function moduleFor(code) {
     if (line.startsWith('<') && rest.endsWith('>')) {
       const head = tryParse(code.slice(0, offset));
       if ('ast' in head) {
-        const prefix = code.slice(0, offset);
-        const nodes = /** @type {any[]} */ (head.ast.program.body);
-        const text = (/** @type {any} */ node) =>
-          prefix.slice(node.start, node.end);
         const result = composed(
-          nodes.filter(node => node.type === 'ImportDeclaration').map(text),
-          nodes.filter(node => node.type !== 'ImportDeclaration').map(text),
-          fragment(code.slice(offset, offset + rest.length)),
+          code,
+          head.ast.program.directives,
+          head.ast.program.body,
+          fragment([{text: rest, from: offset}]),
         );
-        if ('module' in result && 'ast' in tryParse(result.module)) {
-          return result;
-        }
+        if ('ast' in tryParse(result.module)) return result;
       }
       break;
     }
@@ -310,36 +347,162 @@ function moduleFor(code) {
   return {error: parsed.error};
 }
 
-/** @param {string} markup sibling elements */
-const fragment = markup => `<>\n${markup}\n</>`;
+/**
+ * @typedef {string | {text: string, from: number}} Piece text the module
+ *   adds, or text of the example and where it starts in the example's code
+ */
 
 /**
- * @param {string[]} imports
- * @param {string[]} statements
- * @param {string} element the JSX the component returns
- * @returns {{module: string, renders: boolean}}
+ * @param {string} code
+ * @param {any} node
+ * @returns {Piece}
  */
-function composed(imports, statements, element) {
+const piece = (code, node) => ({
+  text: code.slice(node.start, node.end),
+  from: node.start,
+});
+
+/**
+ * Sibling elements as one fragment.
+ * @param {Piece[]} elements
+ * @returns {Piece[]}
+ */
+const fragment = elements => ['<>\n', ...joined(elements, '\n'), '\n</>'];
+
+/**
+ * @param {Piece[]} pieces
+ * @param {string} separator
+ * @returns {Piece[]}
+ */
+const joined = (pieces, separator) =>
+  pieces.flatMap((each, index) => (index === 0 ? [each] : [separator, each]));
+
+/** Statements that stay at module scope: imports and re-exports. */
+const MODULE_SCOPE = new Set([
+  'ImportDeclaration',
+  'TSImportEqualsDeclaration',
+  'ExportAllDeclaration',
+]);
+
+/**
+ * The component an example's statements and trailing JSX stand for. Its
+ * directives, imports and re-exports stay at module scope; every other
+ * statement runs in the component, in order, a declaration it exports
+ * without its `export` (an `export {…}` list of its own names is dropped).
+ * @param {string} code
+ * @param {any[]} directives
+ * @param {any[]} statements
+ * @param {Piece[]} element the JSX the component returns
+ * @returns {ExampleModule}
+ */
+function composed(code, directives, statements, element) {
+  /** @type {Piece[]} */
+  const prelude = directives.map(node => piece(code, node));
+  /** @type {Piece[]} */
+  const inside = [];
+  for (const node of statements) {
+    if (
+      MODULE_SCOPE.has(node.type) ||
+      (node.type === 'ExportNamedDeclaration' && node.source)
+    ) {
+      prelude.push(piece(code, node));
+    } else if (node.type === 'ExportNamedDeclaration') {
+      if (node.declaration) inside.push(piece(code, node.declaration));
+    } else {
+      inside.push(piece(code, node));
+    }
+  }
   return {
-    module: `${imports.join('\n')}${imports.length > 0 ? '\n\n' : ''}export default function Example() {\n${statements.join('\n')}${statements.length > 0 ? '\n' : ''}return (\n${element}\n);\n}\n`,
+    ...assembled([
+      ...joined(prelude, '\n'),
+      prelude.length > 0 ? '\n\n' : '',
+      'export default function Example() {\n',
+      ...joined(inside, '\n'),
+      inside.length > 0 ? '\n' : '',
+      'return (\n',
+      ...element,
+      '\n);\n}\n',
+    ]),
     renders: true,
   };
 }
 
 /**
+ * Join pieces into a module, keeping the way back from a position in it to
+ * the position in the example's code it comes from.
+ * @param {Piece[]} pieces
+ * @returns {{module: string, toExample: (position: number) => number | null}}
+ */
+function assembled(pieces) {
+  let module = '';
+  /** @type {Array<{at: number, from: number, length: number}>} */
+  const spans = [];
+  for (const each of pieces) {
+    if (typeof each === 'string') {
+      module += each;
+      continue;
+    }
+    spans.push({at: module.length, from: each.from, length: each.text.length});
+    module += each.text;
+  }
+  return {
+    module,
+    toExample: position => {
+      const span = spans.find(
+        each => position >= each.at && position <= each.at + each.length,
+      );
+      return span ? span.from + position - span.at : null;
+    },
+  };
+}
+
+/**
+ * The 1-based line and 0-based column of a position in some text.
+ * @param {string} text
+ * @param {number} position
+ */
+function lineAndColumn(text, position) {
+  const before = text.slice(0, position);
+  const lineStart = before.lastIndexOf('\n') + 1;
+  return {
+    line: before.split('\n').length,
+    column: position - lineStart,
+  };
+}
+
+/**
+ * The problem a parse error is, placed in the example's own code. An error
+ * in the module but not in the code means a statement before the trailing
+ * JSX cannot run inside the component that renders it, such as a top-level
+ * `await`.
  * @param {any} error a Babel parse error
- * @param {string} code
+ * @param {string} code the example's code
+ * @param {ExampleModule} [read] the module the error is in, when it is not
+ *   the code itself
  * @returns {ExampleProblem}
  */
-function compileProblem(error, code) {
+function compileProblem(error, code, read) {
   const message = String(error?.message ?? error)
     .replace(/\s*\(\d+:\d+\)$/u, '')
     .replace(/\.$/u, '');
-  const line = error?.loc?.line;
-  const column = error?.loc?.column;
-  const where = typeof line === 'number' ? ` (line ${line})` : '';
-  const atEnd =
-    typeof error?.pos === 'number' && error.pos >= code.trimEnd().length - 1;
+  const position =
+    typeof error?.pos !== 'number'
+      ? null
+      : read
+        ? read.toExample(error.pos)
+        : error.pos;
+  const place = position == null ? null : lineAndColumn(code, position);
+  const where = place ? ` (line ${place.line})` : '';
+  const located = place ? {line: place.line, column: place.column} : {};
+  if (read) {
+    return {
+      code: 'example_does_not_compile',
+      message: `does not compile once its code runs inside the component that renders its JSX: ${message}${where}`,
+      fix: "Declare the component yourself and default-export it, with that code where it can run, or set `kind: 'setup'` if it is not meant to run on its own.",
+      ...located,
+    };
+  }
+  const atEnd = position != null && position >= code.trimEnd().length - 1;
   const fix =
     error?.reasonCode === 'IllegalReturn'
       ? "End the example with the JSX it renders instead of a `return`, or put the code in a component. If it is part of a function in an app, set `kind: 'setup'`."
@@ -352,8 +515,7 @@ function compileProblem(error, code) {
       ? `does not compile: the code stops before its last statement ends${where}`
       : `does not compile: ${message}${where}`,
     fix,
-    ...(typeof line === 'number' ? {line} : {}),
-    ...(typeof column === 'number' ? {column} : {}),
+    ...located,
   };
 }
 
@@ -521,15 +683,16 @@ export function previewableExample(example, scope) {
   if (example?.kind === 'setup') return {previewable: false, setup: true};
   const code = typeof example?.code === 'string' ? example.code : '';
   const read = moduleFor(code);
-  if ('error' in read)
+  if ('error' in read) {
     return notPreviewable([compileProblem(read.error, code)]);
+  }
   const parsed = tryParse(read.module);
   if ('error' in parsed) {
-    return notPreviewable([compileProblem(parsed.error, read.module)]);
+    return notPreviewable([compileProblem(parsed.error, code, read)]);
   }
   const unbound = unboundNames(read.module);
   if ('error' in unbound) {
-    return notPreviewable([compileProblem(unbound.error, read.module)]);
+    return notPreviewable([compileProblem(unbound.error, code, read)]);
   }
   const table = scopeTable(scope);
   /** @type {ExampleProblem[]} */
@@ -615,24 +778,28 @@ export function previewableExample(example, scope) {
     });
   }
   if (problems.length > 0) return notPreviewable(problems);
+  const directives = /** @type {any[]} */ (parsed.ast.program.directives);
   return {
     previewable: true,
     module: withScopeImports(
       read.module,
       unbound.free.filter(name => table.names.has(name)),
       table,
+      directives.length > 0 ? directives[directives.length - 1].end : 0,
     ),
   };
 }
 
 /**
  * The module with one import line per specifier for the scope names it
- * uses, `React` as the namespace.
+ * uses, `React` as the namespace, after its directive prologue so a
+ * directive such as `'use client'` stays one.
  * @param {string} module
  * @param {string[]} used
  * @param {ScopeTable} table
+ * @param {number} prologueEnd where the module's directives end
  */
-function withScopeImports(module, used, table) {
+function withScopeImports(module, used, table, prologueEnd) {
   /** @type {Map<string, string[]>} */
   const bySpecifier = new Map();
   const lines = [];
@@ -651,5 +818,7 @@ function withScopeImports(module, used, table) {
   )) {
     lines.push(`import {${names.sort().join(', ')}} from '${specifier}';`);
   }
-  return lines.length > 0 ? `${lines.join('\n')}\n${module}` : module;
+  if (lines.length === 0) return module;
+  if (prologueEnd === 0) return `${lines.join('\n')}\n${module}`;
+  return `${module.slice(0, prologueEnd)}\n${lines.join('\n')}${module.slice(prologueEnd)}`;
 }

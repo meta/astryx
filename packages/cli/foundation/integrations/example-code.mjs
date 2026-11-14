@@ -16,7 +16,10 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {createRequire} from 'node:module';
-import {previewableExample} from '../../authoring/example/preview.mjs';
+import {
+  packagesInstalledWith,
+  previewableExample,
+} from '../../authoring/example/preview.mjs';
 import {findProjectCoreDir} from '../fs/paths.mjs';
 import {
   CORE_PACKAGE,
@@ -58,17 +61,6 @@ function readManifest(packageDir) {
   } catch {
     return null;
   }
-}
-
-/**
- * The packages a manifest declares an app installs with it.
- * @param {Record<string, unknown>} manifest
- * @returns {string[]}
- */
-function declaredPackages(manifest) {
-  return ['dependencies', 'peerDependencies', 'optionalDependencies'].flatMap(
-    field => (isRecord(manifest[field]) ? Object.keys(manifest[field]) : []),
-  );
 }
 
 /**
@@ -263,7 +255,7 @@ export async function exampleCodeCheck(integration) {
     })),
     coreNames: core ?? [],
     reactNames: react ?? [],
-    dependencies: declaredPackages(manifest),
+    dependencies: packagesInstalledWith(manifest),
     isServerOnly: ownServerModules(packageDir, packageName, exportsField),
     serverComponents: asyncComponents(records),
   };

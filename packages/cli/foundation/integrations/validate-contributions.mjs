@@ -32,6 +32,7 @@ import {
   isNodeEnvRead,
   isProcessEnv,
   isServerOnlyImport,
+  packagesInstalledWith,
 } from '../../authoring/example/preview.mjs';
 import {
   contributionFiles,
@@ -1541,21 +1542,14 @@ export async function componentExamplesCheck(integration) {
   const rel = (/** @type {string} */ file) => slash(path.relative(base, file));
   /** @type {unknown} */
   let packedFiles;
-  /** @type {Set<string>} */
-  const declared = new Set();
+  /** @type {string[]} the packages an app installs with this one */
+  let dependencies = [];
   try {
     const pkg = JSON.parse(
       fs.readFileSync(path.join(base, 'package.json'), 'utf8'),
     );
     packedFiles = pkg.files;
-    for (const field of [
-      'dependencies',
-      'peerDependencies',
-      'optionalDependencies',
-      'devDependencies',
-    ]) {
-      for (const name of Object.keys(pkg[field] ?? {})) declared.add(name);
-    }
+    dependencies = packagesInstalledWith(pkg);
   } catch {
     packedFiles = undefined;
   }
@@ -1563,7 +1557,6 @@ export async function componentExamplesCheck(integration) {
   const npm = {};
   /** @type {Array<{file: string, asset: string, reason: string}>} */
   const unchecked = [];
-  const dependencies = [...declared];
   /** @type {Set<string>} */
   const shown = new Set();
   for (const template of templates) {

@@ -5,6 +5,7 @@ import {
   isNodeEnvRead,
   isProcessEnv,
   isServerOnlyImport,
+  packagesInstalledWith,
   previewableExample,
 } from './preview.mjs';
 
@@ -101,7 +102,7 @@ describe('previewableExample', () => {
     expect(read('<Text>A</Text>\n<Text>B</Text>;').previewable).toBe(true);
   });
 
-  it('keeps a module that default-exports what it renders', () => {
+  it('keeps a module that default-exports what it renders, its directive first', () => {
     const code = [
       "'use client';",
       'export default function Demo() {',
@@ -109,7 +110,42 @@ describe('previewableExample', () => {
       '}',
     ].join('\n');
     expect(moduleOf(code)).toBe(
-      `import {AcmeCard} from '@acme/widgets/Card';\n${code}`,
+      [
+        "'use client';",
+        "import {AcmeCard} from '@acme/widgets/Card';",
+        'export default function Demo() {',
+        '  return <AcmeCard />;',
+        '}',
+      ].join('\n'),
+    );
+  });
+
+  it('keeps directives and re-exports at module scope, and runs an exported declaration in the component', () => {
+    const module = moduleOf(
+      [
+        "'use client';",
+        "export {z} from 'zod';",
+        "export const columns = ['Name', 'Role'];",
+        'export function label() { return columns.join(", "); }',
+        'export {columns as headings};',
+        '<AcmeCard title={label()} />',
+      ].join('\n'),
+    );
+    expect(module).toBe(
+      [
+        "'use client';",
+        "import {AcmeCard} from '@acme/widgets/Card';",
+        "export {z} from 'zod';",
+        '',
+        'export default function Example() {',
+        "const columns = ['Name', 'Role'];",
+        'function label() { return columns.join(", "); }',
+        'return (',
+        '<AcmeCard title={label()} />',
+        ');',
+        '}',
+        '',
+      ].join('\n'),
     );
   });
 
@@ -132,6 +168,22 @@ describe('previewableExample', () => {
       "does not compile: 'return' outside of function (line 2)",
     );
     expect(problem.fix).toContain('instead of a `return`');
+  });
+
+  it("places an error the component wrapper causes on the example's own line", () => {
+    const [problem] = problemsOf(
+      [
+        "const label = 'Report';",
+        'const data = await fetch(label);',
+        '<AcmeCard title={label} />',
+      ].join('\n'),
+    );
+    expect(problem.code).toBe('example_does_not_compile');
+    expect(problem.line).toBe(2);
+    expect(problem.column).toBe(13);
+    expect(problem.message).toMatch(
+      /^does not compile once its code runs inside the component that renders its JSX: .*\(line 2\)$/u,
+    );
   });
 
   it('reports code that stops partway', () => {
@@ -257,6 +309,20 @@ describe('previewableExample', () => {
     expect(problems[1].message).toContain(
       "@acme/widgets does not declare 'chart-kit'",
     );
+  });
+});
+
+describe('the packages an app installs with a package', () => {
+  it('reads dependencies, peers and optional dependencies, never devDependencies', () => {
+    expect(
+      packagesInstalledWith({
+        dependencies: {zod: '*'},
+        peerDependencies: {react: '*'},
+        optionalDependencies: {buffer: '*'},
+        devDependencies: {events: '*'},
+      }),
+    ).toEqual(['zod', 'react', 'buffer']);
+    expect(packagesInstalledWith(null)).toEqual([]);
   });
 });
 
