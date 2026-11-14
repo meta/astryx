@@ -1668,6 +1668,43 @@ async function change(sub, slug, thing, value, options) {
         },
       );
   }
+  // A flag typed inside the value (`'red --mode dark'`, `'4px --state
+  // hover'`, `'pill --on button'`): the same command with the flag lifted
+  // out, never the value alone, which would change another scope.
+  if (typeof value === 'string' && /\s--(mode|state|on|when)\b/.test(value)) {
+    /** @type {Record<string, string>} */
+    const lifted = {};
+    const bare = value
+      .replace(
+        /\s+--(mode|state|on|when)(?:\s*=\s*|\s+)("[^"]*"|'[^']*'|\S+)/g,
+        (_, f, x) => {
+          lifted[f] = x.replace(/^(["'])(.*)\1$/, '$2');
+          return '';
+        },
+      )
+      .trim();
+    if (bare && Object.keys(lifted).length) {
+      const opts = /** @type {Record<string, unknown>} */ ({
+        ...options,
+        ...lifted,
+      });
+      const flagText = ['on', 'when', 'state', 'mode']
+        .filter(f => opts[f])
+        .map(f => ` --${f} ${quoteCommandArgument(String(opts[f]))}`)
+        .join('');
+      refuse(
+        E.ERR_INVALID_ARGUMENT,
+        `"${value}" holds ${Object.keys(lifted)
+          .map(f => `--${f}`)
+          .join(' and ')} inside the value; a flag goes outside the quotes.`,
+        {
+          run: [
+            `${P} ${sub} ${slug} ${quoteCommandArgument(String(thing))}${sub === 'set' ? ` ${quoteCommandArgument(bare)}` : ''}${flagText}${options.only ? ' --only' : ''}`,
+          ],
+        },
+      );
+    }
+  }
   // How it was typed, put right before anything reads it (a pasted
   // declaration, a dash, a var(), invisible spaces).
   /** @type {string | undefined} */

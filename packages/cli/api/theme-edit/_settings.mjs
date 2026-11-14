@@ -501,6 +501,9 @@ export const shown = (cwd, f) =>
  * @param {number} [n]
  */
 export function nearest(x, list, n = 3) {
+  // A phrase that negates a word (not round, no caps, unbold,
+  // rounded-none) never has that word as its nearest: it asks the opposite.
+  if (negates(x)) return [];
   const limit = Math.max(2, Math.floor(x.length / 3));
   // Nearest by edit distance first (brand-drak is brand-dark, not brand); a
   // name one holds inside the other is near too, after the close ones.
@@ -517,6 +520,17 @@ export function nearest(x, list, n = 3) {
     .sort((a, b) => a[1] - b[1])
     .slice(0, n)
     .map(([c]) => c);
+}
+
+/**
+ * Whether typed words negate what they name (`not round`, `no caps`,
+ * `anything but blue`, `unbold`, `non-bold`, `rounded-none`).
+ * @param {string} x
+ */
+export function negates(x) {
+  return /(^|[\s-])(not|no|non|without|never|less)([\s-]|$)|anything but|^un(round|bold|rais|outlin|cap)|-none$/i.test(
+    String(x).trim(),
+  );
 }
 
 /**
