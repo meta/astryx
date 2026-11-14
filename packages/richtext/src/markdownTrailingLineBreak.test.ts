@@ -132,9 +132,9 @@ describe('a typed line break inside its block still round-trips', () => {
     expect(readBack(markdown)).toEqual(['one⏎two']);
   });
 
-  it('keeps a break followed by more text after a trailing space', () => {
+  it('drops a break that only a space follows, and keeps the space', () => {
     const markdown = exportBuilt(() => [$paragraph('one', null, ' ')]);
-    expect(readBack(markdown)).toEqual(['one']);
+    expect(readBack(markdown)).toEqual(['one ']);
   });
 
   it('keeps an authored backslash at the end of a line as text', () => {
