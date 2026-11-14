@@ -250,6 +250,27 @@ describe('the tooltip loads after first paint (architecture:component-import-bou
     expect(shows()).toBe(false);
   });
 
+  it('a :hover the page never saw enter is not replayed where the device cannot hover: a tap before hydration (FR5, FR14)', async () => {
+    const realMatchMedia = window.matchMedia;
+    window.matchMedia = (query: string) => ({
+      ...realMatchMedia(query),
+      matches: false,
+    });
+    try {
+      render(<Harness />);
+      // A tap on the server markup left :hover on the trigger, and no
+      // listener saw it.
+      hovered = trigger();
+      await paintAndLoad();
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(shows()).toBe(false);
+    } finally {
+      window.matchMedia = realMatchMedia;
+    }
+  });
+
   it('a pointer that left before the load shows nothing until the next hover', async () => {
     render(<Harness />);
     fireEvent.mouseEnter(trigger());
@@ -477,6 +498,25 @@ describe('the description reference and the load (architecture:component-import-
     const before = dataNames();
     await paintAndLoad();
     expect(dataNames()).toEqual(before);
+  });
+
+  it('a disabled ComplexSelector with a tooltip status adds no aria-describedby to its trigger before the load', async () => {
+    const {ComplexSelector} =
+      await import('../ComplexSelector/ComplexSelector');
+    render(
+      <ComplexSelector
+        label="View options"
+        value={[]}
+        isDisabled
+        disabledMessage="You need the Editor role"
+        status={{type: 'error', message: 'Pick one view'}}
+        statusVariant="tooltip">
+        {() => null}
+      </ComplexSelector>,
+    );
+    expect(
+      screen.getByRole('combobox', {name: 'View options'}),
+    ).not.toHaveAttribute('aria-describedby');
   });
 
   it('the Tooltip component adds no aria-describedby to its child before the load', async () => {

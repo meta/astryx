@@ -371,6 +371,7 @@ function matchesSelector(element: Element, selector: string): boolean {
 function heldIntent(
   trigger: HTMLElement | null,
   wasTapped: boolean,
+  sawHover: boolean,
 ): 'focus' | 'hover' | null {
   if (trigger == null) {
     return null;
@@ -383,8 +384,20 @@ function heldIntent(
   ) {
     return 'focus';
   }
-  // Touch browsers keep :hover on a tapped element, and a tap is not held.
-  return !wasTapped && matchesSelector(trigger, ':hover') ? 'hover' : null;
+  // Touch browsers keep :hover on a tapped element, and a tap is not held. A
+  // :hover no listener saw (before hydration) counts only where the device
+  // can hover.
+  if (wasTapped || !matchesSelector(trigger, ':hover')) {
+    return null;
+  }
+  return sawHover || canHover(trigger) ? 'hover' : null;
+}
+
+function canHover(trigger: HTMLElement): boolean {
+  return (
+    trigger.ownerDocument.defaultView?.matchMedia?.('(hover: hover)').matches ??
+    false
+  );
 }
 
 function createTooltipBridge(
@@ -543,7 +556,7 @@ function createTooltipBridge(
       }
       const interest =
         readsHeldIntent && isMountedBeforeLoad && !hasConnected
-          ? heldIntent(interactionElement, wasTapped)
+          ? heldIntent(interactionElement, wasTapped, hoverStartedAt != null)
           : null;
       hasConnected = true;
       interestRef.current = {
