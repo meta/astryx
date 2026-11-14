@@ -173,6 +173,7 @@ describe('TableHeaderCell', () => {
     const declarations = headerCellDeclarations(container);
     expect(declarations).toContain('position: sticky');
     expect(declarations).toContain('top: 0px');
+    expect(declarations).toContain('overflow: hidden');
     expect(declarations).toContain('z-index: 2');
     expect(declarations.join('\n')).toContain('table-sticky-background');
     expect(declarations.join('\n')).toContain(

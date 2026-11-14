@@ -96,6 +96,9 @@ const stickyHeaderStyles = stylex.create({
   cell: {
     insetBlockStart: 0,
     zIndex: 2,
+    // Sticky-column surfaces allow their shadow to bleed; header labels still
+    // need the normal overflow clip for ellipsis.
+    overflow: 'hidden',
   },
 });
 

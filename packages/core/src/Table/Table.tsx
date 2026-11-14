@@ -73,7 +73,7 @@ interface TableAppearanceProps<T extends Record<string, unknown>> extends Omit<
   isStriped?: boolean;
   /** Hover highlight on rows. @default false */
   hasHover?: boolean;
-  /** Keep header cells pinned while the surrounding scroll region moves. @default false */
+  /** Keep header cells pinned while the surrounding block-scrolling region moves when the table fits inline. @default false */
   hasStickyHeader?: boolean;
   /**
    * Vertical alignment for body row cells.
@@ -248,8 +248,6 @@ function TableScrollWrapper({
     axis: hasBlockViewport ? 'both' : 'inline',
     keyboardAccess: {owner: 'content'},
     overscroll: 'contain',
-    unrequestedOverflow:
-      tableName?.hasStickyHeader && !hasBlockViewport ? 'clip' : 'hidden',
   });
   // The spread below replaces className and style. Merge the plugin's instead.
   const {
