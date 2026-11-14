@@ -424,3 +424,31 @@ describe('FieldLabel', () => {
     });
   });
 });
+
+describe('FieldLabel caller text direction', () => {
+  it('adds no direction span to a hidden label or its description', () => {
+    render(
+      <div dir="rtl">
+        <FieldLabel
+          label="Prefix https://"
+          description="Prefix https://"
+          inputID="hidden"
+          isLabelHidden
+        />
+      </div>,
+    );
+    expect(document.querySelector('[dir="ltr"]')).toBeNull();
+    expect(screen.getAllByText('Prefix https://')).toHaveLength(2);
+  });
+
+  it('marks a visible label with plain text left to right', () => {
+    render(
+      <div dir="rtl">
+        <FieldLabel label="Prefix https://" inputID="shown" />
+      </div>,
+    );
+    expect(document.querySelector('span[dir="ltr"]')).toHaveTextContent(
+      'Prefix https://',
+    );
+  });
+});

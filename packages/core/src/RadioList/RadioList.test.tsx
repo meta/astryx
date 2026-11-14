@@ -408,7 +408,7 @@ describe('RadioList', () => {
     // element — a `<label>` names a single control and can't be associated
     // with a group. It is rendered as a `<span>` and referenced via
     // aria-labelledby (with no orphaned htmlFor).
-    const labelEl = screen.getByText('Plan');
+    const labelEl = screen.getByText('Plan').parentElement!;
     expect(labelEl.tagName).toBe('SPAN');
     expect(labelEl.closest('label')).toBeNull();
     expect(labelEl).not.toHaveAttribute('for');

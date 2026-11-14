@@ -31,6 +31,7 @@ import {FormLayoutContext} from '../FormLayout/FormLayoutContext';
 import {Text} from '../Text/Text';
 import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
 import {themeProps} from '../utils/themeProps';
+import {withTextDirection} from '../utils/textDirection';
 import type {FieldStatusPlacement} from './fieldStatusPlacement';
 
 const styles = stylex.create({
@@ -318,7 +319,7 @@ export function Field({
                 type="supporting"
                 display="block"
                 id={resolvedDescriptionID}>
-                {description}
+                {withTextDirection(description)}
               </Text>
             ))}
           {children}

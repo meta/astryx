@@ -32,6 +32,7 @@ import {renderIconSlot} from '../Icon/Icon';
 import type {IconType} from '../Icon';
 import {InfoTip} from '../InfoTip/InfoTip';
 import {themeProps} from '../utils/themeProps';
+import {withTextDirection} from '../utils/textDirection';
 import {useInputContainer} from '../hooks/useInputContainer';
 import {useResolvedOptionality} from '../hooks/useResolvedRequired';
 import {
@@ -294,11 +295,18 @@ export function FieldLabel({
     inputRef: controlRef,
     disabled: !forwardsDescriptionClick,
   });
-
+  // Plain text with no right-to-left letter keeps its written order on a
+  // right-to-left page. The direction goes on an inner span, so the label's
+  // alignment and its marker still follow the page. A hidden label has no
+  // visual order to keep, so its text stays as the caller wrote it.
+  const labelText = isLabelHidden ? label : withTextDirection(label);
+  const descriptionText = isLabelHidden
+    ? description
+    : withTextDirection(description);
   const labelContent = (
     <>
       {labelIcon && renderIconSlot(labelIcon, {size: 'sm', color: 'inherit'})}
-      {label}
+      {labelText}
       {statusText && (
         <span {...stylex.props(styles.optionalRequired)}>
           <span aria-hidden="true"> ∙ </span>
@@ -377,7 +385,7 @@ export function FieldLabel({
           forwardsDescriptionClick && styles.descriptionClickable,
           isLabelHidden && styles.srOnly,
         )}>
-        {description}
+        {descriptionText}
       </span>
     </div>
   );

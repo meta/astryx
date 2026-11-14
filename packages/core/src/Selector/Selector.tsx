@@ -33,6 +33,7 @@ import React, {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {withTextDirection} from '../utils/textDirection';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useTooltip} from '../Tooltip';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
@@ -2480,7 +2481,8 @@ export function Selector<T extends SelectorOptionType>(
 
       {selectionSurface}
 
-      {showStatusTooltip && statusTooltip.renderTooltip(status?.message ?? '')}
+      {showStatusTooltip &&
+        statusTooltip.renderTooltip(withTextDirection(status?.message ?? ''))}
 
       {showsDisabledMessage &&
         disabledMessageTooltip.renderTooltip(disabledMessage)}

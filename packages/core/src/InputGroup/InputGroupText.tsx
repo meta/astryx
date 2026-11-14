@@ -29,7 +29,7 @@ import {
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
 import {inputGroupItemProps} from './groupStyles';
-import {textDirectionProps} from '../utils/textDirection';
+import {withTextDirection} from '../utils/textDirection';
 
 const styles = stylex.create({
   text: {
@@ -100,7 +100,6 @@ export function InputGroupText({
 }: InputGroupTextProps) {
   // The direction goes on a span inside the cell, not on the cell: the cell's
   // logical corners and border overlap follow the group's direction.
-  const {dir} = textDirectionProps(children);
   return (
     <div
       ref={ref}
@@ -112,7 +111,7 @@ export function InputGroupText({
         className,
         style,
       )}>
-      {dir == null ? children : <span dir={dir}>{children}</span>}
+      {withTextDirection(children)}
     </div>
   );
 }

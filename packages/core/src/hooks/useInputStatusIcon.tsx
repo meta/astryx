@@ -28,6 +28,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/hooks/useInputStatusIcon.generated';
+import {withTextDirection} from '../utils/textDirection';
 
 registerEnglishFallback(english);
 
@@ -226,7 +227,7 @@ export function useInputStatusIcon({
           )}>
           {icon}
         </button>
-        {tooltip.renderTooltip(status.message)}
+        {tooltip.renderTooltip(withTextDirection(status.message))}
       </>
     ),
     describedBy: tooltip.describedBy,
