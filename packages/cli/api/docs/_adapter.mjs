@@ -18,7 +18,6 @@
  */
 
 import * as path from 'node:path';
-import {deserialize, serialize} from 'node:v8';
 import {Project} from '../../foundation/config/project.mjs';
 import {
   DocsCatalog,
@@ -90,6 +89,7 @@ import {
   templateFilesNaming,
 } from '../../foundation/discovery/template-adapter.mjs';
 import {persistedGather} from '../../foundation/fs/gather-cache.mjs';
+import {EXACT_CODEC} from '../../foundation/fs/exact-codec.mjs';
 import {CLI_ROOT, findCoreDir} from '../../foundation/fs/paths.mjs';
 import {reusedWhileUnchanged} from '../../foundation/fs/read-record.mjs';
 import {AstryxError} from '../error.mjs';
@@ -438,15 +438,14 @@ const readTreeInputs = reusedWhileUnchanged(() => loadTreeInputs());
 
 /** @typedef {Awaited<ReturnType<typeof loadTreeInputs>>} TreeInputs */
 
-/**
- * The kept form of the tree inputs: Node's structured serialization, which
- * gives back every field as it was, `undefined` ones too, where JSON would
- * drop them.
- * @type {{encode: (inputs: TreeInputs) => string, decode: (stored: string) => TreeInputs}}
- */
+/** The tree inputs, kept exactly, with the shape they need. */
 const TREE_INPUTS = {
-  encode: inputs => serialize(inputs).toString('base64'),
-  decode: stored => deserialize(Buffer.from(stored, 'base64')),
+  ...EXACT_CODEC,
+  valid: (/** @type {any} */ value) =>
+    value != null &&
+    Array.isArray(value.namespaces) &&
+    Array.isArray(value.docs) &&
+    Array.isArray(value.diagnostics),
 };
 
 /**
