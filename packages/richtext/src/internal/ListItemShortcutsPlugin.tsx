@@ -49,7 +49,7 @@ import {
   type LexicalNode,
   type NodeKey,
 } from 'lexical';
-import {$getTaskState, $setTaskState} from './markdownTaskList';
+import {$getTaskState, $setTaskState} from '../markdownTaskList';
 
 /** What a marker typed at the start of a list item makes of it. */
 type ListItemMarker =

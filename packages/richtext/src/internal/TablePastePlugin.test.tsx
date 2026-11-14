@@ -30,8 +30,8 @@ import {
   PASTE_COMMAND,
   type LexicalEditor,
 } from 'lexical';
-import {RichTextEditor, type RichTextEditorRef} from './RichTextEditor';
-import {markdownToEditorStateJSON} from './markdownSerializers';
+import {RichTextEditor, type RichTextEditorRef} from '../RichTextEditor';
+import {markdownToEditorStateJSON} from '../markdownSerializers';
 
 const TABLE = markdownToEditorStateJSON(
   '| a | b | c |\n| --- | --- | --- |\n| d1 | d2 | d3 |\n| e1 | e2 | e3 |',
