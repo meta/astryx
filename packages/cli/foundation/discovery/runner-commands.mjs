@@ -73,6 +73,7 @@ export const CLI_COMMANDS = Object.freeze([
   'init',
   'integration',
   'manifest',
+  'mcp',
   'postinstall',
   'search',
   'swizzle',
