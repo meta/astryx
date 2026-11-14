@@ -399,6 +399,73 @@ export const GalleryWithGeneratedContentCaptionFixture: Story = {
 };
 
 /**
+ * The long caption ending in visually hidden text, laid out out of flow as a
+ * screen-reader-only utility class lays it out.
+ */
+export const GalleryWithVisuallyHiddenCaptionFixture: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  args: longCaptionArgs(
+    <>
+      {LONG_CAPTION_HEAD} home.
+      <span
+        style={{
+          position: 'absolute',
+          width: 1,
+          height: 1,
+          padding: 0,
+          margin: -1,
+          overflow: 'hidden',
+          clip: 'rect(0, 0, 0, 0)',
+          whiteSpace: 'nowrap',
+          borderWidth: 0,
+        }}>
+        {' '}
+        Opens the photo in a new tab.
+      </span>
+    </>,
+  ),
+  render: GalleryWithCaptions.render,
+};
+
+/**
+ * The paragraph caption with a generated glyph after its text, from the
+ * paragraph's own `::after`.
+ */
+export const GalleryWithParagraphGlyphCaptionFixture: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  args: longCaptionArgs(
+    <>
+      <style>
+        {'.lightbox-caption-fixture-glyph::after { content: " \\2197"; }'}
+      </style>
+      <p className="lightbox-caption-fixture-glyph">
+        {LONG_CAPTION_HEAD} home.
+      </p>
+    </>,
+  ),
+  render: GalleryWithCaptions.render,
+};
+
+/**
+ * The paragraph caption with generated words after its text, from the
+ * paragraph's own `::after`.
+ */
+export const GalleryWithParagraphWordsCaptionFixture: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  args: longCaptionArgs(
+    <>
+      <style>
+        {'.lightbox-caption-fixture-words::after { content: " (see map)"; }'}
+      </style>
+      <p className="lightbox-caption-fixture-words">
+        {LONG_CAPTION_HEAD} home.
+      </p>
+    </>,
+  ),
+  render: GalleryWithCaptions.render,
+};
+
+/**
  * The long caption ending in an inline-block element, which lays out as one
  * box.
  */

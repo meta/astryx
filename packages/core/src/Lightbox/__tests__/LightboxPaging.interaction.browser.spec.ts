@@ -1732,31 +1732,45 @@ test('opening a gallery on a clamped caption lays out no more than opening one w
   ).toBeLessThanOrEqual(plain.layouts);
 });
 
-test('a tap on "more" takes exactly one forced layout', async ({
-  page,
-  browserName,
-}) => {
-  test.skip(browserName !== 'chromium', 'rendering traces are Chromium-only');
-  await page.route('https://picsum.photos/**', async route => {
-    const id = /\/id\/(\d+)\//.exec(route.request().url())?.[1] ?? '10';
-    await route.fulfill({
-      contentType: 'image/svg+xml',
-      body: photoSvg(COLORS[id] ?? '#888'),
+// The tap's one forced layout holds too for a caption whose block has its own
+// generated content, which the fit check cannot measure.
+const TAP_CASES = [
+  {name: 'a plain caption', story: 'core-lightbox--gallery-with-captions'},
+  {
+    name: 'a paragraph caption with generated words after its text',
+    story: 'core-lightbox--gallery-with-paragraph-words-caption-fixture',
+  },
+];
+
+for (const {name, story} of TAP_CASES) {
+  test(`a tap on "more" takes exactly one forced layout (${name})`, async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'rendering traces are Chromium-only');
+    await page.route('https://picsum.photos/**', async route => {
+      const id = /\/id\/(\d+)\//.exec(route.request().url())?.[1] ?? '10';
+      await route.fulfill({
+        contentType: 'image/svg+xml',
+        body: photoSvg(COLORS[id] ?? '#888'),
+      });
     });
+    await openStory(page, storybook(), story);
+    await page
+      .getByRole('button', {name: 'Open gallery with captions'})
+      .click();
+    const dialog = page.getByRole('dialog');
+    const more = dialog.getByRole('button', {name: 'more'});
+    await expect(more).toBeVisible();
+    await frames(page, 2);
+    const tap = await taskLayouts(page, 'click', async () => more.click());
+    await expect(dialog.getByRole('button', {name: 'less'})).toBeVisible();
+    // The band cannot grow from its own resize report without looping, so the
+    // tap lays the open caption out once, and "less" is placed before the
+    // first frame.
+    expect(tap.layouts, JSON.stringify(tap)).toBe(1);
   });
-  await openStory(page, storybook(), 'core-lightbox--gallery-with-captions');
-  await page.getByRole('button', {name: 'Open gallery with captions'}).click();
-  const dialog = page.getByRole('dialog');
-  const more = dialog.getByRole('button', {name: 'more'});
-  await expect(more).toBeVisible();
-  await frames(page, 2);
-  const tap = await taskLayouts(page, 'click', async () => more.click());
-  await expect(dialog.getByRole('button', {name: 'less'})).toBeVisible();
-  // The band cannot grow from its own resize report without looping, so the
-  // tap lays the open caption out once, and "less" is placed before the
-  // first frame.
-  expect(tap.layouts, JSON.stringify(tap)).toBe(1);
-});
+}
 
 /**
  * Logs every geometry read of an element inside a caption in the task of the
@@ -1976,6 +1990,8 @@ test("the caption toggle's width comes from its own delivery, never from a read 
   expect(reads).toEqual([]);
 });
 
+// Captions with no block of their own generated content. With it, the frame
+// that shrinks a caption reads the result, as before.
 const CAPTION_STORIES = [
   {name: 'a plain caption', story: 'core-lightbox--gallery-with-captions'},
   {
@@ -1988,8 +2004,24 @@ const CAPTION_STORIES = [
   },
 ];
 
-for (const {name, story} of CAPTION_STORIES) {
-  test(`no caption read follows a write in the same frame callback as an open caption widens to fewer lines (${name})`, async ({
+// A block's own generated content has no node the fit check can measure. So
+// for that caption the frame reads the caption once after its write, one
+// forced layout, as on main.
+const SHRINK_CASES = [
+  ...CAPTION_STORIES.map(({name, story}) => ({
+    name,
+    story,
+    expectedReads: [] as string[],
+  })),
+  {
+    name: 'a paragraph caption with generated words after its text',
+    story: 'core-lightbox--gallery-with-paragraph-words-caption-fixture',
+    expectedReads: ['clientHeight'],
+  },
+];
+
+for (const {name, story, expectedReads} of SHRINK_CASES) {
+  test(`${expectedReads.length === 0 ? 'no caption read follows' : 'exactly one caption read follows'} a write in the same frame callback as an open caption widens to fewer lines (${name})`, async ({
     page,
   }) => {
     // A read after a write in one frame callback forces a layout before the
@@ -2147,14 +2179,15 @@ for (const {name, story} of CAPTION_STORIES) {
     const reads = await page.evaluate(
       () => (window as unknown as {__frameReads: string[]}).__frameReads,
     );
-    expect(reads).toEqual([]);
+    expect(reads).toEqual(expectedReads);
   });
 }
 
 // The plain caption again, in a same-origin iframe's document, whose elements
 // are not this window's, as in a Picture-in-Picture window. Then captions whose
-// last line holds more than text, a padded paragraph, an end-aligned one, and
-// two captions right to left, where the place sits at the left.
+// last line holds more than text or holds hidden text, a paragraph with its own
+// generated content, a padded paragraph, an end-aligned one, and two captions
+// right to left, where the place sits at the left.
 const FIT_CASES: {
   name: string;
   story: string;
@@ -2186,6 +2219,18 @@ const FIT_CASES: {
   {
     name: 'a caption ending in generated content',
     story: 'core-lightbox--gallery-with-generated-content-caption-fixture',
+  },
+  {
+    name: 'a caption ending in visually hidden text',
+    story: 'core-lightbox--gallery-with-visually-hidden-caption-fixture',
+  },
+  {
+    name: 'a paragraph caption with a generated glyph after its text',
+    story: 'core-lightbox--gallery-with-paragraph-glyph-caption-fixture',
+  },
+  {
+    name: 'a paragraph caption with generated words after its text',
+    story: 'core-lightbox--gallery-with-paragraph-words-caption-fixture',
   },
   {
     name: 'a caption ending in an inline-block element',
