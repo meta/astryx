@@ -131,8 +131,9 @@ export function keptFileCheck(
   check,
   codec = CHECK_CODEC,
 ) {
-  // Only a recorded run (a plain `doctor` from the bin) reads or keeps one: a
-  // hosted run names its commands its own way, so it always checks.
+  // Only a recorded run (`doctor` from the bin, with or without `--built`)
+  // reads or keeps one: a hosted run names its commands its own way, so it
+  // always checks.
   if (!recordedRun()) return check();
   return persistedGather(
     // With the command name the checks print commands with.
