@@ -559,7 +559,7 @@ function pickOrder(idea, ranked, pick, catalog, weights) {
     .sort((x, y) => y.s - x.s);
   const typical = new Map(ranked.map(r => [r.name, r.typical]));
   const out = [];
-  for (let i = 0; i < sorted.length; ) {
+  for (let i = 0; i < sorted.length;) {
     let j = i + 1;
     while (j < sorted.length && sorted[j].s === sorted[i].s) j++;
     const run = sorted.slice(i, j).map(x => x.c);
