@@ -12,6 +12,7 @@ import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import {runCli} from '../../../test-utils/run-cli.mjs';
 
 let tmpDir;
 let templateApi;
@@ -40,16 +41,133 @@ describe('template path safety', () => {
     expect(fs.readdirSync(outside)).toEqual([]);
   });
 
-  it('rejects absolute targetPath', async () => {
+  it('refuses an absolute targetPath outside the project and names commands that work', async () => {
     const cwd = path.join(tmpDir, 'project');
     fs.mkdirSync(cwd, {recursive: true});
     const absTarget = path.join(tmpDir, 'absolute-out');
 
-    await expect(
-      templateApi('blank', {targetPath: absTarget, cwd}),
-    ).rejects.toThrow(/absolute paths are not allowed/i);
+    const err = await templateApi('blank', {targetPath: absTarget, cwd}).catch(e => e);
+    expect(err.code).toBe('ERR_PATH_TRAVERSAL');
+    expect(err.message).toMatch(/outside the project root/i);
+    expect(err.suggestions).toEqual([
+      {name: 'astryx template blank src/pages/blank', reason: 'write the page inside the project'},
+      {name: 'astryx template blank', reason: 'print the source and write nothing'},
+    ]);
 
     expect(fs.existsSync(absTarget)).toBe(false);
+    expect(fs.readdirSync(cwd)).toEqual([]);
+  });
+
+  it('keeps the flags as typed in the suggested commands', async () => {
+    const cwd = path.join(tmpDir, 'project');
+    fs.mkdirSync(cwd, {recursive: true});
+
+    const err = await templateApi('blank', {
+      targetPath: path.join(tmpDir, 'scratch'),
+      type: 'page',
+      package: '@astryxdesign/core',
+      cwd,
+    }).catch(e => e);
+    expect(err.suggestions.map(s => s.name)).toEqual([
+      'astryx template blank --type page --package @astryxdesign/core src/pages/blank',
+      'astryx template blank --type page --package @astryxdesign/core',
+    ]);
+  });
+
+  it('writes an absolute targetPath inside the project as its relative form', async () => {
+    const cwd = path.join(tmpDir, 'project');
+    fs.mkdirSync(cwd, {recursive: true});
+    const relative = await templateApi('blank', {targetPath: 'src/pages/rel', cwd});
+    const absolute = await templateApi('blank', {
+      targetPath: path.join(cwd, 'src', 'pages', 'abs'),
+      cwd,
+    });
+
+    expect(absolute.data.outputDir).toBe(path.join('src', 'pages', 'abs'));
+    expect(absolute.data.givenPath).toBe(path.join(cwd, 'src', 'pages', 'abs'));
+    expect(relative.data).not.toHaveProperty('givenPath');
+    expect(fs.readFileSync(path.join(cwd, 'src/pages/abs/page.tsx'), 'utf8')).toBe(
+      fs.readFileSync(path.join(cwd, 'src/pages/rel/page.tsx'), 'utf8'),
+    );
+  });
+
+  it('writes an absolute file path inside the project to that file', async () => {
+    const cwd = path.join(tmpDir, 'project');
+    fs.mkdirSync(cwd, {recursive: true});
+    const result = await templateApi('blank', {targetPath: path.join(cwd, 'app', 'home.tsx'), cwd});
+    expect(result.data.outputDir).toBe('app');
+    expect(result.data.fileName).toBe('home.tsx');
+    expect(fs.statSync(path.join(cwd, 'app', 'home.tsx')).isFile()).toBe(true);
+  });
+
+  it('accepts the project root itself, given as an absolute path', async () => {
+    const cwd = path.join(tmpDir, 'project');
+    fs.mkdirSync(cwd, {recursive: true});
+    const result = await templateApi('blank', {targetPath: cwd + path.sep, cwd});
+    expect(result.data.outputDir).toBe('.');
+    expect(fs.existsSync(path.join(cwd, 'page.tsx'))).toBe(true);
+  });
+
+  it('reads an absolute path through a symlinked project root as inside the project', async () => {
+    const real = path.join(tmpDir, 'real-project');
+    const link = path.join(tmpDir, 'linked-project');
+    fs.mkdirSync(real, {recursive: true});
+    fs.symlinkSync(real, link, 'dir');
+
+    // The shell reports the real folder; the agent types the linked one.
+    const viaLink = await templateApi('blank', {
+      targetPath: path.join(link, 'src', 'dash'),
+      cwd: real,
+    });
+    expect(viaLink.data.outputDir).toBe(path.join('src', 'dash'));
+    expect(fs.existsSync(path.join(real, 'src', 'dash', 'page.tsx'))).toBe(true);
+
+    // And the other way round: cwd through the link, the path through the real folder.
+    const viaReal = await templateApi('blank', {
+      targetPath: path.join(real, 'src', 'other'),
+      cwd: link,
+    });
+    expect(viaReal.data.outputDir).toBe(path.join('src', 'other'));
+    expect(fs.existsSync(path.join(real, 'src', 'other', 'page.tsx'))).toBe(true);
+  });
+
+  it('refuses an absolute path inside the project that a symlink carries outside', async () => {
+    const cwd = path.join(tmpDir, 'project');
+    const outside = path.join(tmpDir, 'outside');
+    fs.mkdirSync(cwd, {recursive: true});
+    fs.mkdirSync(outside, {recursive: true});
+    fs.symlinkSync(outside, path.join(cwd, 'escape'), 'dir');
+
+    await expect(
+      templateApi('blank', {targetPath: path.join(cwd, 'escape', 'leak'), cwd}),
+    ).rejects.toMatchObject({code: 'ERR_PATH_TRAVERSAL'});
+    expect(fs.readdirSync(outside)).toEqual([]);
+  });
+
+  it('refuses a sibling folder whose name starts with the project name', async () => {
+    const cwd = path.join(tmpDir, 'project');
+    fs.mkdirSync(cwd, {recursive: true});
+    const sibling = path.join(tmpDir, 'project-scratch');
+
+    await expect(
+      templateApi('blank', {targetPath: sibling, cwd}),
+    ).rejects.toMatchObject({code: 'ERR_PATH_TRAVERSAL'});
+    expect(fs.existsSync(sibling)).toBe(false);
+  });
+
+  it('writes an absolute --cdn path inside the project and refuses one outside', async () => {
+    const cwd = path.join(tmpDir, 'project');
+    fs.mkdirSync(cwd, {recursive: true});
+
+    const inside = await templateApi(undefined, {cdn: path.join(cwd, 'public', 'demo.html'), cwd});
+    expect(inside.data.path).toBe(path.join('public', 'demo.html'));
+    expect(fs.existsSync(path.join(cwd, 'public', 'demo.html'))).toBe(true);
+
+    const outsidePath = path.join(tmpDir, 'demo.html');
+    const err = await templateApi(undefined, {cdn: outsidePath, cwd}).catch(e => e);
+    expect(err.code).toBe('ERR_PATH_TRAVERSAL');
+    expect(err.suggestions[0].name).toBe('astryx template --cdn cdn.template.html');
+    expect(fs.existsSync(outsidePath)).toBe(false);
   });
 
   it('treats targetPath with .tsx extension as a file, not a directory', async () => {
@@ -79,4 +197,27 @@ describe('template path safety', () => {
     // The bad-old behavior would have left foo.tsx as a directory.
     expect(fs.statSync(path.join(cwd, 'foo.tsx')).isDirectory()).toBe(false);
   });
+});
+
+describe('template path text output', () => {
+  it('says an absolute path inside the project was written as its relative path', async () => {
+    const cwd = fs.realpathSync(fs.mkdtempSync(path.join(tmpDir, 'cli-')));
+    const result = await runCli(['template', 'blank', path.join(cwd, 'src', 'dash')], cwd);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(`Copied template to ${path.join('src', 'dash')}/page.tsx`);
+    expect(result.stdout).toContain(
+      `${path.join(cwd, 'src', 'dash')} is inside the project, so it was written as its relative path, ${path.join('src', 'dash')}.`,
+    );
+  }, 60_000);
+
+  it('names the commands that work when the path is outside the project', async () => {
+    const cwd = fs.realpathSync(fs.mkdtempSync(path.join(tmpDir, 'cli-')));
+    const scratch = path.join(tmpDir, 'astryx_dash');
+    const result = await runCli(['template', 'blank', scratch], cwd);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('is outside the project root');
+    expect(result.stderr).toMatch(/template blank src\/pages\/blank\s+\(write the page inside the project\)/);
+    expect(result.stderr).toMatch(/template blank\s+\(print the source and write nothing\)/);
+    expect(fs.existsSync(scratch)).toBe(false);
+  }, 60_000);
 });

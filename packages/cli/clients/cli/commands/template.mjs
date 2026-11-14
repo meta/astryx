@@ -319,11 +319,16 @@ export function registerTemplate(program) {
               demoContentReplaced,
               notes,
               icons,
+              givenPath,
             } = result.data;
             const file = `${outputDir}/${fileName}`;
             const iconText = iconLines(icons);
             emit(
               text(`Copied template to ${file}`),
+              givenPath !== undefined &&
+                text(
+                  `${givenPath} is inside the project, so it was written as its relative path, ${outputDir}.`,
+                ),
               record({package: result.package}),
               demoMediaReplaced > 0 &&
                 text(

@@ -9,6 +9,7 @@ import {
   sanitizeName,
   isFilePathArg,
   PathSafetyError,
+  projectRelativePath,
 } from './path-safety.mjs';
 
 let tmpDir;
@@ -218,5 +219,52 @@ describe('assertWithin — symlink escape (realpath guard)', () => {
     fs.symlinkSync('loop', path.join(root, 'loop'));
     const result = rejectionCode(() => assertWithin('loop', root));
     expect(['accepted', 'ERR_PATH_TRAVERSAL']).toContain(result);
+  });
+});
+
+describe('projectRelativePath', () => {
+  it('returns a relative path unchanged', () => {
+    expect(projectRelativePath('src/pages/x', tmpDir)).toBe('src/pages/x');
+    expect(projectRelativePath('../x', tmpDir)).toBe('../x');
+  });
+
+  it('reads an absolute path inside the root as its relative form', () => {
+    expect(projectRelativePath(path.join(tmpDir, 'src', 'x'), tmpDir)).toBe(
+      path.join('src', 'x'),
+    );
+    expect(projectRelativePath(tmpDir, tmpDir)).toBe('.');
+  });
+
+  it('keeps a trailing separator, which marks a folder', () => {
+    expect(projectRelativePath(path.join(tmpDir, 'out.tsx') + path.sep, tmpDir)).toBe(
+      'out.tsx' + path.sep,
+    );
+  });
+
+  it('gives null for an absolute path outside the root', () => {
+    expect(projectRelativePath(path.dirname(tmpDir), tmpDir)).toBeNull();
+    expect(projectRelativePath(`${tmpDir}-scratch`, tmpDir)).toBeNull();
+    expect(projectRelativePath(path.join(tmpDir, '..', 'x'), tmpDir)).toBeNull();
+  });
+
+  it('keeps a folder whose name starts with two dots inside the root', () => {
+    expect(projectRelativePath(path.join(tmpDir, '..cache'), tmpDir)).toBe('..cache');
+  });
+
+  it('follows a symlinked root on either side', () => {
+    const real = path.join(tmpDir, 'real');
+    const link = path.join(tmpDir, 'link');
+    fs.mkdirSync(real);
+    fs.symlinkSync(real, link, 'dir');
+    expect(projectRelativePath(path.join(link, 'a'), real)).toBe('a');
+    expect(projectRelativePath(path.join(real, 'a'), link)).toBe('a');
+  });
+
+  it.runIf(process.platform === 'win32')('reads Windows drive paths', () => {
+    const root = path.join(tmpDir, 'proj');
+    expect(projectRelativePath(path.join(root, 'src'), root)).toBe('src');
+    expect(projectRelativePath(root.replace(/\\/g, '/') + '/src', root)).toBe('src');
+    const otherDrive = /^[Cc]:/.test(root) ? 'D:\\proj\\src' : 'C:\\proj\\src';
+    expect(projectRelativePath(otherDrive, root)).toBeNull();
   });
 });

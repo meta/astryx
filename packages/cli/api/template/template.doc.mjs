@@ -89,7 +89,7 @@ export const doc = {
       name: 'options.targetPath',
       type: 'string',
       description:
-        'Destination (relative to cwd) to scaffold the template into. Its presence switches a named lookup into a copy. ' +
+        'Destination inside cwd to scaffold the template into: a relative path, or an absolute path inside cwd, which is written as its relative form and reported as data.givenPath. A path outside cwd is refused with ERR_PATH_TRAVERSAL. Its presence switches a named lookup into a copy. ' +
         "A path that ends in .tsx, .ts, .jsx, .js, .mjs, .cjs, .css, .scss, .json, .md or .html is the file to write; any other path is a directory, which receives page.tsx for a page template or the block's own file name for a block.",
     },
     {
@@ -152,7 +152,7 @@ export const doc = {
     },
     {
       code: 'ERR_PATH_TRAVERSAL',
-      when: 'the copy target path is absolute or escapes the project root',
+      when: 'the copy target path is outside the project root',
     },
     {
       code: 'ERR_FILE_EXISTS',

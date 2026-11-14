@@ -114,6 +114,53 @@ export function assertWithin(targetPath, rootDir, options = {}) {
   return resolved;
 }
 
+/**
+ * The form of `targetPath` relative to `rootDir`. A relative path is returned
+ * unchanged. An absolute path that names a place inside `rootDir`, as typed or
+ * through a symlink on either side, is returned relative to `rootDir`, with a
+ * trailing separator kept. An absolute path outside `rootDir` gives `null`.
+ *
+ * This only rewrites the path. The caller still passes the result to
+ * {@link assertWithin}, which confines the write.
+ *
+ * @param {string} targetPath - User-provided path.
+ * @param {string} rootDir - Absolute path of the directory to constrain into.
+ * @returns {string | null}
+ */
+export function projectRelativePath(targetPath, rootDir) {
+  if (typeof targetPath !== 'string' || !path.isAbsolute(targetPath)) {
+    return targetPath;
+  }
+  const absRoot = path.resolve(rootDir);
+  const absTarget = path.resolve(targetPath);
+  let relative = relativeInside(absRoot, absTarget);
+  if (relative === null) {
+    try {
+      relative = relativeInside(canonicalPath(absRoot), canonicalPath(absTarget));
+    } catch {
+      // A symlink loop or a permission error: the path is not known to be
+      // inside the root.
+    }
+  }
+  if (relative === null) return null;
+  const trailing = /[\\/]$/.test(targetPath) ? path.sep : '';
+  return (relative || '.') + trailing;
+}
+
+/**
+ * @param {string} root absolute
+ * @param {string} target absolute
+ * @returns {string | null} `target` relative to `root`, or null when outside
+ */
+function relativeInside(root, target) {
+  const relative = path.relative(root, target);
+  const escapes =
+    relative === '..' ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative);
+  return escapes ? null : relative;
+}
+
 /** Linux's MAXSYMLINKS; a longer chain is treated as a loop. */
 const MAX_SYMLINK_HOPS = 40;
 

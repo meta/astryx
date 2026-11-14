@@ -20,7 +20,11 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {CLI_ROOT, findCoreDir} from '../../../foundation/fs/paths.mjs';
-import {assertWithin, PathSafetyError} from '../../../foundation/fs/path-safety.mjs';
+import {
+  assertWithin,
+  PathSafetyError,
+  projectRelativePath,
+} from '../../../foundation/fs/path-safety.mjs';
 import {stripCopyrightHeader} from '../../../foundation/text/copyright-header.mjs';
 import {getXdsVersion} from '../../../foundation/agent-docs/agent-docs.mjs';
 import {AstryxError} from '../../error.mjs';
@@ -51,12 +55,29 @@ export function templateCdn(options = {}) {
     cwd = process.cwd(),
   } = options;
 
+  const inside = [
+    {
+      name: `astryx template --cdn ${CDN_TEMPLATE_DEFAULT_PATH}`,
+      reason: 'write the page inside the project',
+    },
+  ];
+  // An absolute path inside the project is the same write as its relative
+  // form.
+  const relativeTarget = projectRelativePath(targetPath, cwd);
+  if (relativeTarget === null) {
+    throw new AstryxError(
+      `Invalid cdn template path "${targetPath}": it is outside the project root (${path.resolve(cwd)}). ` +
+        'The page is written only inside the project.',
+      inside,
+      ERROR_CODES.ERR_PATH_TRAVERSAL,
+    );
+  }
   let resolved;
   try {
-    resolved = assertWithin(targetPath, cwd, {label: 'cdn template path'});
+    resolved = assertWithin(relativeTarget, cwd, {label: 'cdn template path'});
   } catch (err) {
     if (err instanceof PathSafetyError) {
-      throw new AstryxError(err.message, undefined, ERROR_CODES.ERR_PATH_TRAVERSAL);
+      throw new AstryxError(err.message, inside, ERROR_CODES.ERR_PATH_TRAVERSAL);
     }
     throw err;
   }
