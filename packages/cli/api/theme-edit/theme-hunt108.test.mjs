@@ -203,12 +203,17 @@ describe('wrong writes that are no longer accepted', () => {
     },
     T,
   );
-  it(
-    'remove the card border and shadow removes both',
-    async () => {
-      expect((await answer('remove the card border and shadow')).first).toEqual(
-        ['set q border none --on card', 'set q box-shadow none --on card'],
-      );
+  it.each([
+    'remove the card border and shadow',
+    "remove the card's border and shadow",
+    'remove the card’s border and shadow',
+  ])(
+    '%s removes both',
+    async ask => {
+      expect((await answer(ask)).first).toEqual([
+        'set q border none --on card',
+        'set q box-shadow none --on card',
+      ]);
     },
     T,
   );

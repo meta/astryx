@@ -183,7 +183,7 @@ const CASES =
     ],
   ]);
 
-describe('hunt104', () => {
+describe('the repair gate offers only lines that carry the whole typed value', () => {
   it.each(CASES)(
     '%s %s %j',
     async (thing, value, flags, lines, never) => {

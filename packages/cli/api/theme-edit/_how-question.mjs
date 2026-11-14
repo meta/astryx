@@ -3345,10 +3345,11 @@ export function draftAnswer(ctx, env, question) {
     // removable noun the first lead governs ("no shadows and borders"); a
     // noun with an adjective ("rounded corners") is an ask of its own.
     // The part may come first, as an owner: "remove the card border and
-    // shadow" is no border and no shadow on cards.
+    // shadow" (or "the card's border and shadow") is no border and no
+    // shadow on cards.
     .replace(
       new RegExp(
-        `\\b${REMOVAL_LEAD} (?:the |my |our )?([a-z][a-z-]*) (${REMOVABLE}) and (?:the |its |their )?(${REMOVABLE})\\b(?! (?:on|from|for)\\b)`,
+        `\\b${REMOVAL_LEAD} (?:the |my |our )?([a-z][a-z-]*)(?:['’]s)? (${REMOVABLE}) and (?:the |its |their )?(${REMOVABLE})\\b(?! (?:on|from|for)\\b)`,
         'gi',
       ),
       (m, part, x, y) =>
