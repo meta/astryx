@@ -820,6 +820,7 @@
     "/templates/useComboboxHookUsage/",
     "/templates/useContainerRevealHookUsage/",
     "/templates/useDirectionHookUsage/",
+    "/templates/useEntryAnimationHookUsage/",
     "/templates/useFocusTrapHookUsage/",
     "/templates/useGridFocusHookUsage/",
     "/templates/useHotkeysHookUsage/",

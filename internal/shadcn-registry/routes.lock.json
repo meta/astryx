@@ -3807,6 +3807,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-entry-animation-mount-validation-notice",
+      "path": "examples/use-entry-animation/mount-validation-notice",
+      "aliases": []
+    },
+    {
       "name": "example-use-focus-trap-quick-edit-panel",
       "path": "examples/use-focus-trap/quick-edit-panel",
       "aliases": []
