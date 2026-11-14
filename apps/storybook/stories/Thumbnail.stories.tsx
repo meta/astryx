@@ -161,6 +161,34 @@ export const ClickableWithRemove: Story = {
   },
 };
 
+export const RemoveOverPhotos: Story = {
+  render: () => (
+    <div style={{display: 'flex', gap: 16}}>
+      <Thumbnail
+        src={DARK_IMAGE}
+        alt="Dark interior"
+        onClick={() => {}}
+        onRemove={() => {}}
+        showRemoveOn="always"
+      />
+      <Thumbnail
+        src={LIGHT_IMAGE}
+        alt="Snow and sky"
+        onClick={() => {}}
+        onRemove={() => {}}
+        showRemoveOn="always"
+      />
+      <Thumbnail
+        src={MIXED_IMAGE}
+        alt="Mixed tones"
+        onClick={() => {}}
+        onRemove={() => {}}
+        showRemoveOn="always"
+      />
+    </div>
+  ),
+};
+
 export const Loading: Story = {
   name: 'Loading (no preview)',
   args: {

@@ -302,6 +302,17 @@ const styles = stylex.create({
     // without sampling pixel brightness.
     backgroundColor: colorVars['--color-overlay'],
     color: colorVars['--color-on-dark'],
+    // A two-tone ring: a white band inside a black ring. The two tones
+    // contrast with each other, so one of them stands out on any image.
+    outlineColor: {
+      default: null,
+      ':focus-visible': colorVars['--color-on-light'],
+    },
+    outlineOffset: {default: '0', ':focus-visible': '2px'},
+    boxShadow: {
+      default: null,
+      ':focus-visible': `0 0 0 2px ${colorVars['--color-on-dark']}`,
+    },
     '--_thumbnail-hit-inset': {
       default: '0px',
       '@media (pointer: coarse)': '-2px',
