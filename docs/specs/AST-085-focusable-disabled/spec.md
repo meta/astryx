@@ -61,8 +61,10 @@ non-operable control. No component renders the native `disabled` attribute.
 
 ## Non-goals
 
-- Which items arrow keys visit inside a composite widget (listbox, menu, grid,
-  tablist, roving group). The composite's own record decides that.
+- Which items arrow keys visit inside a composite widget whose arrows select
+  (radio group, segmented control, tablist, listbox) or pick a value (grid,
+  calendar, wheel). The composite's own record decides that. FR8 decides it
+  for action composites.
 - Read-only. `spec:AST-011` keeps read-only distinct from disabled.
 - Disabled paint, tokens, and theme states. They keep their current owners.
 - Elements a caller renders inside an Astryx slot. The caller owns their
@@ -102,6 +104,13 @@ non-operable control. No component renders the native `disabled` attribute.
   (`architecture:interaction-modality` INV1, INV5).
 - **FR7 — Group disablement follows the same rule.** Members disabled by a group
   or form-level default follow FR1–FR6.
+- **FR8 — Action composites reach a disabled member.** In a composite whose
+  members are actions and whose arrow keys move focus without activating
+  (a menu, a toolbar, a button group), arrow keys, Home, End, and type-ahead
+  visit a disabled member. It takes focus, is announced as disabled with its
+  reason (FR5), and does nothing when activated (FR2). The composite's single
+  Tab stop still starts on an enabled member. A wholly disabled composite
+  keeps its Tab stop (FR1, FR7).
 
 ### Platform support
 
@@ -149,20 +158,26 @@ non-operable control. No component renders the native `disabled` attribute.
   reason. Fields with a form value drop it from submission (FR3).
 - Pagination, Calendar, Lightbox, and the touch date pickers stop dropping focus
   to the page body at their boundaries (FR4).
+- FR8 extends `component:DropdownMenu` DEC-11 from menus to every action
+  composite. `component:Toolbar` FR4 and `component:ButtonGroup` FR8, FR9,
+  its review checks, and its one-member-disabled state change from "arrows
+  skip a disabled member" to "arrows visit it"; their tests that assert the
+  skip are pending conformance.
 - Consumers who select disabled controls with `:disabled`, query them with
   `toBeDisabled()`, or rely on disabled controls being skipped by Tab see a
   change. Release notes name it.
 
 ## Verification
 
-| Contract | Verification                                           | Representative states                                                   | Mutation or failure expectation                                  |
-| -------- | ------------------------------------------------------ | ----------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| FR1      | Shared test over every component's disabled story      | Button, text field, checkbox, switch, selector, slider, group-disabled  | Any rendered `disabled` attribute, or a changed tab order, fails |
-| FR2      | Per-component keyboard, pointer, paste, and drop tests | Each change path the component supports                                 | A value change, activation, navigation, or callback fails        |
-| FR3      | Form submission tests reading `FormData`               | Disabled text, checkbox, selector, required-and-disabled field          | A submitted disabled value, or a blocked submit, fails           |
-| FR4      | Real-browser focus-transition checks                   | Last Pagination page, Calendar max month, last Lightbox item, group off | Focus on the document body fails                                 |
-| FR5      | Accessibility-tree checks                              | Focused disabled control with and without a disabled reason             | Missing disabled state, name, or reason fails                    |
-| FR6      | Real-browser computed-style checks                     | Disabled at rest, hover, pressed, keyboard focus                        | Hover or pressed paint, or a missing focus indicator, fails      |
+| Contract | Verification                                                | Representative states                                                                                                     | Mutation or failure expectation                                                                                               |
+| -------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| FR1      | Shared test over every component's disabled story           | Button, text field, checkbox, switch, selector, slider, group-disabled                                                    | Any rendered `disabled` attribute, or a changed tab order, fails                                                              |
+| FR2      | Per-component keyboard, pointer, paste, and drop tests      | Each change path the component supports                                                                                   | A value change, activation, navigation, or callback fails                                                                     |
+| FR3      | Form submission tests reading `FormData`                    | Disabled text, checkbox, selector, required-and-disabled field                                                            | A submitted disabled value, or a blocked submit, fails                                                                        |
+| FR4      | Real-browser focus-transition checks                        | Last Pagination page, Calendar max month, last Lightbox item, group off                                                   | Focus on the document body fails                                                                                              |
+| FR5      | Accessibility-tree checks                                   | Focused disabled control with and without a disabled reason                                                               | Missing disabled state, name, or reason fails                                                                                 |
+| FR6      | Real-browser computed-style checks                          | Disabled at rest, hover, pressed, keyboard focus                                                                          | Hover or pressed paint, or a missing focus indicator, fails                                                                   |
+| FR8      | Keyboard tests plus a real-browser accessibility-tree check | Toolbar and ButtonGroup with one disabled member, with and without a reason; a wholly disabled group; a menu row (DEC-11) | An arrow that skips a disabled member, a disabled member that activates, or a Tab stop that starts on a disabled member fails |
 
 ## Decision log
 
@@ -178,6 +193,23 @@ removes all three failures, and components keep the same `isDisabled` API.
 
 Rejected: moving focus to a component-chosen fallback when a control becomes
 disabled — every component needs its own destination, and focus still jumps.
+
+### DEC-2 — Action composites reach a disabled member
+
+**Decider:** pending
+
+A keyboard user moving through a toolbar or a button group cannot learn that a
+disabled button exists, or why, when arrow keys skip it. Menus already reach a
+disabled row (`component:DropdownMenu` DEC-11). FR8 gives every action
+composite the same rule. Composites whose arrows select or pick a value keep
+skipping, because landing on a disabled member there would seem to select
+nothing.
+
+Rejected: reaching disabled members in every composite, including radio
+groups, segmented controls, and calendars, where an arrow that lands without
+selecting breaks the selection-follows-focus pattern. Rejected: keeping each
+composite's own skip rule, which leaves a toolbar's disabled reason reachable
+only by pointer hover.
 
 ## Open questions
 
