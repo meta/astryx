@@ -2,6 +2,7 @@
 
 'use client';
 
+import {useState} from 'react';
 import {
   ChatDictationButton,
   useSpeechRecognition,
@@ -10,10 +11,9 @@ import {VStack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
 
 export default function UseSpeechRecognitionHookUsage() {
+  const [committedTranscript, setCommittedTranscript] = useState('');
   const dictation = useSpeechRecognition({
-    onResult: transcript => {
-      console.log('Committed transcript:', transcript);
-    },
+    onResult: setCommittedTranscript,
   });
 
   return (
@@ -23,7 +23,7 @@ export default function UseSpeechRecognitionHookUsage() {
         {dictation.isSupported
           ? dictation.isListening
             ? dictation.interimTranscript || 'Listening…'
-            : 'Tap the microphone to start.'
+            : committedTranscript || 'Tap the microphone to start.'
           : 'Speech recognition is not available in this browser.'}
       </Text>
     </VStack>
