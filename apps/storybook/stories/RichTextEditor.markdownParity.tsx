@@ -11,7 +11,8 @@
  *   per-block geometry and the scroll anchor across a mode switch.
  *   `WideNumberMarkerParity`, `MixedNumberMarkerParity` and
  *   `TaskParentNumberMarkerParity` compare short and wide outside counters on
- *   Markdown, RichTextView, and RichTextEditor.
+ *   Markdown, RichTextView, and RichTextEditor; `CodeDirectionParity` shows
+ *   inline and fenced code in a Hebrew paragraph on the same three surfaces.
  * @position Storybook-only diagnostic for RichTextEditor.stories.tsx. It shows
  *   current behavior and fixes nothing: every difference it reports is a
  *   finding, and none of its numbers is a target.
@@ -919,6 +920,22 @@ const TASK_PARENT_MARKER_SOURCE = [
   '    388. Task roman counter',
   '    389. Task roman sibling',
 ].join('\n');
+
+const CODE_DIRECTION_SOURCE = [
+  'פסקה בעברית עם הקוד `const a = 1;` בתוך השורה.',
+  '',
+  '```ts',
+  'const a = 1;',
+  'if (a > 0) {',
+  '  console.log(a);',
+  '}',
+  '```',
+].join('\n');
+
+/** Reusable comparison for inline and fenced code in a Hebrew paragraph. */
+export function CodeDirectionParity() {
+  return <NumberMarkerParity source={CODE_DIRECTION_SOURCE} />;
+}
 
 /** Reusable comparison for a numbered list below two pure task ancestors. */
 export function TaskParentNumberMarkerParity() {

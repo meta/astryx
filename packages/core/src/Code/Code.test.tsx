@@ -27,6 +27,16 @@ describe('Code', () => {
     expect(el.tagName).toBe('CODE');
   });
 
+  it('reads left to right in right-to-left prose, and keeps a caller dir', () => {
+    render(
+      <p dir="rtl">
+        <Code>const a = 1;</Code> <Code dir="auto">other</Code>
+      </p>,
+    );
+    expect(screen.getByText('const a = 1;')).toHaveAttribute('dir', 'ltr');
+    expect(screen.getByText('other')).toHaveAttribute('dir', 'auto');
+  });
+
   it('forwards ref to the root element', () => {
     const ref = vi.fn();
     render(<Code ref={ref}>code</Code>);

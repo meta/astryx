@@ -293,6 +293,8 @@ const editorTheme = stylex.create({
   textUnderline: {textDecoration: 'underline'},
   textStrikethrough: {textDecoration: 'line-through'},
   textCode: {
+    direction: 'ltr',
+    unicodeBidi: 'isolate',
     fontFamily: typographyVars['--font-family-code'],
     backgroundColor: colorVars['--color-background-muted'],
     paddingInline: spacingVars['--spacing-1'],
@@ -432,6 +434,8 @@ const editorTheme = stylex.create({
   // scroll it (axe scrollable-region-focusable).
   code: {
     display: 'block',
+    direction: 'ltr',
+    unicodeBidi: 'isolate',
     fontFamily: typographyVars['--font-family-code'],
     fontSize: typeScaleVars['--text-code-size'],
     lineHeight: typeScaleVars['--text-code-leading'],
@@ -531,7 +535,9 @@ export function sharedEditorTheme(): EditorThemeClasses {
       code: stylex.props(editorTheme.textCode).className,
     },
     // The plain class lets CodeSyntaxPlugin's highlight rules find code blocks.
-    code: `${block(editorTheme.code)} ${CODE_SYNTAX_CLASS}`,
+    // Code reads left to right in a surface of either direction, so it does
+    // not take the surface's direction.
+    code: `${stylex.props(editorTheme.code).className ?? ''} ${CODE_SYNTAX_CLASS}`,
     hr: stylex.props(editorTheme.hr).className,
     hrSelected: stylex.props(editorTheme.hrSelected).className,
     // MarkdownExtensionsPlugin puts it on a selected plugin node.

@@ -885,6 +885,7 @@ function SpanCodeContent({
 
   return (
     <code
+      dir="ltr"
       {...stylex.props(
         styles.code,
         sizeStyle,
@@ -968,6 +969,7 @@ function RangeCodeContent({
   return (
     <code
       ref={codeRef}
+      dir="ltr"
       {...stylex.props(
         styles.code,
         sizeStyle,
