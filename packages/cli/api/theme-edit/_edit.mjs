@@ -1900,11 +1900,13 @@ function carryTyped(e, sub, slug, thing, typed, data) {
       mode: / --mode (light|dark)\b/.exec(x.name)?.[1] ?? '',
     });
   });
-  const covered = coversTyped(reads, typedText);
+  const covered = coversTyped(reads, typedText, String(thing));
   /** @type {Set<string>} */
   const dropped = new Set();
   const lines = e.suggestions.filter((x, i) => {
-    if (reads[i] === true || (Array.isArray(reads[i]) && covered)) return true;
+    const read = reads[i];
+    if (read === true || (read && typeof read === 'object' && covered))
+      return true;
     const m = head.exec(x.name);
     if (m) dropped.add(String(m[3] ?? m[4]).toLowerCase());
     return false;
@@ -1953,12 +1955,14 @@ function savedAsWritten(cwd, slug) {
 /**
  * The lines of a repair that work: each run through set's own check (in
  * memory) and offered only when set takes it as offered and its value
- * passes the allowlist of exact readings of what was typed. With none
- * left, how for the thing.
+ * passes the allowlist of exact readings of what was typed. A line left
+ * out that names its own setting points to how for it; with no line left,
+ * how for the thing (or the command's help when there is no one thing).
  * @param {'set' | 'undo'} sub
  * @param {string} slug
- * @param {Array<string | [string, string]>} lines each line, or each line
- *   with the typed text it carries (an entry of a pasted object)
+ * @param {Array<string | [string, string] | [string, string, string]>} lines
+ *   each line, or each line with the typed text it carries (and, for an
+ *   entry of a pasted object, its setting)
  * @param {string} cwd
  * @param {string} typed
  * @param {string} thing
@@ -1968,10 +1972,20 @@ async function workingLines(sub, slug, lines, cwd, typed, thing) {
   /** @type {string[]} */
   const out = [];
   for (const item of lines) {
-    const [line, own] = Array.isArray(item) ? item : [item, typed];
+    const [line, own, subject] = Array.isArray(item)
+      ? item
+      : [item, typed, undefined];
+    // A line left out points to how for its own setting, when it names one
+    // (an entry of a pasted object).
+    const left = () => {
+      if (subject) out.push(`${P} how ${quoteCommandArgument(subject)}`);
+    };
     // The line as set takes it (a repair set offers for it folded in).
     const followed = await followChangeLine(sub, slug, line, cwd);
-    if (followed.why) continue;
+    if (followed.why) {
+      left();
+      continue;
+    }
     const read = readSetLine(followed.line, slug);
     if (
       sub === 'set' &&
@@ -1982,11 +1996,19 @@ async function workingLines(sub, slug, lines, cwd, typed, thing) {
         thing: read.thing,
         mode: String(read.flags?.mode ?? ''),
       })
-    )
+    ) {
+      left();
       continue;
+    }
     out.push(followed.line);
   }
-  return out.length ? out : [`${P} how ${quoteCommandArgument(thing)}`];
+  return out.length
+    ? [...new Set(out)]
+    : [
+        thing
+          ? `${P} how ${quoteCommandArgument(thing)}`
+          : `${P} ${sub} --help`,
+      ];
 }
 
 /**
@@ -2100,14 +2122,17 @@ async function change(sub, slug, thing, value, options) {
                     : String(x);
                 const read = String(normalizeEntry(k, entry).value ?? '');
                 // Each line with the entry it carries, as typed.
-                return /** @type {[string, string]} */ ([
+                return /** @type {[string, string, string]} */ ([
                   `${P} ${sub} ${slug} ${quoteCommandArgument(k)}${sub === 'set' ? ` ${quoteCommandArgument(read)}` : ''}`,
                   read,
+                  k,
                 ]);
               }),
             options.cwd ?? process.cwd(),
             objectText,
-            'settings',
+            // No one setting: each entry left out points to how for its
+            // own (above), else set's help.
+            '',
           ),
         },
       );
@@ -2337,6 +2362,7 @@ async function changeOnce(
       data,
       cwd,
       thing === 'mode' || thing === 'base' ? thing : undefined,
+      slug,
     ),
   ];
   const ctx = await context(cwd);

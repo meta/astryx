@@ -684,14 +684,33 @@ export function vibrancyMeant(dial, v) {
  * @returns {{mode: string, like: string}}
  */
 export function fieldsMeant(data) {
-  const mode = String(data?.mode ?? '')
+  const MODES = ['both', 'light-only', 'dark-only'];
+  const typed = String(data?.mode ?? '')
     .trim()
     .toLowerCase()
     .replace(/[\s_]+/g, '-');
-  const like = String(data?.like ?? '')
+  // A mode word (light, night) is that one mode, as `set` reads it; a typo
+  // of a mode is that mode.
+  const word = /** @type {Record<string, string>} */ ({
+    light: 'light-only',
+    day: 'light-only',
+    dark: 'dark-only',
+    night: 'dark-only',
+  })[typed];
+  const near = (/** @type {string} */ t, /** @type {string[]} */ list) => {
+    const hits = list.filter(x => typoNear(t, x));
+    return hits.length === 1 ? hits[0] : null;
+  };
+  const mode = MODES.includes(typed)
+    ? typed
+    : (word ?? (typed ? near(typed, MODES) : null) ?? typed);
+  const likeTyped = String(data?.like ?? '')
     .trim()
     .toLowerCase()
     .replace(/^@astryxdesign\/theme-/, '');
+  const like = LIKE.includes(likeTyped)
+    ? likeTyped
+    : ((likeTyped ? near(likeTyped, LIKE) : null) ?? likeTyped);
   return {mode, like};
 }
 
@@ -6772,19 +6791,30 @@ export function entriesReadable(data) {
 
 /**
  * Read a damaged mode or base the way a change reads it, in place: one
- * written in other letters or as a package name (`Dark-Only`,
- * `@astryxdesign/theme-neutral`) is the value meant; any other goes back to
- * its default. `like: "none"` is no base. The field a command sets itself
- * is left to that command.
+ * written in other letters, as a package name, as a mode word or with a
+ * typo (`Dark-Only`, `@astryxdesign/theme-neutral`, `light`, `neutrl`) is
+ * the value meant, as `set` reads it. Any other is refused for a change
+ * (slug given), with the line that sets it; read for an undo step, it goes
+ * back to its default. `like: "none"` is no base. The field a command sets
+ * itself is left to that command.
  * @param {any} data
  * @param {string} cwd
  * @param {string} [fixing] `mode` or `base` when the command sets it
+ * @param {string} [slug] the theme a change is made to
  * @returns {string[]} a note for each field read differently from the file
  */
-export function readFields(data, cwd, fixing) {
+export function readFields(data, cwd, fixing, slug) {
   /** @type {string[]} */
   const notes = [];
   const meant = fieldsMeant(data);
+  // A field written as no value the reader can read: for a change (slug
+  // given), refused with the line that sets it, never dropped on the way.
+  const damaged = (/** @type {string} */ field, /** @type {string} */ fix) =>
+    refuse(
+      ERROR_CODES.ERR_THEME_INVALID,
+      `themes/${slug}/${slug}.settings.json: ${field === 'mode' ? 'mode' : 'base'} "${field === 'mode' ? data.mode : data.like}" is no value the editor reads, and a change never drops it. Set it again.`,
+      {run: [`${P} set ${slug} ${field} ${fix}`]},
+    );
   if (
     fixing !== 'mode' &&
     !['both', 'light-only', 'dark-only'].includes(data.mode)
@@ -6794,6 +6824,8 @@ export function readFields(data, cwd, fixing) {
         `mode was written "${data.mode}", so it is saved as ${meant.mode}`,
       );
       data.mode = meant.mode;
+    } else if (slug && data.mode != null && String(data.mode).trim()) {
+      damaged('mode', 'both');
     } else {
       data.mode = 'both';
       notes.push('mode was missing or damaged, so it is both again');
@@ -6806,6 +6838,8 @@ export function readFields(data, cwd, fixing) {
         `base was written "${data.like}", so it is saved as ${meant.like}`,
       );
       data.like = meant.like;
+    } else if (slug) {
+      damaged('base', LIKE.includes(meant.like) ? meant.like : 'none');
     } else {
       delete data.like;
       notes.push('base was not a built-in theme, so it is none again');

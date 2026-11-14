@@ -95,9 +95,8 @@ describe('hunt21, R03-05-07 final 11', () => {
     const run = async (prop, value) =>
       (await refusal(() => themeEditSet('v', prop, value, {cwd, on: 'card'})))
         .run[0];
-    expect(await run('border-width', '-2')).toMatch(
-      / border-width 2px --on card$/,
-    );
+    // A minus sign is never read away: no line offers the positive size.
+    expect(await run('border-width', '-2')).toMatch(/ how border-width$/);
     expect(await run('padding', '4 8px')).toMatch(
       / padding '4px 8px' --on card$/,
     );
