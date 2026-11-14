@@ -72,6 +72,18 @@ export function assetRefsIn(text) {
 }
 
 /**
+ * The images, fonts and media a carried file names by a relative path: in a
+ * module's strings, or in a stylesheet. A render carries each one that
+ * exists, and {@link reachableFiles} expects each one back.
+ * @param {string} source
+ * @param {string} file its path; a `.css` file is read as a stylesheet
+ * @returns {string[]}
+ */
+export function assetRefsOf(source, file) {
+  return /\.css$/i.test(file) ? assetRefsIn(source) : scanModule(source, file).assets;
+}
+
+/**
  * One module's imports, and the relative asset paths its strings name
  * (`<img src="./logo.png">`, `url(./bg.png)` in a style).
  * @param {string} source

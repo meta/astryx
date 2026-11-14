@@ -465,6 +465,21 @@ describe('render(): every write stays inside the current folder', () => {
     expect(again.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('missing-asset');
   }, 60_000);
 
+  it('carries an image a module or a stylesheet names that the page did not show, and gives every file back', async () => {
+    put('named/img/shown.png', PNG);
+    put('named/img/other.png', PNG);
+    put('named/img/unused-bg.png', PNG);
+    put('named/icons.ts', "export const icons = {shown: './img/shown.png', other: './img/other.png'};\n");
+    put('named/styles.css', '.used { color: red; }\n.unused { background: url("./img/unused-bg.png"); }\n');
+    put('named/page.tsx', "import './styles.css';\nimport {icons} from './icons';\nexport default function Page() { return <img className=\"used\" src={icons.shown} alt=\"\" />; }\n");
+    const r = /** @type {any} */ (await render('named/page.tsx', {cwd: dir}));
+    expect(r.data.files).toEqual(expect.arrayContaining(['img/shown.png', 'img/other.png', 'img/unused-bg.png']));
+    const back = /** @type {any} */ (await render('named/page.html', {cwd: dir, reverse: true, out: 'named-back/page.tsx'}));
+    expect(back.data).toMatchObject({exact: true});
+    expect(back.data.missing).toBeUndefined();
+    expect(fs.readFileSync(path.join(dir, 'named-back/img/other.png'))).toEqual(PNG);
+  }, 60_000);
+
   it('gives back images named any way the render carried them', async () => {
     put('spell/logo.png', PNG);
     put('spell/images/bg.png', PNG);

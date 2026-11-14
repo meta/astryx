@@ -27,6 +27,7 @@ import {assetDataUri, isAssetBytes, isAssetPath, RenderAssetError} from './asset
 import {classesIn, cutCss, layerOrderOf} from './css-cut.mjs';
 import {RENDER_FORMAT, sha256, sourceBlock} from './source-block.mjs';
 import {embeddedPathProblem} from './embedded-files.mjs';
+import {assetRefsOf} from './embedded-imports.mjs';
 import {isServedPackage, resolveServed} from './served-packages.mjs';
 import {CHART_CSS} from './charts.mjs';
 import {HOST_EXIT} from './host-exit.mjs';
@@ -814,20 +815,47 @@ export async function renderPage(entry, options = {}) {
     if (rel.startsWith('..') || path.isAbsolute(rel) || rel.split(path.sep).includes('node_modules')) continue;
     if (!files.includes(sheet)) files.push(sheet);
   }
-  for (const asset of ctx.localAssets) {
+  /** Assets named in a warning already, so each is named once. @type {Set<string>} */
+  const notCarried = new Set();
+  /**
+   * Carry an image, font or media file of the project's own. It is carried
+   * only when its bytes are a known image, font or media format, the same
+   * test --reverse applies, so the file always comes back.
+   * @param {string} asset absolute
+   * @param {string} how how the page uses it, for the warning
+   */
+  const carryAsset = (asset, how) => {
     const rel = path.relative(root, asset);
-    if (rel.startsWith('..') || path.isAbsolute(rel) || rel.split(path.sep).includes('node_modules')) continue;
-    if (files.includes(asset)) continue;
-    // Carried only when its bytes are a known image, font or media format,
-    // the same test --reverse applies, so the file always comes back.
+    if (rel.startsWith('..') || path.isAbsolute(rel) || rel.split(path.sep).includes('node_modules')) return;
+    if (files.includes(asset) || notCarried.has(asset)) return;
     if (!isAssetBytes(fs.readFileSync(asset))) {
+      notCarried.add(asset);
       warnings.push({
         code: 'not-embedded',
-        message: `${path.relative(dir, asset).split(path.sep).join('/')} is shown inline but not carried in the file: its bytes are not a known image, font or media format, so --reverse cannot give it back.`,
+        message: `${path.relative(dir, asset).split(path.sep).join('/')} is ${how} but not carried in the file: its bytes are not a known image, font or media format, so --reverse cannot give it back.`,
       });
-      continue;
+      return;
     }
     files.push(asset);
+  };
+  for (const asset of ctx.localAssets) carryAsset(asset, 'shown inline');
+  // An image or font that a carried module's strings or a carried stylesheet
+  // name by a relative path belongs to the page even when this render did
+  // not show it (a branch the page did not take, a rule no element uses):
+  // --reverse reads the same names to tell whether every file came back.
+  for (const file of files.filter(f => /\.(?:[cm]?[jt]sx?|css)$/i.test(f))) {
+    let text;
+    try {
+      text = fs.readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    for (const ref of assetRefsOf(text, file)) {
+      const asset = path.resolve(path.dirname(file), ref);
+      if (fs.statSync(asset, {throwIfNoEntry: false})?.isFile()) {
+        carryAsset(asset, `named in ${path.relative(dir, file).split(path.sep).join('/')}`);
+      }
+    }
   }
   // Paths are kept relative to the folder that holds every file: the page's
   // folder, or an ancestor when the page imports from above it.
