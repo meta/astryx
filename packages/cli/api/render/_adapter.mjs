@@ -43,7 +43,7 @@ import {isAstryxMarkup} from '../../foundation/render/html-reader.mjs';
 import {rebuildPage} from '../../foundation/render/rebuild.mjs';
 import {cliVersion} from '../../foundation/integrations/cli-peer-version.mjs';
 import {assertWithin, PathSafetyError} from '../../foundation/fs/path-safety.mjs';
-import {requireCoreDir} from '../../foundation/fs/paths.mjs';
+import {findPackageRoot, requireCoreDir} from '../../foundation/fs/paths.mjs';
 import {runChoice} from '../../foundation/release/run-context.mjs';
 import {isAlive, pidSpace} from '../../foundation/release/cache.mjs';
 import {isServedPackage} from '../../foundation/render/served-packages.mjs';
@@ -573,19 +573,7 @@ function aliasEntry(spec, file, base) {
  * @param {string} cwd
  */
 function aliasedResult(unaliased, page, cwd) {
-  let root = path.dirname(page);
-  while (!fs.existsSync(root) && path.dirname(root) !== root) root = path.dirname(root);
-  for (let d = root; ; d = path.dirname(d)) {
-    if (fs.existsSync(path.join(d, 'package.json'))) {
-      root = d;
-      break;
-    }
-    if (path.dirname(d) === d) {
-      root = cwd;
-      break;
-    }
-  }
-  const home = pathsHomeFor(page, root);
+  const home = pathsHomeFor(page, findPackageRoot(path.dirname(page)) ?? cwd);
   /** @param {string} p */
   const fromBase = p => {
     const rel = path.relative(home.base, p).split(path.sep).join('/');
