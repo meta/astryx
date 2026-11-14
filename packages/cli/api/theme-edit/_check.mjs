@@ -3336,7 +3336,19 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
         (x.when ?? null) === (s.when ?? null) &&
         (x.state ?? null) === (s.state ?? null),
     );
-  if (s.mode && data.mode !== 'both' && !unset && !sameModeEntry) {
+  // A one-mode theme still has the other mode where Core draws it (a toast,
+  // a lightbox): a value for that mode is written for those regions.
+  const otherModeOfOneMode =
+    s.mode != null &&
+    oneModeOfTheme(data) != null &&
+    oneModeOfTheme(data) !== s.mode;
+  if (
+    s.mode &&
+    data.mode !== 'both' &&
+    !unset &&
+    !sameModeEntry &&
+    !otherModeOfOneMode
+  ) {
     // What takes no --mode in any theme (a size, a font, a keyword) is
     // refused for that, with the command that drops --mode: a theme with
     // both modes would refuse it too, so its mode is no way out.
@@ -3347,14 +3359,9 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
     }
     refuse(
       E.ERR_THEME_NO_MODE,
-      `This theme is ${data.mode}; --mode is for themes with both modes.`,
+      `This theme is ${data.mode}, so its own mode needs no --mode.`,
       {
         run: [
-          // For the mode the theme does not show, both modes first; the
-          // same setting for the theme's own mode keeps where it applies.
-          ...((data.mode === 'light-only' ? 'light' : 'dark') !== s.mode
-            ? [`${P} set ${slug} mode both`]
-            : []),
           `${P} set ${slug} ${thing} ${quoteCommandArgument(v)}${onFlag}${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}`,
         ],
       },
@@ -5598,16 +5605,25 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
           v && isColorValue(v) && isFixedColor(v) && !/\bvar\(/i.test(v)
             ? v
             : (nearestColorName(v) ?? '#1f2937');
+        // The token the part's color prop reads: the one named, else the
+        // prop's own default (a link's accent), set on the part alone.
+        const defaultColor = /^'([\w-]+)'$/.exec(
+          partComponentDocs(ctx, /** @type {string} */ (s.on)).find(
+            d => d.doc.props?.color?.default,
+          )?.doc.props.color.default ?? '',
+        )?.[1];
+        const colorName = named ?? defaultColor ?? 'primary';
+        const tail = `${s.on ? ` --on ${s.on}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}`;
         refuse(
           E.ERR_THEME_NO_EFFECT,
-          `${s.on} takes its color from the color prop, which Core sets after part styles, so a color set on ${s.on} never shows. Set the text color token instead.`,
+          `${s.on} takes its color from the color prop, which Core sets after part styles, so a color set on ${s.on} never shows. Set the token its color prop reads (${colorName}: --color-text-${colorName}) on ${s.on} instead.`,
           {
             run: [
-              `${P} set ${slug} --color-text-${named ?? 'primary'} ${quoteCommandArgument(color)}${s.mode ? ` --mode ${s.mode}` : ''}`,
-              ...(named
+              `${P} set ${slug} --color-text-${colorName} ${quoteCommandArgument(color)}${tail}`,
+              ...(named || defaultColor || colorName === 'secondary'
                 ? []
                 : [
-                    `${P} set ${slug} --color-text-secondary ${quoteCommandArgument(color)}${s.mode ? ` --mode ${s.mode}` : ''}`,
+                    `${P} set ${slug} --color-text-secondary ${quoteCommandArgument(color)}${tail}`,
                   ]),
             ],
           },

@@ -145,7 +145,7 @@ describe('hunt26: the cases', () => {
     const ok = await refusal(() =>
       themeEditSet('b', 'color', 'red', {cwd, on: 'text'}),
     );
-    expect(bare(ok.run)[0]).toBe('set b --color-text-primary red');
+    expect(bare(ok.run)[0]).toBe('set b --color-text-primary red --on text');
   }, 240_000);
 
   it('N19: headings --on heading offers the dial and the asked weight or tracking', async () => {

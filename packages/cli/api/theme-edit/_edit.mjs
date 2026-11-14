@@ -3741,9 +3741,9 @@ async function changeOnce(
                 ))) &&
             x.when === s.when &&
             x.state === s.state &&
-            // A shorthand for one mode replaces longhands of that mode or of
-            // both, never the other mode's.
-            (!s.mode || !x.mode || x.mode === s.mode) &&
+            // A shorthand for one mode replaces longhands of that mode only:
+            // a longhand set for both modes still holds the other mode.
+            (!s.mode || x.mode === s.mode) &&
             // A longhand the shorthand really sets (MDN's data), never a
             // property that only shares its name (overflow-wrap).
             (coversProperty(s.thing, x.thing) ||
@@ -4177,6 +4177,16 @@ async function changeOnce(
         : null
     : null;
   if (s.note) notes.push(s.note);
+  // A value for the mode a one-mode theme does not show applies where Core
+  // draws that mode.
+  if (
+    s.mode &&
+    (data.mode === 'light-only' || data.mode === 'dark-only') &&
+    data.mode !== `${s.mode}-only`
+  )
+    notes.push(
+      `a ${data.mode} theme shows ${s.mode} mode only where Core draws a ${s.mode} region (a toast, a lightbox), so this value applies there`,
+    );
   // A group kept alike (inputs share one height) loses that when one member
   // changes its height alone.
   const family = s.on && s.only ? familyOf(s.on) : null;
@@ -5042,8 +5052,9 @@ function nowApplies(ctx, data, removed, base) {
 }
 
 /**
- * Settings saved for a mode a one-mode theme does not have: they stay saved
- * and apply again when the theme has that mode.
+ * Settings saved for the mode a one-mode theme does not show: they apply
+ * where Core draws that mode (a toast, a lightbox), as the theme's other
+ * halves of its colors do.
  * @param {import('./_settings.mjs').ThemeData} data
  * @returns {string[]}
  */
@@ -5054,7 +5065,7 @@ function otherModeNotes(data) {
   );
   if (!off.length) return [];
   return [
-    `not applied in a ${data.mode} theme, kept for when it has that mode again: ${off
+    `a ${data.mode} theme shows the other mode only where Core draws it (a toast, a lightbox), so these apply there: ${off
       .slice(0, 4)
       .map(describe)
       .join(', ')}${off.length > 4 ? `, and ${off.length - 4} more` : ''}`,
