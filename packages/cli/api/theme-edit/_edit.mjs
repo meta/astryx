@@ -2509,12 +2509,12 @@ async function ownTokenProblems(ctx, slug, data) {
         );
       }
     /**
-     * A custom property and its value, wherever a block sets one.
+     * A custom property and its value, wherever a block sets one. An
+     * undefined value is not set: the build writes nothing for it.
      * @param {string[]} at @param {string} k @param {unknown} v @param {Set<string>} here
-     * @param {boolean} dropsUndefined
      * @param {boolean} [designMap] a `tokens` map, which overrides design tokens
      */
-    const token = (at, k, v, here, dropsUndefined, designMap = false) => {
+    const token = (at, k, v, here, designMap = false) => {
       const loc = at.length || prefix ? where(at.join('.'), k) : whereOf(k);
       // A tokens map overrides design tokens; a name one typo from one is
       // that token misspelled, which the build writes as a property
@@ -2535,15 +2535,7 @@ async function ownTokenProblems(ctx, slug, data) {
           k,
           `${k} is a private variable (--_*), which Core sets itself, so the build refuses a theme that sets one: remove it`,
         );
-      if (v === undefined) {
-        if (!dropsUndefined)
-          refuse(
-            at,
-            k,
-            `${fileName(loc)} gives ${k} the value undefined here, which the build writes as the text undefined in this rule, where the browser drops it: remove the key to leave it unset`,
-          );
-        return;
-      }
+      if (v === undefined) return;
       if (!at.length && !prefix && named.has(k)) return;
       const why = judge(k, v, fileName(loc), here);
       if (why) refuse(at, k, why, asWritten(v));
@@ -2551,12 +2543,11 @@ async function ownTokenProblems(ctx, slug, data) {
     for (const map of ['tokens', 'localTokens']) {
       const m = block[map];
       if (!m || typeof m !== 'object') continue;
-      // A theme's own tokens map: the build drops an undefined token there,
-      // and the exported theme's are named by token alone.
+      // The exported theme's own tokens are named by token alone.
       const top = path.length === 0 && map === 'tokens';
       const at = top && !prefix ? [] : [...path, map];
       for (const [k, v] of Object.entries(m))
-        token(at, k, v, reads, top, map === 'tokens');
+        token(at, k, v, reads, map === 'tokens');
     }
     /** A part's style block. @param {any} node @param {string[]} at @param {Set<string>} outer @param {number} depth */
     const part = (node, at, outer, depth) => {
@@ -2645,15 +2636,9 @@ async function ownTokenProblems(ctx, slug, data) {
         // A vendor-prefixed property is the browser's own: Core checks
         // that the declaration stays one.
         if (/^-|^(webkit|moz|ms|o)-/.test(prop)) continue;
+        // An undefined property is not set: the build writes nothing for it.
+        if (v === undefined) continue;
         const loc = where(at.join('.'), k);
-        if (v === undefined) {
-          refuse(
-            at,
-            prop,
-            `${fileName(loc)} gives ${k} the value undefined here, which the build writes as the text undefined in this rule, where the browser drops it: remove the key to leave it unset`,
-          );
-          continue;
-        }
         if (!cssProperties().has(prop)) {
           const near = nearest(k, camelNames())[0];
           refuse(
@@ -2670,7 +2655,19 @@ async function ownTokenProblems(ctx, slug, data) {
     const components = block.components;
     if (components && typeof components === 'object')
       for (const [name, styles] of Object.entries(components)) {
+        // A part left undefined is not set; one given null, or another
+        // value that is no block of style keys, cannot be read.
         if (styles === undefined) continue;
+        if (!styles || typeof styles !== 'object') {
+          refuse(
+            [...path, 'components'],
+            name,
+            `${name} holds ${describeValue(styles)}, which the build cannot read as a part's style keys: give it style keys, such as ${name}: {base: {…}}, or remove it`,
+            '',
+            prefix ? null : whereKey([...path, 'components'].join('.'), name),
+          );
+          continue;
+        }
         if (!targetKey(name)) {
           // A part's class (`.astryx-card`) names it the way a stylesheet
           // does; the components map names it by its key (`card`).
@@ -2689,14 +2686,13 @@ async function ownTokenProblems(ctx, slug, data) {
           continue;
         }
         // A component's entries are style keys, each holding a block.
-        if (styles && typeof styles === 'object')
-          for (const [key, block] of Object.entries(styles))
-            if (block !== undefined && (!block || typeof block !== 'object'))
-              refuse(
-                [...path, 'components', name],
-                key,
-                `${name}'s entries are style keys (such as base) that each hold a block of properties, and ${key} holds ${describeValue(block)}, which the build cannot read as one: write it inside a style key, such as base: {${key}: ${JSON.stringify(block)}}`,
-              );
+        for (const [key, block] of Object.entries(styles))
+          if (block !== undefined && (!block || typeof block !== 'object'))
+            refuse(
+              [...path, 'components', name],
+              key,
+              `${name}'s entries are style keys (such as base) that each hold a block of properties, and ${key} holds ${describeValue(block)}, which the build cannot read as one: write it inside a style key, such as base: {${key}: ${JSON.stringify(block)}}`,
+            );
         part(styles, [...path, 'components', name], reads, 0);
       }
     for (const surface of ['onDark', 'onLight'])
