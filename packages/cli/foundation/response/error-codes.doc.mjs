@@ -210,7 +210,7 @@ export const doc = {
     {
       value: 'ERR_READ_FAILED',
       description:
-        'Reading an input file failed: no permission, or a folder on its path may not be searched.',
+        'An input file is there but cannot be read: no permission, a folder or other entry that is not a regular file, or another error from the file system.',
     },
 
     // Theme build

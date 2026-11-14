@@ -325,6 +325,22 @@ describe('render(): every write takes its place in one step', () => {
         for (const file of files) fs.chmodSync(path.join(dir, file), 0o644);
       }
       expect(await codeOf(() => render('unreadable/missing.tsx', {cwd: dir}))).toBe('ERR_FILE_NOT_FOUND');
+      // A folder or a pipe given as the file is refused before it is opened,
+      // so nothing waits on a pipe no one writes.
+      fs.mkdirSync(path.join(dir, 'unreadable/folder.tsx'));
+      const entries = [['unreadable/folder.tsx', 'it is a folder']];
+      if (spawnSync('mkfifo', [path.join(dir, 'unreadable/pipe.tsx')]).status === 0) entries.push(['unreadable/pipe.tsx', 'it is not a regular file']);
+      for (const [file, why] of entries) {
+        /** @type {any} */
+        let refused;
+        try {
+          await render(file, {cwd: dir});
+        } catch (e) {
+          refused = e;
+        }
+        expect(refused?.code, file).toBe('ERR_READ_FAILED');
+        expect(refused.message).toBe(`${file} cannot be read (${why}); nothing was written.`);
+      }
     },
     60_000,
   );

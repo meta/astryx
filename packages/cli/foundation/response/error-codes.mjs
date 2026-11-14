@@ -216,7 +216,7 @@ export const ERROR_CODES = Object.freeze({
   ERR_PATH_TRAVERSAL: 'ERR_PATH_TRAVERSAL',
   /** Writing output files failed (and was rolled back). */
   ERR_WRITE_FAILED: 'ERR_WRITE_FAILED',
-  /** Reading an input file failed: no permission, or a folder on its path may not be searched. */
+  /** An input file is there but cannot be read: no permission, a folder or other entry that is not a regular file, or another error from the file system. */
   ERR_READ_FAILED: 'ERR_READ_FAILED',
 
   // ── Theme build ──────────────────────────────────────────────────
