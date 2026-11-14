@@ -160,6 +160,19 @@ export interface TextInputProps
    */
   type?: TextInputType;
   /**
+   * The native `maxlength` attribute: the browser stops typing past this many
+   * UTF-16 code units (an emoji can take two or more). TextInput adds no
+   * truncation, counter or validation of its own, so a longer controlled
+   * value stays as the caller set it. Unlike TextArea's `maxLength`, which is
+   * a soft counter, this limit blocks typing.
+   */
+  maxLength?: number;
+  /**
+   * The native `minlength` attribute, which the browser's own form
+   * validation reads. TextInput adds no validation of its own.
+   */
+  minLength?: number;
+  /**
    * Label text for the input (always rendered for accessibility).
    */
   label: string;
