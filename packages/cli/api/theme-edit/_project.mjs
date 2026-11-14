@@ -55,7 +55,7 @@ import {
  * @property {boolean} overlay - Its playground opens it over the whole page, so a page of components leaves it out.
  * @property {string | null} subComponentOf - The component it is a part of, or null.
  * @property {string[]} keywords - The doc's search keywords.
- * @property {Record<string, {type: string, required: boolean, slots: Array<{__element: string, props?: Record<string, unknown>, children?: unknown}>}>} props - Each prop's declared type, whether it is required, and the elements the doc suggests for it.
+ * @property {Record<string, {type: string, required: boolean, default: string | null, slots: Array<{__element: string, props?: Record<string, unknown>, children?: unknown}>}>} props - Each prop's declared type, whether it is required, its documented default (as the doc writes it), and the elements the doc suggests for it.
  * @property {Array<{className: string, states: string[], values: Record<string, string[]>}>} targets
  */
 
@@ -247,6 +247,7 @@ async function readComponents(coreDir) {
             {
               type: String(p.type ?? ''),
               required: p.required === true,
+              default: typeof p.default === 'string' ? p.default : null,
               slots: Array.isArray(p.slotElements) ? p.slotElements : [],
             },
           ]),

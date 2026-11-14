@@ -190,17 +190,18 @@ describe('one-mode themes', () => {
     if (needBases(ctx)) return;
     await themeEditNew('o3', {cwd, like: 'neutral'});
     await themeEditSet('o3', 'mode', 'dark-only', {cwd});
+    // The theme's own mode needs no --mode; the other mode is taken for the
+    // regions Core draws in it.
     const r = await refusal(() =>
       themeEditSet('o3', 'background', '#ff0000', {
         cwd,
         on: 'button',
         when: 'variant:primary',
         state: 'hover',
-        mode: 'light',
+        mode: 'dark',
       }),
     );
-    expect(r.run[0]).toMatch(/set o3 mode both$/);
-    expect(r.run[1]).toMatch(/--when variant:primary --state hover$/);
+    expect(r.run[0]).toMatch(/--when variant:primary --state hover$/);
   }, 240_000);
 });
 

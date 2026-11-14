@@ -4634,9 +4634,9 @@ export function compileTheme(ctx, data, base) {
   /** @type {Record<string, any>[]} */
   const fixedToViewport = [];
   for (const s of ordered) {
-    // A setting for the mode a one-mode theme does not have stays saved but
-    // does not apply (maskedSettings names it).
-    if (modeOnly && s.mode && s.mode !== modeOnly) continue;
+    // A setting for the mode a one-mode theme does not show still applies
+    // where Core draws that mode (a toast, a lightbox), as the theme's other
+    // halves of its colors do.
     const parts = partsOf(ctx, s);
     if (s.source === 'dial') {
       if (s.thing === 'corners') {
@@ -4953,16 +4953,25 @@ export function compileTheme(ctx, data, base) {
             !regionsWithOwnBackground.has(region)
           )
             pageParts.push(region);
+        // The see-through main area and the fixed attachment go with the
+        // page background: in its mode's block for a one-mode one, so the
+        // other mode keeps the content panel Core paints.
         if (ctx.project.target.has('layout-content')) {
           const lc = ((theme.components['layout-content'] ??= {}).base ??= {});
-          const main = (lc[':where(.astryx-app-shell [role="main"])'] ??= {});
+          const scope = s.mode ? (lc[`@${s.mode}`] ??= {}) : lc;
+          const main = (scope[':where(.astryx-app-shell [role="main"])'] ??=
+            {});
           if (!ownBackground(main)) main.backgroundColor = 'transparent';
         }
         // Written after every setting (below), so no background shorthand
         // in the same rule resets it.
         if (/gradient\(/.test(String(s.value)))
           for (const t of ['app-shell', ...pageParts])
-            fixedToViewport.push(block({...s, mode: undefined}, t));
+            fixedToViewport.push(
+              s.mode
+                ? modeBlock({...s, state: undefined}, t, s.mode)
+                : block({...s, mode: undefined}, t),
+            );
         (ctx.compileNotes ??= []).push(
           "the page background on app-shell also paints the shell's header and side nav (they stay opaque when content scrolls under them) and makes the main content area see-through; what is drawn inside keeps its colors, and in the default elevated layout the content panel keeps its own surface",
         );
@@ -5169,9 +5178,22 @@ export function compileTheme(ctx, data, base) {
         weights: {...(theme.typography.heading?.weights ?? {}), ...heading},
       };
   }
+  /**
+   * What a token shows in one mode where the theme sets no half for it:
+   * Core's own default when that is a reference to another token the base
+   * theme's value equals (a focus ring that follows the accent), so it keeps
+   * following what the theme sets there; else the base theme's value.
+   * @param {string} k @param {'light' | 'dark'} side
+   */
+  const shownHalf = (k, side) => {
+    const held = base[side][k];
+    const ref = /^var\((--[\w-]+)\)$/.exec(String(TOKENS[k] ?? '').trim());
+    if (ref && (held == null || base[side][ref[1]] === held)) return TOKENS[k];
+    return held ?? TOKENS[k];
+  };
   for (const [k, {light, dark}] of Object.entries(tok)) {
-    const l = light ?? base.light[k] ?? TOKENS[k];
-    const d = dark ?? base.dark[k] ?? TOKENS[k];
+    const l = light ?? shownHalf(k, 'light');
+    const d = dark ?? shownHalf(k, 'dark');
     // A pair only for a color: anything else (a shadow) is one value, the
     // one the theme's mode shows.
     theme.tokens[k] =
@@ -5437,18 +5459,6 @@ export function maskedSettings(data, ctx = null) {
       .filter(x => x.thing === 'headings')
       .map(x => x.axis ?? 'weight'),
   );
-  const only =
-    data.mode === 'light-only'
-      ? 'light'
-      : data.mode === 'dark-only'
-        ? 'dark'
-        : null;
-  for (const s of data.settings)
-    if (only && s.mode && s.mode !== only)
-      out.set(
-        s,
-        `saved for ${s.mode} mode, which a ${data.mode} theme does not have, so it does not apply`,
-      );
   // A part setting that a later setting on a group holding that part
   // covers: the later one is written after it, so it wins.
   data.settings.forEach((s, i) => {
