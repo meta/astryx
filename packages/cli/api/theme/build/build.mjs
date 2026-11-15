@@ -2821,7 +2821,7 @@ function isSyncLoaderLimitation(error) {
  *
  * @param {string} filePath
  * @param {import('./core-interception.mjs').CoreInterception} [interception]
- * @returns {Promise<{theme: any, exportName: string, degraded: {topLevelAwait: boolean, commonJs: boolean}, colorModes: ["light"] | ["dark"] | null, others?: string[]}>}
+ * @returns {Promise<{theme: any, exportName: string, degraded: {topLevelAwait: boolean, commonJs: boolean}, colorModes: ["light"] | ["dark"] | null, others?: string[], defaultHolds?: string[]}>}
  */
 // prettier-ignore
 async function importThemeModule(filePath, interception, /** @type {any} */ loader = undefined, /** @type {string | undefined} */ pick = undefined) {
@@ -2900,6 +2900,14 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
   if (isThemeObject(defaultExport)) {
     return {theme: defaultExport, exportName: 'default', degraded, colorModes};
   }
+  // A default export that holds themes (`export default {light, dark}`) is
+  // no theme: named so, whether a theme is also exported by name or not.
+  const held =
+    hasDefault && defaultExport && typeof defaultExport === 'object'
+      ? Object.entries(defaultExport)
+          .filter(([, value]) => isThemeObject(value))
+          .map(([key]) => key)
+      : [];
   if (isModule) {
     // With no default, the first theme export is built; any other theme the
     // module exports is named (`others`), so the build can say it was left
@@ -2922,9 +2930,14 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
         degraded,
         colorModes,
         ...(others.length ? {others} : {}),
+        ...(held.length ? {defaultHolds: held} : {}),
       };
     }
   }
+  if (held.length)
+    throw new ThemeShapeError(
+      `The default export is an object holding themes (${held.join(', ')}), not a theme: export default the theme to build, or give each theme its own file.`,
+    );
   // The loader's interop answers a null default with the module itself, so
   // read the export as the module wrote it.
   const ownDefault = hasDefault
@@ -3066,15 +3079,21 @@ function isThemeObject(value) {
  *
  * @param {string} filePath
  * @param {import('./core-interception.mjs').CoreInterception} [interception]
- * @returns {Promise<{theme: any, exportName?: string, degraded: {topLevelAwait: boolean, commonJs: boolean}, colorModes?: ['light'] | ['dark'] | null, others?: string[]}>}
- *   `others`: the module's other theme exports, left out (it has no default)
+ * @returns {Promise<{theme: any, exportName?: string, degraded: {topLevelAwait: boolean, commonJs: boolean}, colorModes?: ['light'] | ['dark'] | null, others?: string[], defaultHolds?: string[]}>}
+ *   `others`: the module's other theme exports, left out (it has no theme
+ *   default); `defaultHolds`: the keys of a default export that holds themes
  */
 // prettier-ignore
 async function extractThemeDefinition(filePath, interception, /** @type {any} */ loader = undefined, /** @type {string | undefined} */ pick = undefined) {
   try {
     return await importThemeModule(filePath, interception, loader, pick);
   } catch (jitiError) {
-    const je = /** @type {Error} */ (jitiError);
+    // A module may throw anything: what it threw is told as it is (a string,
+    // an object, null), never read as an Error it is not.
+    const je =
+      jitiError instanceof Error
+        ? jitiError
+        : new Error(`it threw ${thrownText(jitiError)}`);
     throw new Error(
       `Failed to load theme from ${filePath}: ${themeLoadReason(je)}`,
       {cause: jitiError},
@@ -3245,6 +3264,21 @@ const THEME_EXPORT_FIX =
   "Export the theme object: `export default defineTheme({name: 'my-theme', tokens: {...}})`, or a plain `export default {name: 'my-theme', tokens: {...}}`.";
 
 /**
+ * A thrown value that is not an Error, as text: a string as it is, an
+ * object as JSON where it can be, null and undefined by name.
+ * @param {unknown} value
+ */
+function thrownText(value) {
+  if (typeof value === 'string') return JSON.stringify(value);
+  if (value === null || value === undefined) return String(value);
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
+
+/**
  * Why a theme module did not load, with the step that fixes it. A module
  * whose default export is null or a primitive trips the loader's interop
  * before the build reads it; that is a theme shape failure, not an import one.
@@ -3340,7 +3374,93 @@ export function missingThemePackage(error) {
   const specifier = /Cannot find (?:module|package) '([^']+)'/.exec(
     message,
   )?.[1];
-  return specifier ? (packageNameOf(specifier) ?? null) : null;
+  // A name the project maps itself (tsconfig paths or baseUrl) is no
+  // package, however it is spelled: never one to install.
+  if (!specifier || projectMapsImport(specifier, importerOf(message)))
+    return null;
+  return packageNameOf(specifier) ?? null;
+}
+
+/**
+ * The module a "cannot find" error was imported from, as Node (`imported
+ * from …`) or the loader's require stack names it, or null.
+ * @param {string} message
+ * @returns {string | null}
+ */
+function importerOf(message) {
+  const from =
+    /imported from (\S+)/.exec(message)?.[1] ??
+    /Require stack:\s*\n- (.+)/.exec(message)?.[1];
+  if (!from) return null;
+  try {
+    return from.startsWith('file:') ? fileURLToPath(from) : from.trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether the project that holds `from` maps `specifier` itself: the nearest
+ * tsconfig.json or jsconfig.json names it in `compilerOptions.paths` (`@app/*`
+ * maps `@app/c`), or its `baseUrl` holds the file (`lib/c`). The theme loader
+ * maps neither, so such an import is a path alias, never a package.
+ * @param {string} specifier
+ * @param {string | null} from the importing module
+ * @returns {boolean}
+ */
+export function projectMapsImport(specifier, from) {
+  if (!from) return false;
+  for (let dir = path.dirname(from); ; dir = path.dirname(dir)) {
+    for (const name of ['tsconfig.json', 'jsconfig.json']) {
+      const file = path.join(dir, name);
+      /** @type {any} */
+      let config;
+      try {
+        // JSON with comments and trailing commas, as TypeScript reads it.
+        config = JSON.parse(
+          fs
+            .readFileSync(file, 'utf8')
+            .replace(
+              /("(?:[^"\\]|\\.)*")|\/\/[^\n]*|\/\*[\s\S]*?\*\//g,
+              (m, str) => str ?? '',
+            )
+            .replace(/,(\s*[}\]])/g, '$1'),
+        );
+      } catch {
+        continue;
+      }
+      const options = config?.compilerOptions ?? {};
+      const paths = Object.keys(
+        options.paths && typeof options.paths === 'object' ? options.paths : {},
+      );
+      if (
+        paths.some(pattern =>
+          pattern.endsWith('*')
+            ? specifier.startsWith(pattern.slice(0, -1))
+            : specifier === pattern,
+        )
+      )
+        return true;
+      if (typeof options.baseUrl === 'string') {
+        const base = path.resolve(dir, options.baseUrl, specifier);
+        if (
+          ['', ...THEME_MODULE_EXTENSIONS].some(ext => {
+            try {
+              return fs.statSync(base + ext).isFile();
+            } catch {
+              return false;
+            }
+          }) ||
+          THEME_MODULE_EXTENSIONS.some(ext =>
+            fs.existsSync(path.join(base, `index${ext}`)),
+          )
+        )
+          return true;
+      }
+      return false;
+    }
+    if (path.dirname(dir) === dir) return false;
+  }
 }
 
 /**
@@ -3374,7 +3494,8 @@ function unresolvedAlias(error) {
   return specifier &&
     !/^\.{0,2}\//.test(specifier) &&
     !path.isAbsolute(specifier) &&
-    !packageNameOf(specifier)
+    (!packageNameOf(specifier) ||
+      projectMapsImport(specifier, importerOf(message)))
     ? specifier
     : null;
 }
@@ -4412,6 +4533,8 @@ async function themeBuildInternal(
   let themeExportName;
   /** The module's other theme exports, which this build leaves out. @type {string[]} */
   let leftOutThemes;
+  /** The keys of a default export that holds themes, not a theme. @type {string[]} */
+  let defaultHolds;
   /** Paths through the load that interception could not fully observe. */
   let loadDegradation;
   /** The one color mode the theme module exports, or null for both. */
@@ -4443,6 +4566,7 @@ async function themeBuildInternal(
     themeDef = loaded.theme;
     themeExportName = loaded.exportName;
     leftOutThemes = loaded.others ?? [];
+    defaultHolds = loaded.defaultHolds ?? [];
     loadDegradation = loaded.degraded;
     colorModes = handOff.colorModes ?? loaded.colorModes ?? null;
   } catch (e) {
@@ -4712,9 +4836,13 @@ async function themeBuildInternal(
     ...(blankSpecifier ? [blankSpecifier] : []),
     // A file of two themes and no default: one is built, and the other is
     // named, with the way to build it.
-    ...(leftOutThemes.length
+    ...(leftOutThemes.length || defaultHolds.length
       ? [
-          `exports ${leftOutThemes.length + 1} themes and no default (${[themeExportName, ...leftOutThemes].join(', ')}), and this build builds ${themeExportName} only: export default the theme to build, or give each theme its own file`,
+          `${
+            defaultHolds.length
+              ? `has a default export that holds themes (${defaultHolds.join(', ')}), not a theme, and exports ${leftOutThemes.length + 1} ${leftOutThemes.length ? 'themes' : 'theme'} by name`
+              : `exports ${leftOutThemes.length + 1} themes and no default`
+          } (${[themeExportName, ...leftOutThemes].join(', ')}), and this build builds ${themeExportName} only: export default the theme to build, or give each theme its own file`,
         ]
       : []),
     ...nulls.filter(n => !n.unbuildable).map(nullLine),
@@ -5184,12 +5312,9 @@ async function themeBuildInternal(
         options.iconsSpecifier,
         {
           componentIconInfo,
-          // A stylesheet named other than `.css` is named as written. A
-          // `.css` name keeps the theme's own name in the module, so the
-          // module is the same whatever `--out` names the stylesheet.
-          ...(path.extname(outPath).toLowerCase() === '.css'
-            ? {}
-            : {cssFileName: path.basename(outPath)}),
+          // The module's usage comment names the stylesheet this build
+          // writes beside it, whatever --out names it.
+          cssFileName: path.basename(outPath),
         },
       ) +
       // The one color mode, beside the theme export (a two-mode theme

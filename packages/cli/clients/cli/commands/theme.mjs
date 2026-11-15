@@ -1744,6 +1744,23 @@ function registerThemeCommands(theme, program, docs, words) {
         if (report && compact) printCompactTrailer(trailers);
         else if (report) printBatchTrailer(trailers);
         if (entries.length > 1) err.message = `${entry.file}: ${err.message}`;
+        // The themes built before this one are written (a check writes
+        // nothing): the refusal says so, in text and --json alike, and its
+        // "nothing was written" speaks for this theme only.
+        const written = options.check
+          ? []
+          : results.flatMap(r =>
+              r.receipt?.type === 'theme.build' && r.receipt.data?.outputs
+                ? Object.values(r.receipt.data.outputs).filter(
+                    o => typeof o === 'string',
+                  )
+                : [],
+            );
+        if (written.length)
+          err.message = `${err.message.replace(
+            /\s*Nothing was written\.?$/,
+            ` Nothing was written for ${entry.file}.`,
+          )} The themes before it were built and written: ${written.join(', ')}.`;
         return await refuseTheme(
           entries.length === 1
             ? ((await words.follow?.(err, process.cwd())) ?? err)
