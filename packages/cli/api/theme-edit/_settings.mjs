@@ -4690,9 +4690,17 @@ export function controlSizes(sizes, f, kept = {}, noRoom = []) {
 export function compileTheme(ctx, data, base) {
   ctx.sizeNotes = [];
   ctx.compileNotes = [];
-  readSavedStates(ctx, data);
-  // A setting the editor no longer accepts never reaches the build.
-  data = {...data, settings: data.settings.filter(s => !valueProblem(s))};
+  // A setting the editor no longer accepts never reaches the build; a
+  // saved state is built as the part's own (the entry stays as saved).
+  data = {
+    ...data,
+    settings: data.settings
+      .filter(s => !valueProblem(s))
+      .map(s => {
+        const read = savedStateRead(ctx, s);
+        return read && read !== s.state ? {...s, state: read} : s;
+      }),
+  };
   const TOKENS = ctx.project.core.tokenDefaults;
   // The base theme's type scale, read back from its sizes: base text, and
   // the ratio (2xl is three steps above base).
@@ -10469,30 +10477,45 @@ export function partState(ctx, part, state) {
 }
 
 /**
- * Read each saved entry's state on a part as `set` reads a typed one: each
- * of its pieces in the part's own spelling (toggle-button's `is-pressed` or
- * `ispressed` is its isPressed), in place, with a note; the next change
- * saves it that way. The loader reads only what needs no census (case, a
- * colon, a CSS state's words); this is the census half of the one state
- * reader, which the saved-setting check and the build both run.
+ * A saved entry's state on a part as `set` reads a typed one: each of its
+ * pieces in the part's own spelling (toggle-button's `is-pressed` or
+ * `ispressed` is its isPressed), or null when it reads as no state of the
+ * part or as itself. The census half of the one state reader (the loader
+ * reads what needs no census: case, a colon, a CSS state's words): the
+ * saved-setting check and the build read the state through it, and leave
+ * the entry as saved, so a build stamped from the settings matches the
+ * file; a change saves the read state (readSavedStates).
+ * @param {Ctx} ctx
+ * @param {any} s
+ * @returns {string | null}
+ */
+export function savedStateRead(ctx, s) {
+  if (
+    !s ||
+    typeof s.on !== 'string' ||
+    typeof s.state !== 'string' ||
+    !ctx.project.target.has(s.on)
+  )
+    return null;
+  const read = partState(ctx, s.on, s.state);
+  const states = partStates(ctx, s.on);
+  return read.split('+').every(p => states.includes(p)) ? read : null;
+}
+
+/**
+ * Read each saved entry's state on a part in place, as savedStateRead
+ * reads it, with a note: what a change does before it saves the settings,
+ * so the file then holds the part's own spelling.
  * @param {Ctx} ctx
  * @param {ThemeData} data
  */
 export function readSavedStates(ctx, data) {
   for (const s of data.settings ?? []) {
-    if (
-      !s ||
-      typeof s.on !== 'string' ||
-      typeof s.state !== 'string' ||
-      !ctx.project.target.has(s.on)
-    )
-      continue;
-    const read = partState(ctx, s.on, s.state);
-    const states = partStates(ctx, s.on);
-    if (read === s.state || !read.split('+').every(p => states.includes(p)))
-      continue;
+    const read = savedStateRead(ctx, s);
+    const was = SAVED_STATE.get(s) ?? s?.state;
+    if (!read || (read === s.state && was === s.state)) continue;
     ENTRY_NOTES.get(data)?.push(
-      `${s.thing} on ${s.on} was saved with state ${JSON.stringify(SAVED_STATE.get(s) ?? s.state)}, read as ${read}`,
+      `${s.thing} on ${s.on} was saved with state ${JSON.stringify(was)}, read as ${read}`,
     );
     s.state = read;
   }

@@ -30,6 +30,7 @@ import {
   keywordsOf,
   matchType,
   matchValue,
+  varReferences,
   numbersIn,
   propertyGrammar,
   takesPercentage,
@@ -126,7 +127,7 @@ import {
   ARIA_STATES,
   partState,
   partStates,
-  readSavedStates,
+  savedStateRead,
   propertySpelling,
 } from './_settings.mjs';
 import {isColorToken} from './_compiler.mjs';
@@ -803,8 +804,6 @@ const COLOR_DIAL_WORDS = (() => {
  * @returns {Array<{setting: import('./_settings.mjs').Setting, why: string, scope?: boolean, fix?: string}>} every saved setting the editor no longer accepts (`fix`: the clean value to set, when one reads)
  */
 export function storedProblems(ctx, slug, data, skip = '') {
-  // A saved state in a spelling set reads (is-pressed) is the part's own.
-  readSavedStates(ctx, data);
   // The setting the command replaces (its thing in the same scope); a
   // setting of the same thing elsewhere is still checked.
   const skipThing = typeof skip === 'string' ? skip : skip.thing;
@@ -895,7 +894,11 @@ export function storedProblems(ctx, slug, data, skip = '') {
       if (
         t &&
         s.state &&
-        !statesHold(partStates(ctx, /** @type {string} */ (s.on)), s.state)
+        !statesHold(
+          partStates(ctx, /** @type {string} */ (s.on)),
+          // A state in a spelling set reads (is-pressed) is the part's own.
+          savedStateRead(ctx, s) ?? s.state,
+        )
       )
         return scope(`"${s.state}" is not a state of ${s.on}`);
       if (t && s.when) {
@@ -7528,12 +7531,17 @@ export {familySpaces};
  * @returns {{token: string, kind: string, takes: string, message: string} | null}
  */
 function tokenKindMismatch(ctx, prop, v) {
-  for (const m of v.matchAll(/var\(\s*(--[a-z0-9-]+)\s*(?:,[^()]*)?\)/gi)) {
+  // A value no stand-in makes work (text glued to the var(), as in
+  // `var(--x)px`) is wrong around the token, never for the token's kind.
+  if (!matchValue(prop, v)) return null;
+  for (const ref of varReferences(v)) {
+    const m = /^var\(\s*(--[a-z0-9-]+)\s*(?:,[^()]*)?\)$/i.exec(ref.text);
+    if (!m) continue;
     const token = m[1];
     if (!ctx.C.isToken(token)) continue;
     const kind = ctx.C.typeOf(token);
     if (kind === 'other') continue;
-    const sample = v.replace(m[0], exampleOf(kind, token));
+    const sample = `${v.slice(0, ref.at)} ${exampleOf(kind, token)} ${v.slice(ref.at + ref.text.length)}`;
     if (matchValue(prop, sample)) continue;
     const takes =
       matchValue(prop, '1px') && !matchValue(prop, 'red')
