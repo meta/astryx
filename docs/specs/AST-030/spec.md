@@ -422,12 +422,16 @@ they are separately named.
   tool that grants CI capacity reads it through the same count admission uses
   (`.github/actions/ci-admission/count.mjs`), with no count of its own. The contributor class of FR29 is granted by the capacity tool before this admission; its runs are then admitted like any pull request run.
   A run for a head that is no longer its pull request's head passes no
-  required context. Once it is admitted, a pull-request run from this
-  repository cancels each unfinished CI run of its pull request for another
-  head; it never cancels a run for the current head, and a fork's run cancels
-  nothing. A run whose own head is superseded stops before it waits and
-  cancels itself. `build`, `test` and `docsite-test` read the head again as
-  they report, and fail with the reason when it is no longer the run's head.
+  required context. The newest run of a pull request wins, in the order its
+  runs were created; a re-run keeps its run's place. As it starts, before it
+  waits for room, a pull-request run from this repository cancels each
+  unfinished CI run of its pull request that was created before it for
+  another head; it never cancels a newer run, and a fork's run cancels
+  nothing. A run is superseded only when the newest run of its pull request
+  is for another head; a head read alone never stops a run. A superseded run
+  stops before it waits and cancels itself. `build`, `test` and
+  `docsite-test` read the head again as they report, and fail with the reason
+  when it is no longer the run's head.
 - **FR17 — A pull request runs CI when it is ready and a maintainer can vouch
   for it.** A draft pull request runs no CI, and marking it ready for review
   starts its pull-request run, which runs what the change reaches (FR13,
