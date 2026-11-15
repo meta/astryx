@@ -20,7 +20,8 @@
  * - /packages/core/src/Chat/ChatComposerInput.tsx (consumer)
  */
 
-import {useCallback, useState} from 'react';
+import {useCallback, useRef, useState} from 'react';
+import {defaultToToken} from './useChatPasteAsToken';
 import {
   ensureCaretInside,
   insertTextAtCursor,
@@ -35,6 +36,11 @@ import type {
 // =============================================================================
 // Types
 // =============================================================================
+
+export interface PastedTextRange {
+  start: number;
+  end: number;
+}
 
 export interface TokenPortal {
   id: string;
@@ -112,11 +118,14 @@ export function useChatComposerTokens({
   editableRef,
   onEmitChange,
 }: UseChatComposerTokensOptions): UseChatComposerTokensReturn {
-  const {restoreValue: _restoreValue, ...tokens} =
-    useChatComposerTokensInternal({
-      editableRef,
-      onEmitChange,
-    });
+  const {
+    restoreValue: _restoreValue,
+    isDefaultPasteToken: _isDefaultPasteToken,
+    ...tokens
+  } = useChatComposerTokensInternal({
+    editableRef,
+    onEmitChange,
+  });
   return tokens;
 }
 
@@ -126,10 +135,15 @@ export function useChatComposerTokensInternal({
   onEmitChange,
 }: UseChatComposerTokensOptions) {
   const [tokenPortals, setTokenPortals] = useState<TokenPortal[]>([]);
+  const defaultPasteSpansRef = useRef(new WeakSet<HTMLElement>());
+  const isDefaultPasteToken = useCallback(
+    (span: HTMLElement) => defaultPasteSpansRef.current.has(span),
+    [],
+  );
 
   // --- Insert token at cursor ---
   const insertToken = useCallback(
-    (token: ChatComposerToken): string | undefined => {
+    (token: ChatComposerToken, isDefaultPaste = false): string | undefined => {
       const editable = editableRef.current;
       if (!editable) {
         return;
@@ -147,6 +161,9 @@ export function useChatComposerTokensInternal({
       // Create a non-editable container — React will portal the Badge into it
       const portal = createTokenPortal(token);
       const {id, span} = portal;
+      if (isDefaultPaste) {
+        defaultPasteSpansRef.current.add(span);
+      }
 
       range.deleteContents();
       range.insertNode(span);
@@ -169,7 +186,11 @@ export function useChatComposerTokensInternal({
   );
 
   const restoreValue = useCallback(
-    (value: string, triggers: ChatComposerTrigger[] = []) => {
+    (
+      value: string,
+      triggers: ChatComposerTrigger[] = [],
+      pastedTextRanges: PastedTextRange[] = [],
+    ) => {
       const editable = editableRef.current;
       if (!editable) {
         return;
@@ -178,33 +199,55 @@ export function useChatComposerTokensInternal({
       const fragment = document.createDocumentFragment();
       const portals: TokenPortal[] = [];
       let text = '';
-      for (const part of value.split(/(\s+)/)) {
-        if (!part) {
-          continue;
+      function appendToken(token: ChatComposerToken, isDefaultPaste = false) {
+        if (text) {
+          fragment.append(text);
+          text = '';
         }
-        let token: ChatComposerToken | null = null;
-        if (!/^\s+$/.test(part)) {
-          for (const trigger of triggers) {
-            const parsed = trigger.deserialize?.(part);
-            // Restoration must not change the serialized draft.
-            if (parsed?.value === part) {
-              token = parsed;
-              break;
+        const portal = createTokenPortal(token);
+        if (isDefaultPaste) {
+          defaultPasteSpansRef.current.add(portal.span);
+        }
+        fragment.append(portal.span);
+        portals.push(portal);
+      }
+      function appendText(segment: string, offset: number) {
+        for (const part of segment.split(/(\s+)/)) {
+          if (!part) {
+            continue;
+          }
+          const end = offset + part.length;
+          let token: ChatComposerToken | null = null;
+          // A paste boundary must not turn part of a word into a trigger token.
+          if (
+            !/^\s+$/.test(part) &&
+            (offset === 0 || /\s/.test(value[offset - 1])) &&
+            (end === value.length || /\s/.test(value[end]))
+          ) {
+            for (const trigger of triggers) {
+              const parsed = trigger.deserialize?.(part);
+              // Restoration must not change the serialized draft.
+              if (parsed?.value === part) {
+                token = parsed;
+                break;
+              }
             }
           }
-        }
-        if (token) {
-          if (text) {
-            fragment.append(text);
-            text = '';
+          if (token) {
+            appendToken(token);
+          } else {
+            text += part;
           }
-          const portal = createTokenPortal(token);
-          fragment.append(portal.span);
-          portals.push(portal);
-        } else {
-          text += part;
+          offset = end;
         }
       }
+      let offset = 0;
+      for (const {start, end} of pastedTextRanges) {
+        appendText(value.slice(offset, start), offset);
+        appendToken(defaultToToken(value.slice(start, end)), true);
+        offset = end;
+      }
+      appendText(value.slice(offset), offset);
       if (text) {
         fragment.append(text);
       }
@@ -374,5 +417,6 @@ export function useChatComposerTokensInternal({
     handlePaste,
     cleanupPortals,
     restoreValue,
+    isDefaultPasteToken,
   };
 }

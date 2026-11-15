@@ -55,6 +55,7 @@ import {useTriggerMenu} from './useTriggerMenu';
 import {
   useChatComposerTokensInternal,
   isCustomToken,
+  type PastedTextRange,
 } from './useChatComposerTokens';
 import {
   ensureCaretInside,
@@ -348,18 +349,53 @@ function selectAll(el: HTMLElement): void {
   selection.addRange(range);
 }
 
-function serialize(node: Node): string {
+interface DraftSnapshot {
+  value: string;
+  pastedTextRanges: PastedTextRange[];
+}
+
+const PASTE_DRAFT_LIMIT = 32;
+const PASTE_DRAFT_TEXT_LIMIT = 1_048_576;
+
+function rememberPasteDraft(
+  drafts: Map<string, PastedTextRange[]>,
+  {value, pastedTextRanges}: DraftSnapshot,
+): void {
+  drafts.delete(value);
+  if (!pastedTextRanges.length || value.length > PASTE_DRAFT_TEXT_LIMIT) {
+    return;
+  }
+  drafts.set(value, pastedTextRanges);
+  let count = 0;
+  let length = 0;
+  for (const savedValue of Array.from(drafts.keys()).reverse()) {
+    count += 1;
+    length += savedValue.length;
+    if (count > PASTE_DRAFT_LIMIT || length > PASTE_DRAFT_TEXT_LIMIT) {
+      drafts.delete(savedValue);
+    }
+  }
+}
+
+function serialize(
+  node: Node,
+  onToken?: (span: HTMLElement, start: number, end: number) => void,
+  offset = 0,
+): string {
   let result = '';
   for (const child of Array.from(node.childNodes)) {
     if (child.nodeType === Node.TEXT_NODE) {
       result += child.textContent ?? '';
     } else if (child instanceof HTMLElement) {
       if (child.hasAttribute('data-astryx-token')) {
-        result += child.getAttribute('data-astryx-token-value') ?? '';
+        const value = child.getAttribute('data-astryx-token-value') ?? '';
+        const start = offset + result.length;
+        onToken?.(child, start, start + value.length);
+        result += value;
       } else if (child.tagName === 'BR') {
         result += '\n';
       } else {
-        result += serialize(child);
+        result += serialize(child, onToken, offset + result.length);
       }
     }
   }
@@ -425,9 +461,20 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
   const editableRef = useRef<HTMLDivElement>(null);
   const selfRef = useRef<ChatComposerInputHandle>(null);
   const [isEmpty, setIsEmpty] = useState(true);
-  const historyRef = useRef<string[]>([]);
+  const historyRef = useRef<DraftSnapshot[]>([]);
+  const pasteDraftsRef = useRef(new Map<string, PastedTextRange[]>());
   const historyIndexRef = useRef(-1);
-  const currentDraftRef = useRef('');
+  const currentDraftRef = useRef<DraftSnapshot>({
+    value: '',
+    pastedTextRanges: [],
+  });
+
+  // Syncs the remembered paste layouts with the editor's mounted lifetime.
+  useEffect(() => {
+    const drafts = pasteDraftsRef.current;
+    return () => drafts.clear();
+  }, []);
+
   // One-shot marker: when set, holds the value we expect the parent
   // to echo back as `controlledValue` after our latest `onChange`
   // emission. We use it to skip a single `useEffect` resync, because
@@ -439,11 +486,13 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
   // incorrectly skipped.
   const pendingEchoValueRef = useRef<string | undefined>(undefined);
   // Trigger identity changes must not resync the DOM before a controlled echo.
-  const restoreValueRef = useRef<(value: string) => void>(() => {});
+  const restoreValueRef = useRef<
+    (value: string, pastedTextRanges?: PastedTextRange[]) => void
+  >(() => {});
 
   // Stable refs for imperative handle callbacks (avoid re-creating handle on every render)
   const insertTokenRef = useRef<
-    (token: ChatComposerToken) => string | undefined
+    (token: ChatComposerToken, isDefaultPaste?: boolean) => string | undefined
   >(() => undefined);
   const insertTextRef = useRef<(text: string) => void>(() => {});
   const expandTokenRef = useRef<(id: string) => void>(() => {});
@@ -452,13 +501,9 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
   // skips the browser's reveal. Elsewhere the browser's own focus applies.
   const isKeyboardSurface = use(KeyboardSurfaceContext);
 
-  // A single handle object shared between the forwarded ref (via
-  // `useImperativeHandle`) and `selfRef` (used by internal consumers
-  // like paste-as-token). We can't rely on `useImperativeHandle`'s
-  // factory to populate `selfRef` because React only runs that factory
-  // when a parent attaches a ref — without this, paste-as-token would
-  // silently no-op whenever `ChatComposerInput` is rendered without
-  // a forwarded ref (e.g. inside `ChatComposer`).
+  // The built-in paste converter needs a handle even when the caller does
+  // not attach handleRef. Its private insertion path records paste origin
+  // without changing the public handle.
   /**
    * Focus the editable and put the caret after the draft.
    *
@@ -522,7 +567,10 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     getValue: () =>
       serialize(editableRef.current ?? document.createElement('div')),
   };
-  selfRef.current = handle;
+  useCommittedRefInto(selfRef, {
+    ...handle,
+    insertToken: token => insertTokenRef.current(token, true),
+  });
   useImperativeHandle(handleRef, () => handle);
 
   // Register a focus control with the composer shell so body-click-to-focus
@@ -602,8 +650,43 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
   });
   cleanupPortalsRef.current = tokens.cleanupPortals;
   const handleTokenKeyDown = tokens.handleKeyDown;
-  useCommittedRefInto(restoreValueRef, (value: string) =>
-    tokens.restoreValue(value, triggers),
+  const isDefaultPasteToken = tokens.isDefaultPasteToken;
+  const captureDraft = useCallback(
+    (trim = false): DraftSnapshot => {
+      const pastedTextRanges: PastedTextRange[] = [];
+      const editable = editableRef.current;
+      const value = editable
+        ? serialize(editable, (span, start, end) => {
+            if (isDefaultPasteToken(span)) {
+              pastedTextRanges.push({start, end});
+            }
+          })
+        : '';
+      if (!trim) {
+        return {value, pastedTextRanges};
+      }
+      const trimmed = value.trim();
+      const offset = value.length - value.trimStart().length;
+      return {
+        value: trimmed,
+        pastedTextRanges: pastedTextRanges
+          .map(({start, end}) => ({
+            start: Math.max(0, start - offset),
+            end: Math.min(trimmed.length, end - offset),
+          }))
+          .filter(({start, end}) => start < end),
+      };
+    },
+    [isDefaultPasteToken],
+  );
+  useCommittedRefInto(
+    restoreValueRef,
+    (value: string, pastedTextRanges?: PastedTextRange[]) => {
+      // An owned empty snapshot wins over a remembered badge layout.
+      const ranges = pastedTextRanges ?? pasteDraftsRef.current.get(value);
+      rememberPasteDraft(pasteDraftsRef.current, captureDraft());
+      tokens.restoreValue(value, triggers, ranges);
+    },
   );
 
   // --- Paste-as-token (internal default) ---
@@ -631,8 +714,8 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
 
   const insertTokenWithoutEmit = tokens.insertToken;
   const insertToken = useCallback(
-    (token: ChatComposerToken) => {
-      const id = insertTokenWithoutEmit(token);
+    (token: ChatComposerToken, isDefaultPaste = false) => {
+      const id = insertTokenWithoutEmit(token, isDefaultPaste);
       if (id != null) {
         emitChange();
       }
@@ -728,15 +811,16 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
         if (!editableRef.current) {
           return;
         }
-        const text = serialize(editableRef.current).trim();
+        const draft = captureDraft(true);
+        const text = draft.value;
         if (!text) {
           return;
         }
 
         if (hasHistory) {
-          historyRef.current.push(text);
+          historyRef.current.push(draft);
           historyIndexRef.current = -1;
-          currentDraftRef.current = '';
+          currentDraftRef.current = {value: '', pastedTextRanges: []};
         }
 
         // Submitting ends any trigger query, including one dismissed with
@@ -780,7 +864,6 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
           return;
         }
 
-        const text = serialize(editable);
         const history = historyRef.current;
         if (history.length === 0) {
           return;
@@ -788,14 +871,15 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
 
         if (e.key === 'ArrowUp') {
           if (historyIndexRef.current === -1) {
-            currentDraftRef.current = text;
+            currentDraftRef.current = captureDraft();
           }
           const nextIndex =
             historyIndexRef.current === -1
               ? history.length - 1
               : Math.max(0, historyIndexRef.current - 1);
           historyIndexRef.current = nextIndex;
-          restoreValueRef.current(history[nextIndex]);
+          const draft = history[nextIndex];
+          restoreValueRef.current(draft.value, draft.pastedTextRanges);
           selectAll(editableRef.current);
           emitChange();
           e.preventDefault();
@@ -803,13 +887,15 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
           const nextIndex = historyIndexRef.current + 1;
           if (nextIndex >= history.length) {
             historyIndexRef.current = -1;
-            restoreValueRef.current(currentDraftRef.current);
-            if (currentDraftRef.current) {
+            const draft = currentDraftRef.current;
+            restoreValueRef.current(draft.value, draft.pastedTextRanges);
+            if (draft.value) {
               selectAll(editableRef.current);
             }
           } else {
             historyIndexRef.current = nextIndex;
-            restoreValueRef.current(history[nextIndex]);
+            const draft = history[nextIndex];
+            restoreValueRef.current(draft.value, draft.pastedTextRanges);
             selectAll(editableRef.current);
           }
           emitChange();
@@ -826,6 +912,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
       triggerMenu,
       onKeyDownProp,
       handleTokenKeyDown,
+      captureDraft,
     ],
   );
 

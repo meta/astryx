@@ -56,7 +56,7 @@ export interface UseChatPasteAsTokenReturn {
 // Default token factory
 // =============================================================================
 
-function defaultToToken(text: string): ChatComposerToken {
+export function defaultToToken(text: string): ChatComposerToken {
   const lines = text.split('\n').length;
   const chars = text.length;
   const label = lines > 1 ? `${lines} lines, ${chars} chars` : `${chars} chars`;

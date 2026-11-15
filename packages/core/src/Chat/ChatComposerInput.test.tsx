@@ -659,6 +659,184 @@ describe('ChatComposerInput', () => {
       hasMultiWordQuery: true,
     });
 
+    it('restores a default paste badge when switching controlled drafts without changing the saved text', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const onSubmit = vi.fn();
+      function Drafts() {
+        const [drafts, setDrafts] = useState({a: '', b: 'Draft B'});
+        const [active, setActive] = useState<'a' | 'b'>('a');
+        return (
+          <>
+            <ChatComposerInput
+              value={drafts[active]}
+              onChange={value => {
+                onChange(value);
+                setDrafts(previous => ({...previous, [active]: value}));
+              }}
+              onSubmit={onSubmit}
+            />
+            <button type="button" onClick={() => setActive('a')}>
+              Draft A
+            </button>
+            <button type="button" onClick={() => setActive('b')}>
+              Draft B
+            </button>
+          </>
+        );
+      }
+      render(<Drafts />);
+      const editor = screen.getByRole('textbox');
+      const pasted = 'draft text'.repeat(50);
+      await user.click(editor);
+      await user.paste(pasted);
+      expect(screen.getByText('500 chars')).toBeInTheDocument();
+      expect(onChange).toHaveBeenCalledExactlyOnceWith(`${pasted}\u00a0`);
+
+      await user.click(screen.getByRole('button', {name: 'Draft B'}));
+      expect(editor).toHaveTextContent('Draft B');
+      await user.click(screen.getByRole('button', {name: 'Draft A'}));
+      expect(screen.getByText('500 chars')).toBeInTheDocument();
+      expect(onChange).toHaveBeenCalledTimes(1);
+
+      await user.click(editor);
+      await user.keyboard('{Enter}');
+      expect(onSubmit).toHaveBeenCalledExactlyOnceWith(pasted);
+    });
+
+    it('reuses a mixed paste layout for an identical plain draft only within the same mount', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const handle = createRef<ChatComposerInputHandle>();
+      const view = (value: string) => (
+        <ChatComposerInput
+          value={value}
+          onChange={onChange}
+          handleRef={handle}
+        />
+      );
+      const result = render(view(''));
+      const editor = screen.getByRole('textbox');
+      const first = 'alpha beta\n'.repeat(30);
+      const second = 'z'.repeat(210);
+      await user.click(editor);
+      await user.keyboard('prefix ');
+      await user.paste(first);
+      await user.keyboard(' hello ');
+      await user.paste(second);
+      await user.keyboard(' tail');
+      const saved = `prefix ${first}\u00a0 hello ${second}\u00a0 tail`;
+      expect(handle.current!.getValue()).toBe(saved);
+      const changes = onChange.mock.calls.length;
+      const original = editor.querySelector('[data-astryx-token]')!;
+      result.rerender(view(saved));
+      result.rerender(view('Draft B'));
+      result.rerender(view(saved));
+
+      expect(
+        Array.from(editor.querySelectorAll('[data-astryx-token]'), token =>
+          token.getAttribute('data-astryx-token-value'),
+        ),
+      ).toEqual([first, second]);
+      expect(handle.current!.getValue()).toBe(saved);
+      expect(original.isConnected).toBe(false);
+      expect(onChange).toHaveBeenCalledTimes(changes);
+      await user.keyboard('!');
+      expect(handle.current!.getValue()).toBe(`${saved}!`);
+      expect(onChange).toHaveBeenLastCalledWith(`${saved}!`);
+
+      result.unmount();
+      render(view(saved));
+      expect(screen.getByRole('textbox').textContent).toBe(saved);
+      expect(document.querySelector('[data-astryx-token]')).toBeNull();
+      expect(onChange).toHaveBeenCalledTimes(changes + 1);
+    });
+
+    it('forgets a remembered paste layout when expanding it leaves identical plain text', async () => {
+      const user = userEvent.setup();
+      const handle = createRef<ChatComposerInputHandle>();
+      const view = (value: string) => (
+        <ChatComposerInput value={value} handleRef={handle} />
+      );
+      const {rerender} = render(view(''));
+      const editor = screen.getByRole('textbox');
+      await user.click(editor);
+      await user.paste('x'.repeat(205));
+      await user.keyboard(' hello');
+      const saved = handle.current!.getValue();
+      rerender(view(saved));
+      rerender(view('Draft B'));
+      rerender(view(saved));
+      const token = editor.querySelector('[data-astryx-token]')!;
+      expect(token).not.toBeNull();
+      act(() => {
+        handle.current!.expandToken(
+          token.getAttribute('data-astryx-token-id')!,
+        );
+      });
+      expect(handle.current!.getValue()).toBe(saved);
+      rerender(view('Draft B'));
+      rerender(view(saved));
+      expect(editor.textContent).toBe(saved);
+      expect(editor.querySelector('[data-astryx-token]')).toBeNull();
+    });
+
+    it('evicts old paste layouts after 32 distinct remembered drafts', () => {
+      const view = (value: string) => <ChatComposerInput value={value} />;
+      const {rerender} = render(view(''));
+      const editor = screen.getByRole('textbox');
+      const body = 'x'.repeat(205);
+      for (let index = 0; index < 33; index += 1) {
+        const text = `${index}:${body}`;
+        fireEvent.paste(editor, {
+          clipboardData: {files: [], getData: () => text},
+        });
+        rerender(view(`${text}\u00a0`));
+        rerender(view(''));
+      }
+      rerender(view(`0:${body}\u00a0`));
+      expect(editor.textContent).toBe(`0:${body}\u00a0`);
+      expect(editor.querySelector('[data-astryx-token]')).toBeNull();
+      rerender(view(`32:${body}\u00a0`));
+      expect(editor.querySelector('[data-astryx-token]')).toHaveAttribute(
+        'data-astryx-token-value',
+        `32:${body}`,
+      );
+    });
+
+    it('bounds remembered paste text and leaves oversized drafts intact', () => {
+      const view = (value: string) => <ChatComposerInput value={value} />;
+      const {rerender} = render(view(''));
+      const editor = screen.getByRole('textbox');
+      const first = 'a'.repeat(600_000);
+      const second = 'b'.repeat(600_000);
+      for (const text of [first, second]) {
+        fireEvent.paste(editor, {
+          clipboardData: {files: [], getData: () => text},
+        });
+        rerender(view(`${text}\u00a0`));
+        rerender(view(''));
+      }
+      rerender(view(`${first}\u00a0`));
+      expect(editor.textContent).toBe(`${first}\u00a0`);
+      expect(editor.querySelector('[data-astryx-token]')).toBeNull();
+      rerender(view(''));
+      const oversized = 'c'.repeat(1_048_577);
+      fireEvent.paste(editor, {
+        clipboardData: {files: [], getData: () => oversized},
+      });
+      rerender(view(`${oversized}\u00a0`));
+      rerender(view(''));
+      rerender(view(`${oversized}\u00a0`));
+      expect(editor.textContent).toBe(`${oversized}\u00a0`);
+      expect(editor.querySelector('[data-astryx-token]')).toBeNull();
+      rerender(view(`${second}\u00a0`));
+      expect(editor.querySelector('[data-astryx-token]')).toHaveAttribute(
+        'data-astryx-token-value',
+        second,
+      );
+    });
+
     it('shows a saved mention without changing the draft and sends its serialized value', async () => {
       const user = userEvent.setup();
       const onChange = vi.fn();
@@ -919,6 +1097,115 @@ describe('ChatComposerInput', () => {
       // forward past the newest entry and restores the stashed draft.
       fireEvent.keyDown(textbox, {key: 'ArrowDown'});
       expect(textbox.textContent).toBe('draft');
+    });
+
+    it('recalls a submitted default paste separately from an equal-text plain history entry', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const onSubmit = vi.fn();
+      const handle = createRef<ChatComposerInputHandle>();
+      function ControlledInput() {
+        const [value, setValue] = useState('');
+        return (
+          <ChatComposerInput
+            value={value}
+            onChange={next => {
+              onChange(next);
+              setValue(next);
+            }}
+            onSubmit={onSubmit}
+            handleRef={handle}
+          />
+        );
+      }
+      render(<ControlledInput />);
+      const editor = screen.getByRole('textbox');
+      const text = '🦊text'.repeat(50);
+      const pasted = ` \n${text}\n `;
+      await user.click(editor);
+      await user.paste(pasted);
+      await user.keyboard('{Enter}{ArrowUp}');
+
+      expect(screen.getByText('300 chars')).toBeInTheDocument();
+      expect(handle.current!.getValue()).toBe(text);
+      expect(onSubmit).toHaveBeenCalledExactlyOnceWith(text);
+      const token = editor.querySelector('[data-astryx-token]')!;
+      act(() => {
+        handle.current!.expandToken(
+          token.getAttribute('data-astryx-token-id')!,
+        );
+      });
+      expect(token.isConnected).toBe(false);
+      expect(editor.textContent).toBe(text);
+      await user.keyboard('{Enter}{ArrowUp}');
+      expect(editor.querySelector('[data-astryx-token]')).toBeNull();
+      expect(handle.current!.getValue()).toBe(text);
+      await user.keyboard('{ArrowUp}{Enter}{ArrowUp}');
+      expect(screen.getByText('300 chars')).toBeInTheDocument();
+      expect(handle.current!.getValue()).toBe(text);
+      expect(onSubmit.mock.calls).toEqual([[text], [text], [text]]);
+      expect(onChange.mock.calls).toEqual([
+        [`${pasted}\u00a0`],
+        [''],
+        [text],
+        [text],
+        [''],
+        [text],
+        [text],
+        [''],
+        [text],
+      ]);
+    });
+
+    it('restores only actual default pastes in a large pending draft alongside trigger deserialization', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const handle = createRef<ChatComposerInputHandle>();
+      const deserialize = vi.fn((value: string) =>
+        value === '@cindy' ? {value, label: 'Cindy Zhang'} : null,
+      );
+      render(
+        <ChatComposerInput
+          handleRef={handle}
+          onChange={onChange}
+          triggers={[createMentionTrigger({deserialize})]}
+        />,
+      );
+      const editor = screen.getByRole('combobox');
+      submit(editor, 'previous');
+      await user.click(editor);
+      const prefix = 'p'.repeat(1_048_576);
+      act(() => handle.current!.insertText(`${prefix}  🦊\n@cindy @cindy`));
+      const pasted = 'x'.repeat(205);
+      await user.paste(pasted);
+      act(() => handle.current!.insertText(`${pasted} `));
+      await user.paste(`@cindy\n${pasted}`);
+      act(() => handle.current!.insertText('hello'));
+      placeCaret(editor.firstChild!, 0);
+      await user.keyboard('edited ');
+      const saved = `edited ${prefix}  🦊\n@cindy @cindy${pasted}\u00a0${pasted} @cindy\n${pasted}\u00a0hello`;
+      expect(handle.current!.getValue()).toBe(saved);
+      const originalToken = editor.querySelector('[data-astryx-token]')!;
+      onChange.mockClear();
+      placeCaret(editor, 0);
+      fireEvent.keyDown(editor, {key: 'ArrowUp'});
+      expect(originalToken.isConnected).toBe(false);
+      deserialize.mockClear();
+      fireEvent.keyDown(editor, {key: 'ArrowDown'});
+
+      expect(screen.getByText('205 chars')).toBeInTheDocument();
+      expect(screen.getByText('2 lines, 212 chars')).toBeInTheDocument();
+      expect(screen.getByText('Cindy Zhang')).toBeInTheDocument();
+      expect(editor.querySelectorAll('[data-astryx-token]')).toHaveLength(3);
+      expect(
+        deserialize.mock.calls.filter(([value]) => value === '@cindy'),
+      ).toHaveLength(1);
+      expect(handle.current!.getValue()).toBe(saved);
+      expect(onChange.mock.calls).toEqual([['previous'], [saved]]);
+      const selection = window.getSelection()!.getRangeAt(0);
+      expect(selection.startContainer).toBe(editor);
+      expect(selection.startOffset).toBe(0);
+      expect(selection.endOffset).toBe(editor.childNodes.length);
     });
 
     it('does nothing when there is no history', () => {
