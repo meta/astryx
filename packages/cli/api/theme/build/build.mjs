@@ -5989,6 +5989,9 @@ async function preloadFamilySource(filePath, loader, interception) {
   finally { patch.undo(); }
 }
 
+/** The require of this module, for the module cache a family build loads into. */
+const moduleRequire = createRequire(import.meta.url);
+
 /**
  * Build a theme family. The members share one module cache while they load,
  * so a theme they extend is one module; the modules the build loaded from
@@ -6000,7 +6003,7 @@ async function preloadFamilySource(filePath, loader, interception) {
  * @param {{commandWords?: {group: string, build: string}}} [handOff] - the CLI's words for the rebuild hint
  */
 export async function themeBuildFamily(files, options, ctx = {}, handOff = {}) {
-  const cache = createRequire(import.meta.url).cache;
+  const cache = moduleRequire.cache;
   const before = new Set(Object.keys(cache));
   try {
     return await buildFamily(files, options, ctx, handOff);
