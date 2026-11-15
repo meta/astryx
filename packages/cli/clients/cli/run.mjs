@@ -94,6 +94,8 @@ export async function runCli({cliRoot, argv, declinedProjectCli}) {
     await import('../../foundation/response/json.mjs');
   const {handleCommanderError} = await import('./lib/json-shim.mjs');
   const {setOutcome} = await import('../../foundation/debug/index.mjs');
+  const {themeModuleRejection} =
+    await import('../../foundation/fs/theme-module-rejections.mjs');
 
   /**
    * Top-level error boundary (contract guarantee #4): an uncaught throw must
@@ -137,7 +139,13 @@ export async function runCli({cliRoot, argv, declinedProjectCli}) {
     process.exit(1);
   }
 
-  process.on('unhandledRejection', handleFatal);
+  process.on('unhandledRejection', (reason, promise) => {
+    // A theme module read for its export may leave a promise rejecting:
+    // said, never the command's crash.
+    const told = themeModuleRejection(reason, promise);
+    if (told) process.stderr.write(`${told}\n`);
+    else handleFatal(reason);
+  });
   process.on('uncaughtException', handleFatal);
 
   // Pick up the project's `debug` function before parsing, so parse errors

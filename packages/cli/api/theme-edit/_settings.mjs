@@ -2979,10 +2979,25 @@ function ownPageTokens(
     const here = new Set(
       detail.filter(e => e.kind === 'chain').map(e => e.theme),
     );
-    for (const st of ast.program.body) {
-      if (st.type !== 'ImportDeclaration') continue;
-      const file = localFile(String(st.source?.value ?? ''));
-      if (!file || file.endsWith('.json')) continue;
+    // The theme file's local imports, and theirs in turn (a theme two
+    // extends up, in a file a parent's file imports), each read once.
+    /** @param {any} program @param {string} fromDir */
+    const importsOf = (program, fromDir) =>
+      program.body
+        .filter((/** @type {any} */ st) => st.type === 'ImportDeclaration')
+        .map((/** @type {any} */ st) => String(st.source?.value ?? ''))
+        .filter((/** @type {string} */ from) => from.startsWith('.'))
+        .map((/** @type {string} */ from) => localModuleFile(fromDir, from))
+        .filter(
+          (/** @type {string | null | undefined} */ file) =>
+            file && !file.endsWith('.json'),
+        );
+    const queue = importsOf(ast.program, dir);
+    const read = new Set([source.file]);
+    while (queue.length > 0) {
+      const file = /** @type {string} */ (queue.shift());
+      if (read.has(file) || read.size > 50) continue;
+      read.add(file);
       /** @type {any} */
       let other;
       try {
@@ -2993,6 +3008,7 @@ function ownPageTokens(
       } catch {
         continue;
       }
+      queue.push(...importsOf(other.program, path.dirname(file)));
       /** @param {any} node */
       const each = node => {
         if (!node || typeof node !== 'object') return;

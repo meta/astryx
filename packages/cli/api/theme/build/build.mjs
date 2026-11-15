@@ -2786,7 +2786,7 @@ function isSyncLoaderLimitation(error) {
  * @returns {Promise<{theme: any, exportName: string, degraded: {topLevelAwait: boolean, commonJs: boolean}, colorModes: ["light"] | ["dark"] | null, others?: string[], defaultHolds?: string[]}>}
  */
 // prettier-ignore
-async function importThemeModule(filePath, interception, /** @type {any} */ loader = undefined, /** @type {string | undefined} */ pick = undefined) {
+async function importThemeModule(filePath, interception, /** @type {any} */ loader = undefined, /** @type {string | undefined} */ pick = undefined, /** @type {Set<string>} */ unbuilt = new Set()) {
   const jiti =
     loader ??
     createJiti(import.meta.url, {
@@ -2810,7 +2810,7 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
     const commonJsPatch = interception.patchCommonJs(filePath);
     try {
       try {
-        mod = await withEmptyStylesheets(async () => jiti(filePath));
+        mod = await withEmptyStylesheets(async () => jiti(filePath), {unbuilt});
       } catch (error) {
         // Only a sync-loader limitation may fall back. Anything else is the
         // theme's own failure and belongs to the caller unchanged.
@@ -2828,6 +2828,7 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
             async: true,
             forceTranspile: true,
           }),
+          {unbuilt},
         );
       }
     } finally {
@@ -2836,7 +2837,7 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
       commonJsPatch.undo();
     }
   } else {
-    mod = await withEmptyStylesheets(() => jiti.import(filePath));
+    mod = await withEmptyStylesheets(() => jiti.import(filePath), {unbuilt});
   }
 
   // Both loads hand back the module. The theme is read from the module's own
@@ -3041,14 +3042,19 @@ function isThemeObject(value) {
  *
  * @param {string} filePath
  * @param {import('./core-interception.mjs').CoreInterception} [interception]
- * @returns {Promise<{theme: any, exportName?: string, degraded: {topLevelAwait: boolean, commonJs: boolean}, colorModes?: ['light'] | ['dark'] | null, others?: string[], defaultHolds?: string[]}>}
+ * @returns {Promise<{theme: any, exportName?: string, degraded: {topLevelAwait: boolean, commonJs: boolean}, colorModes?: ['light'] | ['dark'] | null, others?: string[], defaultHolds?: string[], unbuiltStylesheets?: string[]}>}
  *   `others`: the module's other theme exports, left out (it has no theme
  *   default); `defaultHolds`: the keys of a default export that holds themes
  */
 // prettier-ignore
 async function extractThemeDefinition(filePath, interception, /** @type {any} */ loader = undefined, /** @type {string | undefined} */ pick = undefined) {
+  // A stylesheet the source imports that is not there yet loads as an empty
+  // module, and is named, so the build can refuse one it does not write.
+  /** @type {Set<string>} */
+  const unbuilt = new Set();
   try {
-    return await importThemeModule(filePath, interception, loader, pick);
+    const loaded = await importThemeModule(filePath, interception, loader, pick, unbuilt);
+    return unbuilt.size ? {...loaded, unbuiltStylesheets: [...unbuilt]} : loaded;
   } catch (jitiError) {
     // A module may throw anything: what it threw is told as it is (a string,
     // an object, null), never read as an Error it is not.
@@ -4583,6 +4589,8 @@ async function themeBuildInternal(
   let leftOutThemes;
   /** The keys of a default export that holds themes, not a theme. @type {string[]} */
   let defaultHolds;
+  /** Stylesheets the source imports that are not there yet. @type {string[]} */
+  let unbuiltStylesheets;
   /** Paths through the load that interception could not fully observe. */
   let loadDegradation;
   /** The one color mode the theme module exports, or null for both. */
@@ -4615,6 +4623,7 @@ async function themeBuildInternal(
     themeExportName = loaded.exportName;
     leftOutThemes = loaded.others ?? [];
     defaultHolds = loaded.defaultHolds ?? [];
+    unbuiltStylesheets = loaded.unbuiltStylesheets ?? [];
     loadDegradation = loaded.degraded;
     colorModes = handOff.colorModes ?? loaded.colorModes ?? null;
   } catch (e) {
@@ -5314,6 +5323,26 @@ async function themeBuildInternal(
     }
   } else {
     outPath = path.join(path.dirname(filePath), `${baseName}.css`);
+  }
+  // A stylesheet the source imports that is not there yet loads empty only
+  // when it is the stylesheet this build writes (an app importing the source
+  // gets its CSS); any other is a missing file, refused before anything is
+  // written.
+  const missingStylesheets = unbuiltStylesheets.filter(
+    file =>
+      handOff.prepareFamily || path.resolve(file) !== path.resolve(outPath),
+  );
+  if (missingStylesheets.length > 0) {
+    const shown = path.relative(cwd, filePath) || filePath;
+    throw new AstryxError(
+      `Failed to load theme from ${shown}: it imports ${missingStylesheets.map(file => path.relative(cwd, file) || file).join(', ')}, which is not there${handOff.prepareFamily ? '' : ` and is not the stylesheet this build writes (${path.relative(cwd, outPath) || outPath})`}. Create the file, correct the import, or build what writes it first. Nothing was written.`,
+      themeLoadSuggestions(new Error('missing stylesheet'), shown, cwd, {
+        check: options.check,
+        out: options.out,
+        iconsSpecifier: options.iconsSpecifier,
+      }),
+      ERROR_CODES.ERR_THEME_LOAD,
+    );
   }
   // The header names the source and command from the project root of the
   // outputs, so a build from any folder writes the same bytes, `--check`
@@ -6339,6 +6368,8 @@ async function buildFamily(
     js: path.relative(cwd, jsPath),
     dts: path.relative(cwd, dtsPath),
   };
+  /** What the output check warns of, for the result. @type {string[]} */
+  const outputWarnings = [];
   // A family build's outputs stay inside cwd too; check mode only reads them.
   if (!options.check) {
     confineOutputs(writes, cwd, FAMILY_REMEDY);
@@ -6351,6 +6382,8 @@ async function buildFamily(
       elsewhere: '--family-key',
       refuseUnmarked: true,
       warnUnmarked: true,
+      // The result's warnings carry what text prints.
+      onWarning: message => outputWarnings.push(message),
     });
   }
   if (options.check) {
@@ -6412,7 +6445,9 @@ Or load the same stylesheet natively:
   // single build says it.
   const keptLocal = keptWarnings(localPlan.kept, cwd);
   for (const w of keptLocal) logger.warn(`Warning: ${w}`);
-  // Each member's warnings name the member they are about.
+  // Each member's warnings name the member they are about; a warning about
+  // the family's outputs (one it replaces, a module it leaves uncompiled)
+  // comes after them.
   const warnings = [
     ...new Set([
       ...members.flatMap(member =>
@@ -6422,6 +6457,7 @@ Or load the same stylesheet natively:
         ),
       ),
       ...keptLocal,
+      ...outputWarnings,
     ]),
   ];
   const unloadedFonts = [
