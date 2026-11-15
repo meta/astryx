@@ -111,6 +111,10 @@ const RUNNERS = {
     runs: "each integration's codemods, through the codemod parser, to plan an upgrade",
     sites: ['loadModuleWithParser(..., parseCodemod)'],
   },
+  'assets/codemods/run-codemod.mjs': {
+    runs: "jscodeshift's Babel parser and its TypeScript parser options (CommonJS), on the first declaration file, to parse it as declarations",
+    sites: ['require(./parser/tsOptions.js)', 'require(@babel/parser)'],
+  },
   'authoring/example/preview.mjs': {
     runs: 'Babel, its TypeScript plugin and the `globals` lists (CommonJS), each on first use, to read a doc example as the module a live preview runs',
     sites: [

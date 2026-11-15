@@ -393,7 +393,8 @@ works on is `spec:AST-040` FR9's.
     integration's contribution-check results, template discovery's records,
     the component list (with each integration's component replacements),
     each integration's components with the doc parts the not-found matcher
-    scores, integrations' theme records, the lookup commands' not-found hint's
+    scores, integrations' theme records, what `theme build` checks a theme
+    against in Core's component docs, the lookup commands' not-found hint's
     name summaries of folder trees, the CLI's own docs tree, and doctor's
     file-only docs checks and theme-wiring scan, which doctor keeps only
     while the folder exists), a
