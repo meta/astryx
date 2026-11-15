@@ -3377,6 +3377,21 @@ const STATE_SYNONYMS = wordTable(
 );
 
 /**
+ * The state a word for one names among those a part has, by the one table
+ * of other words for states (expanded: open; pressed: a toggle's isPressed,
+ * else active); null when none of them is the part's.
+ * @param {string} word
+ * @param {string[]} states
+ * @returns {string | null}
+ */
+export function stateSynonym(word, states) {
+  return (
+    (STATE_SYNONYMS[word.toLowerCase()] ?? []).find(x => states.includes(x)) ??
+    null
+  );
+}
+
+/**
  * The state a typed one means among those a part (or a group's members)
  * has: another word for one, else the nearest; null when none is near.
  * @param {string} state

@@ -69,6 +69,7 @@ import {
   drawsLine,
   inheritedReach,
   settableStates,
+  stateSynonym,
 } from './_check.mjs';
 import {coreKeyframes} from './_parts.mjs';
 import {NUMBER_WORDS, commaNumbers, modeNear} from './_normal.mjs';
@@ -2031,8 +2032,10 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
     /\b(selected|active (tab|nav|item|link|page))\b|\bactive\b(?=.*\b(nav|tab|item)\b)/,
     'selected',
   ],
+  // ("Pressed" is its own word: a toggle's pressed state, else active.)
+  [/\b(press(ed|es)?|on press)\b/, 'pressed'],
   [
-    /\b(press(ed|es)?|click(ed|s)?|tap(ped|s)?(?! targets?)|on press|on click|when i click|active)\b/,
+    /\b(click(ed|s)?|tap(ped|s)?(?! targets?)|on click|when i click|active)\b/,
     'active',
   ],
   [/\b(typing|type in|tab to|tabbing|keyboard focus)\b/, 'focus'],
@@ -2040,7 +2043,8 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
   [/\b(picked|chosen|choose|pick)\b/, 'selected'],
   [/\b(invalid|errors? state|has an error|with an error)\b/, 'invalid'],
   [/\bvisited\b/, 'visited'],
-  [/\b(opened|expanded)\b/, 'open'],
+  [/\bopened\b/, 'open'],
+  [/\bexpanded\b/, 'expanded'],
   // (A page or step shown as the one you are on: aria-current.)
   [/\bcurrent\b/, 'current'],
   // Words for states a part may not have: the answer says so.
@@ -2132,11 +2136,17 @@ function aspectsOf(text) {
   )
     add('underline');
   if (/\bline ?height|\bleading\b|\bline spacing\b/.test(c)) add('leading');
+  // (A way word, "tighter", goes with the thing the clause names: "the
+  // corners twice as tight" is a corners change, never room too.)
   if (
     !a.includes('tracking') &&
-    new RegExp(
-      `\\b(?:padding|spacing|space|spaced|gaps?|margins?|room|breathing|density|${densityWords('roomy', 'dense', 'crowded')})\\b`,
-    ).test(c)
+    (/\b(?:padding|spacing|space|spaced|gaps?|margins?|room|breathing|density)\b/.test(
+      c,
+    ) ||
+      (!a.includes('corners') &&
+        new RegExp(
+          `\\b(?:${densityWords('roomy', 'dense', 'crowded')})\\b`,
+        ).test(c)))
   )
     add('spacing');
   if (
@@ -2857,9 +2867,18 @@ function clausesOf(q, partWords) {
     const state = stateWord(stateText);
     // A mode phrase names the mode ("dark mode", "in light"); a color word
     // ("dark gray") never does when a mode phrase is there.
-    // A pasted label (`dark: cards #1c1c1e`, `drak: …`) names its mode by
-    // the one mode reader, typos that keep the letters included.
-    const labelMode = modeNear(/^\s*([a-z][a-z-]*)\s*:/.exec(text)?.[1] ?? '');
+    // A mode named where a mode is said (a pasted label, `dark: cards
+    // #1c1c1e`; "in drak mode", "ligth theme"; the editor's own `(dark)`,
+    // `[dark only]`) is read by the one mode reader, typos that keep the
+    // letters included.
+    const labelMode =
+      [
+        /^\s*([a-z][a-z-]*)\s*:/.exec(text)?.[1],
+        /\b([a-z]+)[\s-]+(?:mode|theme)\b/.exec(text)?.[1],
+        /[([]\s*([a-z]+(?:[\s-]+(?:only|mode))?)\s*[)\]]/.exec(text)?.[1],
+      ]
+        .map(w => (w ? modeNear(w) : null))
+        .find(m => m != null) ?? null;
     const lightPhrase =
       labelMode === 'light' ||
       /\blight (mode|theme)\b|\bin light(?=\s*(?:[,;.!?]|$|and\b|only\b))/.test(
@@ -6557,6 +6576,11 @@ export function draftAnswer(ctx, env, question) {
     if (word === 'focus')
       return focusStateOf(/** @type {any} */ ({C}), one(on)) ?? 'focus-visible';
     if (word === 'invalid') return null;
+    // (The one table of words for states first, in its order: expanded is
+    // a part's expanded, else its open; pressed a toggle's isPressed, else
+    // the press, active.)
+    const synonym = stateSynonym(word, states);
+    if (synonym) return synonym;
     if (states.includes(word)) return word;
     // A selection said in another word ("toggle buttons red when
     // selected"): the one selection state the part has (a toggle
@@ -11659,6 +11683,46 @@ export function draftAnswer(ctx, env, question) {
   }
 
   /**
+   * The looks Core draws with no border (a borderless variant) kept so: a
+   * width 0 on each, after a border width on the part, so a wider border
+   * never adds one where none is drawn. Only for a change with no variant
+   * or state of its own.
+   * @param {string} on
+   * @param {{when?: string, state?: string}} f
+   * @returns {Step[]}
+   */
+  function borderlessKeeps(on, f) {
+    /** @type {Step[]} */
+    const borderless = [];
+    if (f.when || f.state) return borderless;
+    for (const m of FAMILIES[on] ?? [one(on)])
+      for (const [render, v] of Object.entries(
+        /** @type {Record<string, string>} */ (
+          C.MAP[m]?.at?.['border-width'] ?? {}
+        ),
+      )) {
+        if (String(v).trim() !== '0' || /[\s:]/.test(render)) continue;
+        // (Only a look that would draw it: a style; a look with no style
+        // draws none anyway.)
+        const drawn = String(
+          C.MAP[m]?.at?.['border-style']?.[render] ?? 'none',
+        ).trim();
+        if (/^(?:none|hidden)$/.test(drawn)) continue;
+        const attr = render
+          .split(',')
+          .find(x => !/^(?:size|density|elevation)=/.test(x));
+        if (!attr) continue;
+        borderless.push({
+          ...set('border-width', '0', {
+            on: m,
+            when: attr.replace('=', ':'),
+          }),
+          ...(m !== on ? {only: true} : {}),
+        });
+      }
+    return borderless;
+  }
+  /**
    * The commands for one part (or the whole theme) and one aspect.
    * @param {Clause} c
    * @param {{on: string, when?: string, role?: string, level?: string} | null} p
@@ -12795,7 +12859,16 @@ export function draftAnswer(ctx, env, question) {
         if (value)
           return {
             text: `${prop}${where}: ${value} (now ${now})`,
-            options: [[set(prop, value, f)]],
+            options: [
+              [
+                set(prop, value, f),
+                // (A wider or thinner border keeps the looks Core draws
+                // with none borderless, as the way answer does.)
+                ...(/^border(?:-[a-z]+)?-width$/.test(prop)
+                  ? borderlessKeeps(on, f)
+                  : []),
+              ],
+            ],
           };
       }
     }
@@ -14264,35 +14337,7 @@ export function draftAnswer(ctx, env, question) {
           if (width && !color && !style) {
             // A look Core draws with no border (a borderless variant) keeps
             // none: its width stays 0, so a wider border never adds one.
-            /** @type {Step[]} */
-            const borderless = [];
-            if (!f.when && !f.state)
-              for (const m of FAMILIES[on] ?? [one(on)])
-                for (const [render, v] of Object.entries(
-                  /** @type {Record<string, string>} */ (
-                    C.MAP[m]?.at?.['border-width'] ?? {}
-                  ),
-                )) {
-                  if (String(v).trim() !== '0' || /[\s:]/.test(render))
-                    continue;
-                  // (Only a look that would draw it: a style; a look with
-                  // no style draws none anyway.)
-                  const drawn = String(
-                    C.MAP[m]?.at?.['border-style']?.[render] ?? 'none',
-                  ).trim();
-                  if (/^(?:none|hidden)$/.test(drawn)) continue;
-                  const attr = render
-                    .split(',')
-                    .find(x => !/^(?:size|density|elevation)=/.test(x));
-                  if (!attr) continue;
-                  borderless.push({
-                    ...set('border-width', '0', {
-                      on: m,
-                      when: attr.replace('=', ':'),
-                    }),
-                    ...(m !== on ? {only: true} : {}),
-                  });
-                }
+            const borderless = borderlessKeeps(on, f);
             opts.push([set('border-width', width, f), ...borderless]);
           }
           if (style && !color && !width)
@@ -15086,13 +15131,18 @@ export function draftAnswer(ctx, env, question) {
           /\b(?:more (?:transparent|translucent|see-through)|less opaque|less (?:visible|noticeable|prominent)|half as visible|fainter|subtler)\b/.test(
             c.text,
           );
+        // (The share said, "30% fainter", "half as visible", read by the
+        // one amount reader; else 40%.)
+        const fainterBy = exactFactor(c.text);
         const relative =
           RELATIVE_ALPHA.exec(c.text) ??
           (fainterText
             ? /** @type {RegExpExecArray} */ (
                 /** @type {unknown} */ ([
                   'more transparent',
-                  /\bhalf\b/.test(c.text) ? '50' : '40',
+                  fainterBy != null && fainterBy > 0 && fainterBy < 1
+                    ? String(Math.round((1 - fainterBy) * 100))
+                    : '40',
                   'more',
                   'transparent',
                 ])
@@ -15688,6 +15738,39 @@ export function draftAnswer(ctx, env, question) {
               ],
             ],
           };
+        // "twice as tall", "half as tall", "twice as short": the height
+        // that amount of the one it has, each control height token the
+        // part reads scaled on the part; never one spacing step.
+        const heightBy = /\b(tall(er)?|short(er)?|heights?)\b/.test(c.text)
+          ? exactFactor(c.text)
+          : null;
+        if (heightBy != null && heightBy > 0) {
+          const toks = [
+            ...new Set(
+              (C.partReads(one(on), 'size') ?? [])
+                .filter(r => /^--size-/.test(r.token))
+                .map(r => r.token),
+            ),
+          ];
+          const steps = toks
+            .map(t => {
+              const now = String(resolvedValue(t) || current(t) || '');
+              const next = lengthPx(now) != null ? scaled(now, heightBy) : null;
+              return next ? set(t, next, {on}) : null;
+            })
+            .filter(st => st != null);
+          return steps.length
+            ? {
+                text: `${on} ${heightBy < 1 ? 'shorter' : 'taller'}: each control height it reads (${toks.join(', ')}) at ${Math.round(heightBy * 100)}% of now, on ${on} only`,
+                options: [/** @type {Step[]} */ (steps)],
+                sequence: steps.length > 1,
+              }
+            : {
+                text: `${on} reads no control height token to scale; give a height, such as min-height 40px`,
+                options: [],
+                lookup: `${HOW} ${one(on)}`,
+              };
+        }
         // No direction ("card padding", a bare "16px" after a comma): no
         // dial step, which would pick "bigger" for it.
         if (!c.dir) return null;
@@ -19033,7 +19116,7 @@ export function valueAsked(q) {
   // Only the question part ("how rounded are cards? make them 12px").
   const t = q.toLowerCase().trim().split('?')[0];
   if (
-    !/^(?:how (?:much|many|big|round(?:ed)?|thick|wide|tall|bold|dark|light|transparent|opaque|dense|roomy|spacious|compact|tight|airy|crowded|cramped|strong|faint|soft|blurry)|what(?:(?:'s| is| are)(?: the| my)?(?: [a-z-]+){0,2}?|(?: the)?) (?:colou?r|size|padding|gap|spacing|density|radius|corner radius|font|weight|font size|shadow|border|opacity|font family|typeface|background|fill|focus ring|focus outline|ring|outline)s?|which (?:colou?r|font))\b/.test(
+    !/^(?:how (?:much|many|big|round(?:ed)?|thick|wide|tall|bold|dark|light|transparent|opaque|dense|roomy|spacious|compact|tight|airy|crowded|cramped|strong|faint|soft|blurry)|what(?:(?:'s| is| are)(?: the| my)?(?: [a-z-]+){0,2}?|(?: the)?) (?:colou?r|size|padding|gap|spacing|density|radius|corner radius|font|weight|font size|shadow|border|opacity|font family|typeface|background|fill|focus ring|focus outline|ring|outline|height|width)s?|which (?:colou?r|font))\b/.test(
       t,
     )
   )
@@ -19051,6 +19134,8 @@ export function valueAsked(q) {
   )
     return 'font-family';
   if (/\bgap\b/.test(t)) return 'gap';
+  // "how tall are the buttons", "what is the height of buttons".
+  if (/\b(height|tall)\b/.test(t)) return 'height';
   if (
     /\b(padding|spacing|space|room|density|dense|roomy|spacious|compact|tight|airy|crowded|cramped)\b/.test(
       t,

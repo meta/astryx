@@ -522,7 +522,7 @@ async function answer(subject, options, cwd) {
     ) &&
     // "--color-accent darker", "--a and --b bigger": a way to move it (or
     // more tokens), never a value: the question reader answers it.
-    !/^(?:and\s+--|(?:a bit |slightly )?(?:darker|lighter|bigger|larger|smaller|thicker|thinner|wider|narrower)$)/i.test(
+    !/^(?:and\s+--|(?:a bit |slightly )?(?:darker|lighter|bigger|larger|smaller|thicker|thinner|wider|narrower)(?:$|\s+(?:and|,)))/i.test(
       typedToken[2].trim(),
     )
   ) {
