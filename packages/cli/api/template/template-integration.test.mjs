@@ -1230,7 +1230,8 @@ describe('build names a start its command selects', () => {
     if (kit.type !== 'build.kit') throw new Error('expected build.kit');
     expect(kit.data.start).toMatchObject({
       name: 'contact-form',
-      command: 'astryx template contact-form --type page src/pages/contact-form',
+      command:
+        'astryx template contact-form --type page src/pages/contact-form',
     });
     const selected = await template('contact-form', {
       type: 'page',

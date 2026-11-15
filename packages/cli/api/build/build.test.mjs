@@ -331,7 +331,8 @@ describe('build kit — every page starts from a template', () => {
     expect(r.data.start).toMatchObject({
       name: 'shell-top-nav',
       basis: 'fallback',
-      command: 'astryx template shell-top-nav --type page src/pages/shell-top-nav',
+      command:
+        'astryx template shell-top-nav --type page src/pages/shell-top-nav',
     });
     expect(r.data.start?.description).toBeTruthy();
   });
@@ -699,6 +700,20 @@ describe('build kit — the start names where it goes in the project', () => {
         cwd: dir,
       });
       expect(written.data.outputDir).toBe(path.join('app', start.name));
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+
+  it('names the page file in a Next app with only the Pages Router', async () => {
+    const dir = project(nextApp);
+    fs.mkdirSync(path.join(dir, 'pages'));
+    try {
+      const r = await build('contact form', {cwd: dir});
+      if (r.type !== 'build.kit') throw new Error('expected build.kit');
+      expect(r.data.start?.command).toBe(
+        'astryx template contact-form --type page pages/contact-form.tsx',
+      );
     } finally {
       fs.rmSync(dir, {recursive: true, force: true});
     }
