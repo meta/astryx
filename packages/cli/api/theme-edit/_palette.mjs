@@ -332,8 +332,9 @@ const NON_TEXT = 3;
 /**
  * The official neutral theme's color mapping, read from the theme the CLI
  * ships rather than copied: each token's stops, `[light, dark]`, written
- * there as `<family>.<mode>[N]` or `withAlpha(<family>.<mode>[N], 'aa')`,
- * and the parts whose secondary text it lifts (`[part, block]`).
+ * there as `<family>.<mode>[N]` or `withAlpha(<family>.<mode>[N], 'aa')`
+ * (one stop for both modes when it writes one), and the parts whose
+ * secondary text it lifts (`[part, block]`).
  * @returns {{stops: Record<string, Array<{stop: number, alpha?: string}>>, lifted: Array<[string, string]>}}
  */
 function readOfficialNeutral() {
@@ -373,6 +374,9 @@ function readOfficialNeutral() {
       if (keys.at(-1) === 'tokens' && node.value.type === 'ArrayExpression') {
         const pair = node.value.elements.map(stopOf);
         if (pair.length === 2 && pair.every(Boolean)) stops[key] = pair;
+      } else if (keys.at(-1) === 'tokens') {
+        const one = stopOf(node.value);
+        if (one) stops[key] = [one, one];
       }
       if (keys.at(-3) === 'components' && key === '--color-text-secondary')
         lifted.push([keys.at(-2) ?? '', keys.at(-1) ?? '']);
@@ -396,27 +400,41 @@ const officialStops = token =>
 /**
  * The tokens the neutral color sets at the official theme's stops. The page
  * background, `--color-background-body`, stays the base theme's, so a
- * tinted gray never tints the page. A layout without one of these stops
- * uses the nearest one it has.
+ * tinted gray never tints the page. The inverted surface (tooltips,
+ * toasts), which the official theme leaves to Core, is the card surface of
+ * the other mode, as Core makes it from a neutral scale, inside the ramp
+ * (Core's tones 10 and 99: never the white or black end every ramp shares)
+ * so it carries the neutral color (NEUTRAL_INSIDE); the text on it is the
+ * theme's on-dark and on-light. A layout without one of these stops uses
+ * the nearest one it has.
  */
 const NEUTRAL_STOPS = wordTable(
-  Object.fromEntries(
-    [
-      '--color-background-surface',
-      '--color-background-card',
-      '--color-background-popover',
-      '--color-background-muted',
-      '--color-text-primary',
-      '--color-text-secondary',
-      '--color-text-disabled',
-      '--color-icon-primary',
-      '--color-icon-secondary',
-      '--color-icon-disabled',
-      '--color-border-emphasized',
-      '--color-skeleton',
-    ].map(t => [t, officialStops(t)]),
-  ),
+  /** @type {Record<string, [number, number]>} */ ({
+    ...Object.fromEntries(
+      [
+        '--color-background-surface',
+        '--color-background-card',
+        '--color-background-popover',
+        '--color-background-muted',
+        '--color-text-primary',
+        '--color-text-secondary',
+        '--color-text-disabled',
+        '--color-icon-primary',
+        '--color-icon-secondary',
+        '--color-icon-disabled',
+        '--color-border-emphasized',
+        '--color-skeleton',
+        '--color-on-dark',
+        '--color-on-light',
+      ].map(t => [t, officialStops(t)]),
+    ),
+    '--color-background-inverted': /** @type {[number, number]} */ (
+      [...officialStops('--color-background-card')].reverse()
+    ),
+  }),
 );
+/** Neutral tokens whose shade stays inside the ramp, off its white and black ends. */
+const NEUTRAL_INSIDE = new Set(['--color-background-inverted']);
 /** Neutral tints: a stop with an opacity, `[[stop, alpha], [stop, alpha]]`. */
 const NEUTRAL_TINTS = wordTable(
   Object.fromEntries(
@@ -818,6 +836,12 @@ function tools(
   const {stops} = candidate;
   /** @param {number} n */
   const at = n => nearestStop(stops, n);
+  /** The stop nearest `n` off the white and black ends. @param {number} n */
+  const atInside = n =>
+    nearestStop(
+      stops.filter(s => s > 0 && s < 100),
+      n,
+    );
   /** @param {string} id @param {Mode} m @param {number} stop @param {string} [alpha] @returns {StopRef} */
   const ref = (id, m, stop, alpha) => {
     const color = /** @type {any} */ (candidate.palette[id])[m][stop];
@@ -996,6 +1020,7 @@ function tools(
   return {
     stops,
     at,
+    atInside,
     ref,
     exactOf,
     settingOf,
@@ -1949,7 +1974,18 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
   const {config} = plan;
   const candidate = generate(config, paletteFiles(slug).config);
   const t = tools(candidate, data, base, ownSourceTokenValues(cwd, slug));
-  const {stops, at, ref, exactOf, rawOf, settingOf, side, solid, surfaces} = t;
+  const {
+    stops,
+    at,
+    atInside,
+    ref,
+    exactOf,
+    rawOf,
+    settingOf,
+    side,
+    solid,
+    surfaces,
+  } = t;
   // Both halves, for a one-mode theme too (see planPalette).
   const modes = modesForStrategy('light-and-dark');
   /** @type {PaletteMapping['tokens']} */
@@ -2031,10 +2067,11 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
         token === '--color-icon-secondary'
       )
         continue;
+      const shade = NEUTRAL_INSIDE.has(token) ? atInside : at;
       put(
         token,
         'neutral',
-        each(m => ref('neutral', m, at(pair[side(m)]))),
+        each(m => ref('neutral', m, shade(pair[side(m)]))),
       );
     }
     for (const [token, pair] of Object.entries(NEUTRAL_TINTS))
@@ -2553,7 +2590,7 @@ export function mappingRows(dial) {
       'your exact color sits at its own shade, light and dark, and the shades around it follow it (white and black are already the ends of every ramp)',
       ...Object.entries(NEUTRAL_STOPS).map(
         ([t, [l, d]]) =>
-          `${t}: light shade ${l}, dark shade ${d}${t.endsWith('-secondary') ? ` (moves to a shade that reads at ${t.includes('icon') ? NON_TEXT : TEXT}:1 on the surfaces)` : ''}`,
+          `${t}: light shade ${l}, dark shade ${d}${t.endsWith('-secondary') ? ` (moves to a shade that reads at ${t.includes('icon') ? NON_TEXT : TEXT}:1 on the surfaces)` : NEUTRAL_INSIDE.has(t) ? ' (the card surface of the other mode, for tooltips and toasts, at the nearest shade inside the ramp so it carries your color)' : ''}`,
       ),
       ...Object.entries(NEUTRAL_TINTS).map(
         ([t, [[l, la], [d, da]]]) =>
