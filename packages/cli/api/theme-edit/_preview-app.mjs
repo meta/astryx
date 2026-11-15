@@ -20,7 +20,7 @@ import {IMPORTER_SCAN_MAX, pageImporters} from './_importers.mjs';
 import {parse as parseModule} from '@babel/parser';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {createRequire} from 'node:module';
+import {createRequire, isBuiltin} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
@@ -51,6 +51,7 @@ import {
 } from './_settings.mjs';
 import {
   baseFontsCss,
+  baseFontsSheet,
   colorsPageSource,
   componentsPageSource,
   overviewPageSource,
@@ -723,6 +724,27 @@ function typeScriptNotes(cwd, dir, added) {
     `the app's tsconfig.json turns on noUncheckedIndexedAccess, and ${files.join(', ')} ${files.length > 1 ? 'are' : 'is'} written as the page template ships, which may not pass it; if the build stops there, fix the reported lines or remove the page with ${PREVIEW} remove ${templates[0]}`,
   ];
 }
+
+/**
+ * Why a file could not be read, as {@link unreadable} names it.
+ * @param {string} name the file, as shown
+ * @param {string} code
+ */
+const unreadableNote = (name, code) =>
+  code === 'ENOTREG'
+    ? `${name} is not a regular file (a pipe, a device or a folder), so it is never read`
+    : `${name} could not be read (${code})`;
+
+/**
+ * What makes a file {@link unreadable} names readable: a plain file in its
+ * place, or its permissions.
+ * @param {string} name the file, as shown
+ * @param {string} code
+ */
+const unreadableFix = (name, code) =>
+  code === 'ENOTREG'
+    ? `replace it with a plain file or move it out of the folder`
+    : `make it readable (chmod u+r ${quoteCommandArgument(name)})`;
 
 /**
  * A file's text when it is a regular file that can be read, else null.
@@ -4428,9 +4450,22 @@ async function addPreview(description, options, box) {
     const addable =
       isDefault(named) ||
       (await showablePages(cwd, appRootOf(cwd, cwd), [named], 1)).length > 0;
+    // The description alone is offered only when it relates to a page,
+    // read as add reads it (nothing is written): a line add refuses is
+    // never offered.
+    const relates = await rankedPages(
+      said,
+      cwd,
+      [],
+      `${tf}${pf}`,
+      appRootOf(cwd, cwd),
+    ).then(
+      picks => picks.length > 0,
+      () => false,
+    );
     refuse(
       E.ERR_INVALID_ARGUMENT,
-      `--template names the page; a description asks the ranking to pick one, so drop one of them.${addable ? '' : ` The ${named} page cannot be added here as it is (a package it needs is missing, or no page template has that id).`}`,
+      `--template names the page; a description asks the ranking to pick one, so drop one of them.${addable ? '' : ` The ${named} page cannot be added here as it is (a package it needs is missing, or no page template has that id).`}${relates ? '' : ` No page template relates to "${said}".`}`,
       {
         run: [
           ...(addable
@@ -4438,7 +4473,11 @@ async function addPreview(description, options, box) {
                 `${PREVIEW} add --template ${quoteCommandArgument(named)}${tf}${pf}`,
               ]
             : []),
-          `${PREVIEW} add ${quoteCommandArgument(said)}${tf}${pf}`,
+          ...(relates
+            ? [`${PREVIEW} add ${quoteCommandArgument(said)}${tf}${pf}`]
+            : []),
+          // With neither, the default pages, which need nothing more.
+          ...(!addable && !relates ? [`${PREVIEW} add${tf}${pf}`] : []),
         ],
       },
     );
@@ -5081,21 +5120,52 @@ export async function themeEditPreviewApp(dir, options = {}) {
     copyDir('');
     if (links.length)
       notes.push(
-        `left out ${links.join(', ')}: ${links.length === 1 ? 'a link' : 'links'}, which the editor never reads through; put a copy of the file there to bring it along`,
+        `left out ${links.join(', ')}: ${links.length === 1 ? 'a link' : 'links'}, which the copy does not follow; put a copy of the file there to bring it along`,
       );
     // A source file of the theme that imports a file outside its folder
     // would not build in the new app, where that file is not: refused,
     // naming the import, before anything is written.
+    // Outside the theme folder by where a file really is: a link in the
+    // folder that leads out of it (themes/t/img → ../../shared) is left out
+    // of the copy, so what it reaches is outside too.
+    const realFrom = (() => {
+      try {
+        return fs.realpathSync(from.dir);
+      } catch {
+        return from.dir;
+      }
+    })();
+    /** @param {string} at */
+    const leaves = at => {
+      /** @type {string} */
+      let real;
+      try {
+        real = fs.realpathSync(at);
+      } catch {
+        // Not there (an import without its extension): by its path.
+        real = path.resolve(at);
+        const lexical =
+          real === from.dir || real.startsWith(from.dir + path.sep);
+        return !lexical;
+      }
+      return real !== realFrom && !real.startsWith(realFrom + path.sep);
+    };
+    /** Packages the copied theme sources import, by name. @type {Set<string>} */
+    const imported = new Set();
     const outside = themeCopy.flatMap(c => {
       const rel = path.relative(to.dir, c.rel);
       if (!/\.(mjs|cjs|js|mts|cts|ts|tsx|jsx)$/.test(rel)) return [];
       const file = path.join(from.dir, rel);
-      return importSpecifiers(file, String(c.text))
+      const specs = importSpecifiers(file, String(c.text));
+      // A package by its name (`tintx`, `@sc/brand`): never a path alias
+      // (`@/x`, `~/x`, `#x`), which the theme build refuses on its own.
+      for (const spec of specs) {
+        const pkg = /^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*/i.exec(spec)?.[0];
+        if (pkg && !isBuiltin(spec)) imported.add(pkg);
+      }
+      return specs
         .filter(spec => spec.startsWith('.'))
-        .filter(spec => {
-          const at = path.resolve(path.dirname(file), spec);
-          return at !== from.dir && !at.startsWith(from.dir + path.sep);
-        })
+        .filter(spec => leaves(path.resolve(path.dirname(file), spec)))
         .map(spec => `${shown(cwd, file)} imports '${spec}'`);
     });
     // A stylesheet's url() that leads out of the theme folder (an image in
@@ -5103,6 +5173,8 @@ export async function themeEditPreviewApp(dir, options = {}) {
     // module: the new app does not have it, so its build would fail. Read
     // with the renderer's own url reader; a `/` url is the app's public/
     // folder, which the bundler leaves alone.
+    /** Root urls the previews read from this project's public/. @type {Set<string>} */
+    const publicRefs = new Set();
     for (const c of themeCopy) {
       const rel = path.relative(to.dir, c.rel);
       if (!/\.css$/.test(rel)) continue;
@@ -5114,13 +5186,19 @@ export async function themeEditPreviewApp(dir, options = {}) {
           dir: path.dirname(file),
           root: cwd,
         });
-        if (!named || named.kind === 'remote' || named.ref.startsWith('/'))
+        if (!named || named.kind === 'remote') continue;
+        // The app's public/ folder: the bundler leaves it alone, and the
+        // new app has none of this project's files there.
+        if (named.ref.startsWith('/')) {
+          if (named.kind === 'file')
+            publicRefs.add(`url(${named.ref}) (${shown(cwd, named.file)})`);
           continue;
+        }
         const at =
           named.kind === 'missing'
             ? path.resolve(path.dirname(file), named.ref)
             : named.file;
-        if (at !== from.dir && !at.startsWith(from.dir + path.sep))
+        if (leaves(at))
           outside.push(`${shown(cwd, file)} uses url(${named.ref})`);
       }
     }
@@ -5131,6 +5209,35 @@ export async function themeEditPreviewApp(dir, options = {}) {
         {
           fix: `move what it imports into ${shown(cwd, from.dir)}/ (and import it from there), then run the command again`,
           run: [appCommand(dir, slug)],
+        },
+      );
+    if (publicRefs.size)
+      notes.push(
+        `${[...publicRefs].join(', ')}: ${publicRefs.size === 1 ? 'an image' : 'images'} of this app's public/ folder, which the new app does not have, so it shows the theme without ${publicRefs.size === 1 ? 'it' : 'them'} until ${publicRefs.size === 1 ? 'it is' : 'they are'} copied into its public/ folder`,
+      );
+    // A package the theme's own source imports goes into the new app, at
+    // the version this project has, as Core and the base theme do; one this
+    // project cannot resolve is refused by name (its theme would not build).
+    /** @type {string[]} */
+    const unresolved = [];
+    for (const pkg of imported) {
+      if (
+        pkg === 'react' ||
+        pkg === 'react-dom' ||
+        pkg.startsWith('@astryxdesign/')
+      )
+        continue;
+      const v = installedVersion(cwd, pkg);
+      if (v) dependencies[pkg] = v;
+      else unresolved.push(pkg);
+    }
+    if (unresolved.length)
+      refuse(
+        E.ERR_DEP_MISSING,
+        `${slug} cannot be copied into a new app: its source imports ${unresolved.join(', ')}, which this project does not have installed, so its theme would not build there.`,
+        {
+          fix: `install ${unresolved.length > 1 ? 'them' : 'it'} here (or take the import out of ${shown(cwd, from.dir)}/), then run the command again`,
+          run: [installLine(cwd, unresolved)],
         },
       );
     if (theme.like && theme.like !== 'neutral')
@@ -5163,7 +5270,15 @@ export async function themeEditPreviewApp(dir, options = {}) {
     };
     // The new app installs its own packages, so every open font the theme
     // names is added, at the version this project has, else a known one.
-    const fonts = fontPackages(ctx, theme, {forNewApp: true});
+    // A family the base theme's fonts stylesheet loads (which the route
+    // imports) needs no package of its own: it is loaded, every weight the
+    // sheet names.
+    const baseLoads = new Set(
+      (baseFontsSheet(ctx, theme)?.families ?? []).map(f => f.toLowerCase()),
+    );
+    const fonts = fontPackages(ctx, theme, {forNewApp: true}).filter(
+      x => !baseLoads.has(x.family.replace(/["']/g, '').toLowerCase()),
+    );
     for (const font of fonts)
       dependencies[font.pkg] =
         readVersion(project, font.pkg) ?? OPEN_FONT_RANGE;
@@ -5823,16 +5938,18 @@ async function removePreview(page, options, box) {
     else if (unreadable(inside(rel))) {
       kept.push(name);
       notes.push(
-        `${name} could not be read (${unreadable(inside(rel))}), so it is left in place and stays in ${PREVIEW_DATA}; fix its permissions, then run ${PREVIEW} remove${pf} again`,
+        `${unreadableNote(name, /** @type {string} */ (unreadable(inside(rel))))}, so it is left in place, and the ${target.id} page stays in ${PREVIEW_DATA}; ${unreadableFix(name, /** @type {string} */ (unreadable(inside(rel))))}, then run ${PREVIEW} remove ${target.id}${pf} again`,
       );
     } else if (verdict !== 'delete') {
       kept.push(name);
       notes.push(keptNote(name, verdict));
     } else deletes.push(rel);
-    data.pages = data.pages.filter(x => x !== target);
-    // A file left in place because it could not be read stays recorded.
-    if (!unreadable(inside(rel)))
+    // A page whose file could not be read stays, file and record: the same
+    // remove of that page runs again once the file is fixed.
+    if (!unreadable(inside(rel))) {
+      data.pages = data.pages.filter(x => x !== target);
       data.files = data.files.filter(f => f !== rel);
+    }
     const wore = data.theme;
     /** @type {string | null} */
     let gone = null;
@@ -5969,7 +6086,7 @@ async function removePreview(page, options, box) {
     if (cannot) {
       kept.push(shown(cwd, file));
       notes.push(
-        `${shown(cwd, file)} could not be read (${cannot}), so it is left in place; fix its permissions, then run ${PREVIEW} remove${pf} again`,
+        `${unreadableNote(shown(cwd, file), cannot)}, so it is left in place; ${unreadableFix(shown(cwd, file), cannot)}, then run ${PREVIEW} remove${pf} again`,
       );
       continue;
     }

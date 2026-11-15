@@ -9836,6 +9836,24 @@ export function builtFontWeights(ctx, slug) {
  * @returns {Map<string, string> | null}
  */
 export function builtFontFamilies(ctx, slug) {
+  const stacks = builtFontStacks(ctx, slug);
+  if (!stacks) return null;
+  /** @type {Map<string, string>} */
+  const out = new Map();
+  for (const stack of stacks)
+    for (const family of stack)
+      if (!out.has(family.toLowerCase())) out.set(family.toLowerCase(), family);
+  return out;
+}
+
+/**
+ * Each font stack the theme's build writes, as the families it names in
+ * order (see {@link builtFontFamilies}); null when the build is not there.
+ * @param {Ctx} ctx
+ * @param {string} slug
+ * @returns {string[][] | null}
+ */
+export function builtFontStacks(ctx, slug) {
   /** @type {string} */
   let css;
   try {
@@ -9843,8 +9861,6 @@ export function builtFontFamilies(ctx, slug) {
   } catch {
     return null;
   }
-  /** @type {Map<string, string>} */
-  const out = new Map();
   // Every family the build writes: the font tokens, a part's own
   // font-family, the families a `font` shorthand names last, and a family
   // held in the theme's own property that one of those reads.
@@ -9854,10 +9870,7 @@ export function builtFontFamilies(ctx, slug) {
     ...declarationValues(css, /^(--font-family-.*|font-family)$/),
     ...declarationValues(css, /^font$/).map(fontShorthandFamilyList),
   ].flatMap(value => expandFontVars(value, name => own.get(name) ?? []));
-  for (const value of lists)
-    for (const family of namedFontFamilies(value))
-      if (!out.has(family.toLowerCase())) out.set(family.toLowerCase(), family);
-  return out;
+  return lists.map(value => namedFontFamilies(value));
 }
 
 /**
@@ -9895,7 +9908,15 @@ export function fontPackages(ctx, data, {forNewApp = false} = {}) {
     if (!pkg || out.some(x => x.pkg === pkg)) continue;
     out.push({pkg, family: name, installed: isInstalled(pkg), of: s});
   }
-  for (const family of built?.values() ?? []) {
+  // A new app installs the package of each stack's first family, so a
+  // browser never reaches a later one (a system face such as Roboto, there
+  // for a platform with neither): only first families count for it.
+  const families = forNewApp
+    ? (builtFontStacks(ctx, data.name) ?? []).flatMap(stack =>
+        stack.length ? [stack[0]] : [],
+      )
+    : [...(built?.values() ?? [])];
+  for (const family of families) {
     const pkg = fontsourcePackageOf(family);
     if (!pkg || out.some(x => x.pkg === pkg) || !loads(pkg)) continue;
     out.push({pkg, family, installed: isInstalled(pkg), of: null});

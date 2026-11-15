@@ -6073,7 +6073,7 @@ export async function themeEditShow(theme, options = {}) {
           ctx.project,
           [
             {html: f.preview, png: f.previewPng},
-            ...(open ? [open] : []),
+            ...(open && !('problem' in open) ? [open] : []),
             // A section is photographed from its own sheet.
             section
               ? {
@@ -6093,6 +6093,10 @@ export async function themeEditShow(theme, options = {}) {
               : 'no picture was taken: React is not installed here, so the pages the pictures are taken of could not be made; install react and react-dom, then run show --png again'
             : null,
         };
+  // Why the open states were not taken goes with the pictures, as for a
+  // change (something of yours at its page's name is left as it is).
+  if (open && 'problem' in open)
+    shots.problem = [open.problem, shots.problem].filter(Boolean).join('; ');
   const look = lookAtPictures(shots.files);
   // The app copy follows the build there now, also when the build was
   // current and only the copy is missing (a theme made before it existed).

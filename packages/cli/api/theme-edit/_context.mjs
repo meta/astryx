@@ -38,7 +38,7 @@ import {
 import {makeCompiler} from './_compiler.mjs';
 import {openProject, installLine} from './_project.mjs';
 import {partData} from './_parts.mjs';
-import {writeWhole} from './_palette.mjs';
+import {readRegularFile, writeWhole} from './_palette.mjs';
 import {
   assetRef,
   CSS_URL,
@@ -1022,14 +1022,43 @@ export function lookAtPictures(files) {
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
- * @returns {Promise<{html: string, png: string}>}
+ * @returns {Promise<{html: string, png: string} | {problem: string}>} the
+ *   page and its picture, or why neither is made: something of yours at the
+ *   page's name (a file the editor did not write, a link, a folder) is never
+ *   written over, as a picture of yours is not
  */
 export async function openStatesPage(ctx, slug, data) {
   const f = themeFiles(ctx.project.cwd, slug);
   const html = path.join(f.dir, `sheet-${OPEN_SECTION}.html`);
+  const png = path.join(f.dir, `sheet-${OPEN_SECTION}.png`);
+  const shownHtml = shown(ctx.project.cwd, html);
+  const skipped = `so ${shown(ctx.project.cwd, png)} (the open states) was not taken`;
+  const st = fs.lstatSync(html, {throwIfNoEntry: false});
+  if (st?.isSymbolicLink())
+    return {
+      problem: `${shownHtml} is a link, and the editor writes nothing through a link, ${skipped}; move the link, then run ${P} show ${slug} --png`,
+    };
+  if (st && !st.isFile())
+    return {
+      problem: `${shownHtml} is ${st.isDirectory() ? 'a folder' : 'not a plain file'}, where the open states page goes, ${skipped}; move it, then run ${P} show ${slug} --png`,
+    };
+  if (st) {
+    // The editor's page carries the stamp of the build it shows.
+    /** @type {boolean} */
+    let mine;
+    try {
+      mine = SHEET_STAMP.test(readRegularFile(html, 'utf8'));
+    } catch {
+      mine = false;
+    }
+    if (!mine)
+      return {
+        problem: `${shownHtml} is a file the editor did not write, and it is left as it is, ${skipped}; move it, then run ${P} show ${slug} --png`,
+      };
+  }
   await renderSheet(ctx, slug, data, {group: OPEN_SECTION});
   stampSheet(html, slug, ctx.project.cwd);
-  return {html, png: path.join(f.dir, `sheet-${OPEN_SECTION}.png`)};
+  return {html, png};
 }
 
 /**
@@ -1064,14 +1093,19 @@ export async function previewAfter(ctx, slug, data, png) {
   const f = themeFiles(ctx.project.cwd, slug);
   /** The pages photographed: the sample page, and with it the open states. */
   const shotPages = [{html: f.preview, png: f.previewPng}];
+  /** Why the open states were not taken, said with the pictures. @type {string | null} */
+  let openProblem = null;
   // Made before the sections are judged, so it is current, never marked.
-  if (png && preview)
-    try {
-      shotPages.push(await openStatesPage(ctx, slug, data));
-    } catch (e) {
+  if (png && preview) {
+    const open = await openStatesPage(ctx, slug, data).catch(e => {
       if (/** @type {any} */ (e)?.lockLost) throw e;
-      // It could not be rendered: the sample page's picture is taken alone.
-    }
+      return {
+        problem: `the open states page could not be made (${e instanceof Error ? e.message.split('\n')[0] : String(e)}), so ${shown(ctx.project.cwd, path.join(f.dir, `sheet-${OPEN_SECTION}.png`))} was not taken`,
+      };
+    });
+    if ('problem' in open) openProblem = open.problem;
+    else shotPages.push(open);
+  }
   // The sheet of every component is made by show only: after a change it
   // says, at its top, that it shows the theme as it was.
   const sheetStale = markSheetStale(f.sheet, slug, ctx.project.cwd);
@@ -1096,7 +1130,8 @@ export async function previewAfter(ctx, slug, data, png) {
   return {
     preview,
     pictures: shots.files,
-    pictureProblem: shots.problem,
+    pictureProblem:
+      [openProblem, shots.problem].filter(Boolean).join('; ') || null,
     notChecked: notChecked(cause),
     ...(sheetStale && !sectionsStale.length
       ? {

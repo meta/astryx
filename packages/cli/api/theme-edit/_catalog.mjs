@@ -373,7 +373,7 @@ export default function Page() {
       if (!c) { c = {name: it.name, list: []}; g.cells.push(c); }
       if (!c.list.some(x => x.label === it.label)) c.list.push(it);
     }
-    body = groups.map(g => h('section', {key: g.name, className: 'cs-group'},
+    body = groups.map(g => h('section', {key: g.name, className: g.name === 'overlays' ? 'cs-group cs-open-group' : 'cs-group'},
       g.name ? h('h2', {className: 'cs-group-name'}, g.name) : null,
       h('div', {className: g.name === 'pages' ? 'cs-pages' : 'cs-sheet'}, g.cells.map(c => h('div', {key: c.name, className: 'cs-cell'},
         h('div', {className: 'cs-name'}, c.name),
@@ -403,6 +403,11 @@ export const SHEET_CSS = [
   '.cs-pages{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;padding:14px}',
   '.cs-cell{border:1px dashed #8885;padding:10px;overflow:hidden;max-height:340px}',
   '.cs-pages .cs-cell{max-height:none}',
+  // An overlay drawn open is shown at the height of what it holds (a date
+  // range's calendar, a command palette), up to the height of the window a
+  // picture is taken in (900px), as a person sees it on a screen.
+  '.cs-open-group .cs-cell{max-height:900px}',
+  '.cs-open-group .cs-cell dialog{max-height:860px!important}',
   '.cs-name{font:600 12px ui-monospace,monospace;opacity:.6;margin-bottom:8px}',
   '.cs-row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start}',
   '.cs-label{font:10px ui-monospace,monospace;opacity:.5}',

@@ -168,7 +168,19 @@ export function demoProps(project, name) {
       props[p] = v;
     }
   const kids = info.props?.children;
-  const slot = kids?.slots?.[0];
+  // A part whose children are required and whose doc suggests none (a
+  // dropdown menu's submenu, whose children are its flyout's rows) gets
+  // three of its parent's item part (DropdownMenuItem), as a group gets its
+  // slot's: drawn open, an empty flyout shows nothing of the theme.
+  const parentItem =
+    kids?.required && !kids.slots?.length && info.subComponentOf
+      ? `${info.subComponentOf}Item`
+      : null;
+  const slot =
+    kids?.slots?.[0] ??
+    (parentItem && project.components[parentItem]?.props?.label
+      ? {__element: parentItem, props: {label: 'Item'}}
+      : undefined);
   if (!('children' in props) && kids) {
     if (slot?.__element && (kids.required || slot.__element.startsWith(name))) {
       if (info.props.value && !('value' in props) && slot.props?.value != null)
