@@ -86,9 +86,13 @@ describe('the command the words point at', () => {
     expect(await names(['validate-integration', '@acme/widgets'])).toEqual([
       'astryx doctor integration validate @acme/widgets',
     ]);
-    expect(await names(['find-icon', 'grid'])).toEqual([
-      'astryx experimental icon grid',
-    ]);
+  });
+
+  it('names no experimental command, only the group in the list of commands', async () => {
+    for (const words of [['find-icon', 'grid'], ['icons']])
+      expect((await names(words)) ?? []).not.toContainEqual(
+        expect.stringMatching(/^astryx experimental /),
+      );
   });
 
   it('reads the next word, else the word itself, as a name another command reads', async () => {

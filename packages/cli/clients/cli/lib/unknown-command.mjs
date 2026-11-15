@@ -52,6 +52,9 @@ function everyCommand(program) {
   /** @param {CommandLike} node @param {string[]} words */
   const walk = (node, words) => {
     for (const child of visible(node)) {
+      // A stable answer names no experimental command: without the opt-in,
+      // the experimental group is the one entry point stable output shows.
+      if (words.length === 0 && child.name() === 'experimental') continue;
       const path = [...words, child.name()];
       all.push({words: path, cmd: child});
       walk(child, path);
@@ -160,8 +163,7 @@ function nearNames(word, names) {
  * (`components Button`), and a group named alone is its list (`themes` is
  * `theme list`); the word is an option commands take (`list components` is
  * `component --list`); the word, or its singular, is a command deeper in
- * the tree (`verify` is `integration verify`, `icons` is `experimental icon
- * --list`), or its hyphenated parts name that command (`validate-integration`
+ * the tree (`verify` is `integration verify`, `themes` is `theme list`), or its hyphenated parts name that command (`validate-integration`
  * is `doctor integration validate`); the next word, else the word itself,
  * is a name another command reads (`info Text` is `component Text`).
  * @param {{word: string, before: string[], after: string[]}} run the word,
@@ -228,8 +230,8 @@ async function pointed({word, before, after: rest}, program, findEntry) {
   const all = everyCommand(program).filter(c => takesWords(c.cmd, rest));
   const pieces = word.toLowerCase().split(/[-_]/).filter(Boolean);
   // A deeper command the word names; for a hyphenated word, a command whose
-  // words hold every part, else a command one part names
-  // (`find-icon` is `experimental icon`).
+  // words hold every part (`verify-integration` is `integration verify`),
+  // else a command one part names (`run-verify` is `integration verify`).
   const nested = [
     ...all.filter(
       c => c.words.length > 1 && spellings(word).includes(c.cmd.name()),
@@ -241,8 +243,8 @@ async function pointed({word, before, after: rest}, program, findEntry) {
       ? all.filter(c => pieces.some(p => spellings(p).includes(c.cmd.name())))
       : []),
   ].filter((c, i, list) => list.findIndex(o => o.cmd === c.cmd) === i);
-  // A plural named alone asks for a list: the command's own list
-  // (`icons` is `experimental icon --list`).
+  // A plural named alone asks for a list: the command's own `--list`, when
+  // it has one.
   const plural = rest.length === 0 && spellings(word).length > 1;
   /** @param {{words: string[], cmd: CommandLike}} c */
   const listing = c =>

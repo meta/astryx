@@ -9,7 +9,6 @@ import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {setResultCoverage} from './coverage.mjs';
 import {SEARCH_DOMAINS} from './_query.mjs';
-import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
 /** @typedef {import('./_lexical.mjs').Candidate} Candidate */
 
@@ -96,18 +95,8 @@ export function toResult(
 }
 
 /**
- * The kinds `search` does not find, by the `--type` word for them, with the
- * command that finds them: icons have their own search, by meaning.
- * @type {Record<string, {kind: string, command: string}>}
- */
-const FOUND_ELSEWHERE = {
-  icon: {kind: 'icons', command: 'experimental icon'},
-};
-
-/**
  * Throws the search argument errors: an empty query, an unknown type, a limit
- * that is not a positive integer. A type `search` does not cover but another
- * command finds names that command with the query.
+ * that is not a positive integer.
  *
  * @param {string} query
  * @param {{type?: string, limit?: number}} options
@@ -124,23 +113,9 @@ export function checkSearchArgs(query, options) {
   }
 
   if (type && !SEARCH_DOMAINS.includes(type)) {
-    const finder =
-      FOUND_ELSEWHERE[String(type).toLowerCase().replace(/s$/, '')];
     throw new AstryxError(
-      finder
-        ? `Unknown --type "${type}": search does not find ${finder.kind}; ${finder.command} does`
-        : `Unknown --type "${type}"`,
-      [
-        ...(finder
-          ? [
-              {
-                name: `astryx ${finder.command} ${quoteCommandArgument(String(query).trim())}`,
-                reason: `finds ${finder.kind}`,
-              },
-            ]
-          : []),
-        ...SEARCH_DOMAINS.map(d => ({name: d, reason: 'valid type'})),
-      ],
+      `Unknown --type "${type}"`,
+      SEARCH_DOMAINS.map(d => ({name: d, reason: 'valid type'})),
       ERROR_CODES.ERR_INVALID_ARGUMENT,
     );
   }

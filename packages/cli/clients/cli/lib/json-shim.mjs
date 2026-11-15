@@ -697,10 +697,12 @@ async function answerStrayOption(err, rejected, message, exitCode) {
   if (!rejected.parent) {
     const {findEntry, firstWord, unknownCommandAnswer} =
       await import('./unknown-command.mjs');
-    // The stray option and its value left out, so the value is not read as
-    // the command (`astryx --format json component Table`).
+    // Only a word before the stray option is read as the command: after it,
+    // the word may be the option's value (`astryx --format text component
+    // Table`), and the unknown option stays the fault.
+    const at = words.indexOf(stray);
+    const first = firstWord(at < 0 ? words : words.slice(0, at), rejected);
     const cleaned = withoutStray(words, stray, rejected.options);
-    const first = firstWord(cleaned, rejected);
     if (
       first &&
       !rejected.commands.some((/** @type {any} */ c) => c.name() === first.word)

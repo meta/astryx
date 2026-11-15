@@ -2,8 +2,8 @@
 
 /**
  * @file A refusal names a run that works: paths given to `doctor` as words,
- * `search --type icon`, `upgrade --list` with `--from`, `template
- * --skeleton` with a path, and an unknown option before an unknown command.
+ * `upgrade --list` with `--from`, `template --skeleton` with a path, and an
+ * unknown option before an unknown command or with a value before a command.
  * Each test runs the named command too.
  */
 
@@ -118,32 +118,6 @@ describe('doctor given paths as words', () => {
     expect(JSON.parse(stdout).error).toBe(
       "unknown subcommand 'doctor integrations'",
     );
-  });
-});
-
-describe('search --type icon', () => {
-  it('names the icon command with the query, and it runs', async () => {
-    const {status, stdout} = await runCli([
-      '--json',
-      'search',
-      'play',
-      'pause',
-      '--type',
-      'icon',
-    ]);
-    expect(status).toBe(1);
-    const envelope = JSON.parse(stdout);
-    expect(envelope.code).toBe('ERR_INVALID_ARGUMENT');
-    expect(envelope.suggestions[0]).toEqual({
-      name: "astryx experimental icon 'play pause'",
-      reason: 'finds icons',
-    });
-
-    const meant = await runCli([
-      '--json',
-      ...words(envelope.suggestions[0].name),
-    ]);
-    expect(meant.status).toBe(0);
   });
 });
 
@@ -262,5 +236,21 @@ describe('an unknown option with a value before a command', () => {
 
     const named = await runCli(words(envelope.suggestions[0].name));
     expect(named.status).toBe(0);
+  });
+});
+
+describe('an unknown option whose value names no option, before a command', () => {
+  it('reports the unknown option, as before', async () => {
+    const {status, stdout} = await runCli([
+      '--json',
+      '--format',
+      'text',
+      'component',
+      'Text',
+    ]);
+    expect(status).toBe(1);
+    const envelope = JSON.parse(stdout);
+    expect(envelope.code).toBe('ERR_INVALID_OPTION');
+    expect(envelope.error).toMatch(/^unknown option '--format'/);
   });
 });
