@@ -151,16 +151,24 @@ export function showcaseItems(project, group) {
             ? {
                 openable: true,
                 // A prop its doc names that opens it opens it; else the
-                // drawing's press does.
-                ...(OPENERS.some(p => info?.props?.[p])
+                // drawing's press does. A part that waits after a keystroke
+                // before it searches (a typeahead's `debounceMs`) waits for
+                // none: the drawing types once and reads the list then.
+                ...(OPENERS.some(p => info?.props?.[p]) ||
+                info?.props?.debounceMs
                   ? {
                       openTree: inParent({
                         __element: name,
                         props: {
                           ...v.props,
-                          [/** @type {string} */ (
-                            OPENERS.find(p => info?.props?.[p])
-                          )]: true,
+                          ...(OPENERS.some(p => info?.props?.[p])
+                            ? {
+                                [/** @type {string} */ (
+                                  OPENERS.find(p => info?.props?.[p])
+                                )]: true,
+                              }
+                            : {}),
+                          ...(info?.props?.debounceMs ? {debounceMs: 0} : {}),
                         },
                       }),
                     }

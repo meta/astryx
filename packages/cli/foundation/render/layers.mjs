@@ -133,7 +133,10 @@ export async function openLayerMarkup(host, flushSync) {
       if (control.getAttribute('aria-expanded') === 'true') break;
     }
     if (control.getAttribute('aria-expanded') !== 'true' && control.tagName === 'INPUT') {
-      control.value = 'a';
+      // Typed as a person types: through the field's own value setter, so
+      // React sees a value it did not set itself and calls the change
+      // handler (a typeahead searches).
+      Object.getOwnPropertyDescriptor(Object.getPrototypeOf(control), 'value')?.set?.call(control, 'a');
       send(control, 'input');
     }
     await tick();

@@ -448,6 +448,33 @@ const layers = [];
   layerPlaceholder(layers.push({element, ifOpen: Boolean(ifOpen)}) - 1);
 
 /**
+ * Run `fn` with a document in place, as a browser page has one, then put
+ * the globals back as they were (none, for a server render). The document
+ * carries the handler property a browser's document has for input events
+ * (`oninput`), which React reads to tell whether fields fire them.
+ * @param {() => Promise<unknown>} fn
+ */
+async function withLoadDocument(fn) {
+  const g = /** @type {any} */ (globalThis);
+  const had = {window: Object.getOwnPropertyDescriptor(g, 'window'), document: Object.getOwnPropertyDescriptor(g, 'document')};
+  try {
+    const {parseHTML} = await import('linkedom');
+    const {window} = parseHTML('<!doctype html><html><head></head><body></body></html>');
+    if (!('oninput' in window.document)) /** @type {any} */ (window.document).oninput = null;
+    g.window = window;
+    g.document = window.document;
+    await fn();
+  } catch {
+    // No client to load (no react-dom): nothing is drawn with it either.
+  } finally {
+    if (had.window) Object.defineProperty(g, 'window', had.window);
+    else delete g.window;
+    if (had.document) Object.defineProperty(g, 'document', had.document);
+    else delete g.document;
+  }
+}
+
+/**
  * Draw each part the page asked to be drawn open, in the layer document
  * (layers.mjs), and put each where its marker is: the part as drawn, then
  * each overlay it shows or a press opens (openLayerMarkup), in place after
@@ -1135,6 +1162,13 @@ function reach(name) {
 try {
   /** @type {any} */
   let mod;
+  // React DOM's client reads what the document supports as it loads (input
+  // events among them). A component that loads it with the page (a toast's
+  // root) would load it with no document, and the drawing could never type
+  // into a field: a typeahead's search would reach no change handler. It is
+  // loaded first, with a document that fires input events as a browser's
+  // does; the page then renders on the server with no document.
+  await withLoadDocument(() => jiti.import('react-dom/client'));
   try {
     reach('importing the page');
     mod = await jiti.import(entry);
