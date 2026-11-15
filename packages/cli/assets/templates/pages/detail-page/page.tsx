@@ -20,6 +20,7 @@ import {Badge} from '@astryxdesign/core/Badge';
 import {Avatar} from '@astryxdesign/core/Avatar';
 import {Button} from '@astryxdesign/core/Button';
 import {useToast} from '@astryxdesign/core/Toast';
+import {rtlStyles} from '@astryxdesign/core/utils';
 import {TabList, Tab, TabMenu} from '@astryxdesign/core/TabList';
 import {Divider} from '@astryxdesign/core/Divider';
 import {Link} from '@astryxdesign/core/Link';
@@ -179,7 +180,12 @@ function PageHeader({
             <VStack gap={0}>
               <Link href="#" color="secondary">
                 <HStack gap={1} vAlign="center">
-                  <Icon icon={ArrowLeftIcon} size="sm" color="inherit" />
+                  <Icon
+                    icon={ArrowLeftIcon}
+                    size="sm"
+                    color="inherit"
+                    xstyle={rtlStyles.mirror}
+                  />
                   All orders
                 </HStack>
               </Link>
