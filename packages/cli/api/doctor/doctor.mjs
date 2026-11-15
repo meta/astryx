@@ -1996,7 +1996,7 @@ function newestReleaseCheck(ctx) {
     return {
       ...base,
       message:
-        'Update check: not run yet, so the newest release is not known here; it runs in the background once a day, after a command.',
+        'Update check: none recorded here, so the newest release is not known. A copy installed for the computer checks in the background once a day, after a command; a copy that a tool runs for you is kept current by that tool.',
     };
   }
   if (
