@@ -939,6 +939,88 @@ describe.each([
         expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
       });
 
+      it('opens nothing for a finger that drifted past the tolerance before the load', async () => {
+        const trigger = renderMenu();
+        const press = finger(trigger);
+        press.down();
+        advance(100);
+        // Past the tolerance on one axis, then back to where it landed.
+        press.moveTo(20 + contextMenu.press.allowableMovement + 0.5, 20);
+        press.moveTo(20, 20);
+        advance(400);
+        await loadLayer();
+        advance(contextMenu.press.menuDisplayMs * 2);
+        expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+        press.up();
+      });
+
+      it('starts the hold of a finger that drifted within the tolerance before the load', async () => {
+        const trigger = renderMenu();
+        const press = finger(trigger);
+        press.down();
+        advance(100);
+        press.moveTo(
+          20 + contextMenu.press.allowableMovement,
+          20 - contextMenu.press.allowableMovement,
+        );
+        advance(400);
+        await loadLayer();
+        advance(contextMenu.press.menuDisplayMs);
+        expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+        press.up();
+      });
+
+      it('opens nothing for a finger whose drift past the tolerance comes only as a pointer move', async () => {
+        // Before the layer loads, Chromium sends a small drift's pointermove
+        // but not its touchmove.
+        const trigger = renderMenu();
+        const press = finger(trigger);
+        press.down();
+        advance(100);
+        const primaryTouch = {
+          pointerType: 'touch',
+          pointerId: 1,
+          isPrimary: true,
+          clientY: 20,
+        };
+        fireEvent.pointerMove(trigger, {
+          ...primaryTouch,
+          clientX: 20 + contextMenu.press.allowableMovement + 0.5,
+        });
+        fireEvent.pointerMove(trigger, {...primaryTouch, clientX: 20});
+        advance(400);
+        await loadLayer();
+        advance(contextMenu.press.menuDisplayMs * 2);
+        expect(HTMLElement.prototype.showPopover).not.toHaveBeenCalled();
+        press.up();
+      });
+
+      it('starts the hold of a finger while a mouse or a second touch pointer moves far before the load', async () => {
+        const trigger = renderMenu();
+        const press = finger(trigger);
+        press.down();
+        advance(100);
+        fireEvent.pointerMove(trigger, {
+          pointerType: 'mouse',
+          pointerId: 2,
+          isPrimary: true,
+          clientX: 90,
+          clientY: 20,
+        });
+        fireEvent.pointerMove(trigger, {
+          pointerType: 'touch',
+          pointerId: 3,
+          isPrimary: false,
+          clientX: 90,
+          clientY: 20,
+        });
+        advance(400);
+        await loadLayer();
+        advance(contextMenu.press.menuDisplayMs);
+        expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+        press.up();
+      });
+
       it('keeps the browser’s own long-press menu from opening it for a finger held through the load', async () => {
         const trigger = renderMenu();
         const press = finger(trigger);

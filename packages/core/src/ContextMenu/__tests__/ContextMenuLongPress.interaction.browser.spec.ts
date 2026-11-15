@@ -408,10 +408,11 @@ async function watchTouchLayer(page: Page): Promise<ChunkResponse> {
 }
 
 /**
- * Waits for the touch layer, which loads after the page's first paint: its
- * chunk's response, then the module itself (an import of the same URL
- * resolves once it and its imports have run), then two frames for the layer
- * to mount. A finger that lands sooner starts its hold only at that mount.
+ * Waits for the touch layer, which loads after the page's first paint. It
+ * waits for the chunk's response, then for the module itself, then two frames
+ * for the layer to mount. An import of the same URL resolves once it and its
+ * imports have run. A finger that lands sooner starts its hold only at that
+ * mount.
  */
 async function waitForTouchLayer(
   page: Page,
@@ -497,6 +498,31 @@ test('a finger that lifts before the touch layer loads makes a plain tap: one cl
   expect(await menuShownAt(page)).toBeNull();
   await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeHidden();
   expect(await clicks()).toBe(1);
+});
+
+test('a finger that drifts past the tolerance before the touch layer loads gets no menu once it loads', async ({
+  page,
+}) => {
+  const releaseLayer = await holdTouchLayer(page);
+  const {driver, center} = await openTouchStory(page, undefined, {
+    waitsForTouchLayer: false,
+  });
+  const finger = await driver.press(center);
+  // Past the tolerance on one axis, then back to where it landed. Before the
+  // layer loads, Chromium sends this drift as a pointermove only.
+  await finger.move({
+    x: center.x + contextMenu.press.allowableMovement + 1,
+    y: center.y,
+  });
+  await finger.move(center);
+  const released = await releaseLayer();
+  await page.waitForFunction(
+    dueAt => performance.now() > dueAt,
+    released + menuDisplayMs + 300,
+  );
+  expect(await menuShownAt(page)).toBeNull();
+  await finger.lift();
+  await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeHidden();
 });
 
 test('a right click opens the menu at once while the touch layer has not loaded', async ({
@@ -696,9 +722,17 @@ test('the menu mounts at the commit, closed and out of the accessibility tree, a
 test('with presentation="popover" a finger keeps today’s long press: the menu at 500 ms, with no growth and no iOS timeline', async ({
   page,
 }) => {
+  const layerRequests: string[] = [];
+  page.on('request', request => {
+    if (TOUCH_LAYER_CHUNK.test(request.url())) {
+      layerRequests.push(request.url());
+    }
+  });
+  // The touch model does not apply, so the touch layer never loads.
   const {driver, trigger, center} = await openTouchStory(
     page,
     'core-contextmenu--touch-long-press-popover',
+    {waitsForTouchLayer: false},
   );
   // A coarse primary pointer: only the caller's choice keeps today's menu.
   expect(
@@ -724,6 +758,10 @@ test('with presentation="popover" a finger keeps today’s long press: the menu 
   expect(after).toBeGreaterThanOrEqual(500);
   expect(after).toBeLessThan(550);
   expect(scaleBeforeOpen).toBe(1);
+  expect(
+    layerRequests,
+    'the popover presentation loaded the touch layer',
+  ).toEqual([]);
 });
 
 test('a finger where the primary pointer is fine keeps today’s long press: the menu at 500 ms, with no growth', async ({
