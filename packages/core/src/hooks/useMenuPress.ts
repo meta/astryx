@@ -154,8 +154,8 @@ let isModelActivation = false;
 /**
  * The item that `element`'s whole row acts through: the direct child of that
  * row that matches `itemSelector`. A control inside the row's content is not
- * that item, and a row that holds other rows (a section around its rows) has
- * no item of its own.
+ * that item. A row that holds other rows, as a section does, has no item of
+ * its own.
  */
 function findRowAction(
   element: Element,
@@ -271,11 +271,12 @@ interface MenuPressConfig extends UseMenuPressInternalOptions {
 /** The options of {@link useMenuPressInternal}: the public ones, and more. */
 export interface UseMenuPressInternalOptions extends UseMenuPressOptions {
   /**
-   * Selector matching a whole row when its item (the `itemSelector` match) is
-   * only a part of it, as the action of a list row with an icon beside it. A
-   * pointer over the rest of that row (its icon, its end content, its padding)
-   * then picks the row's item: the direct child of the row that matches
-   * `itemSelector`. If no direct child matches, the pointer picks no item.
+   * Selector matching a whole row whose item (the `itemSelector` match) is
+   * only a part of it. An example is a list row's action with an icon beside
+   * it. A pointer over the rest of that row (its icon, end content or padding)
+   * then picks the row's item. That item is the direct child of the row that
+   * matches `itemSelector`. If no direct child matches, the pointer picks no
+   * item.
    */
   wholeRowSelector?: string;
 }
