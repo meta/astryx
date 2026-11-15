@@ -501,7 +501,7 @@ export function makeCompiler(project, parts) {
       if (!under || !top) return null;
       return [compositeOver(top, alphaOf(fg), under), under];
     };
-    /** @type {Array<{part: string, mode: string, ratio: number, sample: string, fg: string, fgToken: string | null, textPart: string | null, when: string | null, bgPart: string | null, bg: string, ground: [number, number, number], over: string | null}>} */
+    /** @type {Array<{part: string, mode: string, ratio: number, sample: string, fg: string, fgToken: string | null, textPart: string | null, when: string | null, bgPart: string | null, bg: string, ground: [number, number, number], over: string | null, pair: any}>} */
     const out = [];
     const seen = new Set();
     /** @type {Set<string>} */
@@ -577,7 +577,10 @@ export function makeCompiler(project, parts) {
           baseBeneath,
         );
         if (was && ratio(was[0], was[1]) <= r + 0.05) continue;
-        const key = `${p.text}|${fg}|${bg}|${beneath}|${m}`;
+        // Pairs alike in color are one problem only when they read the same
+        // token: text on another token is another fix, and shows as the
+        // tokens part ways.
+        const key = `${p.text}|${p.fg.tokens[0] ?? ''}|${fg}|${bg}|${beneath}|${m}`;
         if (seen.has(key)) continue;
         seen.add(key);
         out.push({
@@ -611,6 +614,7 @@ export function makeCompiler(project, parts) {
           textPart: p.fg.target ?? null,
           when: /** @type {any} */ (p).when ?? null,
           ground: pair[1],
+          pair: p,
         });
       }
     }

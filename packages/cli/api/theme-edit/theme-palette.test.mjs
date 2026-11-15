@@ -1221,7 +1221,6 @@ describe('color settings, refused well', () => {
   it('suggests the dial for another name, a part route for a part, and the nearest vibrancy', async () => {
     // The value carries over only to a dial that takes it.
     for (const [thing, rest] of [
-      ['Accent', "accent '#64748b'"],
       ['gray', "neutral '#64748b'"],
       ['saturation', 'vibrancy 60'],
       ['destructive', "danger '#64748b'"],
@@ -2102,11 +2101,10 @@ describe('colors10, final-4', () => {
 
 describe('colors11: refusals name a command that works', () => {
   it('reads a dial typed in other letters as the dial', async () => {
-    const r = await refusal(() => themeEditSet('p', 'Font', 'inter', {cwd}));
-    expect(r.message).toContain('The dial for that is font');
-    expect(r.run).toContain(
-      r.run.find(x => / set p font inter$/.test(x)) ?? 'missing',
-    );
+    // One thing-name reader: a dial name in other letters is the dial.
+    const r = await themeEditSet('p', 'Font', 'inter', {cwd});
+    expect(r.data.setting.thing).toBe('font');
+    await themeEditUndo('p', {cwd});
   });
 
   it('splits a font shorthand on a part into commands that work', async () => {

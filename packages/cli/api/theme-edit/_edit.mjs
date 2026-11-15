@@ -508,6 +508,8 @@ async function vetNewLines(e, cwd, typed, like) {
       });
   /** @type {Array<{name: string, reason?: string}>} */
   const out = [];
+  /** Change lines that need the theme made first. @type {Array<{name: string, reason?: string}>} */
+  const later = [];
   const typedKeys = Object.keys(typed).filter(k => typed[k] != null);
   /** Settings whose typed value no reading makes work. @type {Set<string>} */
   const unread = new Set();
@@ -529,6 +531,19 @@ async function vetNewLines(e, cwd, typed, like) {
     }
     const line = x.name.startsWith(prefix) ? read(x.name) : null;
     if (!line) {
+      // A change line for the theme new was refused for (set's own
+      // repair of a value) needs that theme made first: it follows a new
+      // line that makes it, as its next step, or is not offered.
+      const made = /^(?:set|undo) ([a-z0-9-]+)\b/.exec(
+        x.name.startsWith(P) ? x.name.slice(P.length + 1) : '',
+      )?.[1];
+      if (made && !fs.existsSync(themeFiles(cwd, made).settings)) {
+        later.push({
+          ...x,
+          reason: `then this, once a new line above has made ${made}`,
+        });
+        continue;
+      }
       out.push(x);
       continue;
     }
@@ -636,7 +651,10 @@ async function vetNewLines(e, cwd, typed, like) {
   for (const k of unread)
     if (!kept.has(k) && !out.some(y => y.name === `${P} how ${k}`))
       out.push({name: `${P} how ${k}`, reason: 'what it takes'});
-  e.suggestions = out;
+  e.suggestions = [
+    ...out,
+    ...(out.some(y => y.name.startsWith(prefix)) ? later : []),
+  ];
   return e;
 }
 
@@ -3891,6 +3909,14 @@ async function followChangeLine(sub, slug, line, cwd, skip) {
   return followLine(
     line,
     now => {
+      // A step back (`undo <theme>` naming no setting) works only with an
+      // earlier change to go back to.
+      if (sub === 'undo' && now.trim() === `${P} undo ${slug}`)
+        return readHistory(themeFiles(cwd, slug).history).steps.length
+          ? null
+          : new AstryxError(`${slug} has no earlier change to undo`, [
+              {name: `${P} show ${slug}`, reason: 'see what it sets'},
+            ]);
       const read = readSetLine(
         sub === 'undo' ? now.replace(`${P} undo `, `${P} set `) : now,
         slug,
@@ -4377,11 +4403,19 @@ async function change(sub, slug, thing, value, options) {
           `${P} ${sub} ${near.name}${words.length ? ` ${words.join(' ')}` : ''}`,
           options.cwd ?? process.cwd(),
         );
+        // A step back with nothing to go back to is no line to offer: the
+        // theme's show is.
+        const stepless = !words.length && followed.why != null;
         e.suggestions = [
-          {
-            name: followed.line,
-            reason: `do this instead: ${near.name} is a theme here${followed.why ? `, but this still needs a fix: ${followed.why}` : ''}`,
-          },
+          stepless
+            ? {
+                name: `${P} show ${near.name}`,
+                reason: `do this instead: ${near.name} is a theme here, and ${followed.why}`,
+              }
+            : {
+                name: followed.line,
+                reason: `do this instead: ${near.name} is a theme here${followed.why ? `, but this still needs a fix: ${followed.why}` : ''}`,
+              },
           ...(e.suggestions ?? []).filter(
             x => x !== near && x.name !== `${P} show ${near.name}`,
           ),
@@ -7376,11 +7410,19 @@ export async function themeEditUndo(theme, options = {}) {
           `${P} undo ${name}${words.length ? ` ${words.join(' ')}` : ''}`,
           cwd,
         );
+        // A step back with nothing to go back to is no line to offer: the
+        // theme's show is.
+        const stepless = !words.length && followed.why != null;
         e.suggestions = [
-          {
-            name: followed.line,
-            reason: `do this instead: ${name} is a theme here${followed.why ? `, but this still needs a fix: ${followed.why}` : ''}`,
-          },
+          stepless
+            ? {
+                name: `${P} show ${name}`,
+                reason: `do this instead: ${name} is a theme here, and ${followed.why}`,
+              }
+            : {
+                name: followed.line,
+                reason: `do this instead: ${name} is a theme here${followed.why ? `, but this still needs a fix: ${followed.why}` : ''}`,
+              },
           ...(e.suggestions ?? []).filter(x => x !== near),
         ];
       }

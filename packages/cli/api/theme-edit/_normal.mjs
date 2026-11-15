@@ -313,12 +313,10 @@ export function normalizeEntry(thing, value) {
   // A token typed as a var() reference.
   const ref = /^var\(\s*(--[a-z0-9-]+)\s*\)$/i.exec(t);
   if (ref) t = ref[1];
-  // A dial name written in another style (textSize, text_size, "text
-  // size", a dash-like character for its hyphen) is the dial.
-  if (
-    !t.startsWith('-') &&
-    /[_\s\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]|[a-z][A-Z]/.test(t)
-  ) {
+  // A dial name written in another style or letters (textSize,
+  // text_size, "text size", Corners, MODE, a dash-like character for its
+  // hyphen) is the dial: one reading for every command.
+  if (!t.startsWith('-')) {
     const dial = t
       .replace(/[_\s\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]+/g, '-')
       .replace(/([a-z0-9])([A-Z])/g, '$1-$2')

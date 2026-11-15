@@ -1330,8 +1330,13 @@ export function loadTheme(
     : null;
   if (problem)
     throw new AstryxError(
-      fieldFix?.uninstalled
-        ? `themes/${slug}/${slug}.settings.json: base "${data.like}" reads as ${fieldFix.uninstalled}, which this project has not installed. Install it, then set the base again. Nothing was changed.`
+      fieldFix && (fieldFix.uninstalled || fieldFix.readsAs)
+        ? savedFieldText(
+            slug,
+            data,
+            /** @type {'mode' | 'base'} */ (damagedField),
+            fieldFix,
+          )
         : `themes/${slug}/${slug}.settings.json: ${problem}. ${fieldFix ? 'Set it again' : twice ? `Set it to one of its values or undo it, or fix it by hand${recover.text}` : `Fix it by hand${recover.text}`}. Nothing was changed.`,
       fieldFix
         ? fieldFix.run
@@ -1461,7 +1466,9 @@ export function settingsProblem(
   for (const s of data.settings) {
     // A value or scope that is not text is a bad setting `undo` removes;
     // a setting with no name is damage.
-    if (!s || typeof s.thing !== 'string' || !('value' in s))
+    // An entry with no thing is damage no line can name; one with a thing
+    // and no value is a bad value, which `undo` with its thing removes.
+    if (!s || typeof s.thing !== 'string')
       return 'a setting has no thing or value';
     if (removes(skip) && skips(s, skip) && entryDamage(s)) continue;
     if (!['dial', 'token', 'property'].includes(s.source))
@@ -2046,6 +2053,7 @@ export function withoutBadValues(data) {
  * @returns {string | null}
  */
 export function valueProblem(s) {
+  if (!('value' in s)) return `${s.thing} has no value`;
   if (typeof s.value !== 'string')
     return `${s.thing} has a value that is not text (${JSON.stringify(s.value)})`;
   for (const k of ['on', 'when', 'state', 'mode'])
@@ -3553,7 +3561,9 @@ export function describe(s) {
   const where = s.on
     ? ` on ${s.on}${s.only ? ' only' : ''}${s.when ? ` when ${s.when}` : ''}${s.state ? ` :${s.state}` : ''}`
     : ' (whole theme)';
-  return `${s.thing} = ${s.value}${where}${s.mode ? ` [${s.mode} only]` : ''}`;
+  // An entry saved with no value says so, never "undefined".
+  const value = s.value === undefined ? '(no value)' : s.value;
+  return `${s.thing} = ${value}${where}${s.mode ? ` [${s.mode} only]` : ''}`;
 }
 
 /**
@@ -7764,11 +7774,9 @@ export function nonTextMessage(ctx, slug, [name, value, kind = 'value']) {
  */
 export async function contrastProblems(ctx, data, res) {
   const base = await baseResolved(ctx.project, data.like);
-  /** @param {PaintSide} side @param {'fg' | 'bg'} which @param {string} m @param {string} [when] */
-  const override = (side, which, m, when) => {
+  /** A part's own fill setting, or a token it sets that its fill reads. @param {PaintSide} side @param {'bg'} _which @param {string} m @param {string} [when] */
+  const override = (side, _which, m, when) => {
     if (!side.target) return null;
-    const props =
-      which === 'fg' ? ['color'] : ['background', 'background-color'];
     const hit = [...data.settings]
       .reverse()
       .find(
@@ -7777,7 +7785,8 @@ export async function contrastProblems(ctx, data, res) {
           (!x.when || x.when === when) &&
           !x.state &&
           (!x.mode || x.mode === m) &&
-          ((x.source === 'property' && props.includes(x.thing)) ||
+          ((x.source === 'property' &&
+            ['background', 'background-color'].includes(x.thing)) ||
             (x.source === 'token' && side.tokens.includes(x.thing))),
       );
     return hit?.value ?? null;
@@ -7824,32 +7833,92 @@ export async function contrastProblems(ctx, data, res) {
       : own;
   };
   /**
-   * A token set on the part the text sits on, which every part inside it
-   * reads: card text set on the card reaches the card's heading.
-   * @param {TextPair} p @param {string} m
+   * The variant a pair's text is drawn in: its own, or the one variant of
+   * its part that reads its text token on that ground (on the pair's fill,
+   * or on no fill of its own when the text shows over another part), as
+   * `variant:<name>`; null when the pair names none and no one variant is
+   * it.
+   * @param {TextPair} p
+   * @returns {string | null}
    */
-  const tokenAround = (p, m) => {
-    const around = p.bg.target;
-    if (!around || around === p.fg.target || !p.fg.tokens.length) return null;
-    const hit = [...data.settings]
-      .reverse()
-      .find(
+  const pairVariant = p => {
+    const own = /** @type {any} */ (p).when;
+    if (own) return own;
+    const t = p.fg.target;
+    const token = p.fg.tokens[0];
+    if (!t || !token) return null;
+    /** @param {string[]} when */
+    const atRest = when =>
+      when.map(w => /^variant=([\w-]+)$/.exec(w)?.[1]).filter(v => v != null);
+    const reading = new Set(
+      ctx.C.partReads(t, 'text')
+        .filter(r => r.token === token)
+        .flatMap(r => atRest(r.when)),
+    );
+    if (reading.size < 2) return null;
+    const fills = ctx.C.partReads(t, 'background');
+    const filled = new Set(fills.flatMap(r => atRest(r.when)));
+    const onFill =
+      p.bg.target === t
+        ? new Set(
+            fills
+              .filter(r => r.token === p.bg.tokens[0])
+              .flatMap(r => atRest(r.when)),
+          )
+        : null;
+    const hits = [...reading].filter(v =>
+      onFill ? onFill.has(v) : !filled.has(v),
+    );
+    return hits.length === 1 ? `variant:${hits[0]}` : null;
+  };
+  /**
+   * The setting that draws a pair's text in a mode, by CSS's own order: a
+   * `color` the text's part sets wins over a text token it sets, which
+   * wins over that token set on the part the text sits on (every part
+   * inside reads it). Null when no setting does.
+   * @param {TextPair} p @param {string} m
+   * @returns {Setting | null}
+   */
+  const drawnBy = (p, m) => {
+    const when = pairVariant(p);
+    /** @param {(x: Setting) => boolean} test */
+    const latest = test =>
+      [...data.settings]
+        .reverse()
+        .find(
+          x =>
+            !x.state &&
+            (!x.when || x.when === when) &&
+            (!x.mode || x.mode === m) &&
+            test(x),
+        ) ?? null;
+    /** @param {Setting} x @param {string | null} t */
+    const on = (x, t) => t != null && partsOf(ctx, x).includes(t);
+    const own = p.fg.target;
+    const around = p.bg.target !== own ? p.bg.target : null;
+    return (
+      latest(
+        x => x.source === 'property' && x.thing === 'color' && on(x, own),
+      ) ??
+      latest(
+        x =>
+          x.source === 'token' && p.fg.tokens.includes(x.thing) && on(x, own),
+      ) ??
+      latest(
         x =>
           x.source === 'token' &&
           p.fg.tokens.includes(x.thing) &&
-          partsOf(ctx, x).includes(around) &&
-          (!x.when || x.when === /** @type {any} */ (p).when) &&
-          !x.state &&
-          (!x.mode || x.mode === m),
-      );
-    return hit?.value ?? null;
+          on(x, around),
+      )
+    );
   };
   /** @type {(p: TextPair, side: 'fg' | 'bg', m: string) => string | null} */
   const value = (p, side, m) => {
     const s = p[side];
     return (
-      override(s, side, m, /** @type {any} */ (p).when) ??
-      (side === 'fg' ? tokenAround(p, m) : null) ??
+      (side === 'fg'
+        ? (drawnBy(p, m)?.value ?? null)
+        : override(s, side, m, /** @type {any} */ (p).when)) ??
       // The base theme's own part style (neutral's destructive button),
       // which Core's reads do not know.
       ofBase(p, side, m) ??
@@ -7938,6 +8007,44 @@ export async function contrastProblems(ctx, data, res) {
     )
       for (const over of grounds)
         headerPairs.push({...p, text: `${p.text} in the ${HEADER}`, over});
+  // Text written straight in a part takes the part's own `color`: a part
+  // with one set, whose text no census pair draws itself, is measured as
+  // its own text on its own fill.
+  /** @type {TextPair[]} */
+  const ownTextPairs = [];
+  const drawnParts = new Set(
+    census.pairs.map((/** @type {TextPair} */ p) => p.fg.target),
+  );
+  for (const x of data.settings) {
+    if (x.source !== 'property' || x.thing !== 'color' || !x.on || x.state)
+      continue;
+    for (const t of partsOf(ctx, x)) {
+      if (drawnParts.has(t)) continue;
+      // The fill the census saw the part draw (with its default props),
+      // else what it reads at rest, else none: the page shows.
+      const seen = census.pairs.find(
+        (/** @type {TextPair} */ p) => p.bg.target === t,
+      )?.bg;
+      const fill =
+        seen?.tokens[0] ??
+        ctx.C.partReads(t, 'background').find(
+          r => r.when.includes('') && r.props.some(q => /^background/.test(q)),
+        )?.token;
+      ownTextPairs.push(
+        /** @type {any} */ ({
+          text: t,
+          sample: 'text written straight in it',
+          fg: {target: t, tokens: [], raw: null},
+          bg: {
+            target: t,
+            tokens: fill ? [fill] : [],
+            raw: fill ? null : (seen?.raw ?? 'transparent'),
+          },
+          ...(x.when ? {when: x.when} : {}),
+        }),
+      );
+    }
+  }
   const {problems, unchecked} = ctx.C.contrast(
     value,
     baseValue,
@@ -7950,7 +8057,7 @@ export async function contrastProblems(ctx, data, res) {
       page: m =>
         res[/** @type {'light' | 'dark'} */ (m)]['--color-background-body'],
     },
-    [...variantPairs, ...headerPairs],
+    [...variantPairs, ...headerPairs, ...ownTextPairs],
   );
   const slug = data.name;
   const modeFlag = (/** @type {string} */ m) =>
@@ -7963,11 +8070,30 @@ export async function contrastProblems(ctx, data, res) {
       // property that draws it, what it sits on, its variant and mode.
       key: `text|${x.part}|${x.textPart ?? ''}|${x.fgToken ?? ''}|${x.bgPart ?? ''}|${x.when ?? ''}|${x.sample}|${x.mode}`,
       text: `text in ${x.part} ("${x.sample}") is ${x.ratio}:1 in ${x.mode} (${x.fg} on ${x.bgPart ?? 'the page'}'s ${x.bg}${x.over ? ` over ${x.over}` : ''}); text needs 4.5:1`,
-      fix: x.fgToken
-        ? `${P} set ${slug} ${x.fgToken} '${plainOn(x.ground)}'${x.bgPart ? ` --on ${x.bgPart}` : ''}${x.when ? ` --when ${x.when}` : ''}${modeFlag(x.mode)}`
-        : x.textPart
-          ? `${P} set ${slug} color '${plainOn(x.ground)}' --on ${x.textPart}${x.when ? ` --when ${x.when}` : ''}${modeFlag(x.mode)}`
-          : null,
+      // The fix sets what draws the text: the setting that wins in CSS,
+      // where one does, else the text token where the text sits.
+      fix: (() => {
+        const color = `'${plainOn(x.ground)}'`;
+        const pair = /** @type {TextPair} */ (x.pair);
+        const drawn = drawnBy(pair, x.mode);
+        // Scoped to the variant the text is drawn in, so the fix leaves the
+        // part's other variants, on other grounds, as they are.
+        const variant = pairVariant(pair);
+        const when = (/** @type {string | null | undefined} */ w) =>
+          w ? ` --when ${w}` : '';
+        if (drawn) {
+          const onText =
+            drawn.on && partsOf(ctx, drawn).includes(String(x.textPart));
+          return `${P} set ${slug} ${drawn.thing} ${color}${drawn.on ? ` --on ${drawn.on}${drawn.only ? ' --only' : ''}` : ''}${when(drawn.when ?? (onText ? variant : null))}${modeFlag(x.mode)}`;
+        }
+        if (x.fgToken)
+          return x.bgPart && x.bgPart !== x.textPart
+            ? `${P} set ${slug} ${x.fgToken} ${color} --on ${x.bgPart}${when(x.when)}${modeFlag(x.mode)}`
+            : `${P} set ${slug} ${x.fgToken} ${color}${x.textPart ? ` --on ${x.textPart}` : ''}${when(variant)}${modeFlag(x.mode)}`;
+        return x.textPart
+          ? `${P} set ${slug} color ${color} --on ${x.textPart}${when(x.when)}${modeFlag(x.mode)}`
+          : null;
+      })(),
     })),
     ...borderContrastProblems(ctx, data, res, base),
     // Pairs styled for one variant or state are not measured yet.
@@ -8248,6 +8374,25 @@ export function entriesReadable(data) {
 }
 
 /**
+ * What a refusal of a damaged saved mode or base says: the value it reads
+ * as when there is one (installed, or to install first), else that no
+ * reader reads it. One text for show, compile and every change.
+ * @param {string} slug
+ * @param {any} data
+ * @param {'mode' | 'base'} field
+ * @param {ReturnType<typeof savedFieldRepairs>} fix
+ */
+export function savedFieldText(slug, data, field, fix) {
+  const file = `themes/${slug}/${slug}.settings.json`;
+  const saved = field === 'mode' ? data.mode : data.like;
+  return fix.uninstalled
+    ? `${file}: base "${saved}" reads as ${fix.uninstalled}, which this project has not installed. Install it, then set the base again. Nothing was changed.`
+    : fix.readsAs
+      ? `${file}: ${field} "${saved}" reads as ${fix.readsAs}. Set it again, so the file says so. Nothing was changed.`
+      : `${file}: ${field} "${saved}" is no value the editor reads, and a change never drops it. Set it again. Nothing was changed.`;
+}
+
+/**
  * The lines that set a damaged saved mode or base again: the one repair
  * every command gives that damage (show, compile and each change). The
  * value it reads as when there is one, else each value it can be (each
@@ -8258,7 +8403,9 @@ export function entriesReadable(data) {
  * @param {string} cwd
  * @param {string} slug
  * @param {'mode' | 'base'} field
- * @returns {{values: string[], uninstalled: string | null, run: Array<{name: string, reason: string}>}}
+ * @returns {{values: string[], uninstalled: string | null, readsAs: string | null, run: Array<{name: string, reason: string}>}}
+ *   `readsAs`: the one value the saved text reads as (a base in other
+ *   letters or with a typo), which every reader takes
  */
 export function savedFieldRepairs(data, cwd, slug, field) {
   const MODES = ['both', 'light-only', 'dark-only'];
@@ -8284,6 +8431,14 @@ export function savedFieldRepairs(data, cwd, slug, field) {
       !baseInstalled(cwd, values[0])
         ? values[0]
         : null,
+    readsAs:
+      field === 'mode'
+        ? MODES.includes(meant.mode)
+          ? meant.mode
+          : null
+        : LIKE.includes(meant.like)
+          ? meant.like
+          : null,
     run: values.length
       ? values.flatMap(v =>
           field === 'base' && LIKE.includes(v)
@@ -8333,9 +8488,7 @@ export function readFields(data, cwd, fixing, slug) {
     );
     throw Object.assign(
       new AstryxError(
-        fix.uninstalled
-          ? `themes/${slug}/${slug}.settings.json: base "${data.like}" reads as ${fix.uninstalled}, which this project has not installed. Install it, then set the base again. Nothing was changed.`
-          : `themes/${slug}/${slug}.settings.json: ${field === 'mode' ? 'mode' : 'base'} "${field === 'mode' ? data.mode : data.like}" is no value the editor reads, and a change never drops it. Set it again. Nothing was changed.`,
+        savedFieldText(/** @type {string} */ (slug), data, field, fix),
         fix.run,
         ERROR_CODES.ERR_THEME_INVALID,
       ),
@@ -9555,7 +9708,11 @@ export async function commitTheme(
           return null;
         })
       : null;
+  // The settings before the change as the change read them (a base or a
+  // part in other letters, a typo the reader takes), so the check measures
+  // what was there, not the raw file.
   const before = parseSettings(snapBefore);
+  if (before) readAsMeant(before, cwd);
   const liftedBefore = new Set(
     Array.isArray(before?.lifted) ? before.lifted : [],
   );
