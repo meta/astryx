@@ -90,6 +90,8 @@ const LIFT_AT = 0.3;
  * @param {import('./rank.mjs').IdeaKind} kind
  * @param {PageTemplate[]} catalog
  * @param {string} idea
+ * @param {string | null} [unsupported] a page the weights chose that shares no
+ *   word with the idea; the lift may not bring it back
  * @returns {PageTemplate | null}
  */
 function liftFromShell(ranked, kind, catalog, idea, unsupported = null) {
