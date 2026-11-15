@@ -33,6 +33,7 @@ for (const pkg of [
   '@babel/parser',
   '@babel/core',
   'jscodeshift',
+  'postcss',
   'postcss-selector-parser',
 ]) {
   require.resolve(pkg);
@@ -46,6 +47,8 @@ let core;
 let codeshift;
 /** @type {typeof import('postcss-selector-parser') | undefined} */
 let selectors;
+/** @type {typeof import('postcss').default | undefined} */
+let css;
 
 /** @returns {typeof import('@babel/parser')} */
 export const babelParser = () => (parser ??= require('@babel/parser'));
@@ -67,6 +70,16 @@ export const jscodeshift = () => (codeshift ??= require('jscodeshift'));
 /** @returns {typeof import('postcss-selector-parser')} */
 export const selectorParser = () =>
   (selectors ??= require('postcss-selector-parser'));
+
+/**
+ * postcss, for a module every command loads that reads a stylesheet only
+ * now and then (render/embedded-imports.mjs). Its ES module entry hands on
+ * what its CommonJS one exports, so this is the one postcss the modules that
+ * import it get. Not in {@link LAZY_PACKAGES}: those modules import it as
+ * they load.
+ * @returns {typeof import('postcss').default}
+ */
+export const postcss = () => (css ??= require('postcss'));
 
 /**
  * Every package loaded on first use, here and in the ShadCN source variants,

@@ -14,9 +14,8 @@
  */
 
 import * as path from 'node:path';
-import {babelParse as parse} from '../runtime/lazy-dependencies.mjs';
+import {babelParse as parse, postcss} from '../runtime/lazy-dependencies.mjs';
 import {MODULE_EXTENSIONS} from './embedded-files.mjs';
-import postcss from 'postcss';
 import {builtinModules} from 'node:module';
 import {matchPath, pathsFor} from './ts-paths.mjs';
 import {isAssetPath} from './assets.mjs';
@@ -66,7 +65,7 @@ export function cssReferences(css) {
   /** @type {Array<{url: string, line?: number}>} */
   const urls = [];
   try {
-    const root = postcss.parse(css);
+    const root = postcss().parse(css);
     root.walkAtRules(/^import$/i, rule => {
       const m =
         /^\s*(?:url\(\s*(['"]?)([\s\S]*?)\1\s*\)|(['"])([\s\S]*?)\3)/.exec(
