@@ -39,7 +39,9 @@ import {
 } from './_tables.mjs';
 import {
   PALETTE_DIALS,
+  familyRamp,
   isGraySeed,
+  nearestShade,
   paletteDialOf,
   seedOf,
   vibrancyMoves,
@@ -7214,6 +7216,56 @@ export function draftAnswer(ctx, env, question) {
       );
     return !rest.trim();
   };
+  /** Each family's ramp in the theme, read once. @type {Map<string, any>} */
+  const ramps = new Map();
+  /**
+   * A color word's shade in the theme's own family for its hue: grey (and
+   * gray, neutral) the theme's grays, which every theme has; another hue
+   * its palette family when the theme's colors define one; at the stop
+   * nearest the word's sample, in each mode. The sample itself otherwise,
+   * and for a word with a shade before it ("light grey") or a color typed
+   * out.
+   * @param {Clause} c @param {string} chosen
+   * @returns {string}
+   */
+  const themeShade = (c, chosen) => {
+    for (const m of c.text.matchAll(/\b([a-z]+)\b/g)) {
+      const word = m[1];
+      if (!Object.hasOwn(HUES, word) || HUES[word] !== chosen) continue;
+      if (
+        /\b(?:light|pale|dark|deep|bright)\s+$/.test(c.text.slice(0, m.index))
+      )
+        return chosen;
+      const family = /^(gr[ae]y|neutral)$/.test(word) ? 'neutral' : word;
+      if (!ramps.has(family))
+        ramps.set(
+          family,
+          (() => {
+            try {
+              return familyRamp(
+                ctx.project.cwd,
+                env.slug,
+                env.data,
+                /** @type {any} */ (env.base),
+                family,
+              );
+            } catch {
+              return null;
+            }
+          })(),
+        );
+      const ramp = ramps.get(family);
+      if (!ramp) return chosen;
+      const light = nearestShade(ramp.light, chosen);
+      const dark = nearestShade(ramp.dark, chosen);
+      if (light == null || dark == null) return chosen;
+      const [l, d] = [ramp.light[light], ramp.dark[dark]];
+      return String(l).toLowerCase() === String(d).toLowerCase()
+        ? l
+        : `light-dark(${l}, ${d})`;
+    }
+    return chosen;
+  };
   /** A color for the clause, for a fill, a text or a border color. @param {Clause} c @param {'fill' | 'text' | 'border'} use */
   const colorFor = (c, use) => {
     // (A border's color is read as a fill's, but takes its own palette
@@ -7249,13 +7301,13 @@ export function draftAnswer(ctx, env, question) {
         : c.text;
     // A typed color always wins over a color word.
     const own = kind === 'text' ? colorsIn(ownText) : [];
-    if (own.length) return own[0];
+    if (own.length) return themeShade(c, own[0]);
     if (
       kind === 'fill' &&
       c.colors.length &&
       !THEME_COLOR_WORDS.some(([re]) => re.test(c.text))
     )
-      return c.colors[0];
+      return themeShade(c, c.colors[0]);
     for (const [re, fill, text] of THEME_COLOR_WORDS)
       if (re.test(ownText)) return kind === 'fill' ? fill : text;
     // "the color of the text", "the same color as the danger": a theme

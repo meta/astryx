@@ -4,9 +4,11 @@
  * @file How reads a part against the theme: "<part> match the theme" gives
  * the steps show's missed list has for that part (and says so when it has
  * none); a color named like another part's ("grey like the dialogs", "the
- * same grey as the page") is that part's color, read, never changed; and
- * hard, unblurred or flat shadows keep their offsets with no blur. Every
- * line offered is run.
+ * same grey as the page") is that part's color, read, never changed; a
+ * color word is the theme's own shade where the theme has a family for it
+ * (grey: its grays; another hue: a palette family of that name), at the
+ * stop nearest the word's sample, else the sample; and hard, unblurred or
+ * flat shadows keep their offsets with no blur. Every line offered is run.
  */
 
 import * as fs from 'node:fs';
@@ -19,6 +21,9 @@ import {
 } from '../../test-utils/linked-fixture.mjs';
 import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
 import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
+import {familyRamp, nearestShade} from './_palette.mjs';
+import {loadTheme} from './_settings.mjs';
+import {baseResolved, openProject} from './_project.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 
 vi.mock('./_preview.mjs', async importOriginal =>
@@ -118,6 +123,55 @@ describe("a color named like another part's", () => {
       "set ne background-color 'var(--color-background-body)' --on card",
     ]);
     await follow(lines);
+  }, 120_000);
+});
+
+describe("a color word in the theme's own family", () => {
+  /** The shade a theme's family has nearest a sample, as a set value. @param {string} theme @param {string} family @param {string} sample */
+  const shadeOf = async (theme, family, sample) => {
+    const project = await openProject(cwd);
+    const data = loadTheme(cwd, theme);
+    const ramp = /** @type {any} */ (
+      familyRamp(
+        cwd,
+        theme,
+        data,
+        await baseResolved(project, data.like),
+        family,
+      )
+    );
+    const l =
+      ramp.light[/** @type {string} */ (nearestShade(ramp.light, sample))];
+    const d =
+      ramp.dark[/** @type {string} */ (nearestShade(ramp.dark, sample))];
+    return l.toLowerCase() === d.toLowerCase() ? l : `light-dark(${l}, ${d})`;
+  };
+
+  it("grey is the theme's own grays, never the fixed sample", async () => {
+    const line = writes(await how('ne', 'make cards grey'))[0];
+    const shade = await shadeOf('ne', 'neutral', '#9ca3af');
+    expect(line).toBe(`set ne background-color '${shade}' --on card`);
+    expect(line).not.toContain('#9ca3af');
+    await follow([line]);
+  }, 120_000);
+
+  it('a theme with a neutral color of its own: grey is a shade of it', async () => {
+    await themeEditNew('w98', {cwd, like: 'neutral'});
+    await themeEditSet('w98', 'neutral', '#c0c0c0', {cwd});
+    const line = writes(await how('w98', 'make cards grey'))[0];
+    expect(line).toBe(
+      `set w98 background-color '${await shadeOf('w98', 'neutral', '#9ca3af')}' --on card`,
+    );
+    await follow([line]);
+  }, 120_000);
+
+  it('a hue the theme has no family for keeps its sample; a shaded word is the color it names', async () => {
+    expect(writes(await how('ne', 'make the badge blue'))[0]).toBe(
+      "set ne background-color '#2563eb' --on badge",
+    );
+    expect(writes(await how('ne', 'make cards light grey'))[0]).toBe(
+      "set ne background-color '#e5e7eb' --on card",
+    );
   }, 120_000);
 });
 
