@@ -6344,7 +6344,8 @@ export function draftAnswer(ctx, env, question) {
           if (cannotKeep) dr.options = [];
         }
       push({
-        text: `${prior.clause.text}, except ${said.join('; ')}`,
+        // (The whole ask the except belongs to, every clause of it.)
+        text: `${[...new Set(span.map(x => x.clause.text))].join(', and ')}, except ${said.join('; ')}`,
         options: cannotKeep ? [] : [[...priorSteps, ...keeps]],
         sequence: true,
         intent: intentOf(prior.clause, exceptKeep),

@@ -130,6 +130,8 @@ describe('one list grammar', () => {
         const r = await answer(q);
         expect(r.first[0]).toBe('set n corners more');
         expect(has(r.first, '--on button')).toBe(true);
+        // (The change and the one keep for buttons: nothing else.)
+        expect(r.first).toHaveLength(2);
       }
       // The change alone is not offered beside the except.
       const r = await answer('make cards rounder except muted and blue cards');
