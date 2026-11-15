@@ -1,0 +1,187 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+/**
+ * @file A refusal names a run that works: paths given to `doctor` as words,
+ * `search --type icon`, and `upgrade --list` with `--from`. Each test runs
+ * the named command too.
+ */
+
+import {afterEach, describe, expect, it} from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import {runCli} from '../../test-utils/run-cli.mjs';
+
+/** @type {string[]} */
+const made = [];
+afterEach(() => {
+  for (const dir of made.splice(0))
+    fs.rmSync(dir, {recursive: true, force: true});
+});
+
+/** A folder with an app's files in it. */
+function app() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-refusal-'));
+  made.push(dir);
+  fs.writeFileSync(
+    path.join(dir, 'package.json'),
+    '{"name":"app","private":true}\n',
+  );
+  fs.mkdirSync(path.join(dir, 'app', 'portal'), {recursive: true});
+  fs.writeFileSync(
+    path.join(dir, 'app', 'page.tsx'),
+    'export default () => null;\n',
+  );
+  fs.writeFileSync(
+    path.join(dir, 'app', 'portal', 'A.tsx'),
+    'export const A = 1;\n',
+  );
+  fs.writeFileSync(
+    path.join(dir, 'app', 'portal', 'B.tsx'),
+    'export const B = 2;\n',
+  );
+  return dir;
+}
+
+/** @param {string} line `astryx …` @returns {string[]} */
+const words = line => line.split(' ').slice(1);
+
+describe('doctor given paths as words', () => {
+  it('names --built for one path', async () => {
+    const cwd = app();
+    const {status, stdout} = await runCli(
+      ['--json', 'doctor', 'app/page.tsx'],
+      cwd,
+    );
+    expect(status).toBe(1);
+    const envelope = JSON.parse(stdout);
+    expect(envelope.code).toBe('ERR_UNKNOWN_SUBCOMMAND');
+    expect(envelope.error).toBe(
+      'doctor takes no path: app/page.tsx is checked with --built',
+    );
+    expect(envelope.suggestions).toEqual([
+      {name: 'astryx doctor --built app/page.tsx', reason: 'check that path'},
+    ]);
+
+    const meant = await runCli(
+      ['--json', ...words(envelope.suggestions[0].name)],
+      cwd,
+    );
+    expect(JSON.parse(meant.stdout).type).toBe('doctor');
+  });
+
+  it('names the folder that holds several paths', async () => {
+    const cwd = app();
+    const {stdout} = await runCli(
+      [
+        '--json',
+        'doctor',
+        '--built',
+        'app/portal/A.tsx',
+        'app/portal/B.tsx',
+        'app/page.tsx',
+      ],
+      cwd,
+    );
+    const envelope = JSON.parse(stdout);
+    expect(envelope.error).toBe(
+      '--built takes one path, and doctor was given 3: app/portal/A.tsx, app/portal/B.tsx, app/page.tsx',
+    );
+    expect(envelope.suggestions).toEqual([
+      {
+        name: 'astryx doctor --built app',
+        reason: 'the folder that holds them all',
+      },
+    ]);
+
+    const meant = await runCli(
+      ['--json', ...words(envelope.suggestions[0].name)],
+      cwd,
+    );
+    expect(JSON.parse(meant.stdout).type).toBe('doctor');
+  });
+
+  it('still reads a word that is no path as an unknown subcommand', async () => {
+    const {stdout} = await runCli(['--json', 'doctor', 'integrations'], app());
+    expect(JSON.parse(stdout).error).toBe(
+      "unknown subcommand 'doctor integrations'",
+    );
+  });
+});
+
+describe('search --type icon', () => {
+  it('names the icon command with the query, and it runs', async () => {
+    const {status, stdout} = await runCli([
+      '--json',
+      'search',
+      'play',
+      'pause',
+      '--type',
+      'icon',
+    ]);
+    expect(status).toBe(1);
+    const envelope = JSON.parse(stdout);
+    expect(envelope.code).toBe('ERR_INVALID_ARGUMENT');
+    expect(envelope.suggestions[0]).toEqual({
+      name: 'astryx experimental icon play pause',
+      reason: 'finds icons',
+    });
+
+    const meant = await runCli([
+      '--json',
+      ...words(envelope.suggestions[0].name),
+    ]);
+    expect(meant.status).toBe(0);
+  });
+});
+
+describe('upgrade --list with --from', () => {
+  it('names the list and the migration from that version', async () => {
+    const {status, stdout} = await runCli([
+      '--json',
+      'upgrade',
+      '--from',
+      '0.7.5',
+      '--list',
+    ]);
+    expect(status).toBe(1);
+    const envelope = JSON.parse(stdout);
+    expect(envelope.suggestions).toEqual([
+      {name: 'astryx upgrade --list', reason: 'list the codemods'},
+      {
+        name: 'astryx upgrade --from 0.7.5',
+        reason: 'show what a migration from that version changes',
+      },
+    ]);
+
+    const listed = await runCli(['--json', 'upgrade', '--list']);
+    expect(listed.status).toBe(0);
+  });
+});
+
+describe('template --skeleton with a path', () => {
+  it('names the skeleton alone and the scaffold to that path', async () => {
+    const {status, stdout} = await runCli([
+      '--json',
+      'template',
+      'dashboard',
+      'app/x.tsx',
+      '--skeleton',
+    ]);
+    expect(status).toBe(1);
+    const envelope = JSON.parse(stdout);
+    expect(envelope.suggestions).toEqual([
+      {name: 'astryx template dashboard --skeleton', reason: 'print it'},
+      {
+        name: 'astryx template dashboard app/x.tsx',
+        reason: 'scaffold the template there',
+      },
+    ]);
+
+    const skeleton = await runCli([
+      '--json',
+      ...words(envelope.suggestions[0].name),
+    ]);
+    expect(skeleton.status).toBe(0);
+  });
+});

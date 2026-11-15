@@ -740,6 +740,30 @@ export const BUILT_FILE_MAX_MB = 5;
 const BUILT_FILE_MAX_BYTES = BUILT_FILE_MAX_MB * 1024 * 1024;
 
 /**
+ * The path `doctor --built` checks for paths given to `doctor` as words, or
+ * null when one of them names nothing on disk: the path itself when there is
+ * one, else the folder that holds them all. Relative to `cwd`; `.` is `cwd`.
+ * @param {string} cwd
+ * @param {string[]} paths
+ * @returns {string | null}
+ */
+export function builtTargetOf(cwd, paths) {
+  const resolved = paths.map(p => path.resolve(cwd, p));
+  if (resolved.length === 0 || !resolved.every(p => fs.existsSync(p)))
+    return null;
+  if (paths.length === 1) return paths[0];
+  const folders = resolved.map(p =>
+    fs.statSync(p).isDirectory() ? p : path.dirname(p),
+  );
+  let shared = folders[0];
+  while (
+    !folders.every(f => f === shared || f.startsWith(`${shared}${path.sep}`))
+  )
+    shared = path.dirname(shared);
+  return path.relative(cwd, shared) || '.';
+}
+
+/**
  * The absolute path `doctor --built` checks, or null when it does not exist.
  * @param {string} cwd
  * @param {string} target

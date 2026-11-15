@@ -70,7 +70,21 @@ export async function upgrade(options = {}, {cwd = process.cwd()} = {}) {
       const msg = `\`--list\` cannot be combined with ${ignored.join(', ')}: it lists available codemods and does not run a migration.`;
       logger.error(msg);
       logger.log('Aborted\n');
-      throw new AstryxError(msg, undefined, ERROR_CODES.ERR_INVALID_ARGUMENT);
+      throw new AstryxError(
+        msg,
+        [
+          {name: 'astryx upgrade --list', reason: 'list the codemods'},
+          ...(options.from
+            ? [
+                {
+                  name: `astryx upgrade --from ${options.from}`,
+                  reason: 'show what a migration from that version changes',
+                },
+              ]
+            : []),
+        ],
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
     }
   }
 
