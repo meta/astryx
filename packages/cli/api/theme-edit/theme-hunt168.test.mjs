@@ -213,6 +213,33 @@ describe('problems a change makes', () => {
   );
 
   it(
+    'a change that only moves a ratio makes no new problem',
+    async () => {
+      await cli([
+        ...ED,
+        'set',
+        't',
+        'background-color',
+        '#FFE600',
+        '--on',
+        'card',
+      ]);
+      const r = await cli([
+        ...ED,
+        'set',
+        't',
+        'background-color',
+        '#FFEE00',
+        '--on',
+        'card',
+      ]);
+      expect(r.data.problems.length).toBeGreaterThan(0);
+      expect(r.data.newProblems).toEqual([]);
+    },
+    T,
+  );
+
+  it(
     'a theme with none lists none, and its JSON list is empty',
     async () => {
       expect(await text([...ED, 'show', 't'])).not.toContain('openProblems');

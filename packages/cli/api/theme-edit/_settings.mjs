@@ -7757,9 +7757,12 @@ export async function contrastProblems(ctx, data, res) {
   const modeFlag = (/** @type {string} */ m) =>
     modesOf(data).length > 1 ? ` --mode ${m}` : '';
   /** @type {(text: string) => ThemeProblem} */
-  const plain = text => ({text, fix: null});
+  const plain = text => ({text, fix: null, key: text});
   return [
     ...problems.map(x => ({
+      // What the problem is, whatever its ratio: the text, the token or
+      // property that draws it, what it sits on, its variant and mode.
+      key: `text|${x.part}|${x.textPart ?? ''}|${x.fgToken ?? ''}|${x.bgPart ?? ''}|${x.when ?? ''}|${x.sample}|${x.mode}`,
       text: `text in ${x.part} ("${x.sample}") is ${x.ratio}:1 in ${x.mode} (${x.fg} on ${x.bgPart ?? 'the page'}'s ${x.bg}${x.over ? ` over ${x.over}` : ''}); text needs 4.5:1`,
       fix: x.fgToken
         ? `${P} set ${slug} ${x.fgToken} '${plainOn(x.ground)}'${x.bgPart ? ` --on ${x.bgPart}` : ''}${x.when ? ` --when ${x.when}` : ''}${modeFlag(x.mode)}`
@@ -7808,8 +7811,10 @@ export async function contrastProblems(ctx, data, res) {
 
 /**
  * One problem the theme has, with the command that fixes it, or null when
- * no one command does.
- * @typedef {{text: string, fix: string | null}} ThemeProblem
+ * no one command does. `key` names the problem whatever its ratio (what
+ * is drawn, on what, in which variant and mode), so a change that only
+ * moves a ratio makes no new problem.
+ * @typedef {{text: string, fix: string | null, key: string}} ThemeProblem
  */
 
 /**
@@ -7878,9 +7883,9 @@ function borderContrastProblems(ctx, data, res, base) {
   };
   /** @type {Map<string, ThemeProblem>} */
   const out = new Map();
-  /** @param {string} text @param {string | null} fix */
-  const add = (text, fix) => {
-    if (!out.has(text)) out.set(text, {text, fix});
+  /** @param {string} key @param {string} text @param {string | null} fix */
+  const add = (key, text, fix) => {
+    if (!out.has(key)) out.set(key, {text, fix, key});
   };
   /** The border a setting draws: a border or an outline. @param {string} thing */
   const edge = thing => thing.replace(/-color$/, '');
@@ -7928,6 +7933,7 @@ function borderContrastProblems(ctx, data, res, base) {
         if (now != null && now < 3 && (was == null || was > now)) {
           const color = fixOn(page, page);
           add(
+            `border|${x.thing}|${mode}`,
             `the border ${x.thing} (${inMode(res[mode][x.thing], mode, res[mode])}) is ${now.toFixed(2)}:1 on the page in ${mode} (${page}); a border needs 3:1 to show as an edge`,
             color
               ? `${P} set ${data.name} ${x.thing} '${color}'${modeFlag(mode)}`
@@ -7986,6 +7992,7 @@ function borderContrastProblems(ctx, data, res, base) {
         if (now != null && now < 3 && (was == null || was > now)) {
           const color = fixOn(ground || page, page);
           add(
+            `border|${x.thing}|${t}|${mode}`,
             `the border on ${t} (${border}) is ${now.toFixed(2)}:1 on its ${ground && ground !== page ? `background ${ground}` : `page ${page}`} in ${mode}; a border needs 3:1 to show as an edge`,
             color
               ? `${P} set ${data.name} ${/-color$/.test(x.thing) ? x.thing : `${x.thing.replace(/^(border|outline).*$/, '$1')}-color`} '${color}' --on ${t}${modeFlag(mode)}`
@@ -9574,10 +9581,10 @@ export async function commitTheme(
     const had =
       before && resBefore
         ? new Set(
-            (await contrastProblems(ctx, before, resBefore)).map(x => x.text),
+            (await contrastProblems(ctx, before, resBefore)).map(x => x.key),
           )
         : new Set();
-    newProblems = problemList.filter(x => !had.has(x.text));
+    newProblems = problemList.filter(x => !had.has(x.key));
   } catch (e) {
     ctx.unchecked ??= `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
   }

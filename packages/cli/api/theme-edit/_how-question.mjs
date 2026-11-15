@@ -6065,8 +6065,6 @@ export function draftAnswer(ctx, env, question) {
       clauseNow && !clauseNow.except && d1.options.some(o => o.length)
         ? unreadWords(clauseNow, d1.options)
         : [];
-    if (process.env.HO_UNREAD && unread.length)
-      console.error('UNREAD', unread.join(','), '|', clauseNow?.text);
     const d0 = unread.length
       ? {
           ...d1,
