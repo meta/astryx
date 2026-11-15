@@ -127,9 +127,11 @@ layer:
 A React portal changes DOM placement. It is not itself a top-layer host and
 cannot use `z-index` to outrank a native modal dialog.
 
-A layer whose anchor sits in a closed `<dialog>` that renders opens after the
-next commit (a dialog shown in that commit's effects is open by then); one
-whose dialog is not rendered waits until it renders.
+A layer whose anchor sits in a closed `<dialog>` that renders opens at once
+when a press opens it, and otherwise after the next commit (a dialog shown in
+that commit's effects is open by then); one whose dialog is not rendered waits
+until it renders. Focus containment counts the focusable content of a closed
+`<dialog>` that renders.
 
 `useLayer` keeps a context layer at its JSX position when that position is safe.
 When parsing, interactive-content, or inline-formatting constraints make that
