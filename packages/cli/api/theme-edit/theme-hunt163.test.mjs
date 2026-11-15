@@ -137,7 +137,13 @@ describe('a plain theme that gives null', () => {
           "tokens: {'--color-accent': null} as any",
           'tokens.--color-accent',
           '--color-accent: null;',
-          "a browser keeps that as the token's value, not the base theme's, so a property that reads --color-accent acts as if it were not set",
+          "a browser keeps that as the token's value, not the base theme's, so a property that reads --color-accent gets the word null: most act as if they were not set",
+        ],
+        [
+          "tokens: {'--font-family-body': null} as any",
+          'tokens.--font-family-body',
+          '--font-family-body: null;',
+          "a font family reads it as a font no system has, so its text shows in the browser's default font",
         ],
       ]) {
         plain(fields);

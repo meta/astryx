@@ -173,7 +173,22 @@ describe('pseudo-elements', () => {
       [':where(::after)', 'puts ::after inside :where()'],
       [':not(::before)', '(the browser drops it)'],
       [':has(::before)', '(the browser drops it)'],
-      ['::highlight(x):hover', 'which takes only :window-inactive after it'],
+      ['::highlight(x):hover', 'which takes no pseudo-class after it'],
+      // Browsers take :window-inactive after ::selection only.
+      [
+        '::highlight(x):window-inactive',
+        'which takes no pseudo-class after it',
+      ],
+      ['::target-text:window-inactive', 'which takes no pseudo-class after it'],
+      [
+        '::spelling-error:window-inactive',
+        'which takes no pseudo-class after it',
+      ],
+      [
+        '::grammar-error:window-inactive',
+        'which takes no pseudo-class after it',
+      ],
+      ['::search-text:window-inactive', 'which takes only :current after it'],
       ['::befor', 'did you mean ::before?'],
     ])
       expect(partKeyProblem(key, {}, 'style'), key).toContain(why);

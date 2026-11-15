@@ -125,8 +125,9 @@ const textOf = (key, node) =>
  * What may follow a pseudo-element in its compound selector, as CSS
  * Pseudo-Elements 4 defines it, for the pseudo-elements that take anything:
  * an element-backed one stands for a real element, so any pseudo-class and a
- * further pseudo-element may follow it; a highlight takes :window-inactive;
- * a scroll marker takes :target-current. Any other pseudo-element ends its
+ * further pseudo-element may follow it; ::selection takes :window-inactive
+ * (browsers take it after no other highlight); ::search-text takes
+ * :current; a scroll marker takes :target-current. Any other pseudo-element ends its
  * selector (a vendor one, or one that takes arguments such as `::part()`, is
  * left to the browser).
  * @type {Record<string, {classes: true | string[], elements: boolean}>}
@@ -135,22 +136,19 @@ const AFTER_PSEUDO_ELEMENT = {
   'file-selector-button': {classes: true, elements: true},
   'details-content': {classes: true, elements: true},
   selection: {classes: ['window-inactive'], elements: false},
-  'target-text': {classes: ['window-inactive'], elements: false},
-  'spelling-error': {classes: ['window-inactive'], elements: false},
-  'grammar-error': {classes: ['window-inactive'], elements: false},
-  'search-text': {classes: ['current', 'window-inactive'], elements: false},
+  'search-text': {classes: ['current'], elements: false},
   'scroll-marker': {classes: ['target-current'], elements: false},
   'scroll-marker-group': {classes: true, elements: false},
 };
 
 /**
  * What may follow a functional pseudo-element, by name: a custom highlight
- * (`::highlight(x)`) takes :window-inactive, as the other highlights do. Any
- * other functional one (`::part()`, `::slotted()`) is left to the browser.
+ * (`::highlight(x)`) takes no pseudo-class. Any other functional one
+ * (`::part()`, `::slotted()`) is left to the browser.
  * @type {Record<string, {classes: true | string[], elements: boolean}>}
  */
 const AFTER_FUNCTIONAL_PSEUDO_ELEMENT = {
-  highlight: {classes: ['window-inactive'], elements: false},
+  highlight: {classes: [], elements: false},
 };
 
 /** @type {Set<string> | null} */
