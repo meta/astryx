@@ -19,6 +19,7 @@ import {
   findHookDoc,
   getAllHookNames,
 } from './hook-discovery.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 const REPO = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -46,9 +47,7 @@ describe('discoverHooks (real core)', () => {
       expect(cats.length).toBeGreaterThan(1);
       if (cats.includes('Other')) expect(cats[cats.length - 1]).toBe('Other');
       const nonOther = cats.filter(c => c !== 'Other');
-      expect([...nonOther].sort((a, b) => a.localeCompare(b))).toEqual(
-        nonOther,
-      );
+      expect([...nonOther].sort((a, b) => compareText(a, b))).toEqual(nonOther);
       for (const members of Object.values(hooks)) {
         expect([...members].sort()).toEqual(members);
       }
