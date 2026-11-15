@@ -721,9 +721,17 @@ test('the menu mounts at the commit, closed and out of the accessibility tree, a
 test('with presentation="popover" a finger keeps today’s long press: the menu at 500 ms, with no growth and no iOS timeline', async ({
   page,
 }) => {
+  const layerRequests: string[] = [];
+  page.on('request', request => {
+    if (TOUCH_LAYER_CHUNK.test(request.url())) {
+      layerRequests.push(request.url());
+    }
+  });
+  // The touch model does not apply, so the touch layer never loads.
   const {driver, trigger, center} = await openTouchStory(
     page,
     'core-contextmenu--touch-long-press-popover',
+    {waitsForTouchLayer: false},
   );
   // A coarse primary pointer: only the caller's choice keeps today's menu.
   expect(
@@ -749,6 +757,10 @@ test('with presentation="popover" a finger keeps today’s long press: the menu 
   expect(after).toBeGreaterThanOrEqual(500);
   expect(after).toBeLessThan(550);
   expect(scaleBeforeOpen).toBe(1);
+  expect(
+    layerRequests,
+    'the popover presentation loaded the touch layer',
+  ).toEqual([]);
 });
 
 test('a finger where the primary pointer is fine keeps today’s long press: the menu at 500 ms, with no growth', async ({
