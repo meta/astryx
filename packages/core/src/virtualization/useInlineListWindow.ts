@@ -80,14 +80,12 @@ interface InlinePending {
   snapshot: InlineListWindowGeometry;
   to: number;
 }
+// The items the window last planned for, and an anchor scroll still to land.
+// A scroll changes none of it, so a scroll sets no state.
 interface InlineTracking {
   source: InlineListWindowGeometrySource;
-  snapshot: InlineListWindowGeometry;
   keys: ReadonlyArray<ListWindowKey>;
   offsets: ReadonlyArray<number>;
-  firstVisibleIndex: number;
-  /** The scrolled part of the first visible item, as a fraction of it. */
-  fraction: number;
   pending: InlinePending | undefined;
 }
 
@@ -158,26 +156,43 @@ export function useInlineListWindow({
   const hasItemChange =
     last !== undefined &&
     (!hasSameValues(last.keys, keys) || !hasSameValues(last.offsets, offsets));
-  const anchorScroll =
-    canWindow && isMeasured && last !== undefined && hasItemChange
-      ? reconcileListAnchor({
-          previousKeys: last.keys,
-          keys,
-          keyIndices,
-          firstVisibleIndex: last.firstVisibleIndex,
-          offset: last.fraction,
-          offsets,
-          rowHeight: 0,
-          viewportHeight: viewportSize,
-          startOffset: 0,
-        })
-      : undefined;
   const pending = tracking?.pending;
   const isAwaitingAnchor =
     tracking?.source === geometry &&
     pending !== undefined &&
     pending.snapshot.scrollLeft === snapshot.scrollLeft &&
     (pending.to !== snapshot.scrollLeft || pending.snapshot === snapshot);
+  // The first visible item before the change, read from the previous items
+  // at the scroll position the window shows.
+  const previousRange =
+    canWindow && isMeasured && last !== undefined && hasItemChange
+      ? calculateVariableListRange({
+          offsets: last.offsets,
+          viewportSize,
+          scrollOffset: isAwaitingAnchor
+            ? pending.to
+            : (snapshot.scrollLeft ?? 0),
+          isMeasured,
+          overscan,
+        })
+      : undefined;
+  let anchorScroll: number | undefined;
+  if (previousRange !== undefined && last !== undefined) {
+    const firstSize =
+      last.offsets[previousRange.firstVisibleIndex + 1] -
+      last.offsets[previousRange.firstVisibleIndex];
+    anchorScroll = reconcileListAnchor({
+      previousKeys: last.keys,
+      keys,
+      keyIndices,
+      firstVisibleIndex: previousRange.firstVisibleIndex,
+      offset: firstSize > 0 ? previousRange.offset / firstSize : 0,
+      offsets,
+      rowHeight: 0,
+      viewportHeight: viewportSize,
+      startOffset: 0,
+    });
+  }
   const pendingScroll =
     anchorScroll ?? (isAwaitingAnchor ? pending.to : undefined);
   const range = canWindow
@@ -191,31 +206,23 @@ export function useInlineListWindow({
         overscan,
       })
     : undefined;
-  // The last window feeds the anchor, so it lives in state. Immutable inputs
-  // limit this update to one extra render.
+  // The planned items feed the anchor, so they live in state. Only a change
+  // of items, of source or of the pending anchor updates it: a scroll does
+  // not, so a scroll renders the window once.
   if (range !== undefined && isMeasured) {
+    const nextPending =
+      anchorScroll !== undefined
+        ? {snapshot, to: anchorScroll}
+        : isAwaitingAnchor
+          ? pending
+          : undefined;
     if (
       tracking === undefined ||
       tracking.source !== geometry ||
-      tracking.snapshot !== snapshot ||
-      hasItemChange
+      hasItemChange ||
+      tracking.pending !== nextPending
     ) {
-      const firstSize =
-        offsets[range.firstVisibleIndex + 1] - offsets[range.firstVisibleIndex];
-      setTracking({
-        source: geometry,
-        snapshot,
-        keys,
-        offsets,
-        firstVisibleIndex: range.firstVisibleIndex,
-        fraction: firstSize > 0 ? range.offset / firstSize : 0,
-        pending:
-          anchorScroll !== undefined
-            ? {snapshot, to: anchorScroll}
-            : isAwaitingAnchor
-              ? pending
-              : undefined,
-      });
+      setTracking({source: geometry, keys, offsets, pending: nextPending});
     }
   } else if (tracking !== undefined && !canWindow) {
     setTracking(undefined);

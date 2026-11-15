@@ -727,6 +727,28 @@ describe('column range changes', () => {
     expect([...new Set(built)].sort()).toEqual([...entering].sort());
     expect(built).toHaveLength(entering.length * ROW_COUNT);
   });
+
+  it('renders the column window once for a scroll inside the mounted range', async () => {
+    const viewport = controlledViewport();
+    let renders = 0;
+    // The header row's transform runs once each time the column window
+    // renders the table.
+    const recorder: TablePlugin<Item> = {
+      transformHeaderRow: props => {
+        renders++;
+        return props;
+      },
+    };
+    const {container} = render(<Fixture extraPlugins={{recorder}} />);
+    await settle();
+    await viewport.scrollTo(205);
+    const before = mountedKeys(container);
+    renders = 0;
+    // 90px more stays inside the same columns: none enters or leaves.
+    await viewport.scrollTo(295);
+    expect(mountedKeys(container)).toEqual(before);
+    expect(renders).toBe(1);
+  });
 });
 
 describe('pinning a mounted column', () => {
