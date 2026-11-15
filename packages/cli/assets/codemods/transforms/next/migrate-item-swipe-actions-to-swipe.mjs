@@ -16,12 +16,12 @@
  * instead. Where it cannot move the options, `createSwipe` stays on the row
  * with a TODO. Each entry
  * with no `id` takes one from its static label, then its handler's name, then
- * its side and place with a TODO. A conditional's two branches key their
- * swipes alike exactly where the deprecated props did. An id a branch sets
- * stays, so only the places with no id decide. Where the keys could match,
- * those places share one id. Where no ids are sure to keep the keys so, as
- * with one entry against none on a side, the props stay, with a TODO. Rows
- * with the same options in one place share one definition. A
+ * its side and place with a TODO. A conditional migrates only when the
+ * codemod can read every id in both branches. Its two swipes must then key
+ * alike exactly where the deprecated props did. Where those keys match, the
+ * places with no id share one id. Otherwise the props stay, with a TODO, as
+ * with an entry that spreads, or one entry against none on a side. Rows with
+ * the same options in one place share one definition. A
  * `swipeBehavior={B}` joins the options; a static `'reveal'`, the default, is
  * dropped. On a row that already sets `swipe`, the deprecated props do
  * nothing, so they are removed, and so is a lone `swipeBehavior`. The
@@ -82,11 +82,10 @@ const BRANCH_NAME_COMMENT =
 const BRANCH_KEY_COMMENT =
   ' TODO(astryx upgrade): swipeActions and swipeBehavior are deprecated ' +
   '(DEP-0017). A row keys its actions by their ids, and an open row closes ' +
-  'when the key changes. Here an action with no id faces no action, an ' +
-  'empty id, or an id that is not a string literal in the other branch. No ' +
-  "ids can be sure to keep this condition's two keys equal, or apart, as " +
-  'they are now. So it was left unchanged: migrate it by hand (AST-057 ' +
-  'DEC-10). ';
+  'when the key changes. This codemod migrates a condition only when it can ' +
+  'read every id in both branches. The two keys must then stay equal, or ' +
+  'apart, as they are now. It could not prove that here, so it left this ' +
+  'unchanged: migrate it by hand (AST-057 DEC-10). ';
 const PLACE_COMMENT =
   ' TODO(astryx upgrade): define this swipe once, at module scope or in ' +
   'useMemo, and read the row from the itemKey that onActivate receives ' +
@@ -461,28 +460,60 @@ function sideEntries(sides, name) {
 }
 
 /**
- * What a row's key reads from an entry: `none` with no `id`, the text of a
- * string literal, or `unknown` for any other value. A nullish `id` stays as
- * written and keys as ''.
+ * The id an entry gives when the codemod can read it: the entry's `id` text,
+ * or '' with no `id`. Undefined when it cannot be sure: an entry with a
+ * spread, a computed key, a method or accessor, or two `id`s. So is one whose
+ * `id` is not a non-empty string literal.
  * @param {any} entry
- * @returns {{kind: 'none'}
- *   | {kind: 'literal', text: string}
- *   | {kind: 'unknown'}}
+ * @returns {string | undefined}
  */
-function keyedId(entry) {
-  const id = idPropertyOf(entry);
-  if (id == null) {
-    return {kind: 'none'};
+function readableId(entry) {
+  let id = '';
+  let ids = 0;
+  for (const property of entry.properties) {
+    const key = keyOf(property);
+    if (key == null || property.kind === 'get' || property.kind === 'set') {
+      return undefined;
+    }
+    if (key === 'id') {
+      ids++;
+      id = staticString(property.value) ?? '';
+      if (ids > 1 || id === '') {
+        return undefined;
+      }
+    }
   }
-  if (isNullish(id.value)) {
-    return {kind: 'literal', text: ''};
-  }
-  const text = staticString(id.value);
-  return text == null ? {kind: 'unknown'} : {kind: 'literal', text};
+  return id;
 }
 
 /**
- * The string literal ids of both branches.
+ * The key a row compares when its swipe changes, as `idsKeyOf` in
+ * `SwipeActionsLayer.tsx` builds it. Item renders that layer for the
+ * deprecated props too, with their `leading` and `trailing`, or `[]`. Each
+ * entry gives its id, or '' with none, and each side joins them. `assigned`
+ * gives the ids a plan writes. Undefined when an entry's id is unreadable
+ * (`readableId`).
+ * @param {Array<[string, any[]]>} sides @param {Map<any, string>} [assigned]
+ * @returns {string | undefined}
+ */
+function branchKey(sides, assigned = new Map()) {
+  const parts = [];
+  for (const side of ['leading', 'trailing']) {
+    const ids = [];
+    for (const entry of sideEntries(sides, side)) {
+      const id = assigned.get(entry) ?? readableId(entry);
+      if (id === undefined) {
+        return undefined;
+      }
+      ids.push(id);
+    }
+    parts.push(ids.join('\u0000'));
+  }
+  return parts.join('\u0001');
+}
+
+/**
+ * The ids the entries of both branches set.
  * @param {Array<{sides: Array<[string, any[]]>}>} objects
  */
 function literalIds(objects) {
@@ -490,9 +521,9 @@ function literalIds(objects) {
   for (const {sides} of objects) {
     for (const [, entries] of sides) {
       for (const entry of entries) {
-        const id = keyedId(entry);
-        if (id.kind === 'literal') {
-          ids.add(id.text);
+        const id = readableId(entry);
+        if (id) {
+          ids.add(id);
         }
       }
     }
@@ -501,67 +532,10 @@ function literalIds(objects) {
 }
 
 /**
- * How a conditional's two branches take ids, so that a row keys their swipes
- * alike exactly where it keyed the deprecated props alike. Item renders the
- * same layer for those props, whose `idsKeyOf` joins each side's ids, an
- * entry with none as ''. An id a branch sets stays as written, so a place
- * where both branches set one compares as before, whatever the values. Only
- * the places with no id decide. The keys differ for sure when two string
- * literals at one place differ, or an entry with no id faces a string
- * literal. So does a side with one entry more in one branch, unless the
- * other side is empty and that entry has no id. Then `apart`: each branch
- * takes its own ids, and none matches a string literal in the other.
- * Otherwise `shared`: each place with no id in both branches takes one id in
- * both. Null when the keys could match and an entry with no id faces no
- * entry, '' or an id that is not a string literal. No ids are sure to keep
- * the keys as they were then.
- * @param {Array<{sides: Array<[string, any[]]>}>} objects
- * @returns {'apart' | 'shared' | null}
- */
-function branchIds(objects) {
-  const [first, second] = objects;
-  let apart = false;
-  let unsure = false;
-  for (const side of ['leading', 'trailing']) {
-    const entries = sideEntries(first.sides, side);
-    const others = sideEntries(second.sides, side);
-    if (entries.length !== others.length) {
-      const lone =
-        entries.length + others.length === 1
-          ? keyedId([...entries, ...others][0])
-          : null;
-      if (lone == null || (lone.kind === 'literal' && lone.text !== '')) {
-        apart = true;
-      } else if (lone.kind === 'none') {
-        unsure = true;
-      }
-      continue;
-    }
-    entries.forEach((entry, index) => {
-      const id = keyedId(entry);
-      const other = keyedId(others[index]);
-      if (id.kind !== 'none' && other.kind !== 'none') {
-        apart ||=
-          id.kind === 'literal' &&
-          other.kind === 'literal' &&
-          id.text !== other.text;
-        return;
-      }
-      const facing = id.kind === 'none' ? other : id;
-      if (facing.kind === 'literal' && facing.text !== '') {
-        apart = true;
-      } else if (facing.kind !== 'none') {
-        unsure = true;
-      }
-    });
-  }
-  return apart ? 'apart' : unsure ? null : 'shared';
-}
-
-/**
  * The ids a conditional's two branches share at each place with no id in
- * both (`branchIds`). It is their label's when the labels give the same one,
- * else their handler's, else their side and place.
+ * both, where a side has as many entries in both. It is their label's when
+ * the labels give the same one, else their handler's, else their side and
+ * place.
  * @param {Array<{sides: Array<[string, any[]]>}>} objects
  * @param {Set<string>} reserved
  * @returns {Map<any, {id: string, positional: boolean}>}
@@ -696,20 +670,28 @@ function entryIds(j, sides) {
 }
 
 /**
- * The ids each branch of a conditional takes (`branchIds`), planned before
- * any is written. No planned id matches a string literal id in either
- * branch. Null when the props must stay.
+ * The ids each branch of a conditional takes, planned before any is written.
+ * A condition migrates only when the codemod can read every id in both
+ * branches. The planned ids must then keep the two keys alike exactly where
+ * the deprecated props did (`branchKey`). That check is the only gate. Where
+ * the keys match, the places with no id share ids. Else each branch takes its
+ * own, and none matches an id either branch sets. Null when the check fails.
  * @param {Array<{sides: Array<[string, any[]]>}>} objects
  * @returns {IdPlan[] | null}
  */
 function branchPlans(objects) {
-  const way = branchIds(objects);
-  if (way == null) {
+  const before = objects.map(({sides}) => branchKey(sides));
+  if (before.some(key => key === undefined)) {
     return null;
   }
+  const alike = before[0] === before[1];
   const reserved = literalIds(objects);
-  const shared = way === 'shared' ? sharedIds(objects, reserved) : new Map();
-  return objects.map(({sides}) => planIds(sides, shared, reserved));
+  const shared = alike ? sharedIds(objects, reserved) : new Map();
+  const plans = objects.map(({sides}) => planIds(sides, shared, reserved));
+  const after = objects.map(({sides}, index) =>
+    branchKey(sides, new Map(plans[index].assigned)),
+  );
+  return (after[0] === after[1]) === alike ? plans : null;
 }
 
 /**

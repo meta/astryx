@@ -319,9 +319,7 @@ const a = <ListItem label="A" swipeActions={isUnread ? {leading: [{label: 'Read'
     const output = flat(raw);
     expect(output).toContain('swipeActions={isUnread ?');
     expect(output).not.toContain('createSwipe');
-    expect(
-      output.split("can be sure to keep this condition's two keys"),
-    ).toHaveLength(2);
+    expect(output.split('equal, or apart, as they are now.')).toHaveLength(2);
     await expectStable(raw);
   });
 
@@ -339,21 +337,16 @@ const a = <ListItem label="A" swipeActions={isUnread ? {leading: [{id: 'read', l
     await expectStable(raw);
   });
 
-  it('shares the places with no id when the branches set ids it cannot compare, such as a name against a string literal: those ids stay as written, so they key as before', async () => {
+  it('keeps the props, with a TODO, when a branch sets an id it cannot read, such as a name, even against the same string literal', async () => {
     const raw =
       await applyTransform(`import {ListItem} from '@astryxdesign/core/List';
 import {READ_ID} from './ids';
 import {archive, markRead, remove} from './actions';
 const a = <ListItem label="A" swipeActions={isUnread ? {leading: [{id: READ_ID, label: 'Read', onActivate: markRead}], trailing: [{label: 'Delete', onActivate: remove}]} : {leading: [{id: 'read', label: 'Read', onActivate: markRead}], trailing: [{label: 'Archive', onActivate: archive}]}} />;`);
-    const keys = await swipeKeys(raw);
-    expect(keys).toEqual(['<READ_ID>\u0001trailing-0', 'read\u0001trailing-0']);
     const output = flat(raw);
-    expect(output).toContain(
-      'Give it the same id at the same side and place in both branches of the condition.',
-    );
-    expect(output).not.toContain(
-      "can be sure to keep this condition's two keys",
-    );
+    expect(output).toContain('swipeActions={isUnread ?');
+    expect(output).not.toContain('createSwipe');
+    expect(output.split('equal, or apart, as they are now.')).toHaveLength(2);
     await expectStable(raw);
   });
 
@@ -366,17 +359,30 @@ const a = <ListItem label="A" swipeActions={isPinned ? {trailing: [{id: DELETE_I
     const output = flat(raw);
     expect(output).toContain('swipeActions={isPinned ?');
     expect(output).not.toContain('createSwipe');
-    expect(
-      output.split("can be sure to keep this condition's two keys"),
-    ).toHaveLength(2);
+    expect(output.split('equal, or apart, as they are now.')).toHaveLength(2);
     await expectStable(raw);
   });
 
-  it('keys the two swipes of a condition alike exactly where the deprecated props did, for every value an imported id may take, or keeps the props with a TODO', async () => {
+  it('keeps the props, with a TODO, when an entry spreads a shared action, whose id it cannot see', async () => {
+    const raw =
+      await applyTransform(`import {ListItem} from '@astryxdesign/core/List';
+import {deleteAction, remove} from './actions';
+const a = <ListItem label="A" swipeActions={isPinned ? {trailing: [{...deleteAction, label: 'Delete'}]} : {trailing: [{label: 'Delete', onActivate: remove}]}} />;`);
+    const output = flat(raw);
+    expect(output).toContain('swipeActions={isPinned ?');
+    expect(output).not.toContain('createSwipe');
+    expect(output.split('equal, or apart, as they are now.')).toHaveLength(2);
+    await expectStable(raw);
+  });
+
+  it('migrates a condition only when it can read every id and its two swipes key alike exactly where the deprecated props did, else keeps the props with a TODO, for small shapes of every entry kind', async () => {
     const jscodeshift = (await import('jscodeshift')).default;
     const j = jscodeshift.withParser('tsx');
     const sides = ['leading', 'trailing'];
-    const todo = "can be sure to keep this condition's two keys";
+    const todo = 'equal, or apart, as they are now.';
+    // An entry's id is a string literal ('id') or none, which the codemod can
+    // read. Or it is unreadable: an imported name, a spread or a computed key.
+    const unreadable = ['name', 'spread', 'computed'];
     // Every list of up to `most` entries, each of one of `kinds`.
     const lists = (kinds, most) => {
       let level = [[]];
@@ -389,78 +395,69 @@ const a = <ListItem label="A" swipeActions={isPinned ? {trailing: [{id: DELETE_I
     };
     const shapesOf = pairsOfLists =>
       pairsOfLists.map(([leading, trailing]) => ({leading, trailing}));
-    // An entry's id is a string literal ('id'), none, or an imported name
-    // whose value the codemod cannot see ('name'). Up to two entries a side
-    // with the first two; with a name too, up to one a side or two on one.
-    const twoKinds = shapesOf(
+    // Readable entries only: up to two a side.
+    const readable = shapesOf(
       lists(['id', 'none'], 2).flatMap(leading =>
         lists(['id', 'none'], 2).map(trailing => [leading, trailing]),
       ),
     );
-    const three = ['id', 'none', 'name'];
-    const threeKinds = shapesOf([
-      ...lists(three, 1).flatMap(leading =>
-        lists(three, 1).map(trailing => [leading, trailing]),
-      ),
-      ...lists(three, 2)
-        .filter(list => list.length === 2)
-        .flatMap(list => [
-          [list, []],
-          [[], list],
-        ]),
+    // Every kind: up to one a side, or two on one side with one unreadable.
+    const one = lists(['id', 'none', ...unreadable], 1);
+    const mixed = unreadable.flatMap(kind =>
+      ['id', 'none'].flatMap(other => [
+        [kind, other],
+        [other, kind],
+      ]),
+    );
+    const every = shapesOf([
+      ...one.flatMap(leading => one.map(trailing => [leading, trailing])),
+      ...mixed.flatMap(list => [
+        [list, []],
+        [[], list],
+      ]),
     ]);
     const pairs = new Map();
-    for (const set of [twoKinds, threeKinds]) {
+    for (const set of [readable, every]) {
       for (const first of set) {
         for (const second of set) {
           pairs.set(JSON.stringify([first, second]), [first, second]);
         }
       }
     }
-    const nameOf = (branch, side, index) =>
-      `${branch}_${side[0].toUpperCase()}${index}`;
-    const entry = (branch, side, kind, index) =>
-      kind === 'id'
-        ? `{id: '${side[0]}${index}', label: 'Act', onActivate: f}`
-        : kind === 'name'
-          ? `{id: ${nameOf(branch, side, index)}, label: 'Act', onActivate: f}`
-          : `{label: '${side} ${index}', onActivate: f}`;
-    const literal = (shape, branch) =>
+    const entry = (side, kind, index) =>
+      ({
+        id: `{id: '${side[0]}${index}', label: 'Act', onActivate: f}`,
+        none: `{label: '${side} ${index}', onActivate: f}`,
+        name: `{id: SHARED_ID, label: '${side} ${index}', onActivate: f}`,
+        spread: `{...shared, label: '${side} ${index}'}`,
+        computed: `{[KEY]: 'x', label: '${side} ${index}', onActivate: f}`,
+      })[kind];
+    const literal = shape =>
       `{${sides
         .filter(side => shape[side].length > 0)
         .map(
           side =>
             `${side}: [${shape[side]
-              .map((kind, index) => entry(branch, side, kind, index))
+              .map((kind, index) => entry(side, kind, index))
               .join(', ')}]`,
         )
         .join(', ')}}`;
     const source = value => `import {ListItem} from '@astryxdesign/core/List';
-import {f} from './actions';
-import {A_L0, A_L1, A_T0, A_T1, B_L0, B_L1, B_T0, B_T1} from './ids';
+import {f, shared} from './actions';
+import {KEY, SHARED_ID} from './ids';
 const a = <ListItem label="A" swipeActions={${value}} />;`;
-    // What the deprecated props key at each place: '' with no id, the
-    // literal, or the name's value.
-    const termsOf = (shape, branch) =>
-      sides.map(side =>
-        shape[side].map((kind, index) =>
-          kind === 'id'
-            ? {literal: `${side[0]}${index}`}
-            : kind === 'name'
-              ? {name: nameOf(branch, side, index)}
-              : {literal: ''},
-        ),
-      );
-    const keyOf = (terms, values) =>
-      terms
+    // The key the swipe layer compares for the deprecated props (`idsKeyOf`
+    // in `SwipeActionsLayer.tsx`): each entry's id, or '' with none.
+    const deprecatedKey = shape =>
+      sides
         .map(side =>
-          side
-            .map(term => ('name' in term ? values[term.name] : term.literal))
+          shape[side]
+            .map((kind, index) => (kind === 'id' ? `${side[0]}${index}` : ''))
             .join('\u0000'),
         )
         .join('\u0001');
     const keyName = property => property.key?.name ?? property.key?.value;
-    // The ids of each swipe the output defines, by name, as terms.
+    // The ids of each swipe the output defines, by name and side.
     const definitions = output => {
       const found = new Map();
       j(output)
@@ -473,39 +470,19 @@ const a = <ListItem label="A" swipeActions={${value}} />;`;
               (
                 options.properties.find(p => keyName(p) === side)?.value
                   ?.elements ?? []
-              ).map(element => {
-                const id = element.properties.find(
-                  p => keyName(p) === 'id',
-                ).value;
-                return id.type === 'Identifier'
-                  ? {name: id.name}
-                  : {literal: id.value};
-              }),
+              ).map(
+                element =>
+                  element.properties.find(p => keyName(p) === 'id').value.value,
+              ),
             ),
           );
         });
       return found;
     };
-    // Every way to give the names values. Each takes '', a literal in the
-    // input or output, or a fresh value. That covers every equality the
-    // keys can test.
-    function* assignments(names, candidates) {
-      const values = {};
-      function* from(index) {
-        if (index === names.length) {
-          yield values;
-          return;
-        }
-        for (const candidate of candidates) {
-          values[names[index]] = candidate;
-          yield* from(index + 1);
-        }
-      }
-      yield* from(0);
-    }
+    const keyOfIds = ids => ids.map(side => side.join('\u0000')).join('\u0001');
     const alone = new Map();
-    const ownTerms = async (shape, branch) => {
-      const text = literal(shape, branch);
+    const ownIds = async shape => {
+      const text = literal(shape);
       if (!alone.has(text)) {
         const output = await applyTransform(source(text));
         const name = output.match(/swipe=\{(\w+)\}/)?.[1];
@@ -515,82 +492,42 @@ const a = <ListItem label="A" swipeActions={${value}} />;`;
     };
     const failures = [];
     for (const [first, second] of pairs.values()) {
-      const value = `c ? ${literal(first, 'A')} : ${literal(second, 'B')}`;
+      const value = `c ? ${literal(first)} : ${literal(second)}`;
       const raw = await applyTransform(source(value));
       if ((await applyTransform(raw)) !== raw) {
         failures.push(`${value}: a second run changes the output`);
         continue;
       }
-      const before = [termsOf(first, 'A'), termsOf(second, 'B')];
-      const names = before
-        .flat(2)
-        .filter(term => 'name' in term)
-        .map(term => term.name);
-      const literals = new Set(
-        before
-          .flat(2)
-          .filter(term => 'literal' in term)
-          .map(term => term.literal),
+      const kept =
+        raw.includes(`swipeActions={${value}}`) &&
+        raw.split(todo).length === 2 &&
+        !raw.includes('createSwipe');
+      const hidden = [first, second].some(shape =>
+        sides.some(side => shape[side].some(kind => unreadable.includes(kind))),
       );
-      const migrated = raw.match(/swipe=\{c \? (\w+) : (\w+)\}/);
-      let after = null;
-      if (migrated != null) {
-        const found = definitions(raw);
-        after = [found.get(migrated[1]), found.get(migrated[2])];
-        for (const term of after.flat(2)) {
-          if ('literal' in term) {
-            literals.add(term.literal);
-          }
-        }
-      }
-      const candidates = [
-        ...literals,
-        ...names.map((_, index) => `fresh-${index}`),
-      ];
-      let couldMatch = false;
-      let keptKeys = true;
-      for (const values of assignments(names, candidates)) {
-        const alike = keyOf(before[0], values) === keyOf(before[1], values);
-        couldMatch ||= alike;
-        if (
-          after != null &&
-          (keyOf(after[0], values) === keyOf(after[1], values)) !== alike
-        ) {
-          keptKeys = false;
-        }
-      }
-      // The props stay only where an entry with no id faces no entry or a
-      // name, and the keys could match.
-      const facesUnknown = sides.some(side => {
-        const [a, b] = [first[side], second[side]];
-        if (a.length !== b.length) {
-          return a.length + b.length === 1 && [...a, ...b][0] === 'none';
-        }
-        return a.some(
-          (kind, index) => [kind, b[index]].sort().join() === 'name,none',
-        );
-      });
-      if (couldMatch && facesUnknown) {
-        if (
-          !raw.includes(`swipeActions={${value}}`) ||
-          raw.split(todo).length !== 2
-        ) {
+      const alike = deprecatedKey(first) === deprecatedKey(second);
+      const counted = sides.every(
+        side => first[side].length === second[side].length,
+      );
+      if (hidden || (alike && !counted)) {
+        if (!kept) {
           failures.push(`${value}: expected the props kept with one TODO`);
         }
         continue;
       }
-      if (after == null || raw.includes(todo)) {
+      const names = raw.match(/swipe=\{c \? (\w+) : (\w+)\}/);
+      if (names == null || raw.includes(todo)) {
         failures.push(`${value}: expected the condition migrated`);
         continue;
       }
-      if (!keptKeys) {
-        failures.push(`${value}: the keys compare otherwise than before`);
+      const found = definitions(raw);
+      const [ids, otherIds] = [found.get(names[1]), found.get(names[2])];
+      if ((keyOfIds(ids) === keyOfIds(otherIds)) !== alike) {
+        failures.push(`${value}: keys ${alike ? 'apart' : 'alike'} after`);
       } else if (
-        !couldMatch &&
-        (JSON.stringify(after[0]) !==
-          JSON.stringify(await ownTerms(first, 'A')) ||
-          JSON.stringify(after[1]) !==
-            JSON.stringify(await ownTerms(second, 'B')))
+        !alike &&
+        (JSON.stringify(ids) !== JSON.stringify(await ownIds(first)) ||
+          JSON.stringify(otherIds) !== JSON.stringify(await ownIds(second)))
       ) {
         failures.push(`${value}: expected each branch its own ids`);
       }
@@ -599,7 +536,7 @@ const a = <ListItem label="A" swipeActions={${value}} />;`;
       pairs: pairs.size,
       count: failures.length,
       first: failures.slice(0, 5),
-    }).toEqual({pairs: 3268, count: 0, first: []});
+    }).toEqual({pairs: 5920, count: 0, first: []});
   }, 300_000);
 
   it('hoists each object of a conditional value, leaving the condition on the row', async () => {
