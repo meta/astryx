@@ -8,8 +8,10 @@
  * server markup holds none of them. Drawn again with React DOM in the small
  * document charts draw in (charts.mjs), with the few browser calls a layer
  * makes standing in, an overlay the page shows open mounts; a popup that a
- * press opens (a menu's button, a selector's field) or a typed letter opens
- * (a typeahead) is opened in turn, and each one's markup is kept.
+ * press opens (a menu's button, a selector's field, a submenu's row), a
+ * typed letter opens (a typeahead) or a right click opens (a context menu) is
+ * opened in turn, and each one's markup is kept. The document answers as a
+ * desktop window with a mouse does.
  *
  * A page can also ask for one part to be drawn open in its own place (the
  * theme sheet does, for its overlays section): it writes the marker
@@ -47,6 +49,11 @@ export async function layerDocument() {
   proto.getClientRects = function () {
     return [{...rect, right: 1, bottom: 1, width: 1, height: 1}];
   };
+  // The box a layer opens at (a context menu opens at the pointer, measured
+  // from it).
+  proto.getBoundingClientRect ??= function () {
+    return {...rect, right: 1, bottom: 1, width: 1, height: 1};
+  };
   proto.showPopover = function () {
     this.__astryxPopoverOpen = true;
   };
@@ -57,6 +64,28 @@ export async function layerDocument() {
     this.__astryxPopoverOpen = !this.__astryxPopoverOpen;
   };
   proto.getAnimations = () => [];
+  // A dialog shown open, as a browser marks one.
+  const dialog = g.window.HTMLDialogElement?.prototype;
+  if (dialog) {
+    dialog.show ??= function () {
+      this.setAttribute('open', '');
+    };
+    dialog.showModal ??= dialog.show;
+    dialog.close ??= function () {
+      this.removeAttribute('open');
+    };
+  }
+  // The window a picture is taken in: a desktop's, with a fine pointer that
+  // hovers. A part that asks about the pointer (a submenu flies out beside a
+  // mouse and drills in under a finger) draws as it does there.
+  g.window.matchMedia = g.matchMedia = (/** @type {string} */ query) => ({
+    matches: desktopMatches(query),
+    media: query,
+    addEventListener() {},
+    removeEventListener() {},
+    addListener() {},
+    removeListener() {},
+  });
   // A field a component focuses or selects in (a typeahead's text).
   for (const name of ['HTMLInputElement', 'HTMLTextAreaElement']) {
     const field = g.window[name]?.prototype;
@@ -86,6 +115,9 @@ export async function layerDocument() {
     'Element',
     'HTMLElement',
     'HTMLInputElement',
+    'HTMLSelectElement',
+    'HTMLTextAreaElement',
+    'HTMLIFrameElement',
     'Event',
     'CustomEvent',
     'KeyboardEvent',
@@ -94,6 +126,9 @@ export async function layerDocument() {
   ]) {
     if (g.window[name]) g[name] ??= g.window[name];
   }
+  // A class a component checks against that this document never makes (a
+  // shadow root): nothing in it is one.
+  for (const name of ['ShadowRoot']) g[name] ??= g.window[name] ?? class {};
   for (const name of ['MutationObserver', 'IntersectionObserver']) {
     g[name] ??= class {
       observe() {}
@@ -107,28 +142,51 @@ export async function layerDocument() {
   }
 }
 
+/** The pointer of the window a picture is taken in. */
+const DESKTOP_POINTER = Object.freeze({
+  pointer: 'fine',
+  'any-pointer': 'fine',
+  hover: 'hover',
+  'any-hover': 'hover',
+});
+
+/**
+ * Whether a media query matches in a desktop window: a query about the
+ * pointer is answered as for a mouse; any other feature matches, as in the
+ * chart document (no motion).
+ * @param {string} query
+ * @returns {boolean}
+ */
+export function desktopMatches(query) {
+  return String(query)
+    .split(',')
+    .some(part => {
+      const all = [
+        ...part.matchAll(/\(\s*([a-z-]+)\s*(?::\s*([^)]*?))?\s*\)/g),
+      ].every(([, name, value]) => {
+        const want = /** @type {Record<string, string>} */ (DESKTOP_POINTER)[
+          name
+        ];
+        return want == null || value == null || value.trim() === want;
+      });
+      return /^\s*not\s/.test(part) ? !all : all;
+    });
+}
+
 /**
  * The markup of each overlay the drawn page shows open, then of each popup
- * its controls open: a press on each collapsed control that opens one, and a
- * typed letter in each combobox field that a press leaves closed. Each
- * overlay is kept once, as it was when it opened.
+ * its controls open: a press on each collapsed control that opens one, then
+ * on each one an opened overlay holds (a submenu's row), and a typed letter
+ * in each combobox field that a press leaves closed. A drawing that opened
+ * nothing and holds a layer is right-clicked (a context menu). Each overlay
+ * is kept once, as it was when it opened.
  * @param {any} host the element the page was drawn in
  * @param {(fn: () => void) => void} flushSync
  * @returns {Promise<string[]>}
  */
 export async function openLayerMarkup(host, flushSync) {
   const g = /** @type {any} */ (globalThis);
-  // React finishes an update in tasks of its own: a layer opens in one,
-  // then reads its anchor and renders again in the next. A timer alone can
-  // fire before them on a busy machine, and a read then holds a layer
-  // between two renders. So after a timer each read waits, one immediate at
-  // a time, until no immediate is left queued (React queues its tasks so),
-  // which costs nothing on a settled page.
-  const tick = async () => {
-    await new Promise(resolve => setTimeout(resolve, 0));
-    for (let i = 0; i < SETTLE_TURNS && queued > 0; i++)
-      await new Promise(resolve => nativeImmediate(resolve));
-  };
+  const tick = settled;
   /** @type {Set<string>} */
   const seen = new Set();
   /** @type {string[]} */
@@ -157,17 +215,38 @@ export async function openLayerMarkup(host, flushSync) {
   };
   await tick();
   keep();
-  const controls = [
-    ...host.querySelectorAll(
-      '[aria-haspopup][aria-expanded="false"], [role="combobox"][aria-expanded="false"]',
-    ),
-  ];
-  for (const control of controls) {
+  const CLOSED =
+    '[aria-haspopup][aria-expanded="false"], [role="combobox"][aria-expanded="false"]';
+  /** Each control pressed once. @type {Set<any>} */
+  const pressed = new Set();
+  // The part's own controls first, then each one an opened overlay holds (a
+  // menu's submenu row), pressed while the overlay that holds it is open.
+  /** @type {any[]} */
+  const queue = [...host.querySelectorAll(CLOSED)];
+  let nested = 0;
+  while (queue.length) {
+    const control = queue.shift();
+    if (pressed.has(control) || !control.isConnected) continue;
+    pressed.add(control);
+    // A press outside an open auto popover closes it, as a browser's light
+    // dismiss does: a part shows the popup its last control opened (a date
+    // and time field's time list, not its calendar too).
+    for (const layer of g.document.querySelectorAll(
+      '[data-astryx-layer-root][popover="auto"]',
+    ))
+      if (layer.__astryxPopoverOpen === true && !layer.contains(control)) {
+        layer.hidePopover();
+        for (const type of ['beforetoggle', 'toggle'])
+          send(layer, type, {oldState: 'open', newState: 'closed'});
+      }
     // A press, up to the event that opens it: a control that opens on
     // pointer down would close again on the click that follows.
     for (const type of [
       'pointerdown',
       'mousedown',
+      // A press focuses what it presses (a time field lists its times as it
+      // takes focus).
+      'focusin',
       'pointerup',
       'mouseup',
       'click',
@@ -175,6 +254,8 @@ export async function openLayerMarkup(host, flushSync) {
       send(control, type, {button: 0, pointerType: 'mouse', detail: 1});
       if (control.getAttribute('aria-expanded') === 'true') break;
     }
+    // A popup that shows itself once its layer mounts says so a task later.
+    await tick();
     if (
       control.getAttribute('aria-expanded') !== 'true' &&
       control.tagName === 'INPUT'
@@ -190,9 +271,48 @@ export async function openLayerMarkup(host, flushSync) {
     }
     await tick();
     keep();
+    if (control.getAttribute('aria-expanded') === 'true')
+      for (const layer of g.document.querySelectorAll(
+        '[data-astryx-layer-root]',
+      ))
+        if (layer.__astryxPopoverOpen === true) {
+          const inside = [...layer.querySelectorAll(CLOSED)].filter(
+            (/** @type {any} */ c) => !pressed.has(c),
+          );
+          nested += inside.length;
+          if (nested <= MOST_NESTED) queue.unshift(...inside);
+        }
+  }
+  // A part that opened nothing on a press and holds a layer (a context
+  // menu's area) is right-clicked on its innermost first element, so the
+  // event passes every element around it, as a person's right click does.
+  let target = host.firstElementChild;
+  while (target?.firstElementChild) target = target.firstElementChild;
+  if (!out.length && target && host.querySelector('template')) {
+    send(target, 'contextmenu', {button: 2, clientX: 1, clientY: 1});
+    await tick();
+    keep();
   }
   return out;
 }
+
+/**
+ * Wait until React has run the tasks it queued. React finishes an update in
+ * tasks of its own: a layer opens in one, then reads its anchor and renders
+ * again in the next. A timer alone can fire before them on a busy machine,
+ * and a read then holds a layer between two renders. So after a timer this
+ * waits, one immediate at a time, until no immediate is left queued (React
+ * queues its tasks so), which costs nothing on a settled page.
+ * @returns {Promise<void>}
+ */
+export async function settled() {
+  await new Promise(resolve => setTimeout(resolve, 0));
+  for (let i = 0; i < SETTLE_TURNS && queued > 0; i++)
+    await new Promise(resolve => nativeImmediate(resolve));
+}
+
+/** The most controls inside opened overlays one drawing presses, so menus nested deep stop there. */
+const MOST_NESTED = 24;
 
 /** The most turns a read waits for the queued immediates to run. */
 const SETTLE_TURNS = 50;

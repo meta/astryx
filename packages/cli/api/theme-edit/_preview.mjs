@@ -28,6 +28,8 @@ import {
   bindingFrom,
   SAMPLE_SEARCH_ITEMS,
   SAMPLE_SOURCE,
+  OPEN_SCENES,
+  sampleControls,
 } from './_catalog.mjs';
 import {
   catalogVariants,
@@ -191,6 +193,30 @@ export function showcaseItems(project, group) {
             : {}),
       }),
     );
+  }
+  // The overlays section also shows overlays in deeper states (a submenu, a
+  // form in a popover), and the sample page's controls in each state a
+  // person puts them in. A scene a Core without one of its parts cannot
+  // draw is left out.
+  if (!group || group === 'overlays') {
+    for (const scene of OPEN_SCENES)
+      if ([...elementNames(scene.tree)].every(n => importPathOf(project, n)))
+        items.push({
+          ...scene,
+          // A cell of its own: a deeper state is as tall as the overlay.
+          name: `${scene.name} ${scene.label}`,
+          group: 'overlays',
+          ...(scene.openable ? {onlyOpen: true} : {}),
+        });
+    for (const c of sampleControls())
+      if ([...elementNames(c.tree)].every(n => importPathOf(project, n)))
+        items.push({
+          group: 'overlays',
+          name: [...elementNames(c.tree)].at(-1) ?? '',
+          label: c.label,
+          tree: c.tree,
+          states: true,
+        });
   }
   items.push({
     group: 'pages',
@@ -1290,6 +1316,10 @@ function componentsPage(project, {theme = null, C}) {
     .items.filter(
       it =>
         it.group !== 'pages' &&
+        // The sheet's own deeper overlays and drawn states: the app's page
+        // opens and hovers its parts live.
+        !it.states &&
+        Boolean(project.components[it.name]) &&
         !PAGE_SKIP.has(it.name) &&
         !project.components[it.name]?.overlay,
     )

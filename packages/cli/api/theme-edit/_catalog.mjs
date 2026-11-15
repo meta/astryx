@@ -16,7 +16,7 @@
 
 /**
  * @typedef {{__element: string, props?: Record<string, unknown>, children?: unknown}} Tree
- * @typedef {{name: string, label: string, tree: unknown, group?: string, open?: boolean, openable?: boolean, onlyOpen?: boolean, openTree?: unknown, strip?: boolean, anchored?: boolean}} CatalogItem
+ * @typedef {{name: string, label: string, tree: unknown, group?: string, open?: boolean, openable?: boolean, onlyOpen?: boolean, openTree?: unknown, strip?: boolean, anchored?: boolean, states?: boolean}} CatalogItem
  *   `open`: drawn open in a document after the server render (a popover,
  *   tooltip or menu, which Core places only once mounted: layers.mjs);
  *   `openable`: also shown open in the overlays section when it holds an
@@ -25,7 +25,9 @@
  *   as shown open, when a prop its doc names opens it (a dropdown's
  *   `isMenuOpen`); `strip`: on the sample page, drawn open in the strip of
  *   overlays below it; `anchored`: an overlay placed beside its trigger (it
- *   takes a placement), small, shown before the panels over the page
+ *   takes a placement), small, shown before the panels over the page;
+ *   `states`: drawn at rest, hovered, focused from the keyboard and pressed
+ *   (a control of the sample page), when it holds a control to focus
  */
 
 import {LAYER_GLOBAL} from '../../foundation/render/layers.mjs';
@@ -173,6 +175,130 @@ export const SAMPLE_PAGE = h(
     ),
   ),
 );
+
+/**
+ * Overlays the overlays section draws open in a deeper state than their docs
+ * show: a menu with its submenu open, a popover that holds a form, a date and
+ * time field with its time list, and the navigation drawer of a narrow
+ * screen. Each is drawn as the other overlays are: open as it mounts, or
+ * opened by the drawing's presses (`openable`).
+ * @type {ReadonlyArray<import('./_catalog.mjs').CatalogItem>}
+ */
+export const OPEN_SCENES = Object.freeze([
+  {
+    name: 'DropdownMenu',
+    label: 'submenu',
+    openable: true,
+    tree: h('DropdownMenu', {
+      button: {label: 'Move'},
+      items: [
+        {label: 'Rename'},
+        {
+          label: 'Move to',
+          items: [{label: 'Inbox'}, {label: 'Archive'}, {label: 'Trash'}],
+        },
+        {label: 'Delete'},
+      ],
+    }),
+  },
+  {
+    name: 'Popover',
+    label: 'form',
+    open: true,
+    anchored: true,
+    tree: h('Popover', {
+      isOpen: true,
+      label: 'Filter tasks',
+      hasAutoFocus: false,
+      content: h(
+        'VStack',
+        {gap: 3},
+        h('TextInput', {label: 'Owner', value: 'Alex'}),
+        h('CheckboxInput', {label: 'Only open items', value: true}),
+        h(
+          'HStack',
+          {gap: 2},
+          h('Button', {label: 'Apply', variant: 'primary'}),
+          h('Button', {label: 'Reset', variant: 'ghost'}),
+        ),
+      ),
+      children: h('Button', {label: 'Filter', variant: 'secondary'}),
+    }),
+  },
+  {
+    name: 'DateTimeInput',
+    label: 'time list',
+    openable: true,
+    tree: h('DateTimeInput', {
+      label: 'Starts',
+      value: '2026-11-16T09:30',
+      timeOptionInterval: 30,
+    }),
+  },
+  {
+    name: 'MobileNav',
+    label: 'open',
+    open: true,
+    tree: h(
+      'MobileNav',
+      {isOpen: true, header: 'Navigation'},
+      h(
+        'SideNavSection',
+        {title: 'Main'},
+        h('SideNavItem', {label: 'Inbox', href: '#', isSelected: true}),
+        h('SideNavItem', {label: 'Projects', href: '#'}),
+        h('SideNavItem', {label: 'Reports', href: '#'}),
+      ),
+    ),
+  },
+]);
+
+/**
+ * Each control of the sample page once (a button of each variant, a field,
+ * a switch, a tab, a nav item), for the states section. A part of a parent
+ * (a tab) stays inside the parent the page puts it in, alone there.
+ * @returns {Array<{tree: Tree, label: string}>}
+ */
+export function sampleControls() {
+  /** @type {Map<string, {tree: Tree, label: string}>} */
+  const out = new Map();
+  /** @param {unknown} v @param {Tree | null} parent */
+  const walk = (v, parent) => {
+    if (Array.isArray(v)) {
+      for (const x of v) walk(x, parent);
+      return;
+    }
+    if (!v || typeof v !== 'object') return;
+    const e = /** @type {Tree} */ (v);
+    if (typeof e.__element !== 'string') return;
+    const inner = [...Object.values(e.props ?? {}), e.children];
+    if (elementNames(inner).size) {
+      for (const x of inner) walk(x, e);
+      return;
+    }
+    const props = e.props ?? {};
+    const siblings = /** @type {unknown[]} */ ([]).concat(
+      parent?.children ?? [],
+    );
+    const inParent = parent != null && siblings.includes(e);
+    // A part its parent holds selected by value (a tab), or that says so.
+    const selected =
+      props.isSelected === true ||
+      (inParent && props.value != null && parent?.props?.value === props.value);
+    // One of each look: a variant at a size, selected or not.
+    const label = [props.variant, props.size, selected ? 'selected' : '']
+      .filter(x => typeof x === 'string' && x)
+      .join(' ');
+    const key = `${e.__element} ${label}`;
+    if (out.has(key)) return;
+    out.set(key, {
+      tree: inParent && parent ? {...parent, children: [e]} : e,
+      label,
+    });
+  };
+  walk(SAMPLE_PAGE, null);
+  return [...out.values()];
+}
 
 /** Components first on the contact sheet, in this order. */
 export const SHEET_ORDER = [
@@ -323,8 +449,12 @@ export function pageSource({
     // render's drawing of open layers, which puts it in place after the
     // server render. Any other part is its server render. `open` is
     // 'ifOpen' for a part shown only for its open look: drawn as nothing when
-    // nothing opens.
-    `function html(tree, mode = MODE, open = false) { try { const node = el(tree); const whole = theme ? React.createElement(Theme, {theme, mode}, node) : node; const markup = renderToStaticMarkup(whole); const layered = markup.includes('<template></template>'); if (open === 'ifOpen' && !layered) return null; const draw = open && layered ? globalThis[${JSON.stringify(LAYER_GLOBAL)}] : null; return draw ? draw(whole, open === 'ifOpen') : markup; } catch { return null; } }`,
+    // nothing opens. Content Core keeps inert in its server render waits for
+    // what only the browser knows (a calendar's month waits for today's
+    // date), so a part that holds it is drawn as the browser mounts it; so
+    // is an overlay shown open with no layer, which loads what it lists once
+    // mounted (a command palette's items).
+    `function html(tree, mode = MODE, open = false) { try { const node = el(tree); const whole = theme ? React.createElement(Theme, {theme, mode}, node) : node; const markup = renderToStaticMarkup(whole); const layered = markup.includes('<template></template>'); if (open === 'ifOpen' && !layered) return null; const mounted = open === true && !layered || !open && markup.includes(' inert=""'); const draw = (open && layered) || mounted ? globalThis[${JSON.stringify(LAYER_GLOBAL)}] : null; return draw ? draw(whole, mounted ? 'mounted' : open === 'ifOpen') : markup; } catch { return null; } }`,
   );
   // A theme with both modes: each part is rendered in light and in dark, as
   // the app renders it in each (a part that picks its look from the mode as
@@ -355,16 +485,37 @@ export default function Page() {
   // is not shown closed.
   const done = rendered.filter(it => !it.onlyOpen);
   // A part with a closed control that opens a popup (a dropdown's menu
-  // button, a selector's field: the controls the drawing presses) is shown
-  // open too, with the overlays, so a look's menus and lists show in the
-  // pictures.
-  const opensPopup = html => (html.match(/<[^>]*\\baria-expanded="false"[^>]*>/g) ?? []).some(tag => /\\baria-haspopup=|\\brole="combobox"/.test(tag));
+  // button, a selector's field: the controls the drawing presses), or with
+  // a layer's marker and no such control (a context menu's area, which a
+  // right click opens), is shown open too, with the overlays, so a look's
+  // menus and lists show in the pictures.
+  const opensPopup = html => html.includes('<template></template>') || (html.match(/<[^>]*\\baria-expanded="false"[^>]*>/g) ?? []).some(tag => /\\baria-haspopup=|\\brole="combobox"/.test(tag));
   for (const it of rendered) {
     const m = it.markup;
     if (!it.openable || !opensPopup(m.one ?? m.light)) continue;
     const open = modes(it.openTree ?? it.tree, 'ifOpen');
-    if (open) done.push({...it, group: 'overlays', label: 'open', markup: open, opened: true});
+    if (open) done.push({...it, group: 'overlays', label: it.label || 'open', markup: open, opened: true});
   }
+  // A control of the sample page drawn in each state a person puts it in:
+  // the render's stylesheet applies a state's rules to what is marked with
+  // it (render-page.mjs), so a picture shows hover, keyboard focus and a
+  // press with no pointer or keyboard. Hover and press reach the control
+  // and all it holds, as a pointer over it does; focus reaches the first
+  // element that takes it, as a Tab does.
+  const FOCUSABLE = /<(?:button|input|select|textarea)\\b|<a\\b(?=[^>]*\\shref=)|<[a-z][\\w-]*\\b(?=[^>]*\\stabindex="0")/;
+  const inState = (html, state) => {
+    if (state === 'focus') { const m = FOCUSABLE.exec(html); return m ? html.slice(0, m.index) + m[0] + ' data-astryx-state="focus"' + html.slice(m.index + m[0].length) : html; }
+    return '<div data-astryx-state="' + state + '">' + html + '</div>';
+  };
+  const STATES = [['rest', null], ['hover', 'hover'], ['focus-visible', 'focus'], ['pressed', 'hover active']];
+  const stated = [];
+  for (const it of done.filter(x => x.states)) {
+    const m = it.markup;
+    if (!FOCUSABLE.test(m.one ?? m.light)) continue;
+    const each = f => m.one != null ? {one: f(m.one)} : {light: f(m.light), dark: f(m.dark)};
+    stated.push({...it, rows: STATES.map(([label, s]) => ({label, markup: s ? each(html => inState(html, s)) : m}))});
+  }
+  const drawn = done.filter(x => !x.states);
   const part = (m, key) => m.one != null
     ? h('div', {key, dangerouslySetInnerHTML: {__html: m.one}})
     : h(React.Fragment, {key}, h('div', {className: 'cs-light', dangerouslySetInnerHTML: {__html: m.light}}), h('div', {className: 'cs-dark', dangerouslySetInnerHTML: {__html: m.dark}}));
@@ -375,9 +526,9 @@ export default function Page() {
   let body;
   if (LAYOUT === 'page') {
     // The page, then the overlays drawn open in a strip below it.
-    const strip = done.filter(it => it.strip || it.opened);
+    const strip = drawn.filter(it => it.strip || it.opened);
     body = [
-      ...done.filter(it => !it.strip && !it.opened).map((it, i) => part(it.markup, i)),
+      ...drawn.filter(it => !it.strip && !it.opened).map((it, i) => part(it.markup, i)),
       strip.length
         ? h('section', {key: 'strip', className: 'cs-strip'},
             h('div', {className: 'cs-strip-name'}, 'open overlays'),
@@ -392,7 +543,7 @@ export default function Page() {
     // triggers (a tooltip, a menu, a list) come first; a panel over the
     // whole page (a dialog, a drawer) after them.
     const small = it => it.opened || (it.open && it.anchored);
-    const ordered = [...done.filter(small), ...done.filter(it => !small(it))];
+    const ordered = [...drawn.filter(small), ...drawn.filter(it => !small(it))];
     for (const it of ordered) {
       let g = groups.find(x => x.name === (it.group ?? ''));
       if (!g) { g = {name: it.group ?? '', cells: []}; groups.push(g); }
@@ -407,6 +558,14 @@ export default function Page() {
         h('div', {className: 'cs-row'}, c.list.map((x, j) => h('div', {key: j, className: 'cs-item'},
           x.label ? h('div', {className: 'cs-label'}, x.label) : null,
           x.opened ? h('div', {className: 'cs-open'}, part(x.markup)) : part(x.markup)))))))));
+    if (stated.length)
+      body.push(h('section', {key: 'states', className: 'cs-group cs-states'},
+        h('h2', {className: 'cs-group-name'}, 'states'),
+        h('div', {className: 'cs-states-grid'},
+          h('div', {className: 'cs-states-row cs-states-head'}, h('div', null), STATES.map(([label]) => h('div', {key: label, className: 'cs-label'}, label))),
+          stated.map((it, i) => h('div', {key: i, className: 'cs-states-row'},
+            h('div', {className: 'cs-name'}, it.name + (it.label ? ' ' + it.label : '')),
+            it.rows.map((r, j) => h('div', {key: j, className: 'cs-states-cell'}, part(r.markup))))))));
   }
   const page = h('div', {className: SECTION ? 'cs-page cs-section-' + SECTION : 'cs-page', style: {background: 'var(--color-background-body)', color: 'var(--color-text-primary)', minHeight: '100vh'}}, bar, body);
   return h('main', null, h('style', {dangerouslySetInnerHTML: {__html: SHEET_CSS}}), theme ? h(Theme, {theme, mode: MODE}, page) : page);
@@ -461,5 +620,12 @@ export const SHEET_CSS = [
   '.cs-section-overlays .cs-open-group .cs-sheet{grid-template-columns:repeat(5,minmax(0,1fr))}',
   '.cs-section-overlays .cs-open-group .cs-cell{max-height:300px}',
   '.cs-section-overlays .cs-open-group .cs-cell dialog{max-height:260px!important}',
+  // The states section: one row per control, one column per state.
+  '.cs-states-grid{display:grid;gap:10px;padding:14px}',
+  '.cs-states-row{display:grid;grid-template-columns:160px repeat(4,minmax(0,1fr));gap:14px;align-items:center}',
+  '.cs-states-cell{min-width:0;overflow:hidden;padding:4px}',
+  // A panel wider than its cell (a narrow screen's navigation drawer) is
+  // drawn from its start, never cut at the start.
+  '.cs-cell dialog > *{max-width:100%!important}',
   '.cs-cell dialog{display:block!important;position:relative!important;inset:auto!important;margin:0!important;max-width:100%!important;max-height:300px!important;translate:none!important;transform:none!important}',
 ].join('');

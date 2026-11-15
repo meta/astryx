@@ -157,13 +157,22 @@ export function demoProps(project, name) {
   )
     return null;
   const props = given ?? {};
+  // A search source its defaults leave out (a command palette's) is the
+  // page's sample one: without it the part lists nothing.
+  if (given)
+    for (const [p, d] of Object.entries(info.props ?? {}))
+      if (!(p in props) && /^SearchSource\b/.test(d.type))
+        props[p] = SAMPLE_SOURCE;
   if (!given)
     for (const [p, d] of Object.entries(info.props ?? {})) {
       if (!d.required || /^on[A-Z]/.test(p)) continue;
       if (p === 'children' && d.slots.length) continue;
       // A value the type allows to be null (`T | null`, nothing chosen yet)
       // with no plain sample is null.
+      // A prop the doc suggests elements for (a nav icon's icon) takes the
+      // first of them: a plain sample would draw its own text in their place.
       const v =
+        d.slots?.[0] ??
         sampleOf(name, d.type) ??
         (/(^|\|)\s*null\s*($|\|)/.test(d.type) ? null : undefined);
       // A required prop with no plain sample, such as a render function:
@@ -342,8 +351,30 @@ export function catalogVariants(project, name, cap, opts = {}) {
       String(/** @type {any} */ (doc)?.type ?? '').trim() === 'boolean' &&
       base[p] !== true
     )
-      variants.push({label: p, props: {...base, [p]: true}});
+      variants.push({
+        label: p,
+        props: {...base, [p]: true, ...flagNeeds(info, p, base)},
+      });
   return variants.slice(0, cap);
+}
+
+/**
+ * What a look flag needs to show its look: the prop its name starts with
+ * (`isIconOnly` reads `icon`), given the first element its doc suggests when
+ * the sample leaves it empty. Without it an icon-only button is an empty
+ * square.
+ * @param {any} info
+ * @param {string} flag
+ * @param {Record<string, unknown>} base
+ * @returns {Record<string, unknown>}
+ */
+function flagNeeds(info, flag, base) {
+  const word = /^(?:is|has)([A-Z][a-z0-9]*)/.exec(flag)?.[1];
+  const prop = word ? word[0].toLowerCase() + word.slice(1) : '';
+  const slot = info.props?.[prop]?.slots?.[0];
+  return prop && prop !== flag && slot && base[prop] == null
+    ? {[prop]: slot}
+    : {};
 }
 
 /**

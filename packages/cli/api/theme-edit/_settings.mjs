@@ -3939,10 +3939,16 @@ export function partsOf(ctx, s) {
   if (!s.on) return [];
   if (s.thing === 'font') return [];
   const has = (/** @type {string} */ t) => ctx.project.target.has(t);
-  if (FAMILIES[s.on]) return FAMILIES[s.on].filter(has);
+  // A border set on a group lands where each member draws its edges (a date
+  // and time field's two boxes, never the row around them).
+  const spread = (/** @type {string[]} */ members) =>
+    /^border(?!.*radius)(-|$)/.test(s.thing)
+      ? [...new Set(members.flatMap(t => borderParts(ctx, t)))]
+      : members;
+  if (FAMILIES[s.on]) return spread(FAMILIES[s.on].filter(has));
   const fam = familyOf(s.on);
   if (fam && AUTO_SPREAD.includes(fam) && !s.only)
-    return FAMILIES[fam].filter(has).filter(m => drawnAlike(ctx, s, m));
+    return spread(FAMILIES[fam].filter(has).filter(m => drawnAlike(ctx, s, m)));
   return [s.on];
 }
 
@@ -3976,6 +3982,21 @@ function drawnAlike(ctx, s, member) {
   const a = rest(s.on);
   const b = rest(member);
   return a == null || b == null || a === b;
+}
+
+/**
+ * The parts that draw a part's border: the part itself, or, when it draws
+ * none of its own and its edges are the borders of parts inside it (a date
+ * and time field's date and time boxes), those parts.
+ * @param {Ctx} ctx
+ * @param {string} part
+ * @returns {string[]}
+ */
+export function borderParts(ctx, part) {
+  const own = ctx.C.MAP[part]?.own ?? {};
+  if (Object.keys(own).some(k => /^border(?!.*radius)/.test(k))) return [part];
+  const inner = cornerParts(ctx, part).filter(t => t !== part);
+  return inner.length ? inner : [part];
 }
 
 export {modesOf};

@@ -103,6 +103,7 @@ import {
   radioCircle,
   radioMark,
   radiusTokenOf,
+  borderParts,
   cornerParts,
   focusStateOf,
   valueProblem,
@@ -6763,12 +6764,8 @@ function checkOne(
       partsOf(ctx, s).length === 1
     ) {
       const part = partsOf(ctx, s)[0];
-      const own = ctx.C.MAP[part]?.own ?? {};
-      const inner = cornerParts(ctx, part).filter(t => t !== part);
-      if (
-        inner.length &&
-        !Object.keys(own).some(k => /^border(?!.*radius)/.test(k))
-      )
+      const inner = borderParts(ctx, part).filter(t => t !== part);
+      if (inner.length)
         refuse(
           E.ERR_THEME_NO_EFFECT,
           `${part} draws no border of its own; its edges are the borders of ${inner.join(' and ')}, so set ${prop} on ${inner.length > 1 ? 'those parts' : 'that part'}.`,
