@@ -76,6 +76,7 @@ import {
   editorMissingSource,
   editorThemeTemplate,
   showSections,
+  describe,
 } from '../../../../api/theme-edit/_adapter.mjs';
 import {registerThemeSubcommands} from '../theme.mjs';
 import {doc as groupDoc} from '../experimental-theme.doc.mjs';
@@ -349,14 +350,6 @@ async function run(program, call, render, answer) {
   return answered;
 }
 
-/** @param {import('../../../../api/theme-edit/theme-edit.type.mjs').ThemeEditSetting} s */
-function describe(s) {
-  const where = s.on
-    ? ` on ${s.on}${s.only ? ' only' : ''}${s.when ? ` when ${s.when}` : ''}${s.state ? ` :${s.state}` : ''}`
-    : ' (whole theme)';
-  return `${s.thing} = ${s.value}${where}${s.mode ? ` [${s.mode} only]` : ''}`;
-}
-
 /**
  * The flags of a change, from Commander's options.
  * @param {any} o
@@ -544,12 +537,16 @@ function changeBlocks(r) {
   // The status line names the value as saved, with a quote or space mark
   // the text output would fold written as its CSS escape (\201C), so the
   // text and the JSON name the same value.
+  // A value saved as no text (none at all) is named by describe as such.
   const s = {
     ...d.setting,
-    value: String(d.setting.value).replace(
-      /[\u00A0\u00AB\u00BB\u2000-\u200B\u2018-\u201F\u2039\u203A\u202F\u3000\u300C-\u300F]/g,
-      c => `\\${c.codePointAt(0)?.toString(16).toUpperCase()} `,
-    ),
+    value:
+      typeof d.setting.value !== 'string'
+        ? d.setting.value
+        : d.setting.value.replace(
+            /[\u00A0\u00AB\u00BB\u2000-\u200B\u2018-\u201F\u2039\u203A\u202F\u3000\u300C-\u300F]/g,
+            c => `\\${c.codePointAt(0)?.toString(16).toUpperCase()} `,
+          ),
   };
   const done =
     d.was != null
