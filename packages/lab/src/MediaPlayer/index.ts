@@ -35,6 +35,10 @@ export {
   type MediaVolumeProps,
 } from './MediaPlayerControls';
 export {
+  MediaPlaybackRateMenu,
+  type MediaPlaybackRateMenuProps,
+} from './MediaPlaybackRateMenu';
+export {
   MediaPlayerElement,
   type MediaPlayerAudioElementProps,
   type MediaPlayerElementProps,

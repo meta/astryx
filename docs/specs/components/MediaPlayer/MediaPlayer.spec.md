@@ -23,6 +23,7 @@ review_triggers:
 verified_by:
   [
     packages/lab/src/MediaPlayer/MediaPlayer.test.tsx,
+    packages/lab/src/MediaPlayer/MediaPlaybackRate.bundle.test.mjs,
     scripts/check-knowledge.mjs,
   ]
 modules: []
@@ -134,7 +135,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 | Marks (`marks`)                                                | List of `{value: number, label: string, content?: ReactNode}`, `value` in seconds | Points of interest drawn as dots on the timeline; a mark with `content` is a button that opens it in a popover (FR12). Named and shaped as Slider's and ProgressBar's `marks`                                                                                                                                                             | MediaTimeSlider, VideoPlayer, AudioPlayer                                                                    | None                                         | `component:MediaPlayer` | experimental | A mark outside the media's duration is not drawn |
 | Control size (`size`)                                          | `sm`, `md`, `lg`                                                                  | Height of a control part                                                                                                                                                                                                                                                                                                                  | MediaPlayButton, MediaSeekButton, MediaCaptionsButton, MediaFullscreenButton, MediaVolume, MediaPlaybackRate | The surrounding size, else `md`              | `component:MediaPlayer` | experimental | TypeScript rejects other values                  |
 | Play button emphasis (`variant`)                               | IconButton's variants                                                             | Emphasis of the play button                                                                                                                                                                                                                                                                                                               | MediaPlayButton                                                                                              | `ghost`                                      | `component:MediaPlayer` | experimental | TypeScript rejects other values                  |
-| Speed control (`variant`)                                      | `slider`, `menu`                                                                  | A toggle with a revealed slider of speeds, or a menu of speeds with the current one checked (DEC-10)                                                                                                                                                                                                                                      | MediaPlaybackRate                                                                                            | `slider`                                     | `component:MediaPlayer` | experimental | TypeScript rejects other values                  |
+| Speed control parts                                            | `MediaPlaybackRate`, `MediaPlaybackRateMenu`                                      | A toggle with a revealed slider of speeds, or a menu of speeds with the current one checked; an app imports the menu part only where it shows one (DEC-10)                                                                                                                                                                                |
 | Volume slider (`hasSlider`)                                    | `true`, `false`                                                                   | Whether Mute pairs with a revealed volume slider; the slider never renders where script cannot set the volume (FR7)                                                                                                                                                                                                                       | MediaVolume                                                                                                  | `true`                                       | `component:MediaPlayer` | experimental | TypeScript rejects other values                  |
 | Slider side (`sliderPlacement`)                                | `start`, `end`                                                                    | The side of its button a revealed slider opens on, in a row that runs left to right                                                                                                                                                                                                                                                       | MediaVolume, MediaPlaybackRate (slider variant)                                                              | MediaVolume `start`; MediaPlaybackRate `end` | `component:MediaPlayer` | experimental | TypeScript rejects other values                  |
 
@@ -333,16 +334,18 @@ AudioPlayer paints no card of its own. A Section container gives it the
 theme's section background and padding, and its style props style that
 container.
 
-### DEC-10 — The playback speed is one control with a slider or a menu
+### DEC-10 — The playback speed has a slider part and a menu part
 
 **Reference:** `component:MediaPlayer/DEC-10`
 **Decider:** ernestt, 2026-11-05
 
-The speed control has two variants. The slider variant, which AudioPlayer
+The speed control has two parts. `MediaPlaybackRate`, which AudioPlayer
 uses, pairs a speed button with a speed slider, revealed like volume; the
 button switches between normal speed and the last other speed, the way Mute
-switches the sound. The menu variant opens a menu of speeds. Both variants
-and the `<` and `>` shortcuts share one default list of speeds.
+switches the sound. `MediaPlaybackRateMenu` opens a menu of speeds. The menu
+part is its own import, so a page that shows only the slider part loads no
+menu code (`architecture:component-import-boundaries` INV10). Both parts and
+the `<` and `>` shortcuts share one default list of speeds.
 
 ### DEC-11 — Volume sliders appear through the container reveal
 
@@ -403,11 +406,11 @@ actions to the system media controls. The player keeps no queue, so
 **Reference:** `component:MediaPlayer/DEC-16`
 **Decider:** ernestt, 2026-11-05
 
-Mute and the volume slider are one part, `MediaVolume`. The speed button,
-slider, and menu are one part, `MediaPlaybackRate`, with a slider or menu
-variant. The video and audio elements are one part, `MediaPlayerElement`,
-chosen by `kind`. Play, seek, the timeline, time, captions, and fullscreen
-stay separate parts, because each does one job.
+Mute and the volume slider are one part, `MediaVolume`. The speed button and
+slider are one part, `MediaPlaybackRate`; the speed menu is its own part,
+`MediaPlaybackRateMenu` (DEC-10). The video and audio elements are one part,
+`MediaPlayerElement`, chosen by `kind`. Play, seek, the timeline, time,
+captions, and fullscreen stay separate parts, because each does one job.
 
 Rejected: a root that renders its own media element, which moves the
 element's ref, style, and children onto the root.
@@ -451,9 +454,10 @@ element's ref, style, and children onto the root.
   sliders and the player's seek and volume shortcuts also use the arrow keys.
   Adopting Toolbar means arrow keys move focus while a control has focus;
   keeping the row keeps the shortcuts and the extra tab stops. (`human-api`)
-- **OQ9 — Which speed variant is the default?** AudioPlayer uses the slider
-  variant. The menu shows every speed at once and costs one more press; the
-  slider changes speed in one gesture but hides its stops until it opens.
+- **OQ9 — Which speed part do the presets use?** AudioPlayer uses
+  `MediaPlaybackRate`, the slider part. The menu shows every speed at once
+  and costs one more press; the slider changes speed in one gesture but
+  hides its stops until it opens.
   (`human-design`)
 
 ## Content boundary

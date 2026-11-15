@@ -14,6 +14,7 @@ import {
   MediaVolume,
 } from './MediaPlayerControls';
 import {MediaPlayerElement} from './MediaPlayerElement';
+import {MediaPlaybackRateMenu} from './MediaPlaybackRateMenu';
 
 const announce = vi.hoisted(() => vi.fn());
 
@@ -405,7 +406,7 @@ describe('MediaPlaybackRate', () => {
     const {container} = render(
       <MediaPlayer label="Clip">
         <MediaPlayerElement kind="video" src="/clip.mp4" />
-        <MediaPlaybackRate variant="menu" />
+        <MediaPlaybackRateMenu />
       </MediaPlayer>,
     );
     const playback = fakePlayback(container.querySelector('video')!);
@@ -430,7 +431,7 @@ describe('MediaPlaybackRate', () => {
     const {container} = render(
       <MediaPlayer label="Episode">
         <MediaPlayerElement kind="audio" src="/episode.mp3" />
-        <MediaPlaybackRate variant="menu" />
+        <MediaPlaybackRateMenu />
       </MediaPlayer>,
     );
     const playback = fakePlayback(container.querySelector('audio')!, {
@@ -449,16 +450,17 @@ describe('MediaPlaybackRate', () => {
     ).toBeInTheDocument();
   });
 
-  it('reflects its variant and keeps the slider out of the menu variant', () => {
+  it('renders the menu part as its own group, with no speed slider', () => {
     const {container} = render(
       <MediaPlayer label="Episode">
         <MediaPlayerElement kind="audio" src="/episode.mp3" />
-        <MediaPlaybackRate variant="menu" />
+        <MediaPlaybackRateMenu />
       </MediaPlayer>,
     );
     expect(
-      container.querySelector('.astryx-media-playback-rate'),
-    ).toHaveAttribute('data-variant', 'menu');
+      container.querySelector('.astryx-media-playback-rate-menu'),
+    ).not.toBeNull();
+    expect(container.querySelector('.astryx-media-playback-rate')).toBeNull();
     expect(
       screen.queryByRole('slider', {name: 'Playback speed'}),
     ).not.toBeInTheDocument();

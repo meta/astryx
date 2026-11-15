@@ -25,11 +25,6 @@ import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import type {BaseProps} from '@astryxdesign/core';
 import {Button} from '@astryxdesign/core/Button';
-import {
-  DropdownMenu,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-} from '@astryxdesign/core/DropdownMenu';
 import {useContainerReveal} from '@astryxdesign/core/hooks';
 import {IconButton, type IconButtonProps} from '@astryxdesign/core/IconButton';
 import {useLocale, useTranslator} from '@astryxdesign/core/i18n';
@@ -947,7 +942,11 @@ export function MediaFullscreenButton({
 MediaFullscreenButton.displayName = 'MediaFullscreenButton';
 
 /** Formats a playback speed as a short label, such as "1.5×". */
-function useRateLabel() {
+/** The speed button's width at every speed. MediaPlaybackRateMenu shares it. */
+export const rateButtonXstyle: StyleXStyles = styles.rateLabel;
+
+/** The speed texts for the current locale. MediaPlaybackRateMenu shares it. */
+export function useRateLabel() {
   const t = useTranslator();
   const locale = useLocale();
   const numberFormat = useMemo(
@@ -1052,63 +1051,10 @@ function RateSlider({
   );
 }
 
-/**
- * Shows the playback speed and opens a menu of speeds, with the current one
- * checked. The menu keeps the controls visible while it is open.
- */
-function RateMenu({
-  rates,
-  size,
-}: {
-  rates: readonly number[];
-  size?: MediaControlSize;
-}) {
-  const {store, holdControls} = useMediaPlayerContext('MediaPlaybackRate');
-  const rate = useMediaSelector(
-    'MediaPlaybackRate',
-    state => state.playbackRate,
-  );
-  const text = useRateLabel();
-  return (
-    <DropdownMenu
-      button={{
-        label: text.label(rate),
-        'aria-label': text.name(rate),
-        tooltip: text.tooltip,
-        variant: 'ghost',
-        size,
-        xstyle: styles.rateLabel,
-        ...themeProps('media-playback-rate-button'),
-      }}
-      onOpenChange={isOpen => holdControls('menu', isOpen)}>
-      <DropdownMenuRadioGroup
-        label={text.tooltip}
-        value={String(rate)}
-        onChange={value => store.actions.setPlaybackRate(Number(value))}>
-        {rates.map(option => (
-          <DropdownMenuRadioItem
-            key={option}
-            value={String(option)}
-            label={text.label(option)}
-          />
-        ))}
-      </DropdownMenuRadioGroup>
-    </DropdownMenu>
-  );
-}
-
 export interface MediaPlaybackRateProps extends Omit<
   BaseProps<HTMLDivElement>,
   'children'
 > {
-  /**
-   * How the speed changes. `'slider'`: a button that switches between normal
-   * speed and the last other speed, with a slider of speeds beside it while
-   * it is hovered or holds focus, and always on touch. `'menu'`: a button
-   * that opens a menu of speeds, with the current one checked. Defaults to
-   * `'slider'`.
-   */
-  variant?: 'slider' | 'menu';
   /**
    * Speeds offered, in order. Defaults to 0.5, 0.75, 1, 1.25, 1.5, 1.75, and
    * 2, the same speeds the `<` and `>` shortcuts step through.
@@ -1117,8 +1063,8 @@ export interface MediaPlaybackRateProps extends Omit<
   /** Control height. Follows the surrounding size, else `'md'`. */
   size?: MediaControlSize;
   /**
-   * For the slider variant, the side of the button the slider opens on, in a
-   * row that runs left to right. Defaults to `'end'`, so a button at the
+   * The side of the button the slider opens on, in a row that runs left to
+   * right. Defaults to `'end'`, so a button at the
    * start of a row stays under the pointer while the slider opens.
    */
   sliderPlacement?: MediaSliderPlacement;
@@ -1128,19 +1074,18 @@ export interface MediaPlaybackRateProps extends Omit<
 
 /**
  * Playback speed. The button names the current speed and keeps one width at
- * every speed. The slider variant switches between normal speed and the last
- * other speed, and opens a slider of speeds beside the button; the menu
- * variant opens a menu of speeds. In a container narrower than 480px the
- * slider stays closed.
+ * every speed. A press switches between normal speed and the last other
+ * speed, and a slider of speeds opens beside the button while it is hovered
+ * or holds focus, and always on touch. In a container narrower than 480px the
+ * slider stays closed. For a menu of speeds, use `MediaPlaybackRateMenu`.
  *
  * @example
  * ```
  * <MediaPlaybackRate />
- * <MediaPlaybackRate variant="menu" rates={[0.75, 1, 1.25, 1.5, 2]} />
+ * <MediaPlaybackRate rates={[0.75, 1, 1.25, 1.5, 2]} sliderPlacement="start" />
  * ```
  */
 export function MediaPlaybackRate({
-  variant = 'slider',
   rates = DEFAULT_PLAYBACK_RATES,
   size,
   sliderPlacement = 'end',
@@ -1149,29 +1094,24 @@ export function MediaPlaybackRate({
   style,
   ...rest
 }: MediaPlaybackRateProps) {
-  const hasSlider = variant === 'slider';
-  const reveal = useSliderReveal(hasSlider, sliderPlacement);
-  const slider = hasSlider ? (
+  const reveal = useSliderReveal(true, sliderPlacement);
+  const slider = (
     <span {...reveal.slotProps()}>
       <RateSlider rates={rates} xstyle={reveal.gap} />
     </span>
-  ) : null;
+  );
   return (
     <div
       {...rest}
       {...mergeProps(
         mergeProps(
-          themeProps('media-playback-rate', {variant}),
+          themeProps('media-playback-rate'),
           reveal.groupProps(xstyle),
         ),
         {className, style},
       )}>
       {reveal.isBefore ? slider : null}
-      {hasSlider ? (
-        <RateToggleButton rates={rates} size={size} />
-      ) : (
-        <RateMenu rates={rates} size={size} />
-      )}
+      <RateToggleButton rates={rates} size={size} />
       {reveal.isBefore ? null : slider}
     </div>
   );
