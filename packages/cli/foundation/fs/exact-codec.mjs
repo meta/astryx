@@ -125,18 +125,35 @@ export function sameExactly(a, b) {
   return true;
 }
 
+/**
+ * The JSON text that stands for `value` exactly: written once, checked to
+ * read back as `value`, and returned as it was checked, so a store writes the
+ * very text the check read. Throws for a value that is not plain data or does
+ * not read back exactly.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function exactText(value) {
+  if (!isPlain(value)) throw new Error('not plain data');
+  const text = JSON.stringify(value, replace);
+  if (!sameExactly(restore(JSON.parse(text)), value)) {
+    throw new Error('does not read back exactly');
+  }
+  return text;
+}
+
 export const EXACT_CODEC = {
+  /**
+   * @param {unknown} value
+   * @returns {string}
+   */
+  encodeText: exactText,
   /**
    * @param {unknown} value
    * @returns {unknown}
    */
   encode(value) {
-    if (!isPlain(value)) throw new Error('not plain data');
-    const text = JSON.stringify(value, replace);
-    if (!sameExactly(restore(JSON.parse(text)), value)) {
-      throw new Error('does not read back exactly');
-    }
-    return JSON.parse(text);
+    return JSON.parse(exactText(value));
   },
   /**
    * @param {unknown} stored

@@ -247,7 +247,8 @@ describe('dials and part properties (final 3)', () => {
       on: 'button',
       when: 'size:sm',
     });
-    expect(r.data.setting.value).toBe('round');
+    // One step down from pill is the step between round and pill.
+    expect(r.data.setting.value).toBe('24px');
     await themeEditSet('m4', 'corners', 'pill', {cwd, on: 'text-input'});
     // text-area shows the group's pill: more has nowhere to go.
     const ta = await refusal(() =>
@@ -320,8 +321,10 @@ describe('review on #11303', () => {
     await themeEditNew('sg', {cwd});
     await themeEditSet('sg', 'spacing', 'tight', {cwd, on: 'card'});
     await themeEditSet('sg', 'spacing', 'spacious', {cwd, on: 'containers'});
-    const r = await themeEditSet('sg', 'spacing', 'more', {cwd, on: 'card'});
-    expect(r.data.setting.value).toBe('spacious');
+    // A step from spacious (the group's value) goes down to roomy; up from
+    // the largest step is refused.
+    const r = await themeEditSet('sg', 'spacing', 'less', {cwd, on: 'card'});
+    expect(r.data.setting.value).toBe('roomy');
     fs.rmSync(path.join(cwd, 'themes/sg'), {recursive: true, force: true});
   }, 240_000);
 

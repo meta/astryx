@@ -51,7 +51,7 @@ vi.mock('./_preview.mjs', async importOriginal => {
           'hex',
         ),
       );
-      return {ok: true, file: path.relative(project.cwd, png), cut: true};
+      return {ok: true, file: path.relative(project.cwd, png)};
     },
   };
 });
@@ -73,7 +73,7 @@ afterAll(() => {
 });
 
 describe('pictures and the see line', () => {
-  it('pictures a plain Chrome took (cut to the window) are no failed run', async () => {
+  it('pictures that were taken are no failed run', async () => {
     const r = /** @type {any} */ (
       await themeEditSet('t', 'accent', '#2563eb', {cwd, png: true})
     );
@@ -84,7 +84,9 @@ describe('pictures and the see line', () => {
   it('after undo, the see line names show --png, never the undo again', async () => {
     await themeEditSet('t', 'corners', 'pill', {cwd});
     const r = /** @type {any} */ (await themeEditUndo('t', {cwd}));
-    expect(r.data.see).toMatch(/editor show t --png takes pictures/);
+    expect(r.data.see).toMatch(
+      /editor show t --png writes themes\/t\/preview\.png/,
+    );
     expect(r.data.see).not.toMatch(/run it with --png/);
   }, 240_000);
 
@@ -168,7 +170,7 @@ describe('the in-app preview', () => {
     expect(copied).not.toContain('t.pictures.json');
   }, 240_000);
 
-  it('from a subfolder, the picture note and previewStale use absolute paths like see', async () => {
+  it('from a subfolder, the pictures and previewStale use absolute paths like see', async () => {
     const dir = path.join(cwd, 'src/app/theme-preview');
     const page = path.join(dir, 'page.tsx');
     fs.chmodSync(page, 0o444);
@@ -180,13 +182,14 @@ describe('the in-app preview', () => {
           png: true,
         })
       );
-      const note = String(r.data.pictureProblem ?? '');
-      expect(note).not.toMatch(/(^|[\s(,])themes\//);
-      expect(note).toContain(path.join(cwd, 'themes/t/'));
+      expect(r.data.pictures.length).toBeGreaterThan(0);
+      for (const p of r.data.pictures)
+        expect(p).toContain(path.join(cwd, 'themes/t/'));
       const stale = r.data.previewStale.join('\n');
       expect(stale).toContain(path.join(cwd, 'src/app/theme-preview'));
       expect(stale).not.toMatch(/(^|[\s(,])src\/app\//);
-      expect(r.data.see).toContain(path.join(cwd, 'themes/t/preview.html'));
+      // With pictures taken, see names them, by the same full path.
+      expect(r.data.see).toContain(path.join(cwd, 'themes/t/preview.png'));
     } finally {
       fs.chmodSync(dir, 0o755);
       fs.chmodSync(page, 0o644);

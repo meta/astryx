@@ -10,7 +10,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet, themeEditShow} from './theme-edit.mjs';
 import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
 import {
@@ -21,6 +21,14 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+
+// The assertions are about settings, builds, notes and lines, not rendered
+// pages: a render costs seconds, so the pages are written by the stand-in.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** @type {string} */
 let cwd;
@@ -67,14 +75,14 @@ describe('hunt54 (B): a token on a group', () => {
     });
     const note = String(/** @type {any} */ (r.data).setting.note);
     expect(note).toMatch(/read --focus-outline-width and take this change/);
-    expect(note).toMatch(/text-input reads /);
+    expect(note).toMatch(/text-area reads /);
   }, 120_000);
 
   it('a part that never reads it is refused for no effect', async () => {
     const err = await refusal(() =>
       themeEditSet('w', '--focus-outline-width', '2px', {
         cwd,
-        on: 'text-input',
+        on: 'text-area',
         only: true,
       }),
     );

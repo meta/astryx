@@ -1855,6 +1855,10 @@
     "defaultMessage": "error",
     "description": "Screen-reader-only status word rendered next to a Stepper step label when status=error. Lowercase noun; read mid-sentence after the step label."
   },
+  "@astryx.step.status.unavailable": {
+    "defaultMessage": "unavailable",
+    "description": "Screen-reader-only status word rendered next to a disabled Stepper step label in the compact layout, where the step has no button to say it is disabled. Lowercase adjective; read mid-sentence after the step label."
+  },
   "@astryx.switch.loading": {
     "defaultMessage": "Loading",
     "description": "Screen-reader-only live-region announcement while a Switch is in its busy state (spinner shown, action in flight)."
@@ -2630,6 +2634,14 @@
   "@astryx.mediaPlayer.timeValueContext": {
     "defaultMessage": "{value}, {context}",
     "description": "Spoken value of the timeline slider in a lab media player when the position is inside a chapter or at a marker. `value` is the spoken time, e.g. \"1 minute, 5 seconds of 3 minutes\", and `context` is the chapter title or the marker label, e.g. \"Pollen\"."
+  },
+  "@astryx.mediaPlayer.timeReadout": {
+    "defaultMessage": "{current} / {duration}",
+    "description": "Visible elapsed and total time of a lab media player, e.g. \"0:42 / 1:35\". {current} and {duration} are already-formatted clock times; keep their order unless the language reads time differently."
+  },
+  "@astryx.mediaPlayer.timeRemaining": {
+    "defaultMessage": "-{remaining}",
+    "description": "Visible remaining time of a lab media player, e.g. \"-0:53\". {remaining} is an already-formatted clock time. The sign is a hyphen-minus, as the player's design shows; a language may use its own minus sign or wording."
   },
   "@astryx.mediaPlayer.previousTrack": {
     "defaultMessage": "Previous track",

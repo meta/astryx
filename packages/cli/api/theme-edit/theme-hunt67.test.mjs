@@ -8,7 +8,7 @@
  * @position api/theme-edit — tests
  */
 
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditHow, themeEditNew} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
@@ -18,6 +18,14 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+
+// The assertions are about settings, builds, notes and lines, not rendered
+// pages: a render costs seconds, so the pages are written by the stand-in.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** @type {string} */
 let cwd;
@@ -67,8 +75,8 @@ describe('hunt67', () => {
     expect(r.command).not.toMatch(/--color-error/);
   }, 120_000);
 
-  it('an amount of padding with nothing to take it of says it is a step', async () => {
+  it('an amount of padding is taken of what the part has now', async () => {
     const r = await top('double the padding on list items');
-    expect(r.first).toContain('one step, not an exact amount');
+    expect(r.first).toMatch(/^padding on list-item: \S+ \(now \S+\)/);
   }, 120_000);
 });

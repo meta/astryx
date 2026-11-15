@@ -59,10 +59,19 @@
  * @property {string} displayName
  * @property {string} description
  * @property {boolean} maintained
- * @property {string} [package] source-selector package or local theme root; bundled themes retain @astryxdesign/cli
+ * @property {string} [package] source-selector package or local theme root; bundled themes retain `@astryxdesign/cli` (in backticks: a bare `@` word would end this typedef as a tag)
  * @property {boolean} [added] whether the app module records this theme
  * @property {boolean} [default] whether this is the app's default theme
  * @property {'bundled'|'package'|'local'} [source] where the theme source comes from
+ * @property {{export: string, from: string}} [wiredBy] the provider component
+ *   the owning integration wires its themes with (its manifest's
+ *   `themeProvider`): an app renders `export`, imported from `from`
+ * @property {string} [owner] what `theme add` records and the app imports the
+ *   built theme from: the package (a bundled theme's own, such as
+ *   `@astryxdesign/theme-neutral`) or the local themes root
+ * @property {boolean} [installed] whether its owner is installed: the owner
+ *   package is installed, or it is a local theme (in the project); `theme add`
+ *   refuses a theme whose owner package is not installed
  */
 
 /**
@@ -109,7 +118,28 @@
  * `change.wireModes` is present when the module lists a theme's one color
  * mode (`themeModes`) for the first time after the app was wired: the app's
  * `Theme` then takes `mode={themeModes[defaultThemeSlug] ?? 'system'}`.
- * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean, wireModes?: true}, notes?: string[]}} data
+ * `change.moduleRemoved` is present when `theme remove` removed the only
+ * added theme and deleted the module at `modulePath`: `themes` is empty,
+ * `default` is `''`, and the app root must drop the module's wiring.
+ * `change.themeModes` is present then when that wiring imported `themeModes`.
+ * `appProvider` names the provider an installed package declares as the one
+ * that wires its themes (its manifest's `themeProvider`). `wiredBy` lists
+ * each such provider as `theme list` names it, `{export, from}`, with
+ * `themeProp` and `modeProp` when the provider takes the theme and its mode
+ * through those props. `wire` is what the text prints before the wiring.
+ * On the first add it is present whenever such a provider exists: `wire`
+ * says the app may already get its theme from it and names the props it
+ * takes; with exactly one provider, taking the theme, the wiring the text
+ * shows is that provider with the module's theme passed (`themeProp`, and
+ * `line`, its opening JSX), in place of a Theme wrap; otherwise `wire` adds
+ * each provider's trade-off (replacing it drops what else it sets up; a
+ * Theme inside it themes only what it wraps) above the Theme wiring. On a
+ * later add that marks `wireModes`, and on the removal of the last theme,
+ * it is present only when that one provider takes the theme: `wire` says
+ * how its wiring changes, with `line` the provider's opening JSX (passing
+ * the mode when it takes one and an added theme has one color mode). No
+ * receipt reads app source.
+ * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean, wireModes?: true, moduleRemoved?: true, themeModes?: true}, notes?: string[], appProvider?: {wiredBy: Array<{export: string, from: string, themeProp?: string, modeProp?: string}>, wire: string, themeProp?: string, line?: string}}} data
  */
 
 /**

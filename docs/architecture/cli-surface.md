@@ -35,10 +35,14 @@ verified_by:
     api/integration/add-contribution.test.mjs,
     api/integration/pack-check.test.mjs,
     api/integration/validate-integration.test.mjs,
+    api/integration/example-code.test.mjs,
+    api/integration/example-scope.test.mjs,
+    authoring/example/preview.test.mjs,
     foundation/integrations/cli-peer-version.test.mjs,
     api/theme/integration-themes.test.mjs,
     clients/cli/commands/upgrade.integration-policy.test.mjs,
     clients/cli/formatters/index.test.mjs,
+    api/build/build.test.mjs,
   ]
 deciding_specs: [spec:AST-017/DEC-4, spec:AST-042/DEC-1, spec:AST-042/DEC-2]
 ---
@@ -238,7 +242,8 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   subcommand MUST keep its exit codes, and its JSON MAY change only by
   additions. Because builds fail on its findings, it MUST NOT report a finding
   the package's code does not contradict, other than the doc faults of DEC-8,
-  the doc-syntax findings of DEC-12 and the example findings of DEC-13:
+  the doc-syntax findings of DEC-12 and the example findings of DEC-13 and
+  DEC-14:
   a check that cannot judge an item lists it as not checked instead (DEC-7).
   A finding that would newly fail a build MUST first ship as a note marked
   `next` in `validate`'s `data.notes`, which fails nothing by default:
@@ -277,8 +282,8 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   `ERR_PATH_TRAVERSAL`. Bounded inputs are capped rather than trusted. The only
   writes outside a project or output folder are the per-user ones
   `spec:AST-081` FR7 lists: releases, records, kept search catalogs,
-  integration check results, template discovery's records, the component list, integrations' theme records, the docs not-found
-  hint's name summaries, doctor's docs checks and theme-wiring scan, and jiti's transpiled code in the per-user cache, the settings and state files, and the computer-level skill
+  integration check results, template discovery's records, the component list, each integration's components with the doc parts the not-found matcher scores, integrations' theme records, what theme build checks a theme against in Core's component docs, the lookup commands'
+  not-found hint's name summaries, npm's list of the files an integration package packs, the CLI's own docs tree, doctor's docs checks and theme-wiring scan, and jiti's transpiled code in the per-user cache, the settings and state files, and the computer-level skill
   file with its links or copy in the home folder. None follows a link in its place, and none replaces
   anything the CLI did not create.
 - **INV10a — Refusing a write outside its confined root is a compatible fix.**
@@ -546,6 +551,17 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   `astryx search` meet it first.
   A link between docs names its target by doc identity and is resolved on
   every read; Doctor warns on one that names no doc.
+- **INV38 — A printed command runs as printed, and a value can take a
+  placeholder's place.** A command that the CLI prints runs as printed. A
+  command that it carries as a string in its JSON (such as `astryx build`'s
+  `start.command`) runs once the caller puts its own invocation in place of the
+  `astryx` prefix, or in front of a bare subcommand. In both, the one other
+  exception is an argument shown as a `<placeholder>`, which the CLI prints
+  only where it knows no value. When a release knows the value, it prints the
+  value in the placeholder's place, and that is a compatible `[fix]`
+  (`spec:AST-017` FR54): the field stays a string and the command does the same
+  work. A program that fills a placeholder by replacing its text depends on
+  text that no release keeps, so it is not a released victim.
 - **INV28 — Every result names the package each artifact comes from.** A
   `--json` result about one artifact (a component, doc, template, or hook)
   carries `package` in its envelope, directly after `type`. A result
@@ -656,7 +672,9 @@ updated in the same pull request when it moves an invariant:
 - changing which files hold the agent-docs block, how init finds the project
   root, where it refuses to write agent docs, or where it removes them (INV31);
 - adding a kind of gap-report destination, or changing who chooses one
-  (INV36).
+  (INV36);
+- changing what makes a component example run on its own, or what it may use
+  without importing (DEC-14).
 
 `pnpm check:cli-structure` enforces the layout. The contract tests listed in
 `verified_by` enforce the envelope, the exit codes, the error codes, and the
@@ -702,6 +720,13 @@ non-interactive guarantee.
   INV20 describes; each owns the `type` on its own envelope.
 - `api/<subject>/_adapter.mjs` — the subject's only access to the environment
   (INV21).
+- `authoring/example/preview.mjs` — `previewableExample`, the rule for whether
+  a component example runs on its own, which Doctor and preview tools share
+  (DEC-14).
+- `foundation/integrations/example-code.mjs` and
+  `api/integration/example-scope.mjs` — the scope a package's examples are
+  read against, which Doctor builds and `integrationExampleScope` returns
+  (DEC-14).
 
 ## Deciding specs
 
@@ -807,7 +832,7 @@ out, dropping `--strict`, also drops the check for every real fault. A check
 that cannot tell whether the code contradicts a doc lists the item as not
 checked, which `--strict` does not fail. The exceptions are the doc-quality
 findings of DEC-8, the doc-syntax findings of DEC-12 and the example findings
-of DEC-13.
+of DEC-13 and DEC-14.
 Rejected: reporting a doubtful item as a warning (`--strict` fails it).
 
 ### DEC-8 — The strict check fails on copied passages, fluff and stray pointers in docs
@@ -817,8 +842,8 @@ Rejected: reporting a doubtful item as a warning (`--strict` fails it).
 People and agents read integration docs on a budget. A fact written in two
 topics goes stale in one of them at the next edit, and padding costs every
 reader. So these doc-quality findings fail `--strict` by owner decision, as
-an exception to DEC-7, beside DEC-12's doc-syntax findings and DEC-13's
-example findings. A copied passage (a run of identical words, after
+an exception to DEC-7, beside DEC-12's doc-syntax findings and the example
+findings of DEC-13 and DEC-14. A copied passage (a run of identical words, after
 the filters for function-word runs and for boilerplate that three or more
 topics share) and a listed padding phrase (outside code and quotes) are exact
 matches. The density floor is a threshold, not a contradiction, and a section
@@ -925,6 +950,46 @@ from the next minor release (DEC-11). The CLI finds a component's showcase by
 Rejected: failing them in a patch (packages already running the check would
 break on an update), and per-package special cases (a package that needs one
 is a package the checks should cover).
+
+Amended for component examples by DEC-14.
+
+### DEC-14 — A component example runs on its own, by one exported rule
+
+**Decider:** `josephfarina`, `2026-11-13`, for one rule that Doctor and
+preview tools share; its details are the CLI maintainers' choice under that
+decision.
+
+A docs page or catalog shows a component example that is not
+`kind: 'setup'` as a live preview, so it must run on its own.
+`previewableExample(example, scope)` in `@astryxdesign/cli/authoring` is the
+one rule, and Doctor and preview tools read examples through it, so they
+agree on every example. `integrationExampleScope(pkg)` in
+`@astryxdesign/cli/api` returns the scope Doctor reads a package's examples
+with, as JSON: `ExampleScope` is the contract, so a catalog can store it and a
+preview tool read examples with it as Doctor does. It reads the example as a TSX module that renders
+its default export, else the JSX it ends with, else the last component it
+declares: a function or class, or `memo`, `forwardRef` or `lazy` called
+on one. The example may use, without importing them, the components its
+package documents, the components and hooks Core documents, React's
+exports, and the JavaScript and browser globals of the `globals` package;
+an element takes its name only from the example or those components, as a
+global such as `Image` is not a component. It may import the
+package, the packages the package declares in `dependencies`,
+`peerDependencies` and `optionalDependencies`, React, and Core. Server-only
+code is what `showcase_not_standalone` names, with the same declared
+packages; a module of the package that imports `server-only`; and an async
+component of the package. `validate` lists each example the rule refuses
+as a `next` note with its fix: `example_does_not_compile`,
+`example_renders_nothing`, `example_undefined_name`, `example_server_only`
+and `example_import_unresolvable`. Each fails `--strict --next` now and
+`--strict` from the next minor release (DEC-11). An example the check
+cannot judge, such as one whose names it cannot judge because Core's docs
+or React cannot be read beside the package, is listed as not checked
+(DEC-7).
+
+Rejected: every export of the package in scope without an import (an app
+that copies the example needs the import), and stand-in values for names
+an example leaves undefined (they hide what the preview shows).
 
 ## Verification
 

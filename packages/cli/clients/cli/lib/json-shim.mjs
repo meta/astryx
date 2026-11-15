@@ -41,11 +41,24 @@
  * such as help printed as the failure report, still passes through.
  */
 
-import {API_VERSION, isJsonMode, toErrorEnvelope} from '../../../foundation/response/json.mjs';
+import {
+  API_VERSION,
+  isJsonMode,
+  toErrorEnvelope,
+} from '../../../foundation/response/json.mjs';
 import {answeredBy} from '../../../foundation/release/run-context.mjs';
+import {unknownSubcommandSuggestions} from './cli-error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
-import {setCommand, setOutcome, recordHelp} from '../../../foundation/debug/index.mjs';
-import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
+import {
+  setCommand,
+  setOutcome,
+  recordHelp,
+} from '../../../foundation/debug/index.mjs';
+import {
+  formatCliCommand,
+  getCliInvocation,
+  quoteCommandArgument,
+} from '../../../foundation/env/package-manager.mjs';
 
 /**
  * Fully-qualified name of a command relative to the root program, e.g.
@@ -99,17 +112,18 @@ export function buildHelpEnvelope(cmd) {
   }
 
   /** @type {Array<{flags: string, description: string, defaultValue?: unknown, choices?: string[]}>} */
-  const options = cmd.options.map((o) => {
+  const options = cmd.options.map(o => {
     /** @type {any} */
     const opt = {flags: o.flags, description: o.description || ''};
     if (o.defaultValue !== undefined) opt.defaultValue = o.defaultValue;
-    if (Array.isArray(o.argChoices) && o.argChoices.length) opt.choices = o.argChoices;
+    if (Array.isArray(o.argChoices) && o.argChoices.length)
+      opt.choices = o.argChoices;
     return opt;
   });
 
   const subcommands = cmd.commands
-    .filter((s) => !(/** @type {any} */ (s))._hidden)
-    .map((s) => ({name: s.name(), description: s.description() || ''}));
+    .filter(s => !(/** @type {any} */ (s)._hidden))
+    .map(s => ({name: s.name(), description: s.description() || ''}));
 
   return {
     apiVersion: API_VERSION,
@@ -135,7 +149,7 @@ export function buildHelpEnvelope(cmd) {
  */
 export function buildHelpErrorEnvelope(cmd) {
   const available = cmd.commands
-    .filter(s => !(/** @type {any} */ (s))._hidden && s.name() !== 'help')
+    .filter(s => !(/** @type {any} */ (s)._hidden) && s.name() !== 'help')
     .map(s => s.name());
   if (!cmd.parent) {
     // Commander dispatches `help <name>` with ['help', <name>, ...] in args.
@@ -149,7 +163,10 @@ export function buildHelpErrorEnvelope(cmd) {
   const group = fullNameOf(cmd);
   return toErrorEnvelope(
     `'${group}' needs a subcommand`,
-    available.map(name => ({name: `${group} ${name}`, reason: 'available subcommand'})),
+    available.map(name => ({
+      name: `${group} ${name}`,
+      reason: 'available subcommand',
+    })),
     ERROR_CODES.ERR_MISSING_ARGUMENT,
   );
 }
@@ -188,6 +205,8 @@ function commanderCodeToErrorCode(commanderCode, message) {
       return ERROR_CODES.ERR_UNKNOWN_COMMAND;
     case 'commander.unknownOption':
       return ERROR_CODES.ERR_INVALID_OPTION;
+    case UNKNOWN_SUBCOMMAND:
+      return ERROR_CODES.ERR_UNKNOWN_SUBCOMMAND;
     case 'commander.missingArgument':
     case 'commander.optionMissingArgument':
     case 'commander.missingMandatoryOptionValue':
@@ -206,12 +225,21 @@ function commanderCodeToErrorCode(commanderCode, message) {
 }
 
 /**
+ * Whether a command, by its words (`theme build`), answers `--json`. The
+ * answer to an option a command does not take offers `--json` only then.
+ * @type {(path: string) => boolean}
+ */
+let jsonSupported = () => true;
+
+/**
  * Install the shim on a Commander program. Idempotent — safe to call
  * once at program-construction time.
  *
  * @param {import('commander').Command} program
+ * @param {{jsonSupported?: (path: string) => boolean}} [options]
  */
-export function installJsonShim(program) {
+export function installJsonShim(program, options = {}) {
+  if (options.jsonSupported) jsonSupported = options.jsonSupported;
   // exitOverride() and configureOutput() do NOT auto-cascade to
   // subcommands that were registered BEFORE the shim runs (Commander
   // copies these settings from parent at command-creation time, not
@@ -256,7 +284,7 @@ function applyShimRecursively(cmd) {
     throw err;
   });
   cmd.configureOutput({
-    writeOut: (str) => process.stdout.write(str),
+    writeOut: str => process.stdout.write(str),
     // Commander's own "error: ..." line never reaches the user. Under --json a
     // consumer parsing both streams must not see it alongside the envelope;
     // in text mode it is Commander's format, not Astryx's, so an invalid
@@ -268,7 +296,7 @@ function applyShimRecursively(cmd) {
     // ONLY that line. Commander also writes HELP through this channel when it
     // shows help because the invocation failed (a command group with no
     // subcommand), and that output is still wanted in text mode.
-    writeErr: (str) => {
+    writeErr: str => {
       if (jsonActive()) return;
       if (/^error:\s/i.test(str)) return;
       process.stderr.write(str);
@@ -283,6 +311,32 @@ function applyShimRecursively(cmd) {
 /** Carries the command Commander rejected from exitOverride to the error handler. */
 const REJECTED_COMMAND = Symbol.for('astryx.jsonShim.rejectedCommand');
 
+/** A group given a word that is none of its subcommands. */
+const UNKNOWN_SUBCOMMAND = 'astryx.unknownSubcommand';
+
+/**
+ * The word typed after a group's own words that is none of its
+ * subcommands, read from the command line; null when there is none.
+ * @param {any} group
+ * @returns {string | null}
+ */
+function unknownGroupWord(group) {
+  const chain = [];
+  for (let node = group; node?.parent; node = node.parent)
+    chain.unshift(node.name());
+  let root = group;
+  while (root.parent) root = root.parent;
+  const argv = /** @type {string[]} */ (root.rawArgs ?? process.argv);
+  const words = argv.slice(2).filter(w => !String(w).startsWith('-'));
+  for (let i = 0; i < chain.length; i++) if (words[i] !== chain[i]) return null;
+  const next = words[chain.length];
+  const names = group.commands.flatMap((/** @type {any} */ c) => [
+    c.name(),
+    ...c.aliases(),
+  ]);
+  return next != null && !names.includes(next) ? next : null;
+}
+
 /**
  * The usage line of the command a parse error came from, as a suggestion, for
  * an option given without its value.
@@ -295,15 +349,27 @@ function usageSuggestion(err, code) {
   if (!cmd) return undefined;
   const parts = [];
   for (let node = cmd; node; node = node.parent) parts.unshift(node.name());
-  // The theme editor names what is missing with its usage and its help, as
-  // the project runs the CLI.
+  // The theme editor and its preview commands name what is missing with
+  // their usage and help, as the project runs the CLI.
   if (
     code === 'commander.missingArgument' &&
-    parts.slice(1, 4).join(' ') === 'experimental theme editor'
+    parts.slice(1, 3).join(' ') === 'experimental theme' &&
+    ['editor', 'preview'].includes(parts[3])
   )
     return editorMissingSuggestions(cmd);
   if (code !== 'commander.optionMissingArgument') return undefined;
-  return [{name: `${parts.join(' ')} ${cmd.usage()}`.trim(), reason: 'usage'}];
+  // The command's usage with the option in it, as it takes its value
+  // (`astryx theme build --out <path> <files...>`).
+  const flags = /option '([^']+)' argument missing/.exec(
+    /** @type {any} */ (err)?.message ?? '',
+  )?.[1];
+  const option = flags
+    ? /--[\w-]+(?:\s+[<[][^>\]]*[>\]])?/.exec(flags)?.[0]
+    : undefined;
+  const usage = option
+    ? cmd.usage().replace('[options]', `${option} [options]`)
+    : cmd.usage();
+  return [{name: `${parts.join(' ')} ${usage}`.trim(), reason: 'usage'}];
 }
 
 /**
@@ -317,11 +383,59 @@ function editorMissingMessage(err, message) {
   const wants = (cmd?.registeredArguments ?? [])
     .filter((/** @type {any} */ a) => a.required)
     .map((/** @type {any} */ a) => a.name());
-  return editorMissingArgument(
-    cmd,
-    wants,
-    /'([^']+)'/.exec(message)?.[1],
-  ).message;
+  return editorMissingArgument(cmd, wants, /'([^']+)'/.exec(message)?.[1])
+    .message;
+}
+
+/**
+ * The editor themes of the app a command runs in, as the theme editor
+ * lists them; the editor registers it, so this module reads no theme files.
+ * @type {(cwd: string) => string[]}
+ */
+let editorThemesHere = () => [];
+
+/**
+ * How the theme commands read an option commander does not know, or one
+ * given no value (commander's code says which), which the editor
+ * registers: the message and the commands that work, or undefined for a
+ * command it does not read.
+ * @type {(cmd: any, code: string) => {message: string, suggestions: Array<{name: string, reason: string}>} | undefined | Promise<{message: string, suggestions: Array<{name: string, reason: string}>} | undefined>}
+ */
+let unknownOptionReader = () => undefined;
+
+/**
+ * Register how the theme commands read an option they do not take.
+ * @param {(cmd: any, code: string) => {message: string, suggestions: Array<{name: string, reason: string}>} | undefined | Promise<{message: string, suggestions: Array<{name: string, reason: string}>} | undefined>} read
+ */
+export function setUnknownOptionReader(read) {
+  unknownOptionReader = read;
+}
+
+/**
+ * The word a theme command missing its one argument is offered, the one its
+ * own refusals offer (`new`: a theme name no theme here has; `preview app`:
+ * a folder that is free), with why; null for a command that has none. The
+ * editor registers it, so this module reads no theme files.
+ * @type {(cwd: string, words: string) => {word: string, reason: string} | null}
+ */
+let freeArgument = () => null;
+
+/**
+ * Register the word a theme command missing its one argument is offered.
+ * @param {(cwd: string, words: string) => {word: string, reason: string} | null} free
+ *   `words`: the command's words after the program, `experimental theme editor new`
+ */
+export function setFreeArgument(free) {
+  freeArgument = free;
+}
+
+/**
+ * Register how the theme editor lists the themes of the app a command runs
+ * in, for the missing-theme suggestions.
+ * @param {(cwd: string) => string[]} list
+ */
+export function setEditorThemeList(list) {
+  editorThemesHere = list;
 }
 
 /**
@@ -335,6 +449,64 @@ function editorMissingSuggestions(cmd) {
   for (let node = cmd; node; node = node.parent) parts.unshift(node.name());
   const words = parts.slice(1).join(' ');
   const invocation = getCliInvocation(process.cwd());
+  // No theme named, and the app has exactly one editor theme: the command
+  // on that theme, when the theme is all it takes.
+  const wants = (cmd?.registeredArguments ?? []).filter(
+    (/** @type {any} */ a) => a.required,
+  );
+  // (`new` names a theme that does not exist yet: never the one here.)
+  if (
+    !(cmd?.args ?? []).length &&
+    wants.length === 1 &&
+    wants[0].name() === 'theme' &&
+    cmd.name() !== 'new'
+  ) {
+    const themes = editorThemesHere(process.cwd());
+    if (themes.length === 1)
+      return [
+        {
+          name: `${invocation} ${words} ${themes[0]}`,
+          reason: `do this instead: ${themes[0]} is the theme here`,
+        },
+        {
+          name: `${invocation} ${words} --help`,
+          reason: 'what each argument is',
+        },
+      ];
+  }
+  // Words given with the theme left out (`set corners pill`), in an app
+  // with one editor theme that none of the words names: the same words on
+  // that theme.
+  const given = (cmd?.args ?? []).map(String);
+  if (given.length && wants[0]?.name() === 'theme' && cmd.name() !== 'new') {
+    const themes = editorThemesHere(process.cwd());
+    if (themes.length === 1 && !given.includes(themes[0]))
+      return [
+        {
+          name: `${invocation} ${words} ${themes[0]} ${given.map((/** @type {string} */ w) => quoteCommandArgument(w)).join(' ')}`,
+          reason: `do this instead: ${themes[0]} is the theme here`,
+        },
+        {
+          name: `${invocation} ${words} --help`,
+          reason: 'what each argument is',
+        },
+      ];
+  }
+  // A command whose one argument names something new (`new`'s theme,
+  // `preview app`'s folder), given none: the free word its own refusals
+  // offer.
+  const free =
+    !(cmd?.args ?? []).length && wants.length === 1
+      ? freeArgument(process.cwd(), words)
+      : null;
+  if (free)
+    return [
+      {
+        name: `${invocation} ${words} ${free.word}`,
+        reason: `do this instead: ${free.reason}`,
+      },
+      {name: `${invocation} ${words} --help`, reason: 'what each argument is'},
+    ];
   return [
     {name: `${invocation} ${words} ${cmd.usage()}`.trim(), reason: 'usage'},
     {name: `${invocation} ${words} --help`, reason: 'what each argument is'},
@@ -435,7 +607,9 @@ function patchOutputHelp(cmd) {
   if (anyCmd.__xdsHelpPatched) return;
   anyCmd.__xdsHelpPatched = true;
   const original = cmd.outputHelp.bind(cmd);
-  anyCmd.outputHelp = function patchedOutputHelp(/** @type {any} */ contextOptions) {
+  anyCmd.outputHelp = function patchedOutputHelp(
+    /** @type {any} */ contextOptions,
+  ) {
     if (jsonActive()) {
       if (!process.__xdsJsonHandled) {
         process.__xdsJsonHandled = true;
@@ -461,7 +635,9 @@ function patchPrototype(CommandCtor) {
   if (proto.__xdsHelpPatched) return;
   proto.__xdsHelpPatched = true;
   const original = proto.outputHelp;
-  proto.outputHelp = function patchedProtoOutputHelp(/** @type {any} */ contextOptions) {
+  proto.outputHelp = function patchedProtoOutputHelp(
+    /** @type {any} */ contextOptions,
+  ) {
     if (jsonActive()) {
       if (!process.__xdsJsonHandled) {
         process.__xdsJsonHandled = true;
@@ -493,11 +669,15 @@ function patchPrototype(CommandCtor) {
  *   commander.excessArguments
  *
  * @param {unknown} err
- * @returns {boolean} true if handled (caller should not re-throw)
+ * @returns {boolean | Promise<boolean>} true if handled (caller should not
+ *   re-throw); a promise when the answer is written once its suggestions
+ *   are checked
  */
 export function handleCommanderError(err) {
   if (!err || typeof err !== 'object' || !('code' in err)) return false;
-  const code = /** @type {{code?: string, exitCode?: number, message?: string}} */ (err).code;
+  const code =
+    /** @type {{code?: string, exitCode?: number, message?: string}} */ (err)
+      .code;
   if (typeof code !== 'string' || !code.startsWith('commander.')) return false;
 
   const exitCode = /** @type {{exitCode?: number}} */ (err).exitCode ?? 1;
@@ -529,29 +709,164 @@ export function handleCommanderError(err) {
     code: commanderCodeToErrorCode(code, message),
   });
 
+  // A group of the experimental theme commands given a word it does not
+  // have, then an option (`experimental theme preview path --theme t`): the
+  // word is what is wrong, named as when no option follows it, with the
+  // group's subcommands closest first. Stable groups keep their error.
+  const rejected = /** @type {any} */ (err)?.[REJECTED_COMMAND];
+  const group = rejected;
+  const chain = [];
+  for (let node = group; node?.parent; node = node.parent)
+    chain.unshift(node.name());
+  const word =
+    code === 'commander.unknownOption' &&
+    group?.commands?.length &&
+    chain.slice(0, 2).join(' ') === 'experimental theme'
+      ? unknownGroupWord(group)
+      : null;
+  if (word) {
+    return finishParseError(err, UNKNOWN_SUBCOMMAND, message, exitCode, {
+      message: `unknown subcommand '${chain.join(' ')} ${word}'`,
+      suggestions: unknownSubcommandSuggestions(
+        `${getCliInvocation(process.cwd())} ${chain.join(' ')}`,
+        word,
+        group.commands.map((/** @type {any} */ c) => c.name()),
+      ),
+    });
+  }
+  // An option a command does not take: the editor's own reader reads its
+  // commands' options; every other command gets the generic answer.
+  if (code === 'commander.unknownOption' && rejected)
+    return answerStrayOption(err, rejected, message, exitCode);
+
   // Real error paths. Strip Commander's "error: " prefix once: in the envelope
   // the key is already `error`, and in text mode the Astryx prefix replaces it.
-  const suggestions = usageSuggestion(err, code);
+  // The editor's reader also reads an option given without its value and
+  // words a theme command does not take.
+  const read =
+    code === 'commander.optionMissingArgument' ||
+    code === 'commander.excessArguments'
+      ? unknownOptionReader(rejected, code)
+      : undefined;
+  // The reader checks the commands it offers as the command itself would
+  // (which may take a moment): the answer is written once it has them.
+  if (read instanceof Promise)
+    return read.then(r => finishParseError(err, code, message, exitCode, r));
+  return finishParseError(err, code, message, exitCode, read);
+}
+
+/**
+ * The answer to an option a command does not take, loaded only for this
+ * error. On the program itself, before a word that names no command
+ * (`astryx describe Table --format json`), the unknown command is the fault
+ * to report, and its answer names the command meant. Otherwise the editor's
+ * reader reads the option for its own commands, and every other command
+ * gets the options it takes and the run as meant (./stray-option.mjs).
+ * @param {unknown} err
+ * @param {any} rejected the command that refused the option
+ * @param {string} message Commander's message
+ * @param {number} exitCode
+ * @returns {Promise<boolean>}
+ */
+async function answerStrayOption(err, rejected, message, exitCode) {
+  const code = 'commander.unknownOption';
+  const words = process.argv.slice(2);
+  const stray = /unknown option '([^']+)'/.exec(message)?.[1] ?? '';
+  const {strayOptionAnswer, withoutStray} = await import('./stray-option.mjs');
+  if (!rejected.parent) {
+    const {findEntry, firstWord, unknownCommandAnswer} =
+      await import('./unknown-command.mjs');
+    // Only a word before the stray option is read as the command: after it,
+    // the word may be the option's value (`astryx --format text component
+    // Table`), and the unknown option stays the fault.
+    const at = words.indexOf(stray);
+    const first = firstWord(at < 0 ? words : words.slice(0, at), rejected);
+    const cleaned = withoutStray(words, stray, rejected.options);
+    if (
+      first &&
+      !rejected.commands.some((/** @type {any} */ c) => c.name() === first.word)
+    ) {
+      const answer = await unknownCommandAnswer(rejected, cleaned, {
+        findEntry,
+      });
+      setOutcome('parse-error', {
+        exitCode: exitCode || 1,
+        error: new Error(answer?.message ?? message),
+        code: ERROR_CODES.ERR_UNKNOWN_COMMAND,
+      });
+      return finishParseError(
+        err,
+        code,
+        message,
+        exitCode,
+        answer && {
+          message: answer.message,
+          // Only the runs: a near or listed command name is no run to print
+          // after `Run:`, so the program's help stands in for those.
+          suggestions: answer.suggestions.some(s =>
+            s.name.startsWith('astryx '),
+          )
+            ? answer.suggestions
+                .filter(s => s.name.startsWith('astryx '))
+                .map(s => ({name: formatCliCommand(s.name), reason: s.reason}))
+            : [{name: formatCliCommand('--help'), reason: 'every command'}],
+        },
+        ERROR_CODES.ERR_UNKNOWN_COMMAND,
+      );
+    }
+  }
+  const read = await unknownOptionReader(rejected, code);
+  return finishParseError(
+    err,
+    code,
+    message,
+    exitCode,
+    read ??
+      strayOptionAnswer(rejected, message.replace(/^error:\s*/i, ''), words, {
+        jsonSupported,
+      }),
+  );
+}
+
+/**
+ * The rest of {@link handleCommanderError} for a parse failure: the message
+ * and suggestions written (the theme reader's answer when it read the
+ * option), and the exit.
+ * @param {unknown} err
+ * @param {string} code
+ * @param {string} message
+ * @param {number} exitCode
+ * @param {{message: string, suggestions: Array<{name: string, reason: string}>} | undefined | null} read
+ * @param {string} [errorCode] the code the answer reports, when it is not
+ *   the one Commander's code maps to
+ * @returns {boolean}
+ */
+function finishParseError(err, code, message, exitCode, read, errorCode) {
+  const answer = read ?? undefined;
+  const suggestions = answer?.suggestions ?? usageSuggestion(err, code);
   // In the theme editor a missing argument names what was given: in
   // `set corners small` the first word is read as the theme, so "value" alone
   // would name the wrong thing.
-  const cleaned =
-    suggestions?.length === 2
+  const cleaned = answer
+    ? answer.message
+    : code === 'commander.missingArgument' && suggestions?.length === 2
       ? editorMissingMessage(err, message)
       : message.replace(/^error:\s*/i, '');
   if (jsonActive()) {
     emitJsonError(
       cleaned,
       suggestions,
-      commanderCodeToErrorCode(code, cleaned),
+      errorCode ?? commanderCodeToErrorCode(code, cleaned),
     );
   } else {
     // Commander's own line was suppressed above, so a parse failure reads the
     // same as every other CLI error — the `Error: …` line cliError prints.
     process.stderr.write(`Error: ${cleaned}\n`);
-    if (suggestions) process.stderr.write(`Usage: ${suggestions[0].name}\n`);
-    if (suggestions?.[1])
-      process.stderr.write(`Run: ${suggestions[1].name}\n`);
+    if (suggestions)
+      process.stderr.write(
+        `${suggestions[0].reason === 'usage' ? 'Usage' : 'Run'}: ${suggestions[0].name}\n`,
+      );
+    if (suggestions?.[1]) process.stderr.write(`Run: ${suggestions[1].name}\n`);
   }
   process.exit(exitCode || 1);
 }
