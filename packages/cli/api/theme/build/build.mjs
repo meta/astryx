@@ -119,7 +119,11 @@ import {
   sourceTypography,
 } from './input-fields.mjs';
 import {styleKeyProblems} from './style-keys.mjs';
-import {writtenValueProblems} from './written-values.mjs';
+import {
+  bigIntAsText,
+  writtenPrimitives,
+  writtenValueProblems,
+} from './written-values.mjs';
 import {levenshteinDistance} from '../../../foundation/text/levenshtein.mjs';
 import {
   installCommandFor,
@@ -314,47 +318,6 @@ function coreSurfaceTokens() {
   } catch {
     return {};
   }
-}
-
-/**
- * A JSON replacer that writes a BigInt as its digits, the text Core writes
- * into the stylesheet for it: JSON itself has no BigInt.
- * @param {string} _key
- * @param {unknown} value
- */
-const bigIntAsText = (_key, value) =>
-  typeof value === 'bigint' ? String(value) : value;
-
-/**
- * A value with each BigInt in it, in plain objects and arrays at any depth,
- * replaced by its digits, and each boxed primitive (`new String('4px')`) by
- * its primitive; the same object where it holds none, so a theme without
- * one is handed on as it is.
- * @template T
- * @param {T} value
- * @param {Map<any, any>} [done] each object already replaced, for one that holds itself
- * @returns {T}
- */
-function writtenPrimitives(value, done = new Map()) {
-  if (typeof value === 'bigint') return /** @type {any} */ (String(value));
-  if (value === null || typeof value !== 'object') return value;
-  const kind = Object.prototype.toString.call(value);
-  if (/^\[object (?:String|Number|Boolean)\]$/.test(kind))
-    return /** @type {any} */ (value).valueOf();
-  const plain = Array.isArray(value) || kind === '[object Object]';
-  if (!plain) return value;
-  if (done.has(value)) return done.get(value);
-  done.set(value, value);
-  /** @type {any} */
-  let copy = null;
-  for (const [k, v] of Object.entries(value)) {
-    const next = writtenPrimitives(v, done);
-    if (next === v) continue;
-    copy ??= Array.isArray(value) ? [...value] : {...value};
-    copy[k] = next;
-  }
-  if (copy) done.set(value, copy);
-  return copy ?? value;
 }
 
 /** @type {Map<string, import('./input-fields.mjs').InputFields | null>} */

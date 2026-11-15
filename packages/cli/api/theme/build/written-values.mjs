@@ -43,6 +43,45 @@ const boxed = value =>
   );
 
 /**
+ * A JSON replacer that writes a BigInt as its digits, the text Core writes
+ * into the stylesheet for it: JSON itself has no BigInt.
+ * @param {string} _key
+ * @param {unknown} value
+ */
+export const bigIntAsText = (_key, value) =>
+  typeof value === 'bigint' ? String(value) : value;
+
+/**
+ * A value as the build hands it to Core: each BigInt in it, in plain
+ * objects and arrays at any depth, replaced by its digits, and each boxed
+ * primitive (`new String('4px')`) by its primitive. The same object where
+ * it holds none, so a theme without one is handed on as it is. The value
+ * judge reads values by the same rules, so what is warned is what is
+ * written.
+ * @template T
+ * @param {T} value
+ * @param {Map<any, any>} [done] each object already replaced, for one that holds itself
+ * @returns {T}
+ */
+export function writtenPrimitives(value, done = new Map()) {
+  if (typeof value === 'bigint') return /** @type {any} */ (String(value));
+  if (boxed(value)) return /** @type {any} */ (value).valueOf();
+  if (!Array.isArray(value) && !isPlainBlock(value)) return value;
+  if (done.has(value)) return done.get(value);
+  done.set(value, value);
+  /** @type {any} */
+  let copy = null;
+  for (const [k, v] of Object.entries(value)) {
+    const next = writtenPrimitives(v, done);
+    if (next === v) continue;
+    copy ??= Array.isArray(value) ? [...value] : {...value};
+    copy[k] = next;
+  }
+  if (copy) done.set(value, copy);
+  return copy ?? value;
+}
+
+/**
  * The JSON text Core writes for an object a part holds as a value, where it
  * writes a BigInt as its digits (the build hands Core its digits); null for
  * an object that holds itself, which has no JSON text.
@@ -51,9 +90,7 @@ const boxed = value =>
  */
 export function partJsonText(value) {
   try {
-    return JSON.stringify(value, (_, v) =>
-      typeof v === 'bigint' ? String(v) : v,
-    );
+    return JSON.stringify(value, bigIntAsText);
   } catch {
     return null;
   }
