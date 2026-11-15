@@ -132,6 +132,8 @@ import {
 import {
   borderlessSurfaces,
   checkSetting,
+  indicatorLines,
+  selectedBoxes,
   coveredPaints,
   dividerParts,
   normalizeEntry,
@@ -2073,6 +2075,30 @@ function leftOutParts(ctx, slug, data, sub, s) {
         note: `the dividers draw their rules at --border-width too, so they are ${s.value} now (${dividers.join(', ')}); these keep each at ${own}:`,
         run: dividers.map(
           p => `${P} set ${slug} --border-width ${own} --on ${p}`,
+        ),
+      });
+    const boxed = (/** @type {string} */ p) =>
+      data.settings.some(
+        x => x.on === p && x.state === 'selected' && /^border/.test(x.thing),
+      );
+    const selected = selectedBoxes(C).filter(p => has(p) && !boxed(p));
+    if (selected.length)
+      out.push({
+        note: `the parts that draw a box only when selected draw no border (${selected.join(', ')}); these give each one there:`,
+        run: selected.map(
+          p => `${P} set ${slug} border ${line} --on ${p} --state selected`,
+        ),
+      });
+    const lines = indicatorLines(C).filter(
+      x =>
+        has(x.part) &&
+        !data.settings.some(y => y.on === x.part && y.thing === x.side),
+    );
+    if (lines.length && String(s.value).trim() !== own)
+      out.push({
+        note: `the indicator lines keep their own thickness (${lines.map(x => x.part).join(', ')}); these draw each at ${s.value}:`,
+        run: lines.map(
+          x => `${P} set ${slug} ${x.side} ${s.value} --on ${x.part}`,
         ),
       });
   }

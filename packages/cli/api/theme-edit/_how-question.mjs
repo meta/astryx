@@ -57,6 +57,8 @@ import {
 } from './_settings.mjs';
 import {
   borderlessSurfaces,
+  indicatorLines,
+  selectedBoxes,
   dividerParts,
   drawsLine,
   inheritedReach,
@@ -11891,6 +11893,11 @@ export function draftAnswer(ctx, env, question) {
             const dividers = wide
               ? dividerParts(C).filter(pt => !borderless.includes(pt))
               : [];
+            // Everywhere also reaches the parts that draw a box only when
+            // selected (a nav item, a segment), on that state, and the
+            // indicator lines (a tab's underline), at the border width.
+            const selectedOnly = everywhere ? selectedBoxes(C) : [];
+            const lines = everywhere && wide ? indicatorLines(C) : [];
             /** @type {Step[]} */
             const steps = [
               ...(wide ? [set('--border-width', wide)] : []),
@@ -11904,10 +11911,20 @@ export function draftAnswer(ctx, env, question) {
                     }),
                   )
                 : []),
+              ...selectedOnly.map(pt =>
+                set('border', `${wide ?? bwNow0} solid ${color}`, {
+                  on: pt,
+                  state: 'selected',
+                  ...modeOf(c),
+                }),
+              ),
+              ...lines.map(x =>
+                set(x.side, /** @type {string} */ (wide), {on: x.part}),
+              ),
               ...dividers.map(pt => set('--border-width', bwNow0, {on: pt})),
             ];
             return {
-              text: `borders${wide ? ` ${wide} wide` : ''} in ${color}: the shared border width and colors (--color-border-emphasized is what inputs draw)${everywhere && borderless.length ? `, and a border on the surfaces the shared width does not reach (${borderless.join(', ')})` : ''}${dividers.length ? `; the dividers keep their ${bwNow0} rules (${dividers.join(', ')})` : ''}`,
+              text: `borders${wide ? ` ${wide} wide` : ''} in ${color}: the shared border width and colors (--color-border-emphasized is what inputs draw)${everywhere && borderless.length ? `, and a border on the surfaces the shared width does not reach (${borderless.join(', ')})` : ''}${selectedOnly.length ? `, on the parts that draw a box only when selected (${selectedOnly.join(', ')})` : ''}${lines.length ? `, and the indicator lines at that width (${lines.map(x => x.part).join(', ')})` : ''}${dividers.length ? `; the dividers keep their ${bwNow0} rules (${dividers.join(', ')})` : ''}`,
               options: [steps],
               sequence: true,
             };

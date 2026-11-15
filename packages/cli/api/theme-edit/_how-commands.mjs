@@ -10,7 +10,7 @@
 
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
-import {checkSetting} from './_check.mjs';
+import {checkSetting, indicatorLines} from './_check.mjs';
 import {baseResolved} from './_project.mjs';
 import {readThemeListState} from '../theme/_adapter.mjs';
 import {
@@ -692,6 +692,9 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
       .filter(Boolean)
       .flatMap(x => members(String(x))),
   ]);
+  // An indicator line's thickness (a tab's underline height) is the
+  // width of a line it draws, as a border's is.
+  const lineSide = new Map(indicatorLines(C).map(x => [x.part, x.side]));
   for (const part of touched) {
     // A whole kept part is checked above, not as a subject.
     if (keeps.some(k => k.part === part && !k.prefix)) continue;
@@ -737,9 +740,14 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
           ) &&
           steps.some(x => x.thing === st.thing && familyOf(x.thing) !== fam),
       );
+      // An indicator line's thickness is also the width of a line it
+      // draws: a border ask reaches it.
+      const lineWidth =
+        lineSide.get(part) === prop && intent.families.includes('border');
       if (
         intent.families.length &&
         !intent.families.includes(fam) &&
+        !lineWidth &&
         !typedHere &&
         !sameToken
       )
