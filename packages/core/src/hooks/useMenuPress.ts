@@ -6,7 +6,7 @@
  * @file useMenuPress.ts
  * @input The menu root, its trigger, the enabled-row selector, and callbacks
  *   for opening, highlighting, activating and dismissing
- * @output useMenuPress, useMenuPressInternal (with the internal row
+ * @output useMenuPress, useMenuPressInternal (with the internal whole-row
  *   lookup), the marker attributes and the activation mark
  * @position Core hook for DropdownMenu, ContextMenu, DropdownMenuSubMenu,
  *   Selector, MenuBottomSheetActionList and the navigation menus. The
@@ -268,7 +268,10 @@ interface MenuPressConfig extends UseMenuPressInternalOptions {
   isInScrollView?: (control: Element) => boolean;
 }
 
-/** The options of {@link useMenuPressInternal}: the public ones, and more. */
+/**
+ * The options of {@link useMenuPressInternal}: the public options and the
+ * internal `wholeRowSelector`.
+ */
 export interface UseMenuPressInternalOptions extends UseMenuPressOptions {
   /**
    * Selector matching a whole row whose item (the `itemSelector` match) is
@@ -431,16 +434,16 @@ interface ResolvedPoint {
  * ```
  */
 export function useMenuPress(input: UseMenuPressOptions): UseMenuPressReturn {
-  // The row lookup is internal: an untyped caller's `wholeRowSelector` does not
-  // reach the model.
+  // The whole-row lookup is internal: an untyped caller's `wholeRowSelector`
+  // does not reach the model.
   const {wholeRowSelector: _wholeRowSelector, ...options} =
     input as UseMenuPressInternalOptions;
   return useMenuPressInternal(options);
 }
 
 /**
- * useMenuPress, with the options internal to Core's menus. Not exported from
- * the hooks entry point.
+ * useMenuPress, with the options internal to Core's menus. The hooks entry
+ * point does not export it.
  */
 export function useMenuPressInternal(
   input: UseMenuPressInternalOptions,

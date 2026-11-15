@@ -69,7 +69,9 @@ describe('MenuBottomSheetActionList', () => {
   });
 
   describe('a press on the part of a row outside its action', () => {
-    /** The hit test answers `element` for every point, as under a still finger. */
+    /**
+     * The hit test answers `element` for every point, as under a still finger.
+     */
     function pointAt(element: Element) {
       Object.defineProperty(document, 'elementFromPoint', {
         configurable: true,
