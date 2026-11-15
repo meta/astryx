@@ -121,6 +121,8 @@ export function effectiveTemplateDiscovery(templates) {
  * @property {string} [category]
  * @property {boolean} [isReady]
  * @property {boolean} [scaffold]
+ * @property {boolean} [hidden] a Core page doc's `isHiddenFromOverview`: kept
+ *   off the gallery, so never taken as the app shell
  * @property {number} [aspectRatio]
  * @property {string} [exampleFor]
  * @property {string[]} [alsoExampleFor]
@@ -1210,6 +1212,7 @@ async function discoverPages() {
       keywords: doc?.keywords ?? [],
       isReady: doc?.isReady ?? true,
       scaffold: doc?.scaffold ?? false,
+      hidden: doc?.isHiddenFromOverview === true,
       ...(doc?.icons ? {icons: doc.icons} : {}),
       filePath: path.join(dirPath, 'page.tsx'),
       docPath,
