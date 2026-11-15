@@ -14107,10 +14107,16 @@ export function draftAnswer(ctx, env, question) {
               (m
                 ? `${thinner ? Math.max(0.5, Number(m[1]) / 2) : Number(m[1]) + 1}px`
                 : width);
+            // The children set their own line widths per render (one of
+            // them none), so no setting reaches the line alone; the shared
+            // width token on this part would reach every border inside it
+            // too (a checkbox's, a button's). Nothing is written, and the
+            // answer says why.
             if (w)
               return {
-                text: `the lines${where}: ${on} draws no border of its own; ${kids.join(', ')} inside it draw${kids.length > 1 ? '' : 's'} its lines ${tokens[0]} wide (now ${nowW || 'unset'}), so that width on ${on}`,
-                options: [[set(tokens[0], w, f)]],
+                text: `${on} dividers are drawn by ${kids.join(' and ')}, whose line width Core sets per render; the editor can't change that width without touching the borders of the controls inside ${on} (${tokens[0]} reaches them too), so nothing is written`,
+                options: [],
+                lookup: `${HOW} ${kids[kids.length - 1]}`,
               };
           }
         }

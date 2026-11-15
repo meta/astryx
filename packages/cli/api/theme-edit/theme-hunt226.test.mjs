@@ -291,6 +291,14 @@ describe('tokens, pages, words', () => {
     await follow(radio);
   }, 240_000);
 
+  it('row dividers thicker: nothing written, and why (the cells draw the line per render)', async () => {
+    const rs = await how('q0', 'make the table row dividers thicker');
+    expect(writes(rs)).toEqual([]);
+    expect(rs[0].text).toMatch(
+      /^table-row dividers are drawn by table-header-cell and table-cell, whose line width Core sets per render; the editor can't change that width without touching the borders of the controls inside table-row/,
+    );
+  }, 240_000);
+
   it('motion words are what changes, never an unknown part', async () => {
     const t = await fresh('w5');
     const faster = writes(await how(t, 'make transitions faster'));
