@@ -47,7 +47,16 @@ export function missedSteps(ctx, data, res, base) {
   const accent = any(/^--color-(accent|on-accent|text-accent)/);
   const surfaces = any(/^--color-background-(body|surface)$/);
   const corners = any(/^--radius-(?!full$)/);
-  const borders = any(/^--border-width/);
+  // (A border width the theme took to zero draws no border: a part with
+  // none already shows what it asked for.)
+  const borders =
+    any(/^--border-width/) &&
+    modes.some(
+      m =>
+        !/^0(?:px|rem|em)?$/.test(
+          String(res[m]?.['--border-width'] ?? '').trim(),
+        ),
+    );
   const has = (/** @type {string} */ p) => ctx.project.target.has(p);
   /**
    * A setting on the part that covers an aspect: one of the properties or
@@ -474,6 +483,18 @@ export function missedSteps(ctx, data, res, base) {
             .filter(Boolean),
         ),
       ];
+      // A part that draws no filled box at rest in any variant (a ghost
+      // toggle button, a menu row: their fills are pressed, hover or
+      // selected ones) is borderless on purpose: no frame for it.
+      const boxAtRest = fills(p).some(
+        (/** @type {any} */ r) =>
+          !/^--color-overlay-/.test(r.token) &&
+          r.when.some(
+            (/** @type {string} */ w) =>
+              w === '' || !/:|aria-|selected|\[/.test(w),
+          ),
+      );
+      if (!boxAtRest) continue;
       const all = /** @type {string[]} */ ([
         ...(C.MAP[p]?.attrs?.variant ?? []),
       ]);

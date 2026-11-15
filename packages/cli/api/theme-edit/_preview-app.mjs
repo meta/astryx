@@ -5038,8 +5038,9 @@ export async function themeEditPreviewApp(dir, options = {}) {
       for (const entry of listForCopy(path.join(from.dir, rel))) {
         const sub = path.join(rel, entry.name);
         // A repository's own folder (.git, a file in a worktree) and
-        // installed packages are not the theme's: never copied whole.
-        if (NOT_THEME_ENTRIES.has(entry.name) && !entry.isSymbolicLink()) {
+        // installed packages are not the theme's: never copied, whether a
+        // folder, a file or a link of that name.
+        if (NOT_THEME_ENTRIES.has(entry.name)) {
           notTheme.push(shown(cwd, path.join(from.dir, sub)));
           leftOut.set(
             path.join(from.dir, sub),
@@ -5081,7 +5082,7 @@ export async function themeEditPreviewApp(dir, options = {}) {
       );
     if (links.length)
       notes.push(
-        `left out ${links.join(', ')}: ${links.length === 1 ? 'a link' : 'links'}, which the copy does not follow; put a copy of the file there to bring it along`,
+        `left out ${links.join(', ')}: ${links.length === 1 ? 'a link' : 'links'}, which the copy does not follow; put a copy of what ${links.length === 1 ? 'it leads' : 'each leads'} to there to bring it along`,
       );
     // A source file of the theme that imports a file outside its folder
     // would not build in the new app, where that file is not: refused,
@@ -5144,6 +5145,8 @@ export async function themeEditPreviewApp(dir, options = {}) {
     };
     /** Packages the copied theme sources import, by name. @type {Set<string>} */
     const imported = new Set();
+    /** Stylesheets of another language the theme sources import (a Sass file), which the new app cannot build or type. @type {string[]} */
+    const otherStyles = [];
     const outside = themeCopy.flatMap(c => {
       const rel = path.relative(to.dir, c.rel);
       if (!/\.(mjs|cjs|js|mts|cts|ts|tsx|jsx)$/.test(rel)) return [];
@@ -5154,6 +5157,8 @@ export async function themeEditPreviewApp(dir, options = {}) {
       for (const spec of specs) {
         const pkg = /^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*/i.exec(spec)?.[0];
         if (pkg && !isBuiltin(spec)) imported.add(pkg);
+        if (/\.(scss|sass|less|styl)$/i.test(spec))
+          otherStyles.push(`${shown(cwd, file)} imports '${spec}'`);
       }
       // Each import at the file it loads, resolved as the theme build
       // resolves it (`./helpers` is helpers.ts), so a link it loads is
@@ -5224,6 +5229,18 @@ export async function themeEditPreviewApp(dir, options = {}) {
         `${slug} cannot be copied into a new app: ${outside.slice(0, 3).join('; ')}, a file outside ${shown(cwd, from.dir)}/, which the new app does not have, so its theme would not build there.`,
         {
           fix: `move what it imports into ${shown(cwd, from.dir)}/ (and import it from there), then run the command again`,
+          run: [appCommand(dir, slug)],
+        },
+      );
+    // A Sass, Less or Stylus file the theme imports: the new app builds and
+    // types CSS only (its css.d.ts declares *.css), so its build would
+    // stop there.
+    if (otherStyles.length)
+      refuse(
+        E.ERR_INVALID_ARGUMENT,
+        `${slug} cannot be copied into a new app: ${otherStyles.slice(0, 3).join('; ')}, a stylesheet in another language than CSS, which the new app does not build, so its build would stop there.`,
+        {
+          fix: `make it a .css file (and import that), or take the import out of the theme, then run the command again`,
           run: [appCommand(dir, slug)],
         },
       );
@@ -5318,6 +5335,22 @@ export async function themeEditPreviewApp(dir, options = {}) {
     // uses that the index does not load is named, with the import of each
     // weight sheet the package ships (unknown until installed).
     const used = builtFontWeights(ctx, slug) ?? [400];
+    // The weight sheets a Fontsource static package can have: its weights
+    // are the hundreds from 100 to 900, so a weight between two (650) is
+    // drawn from the two around it, the sheets the browser picks between.
+    /** @param {number[]} ws */
+    const sheetWeights = ws =>
+      [
+        ...new Set(
+          ws
+            .flatMap(w =>
+              w % 100 === 0
+                ? [w]
+                : [Math.floor(w / 100) * 100, Math.ceil(w / 100) * 100],
+            )
+            .map(w => Math.min(900, Math.max(100, w))),
+        ),
+      ].sort((a, b) => a - b);
     for (const font of fonts) {
       const sheets = fontPackageSheets(ctx, slug, font.pkg);
       if (sheets.length !== 1 || sheets[0] !== `${font.pkg}/index.css`)
@@ -5335,7 +5368,7 @@ export async function themeEditPreviewApp(dir, options = {}) {
         ? unloaded.filter(w =>
             (fontPackageWeights(ctx, font.pkg) ?? []).includes(w),
           )
-        : unloaded;
+        : sheetWeights(unloaded);
       notes.push(
         `the new app loads ${font.family} at weight ${loaded} only (${font.pkg}/index.css): ${slug} also uses ${unloaded.join(', ')}, which show as a bold drawn by the browser${loads ? '' : ' until loaded'}; ${
           ships.length
@@ -5352,9 +5385,13 @@ export async function themeEditPreviewApp(dir, options = {}) {
     // uses.
     for (const family of familiesNothingLoads(ctx, theme, fonts)) {
       const s = fontsourceSuggestion(family);
-      const sheets = s ? used.map(w => `'${s.pkg}/${w}.css'`).join(', ') : '';
+      const sheets = s
+        ? sheetWeights(used)
+            .map(w => `'${s.pkg}/${w}.css'`)
+            .join(', ')
+        : '';
       notes.push(
-        `"${family}" is not a font the CLI knows to be open, and this project has no package of it, so the new app does not install it and shows the next font in the stack${s ? `; if Fontsource publishes it, ${installLine(cwd, [s.pkg])} in the new app installs it (then import ${sheets} in its root layout, one for each weight ${slug} uses, among those the family ships)` : ''}`,
+        `"${family}" is not a font the CLI knows to be open, and this project has no package of it, so the new app does not install it and shows the next font in the stack${s ? `; if Fontsource publishes it, ${installLine(cwd, [s.pkg])} in the new app installs it (then import ${sheets} in its root layout: the weight sheets for the weights ${slug} uses, a weight between two hundreds drawn from the two around it; leave out any the family does not ship)` : ''}`,
       );
     }
     routeTheme = {
