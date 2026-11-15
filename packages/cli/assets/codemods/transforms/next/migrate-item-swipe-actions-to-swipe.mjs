@@ -16,14 +16,15 @@
  * instead. Where it cannot move the options, `createSwipe` stays on the row
  * with a TODO. Each entry
  * with no `id` takes one from its static label, then its handler's name, then
- * its side and place with a TODO. Where a conditional's two branches have as
- * many entries on each side, the entries at each place share one id. So an
- * open row stays open when the condition changes, as before. Rows with the
- * same options in one place share one definition. A `swipeBehavior={B}`
- * joins the options; a static `'reveal'`, the default, is dropped. On a row
- * that already sets `swipe`, the deprecated props do nothing, so they are
- * removed, and so is a lone `swipeBehavior`. The `ItemSwipe*` types stay as
- * they are.
+ * its side and place with a TODO. A conditional's two branches key their
+ * swipes alike exactly where the deprecated props did. Where those keys match,
+ * the entries at each place share one id. Where no ids can keep them so, as
+ * with one entry against none on a side, the props stay, with a TODO. Rows
+ * with the same options in one place share one definition. A
+ * `swipeBehavior={B}` joins the options; a static `'reveal'`, the default, is
+ * dropped. On a row that already sets `swipe`, the deprecated props do
+ * nothing, so they are removed, and so is a lone `swipeBehavior`. The
+ * `ItemSwipe*` types stay as they are.
  *
  * It does not follow helpers, wrappers, or types. Where it cannot see every
  * entry, it keeps the old props and leaves a TODO instead of guessing. That
@@ -77,6 +78,12 @@ const BRANCH_NAME_COMMENT =
   'same side and place in both branches of the condition. A row keys its ' +
   'swipe on the ids, and an open row closes when they change (AST-057 ' +
   'DEC-10). ';
+const BRANCH_KEY_COMMENT =
+  ' TODO(astryx upgrade): swipeActions and swipeBehavior are deprecated ' +
+  '(DEP-0017). A row keys its actions by their ids, and an open row closes ' +
+  "when the key changes. No ids on these actions can keep this condition's " +
+  'two keys equal, or apart, as they are now. So it was left unchanged: ' +
+  'migrate it by hand (AST-057 DEC-10). ';
 const PLACE_COMMENT =
   ' TODO(astryx upgrade): define this swipe once, at module scope or in ' +
   'useMemo, and read the row from the itemKey that onActivate receives ' +
@@ -435,60 +442,94 @@ function derivedId(entry, from) {
 }
 
 /**
- * The ids a conditional's two branches share, by entry. Entries with no `id`
- * all key as '' in the deprecated props. So where each side has as many
- * entries in both branches, an open row stayed open when the condition
- * changed. Each place there whose entries have no `id` gets one id in both.
- * It is their label's when the labels give the same one, else their
- * handler's, else their side and place. Empty when the keys differed anyway:
- * a side with more entries in one branch, or ids that differ at one place.
- * @param {Array<{sides: Array<[string, any[]]>}>} objects
- * @returns {Map<any, {id: string, positional: boolean}>}
+ * A side's entries, as the deprecated props give them to the swipe layer:
+ * its array, or none. A later property of the same name wins, as in JS.
+ * @param {Array<[string, any[]]>} sides @param {string} name
+ * @returns {any[]}
  */
-function sharedIds(objects) {
+function sideEntries(sides, name) {
+  let entries = /** @type {any[]} */ ([]);
+  for (const [key, list] of sides) {
+    if (key === name) {
+      entries = list;
+    }
+  }
+  return entries;
+}
+
+/**
+ * The key a row compares when its swipe changes, as `idsKeyOf` in
+ * `SwipeActionsLayer.tsx` builds it. Item renders that layer for the
+ * deprecated props too, with their `leading` and `trailing`, or `[]`. Each
+ * entry gives its `id`, or '' with none, and each side joins them. A static
+ * id gives its string, and any other id its source. `assigned` gives the
+ * ids a plan writes (`planIds`).
+ * @param {any} j @param {Array<[string, any[]]>} sides
+ * @param {Map<any, string>} [assigned]
+ */
+function swipeKey(j, sides, assigned = new Map()) {
+  const idText = (/** @type {any} */ entry) => {
+    const planned = assigned.get(entry);
+    if (planned != null) {
+      return planned;
+    }
+    const id = idPropertyOf(entry);
+    if (id == null || isNullish(id.value)) {
+      return '';
+    }
+    return staticString(id.value) ?? `\u0002${j(id.value).toSource()}`;
+  };
+  const side = (/** @type {string} */ name) =>
+    sideEntries(sides, name).map(idText).join('\u0000');
+  return `${side('leading')}\u0001${side('trailing')}`;
+}
+
+/**
+ * The ids a conditional's two branches share, by entry. Empty when their
+ * deprecated keys differ (`swipeKey`): each branch keeps its own ids. Where
+ * the keys match and each side has as many entries in both, each place whose
+ * entries have no `id` gets one id in both. It is their label's when the
+ * labels give the same one, else their handler's, else their side and place.
+ * Null when the keys match but a side's counts differ. Then one entry with no
+ * `id` keys like an empty side, and no entry with an id can.
+ * @param {any} j @param {Array<{sides: Array<[string, any[]]>}>} objects
+ * @returns {Map<any, {id: string, positional: boolean}> | null}
+ */
+function sharedIds(j, objects) {
   /** @type {Map<any, {id: string, positional: boolean}>} */
   const shared = new Map();
   if (objects.length !== 2) {
     return shared;
   }
   const [first, second] = objects;
-  const on = (
-    /** @type {Array<[string, any[]]>} */ sides,
-    /** @type {string} */ side,
-  ) => sides.find(([name]) => name === side)?.[1] ?? [];
+  if (swipeKey(j, first.sides) !== swipeKey(j, second.sides)) {
+    return shared;
+  }
   const sideNames = [
     ...new Set(objects.flatMap(({sides}) => sides.map(([name]) => name))),
   ];
+  const counts = (/** @type {string} */ side) =>
+    objects.map(({sides}) => sideEntries(sides, side).length);
+  if (sideNames.some(side => new Set(counts(side)).size > 1)) {
+    return null;
+  }
   const taken = new Set();
-  for (const side of sideNames) {
-    const a = on(first.sides, side);
-    const b = on(second.sides, side);
-    if (a.length !== b.length) {
-      return shared;
-    }
-    for (let index = 0; index < a.length; index++) {
-      const [x, y] = [idPropertyOf(a[index]), idPropertyOf(b[index])];
-      if ((x == null) !== (y == null)) {
-        return shared;
-      }
-      const [idX, idY] = [x, y].map(id =>
-        id == null ? null : staticString(id.value),
-      );
-      if (idX != null && idY != null && idX !== idY) {
-        return shared;
-      }
-      for (const id of [idX, idY]) {
-        if (id != null) {
-          taken.add(id);
+  for (const {sides} of objects) {
+    for (const [, entries] of sides) {
+      for (const entry of entries) {
+        const id = idPropertyOf(entry);
+        const text = id == null ? null : staticString(id.value);
+        if (text != null) {
+          taken.add(text);
         }
       }
     }
   }
   for (const side of sideNames) {
-    const b = on(second.sides, side);
-    on(first.sides, side).forEach((entry, index) => {
-      const other = b[index];
-      if (idPropertyOf(entry) != null) {
+    const others = sideEntries(second.sides, side);
+    sideEntries(first.sides, side).forEach((entry, index) => {
+      const other = others[index];
+      if (idPropertyOf(entry) != null || idPropertyOf(other) != null) {
         return;
       }
       const same = (/** @type {'label' | 'onActivate'} */ from) => {
@@ -511,20 +552,25 @@ function sharedIds(objects) {
 }
 
 /**
- * Gives each entry with no `id` one: from its static label, then from its
- * handler, then from its side and place. `createSwipe` needs an `id` on every
- * action, and the ids stay unique in the swipe. An entry in `shared` takes
- * the id its conditional's branches share (`sharedIds`); `branchPositional`
- * says one of those is its side and place.
- * @param {any} j @param {Array<[string, any[]]>} sides
- * @param {Map<any, {id: string, positional: boolean}>} [shared]
- * @returns {{
+ * @typedef {{
  *   ids: Array<string | null>,
  *   positional: boolean,
  *   branchPositional: boolean,
- * }}
+ *   assigned: Array<[any, string]>,
+ * }} IdPlan
  */
-function entryIds(j, sides, shared = new Map()) {
+
+/**
+ * The id each entry with no `id` takes: from its static label, then from its
+ * handler, then from its side and place. `createSwipe` needs an `id` on every
+ * action, and the ids stay unique in the swipe. An entry in `shared` takes
+ * the id its conditional's branches share (`sharedIds`); `branchPositional`
+ * says one of those is its side and place. It writes nothing (`applyIds`).
+ * @param {Array<[string, any[]]>} sides
+ * @param {Map<any, {id: string, positional: boolean}>} [shared]
+ * @returns {IdPlan}
+ */
+function planIds(sides, shared = new Map()) {
   const taken = new Set();
   for (const [, entries] of sides) {
     for (const entry of entries) {
@@ -540,6 +586,8 @@ function entryIds(j, sides, shared = new Map()) {
   }
   /** @type {Array<string | null>} */
   const ids = [];
+  /** @type {Array<[any, string]>} */
+  const assigned = [];
   let positional = false;
   let branchPositional = false;
   for (const [side, entries] of sides) {
@@ -554,9 +602,7 @@ function entryIds(j, sides, shared = new Map()) {
         positional ||= preset.positional;
         branchPositional ||= preset.positional;
         ids.push(preset.id);
-        entry.properties.unshift(
-          j.objectProperty(j.identifier('id'), j.stringLiteral(preset.id)),
-        );
+        assigned.push([entry, preset.id]);
         return;
       }
       let id = derivedId(entry, 'label') ?? derivedId(entry, 'onActivate');
@@ -570,12 +616,53 @@ function entryIds(j, sides, shared = new Map()) {
       }
       taken.add(unique);
       ids.push(unique);
-      entry.properties.unshift(
-        j.objectProperty(j.identifier('id'), j.stringLiteral(unique)),
-      );
+      assigned.push([entry, unique]);
     });
   }
-  return {ids, positional, branchPositional};
+  return {ids, positional, branchPositional, assigned};
+}
+
+/**
+ * Writes a plan's ids into its entries (`planIds`), and returns the plan.
+ * @param {any} j @param {IdPlan} plan
+ */
+function applyIds(j, plan) {
+  for (const [entry, id] of plan.assigned) {
+    entry.properties.unshift(
+      j.objectProperty(j.identifier('id'), j.stringLiteral(id)),
+    );
+  }
+  return plan;
+}
+
+/**
+ * Gives each entry with no `id` one (`planIds`), and returns the plan.
+ * @param {any} j @param {Array<[string, any[]]>} sides
+ */
+function entryIds(j, sides) {
+  return applyIds(j, planIds(sides));
+}
+
+/**
+ * The ids each branch of a conditional takes, planned before any is written.
+ * A row then keys the two swipes alike exactly where the deprecated props did
+ * (`swipeKey`). Null when no ids can do that. One case is a side with one
+ * entry with no `id` against none. Another is branches whose own ids would
+ * key alike where the deprecated props did not.
+ * @param {any} j @param {Array<{sides: Array<[string, any[]]>}>} objects
+ * @returns {IdPlan[] | null}
+ */
+function branchPlans(j, objects) {
+  const shared = sharedIds(j, objects);
+  if (shared == null) {
+    return null;
+  }
+  const plans = objects.map(({sides}) => planIds(sides, shared));
+  const before = objects.map(({sides}) => swipeKey(j, sides));
+  const after = objects.map(({sides}, index) =>
+    swipeKey(j, sides, new Map(plans[index].assigned)),
+  );
+  return (before[0] === before[1]) === (after[0] === after[1]) ? plans : null;
 }
 
 /**
@@ -1925,6 +2012,13 @@ export default function transformer(file, api) {
         hasChanges = addComment(j, actions, VALUE_COMMENT) || hasChanges;
         return;
       }
+      // A condition's swipes key alike exactly where the deprecated props
+      // did, or the props stay (`branchPlans`).
+      const plans = objects.length === 2 ? branchPlans(j, objects) : undefined;
+      if (plans === null) {
+        hasChanges = addComment(j, actions, BRANCH_KEY_COMMENT) || hasChanges;
+        return;
+      }
       const behaviorValue = behavior == null ? null : attributeValue(behavior);
       const behaviorText =
         behaviorValue == null ? null : staticString(behaviorValue);
@@ -1935,8 +2029,7 @@ export default function transformer(file, api) {
       rewrites.push(() => {
         const create = ensureCreateImport(j, root);
         let expression = unwrap(value);
-        const shared = sharedIds(objects);
-        for (const {object, sides, replace} of objects) {
+        for (const [index, {object, sides, replace}] of objects.entries()) {
           const objectPath = j(rowPath)
             .find(j.ObjectExpression)
             .filter((/** @type {any} */ p) => p.node === object)
@@ -1944,11 +2037,8 @@ export default function transformer(file, api) {
           if (keyAttribute != null) {
             readItemKey(j, rowPath, objectPath, sides, keyAttribute, created);
           }
-          const {ids, positional, branchPositional} = entryIds(
-            j,
-            sides,
-            shared,
-          );
+          const {ids, positional, branchPositional} =
+            plans == null ? entryIds(j, sides) : applyIds(j, plans[index]);
           const nameComment = branchPositional
             ? BRANCH_NAME_COMMENT
             : NAME_COMMENT;

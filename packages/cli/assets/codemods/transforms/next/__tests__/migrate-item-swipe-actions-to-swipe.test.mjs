@@ -296,7 +296,7 @@ const a = <ListItem label="A" swipeActions={isUnread ? {leading: [{label: 'Read'
     await expectStable(raw);
   });
 
-  it('keeps each branch its own ids when a side has more entries in one branch, which changed the key before too', async () => {
+  it('keeps each branch its own ids when the branches key their entries apart, as one entry and two on a side do', async () => {
     const raw =
       await applyTransform(`import {ListItem} from '@astryxdesign/core/List';
 import {markRead, markUnread, pin} from './actions';
@@ -306,6 +306,144 @@ const a = <ListItem label="A" swipeActions={isUnread ? {leading: [{label: 'Read'
     expect(flat(raw)).not.toContain('TODO');
     await expectStable(raw);
   });
+
+  it('keeps the props, with a TODO, when one branch has an entry with no id where the other has none: both key alike, and no ids can', async () => {
+    const raw =
+      await applyTransform(`import {ListItem} from '@astryxdesign/core/List';
+import {markRead, remove} from './actions';
+const a = <ListItem label="A" swipeActions={isUnread ? {leading: [{label: 'Read', onActivate: markRead}], trailing: [{label: 'Delete', onActivate: remove}]} : {trailing: [{label: 'Delete', onActivate: remove}]}} />;`);
+    const output = flat(raw);
+    expect(output).toContain('swipeActions={isUnread ?');
+    expect(output).not.toContain('createSwipe');
+    expect(output.split("can keep this condition's two keys")).toHaveLength(2);
+    await expectStable(raw);
+  });
+
+  it('keeps the props, with a TODO, when an id in one branch is the id the other takes from its label: the keys differed, and those ids would key alike', async () => {
+    const raw =
+      await applyTransform(`import {ListItem} from '@astryxdesign/core/List';
+import {markRead} from './actions';
+const a = <ListItem label="A" swipeActions={isUnread ? {leading: [{id: 'read', label: 'Mark read', onActivate: markRead}]} : {leading: [{label: 'Read', onActivate: markRead}]}} />;`);
+    const output = flat(raw);
+    expect(output).toContain('swipeActions={isUnread ?');
+    expect(output.split("can keep this condition's two keys")).toHaveLength(2);
+    await expectStable(raw);
+  });
+
+  it('keys the two swipes of a condition alike exactly where the deprecated props did, or keeps the props with a TODO, for every shape of up to two entries a side, each with an id or none', async () => {
+    const jscodeshift = (await import('jscodeshift')).default;
+    const j = jscodeshift.withParser('tsx');
+    const sides = ['leading', 'trailing'];
+    const kinds = ['id', 'none'];
+    const sideShapes = [
+      [],
+      ...kinds.map(kind => [kind]),
+      ...kinds.flatMap(first => kinds.map(second => [first, second])),
+    ];
+    const shapes = sideShapes.flatMap(leading =>
+      sideShapes.map(trailing => ({leading, trailing})),
+    );
+    const idOf = (side, index) => `${side[0]}${index}`;
+    const entry = (side, kind, index) =>
+      kind === 'id'
+        ? `{id: '${idOf(side, index)}', label: 'Act', onActivate: f}`
+        : `{label: '${side} ${index}', onActivate: f}`;
+    const literal = shape =>
+      `{${sides
+        .filter(side => shape[side].length > 0)
+        .map(
+          side =>
+            `${side}: [${shape[side]
+              .map((kind, index) => entry(side, kind, index))
+              .join(', ')}]`,
+        )
+        .join(', ')}}`;
+    // The key the swipe layer compares for the deprecated props (`idsKeyOf`
+    // in `SwipeActionsLayer.tsx`): each entry's id, or '' with none.
+    const deprecatedKey = shape =>
+      sides
+        .map(side =>
+          shape[side]
+            .map((kind, index) => (kind === 'id' ? idOf(side, index) : ''))
+            .join('\u0000'),
+        )
+        .join('\u0001');
+    const source = value => `import {ListItem} from '@astryxdesign/core/List';
+import {f} from './actions';
+const a = <ListItem label="A" swipeActions={${value}} />;`;
+    const keyOf = property => property.key?.name ?? property.key?.value;
+    // The ids of the swipe each name defines, by side.
+    const definitions = output => {
+      const found = new Map();
+      j(output)
+        .find(j.VariableDeclarator, {init: {callee: {name: 'createSwipe'}}})
+        .forEach(path => {
+          const options = path.node.init.arguments[0];
+          found.set(
+            path.node.id.name,
+            sides.map(side =>
+              (
+                options.properties.find(p => keyOf(p) === side)?.value
+                  ?.elements ?? []
+              ).map(
+                element =>
+                  element.properties.find(p => keyOf(p) === 'id').value.value,
+              ),
+            ),
+          );
+        });
+      return found;
+    };
+    const keyOfIds = ids => ids.map(side => side.join('\u0000')).join('\u0001');
+    const own = new Map();
+    for (const shape of shapes) {
+      const output = await applyTransform(source(literal(shape)));
+      const name = output.match(/swipe=\{(\w+)\}/)?.[1];
+      own.set(literal(shape), definitions(output).get(name) ?? [[], []]);
+    }
+    const failures = [];
+    for (const first of shapes) {
+      for (const second of shapes) {
+        const value = `c ? ${literal(first)} : ${literal(second)}`;
+        const raw = await applyTransform(source(value));
+        const alike = deprecatedKey(first) === deprecatedKey(second);
+        const counted = sides.every(
+          side => first[side].length === second[side].length,
+        );
+        if (alike && !counted) {
+          const kept =
+            raw.includes(`swipeActions={${value}}`) &&
+            raw.split("can keep this condition's two keys").length === 2 &&
+            (await applyTransform(raw)) === raw;
+          if (!kept) {
+            failures.push(`${value}: expected the props kept with one TODO`);
+          }
+          continue;
+        }
+        const names = raw.match(/swipe=\{c \? (\w+) : (\w+)\}/);
+        if (names == null) {
+          failures.push(`${value}: expected the condition migrated`);
+          continue;
+        }
+        const found = definitions(raw);
+        const [ids, otherIds] = [found.get(names[1]), found.get(names[2])];
+        if ((keyOfIds(ids) === keyOfIds(otherIds)) !== alike) {
+          failures.push(`${value}: keys ${alike ? 'apart' : 'alike'} after`);
+        } else if (
+          !alike &&
+          (JSON.stringify(ids) !== JSON.stringify(own.get(literal(first))) ||
+            JSON.stringify(otherIds) !==
+              JSON.stringify(own.get(literal(second))))
+        ) {
+          failures.push(`${value}: expected each branch its own ids`);
+        }
+      }
+    }
+    expect({count: failures.length, first: failures.slice(0, 5)}).toEqual({
+      count: 0,
+      first: [],
+    });
+  }, 120_000);
 
   it('hoists each object of a conditional value, leaving the condition on the row', async () => {
     const raw =
@@ -911,12 +1049,14 @@ function Rows({rows, remove}) {
   });
 
   it('defines every swipe of an arrow component with an expression body in the one block it makes, sharing identical options, conditional branches included', async () => {
+    // The id on Delete keys the branches apart, as the deprecated props key
+    // them, so the condition migrates.
     const raw =
       await applyTransform(`import {List, ListItem} from '@astryxdesign/core/List';
 const Rows = ({flag, archive, remove}) => (
   <List>
     <ListItem label="A" swipeActions={{trailing: [{label: 'Archive', onActivate: archive}]}} />
-    <ListItem label="B" swipeActions={flag ? {trailing: [{label: 'Delete', onActivate: remove}]} : {leading: [{label: 'Read', onActivate: archive}]}} />
+    <ListItem label="B" swipeActions={flag ? {trailing: [{id: 'delete', label: 'Delete', onActivate: remove}]} : {leading: [{label: 'Read', onActivate: archive}]}} />
     <ListItem label="C" swipeActions={{trailing: [{label: 'Archive', onActivate: archive}]}} />
   </List>
 );`);
