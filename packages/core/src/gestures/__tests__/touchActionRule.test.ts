@@ -9,8 +9,20 @@
  * @position Unit test of packages/core/src/gestures/touchActionRule.ts
  */
 
-import {afterEach, describe, expect, it, vi} from 'vitest';
-import {markTouchAction, unmarkTouchAction} from '../touchActionRule';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import type * as TouchActionRule from '../touchActionRule';
+
+let markTouchAction: typeof TouchActionRule.markTouchAction;
+let unmarkTouchAction: typeof TouchActionRule.unmarkTouchAction;
+
+// The shared test setup loads the tooltip layer, which reaches the gesture
+// host and this module, and may leave style elements in the head. Each test
+// starts from an empty head and a fresh module.
+beforeEach(async () => {
+  document.head.innerHTML = '';
+  vi.resetModules();
+  ({markTouchAction, unmarkTouchAction} = await import('../touchActionRule'));
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();

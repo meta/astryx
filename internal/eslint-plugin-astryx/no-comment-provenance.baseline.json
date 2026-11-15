@@ -1240,7 +1240,11 @@
     "component:Tokenizer",
     "spec quote"
   ],
-  "packages/core/src/Tooltip/useTooltip.tsx": ["FR11", "FR4", "spec:AST-059"],
+  "packages/core/src/Tooltip/tooltipSurface.tsx": [
+    "FR11",
+    "FR4",
+    "spec:AST-059"
+  ],
   "packages/core/src/TopNav/TopNavHeading.tsx": [
     "FR1",
     "FR5",

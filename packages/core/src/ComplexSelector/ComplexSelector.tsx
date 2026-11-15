@@ -662,7 +662,7 @@ export function ComplexSelector<Value>({
           : null,
       showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
     ]
-      .filter((id): id is string => id != null)
+      .filter(Boolean)
       .join(' ') || undefined;
 
   const triggerRef = useRef<HTMLElement>(null);

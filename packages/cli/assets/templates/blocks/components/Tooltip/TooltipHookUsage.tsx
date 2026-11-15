@@ -17,7 +17,7 @@ export default function TooltipHookUsage() {
       <Button
         label="Using hook directly"
         ref={tooltip.ref}
-        aria-describedby={tooltip.describedBy}
+        aria-describedby={tooltip.describedBy || undefined}
       />
       {tooltip.renderTooltip('Tooltip via hook')}
     </Center>

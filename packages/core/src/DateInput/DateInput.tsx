@@ -987,7 +987,8 @@ function PointerDateField({
         aria-disabled={isEffectivelyDisabled || undefined}
         // A tab stop while disabled too, so it carries the reason (FR5).
         aria-describedby={
-          showsDisabledMessage ? disabledMessageTooltip.describedBy : undefined
+          (showsDisabledMessage && disabledMessageTooltip.describedBy) ||
+          undefined
         }
         aria-label={
           popover.isOpen

@@ -98,12 +98,14 @@ export const docs = {
     {
       name: 'anchorId',
       type: 'string',
-      description: 'CSS anchor name for advanced positioning cases.',
+      description:
+        "CSS anchor name for advanced positioning cases. Empty until the tooltip loads after the page's first paint.",
     },
     {
       name: 'describedBy',
       type: 'string',
-      description: 'ID to compose into aria-describedby on the trigger.',
+      description:
+        "ID to compose into aria-describedby on the trigger. Empty until the tooltip loads after the page's first paint, so pass `describedBy || undefined`: the trigger then names no missing element.",
     },
     {
       name: 'renderTooltip',
@@ -183,7 +185,8 @@ export const docsDense = {
     positionRef: 'position anchor ref.',
     interactionRef: 'hover/focus interaction ref.',
     anchorId: 'CSS anchor name.',
-    describedBy: 'ID for aria-describedby.',
+    describedBy:
+      'ID for aria-describedby; empty until the tooltip loads after first paint, so pass `describedBy || undefined`.',
     renderTooltip: 'renders anchor-positioned tooltip content.',
     show: 'opens + holds until hide()/Escape/outside press/focus leave; announces once; onShow. Controlled: onShow only. No-op when disabled.',
     hide: 'closes; onHide. Controlled: onHide only.',

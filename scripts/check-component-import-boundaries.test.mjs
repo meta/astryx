@@ -395,12 +395,6 @@ describe('the allowlist', () => {
         to: 'Layer/gestureCounter',
         entries: ['Text', 'Heading', 'Button', 'IconButton', 'Link', 'Table'],
       },
-      {
-        from: 'Button/Button',
-        to: 'Tooltip/useTooltip',
-        entries: ['Button', 'IconButton'],
-      },
-      {from: 'Link/Link', to: 'Tooltip', entries: ['Link']},
       {from: 'Table/tableContextMenu', to: 'ContextMenu', entries: ['Table']},
       {
         from: 'Table/BaseTable',

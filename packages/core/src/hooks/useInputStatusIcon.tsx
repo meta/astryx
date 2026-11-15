@@ -109,7 +109,9 @@ export interface UseInputStatusIconReturn {
    * with a message). It is `undefined` in every other case (no status, no
    * message, `attached`/`detached`, or inside a group), so call-sites can drop
    * it straight into their described-by list without a dangling reference: the
-   * id is present exactly when its tooltip element is in the DOM.
+   * id is present exactly when its tooltip element is in the DOM. In the
+   * `tooltip` variant it is the empty string until the tooltip's layer loads
+   * after first paint, which described-by lists skip.
    */
   describedBy: string | undefined;
 }
@@ -217,7 +219,7 @@ export function useInputStatusIcon({
           type="button"
           ref={tooltip.ref}
           aria-label={t(STATUS_BUTTON_LABEL_KEY[status.type])}
-          aria-describedby={tooltip.describedBy}
+          aria-describedby={tooltip.describedBy || undefined}
           onClick={handleButtonClick}
           onBlur={handleButtonBlur}
           {...stylex.props(

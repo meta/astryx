@@ -905,7 +905,7 @@ export function Slider({ref, ...props}: SliderProps) {
   if (conveysRequired) {
     describedByParts.push(requiredID);
   }
-  if (showsDisabledMessage) {
+  if (showsDisabledMessage && disabledMessageTooltip.describedBy !== '') {
     describedByParts.push(disabledMessageTooltip.describedBy);
   }
   const ariaDescribedBy =
