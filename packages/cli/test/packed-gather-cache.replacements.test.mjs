@@ -169,6 +169,56 @@ function keptEntries(tmp) {
 const inodes = entries =>
   new Map([...entries].map(([name, entry]) => [name, entry.ino]));
 
+/**
+ * The deepest link on the way to `file`, or none: the lowest of its folders
+ * that is a symbolic link.
+ * @param {string} file
+ * @returns {string | undefined}
+ */
+function linkOnTheWay(file) {
+  for (
+    let at = path.dirname(file);
+    at !== path.dirname(at);
+    at = path.dirname(at)
+  ) {
+    if (fs.lstatSync(at, {throwIfNoEntry: false})?.isSymbolicLink()) return at;
+  }
+  return undefined;
+}
+
+/**
+ * Every path an entry holds by the folder it is found in (`in:`) through a
+ * link is under a folder the same entry, or an entry it builds on, holds by
+ * a listing or a stat, at or below that link. A folder moved and a link
+ * re-pointed to its new place keeps the found folder's identity; the folder
+ * stamp below the link still changes.
+ * @param {ReturnType<typeof keptEntries>} entries
+ */
+function expectFoundThroughLinksCovered(entries) {
+  for (const [name, entry] of entries) {
+    /** @type {Map<string, string>} */
+    const held = new Map(entry.stamps);
+    for (const [base] of entry.deps) {
+      for (const [at, state] of entries.get(base)?.stamps ?? []) {
+        if (!held.has(at)) held.set(at, state);
+      }
+    }
+    for (const [file, state] of held) {
+      if (!state.startsWith('in:')) continue;
+      const link = linkOnTheWay(file);
+      if (!link) continue;
+      const covered = [...held].some(
+        ([at, folderState]) =>
+          (at === link || at.startsWith(link + path.sep)) &&
+          file.startsWith(at + path.sep) &&
+          (folderState.startsWith('dir:') || /^\d/u.test(folderState)) &&
+          fs.statSync(at, {throwIfNoEntry: false})?.isDirectory(),
+      );
+      expect(covered, `${name}: ${file} is found through ${link}`).toBe(true);
+    }
+  }
+}
+
 describe.skipIf(process.platform !== 'linux')(
   'kept component replacement',
   () => {
@@ -285,6 +335,7 @@ describe.skipIf(process.platform !== 'linux')(
           };
           same();
           const first = keptEntries(tmp);
+          expectFoundThroughLinksCovered(first);
           const based = [...first].filter(([, entry]) => entry.deps.length > 0);
           expect(based.length).toBeGreaterThan(0);
           // Each names an entry it builds on at the version that entry holds,
@@ -298,9 +349,9 @@ describe.skipIf(process.platform !== 'linux')(
               expect(base?.version).toBe(version);
               for (const [file, state] of base?.stamps ?? []) {
                 if (own.has(file)) {
-                  expect(state === 'present' || state.startsWith('real:')).toBe(
-                    true,
-                  );
+                  expect(
+                    state === 'present' || /^(?:real|in):/u.test(state),
+                  ).toBe(true);
                   expect(own.get(file)).not.toBe(state);
                 }
               }

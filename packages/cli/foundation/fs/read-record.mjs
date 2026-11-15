@@ -32,41 +32,43 @@ import {fileURLToPath} from 'node:url';
 const reads = new AsyncLocalStorage();
 
 /**
- * Add `file` to every running operation's map, with its state now, unless it
- * is there already.
+ * Add the path `file` a call was given to every running operation's map,
+ * with its state now, unless it is there already. Every recorded fs call
+ * comes here, so the common case, a path already recorded in full, costs a
+ * map lookup and one character (weak).
  * @param {Map<string, string>[]} runs
- * @param {string} file - What a run checks: the file read, or the folder of
- *   the path probed.
- * @param {string} [probed] - The path itself, which an exact run checks.
+ * @param {string} file
  * @param {ReadKind} [kind] - What the call returned, which is what an exact
  *   run records of the path.
  */
-function note(runs, file, probed = file, kind = 'read') {
+function note(runs, file, kind = 'read') {
   let state;
-  let probedState;
+  let exact;
+  /** @type {string | undefined} */
+  let checked;
   for (const seen of runs) {
     if (exactRuns.has(seen)) {
-      const had = seen.get(probed);
+      const had = seen.get(file);
       if (had === undefined) {
-        seen.set(probed, (probedState ??= exactState(probed, kind, seen)));
-      } else if (weak(had) && mayTake(had, GIVES[kind])) {
+        seen.set(file, (exact ??= exactState(file, kind, seen)));
+      } else if (had.charCodeAt(0) > 57 && mayTake(had, GIVES[kind])) {
         // A path first only checked for, or only resolved, or a folder first
         // only probed, now resolved, statted, read or listed: what the later
         // call returned counts, so it is checked by that from here on.
-        keepState(
-          seen,
-          probed,
-          (probedState ??= exactState(probed, kind, seen)),
-        );
+        keepState(seen, file, (exact ??= exactState(file, kind, seen)));
       }
     } else {
-      const had = seen.get(file);
+      // A file read or a folder listed is checked itself; a probe is checked
+      // by its folder, whose time changes when an entry is added, removed or
+      // renamed.
+      checked ??= kind === 'read' ? file : path.dirname(file);
+      const had = seen.get(checked);
       if (had === undefined) {
-        seen.set(file, (state ??= stateOf(file)));
-      } else if (weak(had)) {
+        seen.set(checked, (state ??= stateOf(checked)));
+      } else if (had.charCodeAt(0) > 57) {
         // A state another record handed in, such as a kept entry's `present`,
         // gives way to what this read returned.
-        keepState(seen, file, (state ??= stateOf(file)));
+        keepState(seen, checked, (state ??= stateOf(checked)));
       }
     }
   }
@@ -88,19 +90,16 @@ function note(runs, file, probed = file, kind = 'read') {
  */
 function exactState(file, kind, seen) {
   switch (kind) {
-    case 'read': {
-      const looked = lookedUpOf(seen).get(file);
-      return looked ? stampOf(looked) : stateOf(file);
-    }
+    case 'read':
+      return readStamp(file, seen);
     case 'presence':
       return presenceState(file);
     case 'realpath': {
       const run = viewOf(seen);
-      const real = realPathState(file, run.folders, run.looked);
-      return real === '-' ? '-' : `${RESOLVED}${real}`;
+      return lookupState(file, run.parents, run.looked);
     }
     default: {
-      const looked = lookedUpOf(seen).get(file);
+      const looked = takeLookedUp(seen, file);
       if (!looked) return probeStamp(file);
       return looked.isDirectory() ? `dir:${looked.ino}` : stampOf(looked);
     }
@@ -109,37 +108,54 @@ function exactState(file, kind, seen) {
 
 /**
  * What each exact run has seen while it recorded real-path lookups, by the
- * run's record: the folders it resolved, each once however many paths under
- * it it looks up, and the stat it took of each path (lookedUpOf). A check
+ * run's record: the identity of each folder holding a looked-up file, each
+ * taken once however many files in it it looks up, and the stat it took of
+ * each path, until a read or a stat of it takes it (takeLookedUp). A check
  * sees the filesystem afresh (stillInState).
- * @type {WeakMap<Map<string, string>, {folders: Map<string, string>, looked: Map<string, import('node:fs').Stats>}>}
+ * @type {WeakMap<Map<string, string>, {parents: Map<string, string>, looked: Map<string, import('node:fs').Stats>}>}
  */
-const resolvedInRun = new WeakMap();
+const lookedUpInRun = new WeakMap();
 
 /**
- * What the run recording into `seen` has seen (resolvedInRun).
+ * What the run recording into `seen` has seen (lookedUpInRun).
  * @param {Map<string, string>} seen
- * @returns {{folders: Map<string, string>, looked: Map<string, import('node:fs').Stats>}}
+ * @returns {{parents: Map<string, string>, looked: Map<string, import('node:fs').Stats>}}
  */
 function viewOf(seen) {
-  let view = resolvedInRun.get(seen);
+  let view = lookedUpInRun.get(seen);
   if (!view) {
-    view = {folders: new Map(), looked: new Map()};
-    resolvedInRun.set(seen, view);
+    view = {parents: new Map(), looked: new Map()};
+    lookedUpInRun.set(seen, view);
   }
   return view;
 }
 
 /**
- * The stat of each path, no link, that the run recording into `seen` took
- * when it looked up where the path resolves: a later read or stat of the
- * path in the run records the stamp from it, the stamp the path had when the
- * run first touched it, as a lookup that took the whole stamp recorded.
+ * The stamp a read of `file` records in the run recording into `seen`: from
+ * the stat the run took when it looked the path up (takeLookedUp), or a new
+ * one. A module the run loads takes it too (gather-cache.mjs).
+ * @param {string} file
  * @param {Map<string, string>} seen
- * @returns {Map<string, import('node:fs').Stats>}
+ * @returns {string}
  */
-function lookedUpOf(seen) {
-  return viewOf(seen).looked;
+export function readStamp(file, seen) {
+  const looked = takeLookedUp(seen, file);
+  return looked ? stampOf(looked) : stateOf(file);
+}
+
+/**
+ * The stat the run recording into `seen` took when it looked `file` up, if
+ * any, given once: a path is read or statted once after its lookup, and the
+ * run holds no stat longer than it needs.
+ * @param {Map<string, string>} seen
+ * @param {string} file
+ * @returns {import('node:fs').Stats | undefined}
+ */
+function takeLookedUp(seen, file) {
+  const looked = lookedUpInRun.get(seen)?.looked;
+  const stat = looked?.get(file);
+  if (stat) looked?.delete(file);
+  return stat;
 }
 
 /**
@@ -175,11 +191,28 @@ const CONTENT_READS = new Set(['readFileSync', 'openSync']);
 export const PRESENT = 'present';
 
 /**
- * What a real-path lookup records before where the path resolves
- * (realPathState): the lookup's answer, and no more, until a stat or a read
- * of the same path records that call's fuller state instead.
+ * What a real-path lookup records of a path whose last part is a link: where
+ * the path resolves (lookupState), until a stat or a read of the same path
+ * records that call's fuller state instead.
  */
 export const RESOLVED = 'real:';
+
+/**
+ * What a real-path lookup records of any other path: the folder it is found
+ * in, its name and what it is (lookupState), until a stat or a read of the
+ * same path records that call's fuller state instead.
+ */
+export const FOUND_IN = 'in:';
+
+/**
+ * Whether a state is a real-path lookup's (RESOLVED or FOUND_IN): one an
+ * entry checks without the path's content.
+ * @param {string} state
+ * @returns {boolean}
+ */
+export function lookedUp(state) {
+  return state.startsWith(FOUND_IN) || state.startsWith(RESOLVED);
+}
 
 /**
  * What kind of state each call gives (see keepState).
@@ -230,6 +263,7 @@ function installRecorder() {
   for (const name of RECORDED) {
     const original = fs[name];
     if (typeof original !== 'function') continue;
+    const kind = readKind(name);
     /**
      * @this {unknown}
      * @param {...any} args
@@ -242,14 +276,9 @@ function installRecorder() {
           typeof target === 'string'
             ? path.resolve(target)
             : fileURLToPath(target);
-        // A file read or a folder listed is checked itself; a probe is
-        // checked by its folder, whose time changes when an entry is added,
-        // removed or renamed, or, in an exact run, by what it returned.
-        const kind = readKind(name);
-        const checked = kind === 'read' ? file : path.dirname(file);
         // Its state is taken when it is first read, before the read, so a
         // change made while the operation runs shows as a change afterwards.
-        note(runs, checked, file, kind);
+        note(runs, file, kind);
       }
       return original.apply(this, args);
     };
@@ -325,49 +354,90 @@ function presenceState(file) {
 }
 
 /**
- * A real-path lookup's state: a stamp of where `file` resolves, which
- * changes whenever the lookup could resolve it elsewhere, or absent. The
- * program still receives what its own lookup returned; this state only shows
- * a change, and it is worked out the same way when it is recorded and when it
- * is checked.
+ * A real-path lookup's state, which changes whenever the lookup could
+ * resolve the path elsewhere, worked out the same way when it is recorded
+ * and when it is checked; or absent. The program still receives what its own
+ * lookup returned.
  *
- * A path whose last part is a link, or the root, or a path ending in a
- * separator, is resolved whole. Any other
- * resolves through its folder, so the state is the folder's resolved path
- * with the last part's name: one lstat per path, and one lookup per folder,
- * which `folders` shares across the paths one check reads. A file replaced
- * whole keeps the state, as it keeps its path; what a step read of its
- * content has a stamp of its own.
+ * - A path whose last part is a link, or the root, or a path ending in a
+ *   separator: where it resolves, whole (RESOLVED).
+ * - Any other path: the folder it is found in, by that folder's identity
+ *   with links followed, then its name and what it is: a file, a folder or
+ *   another kind of entry (FOUND_IN). The lookup answers the folder's real
+ *   path joined with the name, so the state changes when that answer can:
+ *   a link above the path moved to another folder, that folder made anew,
+ *   the entry made a link, or the entry gone or of another kind. A file
+ *   written in place, or replaced by a save that renames a new file over
+ *   it, keeps the state, as it keeps the answer. Two version folders can
+ *   hold one file through hard links, but never one folder.
+ *
+ * One lstat per path, and one stat per folder, which `parents` shares across
+ * the paths one check or one run looks up.
  * @param {string} file
- * @param {Map<string, string> | null} [folders] - Folders already resolved,
- *   by path: by this check, or by the run that records the lookup; never
- *   shared beyond one check or one run.
+ * @param {Map<string, string> | null} [parents] - Identities of the folders
+ *   paths are found in, by path: taken by this check, or by the run that
+ *   records the lookup; never shared beyond one check or one run.
  * @param {Map<string, import('node:fs').Stats> | null} [looked] - Where the
- *   run that records the lookup keeps the path's stat (lookedUpOf).
+ *   run that records the lookup keeps the path's stat (takeLookedUp).
  * @returns {string}
  */
-function realPathState(file, folders = null, looked = null) {
+function lookupState(file, parents = null, looked = null) {
   /** @type {import('node:fs').Stats | undefined} */
   let stat;
   try {
     stat = lstatSyncRaw(file, {throwIfNoEntry: false});
   } catch {
-    return resolvedPath(file);
+    return resolvedState(file);
   }
   if (!stat) return '-';
   const parent = path.dirname(file);
   // A path ending in a separator (a folder URL) has its last part followed
   // by lstat, so a link there is resolved whole too.
   if (stat.isSymbolicLink() || parent === file || file.endsWith(path.sep)) {
-    return resolvedPath(file);
+    return resolvedState(file);
   }
   looked?.set(file, stat);
-  let real = folders?.get(parent);
-  if (real === undefined) {
-    real = resolvedPath(parent);
-    folders?.set(parent, real);
+  let folder = parents?.get(parent);
+  if (folder === undefined) {
+    folder = folderIdentity(parent);
+    parents?.set(parent, folder);
   }
-  return real === '-' ? '-' : path.join(real, path.basename(file));
+  const kind = stat.isFile() ? 'f' : stat.isDirectory() ? 'd' : 'o';
+  return `${FOUND_IN}${folder}/${path.basename(file)}:${kind}`;
+}
+
+/**
+ * Which folder `folder` is, links followed: its device, inode and birth
+ * time, which a folder made anew under a reused inode changes; or absent.
+ * Where the file system keeps no birth time, or gives one later than the
+ * folder's change or modification time, which no folder has, the folder's
+ * full stamp stands instead: a broken birth time never gives a state that
+ * holds.
+ * @param {string} folder
+ * @returns {string}
+ */
+function folderIdentity(folder) {
+  try {
+    const stat = statSyncRaw(folder, {bigint: true, throwIfNoEntry: false});
+    if (!stat) return '-';
+    const {dev, ino, birthtimeNs, ctimeNs, mtimeNs} = stat;
+    if (birthtimeNs === 0n || birthtimeNs > ctimeNs || birthtimeNs > mtimeNs) {
+      return stampOf(stat);
+    }
+    return `${dev}:${ino}:${birthtimeNs}`;
+  } catch {
+    return '-';
+  }
+}
+
+/**
+ * Where `file` resolves, whole (RESOLVED), or absent.
+ * @param {string} file
+ * @returns {string}
+ */
+function resolvedState(file) {
+  const real = resolvedPath(file);
+  return real === '-' ? '-' : `${RESOLVED}${real}`;
 }
 
 /**
@@ -397,15 +467,12 @@ function resolvedPath(file) {
  * of state that was recorded.
  * @param {string} file - The recorded path.
  * @param {string} state
- * @param {Map<string, string> | null} [folders] - Folders this check has
- *   resolved (realPathState): one map per check, never kept longer.
+ * @param {Map<string, string> | null} [parents] - Identities of folders this
+ *   check has taken (lookupState): one map per check, never kept longer.
  * @returns {boolean}
  */
-export function stillInState(file, state, folders = null) {
-  if (state.startsWith(RESOLVED)) {
-    const real = realPathState(file, folders);
-    return (real === '-' ? '-' : `${RESOLVED}${real}`) === state;
-  }
+export function stillInState(file, state, parents = null) {
+  if (lookedUp(state)) return lookupState(file, parents) === state;
   if (state === PRESENT) return presenceState(file) === state;
   return (
     (state.startsWith('dir:') ? probeStamp(file) : stateOf(file)) === state
@@ -419,9 +486,9 @@ export function stillInState(file, state, folders = null) {
  */
 export function unchangedSince(recorded) {
   /** @type {Map<string, string>} */
-  const folders = new Map();
+  const parents = new Map();
   for (const [file, state] of recorded) {
-    if (!stillInState(file, state, folders)) return false;
+    if (!stillInState(file, state, parents)) return false;
   }
   return true;
 }
@@ -457,8 +524,14 @@ export function withoutRecording(fn) {
 export function recordStates(states) {
   const runs = reads.getStore();
   if (!runs) return;
-  for (const [file, state] of states) {
-    for (const seen of runs) keepState(seen, file, state);
+  for (const seen of runs) {
+    for (const [file, state] of states) {
+      // The common cases need no rule: a path the record does not hold yet,
+      // and one a value reused again in the run handed in already.
+      const had = seen.get(file);
+      if (had === undefined) seen.set(file, state);
+      else if (had !== state && weak(had)) keepState(seen, file, state);
+    }
   }
 }
 
@@ -470,19 +543,24 @@ export function recordStates(states) {
  * `note`). Every place that adds a state to a record goes through this rule.
  * @param {Map<string, string>} seen
  * @param {string} file
- * @param {string | (() => string)} state - The state, or what gives it, asked
- *   only when the rule could keep it: a stat costs more than the check.
+ * @param {string | ((file: string, seen: Map<string, string>) => string)} state
+ *   The state, or what gives it from the path and the record, asked only
+ *   when the rule could keep it: a stat costs more than the check.
  * @param {StateKind} [gives] - With `state` given by a function: the kind of
  *   state it gives.
  */
 export function keepState(seen, file, state, gives = 'probe') {
   const had = seen.get(file);
-  if (had !== undefined && !weak(had)) return;
-  if (typeof state === 'function') {
-    if (had !== undefined && !mayTake(had, gives)) return;
-    state = state();
+  if (had === undefined) {
+    seen.set(file, typeof state === 'function' ? state(file, seen) : state);
+    return;
   }
-  if (had === undefined || takes(had, state)) seen.set(file, state);
+  if (!weak(had)) return;
+  if (typeof state === 'function') {
+    if (!mayTake(had, gives)) return;
+    state = state(file, seen);
+  }
+  if (takes(had, state)) seen.set(file, state);
 }
 
 /**
@@ -515,7 +593,7 @@ function weak(had) {
 function mayTake(had, gives) {
   if (gives === 'presence') return false;
   if (had === PRESENT) return true;
-  if (had.startsWith(RESOLVED)) return gives !== 'resolved';
+  if (lookedUp(had)) return gives !== 'resolved';
   return gives === 'stamp' && had.startsWith('dir:');
 }
 
@@ -529,13 +607,11 @@ function mayTake(had, gives) {
  */
 function takes(had, state) {
   if (had === PRESENT) return state !== PRESENT;
-  if (had.startsWith(RESOLVED)) {
-    return state !== PRESENT && !state.startsWith(RESOLVED);
-  }
+  if (lookedUp(had)) return state !== PRESENT && !lookedUp(state);
   return (
     had.startsWith('dir:') &&
     !state.startsWith('dir:') &&
-    !state.startsWith(RESOLVED) &&
+    !lookedUp(state) &&
     state !== PRESENT
   );
 }

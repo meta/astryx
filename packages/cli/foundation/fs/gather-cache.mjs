@@ -74,9 +74,10 @@ import {cliDoor} from '../env/cli-command.mjs';
 import {CACHE_LIMIT_BYTES, evictOldest} from './cache-eviction.mjs';
 import {
   PRESENT,
-  RESOLVED,
+  lookedUp,
   fileStamp,
   keepState,
+  readStamp,
   recordReads,
   recordStates,
   stillInState,
@@ -417,7 +418,7 @@ export async function recordRun(fn, {armedThroughout = false} = {}) {
             try {
               const file = fileURLToPath(url);
               // The load reads the module's content: its stamp.
-              keepState(reads, file, () => fileStamp(file), 'stamp');
+              keepState(reads, file, readStamp, 'stamp');
             } catch {
               // A URL with no file path holds nothing to check.
             }
@@ -476,7 +477,7 @@ function noteLookups(specifier, parentURL, reads) {
     for (;;) {
       if (path.basename(dir) !== 'node_modules') {
         const candidate = path.join(dir, 'node_modules', name);
-        keepState(reads, candidate, () => lookupStamp(candidate));
+        keepState(reads, candidate, lookupStamp);
       }
       const up = path.dirname(dir);
       if (up === dir) break;
@@ -613,9 +614,9 @@ function staleReason(stamps, env) {
     }
   }
   /** @type {Map<string, string>} */
-  const folders = new Map();
+  const parents = new Map();
   for (const [file, state] of stamps) {
-    if (!stillInState(file, state, folders)) {
+    if (!stillInState(file, state, parents)) {
       return 'a file or folder it read changed';
     }
   }
@@ -806,7 +807,8 @@ function chooseBase(file, stamps, confirmed) {
 /**
  * Whether a state an entry holds agrees with the state the run read of the
  * same path: the same state, or the entry holds only that the path is there,
- * or where it resolves (confirmed this run), and the run read it there.
+ * or what a real-path lookup of it gave (confirmed this run), and the run
+ * read it there.
  * @param {string | undefined} read - the run's state of the path
  * @param {string} held - the entry's state of it
  * @returns {boolean}
@@ -814,9 +816,7 @@ function chooseBase(file, stamps, confirmed) {
 function holdsIn(read, held) {
   return (
     read === held ||
-    ((held === PRESENT || held.startsWith(RESOLVED)) &&
-      read !== undefined &&
-      read !== '-')
+    ((held === PRESENT || lookedUp(held)) && read !== undefined && read !== '-')
   );
 }
 

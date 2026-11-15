@@ -324,29 +324,119 @@ describe('an exact run', () => {
     expect(unchangedSince(seen)).toBe(false);
   });
 
-  it('sees a file one store links into two version folders move between them', () => {
-    const {dir} = scratch();
-    const store = path.join(dir, 'store.js');
-    fs.writeFileSync(store, 'module.exports = 1;\n');
-    for (const version of ['1.0.0', '1.0.1']) {
-      fs.mkdirSync(path.join(dir, version));
-      fs.linkSync(store, path.join(dir, version, 'index.js'));
+  it.each([
+    [
+      'looked up',
+      (/** @type {string} */ pkg) =>
+        fs.realpathSync(path.join(pkg, 'index.js')),
+    ],
+    [
+      'looked up, read and listed',
+      (/** @type {string} */ pkg) => {
+        fs.realpathSync(path.join(pkg, 'index.js'));
+        fs.readFileSync(path.join(pkg, 'index.js'), 'utf8');
+        fs.readdirSync(pkg);
+      },
+    ],
+  ])(
+    'sees a file one store links into two version folders move between them (%s)',
+    (_how, use) => {
+      const {dir} = scratch();
+      const store = path.join(dir, 'store.js');
+      fs.writeFileSync(store, 'module.exports = 1;\n');
+      for (const version of ['1.0.0', '1.0.1']) {
+        fs.mkdirSync(path.join(dir, version));
+        fs.linkSync(store, path.join(dir, version, 'index.js'));
+      }
+      const pkg = path.join(dir, 'pkg');
+      fs.symlinkSync(path.join(dir, '1.0.0'), pkg);
+      const seen = exact(() => use(pkg));
+      expect(unchangedSince(seen)).toBe(true);
+      fs.rmSync(pkg);
+      fs.symlinkSync(path.join(dir, '1.0.1'), pkg);
+      expect(unchangedSince(seen)).toBe(false);
+    },
+  );
+
+  /**
+   * Record a real-path lookup of a file with the stat of its folder changed
+   * as `change` says, after the lookup, from a fresh copy of the recorder.
+   * @param {(stat: import('node:fs').BigIntStats) => Partial<import('node:fs').BigIntStats>} change
+   * @param {(dir: string) => void} [act] - what changes on disk too
+   */
+  async function lookupWithFolder(change, act = () => {}) {
+    const {dir, file} = scratch();
+    const nodeFs = createRequire(import.meta.url)('node:fs');
+    const {statSync} = nodeFs;
+    let changed = false;
+    nodeFs.statSync = (/** @type {any[]} */ ...args) => {
+      const stat = statSync(...args);
+      if (!changed || args[0] !== dir || !stat || !args[1]?.bigint) {
+        return stat;
+      }
+      return Object.assign(
+        Object.create(Object.getPrototypeOf(stat)),
+        stat,
+        change(stat),
+      );
+    };
+    vi.resetModules();
+    try {
+      const fresh = await import('./read-record.mjs');
+      /** @type {Map<string, string>} */
+      const seen = new Map();
+      fresh.recordReads(seen, () => fs.realpathSync(file), {exact: true});
+      const before = fresh.unchangedSince(seen);
+      changed = true;
+      act(dir);
+      return {before, after: fresh.unchangedSince(seen)};
+    } finally {
+      nodeFs.statSync = statSync;
+      vi.resetModules();
     }
-    const pkg = path.join(dir, 'pkg');
-    fs.symlinkSync(path.join(dir, '1.0.0'), pkg);
-    const seen = exact(() => fs.realpathSync(path.join(pkg, 'index.js')));
-    fs.rmSync(pkg);
-    fs.symlinkSync(path.join(dir, '1.0.1'), pkg);
-    expect(unchangedSince(seen)).toBe(false);
+  }
+
+  it('sees the folder a looked-up path is found in made anew, even under a reused inode', async () => {
+    // The same device and inode, as a file system that reuses an inode gives
+    // a new folder, and another birth time.
+    const {before, after} = await lookupWithFolder(stat => ({
+      birthtimeNs: stat.birthtimeNs - 1n,
+    }));
+    expect(before).toBe(true);
+    expect(after).toBe(false);
   });
 
-  it('keeps a real-path lookup of a file replaced whole: its path did not change', () => {
+  it('checks the folder a looked-up path is found in by its full stamp where its birth time is broken', async () => {
+    // A birth time later than the change time, which no folder has: an entry
+    // added to the folder changes the state, as the full stamp does.
+    const {before, after} = await lookupWithFolder(
+      stat => ({birthtimeNs: stat.ctimeNs + 1n}),
+      dir => fs.writeFileSync(path.join(dir, 'added.txt'), 'new'),
+    );
+    expect(before).toBe(true);
+    expect(after).toBe(false);
+  });
+
+  it('keeps a real-path lookup of a file through a write in place and a save that renames a new file over it', () => {
     const {dir, file} = scratch();
     const seen = exact(() => fs.realpathSync(file));
+    expect(seen.get(file)).toMatch(/^in:/u);
+    fs.writeFileSync(file, 'two, longer');
+    expect(unchangedSince(seen)).toBe(true);
     const next = path.join(dir, 'next.txt');
-    fs.writeFileSync(next, 'two, longer');
+    fs.writeFileSync(next, 'three, longer still');
     fs.renameSync(next, file);
     expect(unchangedSince(seen)).toBe(true);
+  });
+
+  it('sees a looked-up path become an entry of another kind', () => {
+    const {dir} = scratch();
+    const entry = path.join(dir, 'entry');
+    fs.writeFileSync(entry, 'a file');
+    const seen = exact(() => fs.realpathSync(entry));
+    fs.rmSync(entry);
+    fs.mkdirSync(entry);
+    expect(unchangedSince(seen)).toBe(false);
   });
 
   it('records a path it looked up and then read with the stat the lookup took', async () => {
@@ -377,9 +467,9 @@ describe('an exact run', () => {
         {exact: true},
       );
       expect(calls).toEqual({lstat: 1, stat: 0});
-      const {size, ino} = statSync(file);
-      expect(seen.get(file)?.startsWith(`${size}:`)).toBe(true);
-      expect(seen.get(file)?.endsWith(`:${ino}`)).toBe(true);
+      // The stamp a check takes, to the digit: one that differed would miss
+      // on every check.
+      expect(seen.get(file)).toBe(fresh.fileStamp(file));
     } finally {
       nodeFs.lstatSync = lstatSync;
       nodeFs.statSync = statSync;
@@ -505,6 +595,19 @@ describe('an exact run', () => {
     fs.writeFileSync(file, 'two, longer');
     expect(unchangedSince(resolved)).toBe(true);
     expect(unchangedSince(resolvedThenRead)).toBe(false);
+
+    // A file looked up by its own path: which file it reaches, until a read
+    // records the stamp.
+    const reached = exact(() => {
+      fs.existsSync(file);
+      fs.realpathSync(file);
+    });
+    expect(reached.get(file)).toMatch(/^in:/u);
+    const reachedThenRead = exact(() => {
+      fs.realpathSync(file);
+      fs.readFileSync(file, 'utf8');
+    });
+    expect(reachedThenRead.get(file)).toMatch(/^\d+:/u);
   });
 
   it('keeps a stamp read elsewhere over an existence check, and never the other way', () => {
