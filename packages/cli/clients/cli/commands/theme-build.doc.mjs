@@ -20,6 +20,14 @@ export const doc = {
     'standard ESM, and type declarations. Ordinary mode writes one complete set per ' +
     'theme. --family combines one selected extension tree into the three files named by ' +
     'the required --family-key, ready for one CSS load and identity-only switching. ' +
+    'A local module the built module imports (an icon registry, a slot value, ' +
+    'the helpers they import) that is TypeScript or JSX is compiled to JavaScript ' +
+    'named after its source (icons.tsx → icons.tsx.js) in a folder beside the ' +
+    "built module named for it (w98.modules beside w98.js), mirroring each source's " +
+    'place under the folder that holds the theme and its compiled sources. Each ' +
+    'local import names its file with its extension, ' +
+    'so the built module loads in any bundler and in plain Node; package imports ' +
+    'stay as they are. ' +
     'With --check it writes nothing and reports source drift. --icons-specifier keeps ' +
     'its existing generated-module behavior. It prints one line per built theme and ' +
     'one line naming fonts the themes do not load; --detail full adds the install ' +
