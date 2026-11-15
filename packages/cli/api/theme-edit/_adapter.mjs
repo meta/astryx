@@ -159,6 +159,13 @@ export const editorBaseIn = (slug, cwd) =>
 /** The sections `show --section` takes. */
 export const showSections = () => [...SHOWCASE_GROUPS];
 
+/**
+ * A free folder for a new starter app here, the one `preview app`'s own
+ * refusals offer.
+ * @param {string} cwd
+ */
+export const editorFreeAppFolder = cwd => preview.freeAppFolder(cwd);
+
 export {
   dialTakesText,
   dialValueFits,

@@ -166,6 +166,8 @@ import {
 import {
   renderPreview,
   renderSheet,
+  pageInTheWay,
+  inTheWayPhrase,
   previewIsCurrent,
   takeFirstAppCopy,
   appCopyBehind,
@@ -986,6 +988,8 @@ async function newTheme(
     );
   }
   const ctx = await context(cwd);
+  // A --png takes the sample page and the open states again after the build.
+  ctx.takesPictures = png ? {sheet: null} : null;
   /** @type {import('./_settings.mjs').ThemeData} */
   const data = {name, ...(like ? {like} : {}), mode: 'both', settings: []};
   try {
@@ -4679,6 +4683,8 @@ async function changeOnce(
     ),
   ];
   const ctx = await context(cwd);
+  // A --png takes the sample page and the open states again after the build.
+  ctx.takesPictures = png ? {sheet: null} : null;
   // An undo of one setting only removes it, so it never waits on the
   // others being fixed.
   if (sub !== 'undo') {
@@ -6232,6 +6238,10 @@ export async function themeEditShow(theme, options = {}) {
     throw await savedDamageRefusal(e, theme, cwd);
   }
   const ctx = await context(cwd);
+  // show --png takes its sheet too, after any build it makes.
+  ctx.takesPictures = png
+    ? {sheet: section ? `sheet-${section}` : 'sheet'}
+    : null;
   // The app copy is written once show succeeds (at its end), never by a
   // build a later refusal puts back.
   holdAfterBuild(ctx);
@@ -6340,7 +6350,22 @@ export async function themeEditShow(theme, options = {}) {
       refuse(
         E.ERR_THEME_INVALID,
         `${theme} did not build: ${why}${why.includes(path.basename(f.ts)) ? ` (${shown(cwd, f.ts)} is your own file: fix it, then run show again)` : ''}`,
-        {run: [`${P} how --list dials`]},
+        {
+          // The build failure's own way on (the annotated source that
+          // loads, to compare with), else show again once it is fixed.
+          run:
+            e instanceof AstryxError && e.suggestions?.length
+              ? e.suggestions.map(x => ({
+                  name: x.name,
+                  reason: x.reason ?? 'do this instead',
+                }))
+              : [
+                  {
+                    name: `${P} show ${theme}`,
+                    reason: 'once the source is fixed as the message says',
+                  },
+                ],
+        },
       );
     }
   }
@@ -6416,28 +6441,54 @@ export async function themeEditShow(theme, options = {}) {
       );
     }
   };
-  const preview = noPages
-    ? shown(cwd, f.preview)
-    : await rendering(() => renderPreview(ctx, theme, data));
+  // Something of yours at a page's name (a file the editor did not write,
+  // a link, a folder) is never written over: that page is not made, its
+  // picture is not taken, and the result names it, as for the open states.
+  const sheetFile = section
+    ? path.join(f.dir, `sheet-${section}.html`)
+    : f.sheet;
+  /** @type {Array<{html: string, png: string, kind: 'link' | 'file', page: string}>} */
+  const leftPages = noPages
+    ? []
+    : [
+        {html: f.preview, png: f.previewPng, page: 'the sample page'},
+        {
+          html: sheetFile,
+          png: section ? path.join(f.dir, `sheet-${section}.png`) : f.sheetPng,
+          page: section ? `the ${section} sheet` : 'the sheet',
+        },
+      ].flatMap(x => {
+        // A folder (or a pipe) there is refused by the write itself, by
+        // name, as before: no page can be made over it.
+        const kind = pageInTheWay(x.html);
+        return kind === 'file' || kind === 'link' ? [{...x, kind}] : [];
+      });
+  const left = (/** @type {string} */ file) =>
+    leftPages.some(x => x.html === file);
+  const preview =
+    noPages || left(f.preview)
+      ? shown(cwd, f.preview)
+      : await rendering(() => renderPreview(ctx, theme, data));
   const previewStale = noPages
     ? []
     : await rendering(() => keepPreviewRoute(ctx, theme));
-  const sheet = noPages
-    ? {file: shown(cwd, f.sheet), components: 0, skipped: [], notes: []}
-    : await rendering(() => renderSheet(ctx, theme, data, {group: section}));
+  const sheet =
+    noPages || left(sheetFile)
+      ? {file: shown(cwd, sheetFile), components: 0, skipped: [], notes: []}
+      : await rendering(() => renderSheet(ctx, theme, data, {group: section}));
   // The full sheet records the build it shows, so a later change tells a
   // sheet that still matches (after an undo) from one that does not.
-  if (!noPages)
-    stampSheet(
-      section ? path.join(f.dir, `sheet-${section}.html`) : f.sheet,
-      theme,
-      cwd,
-    );
+  if (!noPages && !left(sheetFile)) stampSheet(sheetFile, theme, cwd);
+  const leftWords = leftPages.map(
+    x =>
+      `${inTheWayPhrase(shown(cwd, x.html), x.kind, x.page)}, so ${x.page} was not made${png ? ` and ${shown(cwd, x.png)} was not taken` : ''}; move ${x.kind === 'link' ? 'the link' : 'it'}, then run ${P} show ${theme}${section ? ` --section ${section}` : ''}${png ? ' --png' : ''}`,
+  );
   const modes = modesOf(data);
   // The open states (every overlay drawn open) beside the sample page: the
-  // full sheet holds them too, but is too tall to read whole.
+  // full sheet holds them too, but is too tall to read whole. --png always
+  // takes them, with a section's sheet as with the full one.
   const open =
-    png && !noPages && !section
+    png && !noPages
       ? await rendering(async () => {
           try {
             return await openStatesPage(ctx, theme, data);
@@ -6469,7 +6520,7 @@ export async function themeEditShow(theme, options = {}) {
                   png: path.join(f.dir, `sheet-${section}.png`),
                 }
               : {html: f.sheet, png: f.sheetPng},
-          ],
+          ].filter(x => !left(x.html)),
           modes,
         )
       : // Pictures asked for but not taken: said, never a quiet none.
@@ -6485,6 +6536,8 @@ export async function themeEditShow(theme, options = {}) {
   // change (something of yours at its page's name is left as it is).
   if (open && 'problem' in open)
     shots.problem = [open.problem, shots.problem].filter(Boolean).join('; ');
+  if (png && leftWords.length)
+    shots.problem = [...leftWords, shots.problem].filter(Boolean).join('; ');
   const look = lookAtPictures(shots.files);
   // The app copy follows the build there now, also when the build was
   // current and only the copy is missing (a theme made before it existed).
@@ -6530,6 +6583,7 @@ export async function themeEditShow(theme, options = {}) {
       })(),
       notes: [
         ...rebuiltNotes,
+        ...(png ? [] : leftWords),
         ...sheet.notes,
         ...misplacedNotes(theme, data),
         ...(noReact
@@ -7990,6 +8044,8 @@ async function undoTheme(theme, options) {
       {run: [`${P} show ${theme}`]},
     );
   const ctx = await context(cwd);
+  // A --png takes the sample page and the open states again after the build.
+  ctx.takesPictures = png ? {sheet: null} : null;
   const prevText = /** @type {string} */ (history.pop());
   let prev = /** @type {import('./_settings.mjs').ThemeData} */ (
     settingsJson(prevText)

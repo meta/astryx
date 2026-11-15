@@ -109,7 +109,8 @@ describe('the open states picture', () => {
       expect(removed).toContain('themes/t/sheet-overlays.png');
       expect(removed).toMatch(/show t --png take new ones$/);
       expect(removed).not.toContain('--section overlays');
-      // A section asked for is its own picture, with no second one.
+      // A section asked for is its own picture in place of sheet.png, and
+      // the open states come with it, as with every --png.
       const section = /** @type {any} */ (
         await themeEditShow('t', {cwd, png: true, section: 'inputs'})
       );
@@ -120,6 +121,8 @@ describe('the open states picture', () => {
       ).toEqual([
         'preview.png',
         'preview-dark.png',
+        'sheet-overlays.png',
+        'sheet-overlays-dark.png',
         'sheet-inputs.png',
         'sheet-inputs-dark.png',
       ]);

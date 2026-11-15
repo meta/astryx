@@ -32,7 +32,7 @@ import {
 import {cliError} from '../../lib/cli-error.mjs';
 import {
   editorMissingArgument,
-  setEditorFreeName,
+  setFreeArgument,
   setEditorThemeList,
   setUnknownOptionReader,
 } from '../../lib/json-shim.mjs';
@@ -64,6 +64,7 @@ import {
   editorThemesAt,
   editorFreeName,
   editorNameOk,
+  editorFreeAppFolder,
   typoNear,
   typoOf,
   editorAfterBuild,
@@ -479,7 +480,7 @@ function newFlagLine(o) {
  * the command as meant. Commander reads a word that starts with a typed
  * dash as a word of the command, so it is read here. Null when every
  * option is written as the command takes it.
- * @param {string} command `add` under preview
+ * @param {string} command `add` or `app` under preview
  * @param {import('@astryxdesign/cli/authoring').CommandDoc} doc
  * @returns {null}
  */
@@ -1037,10 +1038,20 @@ function optionsAsWritten(
     // An option that takes a value, given none, is left out of the line. A
     // next word that starts with a dash is its value unless it names an
     // option the command takes (`--font -apple-system`, `--text-size -1`).
+    // A word written as a long option (`--path`, `--color-accent`) is never
+    // a value either: no value an option takes starts with two dashes.
     const opt = next == null ? null : optionShape.exec(next);
-    const nextIsOption = next === '--' || Boolean(opt && meant(opt[2]));
+    const nextIsOption =
+      next === '--' ||
+      /^--[A-Za-z]/.test(next ?? '') ||
+      Boolean(opt && meant(opt[2]));
     if (m[3] == null && (next == null || nextIsOption)) {
-      if (valued.includes(flag)) why ??= `${flag} was given no value`;
+      if (valued.includes(flag)) {
+        why ??= `${flag} was given no value`;
+        // Leaving out an option that narrows what the command acts on
+        // would widen it: that line is never offered.
+        if (NARROWING_OPTIONS.includes(flag.slice(2))) unread = true;
+      }
       continue;
     }
     words.push(flag);
@@ -1548,7 +1559,19 @@ function heldStop() {}
 export function registerExperimentalTheme(group, program) {
   // A command run with no theme names the app's only theme.
   setEditorThemeList(editorThemesAt);
-  setEditorFreeName(editorFreeName);
+  setFreeArgument((cwd, words) =>
+    words === 'experimental theme editor new'
+      ? {
+          word: editorFreeName(cwd, 'my-theme'),
+          reason: 'a name for the new theme',
+        }
+      : words === 'experimental theme preview app'
+        ? {
+            word: quoteCommandArgument(editorFreeAppFolder(cwd)),
+            reason: 'a folder for the new app, free here',
+          }
+        : null,
+  );
   setUnknownOptionReader(unknownThemeOption);
   const theme = defineGroup(group, groupDoc);
   explained(theme, groupDoc);
@@ -2082,6 +2105,7 @@ export function registerExperimentalTheme(group, program) {
           program,
           () =>
             previewFlagsOnce('app', ['theme']) ??
+            previewOptionsRead('app', previewAppDoc) ??
             resultStands(
               themeEditPreviewApp(dir, {
                 cwd: process.cwd(),
@@ -2153,9 +2177,17 @@ export function registerExperimentalTheme(group, program) {
               themeEditPreviewRemove(page, {cwd: process.cwd(), path: o.path}),
             ),
           r => [
-            r.data.pages.length
-              ? `[ok] removed ${page} from the theme preview`
-              : `[ok] removed the theme preview in ${r.data.folder}`,
+            // The headline says what happened: a page still listed, or a
+            // preview nothing was removed from, was not removed.
+            r.data.pages.some(
+              p => p.toLowerCase() === String(page ?? '').toLowerCase(),
+            )
+              ? `[ok] nothing was removed: ${page} stays in the theme preview`
+              : r.data.pages.length
+                ? `[ok] removed ${page} from the theme preview`
+                : r.data.removed.length
+                  ? `[ok] removed the theme preview in ${r.data.folder}`
+                  : `[ok] nothing was removed: the theme preview in ${r.data.folder} stays`,
             ...project(/** @type {any} */ (r.data)),
           ],
         ),

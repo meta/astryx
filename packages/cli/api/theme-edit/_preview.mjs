@@ -46,7 +46,7 @@ import {
   APP_COPY_BUILT,
   appCopyNames,
 } from './_settings.mjs';
-import {writeWhole} from './_palette.mjs';
+import {readRegularFile, writeWhole} from './_palette.mjs';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
 import {importPathOf, installLine} from './_project.mjs';
 import {
@@ -455,6 +455,40 @@ export function fontPackageWeights(ctx, pkg) {
 }
 
 /**
+ * The weights a font package's index stylesheet loads, read from its own
+ * @font-face rules: each rule's font-weight as a [from, to] span, one
+ * weight (`400`) or a range (`100 900`, a variable face, every weight in
+ * it); a rule with no font-weight is weight 400. Null when the package is
+ * not installed here or its sheet names no face.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} pkg
+ * @returns {Array<[number, number]> | null}
+ */
+export function fontIndexWeights(ctx, pkg) {
+  /** @type {string} */
+  let text;
+  try {
+    text = fs.readFileSync(ctx.project.req.resolve(`${pkg}/index.css`), 'utf8');
+  } catch {
+    return null;
+  }
+  /** @type {Array<[number, number]>} */
+  const spans = [];
+  for (const m of text.matchAll(/@font-face\s*\{([^}]*)\}/gi)) {
+    const value = /font-weight\s*:\s*([^;}]+)/i.exec(m[1])?.[1] ?? '400';
+    const nums = value
+      .trim()
+      .replace(/\bnormal\b/gi, '400')
+      .replace(/\bbold\b/gi, '700')
+      .split(/\s+/)
+      .map(Number);
+    if (!nums.length || nums.some(n => !Number.isFinite(n))) continue;
+    spans.push([nums[0], nums[1] ?? nums[0]]);
+  }
+  return spans.length ? spans : null;
+}
+
+/**
  * The face a browser shows for a font weight among the weights a family
  * loads, by CSS font matching: from 400 to 500, the weights up to 500
  * first, then lighter, then heavier; below 400, lighter first; above 500,
@@ -608,6 +642,54 @@ function renderKey(project, slug, source, like) {
     }
   }
   return h.digest('hex').slice(0, 24);
+}
+
+/**
+ * The stamps the editor writes into every page it makes: the render key
+ * at its end, and a sheet's build.
+ */
+const EDITOR_PAGE_STAMP =
+  /<!-- astryx: (?:render of [0-9a-f]{24} [0-9a-f]{16}|sheet of build [0-9a-f]{16}) -->/;
+
+/**
+ * What is at the name of a page the editor writes in the theme folder
+ * (preview.html, sheet.html, a section's sheet, the open states page) when
+ * it is not the editor's own page: `link`, `folder`, `other` (not a plain
+ * file) or `file` (a file without the editor's stamp). Null when nothing
+ * is there or the page there is the editor's. Something of yours at a
+ * page's name is never written over: it is left as it is, and named.
+ * @param {string} file
+ * @returns {'link' | 'folder' | 'other' | 'file' | null}
+ */
+export function pageInTheWay(file) {
+  const st = fs.lstatSync(file, {throwIfNoEntry: false});
+  if (!st) return null;
+  if (st.isSymbolicLink()) return 'link';
+  if (st.isDirectory()) return 'folder';
+  if (!st.isFile()) return 'other';
+  try {
+    return EDITOR_PAGE_STAMP.test(readRegularFile(file, 'utf8'))
+      ? null
+      : 'file';
+  } catch {
+    return 'file';
+  }
+}
+
+/**
+ * What {@link pageInTheWay} found, said: `<file> is a link, and the editor
+ * writes nothing through a link`, `… is a folder, where <page> goes`, `…
+ * is a file the editor did not write, and it is left as it is`.
+ * @param {string} shownFile the file, as shown
+ * @param {'link' | 'folder' | 'other' | 'file'} kind
+ * @param {string} page what goes there (`the open states page`)
+ */
+export function inTheWayPhrase(shownFile, kind, page) {
+  return kind === 'link'
+    ? `${shownFile} is a link, and the editor writes nothing through a link`
+    : kind === 'file'
+      ? `${shownFile} is a file the editor did not write, and it is left as it is`
+      : `${shownFile} is ${kind === 'folder' ? 'a folder' : 'not a plain file'}, where ${page} goes`;
 }
 
 /**

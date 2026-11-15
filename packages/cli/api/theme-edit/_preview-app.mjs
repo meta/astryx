@@ -57,7 +57,9 @@ import {
   overviewPageSource,
   previewRouteSource,
   appCopyBlocker,
+  fontIndexWeights,
   fontPackageSheets,
+  fontPackageWeights,
   themeImports,
 } from './_preview.mjs';
 import {
@@ -1429,11 +1431,24 @@ function cdTo(folder) {
 }
 
 /**
+ * Entries of a theme folder that are no part of the theme, which a starter
+ * app never copies: a repository's own folder (or the file a worktree has
+ * there) and installed packages.
+ */
+const NOT_THEME_ENTRIES = new Set([
+  '.git',
+  '.hg',
+  '.svn',
+  '.jj',
+  'node_modules',
+]);
+
+/**
  * A folder name for a new starter app that is free in `cwd`: theme-app, else
  * theme-app-2, theme-app-3 and so on.
  * @param {string} cwd
  */
-function freeAppFolder(cwd) {
+export function freeAppFolder(cwd) {
   return shown(cwd, freeFolder(cwd, cwd, 'theme-app'));
 }
 
@@ -5057,6 +5072,10 @@ export async function themeEditPreviewApp(dir, options = {}) {
     const recorded = readWrittenRecord(cwd, slug);
     /** Links in the theme folder: never read through, so left out, and named. @type {string[]} */
     const links = [];
+    /** Version-control and package folders in the theme folder: no part of the theme, so left out, and named. @type {string[]} */
+    const notTheme = [];
+    /** What the copy leaves out, by full path, with what it is. @type {Map<string, string>} */
+    const leftOut = new Map();
     /**
      * A file of the theme folder, read for the copy before anything is
      * written: one too large for a read, or one that cannot be read, is
@@ -5094,14 +5113,28 @@ export async function themeEditPreviewApp(dir, options = {}) {
         withFileTypes: true,
       })) {
         const sub = path.join(rel, entry.name);
-        if (entry.isDirectory()) copyDir(sub);
+        // A repository's own folder (.git, a file in a worktree) and
+        // installed packages are not the theme's: never copied whole.
+        if (NOT_THEME_ENTRIES.has(entry.name) && !entry.isSymbolicLink()) {
+          notTheme.push(shown(cwd, path.join(from.dir, sub)));
+          leftOut.set(
+            path.join(from.dir, sub),
+            entry.name === 'node_modules'
+              ? 'a folder of installed packages, which the copy leaves out'
+              : 'a version-control folder, which the copy leaves out',
+          );
+        } else if (entry.isDirectory()) copyDir(sub);
         else if (
           entry.isSymbolicLink() &&
           !(rel === '' && skip.has(entry.name)) &&
           !(rel === '' && isEditorPage(entry.name, recorded))
-        )
+        ) {
           links.push(shown(cwd, path.join(from.dir, sub)));
-        else if (
+          leftOut.set(
+            path.join(from.dir, sub),
+            'a link, which the copy does not follow',
+          );
+        } else if (
           entry.isFile() &&
           !(rel === '' && skip.has(entry.name)) &&
           // No page or picture the editor wrote (dark pictures, section
@@ -5118,6 +5151,10 @@ export async function themeEditPreviewApp(dir, options = {}) {
       }
     };
     copyDir('');
+    if (notTheme.length)
+      notes.push(
+        `left out ${notTheme.join(', ')}: version control and installed packages are no part of the theme (the new app installs its own packages)`,
+      );
     if (links.length)
       notes.push(
         `left out ${links.join(', ')}: ${links.length === 1 ? 'a link' : 'links'}, which the copy does not follow; put a copy of the file there to bring it along`,
@@ -5150,6 +5187,37 @@ export async function themeEditPreviewApp(dir, options = {}) {
       }
       return real !== realFrom && !real.startsWith(realFrom + path.sep);
     };
+    /**
+     * A path inside the theme folder that the copy will not hold, because
+     * something the copy leaves out is on its way (a link to a place inside
+     * the folder, a package folder): that entry, else null.
+     * @param {string} at
+     */
+    const leftOutOn = at => {
+      const rel = path.relative(from.dir, path.resolve(at));
+      if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return null;
+      let p = from.dir;
+      for (const part of rel.split(path.sep)) {
+        p = path.join(p, part);
+        if (leftOut.has(p)) return p;
+      }
+      return null;
+    };
+    /** References the copy would break, each with the entry it goes through. @type {string[]} */
+    const broken = [];
+    /**
+     * Whether a reference leads out of the theme folder; one that reaches
+     * a file through something the copy leaves out is recorded as broken.
+     * @param {string} at
+     * @param {string} said how the file names it
+     */
+    const check = (at, said) => {
+      if (leaves(at)) return true;
+      const by = leftOutOn(at);
+      if (by && fs.existsSync(at))
+        broken.push(`${said} through ${shown(cwd, by)}, ${leftOut.get(by)}`);
+      return false;
+    };
     /** Packages the copied theme sources import, by name. @type {Set<string>} */
     const imported = new Set();
     const outside = themeCopy.flatMap(c => {
@@ -5165,7 +5233,12 @@ export async function themeEditPreviewApp(dir, options = {}) {
       }
       return specs
         .filter(spec => spec.startsWith('.'))
-        .filter(spec => leaves(path.resolve(path.dirname(file), spec)))
+        .filter(spec =>
+          check(
+            path.resolve(path.dirname(file), spec),
+            `${shown(cwd, file)} imports '${spec}'`,
+          ),
+        )
         .map(spec => `${shown(cwd, file)} imports '${spec}'`);
     });
     // A stylesheet's url() that leads out of the theme folder (an image in
@@ -5198,7 +5271,7 @@ export async function themeEditPreviewApp(dir, options = {}) {
           named.kind === 'missing'
             ? path.resolve(path.dirname(file), named.ref)
             : named.file;
-        if (leaves(at))
+        if (check(at, `${shown(cwd, file)} uses url(${named.ref})`))
           outside.push(`${shown(cwd, file)} uses url(${named.ref})`);
       }
     }
@@ -5208,6 +5281,17 @@ export async function themeEditPreviewApp(dir, options = {}) {
         `${slug} cannot be copied into a new app: ${outside.slice(0, 3).join('; ')}, a file outside ${shown(cwd, from.dir)}/, which the new app does not have, so its theme would not build there.`,
         {
           fix: `move what it imports into ${shown(cwd, from.dir)}/ (and import it from there), then run the command again`,
+          run: [appCommand(dir, slug)],
+        },
+      );
+    // Inside the folder, yet through something the copy leaves out: the
+    // new app would not have the file at the path it is named by.
+    if (broken.length)
+      refuse(
+        E.ERR_INVALID_ARGUMENT,
+        `${slug} cannot be copied into a new app: ${broken.slice(0, 3).join('; ')}, so the new app would not have the file where it is named, and its theme would not build there.`,
+        {
+          fix: `put the file itself where it is named (in place of what the copy leaves out), or name it at its own place in ${shown(cwd, from.dir)}/, then run the command again`,
           run: [appCommand(dir, slug)],
         },
       );
@@ -5282,22 +5366,40 @@ export async function themeEditPreviewApp(dir, options = {}) {
     for (const font of fonts)
       dependencies[font.pkg] =
         readVersion(project, font.pkg) ?? OPEN_FONT_RANGE;
-    // A package the new app adds and this project has not installed: which
-    // weights it ships is unknown here (Lato has no 500), and importing one
-    // it lacks would stop the app's build. Its index sheet (weight 400)
-    // loads; every other weight the theme uses is named, with the import
-    // that loads it once installed.
-    const used = (builtFontWeights(ctx, slug) ?? [400]).filter(w => w !== 400);
+    // A package loaded by its index sheet alone: the weights that sheet's
+    // own faces load are read from it (a variable package's one face loads
+    // every weight in its range). One this project has not installed is
+    // unread: which weights it ships is unknown here (Lato has no 500), and
+    // importing one it lacks would stop the app's build, so its index
+    // sheet is taken as Fontsource's (weight 400). Each weight the theme
+    // uses that the index does not load is named, with the import of each
+    // weight sheet the package ships (unknown until installed).
+    const used = builtFontWeights(ctx, slug) ?? [400];
     for (const font of fonts) {
       const sheets = fontPackageSheets(ctx, slug, font.pkg);
-      if (
-        used.length &&
-        sheets.length === 1 &&
-        sheets[0] === `${font.pkg}/index.css`
-      )
-        notes.push(
-          `the new app loads ${font.family} at weight 400 only (${font.pkg}/index.css): ${slug} also uses ${used.join(', ')}, which show as a bold drawn by the browser until loaded; after installing, import ${used.map(w => `'${font.pkg}/${w}.css'`).join(', ')} in its root layout (each weight the family ships)`,
-        );
+      if (sheets.length !== 1 || sheets[0] !== `${font.pkg}/index.css`)
+        continue;
+      const loads = fontIndexWeights(ctx, font.pkg);
+      const spans = loads ?? [[400, 400]];
+      const unloaded = used.filter(
+        w => !spans.some(([from, to]) => w >= from && w <= to),
+      );
+      if (!unloaded.length) continue;
+      const loaded = spans
+        .map(([from, to]) => (from === to ? `${from}` : `${from}–${to}`))
+        .join(', ');
+      const ships = loads
+        ? unloaded.filter(w =>
+            (fontPackageWeights(ctx, font.pkg) ?? []).includes(w),
+          )
+        : unloaded;
+      notes.push(
+        `the new app loads ${font.family} at weight ${loaded} only (${font.pkg}/index.css): ${slug} also uses ${unloaded.join(', ')}, which show as a bold drawn by the browser${loads ? '' : ' until loaded'}; ${
+          ships.length
+            ? `${loads ? '' : 'after installing, '}import ${ships.map(w => `'${font.pkg}/${w}.css'`).join(', ')} in its root layout${loads ? '' : ' (each weight the family ships)'}`
+            : `${font.pkg} ships no stylesheet for ${unloaded.length > 1 ? 'those weights' : 'that weight'}`
+        }`,
+      );
     }
     // A family the CLI cannot vouch for as an open font (and this project
     // has no package of) is not installed in the new app: said, with the

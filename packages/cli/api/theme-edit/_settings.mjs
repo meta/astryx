@@ -158,7 +158,7 @@ setOwnTokenReader((cwd, slug) => ownSourceTokenValues(cwd, slug));
 /** What lifted secondary text sits on: the contrast check measures it there. */
 const LIFT_GROUND_TOKENS = new Set(LIFT_PARTS.map(([, , g]) => g));
 
-/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null, uncheckedCode?: string | null, wrote?: Map<string, string | null>, base?: {light: Record<string, string>, dark: Record<string, string>, components?: Record<string, any>}, keepStops?: Record<string, Record<'light' | 'dark', {family: string, stop: number, alpha?: string}>> | null, keepRadii?: Record<string, string> | null, sizeNotes?: string[], compileNotes?: string[], derived?: Record<string, Array<{property: string, vars?: string[], replaces?: boolean, expand?: string}>>}} Ctx */
+/** @typedef {{project: import('./_project.mjs').ThemeProject, C: import('./_compiler.mjs').Compiler, unchecked?: string | null, uncheckedCode?: string | null, wrote?: Map<string, string | null>, base?: {light: Record<string, string>, dark: Record<string, string>, components?: Record<string, any>}, keepStops?: Record<string, Record<'light' | 'dark', {family: string, stop: number, alpha?: string}>> | null, keepRadii?: Record<string, string> | null, sizeNotes?: string[], compileNotes?: string[], derived?: Record<string, Array<{property: string, vars?: string[], replaces?: boolean, expand?: string}>>, takesPictures?: {sheet: string | null} | null}} Ctx */
 /** @typedef {import('./_parts.mjs').PaintSide} PaintSide */
 /** @typedef {import('./_parts.mjs').TextPair} TextPair */
 
@@ -7527,6 +7527,26 @@ async function buildThemeSteps(ctx, slug, data) {
   // Every caller reports the build's notes, so the pictures it removed are
   // named in the result of whatever command built (set, undo, show, a
   // preview command).
+  // The pictures the running command takes again after this build (its
+  // --png: the sample page, the open states, and show's sheet) are not
+  // removed in the end: only the others are named, with what takes them.
+  const modes = modesOf(data);
+  const retaken = new Set(
+    ctx.takesPictures
+      ? [
+          'preview',
+          `sheet-${OPEN_SECTION}`,
+          ...(ctx.takesPictures.sheet ? [ctx.takesPictures.sheet] : []),
+        ].flatMap(n =>
+          modes.map(m =>
+            modes.length > 1 && m === 'dark' ? `${n}-dark.png` : `${n}.png`,
+          ),
+        )
+      : [],
+  );
+  removedPictures = removedPictures.filter(
+    p => !retaken.has(p.slice(p.lastIndexOf('/') + 1)),
+  );
   if (removedPictures.length)
     notes = [
       ...notes,

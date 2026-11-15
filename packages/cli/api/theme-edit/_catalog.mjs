@@ -375,7 +375,7 @@ export default function Page() {
     }
     body = groups.map(g => h('section', {key: g.name, className: g.name === 'overlays' ? 'cs-group cs-open-group' : 'cs-group'},
       g.name ? h('h2', {className: 'cs-group-name'}, g.name) : null,
-      h('div', {className: g.name === 'pages' ? 'cs-pages' : 'cs-sheet'}, g.cells.map(c => h('div', {key: c.name, className: 'cs-cell'},
+      h('div', {className: g.name === 'pages' ? 'cs-pages' : 'cs-sheet'}, g.cells.map(c => h('div', {key: c.name, className: 'cs-cell', style: {'--cs-examples': c.list.length}},
         h('div', {className: 'cs-name'}, c.name),
         h('div', {className: 'cs-row'}, c.list.map((x, j) => h('div', {key: j, className: 'cs-item'},
           x.label ? h('div', {className: 'cs-label'}, x.label) : null,
@@ -407,7 +407,10 @@ export const SHEET_CSS = [
   // range's calendar, a command palette), up to the height of the window a
   // picture is taken in (900px), as a person sees it on a screen.
   '.cs-open-group .cs-cell{max-height:900px}',
-  '.cs-open-group .cs-cell dialog{max-height:860px!important}',
+  // A panel that fills the window (a drawer, a bottom sheet, a lightbox)
+  // takes an equal share of that height for each of its examples, so every
+  // example is drawn, never one panel filling the cell.
+  '.cs-open-group .cs-cell dialog{max-height:calc((860px - (var(--cs-examples, 1) - 1) * 34px) / var(--cs-examples, 1))!important}',
   '.cs-name{font:600 12px ui-monospace,monospace;opacity:.6;margin-bottom:8px}',
   '.cs-row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start}',
   '.cs-label{font:10px ui-monospace,monospace;opacity:.5}',

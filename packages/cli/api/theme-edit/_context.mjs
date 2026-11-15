@@ -38,7 +38,7 @@ import {
 import {makeCompiler} from './_compiler.mjs';
 import {openProject, installLine} from './_project.mjs';
 import {partData} from './_parts.mjs';
-import {readRegularFile, writeWhole} from './_palette.mjs';
+import {writeWhole} from './_palette.mjs';
 import {
   assetRef,
   CSS_URL,
@@ -72,6 +72,8 @@ import {
   renderPreview,
   renderSheet,
   screenshot,
+  pageInTheWay,
+  inTheWayPhrase,
 } from './_preview.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
@@ -151,6 +153,12 @@ export async function context(cwd) {
     unchecked,
     uncheckedCode,
     derived: await derivedVars(project.coreDir),
+    /**
+     * The pictures the running command takes after its build (its --png),
+     * so the build names as removed only the ones it does not take again.
+     * @type {{sheet: string | null} | null}
+     */
+    takesPictures: null,
   };
 }
 
@@ -1033,29 +1041,11 @@ export async function openStatesPage(ctx, slug, data) {
   const png = path.join(f.dir, `sheet-${OPEN_SECTION}.png`);
   const shownHtml = shown(ctx.project.cwd, html);
   const skipped = `so ${shown(ctx.project.cwd, png)} (the open states) was not taken`;
-  const st = fs.lstatSync(html, {throwIfNoEntry: false});
-  if (st?.isSymbolicLink())
+  const inWay = pageInTheWay(html);
+  if (inWay)
     return {
-      problem: `${shownHtml} is a link, and the editor writes nothing through a link, ${skipped}; move the link, then run ${P} show ${slug} --png`,
+      problem: `${inTheWayPhrase(shownHtml, inWay, 'the open states page')}, ${skipped}; move ${inWay === 'link' ? 'the link' : 'it'}, then run ${P} show ${slug} --png`,
     };
-  if (st && !st.isFile())
-    return {
-      problem: `${shownHtml} is ${st.isDirectory() ? 'a folder' : 'not a plain file'}, where the open states page goes, ${skipped}; move it, then run ${P} show ${slug} --png`,
-    };
-  if (st) {
-    // The editor's page carries the stamp of the build it shows.
-    /** @type {boolean} */
-    let mine;
-    try {
-      mine = SHEET_STAMP.test(readRegularFile(html, 'utf8'));
-    } catch {
-      mine = false;
-    }
-    if (!mine)
-      return {
-        problem: `${shownHtml} is a file the editor did not write, and it is left as it is, ${skipped}; move it, then run ${P} show ${slug} --png`,
-      };
-  }
   await renderSheet(ctx, slug, data, {group: OPEN_SECTION});
   stampSheet(html, slug, ctx.project.cwd);
   return {html, png};
@@ -1074,22 +1064,30 @@ export async function previewAfter(ctx, slug, data, png) {
   let preview = null;
   let cause = ctx.unchecked ?? null;
   const f0 = themeFiles(ctx.project.cwd, slug);
-  try {
-    preview = await renderPreview(ctx, slug, data);
-  } catch (e) {
-    // The change is already saved: any failure here leaves it unchecked.
-    const code = /** @type {any} */ (e)?.code;
-    cause ??= isRenderFailure(e)
-      ? renderCause(ctx.project, /** @type {Error} */ (e).message)
-      : ['ENOSPC', 'EACCES', 'EPERM', 'EROFS', 'EIO'].includes(code)
-        ? `preview.html could not be written (${code === 'ENOSPC' ? 'the disk is full' : code}), so it still shows the theme as it was`
-        : // A folder (or another thing) where preview.html goes: the page
-          // was rendered, and could not be written there.
-          code === ERROR_CODES.ERR_WRITE_FAILED ||
-            (fs.existsSync(f0.preview) && !fs.statSync(f0.preview).isFile())
-          ? `preview.html could not be written (${shown(ctx.project.cwd, f0.preview)} is ${fs.existsSync(f0.preview) && fs.statSync(f0.preview).isDirectory() ? 'a folder' : 'in the way'}; move it, then run ${P} show ${slug}), so it still shows the theme as it was`
-          : `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
-  }
+  // Something of yours at preview.html is left as it is: the sample page is
+  // not made, so the change is not rendered, which the result says.
+  // (A folder there is named by the write that fails, below.)
+  const inWay = pageInTheWay(f0.preview);
+  const previewInWay = inWay === 'file' || inWay === 'link' ? inWay : null;
+  if (previewInWay)
+    cause ??= `${inTheWayPhrase(shown(ctx.project.cwd, f0.preview), previewInWay, 'the sample page')}, so the sample page was not made and the change was not rendered; move ${previewInWay === 'link' ? 'the link' : 'it'}, then run ${P} show ${slug}`;
+  else
+    try {
+      preview = await renderPreview(ctx, slug, data);
+    } catch (e) {
+      // The change is already saved: any failure here leaves it unchecked.
+      const code = /** @type {any} */ (e)?.code;
+      cause ??= isRenderFailure(e)
+        ? renderCause(ctx.project, /** @type {Error} */ (e).message)
+        : ['ENOSPC', 'EACCES', 'EPERM', 'EROFS', 'EIO'].includes(code)
+          ? `preview.html could not be written (${code === 'ENOSPC' ? 'the disk is full' : code}), so it still shows the theme as it was`
+          : // A folder (or another thing) where preview.html goes: the page
+            // was rendered, and could not be written there.
+            code === ERROR_CODES.ERR_WRITE_FAILED ||
+              (fs.existsSync(f0.preview) && !fs.statSync(f0.preview).isFile())
+            ? `preview.html could not be written (${shown(ctx.project.cwd, f0.preview)} is ${fs.existsSync(f0.preview) && fs.statSync(f0.preview).isDirectory() ? 'a folder' : 'in the way'}; move it, then run ${P} show ${slug}), so it still shows the theme as it was`
+            : `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
+    }
   const f = themeFiles(ctx.project.cwd, slug);
   /** The pages photographed: the sample page, and with it the open states. */
   const shotPages = [{html: f.preview, png: f.previewPng}];
@@ -1115,13 +1113,7 @@ export async function previewAfter(ctx, slug, data, png) {
     fs.existsSync(f.dir) ? fs.readdirSync(f.dir) : []
   ).filter(n => {
     if (!/^sheet-[a-z-]+\.html$/.test(n)) return false;
-    const file = path.join(f.dir, n);
-    try {
-      if (!SHEET_STAMP.test(fs.readFileSync(file, 'utf8'))) return false;
-    } catch {
-      return false;
-    }
-    return markSheetStale(file, slug, ctx.project.cwd);
+    return markSheetStale(path.join(f.dir, n), slug, ctx.project.cwd);
   });
   const shots =
     png && preview
@@ -1212,6 +1204,8 @@ export function stampSheet(file, slug, cwd) {
  * @param {string} cwd
  */
 function markSheetStale(file, slug, cwd) {
+  // Only the editor's own sheet: a file of yours there is never written.
+  if (pageInTheWay(file) != null) return false;
   let html;
   try {
     html = fs.readFileSync(file, 'utf8');

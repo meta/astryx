@@ -307,11 +307,12 @@ function usageSuggestion(err, code) {
   if (!cmd) return undefined;
   const parts = [];
   for (let node = cmd; node; node = node.parent) parts.unshift(node.name());
-  // The theme editor names what is missing with its usage and its help, as
-  // the project runs the CLI.
+  // The theme editor and its preview commands name what is missing with
+  // their usage and help, as the project runs the CLI.
   if (
     code === 'commander.missingArgument' &&
-    parts.slice(1, 4).join(' ') === 'experimental theme editor'
+    parts.slice(1, 3).join(' ') === 'experimental theme' &&
+    ['editor', 'preview'].includes(parts[3])
   )
     return editorMissingSuggestions(cmd);
   if (code !== 'commander.optionMissingArgument') return undefined;
@@ -358,19 +359,21 @@ export function setUnknownOptionReader(read) {
 }
 
 /**
- * The theme name the editor offers `new` here, the one its own refusals
- * offer: the name asked for when its folder is free, else name-2, name-3…
- * The editor registers it, so this module reads no theme files.
- * @type {(cwd: string, name: string) => string}
+ * The word a theme command missing its one argument is offered, the one its
+ * own refusals offer (`new`: a theme name no theme here has; `preview app`:
+ * a folder that is free), with why; null for a command that has none. The
+ * editor registers it, so this module reads no theme files.
+ * @type {(cwd: string, words: string) => {word: string, reason: string} | null}
  */
-let editorFreeName = (_cwd, name) => name;
+let freeArgument = () => null;
 
 /**
- * Register the theme name the editor offers `new` here.
- * @param {(cwd: string, name: string) => string} free
+ * Register the word a theme command missing its one argument is offered.
+ * @param {(cwd: string, words: string) => {word: string, reason: string} | null} free
+ *   `words`: the command's words after the program, `experimental theme editor new`
  */
-export function setEditorFreeName(free) {
-  editorFreeName = free;
+export function setFreeArgument(free) {
+  freeArgument = free;
 }
 
 /**
@@ -418,17 +421,21 @@ function editorMissingSuggestions(cmd) {
         },
       ];
   }
-  // `new` with no name: a name no theme here has.
-  if (!(cmd?.args ?? []).length && cmd.name() === 'new') {
-    const free = editorFreeName(process.cwd(), 'my-theme');
+  // A command whose one argument names something new (`new`'s theme,
+  // `preview app`'s folder), given none: the free word its own refusals
+  // offer.
+  const free =
+    !(cmd?.args ?? []).length && wants.length === 1
+      ? freeArgument(process.cwd(), words)
+      : null;
+  if (free)
     return [
       {
-        name: `${invocation} ${words} ${free}`,
-        reason: 'do this instead: a name for the new theme',
+        name: `${invocation} ${words} ${free.word}`,
+        reason: `do this instead: ${free.reason}`,
       },
       {name: `${invocation} ${words} --help`, reason: 'what each argument is'},
     ];
-  }
   return [
     {name: `${invocation} ${words} ${cmd.usage()}`.trim(), reason: 'usage'},
     {name: `${invocation} ${words} --help`, reason: 'what each argument is'},
