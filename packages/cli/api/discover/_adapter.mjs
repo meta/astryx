@@ -214,15 +214,17 @@ export async function discoverPackages() {
 const ESCAPE_SEQUENCE =
   // eslint-disable-next-line no-control-regex
   /\u001b(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007\u001b]*(?:\u0007|\u001b\\)?|[@-Z\\-_])/g;
-/** Every other C0 or C1 control character. */
-// eslint-disable-next-line no-control-regex
-const CONTROL_CHARACTER = /[\u0000-\u001f\u007f-\u009f]/g;
+/**
+ * Every other control or format character: C0, C1, and the bidirectional and
+ * zero-width marks that would reorder or hide a printed line.
+ */
+const CONTROL_CHARACTER = /[\p{Cc}\p{Cf}]/gu;
 
 /**
  * The `description` in the package.json of an installed package, so the list
  * says what an installed integration is, as it does for one a source lists.
  * The text is the package's own, so terminal escape sequences and control
- * characters are removed; a blank one is left out.
+ * and format characters are removed; a blank one is left out.
  * @param {string | undefined} packageDir
  * @returns {string | undefined}
  */

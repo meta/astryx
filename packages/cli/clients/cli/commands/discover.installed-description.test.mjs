@@ -117,13 +117,13 @@ describe('astryx discover: an installed integration says what it is', () => {
   );
 
   it(
-    'removes terminal escape codes and control characters from the package text',
+    'removes terminal escape codes, control and bidirectional characters from the package text',
     async () => {
       writeProject({
         name: '@acme/guides',
         version: '1.0.0',
         description:
-          '\u001b[31mAcme\u001b[0m guides\u0007 for\tbuilding.\u001b]0;title\u0007',
+          '\u001b[31mAcme\u001b[0m guides\u0007 for\tbuilding.\u202e\u200b\u001b]0;title\u0007',
       });
 
       const json = await runCli(['--json', 'discover', '--installed'], {
@@ -138,12 +138,30 @@ describe('astryx discover: an installed integration says what it is', () => {
       const text = await runCli(['discover', '--installed'], {cwd: tmpDir});
       expect(text.stdout).not.toContain('\u001b');
       expect(text.stdout).not.toContain('\u0007');
+      expect(text.stdout).not.toContain('\u202e');
     },
     SLOW,
   );
 
   it(
     'adds no description when the package.json has none',
+    async () => {
+      writeProject({name: '@acme/guides', version: '1.0.0'});
+
+      const json = await runCli(['--json', 'discover', '--installed'], {
+        cwd: tmpDir,
+      });
+      expect(json.status, json.stderr).toBe(0);
+      const entry = JSON.parse(json.stdout).data.find(
+        (/** @type {{name: string}} */ each) => each.name === '@acme/guides',
+      );
+      expect(entry).not.toHaveProperty('description');
+    },
+    SLOW,
+  );
+
+  it(
+    'adds no description when the package.json description is blank',
     async () => {
       writeProject({
         name: '@acme/guides',

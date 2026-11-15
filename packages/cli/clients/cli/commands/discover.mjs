@@ -375,7 +375,10 @@ export function registerDiscover(program) {
               blocks.push(section('Available', sourceSubtitle(sources)));
               blocks.push(
                 available.length > 0
-                  ? records(available, listOpts)
+                  ? records(available, {
+                      ...listOpts,
+                      format: {...listOpts.format, description: firstSentence},
+                    })
                   : text(
                       !sources.some(s => s.status !== 'failed')
                         ? 'No source answered, so there is nothing to list.'
@@ -434,7 +437,7 @@ export function registerDiscover(program) {
             const blocks = [
               record(d, {
                 omit: ['versions', 'install'],
-                ...(d.installed ? {format: {description: firstSentence}} : {}),
+                format: {description: firstSentence},
               }),
             ];
             if (d.versions && d.versions.length > 0) {

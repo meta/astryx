@@ -56,19 +56,20 @@ discover sources follow it except where this record says otherwise.
   supplies (FR11) that the project's own `package.json`, the nearest one above
   the folder discover runs in, declares in `dependencies`, `devDependencies` or
   `optionalDependencies`, under its name or an npm alias, each with its
-  version, the `description` in its `package.json` when it has one and is not
-  blank (terminal escape sequences and control characters removed; the text
-  view shows its first sentence), what it adds as one list per kind, and the
-  latest release a source knows. It MUST then list, once per integration, every package its sources
+  version, its description (a loaded integration's from its `package.json`
+  when that is not blank, with terminal escape sequences and control and
+  format characters removed; a declared official package's from its source),
+  what it adds as one list per kind, and the latest release a source knows.
+  The text view shows a description's first sentence. It MUST then list, once per integration, every package its sources
   offer that the project neither loads nor declares as a dependency, each with
   the package-manager command that adds it (FR2), and MUST NOT offer a package
   whose integration the project has under another name. Official packages come
   first in both lists. An integration that failed to load is left out, even an
   official one; the integration-issues warning and Doctor report it.
 - **FR2 — A package page shows its versions and what they add.** `discover
-<package>` MUST show its description (a source's, else the `description` in
-  the installed `package.json`), what the shown version adds, grouped by
-  kind, whether the project has the package, its latest release, and its releases newest
+<package>` MUST show its description (for the installed version, the
+  `description` in the installed `package.json`, as FR1 cleans it; for any
+  other version, a source's), what the shown version adds, grouped by kind, whether the project has the package, its latest release, and its releases newest
   first with their dates and any unreadable status, and MUST count its
   prereleases. `discover <package>@<version>` shows any version, prerelease
   included; the default is the installed version, else the latest release. A
