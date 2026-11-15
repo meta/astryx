@@ -16,6 +16,12 @@ export const doc = {
     'direct message',
     'conversation workspace',
   ],
+  // Before marking ready: the 'Shell - Messaging' category puts this template
+  // in the Shell family, so build's default-shell choice must keep returning
+  // the default shell for parts and edits that name no shell (see the test
+  // "the default app shell with a ready Shell variant in the catalog" in
+  // packages/cli/api/build/kit/start.test.mjs), and build's page-pick model
+  // must be retrained to include this template.
   isReady: false,
   category: 'Shell - Messaging',
   icons: {
