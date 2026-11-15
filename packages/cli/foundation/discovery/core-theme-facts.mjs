@@ -107,6 +107,14 @@ export async function keepCoreThemeFacts(coreSrc) {
 }
 
 /**
+ * The facts each recorded run asked for, by the run's record and the real
+ * path: a build asks for them several times, and checking again each time
+ * every path they were worked out from costs more than the ask.
+ * @type {WeakMap<Map<string, string>, Map<string, Promise<CoreThemeFacts>>>}
+ */
+const askedInRun = new WeakMap();
+
+/**
  * Every fact under the real `src` path `real`, kept as one gather. A run
  * reads it back while nothing it was worked out from changed. Each caller
  * reads it and never changes it.
@@ -119,6 +127,14 @@ export async function keepCoreThemeFacts(coreSrc) {
  * @returns {Promise<CoreThemeFacts>}
  */
 function keptFacts(real) {
+  const reads = recordedRun()?.reads;
+  let asked = reads && askedInRun.get(reads);
+  if (reads && !asked) {
+    asked = new Map();
+    askedInRun.set(reads, asked);
+  }
+  const known = asked?.get(real);
+  if (known) return known;
   let facts = kept.get(real);
   if (facts == null) {
     facts = reusedWhileUnchanged(
@@ -133,7 +149,13 @@ function keptFacts(real) {
     );
     kept.set(real, facts);
   }
-  return facts();
+  const read = facts();
+  if (asked) {
+    asked.set(real, read);
+    // A failed read is tried again at the next ask.
+    read.catch(() => asked.delete(real));
+  }
+  return read;
 }
 
 /**
