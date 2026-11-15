@@ -20,6 +20,7 @@ import {DropdownMenu} from '@astryxdesign/core/DropdownMenu';
 import {MoreMenu} from '@astryxdesign/core/MoreMenu';
 import {AlertDialog} from '@astryxdesign/core/AlertDialog';
 import {useToast} from '@astryxdesign/core/Toast';
+import {useClipboard} from '@astryxdesign/core/hooks';
 import {
   Table,
   TableSelectionToolbar,
@@ -284,6 +285,7 @@ export default function SimpleTableTemplate() {
   // through the closing animation.
   const [removalTitle, setRemovalTitle] = useState('');
   const showToast = useToast();
+  const {copy} = useClipboard();
 
   const {sortedData, sortConfig} = useTableSortableState<MemberRow>({
     data: members,
@@ -438,25 +440,15 @@ export default function SimpleTableTemplate() {
             {
               label: 'Copy email',
               icon: DocumentDuplicateIcon,
-              onClick: () => {
-                const failed = () =>
+              onClick: () =>
+                void copy(member.email).then(copied =>
                   showToast({
-                    body: `Could not copy ${member.email}`,
+                    body: copied
+                      ? `Copied ${member.email}`
+                      : `Could not copy ${member.email}`,
                     uniqueID: `copy-${member.id}`,
-                  });
-                if (!navigator.clipboard) {
-                  failed();
-                  return;
-                }
-                navigator.clipboard.writeText(member.email).then(
-                  () =>
-                    showToast({
-                      body: `Copied ${member.email}`,
-                      uniqueID: `copy-${member.id}`,
-                    }),
-                  failed,
-                );
-              },
+                  }),
+                ),
             },
             {
               label: 'Resend invite',
