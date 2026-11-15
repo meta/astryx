@@ -16624,11 +16624,32 @@ export function draftAnswer(ctx, env, question) {
           options: steps.length ? [steps] : [],
         };
       }
-      // A dark-only theme shows only its dark value: the change starts there.
-      color = shift(
-        current(token, env.data.mode === 'dark-only' ? 'dark' : 'light'),
-        lighter ? 0.2 : -0.2,
+      // The color the dial grows its shades from: the seed the theme saved
+      // for it, else its token's color where that is a color of its own
+      // (opaque; a see-through wash over what it sits on is no seed). A
+      // dark-only theme shows only its dark value: the change starts there.
+      const saved = [...env.data.settings]
+        .reverse()
+        .find(x => x.thing === dial && !x.on && !x.when && !x.state)?.value;
+      const shownNow = String(
+        current(token, env.data.mode === 'dark-only' ? 'dark' : 'light') ?? '',
       );
+      const seedNow = seedOf(String(saved ?? '')) ?? seedOf(shownNow);
+      if (!seedNow)
+        return {
+          text: `${dial} has no color of its own to make ${lighter ? 'lighter' : 'darker'}: ${token} is a see-through wash (${shownNow}) over what it sits on, and no ${dial} color is set; give the color (set ${env.slug} ${dial} <color>)`,
+          options: [],
+          lookup: `${HOW} ${dial}`,
+        };
+      // A gray grows the same shades, white to black, whatever its
+      // lightness: a lighter or darker gray seed changes nothing.
+      if (dial === 'neutral' && isGraySeed(seedNow))
+        return {
+          text: `${dial} is a gray (${seedNow}); a gray's shades run the same from white to black whatever its lightness, so a ${lighter ? 'lighter' : 'darker'} gray seed changes nothing; name what to make ${lighter ? 'lighter' : 'darker'} ("${lighter ? 'lighter' : 'darker'} cards", "${lighter ? 'lighter' : 'darker'} page")${saved ? '' : `, or give a tinted gray (set ${env.slug} ${dial} '#78716c')`}`,
+          options: [],
+          lookup: `${HOW} ${dial}`,
+        };
+      color = shift(seedNow, lighter ? 0.2 : -0.2);
       // The dark half the editor generates from that seed can move the
       // other way; the dark token is stepped the asked way from its own
       // value, in the same answer.
@@ -16656,11 +16677,22 @@ export function draftAnswer(ctx, env, question) {
         text: `${dial} in ${c.mode} mode only: the exact token ${token}`,
         options: [[set(token, color, modeOf(c))]],
       };
+    // (The exact token as an alternative keeps its own strength: a
+    // see-through wash stays one.)
+    const tokenNow = String(current(token, 'light') ?? '');
+    const tokenAlpha = parseColor(tokenNow) ? alphaOf(tokenNow) : 1;
+    const exactToken =
+      tokenAlpha < 1 && parseColor(color)
+        ? withAlpha(
+            hex(/** @type {number[]} */ (parseColor(color))),
+            tokenAlpha,
+          )
+        : color;
     return {
       text: `${dial}: the editor makes its light and dark shades from ${color}${darkStep ? `, and the dark ${token} steps from its own value the same way` : ''}`,
       options: darkStep
         ? [[set(dial, color), darkStep]]
-        : [[set(dial, color)], [set(token, color)]],
+        : [[set(dial, color)], [set(token, exactToken)]],
       ...(darkStep ? {sequence: true} : {}),
     };
   }
