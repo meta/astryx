@@ -172,7 +172,7 @@
  * @experimental May change or be removed in a patch release.
  * @typedef {object} ThemeEditUndoResponse
  * @property {'themeEdit.undo'} type
- * @property {{theme: string, action: 'step', undid: string, refusedBefore?: string, undone: string[], settings: number, stepsLeft: number, changedTokens: string[], problems: string[]} & ThemeEditPreviewFields} data - `undid` names what the step took back (each setting, base and mode, in one line); `refusedBefore` says a change command refused since the last change changed nothing, so the step took back the change before it.
+ * @property {{theme: string, action: 'step', undid: string, refusedBefore?: string, undone: string[], next?: string, settings: number, stepsLeft: number, changedTokens: string[], problems: string[]} & ThemeEditPreviewFields} data - `undid` names what the step took back (each setting, base and mode, in one line); `refusedBefore` says a change command refused since the last change changed nothing, so the step took back the change before it; `next` names the change now on top, which the next undo takes back.
  */
 
 /**

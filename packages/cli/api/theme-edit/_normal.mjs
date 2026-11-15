@@ -282,14 +282,14 @@ export function normalizeEntry(thing, value) {
   // A token typed as a var() reference.
   const ref = /^var\(\s*(--[a-z0-9-]+)\s*\)$/i.exec(t);
   if (ref) t = ref[1];
-  // A dial name written in another style (textSize, text_size, a dash-like
-  // character for its hyphen) is the dial.
+  // A dial name written in another style (textSize, text_size, "text
+  // size", a dash-like character for its hyphen) is the dial.
   if (
     !t.startsWith('-') &&
-    /[_\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]|[a-z][A-Z]/.test(t)
+    /[_\s\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]|[a-z][A-Z]/.test(t)
   ) {
     const dial = t
-      .replace(/[_\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]/g, '-')
+      .replace(/[_\s\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]+/g, '-')
       .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
       .toLowerCase();
     if (DIALS[dial]) t = dial;

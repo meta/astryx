@@ -18,7 +18,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {NETWORK_URL_PATTERNS} from './offline.mjs';
+import {NETWORK_URL_PATTERNS, QUIET_BROWSER_ARGS} from './offline.mjs';
 
 const [chrome, html, png, mode] = process.argv.slice(2);
 
@@ -30,6 +30,8 @@ const browser = spawn(
     '--no-sandbox',
     '--hide-scrollbars',
     '--remote-debugging-pipe',
+    // The browser's own network off: a picture asks the network for nothing.
+    ...QUIET_BROWSER_ARGS,
     `--user-data-dir=${path.join(os.tmpdir(), 'profile')}`,
     'about:blank',
   ],
