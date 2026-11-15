@@ -50,6 +50,7 @@
     "icon_not_component",
     "icon_source_version_drift",
     "icon_theme_map_mismatch",
+    "ignored_manifest_field",
     "inactive_component_replacement",
     "integration_error",
     "invalid_agent_docs",

@@ -629,6 +629,7 @@ async function componentRead(name, options = {}) {
     coreDir,
     cwd,
     name,
+    loadedIntegrations,
   }).catch(async error => {
     const pointed = await withExampleBlockPointer(error, dirName, {
       coreDir,

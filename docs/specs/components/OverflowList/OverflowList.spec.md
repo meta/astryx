@@ -20,7 +20,7 @@ verified_by:
     scripts/check-knowledge.mjs,
     apps/storybook/rtl-audit/targets.json,
   ]
-modules: []
+modules: [module:OverflowList/useOverflow]
 families: []
 design_specs: []
 architecture:

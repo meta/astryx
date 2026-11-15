@@ -26,6 +26,7 @@ import * as path from 'node:path';
 import {createRequire} from 'node:module';
 import {isValidSemver} from '../env/semver.mjs';
 import {findProjectCoreDir} from '../fs/paths.mjs';
+import {oncePerListing} from '../fs/listing-cache.mjs';
 import {KNOWN_INTEGRATION_KEYS} from '../../authoring/integration/schema.mjs';
 import {
   isNodeEnvRead,
@@ -83,6 +84,28 @@ const requireFromHere = createRequire(import.meta.url);
  */
 function parseModule(source, options) {
   return requireFromHere('@babel/parser').parse(source, options);
+}
+
+/**
+ * The syntax tree of one of a package's source files, read and parsed once
+ * in a validation (oncePerListing): the template walks reach the same
+ * helpers from many templates. The checks only read the tree. Null when the
+ * file cannot be read or does not parse.
+ * @param {string} file
+ * @returns {any}
+ */
+function sourceTree(file) {
+  return oncePerListing(`source-tree\0${file}`, () => {
+    try {
+      return parseModule(fs.readFileSync(file, 'utf8'), {
+        sourceType: 'module',
+        plugins: ['typescript', 'jsx'],
+        errorRecovery: true,
+      });
+    } catch {
+      return null;
+    }
+  });
 }
 
 /**
@@ -703,14 +726,8 @@ function importedNames(file, integration) {
     if (seen.has(current)) return;
     seen.add(current);
     const shown = slash(path.relative(top, current)) || shownTop;
-    let ast;
-    try {
-      ast = parseModule(fs.readFileSync(current, 'utf8'), {
-        sourceType: 'module',
-        plugins: ['typescript', 'jsx'],
-        errorRecovery: true,
-      });
-    } catch {
+    const ast = sourceTree(current);
+    if (ast == null) {
       unread.push(
         `${shown} could not be read, so the components it renders are not known.`,
       );
@@ -982,16 +999,8 @@ function importedNames(file, integration) {
  * @returns {string | null}
  */
 function defaultBinding(file) {
-  let ast;
-  try {
-    ast = parseModule(fs.readFileSync(file, 'utf8'), {
-      sourceType: 'module',
-      plugins: ['typescript', 'jsx'],
-      errorRecovery: true,
-    });
-  } catch {
-    return null;
-  }
+  const ast = sourceTree(file);
+  if (ast == null) return null;
   for (const node of ast.program.body) {
     if (node.type !== 'ExportDefaultDeclaration') continue;
     const declaration = /** @type {any} */ (node.declaration);
@@ -2018,16 +2027,8 @@ async function checkThemes(integration, issues) {
  * @returns {string | null}
  */
 export function literalThemeName(file, exportName) {
-  let ast;
-  try {
-    ast = parseModule(fs.readFileSync(file, 'utf8'), {
-      sourceType: 'module',
-      plugins: ['typescript', 'jsx'],
-      errorRecovery: true,
-    });
-  } catch {
-    return null;
-  }
+  const ast = sourceTree(file);
+  if (ast == null) return null;
   /** @type {any} */
   let init = null;
   for (const node of ast.program.body) {
@@ -2174,6 +2175,13 @@ async function allLoadedIntegrationIssues(loaded) {
     return [issueError('integration_error', loaded.__loadError)];
   }
   checkUnknownKeys(loaded, issues);
+  for (const {field, why} of loaded.__ignoredFields ?? [])
+    issues.push(
+      issueWarning(
+        'ignored_manifest_field',
+        `This CLI ignores the manifest field "${field}" because ${why}; the rest of ${manifestName(loaded)} loads.`,
+      ),
+    );
   if (loaded.__agentDocsError) {
     issues.push(issueError(INVALID_AGENT_DOCS, loaded.__agentDocsError));
   }

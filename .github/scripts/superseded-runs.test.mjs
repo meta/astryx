@@ -2,16 +2,20 @@
 
 /**
  * @file Runs for a superseded pull-request head stop, and never pass a required
- * check (.github/actions/superseded-runs, spec:AST-030 FR16).
+ * check; the newest run of a pull request wins (.github/actions/superseded-runs,
+ * spec:AST-030 FR16).
  *
  * @input  the action's real script, run as actions/github-script runs it
  *   against a stubbed GitHub API, and ci.yml's conditions, evaluated as
  *   Actions would
  * @output proofs that a new head's run cancels an older head's re-run in
- *   flight and nothing else, that an older head's re-run cancels itself, that
- *   a fork's current run passes untouched, and that every required context of
- *   a superseded run reports failure or cancellation, never success or a skip,
- *   so a force-push back to that head cannot inherit a passing check
+ *   flight and nothing else, that an older head's re-run cancels itself and
+ *   never a newer run, that a lagging head read and a rapid double push settle
+ *   on the newest run, that a run CI refuses after its sweep recovers on a
+ *   re-run, that a fork's current run passes untouched, and that every
+ *   required context of a superseded run reports failure or cancellation,
+ *   never success or a skip, so a force-push back to that head cannot inherit
+ *   a passing check
  * @position Node contract for the superseded-runs action and the jobs that
  *   read it
  */
@@ -19,8 +23,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import {describe, expect, it} from 'vitest';
+import {describe, expect, it, vi} from 'vitest';
 import yaml from 'yaml';
+
+import {ungated} from './ci-pr-gate.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const read = file => yaml.parse(fs.readFileSync(path.join(root, file), 'utf8'));
@@ -36,7 +42,7 @@ const OLD = 'old-head';
 const NEW = 'new-head';
 const PR = 7;
 
-function pullRequestContext({head = NEW, fork = false, runId = 1} = {}) {
+function pullRequestContext({head = NEW, fork = false, runId = 10} = {}) {
   return {
     eventName: 'pull_request',
     repo: {owner: 'o', repo: 'r'},
@@ -54,42 +60,65 @@ function pullRequestContext({head = NEW, fork = false, runId = 1} = {}) {
   };
 }
 
-/** One listed run; by default an unfinished CI run of this pull request. */
+/**
+ * One listed run; by default an unfinished CI run of this pull request for
+ * the older head, created before the run under test (id 10).
+ */
 function run(id, fields = {}) {
   return {
     id,
     run_attempt: 2,
     status: 'in_progress',
+    event: 'pull_request',
     path: WORKFLOW,
     head_sha: OLD,
+    head_branch: 'fix/a',
     head_repository: {full_name: 'o/r'},
     pull_requests: [{number: PR}],
     ...fields,
   };
 }
 
-/** Runs the action script; returns its output, cancels and messages. */
+/**
+ * Runs the action script; returns its output, cancels and messages.
+ * `current` is the pull request's head, or one head per read (the last one
+ * repeats), to replay a head read that lags a push. `runs` is the listing, or
+ * one listing per look.
+ */
 async function sweep({
   context = pullRequestContext(),
   current = NEW,
   runs = [],
   cancel = true,
+  rule,
   cancelFails = false,
 } = {}) {
-  const result = {outputs: {}, cancelled: [], listed: 0, warning: []};
+  const result = {
+    outputs: {},
+    cancelled: [],
+    listed: 0,
+    reads: 0,
+    warning: [],
+    notice: [],
+    info: [],
+  };
   const core = {
     setOutput: (key, value) => (result.outputs[key] = value),
-    notice: () => {},
-    info: () => {},
+    notice: message => result.notice.push(message),
+    info: message => result.info.push(message),
     warning: message => result.warning.push(message),
   };
+  const heads = [current].flat();
+  const listings = Array.isArray(runs[0]) ? runs : [runs];
   const github = {
+    paginate: async (list, params) => (await list(params)).data.workflow_runs,
     rest: {
       pulls: {
         get: async ({pull_number}) => {
           expect(pull_number).toBe(PR);
-          if (current instanceof Error) throw current;
-          return {data: {head: {sha: current}}};
+          const sha = heads[Math.min(result.reads++, heads.length - 1)];
+          if (sha instanceof Error) throw sha;
+          return {data: {head: {sha}}};
         },
       },
       actions: {
@@ -99,8 +128,9 @@ async function sweep({
             'pull_request',
             'fix/a',
           ]);
-          result.listed++;
-          return {data: {workflow_runs: runs}};
+          const listing =
+            listings[Math.min(result.listed++, listings.length - 1)];
+          return {data: {workflow_runs: listing}};
         },
         cancelWorkflowRun: async ({run_id}) => {
           if (cancelFails) throw new Error('Resource not accessible');
@@ -111,25 +141,35 @@ async function sweep({
   };
   const saved = {...process.env};
   process.env.CANCEL = String(cancel);
+  process.env.RULE = rule ?? (cancel ? 'head' : 'newest-run');
+  process.env.GITHUB_RUN_ATTEMPT = '1';
   process.env.GITHUB_WORKFLOW_REF = `o/r/${WORKFLOW}@refs/pull/${PR}/merge`;
+  vi.useFakeTimers();
   try {
-    await new AsyncFunction('github', 'context', 'core', script)(
+    const done = new AsyncFunction('github', 'context', 'core', script)(
       github,
       context,
       core,
     );
+    await vi.runAllTimersAsync();
+    await done;
   } finally {
+    vi.useRealTimers();
     process.env = saved;
   }
   return result;
 }
 
+// The looks a run takes when the head reads other than its own head and no
+// newer run exists: the first, and the bounded looks again.
+const LOOKS = Number(/const LOOKS_AGAIN = (\d+);/.exec(script)[1]) + 1;
+
 describe('the superseded-runs action', () => {
   it("cancels an older head's re-run in flight from the new head's run, and nothing else", async () => {
     const result = await sweep({
-      context: pullRequestContext({head: NEW, runId: 1}),
+      context: pullRequestContext({head: NEW, runId: 10}),
       runs: [
-        run(1, {head_sha: NEW, run_attempt: 1}),
+        run(10, {head_sha: NEW, run_attempt: 1}),
         // The re-run of the older head, still running.
         run(2),
         // Queued for the older head too.
@@ -142,8 +182,10 @@ describe('the superseded-runs action', () => {
         run(6, {pull_requests: [{number: PR + 1}]}),
         // A fork's branch of the same name.
         run(7, {head_repository: {full_name: 'author/r'}, pull_requests: []}),
-        // The current head's other run (a re-run of the current head).
+        // An older run for the current head (a re-run of the current head).
         run(8, {head_sha: NEW}),
+        // A push to the base branch, whose run names no pull request.
+        run(9, {event: 'push', head_branch: 'main', pull_requests: []}),
       ],
     });
     expect(result.cancelled).toEqual([2, 3]);
@@ -160,16 +202,139 @@ describe('the superseded-runs action', () => {
     expect(result.cancelled).toEqual([]);
   });
 
-  it('cancels a re-run of an older head from that re-run itself, after the others', async () => {
+  it('cancels a re-run of an older head from that re-run itself, and nothing else', async () => {
+    // The re-run keeps its run's id, which is older than the new head's run.
     const result = await sweep({
       context: pullRequestContext({head: OLD, runId: 2}),
-      runs: [run(2), run(3, {head_sha: 'older-head'})],
+      runs: [
+        run(1, {head_sha: 'older-head'}),
+        run(2),
+        run(10, {head_sha: NEW, run_attempt: 1}),
+      ],
     });
     expect(result.outputs.superseded).toBe('true');
-    expect(result.cancelled).toEqual([3, 2]);
+    expect(result.cancelled).toEqual([2]);
   });
 
-  it("leaves a fork's current run untouched: it cancels nothing and passes", async () => {
+  it('never cancels a newer run: the newest run wins, whatever the head reads', async () => {
+    // A re-run of an older head whose head read lags, or a newer push's run
+    // with a different head: either way the older run never cancels it.
+    for (const current of [OLD, NEW]) {
+      const result = await sweep({
+        context: pullRequestContext({head: OLD, runId: 2}),
+        current,
+        runs: [run(2), run(10, {head_sha: NEW, status: 'queued'})],
+      });
+      expect(result.cancelled, current).toEqual([2]);
+    }
+  });
+
+  it('cancels only older runs from an older run of the newest head', async () => {
+    // Pushes A (run 2), B (run 5), then A again (run 10), and a re-run of run
+    // 2: the newest run is for its head, so it goes on, and it never cancels
+    // run 5, which is newer than it.
+    const result = await sweep({
+      context: pullRequestContext({head: OLD, runId: 2}),
+      current: OLD,
+      runs: [
+        run(1, {head_sha: 'first-head'}),
+        run(2),
+        run(5, {head_sha: NEW}),
+        run(10, {run_attempt: 1, status: 'completed'}),
+      ],
+    });
+    expect(result.outputs.superseded).toBe('false');
+    expect(result.cancelled).toEqual([1]);
+  });
+
+  it("goes on, and cancels only older runs, when the head read lags the new head's push", async () => {
+    // The head catches up on the second read.
+    const caughtUp = await sweep({
+      context: pullRequestContext({head: NEW, runId: 10}),
+      current: [OLD, NEW],
+      runs: [run(10, {head_sha: NEW, run_attempt: 1}), run(2)],
+    });
+    expect(caughtUp.outputs.superseded).toBe('false');
+    expect(caughtUp.reads).toBe(2);
+    expect(caughtUp.cancelled).toEqual([2]);
+    // The head never catches up: the run looks again a bounded number of
+    // times, never stops itself on the read alone, and says why it goes on.
+    const lagging = await sweep({
+      context: pullRequestContext({head: NEW, runId: 10}),
+      current: OLD,
+      runs: [run(10, {head_sha: NEW, run_attempt: 1}), run(2)],
+    });
+    expect(lagging.outputs.superseded).toBe('false');
+    expect(lagging.reads).toBe(LOOKS);
+    expect(lagging.listed).toBe(LOOKS);
+    expect(lagging.cancelled).toEqual([2]);
+    expect(lagging.notice.join('\n')).toContain('no newer run exists');
+  });
+
+  it('stops a run once the newer run its head read points to appears', async () => {
+    // The head moved, but GitHub lists the new push's run only on the
+    // second look.
+    const result = await sweep({
+      context: pullRequestContext({head: OLD, runId: 2}),
+      current: NEW,
+      runs: [[run(2)], [run(2), run(10, {head_sha: NEW, status: 'queued'})]],
+    });
+    expect(result.listed).toBe(2);
+    expect(result.outputs.superseded).toBe('true');
+    expect(result.cancelled).toEqual([2]);
+  });
+
+  it('settles a rapid double push on the newest run', async () => {
+    // Pushes B then C: run 9 for B and run 10 for C start together, and the
+    // head reads B for a while. A creation time counts whole seconds, so
+    // both runs carry the same one.
+    const runs = [
+      run(1, {head_sha: OLD}),
+      run(9, {head_sha: 'push-b', run_attempt: 1}),
+      run(10, {head_sha: 'push-c', run_attempt: 1, status: 'queued'}),
+    ];
+    const b = await sweep({
+      context: pullRequestContext({head: 'push-b', runId: 9}),
+      current: 'push-b',
+      runs,
+    });
+    expect(b.outputs.superseded).toBe('true');
+    expect(b.cancelled).toEqual([9]);
+    const c = await sweep({
+      context: pullRequestContext({head: 'push-c', runId: 10}),
+      current: 'push-b',
+      runs,
+    });
+    expect(c.outputs.superseded).toBe('false');
+    expect(c.cancelled).toEqual([1, 9]);
+  });
+
+  it('leaves a pull request whose new run CI refused right after its sweep with that run alone, and a re-run of it recovers', async () => {
+    // Run 10's sweep, at its start, cancels run 2 for the older head; then
+    // CI turns run 10 away, so the pull request is left with run 10 alone.
+    const first = await sweep({
+      context: pullRequestContext({head: NEW, runId: 10}),
+      runs: [run(2), run(10, {head_sha: NEW, run_attempt: 1})],
+    });
+    expect(first.cancelled).toEqual([2]);
+    expect(first.outputs.superseded).toBe('false');
+    // The manual re-run of run 10 keeps its id: it is the newest run, for the
+    // current head, so it goes on, waits for room and cancels nothing.
+    const rerun = await sweep({
+      context: pullRequestContext({head: NEW, runId: 10}),
+      runs: [run(2, {status: 'completed'}), run(10, {head_sha: NEW})],
+    });
+    expect(rerun.outputs.superseded).toBe('false');
+    expect(rerun.cancelled).toEqual([]);
+    const room = await sweep({
+      cancel: false,
+      context: pullRequestContext({head: NEW, runId: 10}),
+      runs: [run(2, {status: 'completed'}), run(10, {head_sha: NEW})],
+    });
+    expect(room.outputs.superseded).toBe('false');
+  });
+
+  it("leaves a fork's current run untouched: it cancels nothing, says so, and passes", async () => {
     const result = await sweep({
       context: pullRequestContext({head: NEW, fork: true}),
       runs: [run(2, {head_repository: {full_name: 'author/r'}})],
@@ -177,28 +342,58 @@ describe('the superseded-runs action', () => {
     expect(result.outputs.superseded).toBe('false');
     expect(result.listed).toBe(0);
     expect(result.cancelled).toEqual([]);
+    const room = await sweep({
+      cancel: false,
+      context: pullRequestContext({head: NEW, fork: true}),
+      runs: [
+        run(2, {head_repository: {full_name: 'author/r'}, pull_requests: []}),
+      ],
+    });
+    expect(room.outputs.superseded).toBe('false');
+    expect(room.info.join('\n')).toContain('skips the superseded-runs sweep');
   });
 
-  it("marks a fork's superseded run, which its read-only token cannot cancel", async () => {
+  it("stops a fork's superseded run, which its read-only token cannot cancel", async () => {
+    // A fork's runs name no pull request, so its branch finds them.
+    const forkRun = (id, fields) =>
+      run(id, {
+        head_repository: {full_name: 'author/r'},
+        pull_requests: [],
+        ...fields,
+      });
     const result = await sweep({
-      context: pullRequestContext({head: OLD, fork: true}),
+      cancel: false,
+      context: pullRequestContext({head: OLD, fork: true, runId: 2}),
+      runs: [forkRun(2), forkRun(10, {head_sha: NEW})],
     });
     expect(result.outputs.superseded).toBe('true');
-    expect(result.listed).toBe(0);
+    expect(result.cancelled).toEqual([]);
   });
 
-  it('only reads the head in room, which cancels nothing', async () => {
+  it('only reads in room, which cancels nothing', async () => {
     const result = await sweep({cancel: false, runs: [run(2)]});
-    expect(result.listed).toBe(0);
     expect(result.cancelled).toEqual([]);
+    expect(result.outputs.superseded).toBe('false');
     expect(
       (
         await sweep({
           cancel: false,
-          context: pullRequestContext({head: OLD}),
+          context: pullRequestContext({head: OLD, runId: 2}),
+          runs: [run(2), run(10, {head_sha: NEW})],
         })
       ).outputs.superseded,
     ).toBe('true');
+  });
+
+  it('reads only the head in a required join, as it reports', async () => {
+    const join = await sweep({
+      cancel: false,
+      rule: 'head',
+      context: pullRequestContext({head: OLD}),
+    });
+    expect(join.outputs.superseded).toBe('true');
+    expect(join.listed).toBe(0);
+    expect(join.reads).toBe(1);
   });
 
   it('never fails the current run: a failed lookup or cancel starts it', async () => {
@@ -335,7 +530,7 @@ describe('a superseded run in ci.yml', () => {
     );
     const check = room.steps[1];
     expect(check.uses).toBe('./.ci-admission/.github/actions/superseded-runs');
-    expect(check.with?.cancel).toBeUndefined();
+    expect(check.with).toEqual({rule: 'newest-run'});
     expect(room.steps[2].if).toBe("steps.head.outputs.superseded == 'true'");
     expect(room.outputs.superseded).toBe(
       '${{ steps.head.outputs.superseded }}',
@@ -345,28 +540,11 @@ describe('a superseded run in ci.yml', () => {
 
   it('cancels from one pull-request job, the only new holder of actions: write', () => {
     const job = ci.jobs['superseded-runs'];
-    // It starts once admission found room, or right after room stopped this
-    // run for a superseded head, so the run cancels itself; never while the
-    // run waits, nor after room turned it away as CI full.
-    expect(job.needs).toEqual(['room', 'admission']);
-    const startsAfter = (room, admission) =>
-      evaluate(job.if, {
-        github: github(),
-        needs: {room, admission: {result: admission, outputs: {}}},
-        jobNeeds: job.needs,
-      });
-    expect(startsAfter({result: 'success', outputs: {}}, 'success')).toBe(true);
-    expect(
-      startsAfter(
-        {result: 'failure', outputs: {superseded: 'true'}},
-        'skipped',
-      ),
-    ).toBe(true);
-    expect(
-      startsAfter({result: 'failure', outputs: {full: 'true'}}, 'skipped'),
-    ).toBe(false);
-    expect(startsAfter({result: 'success', outputs: {}}, 'failure')).toBe(
-      false,
+    // It starts with the run, before the run waits for room: a run that
+    // waits, or that CI turns away as full, still cancels the older runs.
+    expect(job.needs).toBeUndefined();
+    expect(ungated(job.if)).toBe(
+      "github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository",
     );
     expect(job.permissions).toEqual({
       actions: 'write',
@@ -430,7 +608,8 @@ describe('a superseded run in ci.yml', () => {
       expect(check.uses, id).toBe(
         './.superseded-runs/.github/actions/superseded-runs',
       );
-      expect(check.with?.cancel, id).toBeUndefined();
+      // The default rule: the head as it reads now.
+      expect(check.with, id).toBeUndefined();
       expect(ci.jobs[id].permissions['pull-requests'], id).toBe('read');
     }
   });

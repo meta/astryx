@@ -33,6 +33,7 @@ import {
 import {
   ThemeImportError,
   resolveThemeImports,
+  themePackageDir,
 } from '../../foundation/discovery/theme-imports.mjs';
 import {
   findThemeProject,
@@ -73,6 +74,19 @@ export {BUNDLED_THEME_PACKAGE, THEMES_DIR};
  */
 export function themeRecordOwner(theme) {
   return themeImportPackage(theme);
+}
+
+/**
+ * Whether a theme's owner is installed, by the rule `theme add` applies
+ * (`themePackageDir`): a local theme is in the project, and a package
+ * theme's package (a bundled theme's own, such as
+ * `@astryxdesign/theme-neutral`) is installed. A local theme `theme add`
+ * still refuses until it is built.
+ * @param {import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme} theme
+ * @param {string} projectDir
+ */
+export function themeOwnerInstalled(theme, projectDir) {
+  return theme.source === 'local' || themePackageDir(theme, projectDir) != null;
 }
 
 /**
