@@ -428,10 +428,10 @@ they are separately named.
   unfinished CI run of its pull request that was created before it for
   another head; it never cancels a newer run, and a fork's run cancels
   nothing. A run is superseded only when the newest run of its pull request
-  is for another head; a head read alone never stops a run. A superseded run
-  stops before it waits and cancels itself. `build`, `test` and
-  `docsite-test` read the head again as they report, and fail with the reason
-  when it is no longer the run's head.
+  is for another head; a head read alone never makes a run stop itself. A
+  superseded run stops before it waits and cancels itself. `build`, `test`
+  and `docsite-test` read the head again as they report, and fail with the
+  reason when it is no longer the run's head.
 - **FR17 — A pull request runs CI when it is ready and a maintainer can vouch
   for it.** A draft pull request runs no CI, and marking it ready for review
   starts its pull-request run, which runs what the change reaches (FR13,

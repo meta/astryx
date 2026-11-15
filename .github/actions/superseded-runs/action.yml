@@ -13,8 +13,8 @@
 #   is for another head. A re-run keeps its run's id and creation time, so a
 #   re-run of an older head never outranks a newer push. When the head reads
 #   other than this run's head but no newer run exists, it looks again a
-#   bounded number of times, and then goes on: a head read alone never stops
-#   a run.
+#   bounded number of times, and then goes on: a head read alone never makes
+#   a run stop itself.
 # - `cancel: true` (the `superseded-runs` job, which alone holds
 #   `actions: write`, at the start of the run): it applies `newest-run`. A
 #   superseded run cancels itself. Any other run cancels each unfinished run
