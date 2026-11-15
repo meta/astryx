@@ -14,7 +14,7 @@
  *           not take, so only the source shows it.
  */
 
-import {parse as parseModule} from '@babel/parser';
+import {babelParse as parseModule} from '../../../foundation/runtime/lazy-dependencies.mjs';
 import {levenshteinDistance} from '../../../foundation/text/levenshtein.mjs';
 
 /**
