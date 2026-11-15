@@ -75,9 +75,10 @@ export function useTruncationTooltipInterest(
     () => tooltipModule.loaded()?.Tooltip ?? null,
   );
   // Syncs with the module loader: truncated text loads the Tooltip module, so
-  // the first interaction mounts the tooltip at once.
+  // the first interaction mounts the tooltip at once. Text that measures on
+  // interest loads it after the page paints as well, before any measurement.
   useEffect(() => {
-    if (!isEnabled || tooltip != null) {
+    if ((!isEnabled && measure == null) || tooltip != null) {
       return;
     }
     let isCurrent = true;
@@ -92,7 +93,7 @@ export function useTruncationTooltipInterest(
     return () => {
       isCurrent = false;
     };
-  }, [isEnabled, tooltip]);
+  }, [isEnabled, measure, tooltip]);
   const interestRef = useRef<TooltipPresentInterestState>({
     interest: null,
     tapEvent: null,

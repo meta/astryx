@@ -10,7 +10,7 @@
  */
 
 import {describe, it, expect, vi} from 'vitest';
-import {act, render, screen} from '@testing-library/react';
+import {act, render, screen, waitFor} from '@testing-library/react';
 import * as stylex from '@stylexjs/stylex';
 import {BaseTable} from './BaseTable';
 import {Table} from './Table';
@@ -31,6 +31,14 @@ import {
 } from './columnUtils';
 import type {TablePlugin, TableColumn, ProportionalWidth} from './types';
 import {Text} from '../Text/Text';
+
+// Counts imports of the Tooltip module; a fresh module registry imports it
+// again.
+const tooltipModuleLoads = vi.hoisted(() => ({count: 0}));
+vi.mock('../Tooltip/Tooltip', async importOriginal => {
+  tooltipModuleLoads.count += 1;
+  return importOriginal();
+});
 
 // =============================================================================
 // Test Data
@@ -1442,6 +1450,19 @@ describe('Table', () => {
     const names = (element: Element) =>
       [...element.attributes].map(attribute => attribute.name).sort();
     expect(names(cellText)).toEqual(names(plainText));
+  });
+
+  it('loads the Tooltip module after a table of default cells paints, with no interaction', async () => {
+    vi.resetModules();
+    const loads = tooltipModuleLoads;
+    loads.count = 0;
+    const {Table: FreshTable} = await import('./Table');
+    render(
+      <FreshTable data={users} columns={columns} textOverflow="truncate" />,
+    );
+    await waitFor(() => {
+      expect(loads.count).toBe(1);
+    });
   });
 
   it('does not wrap renderCell content in Text when truncating', () => {
