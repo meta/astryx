@@ -814,9 +814,14 @@ export function MediaTime({
   } else if (display === 'duration') {
     text = formatClock(duration, hasHours);
   } else if (display === 'remaining') {
-    text = `-${formatClock(Math.max(duration - time, 0), hasHours)}`;
+    text = t('@astryx.mediaPlayer.timeRemaining', {
+      remaining: formatClock(Math.max(duration - time, 0), hasHours),
+    });
   } else {
-    text = `${formatClock(time, hasHours)} / ${formatClock(duration, hasHours)}`;
+    text = t('@astryx.mediaPlayer.timeReadout', {
+      current: formatClock(time, hasHours),
+      duration: formatClock(duration, hasHours),
+    });
   }
   // Times read left to right in every direction, like the timeline.
   return (
