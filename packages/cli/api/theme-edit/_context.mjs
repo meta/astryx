@@ -779,7 +779,7 @@ export function fontNotes(ctx, data) {
         fontOf(s.value).fallbacks.split(',')[0]?.trim() || 'system-ui';
       notes.push(
         /^(-apple-system|blinkmacsystemfont)$/.test(family)
-          ? `"${named}" names the macOS interface font, which only macOS has: other systems show the next font in the stack (${next}). The system preset gives each system its own interface font: ${P} set ${data.name} font system${on}`
+          ? `"${named}" names the interface font of ${system}, and only there: other systems show the next font in the stack (${next}). The system preset gives each system its own interface font: ${P} set ${data.name} font system${on}`
           : `"${named}" ships only on ${system}: other systems show the next font in the stack (${next}).${near ? ` The closest open font, which loads everywhere, is ${near}: ${P} set ${data.name} font ${near}${on}` : ''}`,
       );
       continue;

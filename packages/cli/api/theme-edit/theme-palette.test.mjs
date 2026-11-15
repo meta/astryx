@@ -1603,7 +1603,7 @@ describe('fonts some systems ship, and part properties by their grammar', () => 
     expect(roboto.data.notes.join(' ')).toContain('@fontsource/roboto');
     const gill = await themeEditSet('p', 'font', 'Gill Sans', {cwd});
     expect(gill.data.notes.join(' ')).toContain(
-      '"Gill Sans" ships only on macOS',
+      '"Gill Sans" ships only on Apple platforms (macOS, iOS and iPadOS)',
     );
     const pkgDir = path.join(cwd, 'node_modules', '@fontsource', 'gill-sans');
     fs.mkdirSync(pkgDir, {recursive: true});
@@ -1921,7 +1921,7 @@ describe('colors final-3', () => {
       ['Acme Sans', 'is not a system font'],
       ['Ubuntu', 'ships only on Linux'],
       ['Segoe UI', 'ships only on Windows'],
-      ['Menlo', 'ships only on macOS'],
+      ['Monaco', 'ships only on macOS'],
     ]) {
       const r = await themeEditSet('p', 'font', family, {cwd});
       expect(r.data.notes.join(' '), family).toContain(note);

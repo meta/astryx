@@ -435,7 +435,9 @@ describe('a theme with no name', () => {
 
 describe('fonts', () => {
   it('counts the system emoji fonts as the systems', () => {
-    expect(oneSystemOf('Apple Color Emoji')).toBe('macOS');
+    expect(oneSystemOf('Apple Color Emoji')).toBe(
+      'Apple platforms (macOS, iOS and iPadOS)',
+    );
     expect(oneSystemOf('Noto Color Emoji')).toBe('Android and ChromeOS');
     expect(fontsourceSuggestion('Apple Color Emoji')).toBe(null);
   });

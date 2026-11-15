@@ -55,7 +55,7 @@ const GENERIC_KEYWORDS = new Set([
  * The fonts the systems ship, by the platform that ships them, as their
  * own font lists name them, by lowercase name: `everywhere` for a family
  * macOS and Windows both ship (a theme may name it as its font), else the
- * one platform that has it. The one table: the build's font notice, the
+ * one platform (or family of platforms) that has it. The one table: the build's font notice, the
  * editor's "ships only on" notes and its install lines all read it. A
  * family both a system ships and Fontsource publishes (Roboto, Cascadia
  * Code) stays where the editor's open-font table names its package.
@@ -76,17 +76,14 @@ export const SYSTEM_FONTS_BY_PLATFORM = {
     'impact',
     'comic sans ms',
   ],
-  macOS: [
-    'arial narrow',
-    'andale mono',
+  // The families Apple ships with macOS, iOS and iPadOS alike (Safari's
+  // -apple-system is the interface font on each).
+  'Apple platforms (macOS, iOS and iPadOS)': [
     '-apple-system',
-    'blinkmacsystemfont',
     'helvetica neue',
     'apple color emoji',
-    'monaco',
     'menlo',
     'palatino',
-    'lucida grande',
     'gill sans',
     'snell roundhand',
     'avenir',
@@ -94,41 +91,50 @@ export const SYSTEM_FONTS_BY_PLATFORM = {
     'avenir next condensed',
     'optima',
     'futura',
-    'geneva',
     'didot',
     'baskerville',
-    'big caslon',
     'bodoni 72',
     'hoefler text',
-    'iowan old style',
     'american typewriter',
     'cochin',
     'copperplate',
-    'athelas',
-    'seravek',
-    'skia',
-    'superclarendon',
     'rockwell',
     'marker felt',
     'noteworthy',
-    'chalkboard',
     'chalkboard se',
     'chalkduster',
-    'apple chancery',
     'zapfino',
     'papyrus',
-    'herculanum',
-    'phosphate',
-    'trattatello',
     'arial rounded mt bold',
     'pingfang sc',
     'pingfang tc',
     'pingfang hk',
     'hiragino sans',
-    'hiragino sans gb',
-    'hiragino kaku gothic pron',
     'hiragino mincho pron',
     'apple sd gothic neo',
+  ],
+  // The families only the Mac has (BlinkMacSystemFont is Chrome's name for
+  // the Mac interface font; Chrome on iOS reads only -apple-system).
+  macOS: [
+    'arial narrow',
+    'andale mono',
+    'blinkmacsystemfont',
+    'monaco',
+    'lucida grande',
+    'geneva',
+    'big caslon',
+    'iowan old style',
+    'athelas',
+    'seravek',
+    'skia',
+    'superclarendon',
+    'chalkboard',
+    'apple chancery',
+    'herculanum',
+    'phosphate',
+    'trattatello',
+    'hiragino sans gb',
+    'hiragino kaku gothic pron',
   ],
   Windows: [
     'segoe ui',
