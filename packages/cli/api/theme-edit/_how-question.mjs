@@ -6266,7 +6266,7 @@ export function draftAnswer(ctx, env, question) {
       if (
         st.verb !== 'set' ||
         !st.on ||
-        st.mode ||
+        (st.mode && st.mode !== c.mode) ||
         !/^border(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?$/.test(
           st.thing,
         )
@@ -6288,15 +6288,33 @@ export function draftAnswer(ctx, env, question) {
         st.state,
       );
 
-      return color && shows
-        ? {...st, thing: `${st.thing}-color`, value: color}
-        : st;
+      if (color && shows)
+        return {...st, thing: `${st.thing}-color`, value: color};
+      // A border drawn where the part shows none: its width and style are
+      // the same in both modes, so its color carries the mode, see-through
+      // in the other (light-dark()), and the line takes no --mode.
+      if (color && (c.mode === 'light' || c.mode === 'dark')) {
+        const half =
+          c.mode === 'dark'
+            ? `light-dark(transparent, ${color})`
+            : `light-dark(${color}, transparent)`;
+        return held({
+          ...st,
+          mode: undefined,
+          value: value.replace(color, half),
+        });
+      }
+      return st;
     };
     /** @param {Step} st */
     const modal = st => {
       if (st.mode) return true;
       if (st.verb !== 'set') return false;
-      if (st.thing === 'box-shadow' || /^--shadow-/.test(st.thing))
+      if (
+        st.thing === 'box-shadow' ||
+        /^--shadow-/.test(st.thing) ||
+        inValue.has(st)
+      )
         return inValue.has(st);
       if (st.thing.startsWith('--')) return C.typeOf(st.thing) === 'color';
       // A gradient goes per mode too, as a background image (the other
@@ -16161,12 +16179,16 @@ export function draftAnswer(ctx, env, question) {
     };
   }
   if (asked) {
+    // ("the focus ring of inputs" asks about the inputs: the ring is what
+    // is asked, never the focus-ring part.)
     const named = lex.parts
       .map(([re, x]) => ({
         at: re.exec(question.toLowerCase())?.index ?? -1,
         on: x.on,
       }))
-      .filter(x => x.at >= 0)
+      .filter(
+        x => x.at >= 0 && !(asked === 'focus-ring' && x.on === 'focus-ring'),
+      )
       .sort((x, y) => x.at - y.at)[0]?.on;
     // Else any rule of the part that sets the property (in the state the
     // question names first: "disabled buttons" read their disabled rule),
@@ -16232,6 +16254,108 @@ export function draftAnswer(ctx, env, question) {
     // read from the census's own rules for the part (and the variant
     // named): Core draws a hover or press wash as an image over the
     // resting fill, so a state reads that layer over the fill at rest.
+    /**
+     * A census value for the part's plain rule (its default or first
+     * variant, no status, selection or disabled), in a state's selector
+     * or at rest, with each token read in the mode asked: a private
+     * variable Core sets only in another state (`--_card-ring`) reads its
+     * fallback, and a value that draws nothing is none.
+     * @param {string} prop @param {RegExp | null} state
+     * @param {'light' | 'dark'} [inMode]
+     */
+    const censusOne = (prop, state, inMode) => {
+      const at = named ? C.MAP[one(named)]?.at?.[prop] : null;
+      if (!at) return null;
+      const keys = Object.keys(at).filter(k => {
+        const [rule, cond = ''] = k.split(' ');
+        return (
+          !/status=|selected=|disabled=|aria-|nav=|readonly=/.test(rule) &&
+          (vWord
+            ? rule.split(',').includes(`variant=${vWord}`)
+            : !/variant=/.test(rule) ||
+              /variant=(?:default|primary|input)\b/.test(rule)) &&
+          // (A state's own selector: never a hover that holds off
+          // while focused.)
+          (state ? state.test(cond) && !/:hover|:not\(/.test(cond) : !cond)
+        );
+      });
+      const value = keys.map(k => at[k])[0];
+      if (value == null) return null;
+      const mode = inMode ?? readMode ?? 'light';
+      const read = String(value)
+        .replace(
+          /var\(\s*(--_[a-z0-9-]+)\s*,\s*([^()]*(?:\([^()]*\)[^()]*)*)\)/g,
+          '$2',
+        )
+        .replace(/var\(\s*(--[a-z0-9-]+)\s*\)/g, (_m, tok) =>
+          String(current(tok, mode) ?? _m),
+        )
+        // (Each light-dark() color as the mode asked shows it.)
+        .replace(
+          /light-dark\(((?:[^(),]|\([^()]*\))*),\s*((?:[^(),]|\([^()]*\))*)\)/g,
+          (_m, light, dark) => (mode === 'dark' ? dark : light).trim(),
+        );
+      const drawn = splitTop(read, ',').filter(
+        layer =>
+          !/^\s*(?:none|0 0 transparent|0 0 0 transparent)\s*$/.test(layer),
+      );
+      return drawn.length ? drawn.join(', ').trim() : 'none';
+    };
+    /**
+     * The census value in the mode asked, else in each mode the theme
+     * shows (one value when they agree).
+     * @param {string} prop @param {RegExp | null} state
+     */
+    const censusNow = (prop, state) => {
+      if (readMode) return censusOne(prop, state, readMode);
+      const vals = shownModes.map(m => censusOne(prop, state, m));
+      if (vals.some(v => v == null)) return null;
+      return vals.every(v => v === vals[0])
+        ? vals[0]
+        : vals.map((v, i) => `${v} in ${shownModes[i]} mode`).join(', ');
+    };
+    const qModeSaid = `${qMode ? ` in ${qMode} mode` : ''}${vWord ? ` (${vWord})` : ''}`;
+    // The focus ring a part draws: its box-shadow when focused (inputs),
+    // else its outline there (buttons).
+    const ringNow = () => {
+      if (asked !== 'focus-ring' || !named) return null;
+      const focus =
+        /:focus(?:-visible|-within)?(?![\w-])|:has\(:focus-visible\)/;
+      const shadow = censusNow('box-shadow', focus);
+      if (shadow && shadow !== 'none')
+        return `a box-shadow ring when focused: ${shadow}${qModeSaid}`;
+      const width = censusNow('outline-width', focus);
+      const color = censusNow('outline-color', focus);
+      return width && color
+        ? `an outline when focused: ${width} ${color}${qModeSaid}`
+        : null;
+    };
+    // A part whose text sits on Core's media surface inside it (a toast's
+    // inverted surface): the on-dark or on-light color, whichever that
+    // surface takes in the mode asked.
+    const mediaTextNow = () => {
+      if (asked !== 'color' || !named || !C.MAP[one(named)]?.media) return null;
+      const mode = readMode ?? 'light';
+      const fill = Object.values(
+        C.MAP[one(named)]?.at?.['background-color'] ??
+          C.MAP[one(named)]?.at?.background ??
+          {},
+      )[0];
+      const tok = /var\(\s*(--[a-z0-9-]+)\s*\)/.exec(String(fill ?? ''))?.[1];
+      const surface = tok ? parseColor(current(tok, mode)) : null;
+      if (!surface) return null;
+      const [best] = ['--color-on-dark', '--color-on-light']
+        .map(t => ({t, c: parseColor(current(t, mode))}))
+        .filter(x => x.c)
+        .sort(
+          (x, y) =>
+            ratio(/** @type {any} */ (y.c), surface) -
+            ratio(/** @type {any} */ (x.c), surface),
+        );
+      return best
+        ? `${current(best.t, mode)} (${best.t}, on its ${current(/** @type {string} */ (tok), mode)} surface)${qModeSaid}`
+        : null;
+    };
     const stateNow = () => {
       if (!named || !/^background(?:-color)?$/.test(asked)) return null;
       const at = C.MAP[one(named)]?.at;
@@ -16479,6 +16603,11 @@ export function draftAnswer(ctx, env, question) {
     const now =
       named && !unshown
         ? (pageNow() ??
+          ringNow() ??
+          mediaTextNow() ??
+          (asked === 'box-shadow' && censusNow('box-shadow', null)
+            ? `${censusNow('box-shadow', null)}${qModeSaid}`
+            : null) ??
           stateNow() ??
           variantNow() ??
           partPropNow(named, asked) ??
@@ -16490,7 +16619,7 @@ export function draftAnswer(ctx, env, question) {
         ? `${env.slug} has only a ${shownModes[0]} mode, so ${named ?? 'it'} has no ${asked} in ${unshown} mode to tell (nothing is changed)`
         : named
           ? now
-            ? `${named} has ${asked} ${now} now (nothing is changed); to change it, ask for the change ("${asked === 'color' ? `${named} text red` : asked === 'border-color' ? `${named} border red` : /color|background/.test(asked) ? `${named} background red` : asked === 'font-weight' ? `${named} font-weight 700` : asked === 'opacity' ? `${named} opacity 0.8` : asked === 'font-family' ? `${named} font Georgia` : asked === 'box-shadow' ? `${named} shadow stronger` : `${holder} ${asked} 12px`}")`
+            ? `${named} ${asked === 'focus-ring' ? 'draws' : `has ${asked}`} ${now} now (nothing is changed); to change it, ask for the change ("${asked === 'focus-ring' ? `${named} focus ring red` : asked === 'color' ? `${named} text red` : asked === 'border-color' ? `${named} border red` : /color|background/.test(asked) ? `${named} background red` : asked === 'font-weight' ? `${named} font-weight 700` : asked === 'opacity' ? `${named} opacity 0.8` : asked === 'font-family' ? `${named} font Georgia` : asked === 'box-shadow' ? `${named} shadow stronger` : `${holder} ${asked} 12px`}")`
             : `${named} has no ${asked} of its own that how can read; ${HOW} ${named} lists what it reads`
           : `how changes a theme; ${P} show ${env.slug} lists what it has now`,
       options: [],
@@ -16563,11 +16692,15 @@ export function valueAsked(q) {
   // Only the question part ("how rounded are cards? make them 12px").
   const t = q.toLowerCase().trim().split('?')[0];
   if (
-    !/^(?:how (?:much|many|big|round(?:ed)?|thick|wide|tall|bold|dark|light|transparent|opaque|dense|roomy|spacious|compact|tight|airy|crowded|cramped|strong|faint|soft|blurry)|what(?:(?:'s| is| are)(?: the| my)?(?: [a-z-]+){0,2}?|(?: the)?) (?:colou?r|size|padding|gap|spacing|density|radius|corner radius|font|weight|font size|shadow|border|opacity|font family|typeface|background|fill)s?|which (?:colou?r|font))\b/.test(
+    !/^(?:how (?:much|many|big|round(?:ed)?|thick|wide|tall|bold|dark|light|transparent|opaque|dense|roomy|spacious|compact|tight|airy|crowded|cramped|strong|faint|soft|blurry)|what(?:(?:'s| is| are)(?: the| my)?(?: [a-z-]+){0,2}?|(?: the)?) (?:colou?r|size|padding|gap|spacing|density|radius|corner radius|font|weight|font size|shadow|border|opacity|font family|typeface|background|fill|focus ring|focus outline|ring|outline)s?|which (?:colou?r|font))\b/.test(
       t,
     )
   )
     return null;
+  // "what is the focus ring of inputs": the ring the part draws when
+  // focused (a box-shadow or an outline, as Core draws it there).
+  if (/\b(?:focus (?:ring|outline)|rings?|outlines?)\b/.test(t))
+    return 'focus-ring';
   if (/\b(round|rounded|radius|corners?)\b/.test(t)) return 'border-radius';
   if (/\b(opacity|transparent|opaque)\b/.test(t)) return 'opacity';
   if (

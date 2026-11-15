@@ -5201,11 +5201,21 @@ export function compileTheme(ctx, data, base) {
         CARD_LIKE.includes(t),
       ),
     ]);
+    // The part's own rule first, then its variants' rules, then every other
+    // condition (a status, a size): a condition written at the same weight
+    // as a variant's rule wins over it whatever was set first, as Core
+    // draws a status over the variant (a plain one-mode color is written
+    // into each variant's block, so it must never out-rank an earlier
+    // `--when status:error` setting).
     for (const [target, blocks] of Object.entries(theme.components ?? {})) {
       const keys = Object.keys(blocks);
-      const ordered = keys.includes('base')
-        ? ['base', ...keys.filter(k => k !== 'base')]
-        : keys;
+      const variantOnly = (/** @type {string} */ k) =>
+        /^variant:[^\s,]+$/.test(k);
+      const ordered = [
+        ...keys.filter(k => k === 'base'),
+        ...keys.filter(variantOnly),
+        ...keys.filter(k => k !== 'base' && !variantOnly(k)),
+      ];
       theme.components[target] = Object.fromEntries(
         ordered.map(k => [
           k,

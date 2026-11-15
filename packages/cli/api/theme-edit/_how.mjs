@@ -593,10 +593,17 @@ async function answer(subject, options, cwd) {
       return tokenAnswer(ctx, env, t, tok, unknown, themeFields);
     // "what does spacing more do": the dial's own lookup, its values and
     // what each does.
+    // ("in dark mode" names a mode to read, never the mode dial; a dial
+    // word that names a part's thing, "the focus ring of buttons", is the
+    // part's.)
     const dial = Object.keys(DIALS).find(d =>
-      new RegExp(`\\b${d}\\b`, 'i').test(t.replace(/--[a-z0-9-]+/gi, ' ')),
+      new RegExp(`\\b${d}\\b`, 'i').test(
+        t
+          .replace(/--[a-z0-9-]+/gi, ' ')
+          .replace(/\b(?:in|for)\s+(?:the\s+)?(?:dark|light)\s+mode\b/gi, ' '),
+      ),
     );
-    if (dial && !/\b(on|for)\s+(the\s+)?[a-z]+s?\b/i.test(t))
+    if (dial && !/\b(on|for|of)\s+(the\s+)?[a-z]+s?\b/i.test(t))
       return {...(await answer(dial, options, cwd)), subject: t};
     const q = draftAnswer(ctx, env, t);
     const groups = q.aspects.filter(a => Object.hasOwn(GROUPS, a));
