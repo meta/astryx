@@ -24,7 +24,6 @@ import {Token} from '@astryxdesign/core/Token';
 import {useToast} from '@astryxdesign/core/Toast';
 import {useMediaQuery} from '@astryxdesign/core/hooks';
 import {
-  AcademicCapIcon,
   BanknotesIcon,
   BookOpenIcon,
   BuildingOfficeIcon,
@@ -32,7 +31,8 @@ import {
   ChatBubbleLeftRightIcon,
   ClipboardDocumentCheckIcon,
   ComputerDesktopIcon,
-  LifebuoyIcon,
+  LightBulbIcon,
+  InformationCircleIcon,
   MagnifyingGlassIcon,
   ShieldCheckIcon,
   StarIcon,
@@ -90,7 +90,7 @@ const DESTINATIONS: Destination[] = [
     section: 'Learning',
     title: 'Courses',
     summary: 'Required training and optional classes.',
-    icon: AcademicCapIcon,
+    icon: LightBulbIcon,
   },
   {
     id: 'handbook',
@@ -464,7 +464,7 @@ export default function PortalPage() {
     <Card variant="gray">
       <VStack gap={3}>
         <HStack gap={2} vAlign="center">
-          <Icon icon={LifebuoyIcon} size="md" />
+          <Icon icon={InformationCircleIcon} size="md" />
           <Text type="body" weight="semibold">
             Need help?
           </Text>
