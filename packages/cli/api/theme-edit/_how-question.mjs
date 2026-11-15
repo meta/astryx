@@ -2920,10 +2920,25 @@ export function draftAnswer(ctx, env, question) {
       // "table header", "accordion header", "card title": that part's own.
       // A place ("not in the header") is the header part too.
       const before = String(all).slice(Math.max(0, at - 16), at);
+      // A part the census knows said just before it ("empty state title",
+      // "code block header"): that part's own, or the part itself.
+      const sub = m.toLowerCase().replace(/s$/, '');
+      const words = String(all)
+        .slice(Math.max(0, at - 40), at)
+        .toLowerCase()
+        .split(/[^a-z]+/)
+        .filter(Boolean);
+      const namesPart = [1, 2, 3].some(n => {
+        if (words.length < n) return false;
+        const key = words.slice(-n).join('-').replace(/s$/, '');
+        return TARGET.has(key) || TARGET.has(`${key}-${sub}`);
+      });
       const owned =
+        namesPart ||
         /\b(table|column|accordion|card|dialog|modal|page|section|app|site|product|top ?nav|block|drawer|popover|panel|header)\s+$/i.test(
           before,
-        ) || /\b(in|on|inside|into|across|of)\s+(the\s+|my\s+)?$/i.test(before);
+        ) ||
+        /\b(in|on|inside|into|across|of)\s+(the\s+|my\s+)?$/i.test(before);
       return text && !surface && !owned
         ? /s$/i.test(m)
           ? 'headings'
@@ -4429,6 +4444,23 @@ export function draftAnswer(ctx, env, question) {
   // listed before the ask all take it.
   // "headings twice as big", "dialog text twice as big": size words on
   // headings or on a part's text are the text size.
+  /**
+   * A part that is only text (a heading, a label, a link): it paints no fill
+   * at rest of its own, and Core names it as text.
+   * @param {string} on
+   */
+  const textOnlyPart = on =>
+    (FAMILIES[on] ?? [on]).every(
+      m =>
+        /(?:^|-)(?:heading|title|label|link|text|description)$/.test(m) &&
+        !Object.entries(C.MAP[m]?.at?.['background-color'] ?? {}).some(
+          ([k, v]) =>
+            !/:/.test(k) &&
+            !/^(?:transparent|inherit|none|initial|unset)$/.test(
+              String(v).trim(),
+            ),
+        ),
+    );
   for (const c of clauses)
     if (
       (!c.aspects.length ||
@@ -4437,7 +4469,8 @@ export function draftAnswer(ctx, env, question) {
           !c.colors.length)) &&
       c.parts.length &&
       /\b(big|bigger|small|smaller|large|larger)\b/.test(c.text) &&
-      (c.parts.some(x => x.on === 'heading') || /\btext\b/.test(c.text))
+      (c.parts.some(x => x.on === 'heading' || textOnlyPart(x.on)) ||
+        /\btext\b/.test(c.text))
     )
       c.aspects = ['fontsize'];
   // "2 steps more on cards" (from "2 spacing units more"): the spacing.
@@ -4520,9 +4553,10 @@ export function draftAnswer(ctx, env, question) {
       c.aspects.length === 1 &&
       c.aspects[0] === 'size' &&
       !/\b(padding|room|spac)/.test(c.text) &&
-      prev.aspects.some(a =>
+      (prev.aspects.some(a =>
         ['text', 'case', 'fontsize', 'weight', 'family'].includes(a),
-      )
+      ) ||
+        c.parts.every(x => textOnlyPart(x.on)))
     )
       c.aspects = ['fontsize'];
     else if (
@@ -4894,23 +4928,6 @@ export function draftAnswer(ctx, env, question) {
   // A clause with no part takes the part of the clause before it ("a dark
   // card with white text"); one with values but no aspect takes the aspect
   // of a neighbor ("cards: 8px radius; buttons: 4px").
-  /**
-   * A part that is only text (a heading, a label, a link): it paints no fill
-   * at rest of its own, and Core names it as text.
-   * @param {string} on
-   */
-  const textOnlyPart = on =>
-    (FAMILIES[on] ?? [on]).every(
-      m =>
-        /(?:^|-)(?:heading|title|label|link|text|description)$/.test(m) &&
-        !Object.entries(C.MAP[m]?.at?.['background-color'] ?? {}).some(
-          ([k, v]) =>
-            !/:/.test(k) &&
-            !/^(?:transparent|inherit|none|initial|unset)$/.test(
-              String(v).trim(),
-            ),
-        ),
-    );
   const fillAspect = () => {
     for (const c of clauses)
       if (
