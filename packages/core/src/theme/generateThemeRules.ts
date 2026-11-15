@@ -1928,10 +1928,32 @@ function schemeDependence(
  * re-declared. A reference to a theme token that does not depend on the
  * scheme is replaced with the theme's value too: the surface does not
  * re-declare that token, so after lowering the reference would resolve on the
- * surface and take a value set between the root and the surface. A reference
- * to a token the theme does not declare, or that depends on the scheme, stays
- * as it is. A reference in a cycle stays as it is.
+ * surface and take a value set between the root and the surface. For the same
+ * reason, a reference to a token the theme does not declare refers to the
+ * root's private alias of it, which the theme root resolves. A reference to a
+ * token that depends on the scheme stays as it is, and so does a reference in
+ * a cycle.
  */
+const ROOT_ALIAS_PREFIX = '--_theme-root-';
+const ROOT_ALIAS_REFERENCE = /var\((--_theme-root-[^\s,()]+)/g;
+
+/**
+ * The theme root's declarations of the private aliases that the media-surface
+ * blocks refer to. Each alias resolves on the theme root, where the token it
+ * names takes its value from an ancestor, so a surface reads the value every
+ * other descendant of the root reads.
+ */
+function rootAliasEntries(blocks: ReadonlyArray<string>): [string, string][] {
+  const aliases = new Set(
+    blocks.flatMap(block =>
+      [...block.matchAll(ROOT_ALIAS_REFERENCE)].map(match => match[1]),
+    ),
+  );
+  return [...aliases]
+    .sort()
+    .map(alias => [alias, `var(--${alias.slice(ROOT_ALIAS_PREFIX.length)})`]);
+}
+
 function withRootValuesForSurfaceTokens(
   value: string,
   surfaceNames: ReadonlySet<string>,
@@ -1946,8 +1968,10 @@ function withRootValuesForSurfaceTokens(
     }
     const declared = declaredValues[reference];
     if (!surfaceNames.has(reference)) {
-      return typeof declared !== 'string' ||
-        dependsOnScheme(reference) ||
+      if (typeof declared !== 'string') {
+        return `var(${ROOT_ALIAS_PREFIX}${reference.slice(2)})`;
+      }
+      return dependsOnScheme(reference) ||
         analyzeDeclarationValue(declared).important
         ? null
         : withRootValuesForSurfaceTokens(
@@ -2317,6 +2341,19 @@ export function generateOnMediaCSS(
         sink,
       }),
     );
+  }
+
+  const aliasEntries = rootAliasEntries([
+    ...parts,
+    ...adaptationMediaRoleBlocks,
+  ]);
+  if (aliasEntries.length > 0) {
+    const declarations = joinDeclarations(
+      aliasEntries,
+      'onMedia.rootAliases.',
+      sink,
+    );
+    parts.unshift(`  :scope {\n${declarations}\n  }`);
   }
 
   if (parts.length === 0 && adaptationMediaRoleBlocks.length === 0) {

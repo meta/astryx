@@ -263,3 +263,43 @@ describe('a root token that refers to a token the surface declares', () => {
     });
   }
 });
+
+describe('a root alias stays private', () => {
+  it('is written only in the theme CSS, never in a token list or type output', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-root-alias-'));
+    tmpDirs.push(tmpDir);
+    fs.writeFileSync(
+      path.join(tmpDir, 'coreMix.mjs'),
+      `export default {
+        name: 'core-mix',
+        tokens: {
+          '--color-text-secondary': ['#555555', '#aaaaaa'],
+          '--color-border-emphasized':
+            'color-mix(in srgb, var(--color-text-secondary) 50%, var(--color-background-muted))',
+        },
+        onDark: {tokens: {'--color-text-primary': '#ffffff'}},
+        onLight: {tokens: {'--color-text-primary': '#111111'}},
+      };\n`,
+    );
+    const out = path.join(tmpDir, 'theme.css');
+    const receipt = await themeBuild('coreMix.mjs', {out}, {cwd: tmpDir});
+    const built = fs.readFileSync(out, 'utf8');
+    expect(built).toContain(
+      '--_theme-root-color-background-muted: var(--color-background-muted);',
+    );
+    expect(JSON.stringify(receipt?.data ?? {})).not.toContain('--_theme-root-');
+    for (const file of fs.readdirSync(tmpDir, {recursive: true})) {
+      const full = path.join(tmpDir, String(file));
+      if (full === out || !fs.statSync(full).isFile()) continue;
+      expect(fs.readFileSync(full, 'utf8'), String(file)).not.toContain(
+        '--_theme-root-',
+      );
+    }
+  });
+
+  it('is not written for a published theme', () => {
+    for (const name of THEMES) {
+      expect(css.get(name)?.lowered, name).not.toContain('--_theme-root-');
+    }
+  });
+});
