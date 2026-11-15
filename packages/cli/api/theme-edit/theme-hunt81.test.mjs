@@ -11,7 +11,20 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet, themeEditShow} from './theme-edit.mjs';
-import {carriesTyped, offersTyped} from './_edit.mjs';
+import {allowedLine, coversTyped, readsTyped} from './_normal.mjs';
+
+/** The gate for a whole typed value with no setting named. @param {string} offered @param {string} typed */
+const offersTyped = (offered, typed) => allowedLine({offered, typed});
+
+/**
+ * Whether the values a refusal offers for one setting carry what was typed.
+ * @param {string[]} offered @param {string} typed
+ */
+const offersAllTyped = (offered, typed) => {
+  const reads = offered.map(o => readsTyped({offered: o, typed}));
+  if (reads.includes(false)) return false;
+  return reads.every(r => r === true) || coversTyped(reads, typed);
+};
 import {escapesMeant} from './_normal.mjs';
 import {
   makeLinkedFixture,
@@ -95,11 +108,16 @@ describe('a repair carries the value typed, never a stock value', () => {
     } catch (e) {
       err = e;
     }
-    for (const s of err?.suggestions ?? []) {
-      const v = valueSet(s.name, thing);
-      if (v == null || MAPPED.some(re => re.test(s.name))) continue;
-      expect(offersTyped(v, value), `${s.name} for ${value}`).toBe(true);
-    }
+    // The values offered for the setting, taken together, carry what was
+    // typed (one value may carry part when the others carry the rest).
+    const values = (err?.suggestions ?? [])
+      .filter((/** @type {any} */ s) => !MAPPED.some(re => re.test(s.name)))
+      .map((/** @type {any} */ s) => valueSet(s.name, thing))
+      .filter((/** @type {any} */ v) => v != null);
+    if (values.length)
+      expect(offersAllTyped(values, value), `${values} for ${value}`).toBe(
+        true,
+      );
   });
 
   it.each([
@@ -182,7 +200,6 @@ describe('the stock values a repair never puts in', () => {
     ['Georgia, serif', 'Georgia serif', true],
   ])('%j for %j: %s', (offered, typed, ok) => {
     expect(offersTyped(offered, typed)).toBe(ok);
-    expect(carriesTyped(offered, typed)).toBe(ok);
   });
 });
 

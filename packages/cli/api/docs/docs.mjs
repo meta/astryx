@@ -13,6 +13,9 @@
  *   docs(route)                           -> node    -> docs.node
  *   docs(route, undefined, {depth: 2})    -> node    -> docs.node, two levels
  *
+ * `list` names the list read. It is the same as no topic, so docs() refuses
+ * a topic or section beside it instead of dropping it.
+ *
  * A topic read returns the whole doc, as it always has; `index` returns its
  * sections, so a reader can open one by its key (spec:AST-047). The CLI's text
  * view lists the sections by default. A route names a node
@@ -114,6 +117,8 @@ function depthRead(options) {
  * @param {string} [options.lang]
  * @param {boolean} [options.zh]
  * @param {boolean} [options.dense]
+ * @param {boolean} [options.list] return the topic list, the same as giving
+ *   no topic; docs() refuses a topic or section beside it
  * @param {boolean} [options.index] return the topic's section index instead of
  *   the whole doc
  * @param {number | 'all'} [options.depth] how many levels below a docs-tree
@@ -148,6 +153,13 @@ export async function docs(topic, section, options = {}) {
  */
 async function docsRead(topic, section, options = {}) {
   const read = depthRead(options);
+  if (options.list && (topic || section)) {
+    throw new AstryxError(
+      'Ask for the topic list or one topic, not both: --list takes no topic or section.',
+      undefined,
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
+  }
   if (!topic) return list(options);
   const found = await resolveDocsArgument(topic, options);
   if (found.kind === 'node') {

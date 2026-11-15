@@ -808,6 +808,31 @@ export function splitTop(v, sep) {
   return out.filter(x => sep === ',' || x.trim());
 }
 
+/**
+ * Several values of one kind (`-4px -8px`, `1.5 2`, `var(--a) var(--b)`):
+ * the items, split as CSS splits them, and their kind (a number's unit, ''
+ * for a bare number, `var` for a var()), when every item is of the first
+ * one's kind; null otherwise (`all 200`). The one reading of "several
+ * values of one kind" that a repair offers the first of and the repair
+ * gate allows.
+ * @param {string} v
+ * @returns {{items: string[], kind: string} | null}
+ */
+export function sameKindValues(v) {
+  const items = splitTop(String(v).trim(), ' ');
+  /** @param {string} x */
+  const kind = x =>
+    /^var\(/i.test(x)
+      ? 'var'
+      : (/^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?([a-z%]*)$/i
+          .exec(x)?.[1]
+          ?.toLowerCase() ?? null);
+  const first = kind(items[0] ?? '');
+  if (items.length < 2 || first === null || items.some(x => kind(x) !== first))
+    return null;
+  return {items, kind: first};
+}
+
 /** The longhand each type of the `font` grammar sets, where css-tree names a type, not a property. */
 const FONT_TYPE_LONGHAND = wordTable(
   /** @type {Record<string, string>} */ ({
@@ -966,27 +991,28 @@ export function grammarText(syntax) {
 /** The math functions, by name, for a check of whether a value holds one. */
 export const MATH_FUNCTION = new RegExp(`\\b(${[...MATH].join('|')})\\(`, 'i');
 
-/** @type {Map<string, boolean>} */
-const percentCache = new Map();
+/** @type {Map<string, Set<string>>} */
+const typesCache = new Map();
 /**
- * Whether a property's grammar takes a percentage anywhere, through the
- * types it names (padding does; border-width and outline-offset do not).
+ * Every type a property's grammar names, through the types and properties
+ * it refers to (padding: length-percentage, length, percentage, …).
  * @param {string} prop
+ * @returns {Set<string>}
  */
-export function takesPercentage(prop) {
-  const known = percentCache.get(prop);
-  if (known != null) return known;
+function grammarTypes(prop) {
+  const known = typesCache.get(prop);
+  if (known) return known;
   const t = csstree();
+  /** @type {Set<string>} */
+  const found = new Set();
   const seen = new Set();
-  let found = false;
   /** @param {any} syntax */
   const walk = syntax => {
-    if (!syntax || found) return;
+    if (!syntax) return;
     t.definitionSyntax.walk(syntax, (/** @type {any} */ n) => {
-      if (found) return;
       if (n.type === 'Type') {
-        if (/percentage/.test(n.name)) found = true;
-        else if (!seen.has(n.name)) {
+        found.add(n.name);
+        if (!seen.has(n.name)) {
           seen.add(n.name);
           walk(t.lexer.types[n.name]?.syntax);
         }
@@ -997,8 +1023,35 @@ export function takesPercentage(prop) {
     });
   };
   walk(propertyGrammar(prop));
-  percentCache.set(prop, found);
+  typesCache.set(prop, found);
   return found;
+}
+
+/**
+ * Whether a property's grammar takes a percentage anywhere, through the
+ * types it names (padding does; border-width and outline-offset do not).
+ * @param {string} prop
+ */
+export function takesPercentage(prop) {
+  return [...grammarTypes(prop)].some(n => /percentage/.test(n));
+}
+
+/**
+ * Whether every number a property takes is whole: its grammar names
+ * `<integer>` and no other numeric type (z-index, order; never opacity or
+ * a length). A comma between such digits can only group thousands.
+ * @param {string} prop
+ */
+export function takesWholeNumbersOnly(prop) {
+  const types = grammarTypes(prop);
+  return (
+    types.has('integer') &&
+    ![...types].some(n =>
+      /^(number|length|percentage|length-percentage|dimension|angle|time|frequency|resolution|flex|ratio)$/.test(
+        n,
+      ),
+    )
+  );
 }
 
 /** The generic font families CSS names, which are never quoted. */

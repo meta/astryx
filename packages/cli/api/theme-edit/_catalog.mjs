@@ -32,6 +32,18 @@ const ROWS = [
   {id: 3, task: 'Fix login timeout', owner: 'Riley', status: 'Blocked'},
 ];
 
+/**
+ * The Core components the in-app preview's top bar draws (its title and
+ * its light/dark/system switch). The route imports these, and the contrast
+ * check measures each one's text over the header, as the app shows it.
+ */
+export const TOP_BAR_COMPONENTS = Object.freeze([
+  'TopNav',
+  'TopNavHeading',
+  'SegmentedControl',
+  'SegmentedControlItem',
+]);
+
 /** The sample app page every preview shows. */
 export const SAMPLE_PAGE = h(
   'AppShell',
@@ -191,6 +203,16 @@ export function elementNames(v, out = new Set()) {
 }
 
 /**
+ * Where an element of a page comes from: a module specifier, bound to the
+ * export named like the element, or a module and the export it is (a
+ * template page is its file's `default`).
+ * @typedef {string | {from: string, export: string}} Binding
+ */
+
+/** The module a binding imports. @param {Binding} b */
+export const bindingFrom = b => (typeof b === 'string' ? b : b.from);
+
+/**
  * The page module source for a list of items. Each item renders on its own,
  * so one component that throws leaves the rest of the page. With a theme,
  * each item renders inside `<Theme>`; a theme with both modes follows the
@@ -198,7 +220,9 @@ export function elementNames(v, out = new Set()) {
  * flips it, since the file runs no script.
  * @param {object} spec
  * @param {CatalogItem[]} spec.items
- * @param {Record<string, string>} spec.imports component name -> module specifier
+ * @param {Record<string, Binding>} spec.imports element name -> the module
+ *   it comes from (bound to the export of the same name), or the module and
+ *   the export it is
  * @param {{module: string, css: string[], mode: 'system' | 'light' | 'dark'} | null} spec.theme
  *   module and css are import specifiers relative to the page
  * @param {'catalog' | 'sheet' | 'page'} spec.layout
@@ -206,11 +230,12 @@ export function elementNames(v, out = new Set()) {
  * @returns {string}
  */
 export function pageSource({items, imports, theme, layout, title = ''}) {
-  /** @type {Map<string, string[]>} */
+  /** @type {Map<string, Array<[string, string]>>} element and export, per module */
   const byModule = new Map();
-  for (const [name, spec] of Object.entries(imports)) {
+  for (const [name, b] of Object.entries(imports)) {
+    const spec = bindingFrom(b);
     const list = byModule.get(spec) ?? [];
-    list.push(name);
+    list.push([name, typeof b === 'string' ? name : b.export]);
     byModule.set(spec, list);
   }
   const lines = [
@@ -227,8 +252,8 @@ export function pageSource({items, imports, theme, layout, title = ''}) {
   let i = 0;
   for (const [spec, names] of byModule) {
     lines.push(`import * as M${i} from ${JSON.stringify(spec)};`);
-    for (const n of names)
-      entries.push(`${JSON.stringify(n)}: M${i}[${JSON.stringify(n)}]`);
+    for (const [n, exp] of names)
+      entries.push(`${JSON.stringify(n)}: M${i}[${JSON.stringify(exp)}]`);
     i++;
   }
   lines.push(`const C = {${entries.join(', ')}};`);
@@ -253,7 +278,14 @@ export function pageSource({items, imports, theme, layout, title = ''}) {
   );
   lines.push(`const MODE = ${JSON.stringify(theme?.mode ?? 'light')};`);
   lines.push(
-    'function html(tree) { try { const node = el(tree); return renderToStaticMarkup(theme ? React.createElement(Theme, {theme, mode: MODE}, node) : node); } catch { return null; } }',
+    'function html(tree, mode = MODE) { try { const node = el(tree); return renderToStaticMarkup(theme ? React.createElement(Theme, {theme, mode}, node) : node); } catch { return null; } }',
+  );
+  // A theme with both modes: each part is rendered in light and in dark, as
+  // the app renders it in each (a part that picks its look from the mode as
+  // it renders, such as a Toast's text on its inverted surface, differs);
+  // a part whose two renders are the same is written once.
+  lines.push(
+    'function modes(tree) { if (!theme || MODE !== "system") { const one = html(tree); return one == null ? null : {one}; } const light = html(tree, "light"); const dark = html(tree, "dark"); if (light == null && dark == null) return null; return light === dark ? {one: light} : {light: light ?? "", dark: dark ?? ""}; }',
   );
   lines.push(`const LAYOUT = ${JSON.stringify(layout)};`);
   lines.push(`const TITLE = ${JSON.stringify(title)};`);
@@ -266,14 +298,17 @@ export default function Page() {
       return markup == null ? null : h('section', {key: i, 'data-cat': it.name, dangerouslySetInnerHTML: {__html: markup}});
     }));
   }
-  const done = ITEMS.map(it => ({...it, markup: html(it.tree)})).filter(it => it.markup != null);
+  const done = ITEMS.map(it => ({...it, markup: modes(it.tree)})).filter(it => it.markup != null);
+  const part = (m, key) => m.one != null
+    ? h('div', {key, dangerouslySetInnerHTML: {__html: m.one}})
+    : h(React.Fragment, {key}, h('div', {className: 'cs-light', dangerouslySetInnerHTML: {__html: m.light}}), h('div', {className: 'cs-dark', dangerouslySetInnerHTML: {__html: m.dark}}));
   const bar = MODE === 'system'
     ? h('div', {className: 'cs-bar'}, h('strong', null, TITLE),
         ['auto', 'light', 'dark'].map(m => h('label', {key: m}, h('input', {type: 'radio', name: 'cs-mode', id: 'cs-' + m, defaultChecked: m === 'auto'}), ' ' + m)))
     : h('div', {className: 'cs-bar'}, h('strong', null, TITLE), h('span', null, MODE + ' only'));
   let body;
   if (LAYOUT === 'page') {
-    body = done.map((it, i) => h('div', {key: i, dangerouslySetInnerHTML: {__html: it.markup}}));
+    body = done.map((it, i) => part(it.markup, i));
   } else {
     const groups = [];
     for (const it of done) {
@@ -289,7 +324,7 @@ export default function Page() {
         h('div', {className: 'cs-name'}, c.name),
         h('div', {className: 'cs-row'}, c.list.map((x, j) => h('div', {key: j, className: 'cs-item'},
           x.label ? h('div', {className: 'cs-label'}, x.label) : null,
-          h('div', {dangerouslySetInnerHTML: {__html: x.markup}})))))))));
+          part(x.markup)))))))));
   }
   const page = h('div', {className: 'cs-page', style: {background: 'var(--color-background-body)', color: 'var(--color-text-primary)', minHeight: '100vh'}}, bar, body);
   return h('main', null, h('style', {dangerouslySetInnerHTML: {__html: SHEET_CSS}}), theme ? h(Theme, {theme, mode: MODE}, page) : page);
@@ -303,6 +338,11 @@ export const SHEET_CSS = [
   '.cs-bar{position:sticky;top:0;z-index:100;display:flex;gap:14px;align-items:center;padding:8px 14px;font:12px ui-monospace,monospace;background:Canvas;color:CanvasText;border-bottom:1px solid #8884}',
   'body:has(#cs-light:checked),body:has(#cs-light:checked) [data-astryx-theme]{color-scheme:light!important}',
   'body:has(#cs-dark:checked),body:has(#cs-dark:checked) [data-astryx-theme]{color-scheme:dark!important}',
+  // A part rendered in each mode: the render of the mode the page shows.
+  '.cs-dark{display:none}',
+  '@media (prefers-color-scheme:dark){.cs-light{display:none}.cs-dark{display:block}}',
+  'body:has(#cs-light:checked) .cs-light,body:has(#cs-dark:checked) .cs-dark{display:block!important}',
+  'body:has(#cs-light:checked) .cs-dark,body:has(#cs-dark:checked) .cs-light{display:none!important}',
   '.cs-group-name{font:600 14px ui-monospace,monospace;margin:16px 14px 0;opacity:.75}',
   '.cs-sheet{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;padding:14px}',
   '.cs-pages{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;padding:14px}',
