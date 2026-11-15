@@ -1433,17 +1433,28 @@ function cdTo(folder) {
 }
 
 /**
- * Entries of a theme folder that are no part of the theme, which a starter
- * app never copies: a repository's own folder (or the file a worktree has
- * there) and installed packages.
+ * The folders version-control systems keep their repository in (or the
+ * file a worktree has there): Git, Mercurial, Sapling, Subversion,
+ * Jujutsu, Bazaar, Pijul, CVS, Fossil and darcs.
  */
-const NOT_THEME_ENTRIES = new Set([
+const VCS_ENTRIES = [
   '.git',
   '.hg',
+  '.sl',
   '.svn',
   '.jj',
-  'node_modules',
-]);
+  '.bzr',
+  '.pijul',
+  'CVS',
+  '.fslckout',
+  '_darcs',
+];
+
+/**
+ * Entries of a theme folder that are no part of the theme, which a starter
+ * app never copies: a repository's own folder and installed packages.
+ */
+const NOT_THEME_ENTRIES = new Set([...VCS_ENTRIES, 'node_modules']);
 
 /**
  * A folder name for a new starter app that is free in `cwd`: theme-app, else
@@ -5458,10 +5469,14 @@ export async function themeEditPreviewApp(dir, options = {}) {
     // A family the CLI cannot vouch for as an open font (and this project
     // has no package of) is not installed in the new app: said, with the
     // package that would load it.
+    // Its index sheet would load weight 400 alone, as for a package not
+    // installed above: the import names the sheet of each weight the theme
+    // uses.
     for (const family of familiesNothingLoads(ctx, theme, fonts)) {
       const s = fontsourceSuggestion(family);
+      const sheets = s ? used.map(w => `'${s.pkg}/${w}.css'`).join(', ') : '';
       notes.push(
-        `"${family}" is not a font the CLI knows to be open, and this project has no package of it, so the new app does not install it and shows the next font in the stack${s ? `; if Fontsource publishes it, ${installLine(cwd, [s.pkg])} in the new app installs it (then import '${s.pkg}' in its root layout)` : ''}`,
+        `"${family}" is not a font the CLI knows to be open, and this project has no package of it, so the new app does not install it and shows the next font in the stack${s ? `; if Fontsource publishes it, ${installLine(cwd, [s.pkg])} in the new app installs it (then import ${sheets} in its root layout, one for each weight ${slug} uses, among those the family ships)` : ''}`,
       );
     }
     routeTheme = {

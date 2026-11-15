@@ -140,6 +140,7 @@ import {
   entryProblem,
   namesSetting,
   skips,
+  OPEN_SECTION,
 } from './_settings.mjs';
 import {
   borderlessSurfaces,
@@ -6817,8 +6818,10 @@ export async function themeEditShow(theme, options = {}) {
   // The open states (every overlay drawn open) beside the sample page: the
   // full sheet holds them too, but is too tall to read whole. --png always
   // takes them, with a section's sheet as with the full one.
+  // The overlays section's sheet is the open states page itself: made and
+  // photographed once, as the section.
   const open =
-    png && !noPages
+    png && !noPages && section !== OPEN_SECTION
       ? await rendering(async () => {
           try {
             return await openStatesPage(ctx, theme, data);

@@ -17,7 +17,10 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {readRegularFile} from '../../foundation/fs/regular-file.mjs';
+import {
+  irregularFileKind,
+  readRegularFile,
+} from '../../foundation/fs/regular-file.mjs';
 import {isAlive} from '../../foundation/release/cache.mjs';
 import {stillHolds} from '../../foundation/release/folder-lock.mjs';
 import {AstryxError} from '../error.mjs';
@@ -89,6 +92,18 @@ export function writeWhole(file, text) {
       ],
       ERROR_CODES.ERR_WRITE_FAILED,
     );
+  // A pipe, a device or a socket there is not the editor's: the rename
+  // below would replace it, so it is refused and left as it is.
+  const kind = irregularFileKind(file);
+  if (kind && kind !== 'a folder')
+    throw new AstryxError(
+      `${[path.dirname(path.dirname(file)), path.dirname(file), file].map(p => path.basename(p)).join('/')} is ${kind}, not a file, so the editor writes nothing over it. Move it, then run the command again.`,
+      [],
+      ERROR_CODES.ERR_WRITE_FAILED,
+    );
+  // The same bytes already there are not written again: a refused command
+  // that puts back what it built leaves the file as it was, time included.
+  if (sameBytes(file, text)) return;
   sweepTemps(path.dirname(file));
   refuseIfLockLost();
   const tmp = tempFor(file);
@@ -97,6 +112,23 @@ export function writeWhole(file, text) {
     fs.renameSync(tmp, file);
   } finally {
     fs.rmSync(tmp, {force: true});
+  }
+}
+
+/**
+ * Whether a regular file (never a link) at `file` holds exactly `text`.
+ * @param {string} file
+ * @param {string | Buffer} text
+ */
+function sameBytes(file, text) {
+  const st = fs.lstatSync(file, {throwIfNoEntry: false});
+  if (!st?.isFile()) return false;
+  const want = Buffer.isBuffer(text) ? text : Buffer.from(text);
+  if (st.size !== want.length) return false;
+  try {
+    return readRegularFile(file).equals(want);
+  } catch {
+    return false;
   }
 }
 

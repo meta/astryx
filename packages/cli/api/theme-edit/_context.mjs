@@ -477,6 +477,20 @@ export async function pictures(project, shots, modes) {
         !editorWrote(project.cwd, /** @type {string} */ (slug), out)
       );
     });
+  // The record of the editor's pictures is a plain file, or none yet.
+  // Something else at its name (a pipe, a folder) is left as it is and
+  // named, and no picture is taken: a picture the record cannot hold would
+  // read as a file of yours on the next run.
+  for (const slug of new Set(shots.map(s => themeOf(s.png)))) {
+    if (!slug) continue;
+    const record = themeFiles(project.cwd, slug).pictures;
+    const st = fs.lstatSync(record, {throwIfNoEntry: false});
+    if (st && !st.isFile() && !st.isSymbolicLink())
+      return {
+        files,
+        problem: `${inTheWayPhrase(path.relative(project.cwd, record), st.isDirectory() ? 'folder' : 'other', "the record of the editor's pictures")}, so no picture was taken and it is left as it is; move it, then run the command again`,
+      };
+  }
   /** Pictures skipped for a link at their name. @type {string[]} */
   const linked = [];
   if (blocked.length)
