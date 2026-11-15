@@ -949,6 +949,24 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
         inherited.dark === v.dark
       )
         continue;
+      // A look kept with no rule of its own under its condition is held to
+      // what the part drew under it before, in any of its looks (Core
+      // writes the condition beside the variant and size): measured as
+      // drawn, never as stored.
+      const condOf = k.split('|')[0].replace(':', '=');
+      const drawnUnder = (/** @type {string} */ x) =>
+        [...a.entries()].find(([k2]) => {
+          const [w2, st2, p2] = k2.split('|');
+          return (
+            !st2 &&
+            p2 === x &&
+            w2.replace(/:/g, '=').split(/[\s,]/).includes(condOf)
+          );
+        })?.[1];
+      if (!o && k.split('|')[0] !== 'base' && !k.split('|')[1]) {
+        const was = drawnUnder(prop0);
+        if (was && was.light === v.light && was.dark === v.dark) continue;
+      }
       // A border color on a look that draws no border (no width there, as
       // a date input's own box, whose field draws the line) shows nothing.
       if (!o && /^border(?:-(?:top|right|bottom|left))?-color$/.test(prop0)) {
@@ -968,16 +986,7 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
         const when0 = k.split('|')[0];
         // (Read under that condition in any look of the part: Core writes
         // it with the variant and size beside it.)
-        const cond = when0.replace(':', '=');
-        const underCond = (/** @type {string} */ x) =>
-          [...a.entries()].find(([k2]) => {
-            const [w2, st2, p2] = k2.split('|');
-            return (
-              !st2 &&
-              p2 === x &&
-              w2.replace(/:/g, '=').split(/[\s,]/).includes(cond)
-            );
-          })?.[1];
+        const underCond = drawnUnder;
         const long = (/** @type {string} */ x) =>
           a.get(`${when0}||${prop0}-${x}`) ??
           a.get(`${when0}||border-${x}`) ??
@@ -1007,7 +1016,27 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
             c === c0[m]
           );
         };
-        if (same('light') && same('dark')) continue;
+        // (The same width and the same color token, written as Core
+        // writes them, draw the same: the token takes the value its scope
+        // gives it under the condition.)
+        const rawParts = splitTop(String(v.raw ?? ''), ' ').filter(Boolean);
+        const widthOf = (/** @type {'light' | 'dark'} */ m) =>
+          splitTop(v[m], ' ').find(x =>
+            /^-?\d*\.?\d+(?:px|rem|em)?$|^(?:thin|medium|thick)$/.test(x),
+          ) ?? '';
+        const sameRaw =
+          w0 != null &&
+          c0?.raw != null &&
+          ['light', 'dark'].every(
+            m =>
+              lineStrength('border-width', widthOf(/** @type {any} */ (m))) ===
+              lineStrength(
+                'border-width',
+                w0[/** @type {'light' | 'dark'} */ (m)],
+              ),
+          ) &&
+          rawParts.includes(String(c0.raw).trim());
+        if (sameRaw || (same('light') && same('dark'))) continue;
       }
       if (!o)
         return `it would change ${part} (${k.split('|').filter(Boolean).join(' ')}), which the question keeps as it is`;

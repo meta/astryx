@@ -8245,6 +8245,22 @@ export function draftAnswer(ctx, env, question) {
             }))
           : []),
       ];
+      // ("except when invalid", "keep the error state": invalid is the
+      // error status of a part that has one, as the ask reads it.)
+      const hasError = (/** @type {string} */ on) =>
+        [on, ...(FAMILIES[on] ?? [])].some(m =>
+          (C.variantValues(one(m)).status ?? []).includes('error'),
+        );
+      for (const x of exceptedAll)
+        if (
+          x.state === 'invalid' &&
+          !stateFor(x.on, 'invalid') &&
+          hasError(x.on) &&
+          (!x.when || x.when === 'status:error')
+        ) {
+          x.when = 'status:error';
+          delete x.state;
+        }
       const excepted = exceptedAll.filter(
         (x, i) =>
           exceptedAll.findIndex(
@@ -8774,14 +8790,35 @@ export function draftAnswer(ctx, env, question) {
         for (let i = keeps.length - 1; i >= 0; i--) {
           const k = keeps[i];
           const members = k.on ? FAMILIES[k.on] : undefined;
-          // (A pin under a variant or status: a state alone reaches only
-          // members that draw that state's line.)
-          if (
-            !members ||
-            !k.when ||
-            !/^border(?:-color|-width)?$/.test(k.thing)
-          )
+          if (!members || !k.when) continue;
+          // Any other property: a member with no look of its own under the
+          // condition (a date input's error look, which its field draws)
+          // keeps by inheriting, so it takes no pin.
+          if (!/^border(?:-color|-width)?$/.test(k.thing)) {
+            const kWhen = k.when;
+            const cond = kWhen.replace(':', '=');
+            const prop =
+              k.thing === 'background' ? 'background-color' : k.thing;
+            const ownUnder = (/** @type {string} */ m) =>
+              Object.keys(
+                /** @type {Record<string, string>} */ (
+                  C.MAP[m]?.at?.[prop] ?? {}
+                ),
+              ).some(r => r.split(/[\s,]/).includes(cond)) ||
+              Boolean(
+                /** @type {any} */ (env.base).components?.[m]?.[kWhen]?.[
+                  prop.replace(/-([a-z])/g, (_m, x) => x.toUpperCase())
+                ],
+              );
+            const owning = members.filter(ownUnder);
+            if (owning.length && owning.length < members.length)
+              keeps.splice(
+                i,
+                1,
+                ...owning.map(m => ({...k, on: m, only: true})),
+              );
             continue;
+          }
           const drawn = members.filter(drawsBorder);
           if (!drawn.length) continue;
           // (A member's variant that draws no border at all, a selector's
