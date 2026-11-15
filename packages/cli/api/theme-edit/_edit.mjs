@@ -161,6 +161,12 @@ import {
 import {MODAL, isColorToken} from './_compiler.mjs';
 import {fontShorthandFamilyList} from '../theme/build/font-warning.mjs';
 import {
+  noLevelWhy,
+  noScaleWeightWhy,
+  roleWeightTokens,
+  typographyValueProblem,
+} from '../theme/build/typography-values.mjs';
+import {
   derivedPrivateCopies,
   spreadPrivateVarMessage,
 } from '../../foundation/config/theme-private-vars.mjs';
@@ -3791,7 +3797,7 @@ async function ownTokenProblems(ctx, slug, data) {
           key: k,
           value: '',
           why: levels
-            ? `${k} is no heading level: Core reads weights for levels ${takes.join(', ')}, so typography.${key} builds nothing`
+            ? noLevelWhy(k, takes, key)
             : `${k} is no field ${path.length ? `typography.${path.join('.')} takes` : 'typography takes'} (${takes.join(', ')}), so Core builds nothing from it${near ? `; did you mean ${near}?` : ''}`,
           ...(e ? atOf(e) : {line: null, file: null}),
         });
@@ -3800,7 +3806,7 @@ async function ownTokenProblems(ctx, slug, data) {
       if (v && typeof v === 'object' && !Array.isArray(v))
         fields(v, [...path, k]);
       else {
-        const why = typographyProblem(key, v);
+        const why = typographyValueProblem(key, v);
         if (!why) continue;
         const e = typo.find(x => x.key === key) ?? typo[0];
         flagged.add(key.split('.')[0]);
@@ -3878,14 +3884,16 @@ async function ownTokenProblems(ctx, slug, data) {
               .filter(n => n.startsWith(`${P} set ${slug} headings `));
           }
         }
-        const tokens =
-          role === 'heading'
-            ? '--text-heading-1-weight … --text-heading-6-weight'
-            : `--text-${role}-weight`;
         out.push({
           token: `typography.${key}`,
           value: given ?? '',
-          why: `Core writes a role's weight only from a type scale, and this typography has none, so ${key} builds nothing. Take it out and ${run.length ? 'run the line below, which changes only the heading weight' : `give the weight as the ${tokens} token${role === 'heading' ? 's' : ''} in tokens, which changes only that weight`}; a type scale would also resize all text`,
+          why: noScaleWeightWhy(
+            key,
+            role,
+            run.length
+              ? 'run the line below, which changes only the heading weight'
+              : `give the weight as the ${roleWeightTokens(role)} token${role === 'heading' ? 's' : ''} in tokens, which changes only that weight`,
+          ),
           ...(run.length ? {run} : {}),
           ...(e ? atOf(e) : {line: null, file: null}),
         });
@@ -3979,83 +3987,6 @@ async function ownTokenProblems(ctx, slug, data) {
     }
   }
   return out;
-}
-
-/**
- * A type scale field as the number Core reads, or NaN: a number, or text
- * that is a number; any other value (a boolean, a symbol, an array) is no
- * number of pixels, whatever Number() would make of it.
- * @param {unknown} value
- */
-const scaleNumber = value =>
-  typeof value === 'number'
-    ? value
-    : typeof value === 'string' && value.trim() !== ''
-      ? Number(value)
-      : NaN;
-
-/**
- * What is wrong with one typography field of a theme's own source, or
- * null: a family is one family name without quotes (Core quotes it whole)
- * and with nothing CSS would read as the end of the value; the scale's
- * ratio is above 1 and at most 4, its base a positive number of pixels.
- * @param {string} key the dotted field (`body.family`, `scale.ratio`)
- * @param {unknown} value
- * @returns {string | null}
- */
-function typographyProblem(key, value) {
-  const field = key.split('.').pop();
-  // A weight is a CSS value Core writes as it is: text, never a number.
-  if (
-    (field === 'weight' || key.split('.').includes('weights')) &&
-    typeof value !== 'string'
-  )
-    return `a typography weight is a CSS value in quotes, which Core writes as it is; ${describeValue(value)} is not text: write ${
-      // A CSS weight is 1 to 1000: any other number is no example.
-      typeof value === 'number' && value >= 1 && value <= 1000
-        ? `'${value}'`
-        : "'600'"
-    } (or a weight token, such as 'var(--font-weight-bold)')`;
-  if (field === 'family') {
-    if (typeof value !== 'string')
-      return 'a typography family is a family name in quotes, such as "Inter"';
-    const v = value.trim();
-    if (/[;{}<>]/.test(v))
-      return `"${v}" holds a ; { } < or >, so the CSS writer drops the whole declaration; give the family name alone, such as "Inter"`;
-    const quoted = /^(["'])(.*)\1$/.exec(v);
-    if (quoted)
-      return `the family is written in quotes, and Core adds its own, so it builds ${JSON.stringify(`"${v}"`)}, a name no font has; write it without them: family: '${quoted[2]}'`;
-    // Core quotes a family with a space whole, so a list here is one
-    // family by that whole name, which exists nowhere.
-    if (v.includes(','))
-      return `a typography family is one family name, which Core quotes whole ("${v}" is one family that exists nowhere); give the first as family and the rest as fallbacks, such as family: '${v
-        .split(',')[0]
-        .trim()
-        .replace(
-          /^["']|["']$/g,
-          '',
-        )}', fallbacks: '${v.split(',').slice(1).join(',').trim()}'`;
-    if (!v || /^[-+]?\d/.test(v) || /^(inherit|initial|unset|revert)$/i.test(v))
-      return `"${v}" is no font family name; give one such as "Inter"`;
-    return null;
-  }
-  if (field === 'ratio') {
-    const n = scaleNumber(value);
-    if (!Number.isFinite(n) || n <= 1 || n > 4)
-      return `the type scale's ratio is how much each size grows over the last, a number above 1 and at most 4 (such as 1.2); ${describeValue(value)} makes ${n <= 0 ? 'sizes that are not numbers' : n <= 1 ? 'every size the same or smaller' : 'sizes no page can use'}`;
-    return null;
-  }
-  if (field === 'base') {
-    const n = scaleNumber(value);
-    if (!Number.isFinite(n) || n <= 0) {
-      // A size with a unit builds NaNrem: the number of pixels it means.
-      const m = /^\s*([0-9.]+)\s*(px|rem|em)\s*$/i.exec(String(value));
-      const px = m ? Number(m[1]) * (/^r?em$/i.test(m[2]) ? 16 : 1) : null;
-      return `the type scale's base is the body size, a positive number of pixels${px ? `, so ${describeValue(value)} is base: ${px}` : ' (such as 16)'}; ${describeValue(value)} builds sizes no page can use${m ? ' (NaNrem)' : ''}`;
-    }
-    return null;
-  }
-  return null;
 }
 
 /**

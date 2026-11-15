@@ -1242,10 +1242,43 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
     }
     // Weight, style, size and number words after the name, read from the
     // end; a weight of two words (extra bold) first.
-    const words = name.split(/\s+/);
-    let end = words.length;
+    let words = name.split(/\s+/);
     /** @type {Array<{kind: string, text: string, value?: number, typo?: boolean}>} */
     const tail = [];
+    // A weight or style word before a family the editor knows (700 Inter,
+    // bold Inter, italic Georgia), as CSS's font shorthand writes them, is
+    // that word too: read from the start while what is left is that family.
+    {
+      let start = 0;
+      while (start < words.length - 1) {
+        const w = words[start];
+        const n = /^[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[-+]?\d+)?$/i.test(w)
+          ? Number(w)
+          : null;
+        const lead =
+          n != null && n >= 1 && n <= 1000
+            ? {kind: 'weight', text: w, value: n}
+            : STYLE.test(w)
+              ? {kind: 'style', text: w.toLowerCase()}
+              : n == null && weightOf(w) != null
+                ? {kind: 'weight', text: w, value: Number(weightOf(w))}
+                : null;
+        if (!lead) break;
+        const rest = words.slice(start + 1);
+        if (
+          !knownFamily(ctx, rest.join(' ')) &&
+          !knownFamily(
+            ctx,
+            rest.filter(x => !weightOf(x) && !STYLE.test(x)).join(' '),
+          )
+        )
+          break;
+        tail.push(lead);
+        start += 1;
+      }
+      words = words.slice(start);
+    }
+    let end = words.length;
     /**
      * Whether the words before index k, past any more weight or style
      * words (typed exactly or with a typo), are a family the editor knows
@@ -1295,13 +1328,13 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
         end -= 1;
       } else if (
         end >= 2 &&
-        /^\d+(?:\.\d+)?$/.test(w) &&
+        /^[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[-+]?\d+)?$/i.test(w) &&
         familyBefore(end - 1)
       ) {
-        // A number after a family the editor knows is no part of its name:
-        // from 1 to 1000 (Inter 650, Inter 450.5, Inter 50) a weight, as
-        // CSS reads it, the rung offered the nearest; any other number
-        // (Inter 1500) a number where a family goes.
+        // A number after a family the editor knows, in any form CSS reads
+        // (Inter 650, Inter 450.5, Inter +500, Inter 1e3), is no part of its
+        // name: from 1 to 1000 a weight, the rung offered the nearest; any
+        // other number (Inter 1500) a number where a family goes.
         const n = Number(w);
         tail.unshift(
           n >= 1 && n <= 1000
@@ -1458,7 +1491,9 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
     // name is unknown and the name without them is known.
     if (
       tail.every(
-        t => t.kind === 'style' || (t.kind === 'weight' && !/^\d/.test(t.text)),
+        t =>
+          t.kind === 'style' ||
+          (t.kind === 'weight' && !/^[-+.\d]/.test(t.text)),
       ) &&
       !(!knownFamily(ctx, name) && knownFamily(ctx, base))
     ) {

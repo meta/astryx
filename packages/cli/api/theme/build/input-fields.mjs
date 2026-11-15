@@ -8,7 +8,7 @@
  *        source.
  * @output inputFieldsFrom(): the fields; sourceFieldProblems(): each
  *         misspelled field a source writes, with its line and the field it
- *         is near.
+ *         is near; sourceTypography(): the typography values it writes.
  * @position Shared by the editor, which refuses a misspelled field, and by
  *           theme build, which warns it: defineTheme() drops a field it does
  *           not take, so only the source shows it.
@@ -160,17 +160,13 @@ const keyOf = p =>
         : null;
 
 /**
- * Each field a theme source writes that Core's theme input does not take:
- * in the object given to `defineTheme()` or exported as the default with a
- * name, and in
- * its `onDark`, `onLight` and `typography` blocks, each with its line and
- * the field it is near. A field written through a spread or a computed key
- * is not judged.
+ * The objects a theme source gives as theme input: the object given to
+ * `defineTheme()`, and a plain object exported as the default with a name.
+ * Empty when the source does not parse.
  * @param {string} source
- * @param {InputFields} fields
- * @returns {Array<{path: string[], line: number | null, why: string}>}
+ * @returns {any[]}
  */
-export function sourceFieldProblems(source, fields) {
+function themeInputNodes(source) {
   /** @type {any} */
   let ast;
   try {
@@ -222,6 +218,61 @@ export function sourceFieldProblems(source, fields) {
         find(v);
   };
   find(ast.program);
+  return inputs;
+}
+
+/**
+ * A theme source's typography block as the plain values it writes: text
+ * and numbers, in nested blocks. A value written as anything else (a name,
+ * a call, a spread) is left out. Null when the source writes none.
+ * @param {string} source
+ * @returns {Record<string, any> | null}
+ */
+export function sourceTypography(source) {
+  /** @param {any} node @returns {any} */
+  const plain = node => {
+    const n = unwrap(node);
+    if (!n) return undefined;
+    if (n.type === 'StringLiteral' || n.type === 'NumericLiteral')
+      return n.value;
+    if (n.type === 'TemplateLiteral' && n.expressions.length === 0)
+      return n.quasis.map((/** @type {any} */ q) => q.value.cooked).join('');
+    if (n.type === 'ObjectExpression') {
+      /** @type {Record<string, any>} */
+      const out = {};
+      for (const p of n.properties) {
+        const k = keyOf(p);
+        if (k == null) continue;
+        const v = plain(p.value);
+        if (v !== undefined) out[k] = v;
+      }
+      return out;
+    }
+    return undefined;
+  };
+  for (const input of themeInputNodes(source)) {
+    const p = input.properties.find(
+      (/** @type {any} */ x) => keyOf(x) === 'typography',
+    );
+    const v = p ? plain(p.value) : undefined;
+    if (v && typeof v === 'object') return v;
+  }
+  return null;
+}
+
+/**
+ * Each field a theme source writes that Core's theme input does not take:
+ * in the object given to `defineTheme()` or exported as the default with a
+ * name, and in
+ * its `onDark`, `onLight` and `typography` blocks, each with its line and
+ * the field it is near. A field written through a spread or a computed key
+ * is not judged.
+ * @param {string} source
+ * @param {InputFields} fields
+ * @returns {Array<{path: string[], line: number | null, why: string}>}
+ */
+export function sourceFieldProblems(source, fields) {
+  const inputs = themeInputNodes(source);
   /** @type {Array<{path: string[], line: number | null, why: string}>} */
   const out = [];
   /**

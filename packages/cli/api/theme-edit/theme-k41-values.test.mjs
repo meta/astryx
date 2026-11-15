@@ -130,7 +130,7 @@ describe('a field defineTheme() does not take', () => {
         expect(JSON.stringify(p.env.data.warnings), fields).toContain(why);
       }
       plain(
-        "components: {button: {base: {color: 'red'}}}, onDark: {tokens: {'--color-accent': '#fff'}}, typography: {body: {family: 'Lato, sans-serif'}}",
+        "components: {button: {base: {color: 'red'}}}, onDark: {tokens: {'--color-accent': '#fff'}}, typography: {body: {family: 'Lato', fallbacks: 'sans-serif'}}",
       );
       expect(json(['theme', 'build', 'plain/p.ts']).env.data.warnings).toEqual(
         [],

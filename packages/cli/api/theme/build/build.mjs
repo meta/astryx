@@ -110,10 +110,12 @@ import {
 import {interceptCore} from './core-interception.mjs';
 import {irregularFileKind} from '../../../foundation/fs/regular-file.mjs';
 import {keyPathLine, nullThemeValues} from './null-values.mjs';
+import {typographyInputProblems} from './typography-values.mjs';
 import {
   INPUT_DECLARATION_FILES,
   inputFieldsFrom,
   sourceFieldProblems,
+  sourceTypography,
 } from './input-fields.mjs';
 import {styleKeyProblems} from './style-keys.mjs';
 import {writtenValueProblems} from './written-values.mjs';
@@ -4996,6 +4998,18 @@ async function themeBuildInternal(
         from: null,
       }))
     : [];
+  // A typography value Core builds into something no browser uses (a font
+  // stack in one family, a quoted name with a space, a role weight with no
+  // type scale): warned at its line, as the editor refuses it. Only what
+  // this file writes: a theme it extends is judged in its own file. A build
+  // that loads the project's own Core captures no input: the values the
+  // source writes are read from it.
+  const typographyInput =
+    interception?.inputOf(themeDef)?.typography ??
+    sourceTypography(themeSource);
+  const badTypography = placed(
+    typographyInputProblems(typographyInput, fields?.levels ?? []),
+  ).filter(t => t.line != null);
 
   // Validate component overrides
   const warnings = await validateComponentOverrides(themeDef);
@@ -5022,6 +5036,7 @@ async function themeBuildInternal(
     ...nulls.filter(n => !n.unbuildable).map(nullLine),
     ...badKeys.map(nullLine),
     ...badValueLines.map(nullLine),
+    ...badTypography.map(nullLine),
     ...badFields.map(nullLine),
   ]) {
     warningMessages.push(w);
