@@ -517,26 +517,6 @@ export const docsDense = {
       },
     ],
   },
-  propDescriptions: {
-    items:
-      'Ordered OutlineItem[]: {id,label,level}. id should match target heading DOM id.',
-    activeId: 'Controlled active heading id. Disables built-in scroll-spy.',
-    onActiveIdChange: 'Called when active id changes from scroll-spy or click.',
-    label: "Accessible nav label. Default: 'Table of contents'.",
-    density:
-      "Density variant: 'default' (standard) or 'compact'. Default: 'default'.",
-    onNavigateStart:
-      'Called with the id when navigation begins, before the scroll.',
-    onNavigateEnd:
-      'Called with the id once the scroll settles. Fires exactly once per onNavigateStart, including on user interruption.',
-    offset:
-      'Height in px of a fixed header overlaying the scroll root. Shifts BOTH the activation line and the scroll landing, so a heading activates where navigating to it lands it. Composes with (does not replace) each heading scroll-margin-top. Default: 0.',
-    scrollContainerRef:
-      'RefObject of the scroll container to track, instead of the nearest scrollable ancestor. For split panes, modals, panels.',
-    hasScrollOnClick:
-      'Whether activating an item smooth-scrolls to it. false = you own scrolling; active id, hash and callbacks still update. Default: true.',
-    xstyle: 'StyleX styles for layout. Must be stylex.create() value.',
-  },
   components: [
     {
       name: 'Outline',
@@ -550,17 +530,18 @@ export const docsDense = {
         onActiveIdChange:
           'Called when active id changes from scroll-spy or click.',
         label: "Accessible nav label. Default: 'Table of contents'.",
-        density: "Density variant: 'default' | 'compact'. Default: 'default'.",
+        density:
+          "Density variant: 'default' (standard) or 'compact'. Default: 'default'.",
         onNavigateStart:
           'Called with the id when navigation begins, before the scroll.',
         onNavigateEnd:
           'Called with the id once the scroll settles. Fires exactly once per onNavigateStart, including on user interruption.',
         offset:
-          'Height in px of a fixed header overlaying the scroll root. Shifts both the activation line and the scroll landing. Composes with scroll-margin-top. Default: 0.',
+          'Height in px of a fixed header overlaying the scroll root. Shifts BOTH the activation line and the scroll landing, so a heading activates where navigating to it lands it. Composes with (does not replace) each heading scroll-margin-top. Default: 0.',
         scrollContainerRef:
-          'RefObject of the scroll container to track, instead of the nearest scrollable ancestor.',
+          'RefObject of the scroll container to track, instead of the nearest scrollable ancestor. For split panes, modals, panels.',
         hasScrollOnClick:
-          'Whether activating an item smooth-scrolls to it. Default: true.',
+          'Whether activating an item smooth-scrolls to it. false = you own scrolling; active id, hash and callbacks still update. Default: true.',
         xstyle: 'StyleX styles for layout. Must be stylex.create() value.',
       },
     },

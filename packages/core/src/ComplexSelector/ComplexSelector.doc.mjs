@@ -386,39 +386,46 @@ export const docsDense = {
       },
     ],
   },
-  propDescriptions: {
-    label: 'Accessible field label.',
-    value: 'Controlled value.',
-    onChange: 'Commit value.',
-    changeAction: 'Async action after onChange; drives optimistic value/busy.',
-    disabledMessage:
-      'why disabled; w/ isDisabled shows tooltip on hover/focus and describes the trigger; use instead of Tooltip wrapper',
-    children: 'Render custom dialog content from (value,onChange,close,state).',
-    triggerLabel: 'Closed trigger label/content.',
-    variant:
-      'input for forms; secondary beside secondary buttons; ghost beside ghost buttons.',
-    startIcon: 'Leading trigger icon.',
-    placement: 'Popup placement.',
-    alignment: 'Popup alignment.',
-    renderTrigger:
-      'Caller-rendered opener replacing the field+button; spread the given props; popup anchored to it, labelled by label.',
-    handleRef: 'Imperative open/close/toggle handle.',
-    onOpenChange: 'Notified on every open and close, whatever caused it.',
-    onClick:
-      'Trigger click; runs before opening, preventDefault() keeps the popup closed.',
-    onKeyDown:
-      'Trigger keys; runs after built-in handling, sees the opening ArrowDown.',
-    containerXstyle:
-      'StyleX styles for the field container; no effect in InputGroup or horizontal-labels FormLayout. No root xstyle/className/style.',
-    containerClassName: 'Class name for the field container.',
-    containerStyle: 'Inline styles for the field container.',
-    controlXstyle:
-      'StyleX styles for the visual control box (border, background, icons); not the trigger button.',
-    controlClassName: 'Class name for the visual control box.',
-    controlStyle: 'Inline styles for the visual control box.',
-    statusVariant:
-      'How status message is placed: attached overlaps below input (detached for secondary and ghost); detached floats below w/ spacing; tooltip shows on status icon.',
-    accessibility:
-      'Custom content must provide its own accessible structure. Use focus hooks and evaluate against WCAG 2.2.',
-  },
+  components: [
+    {
+      name: 'ComplexSelector',
+      description:
+        'Input or toolbar trigger and dialog-popover shell for custom selector content.',
+      propDescriptions: {
+        label: 'Accessible field label.',
+        value: 'Controlled value.',
+        onChange: 'Commit value.',
+        changeAction:
+          'Async action after onChange; drives optimistic value/busy.',
+        disabledMessage:
+          'why disabled; w/ isDisabled shows tooltip on hover/focus and describes the trigger; use instead of Tooltip wrapper',
+        children:
+          'Render custom dialog content from (value,onChange,close,state).',
+        triggerLabel: 'Closed trigger label/content.',
+        variant:
+          'input for forms; secondary beside secondary buttons; ghost beside ghost buttons.',
+        startIcon: 'Leading trigger icon.',
+        placement: 'Popup placement.',
+        alignment: 'Popup alignment.',
+        renderTrigger:
+          'Caller-rendered opener replacing the field+button; spread the given props; popup anchored to it, labelled by label.',
+        handleRef: 'Imperative open/close/toggle handle.',
+        onOpenChange: 'Notified on every open and close, whatever caused it.',
+        onClick:
+          'Trigger click; runs before opening, preventDefault() keeps the popup closed.',
+        onKeyDown:
+          'Trigger keys; runs after built-in handling, sees the opening ArrowDown.',
+        containerXstyle:
+          'StyleX styles for the field container; no effect in InputGroup or horizontal-labels FormLayout. No root xstyle/className/style.',
+        containerClassName: 'Class name for the field container.',
+        containerStyle: 'Inline styles for the field container.',
+        controlXstyle:
+          'StyleX styles for the visual control box (border, background, icons); not the trigger button.',
+        controlClassName: 'Class name for the visual control box.',
+        controlStyle: 'Inline styles for the visual control box.',
+        statusVariant:
+          'How status message is placed: attached overlaps below input (detached for secondary and ghost); detached floats below w/ spacing; tooltip shows on status icon.',
+      },
+    },
+  ],
 };
