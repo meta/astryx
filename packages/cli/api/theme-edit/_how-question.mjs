@@ -5502,10 +5502,65 @@ export function draftAnswer(ctx, env, question) {
       !/\b(?:inside|within|on|in(?! (?:dark|light)\b))\s+(?:the\s+|a\s+|an\s+|my\s+)?([a-z][a-z -]*)$/.test(
         inPlaceText,
       );
-    const place =
-      /\b(?:inside|within|on|of|in(?! (?:dark|light)\b))\s+(?:the\s+|a\s+|an\s+|my\s+)?([a-z][a-z -]*)$/.exec(
-        inPlaceText,
+    // (The last place said: "the text in the hovered menu item of the
+    // dropdown" is in the dropdown.)
+    const place = (() => {
+      const re =
+        /\b(?:inside|within|on|of|in(?! (?:dark|light)\b))\s+(?:the\s+|a\s+|an\s+|my\s+)?([a-z][a-z -]*)$/;
+      let m = re.exec(inPlaceText);
+      let off = 0;
+      while (m) {
+        const from = off + m.index + 1;
+        const next = re.exec(inPlaceText.slice(from));
+        if (!next) break;
+        off = from;
+        m = next;
+      }
+      if (m) m.index += off;
+      return m;
+    })();
+    // An element of the place said by the rest of a catalog name after the
+    // place's own ("the selected option row in the selector":
+    // selector-option-row; "the hovered option": selector-option), whatever
+    // other part its words seem to name (a table's rows). When the one it
+    // names lacks the state said, the one element of the place named that
+    // way that takes it.
+    if (place) {
+      const at0 = c.text.indexOf(place[0]);
+      const before = c.text.slice(0, at0);
+      const holders = c.parts.filter(x =>
+        lex.parts.some(
+          ([re, y]) => y.on === x.on && (re.exec(c.text)?.index ?? -1) >= at0,
+        ),
       );
+      const holder = holders.length === 1 ? holders[0].on : null;
+      if (holder && !FAMILIES[holder]) {
+        const cands = [...ctx.project.target.keys()]
+          .filter(k => k.startsWith(`${holder}-`))
+          .map(k => ({k, rest: k.slice(holder.length + 1).split('-')}));
+        const said = cands
+          .filter(x =>
+            new RegExp(`\\b${x.rest.join('[\\s-]+')}s?\\b`).test(before),
+          )
+          .sort((a, b) => b.rest.length - a.rest.length);
+        let pick = said[0]?.k ?? null;
+        const takes = (/** @type {string} */ k) =>
+          !c.state ||
+          settableStates(ctx, env.slug, env.data, k).includes(c.state);
+        if (pick && !takes(pick)) {
+          const word = said[0].rest.at(-1);
+          const taking = cands.filter(
+            x => x.rest.includes(/** @type {string} */ (word)) && takes(x.k),
+          );
+          if (taking.length === 1) pick = taking[0].k;
+        }
+        if (pick) {
+          c.parts = [{on: pick}];
+          c.container = holder;
+          continue;
+        }
+      }
+    }
     if (!place || c.parts.length < 2) continue;
     const at = c.text.indexOf(place[0]);
     const inPlace = c.parts.filter(x =>
@@ -5523,11 +5578,11 @@ export function draftAnswer(ctx, env, question) {
     )
       continue;
     if (ofOnly) {
-      // (Only the element reading below takes "of".)
+      // (Only an element of the place in a state takes "of": "the hovered
+      // menu item of the dropdown". "Twice the padding of buttons"
+      // compares with them.)
       const holder0 = inPlace.length === 1 ? inPlace[0].on : null;
-      const rest0 = c.parts.filter(x => !inPlace.includes(x));
-      if (!holder0 || !c.state || !rest0.every(x => /^(page|body)$/.test(x.on)))
-        continue;
+      if (!holder0 || !c.state) continue;
     }
     c.parts = c.parts.filter(x => !inPlace.includes(x));
     if (inPlace.length === 1) {
