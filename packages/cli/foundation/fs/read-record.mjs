@@ -46,23 +46,28 @@ function note(runs, file, probed = file, kind = 'read') {
   let probedState;
   for (const seen of runs) {
     if (exactRuns.has(seen)) {
-      if (!seen.has(probed)) {
+      const had = seen.get(probed);
+      if (had === undefined) {
         seen.set(probed, (probedState ??= exactState(probed, kind, seen)));
-      } else if (kind !== 'presence') {
+      } else if (weak(had) && mayTake(had, GIVES[kind])) {
         // A path first only checked for, or only resolved, or a folder first
         // only probed, now resolved, statted, read or listed: what the later
         // call returned counts, so it is checked by that from here on.
         keepState(
           seen,
           probed,
-          () => (probedState ??= exactState(probed, kind, seen)),
-          GIVES[kind],
+          (probedState ??= exactState(probed, kind, seen)),
         );
       }
     } else {
-      // A state another record handed in, such as a kept entry's `present`,
-      // gives way to what this read returned.
-      keepState(seen, file, () => (state ??= stateOf(file)), 'stamp');
+      const had = seen.get(file);
+      if (had === undefined) {
+        seen.set(file, (state ??= stateOf(file)));
+      } else if (weak(had)) {
+        // A state another record handed in, such as a kept entry's `present`,
+        // gives way to what this read returned.
+        keepState(seen, file, (state ??= stateOf(file)));
+      }
     }
   }
 }
@@ -83,39 +88,58 @@ function note(runs, file, probed = file, kind = 'read') {
  */
 function exactState(file, kind, seen) {
   switch (kind) {
-    case 'read':
-      return stateOf(file);
+    case 'read': {
+      const looked = lookedUpOf(seen).get(file);
+      return looked ? stampOf(looked) : stateOf(file);
+    }
     case 'presence':
       return presenceState(file);
     case 'realpath': {
-      const real = realPathState(file, foldersOf(seen));
+      const run = viewOf(seen);
+      const real = realPathState(file, run.folders, run.looked);
       return real === '-' ? '-' : `${RESOLVED}${real}`;
     }
-    default:
-      return probeStamp(file);
+    default: {
+      const looked = lookedUpOf(seen).get(file);
+      if (!looked) return probeStamp(file);
+      return looked.isDirectory() ? `dir:${looked.ino}` : stampOf(looked);
+    }
   }
 }
 
 /**
- * The folders each exact run has resolved while it recorded real-path
- * lookups, by the run's record: a run resolves each folder once, however
- * many paths under it it looks up. A check resolves afresh (stillInState).
- * @type {WeakMap<Map<string, string>, Map<string, string>>}
+ * What each exact run has seen while it recorded real-path lookups, by the
+ * run's record: the folders it resolved, each once however many paths under
+ * it it looks up, and the stat it took of each path (lookedUpOf). A check
+ * sees the filesystem afresh (stillInState).
+ * @type {WeakMap<Map<string, string>, {folders: Map<string, string>, looked: Map<string, import('node:fs').Stats>}>}
  */
 const resolvedInRun = new WeakMap();
 
 /**
- * The folders the run recording into `seen` has resolved (resolvedInRun).
+ * What the run recording into `seen` has seen (resolvedInRun).
  * @param {Map<string, string>} seen
- * @returns {Map<string, string>}
+ * @returns {{folders: Map<string, string>, looked: Map<string, import('node:fs').Stats>}}
  */
-function foldersOf(seen) {
-  let folders = resolvedInRun.get(seen);
-  if (!folders) {
-    folders = new Map();
-    resolvedInRun.set(seen, folders);
+function viewOf(seen) {
+  let view = resolvedInRun.get(seen);
+  if (!view) {
+    view = {folders: new Map(), looked: new Map()};
+    resolvedInRun.set(seen, view);
   }
-  return folders;
+  return view;
+}
+
+/**
+ * The stat of each path, no link, that the run recording into `seen` took
+ * when it looked up where the path resolves: a later read or stat of the
+ * path in the run records the stamp from it, the stamp the path had when the
+ * run first touched it, as a lookup that took the whole stamp recorded.
+ * @param {Map<string, string>} seen
+ * @returns {Map<string, import('node:fs').Stats>}
+ */
+function lookedUpOf(seen) {
+  return viewOf(seen).looked;
 }
 
 /**
@@ -164,7 +188,7 @@ export const RESOLVED = 'real:';
 const GIVES = {
   read: 'stamp',
   stat: 'probe',
-  presence: 'probe',
+  presence: 'presence',
   realpath: 'resolved',
 };
 
@@ -260,6 +284,15 @@ export function fileStamp(file) {
 const stateOf = fileStamp;
 
 /**
+ * A stat's stamp ({@link fileStamp}).
+ * @param {import('node:fs').Stats} stat
+ * @returns {string}
+ */
+function stampOf({size, mtimeMs, ctimeMs, ino}) {
+  return `${size}:${mtimeMs}:${ctimeMs}:${ino}`;
+}
+
+/**
  * A probed path's state for an exact run: a folder's identity alone (a probe
  * reads whether it is there and what it is, not what it holds, and its time
  * changes whenever an entry in it changes), a file's full stamp, or absent.
@@ -309,9 +342,11 @@ function presenceState(file) {
  * @param {Map<string, string> | null} [folders] - Folders already resolved,
  *   by path: by this check, or by the run that records the lookup; never
  *   shared beyond one check or one run.
+ * @param {Map<string, import('node:fs').Stats> | null} [looked] - Where the
+ *   run that records the lookup keeps the path's stat (lookedUpOf).
  * @returns {string}
  */
-function realPathState(file, folders = null) {
+function realPathState(file, folders = null, looked = null) {
   /** @type {import('node:fs').Stats | undefined} */
   let stat;
   try {
@@ -326,6 +361,7 @@ function realPathState(file, folders = null) {
   if (stat.isSymbolicLink() || parent === file || file.endsWith(path.sep)) {
     return resolvedPath(file);
   }
+  looked?.set(file, stat);
   let real = folders?.get(parent);
   if (real === undefined) {
     real = resolvedPath(parent);
@@ -441,6 +477,7 @@ export function recordStates(states) {
  */
 export function keepState(seen, file, state, gives = 'probe') {
   const had = seen.get(file);
+  if (had !== undefined && !weak(had)) return;
   if (typeof state === 'function') {
     if (had !== undefined && !mayTake(had, gives)) return;
     state = state();
@@ -451,9 +488,22 @@ export function keepState(seen, file, state, gives = 'probe') {
 /**
  * The kind of state a call gives, which says what it may replace: a full
  * stamp (a read or a listing), a stamp or a folder's probe state (a stat),
- * or where a path resolves (a real-path lookup).
- * @typedef {'stamp' | 'probe' | 'resolved'} StateKind
+ * where a path resolves (a real-path lookup), or whether it is there (an
+ * existence check, which replaces nothing).
+ * @typedef {'stamp' | 'probe' | 'resolved' | 'presence'} StateKind
  */
+
+/**
+ * Whether a later call's state may replace `had`: present, where a path
+ * resolves, or a folder's probe state, each starting with a letter. A stamp
+ * starts with a digit and absent is `-`: they are kept. Every record checks
+ * this on each call it sees, so it reads one character.
+ * @param {string} had
+ * @returns {boolean}
+ */
+function weak(had) {
+  return had.charCodeAt(0) > 57;
+}
 
 /**
  * Whether a state of kind `gives` could replace `had` (keepState): what a
@@ -463,6 +513,7 @@ export function keepState(seen, file, state, gives = 'probe') {
  * @returns {boolean}
  */
 function mayTake(had, gives) {
+  if (gives === 'presence') return false;
   if (had === PRESENT) return true;
   if (had.startsWith(RESOLVED)) return gives !== 'resolved';
   return gives === 'stamp' && had.startsWith('dir:');

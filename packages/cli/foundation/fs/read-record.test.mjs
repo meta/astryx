@@ -349,6 +349,44 @@ describe('an exact run', () => {
     expect(unchangedSince(seen)).toBe(true);
   });
 
+  it('records a path it looked up and then read with the stat the lookup took', async () => {
+    const {file} = scratch();
+    const nodeFs = createRequire(import.meta.url)('node:fs');
+    const {lstatSync, statSync} = nodeFs;
+    /** @type {Record<string, number>} */
+    const calls = {lstat: 0, stat: 0};
+    nodeFs.lstatSync = (/** @type {any[]} */ ...args) => {
+      if (args[0] === file) calls.lstat += 1;
+      return lstatSync(...args);
+    };
+    nodeFs.statSync = (/** @type {any[]} */ ...args) => {
+      if (args[0] === file) calls.stat += 1;
+      return statSync(...args);
+    };
+    vi.resetModules();
+    try {
+      const fresh = await import('./read-record.mjs');
+      /** @type {Map<string, string>} */
+      const seen = new Map();
+      fresh.recordReads(
+        seen,
+        () => {
+          fs.realpathSync(file);
+          fs.readFileSync(file, 'utf8');
+        },
+        {exact: true},
+      );
+      expect(calls).toEqual({lstat: 1, stat: 0});
+      const {size, ino} = statSync(file);
+      expect(seen.get(file)?.startsWith(`${size}:`)).toBe(true);
+      expect(seen.get(file)?.endsWith(`:${ino}`)).toBe(true);
+    } finally {
+      nodeFs.lstatSync = lstatSync;
+      nodeFs.statSync = statSync;
+      vi.resetModules();
+    }
+  });
+
   it('checks a path both looked up and read by both', () => {
     const {file} = scratch();
     const seen = exact(() => {
