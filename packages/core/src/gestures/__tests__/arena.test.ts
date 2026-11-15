@@ -515,12 +515,14 @@ describe('arena: a timer that fires late', () => {
     expect(log.some(entry => entry.startsWith('press:began'))).toBe(false);
   });
 
-  it('still fires on its deadline when nothing was queued', () => {
+  it('still fires on its deadline when nothing was queued, once the wait for queued input ends', () => {
     const {clock, arena, log} = pressArena();
     clock.runTask(800);
     clock.runTask(800);
+    expect(log.some(entry => entry.startsWith('press:began'))).toBe(false);
+    clock.runTask(850);
     expect(log).toContain('press:began@500');
-    arena.ended([{id: 1, x: 0, y: 0, time: 820}]);
+    arena.ended([{id: 1, x: 0, y: 0, time: 870}]);
   });
 });
 
