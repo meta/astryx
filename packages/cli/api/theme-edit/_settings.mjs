@@ -2430,32 +2430,56 @@ function reexportTarget(st, dir) {
 }
 
 /**
- * Add the names a declaration destructures from an object (`const {toks} =
- * all`) to a file's bindings, each as the property read it is
- * (`all.toks`), so a value given by such a name is read where it is
- * written.
+ * Add the names a declaration destructures (`const {toks} = all`, `const
+ * {a: {b}} = all`, `const [first] = list`) to a file's bindings, each as the
+ * member read it is (`all.toks`, `all.a.b`, `list[0]`), so a value given by
+ * such a name is read where it is written.
  * @param {any} declarator
  * @param {Map<string, any>} into
  */
 function addDestructuredReads(declarator, into) {
-  if (declarator?.id?.type !== 'ObjectPattern' || !declarator.init) return;
-  for (const p of declarator.id.properties) {
-    if (p.type !== 'ObjectProperty' || p.computed) continue;
-    const key =
-      p.key?.type === 'Identifier'
-        ? p.key.name
-        : p.key?.type === 'StringLiteral'
-          ? p.key.value
-          : null;
-    if (key && p.value?.type === 'Identifier')
-      into.set(p.value.name, {
-        type: 'MemberExpression',
-        computed: false,
-        object: declarator.init,
-        property: {type: 'Identifier', name: key},
-        loc: p.loc,
-      });
-  }
+  if (!declarator?.init) return;
+  /** @param {any} pattern @param {any} value the expression the pattern reads */
+  const bind = (pattern, value) => {
+    if (pattern?.type === 'AssignmentPattern') pattern = pattern.left;
+    if (pattern?.type === 'Identifier') {
+      into.set(pattern.name, value);
+      return;
+    }
+    if (pattern?.type === 'ObjectPattern')
+      for (const p of pattern.properties) {
+        if (p.type !== 'ObjectProperty' || p.computed) continue;
+        const key =
+          p.key?.type === 'Identifier'
+            ? p.key.name
+            : p.key?.type === 'StringLiteral'
+              ? p.key.value
+              : null;
+        if (key)
+          bind(p.value, {
+            type: 'MemberExpression',
+            computed: false,
+            object: value,
+            property: {type: 'Identifier', name: key},
+            loc: p.loc,
+          });
+      }
+    else if (pattern?.type === 'ArrayPattern')
+      pattern.elements.forEach(
+        (/** @type {any} */ e, /** @type {number} */ i) => {
+          if (e && e.type !== 'RestElement')
+            bind(e, {
+              type: 'MemberExpression',
+              computed: true,
+              object: value,
+              property: {type: 'NumericLiteral', value: i},
+              loc: e.loc,
+            });
+        },
+      );
+  };
+  if (declarator.id?.type !== 'Identifier')
+    bind(declarator.id, declarator.init);
 }
 
 /**
@@ -2523,22 +2547,29 @@ function exportedValue(file, name, hops = 0) {
       return unwrap(local.get(n.name), k + 1);
     // A property of a block the file binds (`export const toks = base.toks`).
     if (
-      (n.type === 'MemberExpression' ||
-        n.type === 'OptionalMemberExpression') &&
-      !n.computed
+      n.type === 'MemberExpression' ||
+      n.type === 'OptionalMemberExpression'
     ) {
-      const key = n.property?.name ?? n.property?.value;
+      const key = n.computed
+        ? ['NumericLiteral', 'StringLiteral'].includes(n.property?.type)
+          ? String(n.property.value)
+          : null
+        : (n.property?.name ?? n.property?.value);
       const base = unwrap(n.object, k + 1);
-      const prop =
-        base?.type === 'ObjectExpression'
-          ? base.properties.findLast(
-              (/** @type {any} */ p) =>
-                p.type === 'ObjectProperty' &&
-                !p.computed &&
-                (p.key?.name ?? p.key?.value) === key,
-            )
-          : null;
-      if (prop) return unwrap(prop.value, k + 1);
+      const value =
+        key == null
+          ? undefined
+          : base?.type === 'ObjectExpression'
+            ? base.properties.findLast(
+                (/** @type {any} */ p) =>
+                  p.type === 'ObjectProperty' &&
+                  !p.computed &&
+                  String(p.key?.name ?? p.key?.value) === key,
+              )?.value
+            : base?.type === 'ArrayExpression' && /^\d+$/.test(key)
+              ? base.elements[Number(key)]
+              : undefined;
+      if (value) return unwrap(value, k + 1);
     }
     return n;
   };

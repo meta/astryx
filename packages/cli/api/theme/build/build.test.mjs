@@ -393,7 +393,7 @@ describe('themeBuild() — dropped declarations reach the receipt', () => {
     // A null value keeps its meaning; the build names where it is.
     expect(result?.data.warnings).toEqual([
       expect.stringMatching(
-        /^tokens\.--color-background-body \(line 3\): --color-background-body holds null, which the build writes as it is/,
+        /^tokens\.--color-background-body \(line 3\): --color-background-body holds null; null leaves it unset: the build writes it as it is/,
       ),
       expect.stringMatching(
         /^onDark\.tokens\.--color-background-body \(line 4\): /,

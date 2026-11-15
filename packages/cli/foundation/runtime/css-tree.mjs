@@ -4,8 +4,9 @@
  * @file css-tree and the MDN property data it ships, for the CLI's CSS
  *   checks: resolved when this module loads, each loaded on first use.
  * @input Nothing; css-tree is resolved once, here.
- * @output `cssTree`, the css-tree module, and `mdnCssProperties`, the MDN
- *   property data at the version css-tree pins.
+ * @output `cssTree`, the css-tree module, and `mdnCssProperties` and
+ *   `mdnCssSelectors`, the MDN property and selector data at the version
+ *   css-tree pins.
  * @position The one loader of css-tree, for the theme editor's CSS
  *   knowledge and the theme build's style-key checks. The entry is resolved
  *   before any command stats a file: after a stat of a named pipe, Node's
@@ -35,3 +36,14 @@ export const cssTree = () => (tree ??= require(CSS_TREE));
  */
 export const mdnCssProperties = () =>
   (mdn ??= fromCssTree('mdn-data/css/properties.json'));
+
+/** @type {Record<string, {syntax?: string}> | null} */
+let selectors = null;
+
+/**
+ * The MDN selector data css-tree ships (pseudo-classes and pseudo-elements
+ * by name, `::before`, `::part()`), loaded once.
+ * @returns {Record<string, {syntax?: string}>}
+ */
+export const mdnCssSelectors = () =>
+  (selectors ??= fromCssTree('mdn-data/css/selectors.json'));

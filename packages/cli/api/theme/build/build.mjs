@@ -2770,6 +2770,70 @@ function resolveThemeModule(specifier, fromFile) {
 }
 
 /**
+ * The sources of the themes a theme source extends, nearest first: the
+ * module each `extends: name` imports `name` from, when it is a relative
+ * import, then the one that module extends, a few hops at most. Empty when
+ * the source extends nothing it imports.
+ * @param {string} filePath
+ * @param {string} source
+ * @returns {Array<{file: string, source: string}>}
+ */
+function extendedThemeSources(filePath, source) {
+  /** @type {Array<{file: string, source: string}>} */
+  const chain = [];
+  let file = filePath;
+  let text = source;
+  for (let hop = 0; hop < 4; hop++) {
+    /** @type {any} */
+    let ast;
+    try {
+      ast = parse(text, {
+        sourceType: 'unambiguous',
+        plugins: ['typescript', 'jsx'],
+      });
+    } catch {
+      return chain;
+    }
+    /** @type {string | null} */
+    let base = null;
+    /** @param {any} node */
+    const find = node => {
+      if (base || !node || typeof node !== 'object') return;
+      if (
+        node.type === 'ObjectProperty' &&
+        !node.computed &&
+        (node.key?.name ?? node.key?.value) === 'extends' &&
+        node.value?.type === 'Identifier'
+      ) {
+        base = node.value.name;
+        return;
+      }
+      for (const [k, v] of Object.entries(node)) {
+        if (k === 'loc') continue;
+        if (Array.isArray(v)) v.forEach(find);
+        else if (v && typeof v === 'object' && v.type) find(v);
+      }
+    };
+    find(ast.program);
+    const from = ast.program.body.find(
+      (/** @type {any} */ st) =>
+        st.type === 'ImportDeclaration' &&
+        String(st.source?.value ?? '').startsWith('.') &&
+        st.specifiers.some((/** @type {any} */ x) => x.local?.name === base),
+    );
+    if (!from) return chain;
+    try {
+      file = resolveThemeModule(String(from.source.value), file);
+      text = fs.readFileSync(file, 'utf8');
+    } catch {
+      return chain;
+    }
+    chain.push({file, source: text});
+  }
+  return chain;
+}
+
+/**
  * Errors that mean "the synchronous loader cannot evaluate this module", as
  * opposed to "this module is broken". Only the former may fall back to the
  * async path: a genuine author error (a throw, a missing import, a real syntax
@@ -4752,6 +4816,9 @@ async function themeBuildInternal(
   // is that theme's: it is named as inherited, and a family leaves it to
   // that theme's own member, which names its file and line.
   const parentTheme = themeDef.extends ?? interception?.parentOf(themeDef);
+  // The files of the themes this source extends, to name the file and line
+  // that write a value this file does not.
+  const extendedSources = extendedThemeSources(filePath, themeSource);
   /** @param {any} value @param {string[]} keys */
   const valueAt = (value, keys) =>
     keys.reduce(
@@ -4762,23 +4829,33 @@ async function themeBuildInternal(
   /**
    * @template {{path: string[]}} T
    * @param {T[]} items
-   * @returns {Array<T & {line: number | null, inherited: boolean, elsewhere: boolean}>}
+   * @returns {Array<T & {line: number | null, inherited: boolean, elsewhere: boolean, from: {file: string, line: number} | null}>}
    */
   const placed = items =>
     items.flatMap(item => {
       const line = keyPathLine(themeSource, item.path);
+      /** @type {{file: string, line: number} | null} */
+      let from = null;
+      if (line == null)
+        for (const base of extendedSources) {
+          const at = keyPathLine(base.source, item.path);
+          if (at == null) continue;
+          from = {file: path.relative(cwd, base.file) || base.file, line: at};
+          break;
+        }
       const inherited =
         line == null &&
-        parentTheme != null &&
-        valueAt(parentTheme, item.path) !== undefined;
+        (from != null ||
+          (parentTheme != null &&
+            valueAt(parentTheme, item.path) !== undefined));
       return inherited && handOff.prepareFamily
         ? []
-        : [{...item, line, inherited, elsewhere: line == null}];
+        : [{...item, line, inherited, elsewhere: line == null, from}];
     });
   const nulls = placed(nullThemeValues(themeDef));
-  /** @param {{path: string[], why: string, line: number | null, inherited?: boolean, elsewhere?: boolean}} n */
+  /** @param {{path: string[], why: string, line: number | null, inherited?: boolean, elsewhere?: boolean, from?: {file: string, line: number} | null}} n */
   const nullLine = n =>
-    `${n.path.join('.')}${n.line != null ? ` (line ${n.line})` : n.inherited ? ' (from the theme it extends)' : n.elsewhere ? ' (not written in this file as it is: from the theme it extends or a module it imports)' : ''}: ${n.why}`;
+    `${n.path.join('.')}${n.line != null ? ` (line ${n.line})` : n.from ? ` (in ${n.from.file}, line ${n.from.line}, the theme it extends)` : n.inherited ? ' (from the theme it extends)' : n.elsewhere ? ' (not written in this file as it is: from the theme it extends or a module it imports)' : ''}: ${n.why}`;
   const unbuildable = nulls.filter(n => n.unbuildable);
   if (unbuildable.length > 0) {
     const first = unbuildable.find(n => n.line != null);

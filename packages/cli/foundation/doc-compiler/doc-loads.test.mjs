@@ -514,8 +514,12 @@ const RUNNERS = {
     sites: ['child_process.spawn'],
   },
   'foundation/runtime/css-tree.mjs': {
-    runs: 'css-tree and the MDN property data it ships (CommonJS), each on first use, from the entry resolved when the module loads',
-    sites: ['require(<computed>)', 'require(mdn-data/css/properties.json)'],
+    runs: 'css-tree and the MDN property and selector data it ships (CommonJS), each on first use, from the entry resolved when the module loads',
+    sites: [
+      'require(<computed>)',
+      'require(mdn-data/css/properties.json)',
+      'require(mdn-data/css/selectors.json)',
+    ],
   },
   'foundation/runtime/lazy-dependencies.mjs': {
     runs: 'Babel, jscodeshift and postcss-selector-parser (CommonJS), each on first use rather than when a module that may use it is imported',

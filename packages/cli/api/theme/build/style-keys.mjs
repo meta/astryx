@@ -18,7 +18,11 @@
  *           the same keys with the same reasons.
  */
 
-import {cssTree} from '../../../foundation/runtime/css-tree.mjs';
+import {
+  cssTree,
+  mdnCssSelectors,
+} from '../../../foundation/runtime/css-tree.mjs';
+import {levenshteinDistance} from '../../../foundation/text/levenshtein.mjs';
 
 /** @param {unknown} value @returns {value is Record<string, any>} */
 const isBlock = value =>
@@ -134,8 +138,50 @@ const AFTER_PSEUDO_ELEMENT = {
   'target-text': {classes: ['window-inactive'], elements: false},
   'spelling-error': {classes: ['window-inactive'], elements: false},
   'grammar-error': {classes: ['window-inactive'], elements: false},
+  'search-text': {classes: ['current', 'window-inactive'], elements: false},
   'scroll-marker': {classes: ['target-current'], elements: false},
+  'scroll-marker-group': {classes: true, elements: false},
 };
+
+/**
+ * What may follow a functional pseudo-element, by name: a custom highlight
+ * (`::highlight(x)`) takes :window-inactive, as the other highlights do. Any
+ * other functional one (`::part()`, `::slotted()`) is left to the browser.
+ * @type {Record<string, {classes: true | string[], elements: boolean}>}
+ */
+const AFTER_FUNCTIONAL_PSEUDO_ELEMENT = {
+  highlight: {classes: ['window-inactive'], elements: false},
+};
+
+/** @type {Set<string> | null} */
+let knownElements = null;
+/**
+ * The pseudo-element names browsers know, lower case: MDN's selector data,
+ * and the ones this file's tables name (browsers ship some before the data
+ * lists them).
+ */
+const knownPseudoElements = () =>
+  (knownElements ??= new Set([
+    ...Object.keys(mdnCssSelectors())
+      .filter(k => k.startsWith('::'))
+      .map(k => k.slice(2).replace(/\(\)$/, '')),
+    ...Object.keys(AFTER_PSEUDO_ELEMENT),
+    ...Object.keys(AFTER_FUNCTIONAL_PSEUDO_ELEMENT),
+  ]));
+
+/**
+ * The known pseudo-element one or two edits from a name, or null.
+ * @param {string} name
+ */
+const nearPseudoElement = name =>
+  [...knownPseudoElements()].find(
+    known =>
+      levenshteinDistance(known, name.toLowerCase(), 2, {swaps: true}) <=
+      (name.length > 5 ? 2 : 1),
+  ) ?? null;
+
+/** The pseudo-classes whose argument is a selector list. */
+const SELECTOR_LIST_PSEUDO_CLASSES = ['is', 'where', 'not', 'has'];
 
 /**
  * What may follow a pseudo-element node.
@@ -143,12 +189,17 @@ const AFTER_PSEUDO_ELEMENT = {
  * @returns {{classes: true | string[], elements: boolean}}
  */
 const afterPseudoElement = element =>
-  element.name.startsWith('-') || element.children
+  element.name.startsWith('-')
     ? {classes: true, elements: true}
-    : (AFTER_PSEUDO_ELEMENT[element.name.toLowerCase()] ?? {
-        classes: [],
-        elements: false,
-      });
+    : element.children
+      ? (AFTER_FUNCTIONAL_PSEUDO_ELEMENT[element.name.toLowerCase()] ?? {
+          classes: true,
+          elements: true,
+        })
+      : (AFTER_PSEUDO_ELEMENT[element.name.toLowerCase()] ?? {
+          classes: [],
+          elements: false,
+        });
 
 /**
  * The pseudo-classes Core reads by name, as written: it adds its disabled
@@ -179,7 +230,14 @@ function compoundProblem(key, ast) {
     )
       return;
     const colons = node.type === 'PseudoElementSelector' ? '::' : ':';
-    if (node.name.includes('\\'))
+    if (
+      node.type === 'PseudoElementSelector' &&
+      !node.name.startsWith('-') &&
+      !node.name.includes('\\') &&
+      !knownPseudoElements().has(node.name.toLowerCase())
+    )
+      why ??= `${key} names ::${node.name}, a pseudo-element no browser knows, so the browser drops the rule${nearPseudoElement(node.name) ? `; did you mean ::${nearPseudoElement(node.name)}?` : ''}`;
+    else if (node.name.includes('\\'))
       why ??= `${key} escapes a character in ${colons}${node.name}, so the browser reads a pseudo name "${node.name.replace(/\\(.)/g, '$1')}" it does not know and drops the rule`;
     else if (
       node.type === 'PseudoClassSelector' &&
@@ -187,6 +245,23 @@ function compoundProblem(key, ast) {
       CORE_READ_PSEUDO_CLASSES.includes(node.name.toLowerCase())
     )
       capitals.push(node);
+  });
+  if (why) return why;
+  // A pseudo-element in a selector-list argument (`:is(::before)`) matches
+  // no element: :is() and :where() then match nothing, and the browser drops
+  // a rule with one in :not() or :has().
+  t.walk(ast, (/** @type {any} */ node) => {
+    if (
+      why ||
+      node.type !== 'PseudoClassSelector' ||
+      !SELECTOR_LIST_PSEUDO_CLASSES.includes(node.name.toLowerCase()) ||
+      !node.children
+    )
+      return;
+    t.walk(node, (/** @type {any} */ inner) => {
+      if (!why && inner.type === 'PseudoElementSelector')
+        why = `${key} puts ${textOf(key, inner)} inside :${node.name}(), and a pseudo-element matches no element there, so the rule never applies${['is', 'where'].includes(node.name.toLowerCase()) ? '' : ' (the browser drops it)'}: write the pseudo-element on its own, after the part`;
+    });
   });
   if (why) return why;
   t.walk(ast, {

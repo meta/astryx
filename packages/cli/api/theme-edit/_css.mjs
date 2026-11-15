@@ -74,6 +74,20 @@ export function cssProperties() {
   return names;
 }
 
+/** @type {ReadonlySet<string> | null} */
+let vendorNames = null;
+/**
+ * The vendor-prefixed property names css-tree's data lists
+ * (`-webkit-line-clamp`, `-moz-appearance`).
+ * @returns {ReadonlySet<string>}
+ */
+export function vendorProperties() {
+  vendorNames ??= new Set(
+    Object.keys(csstree().lexer.properties).filter(k => /^-[a-z]+-/.test(k)),
+  );
+  return vendorNames;
+}
+
 /**
  * The current specifications' grammar, as patches to css-tree's: the
  * ranges MDN's data leaves out (`line-height` takes `<number [0,∞]>`).

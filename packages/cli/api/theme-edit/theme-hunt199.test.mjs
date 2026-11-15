@@ -218,7 +218,7 @@ describe('a value the theme it extends gives', () => {
       const single = json(['theme', 'build', 'fam/ocean-calm.ts']);
       expect(single.status).toBe(0);
       expect(JSON.stringify(single.env.data.warnings)).toContain(
-        'tokens.--color-accent (not written in this file as it is',
+        'tokens.--color-accent (in fam/ocean.ts, line 2, the theme it extends)',
       );
       const family = json([
         'theme',

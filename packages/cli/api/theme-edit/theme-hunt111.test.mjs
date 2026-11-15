@@ -77,7 +77,7 @@ describe('the own-token check judges every value the source gives', () => {
     const nu = await compile('nu');
     expect(nu.status).toBe(0);
     expect(nu.stdout + nu.stderr).toContain(
-      '--radius-element holds null, which the build writes as it is',
+      '--radius-element holds null; null leaves it unset: the build writes it as it is',
     );
     await withOwn('bo', "  tokens: {'--radius-element': true as any},");
     await refusedEverywhere(
@@ -115,7 +115,7 @@ describe('the own-token check judges every value the source gives', () => {
     const pn = await compile('pn');
     expect(pn.status).toBe(0);
     expect(pn.stdout + pn.stderr).toContain(
-      '--radius-element holds null, which the build writes as it is',
+      '--radius-element holds null; null leaves it unset: the build writes it as it is',
     );
     await withOwn(
       'pr',

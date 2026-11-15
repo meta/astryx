@@ -11,7 +11,12 @@
 
 import {THEME_SLUG_RE} from '../../foundation/discovery/theme-discovery.mjs';
 import * as fs from 'node:fs';
-import {coversProperty, cssProperties, matchValue} from './_css.mjs';
+import {
+  coversProperty,
+  cssProperties,
+  matchValue,
+  vendorProperties,
+} from './_css.mjs';
 import * as path from 'node:path';
 import {AstryxError} from '../error.mjs';
 import {
@@ -157,6 +162,10 @@ import {
   spreadPrivateVarMessage,
 } from '../../foundation/config/theme-private-vars.mjs';
 import {innerBlock, partKeyProblem} from '../theme/build/style-keys.mjs';
+import {
+  customPropertyCycle,
+  cycleProblem,
+} from '../theme/build/written-values.mjs';
 import {colorProblem, hex, parseColor, ratio} from './_color.mjs';
 import {
   PALETTE_DIALS,
@@ -2923,8 +2932,8 @@ async function ownTokenProblems(ctx, slug, data) {
    * @returns {string | null}
    */
   const judge = (token, value, file, reads) => {
-    // A null token keeps its meaning: the build writes it as it is and
-    // warns at its line.
+    // A null token leaves it unset: the build writes it as it is and warns
+    // at its line.
     if (value === null) return null;
     const custom = !(token in known);
     if (Array.isArray(value)) {
@@ -3219,6 +3228,14 @@ async function ownTokenProblems(ctx, slug, data) {
       const why = judge(k, v, fileName(loc), here);
       if (why) refuse(at, k, why, asWritten(v));
     };
+    /** @type {Record<string, unknown>} */
+    const onElement = Object.fromEntries(
+      ['localTokens', 'tokens'].flatMap(map =>
+        block[map] && typeof block[map] === 'object'
+          ? Object.entries(block[map])
+          : [],
+      ),
+    );
     for (const map of ['tokens', 'localTokens']) {
       const m = block[map];
       if (!m || typeof m !== 'object') continue;
@@ -3245,6 +3262,27 @@ async function ownTokenProblems(ctx, slug, data) {
             : undefined;
         if (partVar) {
           refuseShadowed(at, k, v, partVar, "in the page's localTokens");
+          continue;
+        }
+        // Tokens and local tokens are set on one element: a cycle that
+        // passes through a local token leaves each of them no value (one
+        // through tokens alone is judged with the theme's tokens).
+        const cycle = customPropertyCycle(k, onElement);
+        if (
+          cycle &&
+          cycle.some(
+            n =>
+              block.localTokens &&
+              typeof block.localTokens === 'object' &&
+              n in block.localTokens,
+          )
+        ) {
+          refuse(
+            at,
+            k,
+            /** @type {string} */ (cycleProblem(k, onElement)),
+            asWritten(v),
+          );
           continue;
         }
         token(at, k, v, reads, map === 'tokens');
@@ -3296,11 +3334,40 @@ async function ownTokenProblems(ctx, slug, data) {
           );
           continue;
         }
+        // A pseudo-class or pseudo-element one typo from one browsers know
+        // (or a state the part takes), anywhere in the key's selector
+        // chain, inside :not() and :is() too: that one misspelled, a rule
+        // that never applies. A pseudo-element near none is judged with the
+        // other keys the build cannot write.
+        const typo = k.startsWith(':')
+          ? pseudoTypo(k, target?.states ?? [])
+          : null;
+        if (typo) {
+          refuse(
+            at,
+            k,
+            `${typo.written} is no ${typo.element ? 'pseudo-element' : 'pseudo-class'} a browser knows, so the build writes a selector that never matches; did you mean ${typo.fixed}?`,
+            '',
+            whereKey(at.join('.'), k),
+          );
+          continue;
+        }
         // A key the build cannot write as it is: a custom property whose
         // name it renames or CSS keeps, a pseudo key that is no single
         // selector or that the browser drops, a block where none nests, a
         // vendor property without its dash.
-        const unwritable = depth === 0 ? null : partKeyProblem(k, v, kind);
+        const unwritable =
+          depth === 0
+            ? null
+            : (partKeyProblem(k, v, kind) ??
+              (k.startsWith('--')
+                ? cycleProblem(
+                    k,
+                    Object.fromEntries(
+                      Object.entries(node).filter(([n]) => n.startsWith('--')),
+                    ),
+                  )
+                : null));
         if (unwritable) {
           const pseudo = k.startsWith(':');
           refuse(
@@ -3362,24 +3429,6 @@ async function ownTokenProblems(ctx, slug, data) {
           token(at, k, v, here, false);
           continue;
         }
-        // A pseudo-class or pseudo-element one typo from one browsers know
-        // (or a state the part takes), anywhere in the key's selector
-        // chain, inside :not() and :is() too: that one misspelled, a rule
-        // that never applies. A name near none of them is the author's own
-        // call.
-        const typo = k.startsWith(':')
-          ? pseudoTypo(k, target?.states ?? [])
-          : null;
-        if (typo) {
-          refuse(
-            at,
-            k,
-            `${typo.written} is no ${typo.element ? 'pseudo-element' : 'pseudo-class'} a browser knows, so the build writes a selector that never matches; did you mean ${typo.fixed}?`,
-            '',
-            whereKey(at.join('.'), k),
-          );
-          continue;
-        }
         if (v && typeof v === 'object' && !Array.isArray(v)) {
           part(
             v,
@@ -3391,15 +3440,31 @@ async function ownTokenProblems(ctx, slug, data) {
           continue;
         }
         const prop = k.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`);
-        // A vendor-prefixed property is the browser's own: Core checks
-        // that the declaration stays one.
-        if (prop.startsWith('-')) continue;
+        // A vendor-prefixed property is the browser's own, when the data
+        // knows it or it is a prefixed CSS property; any other is a typo or
+        // a name no browser reads.
+        if (prop.startsWith('-')) {
+          const bare = prop.replace(/^-[a-z]+-/, '');
+          if (
+            v !== undefined &&
+            !vendorProperties().has(prop) &&
+            !cssProperties().has(bare)
+          ) {
+            const near = nearest(prop, [...vendorProperties()])[0];
+            refuse(
+              at,
+              k,
+              `${k} is no vendor property a browser knows, so the build writes a declaration no browser reads${near ? `; did you mean '${near}'?` : ''}`,
+            );
+          }
+          continue;
+        }
         // An undefined property is not set: the build writes nothing for it.
         if (v === undefined) continue;
         const loc = where(at.join('.'), k);
-        // A null property keeps its meaning (the build writes it as it
-        // is), and a null pseudo-class or at-rule builds no block: the
-        // build warns either at its line.
+        // A null property leaves it unset (the build writes it as it is),
+        // and a null pseudo-class or at-rule builds no block: the build
+        // warns either at its line.
         if (v === null && (cssProperties().has(prop) || /^[:@]/.test(k)))
           continue;
         if (!cssProperties().has(prop)) {

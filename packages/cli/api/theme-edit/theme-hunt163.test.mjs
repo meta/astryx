@@ -145,7 +145,7 @@ describe('a plain theme that gives null', () => {
           `${where} (line 4): `,
         );
         expect(JSON.stringify(env.data.warnings), fields).toContain(
-          'holds null, which the build writes as it is',
+          'holds null; null leaves it unset: the build writes it as it is',
         );
         expect(
           fs.readFileSync(path.join(cwd, 'plain/p.css'), 'utf8'),

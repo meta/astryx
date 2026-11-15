@@ -40,10 +40,12 @@ const holdsBlock = key => /^[:@&[]/.test(key);
  */
 
 /**
- * What a null value builds, and the fix. @param {string} key
+ * What a null value builds, and the fix. Null has a meaning, unlike a
+ * boolean or NaN: it leaves the value unset, so it is warned, never refused.
+ * @param {string} key
  */
 const written = key =>
-  `${key} holds null, which the build writes as it is (${key}: null), a value no browser reads as one: give it a CSS value, or leave it undefined to set nothing`;
+  `${key} holds null; null leaves it unset: the build writes it as it is (${key}: null), which no browser reads, so the base theme's value stays; to set it, give it a CSS value, or leave it undefined to write nothing`;
 
 /**
  * Every place a theme gives null where the build reads a part, a style key's

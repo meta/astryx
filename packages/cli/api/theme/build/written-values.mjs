@@ -16,6 +16,8 @@
  *           the same values.
  */
 
+import {cssTree} from '../../../foundation/runtime/css-tree.mjs';
+
 /** @param {unknown} value @returns {value is Record<string, any>} */
 const isBlock = value =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -66,13 +68,83 @@ function tokenValueProblem(key, value, reads) {
   if (bad) return bad;
   if (typeof value !== 'string') return null;
   for (const [, name, comma] of value.matchAll(/var\(\s*(--[\w-]+)\s*(,)?/g)) {
-    if (comma) continue;
-    if (name === key)
-      return `${key} reads var(${key}), itself, so it has no value at all and the browser drops what reads it: give it a value, or read another token`;
+    if (comma || name === key) continue;
     if (reads && !reads(name))
       return `${key} reads var(${name}), which no token sets, so it has no value and the browser drops what reads it: read a token, or give a fallback (var(${name}, <value>))`;
   }
   return null;
+}
+
+/**
+ * Why a token's name or empty value sets no token, or null: a name that does
+ * not start with exactly two dashes (`-color-accent`, `---color-border`),
+ * or an empty value.
+ * @param {string} key @param {unknown} value
+ */
+function tokenNameProblem(key, value) {
+  if (value === undefined) return null;
+  // A CSS property set on the theme's root (Core sets color-scheme on a
+  // surface) styles it; any other name is no declaration a browser reads.
+  if (!key.startsWith('--') && key in cssTree().lexer.properties) return null;
+  if (!key.startsWith('--'))
+    return `${key} is no token name: the build writes it as a declaration on the theme's root, which no browser reads as a token; a token name starts with two dashes, such as --${key.replace(/^-+/, '')}`;
+  if (key.startsWith('---'))
+    return `${key} starts with three dashes, so it sets a custom property no token or part reads: a token name starts with two, such as --${key.replace(/^-+/, '')}`;
+  if (typeof value === 'string' && value.trim() === '')
+    return `${key} holds an empty value, so the build writes ${key}: ; and what reads it gets nothing: give it a value, or leave it out`;
+  return null;
+}
+
+/** @param {unknown} value @returns {string[]} the custom properties a value's var()s read */
+const varNames = value =>
+  (Array.isArray(value) ? value : [value]).flatMap(part =>
+    typeof part === 'string'
+      ? [...part.matchAll(/var\(\s*(--[\w-]+)/g)].map(m => m[1])
+      : [],
+  );
+
+/**
+ * The custom properties set on one element that `name` reads back to
+ * itself through, `name` first and last (`--a`, `--b`, `--a`), or null. CSS
+ * gives each custom property in such a cycle no value, a var() fallback
+ * included.
+ * @param {string} name
+ * @param {Record<string, unknown>} values the custom properties set on that element
+ * @returns {string[] | null}
+ */
+export function customPropertyCycle(name, values) {
+  /** @type {Set<string>} */
+  const seen = new Set();
+  /** @param {string} at @param {string[]} trail @returns {string[] | null} */
+  const walk = (at, trail) => {
+    for (const next of varNames(values[at])) {
+      if (next === name) return [...trail, next];
+      if (seen.has(next) || !(next in values) || trail.length > 32) continue;
+      seen.add(next);
+      const found = walk(next, [...trail, next]);
+      if (found) return found;
+    }
+    return null;
+  };
+  return walk(name, [name]);
+}
+
+/**
+ * Why a custom property reads itself back, as `customPropertyCycle` finds
+ * it, or null.
+ * @param {string} name @param {Record<string, unknown>} values
+ */
+export function cycleProblem(name, values) {
+  const cycle = customPropertyCycle(name, values);
+  if (!cycle) return null;
+  return cycle.length === 2
+    ? `${name} reads var(${name}), itself, so it has no value at all (a var() fallback does not count) and the browser drops what reads it: give it a value, or read another token`
+    : `${name} reads ${cycle
+        .slice(1)
+        .map(n => `var(${n})`)
+        .join(
+          ', which reads ',
+        )}: they read each other, so none has a value (a var() fallback does not count) and the browser drops what reads them: give one of them a value`;
 }
 
 /**
@@ -97,23 +169,39 @@ export function writtenValueProblems(theme, {reads} = {}) {
       }
       const why = Array.isArray(v)
         ? `${k} holds an array, which the build writes as JSON text (${JSON.stringify(v)}), a value no browser reads: give it a CSS value in quotes`
-        : nonText(k, v);
+        : (nonText(k, v) ??
+          (k.startsWith('--') ? cycleProblem(k, ownCustom(node)) : null));
       if (why) out.push({path: [...at, k], why});
     }
   };
+  /** @param {Record<string, unknown>} node the custom properties a block sets on its element */
+  const ownCustom = node =>
+    Object.fromEntries(
+      Object.entries(node).filter(([k]) => k.startsWith('--')),
+    );
   /** @param {any} surface @param {string[]} at */
   const visit = (surface, at) => {
     if (!isBlock(surface) || '__built' in surface) return;
+    // A defined theme's tokens are resolved (a pair is already its
+    // light-dark() text); the ones its author wrote are `__inputTokens`.
+    /** @param {string} map */
+    const valuesOf = map =>
+      map === 'tokens' && '__inputTokens' in surface
+        ? surface.__inputTokens
+        : surface[map];
+    // Tokens and local tokens are set on the same element.
+    const onElement = {
+      ...(isBlock(valuesOf('localTokens')) ? valuesOf('localTokens') : {}),
+      ...(isBlock(valuesOf('tokens')) ? valuesOf('tokens') : {}),
+    };
     for (const map of ['tokens', 'localTokens']) {
-      // A defined theme's tokens are resolved (a pair is already its
-      // light-dark() text); the ones its author wrote are `__inputTokens`.
-      const values =
-        map === 'tokens' && '__inputTokens' in surface
-          ? surface.__inputTokens
-          : surface[map];
+      const values = valuesOf(map);
       if (isBlock(values))
         for (const [k, v] of Object.entries(values)) {
-          const why = tokenValueProblem(k, v, reads);
+          const why =
+            tokenNameProblem(k, v) ??
+            tokenValueProblem(k, v, reads) ??
+            cycleProblem(k, onElement);
           if (why) out.push({path: [...at, map, k], why});
         }
     }
