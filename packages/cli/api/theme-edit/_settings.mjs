@@ -789,6 +789,26 @@ export function vibrancyMeant(dial, v) {
  * @returns {{mode: string, like: string}}
  */
 export function fieldsMeant(data) {
+  return {mode: modeMeant(data), like: likeMeant(data)};
+}
+
+/**
+ * Whether a saved base is the word for no base (`none`, `None`, ` NONE`),
+ * read by the one base reader as a typed `set t base None` is.
+ * @param {any} data
+ */
+function savedNoBase(data) {
+  return typeof data?.like === 'string' && likeMeant(data) === 'none';
+}
+
+/** @param {string} t @param {string[]} list */
+function nearOne(t, list) {
+  const hits = list.filter(x => typoNear(t, x));
+  return hits.length === 1 ? hits[0] : null;
+}
+
+/** The mode a damaged theme file meant (see fieldsMeant). @param {any} data */
+function modeMeant(data) {
   const MODES = ['both', 'light-only', 'dark-only'];
   const typed = String(data?.mode ?? '')
     .trim()
@@ -798,18 +818,17 @@ export function fieldsMeant(data) {
   // one mode reader; a typo of a mode is that mode.
   const one = modeWord(typed);
   const word = one ? `${one}-only` : undefined;
-  const near = (/** @type {string} */ t, /** @type {string[]} */ list) => {
-    const hits = list.filter(x => typoNear(t, x));
-    return hits.length === 1 ? hits[0] : null;
-  };
-  const mode = MODES.includes(typed)
+  return MODES.includes(typed)
     ? typed
-    : (word ?? (typed ? near(typed, MODES) : null) ?? typed);
+    : (word ?? (typed ? nearOne(typed, MODES) : null) ?? typed);
+}
+
+/** The base a damaged theme file meant (see fieldsMeant). @param {any} data */
+function likeMeant(data) {
   const likeTyped = baseWord(data?.like);
-  const like = LIKE.includes(likeTyped)
+  return LIKE.includes(likeTyped) || likeTyped === 'none'
     ? likeTyped
-    : ((likeTyped ? near(likeTyped, LIKE) : null) ?? likeTyped);
-  return {mode, like};
+    : ((likeTyped ? nearOne(likeTyped, LIKE) : null) ?? likeTyped);
 }
 
 /**
@@ -1106,6 +1125,8 @@ export function loadTheme(
   }));
   /** @type {any} */
   const data = settingsJson(fs.readFileSync(f.settings, 'utf8'));
+  // Its field names in other letters are read before its shape is judged.
+  const fieldNotes = topFieldNames(data);
   // A step back when there is one; else `new` only for damage `new` itself
   // keeps aside and makes again (settingsRemade): never a `new` it refuses.
   const recover = steps
@@ -1130,9 +1151,10 @@ export function loadTheme(
       [...recover.run.filter(r => !/ new /.test(r.name)), ...remakeRun],
       ERROR_CODES.ERR_THEME_INVALID,
     );
-  readEntryWords(data);
-  // `like: "none"`, the word for no base, is no base.
-  if (data.like === 'none') delete data.like;
+  readEntryWords(data, fieldNotes);
+  // `like: "none"`, the word for no base, is no base, in any letters or
+  // spacing (the one base reader).
+  if (savedNoBase(data)) delete data.like;
   // The folder names the theme: a name missing or changed by hand in the
   // file is the folder's, and the next save writes it back.
   data.name = slug;
@@ -1622,6 +1644,7 @@ const ENTRY_FIELDS = [
 
 /**
  * An entry with its own fields in other letters (`Thing`, `VALUE`, `On`)
+ * or spelled as their flags (`--on`)
  * read as those fields, as setting names are read in any case; a field
  * already written the editor's way keeps its key. Anything else as it is.
  * The one reader for a typed entry and a saved one.
@@ -1632,7 +1655,12 @@ export function entryFieldNames(entry) {
   if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return entry;
   return Object.fromEntries(
     Object.entries(entry).map(([k, x]) => {
-      const field = ENTRY_FIELDS.find(f => f === k.trim().toLowerCase());
+      // A field spelled as its flag (`"--on": "card"`) is that field.
+      const name = k
+        .trim()
+        .toLowerCase()
+        .replace(/^[-\u2013\u2014]+/, '');
+      const field = ENTRY_FIELDS.find(f => f === name);
       return [field && !(field in entry) ? field : k, x];
     }),
   );
@@ -1725,9 +1753,9 @@ function readTypedEntries(data, notes) {
  * the check to name.
  * @param {any} data
  */
-function readEntryWords(data) {
+function readEntryWords(data, early = /** @type {string[]} */ ([])) {
   /** @type {string[]} */
-  const notes = [];
+  const notes = [...early, ...topFieldNames(data)];
   // `lifted` is written by the build: one that is no list of text is
   // dropped, and the next build writes it again.
   if (
@@ -1971,15 +1999,26 @@ export function entryNotes(data) {
   return ENTRY_NOTES.get(data) ?? [];
 }
 
+/** The scope fields that name a place by text. */
+const PLACE_SCOPES = /** @type {const} */ (['on', 'when', 'state']);
+
 /**
- * Which part of an entry means nothing after reading: its source, mode or
- * `only`, or null.
+ * Which part of an entry means nothing after reading: its source, a scope
+ * that is not text (`"when": 5`, `"on": {}`) or a part named by no text
+ * (`"on": ""`), its mode or `only`, or null. The one typed reader of a
+ * saved scope: a damaged one is never read as a flag.
  * @param {any} s
- * @returns {'mode' | 'source' | 'only' | null}
+ * @returns {'mode' | 'source' | 'only' | 'on' | 'when' | 'state' | null}
  */
 export function entryDamage(s) {
   if (!s || typeof s.thing !== 'string') return null;
   if (!['dial', 'token', 'property'].includes(s.source)) return 'source';
+  for (const k of PLACE_SCOPES)
+    if (
+      s[k] != null &&
+      (typeof s[k] !== 'string' || (k === 'on' && !s[k].trim()))
+    )
+      return k;
   if (s.mode != null && s.mode !== 'light' && s.mode !== 'dark') return 'mode';
   // A dial is the same in light and dark: a mode on it means nothing.
   if (s.mode != null && s.source === 'dial') return 'mode';
@@ -2021,6 +2060,11 @@ function damagedUndo(s) {
     ...s,
     mode: damage === 'mode' ? undefined : s.mode,
     only: damage === 'only' ? undefined : s.only,
+    // A damaged part is named as no part (`--on ''`), which an undo of a
+    // property still takes; a damaged variant or state is left out.
+    on: damage === 'on' ? '' : s.on,
+    when: damage === 'when' ? undefined : s.when,
+    state: damage === 'state' ? undefined : s.state,
   };
 }
 
@@ -2040,6 +2084,11 @@ function damagedEntry(data, problem) {
           problem.startsWith(`${s.thing} has source `)) ||
         (entryDamage(s) === 'mode' &&
           problem.startsWith(`${s.thing} has mode `)) ||
+        (PLACE_SCOPES.some(k => entryDamage(s) === k) &&
+          (problem.startsWith(
+            `${s.thing} has a ${entryDamage(s)} that is not text`,
+          ) ||
+            problem.startsWith(`${s.thing} is set on ""`))) ||
         (entryDamage(s) === 'only' &&
           (problem.startsWith(`${s.thing} has only `) ||
             problem.includes(' has only, which is for one member'))),
@@ -2064,21 +2113,27 @@ function removes(skip) {
  * @param {any} s
  * @param {string | Partial<Setting> | undefined} skip
  */
-function skips(s, skip) {
+export function skips(s, skip) {
   if (!skip) return false;
   if (typeof skip === 'string') return s.thing === skip;
+  // Each scope field the same, or (for an undo that names none) the one
+  // that means nothing on this entry: that undo removes it.
+  const same = (/** @type {'on' | 'when' | 'state' | 'mode'} */ k) =>
+    (s[k] ?? '') === (skip[k] ?? '') ||
+    (removes(skip) && !skip[k] && entryDamage(s) === k);
   return (
     s.thing === skip.thing &&
     // A headings half set or undone is that half alone, as keyOf reads it
-    // (an entry with no axis is the weight).
+    // (an entry with no axis is the weight); an entry whose axis names no
+    // half is the headings any change of it replaces.
     (s.thing !== 'headings' ||
       /** @type {any} */ (skip).axis == null ||
+      !['weight', 'tracking', undefined, null].includes(s.axis) ||
       (s.axis ?? 'weight') === /** @type {any} */ (skip).axis) &&
-    (s.on ?? '') === (skip.on ?? '') &&
-    (s.when ?? '') === (skip.when ?? '') &&
-    (s.state ?? '') === (skip.state ?? '') &&
-    ((s.mode ?? '') === (skip.mode ?? '') ||
-      (removes(skip) && !skip.mode && entryDamage(s) === 'mode'))
+    same('on') &&
+    same('when') &&
+    same('state') &&
+    same('mode')
   );
 }
 
@@ -2155,7 +2210,10 @@ export function setArgs(x, value) {
  */
 function scopeFlags(x) {
   return [
-    ...(x.on ? [`--on ${quoteCommandArgument(String(x.on))}`] : []),
+    // A part named as none (`''`) is kept: an undo names it so.
+    ...(x.on || x.on === ''
+      ? [`--on ${quoteCommandArgument(String(x.on))}`]
+      : []),
     ...(x.when ? [`--when ${quoteCommandArgument(String(x.when))}`] : []),
     ...(x.state ? [`--state ${quoteCommandArgument(String(x.state))}`] : []),
     ...(x.mode ? [`--mode ${quoteCommandArgument(String(x.mode))}`] : []),
@@ -8983,7 +9041,7 @@ export function readFields(data, cwd, fixing, slug) {
       notes.push('mode was missing or damaged, so it is both again');
     }
   }
-  if (data.like === 'none') delete data.like;
+  if (savedNoBase(data)) delete data.like;
   if (fixing !== 'base' && data.like != null && !LIKE.includes(data.like)) {
     if (LIKE.includes(meant.like) && baseInstalled(cwd, meant.like)) {
       notes.push(
@@ -9017,6 +9075,32 @@ function stepText(text, cwd, radii) {
   return JSON.stringify(data) !== asWritten
     ? `${JSON.stringify(radii ? {...data, built: {radii}} : data, null, 2)}\n`
     : withBuilt(text, radii);
+}
+
+/** The file's own top-level fields. */
+const TOP_FIELDS = ['name', 'mode', 'like', 'settings', 'lifted'];
+
+/**
+ * The file's top-level field names in other letters (`Like`, `Settings`,
+ * `Mode`) are those fields, as an entry's are (entryFieldNames), in place;
+ * a field written both ways keeps the editor's own.
+ * @param {any} data
+ * @returns {string[]} a note for each name read
+ */
+function topFieldNames(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return [];
+  /** @type {string[]} */
+  const notes = [];
+  for (const k of Object.keys(data)) {
+    const field = TOP_FIELDS.find(f => f === k.trim().toLowerCase());
+    if (!field || field === k || field in data) continue;
+    data[field] = data[k];
+    delete data[k];
+    notes.push(
+      `the settings file writes "${k}" in other letters, read as ${field}`,
+    );
+  }
+  return notes;
 }
 
 /**

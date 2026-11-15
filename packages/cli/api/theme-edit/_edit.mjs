@@ -29,6 +29,7 @@ import {
   readsTyped,
   withoutCopyDebris,
   baseWord,
+  typoNear,
 } from './_normal.mjs';
 import {
   AUTO_SPREAD,
@@ -131,6 +132,8 @@ import {
   setArgs,
   editedThemes,
   entryFieldNames,
+  entryProblem,
+  skips,
 } from './_settings.mjs';
 import {
   borderlessSurfaces,
@@ -2017,9 +2020,15 @@ async function swappedLines(slug, thing, value, options) {
   // as its value: never a sample command from a refusal of the swapped
   // line (`bold` is no setting, and no part was named).
   const read = readSetLine(followed.line, slug);
+  // The setting typed as the value, or the one name it is a typo of (set's
+  // own repair of `cornres`): the swap of a misspelled name is still a swap.
+  const typedName = String(value).trim().toLowerCase();
   if (
     !read ||
-    read.thing.toLowerCase() !== String(value).trim().toLowerCase() ||
+    (read.thing.toLowerCase() !== typedName &&
+      // A misspelled name read as another carries the value as typed.
+      (!typoNear(typedName, read.thing.toLowerCase()) ||
+        read.value.toLowerCase() !== String(thing).trim().toLowerCase())) ||
     // A part named, or none: set's own repair of a typed part may name it
     // as it is spelled, never a part where none was named.
     Boolean(read.flags?.on) !== Boolean(options.on) ||
@@ -2028,7 +2037,7 @@ async function swappedLines(slug, thing, value, options) {
     return null;
   const lines = readyLines(
     followed,
-    `do this instead: ${value} is the setting and ${thing} its value`,
+    `do this instead: ${read.thing} is the setting and ${thing} its value`,
   );
   return lines.length ? lines : null;
 }
@@ -2244,9 +2253,14 @@ async function withSavedRepair(e, slug, cwd) {
   /** @type {any} */
   const scoped = {...bad};
   for (const [k, v] of Object.entries(read.scope)) scoped[k] ??= v;
-  // A scope saved empty (`"mode": ""`) names no scope.
+  // A scope saved empty (`"mode": ""`) names no scope; one that is not
+  // text (`"when": 5`, `"on": {}`) is damage, never read as a flag.
   for (const k of ['on', 'when', 'state', 'mode'])
-    if (typeof scoped[k] === 'string' && !scoped[k].trim()) delete scoped[k];
+    if (
+      scoped[k] != null &&
+      (typeof scoped[k] !== 'string' || !scoped[k].trim())
+    )
+      delete scoped[k];
   const line = `${P} set ${slug} ${setArgs({...scoped, thing}, saved)}`;
   // The lines set offers for the value, as for a typed one: each checked
   // as set checks it, and offered only when they carry the saved value
@@ -4402,8 +4416,9 @@ async function change(sub, slug, thing, value, options) {
           },
         );
     }
-    // An entry's own fields in other letters (`Thing`, `VALUE`, `On`) are
-    // those fields, as setting names are read in any case.
+    // An entry's own fields in other letters (`Thing`, `VALUE`, `On`) or
+    // spelled as their flags (`--on`) are those fields: the one field
+    // reader for a typed entry and a saved one.
     obj = entryFieldNames(obj);
     // An entry that names its thing under `setting`, as the editor's own
     // results print it, is that entry.
@@ -4482,6 +4497,13 @@ async function change(sub, slug, thing, value, options) {
         },
       );
     }
+    // A pasted object or list that holds nothing names no setting.
+    if (obj && typeof obj === 'object' && !Object.keys(obj).length)
+      refuse(
+        E.ERR_MISSING_ARGUMENT,
+        `The pasted ${Array.isArray(obj) ? 'list' : 'object'} holds no setting: name the thing to change.`,
+        {run: [`${P} how --list dials`, `${P} ${sub} --help`]},
+      );
     oneEntry = Boolean(
       obj && typeof obj === 'object' && Object.keys(obj).length === 1,
     );
@@ -4535,6 +4557,33 @@ async function change(sub, slug, thing, value, options) {
           ),
         },
       );
+    }
+  }
+  // An undo of a setting and its value in one argument (`'accent red'`),
+  // as set takes it: the first word names a saved setting and no other
+  // word does (several are a list of settings, read below).
+  if (
+    sub === 'undo' &&
+    objectText == null &&
+    typeof thing === 'string' &&
+    (value == null || value === '') &&
+    !/,|\s(?:and|&)\s/i.test(thing) &&
+    // A pasted form (`opacity = 0.5 on card`) is read by its own reader.
+    !normalizeEntry(thing, undefined).pasted
+  ) {
+    const pair = /^\s*(\S+)\s+(\S.*?)\s*$/.exec(thing);
+    const names = new Set(
+      (savedAsWritten(options.cwd ?? process.cwd(), slug)?.settings ?? []).map(
+        (/** @type {any} */ x) => String(x?.thing ?? '').toLowerCase(),
+      ),
+    );
+    if (
+      pair &&
+      names.has(pair[1].toLowerCase()) &&
+      !pair[2].split(/\s+/).some(w => names.has(w.toLowerCase()))
+    ) {
+      thing = pair[1];
+      value = pair[2];
     }
   }
   // A flag typed inside the value (`'red --mode dark'`, `'4px --state
@@ -4875,18 +4924,23 @@ async function changeOnce(
   // undo removes: only that entry, never a valid one beside it.
   const damagedIdx =
     sub === 'undo'
-      ? data.settings.findIndex(
-          x =>
+      ? data.settings.findIndex(x => {
+          const damage = entryDamage(x);
+          // Each place the same, or the damaged one with no flag for it.
+          const place = (/** @type {'on' | 'when' | 'state'} */ k) =>
+            (x[k] ?? null) === (flags[k] ?? null) ||
+            (damage === k && !flags[k]);
+          return (
             (x.thing === typedThing || x.thing === thing) &&
-            (x.on ?? null) === (flags.on ?? null) &&
-            (x.when ?? null) === (flags.when ?? null) &&
-            (x.state ?? null) === (flags.state ?? null) &&
-            (entryDamage(x) === 'only' ||
-              Boolean(x.only) === Boolean(flags.only)) &&
-            (entryDamage(x) === 'source' || entryDamage(x) === 'only'
-              ? (x.mode ?? null) === (flags.mode ?? null)
-              : entryDamage(x) === 'mode' && !flags.mode),
-        )
+            place('on') &&
+            place('when') &&
+            place('state') &&
+            (damage === 'only' || Boolean(x.only) === Boolean(flags.only)) &&
+            (damage === 'mode'
+              ? !flags.mode
+              : damage != null && (x.mode ?? null) === (flags.mode ?? null))
+          );
+        })
       : -1;
   let rawIdx = damagedIdx;
   if (exactIdx >= 0 && rawIdx < 0) {
@@ -4960,7 +5014,10 @@ async function changeOnce(
       const scoped = all.filter(inScope);
       return {w, entries: scoped.length ? scoped : all};
     });
-    if (!listed.some(l => l.entries.length)) return;
+    // A list names two saved settings or more (or one twice); with one,
+    // the rest is its value (`accent red`), read as set reads it.
+    const named = listed.filter(l => l.entries.length).length;
+    if (!named || (pieces.length > 1 && named < 2)) return;
     const none = listed.filter(l => !l.entries.length).map(l => l.w);
     throw new AstryxError(
       `"${text}" names ${pieces.length === 1 ? `${pieces[0]} more than once` : `${pieces.length} settings`}; undo removes one setting at a time${none.length ? ` (${slug} sets no ${none.join(' or ')})` : ''}. Nothing was changed.`,
@@ -5470,12 +5527,22 @@ async function changeOnce(
   }
   // A setting listed twice by hand keeps only the entry this command left;
   // every other entry it replaces is named in the notes.
+  // A damaged entry the theme was read past as the one this set changes
+  // (a headings entry whose axis names no half) is replaced by it too,
+  // never left to refuse every later command.
   if (sub === 'set') {
     const last = data.settings.map(x => keyOf(x)).lastIndexOf(k);
-    alsoReplaced = data.settings.filter((x, i) => keyOf(x) === k && i !== last);
-    data.settings = data.settings.filter(
-      (x, i) => keyOf(x) !== k || i === last,
-    );
+    const replaced = (
+      /** @type {import('./_settings.mjs').Setting} */ x,
+      /** @type {number} */ i,
+    ) =>
+      (keyOf(x) === k && i !== last) ||
+      (x !== s &&
+        keyOf(x) !== k &&
+        skips(x, s) &&
+        entryProblem(x, data) != null);
+    alsoReplaced = data.settings.filter(replaced);
+    data.settings = data.settings.filter((x, i) => !replaced(x, i));
   }
   // A setting for both modes replaces the ones made for one mode, which it
   // would otherwise sit under.

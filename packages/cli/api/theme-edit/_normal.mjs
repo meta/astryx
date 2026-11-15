@@ -242,7 +242,8 @@ export function normalizeEntry(thing, value) {
   // The editor's own change line pasted back (`corners pill -> round`,
   // `--radius-element: 0.5rem -> 0px`, `--color-accent (light): #1b1b1b ->
   // #ff0000`), whole or with its thing apart: the setting, and the value it
-  // changed to, with the scope the line names. No CSS value holds `->`.
+  // changed to, with the scope the line names. No CSS value holds `->`
+  // (or the `→` arrow, read as it).
   // A mode label after the thing (`(light)`, `(Dark)`, `(dark mode)`,
   // `[dark only]`) goes with the scope, read later by the one --mode reader
   // as a typed --mode is (a typo refused with its line), never into the
@@ -250,7 +251,7 @@ export function normalizeEntry(thing, value) {
   // [light only] -> #7c3aed`): the label is still the scope, never taken
   // as the old value.
   const changed =
-    /^(\S+?)(?:\s*[([]([^)\]]*)[)\]](?:\s*:?\s+(\S.*?))?|\s*:?\s+(\S.*?))\s*->\s*(\S.*?)\s*$/.exec(
+    /^(\S+?)(?:\s*[([]([A-Za-z][^)\]]*)[)\]]\s*:?(?:\s+(\S.*?))?|\s*:?\s+(\S.*?))\s*(?:->|\u2192)\s*(\S.*?)\s*$/.exec(
       v == null || v.trim() === '' ? t : `${t} ${v}`,
     );
   if (changed) {
@@ -264,20 +265,31 @@ export function normalizeEntry(thing, value) {
     }
     if (changed[2] != null && changed[2].trim())
       scope = {...scope, mode: modeLabel(changed[2])};
-  } else if (v == null || v.trim() === '') {
-    const m = /^(\S+?)\s*([:=])\s*(.+?)\s*;?\s*$/.exec(t);
+  } else if (
+    v == null ||
+    v.trim() === '' ||
+    /^\s*[([][A-Za-z][^)\]]*[)\]]\s*[:=]/.test(v)
+  ) {
+    // A mode label after the thing (`--color-accent (dark mode): #7c3aed`)
+    // goes with the scope, as on a change line, also when the words after
+    // the thing came as the value.
+    const m =
+      /^(\S+?)(?:\s*[([]([A-Za-z][^)\]]*)[)\]])?\s*([:=])\s*(.+?)\s*;?\s*$/.exec(
+        v == null || v.trim() === '' ? t : `${t} ${v}`,
+      );
     if (m && !/^https?$/i.test(m[1])) {
       t = m[1];
-      v = m[3];
+      v = m[4];
       pasted = true;
+      if (m[2] != null && m[2].trim()) scope = {mode: modeLabel(m[2])};
       // The editor's own printed line (`corners = pill (whole theme)`,
       // `opacity = 0.5 on card [dark only]`) pasted back: its scope goes
       // with the setting, not into the value.
-      if (m[2] === '=') {
+      if (m[3] === '=') {
         const printed = printedScope(v);
         if (printed) {
           v = printed.value;
-          scope = printed.scope;
+          scope = {...printed.scope, ...scope};
         }
       }
     }
