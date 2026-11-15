@@ -604,12 +604,12 @@ function usageSuggestion(err, code) {
     ['editor', 'preview'].includes(parts[3])
   )
     return editorMissingSuggestions(cmd);
-  // A theme command missing its files (`experimental theme compile`,
-  // `theme build`): its usage and help, as the project runs the CLI.
+  // An experimental theme command missing its argument (`experimental
+  // theme compile`): its usage and help, as the project runs the CLI.
+  // Stable commands (`theme build`) keep their output as released.
   if (
     code === 'commander.missingArgument' &&
-    (parts[1] === 'theme' ||
-      parts.slice(1, 3).join(' ') === 'experimental theme')
+    parts.slice(1, 3).join(' ') === 'experimental theme'
   ) {
     const words = parts.slice(1).join(' ');
     const invocation = getCliInvocation(process.cwd());

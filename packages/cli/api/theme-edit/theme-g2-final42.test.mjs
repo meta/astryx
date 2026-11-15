@@ -283,22 +283,35 @@ describe('an option whose value names another subcommand', () => {
 });
 
 describe('chaos44 leftovers', () => {
-  for (const args of [
-    ['experimental', 'theme', 'compile'],
-    ['theme', 'build'],
-  ])
-    it(
-      `${args.join(' ')} with no file names its usage and help`,
-      async () => {
-        const r = await cli(args);
-        expect(r.code).toBe('ERR_MISSING_ARGUMENT');
-        expect(names(r)).toEqual([
-          expect.stringMatching(new RegExp(` ${args.join(' ')} .*<files`)),
-          expect.stringMatching(new RegExp(` ${args.join(' ')} --help$`)),
-        ]);
-      },
-      T,
-    );
+  it(
+    'experimental theme compile with no file names its usage and help',
+    async () => {
+      const args = ['experimental', 'theme', 'compile'];
+      const r = await cli(args);
+      expect(r.code).toBe('ERR_MISSING_ARGUMENT');
+      expect(names(r)).toEqual([
+        expect.stringMatching(/ experimental theme compile .*<files/),
+        expect.stringMatching(/ experimental theme compile --help$/),
+      ]);
+    },
+    T,
+  );
+
+  it(
+    'theme build (stable) with no file keeps its released output: no lines added',
+    async () => {
+      const r = await cli(['theme', 'build']);
+      expect(r.code).toBe('ERR_MISSING_ARGUMENT');
+      expect(r.error).toBe("missing required argument 'files'");
+      expect(r.suggestions).toBeUndefined();
+      const text = await runCli(['theme', 'build'], cwd);
+      const out = `${text.stdout}\n${text.stderr ?? ''}`;
+      expect(out).toContain("missing required argument 'files'");
+      expect(out).not.toMatch(/^\s*(Usage|Run):/m);
+      expect(out).not.toMatch(/theme build --help/);
+    },
+    T,
+  );
 
   it(
     'set t accent red --mode kdar offers the --mode dark line, never one with no mode',
