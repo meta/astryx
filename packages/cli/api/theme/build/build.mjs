@@ -340,8 +340,8 @@ function realOrSelf(file) {
 /**
  * `target` spelled through real directories: the deepest ancestor that exists
  * is resolved through its symlinks, and the missing rest is appended as given.
- * The build confines its outputs by it, and the theme editor's compile guard
- * reads paths through it too, so both read a path the same way.
+ * The build groups and locates its outputs by it, and the theme editor's
+ * compile guard reads paths through it too, so both read a path the same way.
  * @param {string} target absolute path
  * @returns {string}
  */
@@ -795,9 +795,9 @@ const FAMILY_REMEDY =
 /**
  * Refuse an output outside `root`: every write is confined, whether `out` names
  * the path or it defaults to the theme file's directory (architecture:cli-surface
- * INV10). Both sides are compared by real location, so an absolute path that
- * reaches the working directory through a symlink is inside it, and a symlink
- * inside it that leads elsewhere is not.
+ * INV10). assertWithin reads the absolute path, so a path that reaches the
+ * working directory through a symlink is inside it, and a symlink inside it
+ * that leads elsewhere is not.
  * @param {string} dest absolute output path
  * @param {string} root the directory writes stay inside: the working directory
  * @param {string} remedy what to do instead; ends the error message
@@ -805,7 +805,7 @@ const FAMILY_REMEDY =
  */
 function confineOutput(dest, root, remedy, shown = dest) {
   try {
-    assertWithin(realLocation(dest), realOrSelf(path.resolve(root)), {
+    assertWithin(dest, root, {
       allowAbsolute: true,
       label: 'output path',
     });
