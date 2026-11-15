@@ -243,12 +243,13 @@ export function framesOf(query) {
 
 /**
  * An idea with every run of its words that names a page template written as
- * that template's own words: "a KanbanBoard page", "a kanban-board page" and a
- * one-slip "a kanban bord page" read as the template id's words. Only a whole
- * name counts (matchWholeName), a run never crosses punctuation, and a slip
- * counts only in a word the templates' own descriptors never use, so a real
- * word ("pane", "three") is never respelled into a name. A run already
- * written as the name's words is left as it is.
+ * that template's own words: "a KanbanBoard page", "a kanban-board page" and
+ * "a kanabn board page" read as the template id's words. Only a whole name
+ * counts (matchWholeName), a run never crosses punctuation, and the only slip
+ * read is a swap of two neighbouring letters in a word of six or more letters
+ * that the templates' own descriptors never use, so a real word ("pane",
+ * "seating") is never respelled into a name. A run already written as the
+ * name's words is left as it is.
  * @param {string} idea
  * @param {NamedTemplate[]} pages the project's page templates
  * @returns {string}

@@ -214,7 +214,7 @@ describe('rankPages on any catalog', () => {
     );
   });
 
-  it('reads a template named in any case, separator or one slip', () => {
+  it('reads a template named in any case, separator or with a neighbour-letter swap', () => {
     const catalog = [
       page('kanban-board', 'Tools - Kanban', 'Cards in columns of a board.'),
       page('table-inbox', 'Table - Inbox', 'A list with a reading pane.'),

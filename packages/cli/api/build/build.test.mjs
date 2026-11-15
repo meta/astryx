@@ -579,7 +579,7 @@ describe('build kit — every page starts from a template', () => {
     }
   });
 
-  it('starts a template named in any case or with one slip where its own words start', async () => {
+  it('starts a template named in any case or with a neighbour-letter swap where its own words start', async () => {
     for (const [spacedIdea, others] of [
       ['a kanban board page', ['a KanbanBoard page', 'a kanbanBoard page', 'a knaban board page']],
       ['a checkout wizard page', ['a CheckoutWizard page']],

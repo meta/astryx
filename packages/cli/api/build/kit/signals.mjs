@@ -144,8 +144,8 @@ export async function kitSignals(query, options = {}) {
     : {pages: [], blocks: []};
   const catalog = templates.pages;
   // Search reads a page template the idea names in any case, separator or
-  // one slip as that template's own words (readNames), as the page ranker
-  // does, so such a name matches by name.
+  // with a neighbour-letter swap in a word of six or more letters as that template's own words
+  // (readNames), as the page ranker does, so such a name matches by name.
   const searched = wantsPages ? readNames(query, catalog) : query;
   const result =
     /** @type {import('../../search/search.type.mjs').SearchResponse} */ (

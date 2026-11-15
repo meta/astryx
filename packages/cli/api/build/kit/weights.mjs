@@ -377,8 +377,8 @@ function blend(idea, ranked, pick, catalog, weights) {
     .filter(n => !shellIds.has(n) && !weights.candidates.includes(n));
   const cands = [...listed, ...extra];
   const position = new Map(weights.candidates.map((c, i) => [c, i]));
-  // A template named in any case, separator or one slip reads as its id's
-  // words, as the page ranker reads it (readNames).
+  // A template named in any case, separator or with a neighbour-letter swap in a word of six or more letters
+  // reads as its id's words, as the page ranker reads it (readNames).
   const words = new Set(weightWords(readNames(idea, catalog)).map(stem));
   /** @type {(number | undefined)[][]} */
   const members = weights.tables.map(table => {
@@ -660,7 +660,8 @@ export function weighStart(
 ) {
   if (!weights) return undefined;
   // Every reader below sees a template the idea names in any case, separator
-  // or one slip as that template's own words (readNames).
+  // or with a neighbour-letter swap in a word of six or more letters as that template's own words
+  // (readNames).
   const read = readNames(idea, catalog);
   const {cands, scores, position} = blend(read, ranked, pick, catalog, weights);
   /** @param {(c: string) => boolean} ok */
