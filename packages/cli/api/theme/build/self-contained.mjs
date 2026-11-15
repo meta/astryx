@@ -133,35 +133,33 @@ function commonFolder(dirs) {
 /**
  * Make built modules' carried imports load anywhere. Each relative import
  * that names a TypeScript or JSX module is compiled, with the local
- * TypeScript or JSX modules it imports, to JavaScript under the output
- * folder, and the import names the compiled file, the source's name with
- * `.js` added (`icons.tsx.js`), so an import of the source still finds the
- * source. Each compiled module goes to the place under the output folder
- * that its source has under the folder holding every theme source and
- * compiled source: beside the outputs while they all sit in the theme's
- * folder; when any sits outside it, every module is mirrored under the
- * output folder from the folder that holds them all. Two sources never
- * share one compiled file, nothing is written into the source tree, and a
- * compiled module is an output of its source, shared by every theme that
- * imports it. A relative
- * import of a plain JavaScript module stays as the source writes it, with
- * the file's extension written out. A compiled module is never written
- * over a file the build did not write: the imports of that source are kept
- * as written.
+ * TypeScript or JSX modules it imports, to JavaScript in the build's own
+ * modules folder (`modulesDir`, one per output stem), and the import names
+ * the compiled file. A compiled module is its source's name with `.js`
+ * added (`icons.tsx.js`), at the place its source has under the folder that
+ * holds the theme sources and every compiled source, so each source has
+ * one path of its own by construction, and no two builds share one. A
+ * relative import of a plain JavaScript module stays as the source writes
+ * it, with the file's extension written out. A compiled module is never
+ * written over a file the build did not write: that source's import is
+ * kept as written, and named in `kept`.
  * @param {Array<{sourceFile: string, bindings: Array<{importPath: string, importedName: string, localName: string}>}>} entries
  *   each theme source (a family's members), with the imports its built
  *   module carries
- * @param {{outDir: string, header: (file: string) => string, marker: string, files: LocalModuleFiles, keep?: (binding: {importPath: string, localName: string}) => boolean}} options
- *   `header`: the build header for a compiled module, from its source file;
+ * @param {{outDir: string, modulesDir: string, header: (file: string) => string, marker: string, files: LocalModuleFiles, keep?: (binding: {importPath: string, localName: string}) => boolean}} options
+ *   `outDir`: where the built modules are; `modulesDir`: the folder the
+ *   compiled modules go to; `header`: the build header for a compiled
+ *   module, from its source file;
  *   `files`: the theme adapter's file reader;
  *   `keep`: a binding written as given (an --icons-specifier)
- * @returns {{entries: Array<{bindings: Array<{importPath: string, importedName: string, localName: string}>, renamed: Map<string, string>, compiled: Map<string, string>}>, writes: Array<{dest: string, content: string, source: string}>}}
+ * @returns {{entries: Array<{bindings: Array<{importPath: string, importedName: string, localName: string}>, renamed: Map<string, string>, compiled: Map<string, string>}>, writes: Array<{dest: string, content: string, source: string}>, kept: Array<{source: string, dest: string}>}}
  *   for each entry, `renamed`: each import path as it was, to the one the
  *   module writes; `compiled`: each import path, as it was, whose module was
- *   compiled, to that module's source file
+ *   compiled, to that module's source file; `kept`: each source not
+ *   compiled because a file of the person's own holds its compiled path
  */
 export function selfContainedImports(entries, options) {
-  const {outDir, header, marker, files} = options;
+  const {outDir, modulesDir, header, marker, files} = options;
   /** @param {{importPath: string, localName: string}} binding */
   const kept = binding => Boolean(options.keep?.(binding));
 
@@ -197,15 +195,15 @@ export function selfContainedImports(entries, options) {
   ]);
   /** @type {Map<string, string>} compiled file, by source; absent when it cannot be */
   const destOf = new Map();
-  /** @type {Set<string>} */
-  const claimed = new Set();
+  /** @type {Array<{source: string, dest: string}>} */
+  const keptSources = [];
   for (const file of graph.keys()) {
-    // `icons.tsx` → `icons.tsx.js`: an import of `./icons` still finds the
-    // source, so a build, a watch and an editor never read the compiled copy.
-    const dest = path.join(outDir, `${path.relative(root, file)}.js`);
-    if (claimed.has(dest) || holdsOtherFile(files, dest, marker)) continue;
-    claimed.add(dest);
-    destOf.set(file, dest);
+    // `icons.tsx` → `icons.tsx.js`: one path per source, and an import of
+    // `./icons` never finds the compiled copy.
+    const dest = path.join(modulesDir, `${path.relative(root, file)}.js`);
+    if (holdsOtherFile(files, dest, marker))
+      keptSources.push({source: file, dest});
+    else destOf.set(file, dest);
   }
 
   /** @type {Array<{dest: string, content: string, source: string}>} */
@@ -258,6 +256,7 @@ export function selfContainedImports(entries, options) {
       return {bindings, renamed, compiled: compiledPaths};
     }),
     writes,
+    kept: keptSources,
   };
 }
 

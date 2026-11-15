@@ -1396,9 +1396,8 @@ function assertOutputsReplaceable(
   }
   for (const write of writes) {
     const key = outputKey(write.dest);
-    // A compiled local module is its own source's output, shared by every
-    // theme that imports it: judged against that source, and never claimed
-    // by one theme.
+    // A compiled local module is its own source's output: judged against
+    // that source.
     const owner = /** @type {{source?: string}} */ (write).source ?? filePath;
     if (key === sourceKey) {
       throw new AstryxError(
@@ -1422,7 +1421,7 @@ function assertOutputsReplaceable(
     }
     seen.add(key);
     const earlier = claimed?.get(key);
-    if (earlier !== undefined && earlier !== sharedClaim(write)) {
+    if (earlier !== undefined) {
       const collision = new AstryxError(
         `${earlier} and ${rel(filePath)} both build ${rel(write.dest)}. Give each theme its own name; nothing was written.`,
         undefined,
@@ -1502,16 +1501,6 @@ function assertOutputsReplaceable(
     else logger.warn(`Warning: ${message}`);
     onWarning?.(message);
   }
-}
-
-/**
- * How a batch records a compiled local module it writes: by its source, so
- * a second theme that imports the same module shares it; null for a theme's
- * own output.
- * @param {{dest: string, source?: string}} write
- */
-function sharedClaim(write) {
-  return write.source ? `\0shared:${path.resolve(write.source)}` : undefined;
 }
 
 /**
@@ -3476,8 +3465,8 @@ function componentIconViewExpression(valuesName, viewName) {
  * @template {{imports: Array<{importPath: string, importedName: string, localName: string}>} | null} C
  * @param {I} iconInfo
  * @param {C} componentIconInfo
- * @param {{sourceFile: string, outDir: string, header: (file: string) => string, iconsSpecifier?: string}} options
- * @returns {{iconInfo: I, componentIconInfo: C, writes: Array<{dest: string, content: string}>}}
+ * @param {{sourceFile: string, outDir: string, modulesDir: string, cwd: string, header: (file: string) => string, iconsSpecifier?: string}} options
+ * @returns {{iconInfo: I, componentIconInfo: C, writes: Array<{dest: string, content: string}>, warnings: string[]}}
  */
 function selfContainedInfos(iconInfo, componentIconInfo, options) {
   const icons = iconInfo?.imports ?? [];
@@ -3485,10 +3474,12 @@ function selfContainedInfos(iconInfo, componentIconInfo, options) {
   const {
     entries: [{bindings, renamed}],
     writes,
+    kept,
   } = selfContainedImports(
     [{sourceFile: options.sourceFile, bindings: [...icons, ...slots]}],
     {
       outDir: options.outDir,
+      modulesDir: options.modulesDir,
       header: options.header,
       marker: GENERATED_MARKER,
       files: localModuleFiles,
@@ -3520,7 +3511,32 @@ function selfContainedInfos(iconInfo, componentIconInfo, options) {
       }
     ),
     writes,
+    warnings: keptWarnings(kept, options.cwd),
   };
+}
+
+/**
+ * The folder a build's compiled local modules go to: one per output stem,
+ * beside the outputs, so two builds never compile to one path.
+ * @param {string} outDir
+ * @param {string} stem the outputs' name (`w98` for w98.css), or a family key
+ */
+function modulesFolder(outDir, stem) {
+  return path.join(outDir, `${stem}.modules`);
+}
+
+/**
+ * A warning for each local TypeScript or JSX module left uncompiled because a
+ * file of the person's own holds its compiled path: the built module keeps
+ * importing the TypeScript source.
+ * @param {Array<{source: string, dest: string}>} kept
+ * @param {string} cwd
+ */
+function keptWarnings(kept, cwd) {
+  return kept.map(
+    ({source, dest}) =>
+      `${path.relative(cwd, dest) || dest} is a file this build did not write, so ${path.relative(cwd, source) || source} is not compiled there and the built module keeps importing that TypeScript or JSX source, which an app whose bundler does not compile TypeScript from node_modules cannot load. Move that file, or build to another --out.`,
+  );
 }
 
 /**
@@ -4987,14 +5003,17 @@ async function themeBuildInternal(
     generatedHeader(headerSource, 'ts', buildCommand, versions) +
     'export {};\n';
   // The theme's local modules the built module carries by import (an icon
-  // registry, a slot value, their helpers) are compiled to JavaScript beside
-  // the build when they are TypeScript or JSX, and every local import names
-  // its file: the module loads in any bundler and in plain Node.
+  // registry, a slot value, their helpers) are compiled to JavaScript in the
+  // build's own modules folder when they are TypeScript or JSX, and every
+  // local import names its file: the module loads in any bundler and in
+  // plain Node.
   const local = handOff.prepareFamily
     ? null
     : selfContainedInfos(iconInfo, componentIconInfo, {
         sourceFile: filePath,
         outDir,
+        modulesDir: modulesFolder(outDir, path.basename(outPath, '.css')),
+        cwd,
         header: file =>
           generatedHeader(
             headerPath(headerBase, file),
@@ -5077,6 +5096,10 @@ async function themeBuildInternal(
     writes.push({dest: variantDtsPath, content: variantContent});
   }
   writes.push(...(local?.writes ?? []));
+  for (const w of local?.warnings ?? []) {
+    warningMessages.push(w);
+    logger.warn(`Warning: ${w}`);
+  }
 
   // A named pipe, a device or a socket where an output goes is never read
   // or replaced: an open of one can wait for good. A check refuses it too.
@@ -5161,19 +5184,10 @@ async function themeBuildInternal(
 
   // A batch publishes every theme's outputs after all of them are built, so
   // two themes that build the same files are refused before either writes.
-  // A compiled module an earlier theme of the batch writes is written once.
-  const ownWrites = writes.filter(
-    write =>
-      !sharedClaim(write) ||
-      handOff.claimedOutputs?.get(outputKey(write.dest)) !== sharedClaim(write),
-  );
-  if (handOff.deferredWrites) handOff.deferredWrites.push(ownWrites);
-  else writeBuildOutputs(ownWrites);
+  if (handOff.deferredWrites) handOff.deferredWrites.push(writes);
+  else writeBuildOutputs(writes);
   for (const write of writes) {
-    handOff.claimedOutputs?.set(
-      outputKey(write.dest),
-      sharedClaim(write) ?? sourceRelative,
-    );
+    handOff.claimedOutputs?.set(outputKey(write.dest), sourceRelative);
   }
 
   if (!report.compact) {
@@ -5776,6 +5790,7 @@ export async function themeBuildFamily(
   }));
   const localPlan = selfContainedImports(localEntries, {
     outDir,
+    modulesDir: modulesFolder(outDir, baseName),
     header: file =>
       generatedHeader(
         headerPath(headerBase, file),
