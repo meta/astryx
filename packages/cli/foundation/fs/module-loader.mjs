@@ -33,7 +33,10 @@ import * as fs from 'node:fs';
 import {findPresentFiles} from './present-files.mjs';
 import {importUrl} from './import-url.mjs';
 import {jitiCacheOptions} from './jiti-cache.mjs';
-import {recordThemeModulePromise} from './theme-module-rejections.mjs';
+import {
+  recordThemeModulePromise,
+  tellThemeModuleCallbacks,
+} from './theme-module-rejections.mjs';
 
 export {findPresentFiles};
 
@@ -222,10 +225,15 @@ function loadStylesheetAsEmptyModule(url, context, next) {
 const UNBUILT_QUERY = '?astryx-unbuilt-stylesheet';
 
 /**
- * In a theme module load, a stylesheet import that names no file yet (the
- * stylesheet the theme's own build writes, imported by its source) loads as
- * an empty module and is recorded, so the build can tell it is its own
- * output; any other import resolves as before.
+ * In a theme module load, an import that Node cannot find is read once more:
+ * - an absolute path (jiti hands one on as written) that names a file loads
+ *   that file: Node reads `#`, `?` and `%` in a path as URL syntax, so a
+ *   project in a folder such as `C# work` would find nothing;
+ * - a stylesheet that names no file yet (the stylesheet the theme's own
+ *   build writes, imported by its source, with a query such as `?inline` or
+ *   without) loads as an empty module and is recorded, so the build can tell
+ *   it is its own output.
+ * Any other import fails as before.
  * @param {string} specifier
  * @param {any} context
  * @param {(specifier: string, context: any) => any} next
@@ -237,23 +245,42 @@ function resolveUnbuiltStylesheet(specifier, context, next) {
     const load = themeModuleLoad.getStore();
     const code = /** @type {any} */ (error)?.code;
     if (
-      !load?.unbuilt ||
-      !STYLESHEET_FILE.test(specifier) ||
+      !load ||
       (code !== 'ERR_MODULE_NOT_FOUND' && code !== 'MODULE_NOT_FOUND')
     )
       throw error;
-    const url = path.isAbsolute(specifier)
-      ? pathToFileURL(specifier)
+    if (path.isAbsolute(specifier) && isFile(specifier))
+      return {url: pathToFileURL(specifier).href, shortCircuit: true};
+    // The file a stylesheet import names, its query (`?inline`) aside.
+    const query = specifier.lastIndexOf('?');
+    const bare =
+      query > specifier.lastIndexOf('/')
+        ? specifier.slice(0, query)
+        : specifier;
+    if (!load.unbuilt || !STYLESHEET_FILE.test(bare)) throw error;
+    const url = path.isAbsolute(bare)
+      ? pathToFileURL(bare)
       : context?.parentURL
-        ? new URL(specifier, context.parentURL)
+        ? new URL(bare, context.parentURL)
         : null;
     if (!url) throw error;
-    load.unbuilt.add(fileURLToPath(url));
+    const file = fileURLToPath(url);
+    if (isFile(file)) return {url: url.href, shortCircuit: true};
+    load.unbuilt.add(file);
     return {
       url: `${url.href}${UNBUILT_QUERY}`,
       format: 'module',
       shortCircuit: true,
     };
+  }
+}
+
+/** @param {string} file */
+function isFile(file) {
+  try {
+    return fs.statSync(file).isFile();
+  } catch {
+    return false;
   }
 }
 
@@ -316,12 +343,142 @@ export async function withEmptyStylesheets(load, options = {}) {
  * @type {AsyncLocalStorage<GuardedLoad>}
  */
 const guardedLoad = new AsyncLocalStorage();
-let guardedLoadsInFlight = 0;
+let exitGuards = 0;
 /** @type {typeof process.exit | null} */
 let realExit = null;
 let guardsInstalled = false;
 /** Callbacks of a module load running now, each holding the stdout gate. */
 const deferredGates = new Set();
+/**
+ * Callbacks of a theme module running after its load, each holding the exit
+ * guard, with the exit code to put back when it returns.
+ * @type {Map<number, {exitCode: unknown, cwd: string}>}
+ */
+const deferredExits = new Map();
+
+/**
+ * Change back to `cwd` when a theme module's code changed the process's
+ * working folder: the command reads every path from its own.
+ * @param {string} cwd
+ */
+function restoreCwd(cwd) {
+  try {
+    if (process.cwd() !== cwd) process.chdir(cwd);
+  } catch {
+    // A folder that went away: nothing to change back to.
+  }
+}
+
+/**
+ * The built-in objects a theme module's code can patch for the whole process
+ * (`JSON.stringify = …`, `Object.prototype.x = …`): each is put back as it
+ * was when the load ends, so the command's own code runs on the real ones.
+ */
+const INTRINSICS = [
+  Object,
+  Object.prototype,
+  Array,
+  Array.prototype,
+  // Function.prototype
+  Object.getPrototypeOf(Object),
+  String,
+  String.prototype,
+  Number,
+  Number.prototype,
+  Boolean.prototype,
+  Symbol.prototype,
+  RegExp.prototype,
+  Date.prototype,
+  Error.prototype,
+  Map.prototype,
+  Set.prototype,
+  WeakMap.prototype,
+  Promise,
+  Promise.prototype,
+  JSON,
+  Math,
+  Reflect,
+];
+
+/** The own properties of each intrinsic, to put back after a load. */
+function snapshotIntrinsics() {
+  return INTRINSICS.map(target => ({
+    target,
+    properties: Object.getOwnPropertyDescriptors(target),
+  }));
+}
+
+/**
+ * Put each intrinsic back as the snapshot holds it: a property the load
+ * added is removed, one it changed or removed is restored.
+ * @param {ReturnType<typeof snapshotIntrinsics>} snapshot
+ */
+function restoreIntrinsics(snapshot) {
+  for (const {target, properties} of snapshot) {
+    for (const key of Reflect.ownKeys(target)) {
+      if (!Object.prototype.hasOwnProperty.call(properties, key)) {
+        try {
+          delete (/** @type {any} */ (target)[key]);
+        } catch {
+          // A property the module made non-configurable stays.
+        }
+      }
+    }
+    for (const key of Reflect.ownKeys(properties)) {
+      const was = /** @type {PropertyDescriptor} */ (
+        /** @type {any} */ (properties)[key]
+      );
+      const now = Object.getOwnPropertyDescriptor(target, key);
+      if (
+        now &&
+        now.value === was.value &&
+        now.get === was.get &&
+        now.set === was.set &&
+        now.writable === was.writable &&
+        now.enumerable === was.enumerable
+      )
+        continue;
+      try {
+        Object.defineProperty(target, key, was);
+      } catch {
+        // A property the module made non-configurable stays.
+      }
+    }
+  }
+}
+
+/**
+ * Hold `process.exit` for theme module code until the matching
+ * {@link releaseExit}: called while a module loads, it refuses the load
+ * ({@link ThemeModuleExitError}); called from a callback the module left
+ * after its load, it is ignored with a warning, so the command keeps its own
+ * verdict and exit code. Any other caller exits as usual. The wrapper is
+ * installed for the first overlapping hold and removed after the last.
+ */
+function holdExit() {
+  if (exitGuards++ > 0) return;
+  const exit = process.exit;
+  realExit = exit;
+  process.exit = /** @type {any} */ (
+    function (/** @type {any} */ code) {
+      const store = guardedLoad.getStore();
+      if (store && !store.done) throw new ThemeModuleExitError(code);
+      if (store) {
+        process.stderr.write(
+          `Warning: a theme module called process.exit(${code ?? ''}) after it loaded, from a callback it left running; the command goes on, and its own exit code stands.\n`,
+        );
+        return undefined;
+      }
+      return exit.call(process, code);
+    }
+  );
+}
+
+function releaseExit() {
+  if (--exitGuards > 0 || !realExit) return;
+  process.exit = realExit;
+  realExit = null;
+}
 
 /**
  * A theme module that called `process.exit` while it loaded: the load is
@@ -366,6 +523,9 @@ export class ThemeModuleUnsettledError extends Error {
 function installThemeModuleGuards() {
   if (guardsInstalled) return;
   guardsInstalled = true;
+  // An exception thrown from a module's callback after its load is told as
+  // a warning (theme-module-rejections.mjs), never the command's crash.
+  tellThemeModuleCallbacks(() => Boolean(guardedLoad.getStore()?.done));
   createHook({
     init(_asyncId, type, _triggerAsyncId, resource) {
       const load = guardedLoad.getStore();
@@ -382,12 +542,29 @@ function installThemeModuleGuards() {
       else load.handles.push({unref});
     },
     before(asyncId) {
-      if (!moduleLoad.getStore()) return;
-      gateStdout();
-      deferredGates.add(asyncId);
+      if (moduleLoad.getStore()) {
+        gateStdout();
+        deferredGates.add(asyncId);
+      }
+      // A theme module's callback after its load: its exit is ignored and
+      // the exit code it sets is put back when it returns.
+      if (guardedLoad.getStore()?.done) {
+        holdExit();
+        deferredExits.set(asyncId, {
+          exitCode: process.exitCode,
+          cwd: process.cwd(),
+        });
+      }
     },
     after(asyncId) {
       if (deferredGates.delete(asyncId)) openStdout();
+      const before = deferredExits.get(asyncId);
+      if (before) {
+        process.exitCode = /** @type {any} */ (before.exitCode);
+        restoreCwd(before.cwd);
+        deferredExits.delete(asyncId);
+        releaseExit();
+      }
     },
   }).enable();
 }
@@ -404,20 +581,14 @@ function installThemeModuleGuards() {
  */
 async function withThemeModuleGuards(load) {
   installThemeModuleGuards();
-  if (guardedLoadsInFlight++ === 0) {
-    const exit = process.exit;
-    realExit = exit;
-    process.exit = /** @type {any} */ (
-      function (/** @type {any} */ code) {
-        const store = guardedLoad.getStore();
-        if (store && !store.done) throw new ThemeModuleExitError(code);
-        return exit.call(process, code);
-      }
-    );
-  }
+  holdExit();
   /** @type {GuardedLoad} */
   const store = {done: false, handles: []};
   const exitCode = process.exitCode;
+  // What the module's code may change for the whole process, put back when
+  // the load ends: the working folder and the built-in objects.
+  const cwd = process.cwd();
+  const intrinsics = snapshotIntrinsics();
   /** @type {() => void} */
   let drained = () => {};
   const unsettled = new Promise((_resolve, reject) => {
@@ -432,12 +603,11 @@ async function withThemeModuleGuards(load) {
   } finally {
     process.removeListener('beforeExit', drained);
     process.exitCode = exitCode;
+    restoreCwd(cwd);
+    restoreIntrinsics(intrinsics);
     store.done = true;
     for (const handle of store.handles.splice(0)) handle.unref();
-    if (--guardedLoadsInFlight === 0 && realExit) {
-      process.exit = realExit;
-      realExit = null;
-    }
+    releaseExit();
   }
 }
 

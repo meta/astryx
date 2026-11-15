@@ -3774,6 +3774,33 @@ function keptWarnings(kept, cwd) {
 }
 
 /**
+ * Refuse a theme whose source imports a stylesheet that is not there, unless
+ * it is the stylesheet this build writes (which loads empty, so the first
+ * build from a clean checkout writes it).
+ * @param {string} filePath the theme source
+ * @param {string[]} unbuilt the stylesheets it imports that are not there
+ * @param {string} outPath the stylesheet this build writes
+ * @param {string} cwd
+ * @param {{check?: boolean, out?: string, iconsSpecifier?: string}} options
+ */
+function refuseMissingStylesheets(filePath, unbuilt, outPath, cwd, options) {
+  const missing = unbuilt.filter(
+    file => path.resolve(file) !== path.resolve(outPath),
+  );
+  if (missing.length === 0) return;
+  const shown = path.relative(cwd, filePath) || filePath;
+  throw new AstryxError(
+    `Failed to load theme from ${shown}: it imports ${missing.map(file => path.relative(cwd, file) || file).join(', ')}, which is not there and is not the stylesheet this build writes (${path.relative(cwd, outPath) || outPath}). Create the file, correct the import, or build what writes it first. Nothing was written.`,
+    themeLoadSuggestions(new Error('missing stylesheet'), shown, cwd, {
+      check: options.check,
+      out: options.out,
+      iconsSpecifier: options.iconsSpecifier,
+    }),
+    ERROR_CODES.ERR_THEME_LOAD,
+  );
+}
+
+/**
  * One import statement for a carried registry or slot binding. Ordinary named
  * imports stay byte-compatible; paths with quotes or escapes are encoded, and
  * default, namespace, and aliased bindings are kept.
@@ -5300,6 +5327,33 @@ async function themeBuildInternal(
     // The name's extension is what follows its last dot, a leading one too:
     // `.css` is a name with no stem, which writes hidden files.
     const file = path.basename(outPath);
+    // A TypeScript declaration file's name (`p.css.d.ts`, the default build's
+    // stylesheet types) never names the stylesheet: CSS written there breaks
+    // every TypeScript file that imports the stylesheet.
+    if (/\.d\.[cm]?ts$/i.test(file)) {
+      const fixed = path
+        .join(
+          path.dirname(options.out),
+          `${file.replace(/(?:\.css)?\.d\.[cm]?ts$/i, '') || baseName}.css`,
+        )
+        .split(path.sep)
+        .join('/');
+      throw new AstryxError(
+        `--out ${options.out} names a TypeScript declaration file, where a build writes types, not the stylesheet. --out names the .css file, such as ${fixed}. Nothing was written.`,
+        [
+          {
+            name: buildSuggestion(
+              path.relative(cwd, filePath),
+              {iconsSpecifier: options.iconsSpecifier, out: fixed},
+              cwd,
+              handOff.commandWords,
+            ),
+            reason: 'the same build, naming the stylesheet',
+          },
+        ],
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
+    }
     const dot = file.lastIndexOf('.');
     const ext = dot < 0 ? '' : file.slice(dot).toLowerCase();
     const stem = (dot < 0 ? file : file.slice(0, dot)).replace(/\.d$/, '');
@@ -5328,22 +5382,16 @@ async function themeBuildInternal(
   // when it is the stylesheet this build writes (an app importing the source
   // gets its CSS); any other is a missing file, refused before anything is
   // written.
-  const missingStylesheets = unbuiltStylesheets.filter(
-    file =>
-      handOff.prepareFamily || path.resolve(file) !== path.resolve(outPath),
-  );
-  if (missingStylesheets.length > 0) {
-    const shown = path.relative(cwd, filePath) || filePath;
-    throw new AstryxError(
-      `Failed to load theme from ${shown}: it imports ${missingStylesheets.map(file => path.relative(cwd, file) || file).join(', ')}, which is not there${handOff.prepareFamily ? '' : ` and is not the stylesheet this build writes (${path.relative(cwd, outPath) || outPath})`}. Create the file, correct the import, or build what writes it first. Nothing was written.`,
-      themeLoadSuggestions(new Error('missing stylesheet'), shown, cwd, {
-        check: options.check,
-        out: options.out,
-        iconsSpecifier: options.iconsSpecifier,
-      }),
-      ERROR_CODES.ERR_THEME_LOAD,
+  // A family member's are judged by the family build, which knows the
+  // family's stylesheet.
+  if (!handOff.prepareFamily)
+    refuseMissingStylesheets(
+      filePath,
+      unbuiltStylesheets,
+      outPath,
+      cwd,
+      options,
     );
-  }
   // The header names the source and command from the project root of the
   // outputs, so a build from any folder writes the same bytes, `--check`
   // agrees with it, and a later build reads the source back exactly.
@@ -5508,6 +5556,7 @@ async function themeBuildInternal(
       componentCount,
       warnings: warningMessages,
       unloadedFonts,
+      unbuiltStylesheets,
     };
   }
 
@@ -6182,6 +6231,17 @@ async function buildFamily(
   const root = members[0];
   const outDir = path.dirname(root.filePath);
   const outPath = path.join(outDir, `${baseName}.css`);
+  // A member may import the family's stylesheet (`import './k.css'` in the
+  // root, so an app importing the source gets the family's CSS): it loads
+  // empty, and the first build writes it. Any other is a missing file.
+  for (const member of members)
+    refuseMissingStylesheets(
+      member.filePath,
+      member.unbuiltStylesheets ?? [],
+      outPath,
+      cwd,
+      options,
+    );
   const cssDtsPath = `${outPath}.d.ts`;
   const jsPath = path.join(outDir, `${baseName}.js`);
   const dtsPath = path.join(outDir, `${baseName}.d.ts`);
