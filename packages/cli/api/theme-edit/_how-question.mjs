@@ -4752,6 +4752,50 @@ export function draftAnswer(ctx, env, question) {
   const media = MEDIA_RE.test(q);
   if (media) q = q.replace(MEDIA_RE, ' ').replace(/\s+/g, ' ').trim();
   const clauses = clausesOf(q, lex.parts);
+  // "never make buttons rounder than 12px; make everything rounder": a
+  // clause that only states a bound on a part is a limit on the asks of
+  // the same kind said with it (before or after), never an ask of its
+  // own, and never the part of those asks; it is held after them.
+  /** @type {Array<{parts: string[], prop: string, bound: NonNullable<ReturnType<typeof boundOf>>}>} */
+  const attachedBounds = [];
+  {
+    // (The kinds whose built value is a plain length to hold.)
+    const BOUND_PROP = /** @type {Record<string, string>} */ ({
+      corners: 'border-radius',
+      border: 'border-width',
+    });
+    const boundOnly = (/** @type {Clause} */ c) => {
+      const b = boundOf(c.text);
+      return b &&
+        b.unit === 'px' &&
+        !ownWay(c.text) &&
+        c.parts.length &&
+        !c.except &&
+        c.aspects.length === 1 &&
+        BOUND_PROP[c.aspects[0]]
+        ? b
+        : null;
+    };
+    for (let i = clauses.length - 1; i >= 0; i--) {
+      const c = clauses[i];
+      const b = boundOnly(c);
+      if (!b) continue;
+      const asks = clauses.filter(
+        o =>
+          o !== c &&
+          !o.except &&
+          !boundOnly(o) &&
+          o.aspects.includes(c.aspects[0]),
+      );
+      if (!asks.length) continue;
+      attachedBounds.push({
+        parts: c.parts.map(p => p.on),
+        prop: BOUND_PROP[c.aspects[0]],
+        bound: b,
+      });
+      clauses.splice(i, 1);
+    }
+  }
   /** Parts a prohibition in the question keeps as they are. @type {string[]} */
   const prohibited = [];
   /** The clause each draft answers. @type {WeakMap<Draft, Clause>} */
@@ -17023,12 +17067,80 @@ export function draftAnswer(ctx, env, question) {
       }
     }
   }
+  // A bound said on a part with the asks (above): each answer that
+  // reaches the part is held to it, the part written at the bound after
+  // the answer's own steps when they would build it past the bound.
+  for (const ab of attachedBounds) {
+    const past = (/** @type {number} */ px) =>
+      ab.bound.up
+        ? ab.bound.strict
+          ? px <= ab.bound.limit
+          : px < ab.bound.limit
+        : ab.bound.strict
+          ? px >= ab.bound.limit
+          : px > ab.bound.limit;
+    for (const d of result)
+      for (const o of d.options) {
+        if (!o.length) continue;
+        /** @type {string[]} */
+        const held = [];
+        /** @type {string[]} */
+        const kept = [];
+        for (const part of ab.parts) {
+          const after = env.valueAfter(o, part, ab.prop);
+          const before = env.valueAfter([], part, ab.prop);
+          if (!after || after.light === before?.light) continue;
+          const px = lengthPx(after.light);
+          if (px == null) {
+            kept.push(
+              `${part} could not be measured (${after.light}): check it`,
+            );
+            continue;
+          }
+          if (past(px)) {
+            // (The one theme token the part draws it from, set on the part,
+            // so every rule of the part that reads it holds; else the
+            // property.)
+            const toks = [
+              ...new Set(
+                Object.values(
+                  /** @type {Record<string, string>} */ (
+                    C.MAP[one(part)]?.at?.[ab.prop] ?? {}
+                  ),
+                ).flatMap(v =>
+                  [...String(v).matchAll(/var\(\s*(--[a-z][a-z0-9-]*)/g)].map(
+                    m => m[1],
+                  ),
+                ),
+              ),
+            ];
+            o.push(
+              set(
+                toks.length === 1 ? toks[0] : ab.prop,
+                `${ab.bound.limit}px`,
+                {
+                  on: part,
+                },
+              ),
+            );
+            held.push(
+              `${part} held at ${ab.bound.limit}px (it would be ${after.light})`,
+            );
+          } else kept.push(`${part} is ${after.light}, within it`);
+        }
+        if (held.length || kept.length) {
+          d.text = `${d.text} (${ab.bound.said}: ${[...held, ...kept].join('; ')})`;
+          if (held.length) d.sequence = true;
+        }
+      }
+  }
   // "corners never more than 8px": a length bound holds every radius the
   // corners dial writes (a card's and the page's radii are larger than an
   // element's): each one the dial would build past the bound is written
-  // at the bound after it, and the answer says so.
+  // at the bound after it, and the answer says so. (A bound on a part is
+  // held on that part, above.)
   {
-    const lb = boundOf(question);
+    const lb = attachedBounds.length ? null : boundOf(question);
     if (lb && lb.unit === 'px')
       for (const d of result)
         for (const o of d.options) {

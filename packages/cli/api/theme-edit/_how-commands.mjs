@@ -63,6 +63,7 @@ export const EXAMPLE_THEME = 'my-theme';
  * @property {{light: Record<string, string>, dark: Record<string, string>}} base
  * @property {{light: Record<string, string>, dark: Record<string, string>}} [own] - The theme's own values: the base's with its settings applied.
  * @property {(steps: Step[]) => {ok: true} | {ok: false, why: string, run?: string[]}} check
+ * @property {(steps: Step[], part: string, prop: string) => {light: string, dark: string} | null} valueAfter what a part shows for a property at rest after the steps, in each mode, or null when it reads none
  * @property {(steps: Step[], intent: MeasureIntent) => string | null} measure the measured check: why the built result does not do what the question asks, or null
  */
 
@@ -238,6 +239,66 @@ export async function howTheme(ctx, cwd, name) {
             ? 'dark'
             : null;
       return measureFit(ctx, base, was, now, intent, steps, visible);
+    },
+    /**
+     * What a part shows for a property at rest after the steps (built in
+     * memory, nothing written): its own rule, else what Core declares at
+     * rest, every var() written out from the part's tokens.
+     * @param {Step[]} steps
+     * @param {string} part
+     * @param {string} prop
+     */
+    valueAfter(steps, part, prop) {
+      const d = JSON.parse(JSON.stringify(theme));
+      const checkCtx = /** @type {any} */ ({...ctx, base});
+      try {
+        for (const st of steps) apply(checkCtx, slug, d, st);
+      } catch {
+        return null;
+      }
+      const now = compileTheme(ctx, d, base);
+      const toks = ownTokens(now, base);
+      const camel = prop.replace(/-([a-z])/g, (_m, x) => x.toUpperCase());
+      /** @type {Record<string, any>} */
+      const rules = {
+        ...(base.components?.[part]?.base ?? {}),
+        ...(now.components?.[part]?.base ?? {}),
+      };
+      const at = ctx.C.MAP?.[part]?.at?.[prop] ?? {};
+      const rest =
+        Object.entries(/** @type {Record<string, string>} */ (at)).find(
+          ([k]) =>
+            !/[\s:]/.test(k) &&
+            k
+              .split(',')
+              .every(x =>
+                /^(?:variant=(?:default|primary|standard)|size=md|elevation=none|always)$|^$/.test(
+                  x,
+                ),
+              ),
+        )?.[1] ?? Object.values(at)[0];
+      const raw = rules[camel] ?? rules[prop] ?? rest;
+      if (raw == null) return null;
+      /** @param {'light' | 'dark'} m */
+      const scoped = m => {
+        /** @type {Record<string, string>} */
+        const t = {...toks[m]};
+        for (const [k, v] of Object.entries(rules))
+          if (k.startsWith('--') && typeof v === 'string') t[k] = v;
+        return t;
+      };
+      // (A private variable Core sets nowhere at rest shows its fallback.)
+      /** @param {'light' | 'dark'} m */
+      const shown = m => {
+        let v = String(raw);
+        for (let i = 0; i < 4; i++)
+          v = resolveIn(v, scoped(m), m).replace(
+            /var\(\s*--_[\w-]+\s*,\s*((?:[^()]|\([^()]*\))*)\)/g,
+            '$1',
+          );
+        return v.trim();
+      };
+      return {light: shown('light'), dark: shown('dark')};
     },
     check(steps) {
       /** @type {import('./_settings.mjs').ThemeData} */
