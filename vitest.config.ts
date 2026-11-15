@@ -24,6 +24,11 @@ import {configDefaults, defineConfig} from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import stylexResolution from './scripts/stylex-module-resolution.cjs';
 import DurationShardSequencer from './scripts/vitest-shard-sequencer.mjs';
+import {
+  NODE_TEST_EXCLUDE,
+  NODE_TEST_INCLUDE,
+  SWIZZLE_PROOF_SLICES,
+} from './scripts/vitest-node-files.mjs';
 
 const rootDir = path.resolve(__dirname, '.');
 const coreSrc = path.resolve(__dirname, 'packages/core/src');
@@ -245,32 +250,14 @@ export default defineConfig({
           // parallel workers) avoids concurrent clean-and-build collisions that
           // flake under Vitest 4's reworked pool.
           globalSetup: ['./vitest.global-setup.node.mjs'],
-          include: [
-            'packages/**/src/**/*.test.{ts,tsx,mjs}',
-            // The CLI dissolved its src/ wrapper (pillars live at the package
-            // root), so collect its colocated tests wherever they now live.
-            'packages/cli/**/*.test.{ts,tsx,mjs}',
-            'internal/**/*.test.{ts,tsx,mjs}',
-            'scripts/**/*.test.{ts,tsx,mjs}',
-            '.github/scripts/**/*.test.{ts,tsx,mjs}',
-            // Storybook config invariants (no DOM needed) — e.g. the
-            // workspace source-alias guard in .storybook/main.test.ts.
-            'apps/storybook/.storybook/**/*.test.{ts,tsx,mjs}',
-            // Sandbox page logic (palette generation, colour maths) — pure
-            // modules with no DOM, so they run here rather than in `ui`.
-            'apps/sandbox/src/**/*.test.{ts,tsx,mjs}',
-          ],
+          // The globs live in scripts/vitest-node-files.mjs, which the Node
+          // leg planner reads too.
+          include: NODE_TEST_INCLUDE,
           exclude: [
             ...configDefaults.exclude,
-            'packages/core/**',
-            'packages/lab/**',
-            'packages/charts/**',
-            'packages/richtext/**',
-            'packages/vega/**',
-            // CI runs the swizzle proof's slices in legs of their own
-            // (ci.yml swizzle-proof), so its Node legs leave them out.
+            ...NODE_TEST_EXCLUDE,
             ...(process.env.VITEST_SWIZZLE_PROOF_OWN_JOB === '1'
-              ? ['packages/cli/test/swizzle-proof/swizzle-proof.*.test.mjs']
+              ? [SWIZZLE_PROOF_SLICES]
               : []),
           ],
         },

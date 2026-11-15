@@ -9,8 +9,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {spawnSync} from 'node:child_process';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet, themeEditShow} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
@@ -20,13 +19,18 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {runCli} from '../../test-utils/run-cli.mjs';
+
+// The renders are stood in for: these tests are about settings, files and
+// messages, not the rendered pages.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    await importOriginal(),
+  ),
+);
 
 /** @type {string} */
 let cwd;
-const BIN = path.resolve(
-  import.meta.dirname,
-  '../../clients/cli/bin/astryx.mjs',
-);
 
 beforeAll(() => {
   cwd = makeLinkedFixture('astryx-theme-hunt107-', FIXTURE_PACKAGES);
@@ -40,10 +44,9 @@ afterAll(() => {
 /** @param {string} rel */
 const read = rel => fs.readFileSync(path.join(cwd, rel), 'utf8');
 /** @param {string[]} args @param {string} [at] */
-const cli = (args, at = cwd) =>
-  spawnSync(process.execPath, [BIN, ...args], {cwd: at, encoding: 'utf8'});
-const compile = (/** @type {string[]} */ ...args) =>
-  cli(['experimental', 'theme', 'compile', ...args]);
+const cli = async (args, at = cwd) => await runCli([...args], at);
+const compile = async (/** @type {string[]} */ ...args) =>
+  await cli(['experimental', 'theme', 'compile', ...args]);
 /** @param {string} slug @param {string} body */
 const writeSource = (slug, body) =>
   fs.writeFileSync(
@@ -63,7 +66,7 @@ describe('the theme a source defines is the one the build loads', () => {
       'reads its export a',
     );
     for (const args of [[], ['--check']]) {
-      const r = compile('themes/w4/w4.theme.ts', ...args);
+      const r = await compile('themes/w4/w4.theme.ts', ...args);
       expect(r.status, args.join(' ')).not.toBe(0);
       expect(r.stdout + r.stderr).toContain('reads its export a');
     }
@@ -77,12 +80,12 @@ describe('the theme a source defines is the one the build loads', () => {
       'w5',
       "const N = 'w5';\nexport const w5Theme = defineTheme({extends: w5Settings, name: N});",
     );
-    expect(compile('themes/w5/w5.theme.ts').status).toBe(0);
+    expect((await compile('themes/w5/w5.theme.ts')).status).toBe(0);
     writeSource(
       'w5',
       "const note = 'see https://x.example'; export const w5Theme = defineTheme({extends: w5Settings, name: 'w5'});",
     );
-    expect(compile('themes/w5/w5.theme.ts').status).toBe(0);
+    expect((await compile('themes/w5/w5.theme.ts')).status).toBe(0);
     await themeEditSet('w5', 'corners', 'pill', {cwd});
   }, 240_000);
 
@@ -92,7 +95,7 @@ describe('the theme a source defines is the one the build loads', () => {
       'w5b',
       "export const w5bTheme = defineTheme({name: 'w5b', tokens: {}});\nvoid w5bSettings;",
     );
-    const r = compile('themes/w5b/w5b.theme.ts');
+    const r = await compile('themes/w5b/w5b.theme.ts');
     expect(r.status).not.toBe(0);
     expect(r.stdout + r.stderr).toContain('no longer extends w5bSettings');
   }, 240_000);
@@ -106,7 +109,7 @@ describe('fonts follow the families the theme builds', () => {
       'w3',
       "export const w3Theme = defineTheme({extends: w3Settings, name: 'w3', typography: {body: {family: 'Figtree', fallbacks: 'sans-serif'}, heading: {family: 'Figtree', fallbacks: 'sans-serif'}}});",
     );
-    expect(compile('themes/w3/w3.theme.ts').status).toBe(0);
+    expect((await compile('themes/w3/w3.theme.ts')).status).toBe(0);
     const shown = await themeEditShow('w3', {cwd});
     expect(JSON.stringify(shown)).not.toContain('Inter is not installed');
     expect(read('src/themes/w3/w3.fonts.css')).not.toContain('inter');
@@ -120,7 +123,7 @@ describe('--out forms', () => {
     const js = read('themes/w15/w15.js');
     const stub = read('themes/w15/w15.css.d.ts');
     for (const out of ['themes/w15/x.css', 'themes/w15/w15.css.d.ts']) {
-      const r = compile('themes/w15/w15.theme.ts', '--out', out);
+      const r = await compile('themes/w15/w15.theme.ts', '--out', out);
       expect(r.status, out).not.toBe(0);
       expect(r.stdout + r.stderr).toContain("in w15's own folder");
       expect(r.stdout + r.stderr).not.toContain('--out builds only');
@@ -130,28 +133,31 @@ describe('--out forms', () => {
     expect(read('themes/w15/w15.css.d.ts')).toBe(stub);
     // Its default stylesheet is where the build writes anyway.
     expect(
-      compile('themes/w15/w15.theme.ts', '--out', 'themes/w15/w15.css').status,
+      (await compile('themes/w15/w15.theme.ts', '--out', 'themes/w15/w15.css'))
+        .status,
     ).toBe(0);
   }, 240_000);
 
   it('an --out elsewhere says the folder and the app copy were not written or checked, in text and JSON', async () => {
     await themeEditNew('w11', {cwd});
-    const text = compile('themes/w11/w11.theme.ts', '--out', 'out-w11/');
+    const text = await compile('themes/w11/w11.theme.ts', '--out', 'out-w11/');
     expect(text.status).toBe(0);
     expect(text.stdout + text.stderr).toContain(
       "themes/w11/ and w11's app copy in src/themes/w11/ were not written",
     );
     const json = JSON.parse(
-      cli([
-        '--json',
-        'experimental',
-        'theme',
-        'compile',
-        'themes/w11/w11.theme.ts',
-        '--out',
-        'out-w11/',
-        '--check',
-      ]).stdout,
+      (
+        await cli([
+          '--json',
+          'experimental',
+          'theme',
+          'compile',
+          'themes/w11/w11.theme.ts',
+          '--out',
+          'out-w11/',
+          '--check',
+        ])
+      ).stdout,
     );
     expect(json.data.appCopySkipped).toContain('are not checked');
   }, 240_000);
@@ -160,7 +166,7 @@ describe('--out forms', () => {
     const outer = path.dirname(cwd);
     const app = path.basename(cwd);
     await themeEditNew('w8', {cwd});
-    const r = cli(
+    const r = await cli(
       [
         '--json',
         'experimental',
@@ -178,7 +184,8 @@ describe('--out forms', () => {
     expect(way).not.toContain('--out');
     const command = way.replace(/^cd [^&]+&& /, '');
     expect(
-      cli(command.slice(command.indexOf('experimental')).split(' ')).status,
+      (await cli(command.slice(command.indexOf('experimental')).split(' ')))
+        .status,
     ).toBe(0);
   }, 240_000);
 });
@@ -188,23 +195,26 @@ describe('a family refusal from a subfolder', () => {
     await themeEditNew('wf', {cwd});
     const sub = path.join(cwd, 'themes');
     const env = JSON.parse(
-      cli(
-        [
-          '--json',
-          'experimental',
-          'theme',
-          'compile',
-          'wf/wf.theme.ts',
-          '--family',
-        ],
-        sub,
+      (
+        await cli(
+          [
+            '--json',
+            'experimental',
+            'theme',
+            'compile',
+            'wf/wf.theme.ts',
+            '--family',
+          ],
+          sub,
+        )
       ).stdout,
     );
     const way = env.suggestions[0].name;
     expect(way).toMatch(/^cd \.\. && /);
     const command = way.replace(/^cd \.\. && /, '');
     expect(
-      cli(command.slice(command.indexOf('experimental')).split(' ')).status,
+      (await cli(command.slice(command.indexOf('experimental')).split(' ')))
+        .status,
     ).toBe(0);
   }, 240_000);
 });
@@ -217,13 +227,15 @@ describe('suggested commands are bare in JSON', () => {
     fs.writeFileSync(settings, '{bad');
     try {
       const env = JSON.parse(
-        cli([
-          '--json',
-          'experimental',
-          'theme',
-          'compile',
-          'themes/w12/w12.theme.ts',
-        ]).stdout,
+        (
+          await cli([
+            '--json',
+            'experimental',
+            'theme',
+            'compile',
+            'themes/w12/w12.theme.ts',
+          ])
+        ).stdout,
       );
       expect(env.suggestions[0].name).toMatch(
         /^astryx experimental theme editor /,
@@ -233,13 +245,15 @@ describe('suggested commands are bare in JSON', () => {
     }
     writeSource('w12', "export const w12Theme = defineTheme({name: 'w12'});");
     const env = JSON.parse(
-      cli([
-        '--json',
-        'experimental',
-        'theme',
-        'compile',
-        'themes/w12/w12.theme.ts',
-      ]).stdout,
+      (
+        await cli([
+          '--json',
+          'experimental',
+          'theme',
+          'compile',
+          'themes/w12/w12.theme.ts',
+        ])
+      ).stdout,
     );
     expect(env.suggestions[0].name).toMatch(/^astryx /);
   }, 240_000);

@@ -23,6 +23,7 @@ import {
   SHEET_ORDER,
   elementNames,
   pageSource,
+  bindingFrom,
 } from './_catalog.mjs';
 import {
   catalogVariants,
@@ -35,6 +36,7 @@ import {OVERVIEW_SECTIONS} from './_overview.mjs';
 import {
   camel,
   folderIsEmpty,
+  builtFontWeights,
   fontPackages,
   modesOf,
   shown,
@@ -43,7 +45,13 @@ import {
 import {writeWhole} from './_palette.mjs';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
 import {importPathOf, installLine} from './_project.mjs';
-import {COLOR_PROP_PARTS, DIRECT, P, wordTable} from './_tables.mjs';
+import {
+  COLOR_PROP_PARTS,
+  DIRECT,
+  P,
+  SHOWCASE_GROUPS,
+  wordTable,
+} from './_tables.mjs';
 import {extractImportedPackages} from '../../foundation/discovery/template-needs.mjs';
 import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
 import {themeFileImports} from '../../foundation/discovery/theme-discovery.mjs';
@@ -56,17 +64,14 @@ const TEMPLATES_DIR = path.resolve(
 );
 
 /** The groups of the theme-building page, in order. */
-export const SHOWCASE_GROUPS = [
-  'actions',
-  'inputs',
-  'selection',
-  'navigation',
-  'feedback',
-  'data',
-  'containers',
-  'overlays',
-  'pages',
-];
+export {SHOWCASE_GROUPS};
+
+/**
+ * Packages whose output is drawn in the browser once the page runs (a
+ * recharts chart measures and draws itself after it mounts): a server
+ * render, which the sheet is, has none of it.
+ */
+const DRAWN_IN_BROWSER = Object.freeze(['recharts']);
 
 /** Real template pages the theme-building page shows in full. */
 const PAGE_TEMPLATES = ['dashboard', 'contact-form', 'settings'];
@@ -100,7 +105,7 @@ function groupOf(name, category) {
  * whose packages the project has.
  * @param {import('./_project.mjs').ThemeProject} project
  * @param {string | undefined} group only this group
- * @returns {{items: import('./_catalog.mjs').CatalogItem[], imports: Record<string, string>, skipped: string[]}}
+ * @returns {{items: import('./_catalog.mjs').CatalogItem[], imports: Record<string, import('./_catalog.mjs').Binding>, skipped: string[], notes: string[]}}
  */
 export function showcaseItems(project, group) {
   /** @type {import('./_catalog.mjs').CatalogItem[]} */
@@ -119,6 +124,9 @@ export function showcaseItems(project, group) {
     if (!g) continue;
     const inParent = inParentOf(project, name);
     if (inParent === null) continue;
+    // A component no Core module exports by its name cannot be imported,
+    // so it would draw an empty cell: it gets none.
+    if (!importPathOf(project, name)) continue;
     for (const v of catalogVariants(project, name, 12, {shown: true}))
       items.push({
         group: g,
@@ -135,7 +143,9 @@ export function showcaseItems(project, group) {
   });
   /** @type {string[]} */
   const skipped = [];
-  /** @type {Record<string, string>} */
+  /** What a page in the sheet cannot show, said in the result. @type {string[]} */
+  const notes = [];
+  /** @type {Record<string, import('./_catalog.mjs').Binding>} */
   const templateImports = {};
   for (const t of PAGE_TEMPLATES) {
     const file = path.join(TEMPLATES_DIR, t, 'page.tsx');
@@ -150,8 +160,16 @@ export function showcaseItems(project, group) {
       );
       continue;
     }
+    const drawn = [...extractImportedPackages(src)].filter(pkg =>
+      DRAWN_IN_BROWSER.includes(pkg),
+    );
+    if (drawn.length && (!group || group === 'pages'))
+      notes.push(
+        `the ${t} page's charts are drawn in the browser (${drawn.join(', ')}), so sheet.html and its pictures show the page with their space empty; the in-app preview draws them (astryx experimental theme preview add --template ${t})`,
+      );
     const local = `Template_${t.replace(/-/g, '_')}`;
-    templateImports[local] = `./templates/${t}.tsx`;
+    // A template page is its file's default export.
+    templateImports[local] = {from: `./templates/${t}.tsx`, export: 'default'};
     items.push({
       group: 'pages',
       name: `${t} template`,
@@ -166,7 +184,7 @@ export function showcaseItems(project, group) {
   const chosen = items
     .filter(it => !group || it.group === group)
     .sort((a, b) => order(a) - order(b) || compareText(a.name, b.name));
-  /** @type {Record<string, string>} */
+  /** @type {Record<string, import('./_catalog.mjs').Binding>} */
   const imports = {};
   for (const n of elementNames(chosen.map(i => i.tree))) {
     if (templateImports[n]) {
@@ -180,6 +198,7 @@ export function showcaseItems(project, group) {
     items: chosen,
     imports,
     skipped: !group || group === 'pages' ? skipped : [],
+    notes,
   };
 }
 
@@ -228,12 +247,12 @@ function inParentOf(project, name) {
 
 /**
  * Template page modules the theme-building page imports, copied beside it.
- * @param {Record<string, string>} imports
+ * @param {Record<string, import('./_catalog.mjs').Binding>} imports
  * @returns {Array<{name: string, from: string}>}
  */
 function templateFiles(imports) {
-  return Object.values(imports).flatMap(spec => {
-    const m = /^\.\/templates\/([a-z0-9-]+)\.tsx$/.exec(spec);
+  return Object.values(imports).flatMap(b => {
+    const m = /^\.\/templates\/([a-z0-9-]+)\.tsx$/.exec(bindingFrom(b));
     return m
       ? [
           {
@@ -256,7 +275,21 @@ function templateFiles(imports) {
  * @returns {string[]}
  */
 export function baseFontsCss(ctx, data) {
-  if (!data.like) return [];
+  const sheet = baseFontsSheet(ctx, data);
+  return sheet ? [sheet.spec] : [];
+}
+
+/**
+ * The base theme's fonts stylesheet as {@link baseFontsCss} imports it: its
+ * import spec, the families it loads, and the remote stylesheets it loads
+ * them from (a Google Fonts `@import`), which a static page cannot load.
+ * Null when the base ships none or the build names none of its families.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {{spec: string, families: string[], remote: string[]} | null}
+ */
+export function baseFontsSheet(ctx, data) {
+  if (!data.like) return null;
   const pkg = `@astryxdesign/theme-${data.like}`;
   const sheet = `${pkg}/fonts.css`;
   // Read off disk: the package must export the sheet for an app to import
@@ -265,7 +298,7 @@ export function baseFontsCss(ctx, data) {
   /** @type {string} */
   let text;
   try {
-    if (!found) return [];
+    if (!found) return null;
     const exportsMap = JSON.parse(
       fs.readFileSync(path.join(found.packageDir, 'package.json'), 'utf8'),
     ).exports;
@@ -274,10 +307,10 @@ export function baseFontsCss(ctx, data) {
       typeof exportsMap !== 'object' ||
       !('./fonts.css' in exportsMap)
     )
-      return [];
+      return null;
     text = fs.readFileSync(path.join(found.packageDir, 'fonts.css'), 'utf8');
   } catch {
-    return [];
+    return null;
   }
   // The families the sheet loads; with the theme's build at hand, the sheet
   // is imported only while the build still names one of them.
@@ -293,9 +326,43 @@ export function baseFontsCss(ctx, data) {
   }
   if (built != null && families.length) {
     const css = built;
-    if (!families.some(f => css.includes(f))) return [];
+    if (!families.some(f => css.includes(f))) return null;
   }
-  return [sheet];
+  const remote = [
+    ...text.matchAll(
+      /@import\s+(?:url\(\s*)?["']?((?:[a-z]+:)?\/\/[^"')\s]+)/gi,
+    ),
+  ].map(m => m[1]);
+  return {spec: sheet, families, remote};
+}
+
+/**
+ * The stylesheets of an installed font package that load the theme's
+ * fonts in every weight it uses: a variable package's one stylesheet
+ * (every weight); for a package with a stylesheet per weight, as
+ * Fontsource ships them, each weight the theme's build uses that the
+ * package has; else its index stylesheet.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {string} pkg
+ * @returns {string[]}
+ */
+export function fontPackageSheets(ctx, slug, pkg) {
+  const index = `${pkg}/index.css`;
+  if (pkg.startsWith('@fontsource-variable/')) return [index];
+  /** @param {string} spec */
+  const has = spec => {
+    try {
+      ctx.project.req.resolve(spec);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const weights = (builtFontWeights(ctx, slug) ?? [400])
+    .map(w => `${pkg}/${w}.css`)
+    .filter(has);
+  return weights.length ? weights : [index];
 }
 
 /**
@@ -316,7 +383,7 @@ export function themeImports(ctx, slug, data, fromDir) {
   const modes = modesOf(data);
   const fonts = fontPackages(ctx, data)
     .filter(x => x.installed)
-    .map(x => `${x.pkg}/index.css`);
+    .flatMap(x => fontPackageSheets(ctx, slug, x.pkg));
   return {
     module: rel(f.js),
     css: [rel(f.css), ...baseFontsCss(ctx, data), ...fonts],
@@ -540,11 +607,14 @@ export async function renderPreview(ctx, slug, data) {
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
  * @param {{group?: string, out?: string}} [options]
- * @returns {Promise<{file: string, components: number, skipped: string[]}>}
+ * @returns {Promise<{file: string, components: number, skipped: string[], notes: string[]}>} `notes`: what a page in the sheet cannot show
  */
 export async function renderSheet(ctx, slug, data, options = {}) {
   const {project} = ctx;
-  const {items, imports, skipped} = showcaseItems(project, options.group);
+  const {items, imports, skipped, notes} = showcaseItems(
+    project,
+    options.group,
+  );
   const source = pageSource({
     items,
     imports,
@@ -564,6 +634,7 @@ export async function renderSheet(ctx, slug, data, options = {}) {
     file: shown(project.cwd, out),
     components: new Set(items.map(i => i.name)).size,
     skipped,
+    notes,
   };
   // Rendered from the same inputs before: the sheet is as it would be.
   if (renderedFrom(out, key)) return result;
@@ -580,6 +651,7 @@ export async function renderSheet(ctx, slug, data, options = {}) {
     file: shown(project.cwd, out),
     components: new Set(items.map(i => i.name)).size,
     skipped,
+    notes,
   };
 }
 
@@ -1305,7 +1377,9 @@ export function previewRouteSource({
     '      <AppShell',
     '        height="fill"',
     '        topNav={',
-    `          <TopNav label="Theme preview" heading={<strong>{${JSON.stringify(name)}}</strong>} endContent={`,
+    // Core's own heading, as an app's top bar draws it, so a setting on the
+    // header (its text color) shows here as it does in the app.
+    `          <TopNav label="Theme preview" heading={<TopNavHeading heading={${JSON.stringify(name)}} />} endContent={`,
     ...(mode.length ? mode : ['          null']),
     '          } />',
     '        }',
@@ -1330,7 +1404,7 @@ export function previewRouteSource({
     "import * as React from 'react';",
     "import {AppShell} from '@astryxdesign/core/AppShell';",
     "import {SideNav, SideNavItem} from '@astryxdesign/core/SideNav';",
-    "import {TopNav} from '@astryxdesign/core/TopNav';",
+    "import {TopNav, TopNavHeading} from '@astryxdesign/core/TopNav';",
     ...(theme
       ? [
           // The mode switch only for a theme with both modes: an import the
@@ -1560,7 +1634,9 @@ export async function screenshot(
       ok: false,
       // Advice that can change the result: Playwright's browser only when
       // it is missing; a Chrome to check only when there is one.
-      reason: `No picture was taken (${failed.join('; ')}). ${
+      // What went wrong for this picture, and what can change it; the run
+      // that asked for it says which pictures were and were not taken.
+      reason: `${failed.join('; ')}. ${
         !pwFound
           ? `Install Playwright with its browser (${installLine(project.cwd, ['playwright'])}, then npx playwright install chromium), or`
           : pwMissing
@@ -1785,14 +1861,17 @@ export function writeAppCopyAt(cwd, slug, fontsCss) {
       : dir;
     const at = fs.existsSync(failed) ? failed : path.dirname(failed);
     const rel = path.relative(cwd, at).split(path.sep).join('/');
-    COPY_FAILED.set(
-      failKey,
-      code === 'EACCES' || code === 'EPERM' || code === 'EROFS'
+    const unwritable =
+      code === 'EACCES' || code === 'EPERM' || code === 'EROFS';
+    COPY_FAILED.set(failKey, {
+      why: unwritable
         ? `${rel} is not writable (${code})`
         : code === 'ENOSPC'
           ? `the disk is full (${code})`
           : `${rel} could not be written (${code})`,
-    );
+      // A folder that was not writable, to see whether it still is.
+      ...(unwritable ? {folder: at} : {}),
+    });
     return null;
   }
   COPY_FAILED.delete(failKey);
@@ -1817,10 +1896,7 @@ export function writeAppCopyAt(cwd, slug, fontsCss) {
  * @returns {{appCopyStale?: string}}
  */
 export function appCopyStale(cwd, slug) {
-  const blocker =
-    appCopyBlocker(cwd, slug) ??
-    COPY_FAILED.get(`${path.resolve(cwd)}\0${slug}`) ??
-    null;
+  const blocker = appCopyBlocker(cwd, slug) ?? copyFailure(cwd, slug) ?? null;
   return blocker
     ? {
         appCopyStale: `the app copy in src/themes/${slug}/ was not updated: ${blocker}. The app keeps the theme as it was until that is out of the way; then any set or show writes it.`,
@@ -1956,8 +2032,36 @@ export function appCopyBlocker(cwd, slug) {
 /** The build outputs of a theme, by their ending after `<theme>`. */
 const APP_COPY_BUILT = ['.css', '.css.d.ts', '.js', '.d.ts', '.variants.d.ts'];
 
-/** Why the last write of a theme's app copy failed, by app and theme. @type {Map<string, string>} */
+/**
+ * Why the last write of a theme's app copy failed, by app and theme, and
+ * the folder that was not writable when that was why.
+ * @type {Map<string, {why: string, folder?: string}>}
+ */
 const COPY_FAILED = new Map();
+
+/**
+ * Why the last write of a theme's app copy failed, while that still holds:
+ * a folder that was not writable and is now is no reason any more (a
+ * process that runs several commands, as an API caller does, reads the
+ * folder as it is now).
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {string | null}
+ */
+function copyFailure(cwd, slug) {
+  const key = `${path.resolve(cwd)}\0${slug}`;
+  const failed = COPY_FAILED.get(key);
+  if (!failed) return null;
+  if (failed.folder)
+    try {
+      fs.accessSync(failed.folder, fs.constants.W_OK);
+      COPY_FAILED.delete(key);
+      return null;
+    } catch {
+      // Still not writable.
+    }
+  return failed.why;
+}
 
 /** App copies written for the first time in this process, by app and theme. @type {Map<string, string[]>} */
 const FIRST_COPIES = new Map();

@@ -21,7 +21,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'A theme names its typefaces in `typography`: `body`, `heading`, and `code`, each with a `family` and `fallbacks`. These set the `--font-family-*` tokens every component reads. Always give real `fallbacks` so text stays readable before the font loads, or if it never does. `heading` inherits `family` and `fallbacks` from `body` when you omit them.',
+          text: "A theme names its typefaces in `typography`: `body`, `heading`, and `code`, each with a `family` and `fallbacks`. These set the `--font-family-*` tokens every component reads. Always give real `fallbacks` so text stays readable before the font loads, or if it never does. A heading with no `family` takes the body's whole font list; with its own `family`, only its own `fallbacks`; `fallbacks` with no `family` build nothing.",
         },
         {
           type: 'code',

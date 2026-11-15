@@ -32,7 +32,7 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
-import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
+import {modeValue, refusal} from '../../test-utils/theme-edit-fixture.mjs';
 
 /** @type {string} */
 let cwd;
@@ -178,8 +178,8 @@ describe('spacing and scope', () => {
     // The base that reads as no theme is refused with its own line, never
     // dropped on the way.
     const base = await refusal(() => themeEditSet('m', 'mode', 'both', {cwd}));
-    expect(base.run[0]).toMatch(/set m base none$/);
-    await themeEditSet('m', 'base', 'none', {cwd});
+    expect(base.run[0]).toMatch(/set m base neutral$/);
+    await themeEditSet('m', 'base', 'neutral', {cwd});
     await themeEditSet('m', 'mode', 'both', {cwd});
     await themeEditShow('m', {cwd});
     fs.rmSync(path.join(cwd, 'themes/m'), {recursive: true, force: true});
@@ -264,14 +264,20 @@ describe('astracat on #11262', () => {
     fs.rmSync(big, {force: true});
   }, 240_000);
 
-  it('a one-mode color on a part keeps the other mode as a color, never inherit', async () => {
+  it('a one-mode color on a part writes nothing in the other mode, never inherit', async () => {
     await themeEditSet('t', 'background-color', '#00ff00', {
       cwd,
       on: 'tab',
       mode: 'dark',
     });
-    expect(read('themes/t/t.css')).not.toMatch(/light-dark\(inherit/);
-    expect(read('themes/t/t.css')).toMatch(/light-dark\([^,]+, #00ff00\)/);
+    const css = read('themes/t/t.css');
+    expect(css).not.toMatch(/light-dark\(inherit/);
+    expect(modeValue(css, '.astryx-tab', 'background-color', 'dark')).toBe(
+      '#00ff00',
+    );
+    expect(modeValue(css, '.astryx-tab', 'background-color', 'light')).toBe(
+      undefined,
+    );
     await themeEditUndo('t', {cwd});
   }, 240_000);
 });

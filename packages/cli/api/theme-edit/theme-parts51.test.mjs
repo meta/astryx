@@ -60,7 +60,7 @@ describe("a part in another component's place", () => {
     expect(at('--color-overlay-pressed')).not.toContain('--when variant:ghost');
     // The current page's fill is a condition of its own.
     expect(at('--color-neutral').join(' ')).toMatch(
-      /variant=ghost current=page/,
+      /variant=ghost aria-current=page/,
     );
     expect(at('--color-neutral')).toContain('--when variant:secondary');
   }, 240_000);

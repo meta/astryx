@@ -113,7 +113,9 @@ describe('hunt71', () => {
       (/** @type {any} */ o) => o.flag === '--mode <mode>',
     );
     expect(mode.description).not.toContain('takes no --mode');
-    expect(mode.description).toContain('removes a setting saved for one mode');
+    expect(mode.description).toContain(
+      'removes a setting saved for the other mode',
+    );
   });
 
   it('a stop after the save says the change is saved and how to run the rest', () => {

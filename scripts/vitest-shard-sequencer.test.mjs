@@ -4,7 +4,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {configDefaults} from 'vitest/config';
 import DurationShardSequencer, {
   DURATIONS,
   mergeRecord,
@@ -13,6 +12,12 @@ import DurationShardSequencer, {
   recordDurations,
   idleSwizzleSlices,
 } from './vitest-shard-sequencer.mjs';
+import {splitByDuration} from './lib/duration-split.mjs';
+import {
+  PER_FILE_SECONDS,
+  nodeFileCost,
+  nodeLegFiles,
+} from './vitest-node-legs.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const recorded = readDurations();
@@ -65,24 +70,10 @@ describe('duration-balanced Node legs', () => {
   });
 
   it("keeps a recorded time for nine in ten of the Node project's test files, so the record cannot go stale unnoticed", () => {
-    // The `node` project's own include and exclude lists, read from
-    // vitest.config.ts so this check never drifts from what the project runs.
-    const config = fs
-      .readFileSync(path.join(ROOT, 'vitest.config.ts'), 'utf8')
-      .replace(/\/\/[^\n]*/g, '');
-    const block =
-      /name:\s*'node'[\s\S]*?include:\s*\[([\s\S]*?)\][\s\S]*?exclude:\s*\[([\s\S]*?)\]/.exec(
-        config,
-      );
-    expect(block, 'vitest.config.ts: no node project include list').not.toBe(
-      null,
-    );
-    const globs = list =>
-      [...list.matchAll(/'([^']+)'/g)].map(([, glob]) => glob);
-    const nodeFiles = fs.globSync(globs(block[1]), {
-      cwd: ROOT,
-      exclude: [...configDefaults.exclude, ...globs(block[2])],
-    });
+    // The `node` project's files, from the globs vitest.config.ts reads
+    // (vitest-node-files.test.mjs), so this check never drifts from what the
+    // project runs.
+    const nodeFiles = nodeLegFiles();
     const missing = nodeFiles.filter(file => !(file in recorded));
     expect(nodeFiles.length).toBeGreaterThan(500);
     expect(
@@ -134,19 +125,21 @@ describe('duration-balanced Node legs', () => {
     },
   );
 
-  it('counts a file with no recorded time as the median', () => {
+  it('counts a file with no recorded time as the ninetieth percentile, as the leg planner does', () => {
     const seconds = {'a.test.mjs': 10, 'b.test.mjs': 6, 'c.test.mjs': 1};
-    const legs = partitionByDuration(
-      ['a.test.mjs', 'b.test.mjs', 'c.test.mjs', 'new.test.mjs'],
-      2,
-      seconds,
-    );
-    // new counts as 6, the median: a (10) and c (1) share one leg, b and new
-    // (6 each) the other. Counted as 1 or as 10 it would land elsewhere.
+    const files = ['a.test.mjs', 'b.test.mjs', 'c.test.mjs', 'new.test.mjs'];
+    const legs = partitionByDuration(files, 2, seconds);
+    // new counts as 10, the ninetieth percentile: a and new (10 each) take a
+    // leg each, b (6) joins a, c (1) joins new. At the median, 6, it would
+    // share a leg with a instead.
     expect(legs).toEqual([
-      ['a.test.mjs', 'c.test.mjs'],
-      ['b.test.mjs', 'new.test.mjs'],
+      ['a.test.mjs', 'b.test.mjs'],
+      ['c.test.mjs', 'new.test.mjs'],
     ]);
+    // The planner books the same cost per file.
+    const cost = nodeFileCost(files, seconds);
+    expect(cost('new.test.mjs')).toBe(10 + PER_FILE_SECONDS);
+    expect(splitByDuration(files, 2, cost)).toEqual(legs);
   });
 
   it('splits only the node project; other projects keep Vitest’s split', async () => {
