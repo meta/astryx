@@ -13,6 +13,7 @@
 
 import {pathToFileURL} from 'node:url';
 import {LOCAL_URL, QUIET_BROWSER_ARGS} from './offline.mjs';
+import {PICTURE_WINDOW} from './picture-window.mjs';
 
 const [entry, html, png, mode, executablePath] = process.argv.slice(2);
 try {
@@ -25,7 +26,7 @@ try {
   });
   try {
     const page = await browser.newPage({
-      viewport: {width: 1280, height: 900},
+      viewport: {...PICTURE_WINDOW},
       colorScheme: mode === 'dark' ? 'dark' : 'light',
     });
     // The page loads its own files only: a remote stylesheet, font or image
