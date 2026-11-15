@@ -11,16 +11,14 @@
  */
 
 /**
- * The locale and time zone Intl gives this process by default, asked now.
+ * The locale and time zone Intl gives this process by default, asked now, as
+ * Intl gives them: a TZ that holds a POSIX rule leaves the zone undefined.
  * @returns {{locale: string | null, timezone: string | null}}
  */
 export function intlNow() {
   try {
     const resolved = Intl.DateTimeFormat().resolvedOptions();
-    return {
-      locale: resolved.locale ?? null,
-      timezone: resolved.timeZone ?? null,
-    };
+    return {locale: resolved.locale, timezone: resolved.timeZone};
   } catch {
     return {locale: null, timezone: null};
   }

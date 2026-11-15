@@ -214,4 +214,22 @@ describe('intlDefaults', () => {
     expect(intl.intlDefaults(host())).toEqual(live());
     expect(intl.intlDefaults({...host(), platform: 'darwin'})).toEqual(live());
   });
+
+  it('answers as Intl does where ICU names no zone', () => {
+    const saved = process.env.TZ;
+    // A POSIX rule: ICU gives the zone no name.
+    process.env.TZ = 'XST-3';
+    try {
+      const answer = intl.intlDefaults({
+        ...host(),
+        env: {TZ: process.env.TZ},
+      });
+      const resolved = Intl.DateTimeFormat().resolvedOptions();
+      expect(answer.timezone).toBe(resolved.timeZone);
+      expect(answer.locale).toBe(resolved.locale);
+    } finally {
+      if (saved === undefined) delete process.env.TZ;
+      else process.env.TZ = saved;
+    }
+  });
 });
