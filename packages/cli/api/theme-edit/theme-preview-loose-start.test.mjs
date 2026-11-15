@@ -2,8 +2,9 @@
 
 /**
  * @file `preview add` with a description adds a page only when build is
- * sure of its start: from the app shell it refuses, says why, and offers the
- * nearest pages by name. Build's own start is replaced per case, so each
+ * sure of its start: from the app shell, or from a page its page pick gives
+ * less than a clear fit, it refuses, says why, and offers the nearest pages
+ * by name. Build's own start is replaced per case, so each
  * path is judged on the preview's logic alone.
  */
 
@@ -28,11 +29,14 @@ import {
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
 import {appPackages, refusal} from '../../test-utils/theme-edit-fixture.mjs';
+import {CLEAR_FIT} from '../build/kit/start.mjs';
 
 /** What build's start becomes in the next call; null keeps build's own. */
 const startOverride = vi.hoisted(() => ({
   /** @type {null | ((start: any) => any)} */
   next: null,
+  /** Build's ranked pages in the next call; null keeps build's own. @type {any[] | null} */
+  pages: null,
 }));
 
 vi.mock('../build/build.mjs', async importOriginal => {
@@ -43,6 +47,7 @@ vi.mock('../build/build.mjs', async importOriginal => {
       const r = await real.build(...args);
       if (startOverride.next && r?.data?.start)
         r.data.start = startOverride.next(r.data.start);
+      if (startOverride.pages && r?.data) r.data.pages = startOverride.pages;
       return r;
     },
   };
@@ -88,6 +93,7 @@ afterAll(() => {
 
 beforeEach(() => {
   startOverride.next = null;
+  startOverride.pages = null;
   fs.rmSync(path.join(cwd, 'src/app/theme-preview'), {
     recursive: true,
     force: true,
@@ -121,9 +127,79 @@ describe('a page from a description', () => {
     expect(added.data.added).toEqual([page]);
   }, 240_000);
 
-  it('is added from a page build is sure of', async () => {
+  it('is refused from the app shell when a page id only shares a word with it', async () => {
+    startOverride.next = s => ({
+      ...s,
+      name: 'shell-top-nav',
+      basis: 'fallback',
+      reason: 'No template matched, so start from the app shell.',
+    });
+    // "page" in the description is a word of table-page and detail-page's
+    // ids, which is no name or keyword match.
+    startOverride.pages = [
+      {name: 'table-page', score: 40, reason: 'matches 1/9 terms: page'},
+      {name: 'detail-page', score: 38, reason: 'matches 1/9 terms: page'},
+    ];
+    const e = await refusal(() =>
+      themeEditPreviewAdd(CONCERT, {cwd, theme: 't'}),
+    );
+    expect(e.code).toBe('ERR_NOT_FOUND');
+    expect(fs.existsSync(path.join(cwd, 'src/app/theme-preview'))).toBe(false);
+  }, 240_000);
+
+  it('is refused from a page build calls a loose fit, saying so', async () => {
+    startOverride.next = s => ({
+      ...s,
+      name: 'payment-form',
+      basis: 'closest',
+      fit: CLEAR_FIT / 2,
+    });
+    const e = await refusal(() =>
+      themeEditPreviewAdd(CONCERT, {cwd, theme: 't'}),
+    );
+    expect(e.code).toBe('ERR_NOT_FOUND');
+    expect(e.message).toContain(
+      `No page template is a clear fit for "${CONCERT}": build's closest, payment-form, is a loose fit.`,
+    );
+    expect(e.run[0]).toMatch(/preview add --template \S+ --theme t$/);
+    expect(fs.existsSync(path.join(cwd, 'src/app/theme-preview'))).toBe(false);
+  }, 240_000);
+
+  it('is added from a page build gives a clear fit', async () => {
+    startOverride.next = s => ({
+      ...s,
+      name: 'dashboard',
+      basis: 'closest',
+      fit: CLEAR_FIT,
+    });
+    const r = await themeEditPreviewAdd(CONCERT, {cwd, theme: 't'});
+    expect(r.data.added.length).toBe(1);
+  }, 240_000);
+
+  it('is added from a closest page with no fit (a project without word weights)', async () => {
     startOverride.next = s => ({...s, name: 'dashboard', basis: 'closest'});
     const r = await themeEditPreviewAdd(CONCERT, {cwd, theme: 't'});
     expect(r.data.added.length).toBe(1);
+  }, 240_000);
+
+  it('is added for an idea build gives a clear page pick', async () => {
+    const r = await themeEditPreviewAdd(
+      'a settings page with profile, notifications and security',
+      {cwd, theme: 't'},
+    );
+    expect(r.data.added.length).toBe(1);
+  }, 240_000);
+
+  it('is refused for an idea build gives only a loose page pick', async () => {
+    const words =
+      'a page for a sports team with fixtures, results and the squad';
+    const e = await refusal(() =>
+      themeEditPreviewAdd(words, {cwd, theme: 't'}),
+    );
+    expect(e.code).toBe('ERR_NOT_FOUND');
+    expect(e.message).toContain(
+      `No page template is a clear fit for "${words}"`,
+    );
+    expect(fs.existsSync(path.join(cwd, 'src/app/theme-preview'))).toBe(false);
   }, 240_000);
 });

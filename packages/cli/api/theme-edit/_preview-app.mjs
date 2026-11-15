@@ -78,6 +78,7 @@ import {
   readRegularFile,
 } from './_palette.mjs';
 import {build} from '../build/build.mjs';
+import {CLEAR_FIT} from '../build/kit/start.mjs';
 import {search} from '../search/search.mjs';
 import {template} from '../template/template.mjs';
 import {
@@ -3656,7 +3657,7 @@ async function rankedPages(
     said.some(w => id.split('-').includes(w)) ? 1 : 0;
   const fellBack =
     !start || (start.basis === 'fallback' && frames.has(start.name));
-  const ranked = (fellBack ? [...(kit.data.pages ?? [])] : [])
+  const byBuild = (fellBack ? [...(kit.data.pages ?? [])] : [])
     .map((r, i) => ({
       name: r.name,
       score: Number(r.score) || 0,
@@ -3674,7 +3675,18 @@ async function rankedPages(
     )
     .sort(
       (a, b) => b.score - a.score || byId(b.name) - byId(a.name) || a.i - b.i,
-    )
+    );
+  const ranked = byBuild.map(r => r.name);
+  // The pages build's ranking matches by their name or a keyword, or by at
+  // least two fifths of the description's terms ("a hero section" is
+  // centered-hero's 2 of 2). A word that is only in a page's id ("page" in
+  // table-page, for a long description of an event page) is no such match.
+  const namedByBuild = byBuild
+    .filter(r => {
+      if (/^(exact name|name|keyword)\b/.test(r.reason)) return true;
+      const m = /^matches (\d+)\/(\d+) terms/.exec(r.reason);
+      return !!m && Number(m[1]) / Number(m[2]) >= 0.4;
+    })
     .map(r => r.name);
   for (const r of kit.data.pages ?? [])
     if (!matchedWords.has(r.name))
@@ -3701,12 +3713,15 @@ async function rankedPages(
   const named = APP_PAGES.some(([re]) => re.test(words.toLowerCase()));
   // So does a page build's ranking names by its name or a keyword when
   // build itself starts from the app shell ("checkout"). Otherwise a page is
-  // added only when build is sure of its start: never from the app shell.
+  // added only when build is sure of its start: never from the app shell,
+  // nor from a page its page pick gives less than a clear fit.
+  const loose =
+    !!start && typeof start.fit === 'number' && start.fit < CLEAR_FIT;
   const unrelated =
     !named &&
     !exact &&
-    !ranked.some(n => !frames.has(n)) &&
-    (!pages.length || !start || start.basis === 'fallback');
+    !namedByBuild.some(n => !frames.has(n)) &&
+    (!pages.length || !start || start.basis === 'fallback' || loose);
   if (unrelated) {
     // The pages build ranks nearest that this app can show; with none, a
     // few pages it can show. The list of every page comes last.
@@ -3725,7 +3740,9 @@ async function rankedPages(
       E.ERR_NOT_FOUND,
       cut
         ? `No page template relates to "${cut.typed}". ${cut.why}: put the words that name the page first, or name a page to add it anyway.`
-        : `No page template relates to "${words}". Name a page to add it anyway.`,
+        : loose
+          ? `No page template is a clear fit for "${words}": build's closest, ${start.name}, is a loose fit. Name a page to add it anyway.`
+          : `No page template relates to "${words}". Name a page to add it anyway.`,
       {
         run: [
           ...suggest(offered),
