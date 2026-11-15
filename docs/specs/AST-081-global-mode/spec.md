@@ -395,7 +395,9 @@ works on is `spec:AST-040` FR9's.
     each integration's components with the doc parts the not-found matcher
     scores, integrations' theme records, what `theme build` checks a theme
     against in Core's component docs, the lookup commands' not-found hint's
-    name summaries of folder trees, the CLI's own docs tree, and doctor's
+    name summaries of folder trees, npm's list of the files an integration
+    package packs (for `integration check` and `doctor integration validate`
+    in the package's own folder), the CLI's own docs tree, and doctor's
     file-only docs checks and theme-wiring scan, which doctor keeps only
     while the folder exists), a
     folder only the user can
@@ -403,7 +405,8 @@ works on is `spec:AST-040` FR9's.
     `build`, or another of those commands where an integration can load,
     never `doctor`; that run keeps its gathers at once; a lookup command's
     not-found path may create the per-user catalogs folder to keep its name
-    index; used only while it is
+    index, and an integration package's check of itself may create it to
+    keep npm's list; used only while it is
     a real folder the user owns and others cannot open, never where the
     system has no user ids), each
     kept value used only while every input its gather read is unchanged. For the installed CLI's own files, the CLI's build id stands for their contents (an upgrade or reinstall changes it; in-place edits to an installed CLI aren't supported). A

@@ -1113,18 +1113,23 @@ function settled(stamps) {
  * @param {() => {value: T, stamps: [string, string][]}} make - The summary,
  *   with the stamp ({@link fileStamp}) of each path it depends on, each taken
  *   before the path was read.
- * @param {{accept?: (value: T) => boolean}} [options] - `accept`: whether a
+ * @param {{accept?: (value: T) => boolean, keep?: (value: T) => boolean}} [options] - `accept`: whether a
  *   stored value serves this call, else it is made again and stored over (a
- *   summary that holds more only once a caller asks for it).
+ *   summary that holds more only once a caller asks for it); `keep`: whether
+ *   a value just made is stored at all (a failed or partial answer is not).
  * @returns {T}
  */
-export function persistedSummary(key, make, {accept = () => true} = {}) {
+export function persistedSummary(
+  key,
+  make,
+  {accept = () => true, keep = () => true} = {},
+) {
   const at = summaryAt(key);
   if (!at) return make().value;
   const stored = storedSummary(at);
   if (stored && accept(stored.value)) return stored.value;
   const {value, stamps} = make();
-  storeSummary(at, value, stamps);
+  if (keep(value)) storeSummary(at, value, stamps);
   return value;
 }
 
@@ -1134,21 +1139,21 @@ export function persistedSummary(key, make, {accept = () => true} = {}) {
  * @template T
  * @param {unknown[]} key
  * @param {() => Promise<{value: T, stamps: [string, string][]}>} make
- * @param {{accept?: (value: T) => boolean}} [options] - As for
+ * @param {{accept?: (value: T) => boolean, keep?: (value: T) => boolean}} [options] - As for
  *   {@link persistedSummary}.
  * @returns {Promise<T>}
  */
 export async function persistedSummaryAsync(
   key,
   make,
-  {accept = () => true} = {},
+  {accept = () => true, keep = () => true} = {},
 ) {
   const at = summaryAt(key);
   if (!at) return (await make()).value;
   const stored = storedSummary(at);
   if (stored && accept(stored.value)) return stored.value;
   const {value, stamps} = await make();
-  storeSummary(at, value, stamps);
+  if (keep(value)) storeSummary(at, value, stamps);
   return value;
 }
 

@@ -27,8 +27,9 @@ const OWN_FILE = fileURLToPath(import.meta.url);
 
 /**
  * One folder of the tree: its path from the root (`''` for the root) and its
- * entries, in the order the disk lists them.
- * @typedef {{rel: string, entries: Array<{name: string, isDir: boolean}>}} TreeFolder
+ * entries, in the order the disk lists them. A link is never a folder here:
+ * the walk does not follow it.
+ * @typedef {{rel: string, entries: Array<{name: string, isDir: boolean, isLink: boolean}>}} TreeFolder
  */
 
 /**
@@ -58,6 +59,7 @@ function walkTree(root, skip, stamps) {
     const entries = dirents.map(entry => ({
       name: entry.name,
       isDir: entry.isDirectory(),
+      isLink: entry.isSymbolicLink(),
     }));
     folders.push({rel, entries});
     for (const entry of entries) {
@@ -105,7 +107,7 @@ export function hasNameLine(lines, name) {
 
 /**
  * What a kept tree summary is kept under, and what makes it.
- * @typedef {{kind: string, roots: Array<string | {root: string, skip?: (name: string) => boolean}>, code: string[], skip?: (name: string) => boolean, key?: unknown[], recorded?: boolean, accept?: (value: any) => boolean}} TreeSummaryOptions
+ * @typedef {{kind: string, roots: Array<string | {root: string, skip?: (name: string) => boolean}>, code: string[], skip?: (name: string) => boolean, key?: unknown[], recorded?: boolean, accept?: (value: any) => boolean, keep?: (value: any) => boolean}} TreeSummaryOptions
  *   `roots`: each a folder, or a folder with the folder names its own walk
  *   does not enter; `code`: the files whose code makes the summary; `skip`:
  *   folder names the walk of a root without its own does not enter (both are
@@ -113,7 +115,8 @@ export function hasNameLine(lines, name) {
  *   `recorded`: every path `summarize` reads through fs or probes is checked
  *   too, by its own stamp, so it can read files outside the trees and through
  *   caches that stat a file before they reuse it; `accept`: whether a stored
- *   summary serves this call (gather-cache.mjs persistedSummary)
+ *   summary serves this call; `keep`: whether a summary just made is stored
+ *   (both gather-cache.mjs persistedSummary)
  */
 
 /**
@@ -207,7 +210,7 @@ export function keptTreeSummary(options, summarize) {
       finish(seen);
       return {value, stamps};
     },
-    {accept: options.accept},
+    {accept: options.accept, keep: options.keep},
   );
 }
 
@@ -235,6 +238,6 @@ export function keptTreeSummaryAsync(options, summarize) {
       finish(seen);
       return {value, stamps};
     },
-    {accept: options.accept},
+    {accept: options.accept, keep: options.keep},
   );
 }

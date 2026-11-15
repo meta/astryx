@@ -12,14 +12,26 @@
  * @position foundation/integrations; read by the template-asset and logo
  *   checks (validate-contributions.mjs) and the shipped-import check
  *   (shipped-imports.mjs). Inside `withListingCache` (one validation) npm is
- *   asked once per package folder, however many checks ask.
+ *   asked once per package folder, however many checks ask, and its list is
+ *   kept between runs while nothing it depends on has changed.
  */
 
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
+import {createHash} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {npmCommand} from '../release/cache.mjs';
 import {oncePerListing} from '../fs/listing-cache.mjs';
+import {keptTreeSummary} from '../fs/kept-tree.mjs';
+import {makeGatherCacheDir} from '../fs/gather-cache.mjs';
+
+/** The module's own file: its code decides what a kept list holds. */
+const OWN_FILE = fileURLToPath(import.meta.url);
+
+/** The files whose text decides which of a folder's files npm packs. */
+const IGNORE_FILES = new Set(['.npmignore', '.gitignore']);
 
 /**
  * The paths npm packs for the package in `base`, read from
@@ -33,21 +45,152 @@ import {oncePerListing} from '../fs/listing-cache.mjs';
  */
 export function npmPackedPaths(base) {
   const folder = path.resolve(base);
-  return oncePerListing(`npm-pack\0${folder}`, () => askNpm(folder));
+  return oncePerListing(`npm-pack\0${folder}`, () => keptNpmAnswer(folder));
 }
 
 /**
- * What npm answers for the package in `base` (npmPackedPaths).
- * @param {string} base
+ * npm's list for the package in `folder`, kept between runs (kept-tree.mjs):
+ * the stored list while no folder npm walks has changed, nor package.json,
+ * an ignore file in any folder, or an npmrc file npm reads. Which files npm
+ * packs depends on those and on the files' names and types, never on what
+ * the files hold, so an edit inside a file keeps the list. It is kept only
+ * for the npm entry file this check starts, by that npm's version and the
+ * major version of the Node that runs it, and only as a list: an error, a
+ * package that bundles dependencies (npm then walks their folders too), or a
+ * tree with a link in it is asked every time.
+ * @param {string} folder
  * @returns {{paths: Set<string>} | {error: string}}
  */
-function askNpm(base) {
+function keptNpmAnswer(folder) {
   let npm;
   try {
     npm = npmCommand();
   } catch {
     return {error: 'npm was not found'};
   }
+  const version = npmVersion(npm);
+  if (version == null) return askNpm(folder, npm);
+  // A package's check of itself may make the per-user folder its list is
+  // kept in, as a lookup's not-found path does for its name index.
+  makeGatherCacheDir();
+  /** @type {{paths: string[], keep: boolean} | {error: string}} */
+  const answer = keptTreeSummary(
+    {
+      kind: 'npm-packed-paths',
+      roots: [folder],
+      code: [OWN_FILE],
+      // npm packs neither; a bundled dependency is never kept (below).
+      skip: name => name === '.git' || name === 'node_modules',
+      key: [version, process.versions.node.split('.')[0], npmEnvironment()],
+      recorded: true,
+      keep: value => 'paths' in value && value.keep,
+    },
+    ([{folders, readText}]) => {
+      let linked = false;
+      for (const {rel, entries} of folders) {
+        for (const {name, isDir, isLink} of entries) {
+          if (isLink) linked = true;
+          if (!isDir && IGNORE_FILES.has(name)) {
+            readText(rel === '' ? name : path.join(rel, name));
+          }
+        }
+      }
+      /** @type {any} */
+      let pkg = null;
+      try {
+        pkg = JSON.parse(readText('package.json'));
+      } catch {
+        // npm says why.
+      }
+      readNpmrcFiles(folder, npm);
+      const result = askNpm(folder, npm);
+      if ('error' in result) return result;
+      const bundles = [pkg?.bundleDependencies, pkg?.bundledDependencies].some(
+        each =>
+          each === true ||
+          (Array.isArray(each) && each.length > 0) ||
+          (each != null && typeof each === 'object' && !Array.isArray(each)),
+      );
+      return {paths: [...result.paths], keep: !linked && !bundles};
+    },
+  );
+  return 'paths' in answer ? {paths: new Set(answer.paths)} : answer;
+}
+
+/**
+ * The version of the npm whose entry file `npm` starts, or null when the
+ * check starts a bare `npm` and cannot tell which one runs.
+ * @param {{command: string, prefix: string[]}} npm
+ * @returns {string | null}
+ */
+function npmVersion(npm) {
+  const entry = npm.prefix[0];
+  if (typeof entry !== 'string') return null;
+  try {
+    const pkg = JSON.parse(
+      fs.readFileSync(
+        path.join(path.dirname(entry), '..', 'package.json'),
+        'utf-8',
+      ),
+    );
+    return typeof pkg?.version === 'string' ? pkg.version : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The npm settings the environment gives (`npm_config_*`), as a digest: they
+ * can change what npm reads, and a token among them is never kept.
+ * @returns {string}
+ */
+function npmEnvironment() {
+  const settings = Object.entries(process.env)
+    .filter(([name]) => name.toLowerCase().startsWith('npm_config_'))
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return createHash('sha256').update(JSON.stringify(settings)).digest('hex');
+}
+
+/**
+ * Read each npmrc file npm may read for a package in `folder`, so a kept list
+ * holds its stamp, present or not: the package's own and each folder's above
+ * it, the user's, the global one and npm's own.
+ * @param {string} folder
+ * @param {{prefix: string[]}} npm
+ */
+function readNpmrcFiles(folder, npm) {
+  /** @type {string[]} */
+  const files = [];
+  for (let dir = folder; ; dir = path.dirname(dir)) {
+    files.push(path.join(dir, '.npmrc'));
+    if (path.dirname(dir) === dir) break;
+  }
+  const env = process.env;
+  files.push(env.npm_config_userconfig ?? path.join(os.homedir(), '.npmrc'));
+  const npmRoot = path.join(path.dirname(npm.prefix[0]), '..');
+  const prefix =
+    env.npm_config_prefix ??
+    (process.platform === 'win32'
+      ? path.join(npmRoot, '..', '..')
+      : path.join(npmRoot, '..', '..', '..'));
+  files.push(env.npm_config_globalconfig ?? path.join(prefix, 'etc', 'npmrc'));
+  files.push(path.join(npmRoot, 'npmrc'));
+  for (const file of files) {
+    try {
+      if (fs.existsSync(file)) fs.readFileSync(file);
+    } catch {
+      // Unreadable: npm cannot read it either.
+    }
+  }
+}
+
+/**
+ * What npm answers for the package in `base` (npmPackedPaths).
+ * @param {string} base
+ * @param {{command: string, prefix: string[]}} npm
+ * @returns {{paths: Set<string>} | {error: string}}
+ */
+function askNpm(base, npm) {
   const result = spawnSync(
     npm.command,
     [
