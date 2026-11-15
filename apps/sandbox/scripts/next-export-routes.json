@@ -791,6 +791,7 @@
     "/templates/messaging-shell/",
     "/templates/mixed-gallery/",
     "/templates/payment-form/",
+    "/templates/portal/",
     "/templates/product-detail/",
     "/templates/product-gallery/",
     "/templates/settings-dialog/",

@@ -94,6 +94,8 @@ export const TEMPLATE_LOADERS: Record<string, () => Promise<TemplateModule>> = {
     import('../../../../packages/cli/assets/templates/pages/mixed-gallery/page'),
   'payment-form': () =>
     import('../../../../packages/cli/assets/templates/pages/payment-form/page'),
+  portal: () =>
+    import('../../../../packages/cli/assets/templates/pages/portal/page'),
   'product-detail': () =>
     import('../../../../packages/cli/assets/templates/pages/product-detail/page'),
   'product-gallery': () =>

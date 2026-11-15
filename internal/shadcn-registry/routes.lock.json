@@ -5637,6 +5637,11 @@
       "aliases": []
     },
     {
+      "name": "template-portal",
+      "path": "templates/portal",
+      "aliases": []
+    },
+    {
       "name": "template-product-detail",
       "path": "templates/product-detail",
       "aliases": []
