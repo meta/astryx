@@ -4,7 +4,9 @@
  * @file theme build warns a misspelled field that reaches the theme input
  * through a spread; warns a [light, dark] pair whose half is empty or a
  * number (light-dark() takes colors only); and writes a boxed primitive in
- * a part as its primitive, judged as that.
+ * a part as its primitive, judged as that. A theme a file imports and
+ * exports is read in the module that writes it, and a BigInt typography
+ * value held in a const is named.
  */
 
 import * as fs from 'node:fs';
@@ -150,6 +152,44 @@ describe('a boxed primitive in a part', () => {
       const css = fs.readFileSync(path.join(cwd, 'plain/p.css'), 'utf8');
       expect(css).toContain('padding: 4px');
       expect(css).not.toContain('"4px"');
+    },
+    T,
+  );
+});
+
+describe('a theme a file imports, then exports', () => {
+  it(
+    'is read for misspelled fields in the module that writes it',
+    () => {
+      write(
+        'h/real.ts',
+        `${CORE}\nexport const hTheme = defineTheme({\n  name: 'h',\n  tokenz: {'--color-accent': 'red'},\n});\n`,
+      );
+      write('h/a.ts', `import {hTheme} from './real';\nexport {hTheme};\n`);
+      expect(warned(build('h/a.ts'))).toContain(
+        'tokenz (in h/real.ts, line 4): tokenz is no field defineTheme takes',
+      );
+      write(
+        'h/b.ts',
+        `import {hTheme as x} from './real';\nexport const hTheme = x;\n`,
+      );
+      expect(warned(build('h/b.ts'))).toContain(
+        'tokenz (in h/real.ts, line 4): ',
+      );
+    },
+    T,
+  );
+
+  it(
+    'names a BigInt typography value held in a const',
+    () => {
+      write(
+        'h/w.ts',
+        `${CORE}\nconst w = 600n;\nexport default defineTheme({\n  name: 'w',\n  typography: {body: {family: 'Inter', weight: w as any}},\n});\n`,
+      );
+      expect(warned(build('h/w.ts'))).toContain(
+        'typography.body.weight (line 5): weight holds 600n, a BigInt, which is no CSS value',
+      );
     },
     T,
   );
