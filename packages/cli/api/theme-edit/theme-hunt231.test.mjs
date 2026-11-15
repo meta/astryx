@@ -80,9 +80,13 @@ describe("a part's own state in its census spelling", () => {
         state: 'isPressed',
       });
       expect(saved()).toEqual([PRESSED]);
-      expect(
-        fs.readFileSync(path.join(cwd, 'themes/t/t.css'), 'utf8'),
-      ).toContain('background-color: #000080');
+      // ToggleButton writes data-is-pressed="true" when pressed (its
+      // isPressed prop is a boolean): the rule is built on that value.
+      const css = fs.readFileSync(path.join(cwd, 'themes/t/t.css'), 'utf8');
+      expect(css).toMatch(
+        /\.astryx-toggle-button\[data-is-pressed="true"\][^{]*\{\s*background-color: #000080/,
+      );
+      expect(css).not.toContain('data-is-pressed="isPressed"');
       const r = await themeEditSet('t', 'accent', 'teal', {cwd});
       expect(r.data.setting).toMatchObject({thing: 'accent', value: 'teal'});
       expect(saved()).toEqual([

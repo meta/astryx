@@ -4669,6 +4669,7 @@ export function compileTheme(ctx, data, base) {
       s.state,
       s.when,
       wrapsOneControl(ctx, target),
+      ctx.project.target.get(target)?.stateValues,
     );
     const b = (t[key] ??= {});
     return pseudo ? (b[pseudo] ??= {}) : b;
@@ -4687,6 +4688,7 @@ export function compileTheme(ctx, data, base) {
       s.state,
       s.when,
       wrapsOneControl(ctx, target),
+      ctx.project.target.get(target)?.stateValues,
     );
     const rule = (t[key] ??= {});
     const mb = (rule[`@${mode}`] ??= {});
@@ -5361,6 +5363,7 @@ export function compileTheme(ctx, data, base) {
       s.state,
       s.when,
       wrapsOneControl(ctx, target),
+      tg?.stateValues,
     );
     if (s.state && slot.key !== (s.when ?? 'base')) return null;
     const [k, v] = s.when ? String(s.when).split(':') : [];
@@ -5451,6 +5454,7 @@ export function compileTheme(ctx, data, base) {
       s.state,
       s.when,
       wrapsOneControl(ctx, target),
+      tg?.stateValues,
     );
     if (!slot.pseudo) return [block(s, target), dir];
     const parent = ((theme.components[target] ??= {})[slot.key] ??= {});
@@ -9784,6 +9788,7 @@ export function baseComponent(base, ctx, target, prop, s) {
       s.state,
       s.when,
       wrapsOneControl(ctx, target),
+      ctx.project.target.get(target)?.stateValues,
     );
     b = slot.pseudo
       ? (t[slot.key]?.[slot.pseudo] ??
@@ -10144,11 +10149,15 @@ export function readSavedStates(ctx, data) {
  * @param {string | undefined} state
  * @param {string | undefined} when
  * @param {boolean} [wrapsControl]
+ * @param {Record<string, string>} [values] the value Core writes for each
+ *   own state: a state that names a boolean prop is written `state:true`
  * @returns {{key: string, pseudo: string | null}}
  */
-export function stateSlot(own, state, when, wrapsControl = false) {
+export function stateSlot(own, state, when, wrapsControl = false, values = {}) {
   const pieces = state ? String(state).split('+') : [];
-  const keyed = pieces.filter(p => own.includes(p));
+  const keyed = pieces
+    .filter(p => own.includes(p))
+    .map(p => (values[p] && values[p] !== p ? `${p}:${values[p]}` : p));
   const pseudo = pieces
     .filter(p => !own.includes(p))
     .map(p => stateKey(p, wrapsControl))

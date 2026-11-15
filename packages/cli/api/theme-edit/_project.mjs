@@ -43,11 +43,16 @@ import {
  * @property {string} cacheDir - node_modules/.cache/astryx-theme/<coreKey>
  * @property {any} core - Core's theme module.
  * @property {NodeJS.Require} req - Resolves packages from the project.
- * @property {import('../../foundation/discovery/theming-targets.mjs').ThemingTarget[]} targets
- * @property {Map<string, import('../../foundation/discovery/theming-targets.mjs').ThemingTarget>} target
+ * @property {ProjectTarget[]} targets
+ * @property {Map<string, ProjectTarget>} target
  * @property {Record<string, ComponentInfo>} components
  * @property {import('../../foundation/discovery/theming-targets.mjs').ThemingVar[]} vars - The public custom properties Core's components read.
  * @property {InputFields | null} inputFields - The fields Core's theme input takes, read from its type declarations; null when they are not installed.
+ */
+
+/**
+ * A theming target, with the value Core writes for each of its states.
+ * @typedef {import('../../foundation/discovery/theming-targets.mjs').ThemingTarget & {stateValues: Record<string, string>}} ProjectTarget
  */
 
 /**
@@ -355,7 +360,7 @@ export async function openProject(cwd) {
   );
   // Reading every component doc takes a second; it is fixed per Core install.
   const docsFile = path.join(cacheDir, 'docs.json');
-  /** @type {{version: number, targets: ThemeProject['targets'], components: ThemeProject['components'], vars: ThemeProject['vars']} | null} */
+  /** @type {{version: number, targets: import('../../foundation/discovery/theming-targets.mjs').ThemingTarget[], components: ThemeProject['components'], vars: ThemeProject['vars']} | null} */
   let docs = null;
   try {
     const cached = JSON.parse(fs.readFileSync(docsFile, 'utf8'));
@@ -379,7 +384,20 @@ export async function openProject(cwd) {
       // A read-only node_modules: read the docs again next time.
     }
   }
-  const {targets, components, vars} = docs;
+  const {components, vars} = docs;
+  // The value Core writes for each state a target lists: a state that names
+  // a boolean prop of its component (toggle-button's isPressed) is that
+  // prop's attribute, written "true" when on; any other is a bare state,
+  // written as its own name (parseStyleKey's two key forms).
+  const targets = docs.targets.map((/** @type {any} */ t) => ({
+    ...t,
+    stateValues: Object.fromEntries(
+      (t.states ?? []).map((/** @type {string} */ st) => [
+        st,
+        components[t.component]?.props?.[st]?.type === 'boolean' ? 'true' : st,
+      ]),
+    ),
+  }));
   const project = {
     cwd: key,
     coreDir,
