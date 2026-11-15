@@ -14,6 +14,7 @@
 
 import * as path from 'node:path';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import {ERROR_CODES} from '../response/error-codes.mjs';
 
 /**
@@ -133,6 +134,36 @@ export function assertWithin(targetPath, rootDir, options = {}) {
   }
 
   return resolved;
+}
+
+/**
+ * The system temp folder that holds the absolute path `target`: the folder
+ * `os.tmpdir()` names, or `/tmp` on a POSIX system. Null for a path in
+ * neither. A temp folder that is a disk's root or holds the home folder is
+ * not one, so a scratch copy never reaches the user's files. The path is read
+ * as written and through the temp folder's own links, as `assertWithin`
+ * reads a project folder (macOS keeps `/tmp` at `/private/tmp`).
+ *
+ * @param {string} target absolute
+ * @returns {string | null}
+ */
+export function tempFolderOf(target) {
+  const home = path.resolve(os.homedir());
+  const folders = [
+    os.tmpdir(),
+    ...(process.platform === 'win32' ? [] : ['/tmp']),
+  ]
+    .map(folder => path.resolve(folder))
+    .filter(
+      folder =>
+        folder !== path.parse(folder).root &&
+        relativeInside(folder, home) === null,
+    );
+  return (
+    folders.find(
+      folder => relativeInsideRoot(path.resolve(target), folder) !== null,
+    ) ?? null
+  );
 }
 
 /**

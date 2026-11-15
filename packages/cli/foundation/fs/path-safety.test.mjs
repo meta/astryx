@@ -9,6 +9,7 @@ import {
   sanitizeName,
   isFilePathArg,
   PathSafetyError,
+  tempFolderOf,
 } from './path-safety.mjs';
 
 let tmpDir;
@@ -349,4 +350,38 @@ describe('assertWithin allowAbsolute', () => {
       'ERR_PATH_TRAVERSAL',
     );
   });
+});
+
+describe('tempFolderOf', () => {
+  const tmpdir = process.env.TMPDIR;
+  afterEach(() => {
+    if (tmpdir === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = tmpdir;
+  });
+
+  it('names the system temp folder that holds a path, and nothing for any other path', () => {
+    expect(tempFolderOf(path.join(os.tmpdir(), 'a', 'b'))).toBe(
+      path.resolve(os.tmpdir()),
+    );
+    expect(
+      tempFolderOf(
+        path.join(path.parse(os.tmpdir()).root, 'astryx-no-such-folder'),
+      ),
+    ).toBeNull();
+  });
+
+  it.skipIf(process.platform === 'win32')(
+    'takes /tmp on a POSIX system',
+    () => {
+      expect(tempFolderOf('/tmp/astryx/x')).toBe('/tmp');
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'is no temp folder when it holds the home folder',
+    () => {
+      process.env.TMPDIR = path.dirname(os.homedir());
+      expect(tempFolderOf(path.join(os.homedir(), 'notes'))).toBeNull();
+    },
+  );
 });
