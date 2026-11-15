@@ -77,6 +77,31 @@ describe('parseIntegration (load boundary)', () => {
     expect(unknownIntegrationKeys(everyKnownKey)).toEqual([]);
   });
 
+  it('ignores a key it does not know inside a known object, and names it', () => {
+    // A later CLI may give themeProvider another field: this CLI keeps the
+    // fields it knows and the rest of the manifest.
+    const manifest = {
+      themes: './themes',
+      themeProvider: {
+        export: 'AcmeThemeProvider',
+        from: '@acme/ui/theme',
+        stylesheet: '@acme/ui/theme.css',
+      },
+    };
+    expect(parseIntegration(manifest)).toEqual({
+      themes: './themes',
+      themeProvider: {export: 'AcmeThemeProvider', from: '@acme/ui/theme'},
+    });
+    expect(unknownIntegrationKeys(manifest)).toEqual([
+      'themeProvider.stylesheet',
+    ]);
+    // Only themeProvider's inner keys are reported: a key inside logo is
+    // stripped as it always was, with no new warning.
+    expect(
+      unknownIntegrationKeys({logo: {light: './l.svg', size: 32}}),
+    ).toEqual([]);
+  });
+
   it('still rejects a known key of the wrong type', () => {
     // The relaxation is about keys this CLI has never heard of. A key it DOES
     // know, holding the wrong type, is a real authoring mistake.

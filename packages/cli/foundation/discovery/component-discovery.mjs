@@ -18,7 +18,7 @@ import {
 import {existsCaseExact} from '../fs/paths.mjs';
 import {CORE_PROVIDER_ID} from '../identity/providers.mjs';
 import {loadComponentDoc} from './component-loader.mjs';
-import {COMPONENT_NAME_RE} from './entry-name-files.mjs';
+import {COMPONENT_NAME_RE} from '../text/entry-names.mjs';
 import {
   checkedComponentList,
   storedComponentList,

@@ -10,7 +10,6 @@ import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
-import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -91,20 +90,17 @@ describe('a state setting of the theme', () => {
 });
 
 describe('a shadow on a part that rings itself in its shadow', () => {
-  it('is refused with the true reason, in both modes or one', async ctx => {
+  it('is written with its rings kept in their states', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('r', {cwd, like: 'neutral'});
-    for (const mode of [undefined, 'dark']) {
-      const r = await refusal(() =>
-        themeEditSet('r', 'box-shadow', '0 2px 6px #00000066', {
-          cwd,
-          on: 'text-input',
-          ...(mode ? {mode} : {}),
-        }),
-      );
-      expect(r.code, mode).toBe('ERR_THEME_NO_EFFECT');
-      expect(r.message, mode).toMatch(/hover and focus rings/);
-    }
+    await themeEditSet('r', 'box-shadow', '0 2px 6px #00000066', {
+      cwd,
+      on: 'text-input',
+      only: true,
+    });
+    expect(cssOf('r')).toMatch(
+      /\.astryx-text-input:focus-within\s*\{\s*box-shadow: 0 2px 6px #00000066, inset 0 0 0 2px var\(--color-accent-muted\);/,
+    );
     // A part without rings takes it.
     await themeEditSet('r', 'box-shadow', '0 2px 6px #00000066', {
       cwd,

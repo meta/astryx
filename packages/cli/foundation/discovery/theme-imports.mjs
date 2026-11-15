@@ -138,15 +138,30 @@ function complete(triplet) {
 }
 
 /**
+ * The folder the app imports a package theme's built output from, or null
+ * when the package that holds it is not installed, so `theme add` refuses
+ * it: an integration theme's own package folder, else (a bundled theme) its
+ * own package as the app installs it.
+ * @param {import('./theme-discovery.mjs').DiscoveredTheme} theme
+ * @param {string} cwd
+ * @returns {string | null}
+ */
+export function themePackageDir(theme, cwd) {
+  return (
+    /** @type {any} */ (theme).packageDir ??
+    findInstalledPackage(cwd, themeImportPackage(theme)) ??
+    null
+  );
+}
+
+/**
  * @param {import('./theme-discovery.mjs').DiscoveredTheme} theme
  * @param {string} cwd
  * @param {number} ownerThemeCount
  */
 function resolvePackageTheme(theme, cwd, ownerThemeCount) {
   const importPackage = themeImportPackage(theme);
-  const packageDir =
-    /** @type {any} */ (theme).packageDir ??
-    findInstalledPackage(cwd, importPackage);
+  const packageDir = themePackageDir(theme, cwd);
   if (!packageDir) {
     // The app imports a theme from its package, bundled themes included, so
     // the package is installed in the app before the theme is added.

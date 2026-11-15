@@ -736,7 +736,7 @@ function SectionHeading({
   icon?: typeof UsersIcon;
 }) {
   return (
-    <HStack hAlign="between" vAlign="center" gap={3}>
+    <HStack hAlign="between" vAlign="center" gap={3} wrap="wrap">
       <HStack gap={3} vAlign="center">
         {icon ? (
           <AspectRatio ratio={1} fit="center" xstyle={sectionIconStyles.tile}>
@@ -791,7 +791,7 @@ export default function DataDashboardPage() {
                 User analytics overview · {summary}
               </Text>
             </VStack>
-            <HStack gap={1}>
+            <HStack gap={1} wrap="wrap">
               <Selector
                 label="Date range"
                 isLabelHidden

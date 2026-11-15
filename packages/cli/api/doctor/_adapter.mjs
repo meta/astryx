@@ -46,7 +46,10 @@ export {
   iconUseCommand,
   unlistedIconSets,
 } from '../../foundation/discovery/icon-set-discovery.mjs';
-import {elementPropOrigins} from '../../foundation/discovery/module-exports.mjs';
+import {
+  elementPropOrigins,
+  rendersElement,
+} from '../../foundation/discovery/module-exports.mjs';
 import {cssImports} from '../../foundation/render/embedded-imports.mjs';
 import {satisfiesRange} from '../../foundation/env/semver.mjs';
 import * as path from 'node:path';
@@ -364,6 +367,16 @@ export function realDoctorFile(file) {
  */
 export function doctorElementPropOrigins(file, element) {
   return elementPropOrigins(file, element);
+}
+
+/**
+ * Whether a module renders an element imported by name from a module (see
+ * `rendersElement`).
+ * @param {string} file
+ * @param {Parameters<typeof rendersElement>[1]} element
+ */
+export function doctorRendersElement(file, element) {
+  return rendersElement(file, element);
 }
 
 /**

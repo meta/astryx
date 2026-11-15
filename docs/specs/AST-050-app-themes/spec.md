@@ -232,7 +232,12 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
 - **FR10 — Listing shows the app's themes.** `theme list` MUST mark each theme
   as added or not and as the default or not for the project, and name whether it
   is bundled, from a package, or local. These fields are additive, and local
-  themes join the list as additional entries.
+  themes join the list as additional entries. A theme whose package names the
+  provider that wires its themes (`spec:AST-039/FR15`) carries `wiredBy`: that
+  provider's export and module. The list reads no app source: its added and
+  default marks stay as they are for every theme, and its text says the
+  provider applies when the app renders it and that doctor checks where
+  (FR11).
 - **FR11 — Doctor proves the setup.** In a project with a theme module, doctor
   MUST check, and pass each check only on positive evidence:
   1. every added theme's owner is installed and its module and stylesheet
@@ -258,6 +263,19 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
       for the same selector, because every added stylesheet loads at once.
 
   Each failure names the exact command that fixes it.
+
+  In a project without a theme module, doctor counts a package theme as wired
+  when project source imports the provider its package names
+  (`spec:AST-039/FR15`) by name from the named module and renders it as an
+  element. That theme is the one whose stylesheet the app imports (its
+  export, or a stylesheet of the package that only that theme claims: its
+  file, a file in its own folder, or a file its stylesheet imports), or the
+  package's only theme. With several, doctor reports that one of them is
+  wired and that it cannot tell which, naming each stylesheet of the package
+  the app imports; it never calls a stylesheet missing when the app imports
+  one from the package. An import
+  that is never rendered does not count. The `theme-management` check then
+  names the theme and its provider and offers no `theme add`.
 
 - **FR12 — The copy default leaves through its lifecycle.** The copying
   `theme add`, its options, and its `theme.add` response are released
@@ -299,8 +317,10 @@ use` or `theme remove` on a theme that is not added MUST fail and name the
      root only, this replaces the rule that such a folder fails discovery
      (`architecture:cli-surface` INV19).
   4. A project with no theme module keeps working as it is. Doctor reports that
-     the CLI manages none of its themes and names the import command; the FR11
-     checks apply once a theme module exists.
+     the CLI manages none of its themes and names the import command, except
+     for a theme its package's provider wires (FR11), which doctor names with
+     that provider and no import command; the FR11 checks apply once a theme
+     module exists.
   5. A caller that sets `ASTRYX_THEME` chooses the default with `theme use`, or
      with `astryx.theme` in a project with no theme module.
 
@@ -372,6 +392,7 @@ unchanged.
 | FR9      | Generated module tests                                                                              | package and local themes                                                                                                                                                                                                                                                                                                                                             | The module imports source                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | FR10     | List tests                                                                                          | added, default, bundled, package, local                                                                                                                                                                                                                                                                                                                              | A listed theme lacks its app fields                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | FR11     | Doctor tests, one planted fault per check                                                           | each of the ten faults; a correct app                                                                                                                                                                                                                                                                                                                                | A check passes on its fault, or passes without positive evidence                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| FR11     | Provider wiring tests over a fixture integration that names its provider                            | a provider the app renders; one it only imports; a same-named component from another module; several themes, with and without an imported stylesheet; `theme list` text and JSON                                                                                                                                                                                     | A theme counts as wired without the app rendering its package's provider, `theme-management` offers `theme add` for a provider-wired theme, or `theme list` omits `wiredBy`                                                                                                                                                                                                                                                                                                            |
 | FR12     | Lifecycle tests against the latest stable CLI, migration tests on a project it made, and docs tests | plain `theme add`; the cleanup build; a copy made by the latest stable `theme add`; the upgrade codemod run twice; no theme module                                                                                                                                                                                                                                   | Before the cleanup, plain `theme add` stops copying, changes its exit status, stdout, or `theme.add` fields, omits the deprecation id, or warns more than once; after it, plain `theme add` copies; a theme command or doctor fails on an unmigrated copy; the codemod changes more than the descriptor or changes anything on its second run; a copy is moved or deleted; or doctor fails a project with no theme module                                                              |
 | FR13     | Docs and agent-docs tests                                                                           | theme guide, integration guide, agent block, init next steps                                                                                                                                                                                                                                                                                                         | A surface teaches copying as the way to use a theme, or names a different import command than the current lifecycle stage                                                                                                                                                                                                                                                                                                                                                              |
 | FR14     | Search tests and CLI runs                                                                           | bundled and integration themes; `--type theme` and an open search outside an app; a word only in a theme's description, such as `focus`; an exact slug or display name; a CLI with and without `--import`; help and the manifest                                                                                                                                     | A theme `theme list` shows is missing from search, a theme result lacks a field or names another command than its FR12 stage, a word only in a theme's description ranks it as a name or keyword match or above a result matching that word by name, title, or keyword, a themes-only search needs Core, or help, the manifest, or the API reference omits the domain                                                                                                                  |

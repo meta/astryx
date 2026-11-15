@@ -4,7 +4,7 @@
 
 export const docsZh = {
   description:
-    'Astryx 主题的工作方式：用主题包裹应用，并用 `astryx experimental theme editor new <name> --like neutral` 创建或修改主题（其余步骤见本主题最前面的几节）。',
+    'Astryx 主题的工作方式：用主题包裹应用，并用 `astryx experimental theme editor new <name> --like neutral` 创建或修改主题（让应用更紧凑或更宽松、修改某一类部件，也用它；其余步骤见本主题最前面的几节）。',
   sections: [
     {
       section: 'Make or change a theme',

@@ -1,9 +1,15 @@
-Results for "experimental" (12)
+Results for "experimental" (13)
 name:        author-a-theme
 domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs author-a-theme --index
 parent:      pnpm exec astryx docs guides
+name:        author-a-theme
+section:     creating-a-custom-theme
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs author-a-theme creating-a-custom-theme
+parent:      pnpm exec astryx docs author-a-theme --index
 name:        authoring/field-reference
 section:     config
 domain:      doc
