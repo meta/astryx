@@ -37,6 +37,8 @@ export const TEMPLATE_LOADERS: Record<string, () => Promise<TemplateModule>> = {
     import('../../../../packages/cli/assets/templates/pages/classic-gallery/page'),
   'contact-form': () =>
     import('../../../../packages/cli/assets/templates/pages/contact-form/page'),
+  'content-compare': () =>
+    import('../../../../packages/cli/assets/templates/pages/content-compare/page'),
   'course-detail': () =>
     import('../../../../packages/cli/assets/templates/pages/course-detail/page'),
   dashboard: () =>

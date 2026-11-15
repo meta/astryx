@@ -761,6 +761,7 @@
     "/templates/checkout-wizard/",
     "/templates/classic-gallery/",
     "/templates/contact-form/",
+    "/templates/content-compare/",
     "/templates/course-detail/",
     "/templates/dashboard-alert-rail/",
     "/templates/dashboard-cohort-funnel/",

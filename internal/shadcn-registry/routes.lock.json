@@ -5487,6 +5487,11 @@
       "aliases": []
     },
     {
+      "name": "template-content-compare",
+      "path": "templates/content-compare",
+      "aliases": []
+    },
+    {
       "name": "template-course-detail",
       "path": "templates/course-detail",
       "aliases": []
