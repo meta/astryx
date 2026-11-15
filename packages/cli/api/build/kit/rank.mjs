@@ -142,7 +142,7 @@ const START_TERMS = 2;
  * by how strongly each one's own descriptor answers the idea, then by how
  * typical of its family it is, then by name (`settleTies`).
  *
- * @param {string} query
+ * @param {string} idea
  * @param {PageTemplate[]} pages
  * @returns {RankedPage[]}
  */

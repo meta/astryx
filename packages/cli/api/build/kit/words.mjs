@@ -232,6 +232,16 @@ export function framesOf(query) {
 }
 
 /**
+ * The parts of a page template that its name and descriptor words come from.
+ * @typedef {object} NamedTemplate
+ * @property {string} name
+ * @property {string} [displayName]
+ * @property {string} [category]
+ * @property {string[]} [keywords]
+ * @property {string} [description]
+ */
+
+/**
  * An idea with every run of its words that names a page template written as
  * that template's own words: "a KanbanBoard page", "a kanban-board page" and a
  * one-slip "a kanban bord page" read as the template id's words. Only a whole
@@ -240,7 +250,7 @@ export function framesOf(query) {
  * word ("pane", "three") is never respelled into a name. A run already
  * written as the name's words is left as it is.
  * @param {string} idea
- * @param {import('./words.mjs').PageTemplate[]} pages the project's page templates
+ * @param {NamedTemplate[]} pages the project's page templates
  * @returns {string}
  */
 export function readNames(idea, pages) {
@@ -300,7 +310,7 @@ const descriptorWordCache = new WeakMap();
 /**
  * Every stemmed word the page templates' own descriptors use: ids, display
  * names, categories, keywords and descriptions.
- * @param {import('./words.mjs').PageTemplate[]} pages
+ * @param {NamedTemplate[]} pages
  * @returns {Set<string>}
  */
 function descriptorWordsOf(pages) {
