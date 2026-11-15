@@ -30,10 +30,8 @@ const styles = stylex.create({
     flexShrink: 0,
     borderWidth: borderVars['--border-width'],
     borderStyle: 'solid',
-    // The circle is what marks a radio, not a corner: 50% on the square box
-    // the size styles below guarantee, so a theme that squares its pills
-    // (--radius-full) keeps round radios. A theme that wants square radios
-    // says so on this component.
+    // The circle marks a radio, so it ignores --radius-full.
+    // 50% draws a circle on the square box the size styles set.
     borderRadius: '50%',
     transitionProperty: 'background-color, border-color',
     transitionDuration: {

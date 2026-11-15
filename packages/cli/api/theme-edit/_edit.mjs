@@ -52,6 +52,7 @@ import {
   compileTheme,
   cornerPx,
   radiusAt,
+  radioCircle,
   radiusTokenOf,
   contrastProblems,
   describe,
@@ -125,7 +126,6 @@ import {
 } from './_settings.mjs';
 import {
   checkSetting,
-  fixedCorners,
   normalizeEntry,
   propertyValueProblem,
   storedProblems,
@@ -6058,19 +6058,18 @@ function partValues(ctx, data, res, mode) {
         // part's is unknown.
         /** @type {Map<string, string[]>} */
         const byToken = new Map();
-        // A part drawn as a fixed shape (a radio's circle) reads no token:
-        // the dial leaves it at that shape.
+        // A radio's circle is no corner: the dial leaves it (the build
+        // writes nothing there).
         for (const t of parts) {
-          const shape = fixedCorners(ctx.C, t);
-          const token = shape ? `fixed:${shape}` : radiusTokenOf(ctx, t);
+          const token = radioCircle(ctx.C, t)
+            ? 'circle'
+            : radiusTokenOf(ctx, t);
           byToken.set(token, [...(byToken.get(token) ?? []), t]);
         }
-        /** @param {string} token */
-        const shapeOf = token => token.replace(/^fixed:/, '');
         const whole = [...byToken]
           .map(
             ([token, ts]) =>
-              `${token === 'unknown' ? 'unknown' : token.startsWith('fixed:') ? `a fixed ${shapeOf(token)}` : `${token} ${res[mode][token] ?? 'unset'}`}${byToken.size > 1 ? ` for ${ts.join(', ')}` : ''}`,
+              `${token === 'unknown' ? 'unknown' : token === 'circle' ? "a radio's circle, 50%" : `${token} ${res[mode][token] ?? 'unset'}`}${byToken.size > 1 ? ` for ${ts.join(', ')}` : ''}`,
           )
           .join('; ');
         // What the build writes on each part: a rung by the radius token
@@ -6078,8 +6077,8 @@ function partValues(ctx, data, res, mode) {
         const rung = CORNERS.some(([n]) => n === s.value) || px >= 1000;
         const built = [...byToken]
           .map(([token, ts]) => {
-            if (token.startsWith('fixed:'))
-              return `${shapeOf(token)} (a fixed shape)${byToken.size > 1 ? ` on ${ts.join(', ')}` : ''}`;
+            if (token === 'circle')
+              return `none (a radio's circle stays 50%)${byToken.size > 1 ? ` on ${ts.join(', ')}` : ''}`;
             const v =
               rung && token !== 'unknown' && ctx.base
                 ? radiusAt(ctx.base, s.value, token)

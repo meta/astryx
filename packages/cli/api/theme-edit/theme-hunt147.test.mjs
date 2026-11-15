@@ -146,10 +146,8 @@ describe('readers the lists lean on', () => {
     'checkboxes, a pill base’s kept variant, titles, items, outlines, padding',
     async test => {
       needsBases(test);
-      // The checks family: the checkbox reads a radius token, and the radio
-      // draws its circle as a fixed shape the dial leaves.
       expect((await answer('make checkboxes rounder')).first).toEqual([
-        'set n corners more --on checks',
+        'set n corners more --on checkbox-indicator --only',
       ]);
       const pill = await answer(
         'make buttons less round except ghost ones',

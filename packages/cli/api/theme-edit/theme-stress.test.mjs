@@ -862,9 +862,22 @@ describe('review fixes', () => {
       x.startsWith('corners = large on checks'),
     );
     expect(line).toContain('--radius-inner 4px for checkbox-indicator');
-    // The radio draws its circle as a fixed shape, which the dial leaves.
-    expect(line).toContain('a fixed 50% for radio-indicator');
-    expect(line).toContain('50% (a fixed shape) on radio-indicator');
+    // A radio's circle is no corner: the dial leaves it.
+    expect(line).toContain("a radio's circle, 50% for radio-indicator");
+    expect(line).toContain(
+      "none (a radio's circle stays 50%) on radio-indicator",
+    );
+    await themeEditUndo('s', {cwd, thing: 'corners', on: 'checks'});
+  }, 120_000);
+
+  it("leaves a radio's circle out of a corners dial on its group", async () => {
+    await themeEditSet('s', 'corners', 'square', {cwd, on: 'checks'});
+    const css = read('themes/s/s.css');
+    const rules = [
+      ...css.matchAll(/\.astryx-radio-indicator\b[^{]*\{([^}]*)\}/g),
+    ].map(m => m[1]);
+    expect(rules.some(r => /radius/.test(r))).toBe(false);
+    expect(css).toMatch(/\.astryx-checkbox-indicator[^{]*\{[^}]*radius/);
     await themeEditUndo('s', {cwd, thing: 'corners', on: 'checks'});
   }, 120_000);
 

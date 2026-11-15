@@ -43,6 +43,7 @@ import {
 } from './_palette.mjs';
 import {isColorToken} from './_compiler.mjs';
 import {
+  radioCircle,
   cornerParts,
   focusStateOf,
   paddedParts,
@@ -5648,6 +5649,8 @@ export function draftAnswer(ctx, env, question) {
         )
           return [st];
         const atEnd = (/** @type {string} */ m) => {
+          // A radio's circle is no corner: it is left either way.
+          if (radioCircle(C, m)) return true;
           const tok = C.partReads(m, 'corners')?.[0]?.token;
           const v = /^(\d*\.?\d+)(px|rem)$/.exec(
             String(tok ? resolvedValue(tok) || '' : ''),
@@ -5667,7 +5670,12 @@ export function draftAnswer(ctx, env, question) {
       ? {
           ...d,
           options,
-          text: `${d.text} (${[...new Set(skipped)].join(', ')} is ${d.options.flat().some(st => st.value === 'more') ? 'fully round already' : 'square already'}, so it is left as it is)`,
+          text: `${d.text} (${[...new Set(skipped)]
+            .map(
+              m =>
+                `${m} ${radioCircle(C, m) ? "is a radio's circle" : d.options.flat().some(st => st.value === 'more') ? 'is fully round already' : 'is square already'}`,
+            )
+            .join(', ')}, so it is left as it is)`,
         }
       : d;
   };

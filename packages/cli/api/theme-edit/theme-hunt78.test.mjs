@@ -529,21 +529,19 @@ describe('the answer that joins every clause is measured too', () => {
   it(
     'never brings back a step the check left out',
     async () => {
-      // A radio draws its circle as a fixed shape: its clause is left out.
       const {commands} = await answer(
-        'make form controls like inputs and radios rounder',
+        'make form controls like inputs and checkboxes rounder',
       );
-      expect(commands.some(c => c.includes('--on radio-indicator'))).toBe(
-        false,
-      );
+      expect(commands.some(c => c.includes('--on checks'))).toBe(false);
       expect(commands[0]).toBe('set q corners more --on inputs');
+      // A radio's circle alone is no corner the dial reaches.
       await expect(
         themeEditSet('q', 'corners', 'more', {
           cwd,
           on: 'radio-indicator',
           only: true,
         }),
-      ).rejects.toThrow(/fixed shape \(border-radius 50%\)/);
+      ).rejects.toThrow(/a radio's circle \(border-radius 50%\), not a corner/);
     },
     T,
   );
