@@ -59,6 +59,9 @@ describe('template path safety', () => {
     );
     expect(err.code).toBe('ERR_PATH_TRAVERSAL');
     expect(err.message).toMatch(/outside the project root/i);
+    expect(err.message).toContain(
+      `as a scratch copy in the system temp folder (${path.resolve(os.tmpdir())})`,
+    );
     expect(err.suggestions).toEqual([
       {
         name: 'astryx template blank src/pages/blank',

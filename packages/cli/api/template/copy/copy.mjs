@@ -16,6 +16,7 @@ import {
   isFilePathArg,
   PathSafetyError,
   tempFolderOf,
+  tempFolders,
 } from '../../../foundation/fs/path-safety.mjs';
 import {AstryxError, writeFailed} from '../../error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
@@ -96,9 +97,12 @@ export function templateCopy(
       // so the refusal names a place inside the project and the print that
       // writes nothing.
       const folder = templateDestination(cwd, match.type, match.dirName);
+      const [scratchFolder] = tempFolders();
       throw new AstryxError(
         `Invalid template target path "${targetPath}": it is outside the project root (${path.resolve(cwd)}). ` +
-          'The template is written only inside the project, or as a scratch copy in the system temp folder. Give a path inside one, or print the source.',
+          (scratchFolder
+            ? `The template is written only inside the project, or as a scratch copy in the system temp folder (${scratchFolder}). Give a path inside one, or print the source.`
+            : 'The template is written only inside the project. Give a path inside it, or print the source.'),
         [
           {
             name: `${command} ${quoteCommandArgument(folder)}`,

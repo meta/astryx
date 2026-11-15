@@ -137,30 +137,40 @@ export function assertWithin(targetPath, rootDir, options = {}) {
 }
 
 /**
- * The system temp folder that holds the absolute path `target`: the folder
- * `os.tmpdir()` names, or `/tmp` on a POSIX system. Null for a path in
- * neither. A temp folder that is a disk's root or holds the home folder is
- * not one, so a scratch copy never reaches the user's files. The path is read
- * as written and through the temp folder's own links, as `assertWithin`
- * reads a project folder (macOS keeps `/tmp` at `/private/tmp`).
+ * The system temp folders a scratch copy may go to: the folder `os.tmpdir()`
+ * names, and `/tmp` on a POSIX system. A folder that is a disk's root or holds
+ * the home folder is left out, so a misset `TMPDIR` cannot open the whole disk
+ * or the home folder to scratch copies.
+ *
+ * @returns {string[]}
+ */
+export function tempFolders() {
+  const home = path.resolve(os.homedir());
+  return [
+    ...new Set(
+      [os.tmpdir(), ...(process.platform === 'win32' ? [] : ['/tmp'])].map(
+        folder => path.resolve(folder),
+      ),
+    ),
+  ].filter(
+    folder =>
+      folder !== path.parse(folder).root &&
+      relativeInside(folder, home) === null,
+  );
+}
+
+/**
+ * The temp folder of {@link tempFolders} that holds the absolute path
+ * `target`, or null. The path is read as written and through the temp
+ * folder's own links, as `assertWithin` reads a project folder (macOS keeps
+ * `/tmp` at `/private/tmp`).
  *
  * @param {string} target absolute
  * @returns {string | null}
  */
 export function tempFolderOf(target) {
-  const home = path.resolve(os.homedir());
-  const folders = [
-    os.tmpdir(),
-    ...(process.platform === 'win32' ? [] : ['/tmp']),
-  ]
-    .map(folder => path.resolve(folder))
-    .filter(
-      folder =>
-        folder !== path.parse(folder).root &&
-        relativeInside(folder, home) === null,
-    );
   return (
-    folders.find(
+    tempFolders().find(
       folder => relativeInsideRoot(path.resolve(target), folder) !== null,
     ) ?? null
   );

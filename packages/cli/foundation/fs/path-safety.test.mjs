@@ -10,6 +10,7 @@ import {
   isFilePathArg,
   PathSafetyError,
   tempFolderOf,
+  tempFolders,
 } from './path-safety.mjs';
 
 let tmpDir;
@@ -374,6 +375,24 @@ describe('tempFolderOf', () => {
     'takes /tmp on a POSIX system',
     () => {
       expect(tempFolderOf('/tmp/astryx/x')).toBe('/tmp');
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'lists the temp folder and /tmp once each',
+    () => {
+      process.env.TMPDIR = '/tmp';
+      expect(tempFolders()).toEqual(['/tmp']);
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'takes a TMPDIR inside the home folder, and leaves out one that holds it',
+    () => {
+      process.env.TMPDIR = path.join(os.homedir(), 'tmp');
+      expect(tempFolders()).toContain(path.join(os.homedir(), 'tmp'));
+      process.env.TMPDIR = path.dirname(os.homedir());
+      expect(tempFolders()).not.toContain(path.dirname(os.homedir()));
     },
   );
 

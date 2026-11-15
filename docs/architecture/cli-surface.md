@@ -1007,8 +1007,8 @@ such files, so `astryx template <name> <path>` writes a scratch copy to a path
 in it instead of refusing the path (INV10). The checks a write in the project
 has apply there too, so the copy cannot follow a link out of the temp folder
 or replace a file without `--overwrite`. A temp folder that is a disk's root or
-holds the home folder is not one, so a scratch copy never reaches the user's
-files.
+holds the home folder is not one, so a misset `TMPDIR` cannot open the whole
+disk or the home folder to scratch copies.
 
 Rejected: keeping scratch copies inside the project (they land in folders the
 app builds, typechecks and lints).
