@@ -111,18 +111,22 @@ export function useSelectorPresentation({
   const handlePopoverHide = useCallback(() => {
     onHideRef.current();
     const trigger = triggerRef.current;
-    // A light dismiss caused by pressing another focusable element has already
-    // moved focus there; taking it back would leave the next key on this
-    // closed Selector (spec:Popover AR4 returns focus only when it would
-    // otherwise be lost). Escape, a choice in the list, or a press on nothing
-    // focusable still returns focus to the trigger.
+    // A light dismiss by a press on another control has already moved focus
+    // there. Taking it back would send the next key to this closed Selector.
+    // Escape, a pick in the list, or a press on nothing focusable returns
+    // focus to the trigger. A press inside the list, or on a focusable
+    // container around it, moves focus to that container, such as a dialog's
+    // content box. A container of the list is no other control, so that
+    // focus returns too.
     const active = document.activeElement;
+    const list = popoverContentRef.current?.current ?? null;
     const focusLandedElsewhere =
       !isFocusReturnAlways &&
       active instanceof HTMLElement &&
       active !== document.body &&
       active !== trigger &&
-      !popoverContentRef.current?.current?.contains(active);
+      list?.contains(active) !== true &&
+      !active.contains(list);
     if (focusLandedElsewhere) {
       return;
     }
