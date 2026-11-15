@@ -50,7 +50,7 @@ export {withListingCache} from '../../foundation/fs/listing-cache.mjs';
  * @property {string[]} keywords The ideas the page serves, as its own descriptor names them; empty when it declares none.
  * @property {string} filePath Absolute path to the template source file on disk.
  * @property {string[]} components The components its page composes, read from its source on first use; empty when the source cannot be read.
- * @property {boolean} hidden The template's own `isHiddenFromOverview`: kept off the gallery, so never offered as a page to start from.
+ * @property {boolean} hidden The template's own `isHiddenFromOverview`: kept off the gallery, so never taken as the app shell.
  */
 
 /**

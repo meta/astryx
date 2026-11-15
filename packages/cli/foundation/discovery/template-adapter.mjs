@@ -121,8 +121,8 @@ export function effectiveTemplateDiscovery(templates) {
  * @property {string} [category]
  * @property {boolean} [isReady]
  * @property {boolean} [scaffold]
- * @property {boolean} [hidden] the doc's `isHiddenFromOverview`: kept off the
- *   gallery, so never offered as a page to start from
+ * @property {boolean} [hidden] a Core page doc's `isHiddenFromOverview`: kept
+ *   off the gallery, so never taken as the app shell
  * @property {number} [aspectRatio]
  * @property {string} [exampleFor]
  * @property {string[]} [alsoExampleFor]
@@ -2078,8 +2078,6 @@ export async function discoverIntegrationTemplatesForOne(integration) {
       category: doc?.category || '',
       isReady: doc?.isReady ?? true,
       scaffold: doc?.scaffold ?? false,
-      hidden:
-        doc?.type === 'page' ? doc.isHiddenFromOverview === true : undefined,
       aspectRatio: doc?.type === 'block' ? doc.aspectRatio : undefined,
       exampleFor: doc?.type === 'block' ? doc.exampleFor : undefined,
       alsoExampleFor:
