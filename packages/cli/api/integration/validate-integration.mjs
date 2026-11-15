@@ -325,8 +325,11 @@ async function findUnreachableContributionIssues(
  * Shared core for the local and installed entry points.
  * @param {string} packageDir
  * @param {{name: string, version?: string}} identity
- * @param {{scanUnreachable?: boolean, own?: boolean, cwd?: string, iconSets?: boolean}} [options]
+ * @param {{scanUnreachable?: boolean, own?: boolean, cwd?: string, iconSets?: boolean, shippedImports?: boolean}} [options]
  *   `own`: the package is the one being authored in the current folder;
+ *   `shippedImports`: check the relative imports of the modules the package
+ *   ships (default true; `integration verify` checks them in the packed
+ *   tree instead, which holds exactly what npm packs);
  *   `cwd`: the folder whose package manager an install command names;
  *   `iconSets`: read the experimental `experimental.iconSets` root (default
  *   true). Off, the root is not resolved or checked and `iconSets` is not
@@ -341,6 +344,7 @@ async function validateAtPackageDir(
     own = false,
     cwd = packageDir,
     iconSets = true,
+    shippedImports = true,
   } = {},
 ) {
   /** @type {Issue[]} */
@@ -554,14 +558,18 @@ async function validateAtPackageDir(
   // installed or packed one, which are exactly what npm packed. Each one no
   // shipped file answers is a `next` note until the next minor release makes
   // it a warning (architecture:cli-surface INV35).
-  const shipped = shippedImportFindings(packageDir, {
-    files: own ? shippedFiles(packageDir) : filesOnDisk(packageDir),
-    manifestFile: loaded.__manifestFile,
-  });
-  (result.listed ??= []).push(
-    ...shipped.findings.map(finding => listed(finding.code, finding.message)),
-  );
-  if (shipped.unchecked.length > 0) result.shippedImports = shipped.unchecked;
+  if (shippedImports) {
+    const shipped = shippedImportFindings(packageDir, {
+      files: own ? shippedFiles(packageDir) : filesOnDisk(packageDir),
+      manifestFile: loaded.__manifestFile,
+    });
+    (result.listed ??= []).push(
+      ...shipped.findings.map(finding => listed(finding.code, finding.message)),
+    );
+    if (shipped.unchecked.length > 0) {
+      result.shippedImports = shipped.unchecked;
+    }
+  }
   if (scanUnreachable) {
     issues.push(
       ...(await findUnreachableContributionIssues(
@@ -609,9 +617,14 @@ async function validateAtPackageDir(
  * + a single sibling astryx.integration.{ts,mjs,js}. A missing manifest yields
  * `found: false` (guidance, not an error) so callers stay exit-0.
  * @param {string} [cwd]
+ * @param {{shippedImports?: boolean}} [options] `shippedImports: false`
+ *   skips the shipped-import check, for a caller that checks the packed tree
  * @returns {Promise<ValidateResult>}
  */
-export async function validateLocalIntegration(cwd = process.cwd()) {
+export async function validateLocalIntegration(
+  cwd = process.cwd(),
+  {shippedImports = true} = {},
+) {
   const pkgJsonPath = findNearestPackageJson(cwd);
   if (!pkgJsonPath) {
     return {found: false, reason: 'no_package_json', issues: []};
@@ -654,7 +667,7 @@ export async function validateLocalIntegration(cwd = process.cwd()) {
   const result = await validateAtPackageDir(
     packageDir,
     {name, version: pkg.version},
-    {scanUnreachable: true, own: true},
+    {scanUnreachable: true, own: true, shippedImports},
   );
   (result.listed ??= []).unshift(
     ...fields,

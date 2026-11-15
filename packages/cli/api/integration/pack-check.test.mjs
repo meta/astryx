@@ -835,6 +835,43 @@ describe('integrationPackCheck', () => {
     );
   });
 
+  it('warns, in the packed tree, on a relative import of a file npm leaves out', async () => {
+    writePackage({
+      files: ['astryx.integration.mjs', 'themes', 'lib/extra.js'],
+    });
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(tmpDir, 'package.json'), 'utf8'),
+    );
+    pkg.exports = {'./extra': './lib/extra.js'};
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify(pkg));
+    fs.mkdirSync(path.join(tmpDir, 'lib', 'icons'), {recursive: true});
+    fs.writeFileSync(
+      path.join(tmpDir, 'lib', 'extra.js'),
+      "export * from './icons';\n",
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'lib', 'icons', 'index.js'),
+      'export const Check = 1;\n',
+    );
+
+    const result = await integrationPackCheck({cwd: tmpDir});
+
+    expect(result.data.packable).toBe(true);
+    expect(
+      result.data.issues.filter(issue =>
+        issue.code.endsWith('relative_import_not_shipped'),
+      ),
+    ).toEqual([
+      {
+        code: 'packed_relative_import_not_shipped',
+        severity: 'warning',
+        message: expect.stringContaining(
+          'Packed: lib/extra.js:1: imports "./icons", which is not a file in the package',
+        ),
+      },
+    ]);
+  });
+
   it('fails when a declared theme export does not resolve', async () => {
     writePackage({
       files: ['astryx.integration.mjs', 'themes'],
