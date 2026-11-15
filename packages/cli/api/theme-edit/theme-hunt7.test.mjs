@@ -247,7 +247,8 @@ describe('dials and part properties (final 3)', () => {
       on: 'button',
       when: 'size:sm',
     });
-    expect(r.data.setting.value).toBe('round');
+    // One step down from pill is the step between round and pill.
+    expect(r.data.setting.value).toBe('24px');
     await themeEditSet('m4', 'corners', 'pill', {cwd, on: 'text-input'});
     // text-area shows the group's pill: more has nowhere to go.
     const ta = await refusal(() =>

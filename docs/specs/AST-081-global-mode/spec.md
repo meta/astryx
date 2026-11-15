@@ -392,16 +392,19 @@ works on is `spec:AST-040` FR9's.
     `docs` and `doctor` keep in `astryx/catalogs` (search's catalogs, each
     integration's contribution-check results, template discovery's records,
     the component list (with each integration's component replacements),
-    integrations' theme records, the docs not-found hint's name summaries of
-    folder trees, the CLI's own docs tree, and doctor's file-only docs checks
-    and theme-wiring scan, which doctor keeps only while the folder exists), a
+    integrations' theme records, the lookup commands' not-found hint's
+    name summaries of folder trees, the CLI's own docs tree, and doctor's
+    file-only docs checks and theme-wiring scan, which doctor keeps only
+    while the folder exists), a
     folder only the user can
     reach (made `0700` by the first run that keeps a gather: `search` or
     `build`, or another of those commands where an integration can load,
-    never `doctor`; that run keeps its gathers at once; used only while it is
+    never `doctor`; that run keeps its gathers at once; a lookup command's
+    not-found path may create the per-user catalogs folder to keep its name
+    index; used only while it is
     a real folder the user owns and others cannot open, never where the
     system has no user ids), each
-    kept value used only while every input its gather read is unchanged; a
+    kept value used only while every input its gather read is unchanged. For the installed CLI's own files, the CLI's build id stands for their contents (an upgrade or reinstall changes it; in-place edits to an installed CLI aren't supported). A
     run under Yarn Plug'n'Play's loader, such as `yarn astryx`, keeps and
     uses no catalog; `doctor` lists that folder and its size in an info row,
     which also names the size limit it shares with the transpile cache below

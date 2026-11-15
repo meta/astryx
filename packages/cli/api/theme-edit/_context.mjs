@@ -29,6 +29,7 @@ import {
   FONT_ROLES,
   FONTS,
   OPEN_FONTS,
+  appleFaceGeneric,
   isDesktopFamily,
   oneSystemOf,
   P,
@@ -38,10 +39,17 @@ import {makeCompiler} from './_compiler.mjs';
 import {openProject, installLine} from './_project.mjs';
 import {partData} from './_parts.mjs';
 import {writeWhole} from './_palette.mjs';
+import {
+  assetRef,
+  CSS_URL,
+  cssUrlRef,
+} from '../../foundation/render/render-page.mjs';
+import {MAX_ASSET_BYTES} from '../../foundation/render/assets.mjs';
 import {typoNear} from './_normal.mjs';
 import {
   fontOf,
   builtFontFamilies,
+  builtFontWeights,
   fontPackages,
   fontsourceSuggestion,
   modesOf,
@@ -51,14 +59,18 @@ import {
   themeFiles,
   refuseThemesNotFolder,
   shown,
+  OPEN_SECTION,
 } from './_settings.mjs';
 import {
   SHOWCASE_GROUPS,
   copyFontsCss,
   fontPackageSheets,
+  fontPackageWeights,
+  shownWeight,
   baseFontsSheet,
   newPictureRun,
   renderPreview,
+  renderSheet,
   screenshot,
 } from './_preview.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
@@ -163,7 +175,8 @@ async function derivedVars(coreDir) {
 const isRenderFailure = e =>
   e instanceof AstryxError &&
   (e.code === E.ERR_RENDER_FAILED ||
-    e.code === E.ERR_RENDER_MISSING_DEPENDENCY);
+    e.code === E.ERR_RENDER_MISSING_DEPENDENCY ||
+    e.code === E.ERR_RENDER_ASSET_TOO_LARGE);
 
 /**
  * The app a folder belongs to: the nearest folder at or above it whose
@@ -594,9 +607,69 @@ export function familiesNothingLoads(ctx, data, packages) {
       loaded.has(key) ||
       packages.some(x => fontKey(x.family) === key) ||
       isDesktopFamily(family) ||
-      oneSystemOf(family)
+      oneSystemOf(family) ||
+      appleFaceGeneric(family)
     );
   });
+}
+
+/**
+ * What the previews (preview.html, sheet.html and their pictures) cannot
+ * show of the images and files the theme's built stylesheet names: a
+ * remote file (a page opened from disk loads no network), a file that is
+ * not there, one that is not a regular file, and one too large to carry.
+ * Read from the built stylesheet with the renderer's own reader, so a
+ * preview rendered before says it too.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @returns {string[]}
+ */
+export function themeImageNotes(ctx, slug) {
+  const file = themeFiles(ctx.project.cwd, slug).css;
+  /** @type {string} */
+  let css;
+  try {
+    css = fs.readFileSync(file, 'utf8');
+  } catch {
+    return [];
+  }
+  const at = {dir: path.dirname(file), root: ctx.project.cwd};
+  const where = shown(ctx.project.cwd, at.dir);
+  /** @type {Map<string, string>} */
+  const notes = new Map();
+  for (const m of css.matchAll(new RegExp(CSS_URL.source, 'g'))) {
+    const named = assetRef(cssUrlRef(m), at);
+    if (!named || notes.has(named.ref)) continue;
+    if (named.kind === 'remote')
+      notes.set(
+        named.ref,
+        `${named.ref} is loaded from the network: the app loads it, but the previews (preview.html, sheet.html and their pictures) cannot, and show the theme without it.`,
+      );
+    else if (named.kind === 'missing')
+      notes.set(
+        named.ref,
+        `${named.ref} was not found beside the theme (${where}/), so neither the previews nor the app show it.`,
+      );
+    else if (named.kind === 'not-file')
+      notes.set(
+        named.ref,
+        `${named.ref} is not a regular file (a pipe, a device or a folder), so the previews do not read it and show the theme without it.`,
+      );
+    else if (named.kind === 'unreadable')
+      notes.set(
+        named.ref,
+        `${shown(ctx.project.cwd, named.file)} cannot be read (no permission), so the previews show the theme without it; make it readable (chmod u+r) to show it.`,
+      );
+    else {
+      const bytes = fs.statSync(named.file).size;
+      if (bytes > MAX_ASSET_BYTES)
+        notes.set(
+          named.ref,
+          `${shown(ctx.project.cwd, named.file)} is ${(bytes / 1048576).toFixed(1)} MB, more than the ${MAX_ASSET_BYTES / 1048576} MB a preview page carries per file; a smaller copy shows in the previews too.`,
+        );
+    }
+  }
+  return [...notes.values()];
 }
 
 /**
@@ -615,8 +688,8 @@ export function fontNotes(ctx, data) {
   // it, when Fontsource's naming gives one.
   /** @param {string} family */
   const unloadedNote = family => {
-    const pkg = fontsourceSuggestion(family);
-    return `"${family}" is not a system font and no package loads it: the app must load it, or it falls back.${pkg ? ` If Fontsource publishes it, ${installLine(ctx.project.cwd, [pkg])} installs its package, which the previews and the app copy then load.` : ''}`;
+    const s = fontsourceSuggestion(family);
+    return `"${family}" is not a system font and no package loads it: the app must load it, or it falls back.${s ? ` ${s.known ? '' : 'If Fontsource publishes it, '}${installLine(ctx.project.cwd, [s.pkg])} installs its package, which the previews and the app copy then load.` : ''}`;
   };
   for (const {pkg, family, installed} of packages) {
     const fallbacks =
@@ -628,7 +701,7 @@ export function fontNotes(ctx, data) {
         : 'system';
     notes.push(
       installed
-        ? `${family} is installed (${pkg}), so the previews and the app copy load it, a stylesheet for each weight the theme uses: ${fontPackageSheets(
+        ? `${family} is installed (${pkg}), so the previews and the app copy load it, a stylesheet for each face the theme's weights show: ${fontPackageSheets(
             ctx,
             data.name,
             pkg,
@@ -675,6 +748,17 @@ export function fontNotes(ctx, data) {
     const named = fontOf(s.value).family.replace(/^["']|["']$/g, '');
     const system = oneSystemOf(named);
     const on = s.on ? ` --on ${s.on}` : '';
+    const generic = appleFaceGeneric(named);
+    if (generic) {
+      // Apple systems reach their interface faces only by a generic.
+      const {fallbacks} = fontOf(s.value);
+      const next = fallbacks.split(',')[0]?.trim() || 'system-ui';
+      const value = [generic, fallbacks.trim()].filter(Boolean).join(', ');
+      notes.push(
+        `"${named}" is an Apple interface face, which browsers do not reach by its name, so every system shows the next font in the stack (${next}). Apple systems show it for ${generic}: ${P} set ${data.name} font ${quoteCommandArgument(value)}${on}`,
+      );
+      continue;
+    }
     if (system) {
       // A system font, on one system: the others show the next font.
       const next =
@@ -711,14 +795,67 @@ export function fontNotes(ctx, data) {
         packages.some(x => x.installed && fontKey(x.family) === fontKey(family))
       )
         continue;
-      const pkg = fontsourceSuggestion(family);
+      const s = fontsourceSuggestion(family);
       notes.push(
-        `"${family}" comes from ${base.spec}, which loads it from ${new URL(base.remote[0], 'https://x').host}: the app shows it, but the previews (preview.html, sheet.html and their pictures) cannot load a remote stylesheet and show the next font in the stack.${pkg ? ` ${installLine(ctx.project.cwd, [pkg])} installs a copy the previews load too.` : ''}`,
+        `"${family}" comes from ${base.spec}, which loads it from ${new URL(base.remote[0], 'https://x').host}: the app shows it, but the previews (preview.html, sheet.html and their pictures) cannot load a remote stylesheet and show the next font in the stack.${s ? ` ${installLine(ctx.project.cwd, [s.pkg])} installs a copy the previews load too.` : ''}`,
       );
     }
+  notes.push(...baseWeightNotes(ctx, data));
   for (const family of familiesNothingLoads(ctx, data, packages)) {
     if (dialFamilies.has(fontKey(family))) continue;
     notes.push(unloadedNote(family));
+  }
+  return notes;
+}
+
+/**
+ * A note for each weight the theme uses that a stylesheet loading one of
+ * its families has no face for (it shows as the face CSS font matching
+ * picks): the base theme's font stylesheet, unless an installed package
+ * loads that family, and each installed font package with a stylesheet per
+ * weight.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {string[]}
+ */
+export function baseWeightNotes(ctx, data) {
+  /** @type {string[]} */
+  const notes = [];
+  const used = builtFontWeights(ctx, data.name) ?? [];
+  const built = builtFontFamilies(ctx, data.name);
+  const packages = fontPackages(ctx, data);
+  /**
+   * @param {string} family @param {string} by what loads it
+   * @param {number[]} faces the weights it loads @param {string} fix
+   */
+  const gap = (family, by, faces, fix) => {
+    const missing = used.filter(w => !faces.includes(w));
+    if (missing.length)
+      notes.push(
+        `${family} is loaded by ${by} at ${faces.join(', ')} only, so ${missing.map(w => `${w} shows as ${shownWeight(w, faces)}`).join(', ')}${fix}`,
+      );
+  };
+  const base = baseFontsSheet(ctx, data);
+  for (const [family, faces] of base?.weights ?? []) {
+    if (built && !built.has(family.toLowerCase())) continue;
+    if (
+      packages.some(x => x.installed && fontKey(x.family) === fontKey(family))
+    )
+      continue;
+    const s = fontsourceSuggestion(family);
+    gap(
+      family,
+      /** @type {{spec: string}} */ (base).spec,
+      faces,
+      s
+        ? `; ${installLine(ctx.project.cwd, [s.pkg])} loads every weight of it`
+        : '',
+    );
+  }
+  for (const {pkg, family, installed} of packages) {
+    if (!installed || (built && !built.has(family.toLowerCase()))) continue;
+    const faces = fontPackageWeights(ctx, pkg);
+    if (faces) gap(family, pkg, faces, '');
   }
   return notes;
 }
@@ -850,7 +987,27 @@ export function styledChanges(before, after, base) {
 }
 
 /**
- * Previews after a change: the sample page always, pictures on request.
+ * The page of the theme's open states (every menu, tooltip, popover and
+ * list drawn open: the overlays section of the sheet), made and stamped
+ * with the build it shows, and where its picture goes. The sample page
+ * (preview.png) has no overlay open, and the full sheet is too tall to
+ * read whole, so `--png` takes this picture beside the sample page's.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {Promise<{html: string, png: string}>}
+ */
+export async function openStatesPage(ctx, slug, data) {
+  const f = themeFiles(ctx.project.cwd, slug);
+  const html = path.join(f.dir, `sheet-${OPEN_SECTION}.html`);
+  await renderSheet(ctx, slug, data, {group: OPEN_SECTION});
+  stampSheet(html, slug, ctx.project.cwd);
+  return {html, png: path.join(f.dir, `sheet-${OPEN_SECTION}.png`)};
+}
+
+/**
+ * Previews after a change: the sample page always; on request, pictures of
+ * it and of the open states ({@link openStatesPage}).
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
@@ -878,6 +1035,16 @@ export async function previewAfter(ctx, slug, data, png) {
           : `checking it failed: ${e instanceof Error ? e.message : String(e)}`;
   }
   const f = themeFiles(ctx.project.cwd, slug);
+  /** The pages photographed: the sample page, and with it the open states. */
+  const shotPages = [{html: f.preview, png: f.previewPng}];
+  // Made before the sections are judged, so it is current, never marked.
+  if (png && preview)
+    try {
+      shotPages.push(await openStatesPage(ctx, slug, data));
+    } catch (e) {
+      if (/** @type {any} */ (e)?.lockLost) throw e;
+      // It could not be rendered: the sample page's picture is taken alone.
+    }
   // The sheet of every component is made by show only: after a change it
   // says, at its top, that it shows the theme as it was.
   const sheetStale = markSheetStale(f.sheet, slug, ctx.project.cwd);
@@ -897,11 +1064,7 @@ export async function previewAfter(ctx, slug, data, png) {
   });
   const shots =
     png && preview
-      ? await pictures(
-          ctx.project,
-          [{html: f.preview, png: f.previewPng}],
-          modesOf(data),
-        )
+      ? await pictures(ctx.project, shotPages, modesOf(data))
       : {files: [], problem: null};
   return {
     preview,

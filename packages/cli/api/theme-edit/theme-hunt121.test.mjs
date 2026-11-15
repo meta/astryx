@@ -7,7 +7,7 @@
  * is printed (after `--` for a name starting with `-`, rebased onto a
  * subfolder, from the app that holds the theme, a repaired name free); a
  * starter app gets every open font the theme builds; a change names the
- * pictures it removed and keeps a section sheet's; and a theme that imports
+ * pictures it removed, a section sheet's included; and a theme that imports
  * a file outside its folder is not copied into a new app.
  */
 
@@ -178,7 +178,7 @@ describe('a starter app and a change', () => {
     expect(Object.keys(pkg.dependencies)).toContain('@fontsource/inter');
   }, 240_000);
 
-  it('a change names the pictures it removed, and keeps a section sheet’s', async () => {
+  it('a change names the pictures it removed, a section sheet’s included, with the commands that retake them', async () => {
     const dir = path.join(cwd, 'themes/t');
     const files = ['preview.png', 'sheet-dark.png', 'sheet-inputs.png'].map(n =>
       path.join(dir, n),
@@ -193,8 +193,11 @@ describe('a starter app and a change', () => {
     );
     expect(note).toMatch(/themes\/t\/preview\.png/);
     expect(note).toMatch(/themes\/t\/sheet-dark\.png/);
-    expect(note).not.toMatch(/sheet-inputs/);
-    expect(fs.existsSync(path.join(dir, 'sheet-inputs.png'))).toBe(true);
+    // A section sheet's picture shows the old look too: it goes, and the
+    // command that takes it again is named.
+    expect(note).toMatch(/themes\/t\/sheet-inputs\.png/);
+    expect(note).toMatch(/show t --png --section inputs/);
+    expect(fs.existsSync(path.join(dir, 'sheet-inputs.png'))).toBe(false);
   }, 240_000);
 
   it('a theme that imports a file outside its folder is not copied into a new app', async () => {

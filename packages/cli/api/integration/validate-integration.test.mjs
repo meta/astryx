@@ -527,6 +527,22 @@ export default {type: 'theme', name: 'ocean', displayName: 'Ocean', description:
     expect(byCode(result.issues, 'package_not_found')).toHaveLength(1);
   });
 
+  it('in the folder of the package itself, points to integration check', async () => {
+    const own = path.join(tmpDir, 'own');
+    writePackage(own, {
+      name: '@acme/widgets',
+      manifest: 'export default {};\n',
+    });
+
+    const result = await validateInstalledIntegration('@acme/widgets', own);
+
+    const [issue] = byCode(result.issues, 'package_not_found');
+    expect(issue.message).toContain(
+      '"@acme/widgets" is the package in this folder, not one it installs',
+    );
+    expect(issue.message).toMatch(/run `[^`]*integration check`/);
+  });
+
   it('reports malformed installed package.json distinctly from not found', async () => {
     const consumer = path.join(tmpDir, 'consumer');
     const pkgDir = path.join(consumer, 'node_modules', '@acme', 'widgets');
