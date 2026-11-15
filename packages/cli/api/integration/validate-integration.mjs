@@ -803,7 +803,7 @@ export async function validateInstalledIntegration(
           exists ? 'invalid_package_json' : 'package_not_found',
           exists
             ? `Could not parse ${pkgJsonPath}: ${err instanceof Error ? err.message : String(err)}`
-            : `Could not find installed integration package "${spec}" at ${pkgJsonPath}. Install it first.`,
+            : notInstalledMessage(spec, pkgJsonPath, cwd),
         ),
       ],
     };
@@ -814,6 +814,30 @@ export async function validateInstalledIntegration(
     {name: pkg.name ?? spec, version: pkg.version},
     {cwd, iconSets: iconSets ?? (await projectUsesIconSets(cwd))},
   );
+}
+
+/**
+ * Why `spec` is not installed here. This command checks a package the project
+ * in `cwd` installs; when `cwd` is that package's own folder, the check the
+ * author wants is `integration check`.
+ * @param {string} spec
+ * @param {string} pkgJsonPath
+ * @param {string} cwd
+ */
+function notInstalledMessage(spec, pkgJsonPath, cwd) {
+  /** @type {unknown} */
+  let own;
+  try {
+    own = JSON.parse(
+      fs.readFileSync(path.join(cwd, 'package.json'), 'utf-8'),
+    )?.name;
+  } catch {
+    own = undefined;
+  }
+  if (own === spec) {
+    return `"${spec}" is the package in this folder, not one it installs: this command checks a package the project installs. To check the package you are making, run \`${formatCliCommand('integration check', cwd)}\`.`;
+  }
+  return `Could not find installed integration package "${spec}" at ${pkgJsonPath}. Install it first.`;
 }
 
 /**
