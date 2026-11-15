@@ -465,7 +465,7 @@ const QUESTIONS = [
   [
     'square corners everywhere',
     {
-      top: /^set q corners square && set q --radius-full 0px$/,
+      top: /^set q corners square && set q --radius-full 0px && set q --radius-full 9999px --on radio-indicator --only && set q --radius-full 9999px --on dropdown-menu-radio$/,
       adds: /--radius-element=0px/,
     },
   ],
@@ -3112,7 +3112,7 @@ const QUESTIONS_J = [
   [
     'zero radius everywhere',
     {
-      top: /^set q corners square && set q --radius-full 0px$/,
+      top: /^set q corners square && set q --radius-full 0px && set q --radius-full 9999px --on radio-indicator --only && set q --radius-full 9999px --on dropdown-menu-radio$/,
       adds: /--radius-element=0px/,
     },
   ],

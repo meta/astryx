@@ -2722,20 +2722,148 @@ function readsToken(C, part, token) {
 }
 
 /**
+ * The selection marks drawn as circles: a part that shows a checked state
+ * in a square box of a fixed size whose corners read --radius-full (a
+ * radio's ring, a menu's radio). The circle is what the mark is, not a
+ * corner: squaring the pills must not square it. A part it contains (the
+ * radio's dot) takes the token from it.
+ * @param {any} C the part census
+ * @returns {string[]}
+ */
+export function circleMarks(C) {
+  /** @param {string} pt @param {string} k */
+  const fixed = (pt, k) =>
+    Object.entries(C.MAP[pt]?.at?.[k] ?? {}).find(
+      ([sel, v]) => !/:/.test(sel) && /^\s*\d*\.?\d+px\s*$/.test(String(v)),
+    )?.[1];
+  /** A square box of a fixed size whose corners read --radius-full. @param {string} pt */
+  const circle = pt => {
+    const radius = Object.values(C.MAP[pt]?.at?.['border-radius'] ?? {});
+    const w = fixed(pt, 'width');
+    return (
+      radius.some(v => /--radius-full/.test(String(v))) &&
+      w != null &&
+      String(w).trim() === String(fixed(pt, 'height') ?? '').trim()
+    );
+  };
+  // A knob inside a pill (a switch's thumb) goes with its pill.
+  /** @param {string} pt */
+  const inPill = pt =>
+    Object.keys(C.MAP).some(
+      p =>
+        (C.MAP[p]?.contains ?? []).includes(pt) &&
+        readsToken(C, p, '--radius-full') &&
+        !circle(p),
+    );
+  return Object.keys(C.MAP).filter(
+    pt =>
+      (C.MAP[pt]?.attrs?.checked ?? []).length > 0 && circle(pt) && !inPill(pt),
+  );
+}
+
+/**
  * The parts drawn as pills: they read --radius-full, which the corners
- * dial leaves round.
+ * dial leaves round. A selection mark drawn as a circle, and what it
+ * contains, is no pill.
  * @param {any} C the part census
  * @returns {string[]}
  */
 export function pillParts(C) {
-  return Object.keys(C.MAP).filter(p => readsToken(C, p, '--radius-full'));
+  const marks = circleMarks(C);
+  const inMark = new Set(
+    marks.flatMap(m => [m, ...(C.MAP[m]?.contains ?? [])]),
+  );
+  return Object.keys(C.MAP).filter(
+    p => !inMark.has(p) && readsToken(C, p, '--radius-full'),
+  );
+}
+
+/**
+ * The lines a part draws as an indicator, by the census: a part with no
+ * parts inside and one side of a fixed size of a few pixels at rest, the
+ * other following what it marks (no fixed size), that shows a state: its
+ * fill only when selected (a tab's underline) or its length taken from an
+ * anchor (an outline's bar). Each with the side that is its thickness.
+ * @param {any} C the part census
+ * @returns {Array<{part: string, side: 'height' | 'width'}>}
+ */
+export function indicatorLines(C) {
+  /** @type {Array<{part: string, side: 'height' | 'width'}>} */
+  const out = [];
+  for (const pt of Object.keys(C.MAP)) {
+    if ((C.MAP[pt]?.contains ?? []).length) continue;
+    const fills = C.partReads(pt, 'background') ?? [];
+    if (!fills.length) continue;
+    const at = C.MAP[pt]?.at ?? {};
+    const selectedOnly = fills.every((/** @type {{when: string[]}} */ r) =>
+      r.when.every(w => /selected=selected/.test(w)),
+    );
+    const anchored = Object.values(at)
+      .flatMap(v => Object.values(/** @type {Record<string, unknown>} */ (v)))
+      .some(v => /anchor-size\(/.test(String(v)));
+    if (!selectedOnly && !anchored) continue;
+    /** @param {string} side */
+    const fixedPx = side =>
+      Object.entries(at[side] ?? {})
+        .filter(([sel]) => !/:/.test(sel))
+        .map(([, v]) => /^\s*(\d*\.?\d+)px\s*$/.exec(String(v))?.[1])
+        .find(px => px != null);
+    for (const side of /** @type {const} */ (['height', 'width'])) {
+      const px = fixedPx(side);
+      const other = fixedPx(side === 'height' ? 'width' : 'height');
+      if (px != null && Number(px) > 0 && Number(px) <= 4 && other == null) {
+        out.push({part: pt, side});
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * The parts that draw a box only when selected (a nav item's or a
+ * segment's fill in its selected state, none at rest) and no border: a
+ * border for them goes on that state. An indicator line and a table row
+ * (its cells draw the rules) are none.
+ * @param {any} C the part census
+ * @returns {string[]}
+ */
+export function selectedBoxes(C) {
+  const lines = new Set(indicatorLines(C).map(x => x.part));
+  const dividers = new Set(dividerParts(C));
+  return Object.keys(C.MAP).filter(pt => {
+    if (lines.has(pt)) return false;
+    // A row of a table: its cells draw the rules between rows.
+    if (
+      (C.MAP[pt]?.contains ?? []).some((/** @type {string} */ c) =>
+        dividers.has(c),
+      )
+    )
+      return false;
+    const fills = C.partReads(pt, 'background') ?? [];
+    // A press or hover state written as an attribute is no resting fill.
+    const atRest = fills.some((/** @type {{when: string[]}} */ r) =>
+      r.when.some(w => !/:|selected|\[/.test(w)),
+    );
+    const selected = fills.some(
+      (/** @type {{token: string, when: string[]}} */ r) =>
+        /^--color-(?!overlay)/.test(r.token) &&
+        r.when.some(w => /selected=selected/.test(w) && !/:/.test(w)),
+    );
+    const bordered = (C.partReads(pt, 'border') ?? []).some(
+      (/** @type {{token: string}} */ r) =>
+        r.token === '--border-width' || /^--color-border/.test(r.token),
+    );
+    return selected && !atRest && !bordered;
+  });
 }
 
 /**
  * The surfaces whose border the shared border tokens never reach, as the
  * census reads them: the containers, menus and overlays (a part with an
  * elevation shadow, or one the layer runtime places: a tooltip), a framed
- * surface (container corners and a fill around other parts: a banner), and
+ * surface (container or element corners and a fill around other parts: a
+ * banner, a segmented control), and
  * every part that draws a fixed line of its own at rest (a popover's 1px,
  * a secondary button's edge), whose border reads no border width or
  * border color token. --border-width does not widen any of them. A family
@@ -2753,10 +2881,11 @@ export function borderlessSurfaces(C) {
         /--astryx-layer-/.test(String(v)),
       ),
     );
-  /** A box with container corners and a fill around other parts. @param {string} pt */
+  /** A box with container or element corners and a fill around other parts (a banner, a segmented control). @param {string} pt */
   const framed = pt =>
     (C.partReads(pt, 'corners') ?? []).some(
-      (/** @type {any} */ r) => r.token === '--radius-container' && rest(r),
+      (/** @type {any} */ r) =>
+        /^--radius-(?:container|element)$/.test(r.token) && rest(r),
     ) &&
     (C.partReads(pt, 'background') ?? []).some(rest) &&
     (C.MAP[pt]?.contains ?? []).length > 0;

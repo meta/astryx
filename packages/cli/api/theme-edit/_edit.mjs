@@ -132,6 +132,9 @@ import {
 import {
   borderlessSurfaces,
   checkSetting,
+  circleMarks,
+  indicatorLines,
+  selectedBoxes,
   coveredPaints,
   dividerParts,
   normalizeEntry,
@@ -2040,10 +2043,23 @@ function leftOutParts(ctx, slug, data, sub, s) {
     !data.settings.some(x => x.thing === '--radius-full' && !x.on)
   ) {
     const pills = pillParts(C).filter(has);
+    // A radio's circle is what it is: it keeps the token at Core's value.
+    const marks = circleMarks(C).filter(has);
+    const round = String(
+      ctx.project.core.tokenDefaults?.['--radius-full'] ?? '9999px',
+    );
+    /** @param {string} m */
+    const only = m =>
+      !FAMILIES[m] && AUTO_SPREAD.includes(familyOf(m) ?? '') ? ' --only' : '';
     if (pills.length)
       out.push({
-        note: `the parts drawn as pills stay round (${pills.join(', ')}): they read --radius-full, which corners leaves as it is; this squares them:`,
-        run: [`${P} set ${slug} --radius-full 0px`],
+        note: `the parts drawn as pills stay round (${pills.join(', ')}): they read --radius-full, which corners leaves as it is; these square them${marks.length ? ` and keep the radio marks round (${marks.join(', ')})` : ''}:`,
+        run: [
+          `${P} set ${slug} --radius-full 0px`,
+          ...marks.map(
+            m => `${P} set ${slug} --radius-full ${round} --on ${m}${only(m)}`,
+          ),
+        ],
       });
   }
   if (s.source === 'token' && s.thing === '--border-width') {
@@ -2069,6 +2085,30 @@ function leftOutParts(ctx, slug, data, sub, s) {
         note: `the dividers draw their rules at --border-width too, so they are ${s.value} now (${dividers.join(', ')}); these keep each at ${own}:`,
         run: dividers.map(
           p => `${P} set ${slug} --border-width ${own} --on ${p}`,
+        ),
+      });
+    const boxed = (/** @type {string} */ p) =>
+      data.settings.some(
+        x => x.on === p && x.state === 'selected' && /^border/.test(x.thing),
+      );
+    const selected = selectedBoxes(C).filter(p => has(p) && !boxed(p));
+    if (selected.length)
+      out.push({
+        note: `the parts that draw a box only when selected draw no border (${selected.join(', ')}); these give each one there:`,
+        run: selected.map(
+          p => `${P} set ${slug} border ${line} --on ${p} --state selected`,
+        ),
+      });
+    const lines = indicatorLines(C).filter(
+      x =>
+        has(x.part) &&
+        !data.settings.some(y => y.on === x.part && y.thing === x.side),
+    );
+    if (lines.length && String(s.value).trim() !== own)
+      out.push({
+        note: `the indicator lines keep their own thickness (${lines.map(x => x.part).join(', ')}); these draw each at ${s.value}:`,
+        run: lines.map(
+          x => `${P} set ${slug} ${x.side} ${s.value} --on ${x.part}`,
         ),
       });
   }

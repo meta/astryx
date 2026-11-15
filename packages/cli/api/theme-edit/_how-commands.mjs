@@ -10,7 +10,7 @@
 
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
-import {checkSetting} from './_check.mjs';
+import {checkSetting, circleMarks, indicatorLines} from './_check.mjs';
 import {baseResolved} from './_project.mjs';
 import {readThemeListState} from '../theme/_adapter.mjs';
 import {
@@ -692,6 +692,14 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
       .filter(Boolean)
       .flatMap(x => members(String(x))),
   ]);
+  // A selection mark drawn as a circle (a radio), and what it holds: its
+  // circle is what it is, not a corner, so no rounding leaves it round.
+  const circles = new Set(
+    circleMarks(C).flatMap(m => [m, ...(C.MAP[m]?.contains ?? [])]),
+  );
+  // An indicator line's thickness (a tab's underline height) is the
+  // width of a line it draws, as a border's is.
+  const lineSide = new Map(indicatorLines(C).map(x => [x.part, x.side]));
   for (const part of touched) {
     // A whole kept part is checked above, not as a subject.
     if (keeps.some(k => k.part === part && !k.prefix)) continue;
@@ -737,9 +745,14 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
           ) &&
           steps.some(x => x.thing === st.thing && familyOf(x.thing) !== fam),
       );
+      // An indicator line's thickness is also the width of a line it
+      // draws: a border ask reaches it.
+      const lineWidth =
+        lineSide.get(part) === prop && intent.families.includes('border');
       if (
         intent.families.length &&
         !intent.families.includes(fam) &&
+        !lineWidth &&
         !typedHere &&
         !sameToken
       )
@@ -748,6 +761,7 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
         if (visible && mode !== visible) continue;
         const after = v[mode];
         const before = o?.[mode] ?? null;
+        if (intent.zero && fam === 'radius' && circles.has(part)) continue;
         if (
           intent.zero &&
           ['radius', 'space', 'border', 'shadow'].includes(fam)
