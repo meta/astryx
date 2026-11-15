@@ -391,6 +391,8 @@ async function validateAtPackageDir(
   let manifest;
   /** @type {string[]} */
   let unknownKeys;
+  /** @type {Array<{field: string, why: string}>} */
+  let ignoredFields;
   /** @type {string[]} */
   let declaredKeys;
   /** @type {string | undefined} */
@@ -398,11 +400,17 @@ async function validateAtPackageDir(
   /** @type {string | undefined} */
   let cliCommandError;
   try {
-    ({manifest, unknownKeys, declaredKeys, agentDocsError, cliCommandError} =
-      await loadManifest(
-        manifestFile,
-        `Integration manifest (${path.basename(manifestFile)})`,
-      ));
+    ({
+      manifest,
+      unknownKeys,
+      ignoredFields,
+      declaredKeys,
+      agentDocsError,
+      cliCommandError,
+    } = await loadManifest(
+      manifestFile,
+      `Integration manifest (${path.basename(manifestFile)})`,
+    ));
   } catch (err) {
     issues.push(error('invalid_manifest', /** @type {any} */ (err).message));
     return result;
@@ -469,6 +477,7 @@ async function validateAtPackageDir(
     __cliCommandError: cliCommandError,
     __agentDocsError: agentDocsError,
     __unknownKeys: unknownKeys,
+    __ignoredFields: ignoredFields,
     __declaredKeys: declaredKeys,
     __spec: identity.name,
     __declaredProviderId: manifest.providerId,
