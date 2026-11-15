@@ -7,8 +7,8 @@
  * command (`astryx hook useHotkeys`). A name matches at one of six tiers,
  * best first: exact (the whole name, any case), folded (without spaces and
  * hyphens, a hook with or without `use`), last segment (of a path name, exact
- * or folded), near hook (a `use…` name a slip or two from a hook, or with
- * every word of one), hook keyword (two or more words that are a keyword
+ * or folded), near hook (a `use…` name a slip or two from a hook's name, or
+ * one whose every word the hook's name carries), hook keyword (two or more words that are a keyword
  * one hook's doc declares), and word cover (every word of the name); word
  * cover gives no hint. The near hook tier gives one when a component or
  * template lookup misses and no better tier matches; the hook keyword tier
@@ -304,7 +304,8 @@ export function withOtherCommand(
  * text, says first which catalogs can hold the name; a catalog is asked only
  * then, only for the names that fold to it, and only until a catalog before
  * it has an exact match. So a name no file carries reads no doc and loads no
- * discovery. The docs catalog is every route of the docs tree, from
+ * discovery, except the hook discovery that the near hook and hook keyword
+ * tiers read when a component or template lookup misses. The docs catalog is every route of the docs tree, from
  * `docsRoutes`, which the docs lookup owns; the index keeps them where it is
  * kept, and they are worked out only when the name's last segment can end a
  * route. A check that fails gives no hint.

@@ -2,7 +2,8 @@
 
 /**
  * @file The not-found hint's two hook tiers: a `use…` name a slip or two
- * from a hook, or with every word of one (near hook), and a name with
+ * from a hook's name, or one whose every word the hook's name carries (near
+ * hook), and a name with
  * exactly the words of a keyword a hook's doc declares (hook keyword).
  *
  * @input  made-up hooks with made-up keywords, as lists and as a stand-in
