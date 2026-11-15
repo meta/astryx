@@ -249,15 +249,19 @@ async function pointed({word, before, after: rest}, program, findEntry) {
     plural && (c.cmd.options ?? []).some(o => o.long === '--list')
       ? ['--list']
       : [];
-  if (nested.length > 0)
-    return nested
-      .slice(0, 3)
-      .map(c =>
-        run(
-          [...c.words, ...listing(c), ...rest],
-          `the command is ${c.words.join(' ')}`,
-        ),
-      );
+  // A command that needs words the run did not give is named by its help
+  // (`eject` is `theme eject --help`).
+  /** @param {{words: string[], cmd: CommandLike}} c */
+  const asRun = c => {
+    const words = [...c.words, ...listing(c), ...rest];
+    return run(
+      runParses(program, [...before, ...words])
+        ? words
+        : [...c.words, '--help'],
+      `the command is ${c.words.join(' ')}`,
+    );
+  };
+  if (nested.length > 0) return nested.slice(0, 3).map(asRun);
 
   // A name another command reads: the next word (`info Text`), else the
   // word itself (`astryx tokens`).

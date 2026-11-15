@@ -234,6 +234,32 @@ describe('runParses', () => {
   });
 });
 
+describe('runParses: what a command requires', () => {
+  it('refuses a run without a required argument or a required option, and accepts a help run', () => {
+    const root = new Command('astryx');
+    const theme = root.command('theme');
+    theme.command('list');
+    theme
+      .command('build')
+      .argument('<files...>')
+      .requiredOption('--out <path>', 'out');
+    theme.command('eject').argument('<name>');
+    expect(runParses(root, ['theme', 'build'])).toBe(false);
+    expect(runParses(root, ['theme', 'build', 'a.ts'])).toBe(false);
+    expect(runParses(root, ['theme', 'build', 'a.ts', '--out', 'x'])).toBe(
+      true,
+    );
+    expect(runParses(root, ['theme', 'eject'])).toBe(false);
+    expect(runParses(root, ['theme', 'eject', 'brand'])).toBe(true);
+    expect(runParses(root, ['theme', 'build', '--help'])).toBe(true);
+  });
+
+  it('offers no run as meant that lacks what the command requires', () => {
+    const {theme} = program();
+    expect(runs(answer(theme, '--build', ['theme', '--build']))).toEqual([]);
+  });
+});
+
 describe('withoutStray', () => {
   it('replaces the option by the one its value names, else leaves the option word out', () => {
     const {root} = program();

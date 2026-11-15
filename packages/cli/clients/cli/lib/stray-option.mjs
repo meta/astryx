@@ -19,7 +19,7 @@ import {
 
 /**
  * The part of a Commander option this module reads.
- * @typedef {{long?: string, short?: string, hidden?: boolean, required?: boolean, optional?: boolean, argChoices?: string[]}} OptionLike
+ * @typedef {{long?: string, short?: string, hidden?: boolean, required?: boolean, optional?: boolean, mandatory?: boolean, defaultValue?: unknown, argChoices?: string[]}} OptionLike
  */
 
 /**
@@ -349,9 +349,10 @@ function rootOf(cmd) {
 /**
  * Whether a run's words parse: every option word is an option of the
  * command reached at that word (or of a group above it), and the command the
- * words name takes the words left as its arguments. A group the run stops at
- * does not parse, since it runs no command; the program parses with its own
- * options and no word.
+ * words name takes the words left as its arguments, its required arguments
+ * and required options among them. A group the run stops at does not parse,
+ * since it runs no command; the program parses with its own options and no
+ * word; a help run parses.
  * @param {CommandLike} program
  * @param {string[]} words the words of the run after the program name
  * @returns {boolean}
@@ -393,10 +394,25 @@ export function runParses(program, words) {
   // The program itself runs only with no word: its options alone
   // (`astryx --help`).
   if (cmd === program) return args.length === 0;
+  // A help run prints the help whatever else it lacks.
+  if (words.includes('--help') || words.includes('-h')) return true;
   const declared = /** @type {any} */ (cmd).registeredArguments ?? [];
   const groupOnly =
     (cmd.commands ?? []).some(c => !c._hidden) && declared.length === 0;
   if (groupOnly) return false;
+  // Every required argument and every required option is given.
+  const required = declared.filter((/** @type {any} */ a) => a.required);
+  const given = (/** @type {OptionLike} */ o) =>
+    words.some(
+      w =>
+        w === o.long ||
+        w === o.short ||
+        (o.long != null && w.startsWith(`${o.long}=`)),
+    );
+  const mandatory = (cmd.options ?? []).filter(
+    o => o.mandatory && o.defaultValue === undefined,
+  );
+  if (args.length < required.length || !mandatory.every(given)) return false;
   return (
     declared.some((/** @type {any} */ a) => a.variadic) ||
     args.length <= declared.length
