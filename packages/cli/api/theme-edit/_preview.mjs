@@ -156,11 +156,12 @@ export function showcaseItems(project, group) {
         // tooltip or hover card only once it is mounted. Any other part, as
         // first shown, is shown open with the overlays too when a press
         // opens one from it (the page sees which: _catalog.mjs).
+        // A part of another part that opens a layer of its own (a menu's
+        // submenu, a tab list's overflow menu) is drawn open as any part
+        // is: only an overlay's own parts stay inside it (above).
         ...(info?.opens
           ? {open: true, ...(info?.props?.placement ? {anchored: true} : {})}
-          : i === 0 &&
-              g !== 'overlays' &&
-              !(group === 'overlays' && info?.subComponentOf)
+          : i === 0 && g !== 'overlays'
             ? {
                 openable: true,
                 // A prop its doc names that opens it opens it; else the

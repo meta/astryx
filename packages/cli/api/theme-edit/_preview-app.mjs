@@ -2245,10 +2245,17 @@ function canonicalCode(text) {
   const walk = node => {
     if (Array.isArray(node)) return node.map(walk);
     if (!node || typeof node !== 'object') return node;
+    const jsx = node.type === 'JSXElement' || node.type === 'JSXFragment';
     /** @type {Record<string, any>} */
     const out = {};
     for (const [k, v] of Object.entries(node)) {
       if (LAYOUT.has(k)) continue;
+      // An element's children are read once, below: walked here too, each
+      // level of nesting would read everything inside it twice.
+      if (jsx && k === 'children') {
+        out[k] = null;
+        continue;
+      }
       out[k] = walk(v);
     }
     // A key written "a" or a is the same key.
@@ -2262,8 +2269,7 @@ function canonicalCode(text) {
       /^[A-Za-z_$][\w$]*$/.test(node.key.value)
     )
       out.key = {type: 'Identifier', name: node.key.value};
-    if (node.type === 'JSXElement' || node.type === 'JSXFragment')
-      out.children = jsxChildren(node.children, walk);
+    if (jsx) out.children = jsxChildren(node.children, walk);
     return out;
   };
   const comments = (file.comments ?? []).map((/** @type {any} */ c) =>
