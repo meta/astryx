@@ -97,7 +97,7 @@ function load(): void {
 }
 
 function scheduleLoad(view: Window): void {
-  if (state.layer != null || scheduledViews.has(view)) {
+  if (state.layer != null || state.hasFailed || scheduledViews.has(view)) {
     return;
   }
   scheduledViews.add(view);
