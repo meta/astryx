@@ -92,13 +92,29 @@ export async function coreThemeValues(coreSrc) {
 }
 
 /**
+ * In a run that keeps Core's facts, work them out now. A kept gather stamps
+ * every read of its run so far, so a build asks for them before it reads the
+ * theme it builds: an edit to that theme then leaves them kept. A run that
+ * keeps nothing works each view out only when asked, so this does nothing
+ * there.
+ * @param {string | null} coreSrc - absolute path to `<core>/src`
+ * @returns {Promise<void>}
+ */
+export async function keepCoreThemeFacts(coreSrc) {
+  if (coreSrc && recordedRun() && fs.existsSync(coreSrc)) {
+    await keptFacts(fs.realpathSync(coreSrc));
+  }
+}
+
+/**
  * Every fact under the real `src` path `real`, kept as one gather. A run
  * reads it back while nothing it was worked out from changed. Each caller
  * reads it and never changes it.
  *
- * One gather holds every fact, worked out when a build first checks a theme,
- * before the build reads its output files: a gather later in the build would
- * stamp the output the build rewrites, and miss every run.
+ * One gather holds every fact, worked out before the build reads the theme
+ * (keepCoreThemeFacts): a gather later in the build would stamp the theme,
+ * and miss after every edit to it, or the output the build rewrites, and miss
+ * every run.
  * @param {string} real
  * @returns {Promise<CoreThemeFacts>}
  */

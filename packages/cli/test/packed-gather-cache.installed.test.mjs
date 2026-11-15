@@ -206,6 +206,16 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
         expect(plain.status, plain.stderr).toBe(0);
         const kept = themeFactsEntries(tmp);
         expect(kept.size).toBe(1);
+        // A build after an edit to that theme reads the facts back: they do
+        // not depend on the theme.
+        fs.appendFileSync(path.join(dir, 'theme', 'plain.ts'), '// edited\n');
+        const edited = run(['theme', 'build', 'theme/plain.ts'], {
+          tmp,
+          cwd: dir,
+          cli,
+        });
+        expect(edited.status, edited.stderr).toBe(0);
+        expect(themeFactsEntries(tmp)).toEqual(kept);
         // A theme whose overrides name a prop value reads back the same
         // entry: it holds every fact a build checks a theme against.
         const first = run(ask, {tmp, cwd: dir, cli});

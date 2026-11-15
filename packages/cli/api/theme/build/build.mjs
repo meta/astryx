@@ -93,6 +93,7 @@ import {logger} from '../../logger.mjs';
 import {
   coreThemeTargets,
   coreThemeValues,
+  keepCoreThemeFacts,
 } from '../../../foundation/discovery/core-theme-facts.mjs';
 import {THEME_SOURCE_EXTENSIONS} from '../../../foundation/discovery/theme-module-extensions.mjs';
 import {
@@ -1693,8 +1694,7 @@ let _knownValuesIndexPromise = null;
  * guessing is not a valid lookup strategy.
  */
 async function loadKnownValuesIndex() {
-  const coreRoot = resolveCoreRoot();
-  const coreSrc = coreRoot ? path.join(coreRoot, 'src') : null;
+  const coreSrc = coreSrcPath();
   if (!coreSrc || !fs.existsSync(coreSrc)) return {};
   return (await coreThemeValues(coreSrc)).knownValues;
 }
@@ -1719,6 +1719,16 @@ function resolveCoreRoot() {
   const cliDir = path.dirname(fileURLToPath(import.meta.url));
   const coreRoot = path.resolve(cliDir, '../../../../core');
   return fs.existsSync(coreRoot) ? coreRoot : null;
+}
+
+/**
+ * The `src` folder of the Core beside the CLI ({@link resolveCoreRoot}), or
+ * null when there is none.
+ * @returns {string | null}
+ */
+function coreSrcPath() {
+  const coreRoot = resolveCoreRoot();
+  return coreRoot ? path.join(coreRoot, 'src') : null;
 }
 
 /**
@@ -1802,8 +1812,7 @@ async function resolveAugmentationTargetCandidates(componentName) {
     },
   ];
 
-  const coreRoot = resolveCoreRoot();
-  const coreSrc = coreRoot ? path.join(coreRoot, 'src') : null;
+  const coreSrc = coreSrcPath();
   if (!coreSrc || !fs.existsSync(coreSrc)) {
     _augmentationTargetCache.set(componentName, fallback);
     return fallback;
@@ -3564,8 +3573,7 @@ function builtThemeType(themeDef) {
  * @returns {Promise<{propsByKey: Record<string, string[]>} | null>}
  */
 async function loadKnownComponents() {
-  const coreRoot = resolveCoreRoot();
-  const coreSrc = coreRoot ? path.join(coreRoot, 'src') : null;
+  const coreSrc = coreSrcPath();
   if (!coreSrc || !fs.existsSync(coreSrc)) return null;
 
   const propsByKey = targetsByKey(await coreThemeTargets(coreSrc));
@@ -3926,6 +3934,10 @@ async function themeBuildInternal(
   if (typeof options.out === 'string' && options.out.includes('\\'))
     options = {...options, out: options.out.replace(/\\/g, '/')};
   const filePath = path.resolve(cwd, file);
+
+  // Core's facts first, before the build reads the theme: kept facts then do
+  // not depend on it, and a build after an edit to the theme reads them back.
+  await keepCoreThemeFacts(coreSrcPath());
 
   {
     const problem = buildInputProblem(file, options, cwd);
