@@ -601,6 +601,7 @@ function DescriptionCell({item}: {item: InvoiceRow}) {
             variant="secondary"
             width="100%"
             onClick={() =>
+              // Demo only: replace this toast with the call that performs the action.
               showToast({
                 body: `Dispute opened for ${item.description}`,
                 uniqueID: `dispute-${item.id}`,

@@ -4188,6 +4188,7 @@ export default function TableFilterTemplate() {
                 size="sm"
                 width="100%"
                 onClick={() =>
+                  // Demo only: replace this toast with the call that performs the action.
                   showToast({
                     body: `Started “${NEXT_ACTION[activeJob.status]}” for ${activeJob.id}`,
                     uniqueID: `next-${activeJob.id}`,

@@ -169,6 +169,7 @@ function PageHeader({
 }) {
   const showToast = useToast();
   const restock = () =>
+    // Demo only: replace this toast with the call that performs the action.
     showToast({body: 'Restock requested for order #1001', uniqueID: 'restock'});
   return (
     <LayoutHeader hasDivider padding={4} paddingBlockEnd={0}>
@@ -304,6 +305,7 @@ function ItemsCard() {
               label="Fulfill item"
               variant="ghost"
               onClick={() =>
+                // Demo only: replace this toast with the call that performs the action.
                 showToast({
                   body: `Fulfillment started for ${PRODUCTS.length} items`,
                   uniqueID: 'fulfill',
@@ -314,6 +316,7 @@ function ItemsCard() {
               label="Create label"
               variant="secondary"
               onClick={() =>
+                // Demo only: replace this toast with the call that performs the action.
                 showToast({
                   body: 'Shipping label created for order #1001',
                   uniqueID: 'label',
@@ -381,6 +384,7 @@ function InvoiceCard() {
               label="Refund"
               variant="ghost"
               onClick={() =>
+                // Demo only: replace this toast with the call that performs the action.
                 showToast({
                   body: 'Refund started for order #1001',
                   uniqueID: 'refund',
@@ -391,6 +395,7 @@ function InvoiceCard() {
               label="Send Invoice"
               variant="secondary"
               onClick={() =>
+                // Demo only: replace this toast with the call that performs the action.
                 showToast({
                   body: 'Invoice sent to janedoe@email.com',
                   uniqueID: 'invoice',

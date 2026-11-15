@@ -433,6 +433,7 @@ export default function ResizableWorkspacePage() {
                                       size="sm"
                                       variant="secondary"
                                       onClick={() =>
+                                        // Demo only: replace this toast with the call that performs the action.
                                         showToast({
                                           body: `${activeFile} formatted`,
                                           uniqueID: 'format',
