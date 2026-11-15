@@ -190,6 +190,7 @@ describe('the stale-head hint in the interaction legs', () => {
 
     it('names the main commit that changed a spec the leg ran, and nothing else', () => {
       const head = fs.readFileSync(path.join(dir, 'head.txt'), 'utf8');
+      const at = head.slice(0, 8);
       const out = explain(head, [spec, other]);
       expect(out.status).toBe(0);
       const warnings = out.stdout
@@ -199,9 +200,9 @@ describe('the stale-head hint in the interaction legs', () => {
       // merge commit, so the hint reads main's tip. The subject's "%" is
       // escaped once on each line of a commit that changed two specs.
       expect(warnings).toEqual([
-        `::warning title=Update your branch before debugging::internal/interaction-harness/src/busy.ts changed on main in ${later.slice(0, 7)} (fix(harness): a later fix), which this head does not have. Update the branch onto main and re-run: a test whose file changed on main gets an update, not a retry.`,
-        `::warning title=Update your branch before debugging::${other} changed on main in ${fixed.slice(0, 7)} (test(Row): the release reads 100%25), which this head does not have. Update the branch onto main and re-run: a test whose file changed on main gets an update, not a retry.`,
-        `::warning title=Update your branch before debugging::${spec} changed on main in ${fixed.slice(0, 7)} (test(Row): the release reads 100%25), which this head does not have. Update the branch onto main and re-run: a test whose file changed on main gets an update, not a retry.`,
+        `::warning title=Update your branch before debugging::internal/interaction-harness/src/busy.ts changed on main in ${later.slice(0, 7)} (fix(harness): a later fix). This leg runs at the PR head (${at}), which does not have it. Update the branch onto main and re-run: a test whose file changed on main gets an update, not a retry.`,
+        `::warning title=Update your branch before debugging::${other} changed on main in ${fixed.slice(0, 7)} (test(Row): the release reads 100%25). This leg runs at the PR head (${at}), which does not have it. Update the branch onto main and re-run: a test whose file changed on main gets an update, not a retry.`,
+        `::warning title=Update your branch before debugging::${spec} changed on main in ${fixed.slice(0, 7)} (test(Row): the release reads 100%25). This leg runs at the PR head (${at}), which does not have it. Update the branch onto main and re-run: a test whose file changed on main gets an update, not a retry.`,
       ]);
     });
 
