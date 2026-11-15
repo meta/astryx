@@ -130,7 +130,7 @@ describe('preview add', () => {
     );
     expect(made.message).toContain('has no root layout');
     expect(fs.existsSync(path.join(cwd, 'app'))).toBe(false);
-    // A workspace root names the Next app below it, run from its folder.
+    // A project root names the Next app below it, reached with --path.
     const web = path.join(cwd, 'apps/web');
     fs.mkdirSync(path.join(web, 'src/app'), {recursive: true});
     fs.writeFileSync(
@@ -145,7 +145,7 @@ describe('preview add', () => {
       const ws = await refusal(() => themeEditPreviewAdd(undefined, {cwd}));
       expect(ws.message).toContain('the Next app below is apps/web/');
       expect(ws.run[0]).toBe(
-        'cd apps/web && astryx experimental theme preview add',
+        'astryx experimental theme preview add --path apps/web/src/app/theme-preview',
       );
     } finally {
       fs.rmSync(path.join(cwd, 'apps'), {recursive: true, force: true});
@@ -338,7 +338,10 @@ describe('preview add', () => {
     fs.writeFileSync(path.join(pkgDir, 'index.css'), '');
     try {
       const show = await themeEditShow('brand', {cwd});
-      expect(show.data.notes.join(' ')).toContain("import '@fontsource/inter'");
+      // A package with no stylesheet per weight loads through its index.
+      expect(show.data.notes.join(' ')).toContain(
+        "import '@fontsource/inter/index.css'",
+      );
       expect(read(route)).toContain('import "@fontsource/inter/index.css";');
     } finally {
       fs.rmSync(path.join(cwd, 'node_modules', '@fontsource'), {

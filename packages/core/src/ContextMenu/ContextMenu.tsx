@@ -3,9 +3,10 @@
 
 /**
  * @file ContextMenu.tsx
- * @input Uses React, StyleX, useLayer, shared layer dismissal, BottomSheet,
- *   useListFocus, the presentation resolver (usePresentation), useLongPress,
- *   and the touch layer (ContextMenuTouchLayer), which loads after first paint
+ * @input Uses React, StyleX, useLayer, shared layer dismissal, the lazily
+ *   loaded menu sheet (DropdownMenu/lazyMenuBottomSheet), useListFocus, the
+ *   presentation resolver (usePresentation), useLongPress, and the touch layer
+ *   (ContextMenuTouchLayer), which loads after first paint
  * @output Exports ContextMenu with cursor-popover and touch-sheet presentations
  * @position Core implementation; consumed by index.ts
  *
@@ -48,12 +49,11 @@
 
 import React, {
   useCallback,
+  useEffect,
   useId,
-  lazy,
   useMemo,
   useRef,
   useState,
-  Suspense,
 } from 'react';
 import type {ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
@@ -65,7 +65,11 @@ import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {currentGesture} from '../Layer/gestureCounter';
 import {useOutsidePress} from '../Layer/outsidePress';
-import {MenuBottomSheetActionList} from '../DropdownMenu/MenuBottomSheetActionList';
+import {
+  MenuBottomSheet,
+  MenuBottomSheetActionList,
+  preloadMenuBottomSheetActionList,
+} from '../DropdownMenu/lazyMenuBottomSheet';
 import {menuBottomSheetStyles} from '../DropdownMenu/menuBottomSheet.stylex';
 import {renderDropdownItems} from '../DropdownMenu/renderDropdownItems';
 import {
@@ -123,11 +127,6 @@ import english from '../i18n/generated-english/ContextMenu/ContextMenu.generated
 
 registerEnglishFallback(english);
 
-const LazyMenuBottomSheet = lazy(async () =>
-  import('../DropdownMenu/MenuBottomSheet').then(module => ({
-    default: module.MenuBottomSheet,
-  })),
-);
 const styles = stylex.create({
   // Trigger wrapper. `position: relative` makes the containing block for the
   // absolutely positioned cursor anchor below. So the anchor point follows
@@ -432,6 +431,16 @@ export function ContextMenu({
   >;
   const items = itemsProp ?? [];
   const menuContent = menuContentProp;
+
+  const usesSheetActionList = usesBottomSheet && itemsProp !== undefined;
+  // Syncs the touch sheet's action list with the presentation: a data-driven
+  // sheet menu loads its rows at rest, so its first open shows them at once. A
+  // pointer menu never loads them.
+  useEffect(() => {
+    if (usesSheetActionList) {
+      void preloadMenuBottomSheetActionList();
+    }
+  }, [usesSheetActionList]);
 
   const menuId = useId();
   // Cursor point in the trigger's local coordinate space (offset from the
@@ -1107,14 +1116,12 @@ export function ContextMenu({
       ) : null}
 
       {usesBottomSheet ? (
-        <Suspense fallback={null}>
-          <LazyMenuBottomSheet
-            isOpen={isOpen}
-            onOpenChange={updateOpenState}
-            label={sheetLabel}>
-            {renderedBottomSheetContent}
-          </LazyMenuBottomSheet>
-        </Suspense>
+        <MenuBottomSheet
+          isOpen={isOpen}
+          onOpenChange={updateOpenState}
+          label={sheetLabel}>
+          {renderedBottomSheetContent}
+        </MenuBottomSheet>
       ) : (
         layer.render(<LayerDepthProvider>{renderedMenu}</LayerDepthProvider>, {
           placement: 'below',

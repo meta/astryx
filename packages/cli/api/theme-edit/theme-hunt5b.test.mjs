@@ -26,7 +26,7 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
-import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
+import {modeValue, refusal} from '../../test-utils/theme-edit-fixture.mjs';
 
 vi.mock('./_preview.mjs', async importOriginal =>
   (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
@@ -164,7 +164,13 @@ describe('one mode on a part', () => {
       when: 'variant:destructive',
       mode: 'dark',
     });
-    expect(read('themes/t/t.css')).toMatch(/light-dark\(#ffc4be, #00ff00\)/);
+    // The dark block alone takes the color; light keeps the base theme's.
+    const css = read('themes/t/t.css');
+    const sel = '.astryx-button[data-variant="destructive"]';
+    expect(modeValue(css, sel, 'background-color', 'dark')).toBe('#00ff00');
+    expect(modeValue(css, sel, 'background-color', 'light')).not.toBe(
+      '#00ff00',
+    );
     await themeEditUndo('t', {cwd});
   }, 240_000);
 });
