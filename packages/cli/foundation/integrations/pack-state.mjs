@@ -95,6 +95,22 @@ function askNpm(base) {
 }
 
 /**
+ * Whether an ignore file is there. npm reads its content in a child process,
+ * which a kept check's record does not see, so this stats the file: a kept
+ * check that asked is checked by the file's stamp, not only by whether it is
+ * there.
+ * @param {string} file
+ * @returns {boolean}
+ */
+function ignoreFileThere(file) {
+  try {
+    return fs.statSync(file, {throwIfNoEntry: false}) !== undefined;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The ignore files npm reads for one path in a package with no `files`
  * field: in the root and each folder down to the path's own, `.npmignore`,
  * or `.gitignore` where that folder has none. Root first, each relative to
@@ -110,7 +126,7 @@ export function ignoreFilesFor(base, rel) {
   for (let depth = 0; depth <= folders.length; depth++) {
     const folder = folders.slice(0, depth).join('/');
     const file = ['.npmignore', '.gitignore'].find(name =>
-      fs.existsSync(path.join(base, folder, name)),
+      ignoreFileThere(path.join(base, folder, name)),
     );
     if (file) found.push(folder ? `${folder}/${file}` : file);
   }
