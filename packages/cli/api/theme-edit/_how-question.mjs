@@ -71,7 +71,7 @@ import {
   settableStates,
 } from './_check.mjs';
 import {coreKeyframes} from './_parts.mjs';
-import {NUMBER_WORDS, commaNumbers} from './_normal.mjs';
+import {NUMBER_WORDS, commaNumbers, modeNear} from './_normal.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {cssProperties, keywordsOf, matchValue, splitTop} from './_css.mjs';
 
@@ -2839,12 +2839,17 @@ function clausesOf(q, partWords) {
     const state = stateWord(stateText);
     // A mode phrase names the mode ("dark mode", "in light"); a color word
     // ("dark gray") never does when a mode phrase is there.
+    // A pasted label (`dark: cards #1c1c1e`, `drak: …`) names its mode by
+    // the one mode reader, typos that keep the letters included.
+    const labelMode = modeNear(/^\s*([a-z][a-z-]*)\s*:/.exec(text)?.[1] ?? '');
     const lightPhrase =
-      /\blight (mode|theme)\b|\bin light(?=\s*(?:[,;.!?]|$|and\b|only\b))|^light\s*:/.test(
+      labelMode === 'light' ||
+      /\blight (mode|theme)\b|\bin light(?=\s*(?:[,;.!?]|$|and\b|only\b))/.test(
         text,
       );
     const darkPhrase =
-      /\bdark (mode|theme)\b|\bin dark\b|\boled\b|^dark\s*:/.test(text);
+      labelMode === 'dark' ||
+      /\bdark (mode|theme)\b|\bin dark\b|\boled\b/.test(text);
     const mode =
       darkPhrase ||
       (!lightPhrase &&

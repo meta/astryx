@@ -136,6 +136,7 @@ import {
   typoOf,
   typoNear,
   stateSpelling,
+  modeNear,
   modeWord,
   documentTypoWords,
   PROPERTY_WORDS,
@@ -3708,7 +3709,7 @@ export function checkSetting(
             ],
           },
         );
-      const mode = modeWord(label.word);
+      const mode = modeNear(label.word);
       const colorful =
         PALETTE_DIALS.includes(thing) ||
         (thing.startsWith('--') && isColorToken(thing)) ||
@@ -3833,7 +3834,7 @@ export function checkSetting(
       if (
         flagWord &&
         (flagWord === 'mode'
-          ? Boolean(modeWord(rest))
+          ? Boolean(modeNear(rest))
           : !otherSettingLabel(thing, value))
       ) {
         const r = rest.trim().toLowerCase();
@@ -3860,7 +3861,7 @@ export function checkSetting(
             },
           );
         }
-        const m = flagWord === 'mode' ? modeWord(r) : null;
+        const m = flagWord === 'mode' ? modeNear(r) : null;
         const when =
           flagWord === 'when'
             ? label.word === 'when' || label.word === 'prop'
@@ -4243,7 +4244,7 @@ function checkOne(
       // A word that names one of the two (dark-only, darkmode, night) is
       // that one, by the one mode reader; never the nearest spelling, which
       // can be the other (night → light).
-      const meant = modeWord(mode);
+      const meant = modeNear(mode);
       const near = meant ? [meant] : nearest(mode, ['light', 'dark']);
       // The line for that one mode: for a dial, the one `--mode dark` itself
       // offers (the color token for that mode), never the both-modes dial.
