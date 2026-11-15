@@ -293,6 +293,8 @@ describe('recentFailedInstall', () => {
       'null',
       JSON.stringify({reason: 'offline', failures: 1}),
       JSON.stringify({at: 'yesterday', reason: 'offline', failures: 1}),
+      // A number written as text still counts: `now - '1700...'` is a number.
+      JSON.stringify({at: String(now), reason: 'offline', failures: 1}),
       JSON.stringify({at: now, failures: 1}),
       JSON.stringify({at: now, reason: 5, failures: 1}),
     ]) {
