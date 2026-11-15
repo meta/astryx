@@ -106,7 +106,7 @@ describe('the browser run', () => {
       `exports.chromium = {async launch(o) {
         if (o && o.executablePath) throw new Error('system chrome broken');
         return {
-          async newPage() { return {async goto() {}, async screenshot({path}) { require('fs').writeFileSync(path, 'x'); }}; },
+          async newPage() { return {async route() {}, async goto() {}, async screenshot({path}) { require('fs').writeFileSync(path, 'x'); }}; },
           async close() {},
         };
       }};`,

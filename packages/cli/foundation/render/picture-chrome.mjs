@@ -18,6 +18,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {NETWORK_URL_PATTERNS} from './offline.mjs';
 
 const [chrome, html, png, mode] = process.argv.slice(2);
 
@@ -139,6 +140,10 @@ try {
     flatten: true,
   });
   await send('Page.enable', {}, sessionId);
+  // The page loads its own files only: a remote stylesheet, font or image
+  // fails at once instead of holding the load on a network.
+  await send('Network.enable', {}, sessionId);
+  await send('Network.setBlockedURLs', {urls: NETWORK_URL_PATTERNS}, sessionId);
   await send(
     'Emulation.setDeviceMetricsOverride',
     {width: 1280, height: 900, deviceScaleFactor: 1, mobile: false},

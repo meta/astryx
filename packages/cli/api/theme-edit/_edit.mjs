@@ -4145,8 +4145,8 @@ async function changeOnce(
       },
     };
   }
-  const k = keyOf(s);
-  const prevIdx =
+  let k = keyOf(s);
+  let prevIdx =
     rawIdx >= 0
       ? rawIdx
       : // A setting listed twice by hand: the last entry is the one the
@@ -4154,9 +4154,38 @@ async function changeOnce(
         data.settings.map(x => keyOf(x)).lastIndexOf(k);
   /** @type {string | null} */
   let vibrancyGone = null;
-  const prev = prevIdx >= 0 ? data.settings[prevIdx] : null;
+  let prev = prevIdx >= 0 ? data.settings[prevIdx] : null;
   /** The other entries of a setting listed twice by hand that this command replaces or removes. @type {import('./_settings.mjs').Setting[]} */
   let alsoReplaced = [];
+  if (sub === 'undo' && !prev && !s.mode) {
+    // An undo with no --mode of a setting saved for one mode only: that
+    // entry, named with its mode; saved for each mode, one undo each.
+    const modal = data.settings.filter(
+      x =>
+        x.thing === s.thing &&
+        x.mode &&
+        (x.on ?? null) === (s.on ?? null) &&
+        (x.when ?? null) === (s.when ?? null) &&
+        (x.state ?? null) === (s.state ?? null) &&
+        Boolean(x.only) === Boolean(s.only),
+    );
+    if (modal.length === 1) {
+      s.mode = modal[0].mode;
+      k = keyOf(s);
+      prevIdx = data.settings.indexOf(modal[0]);
+      prev = modal[0];
+    } else if (modal.length > 1)
+      refuse(
+        E.ERR_THEME_NOT_SET,
+        `${slug} sets ${describe({...s, value: '?'})
+          .replace(' = ?', '')
+          .replace(
+            / \(whole theme\)$/,
+            '',
+          )} for each mode on its own (${modal.map(x => `${x.mode}: ${x.value}`).join('; ')}), so undo needs the one to remove: name its --mode.`,
+        {run: modal.map(x => `${P} undo ${slug} ${undoArgs(x)}`)},
+      );
+  }
   if (sub === 'undo') {
     if (!prev) {
       // A padding set in the other form (a side for the shorthand, or the
