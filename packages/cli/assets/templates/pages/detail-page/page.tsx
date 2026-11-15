@@ -19,6 +19,7 @@ import {Text, Heading} from '@astryxdesign/core/Text';
 import {Badge} from '@astryxdesign/core/Badge';
 import {Avatar} from '@astryxdesign/core/Avatar';
 import {Button} from '@astryxdesign/core/Button';
+import {useToast} from '@astryxdesign/core/Toast';
 import {TabList, Tab, TabMenu} from '@astryxdesign/core/TabList';
 import {Divider} from '@astryxdesign/core/Divider';
 import {Link} from '@astryxdesign/core/Link';
@@ -166,6 +167,9 @@ function PageHeader({
   onTogglePanel: () => void;
   isNarrow: boolean;
 }) {
+  const showToast = useToast();
+  const restock = () =>
+    showToast({body: 'Restock requested for order #1001', uniqueID: 'restock'});
   return (
     <LayoutHeader hasDivider padding={4} paddingBlockEnd={0}>
       <VStack gap={3}>
@@ -225,7 +229,7 @@ function PageHeader({
           </StackItem>
           {!isNarrow && (
             <HStack gap={2}>
-              <Button label="Restock" variant="secondary" />
+              <Button label="Restock" variant="secondary" onClick={restock} />
               <Button label="Edit" variant="secondary" />
             </HStack>
           )}
@@ -238,7 +242,7 @@ function PageHeader({
           <HStack gap={2}>
             <StackItem size="fill">
               <VStack hAlign="stretch">
-                <Button label="Restock" variant="secondary" />
+                <Button label="Restock" variant="secondary" onClick={restock} />
               </VStack>
             </StackItem>
             <StackItem size="fill">
@@ -284,6 +288,7 @@ function PageHeader({
 
 // ─── Items Card ─────────────────────────────────────────────────────────────
 function ItemsCard() {
+  const showToast = useToast();
   return (
     <Section>
       <VStack gap={4}>
@@ -295,8 +300,26 @@ function ItemsCard() {
             </HStack>
           </StackItem>
           <HStack gap={2}>
-            <Button label="Fulfill item" variant="ghost" />
-            <Button label="Create label" variant="secondary" />
+            <Button
+              label="Fulfill item"
+              variant="ghost"
+              onClick={() =>
+                showToast({
+                  body: `Fulfillment started for ${PRODUCTS.length} items`,
+                  uniqueID: 'fulfill',
+                })
+              }
+            />
+            <Button
+              label="Create label"
+              variant="secondary"
+              onClick={() =>
+                showToast({
+                  body: 'Shipping label created for order #1001',
+                  uniqueID: 'label',
+                })
+              }
+            />
           </HStack>
         </HStack>
 
@@ -342,6 +365,7 @@ function ItemsCard() {
 
 // ─── Invoice Card ───────────────────────────────────────────────────────────
 function InvoiceCard() {
+  const showToast = useToast();
   return (
     <Section>
       <VStack gap={4}>
@@ -353,8 +377,26 @@ function InvoiceCard() {
             </HStack>
           </StackItem>
           <HStack gap={2}>
-            <Button label="Refund" variant="ghost" />
-            <Button label="Send Invoice" variant="secondary" />
+            <Button
+              label="Refund"
+              variant="ghost"
+              onClick={() =>
+                showToast({
+                  body: 'Refund started for order #1001',
+                  uniqueID: 'refund',
+                })
+              }
+            />
+            <Button
+              label="Send Invoice"
+              variant="secondary"
+              onClick={() =>
+                showToast({
+                  body: 'Invoice sent to janedoe@email.com',
+                  uniqueID: 'invoice',
+                })
+              }
+            />
           </HStack>
         </HStack>
 
