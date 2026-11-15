@@ -4305,7 +4305,8 @@ describe('SideNavItem collapsed-from-mount rail tooltip', () => {
     act(() => {
       vi.advanceTimersByTime(200);
     });
-    expect(spy.mock.contexts).toContain(layer);
+    // The layer mounts at this first show; the trigger then names it.
+    expect(spy.mock.contexts).toContain(railTooltipFor(button));
   });
 
   it('describes a disabled rail item on the control that takes focus', async () => {
@@ -4431,7 +4432,8 @@ describe('SideNavItem collapsed-from-mount rail tooltip', () => {
     act(() => {
       vi.advanceTimersByTime(200);
     });
-    expect(spy.mock.contexts).toContain(layer);
+    // The layer mounts at this first show; the trigger then names it.
+    expect(spy.mock.contexts).toContain(railTooltipFor(link));
   });
 
   it("keeps the tooltip beside a caller's changing aria-describedby", () => {
@@ -4467,7 +4469,6 @@ describe('SideNavItem collapsed-from-mount rail tooltip', () => {
       <SideNavItem label="Dashboard" icon={StubIcon} href="/dashboard" />,
     );
     const link = screen.getByRole('link', {name: 'Dashboard'});
-    const layer = railTooltipFor(link);
     // jsdom does not model `:focus-visible`; stand in for a keyboard focus.
     const realMatches = link.matches.bind(link);
     vi.spyOn(link, 'matches').mockImplementation((selector: string) =>
@@ -4475,7 +4476,8 @@ describe('SideNavItem collapsed-from-mount rail tooltip', () => {
     );
 
     fireEvent.focusIn(link);
-    expect(spy.mock.contexts).toContain(layer);
+    // The layer mounts at this first show; the trigger then names it.
+    expect(spy.mock.contexts).toContain(railTooltipFor(link));
   });
 
   it('keeps a tooltip that was open when the rail expanded shut on the next collapse', () => {

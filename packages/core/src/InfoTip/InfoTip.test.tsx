@@ -185,33 +185,35 @@ describe('InfoTip', () => {
   it('closes the tooltip on Escape', async () => {
     render(<InfoTip content="Helpful context" />);
     const trigger = screen.getByRole('button', {name: 'More information'});
-    const layer = screen.getByRole('tooltip', {hidden: true});
+    // The tooltip's layer mounts at its first show; read it each time.
+    const layer = () => screen.getByRole('tooltip', {hidden: true});
 
     focusTrigger(trigger);
     await waitFor(() => {
-      expect(popoverOpenState.get(layer)).toBe(true);
+      expect(popoverOpenState.get(layer())).toBe(true);
     });
 
     fireEvent.keyDown(trigger, {key: 'Escape'});
 
     await waitFor(() => {
-      expect(popoverOpenState.get(layer)).toBe(false);
+      expect(popoverOpenState.get(layer())).toBe(false);
     });
   });
 
   it('re-opens after Escape once the trigger is left and re-hovered', async () => {
     render(<InfoTip content="Helpful context" />);
     const trigger = screen.getByRole('button', {name: 'More information'});
-    const layer = screen.getByRole('tooltip', {hidden: true});
+    // The tooltip's layer mounts at its first show; read it each time.
+    const layer = () => screen.getByRole('tooltip', {hidden: true});
 
     focusTrigger(trigger);
     await waitFor(() => {
-      expect(popoverOpenState.get(layer)).toBe(true);
+      expect(popoverOpenState.get(layer())).toBe(true);
     });
 
     fireEvent.keyDown(trigger, {key: 'Escape'});
     await waitFor(() => {
-      expect(popoverOpenState.get(layer)).toBe(false);
+      expect(popoverOpenState.get(layer())).toBe(false);
     });
 
     // Leave (resets dismissal), then re-enter
@@ -223,7 +225,7 @@ describe('InfoTip', () => {
 
     fireEvent.mouseEnter(trigger);
     await waitFor(() => {
-      expect(popoverOpenState.get(layer)).toBe(true);
+      expect(popoverOpenState.get(layer())).toBe(true);
     });
   });
 
@@ -292,37 +294,39 @@ describe('InfoTip', () => {
     it('reports the pin on the button: aria-expanded and aria-controls', async () => {
       render(<InfoTip content="Helpful context" />);
       const trigger = screen.getByRole('button', {name: 'More information'});
-      const layer = screen.getByRole('tooltip', {hidden: true});
+      // The tooltip's layer mounts at its first show; read it each time.
+      const layer = () => screen.getByRole('tooltip', {hidden: true});
       expect(trigger).toHaveAttribute('aria-expanded', 'false');
 
       fireEvent.click(trigger);
 
       await waitFor(() => {
-        expect(popoverOpenState.get(layer)).toBe(true);
+        expect(popoverOpenState.get(layer())).toBe(true);
       });
       expect(trigger).toHaveAttribute('aria-expanded', 'true');
-      expect(trigger).toHaveAttribute('aria-controls', layer.id);
+      expect(trigger).toHaveAttribute('aria-controls', layer().id);
     });
 
     it('stays pinned when the pointer leaves, and a second click closes it', async () => {
       render(<InfoTip content="Helpful context" />);
       const trigger = screen.getByRole('button', {name: 'More information'});
-      const layer = screen.getByRole('tooltip', {hidden: true});
+      // The tooltip's layer mounts at its first show; read it each time.
+      const layer = () => screen.getByRole('tooltip', {hidden: true});
 
       fireEvent.mouseEnter(trigger);
       fireEvent.click(trigger);
       await waitFor(() => {
-        expect(popoverOpenState.get(layer)).toBe(true);
+        expect(popoverOpenState.get(layer())).toBe(true);
       });
       fireEvent.mouseLeave(trigger);
       await act(async () => {
         await new Promise(resolve => setTimeout(resolve, 300));
       });
-      expect(popoverOpenState.get(layer)).toBe(true);
+      expect(popoverOpenState.get(layer())).toBe(true);
 
       fireEvent.click(trigger);
       await waitFor(() => {
-        expect(popoverOpenState.get(layer)).toBe(false);
+        expect(popoverOpenState.get(layer())).toBe(false);
       });
       expect(trigger).toHaveAttribute('aria-expanded', 'false');
     });
@@ -359,14 +363,15 @@ describe('InfoTip', () => {
     it('pins on a tap, though the trigger is a button', async () => {
       render(<InfoTip content="30-day rolling average." />);
       const trigger = screen.getByRole('button');
-      const layer = screen.getByRole('tooltip', {hidden: true});
+      // The tooltip's layer mounts at its first show; read it each time.
+      const layer = () => screen.getByRole('tooltip', {hidden: true});
 
       // Revealing the help is the button's whole purpose, so a tap pins it.
       // Without that its content is unreachable on a phone.
       tap(trigger);
 
       await waitFor(() => {
-        expect(popoverOpenState.get(layer)).toBe(true);
+        expect(popoverOpenState.get(layer())).toBe(true);
       });
       expect(trigger).toHaveAttribute('aria-expanded', 'true');
     });
@@ -374,16 +379,17 @@ describe('InfoTip', () => {
     it('closes on a second tap of the trigger', async () => {
       render(<InfoTip content="30-day rolling average." />);
       const trigger = screen.getByRole('button');
-      const layer = screen.getByRole('tooltip', {hidden: true});
+      // The tooltip's layer mounts at its first show; read it each time.
+      const layer = () => screen.getByRole('tooltip', {hidden: true});
 
       tap(trigger);
       await waitFor(() => {
-        expect(popoverOpenState.get(layer)).toBe(true);
+        expect(popoverOpenState.get(layer())).toBe(true);
       });
 
       tap(trigger);
       await waitFor(() => {
-        expect(popoverOpenState.get(layer)).toBe(false);
+        expect(popoverOpenState.get(layer())).toBe(false);
       });
     });
 
@@ -395,11 +401,12 @@ describe('InfoTip', () => {
         </>,
       );
       const trigger = screen.getByRole('button', {name: 'More information'});
-      const layer = screen.getByRole('tooltip', {hidden: true});
+      // The tooltip's layer mounts at its first show; read it each time.
+      const layer = () => screen.getByRole('tooltip', {hidden: true});
 
       tap(trigger);
       await waitFor(() => {
-        expect(popoverOpenState.get(layer)).toBe(true);
+        expect(popoverOpenState.get(layer())).toBe(true);
       });
 
       // The tap outside counts when the finger lifts.
@@ -408,7 +415,7 @@ describe('InfoTip', () => {
       fireEvent.pointerUp(elsewhere, {pointerType: 'touch'});
 
       await waitFor(() => {
-        expect(popoverOpenState.get(layer)).toBe(false);
+        expect(popoverOpenState.get(layer())).toBe(false);
       });
     });
   });

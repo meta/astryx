@@ -1509,12 +1509,14 @@ describe('DateInput', () => {
 
       fireEvent.mouseEnter(container);
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open');
       });
 
       fireEvent.mouseLeave(container);
       await waitFor(() => {
-        expect(tooltip).not.toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).not.toHaveAttribute(
+          'popover-open',
+        );
       });
     });
 
@@ -1528,7 +1530,6 @@ describe('DateInput', () => {
         />,
       );
 
-      const tooltip = screen.getByRole('tooltip', h);
       // The calendar button keeps its enabled tab stop (spec:AST-085 FR1),
       // so the input is the second stop.
       await user.tab();
@@ -1536,7 +1537,7 @@ describe('DateInput', () => {
       await user.tab();
       expect(screen.getByRole('combobox')).toHaveFocus();
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open');
       });
     });
 

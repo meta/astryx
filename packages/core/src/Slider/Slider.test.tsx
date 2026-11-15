@@ -1162,9 +1162,15 @@ describe('Slider', () => {
         'Volume is locked while sharing your screen',
       );
       fireEvent.mouseEnter(getTrack());
-      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      await waitFor(() =>
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open'),
+      );
       fireEvent.mouseLeave(getTrack());
-      await waitFor(() => expect(tooltip).not.toHaveAttribute('popover-open'));
+      await waitFor(() =>
+        expect(screen.getByRole('tooltip', h)).not.toHaveAttribute(
+          'popover-open',
+        ),
+      );
     });
 
     it('shows the reason tooltip on keyboard focus', async () => {
@@ -1178,10 +1184,11 @@ describe('Slider', () => {
           disabledMessage="Volume is locked while sharing your screen"
         />,
       );
-      const tooltip = screen.getByRole('tooltip', h);
       await user.tab();
       expect(screen.getByRole('slider')).toHaveFocus();
-      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      await waitFor(() =>
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open'),
+      );
     });
 
     it('does not render a tooltip when not disabled', () => {

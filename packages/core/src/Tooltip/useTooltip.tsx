@@ -19,6 +19,7 @@ import {
   useEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
   type RefCallback,
 } from 'react';
@@ -276,6 +277,32 @@ export interface TooltipReturn {
  * ```
  */
 
+/** A flag that turns on once: whether a tooltip's layer has mounted. */
+function createLayerMountFlag() {
+  let isMounted = false;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => isMounted,
+    set: () => {
+      if (isMounted) {
+        return;
+      }
+      isMounted = true;
+      for (const listener of listeners) {
+        listener();
+      }
+    },
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  };
+}
+
+const isNotMounted = () => false;
+
 export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   const {
     placement = 'above',
@@ -295,21 +322,40 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   // over the trigger: content taller than the room above and below opens
   // beside it, or on the roomier side sized to that room, and scrolls what does not
   // fit inside the surface, which stays hoverable (spec:AST-059 FR4).
+  // The layer mounts at its first show and then stays, so a page with a
+  // tooltip on every row pays for no closed layers (`useLayer`'s `lazyMount`).
   const layer = useLayerInternal({
     mode: 'context',
     onShow,
     onHide,
     keepsAnchorClear: true,
+    lazyMount: true,
+    keepsMountAfterShow: true,
   });
   const {
     ref: layerRef,
     anchorId: layerAnchorId,
-    show: showLayer,
+    show: showMountedLayer,
     hide: hideLayer,
     isOpen: isLayerOpen,
     id: layerId,
     render: renderLayer,
   } = layer;
+  // Until the first show, the description is hidden text in the trigger's
+  // markup, so `aria-describedby` always names an element in the document.
+  // The flag is an external store, as the layer's mount is: both update in
+  // the same commit, so the hidden text and the layer never exist together.
+  const [layerMount] = useState(createLayerMountFlag);
+  const isLayerMounted = useSyncExternalStore(
+    layerMount.subscribe,
+    layerMount.get,
+    isNotMounted,
+  );
+  const descriptionId = `${layerId}-description`;
+  const showLayer = useCallback(() => {
+    layerMount.set();
+    showMountedLayer();
+  }, [layerMount, showMountedLayer]);
 
   const popoverXstyle = styles.container;
 
@@ -967,20 +1013,33 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         onMouseLeave: scheduleHide,
       };
 
-      return renderLayer(
-        // FR11: React bubbles a press on the surface to the trigger's
-        // ancestors, portaled or not. A registered surface counts as
-        // something else in the shared interactive-ancestor walk, so a
-        // clickable container around the trigger leaves the press alone while
-        // document listeners still see it.
-        // The hold's announcement reads this element's text.
-        <div ref={contentRefs} {...stylex.props(styles.content)}>
-          {children}
-        </div>,
-        renderProps,
+      return (
+        <>
+          {renderLayer(
+            // FR11: React bubbles a press on the surface to the trigger's
+            // ancestors, portaled or not. A registered surface counts as
+            // something else in the shared interactive-ancestor walk, so a
+            // clickable container around the trigger leaves the press alone
+            // while document listeners still see it.
+            // The hold's announcement reads this element's text.
+            <div ref={contentRefs} {...stylex.props(styles.content)}>
+              {children}
+            </div>,
+            renderProps,
+          )}
+          {!isLayerMounted && (
+            // A closed manual popover: hidden, and skipped as a layer piece
+            // by sibling rules such as ButtonGroup's last-member radius.
+            <span id={descriptionId} role="tooltip" popover="manual">
+              {children}
+            </span>
+          )}
+        </>
       );
     },
     [
+      isLayerMounted,
+      descriptionId,
       renderLayer,
       placement,
       alignment,
@@ -1028,7 +1087,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     positionRef: layerRef,
     interactionRef,
     anchorId: layerAnchorId,
-    describedBy: layerId,
+    describedBy: isLayerMounted ? layerId : descriptionId,
     renderTooltip,
     show,
     hide,

@@ -985,6 +985,109 @@ describe('Tooltip', () => {
   });
 });
 
+describe('Tooltip layer mounts at its first show', () => {
+  // A tooltip's layer is not in the page until the tooltip first opens, so a
+  // table with a tooltip on every row mounts no closed layers.
+  const layers = () =>
+    Array.from(document.querySelectorAll('[data-layer-anchored]'));
+
+  function describedBy(trigger: HTMLElement) {
+    const id = trigger.getAttribute('aria-describedby');
+    return id == null ? null : document.getElementById(id);
+  }
+
+  it('mounts no layer for a hundred closed tooltips, and each trigger names its hidden description', () => {
+    render(
+      <>
+        {Array.from({length: 100}, (_, index) => (
+          <Tooltip key={index} content={`Row ${index}`}>
+            <button type="button">{`Action ${index}`}</button>
+          </Tooltip>
+        ))}
+      </>,
+    );
+    expect(layers()).toHaveLength(0);
+    const trigger = screen.getByRole('button', {name: 'Action 42'});
+    const description = describedBy(trigger);
+    expect(description).toHaveTextContent('Row 42');
+    expect(description).toHaveAttribute('role', 'tooltip');
+    expect(description).not.toBeVisible();
+  });
+
+  it('mounts the layer at the first hover, after the delay, and never shows two tooltips', () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <Tooltip content="Save changes" delay={200}>
+          <button type="button">Save</button>
+        </Tooltip>,
+      );
+      const trigger = screen.getByRole('button', {name: 'Save'});
+      fireEvent.mouseEnter(trigger);
+      act(() => {
+        vi.advanceTimersByTime(199);
+      });
+      expect(layers()).toHaveLength(0);
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+      const tooltips = screen.getAllByRole('tooltip', {hidden: true});
+      expect(tooltips).toHaveLength(1);
+      expect(tooltips[0]).toHaveTextContent('Save changes');
+      expect(popoverOpenState.get(tooltips[0])).toBe(true);
+      expect(describedBy(trigger)).toBe(tooltips[0]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('opens on the first keyboard focus, in that focus', () => {
+    render(
+      <Tooltip content="Save changes">
+        <button type="button">Save</button>
+      </Tooltip>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Save'});
+    vi.spyOn(trigger, 'matches').mockImplementation((selector: string) =>
+      selector === ':focus-visible'
+        ? true
+        : originalMatches.call(trigger, selector),
+    );
+    fireEvent.focusIn(trigger);
+    const tooltips = screen.getAllByRole('tooltip', {hidden: true});
+    expect(tooltips).toHaveLength(1);
+    expect(popoverOpenState.get(tooltips[0])).toBe(true);
+    expect(describedBy(trigger)).toBe(tooltips[0]);
+  });
+
+  it('keeps its layer after it hides, so the next show opens the same layer', async () => {
+    render(
+      <Tooltip content="Save changes" delay={0}>
+        <button type="button">Save</button>
+      </Tooltip>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Save'});
+    fireEvent.mouseEnter(trigger);
+    await waitFor(() => {
+      expect(layers()).toHaveLength(1);
+    });
+    const layer = layers()[0] as HTMLElement;
+    await waitFor(() => {
+      expect(popoverOpenState.get(layer)).toBe(true);
+    });
+    fireEvent.mouseLeave(trigger);
+    await waitFor(() => {
+      expect(popoverOpenState.get(layer)).toBe(false);
+    });
+    expect(layers()).toEqual([layer]);
+    expect(describedBy(trigger)).toBe(layer);
+    fireEvent.mouseEnter(trigger);
+    await waitFor(() => {
+      expect(popoverOpenState.get(layer)).toBe(true);
+    });
+  });
+});
+
 describe('Tooltip sibling mode (anchorRef)', () => {
   // SideNavItem's collapsed rail tooltip renders the Tooltip inside the very
   // element anchorRef points at. React attaches an ancestor's ref after its

@@ -720,9 +720,15 @@ describe('Switch', () => {
         'Notifications are turned off org-wide',
       );
       fireEvent.mouseEnter(getRow());
-      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      await waitFor(() =>
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open'),
+      );
       fireEvent.mouseLeave(getRow());
-      await waitFor(() => expect(tooltip).not.toHaveAttribute('popover-open'));
+      await waitFor(() =>
+        expect(screen.getByRole('tooltip', h)).not.toHaveAttribute(
+          'popover-open',
+        ),
+      );
     });
 
     it('shows the reason tooltip on keyboard focus', async () => {
@@ -736,10 +742,11 @@ describe('Switch', () => {
           disabledMessage="Notifications are turned off org-wide"
         />,
       );
-      const tooltip = screen.getByRole('tooltip', h);
       await user.tab();
       expect(screen.getByRole('switch', h)).toHaveFocus();
-      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      await waitFor(() =>
+        expect(screen.getByRole('tooltip', h)).toHaveAttribute('popover-open'),
+      );
     });
 
     it('does not render a tooltip when not disabled', () => {
