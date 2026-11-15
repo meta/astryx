@@ -16,8 +16,15 @@ import {
   beforeEach,
   afterEach,
 } from 'vitest';
-import {render, screen, fireEvent} from '@testing-library/react';
-import type {ComponentProps, ReactNode} from 'react';
+import {act, render, screen, fireEvent} from '@testing-library/react';
+import {
+  Suspense,
+  startTransition,
+  use,
+  type ComponentProps,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Markdown} from './Markdown';
 import {markdownSourceLinesPlugin} from './plugins';
@@ -924,6 +931,116 @@ describe('Markdown', () => {
     });
   });
 
+  // The parser's caches are written while Markdown renders: its incremental
+  // state, the option flags that reset it, and the plugins' syntax entries. A
+  // render React discards can leave an entry there. The parser reuses settled
+  // blocks only while the input still starts with their text. So such an entry
+  // can never put a discarded render's text on screen.
+  describe('a streamed render that React discards', () => {
+    // A transition that suspends for good: React renders its element, then
+    // keeps the committed tree and never commits that render.
+    const forever = new Promise<never>(() => {});
+    function Forever(): null {
+      use(forever);
+      return null;
+    }
+    function Discardable({
+      children,
+      isPending = false,
+    }: {
+      children: ReactNode;
+      isPending?: boolean;
+    }) {
+      return (
+        <Suspense fallback={null}>
+          {children}
+          {isPending ? <Forever /> : null}
+        </Suspense>
+      );
+    }
+    async function discardRender(
+      rerender: (ui: ReactElement) => void,
+      ui: ReactElement,
+    ): Promise<void> {
+      await act(async () => {
+        startTransition(() => {
+          rerender(<Discardable isPending>{ui}</Discardable>);
+        });
+      });
+    }
+
+    // Reduced motion makes the reveal synchronous, so each render parses
+    // exactly the text it is given.
+    beforeEach(() => {
+      stubMatchMedia({reduceMotion: true});
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    /** Each block's tag and text, in document order. */
+    function blocks(container: HTMLElement): string[] {
+      const doc = container.querySelector('[role="document"]');
+      return Array.from(doc?.querySelectorAll('div, li, strong, em') ?? []).map(
+        node =>
+          `${node.tagName.toLowerCase()}: ${(node.textContent ?? '')
+            .replace(/\s+/g, ' ')
+            .trim()}`,
+      );
+    }
+
+    async function streamAround(discarded: ReactElement) {
+      const settled = 'Intro with **bold**\n\nA settled paragraph\n\n';
+      const first = `${settled}Streaming`;
+      const next = `${settled}Streaming goes on`;
+      // The control: the same two committed renders, with nothing discarded.
+      const control = render(
+        <Discardable>
+          <Markdown isStreaming>{first}</Markdown>
+        </Discardable>,
+      );
+      control.rerender(
+        <Discardable>
+          <Markdown isStreaming>{next}</Markdown>
+        </Discardable>,
+      );
+      const {container, rerender} = render(
+        <Discardable>
+          <Markdown isStreaming>{first}</Markdown>
+        </Discardable>,
+      );
+      await discardRender(rerender, discarded);
+      rerender(
+        <Discardable>
+          <Markdown isStreaming>{next}</Markdown>
+        </Discardable>,
+      );
+      return {committed: blocks(container), control: blocks(control.container)};
+    }
+
+    it('never shows its text: the parser re-checks its settled blocks', async () => {
+      const {committed, control} = await streamAround(
+        <Markdown isStreaming>
+          {'Other *text* that never commits\n\n- a list\n- of items\n\nMore'}
+        </Markdown>,
+      );
+
+      // None of the discarded render's own text shows: not its paragraph, its
+      // list or its tail.
+      for (const text of [
+        'Other',
+        'never commits',
+        'a list',
+        'of items',
+        'More',
+      ]) {
+        expect(committed.join('\n')).not.toContain(text);
+      }
+      expect(committed).toEqual(control);
+    });
+  });
+
   it('applies compact density', () => {
     const {container} = render(
       <Markdown density="compact">{'Hello'}</Markdown>,
@@ -975,14 +1092,15 @@ describe('Markdown', () => {
   });
 
   describe('link destinations follow the shared navigation rule', () => {
-    // The same matrix Core's link plumbing and imperative navigation apply
-    // (utils/safeUrl.ts): only executable document schemes are blocked.
+    // The matrix Core's link plumbing and imperative navigation apply
+    // (utils/safeUrl.ts), plus every data: URL, which the parser rejects.
     const blocked = [
       'javascript:alert(1)',
       'JaVaScRiPt:alert(1)',
       'vbscript:MsgBox(1)',
       'data:text/html,<script>alert(1)</script>',
       'java\nscript:alert(1)',
+      'data:image/png;base64,iVBORw0KGgo=',
     ];
     const accepted = [
       'https://example.com',
@@ -991,7 +1109,6 @@ describe('Markdown', () => {
       '//example.com/x',
       'mailto:a@example.com',
       'tel:+15555550100',
-      'data:image/png;base64,iVBORw0KGgo=',
     ];
 
     it.each(blocked)('renders %s as text, not a link', destination => {
@@ -1011,7 +1128,7 @@ describe('Markdown', () => {
       expect(link?.getAttribute('href')).toBe(destination);
     });
 
-    it('a data:image link is navigation and is accepted, while a data:image image stays rejected by the resource policy', () => {
+    it('renders a data:image link and a data:image image as text', () => {
       const {container} = render(
         <Markdown>
           {
@@ -1019,10 +1136,9 @@ describe('Markdown', () => {
           }
         </Markdown>,
       );
-      expect(container.querySelector('a')?.getAttribute('href')).toBe(
-        'data:image/png;base64,iVBORw0KGgo=',
-      );
+      expect(container.querySelector('a')).toBeNull();
       expect(container.querySelector('img')).toBeNull();
+      expect(container.textContent).toContain('view');
     });
   });
 
@@ -1379,5 +1495,57 @@ describe('inlinePlugins', () => {
       expect(container.querySelector('a')).toBeNull();
       expect(container.querySelector('pre')).not.toBeNull();
     });
+  });
+});
+
+describe('Markdown contentWidth', () => {
+  function maxWidthStyles(container: HTMLElement): string[] {
+    return Array.from(container.querySelectorAll('*'))
+      .map(el => el.getAttribute('style') ?? '')
+      .filter(style => style.includes('--x-maxWidth'));
+  }
+
+  it('caps default prose at the 680px measure', () => {
+    const {container} = render(
+      <Markdown>{'Hello world paragraph.\n\n```\ncode\n```'}</Markdown>,
+    );
+    expect(
+      maxWidthStyles(container).some(style =>
+        style.includes('--x-maxWidth: 680px'),
+      ),
+    ).toBe(true);
+    // A code block spans the column, with the prose measure as its floor.
+    expect(container.querySelector('pre')?.getAttribute('style')).toContain(
+      '--x-minWidth: min(680px, 100%)',
+    );
+  });
+
+  it('lets prose span the column with contentWidth="100%"', () => {
+    const {container} = render(
+      <Markdown contentWidth="100%">{'Hello world paragraph.'}</Markdown>,
+    );
+    const proseStyles = maxWidthStyles(container);
+    expect(proseStyles.length).toBeGreaterThan(0);
+    for (const style of proseStyles) {
+      expect(style).toContain('--x-maxWidth: 100%');
+    }
+  });
+
+  it('keeps an explicit numeric contentWidth in pixels', () => {
+    const {container} = render(
+      <Markdown contentWidth={640}>{'Hello world paragraph.'}</Markdown>,
+    );
+    const proseStyles = maxWidthStyles(container);
+    expect(proseStyles.length).toBeGreaterThan(0);
+    for (const style of proseStyles) {
+      expect(style).toContain('--x-maxWidth: 640px');
+    }
+  });
+
+  it('still drops the prose cap entirely for contentWidth={0}', () => {
+    const {container} = render(
+      <Markdown contentWidth={0}>{'Hello world paragraph.'}</Markdown>,
+    );
+    expect(maxWidthStyles(container)).toEqual([]);
   });
 });

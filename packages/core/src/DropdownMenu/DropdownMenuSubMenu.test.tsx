@@ -28,6 +28,7 @@ import {RadioList, RadioListItem} from '../RadioList';
 import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
 import {Theme, defineTheme} from '../theme';
 import {rtlStyles} from '../utils';
+import {TOUCH_QUERY} from '../utils/touchPresentation';
 
 beforeEach(() => {
   HTMLElement.prototype.showPopover = vi.fn(function (this: HTMLElement) {
@@ -407,6 +408,67 @@ describe('DropdownMenuSubMenu', () => {
     await waitFor(() => {
       expect(
         screen.getByRole('menuitem', {name: 'Archive', hidden: true}),
+      ).toHaveFocus();
+    });
+  });
+});
+
+describe('DropdownMenuSubMenu disabled rows', () => {
+  it('the arrow keys reach a disabled sub-menu row and move past it', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuItem label="Edit" onClick={() => {}} />
+        <DropdownMenuSubMenu label="Move to" isDisabled>
+          <DropdownMenuItem label="Projects" onClick={() => {}} />
+        </DropdownMenuSubMenu>
+        <DropdownMenuItem label="Print" onClick={() => {}} />
+      </DropdownMenu>,
+    );
+    screen.getByRole('button', {name: /Actions/}).focus();
+    await user.keyboard('{Enter}');
+    const edit = screen.getByRole('menuitem', {name: 'Edit', hidden: true});
+    await waitFor(() => expect(edit).toHaveFocus());
+    const moveTo = screen.getByRole('menuitem', {
+      name: /Move to/,
+      hidden: true,
+    });
+    expect(moveTo).toHaveAttribute('tabindex', '-1');
+    await user.keyboard('{ArrowDown}');
+    expect(moveTo).toHaveFocus();
+    await user.keyboard('{ArrowDown}');
+    expect(
+      screen.getByRole('menuitem', {name: 'Print', hidden: true}),
+    ).toHaveFocus();
+  });
+
+  it('a keyboard open lands on the first enabled row, and ArrowUp then reaches the disabled one', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuSubMenu label="Move to">
+          <DropdownMenuItem label="Projects" isDisabled onClick={() => {}} />
+          <DropdownMenuItem label="Archive" onClick={() => {}} />
+        </DropdownMenuSubMenu>
+      </DropdownMenu>,
+    );
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    await waitFor(() => {
+      expect(
+        screen.getByRole('menu', {name: 'Actions', hidden: true}),
+      ).toHaveFocus();
+    });
+    screen.getByRole('menuitem', {name: /Move to/, hidden: true}).focus();
+    await user.keyboard('{ArrowRight}');
+    await waitFor(() => {
+      expect(
+        screen.getByRole('menuitem', {name: 'Archive', hidden: true}),
+      ).toHaveFocus();
+    });
+    await user.keyboard('{ArrowUp}');
+    await waitFor(() => {
+      expect(
+        screen.getByRole('menuitem', {name: 'Projects', hidden: true}),
       ).toHaveFocus();
     });
   });
@@ -1256,6 +1318,75 @@ describe('DropdownMenuSubMenu hover/click guard', () => {
 });
 
 describe('DropdownMenuSubMenu press model', () => {
+  const finger = (pointerId = 1) => ({pointerType: 'touch', pointerId});
+
+  it('a cancelled finger in a flyout clears its lit row as the root\u2019s does, on every device (spec:AST-094 FR28, FR43), presentation="popover" too', async () => {
+    const originalMatchMedia = window.matchMedia;
+    // A large screen, its primary pointer coarse (a tablet) or fine (a
+    // touchscreen laptop): the root is an anchored popover and its sub-menu
+    // flies out.
+    const stubPrimaryPointer = (coarse: boolean) =>
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn().mockImplementation((query: string) => ({
+          matches: coarse && query === TOUCH_QUERY,
+          media: query,
+          onchange: null,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        })),
+      );
+    try {
+      const litAfterCancel = async (presentation?: 'popover') => {
+        const user = userEvent.setup();
+        const {unmount} = render(
+          <DropdownMenu button={{label: 'Actions'}} presentation={presentation}>
+            <DropdownMenuItem label="Rename" onClick={() => {}} />
+            <DropdownMenuSubMenu label="Move to">
+              <DropdownMenuItem label="Folder A" onClick={() => {}} />
+              <DropdownMenuItem label="Folder B" onClick={() => {}} />
+            </DropdownMenuSubMenu>
+          </DropdownMenu>,
+        );
+        await user.click(screen.getByRole('button', {name: /Actions/}));
+        const trigger = screen.getByRole('menuitem', {
+          name: /Move to/,
+          hidden: true,
+        });
+        fireEvent.pointerDown(trigger, finger());
+        fireEvent.pointerUp(trigger, finger());
+        expect(trigger).toHaveAttribute('aria-expanded', 'true');
+        const folderA = screen.getByRole('menuitem', {
+          name: 'Folder A',
+          hidden: true,
+        });
+        const folderB = screen.getByRole('menuitem', {
+          name: 'Folder B',
+          hidden: true,
+        });
+        // A finger lands in the flyout and slides onto Folder B, which lights;
+        // then the browser takes the touch (a scroll, a system gesture).
+        fireEvent.pointerDown(folderA, finger(2));
+        fireEvent.pointerMove(folderB, finger(2));
+        expect(folderB).toHaveFocus();
+        fireEvent.pointerCancel(folderB, finger(2));
+        const lit = document.activeElement === folderB;
+        unmount();
+        return lit;
+      };
+      for (const coarse of [true, false]) {
+        stubPrimaryPointer(coarse);
+        expect(await litAfterCancel(), `coarse=${coarse}`).toBe(false);
+        expect(await litAfterCancel('popover'), `coarse=${coarse}`).toBe(false);
+      }
+    } finally {
+      vi.stubGlobal('matchMedia', originalMatchMedia);
+    }
+  });
+
   it('a press released on the sub-menu row opens it and keeps the menu', async () => {
     const user = userEvent.setup();
     render(<MoveMenu />);
@@ -1559,6 +1690,28 @@ describe('DropdownMenuSubMenu drill-in on a phone', () => {
     fireEvent.keyDown(document.activeElement!, {key: 'Home'});
     expect(shownRow('Back to Actions')).toHaveFocus();
     expect(drilled).toBeInTheDocument();
+  });
+
+  it('a keyboard drill-in lands on the first enabled row after Back, and ArrowUp reaches the disabled one', async () => {
+    stubCompactTouch(true);
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuSubMenu label="Move to">
+          <DropdownMenuItem label="Projects" isDisabled onClick={() => {}} />
+          <DropdownMenuItem label="Archive" onClick={() => {}} />
+        </DropdownMenuSubMenu>
+      </DropdownMenu>,
+    );
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    fireEvent.keyDown(await waitFor(() => shownRow('Move to')), {
+      key: 'Enter',
+    });
+    await waitFor(() => shownMenu('Move to'));
+    await waitFor(() => expect(shownRow('Archive')).toHaveFocus());
+    fireEvent.keyDown(document.activeElement!, {key: 'ArrowUp'});
+    expect(shownRow('Projects')).toHaveFocus();
+    expect(shownRow('Projects')).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('presentation="flyout" keeps the flyout on a phone and "drill-in" drills on a laptop', async () => {

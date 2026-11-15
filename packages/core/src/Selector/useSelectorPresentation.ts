@@ -4,7 +4,7 @@
 
 /**
  * @file useSelectorPresentation.ts
- * @input Uses the shared adaptive presentation policy and usePopover
+ * @input Uses the shared adaptive presentation policy and usePopoverInternal
  * @output Coordinates popover and bottom-sheet disclosure state
  * @position Internal presentation controller shared by Selector and MultiSelector
  */
@@ -16,9 +16,10 @@ import {
   type FocusEvent,
   type RefObject,
 } from 'react';
+import {useCommittedRef, useCommittedRefInto} from '../hooks/useCommittedRef';
 import {
-  usePopover,
-  type UsePopoverOptions,
+  usePopoverInternal,
+  type InternalPopoverOptions,
   type UsePopoverReturn,
 } from '../Popover/usePopover';
 import {
@@ -28,12 +29,16 @@ import {
 } from '../hooks/useAdaptivePresentation';
 import type {InteractionModalityTracking} from '../utils/interactionModality';
 import {useFocusReturnVisibility} from '../hooks/useFocusReturnVisibility';
+import {
+  createPresentationHold,
+  usePresentationHold,
+} from '../Layer/presentationHold';
 
 interface UseSelectorPresentationOptions {
   presentation: AdaptivePresentation;
   onHide: () => void;
   onShow: () => void;
-  popoverOptions: Omit<UsePopoverOptions, 'onHide' | 'onShow'>;
+  popoverOptions: Omit<InternalPopoverOptions, 'onHide' | 'onShow'>;
   triggerRef: RefObject<HTMLElement | null>;
   /**
    * The component's one modality tracking, its `ref` attached to the trigger,
@@ -72,28 +77,36 @@ export function useSelectorPresentation({
   isFocusReturnAlways = false,
 }: UseSelectorPresentationOptions): SelectorPresentationController {
   const resolvedPresentation = useAdaptivePresentation(presentation);
-  const activePresentationRef =
-    useRef<ResolvedAdaptivePresentation>(resolvedPresentation);
+  // The layer runtime's presentation holds (Layer/presentationHold): the
+  // presentation an opening chose, taken as it shows; and the sheet, held from
+  // the render that opens it until its close settles. BottomSheet owns its
+  // exit animation and final-focus handoff, so the sheet stays mounted after
+  // the controlled open state turns false until that handoff reaches the
+  // trigger; then consumers may remove the hidden surface tree.
+  const [activePresentationHold] = useState(() =>
+    createPresentationHold<ResolvedAdaptivePresentation>(),
+  );
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const isSheetOpenRef = useRef(false);
-  // BottomSheet owns its exit animation and final-focus handoff. Keep it mounted
-  // after the controlled open state turns false until that handoff reaches the
-  // trigger, then consumers may remove the hidden surface tree.
-  const [isSheetPresented, setIsSheetPresented] = useState(false);
-  const onHideRef = useRef(onHide);
-  const onShowRef = useRef(onShow);
+  const {isHeld: isSheetPresented, release: releaseSheet} = usePresentationHold(
+    {isOpen: isSheetOpen, presentation: true},
+  );
+  // The layer's popover ref callback can show the popover in the same commit.
+  const onHideRef = useCommittedRef(onHide);
+  const onShowRef = useCommittedRef(onShow);
   const didShowPopoverRef = useRef(false);
-  // The open list's container, read when the popover hides to tell focus that
-  // is still inside the list from focus that moved to another element.
-  const popoverContentRef = useRef<HTMLDivElement | null>(null);
+  // The popover's own ref to the open list's container. The hide reads it to
+  // tell focus that is still inside the list from focus that moved elsewhere.
+  // The hook writes it below, once the popover exists.
+  const popoverContentRef = useRef<RefObject<HTMLDivElement | null> | null>(
+    null,
+  );
   const {
     isFocusRingSuppressed,
     onFocusReturnTargetFocus,
     prepareFocusReturn,
     resetFocusReturn,
   } = useFocusReturnVisibility(triggerModality);
-  onHideRef.current = onHide;
-  onShowRef.current = onShow;
 
   const handlePopoverHide = useCallback(() => {
     onHideRef.current();
@@ -109,41 +122,47 @@ export function useSelectorPresentation({
       active instanceof HTMLElement &&
       active !== document.body &&
       active !== trigger &&
-      !popoverContentRef.current?.contains(active);
+      !popoverContentRef.current?.current?.contains(active);
     if (focusLandedElsewhere) {
       return;
     }
     prepareFocusReturn();
     trigger?.focus();
-  }, [isFocusReturnAlways, prepareFocusReturn, triggerRef]);
+  }, [isFocusReturnAlways, onHideRef, prepareFocusReturn, triggerRef]);
   const handlePopoverShow = useCallback(() => {
     didShowPopoverRef.current = true;
     resetFocusReturn();
     onShowRef.current();
-  }, [resetFocusReturn]);
-  const popover = usePopover({
+  }, [onShowRef, resetFocusReturn]);
+  const popover = usePopoverInternal({
     ...popoverOptions,
     onHide: handlePopoverHide,
     onShow: handlePopoverShow,
   });
-  popoverContentRef.current = popover.contentRef.current;
+  useCommittedRefInto(popoverContentRef, popover.contentRef);
   const {hide: hidePopover, show: showPopover} = popover;
 
   const show = useCallback((): boolean => {
-    activePresentationRef.current = resolvedPresentation;
+    activePresentationHold.take(resolvedPresentation);
     if (resolvedPresentation === 'bottom-sheet') {
       resetFocusReturn();
       onShowRef.current();
       isSheetOpenRef.current = true;
-      setIsSheetPresented(true);
       setIsSheetOpen(true);
       return true;
     }
-    setIsSheetPresented(false);
+    releaseSheet();
     didShowPopoverRef.current = false;
     showPopover();
     return didShowPopoverRef.current;
-  }, [resetFocusReturn, resolvedPresentation, showPopover]);
+  }, [
+    activePresentationHold,
+    onShowRef,
+    releaseSheet,
+    resetFocusReturn,
+    resolvedPresentation,
+    showPopover,
+  ]);
 
   const hide = useCallback(() => {
     if (isSheetOpenRef.current) {
@@ -154,22 +173,24 @@ export function useSelectorPresentation({
     } else {
       hidePopover();
     }
-  }, [hidePopover, prepareFocusReturn]);
+  }, [hidePopover, onHideRef, prepareFocusReturn]);
 
   const handleTriggerFocus = useCallback(
     (_event: FocusEvent<HTMLElement>) => {
       onFocusReturnTargetFocus();
       if (
         !isSheetOpenRef.current &&
-        activePresentationRef.current === 'bottom-sheet'
+        activePresentationHold.current() === 'bottom-sheet'
       ) {
         // BottomSheet focuses finalFocusRef only after its exit completes. That
         // focus event is the lifecycle signal that the retained sheet can now
-        // leave the tree without dropping focus to the document body.
-        setIsSheetPresented(false);
+        // leave the tree without dropping focus to the document body: its
+        // close has settled.
+        activePresentationHold.release();
+        releaseSheet();
       }
     },
-    [onFocusReturnTargetFocus],
+    [activePresentationHold, onFocusReturnTargetFocus, releaseSheet],
   );
 
   const handleSheetOpenChange = useCallback(
@@ -186,7 +207,7 @@ export function useSelectorPresentation({
   const isOpen = popover.isOpen || isSheetOpen;
   const activePresentation =
     isOpen || isSheetPresented
-      ? activePresentationRef.current
+      ? (activePresentationHold.current() ?? resolvedPresentation)
       : resolvedPresentation;
 
   return {

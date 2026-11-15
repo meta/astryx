@@ -2,22 +2,20 @@
 
 /**
  * @file webInput.pacing.test.ts
- * @input webInput.ts's wheel pacing error and re-take
- * @output Unit cases: a wheel burst's steps arrive when the page received
- *   them in WebKit and at their stamps in Chromium; its gaps past its bound
- *   are the page's when its own handling of the step before caused them and
- *   widened them past the harness's own send spacing, and the dispatch's
- *   otherwise; each error names its gaps; and a proof is
- *   re-taken once, only on a dispatch stall, with the re-take listed.
+ * @input webInput.ts's wheel pacing errors
+ * @output Unit cases. A wheel burst's steps arrive when the page received
+ *   them in WebKit, and at their stamps in Chromium. A gap past its bound is
+ *   the page's when two things hold. The page's handling of the step before
+ *   caused it, and it is wider than the harness's send spacing. Otherwise the
+ *   gap is the dispatch's. Each error names its gaps.
  * @position Node unit tests beside the harness's browser self-tests.
  *
  * SYNC: When modified, update webInput.ts (wheelArrivals, wheelSendGaps, wheelGapCauses,
- *   WheelPacingError, WheelPageStallError, retakeOnWheelPacing).
+ *   WheelPacingError, WheelPageStallError).
  */
 
 import {describe, expect, it} from 'vitest';
 import {
-  retakeOnWheelPacing,
   wheelArrivals,
   wheelGapCauses,
   wheelSendGaps,
@@ -29,7 +27,7 @@ describe('WheelPacingError', () => {
   it('names the longest gap, the bound and every gap', () => {
     const error = new WheelPacingError(100, [16, 16, 141, 0, 16]);
     expect(error.name).toBe('WheelPacingError');
-    expect(error.message).toMatch(/a gap of 141 ms, over its 100 ms/);
+    expect(error.message).toMatch(/a gap of 141 ms, at or over its 100 ms/);
     expect(error.message).toMatch(/gaps 16, 16, 141, 0, 16 ms/);
     expect(error.receivedGapsMs).toEqual([16, 16, 141, 0, 16]);
   });
@@ -70,6 +68,21 @@ describe('wheelGapCauses', () => {
     ).toEqual({pageStalls: [], dispatchStalls: []});
   });
 
+  it('judges a gap of exactly the bound, as Core ends a wheel gesture at a pause of its end window or more', () => {
+    // WebKit stamps whole ms, so a gap can equal the bound exactly.
+    expect(wheelGapCauses('webkit', [0, 16, 116], [1, 17, 117], 100)).toEqual({
+      pageStalls: [],
+      dispatchStalls: [100],
+    });
+    expect(wheelGapCauses('chromium', [0, 16, 116], [1, 17, 117], 100)).toEqual(
+      {pageStalls: [], dispatchStalls: [100]},
+    );
+    // Just under the bound, the run stays one gesture.
+    expect(
+      wheelGapCauses('chromium', [0, 16, 115.9], [1, 17, 116.9], 100),
+    ).toEqual({pageStalls: [], dispatchStalls: []});
+  });
+
   it('gives a WebKit gap to the page when the step reached it within a frame of the listeners finishing the one before', () => {
     // The listeners held the main thread 150 ms on the first step; the next
     // was dispatched 2 ms after they finished.
@@ -99,6 +112,32 @@ describe('wheelGapCauses', () => {
     expect(
       wheelGapCauses('chromium', [0, 152, 168], [150, 153, 169], 100),
     ).toEqual({pageStalls: [], dispatchStalls: [152]});
+  });
+
+  it('gives a WebKit gap to the page, naming its frame gap, when the page drew no frame across it with its listeners idle', () => {
+    // The listeners took 1 ms; the page then drew no frame from 20 to 380,
+    // across the 360 ms gap between the steps.
+    const frames = [4, 20, 380, 396];
+    expect(
+      wheelGapCauses('webkit', [16, 376], [17, 377], 100, [16], frames),
+    ).toEqual({
+      pageStalls: [{gapMs: 360, handlingMs: 1, frameGapMs: 360}],
+      dispatchStalls: [],
+    });
+    // With frames running through the same gap, it is the dispatch's.
+    const running = Array.from({length: 26}, (_, k) => 4 + 16 * k);
+    expect(
+      wheelGapCauses('webkit', [16, 376], [17, 377], 100, [16], running),
+    ).toEqual({pageStalls: [], dispatchStalls: [360]});
+    // A gap no wider than the harness's own send spacing stays the
+    // dispatch's, frames or not.
+    expect(
+      wheelGapCauses('webkit', [16, 376], [17, 377], 100, [360], frames),
+    ).toEqual({pageStalls: [], dispatchStalls: [360]});
+    // Chromium's stamps are its dispatch's.
+    expect(
+      wheelGapCauses('chromium', [16, 376], [17, 377], 100, [16], frames),
+    ).toEqual({pageStalls: [], dispatchStalls: [360]});
   });
 
   it('counts a step whose handling was never seen as the dispatch\u2019s', () => {
@@ -206,79 +245,11 @@ describe('WheelPageStallError', () => {
     expect(error.message).toMatch(
       /took 150 ms of page wall time to handle a step/,
     );
-    expect(error.message).toMatch(/152 ms later, over its 100 ms/);
+    expect(error.message).toMatch(/152 ms later, at or over its 100 ms/);
     expect(error.message).toMatch(
       /the page split the run\. On a starved runner that time includes the page's wait for a CPU: judge a page stall from a run with CI's CPU limits/,
     );
     expect(error.message).not.toMatch(/not the runner/);
     expect(error).not.toBeInstanceOf(WheelPacingError);
-  });
-});
-
-describe('retakeOnWheelPacing', () => {
-  const offPace = () => new WheelPacingError(100, [16, 120]);
-
-  it('stays red when both attempts are off pace, with one re-take listed', async () => {
-    const testInfo = {
-      annotations: [] as {type: string; description?: string}[],
-    };
-    let attempts = 0;
-    await expect(
-      retakeOnWheelPacing(testInfo, async () => {
-        attempts += 1;
-        throw offPace();
-      }),
-    ).rejects.toBeInstanceOf(WheelPacingError);
-    expect(attempts).toBe(2);
-    expect(testInfo.annotations.map(a => a.type)).toEqual(['wheel-retake']);
-  });
-
-  it('never re-takes a product failure after input that kept its pace', async () => {
-    const testInfo = {
-      annotations: [] as {type: string; description?: string}[],
-    };
-    let attempts = 0;
-    await expect(
-      retakeOnWheelPacing(testInfo, async () => {
-        attempts += 1;
-        throw new Error('the gallery did not page');
-      }),
-    ).rejects.toThrow('the gallery did not page');
-    expect(attempts).toBe(1);
-    expect(testInfo.annotations).toEqual([]);
-  });
-
-  it('never re-takes a stall the page caused', async () => {
-    const testInfo = {
-      annotations: [] as {type: string; description?: string}[],
-    };
-    let attempts = 0;
-    await expect(
-      retakeOnWheelPacing(testInfo, async () => {
-        attempts += 1;
-        throw new WheelPageStallError(100, {gapMs: 152, handlingMs: 150});
-      }),
-    ).rejects.toBeInstanceOf(WheelPageStallError);
-    expect(attempts).toBe(1);
-    expect(testInfo.annotations).toEqual([]);
-  });
-
-  it('passes on a good second attempt after one off pace, and lists the re-take', async () => {
-    const testInfo = {
-      annotations: [] as {type: string; description?: string}[],
-    };
-    const seen: number[] = [];
-    const result = await retakeOnWheelPacing(testInfo, async n => {
-      seen.push(n);
-      if (n === 1) {
-        throw offPace();
-      }
-      return 'paged';
-    });
-    expect(result).toBe('paged');
-    expect(seen).toEqual([1, 2]);
-    expect(testInfo.annotations).toEqual([
-      {type: 'wheel-retake', description: offPace().message},
-    ]);
   });
 });

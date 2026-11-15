@@ -66,6 +66,17 @@ const GOLDEN = path.join(CLI_ROOT, 'test', '__golden__', 'no-icon-set');
 /** Words an experimental surface's text uses; a stable doc that gains one leaks. */
 const LEAK_WORDS =
   /\bexperimental\b|\bicon[- ]?sets?\b|\bicon[- ]definitions?\b/iu;
+/**
+ * The one named exception (AST-017 FR27): stable theme help and docs may
+ * point at the experimental theme editor (`experimental theme editor`,
+ * `experimental theme preview`) as the way to make and change a theme, until
+ * it graduates or is removed. Only those two entry points are taken out
+ * before the leak check; every other experimental surface a stable text
+ * names still fails it.
+ * @param {string} text
+ */
+const withoutThemeEditor = text =>
+  text.replace(/\bexperimental theme (?:editor|preview)\b/giu, 'theme-editor');
 /** Writing the goldens from main's CLI, not checking this branch's. */
 const REGENERATING = Boolean(process.env.GOLDEN_CLI_ROOT);
 /**
@@ -369,7 +380,8 @@ function leakMentions(value) {
   const visit = each => {
     if (typeof each === 'string') {
       for (const sentence of each.split(/(?<=[.!?])\s+/u)) {
-        if (LEAK_WORDS.test(sentence)) found.add(sentence.trim());
+        if (LEAK_WORDS.test(withoutThemeEditor(sentence)))
+          found.add(sentence.trim());
       }
     } else if (Array.isArray(each)) {
       each.forEach(visit);
@@ -627,7 +639,8 @@ describe('with no icon set, stable output is unchanged', () => {
       const visit = each => {
         if (typeof each === 'string') {
           for (const sentence of each.split(/(?<=[.!?])\s+/u)) {
-            if (LEAK_WORDS.test(sentence)) found.add(sentence);
+            if (LEAK_WORDS.test(withoutThemeEditor(sentence)))
+              found.add(sentence);
           }
         } else if (Array.isArray(each)) {
           each.forEach(visit);
@@ -868,7 +881,9 @@ describe('with no icon set, stable output is unchanged', () => {
 
   it('help gains only the experimental group', async () => {
     const help = astryx(['help']).stdout.split('\n');
-    const added = help.filter(line => /experimental|\bicon\b/i.test(line));
+    const added = help.filter(line =>
+      /experimental|\bicon\b/i.test(withoutThemeEditor(line)),
+    );
     if (!REGENERATING) {
       expect(added).toHaveLength(1);
       expect(added[0]).toMatch(/^\s+experimental\s+\[experimental\] /);
@@ -1440,5 +1455,20 @@ describe('with icon sets installed but no experimental.iconSet, stable output is
     await expect(withoutComputerChecks(res.stdout)).toMatchFileSnapshot(
       path.join(GOLDEN, 'doctor-installed-set.json'),
     );
+  });
+});
+
+describe('the theme editor exception is only the theme editor', () => {
+  it.each([
+    [
+      'use the experimental theme editor: astryx experimental theme editor new b',
+      false,
+    ],
+    ['look at it with astryx experimental theme preview add', false],
+    ['run astryx experimental icon search', true],
+    ['an experimental theme feature', true],
+    ['astryx experimental theme compile', true],
+  ])('%j leaks: %s', (sentence, leaks) => {
+    expect(LEAK_WORDS.test(withoutThemeEditor(sentence))).toBe(leaks);
   });
 });

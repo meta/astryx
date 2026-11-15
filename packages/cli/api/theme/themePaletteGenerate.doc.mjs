@@ -68,7 +68,7 @@ export const doc = {
     {code: 'ERR_FILE_NOT_FOUND', when: 'the config file does not exist'},
     {
       code: 'ERR_PALETTE_GENERATION',
-      when: 'the config is not valid JSON; the request, seed, stop layout, mode or anchor is invalid; out does not end in .ts or .json; or preview does not end in .html',
+      when: 'the config is not valid JSON; the request, seed, stop layout, mode, anchor or dark chroma taper is invalid; out does not end in .ts or .json; or preview does not end in .html',
     },
     {
       code: 'ERR_PATH_TRAVERSAL',

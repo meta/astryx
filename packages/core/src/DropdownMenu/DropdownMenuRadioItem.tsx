@@ -40,6 +40,7 @@ import {colorVars, focusVars, spacingVars} from '../theme/tokens.stylex';
 import {composeEventHandlers, mergeProps, themeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {useDropdownMenuRadioGroupContext} from './DropdownMenuContext';
+import {keepDisabledRowUnfocused} from './menuItemRoles';
 
 const styles = stylex.create({
   root: {
@@ -111,9 +112,9 @@ export interface DropdownMenuRadioItemProps extends Omit<
   icon?: ReactNode | IconType;
   /**
    * Whether this individual radio item is disabled. A disabled item stays in
-   * the accessibility tree as disabled (`aria-disabled`) but takes no focus:
-   * the arrow keys, typeahead, and the pointer highlight skip it, and
-   * selection is blocked.
+   * the accessibility tree as disabled (`aria-disabled`), and the arrow keys
+   * and typeahead reach it so keyboard users find it. The pointer highlight
+   * skips it, and selection is blocked.
    * @default false
    */
   isDisabled?: boolean;
@@ -189,9 +190,13 @@ export function DropdownMenuRadioItem({
   return (
     <Item
       {...rest}
+      onMouseDown={composeEventHandlers(
+        rest.onMouseDown,
+        isDisabled ? keepDisabledRowUnfocused : undefined,
+      )}
       role="menuitemradio"
       aria-checked={isChecked}
-      tabIndex={isDisabled ? undefined : -1}
+      tabIndex={-1}
       onPointerMove={composeEventHandlers(handlePointerMove, onPointerMove)}
       marker={
         // No wrapper — see DropdownMenuCheckboxItem: the target belongs on the

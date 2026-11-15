@@ -18,8 +18,13 @@
  */
 
 import {useCallback, useState} from 'react';
+import {enabledEdgeIndex} from '../utils/enabledEdgeIndex';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {
+  readLayerEntranceSide,
+  writeLayerEntranceSide,
+} from '../Layer/layerEntranceSide';
 import {LAYER_KEYBOARD_INSET_PROPERTY} from '../Layer/useLayerKeyboardClearance';
 import {isImeKeyEvent} from '../utils/ime';
 import {layoutViewportHeight} from '../utils/layoutViewport';
@@ -81,6 +86,7 @@ function measureSelectedItem(
   anchor: HTMLElement | null,
   listboxId: string,
   selectedItemIndex: number,
+  {countsLayerGutter = false}: {countsLayerGutter?: boolean} = {},
 ): SelectedItemPlacement | null {
   if (listbox == null || anchor == null) {
     return null;
@@ -117,8 +123,27 @@ function measureSelectedItem(
   // Desired top aligns the selected item's center with the anchor center.
   const desiredTop =
     anchorCenter - itemCenterInListbox - SELECTED_ITEM_OPTICAL_OFFSET;
+  // The layer keeps a gutter from the viewport's block end. A list that
+  // reaches into it overflows the layer's room, and the browser then takes a
+  // position fallback, which can flip the list off screen. The gutter is the
+  // layer's far-edge margin. The browser can flip the layer above its anchor
+  // before the overlay margin applies. The flip moves the gutter to the
+  // block-start margin. So read the larger of the two margins. A software
+  // keyboard's own inset replaces the gutter.
+  const layer = countsLayerGutter
+    ? listbox.closest<HTMLElement>('[popover]')
+    : null;
+  let blockEndGutter = 0;
+  if (layer != null) {
+    const layerStyle = getComputedStyle(layer);
+    blockEndGutter = Math.max(
+      0,
+      parseFloat(layerStyle.marginBlockStart) || 0,
+      parseFloat(layerStyle.marginBlockEnd) || 0,
+    );
+  }
   const viewportHeight = window.innerHeight;
-  const maxTop = Math.max(0, viewportHeight - listboxHeight);
+  const maxTop = Math.max(0, viewportHeight - listboxHeight - blockEndGutter);
   const clampedTop = Math.min(Math.max(desiredTop, 0), maxTop);
 
   // useLayer positions the popover below the outer anchor. Apply a negative
@@ -218,6 +243,7 @@ export function useSelectedItemOverlayMargin({
           anchorRef.current,
           listboxId,
           selectedItemIndex,
+          {countsLayerGutter: true},
         )
       : null;
     let margin: string | undefined;
@@ -234,6 +260,17 @@ export function useSelectedItemOverlayMargin({
     // eslint-disable-next-line @eslint-react/set-state-in-effect -- selector popover position is derived from DOM layout
     setIsPositioned(isOpen);
   }, [isOpen, selectedItemIndex, listboxId, listboxRef, anchorRef]);
+
+  // The list moves over its trigger in the commit that applies the margin.
+  // The runtime skips its read at the show (`writesEntranceSide`), so the
+  // entrance takes its side here, once, before the first paint.
+  useIsomorphicLayoutEffect(() => {
+    const layer = listboxRef.current?.closest<HTMLElement>('[popover]');
+    const anchor = anchorRef.current;
+    if (isOpen && isPositioned && layer != null && anchor != null) {
+      writeLayerEntranceSide(layer, readLayerEntranceSide(layer, anchor));
+    }
+  }, [isOpen, isPositioned, listboxRef, anchorRef]);
 
   return {marginBlockStart, isPositioned};
 }
@@ -376,6 +413,18 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
     return selectableItems.findIndex(item => item.value === value);
   }, [selectableItems, value]);
 
+  /** Opening never lands on a disabled option. */
+  const findOpeningIndex = useCallback(
+    (fromEnd: boolean) => {
+      const selectedIndex = findSelectedIndex();
+      if (selectedIndex >= 0 && !selectableItems[selectedIndex].disabled) {
+        return selectedIndex;
+      }
+      return enabledEdgeIndex(selectableItems, fromEnd);
+    },
+    [findSelectedIndex, selectableItems],
+  );
+
   const closeAndReset = useCallback(() => {
     setHighlightedIndex(-1);
     onClose();
@@ -401,11 +450,10 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
     } else {
       const didOpen = onOpen() !== false;
       if (didOpen && !hasSearch) {
-        const selectedIndex = findSelectedIndex();
-        setHighlightedIndex(selectedIndex >= 0 ? selectedIndex : 0);
+        setHighlightedIndex(findOpeningIndex(false));
       }
     }
-  }, [isDisabled, isOpen, onOpen, closeAndReset, findSelectedIndex, hasSearch]);
+  }, [isDisabled, isOpen, onOpen, closeAndReset, findOpeningIndex, hasSearch]);
 
   // The scroll effect lives here, the highlight owner, so every consumer
   // (Selector, CommandPalette) shares one hover/keyboard split (#6077).
@@ -438,7 +486,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
           e.preventDefault();
           if (!isOpen) {
             if (onOpen() !== false) {
-              setHighlightedIndex(0);
+              setHighlightedIndex(findOpeningIndex(false));
             }
           } else {
             const currentEnabledPos = enabledIndices.indexOf(highlightedIndex);
@@ -454,7 +502,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
           e.preventDefault();
           if (!isOpen) {
             if (onOpen() !== false) {
-              setHighlightedIndex(selectableItems.length - 1);
+              setHighlightedIndex(findOpeningIndex(true));
             }
           } else {
             const currentEnabledPos = enabledIndices.indexOf(highlightedIndex);
@@ -480,8 +528,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
           } else if (!isOpen) {
             const didOpen = onOpen() !== false;
             if (didOpen && !hasSearch) {
-              const selectedIndex = findSelectedIndex();
-              setHighlightedIndex(selectedIndex >= 0 ? selectedIndex : 0);
+              setHighlightedIndex(findOpeningIndex(false));
             }
           }
           break;
@@ -569,7 +616,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
       selectableItems,
       highlightedIndex,
       selectItem,
-      findSelectedIndex,
+      findOpeningIndex,
       getEnabledIndices,
       hasSearch,
       onClear,

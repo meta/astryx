@@ -65,11 +65,17 @@ import {
 } from './parser';
 import type {IncrementalState, MathParseOptions, ParseOptions} from './parser';
 import {getMarkdownAstLegacyCodeLanguage, markdownAstText} from './ast';
+import {
+  blockDirection,
+  innerDirectionScope,
+  type BlockDirectionScope,
+} from './blockDirection';
 import type {
   MarkdownAstBlockContent,
   MarkdownAstPhrasingContent,
   MarkdownAstPosition,
   MarkdownAstTable,
+  MarkdownAstTableAlignment,
 } from './ast';
 import {
   applyMarkdownTransforms,
@@ -88,7 +94,6 @@ import type {
   MarkdownPluginEntry,
   PreparedMarkdownPlugins,
 } from './plugins/protocol';
-import {sanitizeMarkdownLinkUrl, sanitizeMarkdownUrl} from './url';
 import {
   projectMarkdownHeadings,
   type MarkdownHeadingProjection,
@@ -103,6 +108,7 @@ import {
   registerEnglishFallback,
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
+import {useDirection} from '../i18n/useDirection';
 import english from '../i18n/generated-english/Markdown/Markdown.generated';
 
 registerEnglishFallback(english);
@@ -376,6 +382,7 @@ const dynamicStyles = stylex.create({
 });
 
 const cellAlignStyles = stylex.create({
+  start: {textAlign: 'start'},
   center: {textAlign: 'center'},
   end: {textAlign: 'end'},
 });
@@ -427,6 +434,17 @@ const markdownTableCellStyles = stylex.create({
   // and lets the column carry the width instead.
   code: {
     wordBreak: 'normal',
+  },
+  // A cell that reads against its table draws the column rule on the table's
+  // inline-end side, which is the cell's own inline-start.
+  ruleOnTableEnd: {
+    borderInlineEndWidth: 0,
+    borderInlineStartWidth: {
+      default: borderVars['--border-width'],
+      ':last-child': '0',
+    },
+    borderInlineStartStyle: 'solid',
+    borderInlineStartColor: colorVars['--color-border'],
   },
   // The grid's outer edge. `dividers="grid"` draws the lines *between* cells
   // and stops at the table's rim, so without this the top, bottom, and sides
@@ -896,6 +914,8 @@ function useStableMarkdownSyntaxEntries(
   plugins: PreparedMarkdownPlugins | undefined,
 ): ReadonlyArray<MarkdownPluginEntry> | undefined {
   const identity = plugins?.syntaxIdentity ?? '';
+  // A discarded render can leave an entry here. The hook uses an entry only
+  // while its identity matches, so it replaces that entry.
   const syntaxEntriesRef = useRef<
     | {
         identity: string;
@@ -1095,9 +1115,10 @@ function renderInline(
       return <MathComp key={index} value={node.value} display="inline" />;
     }
     case 'link': {
-      const safeHref = sanitizeMarkdownLinkUrl(node.url);
-      if (safeHref == null) {
-        // Unsafe URL — render as plain text
+      // The parser keeps only safe destinations, so the renderer checks no
+      // scheme. An empty destination still renders as text.
+      const safeHref = node.url;
+      if (safeHref === '') {
         return (
           <span key={index}>
             {node.children.map((c, i) =>
@@ -1176,8 +1197,8 @@ function renderInline(
       );
     }
     case 'image': {
-      const safeSrc = sanitizeMarkdownUrl(node.url);
-      if (safeSrc == null) {
+      const safeSrc = node.url;
+      if (safeSrc === '') {
         return <span key={index}>[{node.alt}]</span>;
       }
       const ImageComp = components?.image;
@@ -1344,6 +1365,24 @@ function computeTableColumnMinWidths(node: RenderTable): number[] {
   });
 }
 
+/**
+ * The alignment and column-rule styles for a Markdown table cell. For a cell
+ * that reads against its table, the table's start is the cell's end, so an
+ * explicit alignment and the rule swap logical sides.
+ */
+function tableCellSideStyles(
+  align: MarkdownAstTableAlignment | undefined,
+  isAgainstTable: boolean,
+): ReadonlyArray<StyleXStyles | false> {
+  return [
+    align === 'center' && cellAlignStyles.center,
+    align === 'right' &&
+      (isAgainstTable ? cellAlignStyles.start : cellAlignStyles.end),
+    align === 'left' && isAgainstTable && cellAlignStyles.end,
+    isAgainstTable && markdownTableCellStyles.ruleOnTableEnd,
+  ];
+}
+
 function renderBlock(
   node: RenderBlockNode,
   index: number,
@@ -1365,6 +1404,7 @@ function renderBlock(
   headingProjection?: MarkdownHeadingProjection,
   // How many lists enclose this block (spec:AST-061 DEC-6).
   listDepth = 0,
+  directionScope?: BlockDirectionScope,
 ): SyncReactNode {
   const blockAlignMargin = BLOCK_ALIGN_MARGIN[contentAlign];
   const blockAlignStyle =
@@ -1415,6 +1455,7 @@ function renderBlock(
           <Tag
             key={index}
             id={headingId}
+            dir={blockDirection(node, directionScope)}
             {...mergeProps(
               themeProps('markdown-heading', {density, level}),
               stylex.props(
@@ -1439,6 +1480,7 @@ function renderBlock(
       return (
         <HeadingLinksRenderer
           key={index}
+          dir={blockDirection(node, directionScope)}
           headingId={headingId}
           headingLabel={headingLabel}
           permalinkUrl={permalinkUrl}
@@ -1501,6 +1543,7 @@ function renderBlock(
         <div
           key={index}
           role="paragraph"
+          dir={blockDirection(node, directionScope)}
           {...mergeProps(
             themeProps('markdown-paragraph', {density}),
             stylex.props(
@@ -1660,6 +1703,7 @@ function renderBlock(
             codeLanguages,
             headingProjection,
             listDepth,
+            directionScope,
           ),
         );
         return (
@@ -1671,6 +1715,7 @@ function renderBlock(
       return (
         <Blockquote
           key={index}
+          dir={blockDirection(node, directionScope)}
           {...themeProps('markdown-blockquote', {density})}
           {...lineStamps}
           xstyle={[
@@ -1704,6 +1749,7 @@ function renderBlock(
               codeLanguages,
               headingProjection,
               listDepth,
+              innerDirectionScope(node, directionScope),
             ),
           )}
         </Blockquote>
@@ -1735,6 +1781,12 @@ function renderBlock(
               themeProps('markdown-list', {density}),
               stylex.props(
                 spacing,
+                contentWidthValue != null
+                  ? dynamicStyles.proseWidth(contentWidthValue)
+                  : null,
+                contentAlign !== 'start'
+                  ? dynamicStyles.proseAlign(ALIGN_MARGIN[contentAlign])
+                  : null,
                 isFirst && styles.noMarginBlockStart,
                 isLast && styles.noMarginBlockEnd,
               ),
@@ -1790,6 +1842,7 @@ function renderBlock(
                         codeLanguages,
                         headingProjection,
                         listDepth + 1,
+                        innerDirectionScope(item, directionScope),
                       ),
                     )}
                   </>
@@ -1801,6 +1854,7 @@ function renderBlock(
                     key={i}
                     value={`task-${i}`}
                     label={label}
+                    dir={blockDirection(item, directionScope)}
                     {...(recordsSourceLines
                       ? sourceLineAttributes(blockSourceLines(item))
                       : undefined)}
@@ -1880,6 +1934,7 @@ function renderBlock(
                       codeLanguages,
                       headingProjection,
                       listDepth + 1,
+                      innerDirectionScope(item, directionScope),
                     ),
                   )}
                 </>
@@ -1909,6 +1964,16 @@ function renderBlock(
                           : t('@astryx.markdown.taskList'),
                     };
 
+              const itemDirection = blockDirection(item, directionScope);
+              // A numbered item that reads against its list keeps its counter
+              // beside its own text, so its text never widens the counter
+              // column that the other rows share.
+              const readsAgainstList =
+                node.ordered &&
+                itemDirection != null &&
+                directionScope != null &&
+                itemDirection !== directionScope.around;
+
               return (
                 <ListMarkerScope
                   // eslint-disable-next-line @eslint-react/no-array-index-key -- markdown list items are rendered from positional AST nodes
@@ -1919,9 +1984,11 @@ function renderBlock(
                     ]
                   }
                   task={task}
-                  hasMarkerGutter={node.ordered}>
+                  hasMarkerGutter={node.ordered}
+                  isOutsideNumberColumns={readsAgainstList}>
                   <ListItem
                     label={label}
+                    dir={itemDirection}
                     {...(recordsSourceLines
                       ? sourceLineAttributes(blockSourceLines(item))
                       : undefined)}
@@ -1935,6 +2002,19 @@ function renderBlock(
     }
     case 'table': {
       const colMinWidths = computeTableColumnMinWidths(node);
+      // A cell whose text reads against its table keeps the table's sides: the
+      // column rule and an explicit alignment resolve in the table's
+      // direction, not the cell's.
+      const readsAgainstTable = (
+        cell: Parameters<typeof blockDirection>[0],
+      ): boolean => {
+        const cellDirection = blockDirection(cell, directionScope);
+        return (
+          cellDirection != null &&
+          directionScope != null &&
+          cellDirection !== directionScope.around
+        );
+      };
       const [header, ...rows] = node.children;
       // Inline code inside a cell keeps its token whole, through the same
       // `components` seam consumers use. A supplied renderer owns its own
@@ -1977,11 +2057,14 @@ function renderBlock(
                   <TableHeaderCell
                     // eslint-disable-next-line @eslint-react/no-array-index-key -- markdown table columns are positional by definition
                     key={i}
+                    dir={blockDirection(h, directionScope)}
                     xstyle={[
                       markdownTableCellStyles.headerCell,
                       dynamicStyles.cellMinWidth(`${colMinWidths[i]}ch`),
-                      node.align[i] === 'center' && cellAlignStyles.center,
-                      node.align[i] === 'right' && cellAlignStyles.end,
+                      ...tableCellSideStyles(
+                        node.align[i],
+                        readsAgainstTable(h),
+                      ),
                     ]}>
                     {h.children.map((c, j) =>
                       renderInline(
@@ -2006,10 +2089,13 @@ function renderBlock(
                   <TableCell
                     // eslint-disable-next-line @eslint-react/no-array-index-key -- markdown table cells are positional by row and column
                     key={j}
+                    dir={blockDirection(cell, directionScope)}
                     xstyle={[
                       markdownTableCellStyles.cell,
-                      node.align[j] === 'center' && cellAlignStyles.center,
-                      node.align[j] === 'right' && cellAlignStyles.end,
+                      ...tableCellSideStyles(
+                        node.align[j],
+                        readsAgainstTable(cell),
+                      ),
                     ]}>
                     {cell.children.map((c, k) =>
                       renderInline(
@@ -2089,8 +2175,8 @@ function renderBlock(
       );
     }
     case 'image': {
-      const safeSrc = sanitizeMarkdownUrl(node.url);
-      if (safeSrc == null) {
+      const safeSrc = node.url;
+      if (safeSrc === '') {
         return (
           <div
             key={index}
@@ -2174,6 +2260,7 @@ export function Markdown<
   ...props
 }: MarkdownProps<Plugins>): React.ReactElement {
   const t = useComponentTranslator();
+  const direction = useDirection();
   // Keep one list while it names the same values, so an inline
   // `codeLanguages={[…]}` does not re-render every block on each parent
   // render (adjusting state during render, not in an Effect).
@@ -2233,6 +2320,10 @@ export function Markdown<
   // When not streaming, the hook returns children unchanged (no-op).
   const smoothedText = useStreamingText(children, isStreaming);
 
+  // A discarded render can change this cache, as it can change the option
+  // flags below. The parser reuses settled blocks only while the input starts
+  // with their text. So the output never shows text that only a discarded
+  // render had (Markdown.test.tsx: "a streamed render that React discards").
   const incrementalStateRef = useRef<IncrementalState<boolean>>(
     createIncrementalState<boolean>(),
   );
@@ -2387,6 +2478,10 @@ export function Markdown<
     return Math.min(Math.ceil(duration / tickMs), 12);
   }, [token]);
 
+  // Render writes these fade-in refs on purpose, an accepted exception to the
+  // runtime's ref rule. Text comes only from `smoothedText`. A render that
+  // React discards shifts the fade spans by the text it added. The "streamed
+  // text after a render React discards" tests pin why it is harmless.
   const prevBlocksRef = useRef<ReadonlyArray<RenderBlockNode>>([]);
   const prevInlineNodesRef = useRef<ReadonlyArray<RenderInlineNode>>([]);
   const boundariesRef = useRef<number[]>([]);
@@ -2398,6 +2493,7 @@ export function Markdown<
         ? countInlineTextLength(prevInlineNodesRef.current)
         : countBlockTextLength(prevBlocksRef.current);
     const next = computeBoundaries(boundariesRef.current, prevLen, maxSpans);
+    // Render writes this on purpose: see the fade-in refs' note above.
     boundariesRef.current = next;
     return next;
   }, [display, smoothedLen, maxSpans]);
@@ -2445,6 +2541,8 @@ export function Markdown<
         t,
         codeLanguages,
         headingProjection,
+        undefined,
+        {provider: direction, around: direction},
       ),
     );
   }, [
@@ -2466,6 +2564,7 @@ export function Markdown<
     t,
     headingProjection,
     codeLanguages,
+    direction,
   ]);
 
   if (display === 'inline') {
@@ -2508,6 +2607,7 @@ export function Markdown<
     );
 
     // Store current inline nodes for next render's boundary calculation.
+    // Render writes this on purpose: see the fade-in refs' note above.
     prevInlineNodesRef.current = inlineNodes;
     prevBlocksRef.current = [];
 
@@ -2536,6 +2636,7 @@ export function Markdown<
   // Store current blocks for next render's boundary calculation.
   // This ref write is safe under StrictMode: both invocations produce the same
   // blocks (same smoothedText → same useMemo result), so both write the same value.
+  // Render writes this on purpose: see the fade-in refs' note above.
   prevBlocksRef.current = blocks;
   prevInlineNodesRef.current = [];
 

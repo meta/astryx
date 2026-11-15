@@ -31,6 +31,7 @@ import {
   legacyExternalKeeps,
   resolveCoreSourcePath,
   resolveUnscopedDoc,
+  withExampleBlockPointer,
   loadComponentDoc,
   scopeSubComponent,
   ComponentAmbiguityError,
@@ -623,7 +624,13 @@ async function componentRead(name, options = {}) {
     });
   }
 
-  const resolved = await resolveUnscopedDoc(dirName, {coreDir, cwd, name});
+  const resolved = await resolveUnscopedDoc(dirName, {
+    coreDir,
+    cwd,
+    name,
+  }).catch(async error => {
+    throw await withExampleBlockPointer(error, dirName, {coreDir, cwd});
+  });
   const docs = await loadComponentDoc(resolved.readmePath, docOpts);
 
   // ── Blocks mode ──────────────────────────────────────────────

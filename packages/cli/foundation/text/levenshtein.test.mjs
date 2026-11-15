@@ -64,3 +64,24 @@ describe('levenshteinDistance', () => {
   });
 });
 
+describe('levenshteinDistance with swaps', () => {
+  it('counts two adjacent letters swapped as one edit', () => {
+    expect(d('gorup', 'group', 2, {swaps: true})).toBe(1);
+    expect(d('gorup', 'group', 2)).toBe(2);
+  });
+
+  it('agrees with the plain distance when nothing is swapped', () => {
+    for (const [a, b] of [
+      ['button', 'buton'],
+      ['dashboard', 'dashbord'],
+      ['card', 'cart'],
+      ['abc', 'xyz'],
+    ]) {
+      expect(d(a, b, 3, {swaps: true})).toBe(d(a, b, 3));
+    }
+  });
+
+  it('answers max + 1 past the cap', () => {
+    expect(d('abcdef', 'badcfe', 2, {swaps: true})).toBe(3);
+  });
+});

@@ -9,6 +9,7 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
 const reread = vi.hoisted(() => ({calls: 0, failOn: 0}));
 
@@ -41,7 +42,7 @@ let tmpDir;
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(
-    path.join(process.cwd(), '.astryx-add-icon-definition-undo-'),
+    path.join(REPO_ROOT, '.astryx-add-icon-definition-undo-'),
   );
   fs.writeFileSync(
     path.join(tmpDir, 'package.json'),

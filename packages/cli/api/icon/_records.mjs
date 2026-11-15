@@ -14,6 +14,7 @@
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
 export {
   answeringMatches,
   iconRecord,
@@ -80,6 +81,32 @@ export function unusableSet(sets, withdrawn, selector) {
 }
 
 /**
+ * The one valid installed set a selector names. Throws `ERR_NOT_FOUND` when
+ * it names none (see `unusableSet`), and `ERR_INVALID_ARGUMENT` when it names
+ * more than one, so the caller names the package too.
+ * @template {{name: string, package: string}} T
+ * @param {T[]} sets the valid sets
+ * @param {Array<{name: string, package: string, reason: string}>} withdrawn
+ * @param {string} selector
+ * @returns {T}
+ */
+export function oneNamedSet(sets, withdrawn, selector) {
+  const named = setsNamed(sets, selector);
+  if (named.length === 0) throw unusableSet(sets, withdrawn, selector);
+  if (named.length > 1) {
+    throw new AstryxError(
+      `"${selector}" names ${named.length} sets; name one as <package>/<set>`,
+      named.map(each => ({
+        name: `${each.package}/${each.name}`,
+        reason: 'name the package',
+      })),
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
+  }
+  return named[0];
+}
+
+/**
  * Suggestions for a name that matched nothing: the closest candidates first.
  * @param {string} wanted
  * @param {string[]} candidates
@@ -89,7 +116,7 @@ export function unusableSet(sets, withdrawn, selector) {
 export function closest(wanted, candidates, reason, max = 5) {
   return [...new Set(candidates)]
     .map(name => ({name, distance: levenshteinDistance(wanted, name)}))
-    .sort((a, b) => a.distance - b.distance || a.name.localeCompare(b.name))
+    .sort((a, b) => a.distance - b.distance || compareText(a.name, b.name))
     .slice(0, max)
     .map(({name}) => ({name, reason}));
 }

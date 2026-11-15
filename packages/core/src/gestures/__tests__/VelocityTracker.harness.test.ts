@@ -4,7 +4,8 @@
  * @file VelocityTracker.harness.test.ts
  * @input VelocityTracker and the interaction harness's `readRelease`
  * @output Checks that the harness reads a paced play's release as this
- *   tracker does, on the same samples
+ *   tracker does, on the same samples: a dragged surface's release and a
+ *   scrolling surface's
  * @position Testing. The harness copies this tracker's filter because it
  *   cannot import Core's gestures. This test keeps the two equal.
  *
@@ -92,6 +93,16 @@ const GESTURES: Record<string, Gesture> = {
     ],
     lift: 66,
   },
+  'a turn after four moves': {
+    samples: [
+      [100, 50, 0],
+      [116, 50, 16],
+      [140, 50, 32],
+      [150, 50, 48],
+      [190, 50, 64],
+    ],
+    lift: 72,
+  },
   'a single move': {
     samples: [
       [100, 50, 0],
@@ -111,13 +122,18 @@ const GESTURES: Record<string, Gesture> = {
   'a lift 1 ms past the stillness interval': PAST_STILLNESS,
 };
 
-/** The tracker's release speed for the gesture, in px/s. */
-function coreSpeed({samples, lift}: Gesture): number {
+/**
+ * The tracker's release speed for the gesture, in px/s: a dragged surface's,
+ * or with `scroll` a scrolling surface's.
+ */
+function coreSpeed({samples, lift}: Gesture, scroll = false): number {
   const tracker = new VelocityTracker();
   for (const [x, y, t] of samples) {
     tracker.add(x, y, t);
   }
-  const velocity = tracker.velocity(lift);
+  const velocity = scroll
+    ? tracker.scrollVelocity(lift)
+    : tracker.velocity(lift);
   return Math.hypot(velocity.x, velocity.y);
 }
 
@@ -151,6 +167,18 @@ describe("the interaction harness's copy of the release filter", () => {
       const reading = readRelease(
         steps,
         steps.map(step => ({stamp: step.t, handledAt: step.t})),
+      );
+      expect(reading?.scriptPxPerS).toBeCloseTo(core, 6);
+      expect(reading?.pagePxPerS).toBeCloseTo(core, 6);
+    });
+
+    it(`reads ${name} as a scrolling surface's VelocityTracker does`, () => {
+      const core = coreSpeed(gesture, true);
+      const steps = stepsOf(gesture);
+      const reading = readRelease(
+        steps,
+        steps.map(step => ({stamp: step.t, handledAt: step.t})),
+        'scroll',
       );
       expect(reading?.scriptPxPerS).toBeCloseTo(core, 6);
       expect(reading?.pagePxPerS).toBeCloseTo(core, 6);

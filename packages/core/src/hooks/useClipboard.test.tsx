@@ -18,6 +18,10 @@ function politeRegion(): HTMLElement | null {
   return document.querySelector('[data-astryx-live-region="polite"]');
 }
 
+function assertiveRegion(): HTMLElement | null {
+  return document.querySelector('[data-astryx-live-region="assertive"]');
+}
+
 describe('useClipboard', () => {
   beforeEach(() => {
     // jsdom does not implement the async Clipboard API.
@@ -177,8 +181,14 @@ describe('useClipboardCopy (internal)', () => {
     expect(result.current.isCopied).toBe(false);
     expect(onError).toHaveBeenCalledTimes(1);
     expect(onError).toHaveBeenCalledWith(error);
+    // A failure is an error, so it is announced assertively.
     act(() => {
-      vi.advanceTimersByTime(2000);
+      vi.advanceTimersByTime(20);
+    });
+    expect(assertiveRegion()).toHaveTextContent('Failed');
+    expect(politeRegion()?.textContent ?? '').not.toContain('Failed');
+    act(() => {
+      vi.advanceTimersByTime(1980);
     });
     expect(result.current.isFailed).toBe(false);
   });

@@ -5,7 +5,8 @@
  * @input The keyboard module's reports and focus claim, the layout guide,
  *   rideKeyboard and the shared animator
  * @output The keyboard targets: their registry, followKeyboard for a docked
- *   or scrolling target, and keepFieldAboveKeyboard, a covered field's path
+ *   or scrolling target, and keepFieldAboveKeyboard, a covered field's path.
+ *   Also followsKeyboard, the touch gate, and deliverTap, a tap's delivery
  * @position Keyboard module, internal to core. useMobileKeyboard calls it.
  *
  * SYNC: When modified, update /packages/core/src/keyboard/README.md
@@ -15,7 +16,8 @@ import {animatorFor, type Animator} from '../motion/animator';
 import {isCoarsePointer} from '../utils/coarsePointer';
 import {subscribeInput} from '../utils/inputStream';
 import {layoutViewportHeight} from '../utils/layoutViewport';
-import {scrollingAncestor} from '../utils/scrollingAncestor';
+import {nearestScroller, scrollingAncestor} from '../utils/scrollingAncestor';
+import {sharedWeakMap, sharedWeakSet} from '../utils/sharedRealm';
 import {
   KEYBOARD_EPSILON,
   claimTapFocus,
@@ -47,7 +49,7 @@ export const FIELD_OFFSET = 10;
 
 // Targets that keep their own fields above the keyboard. A field inside one
 // moves nothing itself, so nothing moves twice.
-const targets = new WeakSet<Element>();
+const targets = sharedWeakSet<Element>('keyboard/keyboard-target/targets', 1);
 
 /** Registers `element` as a keyboard target until the returned call. */
 export function registerKeyboardTarget(element: Element): () => void {
@@ -56,6 +58,8 @@ export function registerKeyboardTarget(element: Element): () => void {
     targets.delete(element);
   };
 }
+
+export {nearestScroller};
 
 /** Whether a registered target holds `element`. */
 export function isInsideKeyboardTarget(element: Element): boolean {
@@ -69,20 +73,6 @@ export function isInsideKeyboardTarget(element: Element): boolean {
     }
   }
   return false;
-}
-
-/**
- * The element that scrolls `element` into view: its nearest ancestor that
- * scrolls on the block axis, or else the document's scroller.
- */
-export function nearestScroller(element: Element): Element {
-  const doc = element.ownerDocument;
-  const scroller = scrollingAncestor(element);
-  return scroller == null ||
-    scroller === doc.body ||
-    scroller === doc.documentElement
-    ? (doc.scrollingElement ?? doc.documentElement)
-    : scroller;
 }
 
 // The element's bottom edge where layout puts it, without the ride's move.
@@ -170,7 +160,10 @@ function dockOf(
 
 // The animator each ridden target moves with. A translate it draws is the
 // ride's, not the app's.
-const riddenAnimators = new WeakMap<HTMLElement, Animator>();
+const riddenAnimators = sharedWeakMap<HTMLElement, Animator>(
+  'keyboard/keyboard-target/ridden-animators',
+  1,
+);
 
 // Whether the app positions `node` with its own `translate`, such as `-50% 0`
 // to centre it. A translate the ride draws is not the app's.
@@ -397,7 +390,7 @@ function reveal(
 // caller's `onClick` still runs once. The click is synthetic: its `isTrusted`
 // is false. Like a real tap's click in Chrome and Safari, it is a touch
 // `PointerEvent`, or a `MouseEvent` where no `PointerEvent` exists.
-function deliverTap(
+export function deliverTap(
   control: HTMLElement,
   x: number,
   y: number,
@@ -429,11 +422,17 @@ function deliverTap(
   control.dispatchEvent(click);
 }
 
-// Puts back a pan the browser makes on its own after a keyboard report. This
-// happens, for example, after a focus no claim saw: a script's `focus()` while
-// nothing has focus. The field sits in place already, so the pan only displaces
-// the page.
-function watchPans(win: Window, owns: (focused: Element) => boolean) {
+/**
+ * Puts back a pan the browser makes on its own after a keyboard report. This
+ * happens, for example, after a focus no claim saw: a script's `focus()` while
+ * nothing has focus. The field sits in place already, so the pan only displaces
+ * the page. Feed `report` each keyboard height the module reports; `owns`
+ * says whether a focused element is one this watch keeps in place.
+ */
+export function watchPans(
+  win: Window,
+  owns: (focused: Element) => boolean,
+): {report(height: number): void; stop(): void} {
   const watch = watchRevealPan(win, {owns});
   let lastHeight = getKeyboardHeight(win);
   return {
@@ -459,9 +458,12 @@ function focusedFieldIn(target: Element): HTMLElement | null {
     : null;
 }
 
-// Whether this window keeps fields above a keyboard at all: a top-level
-// document whose visual viewport shrinks for the keyboard, under a finger.
-function followsKeyboard(win: Window | null): win is Window {
+/**
+ * Whether `win` keeps fields above a keyboard at all: a top-level document
+ * whose visual viewport shrinks for the keyboard, under a coarse primary
+ * pointer.
+ */
+export function followsKeyboard(win: Window | null): win is Window {
   return win != null && isKeyboardMeasurable(win) && isCoarsePointer(win);
 }
 
@@ -626,7 +628,10 @@ function fieldLift(
 // The ride that moves each target. A new ride on the same target takes over,
 // whether the old one still rides or waits for the keyboard to go. So two never
 // move one target, and the one taken over never moves it again.
-const currentRides = new WeakMap<HTMLElement, () => void>();
+const currentRides = sharedWeakMap<HTMLElement, () => void>(
+  'keyboard/keyboard-target/current-rides',
+  1,
+);
 
 // Rides `target` with the keyboard until the returned call (see liftFor).
 // `isHostOwned` is true for a Core host's own element, and false for an app's

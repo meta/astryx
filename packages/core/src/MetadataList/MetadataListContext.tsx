@@ -9,7 +9,7 @@
  * @position Internal context; consumed by MetadataList.tsx and MetadataListItem.tsx
  */
 
-import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
 
 export interface MetadataListLabelConfig {
   position?: 'start' | 'top';
@@ -22,5 +22,9 @@ export interface MetadataListContextValue {
 }
 
 export const MetadataListContext =
-  createContext<MetadataListContextValue | null>(null);
+  createLayerScopedContext<MetadataListContextValue | null>(
+    'MetadataListContext',
+    1,
+    null,
+  );
 MetadataListContext.displayName = 'MetadataListContext';

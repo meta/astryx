@@ -8,11 +8,19 @@
  *   dos and don'ts, theming notes).
  * @output Text-wrapped paragraphs whose code spans run the site's linkifiers
  *   and whose links carry the shared prose-link treatment from proseLink.ts.
- * @position Prose renderer for component detail pages, over core Markdown.
+ *   A code span in a link label stays a plain chip.
+ * @position Prose renderer over core Markdown for component detail pages,
+ *   docs-page guidance rows, and blog post summaries.
  */
 
-import type {ComponentProps, ReactNode} from 'react';
+import {
+  createContext,
+  useContext,
+  type ComponentProps,
+  type ReactNode,
+} from 'react';
 import type {StyleXStyles} from '@stylexjs/stylex';
+import {Code} from '@astryxdesign/core/CodeBlock';
 import {Markdown} from '@astryxdesign/core/Markdown';
 import type {MarkdownComponents} from '@astryxdesign/core/Markdown';
 import {VStack} from '@astryxdesign/core/Layout';
@@ -22,6 +30,8 @@ import {InlineCode} from './InlineCode';
 import {proseLinkStyles} from './proseLink';
 
 type TextProps = ComponentProps<typeof Text>;
+
+const LinkLabelContext = createContext(false);
 
 // Authored [label](href) links, restyled from core Markdown's plain underline
 // to the docsite's prose-link treatment (proseLink.ts). External links open in
@@ -44,8 +54,20 @@ function MarkdownLink({href, children}: {href: string; children: ReactNode}) {
           proseLinkStyles.color,
         ] as unknown as StyleXStyles
       }>
-      {children}
+      <LinkLabelContext value={true}>{children}</LinkLabelContext>
     </Link>
+  );
+}
+
+// HTML allows no link inside a link. The browser splits such markup while it
+// parses the page, and hydration then fails. A code span in a link label thus
+// stays a plain chip, and the label's own link is the destination.
+function MarkdownInlineCode({children}: {children: string}) {
+  const isInLinkLabel = useContext(LinkLabelContext);
+  return isInLinkLabel ? (
+    <Code>{children}</Code>
+  ) : (
+    <InlineCode>{children}</InlineCode>
   );
 }
 
@@ -54,7 +76,7 @@ function MarkdownLink({href, children}: {href: string; children: ReactNode}) {
 // `astryx docs icons`". Route those spans through the same linkifiers, and
 // links through the same treatment.
 const MARKDOWN_COMPONENTS: MarkdownComponents = {
-  inlineCode: InlineCode,
+  inlineCode: MarkdownInlineCode,
   link: MarkdownLink,
 };
 

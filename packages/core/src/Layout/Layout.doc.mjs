@@ -145,6 +145,17 @@ export const docs = {
         "Padding at the layout's outer edges using the spacing scale. Applies to this Layout's own header, footer, panels, and content. A nested Layout does not inherit it: without `padding`, its regions use the enclosing Card, Section, or Dialog padding, or the default inset (spacing 4). That keeps a page Layout inside AppShell inset even though AppShell's own regions are full bleed.",
     },
     {
+      name: 'children',
+      type: 'ReactNode',
+      description:
+        'Shorthand for the content slot: `<Layout>{main}</Layout>` is the same as `<Layout content={main} />`. When both are given, `content` wins.',
+    },
+    {
+      name: 'ref',
+      type: 'React.Ref<HTMLDivElement>',
+      description: 'Ref forwarded to the root layout element.',
+    },
+    {
       name: 'defaultHasDividers',
       type: 'boolean',
       description:
@@ -165,6 +176,8 @@ export const docs = {
     bestPractices: [
       { guidance: true, description: 'Use Layout when content needs named header, start, content, end, or footer regions.' },
       { guidance: true, description: 'Use HStack and VStack for simple directional stacking within a content area.' },
+      { guidance: true, description: 'Hide a region by passing `false`, `null`, or `undefined` to its slot, for example `isOpen && <LayoutPanel />`. The slot counts as empty, so the neighbouring regions move out to the layout edge.' },
+      { guidance: true, description: 'Give a region a landmark role and label on the region component when it is a page landmark, for example `<LayoutPanel role="navigation" label="Sections">`. Layout adds no role or name.' },
       { guidance: false, description: 'Use Layout for simple stacking layouts; use HStack or VStack instead.' },
       { guidance: false, description: 'Use Layout as the page shell or for app-wide navigation; use AppShell for that responsibility.' },
     ],
@@ -230,6 +243,8 @@ export const docsZh = {
     bestPractices: [
       { guidance: true, description: 'Use Layout when content needs named header, start, content, end, or footer regions.' },
       { guidance: true, description: 'Use HStack and VStack for simple directional stacking within a content area.' },
+      { guidance: true, description: 'Hide a region by passing `false`, `null`, or `undefined` to its slot, for example `isOpen && <LayoutPanel />`. The slot counts as empty, so the neighbouring regions move out to the layout edge.' },
+      { guidance: true, description: 'Give a region a landmark role and label on the region component when it is a page landmark, for example `<LayoutPanel role="navigation" label="Sections">`. Layout adds no role or name.' },
       { guidance: false, description: 'Use Layout for simple stacking layouts; use HStack or VStack instead.' },
       { guidance: false, description: 'Use Layout as the page shell or for app-wide navigation; use AppShell for that responsibility.' },
     ],
@@ -246,6 +261,8 @@ export const docsDense = {
     bestPractices: [
       { guidance: true, description: 'Use Layout when content needs named header, start, content, end, or footer regions.' },
       { guidance: true, description: 'Use HStack and VStack for simple directional stacking within a content area.' },
+      { guidance: true, description: 'Hide a region by passing `false`, `null`, or `undefined` to its slot, for example `isOpen && <LayoutPanel />`. The slot counts as empty, so the neighbouring regions move out to the layout edge.' },
+      { guidance: true, description: 'Give a region a landmark role and label on the region component when it is a page landmark, for example `<LayoutPanel role="navigation" label="Sections">`. Layout adds no role or name.' },
       { guidance: false, description: 'Use Layout for simple stacking layouts; use HStack or VStack instead.' },
       { guidance: false, description: 'Use Layout as the page shell or for app-wide navigation; use AppShell for that responsibility.' },
     ],

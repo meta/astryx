@@ -15,6 +15,8 @@
  * SYNC: When modified, update inputStream.test.ts.
  */
 
+import {realmValue, sharedKey} from './sharedRealm';
+
 // The window's capture phase runs before document listeners, so an app's
 // `stopPropagation` there does not hide input from press feedback or the
 // gesture host. A claiming recognizer still needs the touch to reach its
@@ -67,14 +69,20 @@ export interface InputSubscriptionOptions {
 /** The events a window's capture phase sees: its own, and the document's. */
 export type InputEventMap = WindowEventMap & DocumentEventMap;
 
-const streams = new WeakMap<Window, Map<string, Channel>>();
-/** The type of the latest pointer event each window's stream delivered. */
-const lastPointerTypes = new WeakMap<Window, string>();
-/** Where the latest mouse pointer event each window's stream delivered was. */
-const lastMousePoints = new WeakMap<Window, MousePoint>();
-
-/** Each window's finger and pen presses that are down, by pointer id. */
-const downPresses = new WeakMap<Window, Map<number, MousePoint>>();
+/**
+ * Registered, so a swizzled copy's subscribers join the package's window
+ * listeners.
+ */
+const inputState = realmValue(sharedKey('input-stream', 1), () => ({
+  streams: new WeakMap<Window, Map<string, Channel>>(),
+  /** The type of the latest pointer event each window's stream delivered. */
+  lastPointerTypes: new WeakMap<Window, string>(),
+  /** Where the latest mouse pointer event each window's stream delivered was. */
+  lastMousePoints: new WeakMap<Window, MousePoint>(),
+  /** Each window's finger and pen presses that are down, by pointer id. */
+  downPresses: new WeakMap<Window, Map<number, MousePoint>>(),
+}));
+const {streams, lastPointerTypes, lastMousePoints, downPresses} = inputState;
 const NO_PRESSES: ReadonlyMap<number, MousePoint> = new Map();
 
 /** A point in the viewport, in CSS pixels. */

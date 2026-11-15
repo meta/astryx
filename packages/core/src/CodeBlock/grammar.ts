@@ -13,6 +13,8 @@
  * - /packages/core/src/CodeBlock/languages/
  */
 
+import {sharedKey} from '../utils/sharedRealm';
+
 /** One grammar rule: text matching `regex` paints as `type`. */
 export type GrammarPattern = {type: string; regex: RegExp};
 
@@ -23,7 +25,9 @@ export type Grammar = {
   defaultType: string;
 };
 
-const LANGUAGE = Symbol.for('astryx.codeLanguage');
+// A registered key, so a swizzled copy of this module accepts a package
+// language and the package accepts a copy's.
+const LANGUAGE = sharedKey('code-language', 1);
 
 /** A flat token from a custom tokenize function: absolute offsets in `code`. */
 export type CodeLanguageToken = {type: string; start: number; end: number};
@@ -49,7 +53,11 @@ export type CodeLanguage = {
   readonly fileExtensions: ReadonlyArray<string>;
   /** Whole file names that infer this language, such as `Dockerfile`. */
   readonly fileNames: ReadonlyArray<string>;
-  readonly [LANGUAGE]: true;
+  /**
+   * A brand that is never present, so the language types of the package and
+   * a swizzled copy match.
+   */
+  readonly '@astryxdesign/core/code-language/v1'?: never;
 };
 
 /** How a language value paints: Astryx grammar data or a custom function. */
@@ -58,6 +66,7 @@ export type CodeLanguagePainter =
   | {kind: 'tokenize'; tokenize: CodeLanguageTokenize};
 
 type InternalCodeLanguage = CodeLanguage & {
+  readonly [LANGUAGE]: true;
   readonly painter: () => CodeLanguagePainter;
 };
 
@@ -124,7 +133,7 @@ export function isCodeLanguage(value: unknown): value is CodeLanguage {
   return (
     typeof value === 'object' &&
     value !== null &&
-    (value as Partial<CodeLanguage>)[LANGUAGE] === true
+    (value as {readonly [LANGUAGE]?: unknown})[LANGUAGE] === true
   );
 }
 

@@ -4,6 +4,7 @@ import {spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {Project} from '../../foundation/config/project.mjs';
 import {
@@ -331,6 +332,9 @@ export default {};
       path.join(sharedDir, 'handler.mjs'),
       "export const handle = async (report) => ({status: 'filed', message: 'shared'});\n",
     );
+    const sharedHandler = pathToFileURL(
+      path.join(sharedDir, 'handler.mjs'),
+    ).href;
 
     const dir1 = packageDir('@test/first');
     fs.mkdirSync(dir1, {recursive: true});
@@ -340,7 +344,7 @@ export default {};
     );
     fs.writeFileSync(
       path.join(dir1, 'astryx.integration.mjs'),
-      `import {handle} from ${JSON.stringify(path.join(sharedDir, 'handler.mjs'))};\nexport const gapReport = {audience: 'internal', handle};\nexport default {};\n`,
+      `import {handle} from ${JSON.stringify(sharedHandler)};\nexport const gapReport = {audience: 'internal', handle};\nexport default {};\n`,
     );
 
     const dir2 = packageDir('@test/second');
@@ -351,7 +355,7 @@ export default {};
     );
     fs.writeFileSync(
       path.join(dir2, 'astryx.integration.mjs'),
-      `import {handle} from ${JSON.stringify(path.join(sharedDir, 'handler.mjs'))};\nexport const gapReport = {audience: 'internal', handle};\nexport default {};\n`,
+      `import {handle} from ${JSON.stringify(sharedHandler)};\nexport const gapReport = {audience: 'internal', handle};\nexport default {};\n`,
     );
 
     configure(['@test/first', '@test/second']);
@@ -546,11 +550,11 @@ describe('gapReport handler isolation', () => {
     });
     configure(['@test/late-exit', '@test/after-late-exit']);
 
-    const projectModule = path.resolve(
-      import.meta.dirname,
+    const projectModule = new URL(
       '../../foundation/config/project.mjs',
-    );
-    const gapModule = path.resolve(import.meta.dirname, 'gap-report.mjs');
+      import.meta.url,
+    ).href;
+    const gapModule = new URL('./gap-report.mjs', import.meta.url).href;
     const source = `
       const {Project} = await import(${JSON.stringify(projectModule)});
       const {collectGapReportHandlers, deliverGapReportHandlers} = await import(${JSON.stringify(gapModule)});

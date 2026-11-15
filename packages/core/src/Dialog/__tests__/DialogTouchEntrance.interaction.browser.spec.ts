@@ -76,7 +76,9 @@ async function holdEntrance(page: Page): Promise<void> {
         ?.getAnimations()
         .some(animation => animation.playState === 'running') ?? false,
   );
-  const held = await holdAnimations(page, openDialogs(page));
+  const held = await holdAnimations(page, openDialogs(page), {
+    judges: {target: openDialogs(page), property: 'opacity'},
+  });
   // Held: later transitions (an exit, the next open) keep their own timing.
   await page.evaluate(() =>
     document.getElementById('__slowEntrance')?.remove(),
@@ -320,6 +322,9 @@ test.describe('under a finger (spec:AST-094 FR35)', () => {
 
     await finishEntrance(page);
     await expect(openDialogs(page)).toHaveCount(1);
+    // Under a finger the alert plays its own entrance. Its input hold ends
+    // when the motion animator retires that finished entrance.
+    await expect(page.locator('dialog[open] > [popover]')).toHaveCount(0);
 
     await driver.tap(await centerOf(action));
     await expect(openDialogs(page)).toHaveCount(0);

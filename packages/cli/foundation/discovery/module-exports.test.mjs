@@ -401,6 +401,19 @@ describe('moduleExportOrigins', () => {
     }
   });
 
+  it('follows an alias of an imported binding to where that binding is declared', () => {
+    const write = (name, text) => fs.writeFileSync(path.join(dir, name), text);
+    write('inner.ts', 'export const Inner = {};\n');
+    write(
+      'alias.ts',
+      "import {Inner as Provider} from './inner';\nexport const Public = Provider;\n",
+    );
+    const alias = path.join(dir, 'alias.ts');
+    const inner = {file: path.join(dir, 'inner.ts'), name: 'Inner'};
+    expect(moduleExportOrigin(alias, 'Public')).toEqual(inner);
+    expect(moduleExportOrigins(alias).get('Public')).toEqual(inner);
+  });
+
   it('agrees through an export * cycle', () => {
     const write = (name, text) => fs.writeFileSync(path.join(dir, name), text);
     write('c.ts', 'export const w = 1;\nexport const z = 2;\n');

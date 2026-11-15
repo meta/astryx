@@ -32,7 +32,7 @@ export const docs = {
       name: 'options.selectableItems',
       type: 'MultiSelectorOptionData[]',
       description:
-        'The options in the same order as they render. Options with `disabled` cannot be toggled and are skipped while moving through the open list; ArrowDown or ArrowUp that opens the list still lands on the first or last option.',
+        'The options in the same order as they render. Options with `disabled` cannot be toggled and are skipped while moving through the open list. Opening never lands on a disabled option: ArrowUp opens on the last enabled option, and ArrowDown, a press, Enter or Space on the first enabled option.',
       required: true,
     },
     {
@@ -72,7 +72,7 @@ export const docs = {
       name: 'options.hasSearch',
       type: 'boolean',
       description:
-        'Whether the list has its own search field. Space then types instead of toggling, opening by a press or Enter does not pre-highlight (ArrowDown and ArrowUp still open on the first and last option), Delete and Backspace edit the query, and type-to-select is off. Home and End still jump to the first and last option, so a search input that keeps them for the caret should stop them before this handler and rely on PageUp and PageDown.',
+        'Whether the list has its own search field. Space then types instead of toggling, opening by a press or Enter does not pre-highlight (ArrowDown and ArrowUp still open on the first and last enabled option), Delete and Backspace edit the query, and type-to-select is off. Home and End still jump to the first and last option, so a search input that keeps them for the caret should stop them before this handler and rely on PageUp and PageDown.',
       default: 'false',
     },
     {
@@ -206,7 +206,7 @@ export const docsDense = {
   paramDescriptions: {
     options: 'config.',
     'options.selectableItems':
-      'options in render order; disabled ones not toggleable, skipped while moving in open list (ArrowDown/Up opening still lands first / last).',
+      'options in render order; disabled ones not toggleable, skipped while moving in open list; opening lands on the first / last enabled option (ArrowUp: last).',
     'options.isOpen': 'list shown; caller owns state.',
     'options.onOpen':
       'show list; return false to refuse (highlight untouched).',
@@ -215,7 +215,7 @@ export const docsDense = {
     'options.listboxId':
       'listbox / grid id; option + action-cell ids derive from it.',
     'options.hasSearch':
-      'own search field: Space types, press / Enter opening does not pre-highlight (ArrowDown/Up still first / last), Delete / Backspace edit query, no type-to-select. Home / End still jump; stop them first to keep them for the caret, use PageUp / PageDown.',
+      'own search field: Space types, press / Enter opening does not pre-highlight (ArrowDown/Up still first / last enabled), Delete / Backspace edit query, no type-to-select. Home / End still jump; stop them first to keep them for the caret, use PageUp / PageDown.',
     'options.onClear':
       'clear all; Delete / Backspace on closed control. ignored when open or hasSearch.',
     'options.hasValue': 'anything selected; clear skipped when false.',

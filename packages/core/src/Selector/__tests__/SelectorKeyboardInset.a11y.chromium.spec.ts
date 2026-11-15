@@ -96,6 +96,45 @@ async function coverAndTrackTop(page: Page, cover = 0): Promise<number[]> {
   }, cover);
 }
 
+/**
+ * Waits for the open's own animations to end. Until then the entrance, on the
+ * popover's surface, moves the list's box. A wait past 2 s fails and names
+ * what still runs.
+ */
+async function openEnded(page: Page): Promise<void> {
+  await page.getByRole('listbox').evaluate(async list => {
+    const layer = list.closest('[popover]') ?? list;
+    const finite = layer
+      .getAnimations({subtree: true})
+      .filter(
+        animation => animation.effect?.getComputedTiming().endTime !== Infinity,
+      );
+    const ended = Promise.all(
+      finite.map(async animation => animation.finished.catch(() => undefined)),
+    ).then(() => 'ended' as const);
+    const cap = new Promise<'cap'>(resolve => {
+      setTimeout(() => resolve('cap'), 2_000);
+    });
+    if ((await Promise.race([ended, cap])) === 'cap') {
+      const running = finite
+        .filter(animation => animation.playState !== 'finished')
+        .map(animation => {
+          const target = (animation.effect as KeyframeEffect | null)?.target;
+          const name =
+            animation instanceof CSSAnimation
+              ? animation.animationName
+              : animation instanceof CSSTransition
+                ? animation.transitionProperty
+                : 'script';
+          return `${target?.tagName ?? 'no target'} ${name} ${animation.playState}`;
+        });
+      throw new Error(
+        `The open's animations still run after 2 s: ${running.join('; ')}`,
+      );
+    }
+  });
+}
+
 function expectTopHeld(tops: number[], top: number, detail: string) {
   expect(tops.length, detail).toBeGreaterThan(0);
   for (const each of tops) {
@@ -191,6 +230,7 @@ for (const drop of [80, 150, 190]) {
     await raiseKeyboard(page);
     await trigger.click();
     await expect(page.getByRole('listbox')).toBeVisible();
+    await openEnded(page);
     await expect(async () => {
       expectClearOfKeyboard(await listFacts(page));
     }).toPass({timeout: 3_000});
@@ -253,6 +293,7 @@ test('a list the cap holds above the keyboard grows downward in place when the r
   await trigger.click();
   const listbox = page.getByRole('listbox');
   await expect(listbox).toBeVisible();
+  await openEnded(page);
   const read = async () =>
     listbox.evaluate(list => {
       const box = list.getBoundingClientRect();

@@ -103,7 +103,7 @@
         "token-utilities",
         "usetheme-hook"
       ],
-      "skeleton": "11dd50b9d1b4ab0d08622c70d90634a9848d91fea3ed0eb3aad5845d120a1042",
+      "skeleton": "cc6829150c7417adc6cc1ef0c45e007441e56a8cefa3f6019baef632ae1790a3",
       "mentions": []
     },
     "browser-support": {
@@ -249,18 +249,23 @@
         "what-each-file-does",
         "further-reading"
       ],
-      "skeleton": "2bb79103d25e7b1f1a0cb160776a00d871056f95a6b8a728bb5c4c487475a25f",
+      "skeleton": "ef4e4158ed2cdf854f1136340b28822987012bda257287dff750fea105ec5d8d",
       "mentions": []
     },
     "theme": {
       "sections": [
+        "make-or-change",
+        "look-after-each-change",
+        "denser-or-roomier",
+        "one-kind-of-part",
+        "no-app-yet",
         "quick-start",
         "creating-a-custom-theme",
         "icon-sizes",
         "light-dark-mode",
         "integration-themes"
       ],
-      "skeleton": "eacd1432d49237ed62f82ea054c0e5930503e9f072ab40b4965461f29cf31080",
+      "skeleton": "1909da5648717dc2e7d41c2cc1faded7dbe43f47d50fffc8a4190b91bf0168d5",
       "mentions": []
     },
     "use-a-theme": {

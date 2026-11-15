@@ -89,7 +89,7 @@ export const Reveal: Story = {
     <div {...stylex.props(styles.stack)}>
       <p {...stylex.props(styles.hint)}>
         Hover a row — or press Tab to focus into it — to reveal its actions. On
-        touch devices the actions are always visible.
+        a phone or tablet the actions are always visible.
       </p>
       <RevealRow label="report.pdf" />
       <RevealRow label="budget.xlsx" />

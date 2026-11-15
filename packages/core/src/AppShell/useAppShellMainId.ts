@@ -11,8 +11,10 @@
  * @position Private to AppShell; keeps main-region ids unique on a page
  */
 
-import {createContext, use, useId, useState, useSyncExternalStore} from 'react';
+import {use, useId, useState, useSyncExternalStore} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {createSharedContext} from '../utils/sharedContext';
+import {sharedState} from '../utils/sharedRealm';
 
 /** The id of the first mounted shell's main region. Consumers link to it. */
 export const MAIN_CONTENT_ID = 'astryx-app-shell-main';
@@ -21,21 +23,33 @@ export const MAIN_CONTENT_ID = 'astryx-app-shell-main';
  * True inside an AppShell. A shell nested in another shell's content never
  * takes the fixed id: the page's own shell keeps it.
  */
-export const AppShellNestingContext = createContext(false);
+export const AppShellNestingContext = createSharedContext(
+  'AppShellNestingContext',
+  1,
+  false,
+);
 AppShellNestingContext.displayName = 'AppShellNestingContext';
 
-const claims: object[] = [];
-const listeners = new Set<() => void>();
+// One claim list for every copy of Core, so a swizzled AppShell and the
+// package's AppShell never both keep the fixed id.
+const mainIdClaims = sharedState(
+  'app-shell/use-app-shell-main-id/claims',
+  1,
+  () => ({
+    claims: [] as object[],
+    listeners: new Set<() => void>(),
+  }),
+);
 
 function subscribe(listener: () => void): () => void {
-  listeners.add(listener);
+  mainIdClaims.listeners.add(listener);
   return () => {
-    listeners.delete(listener);
+    mainIdClaims.listeners.delete(listener);
   };
 }
 
 function notify(): void {
-  for (const listener of listeners) {
+  for (const listener of mainIdClaims.listeners) {
     listener();
   }
 }
@@ -54,7 +68,7 @@ export function useAppShellMainId(): string {
   const [claim] = useState(() => ({}));
   const isFirst = useSyncExternalStore(
     subscribe,
-    () => claims.length === 0 || claims[0] === claim,
+    () => mainIdClaims.claims.length === 0 || mainIdClaims.claims[0] === claim,
     () => true,
   );
 
@@ -63,10 +77,10 @@ export function useAppShellMainId(): string {
     if (isNested) {
       return;
     }
-    claims.push(claim);
+    mainIdClaims.claims.push(claim);
     notify();
     return () => {
-      claims.splice(claims.indexOf(claim), 1);
+      mainIdClaims.claims.splice(mainIdClaims.claims.indexOf(claim), 1);
       notify();
     };
   }, [claim, isNested]);

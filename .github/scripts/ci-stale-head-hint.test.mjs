@@ -41,8 +41,9 @@ describe('the stale-head hint in the interaction legs', () => {
     it(`${id} explains a failure after its proofs, without failing the leg further`, () => {
       const job = ci.jobs[id];
       const hint = step(job, NAME);
+      // Only after a plan that succeeded: a failed plan leaves no list.
       expect(hint.if).toBe(
-        `failure() && ${gate} && steps.plan.outputs.files != '0'`,
+        `failure() && ${gate} && steps.plan.outcome == 'success' && steps.plan.outputs.files != '0'`,
       );
       expect(hint['continue-on-error']).toBe(true);
       // The base branch's tip at step time, not the run's merge commit, so a
@@ -125,7 +126,12 @@ describe('the stale-head hint in the interaction legs', () => {
       git(work, 'checkout', '-q', '-b', 'topic');
       const head = commit(work, {'packages/core/src/Row/Row.tsx': 'x'}, 'head');
       git(work, 'checkout', '-q', 'main');
-      fixed = commit(work, {[spec]: 'v2'}, 'test(Row): the release reads 100%');
+      // One commit changes two specs the leg ran; its subject holds a "%".
+      fixed = commit(
+        work,
+        {[spec]: 'v2', [other]: 'v2'},
+        'test(Row): the release reads 100%',
+      );
       commit(work, {'README.md': 'v2'}, 'docs: readme');
       commit(
         work,
@@ -190,9 +196,11 @@ describe('the stale-head hint in the interaction legs', () => {
         .split('\n')
         .filter(line => line.startsWith('::warning'));
       // Newest first, as git log lists them; the first landed after the run's
-      // merge commit, so the hint reads main's tip.
+      // merge commit, so the hint reads main's tip. The subject's "%" is
+      // escaped once on each line of a commit that changed two specs.
       expect(warnings).toEqual([
         `::warning title=Update your branch before debugging::internal/interaction-harness/src/busy.ts changed on main in ${later.slice(0, 7)} (fix(harness): a later fix), which this head does not have. Update the branch onto main and re-run: a test whose file changed on main gets an update, not a retry.`,
+        `::warning title=Update your branch before debugging::${other} changed on main in ${fixed.slice(0, 7)} (test(Row): the release reads 100%25), which this head does not have. Update the branch onto main and re-run: a test whose file changed on main gets an update, not a retry.`,
         `::warning title=Update your branch before debugging::${spec} changed on main in ${fixed.slice(0, 7)} (test(Row): the release reads 100%25), which this head does not have. Update the branch onto main and re-run: a test whose file changed on main gets an update, not a retry.`,
       ]);
     });

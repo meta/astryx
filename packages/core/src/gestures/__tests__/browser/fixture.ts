@@ -55,6 +55,11 @@ declare global {
     /** Every touch listener added to the document or the window, by type. */
     __pageTouchListeners: string[];
     /**
+     * The last release velocities, read as each ends: the pan's for a dragged
+     * surface and for a scrolling one, and the pinch's.
+     */
+    __releases: {hpan?: number; hpanScroll?: number; pinch?: number};
+    /**
      * The same, as the page left them once loaded: the test driver adds its
      * own window listeners when it first runs a script.
      */
@@ -212,6 +217,13 @@ function record(recognizer: GestureRecognizer, extra: () => Partial<Entry>) {
 const hpan = new PanGestureRecognizer({name: 'hpan', direction: 'horizontal'});
 record(hpan, () => ({x: hpan.translation().x, y: hpan.translation().y}));
 host.attach(element('hpan'), hpan);
+window.__releases = {};
+hpan.addTransitionListener((_current, _from, to) => {
+  if (to === 'ended') {
+    window.__releases.hpan = hpan.velocity().x;
+    window.__releases.hpanScroll = hpan.scrollVelocity().x;
+  }
+});
 
 const tap = new TapGestureRecognizer({name: 'tap'});
 record(tap, () => ({}));
@@ -237,6 +249,11 @@ const pinchPan = new PanGestureRecognizer({
 });
 pinch.recognizeSimultaneouslyWith(pinchPan);
 record(pinch, () => ({scale: pinch.scale}));
+pinch.addTransitionListener((_current, _from, to) => {
+  if (to === 'ended') {
+    window.__releases.pinch = pinch.velocity;
+  }
+});
 record(pinchPan, () => ({x: pinchPan.translation().x}));
 host.attach(element('pinchable'), pinch);
 host.attach(element('pinchable'), pinchPan);

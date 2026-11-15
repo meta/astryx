@@ -18,6 +18,7 @@ import {
   coveredBy,
   dockedAncestor,
   followKeyboard,
+  followsKeyboard,
   keepFieldAboveKeyboard,
   nearestScroller,
   registerKeyboardTarget,
@@ -188,6 +189,20 @@ afterEach(() => {
   __resetLayoutViewportForTest();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+});
+
+describe('followsKeyboard', () => {
+  it('holds for a top-level document with a visual viewport under a coarse pointer, and nowhere else', () => {
+    expect(followsKeyboard(window)).toBe(true);
+    expect(followsKeyboard(null)).toBe(false);
+    // A fine primary pointer: a desktop browser.
+    isCoarse = false;
+    expect(followsKeyboard(window)).toBe(false);
+    isCoarse = true;
+    // No visual viewport: nothing measures the keyboard.
+    Reflect.deleteProperty(window, 'visualViewport');
+    expect(followsKeyboard(window)).toBe(false);
+  });
 });
 
 describe('where a field is', () => {

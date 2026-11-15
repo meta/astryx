@@ -26,6 +26,7 @@ import {
   serveStorybook,
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
+import {installTouchStartBeforeLoad} from './touch';
 
 export const phone = {
   viewport: {width: 402, height: 714},
@@ -63,6 +64,9 @@ export function withStorybook(test: TestType<any, any>): () => string {
 /** Pages whose Storybook highlight module `openStory` turned off. */
 const highlightOff = new WeakSet<Page>();
 
+/** Pages that `openStory` gave the touch driver's listener-start mark. */
+const touchStartMarked = new WeakSet<Page>();
+
 export interface OpenStoryOptions {
   /**
    * Keeps Storybook's highlight module on. It is off by default: when on, it
@@ -77,7 +81,9 @@ export interface OpenStoryOptions {
  * Loads a story in the page and waits for its first render, for Storybook to
  * finish that render, for its fonts and for two frames. Storybook's highlight
  * module is off (see `OpenStoryOptions`), and that is checked: its root
- * element must be absent once the story renders.
+ * element must be absent once the story renders. On WebKit, it adds the touch
+ * driver's listener-start mark before the story loads (see
+ * `installTouchStartBeforeLoad`).
  *
  * Storybook finishes a render after the story first paints: it waits out the
  * story's animations (phase `completing`), runs `afterEach`, and only then
@@ -108,6 +114,10 @@ export async function openStory(
         globalThis as unknown as {__STORYBOOK_HIGHLIGHT_INITIALIZED?: boolean}
       ).__STORYBOOK_HIGHLIGHT_INITIALIZED = true;
     });
+  }
+  if (!touchStartMarked.has(page)) {
+    touchStartMarked.add(page);
+    await installTouchStartBeforeLoad(page);
   }
   const params = new URLSearchParams({id: storyId, viewMode: 'story'});
   if (args != null) {
@@ -177,6 +187,8 @@ export async function frames(page: Page, count = 2): Promise<void> {
 // does not stop. The gate's freeze() and thaw() are its one way in:
 // freezeTimers and thawTimers call them, and so does a page freeze
 // (freeze.ts), which stops the page's clock too.
+// `clearTimeout` is the real clearTimeout, so a harness wait that ends early
+// cancels its own timer.
 const TIMER_GATE = `(() => {
   if (window.__harnessTimerGate) return;
   const realTimeout = window.setTimeout.bind(window);
@@ -202,6 +214,7 @@ const TIMER_GATE = `(() => {
     frame: realFrame,
     now: realNow,
     timeout: realTimeout,
+    clearTimeout: realClearTimeout,
     // Holds every callback that comes due. With the page's clock stopped as
     // well, the timeouts not yet due stop counting.
     freeze(isClockStopped = false) {

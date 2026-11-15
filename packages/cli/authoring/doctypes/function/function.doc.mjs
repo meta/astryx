@@ -186,6 +186,12 @@ export const doc = {
           type: 'string',
           description: 'Optional sample result.',
         },
+        {
+          name: 'examples[].kind',
+          type: "'demo' | 'setup'",
+          description:
+            "`'demo'` (the default) may render as a live preview; `'setup'` is shown as code, never rendered live.",
+        },
       ],
     },
     {

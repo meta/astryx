@@ -193,6 +193,7 @@ export async function template(name, options = {}) {
       `Unknown template "${name}"`,
       orderByAffinity(name, templates, t => [t.dirName, t.name], {
         closest: true,
+        typos: true,
       }).map(t => ({
         name: t.dirName,
         reason: `${t.type} template`,
@@ -223,5 +224,12 @@ export async function template(name, options = {}) {
     return templateShow(match, {iconSets});
   }
 
-  return templateCopy(match, {targetPath, cwd, overwrite, iconSets});
+  // The command as typed selects the same template again, an integration
+  // replacement included.
+  const command = [
+    `astryx template ${name}`,
+    type ? ` --type ${type}` : '',
+    packageFilter ? ` --package ${packageFilter}` : '',
+  ].join('');
+  return templateCopy(match, {targetPath, cwd, overwrite, iconSets, command});
 }

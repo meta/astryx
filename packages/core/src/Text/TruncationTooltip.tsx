@@ -8,7 +8,8 @@
  * @output Exports `useTruncationTooltipInterest`, which loads the Tooltip
  *   module once text is truncated and tracks the first hover, tap or focus on
  *   it, and `TruncationTooltip`, the Tooltip that mounts on that interaction
- * @position Shared by Text and Heading. Until the first interaction a page of
+ * @position Shared by Text, Heading and Lab's LineClamp (through Core's internal
+ *   line-clamp entry). Until the first interaction a page of
  *   truncated text mounts no tooltip layers, and the tooltip that then mounts
  *   answers that interaction as it would once mounted.
  */
@@ -26,7 +27,8 @@ import {
 import type {LayerPlacement} from '../Layer';
 import {createModuleLoader} from '../utils/moduleLoader';
 import type {Tooltip as TooltipType} from '../Tooltip/Tooltip';
-import {useTapRecognizer} from '../Layer/useTouchTrigger';
+import {useTapRecognizer} from '../Layer/gestureCounter';
+import {isElement} from '../utils/nodeType';
 import {
   TooltipPresentInterestContext,
   type TooltipPresentInterestState,
@@ -139,7 +141,21 @@ export function useTruncationTooltipInterest(
     },
     [isEnabled, tapRecognizer, want, forget],
   );
-  const onFocus = useCallback(() => want('focus'), [want]);
+  const onFocus = useCallback(
+    (event: FocusEvent<HTMLElement>) => {
+      const target = event.target;
+      if (
+        isElement(target) &&
+        target.matches(':focus-visible') &&
+        // Chrome on Android focuses a tapped child before the tap's click.
+        // Skip that focus, so the click still opens the tooltip.
+        !tapRecognizer.isTouchPressCurrent()
+      ) {
+        want('focus');
+      }
+    },
+    [want, tapRecognizer],
+  );
   const onBlur = useCallback(() => forget('focus'), [forget]);
   return {
     isWanted,

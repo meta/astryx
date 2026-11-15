@@ -41,6 +41,7 @@ done < <(
     -not -path '*/.next/*' \
     -not -path '*/.husky/_/*' \
     -not -path '*/__snapshots__/*' \
+    -not -path './internal/vibe-tests/eval/arms/*' \
     -not -name 'pnpm-lock.yaml' \
     -not -name 'next-env.d.ts' \
     -print0

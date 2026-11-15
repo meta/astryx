@@ -2,7 +2,7 @@
 
 'use client';
 
-import React, {useState, useMemo} from 'react';
+import {useState, useMemo} from 'react';
 import {useResizable, ResizeHandle} from '@astryxdesign/core/Resizable';
 import type {ResizableProps} from '@astryxdesign/core/Resizable';
 import {
@@ -37,17 +37,13 @@ import {Divider} from '@astryxdesign/core/Divider';
 import {MetadataList, MetadataListItem} from '@astryxdesign/core/MetadataList';
 import {
   Table,
-  TableBody,
-  TableRow,
-  TableCell,
   proportional,
   pixel,
-  resolveColumnWidths,
+  useTableGroupedRows,
 } from '@astryxdesign/core/Table';
-import type {TableColumn} from '@astryxdesign/core/Table';
+import type {TableColumn, TablePlugin} from '@astryxdesign/core/Table';
+import {rtlStyles} from '@astryxdesign/core/utils';
 import {
-  ChevronRightIcon,
-  ChevronDownIcon,
   PencilIcon,
   DocumentDuplicateIcon,
   ArrowRightIcon,
@@ -58,16 +54,6 @@ import {
 } from '@heroicons/react/24/outline';
 import {XMarkIcon} from '@heroicons/react/24/outline';
 import {ChartBarIcon} from '@heroicons/react/24/solid';
-
-// Plain inline styles using Astryx design-token CSS variables (declared at
-// :root by `@astryxdesign/core/astryx.css`). No StyleX compiler required.
-// The group-header background + cursor live on the colSpan TableCell (which
-// reliably forwards `style`) so they fill the full row width.
-const groupHeaderCell: React.CSSProperties = {
-  cursor: 'pointer',
-  backgroundColor: 'var(--color-background-muted)',
-  padding: 'var(--spacing-3) var(--spacing-4)',
-};
 
 // Types
 type TaskStatus = 'in_progress' | 'todo' | 'backlog' | 'done';
@@ -114,7 +100,7 @@ const PRIORITY_COLOR: Record<
 const allTasks: TaskRow[] = [
   {
     id: '1',
-    taskId: 'T235040469',
+    taskId: 'TASK-1001',
     title: 'Update user interface',
     subtitle: 'Update payment gateway integration',
     status: 'in_progress',
@@ -129,7 +115,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '2',
-    taskId: 'T235040470',
+    taskId: 'TASK-1002',
     title: 'Use Projects to organize work for features or releases',
     subtitle: '',
     status: 'in_progress',
@@ -144,7 +130,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '3',
-    taskId: 'T235040471',
+    taskId: 'TASK-1003',
     title: 'Use Cycles to focus work over n-weeks',
     subtitle: '',
     status: 'in_progress',
@@ -159,7 +145,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '4',
-    taskId: 'T235040472',
+    taskId: 'TASK-1004',
     title: 'Testing code',
     subtitle: 'Update payment gateway integration',
     status: 'todo',
@@ -174,7 +160,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '5',
-    taskId: 'T235040473',
+    taskId: 'TASK-1005',
     title: 'Update backend code',
     subtitle: 'Update payment gateway integration',
     status: 'todo',
@@ -189,7 +175,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '6',
-    taskId: 'T235040474',
+    taskId: 'TASK-1006',
     title: 'Update front end code',
     subtitle: 'Update payment gateway integration',
     status: 'todo',
@@ -204,7 +190,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '7',
-    taskId: 'T235040475',
+    taskId: 'TASK-1007',
     title: 'Update payment gateway integration',
     subtitle: '',
     status: 'todo',
@@ -219,7 +205,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '8',
-    taskId: 'T235040476',
+    taskId: 'TASK-1008',
     title: 'Update payment gateway backend code',
     subtitle: '',
     status: 'todo',
@@ -234,7 +220,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '9',
-    taskId: 'T235040477',
+    taskId: 'TASK-1009',
     title: 'Invite your teammates',
     subtitle: '',
     status: 'todo',
@@ -249,7 +235,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '10',
-    taskId: 'T235040478',
+    taskId: 'TASK-1010',
     title: 'Next steps',
     subtitle: '',
     status: 'todo',
@@ -264,7 +250,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '11',
-    taskId: 'T235040479',
+    taskId: 'TASK-1011',
     title: 'Welcome to Linear',
     subtitle: '',
     status: 'backlog',
@@ -279,7 +265,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '12',
-    taskId: 'T235040480',
+    taskId: 'TASK-1012',
     title: 'Connect GitHub or GitLab',
     subtitle: '',
     status: 'backlog',
@@ -294,7 +280,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '13',
-    taskId: 'T235040481',
+    taskId: 'TASK-1013',
     title: 'Customize settings',
     subtitle: '',
     status: 'backlog',
@@ -309,7 +295,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '14',
-    taskId: 'T235040482',
+    taskId: 'TASK-1014',
     title: 'Try 3 ways to navigate: Command menu, keyboard or mouse',
     subtitle: '',
     status: 'done',
@@ -324,7 +310,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '15',
-    taskId: 'T235040483',
+    taskId: 'TASK-1015',
     title: 'Connect to Slack',
     subtitle: '',
     status: 'done',
@@ -339,7 +325,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '16',
-    taskId: 'T235040484',
+    taskId: 'TASK-1016',
     title: 'Migrate database schema to v2',
     subtitle: 'Payment gateway integration',
     status: 'in_progress',
@@ -354,7 +340,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '17',
-    taskId: 'T235040485',
+    taskId: 'TASK-1017',
     title: 'Write integration tests for checkout flow',
     subtitle: '',
     status: 'in_progress',
@@ -369,7 +355,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '18',
-    taskId: 'T235040486',
+    taskId: 'TASK-1018',
     title: 'Set up CI/CD pipeline for staging',
     subtitle: '',
     status: 'in_progress',
@@ -384,7 +370,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '19',
-    taskId: 'T235040487',
+    taskId: 'TASK-1019',
     title: 'Add rate limiting to public API endpoints',
     subtitle: '',
     status: 'todo',
@@ -399,7 +385,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '20',
-    taskId: 'T235040488',
+    taskId: 'TASK-1020',
     title: 'Refactor auth middleware to support OAuth2',
     subtitle: '',
     status: 'todo',
@@ -414,7 +400,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '21',
-    taskId: 'T235040489',
+    taskId: 'TASK-1021',
     title: 'Design error pages for 404 and 500',
     subtitle: '',
     status: 'todo',
@@ -429,7 +415,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '22',
-    taskId: 'T235040490',
+    taskId: 'TASK-1022',
     title: 'Audit third-party dependencies for vulnerabilities',
     subtitle: '',
     status: 'todo',
@@ -444,7 +430,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '23',
-    taskId: 'T235040491',
+    taskId: 'TASK-1023',
     title: 'Implement webhook retry logic with exponential backoff',
     subtitle: 'Payment gateway integration',
     status: 'todo',
@@ -459,7 +445,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '24',
-    taskId: 'T235040492',
+    taskId: 'TASK-1024',
     title: 'Add dark mode support to dashboard',
     subtitle: '',
     status: 'backlog',
@@ -474,7 +460,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '25',
-    taskId: 'T235040493',
+    taskId: 'TASK-1025',
     title: 'Create onboarding flow for new team members',
     subtitle: '',
     status: 'backlog',
@@ -489,7 +475,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '26',
-    taskId: 'T235040494',
+    taskId: 'TASK-1026',
     title: 'Set up error tracking with Sentry',
     subtitle: '',
     status: 'backlog',
@@ -504,7 +490,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '27',
-    taskId: 'T235040495',
+    taskId: 'TASK-1027',
     title: 'Improve search performance with indexing',
     subtitle: '',
     status: 'backlog',
@@ -519,7 +505,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '28',
-    taskId: 'T235040496',
+    taskId: 'TASK-1028',
     title: 'Write API documentation for v2 endpoints',
     subtitle: '',
     status: 'done',
@@ -534,7 +520,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '29',
-    taskId: 'T235040497',
+    taskId: 'TASK-1029',
     title: 'Set up staging environment',
     subtitle: '',
     status: 'done',
@@ -549,7 +535,7 @@ const allTasks: TaskRow[] = [
   },
   {
     id: '30',
-    taskId: 'T235040498',
+    taskId: 'TASK-1030',
     title: 'Fix flaky end-to-end tests in CI',
     subtitle: '',
     status: 'done',
@@ -571,8 +557,6 @@ const STATUS_LABEL: Record<TaskStatus, string> = {
   done: 'Done',
 };
 
-const GROUP_ORDER: TaskStatus[] = ['in_progress', 'todo', 'backlog', 'done'];
-
 type GroupByField = 'status' | 'priority' | 'project' | 'assignee' | 'none';
 
 const GROUP_BY_OPTIONS: {value: GroupByField; label: string}[] = [
@@ -582,26 +566,6 @@ const GROUP_BY_OPTIONS: {value: GroupByField; label: string}[] = [
   {value: 'project', label: 'Project'},
   {value: 'assignee', label: 'Assignee'},
 ];
-
-function groupTasks(
-  tasks: TaskRow[],
-  groupBy: GroupByField,
-): Map<string, TaskRow[]> {
-  if (groupBy === 'none') {
-    return new Map([['All', tasks]]);
-  }
-  const map = new Map<string, TaskRow[]>();
-  for (const task of tasks) {
-    const key = String(task[groupBy]) || '—';
-    let group = map.get(key);
-    if (!group) {
-      group = [];
-      map.set(key, group);
-    }
-    group.push(task);
-  }
-  return map;
-}
 
 function getGroupLabel(groupBy: GroupByField, key: string): string {
   if (groupBy === 'status') {
@@ -625,36 +589,137 @@ const columns: TableColumn<TaskRow>[] = [
     key: 'status',
     header: '',
     width: pixel(44),
+    renderCell: task => (
+      <Center axis="horizontal">
+        <StatusDot
+          variant={STATUS_DOT_VARIANT[task.status]}
+          label={STATUS_LABEL[task.status]}
+        />
+      </Center>
+    ),
   },
   {
     key: 'title',
     header: 'Issue',
     width: proportional(1),
+    renderCell: task => (
+      <HStack gap={3} vAlign="center">
+        <Icon
+          icon={ChartBarIcon}
+          size="sm"
+          color={PRIORITY_COLOR[task.priority]}
+        />
+        <Text type="supporting" color="secondary">
+          {task.taskId}
+        </Text>
+        <Text type="body" maxLines={1}>
+          {task.title}
+        </Text>
+        {task.subtitle && (
+          <Text type="body" color="secondary" maxLines={1}>
+            › {task.subtitle}
+          </Text>
+        )}
+      </HStack>
+    ),
   },
   {
     key: 'project',
     header: 'Project',
     width: pixel(180),
+    renderCell: task =>
+      task.project ? (
+        <Text type="body" maxLines={1}>
+          {task.project}
+        </Text>
+      ) : (
+        <Text type="supporting" color="secondary">
+          —
+        </Text>
+      ),
   },
   {
     key: 'created',
     header: 'Created',
-    width: pixel(72),
+    width: pixel(88),
+    renderCell: task => (
+      <Text type="supporting" color="secondary">
+        {task.created}
+      </Text>
+    ),
   },
   {
     key: 'updated',
     header: 'Updated',
-    width: pixel(72),
+    width: pixel(88),
+    renderCell: task => (
+      <Text type="supporting" color="secondary">
+        {task.updated}
+      </Text>
+    ),
   },
   {
     key: 'assignee',
     header: 'Assignee',
-    width: pixel(52),
+    width: pixel(88),
+    renderCell: task => <Avatar name={task.assignee} size="sm" />,
   },
   {
     key: 'actions',
     header: '',
     width: pixel(56),
+    renderCell: () => (
+      <DropdownMenu
+        button={{
+          label: 'Actions',
+          variant: 'ghost',
+          size: 'sm',
+          icon: <Icon icon={EllipsisHorizontalIcon} size="sm" />,
+          isIconOnly: true,
+        }}
+        hasChevron={false}
+        items={[
+          {
+            label: 'Edit issue',
+            icon: PencilIcon,
+            onClick: () => {},
+          },
+          {
+            label: 'Assign to...',
+            icon: UserIcon,
+            onClick: () => {},
+          },
+          {
+            label: 'Add label',
+            icon: TagIcon,
+            onClick: () => {},
+          },
+          {
+            label: 'Duplicate',
+            icon: DocumentDuplicateIcon,
+            onClick: () => {},
+          },
+          {
+            label: 'Move to project',
+            icon: (
+              <Icon
+                icon={ArrowRightIcon}
+                size="sm"
+                color="secondary"
+                xstyle={rtlStyles.mirror}
+              />
+            ),
+            onClick: () => {},
+          },
+          {type: 'divider' as const},
+          {
+            label: 'Delete issue',
+            icon: TrashIcon,
+            onClick: () => {},
+          },
+        ]}
+      />
+    ),
   },
 ];
 
@@ -840,8 +905,8 @@ export default function DataTableTemplate() {
     ReadonlyArray<PowerSearchFilter>
   >([]);
   const [groupBy, setGroupBy] = useState<GroupByField>('status');
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
-    () => new Set(GROUP_ORDER as string[]),
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
+    () => new Set(),
   );
 
   const filtered = useMemo(() => {
@@ -861,19 +926,8 @@ export default function DataTableTemplate() {
     return data;
   }, [search, priorityFilter]);
 
-  const grouped = useMemo(
-    () => groupTasks(filtered, groupBy),
-    [filtered, groupBy],
-  );
-
-  const groupKeys = useMemo(() => Array.from(grouped.keys()), [grouped]);
-
-  React.useEffect(() => {
-    setExpandedGroups(new Set(groupKeys));
-  }, [groupKeys]);
-
   const toggleGroup = (key: string) => {
-    setExpandedGroups(prev => {
+    setCollapsedGroups(prev => {
       const next = new Set(prev);
       if (next.has(key)) {
         next.delete(key);
@@ -884,14 +938,47 @@ export default function DataTableTemplate() {
     });
   };
 
+  // Grouping by "None" shows the rows as one plain list, with no headers.
+  const grouped = useTableGroupedRows<TaskRow>({
+    data: filtered,
+    // Groups are keyed by their visible label, which also names each
+    // group's toggle button.
+    groupBy: task =>
+      groupBy === 'none'
+        ? ''
+        : getGroupLabel(groupBy, String(task[groupBy]) || '—'),
+    collapsedGroups,
+    onToggleGroup: toggleGroup,
+    getRowKey: task => task.id,
+    renderGroupHeader: (key, count) => (
+      <HStack gap={2} vAlign="center">
+        <Text type="body" weight="bold">
+          {key}
+        </Text>
+        <Badge variant="neutral" label={String(count)} />
+      </HStack>
+    ),
+  });
+
+  // Clicking an issue row opens its details. Group header rows keep their
+  // own toggle.
+  const openTaskPlugin: TablePlugin<TaskRow> = {
+    transformBodyRow(props, task) {
+      if (task.id === '') {
+        return props;
+      }
+      return {
+        ...props,
+        htmlProps: {...props.htmlProps, onClick: () => setSelectedTask(task)},
+      };
+    },
+  };
+
   const detailPanel = useResizable({
     defaultSize: 360,
     minSize: 280,
     maxSize: 500,
   });
-
-  const COL_COUNT = columns.length;
-  const resolvedWidths = resolveColumnWidths(columns);
 
   return (
     <>
@@ -931,7 +1018,10 @@ export default function DataTableTemplate() {
                       <RadioList
                         label="Group by"
                         value={groupBy}
-                        onChange={v => setGroupBy(v as GroupByField)}>
+                        onChange={v => {
+                          setGroupBy(v as GroupByField);
+                          setCollapsedGroups(new Set());
+                        }}>
                         {GROUP_BY_OPTIONS.map(opt => (
                           <RadioListItem
                             key={opt.value}
@@ -951,181 +1041,19 @@ export default function DataTableTemplate() {
         content={
           <LayoutContent role="main" padding={0}>
             <Table
+              data={groupBy === 'none' ? filtered : grouped.data}
               columns={columns}
+              idKey={groupBy === 'none' ? 'id' : grouped.idKey}
               density="balanced"
               dividers="rows"
               textOverflow="truncate"
-              hasHover>
-              <colgroup>
-                {columns.map(col => (
-                  <col
-                    key={col.key}
-                    style={resolvedWidths.columns.get(col.key)?.style}
-                  />
-                ))}
-              </colgroup>
-              <TableBody>
-                {groupKeys.map(key => {
-                  const tasks = grouped.get(key);
-                  if (!tasks || tasks.length === 0) {
-                    return null;
-                  }
-                  const isExpanded = expandedGroups.has(key);
-
-                  return (
-                    <React.Fragment key={key}>
-                      {groupBy !== 'none' && (
-                        <TableRow
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => toggleGroup(key)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              toggleGroup(key);
-                            }
-                          }}>
-                          <TableCell
-                            colSpan={COL_COUNT}
-                            style={groupHeaderCell}>
-                            <HStack gap={2} vAlign="center">
-                              <Icon
-                                icon={
-                                  isExpanded
-                                    ? ChevronDownIcon
-                                    : ChevronRightIcon
-                                }
-                                size="sm"
-                                color="secondary"
-                              />
-                              <Text type="body" weight="bold">
-                                {getGroupLabel(groupBy, key)}
-                              </Text>
-                              <Badge
-                                variant="neutral"
-                                label={String(tasks.length)}
-                              />
-                            </HStack>
-                          </TableCell>
-                        </TableRow>
-                      )}
-                      {(groupBy === 'none' || isExpanded) &&
-                        tasks.map(task => (
-                          <TableRow
-                            key={task.id}
-                            onClick={() => setSelectedTask(task)}>
-                            <TableCell>
-                              <Center axis="horizontal">
-                                <StatusDot
-                                  variant={STATUS_DOT_VARIANT[task.status]}
-                                  label={STATUS_LABEL[task.status]}
-                                />
-                              </Center>
-                            </TableCell>
-                            <TableCell>
-                              <HStack gap={3} vAlign="center">
-                                <Icon
-                                  icon={ChartBarIcon}
-                                  size="sm"
-                                  color={PRIORITY_COLOR[task.priority]}
-                                />
-                                <Text type="supporting" color="secondary">
-                                  {task.taskId}
-                                </Text>
-                                <Text type="body" maxLines={1}>
-                                  {task.title}
-                                </Text>
-                                {task.subtitle && (
-                                  <Text
-                                    type="body"
-                                    color="secondary"
-                                    maxLines={1}>
-                                    › {task.subtitle}
-                                  </Text>
-                                )}
-                              </HStack>
-                            </TableCell>
-                            <TableCell>
-                              {task.project ? (
-                                <Text type="body" maxLines={1}>
-                                  {task.project}
-                                </Text>
-                              ) : (
-                                <Text type="supporting" color="secondary">
-                                  —
-                                </Text>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <Text type="supporting" color="secondary">
-                                {task.created}
-                              </Text>
-                            </TableCell>
-                            <TableCell>
-                              <Text type="supporting" color="secondary">
-                                {task.updated}
-                              </Text>
-                            </TableCell>
-                            <TableCell>
-                              <Avatar name={task.assignee} size="sm" />
-                            </TableCell>
-                            <TableCell>
-                              <DropdownMenu
-                                button={{
-                                  label: 'Actions',
-                                  variant: 'ghost',
-                                  size: 'sm',
-                                  icon: (
-                                    <Icon
-                                      icon={EllipsisHorizontalIcon}
-                                      size="sm"
-                                    />
-                                  ),
-                                  isIconOnly: true,
-                                }}
-                                hasChevron={false}
-                                items={[
-                                  {
-                                    label: 'Edit issue',
-                                    icon: PencilIcon,
-                                    onClick: () => {},
-                                  },
-                                  {
-                                    label: 'Assign to...',
-                                    icon: UserIcon,
-                                    onClick: () => {},
-                                  },
-                                  {
-                                    label: 'Add label',
-                                    icon: TagIcon,
-                                    onClick: () => {},
-                                  },
-                                  {
-                                    label: 'Duplicate',
-                                    icon: DocumentDuplicateIcon,
-                                    onClick: () => {},
-                                  },
-                                  {
-                                    label: 'Move to project',
-                                    icon: ArrowRightIcon,
-                                    onClick: () => {},
-                                  },
-                                  {type: 'divider' as const},
-                                  {
-                                    label: 'Delete issue',
-                                    icon: TrashIcon,
-                                    onClick: () => {},
-                                  },
-                                ]}
-                              />
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                    </React.Fragment>
-                  );
-                })}
-              </TableBody>
-            </Table>
+              hasHover
+              plugins={
+                groupBy === 'none'
+                  ? {openTask: openTaskPlugin}
+                  : {grouped: grouped.plugin, openTask: openTaskPlugin}
+              }
+            />
           </LayoutContent>
         }
         end={

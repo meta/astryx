@@ -49,6 +49,10 @@ import {
   synonymMatches,
 } from '../../foundation/text/suggest-order.mjs';
 import {AstryxError, coreDirOrThrow} from '../error.mjs';
+import {
+  discoverAll,
+  findRelatedBlocks,
+} from '../../foundation/discovery/template-adapter.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {
   componentLinkProvider,
@@ -586,10 +590,25 @@ export function extractProps(docs) {
 }
 
 /**
+ * Give every example its `kind`, so a JSON reader never has to know the
+ * default: an example with no `kind` is a `demo`.
+ * @param {unknown} examples
+ * @returns {unknown}
+ */
+function withExampleKinds(examples) {
+  if (!Array.isArray(examples)) return examples;
+  return examples.map(example =>
+    example && typeof example === 'object'
+      ? {...example, kind: example.kind ?? 'demo'}
+      : example,
+  );
+}
+
+/**
  * Augment a loaded `component.detail` doc with ownership metadata. Adds
  * `package`, the resolved `import` specifier, and `sourceAvailable` (whether a
  * swizzleable source file exists for the owner). Existing doc fields (name,
- * usage, props, …) are preserved.
+ * usage, props, …) are preserved; each example carries its `kind`.
  * @param {LoadedComponentDoc} docs
  * @param {OwnershipSubject} owner
  * @param {string} componentName
@@ -601,8 +620,20 @@ export function withOwnership(docs, owner, componentName, coreDir) {
     owner.package === CORE_PACKAGE
       ? (docs.import ?? resolveImportPath(coreDir, componentName))
       : resolveIntegrationImportPath(owner, componentName, docs.import);
+  /** @type {any} */
+  const doc = docs;
   return /** @type {any} */ ({
     ...docs,
+    ...(doc.examples ? {examples: withExampleKinds(doc.examples)} : {}),
+    ...(Array.isArray(doc.components)
+      ? {
+          components: doc.components.map((/** @type {any} */ entry) =>
+            entry?.examples
+              ? {...entry, examples: withExampleKinds(entry.examples)}
+              : entry,
+          ),
+        }
+      : {}),
     package: owner.package,
     import: importSpec,
     sourceAvailable: owner.sourcePath != null,
@@ -826,4 +857,76 @@ export async function linkComponentResponse(response, cwd) {
     components[group] = linked;
   }
   return {...response, data: {...response.data, components}};
+}
+
+/**
+ * When `error` is the unknown-component error for a name that is an example
+ * block, returns the same error with the commands that show the block in its
+ * message: `astryx template <Block>`, and `astryx component <Parent> --blocks`
+ * for a component whose `--blocks` listing holds the block. The code and the
+ * matcher's suggestions stay. Returns `error` unchanged otherwise.
+ * @param {unknown} error
+ * @param {string} dirName
+ * @param {{coreDir: string, cwd: string}} context
+ * @returns {Promise<unknown>}
+ */
+export async function withExampleBlockPointer(error, dirName, {coreDir, cwd}) {
+  if (
+    !(error instanceof AstryxError) ||
+    error.code !== ERROR_CODES.ERR_UNKNOWN_COMPONENT
+  ) {
+    return error;
+  }
+  // A block doc that fails to load must not replace the unknown-component
+  // error and its suggestions: the pointer is extra help, so a failed lookup
+  // keeps the original error.
+  try {
+    const typed = dirName.toLowerCase();
+    const block = (await discoverAll(cwd)).find(
+      template =>
+        template.type === 'block' && template.dirName.toLowerCase() === typed,
+    );
+    if (block == null) {
+      return error;
+    }
+    const parent = await listingParent(block, coreDir, cwd);
+    const listing = parent
+      ? `, and astryx component ${parent} --blocks lists it`
+      : '';
+    return new AstryxError(
+      `${error.message}. It is an example block: astryx template ${block.dirName} prints its source${listing}.`,
+      error.suggestions,
+      ERROR_CODES.ERR_UNKNOWN_COMPONENT,
+    );
+  } catch {
+    return error;
+  }
+}
+
+/**
+ * A component whose `component <Name> --blocks` listing holds `block`: one of
+ * the components the block uses, its own folder's component first, that
+ * resolves as a component and whose related blocks include the block.
+ * @param {{dirName: string, category?: string, componentsUsed?: string[]}} block
+ * @param {string} coreDir
+ * @param {string} cwd
+ * @returns {Promise<string | null>}
+ */
+async function listingParent(block, coreDir, cwd) {
+  const used = block.componentsUsed ?? [];
+  const folder = path.basename(block.category ?? '');
+  const candidates = [
+    ...used.filter(name => name === folder),
+    ...used.filter(name => name !== folder),
+  ];
+  for (const name of candidates) {
+    if (findComponentReadme(coreDir, name) == null) {
+      continue;
+    }
+    const related = await findRelatedBlocks(name, cwd);
+    if (related.some(entry => entry.dirName === block.dirName)) {
+      return name;
+    }
+  }
+  return null;
 }

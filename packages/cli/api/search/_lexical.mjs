@@ -59,6 +59,7 @@ import {scoreQuery} from './_score.mjs';
 import {scoreCandidate} from './_candidate-score.mjs';
 import {domainPriority} from './_priority.mjs';
 import {toResult, searchedComponentsOf} from './_result.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
 
 /**
  * A search candidate gathered from one content domain. Extra underscore-
@@ -88,6 +89,7 @@ import {toResult, searchedComponentsOf} from './_result.mjs';
  * @property {string} [_command] - The command that reads exactly this doc part.
  * @property {string} [_parent] - The command that opens the level above a doc
  *   part: its topic's section list, or the docs-tree namespace it sits in.
+ * @property {string} [_category] - The category its own doc files it under.
  * @property {string} [_package] - The npm package that owns the candidate:
  *   Core's package for its components, hooks, and templates, the integration's
  *   for what it contributed, and for a doc part the package that wrote it.
@@ -295,7 +297,7 @@ export function rankLexical(query, options, catalog) {
   const byScore = ({result: a, key: ka}, {result: b, key: kb}) =>
     kb - ka ||
     (domainOrder[a.domain] ?? 9) - (domainOrder[b.domain] ?? 9) ||
-    a.name.localeCompare(b.name);
+    compareText(a.name, b.name);
   const others = ranked.filter(r => r.result.domain !== 'doc').sort(byScore);
   // Against other domains, a doc the reader asked for competes ahead of docs
   // they did not, so it is not held behind a broad page that outscores it.
@@ -351,7 +353,11 @@ export function rankLexical(query, options, catalog) {
   if (catalog.searchedComponents) {
     searchedComponentsOf.set(
       response,
-      components.map(c => ({name: c.name, keywords: c.keywords ?? []})),
+      components.map(c => ({
+        name: c.name,
+        keywords: c.keywords ?? [],
+        category: c._category ?? '',
+      })),
     );
   }
   return response;

@@ -14,7 +14,7 @@
  */
 
 import {act, fireEvent, render, screen} from '@testing-library/react';
-import {Profiler, createRef, useState} from 'react';
+import {Profiler, createRef, useRef, useState} from 'react';
 import {
   afterAll,
   afterEach,
@@ -1420,6 +1420,536 @@ describe('PickerWheel — mechanics for its owners', () => {
     // It came to rest on a row and committed it, as without the re-render.
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange.mock.calls[0][0]).toBeGreaterThan(15);
+  });
+});
+
+/** A minute column every 15 minutes: a list shorter than the column. */
+const QUARTERS: WheelOption[] = [0, 15, 30, 45].map(minute => ({
+  value: minute,
+  label: String(minute).padStart(2, '0'),
+}));
+
+/** A minute column every 20 minutes. */
+const THIRDS: WheelOption[] = [0, 20, 40].map(minute => ({
+  value: minute,
+  label: String(minute).padStart(2, '0'),
+}));
+
+/** Months with only February, March and November enabled. */
+const SOME_MONTHS: WheelOption[] = Array.from({length: 12}, (_, index) => ({
+  value: index + 1,
+  label: String(index + 1),
+  isDisabled: ![2, 3, 11].includes(index + 1),
+}));
+
+/** A looping wheel's copies: the rows in the strip's hidden container. */
+function copiesOf(column: Element): HTMLElement[] {
+  const strip = column.querySelector<HTMLElement>('[data-wheel-strip]')!;
+  const container = strip.querySelector(':scope > [aria-hidden="true"]');
+  return container == null
+    ? []
+    : (Array.from(container.children) as HTMLElement[]);
+}
+
+/**
+ * The label of the row drawn `rows` rows below the band, a copy or the
+ * wheel's own row. Null when no row is drawn there.
+ */
+function labelDrawnAt(column: Element, rows: number): string | null {
+  const strip = column.querySelector<HTMLElement>('[data-wheel-strip]')!;
+  const [, y = '0'] = strip.style
+    .getPropertyValue('translate')
+    .trim()
+    .split(/\s+/);
+  const shift = Number.parseFloat(y) || 0;
+  const own = Array.from(
+    strip.querySelectorAll<HTMLElement>(':scope > [data-wheel-row]'),
+  ).map((row, index) => ({row, place: index * ROW}));
+  const copies = copiesOf(column).map(row => ({
+    row,
+    place: Number.parseFloat(row.style.insetBlockStart),
+  }));
+  for (const {row, place} of [...own, ...copies]) {
+    if (Math.abs(place + shift - rows * ROW) < 1) {
+      return row.textContent;
+    }
+  }
+  return null;
+}
+
+/**
+ * Records each animation the wheel plays on its strip: the offsets, in rows,
+ * of its first and last keyframes. jsdom runs no Web Animations.
+ */
+function recordStripTurns(): {
+  turns: {from: number; to: number}[];
+  restore: () => void;
+} {
+  const turns: {from: number; to: number}[] = [];
+  const offsetOf = (frame: Keyframe | undefined) => {
+    const [, y = '0'] = String(frame?.translate ?? '')
+      .trim()
+      .split(/\s+/);
+    return -(Number.parseFloat(y) || 0) / ROW;
+  };
+  Element.prototype.animate = vi.fn(function animate(
+    this: Element,
+    keyframes: Keyframe[],
+  ) {
+    if (this.hasAttribute('data-wheel-strip')) {
+      turns.push({
+        from: offsetOf(keyframes[0]),
+        to: offsetOf(keyframes.at(-1)),
+      });
+    }
+    return {cancel: () => {}} as unknown as Animation;
+  });
+  return {
+    turns,
+    restore: () => Reflect.deleteProperty(Element.prototype, 'animate'),
+  };
+}
+
+/**
+ * Records where each animation the wheel plays moves its strip to, as the
+ * strip's last keyframe: jsdom runs no Web Animations. Returns the places
+ * and the undo.
+ */
+function recordStripEnds(): {ends: number[]; restore: () => void} {
+  const ends: number[] = [];
+  Element.prototype.animate = vi.fn(function animate(
+    this: Element,
+    keyframes: Keyframe[],
+  ) {
+    if (this.hasAttribute('data-wheel-strip')) {
+      const [, y = '0'] = String(keyframes.at(-1)?.translate ?? '')
+        .trim()
+        .split(/\s+/);
+      ends.push(Number.parseFloat(y) || 0);
+    }
+    return {cancel: () => {}} as unknown as Animation;
+  });
+  return {
+    ends,
+    restore: () => Reflect.deleteProperty(Element.prototype, 'animate'),
+  };
+}
+
+describe('PickerWheel — looping', () => {
+  it('repeats a short list down the whole column: at :45 a 15-minute column reads 45 · 00 · 15 · 30 · 45', () => {
+    const {column} = renderWheel({
+      options: QUARTERS,
+      value: 45,
+      label: 'Minute',
+      isLooping: true,
+    });
+    expect([0, 1, 2, 3, 4].map(rows => labelDrawnAt(column, rows))).toEqual([
+      '45',
+      '00',
+      '15',
+      '30',
+      '45',
+    ]);
+    expect([-1, -2, -3].map(rows => labelDrawnAt(column, rows))).toEqual([
+      '30',
+      '15',
+      '00',
+    ]);
+  });
+
+  it('lists each value once for assistive technology: the copies are hidden', () => {
+    const {column} = renderWheel({
+      options: QUARTERS,
+      value: 45,
+      label: 'Minute',
+      isLooping: true,
+    });
+    expect(screen.getAllByRole('option')).toHaveLength(4);
+    const copies = copiesOf(column);
+    expect(copies.length).toBeGreaterThan(0);
+    expect(copies[0].parentElement).toHaveAttribute('aria-hidden', 'true');
+    // The copies add no data attribute of their own.
+    for (const copy of copies) {
+      expect(
+        copy.getAttributeNames().filter(name => name.startsWith('data-')),
+      ).toEqual([]);
+    }
+  });
+
+  it('never loops a single row', () => {
+    const {column} = renderWheel({
+      options: [{value: 0, label: '00'}],
+      value: 0,
+      label: 'Minute',
+      isLooping: true,
+    });
+    expect(copiesOf(column)).toHaveLength(0);
+    expect(labelDrawnAt(column, 1)).toBeNull();
+  });
+
+  it('steps a key one row on across the seam: ArrowDown on :59 commits :00', () => {
+    const {column, onChange} = renderWheel({
+      options: MINUTES,
+      value: 59,
+      label: 'Minute',
+      isLooping: true,
+    });
+    fireEvent.keyDown(column, {key: 'ArrowDown'});
+    expect(onChange).toHaveBeenLastCalledWith(0);
+    advance(turnMs(1) + 10);
+    expect(labelDrawnAt(column, 0)).toBe('00');
+  });
+
+  it('steps a key one row back across the seam: ArrowUp on :00 commits :59', () => {
+    const {column, onChange} = renderWheel({
+      options: MINUTES,
+      value: 0,
+      label: 'Minute',
+      isLooping: true,
+    });
+    fireEvent.keyDown(column, {key: 'ArrowUp'});
+    expect(onChange).toHaveBeenLastCalledWith(59);
+    advance(turnMs(1) + 10);
+    expect(labelDrawnAt(column, 0)).toBe('59');
+  });
+
+  it('never turns a key a whole revolution: with one enabled row it stays put', () => {
+    const {column, onChange} = renderWheel({
+      options: QUARTERS.map(option => ({
+        ...option,
+        isDisabled: option.value !== 45,
+      })),
+      value: 45,
+      label: 'Minute',
+      isLooping: true,
+    });
+    fireEvent.keyDown(column, {key: 'ArrowDown'});
+    advance(2000);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(labelDrawnAt(column, 0)).toBe('45');
+  });
+
+  it('turns onto a tapped copy two rows down and commits its value on arrival', () => {
+    const {column, option, onChange} = renderWheel({
+      options: QUARTERS,
+      value: 45,
+      label: 'Minute',
+      isLooping: true,
+    });
+    const tap = CENTRE + 2 * ROW;
+    touch('touchstart', column, tap);
+    advance(60);
+    touch('touchend', column, tap);
+    advance(turnMs(2) + 10);
+    expect(onChange).toHaveBeenCalledWith(15);
+    // At rest the wheel shows its own row, not the copy it turned onto.
+    expect(labelDrawnAt(column, 0)).toBe('15');
+    expect(distanceOf(option('15'))).toBeCloseTo(0, 4);
+  });
+
+  it('turns onto a tapped copy of the committed row and commits nothing', () => {
+    const {column, option, onChange} = renderWheel({
+      options: THIRDS,
+      value: 40,
+      label: 'Minute',
+      isLooping: true,
+    });
+    const tap = CENTRE + 3 * ROW;
+    touch('touchstart', column, tap);
+    advance(60);
+    touch('touchend', column, tap);
+    // It turns: no row is marked while a motion runs.
+    advance(turnMs(3) / 2);
+    expect(isMarked(option('40'))).toBe(false);
+    advance(turnMs(3) + 10);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(distanceOf(option('40'))).toBeCloseTo(0, 4);
+    expect(isMarked(option('40'))).toBe(true);
+  });
+
+  it('runs a drag on through the seam with no rubber band, and commits where it rests', () => {
+    const {column, option, onChange} = renderWheel({
+      options: MINUTES,
+      value: 58,
+      label: 'Minute',
+      isLooping: true,
+    });
+    // Up 3 rows (+10 px of hysteresis), held still, lifted: 58 → 01.
+    drag(column, 180, 180 - 10 - 3 * ROW, {steps: 30, interval: 40, hold: 300});
+    advance(2000);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith(1);
+    expect(distanceOf(option('01'))).toBeCloseTo(0, 4);
+  });
+
+  it('runs a fling on through the seam and rests on a row past it', () => {
+    const {column, option, onChange} = renderWheel({
+      options: MINUTES,
+      value: 55,
+      label: 'Minute',
+      isLooping: true,
+    });
+    drag(column, 180, 60, {steps: 6, interval: 16});
+    advance(4000);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    const rested = onChange.mock.calls[0][0] as number;
+    expect(rested).toBeLessThan(55);
+    const label = String(rested).padStart(2, '0');
+    expect(labelDrawnAt(column, 0)).toBe(label);
+    expect(distanceOf(option(label))).toBeCloseTo(0, 4);
+  });
+
+  it('turns the shorter way round from a disabled row beside the seam', () => {
+    const {column, onChange} = renderWheel({
+      options: SOME_MONTHS,
+      value: 2,
+      label: 'Month',
+      isLooping: true,
+    });
+    // Down 2 rows (+10 px of hysteresis), across the seam: the wheel rests on
+    // December, disabled. November is one row back, February two on.
+    drag(column, 60, 60 + 10 + 2 * ROW, {steps: 30, interval: 40, hold: 300});
+    advance(3000);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith(11);
+    expect(labelDrawnAt(column, 0)).toBe('11');
+  });
+
+  it('turns onto a value set from outside the shorter way round: one row on, onto the next copy', () => {
+    const {ends, restore} = recordStripEnds();
+    try {
+      const onChange = vi.fn();
+      const {rerender} = render(
+        <PickerWheel
+          label="Minute"
+          options={MINUTES}
+          value={59}
+          onChange={onChange}
+          isLooping
+        />,
+      );
+      rerender(
+        <PickerWheel
+          label="Minute"
+          options={MINUTES}
+          value={0}
+          onChange={onChange}
+          isLooping
+        />,
+      );
+      // The strip moves up by minus the offset: to position 60, :00's copy.
+      expect(ends.at(-1)).toBeCloseTo(-60 * ROW, 0);
+      advance(turnMs(1) + 10);
+      const column = screen.getByRole('listbox', {name: 'Minute'});
+      expect(labelDrawnAt(column, 0)).toBe('00');
+      expect(onChange).not.toHaveBeenCalled();
+    } finally {
+      restore();
+    }
+  });
+
+  it('takes Home and End to the first and last rows of the lap it is on, never across the seam', () => {
+    const {column, onChange} = renderWheel({
+      options: MINUTES,
+      value: 3,
+      label: 'Minute',
+      isLooping: true,
+    });
+    fireEvent.keyDown(column, {key: 'End'});
+    expect(onChange).toHaveBeenLastCalledWith(59);
+    fireEvent.keyDown(column, {key: 'Home'});
+    expect(onChange).toHaveBeenLastCalledWith(0);
+  });
+
+  it('moves its strip onto its own rows as quick keys run on past the seam', () => {
+    const {ends, restore} = recordStripEnds();
+    try {
+      const {column, onChange} = renderWheel({
+        options: MINUTES,
+        value: 59,
+        label: 'Minute',
+        isLooping: true,
+      });
+      // Each key steps from the row the wheel is heading to: 12 rows on.
+      for (let i = 0; i < 12; i++) {
+        fireEvent.keyDown(column, {key: 'ArrowDown'});
+      }
+      expect(onChange).toHaveBeenNthCalledWith(1, 0);
+      expect(onChange).toHaveBeenLastCalledWith(11);
+      // Passing the seam moved the strip a lap back, so the last turn ends on
+      // :11 among the wheel's own rows.
+      expect(ends.at(-1)).toBeCloseTo(-11 * ROW, 0);
+    } finally {
+      restore();
+    }
+  });
+
+  it('draws every row a key’s turn crosses when it interrupts a fling heading laps ahead', () => {
+    const {turns, restore} = recordStripTurns();
+    try {
+      const {column} = renderWheel({
+        options: MINUTES,
+        value: 30,
+        label: 'Minute',
+        isLooping: true,
+      });
+      // A very fast flick, heading laps past :00, then a key as it coasts off.
+      drag(column, 210, 0, {steps: 4, interval: 8});
+      advance(16);
+      fireEvent.keyDown(column, {key: 'ArrowDown'});
+      const turn = turns.at(-1)!;
+      const drawn = new Set([
+        ...MINUTES.map((_, index) => index),
+        ...copiesOf(column).map(row =>
+          Math.round(Number.parseFloat(row.style.insetBlockStart) / ROW),
+        ),
+      ]);
+      const first = Math.floor(Math.min(turn.from, turn.to));
+      const last = Math.ceil(Math.max(turn.from, turn.to));
+      for (let position = first; position <= last; position++) {
+        expect(drawn.has(position)).toBe(true);
+      }
+    } finally {
+      restore();
+    }
+  });
+
+  it('commits a spin across the seam as its own row', async () => {
+    const ref = createRef<WheelHandle>();
+    const {column, onChange} = renderWheel({
+      options: MINUTES,
+      value: 58,
+      label: 'Minute',
+      isLooping: true,
+      ref,
+    });
+    let arrived: boolean | undefined;
+    act(() => {
+      void ref.current!.spinTo(2).then(value => {
+        arrived = value;
+      });
+    });
+    await advanceAsync(2000);
+    expect(arrived).toBe(true);
+    expect(onChange).toHaveBeenLastCalledWith(2);
+    expect(labelDrawnAt(column, 0)).toBe('02');
+  });
+
+  /**
+   * An owner that clamps :01 to :09 onto :00, turning the wheel there first,
+   * as TimeWheels does. `onSpun` hears whether that turn arrived.
+   */
+  function ClampingWheel({
+    onCommit,
+    onSpun,
+  }: {
+    onCommit: (value: number) => void;
+    onSpun: (arrived: boolean) => void;
+  }) {
+    const [value, setValue] = useState(55);
+    const wheelRef = useRef<WheelHandle | null>(null);
+    return (
+      <PickerWheel
+        ref={wheelRef}
+        label="Minute"
+        options={MINUTES}
+        value={value}
+        isLooping
+        onChange={next => {
+          // Every minute from :01 to :09 clamps onto :00.
+          const clamped = next > 0 && next < 10 ? 0 : next;
+          if (clamped !== next) {
+            void wheelRef.current?.spinTo(clamped).then(onSpun);
+          }
+          onCommit(clamped);
+          setValue(clamped);
+        }}
+      />
+    );
+  }
+
+  it('turns on from a value its owner clamps, as a key passes the seam into it', () => {
+    const onCommit = vi.fn();
+    render(<ClampingWheel onCommit={onCommit} onSpun={vi.fn()} />);
+    const column = screen.getByRole('listbox', {name: 'Minute'});
+    fireEvent.keyDown(column, {key: 'PageDown'});
+    expect(onCommit).toHaveBeenLastCalledWith(0);
+    advance(2000);
+    // The owner's turn wins over the key's: the wheel rests on :00, not :05.
+    expect(labelDrawnAt(column, 0)).toBe('00');
+  });
+
+  it('turns on from a value its owner clamps, as a rest past the seam lands in it', async () => {
+    const onCommit = vi.fn();
+    const onSpun = vi.fn();
+    render(<ClampingWheel onCommit={onCommit} onSpun={onSpun} />);
+    const column = screen.getByRole('listbox', {name: 'Minute'});
+    column.getBoundingClientRect = () => ({
+      top: 0,
+      bottom: 216,
+      left: 0,
+      right: 120,
+      width: 120,
+      height: 216,
+      x: 0,
+      y: 0,
+      toJSON() {},
+    });
+    // Up 7 rows (+10 px of hysteresis), held still, lifted: :55 to :02.
+    drag(column, 200, 200 - 10 - 7 * ROW, {steps: 30, interval: 40, hold: 300});
+    await advanceAsync(3000);
+    expect(onCommit).toHaveBeenLastCalledWith(0);
+    // The owner's own turn arrives: the rest moved the strip before the commit.
+    expect(onSpun).toHaveBeenCalledWith(true);
+    expect(labelDrawnAt(column, 0)).toBe('00');
+  });
+
+  it('rests a whole lap away on a committed value outside the bounds and commits nothing (component:DateInput FR13)', () => {
+    // :00 to :09 are disabled, as under a 10:10 AM minimum at 10 AM.
+    const {column, onChange} = renderWheel({
+      options: MINUTES.map(option => ({
+        ...option,
+        isDisabled: option.value < 10,
+      })),
+      value: 5,
+      label: 'Minute',
+      isLooping: true,
+    });
+    // Up 60 rows (+10 px of hysteresis), held still, lifted: the wheel rests
+    // on :05's copy one lap on.
+    drag(column, 1900, 1900 - 10 - 60 * ROW, {
+      steps: 60,
+      interval: 16,
+      hold: 300,
+    });
+    advance(3000);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(labelDrawnAt(column, 0)).toBe('05');
+  });
+
+  it('with no enabled row, turns from a rest laps away onto the committed row’s nearest copy', () => {
+    const {ends, restore} = recordStripEnds();
+    try {
+      const {column, onChange} = renderWheel({
+        options: MINUTES.map(option => ({...option, isDisabled: true})),
+        value: 30,
+        label: 'Minute',
+        isLooping: true,
+      });
+      // Up 124 rows (+10 px of hysteresis), held still, lifted: the wheel
+      // rests at position 154, on :34. The nearest :30 is position 150.
+      drag(column, 3700, 3700 - 10 - 124 * ROW, {
+        steps: 124,
+        interval: 16,
+        hold: 300,
+      });
+      advance(3000);
+      // The strip moves up by minus the offset: four rows back, not 124.
+      expect(ends.at(-1)).toBeCloseTo(-150 * ROW, 0);
+      expect(onChange).not.toHaveBeenCalled();
+    } finally {
+      restore();
+    }
   });
 });
 

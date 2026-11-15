@@ -2359,6 +2359,85 @@ describe('Typeahead edit mode', () => {
   });
 });
 
+describe('Typeahead Backspace and Delete on the token', () => {
+  function tokenButton() {
+    return screen.getByRole('button', {
+      name: new RegExp(`${fruits[0].label}$`),
+    });
+  }
+
+  it.each(['Backspace', 'Delete'])(
+    '%s on the token clears the value as the clear button does, announces it, and focuses the empty input',
+    async key => {
+      const onChange = vi.fn();
+      render(
+        <Typeahead
+          label="Fruit"
+          searchSource={fruitSource}
+          value={fruits[0]}
+          onChange={onChange}
+        />,
+      );
+      tokenButton().focus();
+      fireEvent.keyDown(tokenButton(), {key});
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange).toHaveBeenCalledWith(null);
+      const input = screen.getByRole<HTMLInputElement>('combobox');
+      expect(input).toHaveFocus();
+      expect(input.value).toBe('');
+      await waitFor(() => {
+        expect(
+          document.querySelector('[data-astryx-live-region="polite"]')
+            ?.textContent,
+        ).toBe(`Cleared ${fruits[0].label}`);
+      });
+    },
+  );
+
+  it('Backspace on the token starts editing when there is no clear button', () => {
+    const onChange = vi.fn();
+    render(
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        value={fruits[0]}
+        onChange={onChange}
+        hasClear={false}
+      />,
+    );
+    tokenButton().focus();
+    fireEvent.keyDown(tokenButton(), {key: 'Backspace'});
+    expect(onChange).not.toHaveBeenCalled();
+    const input = screen.getByRole<HTMLInputElement>('combobox');
+    expect(input).toHaveFocus();
+    expect(input.value).toBe(fruits[0].label);
+  });
+
+  it('other keys and a disabled field leave the value alone', () => {
+    const onChange = vi.fn();
+    const {rerender} = render(
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        value={fruits[0]}
+        onChange={onChange}
+      />,
+    );
+    fireEvent.keyDown(tokenButton(), {key: 'a'});
+    rerender(
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        value={fruits[0]}
+        onChange={onChange}
+        isDisabled
+      />,
+    );
+    fireEvent.keyDown(tokenButton(), {key: 'Backspace'});
+    expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
 describe('Typeahead collapsed input tab order', () => {
   it('removes the invisible input from the Tab order while a token is shown', () => {
     render(

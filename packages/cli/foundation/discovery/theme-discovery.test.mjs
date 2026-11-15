@@ -359,7 +359,7 @@ describe('theme descriptor discovery', () => {
   it('rejects descriptor identity that differs from its directory', () => {
     writeTheme({doc: {name: 'sea'}});
     expect(() => discoverThemeDirectory(tmpDir, '@acme/themes')).toThrow(
-      'Theme descriptor oceanTheme.doc.mjs for @acme/themes names "sea" but its directory is "ocean".',
+      'Theme descriptor oceanTheme.doc.mjs for @acme/themes names "sea" but its directory is "ocean". A theme\'s folder carries its name: move its files into a folder named "sea".',
     );
   });
 

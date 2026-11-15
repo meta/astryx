@@ -151,6 +151,10 @@ export interface TooltipProps {
    * answers by calling `onOpenChange(false)` without hiding itself — closing is
    * your update's decision, exactly as for a controlled Dialog. Ignore the call
    * and the tip stays, and so does the press: nothing underneath dismisses.
+   *
+   * The same holds for focus held closed: focus that would open the tooltip
+   * calls `onOpenChange(true)` and shows nothing until your update sets
+   * `isOpen`.
    */
   isOpen?: boolean;
 

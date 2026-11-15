@@ -495,6 +495,30 @@ function mockSheetTop(sheet: HTMLElement, top: number) {
   }
 }
 
+// A fast downward drag on a handle: two moves, 16 ms apart on the events'
+// own timestamps, so it releases at 3,750 px/s.
+let flickTime = 0;
+
+function flick(handle: HTMLElement) {
+  for (const [type, y] of [
+    ['pointerdown', 0],
+    ['pointermove', 60],
+    ['pointermove', 120],
+    ['pointerup', 120],
+  ] as const) {
+    flickTime += 16;
+    const event = new Event(type, {bubbles: true, cancelable: true});
+    Object.defineProperties(event, {
+      button: {value: 0},
+      clientY: {value: y},
+      isPrimary: {value: true},
+      pointerId: {value: 1},
+      timeStamp: {value: flickTime},
+    });
+    fireEvent(handle, event);
+  }
+}
+
 describe('BottomSheetSwitcher', () => {
   it('opens only the sheet selected by activeSheet', () => {
     render(<Flow />);
@@ -979,14 +1003,7 @@ describe('BottomSheetSwitcher', () => {
     }
 
     fireEvent.click(dialog);
-    fireEvent.pointerDown(handle, {
-      pointerId: 1,
-      clientY: 0,
-      button: 0,
-      isPrimary: true,
-    });
-    fireEvent.pointerMove(handle, {pointerId: 1, clientY: 120});
-    fireEvent.pointerUp(handle, {pointerId: 1, clientY: 120});
+    flick(handle);
 
     expect(onActiveSheetChange).not.toHaveBeenCalled();
     expect(dialog).toHaveStyle({'--_sheet-scrim-opacity': '1'});
@@ -1049,14 +1066,7 @@ describe('BottomSheetSwitcher', () => {
     fireEvent.click(dialog);
     fireEvent.keyDown(dialog, {key: 'Escape'});
     fireEvent(dialog, new Event('cancel', {cancelable: true}));
-    fireEvent.pointerDown(handle, {
-      pointerId: 1,
-      clientY: 0,
-      button: 0,
-      isPrimary: true,
-    });
-    fireEvent.pointerMove(handle, {pointerId: 1, clientY: 120});
-    fireEvent.pointerUp(handle, {pointerId: 1, clientY: 120});
+    flick(handle);
 
     expect(onActiveSheetChange).not.toHaveBeenCalled();
     expect(dialog).toHaveStyle({'--_sheet-scrim-opacity': '1'});

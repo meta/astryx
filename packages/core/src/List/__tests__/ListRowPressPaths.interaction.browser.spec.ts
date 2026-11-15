@@ -23,8 +23,8 @@ import {
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
+  armHold,
   drag,
-  holdAnimations,
   openStory,
   releaseAnimations,
   seekAnimations,
@@ -218,11 +218,17 @@ test('Reduce Motion keeps the release fade: a fade, not a movement', async ({
   if (box == null) {
     throw new Error('no row');
   }
+  // The page holds the release itself as soon as it runs. A hold the test
+  // sends after the lift arrives later on a busy machine, and the release
+  // can end first.
+  const hold = await armHold(page, row, {
+    judges: {target: row, property: 'opacity', pseudoElement: '::before'},
+  });
   await driver.play(
     tap({x: box.x + box.width / 2, y: box.y + box.height / 2}, {holdMs: 300}),
   );
   const releaseMs = await exitMsOf(row);
-  await holdAnimations(page);
+  await hold.held();
   await seekAnimations(page, 0);
   expect(await layerOpacity(row)).toBeCloseTo(1, 2);
   await seekAnimations(page, releaseMs / 2);
@@ -288,6 +294,10 @@ test('under a finger, a row held and released between two divided rows keeps bot
   if (box == null) {
     throw new Error('no row');
   }
+  // Armed before the press, so the page holds the release as it starts.
+  const hold = await armHold(page, pressed, {
+    judges: {target: pressed, property: 'opacity', pseudoElement: '::before'},
+  });
   // Held: checked while the finger is still down, after the first event.
   await driver.play(
     tap({x: box.x + box.width / 2, y: box.y + box.height / 2}, {holdMs: 600}),
@@ -303,7 +313,7 @@ test('under a finger, a row held and released between two divided rows keeps bot
   );
   // Released: halfway through the release fade.
   const releaseMs = await exitMsOf(pressed);
-  await holdAnimations(page);
+  await hold.held();
   await seekAnimations(page, releaseMs / 2);
   expect(await pressState(pressed)).toBe('fading');
   await expectDividersAsAtRest('releasing');

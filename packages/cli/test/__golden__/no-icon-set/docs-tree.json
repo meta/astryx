@@ -564,6 +564,7 @@
       "debug-event",
       "gap-report-handler",
       "discover-source",
+      "example-scope",
       "codemod",
       "provider-identity",
       "authored-doc-graph-fields",
@@ -633,6 +634,7 @@
     "sections": [
       "pick-a-check",
       "run-every-check-in-ci",
+      "get-ready-to-list",
       "what-integration-verify-does"
     ],
     "mentions": []
@@ -1197,7 +1199,8 @@
   "styling-libraries/tailwind": {
     "type": "docs.detail",
     "sections": [
-      "tailwind"
+      "tailwind",
+      "add-astryx-to-an-app-that-already-uses-tailwind"
     ],
     "mentions": []
   },
@@ -1239,13 +1242,22 @@
     "type": "docs.detail",
     "sections": [
       "design-tokens",
-      "stylex-setup"
+      "stylex-setup",
+      "nextjs-webpack"
     ],
-    "mentions": []
+    "mentions": [
+      "/** @type {import('next').NextConfig} */\nconst nextConfig = {\n  experimental: {\n    optimizePackageImports: ['@astryxdesign/core'],\n  },\n};\n\nexport default nextConfig;",
+      "If your Next.js app builds with webpack (`next build --webpack`), add `@astryxdesign/core` to `experimental.optimizePackageImports`."
+    ]
   },
   "theme": {
     "type": "docs.detail",
     "sections": [
+      "make-or-change",
+      "look-after-each-change",
+      "denser-or-roomier",
+      "one-kind-of-part",
+      "no-app-yet",
       "quick-start",
       "creating-a-custom-theme",
       "icon-sizes",
@@ -1415,7 +1427,8 @@
       "type-scale",
       "display-text",
       "usage",
-      "custom-type-scale"
+      "custom-type-scale",
+      "dynamic-type"
     ],
     "mentions": []
   },

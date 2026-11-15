@@ -20,6 +20,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {runCli} from '../test-utils/run-cli.mjs';
+import {REPO_ROOT} from '../test-utils/repo-root.mjs';
 
 const CORE = '@astryxdesign/core';
 const CLI = '@astryxdesign/cli';
@@ -229,7 +230,7 @@ describe('INV28: theme add names the package that owns the added theme', () => {
    */
   function appWithThemePackage() {
     const dir = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-inv28-theme-'),
+      path.join(REPO_ROOT, '.astryx-inv28-theme-'),
     );
     dirs.push(dir);
     /** @param {string} rel @param {string} content */

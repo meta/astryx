@@ -15,6 +15,7 @@
 
 import {useRef} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {sharedState} from '../utils/sharedRealm';
 
 /**
  * How many hooks are driving a recognizer from an Effect right now: an
@@ -26,21 +27,23 @@ import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
  * listener reports as usual (`deferringResolution` in useGestureRecognizer).
  * A press tracker's callbacks wait for a microtask after it (usePressTracker).
  */
-let syncingDepth = 0;
+const sync = sharedState('gestures/gesture-sync/state', 1, () => ({
+  syncingDepth: 0,
+}));
 
 /** Runs `body` as a gesture sync (see `syncingDepth`). */
 export function syncingGestures<T>(body: () => T): T {
-  syncingDepth += 1;
+  sync.syncingDepth += 1;
   try {
     return body();
   } finally {
-    syncingDepth -= 1;
+    sync.syncingDepth -= 1;
   }
 }
 
 /** True while any gesture hook's sync runs. */
 export function isSyncingGestures(): boolean {
-  return syncingDepth > 0;
+  return sync.syncingDepth > 0;
 }
 
 /**

@@ -372,6 +372,36 @@ describe('useShownScrollOverflow', () => {
     unmount();
   });
 
+  it('commits an edge change in the report itself, so a held row changes the buttons in its frame', () => {
+    const {result, unmount} = attach();
+    act(() => {
+      result.current.followShown({offset: 150, travel: 300});
+      // Rendered before the report returns, not when the batch ends.
+      expect(result.current.overflowStart).toBe(true);
+    });
+    unmount();
+  });
+
+  it('renders nothing for a report that changes no edge', () => {
+    let renders = 0;
+    const el = document.createElement('div');
+    fakeScrollBox(el, {scrollWidth: 600, clientWidth: 300});
+    stubRendered(el, true);
+    const {result, unmount} = renderHook(() => {
+      renders += 1;
+      return useShownScrollOverflow();
+    });
+    act(() => {
+      result.current.scrollRef(el);
+    });
+    act(() => result.current.followShown({offset: 150, travel: 300}));
+    const before = renders;
+    act(() => result.current.followShown({offset: 160, travel: 300}));
+    act(() => result.current.followShown({offset: 170, travel: 300}));
+    expect(renders).toBe(before);
+    unmount();
+  });
+
   it('keeps the reported edges for one frame after null, then measures the scroll offset', async () => {
     const {el, result, unmount} = attach();
     act(() => result.current.followShown({offset: 300, travel: 300}));

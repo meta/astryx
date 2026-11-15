@@ -10,7 +10,8 @@
  *   and by Lab's DialogHeroHeader through the internal/dialog-context entry
  */
 
-import {createContext, use} from 'react';
+import {use} from 'react';
+import {createSharedContext} from '../utils/sharedContext';
 
 export interface DialogContextValue {
   /** Whether the dialog is rendered inline for docs/showcases. */
@@ -30,7 +31,11 @@ export interface DialogContextValue {
   syncDefaultName?: () => void;
 }
 
-export const DialogContext = createContext<DialogContextValue | null>(null);
+export const DialogContext = createSharedContext<DialogContextValue | null>(
+  'DialogContext',
+  1,
+  null,
+);
 DialogContext.displayName = 'DialogContext';
 
 export function useDialogContext(): DialogContextValue | null {

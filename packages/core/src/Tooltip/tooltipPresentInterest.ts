@@ -4,7 +4,7 @@
 
 /**
  * @file tooltipPresentInterest.ts
- * @input React createContext
+ * @input createSharedContext
  * @output Exports `TooltipPresentInterestContext` and its value types: the
  *   interaction on a tooltip's anchor that mounted the tooltip
  * @position Internal to Core, not exported from the Tooltip entry. A
@@ -13,7 +13,8 @@
  *   its trigger attaches, as its own listeners would have.
  */
 
-import {createContext, type RefObject} from 'react';
+import type {RefObject} from 'react';
+import {createSharedContext} from '../utils/sharedContext';
 
 /**
  * The interaction on the anchor that mounted the tooltip: a hover from a
@@ -34,5 +35,9 @@ export interface TooltipPresentInterestState {
 }
 
 export const TooltipPresentInterestContext =
-  createContext<RefObject<TooltipPresentInterestState> | null>(null);
+  createSharedContext<RefObject<TooltipPresentInterestState> | null>(
+    'TooltipPresentInterestContext',
+    1,
+    null,
+  );
 TooltipPresentInterestContext.displayName = 'TooltipPresentInterestContext';

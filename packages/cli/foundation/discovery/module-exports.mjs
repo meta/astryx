@@ -19,9 +19,9 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {parse} from '@babel/parser';
 import {findInstalledPackage} from '../fs/paths.mjs';
 import {inspectPackageExport} from './package-exports.mjs';
+import {babelParser} from '../runtime/lazy-dependencies.mjs';
 
 const MODULE_EXTENSIONS = [
   '.mjs',
@@ -108,7 +108,7 @@ function parseModule(file) {
   const stamp = fileStamp(file);
   const cached = parsedModules.get(file);
   if (cached?.stamp === stamp) return cached.ast;
-  const ast = parse(moduleText(file), PARSE_OPTIONS);
+  const ast = babelParser().parse(moduleText(file), PARSE_OPTIONS);
   parsedModules.set(file, {stamp, ast});
   return ast;
 }
@@ -227,30 +227,78 @@ function collectNodesOfType(node, type, found) {
   return found;
 }
 
+/** What a bundler also adds to an extensionless specifier. */
+const BUNDLER_EXTENSIONS = [...MODULE_EXTENSIONS, '.json'];
+
+/** The TypeScript files a bundler tries for a `.js`-family specifier. */
+const TYPESCRIPT_FOR = /** @type {Record<string, string[]>} */ ({
+  '.js': ['.ts', '.tsx'],
+  '.jsx': ['.tsx'],
+  '.mjs': ['.mts'],
+  '.cjs': ['.cts'],
+});
+
+/** @param {string} file */
+function isFileOnDisk(file) {
+  try {
+    return fs.statSync(file).isFile();
+  } catch {
+    return false;
+  }
+}
+
 /**
  * The file a relative import names: the path itself, then each module
  * extension, then a folder's index. Null for a bare specifier or no file.
+ *
+ * With `bundler`, it resolves as an app's bundler does: a `?query` or
+ * `#hash` is not part of the path; a `.js`-family specifier may name the
+ * TypeScript file of its stem; `.json` is tried too; and a folder resolves
+ * through its package.json `module` or `main` before its index. `extensions`
+ * replaces the module extensions (`['.css']` for a stylesheet `@import`), and
+ * `isFile` decides whether a file is there (by default, on disk), so a caller
+ * can resolve against a list of files, such as what a package ships.
  * @param {unknown} specifier
  * @param {string} fromFile absolute path of the importing file
+ * @param {{bundler?: boolean, extensions?: readonly string[], isFile?: (file: string) => boolean}} [options]
  * @returns {string|null}
  */
-export function resolveLocalModule(specifier, fromFile) {
+export function resolveLocalModule(specifier, fromFile, options = {}) {
   if (typeof specifier !== 'string' || !specifier.startsWith('.')) return null;
-  const base = path.resolve(path.dirname(fromFile), specifier);
-  const candidates = [
-    base,
-    ...MODULE_EXTENSIONS.map(extension => `${base}${extension}`),
-    ...MODULE_EXTENSIONS.map(extension => path.join(base, `index${extension}`)),
-  ];
-  return (
-    candidates.find(candidate => {
-      try {
-        return fs.statSync(candidate).isFile();
-      } catch {
-        return false;
+  const {bundler = false, isFile = isFileOnDisk} = options;
+  const extensions =
+    options.extensions ?? (bundler ? BUNDLER_EXTENSIONS : MODULE_EXTENSIONS);
+  const written = bundler ? specifier.replace(/[?#].*$/su, '') : specifier;
+  const base = path.resolve(path.dirname(fromFile), written);
+  const candidates = [base];
+  if (bundler) {
+    const extension = path.extname(base);
+    for (const typed of TYPESCRIPT_FOR[extension] ?? []) {
+      candidates.push(`${base.slice(0, -extension.length)}${typed}`);
+    }
+  }
+  candidates.push(...extensions.map(extension => `${base}${extension}`));
+  if (bundler && isFile(path.join(base, 'package.json'))) {
+    try {
+      const pkg = JSON.parse(
+        fs.readFileSync(path.join(base, 'package.json'), 'utf-8'),
+      );
+      for (const field of ['module', 'main']) {
+        if (typeof pkg?.[field] !== 'string') continue;
+        const entry = path.resolve(base, pkg[field]);
+        candidates.push(
+          entry,
+          ...extensions.map(extension => `${entry}${extension}`),
+        );
       }
-    }) ?? null
+    } catch {
+      // A package.json that does not parse names no entry.
+    }
+  }
+  candidates.push(
+    ...extensions.map(extension => path.join(base, `index${extension}`)),
   );
+  return candidates.find(candidate => isFile(candidate)) ?? null;
 }
 
 /**
@@ -707,7 +755,12 @@ function exportOriginsOf(file, read) {
     for (const node of declarations) {
       for (const name of declaredNames(node.declaration, types)) {
         named.add(name);
-        if (!origins.has(name)) origins.set(name, {file, name});
+        if (!origins.has(name)) {
+          origins.set(
+            name,
+            declaredOrigin(ast, file, node.declaration, name, types),
+          );
+        }
       }
     }
     for (const [exportName, entries] of specifiers) {
@@ -1211,7 +1264,15 @@ function exportOrigin(file, exportName, seen, read, types = false) {
   const {declarations, specifiers} = namedExportIndex(ast.program, types, read);
   for (const node of declarations) {
     if (declarationExports(node.declaration, exportName, types)) {
-      return {file, name: exportName};
+      return declaredOrigin(
+        ast,
+        file,
+        node.declaration,
+        exportName,
+        types,
+        seen,
+        read,
+      );
     }
   }
   for (const {node, specifier} of specifiers.get(exportName) ?? []) {
@@ -1688,6 +1749,48 @@ export function elementPropOrigins(file, {sources, name, prop, unwrap}) {
     origins.push(binding ? aliasedOrigin(binding, new Set(), unwrap) : null);
   }
   return origins;
+}
+
+/**
+ * Where a declared export is defined. An `export const X = Y` whose value is
+ * another binding is that binding, so an alias of an imported value has the
+ * imported value's origin.
+ * @param {any} ast
+ * @param {string} file
+ * @param {any} declaration
+ * @param {string} name
+ * @param {boolean} types
+ * @param {Set<string>} [seen]
+ * @param {(node: any, type: string) => readonly any[]} [read]
+ * @returns {{file: string, name: string}}
+ */
+function declaredOrigin(
+  ast,
+  file,
+  declaration,
+  name,
+  types,
+  seen = new Set(),
+  read = nodesOfType,
+) {
+  if (
+    declaration?.type === 'VariableDeclaration' &&
+    declaration.kind === 'const'
+  ) {
+    for (const declarator of declaration.declarations) {
+      if (
+        declarator.id?.type === 'Identifier' &&
+        declarator.id.name === name &&
+        declarator.init?.type === 'Identifier'
+      ) {
+        const init = declarator.init.name;
+        return (
+          bindingOrigin(ast, file, init, seen, types, read) ?? {file, name}
+        );
+      }
+    }
+  }
+  return {file, name};
 }
 
 /**
