@@ -25,8 +25,7 @@ import {TopNavSlotContext} from './TopNavContext';
 import {useTopNavRenderMode} from './TopNavRenderContext';
 import {useTopNavMobileContent} from './TopNavMobileContentContext';
 import {Divider} from '../Divider/Divider';
-import {MobileNav} from '../MobileNav/MobileNav';
-import {MobileNavToggle} from '../MobileNav/MobileNavToggle';
+import {MobileNavDrawer, MobileNavToggle} from '../MobileNav/MobileNavToggle';
 import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
 import {themeProps} from '../utils/themeProps';
 import {
@@ -295,7 +294,7 @@ export function TopNav({
     }
 
     return (
-      <MobileNav header={heading}>
+      <MobileNavDrawer header={heading}>
         {hasCollapsibleContent && (
           <div {...stylex.props(styles.drawerItems)}>
             {resolvedStartContent}
@@ -310,7 +309,7 @@ export function TopNav({
             {mobileContent}
           </div>
         )}
-      </MobileNav>
+      </MobileNavDrawer>
     );
   }
 

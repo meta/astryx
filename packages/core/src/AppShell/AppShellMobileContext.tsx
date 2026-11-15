@@ -16,6 +16,14 @@
 import {use} from 'react';
 import {createSharedContext} from '../utils/sharedContext';
 
+/**
+ * Longest the mobile nav drawer waits before it closes, however long the hold
+ * is. `AppShell` keeps the drawer's `Activity` boundary visible for at least
+ * this long; otherwise the boundary's `display: none` lands before the
+ * drawer's own `dialog.close()` runs.
+ */
+export const MAX_CLOSE_DELAY_MS = 250;
+
 export interface AppShellMobileContextValue {
   /** Whether the viewport is below the mobile breakpoint */
   isMobile: boolean;
