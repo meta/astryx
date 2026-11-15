@@ -71,6 +71,43 @@ const readBody = async (field: Locator) =>
     };
   });
 
+/**
+ * Resolves once the field's scrolling body keeps one position for 10 frames.
+ * Fails after 300 frames without that.
+ */
+const holdStill = async (field: Locator) =>
+  field.evaluate(
+    async element =>
+      new Promise<void>((resolve, reject) => {
+        let body = element.parentElement;
+        while (body != null && getComputedStyle(body).overflowY !== 'auto') {
+          body = body.parentElement;
+        }
+        if (body == null) {
+          reject(new Error('no scrolling body'));
+          return;
+        }
+        const scroller = body;
+        let last = scroller.scrollTop;
+        let still = 0;
+        let frames = 0;
+        const step = () => {
+          const now = scroller.scrollTop;
+          still = now === last ? still + 1 : 0;
+          last = now;
+          frames += 1;
+          if (still >= 10) {
+            resolve();
+          } else if (frames >= 300) {
+            reject(new Error('the body never held still'));
+          } else {
+            requestAnimationFrame(step);
+          }
+        };
+        requestAnimationFrame(step);
+      }),
+  );
+
 /** Scrolls the body so `field`'s top shows `peek` px above the body's end. */
 const peekAtEnd = async (field: Locator, peek: number) =>
   field.evaluate((element, px) => {
@@ -114,6 +151,13 @@ test.describe('with a fine pointer and no keyboard', () => {
     await before.focus();
     await page.keyboard.press('Tab');
     await expect(target).toBeFocused();
+    // Core reveals the focused field into its scroller in a later task, after
+    // the browser's own focus scroll, and can correct that move once more.
+    // Read the body once the reveal lands and the body holds still.
+    await expect
+      .poll(async () => Math.abs((await readBody(target)).gap))
+      .toBeLessThanOrEqual(1);
+    await holdStill(target);
     const {scrollPadding, gap} = await readBody(target);
     expect(scrollPadding).toBe('auto');
     expect(Math.abs(gap)).toBeLessThanOrEqual(1);
