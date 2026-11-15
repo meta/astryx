@@ -21,6 +21,7 @@ import {
 import {readFileSync} from 'node:fs';
 import {
   act,
+  cleanup,
   render,
   screen,
   fireEvent,
@@ -4746,6 +4747,40 @@ describe('Selector light dismiss focus (spec:Popover AR4)', () => {
     expect(focusAtPick).toBe(screen.getByTestId('container'));
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
     expect(trigger).toHaveFocus();
+  });
+
+  it('returns focus to the trigger after a pick from a list inside a shadow root', async () => {
+    const user = userEvent.setup();
+    const host = document.createElement('div');
+    document.body.append(host);
+    const shadow = host.attachShadow({mode: 'open'});
+    const container = document.createElement('div');
+    container.tabIndex = -1;
+    shadow.append(container);
+    try {
+      render(
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {}}
+          placement="below"
+        />,
+        {container},
+      );
+      const view = within(container);
+      const trigger = view.getByRole('combobox');
+      await user.click(trigger);
+      await user.click(
+        view.getByRole('option', {name: 'Cherry', hidden: true}),
+      );
+
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(shadow.activeElement).toBe(trigger);
+    } finally {
+      cleanup();
+      host.remove();
+    }
   });
 
   it('returns focus to the trigger after a keyboard pick from the search field inside the list', async () => {
