@@ -16370,14 +16370,27 @@ export function draftAnswer(ctx, env, question) {
      * fallback, and a value that draws nothing is none.
      * @param {string} prop @param {RegExp | null} state
      * @param {'light' | 'dark'} [inMode]
+     * @param {{status?: string, attr?: string}} [scope] a status the
+     *   question names (`error`), or an attribute state (`selected=true`,
+     *   `disabled=disabled`): that rule's own value, never the plain one
      */
-    const censusOne = (prop, state, inMode) => {
+    const censusOne = (prop, state, inMode, scope = {}) => {
       const at = named ? C.MAP[one(named)]?.at?.[prop] : null;
       if (!at) return null;
       const keys = Object.keys(at).filter(k => {
         const [rule, cond = ''] = k.split(' ');
+        const attrs = rule.split(',');
+        const own = [
+          ...(scope.status ? [`status=${scope.status}`] : []),
+          ...(scope.attr ? [scope.attr] : []),
+        ];
         return (
-          !/status=|selected=|disabled=|aria-|nav=|readonly=/.test(rule) &&
+          own.every(a => attrs.includes(a)) &&
+          !attrs.some(
+            a =>
+              /^(?:status|selected|disabled|readonly)=|^aria-|^nav=/.test(a) &&
+              !own.includes(a),
+          ) &&
           (vWord
             ? rule.split(',').includes(`variant=${vWord}`)
             : !/variant=/.test(rule) ||
@@ -16413,10 +16426,11 @@ export function draftAnswer(ctx, env, question) {
      * The census value in the mode asked, else in each mode the theme
      * shows (one value when they agree).
      * @param {string} prop @param {RegExp | null} state
+     * @param {{status?: string, attr?: string}} [scope]
      */
-    const censusNow = (prop, state) => {
-      if (readMode) return censusOne(prop, state, readMode);
-      const vals = shownModes.map(m => censusOne(prop, state, m));
+    const censusNow = (prop, state, scope) => {
+      if (readMode) return censusOne(prop, state, readMode, scope);
+      const vals = shownModes.map(m => censusOne(prop, state, m, scope));
       if (vals.some(v => v == null)) return null;
       return vals.every(v => v === vals[0])
         ? vals[0]
@@ -16430,8 +16444,13 @@ export function draftAnswer(ctx, env, question) {
       const focus =
         /:focus(?:-visible|-within)?(?![\w-])|:has\(:focus-visible\)/;
       const shadow = censusNow('box-shadow', focus);
+      // "how thick is the focus ring": the ring's width (an inset ring's
+      // spread), then how it is drawn.
+      const spread = shadow
+        ? /(?:^|,\s*)inset\s+0\s+0\s+0\s+(\d*\.?\d+px)/.exec(shadow)?.[1]
+        : null;
       if (shadow && shadow !== 'none')
-        return `a box-shadow ring when focused: ${shadow}${qModeSaid}`;
+        return `${spread && /\b(?:thick|thickness|wide|width)\b/.test(qWords) ? `a ${spread} ` : 'a '}box-shadow ring when focused: ${shadow}${qModeSaid}`;
       const width = censusNow('outline-width', focus);
       const color = censusNow('outline-color', focus);
       return width && color
@@ -16463,6 +16482,50 @@ export function draftAnswer(ctx, env, question) {
       return best
         ? `${current(best.t, mode)} (${best.t}, on its ${current(/** @type {string} */ (tok), mode)} surface)${qModeSaid}`
         : null;
+    };
+    // A status ("error inputs") or a state ("focused inputs", "selected
+    // cards") the question names: that rule's own value from the census,
+    // in each mode asked, never the plain rule's.
+    const conditionNow = () => {
+      if (!named || !C.MAP[one(named)]) return null;
+      const status = /\b(error|danger|warning|success)\b/.exec(qWords)?.[1];
+      const st = stateWord?.replace(/ed$/, '').replace(/^press$/, 'active');
+      if (!status && !st) return null;
+      if (
+        !/^(?:border-color|border-width|background-color|color|box-shadow|outline-color)$/.test(
+          asked,
+        )
+      )
+        return null;
+      const scope = {
+        ...(status ? {status: status === 'danger' ? 'error' : status} : {}),
+        ...(st === 'select' || st === 'selected'
+          ? {attr: 'selected=true'}
+          : st === 'disabl' || st === 'disabled'
+            ? {attr: 'disabled=disabled'}
+            : {}),
+      };
+      const cond = /^focus/.test(st ?? '')
+        ? /:focus(?:-visible|-within)?(?![\w-])|:has\(:focus-visible\)/
+        : st === 'hover'
+          ? /:hover(?![\w-])/
+          : st === 'active'
+            ? /:active(?![\w-])/
+            : null;
+      const props =
+        asked === 'background-color'
+          ? ['background-color', 'background']
+          : [asked];
+      for (const prop of props) {
+        const v =
+          censusNow(prop, cond, scope) ??
+          // (A status that draws the same when focused keeps its resting
+          // value.)
+          (cond && scope.status ? censusNow(prop, null, scope) : null);
+        if (v != null)
+          return `${v}${qModeSaid}${scope.status ? ` (status ${scope.status})` : ''}${st ? ` when ${stateWord}` : ''}`;
+      }
+      return null;
     };
     const stateNow = () => {
       if (!named || !/^background(?:-color)?$/.test(asked)) return null;
@@ -16712,6 +16775,7 @@ export function draftAnswer(ctx, env, question) {
       named && !unshown
         ? (pageNow() ??
           ringNow() ??
+          conditionNow() ??
           mediaTextNow() ??
           (asked === 'box-shadow' && censusNow('box-shadow', null)
             ? `${censusNow('box-shadow', null)}${qModeSaid}`
