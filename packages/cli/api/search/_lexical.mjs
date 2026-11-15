@@ -140,6 +140,55 @@ export function readsMentionAsWords(query) {
   return COMPONENT_NAME_RE.test(query.trim());
 }
 
+/** Each catalog's readings of a query, worked out once. @type {WeakMap<object, Map<string, {split: boolean, mentioned: Set<Candidate>}>>} */
+const readings = new WeakMap();
+
+/**
+ * How a one-identifier query is read. It is read as its words when, read
+ * whole, it matches nothing: a prop or hook name (camelCase) a doc already
+ * mentions keeps the entries that mention it. An identifier written as an
+ * entry's name (see readsMentionAsWords) is read as its words also when all
+ * it matches is text that mentions it: `mentioned` holds those entries,
+ * which keep the hit, and the words find the entries they name. The whole
+ * identifier is scored against the catalog only for a query these rules can
+ * split; `mentioned` is empty unless the query is split for its mentions.
+ * @param {string} query
+ * @param {Candidate[]} all
+ * @returns {{split: boolean, mentioned: Set<Candidate>}}
+ */
+export function identifierReading(query, all) {
+  let byQuery = readings.get(all);
+  if (!byQuery) readings.set(all, (byQuery = new Map()));
+  const known = byQuery.get(query);
+  if (known) return known;
+  const term = String(query).trim().toLowerCase();
+  const spelled = spellIdentifiers(String(query).trim());
+  const oneIdentifier =
+    !/\s/.test(term) &&
+    spelled !== term &&
+    !all.some(candidate => namesWhole(candidate, term));
+  const mentionsSplit = oneIdentifier && readsMentionAsWords(String(query));
+  /** @type {Set<Candidate>} */
+  const mentioned = new Set();
+  let wholeHit = false;
+  let otherHit = false;
+  if (oneIdentifier)
+    for (const candidate of all) {
+      const hit = scoreCandidate(term, candidate);
+      if (!hit) continue;
+      wholeHit = true;
+      if (!mentionsSplit || !hit.inText) {
+        otherHit = true;
+        break;
+      }
+      mentioned.add(candidate);
+    }
+  const split = oneIdentifier && (!wholeHit || (mentionsSplit && !otherHit));
+  const reading = {split, mentioned: split ? mentioned : new Set()};
+  byQuery.set(query, reading);
+  return reading;
+}
+
 /**
  * Today's lexical ranking of a gathered catalog: the search response
  * `searchCore` returns.
@@ -163,35 +212,11 @@ export function rankLexical(query, options, catalog) {
   // neither reading may add near siblings beside it.
   const spelled = spellIdentifiers(String(query).trim());
   const exact = all.some(candidate => namesWhole(candidate, term));
-  // One identifier is read as its words when, read whole, it matches
-  // nothing: a prop or hook name (camelCase) a doc already mentions keeps
-  // the entries that mention it. An identifier written as an entry's name
-  // (see readsMentionAsWords) is read as its words also when all it matches
-  // is text that mentions it: that text keeps its entry, and the words find
-  // the entries they name. The whole identifier is scored against the
-  // catalog only for a query these rules can split.
-  const oneIdentifier = !exact && !/\s/.test(term) && spelled !== term;
-  const mentionsSplit = oneIdentifier && readsMentionAsWords(String(query));
-  /** The entries the identifier, read whole, mentions. @type {Set<Candidate>} */
-  const mentioned = new Set();
-  let wholeHit = false;
-  let otherHit = false;
-  if (oneIdentifier)
-    for (const candidate of all) {
-      const hit = scoreCandidate(term, candidate);
-      if (!hit) continue;
-      wholeHit = true;
-      if (!mentionsSplit || !hit.inText) {
-        otherHit = true;
-        break;
-      }
-      mentioned.add(candidate);
-    }
-  const split = oneIdentifier && (!wholeHit || (mentionsSplit && !otherHit));
+  const {split, mentioned} = identifierReading(query, all);
   // Read as its words, the identifier still answers the text that mentions
   // it whole: that entry keeps the better of the two readings.
-  const wholeTokens = split && mentioned.size ? tokenizeQuery(term) : null;
-  const wholeWords = split && mentioned.size ? phraseWords(term) : null;
+  const wholeTokens = mentioned.size ? tokenizeQuery(term) : null;
+  const wholeWords = mentioned.size ? phraseWords(term) : null;
   const tokens = tokenizeQuery(split ? spelled : term);
   /** @type {string[]} */
   const words = exact

@@ -940,6 +940,13 @@ describe('search leaf — compound names, other names, and word forms', () => {
     });
   }, SLOW);
 
+  it('lists first the entry that mentions an identifier read as its words', async () => {
+    // Only Markdown's docs mention BlockNodeWithMath; Section and Blockquote
+    // match its words. No signal moves a words-only match above it.
+    const {data} = await search('BlockNodeWithMath', {cwd});
+    expect(data.results[0]).toMatchObject({name: 'Markdown'});
+  }, SLOW);
+
   it('adds no near siblings beside an entry the query names outright', async () => {
     const {data} = await search('top nav mega menu', {cwd});
     expect(data.results[0]).toMatchObject({name: 'TopNavMegaMenu'});

@@ -90,6 +90,21 @@ describe('an identifier only docs mention', () => {
     ).toEqual(['manifest-fields']);
   });
 
+  it('beside a keyword hit is read whole, by score: the keyword before a mention', () => {
+    // A template declares the identifier as a keyword, and a component's
+    // guidance only mentions it: not read as words, so no mention moves.
+    const page = entry('template', 'lantern-page', {
+      keywords: ['LanternKeeper'],
+    });
+    const Lamp = entry('component', 'Lamp', {
+      guidance: ['Pair it with a LanternKeeper.'],
+    });
+    expect(names('LanternKeeper', [Lamp, page, Lantern])).toEqual([
+      'lantern-page',
+      'Lamp',
+    ]);
+  });
+
   it('that names an entry outright, answers with that entry', () => {
     expect(names('Lantern')[0]).toBe('Lantern');
   });
