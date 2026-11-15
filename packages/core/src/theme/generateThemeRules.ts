@@ -1869,33 +1869,52 @@ function schemeDependentEntries(
   candidates: Iterable<string>,
   exclude: ReadonlySet<string>,
 ): [string, string][] {
+  const dependsOnScheme = schemeDependence(values);
+  const entries: [string, string][] = [];
+  for (const name of candidates) {
+    if (!exclude.has(name) && dependsOnScheme(name)) {
+      entries.push([name, values[name]]);
+    }
+  }
+  return entries;
+}
+
+const schemeDependenceByValues = new WeakMap<
+  Record<string, string>,
+  (name: string) => boolean
+>();
+
+/** Whether a token in `values` depends on the color scheme. */
+function schemeDependence(
+  values: Record<string, string>,
+): (name: string) => boolean {
+  const cached = schemeDependenceByValues.get(values);
+  if (cached !== undefined) {
+    return cached;
+  }
   const known = new Map<string, boolean>();
   const dependsOnScheme = (name: string, visiting: Set<string>): boolean => {
-    const cached = known.get(name);
-    if (cached !== undefined) {
-      return cached;
+    const result = known.get(name);
+    if (result !== undefined) {
+      return result;
     }
     const value = values[name];
     if (typeof value !== 'string' || visiting.has(name)) {
       return false;
     }
     visiting.add(name);
-    const result =
+    const isDependent =
       value.includes('light-dark(') ||
       analyzeDeclarationValue(value).references.some(reference =>
         dependsOnScheme(reference, visiting),
       );
     visiting.delete(name);
-    known.set(name, result);
-    return result;
+    known.set(name, isDependent);
+    return isDependent;
   };
-  const entries: [string, string][] = [];
-  for (const name of candidates) {
-    if (!exclude.has(name) && dependsOnScheme(name, new Set())) {
-      entries.push([name, values[name]]);
-    }
-  }
-  return entries;
+  const check = (name: string) => dependsOnScheme(name, new Set());
+  schemeDependenceByValues.set(values, check);
+  return check;
 }
 
 /**
@@ -1906,7 +1925,12 @@ function schemeDependentEntries(
  * result, so the surface's own value never applies; the replacement keeps that
  * result. When the theme does not declare the referenced token, its value
  * comes from an ancestor this theme cannot see, so the token is not
- * re-declared. A reference in a cycle stays as it is.
+ * re-declared. A reference to a theme token that does not depend on the
+ * scheme is replaced with the theme's value too: the surface does not
+ * re-declare that token, so after lowering the reference would resolve on the
+ * surface and take a value set between the root and the surface. A reference
+ * to a token the theme does not declare, or that depends on the scheme, stays
+ * as it is. A reference in a cycle stays as it is.
  */
 function withRootValuesForSurfaceTokens(
   value: string,
@@ -1915,11 +1939,24 @@ function withRootValuesForSurfaceTokens(
   resolving: ReadonlySet<string> = new Set(),
 ): string | null {
   let isUnknown = false;
+  const dependsOnScheme = schemeDependence(declaredValues);
   const result = substituteVarReferences(value, reference => {
-    if (!surfaceNames.has(reference) || resolving.has(reference)) {
+    if (resolving.has(reference)) {
       return null;
     }
     const declared = declaredValues[reference];
+    if (!surfaceNames.has(reference)) {
+      return typeof declared !== 'string' ||
+        dependsOnScheme(reference) ||
+        analyzeDeclarationValue(declared).important
+        ? null
+        : withRootValuesForSurfaceTokens(
+            declared,
+            surfaceNames,
+            declaredValues,
+            new Set([...resolving, reference]),
+          );
+    }
     const replaced =
       typeof declared !== 'string' ||
       analyzeDeclarationValue(declared).important

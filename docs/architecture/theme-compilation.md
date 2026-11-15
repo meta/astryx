@@ -171,7 +171,8 @@ Platform-specific details stay inside that compiler.
   base rules and under each adaptation's query, so it resolves under the
   surface's color scheme even when a consumer's bundler lowers `light-dark()`.
   In a re-declared value, a reference to a token the surface declares itself
-  takes the theme's value of that token, so CSS that keeps `light-dark()`
+  takes the theme's value of that token, and so does a reference to a theme
+  token that does not depend on the scheme, so CSS that keeps `light-dark()`
   resolves as before. When the theme does not declare that token, the surface
   does not re-declare the referring token. A token that depends on the color
   scheme only through tokens the theme does not declare is not re-declared.
