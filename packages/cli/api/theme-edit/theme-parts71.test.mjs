@@ -111,7 +111,8 @@ describe('several states at once', () => {
     expect(
       (await top('make hovered selected tabs blue', 't')).commands,
     ).toEqual([
-      "set t background-color '#2563eb' --on tab --state hover+selected",
+      // (In the tab's own order, as set saves it.)
+      "set t background-color '#2563eb' --on tab --state selected+hover",
     ]);
     await themeEditSet('t', 'background-color', '#ff0000', {
       cwd,

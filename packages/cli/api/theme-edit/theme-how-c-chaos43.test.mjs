@@ -78,7 +78,9 @@ describe('chaos43', () => {
       needsBases(test);
       const r = await answer(q);
       expect(r.first.length).toBeGreaterThan(0);
-      for (const c of r.all) expect(c, q).not.toMatch(/--on dropdown-menu/);
+      // (The menu's own divider is no menu fill.)
+      for (const c of r.all)
+        expect(c, q).not.toMatch(/--on dropdown-menu(?![\w-])/);
       for (const c of r.all) expect(c, q).not.toMatch(/^background/);
     },
     T,

@@ -75,11 +75,11 @@ describe('FINAL-42', () => {
       needsBases(test);
       const r = await answer(q);
       expect(r.first.length, q).toBeGreaterThan(0);
-      // (The menu's own divider when the census records its line, else
-      // every divider with the place note.)
+      // (The menu's own divider, which draws the line: its separators only.)
       for (const c of r.first)
         expect(c, q).toMatch(/--on (?:dropdown-menu-)?divider\b/);
-      for (const c of r.all) expect(c, q).not.toMatch(/--on dropdown-menu\b/);
+      for (const c of r.all)
+        expect(c, q).not.toMatch(/--on dropdown-menu(?![\w-])/);
       expect(r.text, q).not.toMatch(/couldn't work out/);
     },
     T,

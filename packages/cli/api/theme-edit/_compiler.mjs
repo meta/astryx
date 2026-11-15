@@ -326,9 +326,10 @@ export function makeCompiler(project, parts) {
    * @param {string} value
    * @param {string} P
    * @param {string} [when] the --when the token is set under (`variant:strong`)
+   * @param {string} [also] the rest of the flags the setting carries (` --state hover --mode dark`), kept on the lines offered
    * @returns {CheckFailure | null}
    */
-  function checkTokenOn(theme, target, token, value, P, when) {
+  function checkTokenOn(theme, target, token, value, P, when, also = '') {
     if (!MAP[target]) {
       return {
         soft: true,
@@ -381,7 +382,7 @@ export function makeCompiler(project, parts) {
             .slice(0, 3)
             .map(
               t =>
-                `${P} set ${theme} ${t} ${quoteCommandArgument(value)} --on ${target} --when ${when}`,
+                `${P} set ${theme} ${t} ${quoteCommandArgument(value)} --on ${target} --when ${when}${also}`,
             ),
           also: [],
         };

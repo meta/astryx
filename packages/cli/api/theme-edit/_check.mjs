@@ -3379,6 +3379,10 @@ function paintedTogether(ctx, part, pieces) {
   const named = (/** @type {string} */ cond, /** @type {string} */ p) => {
     const aria = ARIA_STATES[/** @type {keyof typeof ARIA_STATES} */ (p)];
     if (aria) return cond.includes(`${aria.attr}=`);
+    // (A doc state Core marks with its ARIA attribute, a toggle button's
+    // isPressed by aria-pressed.)
+    const asAria = /^is([A-Z][a-z]+)$/.exec(p)?.[1]?.toLowerCase();
+    if (asAria && cond.includes(`aria-${asAria}=`)) return true;
     return (
       new RegExp(`(^|[\\s,])${kebab(p)}=`).test(cond) ||
       new RegExp(`:${p}(?![\\w-])`).test(cond) ||
@@ -6568,7 +6572,16 @@ function checkOne(
             t,
             baseComponentReads(ctx.project.cwd, data.like, t).has(thing)
               ? null
-              : C.checkTokenOn(slug, t, thing, v, P, s.when),
+              : C.checkTokenOn(
+                  slug,
+                  t,
+                  thing,
+                  v,
+                  P,
+                  s.when,
+                  // (The state and the mode asked go on the line too.)
+                  `${s.state ? ` --state ${s.state}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}`,
+                ),
           ]),
       );
       const recorded = results.filter(([, r]) => !r?.soft);

@@ -58,6 +58,7 @@ import {
   partRuleTokens,
   positionalCornerToken,
   radiusAt,
+  partState,
 } from './_settings.mjs';
 import {
   borderlessSurfaces,
@@ -2091,6 +2092,8 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
     'open',
   ],
   [/\bexpanded\b/, 'expanded'],
+  // (The option a list points at, by keyboard or pointer.)
+  [/\b(highlighted|keyboard[- ]highlighted)\b/, 'highlighted'],
   // (A page or step shown as the one you are on: aria-current.)
   [/\bcurrent\b/, 'current'],
   // Words for states a part may not have: the answer says so.
@@ -2115,6 +2118,8 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
  * @property {string | null} bad - a hex color written with the wrong number of digits
  * @property {string[]} lengths
  * @property {string | null} state
+ * @property {string} [refused] - why nothing is written for the clause (an element its place has no part of its own for)
+ * @property {boolean} [stateImplied] - the state was read from the part, never said ("checks red": checked)
  * @property {string | null} [alsoState] - a second state said with the first ("hovered selected tabs"): the part in both at once
  * @property {'light' | 'dark' | null} mode
  * @property {boolean} except - "but not on X": X keeps what the clause before does
@@ -2446,7 +2451,14 @@ function namedLists(q, partWords, isVariant) {
       !on ||
       items.length < 2 ||
       /\bexcept\b[^,;.]*$/i.test(before) ||
-      !items.every(w => stateWord(w) != null || isVariant(w, on))
+      !items.every(w => stateWord(w) != null || isVariant(w, on)) ||
+      // ("the checked and disabled checkbox": two states said of one
+      // part, both at once, never each.)
+      (items.length === 2 &&
+        items.every(w => stateWord(w) != null) &&
+        /\sand\s/i.test(String(list)) &&
+        !/,|\bor\b/i.test(String(list)) &&
+        !/s$/i.test(String(noun)))
     )
       continue;
     // The asks said of the list: up to a full stop or semicolon, an
@@ -2518,6 +2530,16 @@ function namedLists(q, partWords, isVariant) {
           if (noun && on) {
             const modifies = (/** @type {string} */ w) =>
               stateWord(w) != null || isVariant(w, on);
+            // ("the checked and disabled checkbox": two states said of one
+            // part, both at once, never each.)
+            const bothAtOnce =
+              items.length === 2 &&
+              items.every(w => stateWord(w) != null) &&
+              !/,|\bor\b/i.test(String(list)) &&
+              !ones &&
+              nounPart != null &&
+              !/s$/i.test(next);
+            if (bothAtOnce) return m;
             if (items.every(modifies))
               // (The noun said after the list stays after its last item.)
               return ones
@@ -2607,10 +2629,22 @@ function clausesOf(q, partWords) {
     /(--[a-z][a-z0-9-]*)(?:\s*,\s*|\s+and\s+)(?=--[a-z])/g,
     '$1 & ',
   );
+  // "the checked and disabled checkbox": two states said of one part are
+  // the part in both at once, one ask.
+  const bothStates = tokenLists.replace(
+    /\b([a-z]+)\s+and\s+([a-z]+)\s+([a-z][a-z-]*)\b/gi,
+    (m, a, b, noun) =>
+      stateWord(String(a).toLowerCase()) != null &&
+      stateWord(String(b).toLowerCase()) != null &&
+      !/s$/i.test(String(noun)) &&
+      partWords.some(([re]) => re.test(` ${String(noun).toLowerCase()} `))
+        ? `${a} & ${b} ${noun}`
+        : m,
+  );
   const pieces = (
-    /\bswap\b/.test(tokenLists)
-      ? tokenLists.replace(/\band\b/g, '&')
-      : sharedAsk(tokenLists, partWords)
+    /\bswap\b/.test(bothStates)
+      ? bothStates.replace(/\band\b/g, '&')
+      : sharedAsk(bothStates, partWords)
   )
     .split(
       // A font stack ("Georgia, serif") is one value, not two asks.
@@ -3048,7 +3082,14 @@ function clausesOf(q, partWords) {
           Math.min(firstAt.index + firstAt[0].length, m.index + m[0].length),
           Math.max(firstAt.index, m.index),
         );
-        return overlaps || /\b(?:or|and|nor)\b|[,/&]/.test(between) ? null : s;
+        // ("checked and disabled checkbox": both, said before the part;
+        // "when hovered and focused" names each.)
+        const andBefore =
+          /^\s*(?:and|&)\s*$/.test(between) && !/\bwhen\b/.test(stateText);
+        return overlaps ||
+          (!andBefore && /\b(?:or|and|nor)\b|[,/&]/.test(between))
+          ? null
+          : s;
       }).find(s => s != null) ?? null;
     // A mode phrase names the mode ("dark mode", "in light"); a color word
     // ("dark gray") never does when a mode phrase is there.
@@ -5376,8 +5417,10 @@ export function draftAnswer(ctx, env, question) {
       !c.state &&
       !c.named &&
       !/\b(border|outline|background|unchecked)\b/.test(c.text)
-    )
+    ) {
       c.state = 'checked';
+      c.stateImplied = true;
+    }
   // "labels on form fields": the label, not the field it sits on.
   for (const c of clauses)
     if (c.parts.some(p => p.on === 'field-label')) {
@@ -5814,6 +5857,293 @@ export function draftAnswer(ctx, env, question) {
       c.aspects = c.aspects.length
         ? c.aspects.map(x => (x === 'background' ? 'text' : x))
         : ['text'];
+  /**
+   * The element a clause names in a place, by the part data: the place
+   * itself when the words name it ("the indicator in checkboxes"), a part
+   * named after it by any of the rest of its name ("the indicator in
+   * selects": selector-indicator-icon), a phrase of the lexicon said owner
+   * first ("the knob of switches" is the switch knob), a part drawn inside
+   * it by the last words of its name ("the item in the context menu": the
+   * dropdown menu's item), a group of parts it holds ("the buttons'
+   * icons"), or the one inside it whose own state the words name ("today's
+   * date in the calendar"). Null when the clause names no place, or none
+   * of those.
+   * @param {Clause} c
+   * @returns {{part: {on: string}, holder: string, state?: string | null, note?: string, refuse?: string} | null}
+   */
+  const elementOfPlace = c => {
+    const text = c.text.replace(/\s+(?:on|when) \w+$/, '');
+    // ("On" is read below: "the focus ring on inputs" is a look the inputs
+    // draw.)
+    /** @type {Array<{holderText: string, elementText: string, by: string}>} */
+    const places = [];
+    const preps =
+      /\b(inside|within|of|in(?! (?:dark|light)\b))\s+(?:the\s+|a\s+|an\s+|my\s+)?/g;
+    for (const m of text.matchAll(preps)) {
+      const after = text.slice(/** @type {number} */ (m.index) + m[0].length);
+      // (The place runs to the next place said.)
+      const next = after.search(
+        /\s(?:inside|within|on|of|in(?! (?:dark|light)\b))\s/,
+      );
+      places.push({
+        holderText: next >= 0 ? after.slice(0, next) : after,
+        elementText: text.slice(0, m.index),
+        by: m[1],
+      });
+    }
+    const poss = /\b([a-z][a-z -]*?)(?:'s|s'|’s|s’)\s+(.*)$/.exec(text);
+    if (poss)
+      places.unshift({
+        holderText: `${poss[1]}s`,
+        elementText: poss[2],
+        by: 'possessive',
+      });
+    // (The first place said first: "the item in menus in cards" is a
+    // menu's item; the words for the element end at the next place.)
+    /** @param {string} t @returns {{on: string, word: string} | null} */
+    const partWord = t => {
+      for (const [re, y] of lex.parts) {
+        if (y.missing) continue;
+        const m = re.exec(` ${t} `);
+        if (m) return {on: y.on, word: m[0].trim()};
+      }
+      return null;
+    };
+    /** @param {string} t */
+    const partIn = t => partWord(t)?.on ?? null;
+    const keys = [...ctx.project.target.keys()];
+    /** @param {string} k */
+    const takes = k =>
+      !c.state ||
+      settableStates(ctx, env.slug, env.data, k).includes(String(c.state));
+    for (const {holderText, elementText, by} of places) {
+      const holderWord = partWord(holderText);
+      const holder = holderWord?.on ?? null;
+      if (!holder || !holderWord || !elementText.trim()) continue;
+      // (And the catalog part the place's own word names, when the lexicon
+      // reads that word as another part: "the table" read as its rows is
+      // the table too.)
+      const named = holderWord.word
+        .toLowerCase()
+        .replace(/^(?:the|a|an|my)\s+/, '')
+        .replace(/(?:'s|s'|s)$/, '')
+        .replace(/\s+/g, '-');
+      const members = [
+        ...(FAMILIES[holder] ?? [holder]),
+        ...(named !== holder && keys.includes(named) ? [named] : []),
+      ];
+      // The element's own words: those said next to the place (right
+      // before "in" or "of", right after a possessive), less the state
+      // words said with them ("the close button of", "the hovered item in",
+      // "the button background the color of" names no element).
+      const said =
+        (by === 'possessive'
+          ? /^\s*(?:the\s+)?([a-z][a-z -]*?)(?=\s+(?:red|blue|green|darker|lighter|bold|bigger|smaller|thicker|thinner|rounder|square|gr[ae]y|white|black|#|more|less|to\b|the\b)|\s*$)/i.exec(
+              elementText,
+            )?.[1]
+          : /^(?:.*\b(?:the|a|an|my|make|set|give|turn|change)\s+)?((?:[a-z][a-z'-]*\s+){0,3}?[a-z][a-z'-]*)\s*$/i.exec(
+              elementText,
+            )?.[1]) ?? '';
+      // (A word that names what to change, "the text in…", never names an
+      // element.)
+      // (A catalog "header" is said as "heading" too: the question's words
+      // read a header as a heading.)
+      const words = (/** @type {string} */ ws) =>
+        /^(text|background|border|shadow|font|color|corners|padding)$/.test(ws)
+          ? /(?!)/
+          : new RegExp(
+              `\\b${ws
+                .split('-')
+                .map(w => (w === 'header' ? '(?:header|heading)' : w))
+                .join('[\\s-]+')}s?\\b`,
+              'i',
+            );
+      // (Names test the element's own words; states, the whole.)
+      const nameText = said;
+      /** @type {Array<{k: string, score: number}>} */
+      const found = [];
+      for (const h of members) {
+        // The place itself, by the last words of its name.
+        const own = h.split('-');
+        for (let i = 1; i < own.length; i++)
+          if (words(own.slice(i).join('-')).test(nameText))
+            found.push({k: h, score: 30 + (own.length - i)});
+        // Parts named after it: the whole rest of the name, else one
+        // word of it.
+        for (const k of keys.filter(x => x.startsWith(`${h}-`))) {
+          const rest = k.slice(h.length + 1).split('-');
+          if (words(rest.join('-')).test(nameText))
+            found.push({k, score: 40 + rest.length});
+          else if (rest.some(w => words(w).test(nameText)))
+            found.push({k, score: 20});
+        }
+        // A phrase of the lexicon said owner first.
+        const reordered = partIn(`${holderWord.word} ${nameText}`);
+        // (Not when the words name a part of their own: "links in the
+        // sidebar" are links, kept to the sidebar by the reader below.)
+        const alone = partIn(nameText);
+        if (
+          reordered &&
+          reordered !== h &&
+          !(
+            alone &&
+            alone !== reordered &&
+            TARGET.has((FAMILIES[alone] ?? [alone])[0])
+          ) &&
+          (reordered.startsWith(`${h}-`) ||
+            (C.MAP[h]?.contains ?? []).includes(reordered))
+        )
+          found.push({k: reordered, score: 50});
+        // Parts drawn inside it, by the last words of their names.
+        for (const k of C.MAP[h]?.contains ?? []) {
+          const w = k.split('-');
+          for (let i = 0; i < w.length; i++)
+            if (words(w.slice(i).join('-')).test(nameText))
+              found.push({k, score: 10 + (w.length - i)});
+        }
+      }
+      // A group of parts the place holds, named ("the buttons' icons").
+      const group = Object.keys(FAMILIES).find(
+        g =>
+          words(g).test(nameText) &&
+          FAMILIES[g].some(m =>
+            members.some(h => (C.MAP[h]?.contains ?? []).includes(m)),
+          ),
+      );
+      // A part of its own the words name ("the menu's separators": a
+      // divider), drawn in the place or not.
+      // (Said owner first only: "the menu's separators"; "the muted text
+      // in cards" names the cards' own text.)
+      const ownPart = by === 'possessive' ? partIn(nameText) : null;
+      // (The place's own part of that kind: a dropdown menu's own divider.)
+      for (const h of members)
+        if (ownPart && keys.includes(`${h}-${ownPart}`))
+          found.push({k: `${h}-${ownPart}`, score: 45});
+      if (
+        ownPart &&
+        !members.includes(ownPart) &&
+        ownPart !== 'text' &&
+        TARGET.has((FAMILIES[ownPart] ?? [ownPart])[0])
+      )
+        found.push({k: ownPart, score: 5});
+      // (What the whole theme draws with tokens, its icons, named in the
+      // place: those tokens, on it.)
+      const themeWide =
+        ownPart &&
+        !FAMILIES[ownPart] &&
+        !TARGET.has(ownPart) &&
+        ownPart !== 'text' &&
+        ownPart !== 'page' &&
+        // (Only one the place holds parts of: a button's icons; an input's
+        // focus ring is a look it draws.)
+        members.some(h =>
+          (C.MAP[h]?.contains ?? []).some((/** @type {string} */ k) =>
+            k.split('-').includes(String(ownPart).replace(/s$/, '')),
+          ),
+        )
+          ? ownPart
+          : null;
+      found.sort((a, b) => b.score - a.score || b.k.length - a.k.length);
+      // (A group the words name wins over a part found only by the last
+      // word of its name: "the buttons' icons" are the icons.)
+      const wide = group ?? themeWide;
+      let pick =
+        wide && !(found[0]?.score >= 20) ? wide : (found[0]?.k ?? null);
+      /** @type {string | null | undefined} */
+      let state;
+      if (pick && !FAMILIES[pick] && pick !== themeWide && !takes(pick)) {
+        // The one named the same way that takes the state said; a state
+        // read from the part, not said, is let go.
+        const taking = found.filter(
+          x => x.score === found[0].score && takes(x.k),
+        );
+        const sameWord = keys.filter(
+          k =>
+            members.some(h => k.startsWith(`${h}-`)) &&
+            k.split('-').includes(String(pick?.split('-').at(-1))) &&
+            takes(k),
+        );
+        if (taking.length === 1) pick = taking[0].k;
+        else if (sameWord.length === 1) pick = sameWord[0];
+        else if (c.stateImplied) state = null;
+      }
+      if (!pick) {
+        // The one inside whose own state the words name.
+        const cands = [
+          ...new Set([
+            ...members,
+            ...members.flatMap(h => keys.filter(k => k.startsWith(`${h}-`))),
+            ...members.flatMap(h => C.MAP[h]?.contains ?? []),
+          ]),
+        ];
+        const byState = cands.flatMap(k =>
+          (ctx.project.target.get(k)?.states ?? [])
+            .filter(
+              (/** @type {string} */ st) =>
+                !/^(hover|active|focus|focus-visible|focus-within|disabled)$/.test(
+                  st,
+                ) && words(st).test(elementText),
+            )
+            .map((/** @type {string} */ st) => ({k, st})),
+        );
+        if (byState.length === 1) {
+          pick = byState[0].k;
+          state = byState[0].st;
+        }
+        // A state only a part the place is never drawn holding takes
+        // ("the today date in the date picker": a calendar day's today,
+        // in a calendar the part data draws closed): nothing is written.
+        const elsewhere = !pick
+          ? keys.flatMap(k =>
+              cands.includes(k)
+                ? []
+                : (ctx.project.target.get(k)?.states ?? [])
+                    .filter(
+                      (/** @type {string} */ st) =>
+                        !/^(hover|active|focus|focus-visible|focus-within|disabled|selected|checked|open|expanded|pressed|current)$/.test(
+                          st,
+                        ) && words(st).test(elementText),
+                    )
+                    .map((/** @type {string} */ st) => ({k, st})),
+            )
+          : [];
+        if (elsewhere.length === 1)
+          return {
+            part: {on: holder},
+            holder,
+            refuse: `${elsewhere[0].k} is the part that is ${elsewhere[0].st}, and the part data never draws one inside ${holder} (it draws ${holder} closed), so a change there cannot be kept to ${holder}: nothing is written`,
+          };
+      }
+      if (!pick) continue;
+      // ("Of" names an element only by its name or in a state: "twice the
+      // padding of buttons" compares with them.)
+      if (by === 'of' && !c.state && !(found[0]?.score >= 10)) continue;
+      // (A part drawn in many places, a plain button in a toast, is themed
+      // everywhere: said so.)
+      const specific =
+        FAMILIES[pick] != null ||
+        pick === themeWide ||
+        members.includes(pick) ||
+        members.some(h => pick?.startsWith(`${h}-`));
+      // (Parts said as parts, "buttons inside cards": every one, as the
+      // place reader below says; only an element said as one, "the close
+      // button of toasts", is refused.)
+      if (!specific && /s\s*$/i.test(nameText)) return null;
+      // (A plain part drawn everywhere, a toast's button: any write would
+      // reach every one, so nothing is written.)
+      return {
+        part: {on: pick},
+        holder,
+        ...(state !== undefined ? {state} : {}),
+        ...(specific
+          ? {}
+          : {
+              refuse: `${holder} has no ${pick} of its own: the ${pick} it draws is the plain ${pick}, so a change there would reach every ${pick}, and nothing is written`,
+            }),
+      };
+    }
+    return null;
+  };
   // "links on cards", "buttons inside cards", "links in the sidebar": the
   // place is never changed. A token the answer writes is set on it, so it
   // holds there only (the token cascades to the parts inside); a part's
@@ -5847,6 +6177,23 @@ export function draftAnswer(ctx, env, question) {
           });
           continue;
         }
+      }
+    }
+    // An element of a place ("the selected option row in the selector",
+    // "the close button of toasts", "the tabs' indicator", "the hovered
+    // item in menus in cards"): the part that place draws it as, never the
+    // place or another component the words seem to name. Each place said
+    // is tried, the first first; the element is read from the words before
+    // it (after a possessive owner, the words after).
+    {
+      const element = elementOfPlace(c);
+      if (element) {
+        c.parts = [element.part];
+        c.container = element.holder;
+        if (element.state !== undefined) c.state = element.state;
+        if (element.note) placeNotes.push({c, text: element.note});
+        if (element.refuse) c.refused = element.refuse;
+        continue;
       }
     }
     // "the menus' separators", "the menu's separators": the owner named
@@ -5969,48 +6316,6 @@ export function draftAnswer(ctx, env, question) {
       if (m) m.index += off;
       return m;
     })();
-    // An element of the place said by the rest of a catalog name after the
-    // place's own ("the selected option row in the selector":
-    // selector-option-row; "the hovered option": selector-option), whatever
-    // other part its words seem to name (a table's rows). When the one it
-    // names lacks the state said, the one element of the place named that
-    // way that takes it.
-    if (place) {
-      const at0 = c.text.indexOf(place[0]);
-      const before = c.text.slice(0, at0);
-      const holders = c.parts.filter(x =>
-        lex.parts.some(
-          ([re, y]) => y.on === x.on && (re.exec(c.text)?.index ?? -1) >= at0,
-        ),
-      );
-      const holder = holders.length === 1 ? holders[0].on : null;
-      if (holder && !FAMILIES[holder]) {
-        const cands = [...ctx.project.target.keys()]
-          .filter(k => k.startsWith(`${holder}-`))
-          .map(k => ({k, rest: k.slice(holder.length + 1).split('-')}));
-        const said = cands
-          .filter(x =>
-            new RegExp(`\\b${x.rest.join('[\\s-]+')}s?\\b`).test(before),
-          )
-          .sort((a, b) => b.rest.length - a.rest.length);
-        let pick = said[0]?.k ?? null;
-        const takes = (/** @type {string} */ k) =>
-          !c.state ||
-          settableStates(ctx, env.slug, env.data, k).includes(c.state);
-        if (pick && !takes(pick)) {
-          const word = said[0].rest.at(-1);
-          const taking = cands.filter(
-            x => x.rest.includes(/** @type {string} */ (word)) && takes(x.k),
-          );
-          if (taking.length === 1) pick = taking[0].k;
-        }
-        if (pick) {
-          c.parts = [{on: pick}];
-          c.container = holder;
-          continue;
-        }
-      }
-    }
     if (!place || c.parts.length < 2) continue;
     const at = c.text.indexOf(place[0]);
     const inPlace = c.parts.filter(x =>
@@ -7109,7 +7414,10 @@ export function draftAnswer(ctx, env, question) {
       )?.[0];
       // (A second state said with it, the part takes too: both at once.)
       const also = st && c.alsoState ? stateFor(p.on, c.alsoState) : null;
-      if (st) f.state = also && also !== st ? `${st}+${also}` : st;
+      // (In the part's own order, as set saves it.)
+      if (st)
+        f.state =
+          also && also !== st ? partState(ctx, one(p.on), `${st}+${also}`) : st;
       else if (byValue && !f.when) f.when = `${byValue}:${c.state}`;
       else f.noState = c.state;
     }
@@ -8432,6 +8740,16 @@ export function draftAnswer(ctx, env, question) {
 
   for (const c of clauses) {
     clauseNow = c;
+    // An element its place has no part of its own for: nothing is written,
+    // and the answer says why.
+    if (c.refused) {
+      push({
+        text: c.refused,
+        options: [],
+        lookup: `${HOW} ${c.container ?? c.parts[0]?.on ?? ''}`.trim(),
+      });
+      continue;
+    }
     // The unknown-part guard: a clause whose part slot holds a word how
     // knows as no part ("from widgets") is never answered for the whole
     // theme or dropped; it says so.
@@ -13380,11 +13698,16 @@ export function draftAnswer(ctx, env, question) {
     // variant's own token, as the part data records the line: subtle reads
     // --color-border, strong --color-border-emphasized) and its thickness.
     if (
-      on === 'divider' &&
+      // (Any part whose paint is a line drawn inside it, a menu's own
+      // divider too: its tokens set on it hold there only.)
+      on &&
+      !FAMILIES[on] &&
+      (on === 'divider' ||
+        (C.MAP[on]?.line ?? []).includes('background-color')) &&
       ['border', 'size', 'background', 'text'].includes(a)
     ) {
       const asked = /^variant:([\w-]+)$/.exec(String(f.when ?? ''))?.[1];
-      const lineReads = (C.partReads('divider', 'background') ?? []).filter(r =>
+      const lineReads = (C.partReads(on, 'background') ?? []).filter(r =>
         /^--color-/.test(r.token),
       );
       /** The color tokens the line reads, for the variant asked or every one. */
