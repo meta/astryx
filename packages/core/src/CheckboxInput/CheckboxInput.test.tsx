@@ -30,6 +30,7 @@ import {defineTheme} from '../theme/defineTheme';
 import {getForcedColorsRules} from '../__tests__/forcedColors';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {FOCUS_OUTLINE_PARTS} from '../utils/focusOutline.stylex';
+import {getTooltipDescription} from '../__tests__/tooltipDescription';
 
 interface InjectedRule {
   selector: string;
@@ -579,7 +580,7 @@ describe('CheckboxInput', () => {
           disabledMessage="Terms are managed by your administrator"
         />,
       );
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltipDescription();
       expect(tooltip).toHaveTextContent(
         'Terms are managed by your administrator',
       );
@@ -640,7 +641,7 @@ describe('CheckboxInput', () => {
         </>,
       );
       const checkbox = screen.getByRole('checkbox');
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltipDescription();
       const ids = checkbox.getAttribute('aria-describedby')!.split(' ');
       expect(ids).toContain('terms-hint');
       expect(ids).toContain(tooltip.id);
@@ -684,7 +685,7 @@ describe('CheckboxInput', () => {
         />,
       );
       const checkbox = screen.getByRole('checkbox', h);
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltipDescription();
       expect(checkbox.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 

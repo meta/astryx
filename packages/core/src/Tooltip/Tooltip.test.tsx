@@ -37,6 +37,7 @@ import userEvent from '@testing-library/user-event';
 import {IconButton} from '../IconButton/IconButton';
 import {Toolbar} from '../Toolbar/Toolbar';
 import {TestIcon} from '../__tests__/TestIcon';
+import {getTooltipDescription} from '../__tests__/tooltipDescription';
 
 // Store original matches to restore later
 const originalMatches = HTMLElement.prototype.matches;
@@ -99,9 +100,7 @@ describe('Tooltip', () => {
         <button type="button">Trigger</button>
       </Tooltip>,
     );
-    expect(screen.getByRole('tooltip', {hidden: true})).toHaveTextContent(
-      'Tooltip text',
-    );
+    expect(getTooltipDescription()).toHaveTextContent('Tooltip text');
   });
 
   it('calls onOpenChange(true) when shown via hover', async () => {
@@ -357,8 +356,8 @@ describe('Tooltip', () => {
     /** Whether the tooltip's layer is open. */
     const isShown = () =>
       screen
-        .getByRole('tooltip', {hidden: true})
-        .closest<HTMLElement>('[popover]')
+        .queryByRole('tooltip', {hidden: true})
+        ?.closest<HTMLElement>('[popover]')
         ?.matches(':popover-open') ?? false;
 
     it('reports keyboard-focus intent once while held closed, and shows nothing', async () => {
@@ -1010,8 +1009,10 @@ describe('Tooltip layer mounts at its first show', () => {
     const trigger = screen.getByRole('button', {name: 'Action 42'});
     const description = describedBy(trigger);
     expect(description).toHaveTextContent('Row 42');
-    expect(description).toHaveAttribute('role', 'tooltip');
     expect(description).not.toBeVisible();
+    expect(trigger).toHaveAccessibleDescription('Row 42');
+    // One tooltip per trigger: the hidden copy is not a tooltip.
+    expect(screen.queryAllByRole('tooltip', {hidden: true})).toHaveLength(0);
   });
 
   it('mounts the layer at the first hover, after the delay, and never shows two tooltips', () => {
@@ -1118,7 +1119,7 @@ describe('Tooltip sibling mode (anchorRef)', () => {
     await waitFor(() => {
       expect(anchor.getAttribute('aria-describedby')).not.toBe('');
     });
-    const layer = screen.getByRole('tooltip', {hidden: true});
+    const layer = getTooltipDescription();
     expect(anchor.getAttribute('aria-describedby')).toBe(layer.id);
 
     // Hovering the anchor opens the tooltip: the interaction listeners were

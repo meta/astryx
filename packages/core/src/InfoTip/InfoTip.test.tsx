@@ -21,6 +21,7 @@ import {InternationalizationProvider} from '../i18n';
 import type * as HitAreaModule from '../utils/hitArea';
 import type {HitInsets} from '../utils/hitArea';
 import {InfoTip} from './InfoTip';
+import {getTooltipDescription} from '../__tests__/tooltipDescription';
 
 // On a coarse pointer, the shared hit area measures neighbours in a real
 // layout. Here it reports what it was asked to watch, and each test answers
@@ -142,7 +143,7 @@ describe('InfoTip', () => {
 
   it('links the trigger to the tooltip layer via aria-describedby', () => {
     render(<InfoTip content="Helpful context" />);
-    const layer = screen.getByRole('tooltip', {hidden: true});
+    const layer = getTooltipDescription();
     expect(layer).toHaveTextContent('Helpful context');
     const trigger = screen.getByRole('button', {name: 'More information'});
     expect(trigger.getAttribute('aria-describedby')).toBe(layer.id);

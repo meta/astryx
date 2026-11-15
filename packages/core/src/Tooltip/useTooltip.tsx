@@ -23,6 +23,7 @@ import {
   type ReactNode,
   type RefCallback,
 } from 'react';
+import {createPortal} from 'react-dom';
 import {useCommittedRef} from '../hooks/useCommittedRef';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {TooltipPresentInterestContext} from './tooltipPresentInterest';
@@ -213,7 +214,9 @@ export interface TooltipReturn {
 
   /**
    * ID for aria-describedby on the trigger element.
-   * Caller should compose with other IDs using mergeIds utility.
+   * Caller should compose with other IDs using mergeIds utility. It is empty
+   * in a server render and the render that hydrates it; leave the attribute
+   * off then.
    */
   describedBy: string;
 
@@ -270,7 +273,7 @@ export interface TooltipReturn {
  * @example
  * ```
  * const tooltip = useTooltip({ placement: 'above' });
- * <Button ref={tooltip.ref} aria-describedby={tooltip.describedBy}>
+ * <Button ref={tooltip.ref} aria-describedby={tooltip.describedBy || undefined}>
  *   Hover me
  * </Button>
  * {tooltip.renderTooltip('Helpful tooltip text')}
@@ -302,6 +305,8 @@ function createLayerMountFlag() {
 }
 
 const isNotMounted = () => false;
+const isClient = () => true;
+const subscribeToNothing = () => () => {};
 
 export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   const {
@@ -341,10 +346,10 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     id: layerId,
     render: renderLayer,
   } = layer;
-  // Until the first show, the description is hidden text in the trigger's
-  // markup, so `aria-describedby` always names an element in the document.
-  // The flag is an external store, as the layer's mount is: both update in
-  // the same commit, so the hidden text and the layer never exist together.
+  // Until the first show, `aria-describedby` names a hidden copy of the
+  // description, so a screen reader reads it before the tooltip opens. The
+  // flag is an external store, as the layer's mount is: both update in the
+  // same commit, so the copy and the layer are never in the page together.
   const [layerMount] = useState(createLayerMountFlag);
   const isLayerMounted = useSyncExternalStore(
     layerMount.subscribe,
@@ -352,6 +357,18 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     isNotMounted,
   );
   const descriptionId = `${layerId}-description`;
+  // The copy renders through a portal, which a server render cannot do, so a
+  // server render and the render that hydrates it carry no description and
+  // no reference to one.
+  const canPortal = useSyncExternalStore(
+    subscribeToNothing,
+    isClient,
+    isNotMounted,
+  );
+  // A trigger in another document, such as a same-origin iframe, keeps the
+  // copy in that document, where its `aria-describedby` can name it.
+  const [triggerDocument, setTriggerDocument] = useState<Document | null>(null);
+  const descriptionHost = canPortal ? (triggerDocument ?? document).body : null;
   const showLayer = useCallback(() => {
     layerMount.set();
     showMountedLayer();
@@ -822,6 +839,10 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       el.addEventListener('focusout', onFocusOut);
       el.addEventListener('focusout', onHeldFocusOut);
       triggerRef.current = el;
+      // A trigger in another document keeps the hidden copy there.
+      if (el.ownerDocument !== document) {
+        setTriggerDocument(el.ownerDocument);
+      }
 
       // A trigger that attaches again after its wiring was removed
       // (DropdownMenu's Button as its menu closes) missed the focus that
@@ -1027,18 +1048,23 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
             </div>,
             renderProps,
           )}
-          {!isLayerMounted && (
-            // A closed manual popover: hidden, and skipped as a layer piece
-            // by sibling rules such as ButtonGroup's last-member radius.
-            <span id={descriptionId} role="tooltip" popover="manual">
-              {children}
-            </span>
-          )}
+          {!isLayerMounted &&
+            descriptionHost != null &&
+            // In the document's body, the copy changes no layout and no
+            // sibling rule (such as ButtonGroup's last-member radius) where
+            // the trigger sits.
+            createPortal(
+              <span id={descriptionId} hidden>
+                {children}
+              </span>,
+              descriptionHost,
+            )}
         </>
       );
     },
     [
       isLayerMounted,
+      descriptionHost,
       descriptionId,
       renderLayer,
       placement,
@@ -1087,7 +1113,11 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     positionRef: layerRef,
     interactionRef,
     anchorId: layerAnchorId,
-    describedBy: isLayerMounted ? layerId : descriptionId,
+    describedBy: isLayerMounted
+      ? layerId
+      : descriptionHost != null
+        ? descriptionId
+        : '',
     renderTooltip,
     show,
     hide,

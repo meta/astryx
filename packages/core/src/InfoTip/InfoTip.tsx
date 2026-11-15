@@ -199,7 +199,7 @@ export function InfoTip({
         ref={mergedRef}
         type="button"
         aria-label={label ?? t('@astryx.infoTip.label')}
-        aria-describedby={tooltip.describedBy}
+        aria-describedby={tooltip.describedBy || undefined}
         aria-expanded={isPinned}
         aria-controls={isShown ? tooltip.describedBy : undefined}
         onPointerDownCapture={handlePointerDownCapture}

@@ -11,6 +11,7 @@ import {DateRangeInput} from '../DateRangeInput/DateRangeInput';
 import {TimeInput} from '../TimeInput/TimeInput';
 import {FileInput} from '../FileInput/FileInput';
 import type {FieldStatusVariant} from '../FieldStatus/FieldStatus';
+import {getTooltipDescription} from '../__tests__/tooltipDescription';
 
 // Every id referenced by an aria-describedby must resolve to an element in the
 // document (WCAG 1.3.1) — a described-by pointing at a non-rendered node is a
@@ -138,7 +139,7 @@ describe('useInputStatusIcon — no dangling aria-describedby (WCAG 1.3.1)', () 
       />,
     );
     const input = screen.getByRole('textbox');
-    const tooltip = screen.getByRole('tooltip', {hidden: true});
+    const tooltip = getTooltipDescription();
     expect(input.getAttribute('aria-describedby')).toContain(tooltip.id);
   });
 

@@ -180,6 +180,15 @@ function mergeIds(...ids: (string | undefined | null)[]): string | undefined {
   return filtered.length > 0 ? filtered.join(' ') : undefined;
 }
 
+/** Sets `aria-describedby`, or removes it when no id is left. */
+function setDescribedBy(element: Element, ids: string | undefined): void {
+  if (ids == null) {
+    element.removeAttribute('aria-describedby');
+  } else {
+    element.setAttribute('aria-describedby', ids);
+  }
+}
+
 /**
  * Tooltip component for displaying informative text on hover/focus.
  *
@@ -252,10 +261,7 @@ export function Tooltip({
 
       // Set aria-describedby, merging with existing
       const existingDescribedBy = el.getAttribute('aria-describedby');
-      el.setAttribute(
-        'aria-describedby',
-        mergeIds(existingDescribedBy, tooltip.describedBy) ?? '',
-      );
+      setDescribedBy(el, mergeIds(existingDescribedBy, tooltip.describedBy));
 
       return () => {
         tooltip.ref(null);
@@ -318,9 +324,9 @@ export function Tooltip({
 
     // Set aria-describedby, merging with existing
     const existingDescribedBy = firstChild.getAttribute('aria-describedby');
-    firstChild.setAttribute(
-      'aria-describedby',
-      mergeIds(existingDescribedBy, tooltip.describedBy) ?? '',
+    setDescribedBy(
+      firstChild,
+      mergeIds(existingDescribedBy, tooltip.describedBy),
     );
 
     return () => {
@@ -345,7 +351,7 @@ export function Tooltip({
         <span
           ref={tooltip.ref}
           tabIndex={0}
-          aria-describedby={tooltip.describedBy}
+          aria-describedby={tooltip.describedBy || undefined}
           // The span is a tab stop Astryx adds: it draws the shared ring,
           // which a theme restyles through the focus-outline tokens.
           {...focusOutlineProps.focusVisible(

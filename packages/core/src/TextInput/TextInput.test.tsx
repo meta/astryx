@@ -19,6 +19,7 @@ import {TestIcon} from '../__tests__/TestIcon';
 import {declaredValue} from '../__tests__/stylexDeclarations';
 import {InputGroup} from '../InputGroup';
 import {TextInput} from './TextInput';
+import {getTooltipDescription} from '../__tests__/tooltipDescription';
 
 // jsdom cannot match `:focus-visible`: compare the ring's StyleX class hash.
 const RING = stylex
@@ -1199,7 +1200,7 @@ describe('TextInput', () => {
 
       const input = screen.getByRole('textbox');
       const container = input.parentElement as HTMLElement;
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltipDescription();
       expect(tooltip).toHaveTextContent('You need the Editor role');
 
       fireEvent.mouseEnter(container);
@@ -1280,7 +1281,7 @@ describe('TextInput', () => {
         />,
       );
       const input = screen.getByRole('textbox');
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltipDescription();
       expect(input.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 
@@ -1372,7 +1373,7 @@ describe('TextInput statusVariant forwarding', () => {
         statusVariant="tooltip"
       />,
     );
-    const tooltip = screen.getByRole('tooltip', h);
+    const tooltip = getTooltipDescription();
     expect(tooltip).toHaveTextContent('Invalid email');
   });
 
@@ -1387,7 +1388,7 @@ describe('TextInput statusVariant forwarding', () => {
       />,
     );
     const input = screen.getByRole('textbox');
-    const tooltip = screen.getByRole('tooltip', h);
+    const tooltip = getTooltipDescription();
     expect(input.getAttribute('aria-describedby')).toContain(tooltip.id);
   });
 
@@ -1438,7 +1439,7 @@ describe('TextInput statusVariant forwarding', () => {
       />,
     );
     const statusButton = screen.getByRole('button', {name: /error details/i});
-    const tooltip = screen.getByRole('tooltip', h);
+    const tooltip = getTooltipDescription();
     expect(statusButton.getAttribute('aria-describedby')).toContain(tooltip.id);
   });
 });

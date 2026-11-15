@@ -2618,6 +2618,7 @@ describe('SideNavItem — actions slot', () => {
 
 import {SideNavRenderContext} from './SideNavRenderContext';
 import {AppShellMobileContext} from '../AppShell/AppShellMobileContext';
+import {getTooltipDescription} from '../__tests__/tooltipDescription';
 
 describe('SideNavItem — mobile drawer close-on-activate', () => {
   function renderInDrawer(ui: ReactNode, closeMobileNav = vi.fn()) {
@@ -4272,10 +4273,10 @@ describe('SideNavItem collapsed-from-mount rail tooltip', () => {
     );
     const link = screen.getByRole('link', {name: 'Dashboard'});
 
-    const layer = railTooltipFor(link);
-    expect(layer).not.toBeNull();
-    expect(layer).toHaveAttribute('role', 'tooltip');
-    expect(layer).toHaveTextContent('Dashboard');
+    const description = railTooltipFor(link);
+    expect(description).not.toBeNull();
+    expect(description).toHaveTextContent('Dashboard');
+    expect(link).toHaveAccessibleDescription('Dashboard');
   });
 
   it('shows a disabled item its label when the pointer rests on its row', async () => {
@@ -4298,8 +4299,7 @@ describe('SideNavItem collapsed-from-mount rail tooltip', () => {
       name: 'Analytics (Coming Soon)',
     });
     const row = button.parentElement as HTMLElement;
-    const layer = screen.getByRole('tooltip', {hidden: true});
-    expect(layer).toHaveTextContent('Analytics (Coming Soon)');
+    expect(railTooltipFor(button)).toHaveTextContent('Analytics (Coming Soon)');
 
     fireEvent.mouseEnter(row);
     act(() => {
@@ -4455,7 +4455,7 @@ describe('SideNavItem collapsed-from-mount rail tooltip', () => {
     );
 
     const link = screen.getByRole('link', {name: 'Dashboard'});
-    const tooltip = screen.getByRole('tooltip', {hidden: true});
+    const tooltip = getTooltipDescription();
     const ids = (link.getAttribute('aria-describedby') ?? '').split(' ');
     expect(ids).toContain('hint-b');
     expect(ids).toContain(tooltip.id);

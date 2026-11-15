@@ -8,7 +8,13 @@
  * @position Binding test for Tooltip and useTooltip (the Chromium spec covers the rest)
  */
 
-import {cleanup, render, screen} from '@testing-library/react';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import {describe, expect, it} from 'vitest';
 import {
   TOOLTIP_PATTERN,
@@ -31,14 +37,49 @@ function triggerFor(state: TooltipBindingState): HTMLElement {
     : screen.getByRole(state.triggerRole, {name: state.triggerText});
 }
 
-function relatedFor(): Readonly<Record<string, Element>> {
-  return {
-    // The tooltip stays in the page while hidden; it is found with hidden
-    // elements included so the DOM rows can read it before it shows.
-    tooltip: screen.getByRole('tooltip', {hidden: true}),
+function relatedFor(
+  state: TooltipBindingState,
+): Readonly<Record<string, Element>> {
+  const neighbours = {
     before: screen.getByRole('button', {name: 'Before the trigger'}),
     after: screen.getByRole('button', {name: 'After the trigger'}),
   };
+  if (state.facts.isBeforeFirstShow === true) {
+    const id = triggerFor(state).getAttribute('aria-describedby') ?? '';
+    return {
+      description: document.getElementById(id) ?? document.body,
+      ...neighbours,
+    };
+  }
+  return {
+    // The tooltip stays in the page while hidden once it has shown; it is
+    // found with hidden elements included so the DOM rows can read it.
+    tooltip: screen.getByRole('tooltip', {hidden: true}),
+    ...neighbours,
+  };
+}
+
+/**
+ * Renders the state. A state after the first show hovers the trigger until
+ * the tooltip shows, then moves the pointer away and lets it hide, so the
+ * tooltip is in the page and hidden.
+ */
+async function renderState(state: TooltipBindingState): Promise<void> {
+  render(renderTooltipState(state));
+  if (state.facts.isBeforeFirstShow === true) {
+    return;
+  }
+  const trigger = triggerFor(state);
+  fireEvent.mouseEnter(trigger);
+  await waitFor(() => {
+    expect(screen.getByRole('tooltip', {hidden: true})).toBeTruthy();
+  });
+  fireEvent.mouseLeave(trigger);
+  await waitFor(() => {
+    expect(
+      screen.getByRole('tooltip', {hidden: true}).matches(':popover-open'),
+    ).toBe(false);
+  });
 }
 
 async function checkState(state: TooltipBindingState): Promise<BindingResult> {
@@ -48,10 +89,10 @@ async function checkState(state: TooltipBindingState): Promise<BindingResult> {
     state: state.id,
     facts: state.facts,
     mount: async () => {
-      render(renderTooltipState(state));
+      await renderState(state);
       return createJsdomHarness({
         subject: triggerFor(state),
-        related: relatedFor(),
+        related: relatedFor(state),
       });
     },
     unmount: cleanup,
@@ -69,25 +110,32 @@ describe('Tooltip — tooltip pattern, jsdom lane', () => {
       binding: 'Tooltip',
       state: state.id,
       facts: state.facts,
-      render: () => {
-        render(renderTooltipState(state));
+      render: async () => {
+        await renderState(state);
       },
       subject: () => triggerFor(state),
-      related: () => relatedFor(),
+      related: () => relatedFor(state),
       cleanup,
     });
   });
 
-  it('runs the DOM layer and reports the browser-owned outcomes as unrun', async () => {
-    const results: BindingResult[] = [];
-    for (const state of TOOLTIP_BINDING_STATES) {
-      results.push(await checkState(state));
-    }
-    const report = summarize(TOOLTIP_PATTERN, results);
-    expect(report.counts.pass).toBeGreaterThan(0);
-    expect(report.unrunLayers).toEqual(['accessibility-tree', 'real-browser']);
-    expect(report.counts.unexpectedPass).toBe(0);
-  });
+  it(
+    'runs the DOM layer and reports the browser-owned outcomes as unrun',
+    {timeout: 120_000},
+    async () => {
+      const results: BindingResult[] = [];
+      for (const state of TOOLTIP_BINDING_STATES) {
+        results.push(await checkState(state));
+      }
+      const report = summarize(TOOLTIP_PATTERN, results);
+      expect(report.counts.pass).toBeGreaterThan(0);
+      expect(report.unrunLayers).toEqual([
+        'accessibility-tree',
+        'real-browser',
+      ]);
+      expect(report.counts.unexpectedPass).toBe(0);
+    },
+  );
 });
 
 describe('tooltip binding inventory', () => {
@@ -111,15 +159,20 @@ describe('tooltip binding inventory', () => {
     }
   });
 
-  it('renders the trigger, one tooltip and both page buttons for every state', () => {
+  it('renders the trigger, one tooltip once it has shown and none before, and both page buttons for every state', async () => {
     for (const state of TOOLTIP_BINDING_STATES) {
-      render(renderTooltipState(state));
+      await renderState(state);
       expect(triggerFor(state), state.id).toBeTruthy();
+      const isBeforeFirstShow = state.facts.isBeforeFirstShow === true;
       expect(
-        screen.getAllByRole('tooltip', {hidden: true}),
+        screen.queryAllByRole('tooltip', {hidden: true}),
         state.id,
-      ).toHaveLength(1);
-      expect(Object.keys(relatedFor())).toEqual(['tooltip', 'before', 'after']);
+      ).toHaveLength(isBeforeFirstShow ? 0 : 1);
+      expect(Object.keys(relatedFor(state))).toEqual([
+        isBeforeFirstShow ? 'description' : 'tooltip',
+        'before',
+        'after',
+      ]);
       cleanup();
     }
   });

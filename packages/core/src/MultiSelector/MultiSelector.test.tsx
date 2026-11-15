@@ -48,6 +48,7 @@ import {groupStyles} from '../InputGroup/groupStyles';
 import {InputGroup, InputGroupText} from '../InputGroup';
 import {colorVars, focusVars} from '../theme/tokens.stylex';
 import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
+import {getTooltipDescription} from '../__tests__/tooltipDescription';
 
 /**
  * Enters a search query as one change. Typing it key by key can land several
@@ -2345,7 +2346,7 @@ describe('MultiSelector', () => {
       const container = screen
         .getByTestId('fruit-multi-selector')
         .closest('.astryx-multi-selector') as HTMLElement;
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltipDescription();
       expect(tooltip).toHaveTextContent('Select a table first');
 
       fireEvent.mouseEnter(container);
@@ -2436,7 +2437,7 @@ describe('MultiSelector', () => {
         />,
       );
       const trigger = screen.getByRole('combobox');
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltipDescription();
       expect(trigger.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 
@@ -2990,7 +2991,7 @@ describe('MultiSelector statusVariant forwarding', () => {
     const statusButton = screen.getByRole('button', {
       name: /warning details/i,
     });
-    const tooltip = screen.getByRole('tooltip', h);
+    const tooltip = getTooltipDescription();
     expect(tooltip).toHaveTextContent('Some rows are hidden');
     expect(statusButton.getAttribute('aria-describedby')).toContain(tooltip.id);
     expect(

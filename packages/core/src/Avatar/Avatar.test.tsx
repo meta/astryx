@@ -10,6 +10,7 @@ import {Avatar} from './Avatar';
 import {AvatarStatusDot} from './AvatarStatusDot';
 import {AvatarGroup} from '../AvatarGroup';
 import {rulesDeclaredFor} from '../__tests__/pressState';
+import {getTooltipDescription} from '../__tests__/tooltipDescription';
 
 /**
  * The initials an avatar draws: the plain CSS string in the fallback's private
@@ -713,13 +714,13 @@ describe('Avatar', () => {
 
     it('shows the name in a tooltip by default', () => {
       render(<Avatar name="Ada Lovelace" />);
-      const tooltip = screen.getByRole('tooltip', {hidden: true});
+      const tooltip = getTooltipDescription();
       expect(tooltip).toHaveTextContent('Ada Lovelace');
     });
 
     it('shows a custom string tooltip instead of the name', () => {
       render(<Avatar name="alovelace" tooltip="Ada Lovelace, Mathematician" />);
-      const tooltip = screen.getByRole('tooltip', {hidden: true});
+      const tooltip = getTooltipDescription();
       expect(tooltip).toHaveTextContent('Ada Lovelace, Mathematician');
       expect(tooltip).not.toHaveTextContent('alovelace');
     });
@@ -747,7 +748,7 @@ describe('Avatar', () => {
 
     it('still shows a custom string tooltip when there is no name', () => {
       render(<Avatar tooltip="Anonymous user" data-testid="a" />);
-      const tooltip = screen.getByRole('tooltip', {hidden: true});
+      const tooltip = getTooltipDescription();
       expect(tooltip).toHaveTextContent('Anonymous user');
     });
 
@@ -801,7 +802,7 @@ describe('Avatar', () => {
       const describedBy = root.getAttribute('aria-describedby');
       expect(describedBy).toBeTruthy();
       // aria-describedby points at the rendered tooltip layer.
-      const tooltip = screen.getByRole('tooltip', {hidden: true});
+      const tooltip = getTooltipDescription();
       expect(tooltip.id).toBeTruthy();
       expect(describedBy).toContain(tooltip.id);
     });

@@ -19,6 +19,7 @@ import {LayerContentBoundary} from '../Layer/layerScopedContext';
 import {Text} from '../Text/Text';
 import {Link} from './Link';
 import {LinkProvider} from './LinkProvider';
+import {getTooltipDescription} from '../__tests__/tooltipDescription';
 
 function CustomLink({
   children,
@@ -834,7 +835,7 @@ describe('Link names and native attributes', () => {
       </Link>,
     );
     const link = screen.getByRole('link', {name: 'Settings'});
-    const tooltip = screen.getByRole('tooltip', {hidden: true});
+    const tooltip = getTooltipDescription();
     expect(tooltip).toHaveTextContent('Configure settings');
     expect(link.getAttribute('aria-describedby')).toBe(tooltip.id);
   });

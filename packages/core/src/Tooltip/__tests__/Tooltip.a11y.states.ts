@@ -85,6 +85,17 @@ export const TOOLTIP_BINDING_STATES = [
     content: 'Moves this page out of the list',
     facts: DEFAULT_DELAY,
   },
+  {
+    id: 'before-first-show',
+    summary:
+      'a Tooltip wrapping a Button that has not shown yet, so no tooltip is in the page and the Button is described by a hidden copy of the tooltip text',
+    storyId: story('before-first-show'),
+    attachment: 'wrapped-element',
+    triggerText: 'Save',
+    triggerRole: 'button',
+    content: 'Saves your changes to this draft',
+    facts: {...DEFAULT_DELAY, isBeforeFirstShow: true},
+  },
 ] as const satisfies ReadonlyArray<TooltipBindingState>;
 
 export const TOOLTIP_EXCLUSIONS = [

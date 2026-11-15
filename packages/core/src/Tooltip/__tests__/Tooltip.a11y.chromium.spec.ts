@@ -69,22 +69,33 @@ async function mountState(
           exact: true,
         });
   await expect(subject).toBeVisible();
-  return {
-    subject,
-    related: {
-      // The layer may mount the tooltip outside the story root, and it stays
-      // in the page while hidden, so it is found page-wide, hidden included.
-      tooltip: page.getByRole('tooltip', {includeHidden: true}),
-      before: root.getByRole('button', {
-        name: 'Before the trigger',
-        exact: true,
-      }),
-      after: root.getByRole('button', {
-        name: 'After the trigger',
-        exact: true,
-      }),
-    },
+  const neighbours = {
+    before: root.getByRole('button', {
+      name: 'Before the trigger',
+      exact: true,
+    }),
+    after: root.getByRole('button', {
+      name: 'After the trigger',
+      exact: true,
+    }),
   };
+  if (state.facts.isBeforeFirstShow === true) {
+    const id = (await subject.getAttribute('aria-describedby')) ?? '';
+    return {
+      subject,
+      related: {description: page.locator(`[id="${id}"]`), ...neighbours},
+    };
+  }
+  // The layer may mount the tooltip outside the story root, and it stays in
+  // the page while hidden once it has shown, so it is found page-wide,
+  // hidden included. A state after the first show shows it once, then lets
+  // it hide.
+  const tooltip = page.getByRole('tooltip', {includeHidden: true});
+  await subject.hover();
+  await expect(tooltip).toBeVisible();
+  await page.mouse.move(0, 0);
+  await expect(tooltip).toBeHidden();
+  return {subject, related: {tooltip, ...neighbours}};
 }
 
 async function runState(

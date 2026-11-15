@@ -171,7 +171,56 @@ function tooltip(
   };
 }
 
+/**
+ * A trigger before its tooltip first shows: no tooltip is in the page, and
+ * the trigger's aria-describedby names a hidden copy of the tooltip's text.
+ */
+function beforeFirstShow(
+  id: string,
+  summary: string,
+  {
+    describedBy = 'copy',
+    copyRole = null,
+  }: {describedBy?: string | null; copyRole?: string | null} = {},
+): TooltipFixture {
+  const triggerAttributes = [
+    'type="button"',
+    'id="trigger"',
+    describedBy == null ? null : `aria-describedby="${describedBy}"`,
+  ]
+    .filter(attribute => attribute != null)
+    .join(' ');
+  const copyAttributes = [
+    'id="copy"',
+    'hidden',
+    copyRole == null ? null : `role="${copyRole}"`,
+  ]
+    .filter(attribute => attribute != null)
+    .join(' ');
+  return {
+    id,
+    summary,
+    facts: {...FACTS, isBeforeFirstShow: true},
+    relations: {description: '#copy', before: '#before', after: '#after'},
+    html: `<div style="padding:48px"><button type="button" id="before">Before the trigger</button> <button ${triggerAttributes}>Save</button> <button type="button" id="after">After the trigger</button></div><span ${copyAttributes}>${TOOLTIP_TEXT}</span>`,
+  };
+}
+
 export const TOOLTIP_FIXTURES: readonly TooltipFixture[] = [
+  beforeFirstShow(
+    'conforming-before-first-show',
+    'a button whose tooltip has not shown yet, described by a hidden copy of the tooltip text that is not a tooltip',
+  ),
+  beforeFirstShow(
+    'violating-copy-is-tooltip',
+    'before the first show, the hidden copy carries role tooltip, so the trigger has two tooltips once the tooltip shows',
+    {copyRole: 'tooltip'},
+  ),
+  beforeFirstShow(
+    'violating-copy-not-described',
+    'before the first show, the trigger has no aria-describedby, so a screen-reader user hears no hint',
+    {describedBy: null},
+  ),
   tooltip(
     'conforming-text-trigger',
     'a button described by its tooltip, shown by focus at once and by hover after a delay, kept while hovered, hidden by Escape, blur and leaving',
@@ -276,6 +325,10 @@ export const CONFORMING_FIXTURES: readonly string[] = TOOLTIP_FIXTURES.filter(
 ).map(candidate => candidate.id);
 
 export const TOOLTIP_MUTATIONS: Readonly<Record<string, readonly string[]>> = {
+  'tooltip.trigger.described-before-first-show': [
+    'violating-copy-is-tooltip',
+    'violating-copy-not-described',
+  ],
   'tooltip.surface.role': ['violating-status-role', 'violating-no-role'],
   'tooltip.trigger.described-by-tooltip': [
     'violating-not-described',

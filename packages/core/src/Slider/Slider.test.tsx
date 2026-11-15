@@ -26,6 +26,7 @@ import {
   __resetInteractionModalityForTest,
   getInteractionModality,
 } from '../utils/interactionModality';
+import {getTooltipDescription} from '../__tests__/tooltipDescription';
 
 // Mock showPopover/hidePopover (not implemented in jsdom) so the tooltip layer
 // reflects its open state via a `popover-open` attribute the tests can assert.
@@ -1157,7 +1158,7 @@ describe('Slider', () => {
           disabledMessage="Volume is locked while sharing your screen"
         />,
       );
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltipDescription();
       expect(tooltip).toHaveTextContent(
         'Volume is locked while sharing your screen',
       );
@@ -1236,7 +1237,7 @@ describe('Slider', () => {
         />,
       );
       const thumb = screen.getByRole('slider');
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltipDescription();
       expect(thumb.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 

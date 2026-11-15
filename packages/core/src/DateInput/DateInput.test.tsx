@@ -41,6 +41,7 @@ import {generateThemeCSS} from '../theme/generateThemeRules';
 import {InternationalizationProvider} from '../i18n';
 import type {ISODateString} from '../utils';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
+import {getTooltipDescription} from '../__tests__/tooltipDescription';
 
 function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
   const {prose, component} = generateThemeCSS(theme);
@@ -1463,7 +1464,7 @@ describe('DateInput', () => {
       );
 
       const input = screen.getByRole('combobox', {name: 'Availability Date'});
-      const tooltip = screen.getByRole('tooltip', {hidden: true});
+      const tooltip = getTooltipDescription();
 
       expect(input).not.toBeDisabled();
       expect(input).toHaveAttribute('aria-disabled', 'true');
@@ -1504,7 +1505,7 @@ describe('DateInput', () => {
 
       const container = screen.getByRole('combobox')
         .parentElement as HTMLElement;
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltipDescription();
       expect(tooltip).toHaveTextContent('You need the Editor role');
 
       fireEvent.mouseEnter(container);
@@ -1582,7 +1583,7 @@ describe('DateInput', () => {
           disabledMessage="You need the Editor role"
         />,
       );
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltipDescription();
       expect(
         getButton('Open calendar').getAttribute('aria-describedby'),
       ).toContain(tooltip.id);
@@ -1621,7 +1622,7 @@ describe('DateInput', () => {
         />,
       );
       const input = screen.getByRole('combobox');
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltipDescription();
       expect(input.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 
