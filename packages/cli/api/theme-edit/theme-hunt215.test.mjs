@@ -358,3 +358,35 @@ describe('a swapped setting and value with the setting misspelled', () => {
     T,
   );
 });
+
+describe('a pasted change line whose label names a part', () => {
+  it(
+    'reads an exact part name as the part, and any other word as a mode',
+    async () => {
+      expect(
+        (await cli(['set', 't', 'background-color (card) -> red'])).status,
+      ).toBe(0);
+      const entry = saved().settings.find(
+        (/** @type {any} */ s) => s.thing === 'background-color',
+      );
+      expect(entry?.on).toBe('card');
+      expect(entry?.mode).toBeUndefined();
+      fs.writeFileSync(file(), fresh);
+      const typo = await cli(['set', 't', '--color-accent (drak) -> red']);
+      expect(typo.status).not.toBe(0);
+      const line = offered(typo.json).find(
+        (/** @type {string[]} */ l) => l[0] === 'set',
+      );
+      expect(line).toEqual([
+        'set',
+        't',
+        '--color-accent',
+        'red',
+        '--mode',
+        'dark',
+      ]);
+      expect((await cli(line)).status).toBe(0);
+    },
+    T,
+  );
+});

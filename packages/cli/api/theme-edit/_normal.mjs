@@ -264,7 +264,7 @@ export function normalizeEntry(thing, value) {
       scope = printed.scope;
     }
     if (changed[2] != null && changed[2].trim())
-      scope = {...scope, mode: modeLabel(changed[2])};
+      scope = {...scope, ...labelScope(changed[2])};
   } else if (
     v == null ||
     v.trim() === '' ||
@@ -281,7 +281,7 @@ export function normalizeEntry(thing, value) {
       t = m[1];
       v = m[4];
       pasted = true;
-      if (m[2] != null && m[2].trim()) scope = {mode: modeLabel(m[2])};
+      if (m[2] != null && m[2].trim()) scope = labelScope(m[2]);
       // The editor's own printed line (`corners = pill (whole theme)`,
       // `opacity = 0.5 on card [dark only]`) pasted back: its scope goes
       // with the setting, not into the value.
@@ -404,7 +404,23 @@ function modeLabel(label) {
 }
 
 /**
- * @typedef {{on?: string, only?: boolean, when?: string, state?: string, mode?: string}} EntryScope
+ * The scope a pasted line's label names: a mode the one mode reader reads
+ * (`(Dark)`, `[dark only]`, `(drak mode)`), else the word as typed
+ * (`label`), which the change reads as a part when it is one exact part
+ * name and as a mode (its typo rule) otherwise.
+ * @param {string} label
+ * @returns {EntryScope}
+ */
+function labelScope(label) {
+  const word = modeLabel(label);
+  return modeWord(word) || /\b(only|mode)\s*$/i.test(label.trim())
+    ? {mode: word}
+    : {label: word};
+}
+
+/**
+ * @typedef {{on?: string, only?: boolean, when?: string, state?: string, mode?: string, label?: string}} EntryScope
+ *   `label`: a pasted line's label that names no mode word (see labelScope)
  */
 
 /**

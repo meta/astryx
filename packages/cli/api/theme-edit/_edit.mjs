@@ -204,6 +204,7 @@ import {
   baseResolved,
   copiesLine,
   installLine,
+  openProject,
   themeCacheRoot,
 } from './_project.mjs';
 import {reactMissing} from './_parts.mjs';
@@ -4742,7 +4743,19 @@ async function change(sub, slug, thing, value, options) {
     // The scope the editor's own printed line names, where no flag gives
     // one.
     if (entry.scope) {
-      const s = entry.scope;
+      const s = {...entry.scope};
+      // A label that names no mode word is the part it names exactly (the
+      // project's part names, as --on reads them: `(card)`), else a mode
+      // for the mode reader's typo rule (`(drak)`).
+      if (s.label) {
+        const word = s.label.trim().toLowerCase().replace(/\s+/g, '-');
+        const target = await openProject(options.cwd ?? process.cwd())
+          .then(p => p.target)
+          .catch(() => null);
+        if (target?.has(word) || FAMILIES[word]) s.on = word;
+        else s.mode = s.label;
+        delete s.label;
+      }
       options = {
         ...options,
         ...(s.on && !options.on ? {on: s.on} : {}),
