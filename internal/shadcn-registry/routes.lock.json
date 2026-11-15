@@ -3962,6 +3962,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-speech-recognition-transcript",
+      "path": "examples/use-speech-recognition/transcript",
+      "aliases": []
+    },
+    {
       "name": "example-use-streaming-text-streaming-response",
       "path": "examples/use-streaming-text/streaming-response",
       "aliases": []
@@ -4119,6 +4124,11 @@
     {
       "name": "hook-create-reorderable",
       "path": "hooks/create-reorderable",
+      "aliases": []
+    },
+    {
+      "name": "hook-create-swipe",
+      "path": "hooks/create-swipe",
       "aliases": []
     },
     {
@@ -4394,6 +4404,11 @@
     {
       "name": "hook-use-snap-paging",
       "path": "hooks/use-snap-paging",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-speech-recognition",
+      "path": "hooks/use-speech-recognition",
       "aliases": []
     },
     {

@@ -8,13 +8,14 @@ A zorblax card that groups one topic.
 
 ## Best Practices
 
-- **Do:** Keep one idea per card.
-- **Don't:** Do not nest cards.
+Do:
+- Keep one idea per card.
+
+Don't:
+- Do not nest cards.
 
 ## Props
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `title` | `string` | - | Heading text. **(required)** |
-| `tone` | `'calm' \| 'loud'` | `'calm'` | Visual weight. |
+- `title`: `string` **(required)** - Heading text.
+- `tone`: `'calm' | 'loud'` = `'calm'` - Visual weight.
 

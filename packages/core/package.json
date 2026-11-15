@@ -1,6 +1,6 @@
 {
   "name": "@astryxdesign/core",
-  "version": "0.7.16",
+  "version": "0.7.17",
   "displayName": "Astryx Core",
   "description": "The component library. Accessible, themeable React components with built-in spacing, dark mode, and StyleX styling.",
   "author": "Meta Open Source",
@@ -603,6 +603,11 @@
       "source": "./src/Stepper/index.ts",
       "types": "./dist/Stepper/index.d.ts",
       "default": "./dist/Stepper/index.js"
+    },
+    "./Swipe": {
+      "source": "./src/Swipe/index.ts",
+      "types": "./dist/Swipe/index.d.ts",
+      "default": "./dist/Swipe/index.js"
     },
     "./Switch": {
       "source": "./src/Switch/index.ts",

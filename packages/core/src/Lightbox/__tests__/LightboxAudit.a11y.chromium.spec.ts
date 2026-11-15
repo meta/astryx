@@ -235,7 +235,7 @@ for (const item of cases) {
     const page = await context.newPage();
     const pageErrors: string[] = [];
     page.on('pageerror', error => pageErrors.push(String(error)));
-    await page.route(/picsum\.photos/, async route =>
+    await page.route(/\/sample-[a-z]+-\d+x\d+[^/]*\.svg/, async route =>
       route.fulfill({contentType: 'image/svg+xml', body: PHOTO}),
     );
     // The video is remote too; without it the frame shows the empty player.

@@ -24,7 +24,7 @@
 //     system: G25, a folder typed in another letter case (macOS, Windows), and G26, Windows paths and
 //     installs (a lower-case drive letter, the npm shim on the search path, the cache under LOCALAPPDATA).
 // Started by hand from the workflow (.github/workflows/cli-global-mode-smoke.yml); the in-repo table
-// tests (packages/cli/test/global-local.test.mjs) cover the path rules on every pull request.
+// tests (packages/cli/test/global-local*.test.mjs) cover the path rules on every pull request.
 // Exit status 1 when any check fails. Results are written as JSON, and as Markdown to $GITHUB_STEP_SUMMARY when set.
 
 import {spawn, execFileSync} from 'node:child_process';

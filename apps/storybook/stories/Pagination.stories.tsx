@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import type {Meta, StoryObj} from '@storybook/react';
-import {useState} from 'react';
+import {createContext, useContext, useState} from 'react';
 import {Pagination} from '@astryxdesign/core/Pagination';
 import {InternationalizationProvider} from '@astryxdesign/core';
 
@@ -188,6 +188,105 @@ export const WithPageSizeSelector: Story = {
 export const CursorBased: Story = {
   name: 'Cursor-Based (hasMore)',
   render: () => <PaginationDemo page={1} hasMore={true} />,
+};
+
+/** A page's address in a story: a fragment, so the story stays loaded. */
+const pageFragment = (page: number) => `#page-${page}`;
+
+export const PageLinks: Story = {
+  name: 'Page links',
+  render: () => (
+    // The page numbers, Previous and Next are links: open one in a new tab.
+    // onChange keeps the page in state, and the link navigates.
+    <PaginationDemo
+      page={1}
+      totalItems={200}
+      pageSize={10}
+      variant="pages"
+      getPageHref={pageFragment}
+    />
+  ),
+};
+
+export const PageLinksDots: Story = {
+  name: 'Page links (dots)',
+  render: () => (
+    // Previous and Next are links. The dots stay a radio group.
+    <PaginationDemo
+      page={1}
+      totalPages={8}
+      variant="dots"
+      getPageHref={pageFragment}
+    />
+  ),
+};
+
+/** How a link asks the story's router to navigate. */
+const StoryRouter = createContext<(path: string) => void>(() => {});
+
+/**
+ * A link as a client-side router renders it: it stops the page load and asks
+ * the router to navigate. A click with a modifier key stays the browser's.
+ */
+function StoryRouterLink({
+  to: _to,
+  onClick,
+  ...props
+}: React.ComponentProps<'a'> & {to?: string}) {
+  const navigate = useContext(StoryRouter);
+  return (
+    <a
+      {...props}
+      onClick={event => {
+        onClick?.(event);
+        const hasModifier =
+          event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
+        if (event.defaultPrevented || hasModifier || props.href == null) {
+          return;
+        }
+        event.preventDefault();
+        navigate(props.href);
+      }}
+    />
+  );
+}
+
+/** How long the story's router takes to finish a navigation, in milliseconds. */
+const STORY_NAVIGATION_MS = 150;
+
+function PageLinksRouterDemo() {
+  const [path, setPath] = useState('#/items/4');
+  const [isNavigating, setIsNavigating] = useState(false);
+  const navigate = (next: string) => {
+    setIsNavigating(true);
+    window.setTimeout(() => {
+      setPath(next);
+      setIsNavigating(false);
+    }, STORY_NAVIGATION_MS);
+  };
+  return (
+    <StoryRouter value={navigate}>
+      <div style={{display: 'flex', flexDirection: 'column', gap: 16}}>
+        <output aria-label="Location">{path}</output>
+        <Pagination
+          page={Number(path.slice(path.lastIndexOf('/') + 1))}
+          totalPages={5}
+          // The router owns the page, so onChange has no state to keep.
+          onChange={() => {}}
+          getPageHref={page => `#/items/${page}`}
+          as={StoryRouterLink}
+          isDisabled={isNavigating}
+        />
+      </div>
+    </StoryRouter>
+  );
+}
+
+export const PageLinksRouter: Story = {
+  name: 'Page links (client-side router)',
+  // The page comes from the router's location, which changes a moment after a
+  // link is activated. The control is disabled while the router navigates.
+  render: () => <PageLinksRouterDemo />,
 };
 
 export const SmallSize: Story = {

@@ -982,7 +982,19 @@ test('a row swiped away lays the page out no more often than the same swipe with
       touchPoints: [],
       type: 'touchEnd',
     });
-    await expect(leaving(page)).toHaveCount(1, {timeout: 3000});
+    // The page sees the exit's first frame. The row it puts back stays for
+    // under 300 ms, so a check from outside the page can miss it.
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(
+            () =>
+              (window as unknown as {__exit: {sideways: number}}).__exit
+                .sideways,
+          ),
+        {timeout: 3000},
+      )
+      .not.toBe(-1);
     await expect(leaving(page)).toHaveCount(0, {timeout: 3000});
     const after = await layouts();
     const sideways = await page.evaluate(

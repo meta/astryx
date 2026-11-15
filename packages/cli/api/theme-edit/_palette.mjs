@@ -156,7 +156,11 @@ function sweepTemps(dir) {
       }
       continue;
     }
-    const m = /^\..+\.astryx-(\d+)-[a-z0-9]+\.tmp$/.exec(n);
+    // A picture taken under its own name (`.<picture>.part-<pid>.png`) by a
+    // run stopped while the browser ran.
+    const m =
+      /^\..+\.astryx-(\d+)-[a-z0-9]+\.tmp$/.exec(n) ??
+      /^\.[\w-]+\.part-(\d+)\.png$/.exec(n);
     if (!m) continue;
     const p = path.join(dir, n);
     try {
@@ -203,12 +207,14 @@ export function removeEmptyFolder(dir, opts = {}) {
 
 /**
  * Whether a file name is one of the editor's own temp files: a whole-file
- * write's `.<name>.astryx-<pid>-<random>.tmp`, or a build's
- * `.<name>.tmp-<id>`. A command stopped part way can leave one behind.
+ * write's `.<name>.astryx-<pid>-<random>.tmp`, a build's `.<name>.tmp-<id>`,
+ * or a picture's `.<picture>.part-<pid>.png`. A command stopped part way can
+ * leave one behind.
  * @param {string} name
  */
 export const isEditorTemp = name =>
-  /^\..+\.(astryx-\d+-[a-z0-9]+\.tmp|tmp-[\w-]+)$/.test(name);
+  /^\..+\.(astryx-\d+-[a-z0-9]+\.tmp|tmp-[\w-]+)$/.test(name) ||
+  /^\.[\w-]+\.part-\d+\.png$/.test(name);
 
 /**
  * A temp file beside `file` for a whole write, named so only the editor
@@ -535,6 +541,33 @@ const isGray = seed => hexToOklch(seed).C < GRAY_CHROMA;
 
 /** Whether a seed (or no seed) has no color to saturate. @param {string | null} seed */
 export const isGraySeed = seed => !seed || isGray(seed);
+
+/**
+ * Whether a color dial's seed comes out different at two vibrancies: the
+ * ramp the generator grows from it, light and dark, compared shade by
+ * shade. A seed with no saturation to change (a pure gray) gives the same
+ * ramp at every vibrancy. A gray-ish seed is grown as the editor grows it
+ * (a neutral), so a warm or cool gray counts by what it shows.
+ * @param {string} dial
+ * @param {string | null} seed
+ * @param {number} from
+ * @param {number} to
+ */
+export function vibrancyMoves(dial, seed, from, to) {
+  if (!seed || from === to) return false;
+  const kind = dial === 'neutral' || isGray(seed) ? 'neutral' : 'chromatic';
+  const ramp = (/** @type {number} */ vibrancy) =>
+    JSON.stringify(
+      /** @type {any} */ (
+        generate({
+          vibrancy,
+          ...(kind === 'neutral' ? {neutralProfile: 'custom'} : {}),
+          families: [{id: 'seed', seed, kind}],
+        }).palette.seed
+      ),
+    );
+  return ramp(from) !== ramp(to);
+}
 
 /** @param {unknown} a @param {unknown} b */
 function sameColor(a, b) {
@@ -1460,9 +1493,20 @@ function syncPaletteFiles(cwd, slug, data, base) {
  * @returns {Record<string, string>}
  */
 export function readWrittenRecord(cwd, slug) {
+  return readRecordIn(path.join(cwd, 'themes', slug), slug);
+}
+
+/**
+ * The record of what the editor wrote, read from a theme folder as it is
+ * (a copy of one included); empty when there is none or it is damaged.
+ * @param {string} dir
+ * @param {string} slug
+ * @returns {Record<string, string>}
+ */
+export function readRecordIn(dir, slug) {
   try {
     const json = JSON.parse(
-      fs.readFileSync(writtenRecordFile(cwd, slug), 'utf8'),
+      fs.readFileSync(path.join(dir, `${slug}.pictures.json`), 'utf8'),
     );
     return json && typeof json === 'object' && !Array.isArray(json) ? json : {};
   } catch {

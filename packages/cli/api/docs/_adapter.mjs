@@ -43,6 +43,7 @@ import {
   loadTreeInputs,
 } from '../../foundation/doc-compiler/tree.mjs';
 import {sortDiagnostics} from '../../foundation/doc-compiler/diagnostics.mjs';
+import {indexView} from '../../foundation/doc-compiler/lenses.mjs';
 import {
   linkBlocks,
   linkFields,
@@ -88,7 +89,9 @@ import {
   listTemplates,
   templateFilesNaming,
 } from '../../foundation/discovery/template-adapter.mjs';
-import {findCoreDir} from '../../foundation/fs/paths.mjs';
+import {persistedGather} from '../../foundation/fs/gather-cache.mjs';
+import {EXACT_CODEC} from '../../foundation/fs/exact-codec.mjs';
+import {CLI_ROOT, findCoreDir} from '../../foundation/fs/paths.mjs';
 import {reusedWhileUnchanged} from '../../foundation/fs/read-record.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
@@ -97,6 +100,7 @@ import {
   orderRouteSuggestions,
 } from '../../foundation/text/suggest-order.mjs';
 import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
 
 export {OVERLAY_LANGUAGES, overlayLanguages};
 
@@ -418,8 +422,32 @@ export function projectTree(catalog, {fresh = false} = {}) {
   return tree;
 }
 
-/** The CLI's own tree files, loaded again after one of them changes. */
-const cliTreeInputs = reusedWhileUnchanged(() => loadTreeInputs());
+/**
+ * The CLI's own tree files, kept between runs and loaded again after one of
+ * them changes. They are the same for every project this copy of the CLI
+ * runs in, so the copy's folder is the whole key.
+ */
+const keptTreeInputs = reusedWhileUnchanged(() =>
+  persistedGather(['docs-tree-inputs', CLI_ROOT], loadTreeInputs, TREE_INPUTS),
+);
+
+/**
+ * The CLI's own tree files, read from the files themselves, never from the
+ * kept copy: doctor checks what the files say.
+ */
+const readTreeInputs = reusedWhileUnchanged(() => loadTreeInputs());
+
+/** @typedef {Awaited<ReturnType<typeof loadTreeInputs>>} TreeInputs */
+
+/** The tree inputs, kept exactly, with the shape they need. */
+const TREE_INPUTS = {
+  ...EXACT_CODEC,
+  valid: (/** @type {any} */ value) =>
+    value != null &&
+    Array.isArray(value.namespaces) &&
+    Array.isArray(value.docs) &&
+    Array.isArray(value.diagnostics),
+};
 
 /**
  * Every flat topic in the catalog, as the tree's topic levels read it.
@@ -466,7 +494,7 @@ async function flatTopicInputs(catalog) {
  */
 async function buildProjectTree(catalog, fresh) {
   const added = catalog.treeInputs;
-  const cli = await cliTreeInputs({fresh});
+  const cli = fresh ? await readTreeInputs({fresh}) : await keptTreeInputs();
   const result = buildDocsTree({
     namespaces: [...cli.namespaces, ...added.flatMap(each => each.namespaces)],
     docs: [...cli.docs, ...added.flatMap(each => each.guides)],
@@ -489,8 +517,10 @@ async function buildProjectTree(catalog, fresh) {
     if (record.replaces != null) {
       node.guideOverlay = {
         replacement: record,
-        // Extensions were authored against the content that just went away.
-        extensions: [],
+        // An extension adds to whatever answers its route, so it stays: the
+        // order integrations are configured in must not decide whether its
+        // sections show.
+        extensions: overlay.extensions,
         ...(overlay.replacement
           ? {replacedPackage: overlay.replacement.package}
           : {}),
@@ -1152,6 +1182,35 @@ async function includedContent(catalog, tree, block, found) {
 }
 
 /**
+ * Whether a package owns a topic: it wrote the topic, or adds sections to it.
+ * @param {import('../../foundation/discovery/docs-discovery.mjs').DocsTopicEntry} entry
+ * @param {string} owner the package
+ * @returns {boolean}
+ */
+function ownsTopic(entry, owner) {
+  return (
+    entry.package === owner ||
+    entry.extensions.some(extension => extension.package === owner)
+  );
+}
+
+/**
+ * Whether a package owns a node of the docs tree: it placed the node, or
+ * replaces or extends the guide there by its route.
+ * @param {TreeNode} node
+ * @param {string} owner the package
+ * @returns {boolean}
+ */
+function ownsNode(node, owner) {
+  return (
+    node.provider === owner ||
+    node.guideOverlay?.replacement?.package === owner ||
+    (node.guideOverlay?.extensions.some(each => each.package === owner) ??
+      false)
+  );
+}
+
+/**
  * Every link in the project's docs that names no doc: in each topic, each
  * guide the tree places, and each typed doc.
  * @param {DocsCatalog} catalog
@@ -1179,15 +1238,7 @@ export async function docsLinkProblems(
     }
   };
   for (const entry of catalog.entries()) {
-    // A package owns a topic it wrote, and the sections it adds to another
-    // package's topic.
-    if (
-      owner != null &&
-      entry.package !== owner &&
-      !entry.extensions.some(extension => extension.package === owner)
-    ) {
-      continue;
-    }
+    if (owner != null && !ownsTopic(entry, owner)) continue;
     try {
       note(entry.name, await topicLinkProblems(catalog, entry));
     } catch {
@@ -1195,16 +1246,7 @@ export async function docsLinkProblems(
     }
   }
   for (const node of tree.nodes.values()) {
-    // A package owns a guide it placed, and a guide it replaces or extends by
-    // its route.
-    if (
-      owner != null &&
-      node.provider !== owner &&
-      node.guideOverlay?.replacement?.package !== owner &&
-      !node.guideOverlay?.extensions.some(each => each.package === owner)
-    ) {
-      continue;
-    }
+    if (owner != null && !ownsNode(node, owner)) continue;
     if (node.kind === 'generic' && node.ref?.topicFile) {
       try {
         note(node.route, await topicLinkProblems(catalog, guideEntry(node)));
@@ -1890,6 +1932,85 @@ export function holdsOwnName(tree, catalog, entry) {
 }
 
 /**
+ * The names `astryx docs` opens a package's docs by, sorted: the one rule
+ * every surface that lists a package's docs names them by, so each name it
+ * prints opens (`astryx discover` lists an installed integration's docs this
+ * way). The docs are what the package's docs root ships, and each opens where
+ * it lands, not by the name on its file: a topic the package wrote or took
+ * over opens by its own name; a doc that adds sections to another topic opens
+ * with that topic, by its name; a namespace doc or guide the package places,
+ * and a guide it replaces or extends by its route, open by that route. A topic
+ * whose name opens another doc is left out, as the topic list leaves it out
+ * (spec:AST-046 FR11). Typed docs of the package's other contributions, such
+ * as an icon set's own icon definitions, are listed with those contributions,
+ * not here.
+ * @param {DocsCatalog} catalog
+ * @param {DocsTree} tree
+ * @param {string} owner the package
+ * @returns {string[]}
+ */
+export function packageDocNames(catalog, tree, owner) {
+  /** @type {Set<string>} */
+  const names = new Set();
+  for (const entry of catalog.entries()) {
+    if (ownsTopic(entry, owner) && holdsOwnName(tree, catalog, entry)) {
+      names.add(entry.name);
+    }
+  }
+  for (const node of tree.nodes.values()) {
+    // What a docs root ships to the tree: a namespace doc, or a guide (a topic
+    // file the tree places). A generated level has no doc of its own, and a
+    // topic the tree files in one opens by its name, named above.
+    if (node.generated) continue;
+    if (node.kind !== 'namespace' && node.ref?.topicFile == null) continue;
+    if (ownsNode(node, owner)) names.add(node.route);
+  }
+  return [...names].sort();
+}
+
+/**
+ * For each name a package's docs open by ({@link packageDocNames}) whose topic
+ * or guide another package owns, the keys of the sections this package adds
+ * to it, in reading order: `astryx docs <name> <key>` opens one. A theme
+ * package documents itself by adding a section to `theme`, a topic the CLI or
+ * the app's base library owns, and a long one; the key lets a reader open the
+ * package's own section without reading the whole topic. The keys are the
+ * ones the topic's own read lists, from the same merged topic, so each opens.
+ * @param {DocsCatalog} catalog
+ * @param {DocsTree} tree
+ * @param {string} owner the package
+ * @returns {Promise<Record<string, string[]>>}
+ */
+export async function packageDocSections(catalog, tree, owner) {
+  /** @type {Record<string, string[]>} */
+  const sections = {};
+  for (const name of packageDocNames(catalog, tree, owner)) {
+    const found = nameOwner(tree, catalog, name);
+    const entry =
+      found?.kind === 'topic'
+        ? found.entry
+        : found?.kind === 'node' && found.node.kind === 'generic'
+          ? guideEntry(found.node)
+          : null;
+    if (entry == null || entry.package === owner) continue;
+    let node;
+    try {
+      node = await lowerTopic(catalog, entry);
+    } catch {
+      // A topic that cannot be read opens no section, so it lists none; a
+      // read of it names the problem, and doctor reports it.
+      continue;
+    }
+    const sectionPackage = sectionPackageOf(entry, node);
+    const keys = indexView(node)
+      .sections.map(each => each.id)
+      .filter(id => id != null && sectionPackage(id) === owner);
+    if (keys.length > 0) sections[name] = keys;
+  }
+  return sections;
+}
+
+/**
  * What a tree node opens as: a guide the tree places reads like a topic; a
  * namespace or a typed doc is a node.
  * @param {DocsCatalog} catalog
@@ -2293,6 +2414,6 @@ export async function integrationDocTypes(integration, cwd) {
     unchecked: [
       ...report.unchecked,
       ...unread.map(entry => ({doc: rel(entry.path), reason: entry.reason})),
-    ].sort((a, b) => a.doc.localeCompare(b.doc)),
+    ].sort((a, b) => compareText(a.doc, b.doc)),
   };
 }
