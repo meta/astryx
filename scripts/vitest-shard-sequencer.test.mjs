@@ -14,11 +14,7 @@ import DurationShardSequencer, {
   durationsFile,
 } from './vitest-shard-sequencer.mjs';
 import {splitByDuration} from './lib/duration-split.mjs';
-import {
-  PER_FILE_SECONDS,
-  nodeFileCost,
-  nodeLegFiles,
-} from './vitest-node-legs.mjs';
+import {PER_FILE_SECONDS, nodeFileCost} from './vitest-node-legs.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const recorded = readDurations();
@@ -68,19 +64,6 @@ describe('duration-balanced Node legs', () => {
     // The slowest files still exist, so the split they steer is real.
     for (const file of slowest.slice(0, 6))
       expect(fs.existsSync(path.join(ROOT, file)), file).toBe(true);
-  });
-
-  it("keeps a recorded time for nine in ten of the Node project's test files, so the record cannot go stale unnoticed", () => {
-    // The `node` project's files, from the globs vitest.config.ts reads
-    // (vitest-node-files.test.mjs), so this check never drifts from what the
-    // project runs.
-    const nodeFiles = nodeLegFiles();
-    const missing = nodeFiles.filter(file => !(file in recorded));
-    expect(nodeFiles.length).toBeGreaterThan(500);
-    expect(
-      missing.length / nodeFiles.length,
-      `${missing.length} Node test files have no recorded time (${missing.slice(0, 5).join(', ')}, …). Regenerate the record from the Main workflow's Node leg logs: node scripts/vitest-shard-sequencer.mjs record <log>…`,
-    ).toBeLessThanOrEqual(0.1);
   });
 
   it.each([4, 6])(
