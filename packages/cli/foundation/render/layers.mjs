@@ -20,6 +20,7 @@
  *   theme editor writes (_catalog.mjs)
  */
 
+import {promisify} from 'node:util';
 import {chartDocument} from './charts.mjs';
 
 /**
@@ -32,7 +33,16 @@ export async function layerDocument() {
   await chartDocument();
   const g = /** @type {any} */ (globalThis);
   const proto = g.window.Element.prototype;
-  const rect = {x: 0, y: 0, top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0};
+  const rect = {
+    x: 0,
+    y: 0,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: 0,
+    height: 0,
+  };
   // A box where it sits: a layer opens only beside an anchor that has one.
   proto.getClientRects = function () {
     return [{...rect, right: 1, bottom: 1, width: 1, height: 1}];
@@ -58,7 +68,8 @@ export async function layerDocument() {
   proto.scrollIntoView = () => {};
   const matches = proto.matches;
   proto.matches = function (/** @type {string} */ selector) {
-    if (String(selector).includes(':popover-open')) return this.__astryxPopoverOpen === true;
+    if (String(selector).includes(':popover-open'))
+      return this.__astryxPopoverOpen === true;
     try {
       return matches.call(this, selector);
     } catch {
@@ -70,7 +81,17 @@ export async function layerDocument() {
   g.document.getAnimations = () => [];
   // The DOM classes a component checks against by name (an `instanceof
   // Element` before it measures), as a browser gives them.
-  for (const name of ['Node', 'Element', 'HTMLElement', 'HTMLInputElement', 'Event', 'CustomEvent', 'KeyboardEvent', 'MouseEvent', 'FocusEvent']) {
+  for (const name of [
+    'Node',
+    'Element',
+    'HTMLElement',
+    'HTMLInputElement',
+    'Event',
+    'CustomEvent',
+    'KeyboardEvent',
+    'MouseEvent',
+    'FocusEvent',
+  ]) {
     if (g.window[name]) g[name] ??= g.window[name];
   }
   for (const name of ['MutationObserver', 'IntersectionObserver']) {
@@ -97,13 +118,25 @@ export async function layerDocument() {
  */
 export async function openLayerMarkup(host, flushSync) {
   const g = /** @type {any} */ (globalThis);
-  const tick = () => new Promise(resolve => setTimeout(resolve, 0));
+  // React finishes an update in tasks of its own: a layer opens in one,
+  // then reads its anchor and renders again in the next. A timer alone can
+  // fire before them on a busy machine, and a read then holds a layer
+  // between two renders. So after a timer each read waits, one immediate at
+  // a time, until no immediate is left queued (React queues its tasks so),
+  // which costs nothing on a settled page.
+  const tick = async () => {
+    await new Promise(resolve => setTimeout(resolve, 0));
+    for (let i = 0; i < SETTLE_TURNS && queued > 0; i++)
+      await new Promise(resolve => nativeImmediate(resolve));
+  };
   /** @type {Set<string>} */
   const seen = new Set();
   /** @type {string[]} */
   const out = [];
   const keep = () => {
-    for (const layer of g.document.querySelectorAll('[data-astryx-layer-root]')) {
+    for (const layer of g.document.querySelectorAll(
+      '[data-astryx-layer-root]',
+    )) {
       const html = layer.outerHTML;
       if (!seen.has(html)) {
         seen.add(html);
@@ -124,16 +157,35 @@ export async function openLayerMarkup(host, flushSync) {
   };
   await tick();
   keep();
-  const controls = [...host.querySelectorAll('[aria-haspopup][aria-expanded="false"], [role="combobox"][aria-expanded="false"]')];
+  const controls = [
+    ...host.querySelectorAll(
+      '[aria-haspopup][aria-expanded="false"], [role="combobox"][aria-expanded="false"]',
+    ),
+  ];
   for (const control of controls) {
     // A press, up to the event that opens it: a control that opens on
     // pointer down would close again on the click that follows.
-    for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+    for (const type of [
+      'pointerdown',
+      'mousedown',
+      'pointerup',
+      'mouseup',
+      'click',
+    ]) {
       send(control, type, {button: 0, pointerType: 'mouse', detail: 1});
       if (control.getAttribute('aria-expanded') === 'true') break;
     }
-    if (control.getAttribute('aria-expanded') !== 'true' && control.tagName === 'INPUT') {
-      control.value = 'a';
+    if (
+      control.getAttribute('aria-expanded') !== 'true' &&
+      control.tagName === 'INPUT'
+    ) {
+      // Typed as a person types: through the field's own value setter, so
+      // React sees a value it did not set itself and calls the change
+      // handler (a typeahead searches).
+      Object.getOwnPropertyDescriptor(
+        Object.getPrototypeOf(control),
+        'value',
+      )?.set?.call(control, 'a');
       send(control, 'input');
     }
     await tick();
@@ -142,11 +194,56 @@ export async function openLayerMarkup(host, flushSync) {
   return out;
 }
 
+/** The most turns a read waits for the queued immediates to run. */
+const SETTLE_TURNS = 50;
+
+/** The immediates queued in this thread and not yet run, a read's own left out. */
+let queued = 0;
+const nativeImmediate = globalThis.setImmediate;
+const nativeClearImmediate = globalThis.clearImmediate;
+const COUNTED = Symbol.for('astryx.render.counted-immediate');
+
+/**
+ * Count each immediate queued in this thread from now on, so a read knows
+ * when React has no task left: call it before React loads, which keeps the
+ * setImmediate it finds.
+ */
+export function countQueuedImmediates() {
+  const g = /** @type {any} */ (globalThis);
+  if (g.setImmediate[COUNTED]) return;
+  /** @param {(...args: any[]) => void} fn @param {...any} args */
+  const counted = (fn, ...args) => {
+    queued++;
+    let ran = false;
+    const settle = () => {
+      if (!ran) {
+        ran = true;
+        queued--;
+      }
+    };
+    const handle = nativeImmediate(() => {
+      settle();
+      fn(...args);
+    });
+    /** @type {any} */ (handle)[COUNTED] = settle;
+    return handle;
+  };
+  counted[COUNTED] = true;
+  const custom = /** @type {any} */ (nativeImmediate)[promisify.custom];
+  if (custom) /** @type {any} */ (counted)[promisify.custom] = custom;
+  g.setImmediate = counted;
+  g.clearImmediate = (/** @type {any} */ handle) => {
+    handle?.[COUNTED]?.();
+    return nativeClearImmediate(handle);
+  };
+}
+
 /** The global the render worker installs for parts a page shows open in place. SYNC: page-worker.mjs assigns it by this name. */
 export const LAYER_GLOBAL = '__astryxRenderLayer';
 
 /** Where a part drawn open goes in the server markup. */
-export const LAYER_PLACEHOLDER = /<astryx-layer data-layer="(\d+)"><\/astryx-layer>/g;
+export const LAYER_PLACEHOLDER =
+  /<astryx-layer data-layer="(\d+)"><\/astryx-layer>/g;
 
 /**
  * The marker for the part at `index`, which the worker replaces with the

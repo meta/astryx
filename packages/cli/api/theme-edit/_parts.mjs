@@ -37,7 +37,7 @@ import {
 import {removeOnStop} from '../../foundation/fs/stop-cleanup.mjs';
 
 /** Bump when the shape of the cached part data, or which parts it reaches, changes. */
-const PART_DATA_VERSION = 16;
+const PART_DATA_VERSION = 19;
 
 /**
  * Flags that change what a component does or whether it shows, not how it
@@ -60,6 +60,7 @@ const LIFECYCLE_FLAGS = new Set([
  * @property {string[]} contains - parts rendered inside it
  * @property {string[]} [tags] - the elements it is rendered as (`tr` for a table row)
  * @property {string[]} [innerCorners] - the radius tokens of the corners Core draws by place on the parts directly inside it (a button group's end buttons)
+ * @property {boolean} [media] - Core's media surface sits inside it (a toast's inverted surface), setting the text tokens of what it holds from --color-on-dark and --color-on-light
  * @property {Record<string, Record<string, string>>} [inline] - state ('' for always) -> property -> the token Core paints it with as an inline style, which no theme rule can replace
  */
 
@@ -167,7 +168,19 @@ export function demoProps(project, name) {
       props[p] = v;
     }
   const kids = info.props?.children;
-  const slot = kids?.slots?.[0];
+  // A part whose children are required and whose doc suggests none (a
+  // dropdown menu's submenu, whose children are its flyout's rows) gets
+  // three of its parent's item part (DropdownMenuItem), as a group gets its
+  // slot's: drawn open, an empty flyout shows nothing of the theme.
+  const parentItem =
+    kids?.required && !kids.slots?.length && info.subComponentOf
+      ? `${info.subComponentOf}Item`
+      : null;
+  const slot =
+    kids?.slots?.[0] ??
+    (parentItem && project.components[parentItem]?.props?.label
+      ? {__element: parentItem, props: {label: 'Item'}}
+      : undefined);
   if (!('children' in props) && kids) {
     if (slot?.__element && (kids.required || slot.__element.startsWith(name))) {
       if (info.props.value && !('value' in props) && slot.props?.value != null)
@@ -244,7 +257,16 @@ export function catalogVariants(project, name, cap, opts = {}) {
   const base = info.opens ? opened(demo) : demo;
   const values = info.targets[0]?.values ?? {};
   const variants = [{label: '', props: base}];
-  for (const p of ['variant', 'status', 'color'])
+  // Every prop that changes the look, one sample per value (a variant, a
+  // status, a toast's type, an avatar's shape); a size is read at the one
+  // size drawn.
+  // (A number scale, a heading's level, is drawn below.)
+  for (const p of Object.keys(values).filter(
+    k =>
+      !/^(size|density|elevation)$/.test(k) &&
+      info.props?.[k] &&
+      !/^\s*\d+(\s*\|\s*\d+)*\s*$/.test(info.props[k].type ?? ''),
+  ))
     for (const v of values[p] ?? [])
       variants.push({
         label: v,
@@ -308,7 +330,7 @@ export function catalogItems(project) {
   /** @type {import('./_catalog.mjs').CatalogItem[]} */
   const items = [];
   for (const name of Object.keys(project.components))
-    for (const v of catalogVariants(project, name, 16))
+    for (const v of catalogVariants(project, name, 24))
       items.push({
         name,
         label: v.label,
@@ -926,6 +948,30 @@ export function multipliedTokens(project) {
 }
 
 /**
+ * The stylesheet without its forced-colors blocks: what Core draws for a
+ * high-contrast system mode (a button's 1px ButtonText border) is no look
+ * a theme gives, so the part data never reads it as the part's.
+ * @param {string} css
+ */
+function withoutForcedColors(css) {
+  let out = '';
+  let i = 0;
+  const re = /@media\s*\(\s*forced-colors\s*:\s*active\s*\)\s*\{/g;
+  for (let m = re.exec(css); m; m = re.exec(css)) {
+    out += css.slice(i, m.index);
+    let depth = 1;
+    let j = m.index + m[0].length;
+    for (; j < css.length && depth; j++) {
+      if (css[j] === '{') depth++;
+      else if (css[j] === '}') depth--;
+    }
+    i = j;
+    re.lastIndex = j;
+  }
+  return out + css.slice(i);
+}
+
+/**
  * Atomic class -> its declarations, with the condition (pseudo-class,
  * attribute) each one applies under.
  * @param {string} css
@@ -934,7 +980,7 @@ export function multipliedTokens(project) {
 export function declarations(css) {
   /** @type {Map<string, Array<{prop: string, value: string, cond: string}>>} */
   const decls = new Map();
-  for (const m of css.matchAll(
+  for (const m of withoutForcedColors(css).matchAll(
     /\.(x[a-z0-9]+)((?:\.x[a-z0-9]+|[:[][^{]*)?)\{([^{}]*)\}/g,
   )) {
     const [, cls, rest, body] = m;
@@ -1011,12 +1057,21 @@ function resolvePrivate(v, env, tokens, depth = 0) {
  * @returns {{map: Record<string, PartRecord>, pairs: TextPair[]}}
  */
 export function walkMarkup(html, decls, tokens, targets = new Map()) {
-  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, tags: Set<string>, innerCorners: Set<string>}>} */
+  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, tags: Set<string>, innerCorners: Set<string>, media: boolean}>} */
   const map = {};
   /** @type {Array<{env: Record<string, string>, target: string | null, fg: PaintSide | null, bg: PaintSide | null}>} */
   const stack = [{env: {}, target: null, fg: null, bg: null}];
   /** @type {Map<string, TextPair>} */
   const pairs = new Map();
+  /**
+   * Text drawn by a part with its paint: one pair per part, text and
+   * ground.
+   * @param {string} target @param {PaintSide} fg @param {PaintSide} bg @param {string} sample
+   */
+  const addPair = (target, fg, bg, sample) => {
+    const k = `${target}|${fg.target}:${fg.tokens.join('+') || fg.raw}|${bg.target}:${bg.tokens.join('+') || bg.raw}`;
+    pairs.set(k, {text: target, fg, bg, sample: sample.slice(0, 30)});
+  };
   for (const m of html.matchAll(
     /([^<]+)|<(\/?)([a-zA-Z][a-zA-Z0-9-]*)([^>]*?)(\/?)>/g,
   )) {
@@ -1024,15 +1079,8 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
     if (text !== undefined) {
       const top = stack[stack.length - 1];
       const t = text.trim();
-      if (t && top.target && top.fg && top.bg && !/^skip to/i.test(t)) {
-        const k = `${top.target}|${top.fg.target}:${top.fg.tokens.join('+') || top.fg.raw}|${top.bg.target}:${top.bg.tokens.join('+') || top.bg.raw}`;
-        pairs.set(k, {
-          text: top.target,
-          fg: top.fg,
-          bg: top.bg,
-          sample: t.slice(0, 30),
-        });
-      }
+      if (t && top.target && top.fg && top.bg && !/^skip to/i.test(t))
+        addPair(top.target, top.fg, top.bg, t);
       continue;
     }
     if (close) {
@@ -1092,10 +1140,20 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         contains: new Set(),
         tags: new Set(),
         innerCorners: new Set(),
+        media: false,
       });
       if (ownsTarget)
         for (const [k, v] of Object.entries(dataAttrs))
           (T.attrs[k] ??= new Set()).add(v);
+      // Core's media surface inside the part (a toast's inverted surface):
+      // it sets the text tokens of what it holds from the on-dark color
+      // where it is dark and the on-light color where it is light (Core's
+      // onMediaTokens), so the part's text reads one of them in each mode.
+      else if (/\bdata-astryx-media="/.test(attrs)) {
+        T.media = true;
+        for (const t of ['--color-on-dark', '--color-on-light'])
+          if (tokens.has(t)) (T.inside[t] ??= new Set()).add('color');
+      }
       const cond0 = [
         ...Object.entries(dataAttrs).map(([k, v]) => `${k}=${v}`),
         ...context,
@@ -1136,6 +1194,34 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         const t = [...expand(d.value, env, tokens)];
         if (t.length || !/transparent|^\s*inherit\s*$/i.test(d.value))
           bg = {target, tokens: t, raw: t.length ? null : d.value};
+      }
+    }
+    // An input's text is its value, and its placeholder where it has none:
+    // attributes, not text nodes, drawn in the input's text color (the
+    // placeholder in its own ::placeholder color) on the ground it sits on.
+    if (tag.toLowerCase() === 'input' && target && fg && bg) {
+      const attr = (/** @type {string} */ n) =>
+        new RegExp(`\\b${n}="([^"]*)"`).exec(attrs)?.[1]?.trim() ?? '';
+      const type = attr('type') || 'text';
+      if (
+        !/^(checkbox|radio|hidden|range|color|file|submit|button|reset|image)$/.test(
+          type,
+        )
+      ) {
+        if (attr('value')) addPair(target, fg, bg, attr('value'));
+        const ph = own.find(
+          d => d.prop === 'color' && /placeholder/.test(d.cond ?? ''),
+        );
+        if (attr('placeholder') && ph) {
+          const t = [...expand(ph.value, env, tokens)];
+          addPair(
+            target,
+            {target, tokens: t, raw: t.length ? null : ph.value},
+            bg,
+            attr('placeholder'),
+          );
+        } else if (attr('placeholder') && !attr('value'))
+          addPair(target, fg, bg, attr('placeholder'));
       }
     }
     for (const t of ownsTarget ? named.map(c => c.slice(7)) : [])
@@ -1184,6 +1270,7 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
       contains: [...v.contains],
       tags: [...v.tags],
       innerCorners: [...v.innerCorners],
+      ...(v.media ? {media: true} : {}),
     };
   }
   return {map: out, pairs: [...pairs.values()]};

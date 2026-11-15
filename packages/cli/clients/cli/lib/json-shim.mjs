@@ -47,6 +47,7 @@ import {
   toErrorEnvelope,
 } from '../../../foundation/response/json.mjs';
 import {answeredBy} from '../../../foundation/release/run-context.mjs';
+import {unknownSubcommandSuggestions} from './cli-error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {
   setCommand,
@@ -56,6 +57,7 @@ import {
 import {
   formatCliCommand,
   getCliInvocation,
+  quoteCommandArgument,
 } from '../../../foundation/env/package-manager.mjs';
 
 /**
@@ -203,6 +205,8 @@ function commanderCodeToErrorCode(commanderCode, message) {
       return ERROR_CODES.ERR_UNKNOWN_COMMAND;
     case 'commander.unknownOption':
       return ERROR_CODES.ERR_INVALID_OPTION;
+    case UNKNOWN_SUBCOMMAND:
+      return ERROR_CODES.ERR_UNKNOWN_SUBCOMMAND;
     case 'commander.missingArgument':
     case 'commander.optionMissingArgument':
     case 'commander.missingMandatoryOptionValue':
@@ -307,6 +311,32 @@ function applyShimRecursively(cmd) {
 /** Carries the command Commander rejected from exitOverride to the error handler. */
 const REJECTED_COMMAND = Symbol.for('astryx.jsonShim.rejectedCommand');
 
+/** A group given a word that is none of its subcommands. */
+const UNKNOWN_SUBCOMMAND = 'astryx.unknownSubcommand';
+
+/**
+ * The word typed after a group's own words that is none of its
+ * subcommands, read from the command line; null when there is none.
+ * @param {any} group
+ * @returns {string | null}
+ */
+function unknownGroupWord(group) {
+  const chain = [];
+  for (let node = group; node?.parent; node = node.parent)
+    chain.unshift(node.name());
+  let root = group;
+  while (root.parent) root = root.parent;
+  const argv = /** @type {string[]} */ (root.rawArgs ?? process.argv);
+  const words = argv.slice(2).filter(w => !String(w).startsWith('-'));
+  for (let i = 0; i < chain.length; i++) if (words[i] !== chain[i]) return null;
+  const next = words[chain.length];
+  const names = group.commands.flatMap((/** @type {any} */ c) => [
+    c.name(),
+    ...c.aliases(),
+  ]);
+  return next != null && !names.includes(next) ? next : null;
+}
+
 /**
  * The usage line of the command a parse error came from, as a suggestion, for
  * an option given without its value.
@@ -319,11 +349,12 @@ function usageSuggestion(err, code) {
   if (!cmd) return undefined;
   const parts = [];
   for (let node = cmd; node; node = node.parent) parts.unshift(node.name());
-  // The theme editor names what is missing with its usage and its help, as
-  // the project runs the CLI.
+  // The theme editor and its preview commands name what is missing with
+  // their usage and help, as the project runs the CLI.
   if (
     code === 'commander.missingArgument' &&
-    parts.slice(1, 4).join(' ') === 'experimental theme editor'
+    parts.slice(1, 3).join(' ') === 'experimental theme' &&
+    ['editor', 'preview'].includes(parts[3])
   )
     return editorMissingSuggestions(cmd);
   if (code !== 'commander.optionMissingArgument') return undefined;
@@ -381,19 +412,21 @@ export function setUnknownOptionReader(read) {
 }
 
 /**
- * The theme name the editor offers `new` here, the one its own refusals
- * offer: the name asked for when its folder is free, else name-2, name-3…
- * The editor registers it, so this module reads no theme files.
- * @type {(cwd: string, name: string) => string}
+ * The word a theme command missing its one argument is offered, the one its
+ * own refusals offer (`new`: a theme name no theme here has; `preview app`:
+ * a folder that is free), with why; null for a command that has none. The
+ * editor registers it, so this module reads no theme files.
+ * @type {(cwd: string, words: string) => {word: string, reason: string} | null}
  */
-let editorFreeName = (_cwd, name) => name;
+let freeArgument = () => null;
 
 /**
- * Register the theme name the editor offers `new` here.
- * @param {(cwd: string, name: string) => string} free
+ * Register the word a theme command missing its one argument is offered.
+ * @param {(cwd: string, words: string) => {word: string, reason: string} | null} free
+ *   `words`: the command's words after the program, `experimental theme editor new`
  */
-export function setEditorFreeName(free) {
-  editorFreeName = free;
+export function setFreeArgument(free) {
+  freeArgument = free;
 }
 
 /**
@@ -441,17 +474,39 @@ function editorMissingSuggestions(cmd) {
         },
       ];
   }
-  // `new` with no name: a name no theme here has.
-  if (!(cmd?.args ?? []).length && cmd.name() === 'new') {
-    const free = editorFreeName(process.cwd(), 'my-theme');
+  // Words given with the theme left out (`set corners pill`), in an app
+  // with one editor theme that none of the words names: the same words on
+  // that theme.
+  const given = (cmd?.args ?? []).map(String);
+  if (given.length && wants[0]?.name() === 'theme' && cmd.name() !== 'new') {
+    const themes = editorThemesHere(process.cwd());
+    if (themes.length === 1 && !given.includes(themes[0]))
+      return [
+        {
+          name: `${invocation} ${words} ${themes[0]} ${given.map((/** @type {string} */ w) => quoteCommandArgument(w)).join(' ')}`,
+          reason: `do this instead: ${themes[0]} is the theme here`,
+        },
+        {
+          name: `${invocation} ${words} --help`,
+          reason: 'what each argument is',
+        },
+      ];
+  }
+  // A command whose one argument names something new (`new`'s theme,
+  // `preview app`'s folder), given none: the free word its own refusals
+  // offer.
+  const free =
+    !(cmd?.args ?? []).length && wants.length === 1
+      ? freeArgument(process.cwd(), words)
+      : null;
+  if (free)
     return [
       {
-        name: `${invocation} ${words} ${free}`,
-        reason: 'do this instead: a name for the new theme',
+        name: `${invocation} ${words} ${free.word}`,
+        reason: `do this instead: ${free.reason}`,
       },
       {name: `${invocation} ${words} --help`, reason: 'what each argument is'},
     ];
-  }
   return [
     {name: `${invocation} ${words} ${cmd.usage()}`.trim(), reason: 'usage'},
     {name: `${invocation} ${words} --help`, reason: 'what each argument is'},
@@ -654,9 +709,33 @@ export function handleCommanderError(err) {
     code: commanderCodeToErrorCode(code, message),
   });
 
+  // A group of the experimental theme commands given a word it does not
+  // have, then an option (`experimental theme preview path --theme t`): the
+  // word is what is wrong, named as when no option follows it, with the
+  // group's subcommands closest first. Stable groups keep their error.
+  const rejected = /** @type {any} */ (err)?.[REJECTED_COMMAND];
+  const group = rejected;
+  const chain = [];
+  for (let node = group; node?.parent; node = node.parent)
+    chain.unshift(node.name());
+  const word =
+    code === 'commander.unknownOption' &&
+    group?.commands?.length &&
+    chain.slice(0, 2).join(' ') === 'experimental theme'
+      ? unknownGroupWord(group)
+      : null;
+  if (word) {
+    return finishParseError(err, UNKNOWN_SUBCOMMAND, message, exitCode, {
+      message: `unknown subcommand '${chain.join(' ')} ${word}'`,
+      suggestions: unknownSubcommandSuggestions(
+        `${getCliInvocation(process.cwd())} ${chain.join(' ')}`,
+        word,
+        group.commands.map((/** @type {any} */ c) => c.name()),
+      ),
+    });
+  }
   // An option a command does not take: the editor's own reader reads its
   // commands' options; every other command gets the generic answer.
-  const rejected = /** @type {any} */ (err)?.[REJECTED_COMMAND];
   if (code === 'commander.unknownOption' && rejected)
     return answerStrayOption(err, rejected, message, exitCode);
 

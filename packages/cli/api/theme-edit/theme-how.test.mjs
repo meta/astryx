@@ -15,7 +15,7 @@ import * as zlib from 'node:zlib';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {parsePoints} from './_adapter.mjs';
-import {checkSetting} from './_check.mjs';
+import {checkSetting, pillDrawnRadios} from './_check.mjs';
 import {context} from './_context.mjs';
 import {howTheme} from './_how-commands.mjs';
 import {compileTheme, keyOf} from './_settings.mjs';
@@ -41,10 +41,23 @@ vi.mock('./_preview.mjs', async importOriginal =>
 /** @type {string} */
 let cwd;
 
+/**
+ * The steps that keep the radio marks round when the pills go square, on a
+ * Core that draws a radio's circle with the pill token; none on a Core that
+ * draws it at 50%.
+ */
+let radioPins = '';
+
 beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-how-', FIXTURE_PACKAGES);
   writeFixtureBaseTheme(cwd, 'neutral');
   await themeEditNew('q', {cwd, like: 'neutral'});
+  radioPins = pillDrawnRadios((await context(cwd)).C)
+    .map(
+      m =>
+        ` && set q --radius-full 9999px --on ${m}${m === 'radio-indicator' ? ' --only' : ''}`,
+    )
+    .join('');
 }, 120_000);
 
 afterAll(() => {
@@ -221,9 +234,10 @@ const QUESTIONS = [
     },
   ],
   [
+    // (Every focus ring: the inputs draw theirs in their box-shadow.)
     'change the focus ring color to orange',
     {
-      top: /^set q --focus-outline-color '#f97316'$/,
+      top: /^set q --focus-outline-color '#f97316' && set q box-shadow 'inset 0 0 0 2px #f97316' --on inputs --state focus-within/,
       adds: /--focus-outline-color=#f97316/,
     },
   ],
@@ -358,10 +372,12 @@ const QUESTIONS = [
     {top: /^set q border none --on button$/, adds: /button\.base\.border=none/},
   ],
   [
+    // (The dialog draws no border now: a width alone shows nothing, so the
+    // whole line.)
     '2px border on the dialog',
     {
-      top: /^set q border-width 2px --on dialog$/,
-      adds: /dialog\.base\.borderWidth=2px/,
+      top: /^set q border '2px solid var\(--color-border\)' --on dialog$/,
+      adds: /dialog\.base\.border=2px solid var\(--color-border\)/,
     },
   ],
   [
@@ -465,7 +481,10 @@ const QUESTIONS = [
   [
     'square corners everywhere',
     {
-      top: /^set q corners square && set q --radius-full 0px$/,
+      top: () =>
+        new RegExp(
+          `^set q corners square && set q --radius-full 0px${radioPins.replace(/[-.]/g, '\\$&')}$`,
+        ),
       adds: /--radius-element=0px/,
     },
   ],
@@ -775,7 +794,9 @@ describe('how answers plain-words questions', () => {
       const top = changes[0];
       expect(top).toBeTruthy();
       const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
       if (want.adds) expect(await effect(commands)).toMatch(want.adds);
     });
 
@@ -1400,7 +1421,9 @@ describe('how answers pass-2 questions', () => {
       expect(results[0]).toBe(changes[0]);
       const top = changes[0];
       const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
       if (want.adds) expect(await effect(commands)).toMatch(want.adds);
     });
 
@@ -1800,7 +1823,9 @@ describe('how answers pass-3 questions', () => {
       }
       const top = changes[0];
       const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
       // A step is given once.
       expect(new Set(commands).size).toBe(commands.length);
       if (want.adds) expect(await effect(commands)).toMatch(want.adds);
@@ -1922,8 +1947,11 @@ const QUESTIONS_F = [
   ['buttons are not rounded enough', {top: /^set q corners more --on button$/}],
   [
     'nothing should be rounded except avatars',
-    // The avatar keeps the corner token it reads, so its own corners stay.
-    {top: /^set q corners square && set q --radius-full 9999px --on avatar$/},
+    // The avatar keeps every corner token it reads (each shape it draws),
+    // so its own corners stay.
+    {
+      top: /^set q corners square && set q --radius-full 9999px --on avatar( && set q --radius-[a-z]+ \S+ --on avatar)*$/,
+    },
   ],
   [
     'the shadows are too strong',
@@ -2133,7 +2161,9 @@ describe('how answers final-pass questions', () => {
       }
       const top = changes[0];
       const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
       if (want.adds) expect(await effect(commands)).toMatch(want.adds);
     });
 
@@ -2460,7 +2490,9 @@ describe('how answers final-2 questions', () => {
       }
       const top = changes[0];
       const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
       if (want.adds) expect(await effect(commands)).toMatch(want.adds);
     });
 
@@ -2757,7 +2789,9 @@ describe('how answers final-3 questions', () => {
       }
       const top = changes[0];
       const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
       if (want.adds) expect(await effect(commands)).toMatch(want.adds);
     });
 
@@ -2996,7 +3030,9 @@ describe('how answers final-4 questions', () => {
       }
       const top = changes[0];
       const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
       if (want.adds) expect(await effect(commands)).toMatch(want.adds);
     });
 
@@ -3112,7 +3148,10 @@ const QUESTIONS_J = [
   [
     'zero radius everywhere',
     {
-      top: /^set q corners square && set q --radius-full 0px$/,
+      top: () =>
+        new RegExp(
+          `^set q corners square && set q --radius-full 0px${radioPins.replace(/[-.]/g, '\\$&')}$`,
+        ),
       adds: /--radius-element=0px/,
     },
   ],
@@ -3225,7 +3264,9 @@ describe('how answers final-5 questions', () => {
       }
       const top = changes[0];
       const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
       if (want.adds) expect(await effect(commands)).toMatch(want.adds);
     });
 
@@ -3305,7 +3346,9 @@ describe('how answers final-6 questions', () => {
       }
       const top = changes[0];
       const commands = top.sequence ? top.commands : [top.commands[0]];
-      expect(commands.map(bare).join(' && ')).toMatch(want.top);
+      expect(commands.map(bare).join(' && ')).toMatch(
+        typeof want.top === 'function' ? want.top() : want.top,
+      );
     });
 });
 
@@ -4227,13 +4270,20 @@ describe('how answers final-14 fixes', () => {
 
 describe('how lookups', () => {
   it('names the same states for a state a part lacks as set and how <part> do', async () => {
+    // "checked rows" are the rows selected: how reads the selection word
+    // as the row's one selection state; set, given the state a row lacks,
+    // names the states how <part> lists.
     const {data} = await themeEditHow('checked rows in the table tinted blue', {
       cwd,
       theme: 'q',
     });
-    const said = /its states: ([^)]*)\)/.exec(
-      (data.results ?? []).map((/** @type {any} */ r) => r.text).join('\n'),
-    )?.[1];
+    expect(
+      (data.results ?? []).some((/** @type {any} */ r) =>
+        r.commands.some((/** @type {string} */ c) =>
+          / --on table-row --state selected\b/.test(c),
+        ),
+      ),
+    ).toBe(true);
     const part = (await themeEditHow('table-row', {cwd, theme: 'q'})).data;
     const r = await refusal(() =>
       themeEditSet('q', 'background', '#dbeafe', {
@@ -4242,8 +4292,7 @@ describe('how lookups', () => {
         state: 'checked',
       }),
     );
-    expect(said).toBe(part.states.join(', '));
-    expect(r.message).toContain(`States: ${said}.`);
+    expect(r.message).toContain(`States: ${part.states.join(', ')}.`);
   });
 
   it('maps what a part reads under to the flags set takes, or says why none does', async () => {

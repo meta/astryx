@@ -227,9 +227,13 @@ describe('except keeps every excepted part, variant and state', () => {
     'shadows everywhere but cards keep the cards own shadow',
     async () => {
       const r = await answer('remove shadows from everything except cards');
-      expect(r.commands.some(c => /box-shadow .+ --on card/.test(c))).toBe(
-        true,
-      );
+      // (The card picks its shadow by its elevation: the shadow tokens are
+      // kept on it, so every elevation keeps its shadow.)
+      expect(
+        r.commands.some(c =>
+          /(?:box-shadow|--shadow-[a-z]+) .+ --on card/.test(c),
+        ),
+      ).toBe(true);
     },
     T,
   );

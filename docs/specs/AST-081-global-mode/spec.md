@@ -426,8 +426,9 @@ works on is `spec:AST-040` FR9's.
     cached on disk; where the system has no user ids jiti keeps its own
     default, and a set `JITI_FS_CACHE` is left to jiti;
   - the platform's temporary directory, for scratch work such as building or
-    verifying a package, and for Node's compile cache of the CLI's own modules
-    in `node-compile-cache-<uid>`: made `0700` by a machine's first run and
+    verifying a package, for a scratch copy of a template at a path the caller
+    names there (`architecture:cli-surface` INV10, DEC-15), and for Node's
+    compile cache of the CLI's own modules in `node-compile-cache-<uid>`: made `0700` by a machine's first run and
     written from that run, used only while it is a real folder the user owns
     and others cannot open, never where the system has no user ids, and off
     when `NODE_DISABLE_COMPILE_CACHE` is set;

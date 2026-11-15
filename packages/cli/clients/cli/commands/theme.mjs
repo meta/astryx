@@ -1247,7 +1247,8 @@ function registerThemeCommands(theme, program, docs, words) {
           : null;
         out.push(...(refused ? (refused.suggestions ?? []) : [s]));
       }
-      return out;
+      // Two guesses can lead to the same line: it is offered once.
+      return out.filter((s, i) => out.findIndex(x => x.name === s.name) === i);
     };
     /** @param {string} message @param {Parameters<typeof cliError>[1]} [opts] */
     const refuse = async (message, opts = {}) =>
@@ -1293,9 +1294,12 @@ function registerThemeCommands(theme, program, docs, words) {
         : (words.missingSource?.(entry.file, process.cwd()) ?? null);
       // A file another command generates, gone from a folder whose other
       // files carry that command's mark: that command writes it again; a
-      // blank theme template is no way back.
+      // blank theme template is no way back. A theme source that exists
+      // near the name given is what it meant instead.
       const by =
-        rewrite || looksGlobby ? null : generatedSourceCommand(entry.filePath);
+        rewrite || looksGlobby || guesses.length > 0
+          ? null
+          : generatedSourceCommand(entry.filePath);
       if (by)
         return await refuse(
           `File not found: ${entry.filePath}. It is a generated file: the files beside it are written by ${by}, so rebuild it with the command that made it.`,
@@ -1780,6 +1784,23 @@ function registerThemeCommands(theme, program, docs, words) {
         if (report && compact) printCompactTrailer(trailers);
         else if (report) printBatchTrailer(trailers);
         if (entries.length > 1) err.message = `${entry.file}: ${err.message}`;
+        // The themes built before this one are written (a check writes
+        // nothing): the refusal says so, in text and --json alike, and its
+        // "nothing was written" speaks for this theme only.
+        const written = options.check
+          ? []
+          : results.flatMap(r =>
+              r.receipt?.type === 'theme.build' && r.receipt.data?.outputs
+                ? Object.values(r.receipt.data.outputs).filter(
+                    o => typeof o === 'string',
+                  )
+                : [],
+            );
+        if (written.length)
+          err.message = `${err.message.replace(
+            /\s*Nothing was written\.?$/,
+            ` Nothing was written for ${entry.file}.`,
+          )} The themes before it were built and written: ${written.join(', ')}.`;
         return await refuseTheme(
           entries.length === 1
             ? ((await words.follow?.(err, process.cwd())) ?? err)
