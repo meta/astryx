@@ -2880,6 +2880,14 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
       `The default export is ${ownDefault === null ? 'null' : `a ${typeof ownDefault}`}, not a theme object.`,
     );
   }
+  // A Promise of a theme (an async helper's result, its await left out) is
+  // an object with no name: the build reads the export as it is and does
+  // not await it.
+  if (hasDefault && typeof ownDefault?.then === 'function') {
+    throw new ThemeShapeError(
+      'The default export is a Promise, not a theme object: the build reads the export as it is and does not await it. Export the theme itself, such as export default await …, or the defineTheme() result.',
+    );
+  }
   // A plain-object default export is the module's theme even when it has
   // no tokens of its own (local tokens, typography or component styles may
   // be all it defines), or no name: the build's validation says what it
@@ -4211,8 +4219,12 @@ async function themeBuildInternal(
   if (!report.compact) {
     logger.log(`\nBuilding theme from ${path.relative(cwd, filePath)}...`);
   }
-  // A compact report has no per-theme heading, so each warning names its file.
-  const source = report.compact ? `${path.relative(cwd, filePath)}: ` : '';
+  // A compact report has no per-theme heading, and a family's warnings are
+  // read together, so each warning names its file.
+  const source =
+    report.compact || handOff.prepareFamily
+      ? `${path.relative(cwd, filePath)}: `
+      : '';
 
   if (projectCore && !findProjectCoreDir(cwd)) {
     throw new AstryxError(
@@ -5845,7 +5857,17 @@ Load the family CSS once, then select any member by theme identity (paths are re
 Or load the same stylesheet natively:
   <link rel="stylesheet" href="${cssImport}" />
 `);
-  const warnings = [...new Set(members.flatMap(member => member.warnings))];
+  // Each member's warnings name the member they are about.
+  const warnings = [
+    ...new Set(
+      members.flatMap(member =>
+        member.warnings.map(
+          (/** @type {string} */ w) =>
+            `${path.relative(cwd, member.filePath)}: ${w}`,
+        ),
+      ),
+    ),
+  ];
   const unloadedFonts = [
     ...new Set(members.flatMap(member => member.unloadedFonts)),
   ];

@@ -2401,6 +2401,25 @@ function exportedValue(file, name, hops = 0) {
       return unwrap(n.expression, k + 1);
     if (n.type === 'Identifier' && local.has(n.name))
       return unwrap(local.get(n.name), k + 1);
+    // A property of a block the file binds (`export const toks = base.toks`).
+    if (
+      (n.type === 'MemberExpression' ||
+        n.type === 'OptionalMemberExpression') &&
+      !n.computed
+    ) {
+      const key = n.property?.name ?? n.property?.value;
+      const base = unwrap(n.object, k + 1);
+      const prop =
+        base?.type === 'ObjectExpression'
+          ? base.properties.findLast(
+              (/** @type {any} */ p) =>
+                p.type === 'ObjectProperty' &&
+                !p.computed &&
+                (p.key?.name ?? p.key?.value) === key,
+            )
+          : null;
+      if (prop) return unwrap(prop.value, k + 1);
+    }
     return n;
   };
   /** @param {any} node */
@@ -2645,18 +2664,22 @@ function ownPageTokens(
   /**
    * The value a node of the theme file reads from a file beside it, read in
    * the file that holds it: an imported name, a property read off one
-   * (`all.toks`, `s.toks` of a namespace import, `const {toks} = all`), or
-   * what an imported function returns (`make()`). Null when the value is
+   * (`all.toks`, `all?.toks`, `s.toks` of a namespace import, `const {toks}
+   * = all`), or what an imported function returns (`make()`), with the
+   * arguments the theme file passes, by parameter. Null when the value is
    * not read from another file.
    * @param {any} node
    * @param {number} [depth]
-   * @returns {{obj: any, code: string, file: string, unwrap: (n: any) => any} | null}
+   * @returns {{obj: any, code: string, file: string, unwrap: (n: any) => any, args?: Map<string, any>} | null}
    */
   const importedValue = (node, depth = 0) => {
     if (depth > 12) return null;
     const n = unwrap(node);
     if (n?.type === 'Identifier') return imported(n.name);
-    if (n?.type === 'MemberExpression') {
+    if (
+      n?.type === 'MemberExpression' ||
+      n?.type === 'OptionalMemberExpression'
+    ) {
       const key = n.computed ? textOf(unwrap(n.property)) : keyOf(n.property);
       if (key == null) return null;
       if (n.object?.type === 'Identifier') {
@@ -2691,7 +2714,16 @@ function ownPageTokens(
               (/** @type {any} */ st) => st.type === 'ReturnStatement',
             )?.argument
           : body;
-      return fn && returned ? {...fn, obj: fn.unwrap(returned)} : null;
+      if (!fn || !returned) return null;
+      // A parameter the returned value holds is the argument the theme
+      // file passes.
+      /** @type {Map<string, any>} */
+      const args = new Map();
+      f.params.forEach((/** @type {any} */ p, /** @type {number} */ i) => {
+        if (p.type === 'Identifier' && n.arguments[i])
+          args.set(p.name, n.arguments[i]);
+      });
+      return {...fn, obj: fn.unwrap(returned), args};
     }
     return null;
   };
@@ -2709,6 +2741,28 @@ function ownPageTokens(
     const from = importedValue(node);
     const line = from?.obj?.loc?.start?.line;
     return from && line != null ? {file: from.file, line} : {};
+  };
+  /**
+   * Where a property's value is written: its line in the file it is in, or,
+   * for a parameter of an imported function (`make('nope')`), the argument
+   * the theme file passes.
+   * @param {any} p the property
+   * @param {{file: string | null, args?: Map<string, any>}} at the file the property is in (null for the source)
+   * @returns {{line: number | null, file?: string}}
+   */
+  const placeOf = (p, at) => {
+    const arg =
+      p.value?.type === 'Identifier' ? at.args?.get(p.value.name) : undefined;
+    if (arg)
+      return {
+        line: arg.loc?.start?.line ?? null,
+        ...importedValueAt(arg, null),
+      };
+    return {
+      line: p.loc?.start?.line ?? null,
+      ...(at.file ? {file: at.file} : {}),
+      ...importedValueAt(p.value, at.file),
+    };
   };
   // A theme the exported one extends that a file beside it defines
   // (`import {mid} from './mid'`): its call and each token its literal
@@ -2845,8 +2899,8 @@ function ownPageTokens(
        * (`components: parts`, `parts.button`) is read in that file, so its
        * keys and lines are its own.
        * @param {any} node
-       * @param {{file: string | null, unwrap: (n: any) => any}} src the file the node is in (null for the source)
-       * @returns {{obj: any, src: {file: string | null, unwrap: (n: any) => any}}}
+       * @param {{file: string | null, unwrap: (n: any) => any, args?: Map<string, any>}} src the file the node is in (null for the source)
+       * @returns {{obj: any, src: {file: string | null, unwrap: (n: any) => any, args?: Map<string, any>}}}
        */
       const blockOf = (node, src) => {
         const from = src.file == null ? importedValue(node) : null;
@@ -2871,7 +2925,7 @@ function ownPageTokens(
        * @param {any} node
        * @param {string[]} at
        * @param {number} depth
-       * @param {{file: string | null, unwrap: (n: any) => any}} [from] the file the node is in (null for the source)
+       * @param {{file: string | null, unwrap: (n: any) => any, args?: Map<string, any>}} [from] the file the node is in (null for the source)
        */
       const walk = (node, at, depth, from = {file: null, unwrap}) => {
         if (depth > 12) return;
@@ -2903,9 +2957,7 @@ function ownPageTokens(
               key: k,
               kind: 'scoped',
               scope: at.join('.'),
-              line: q.loc?.start?.line ?? null,
-              ...inFile,
-              ...importedValueAt(q.value, src.file),
+              ...placeOf(q, src),
             });
           else {
             // A block's own key (a style key, a pseudo-class, onDark's
@@ -2997,7 +3049,7 @@ function ownPageTokens(
   /**
    * @param {any} node
    * @param {number} depth
-   * @param {{code: string, file: string | null, unwrap: (n: any) => any}} [at]
+   * @param {{code: string, file: string | null, unwrap: (n: any) => any, args?: Map<string, any>}} [at]
    *   the file the node is in (null for the theme file)
    */
   const collect = (node, depth, at = {code, file: null, unwrap}) => {
@@ -3026,9 +3078,7 @@ function ownPageTokens(
           detail.push({
             token: k?.startsWith('--') ? k : null,
             key: at.code.slice(p.key.start, p.key.end),
-            line: p.loc?.start?.line ?? null,
-            ...(at.file ? {file: at.file} : {}),
-            ...importedValueAt(p.value, at.file),
+            ...placeOf(p, at),
             // A key that is no token name (`color`): the build writes it
             // as a declaration on the theme's root.
             ...(k && !k.startsWith('--') ? {notToken: true} : {}),
@@ -7828,15 +7878,17 @@ export function nonTextMessage(ctx, slug, [name, value, kind = 'value']) {
     return `${slug}.theme.ts gives ${name} an object (${describeValue(value)}); a token value is a CSS value in quotes, such as '8px' (only a color takes a [light, dark] pair).`;
   if (kind === 'unit') {
     const n = /** @type {unknown[]} */ (value).find(
-      x => typeof x === 'number' && x !== 0,
+      x => typeof x === 'number' && Number.isFinite(x) && x !== 0,
     );
-    return `${slug}.theme.ts gives ${name}, a size, a [light, dark] pair with a number without a unit (${/** @type {unknown[]} */ (value).join(', ')}); a size needs one, and is the same in light and dark, so give one value, such as '${n}px'.`;
+    return `${slug}.theme.ts gives ${name}, a size, a [light, dark] pair with a number without a unit (${/** @type {unknown[]} */ (value).join(', ')}); a size needs one, and is the same in light and dark, so give one value${n === undefined ? '' : `, such as '${n}px'`}.`;
   }
   const one = Array.isArray(value)
     ? value.find(x => typeof x !== 'string')
     : value;
+  // NaN and Infinity (a computed value gone wrong) are no CSS number, so
+  // they give no example.
   const example =
-    typeof one === 'number'
+    typeof one === 'number' && Number.isFinite(one)
       ? type === 'size'
         ? `'${one}px'`
         : `'${one}'`

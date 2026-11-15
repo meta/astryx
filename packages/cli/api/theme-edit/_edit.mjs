@@ -138,13 +138,11 @@ import {
   pillParts,
   propertyValueProblem,
   storedProblems,
+  unknownVarRef,
 } from './_check.mjs';
 import {MODAL, isColorToken} from './_compiler.mjs';
 import {fontShorthandFamilyList} from '../theme/build/font-warning.mjs';
-import {
-  partCustomPropertyProblem,
-  pseudoKeyProblem,
-} from '../theme/build/style-keys.mjs';
+import {innerBlock, partKeyProblem} from '../theme/build/style-keys.mjs';
 import {colorProblem, hex, parseColor, ratio} from './_color.mjs';
 import {
   PALETTE_DIALS,
@@ -2842,7 +2840,14 @@ async function ownTokenProblems(ctx, slug, data) {
           ? [token, value, 'object']
           : [token, value],
       );
-    if (custom) return null;
+    // A custom property of the theme's own passes its value on to what
+    // reads it: a var() in it that reads nothing gives that nothing.
+    if (custom) {
+      const ref = unknownVarRef(value, known, token, reads);
+      return ref
+        ? `${token} passes its value on to what reads it: ${ref.message}`
+        : null;
+    }
     if (/^light-dark\(/i.test(value) && !isColorToken(token))
       return `${file} gives ${token} a [light, dark] pair, but only colors differ by mode: the build would write light-dark(), which browsers take only for colors; give it one value`;
     return refused(token, value, reads);
@@ -2893,6 +2898,8 @@ async function ownTokenProblems(ctx, slug, data) {
       }
     if (typeof value === 'string')
       return propertyValueProblem(ctx, prop, value, known, reads);
+    if (typeof value === 'number' && !Number.isFinite(value))
+      return `${file} gives ${prop} ${value}, a number no CSS value holds (a computed value gone wrong, such as a division by zero), which the build writes as it is and the browser drops: give a CSS value in quotes`;
     if (typeof value === 'number')
       return matchValue(prop, String(value))
         ? null
@@ -3119,8 +3126,13 @@ async function ownTokenProblems(ctx, slug, data) {
         token(at, k, v, reads, map === 'tokens');
       }
     }
-    /** A part's style block. @param {any} node @param {string[]} at @param {Set<string>} outer @param {number} depth */
-    const part = (node, at, outer, depth) => {
+    /**
+     * A part's style block: its style keys at depth 0, then the block of
+     * `kind` each holds.
+     * @param {any} node @param {string[]} at @param {Set<string>} outer @param {number} depth
+     * @param {import('../theme/build/style-keys.mjs').PartBlock} [kind]
+     */
+    const part = (node, at, outer, depth, kind = 'style') => {
       if (!node || typeof node !== 'object' || depth > 12) return;
       const named = at[at.lastIndexOf('components') + 1];
       const component = named ? (targetKey(named) ?? undefined) : undefined;
@@ -3141,25 +3153,38 @@ async function ownTokenProblems(ctx, slug, data) {
       for (const [k, v] of Object.entries(node)) {
         // A style key's own value is judged with the part's entries.
         if (depth === 0 && (!v || typeof v !== 'object')) continue;
+        // Inside a style key, a block under a pseudo-class's bare name is
+        // that pseudo-class without its colon.
+        if (
+          depth > 0 &&
+          v &&
+          typeof v === 'object' &&
+          /^[a-z-]+$/i.test(k) &&
+          (CSS_PSEUDO_CLASSES.has(k.toLowerCase()) ||
+            (target?.states ?? []).includes(k))
+        ) {
+          refuse(
+            at,
+            k,
+            `${k} holds a block, and a pseudo-class starts with a colon: write it as ':${k}'`,
+            '',
+            whereKey(at.join('.'), k),
+          );
+          continue;
+        }
         // A key the build cannot write as it is: a custom property whose
-        // name it renames, a pseudo key that is no single selector.
-        const unwritable =
-          depth === 0
-            ? null
-            : k.startsWith('--')
-              ? v === undefined
-                ? null
-                : partCustomPropertyProblem(k)
-              : k.startsWith(':') && v && typeof v === 'object'
-                ? pseudoKeyProblem(k)
-                : null;
+        // name it renames or CSS keeps, a pseudo key that is no single
+        // selector or that the browser drops, a block where none nests, a
+        // vendor property without its dash.
+        const unwritable = depth === 0 ? null : partKeyProblem(k, v, kind);
         if (unwritable) {
+          const pseudo = k.startsWith(':');
           refuse(
             at,
             k,
             unwritable,
-            k.startsWith('--') ? asWritten(v) : '',
-            k.startsWith('--') ? undefined : whereKey(at.join('.'), k),
+            pseudo ? '' : asWritten(v),
+            pseudo ? whereKey(at.join('.'), k) : undefined,
           );
           continue;
         }
@@ -3231,33 +3256,20 @@ async function ownTokenProblems(ctx, slug, data) {
           );
           continue;
         }
-        // Inside a style key, a block under a pseudo-class's bare name is
-        // that pseudo-class without its colon.
-        if (
-          depth > 0 &&
-          v &&
-          typeof v === 'object' &&
-          /^[a-z-]+$/i.test(k) &&
-          (CSS_PSEUDO_CLASSES.has(k.toLowerCase()) ||
-            (target?.states ?? []).includes(k))
-        ) {
-          refuse(
-            at,
-            k,
-            `${k} holds a block, and a pseudo-class starts with a colon: write it as ':${k}'`,
-            '',
-            whereKey(at.join('.'), k),
-          );
-          continue;
-        }
         if (v && typeof v === 'object' && !Array.isArray(v)) {
-          part(v, [...at, k], here, depth + 1);
+          part(
+            v,
+            [...at, k],
+            here,
+            depth + 1,
+            depth === 0 ? 'style' : innerBlock(k, kind),
+          );
           continue;
         }
         const prop = k.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`);
         // A vendor-prefixed property is the browser's own: Core checks
         // that the declaration stays one.
-        if (/^-|^(webkit|moz|ms|o)-/.test(prop)) continue;
+        if (prop.startsWith('-')) continue;
         // An undefined property is not set: the build writes nothing for it.
         if (v === undefined) continue;
         const loc = where(at.join('.'), k);

@@ -92,19 +92,168 @@ export function pseudoKeyProblem(key) {
     const what = open.at(-1) === '(' ? 'a parenthesis' : 'a bracket';
     return `${key} leaves ${what} open, so ${drops}${pseudoKeyProblem(closed) ? '' : `; did you mean '${closed}'?`}`;
   }
+  /** @type {any} */
+  let ast;
   try {
-    t.parse(`.p${key}`, {context: 'selectorList'});
+    ast = t.parse(`.p${key}`, {context: 'selectorList', positions: true});
   } catch (e) {
     const reason = e instanceof Error ? e.message : String(e);
     return `${key} is no selector a browser reads (${reason.replace(/\.$/, '')}), so the build writes a rule the browser drops`;
   }
-  if (commas.length === 0) return null;
+  if (commas.length === 0) return compoundProblem(key, ast);
   const members = [-1, ...commas]
     .map((at, i) => key.slice(at + 1, commas[i] ?? key.length).trim())
     .filter(Boolean);
   if (members.length < 2)
     return `${key} holds an empty selector, so the browser drops the rule${members[0] ? `: write '${members[0]}'` : ''}`;
   return `${key} is a selector list, and the build puts the part's selector before its first member only, so ${members.slice(1).join(', ')} would style every element ${members.length > 2 ? 'they match' : 'it matches'} in the app: give each its own key, ${members.map(m => `'${m}': {…}`).join(', ')}`;
+}
+
+/**
+ * The text of a selector node in a pseudo key, read off the key (parsed
+ * after a two-letter class).
+ * @param {string} key @param {any} node
+ */
+const textOf = (key, node) =>
+  key.slice(node.loc.start.offset - 2, node.loc.end.offset - 2);
+
+/**
+ * Why a pseudo key that parses as one selector still builds a rule the
+ * browser drops or Core misreads, or null: a pseudo name with an escape (a
+ * name no browser knows), something after a pseudo-element (which ends its
+ * selector, unless it is a vendor one or takes arguments, as `::part()`
+ * does), or a pseudo name in capitals (a browser reads it either way, but
+ * Core reads only the lower-case name as that pseudo-class).
+ * @param {string} key
+ * @param {any} ast the key parsed after `.p`, with positions
+ * @returns {string | null}
+ */
+function compoundProblem(key, ast) {
+  const t = cssTree();
+  /** @type {string | null} */
+  let why = null;
+  /** @type {any[]} */
+  const capitals = [];
+  t.walk(ast, (/** @type {any} */ node) => {
+    if (
+      node.type !== 'PseudoClassSelector' &&
+      node.type !== 'PseudoElementSelector'
+    )
+      return;
+    const colons = node.type === 'PseudoElementSelector' ? '::' : ':';
+    if (node.name.includes('\\'))
+      why ??= `${key} escapes a character in ${colons}${node.name}, so the browser reads a pseudo name "${node.name.replace(/\\(.)/g, '$1')}" it does not know and drops the rule`;
+    else if (node.name !== node.name.toLowerCase()) capitals.push(node);
+  });
+  if (why) return why;
+  t.walk(ast, {
+    visit: 'Selector',
+    enter(/** @type {any} */ selector) {
+      /** @type {any} */
+      let element = null;
+      /** @type {any[]} */
+      const classes = [];
+      selector.children.forEach((/** @type {any} */ node) => {
+        if (why) return;
+        if (node.type === 'Combinator') {
+          element = null;
+          return;
+        }
+        const after =
+          element && !element.name.startsWith('-') && !element.children;
+        if (node.type === 'PseudoElementSelector') {
+          if (after)
+            why = `${key} holds two pseudo-elements (${textOf(key, element)}, ${textOf(key, node)}), and a selector takes one, so the browser drops the rule: give each its own key`;
+          element = node;
+        } else if (node.type === 'PseudoClassSelector') {
+          if (after) {
+            const last = selector.children.last;
+            const single =
+              selector.children
+                .toArray()
+                .every((/** @type {any} */ x) => x.type !== 'Combinator') &&
+              last === node;
+            classes.push(node);
+            const moved = single
+              ? `${key.slice(0, element.loc.start.offset - 2)}${classes.map(c => textOf(key, c)).join('')}${textOf(key, element)}`
+              : null;
+            why = `${key} puts ${textOf(key, node)} after ${textOf(key, element)}, and a pseudo-element ends its selector, so the browser drops the rule${moved && !pseudoKeyProblem(moved) ? `: write '${moved}'` : ''}`;
+          }
+        }
+      });
+    },
+  });
+  if (why) return why;
+  if (capitals.length === 0) return null;
+  let fixed = key;
+  for (const node of [...capitals].reverse()) {
+    const at =
+      node.loc.start.offset -
+      2 +
+      (node.type === 'PseudoElementSelector' ? 2 : 1);
+    fixed =
+      fixed.slice(0, at) +
+      fixed.slice(at, at + node.name.length).toLowerCase() +
+      fixed.slice(at + node.name.length);
+  }
+  return `${key} writes a pseudo name in capitals, which a browser reads either way, but Core reads only the lower-case name as that pseudo-class (a disabled part's :hover guard, the press model of :active): write '${fixed}'`;
+}
+
+/**
+ * Why a property name in a part's block builds a declaration no browser
+ * reads, or null: a vendor prefix written without its leading dash
+ * (`msOverflowStyle`, `webkit-transform`), which the build writes as it is
+ * in kebab case.
+ * @param {string} name a key that is no custom property and no block
+ * @returns {string | null}
+ */
+export function partPropertyNameProblem(name) {
+  if (!/^(webkit|moz|ms|o)([A-Z]|-)/.test(name)) return null;
+  const built = name.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`);
+  return `${name} builds ${built}, with no leading dash, a property no browser reads: a vendor prefix starts with a dash, so write '-${built}'`;
+}
+
+/** The color-mode blocks a style key's block nests. */
+const MODE_KEYS = ['@light', '@dark'];
+
+/**
+ * @typedef {'style' | 'mode' | 'pseudo'} PartBlock the block a key is in: a
+ *   style key's own (`base`), a color-mode block in it (`@dark`), or a
+ *   pseudo key's (`':hover'`)
+ */
+
+/**
+ * The kind of block a key that holds one opens, inside a block of `kind`.
+ * @param {string} key @param {PartBlock} kind
+ * @returns {PartBlock}
+ */
+export const innerBlock = (key, kind) =>
+  kind === 'style' && MODE_KEYS.includes(key) ? 'mode' : 'pseudo';
+
+/**
+ * Why a key in a part's style block cannot be built as written, or null:
+ * an empty key, a custom property, a pseudo key holding a block, a block
+ * under a key that nests none, or a property name. A style key's block
+ * nests pseudo keys and @light / @dark, a color-mode block nests pseudo
+ * keys, and a pseudo key's block holds properties only; the build writes
+ * any other block as a declaration, which the browser drops.
+ * @param {string} key
+ * @param {unknown} value
+ * @param {PartBlock} kind the block the key is in
+ * @returns {string | null}
+ */
+export function partKeyProblem(key, value, kind) {
+  if (value === undefined) return null;
+  if (key.trim() === '')
+    return `an empty key holds ${isBlock(value) ? 'a block' : 'a value'}, which the build writes as a declaration with no property, and the browser drops it: name the property or the pseudo key`;
+  if (key.startsWith('--')) return partCustomPropertyProblem(key);
+  if (isBlock(value)) {
+    if (key.startsWith(':') && kind !== 'pseudo') return pseudoKeyProblem(key);
+    if (kind === 'style' && MODE_KEYS.includes(key)) return null;
+    return `${key} holds a block, but ${kind === 'pseudo' ? 'a pseudo key holds properties only' : `only a pseudo key (':hover', '::before')${kind === 'style' ? ' or @light / @dark' : ''} holds one here`}, so the build writes it as a declaration the browser drops`;
+  }
+  if (key.startsWith(':') || key.startsWith('@')) return null;
+  return partPropertyNameProblem(key);
 }
 
 /**
@@ -116,6 +265,8 @@ export function pseudoKeyProblem(key) {
  * @returns {string | null}
  */
 export function partCustomPropertyProblem(name) {
+  if (name === '--')
+    return `-- is no custom property name (CSS keeps it for itself), so the browser drops the declaration: give the property a name after the dashes, such as --my-value`;
   if (!/[A-Z]/.test(name)) return null;
   const built = name.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`);
   const lower = /[a-z][A-Z]/.test(name) ? built : name.toLowerCase();
@@ -135,19 +286,13 @@ export function partCustomPropertyProblem(name) {
 export function styleKeyProblems(theme) {
   /** @type {StyleKeyProblem[]} */
   const out = [];
-  /** @param {any} node @param {string[]} at @param {number} depth */
-  const block = (node, at, depth) => {
+  /** @param {any} node @param {string[]} at @param {PartBlock} kind @param {number} depth */
+  const block = (node, at, kind, depth) => {
     if (!isBlock(node) || depth > 12) return;
     for (const [k, v] of Object.entries(node)) {
-      const why = k.startsWith('--')
-        ? v === undefined
-          ? null
-          : partCustomPropertyProblem(k)
-        : k.startsWith(':') && isBlock(v)
-          ? pseudoKeyProblem(k)
-          : null;
+      const why = partKeyProblem(k, v, kind);
       if (why) out.push({path: [...at, k], why});
-      else block(v, [...at, k], depth + 1);
+      else block(v, [...at, k], innerBlock(k, kind), depth + 1);
     }
   };
   /** @param {any} surface @param {string[]} at */
@@ -156,7 +301,7 @@ export function styleKeyProblems(theme) {
     for (const [name, styles] of Object.entries(surface.components))
       if (isBlock(styles))
         for (const [key, rules] of Object.entries(styles))
-          block(rules, [...at, 'components', name, key], 0);
+          block(rules, [...at, 'components', name, key], 'style', 0);
   };
   parts(theme, []);
   parts(theme.onDark ?? theme.__onDark, ['onDark']);
