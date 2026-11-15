@@ -69,6 +69,7 @@ import {
   entryDamage,
   entryNotes,
   printedEntry,
+  readSavedStates,
   keyOf,
   loadTheme,
   maskedSettings,
@@ -5074,6 +5075,10 @@ async function changeOnce(
   } catch (e) {
     throw await withSavedRepair(e, slug, cwd);
   }
+  const ctx = await context(cwd);
+  // A saved state in a spelling set reads is the part's own, noted with the
+  // other entries read before this command's notes are taken.
+  readSavedStates(ctx, data);
   /** @type {string[]} */
   // A damaged mode or base the command does not set itself is read as
   // meant, or goes back to its default, so the theme loads again.
@@ -5086,7 +5091,6 @@ async function changeOnce(
       slug,
     ),
   ];
-  const ctx = await context(cwd);
   // A --png takes the sample page and the open states again after the build.
   ctx.takesPictures = png ? {sheet: null} : null;
   // An undo of one setting only removes it, so it never waits on the

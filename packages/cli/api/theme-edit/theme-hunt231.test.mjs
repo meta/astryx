@@ -3,8 +3,7 @@
 /**
  * @file A part's own state written as its census names it (toggle-button's
  * isPressed) is saved and read back as that state, so the theme keeps
- * loading; a saved state the part does not have is refused with its undo
- * and a line that sets it in its place.
+ * loading; a saved state the part does not have is refused with its undo.
  */
 
 import * as fs from 'node:fs';
@@ -120,12 +119,12 @@ describe("a part's own state in its census spelling", () => {
 
 describe('a saved state the part does not have', () => {
   it(
-    'is refused with its undo and the line that sets it in its place; following that line, the theme loads',
+    'is refused with its undo; following it, the theme loads',
     async () => {
       fs.writeFileSync(
         file(),
         JSON.stringify(
-          {...JSON.parse(fresh), settings: [{...PRESSED, state: 'is-pressed'}]},
+          {...JSON.parse(fresh), settings: [{...PRESSED, state: 'sticky'}]},
           null,
           2,
         ),
@@ -147,27 +146,19 @@ describe('a saved state the part does not have', () => {
           )
         ).stdout,
       );
-      expect(r.error).toContain('"is-pressed" is not a state of toggle-button');
-      const lines = r.suggestions.map((/** @type {any} */ x) => x.name);
-      expect(lines[0]).toMatch(
-        / undo t background-color --on toggle-button --state is-pressed$/,
+      expect(r.error).toContain('"sticky" is not a state of toggle-button');
+      const undo = r.suggestions[0].name;
+      expect(undo).toMatch(
+        / undo t background-color --on toggle-button --state sticky$/,
       );
-      const set = r.suggestions.find((/** @type {any} */ x) =>
-        x.name.includes(' editor set t '),
-      );
-      expect(set.reason).toBe('or set the value it holds, as set reads it');
-      const args = splitCommand(
-        set.name.slice(set.name.indexOf('experimental ')),
-      );
+      const args = splitCommand(undo.slice(undo.indexOf('experimental ')));
       expect((await runCli(/** @type {string[]} */ (args), cwd)).status).toBe(
         0,
       );
-      expect(saved()).toEqual([PRESSED]);
+      expect(saved()).toEqual([]);
       expect(
         (await themeEditSet('t', 'accent', 'teal', {cwd})).data.setting,
-      ).toMatchObject({
-        thing: 'accent',
-      });
+      ).toMatchObject({thing: 'accent'});
     },
     T,
   );

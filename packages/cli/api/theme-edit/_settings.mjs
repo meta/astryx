@@ -4566,6 +4566,7 @@ export function controlSizes(sizes, f, kept = {}, noRoom = []) {
 export function compileTheme(ctx, data, base) {
   ctx.sizeNotes = [];
   ctx.compileNotes = [];
+  readSavedStates(ctx, data);
   // A setting the editor no longer accepts never reaches the build.
   data = {...data, settings: data.settings.filter(s => !valueProblem(s))};
   const TOKENS = ctx.project.core.tokenDefaults;
@@ -10096,6 +10097,36 @@ export function partState(ctx, part, state) {
     .split('+')
     .map(p => states.find(x => flat(x) === flat(p)) ?? p)
     .join('+');
+}
+
+/**
+ * Read each saved entry's state on a part as `set` reads a typed one: each
+ * of its pieces in the part's own spelling (toggle-button's `is-pressed` or
+ * `ispressed` is its isPressed), in place, with a note; the next change
+ * saves it that way. The loader reads only what needs no census (case, a
+ * colon, a CSS state's words); this is the census half of the one state
+ * reader, which the saved-setting check and the build both run.
+ * @param {Ctx} ctx
+ * @param {ThemeData} data
+ */
+export function readSavedStates(ctx, data) {
+  for (const s of data.settings ?? []) {
+    if (
+      !s ||
+      typeof s.on !== 'string' ||
+      typeof s.state !== 'string' ||
+      !ctx.project.target.has(s.on)
+    )
+      continue;
+    const read = partState(ctx, s.on, s.state);
+    const states = partStates(ctx, s.on);
+    if (read === s.state || !read.split('+').every(p => states.includes(p)))
+      continue;
+    ENTRY_NOTES.get(data)?.push(
+      `${s.thing} on ${s.on} was saved with state ${JSON.stringify(s.state)}, read as ${read}`,
+    );
+    s.state = read;
+  }
 }
 
 /**

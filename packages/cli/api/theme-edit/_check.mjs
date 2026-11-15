@@ -125,6 +125,7 @@ import {
   ARIA_STATES,
   partState,
   partStates,
+  readSavedStates,
 } from './_settings.mjs';
 import {isColorToken} from './_compiler.mjs';
 import {
@@ -800,6 +801,8 @@ const COLOR_DIAL_WORDS = (() => {
  * @returns {Array<{setting: import('./_settings.mjs').Setting, why: string, scope?: boolean, fix?: string}>} every saved setting the editor no longer accepts (`fix`: the clean value to set, when one reads)
  */
 export function storedProblems(ctx, slug, data, skip = '') {
+  // A saved state in a spelling set reads (is-pressed) is the part's own.
+  readSavedStates(ctx, data);
   // The setting the command replaces (its thing in the same scope); a
   // setting of the same thing elsewhere is still checked.
   const skipThing = typeof skip === 'string' ? skip : skip.thing;
