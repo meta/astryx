@@ -912,9 +912,9 @@ export class DocsCatalog {
         // package's two replacements of a guide as a note.
         overlay.replacedPackage = earlier.package;
       }
-      // Extensions were authored against the content that just went away.
+      // Extensions stay: an extension adds to whatever answers its route, so
+      // configured order alone must not decide whether its sections show.
       overlay.replacement = record;
-      overlay.extensions = [];
     } else {
       overlay.extensions.push({
         package: record.package,
@@ -1091,8 +1091,12 @@ export class DocsCatalog {
         // the topic was already replaced.
         replacedPackage: target.package,
         ...(record.providerId ? {providerId: record.providerId} : {}),
-        // Extensions were authored against the content that just went away.
-        extensions: [],
+        // An extension adds to the topic a reader reads under the name it
+        // extends, so it carries over to the replacement: otherwise configured
+        // order alone would decide whether its sections show (a theme
+        // package's sections on `theme` would vanish in an app whose base
+        // library, configured later, replaces `theme`).
+        extensions: [...target.extensions],
       });
       if (replacementKey !== replacedKey) {
         this.#aliases.set(replacedKey, replacementKey);
