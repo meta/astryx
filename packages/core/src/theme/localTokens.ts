@@ -262,8 +262,8 @@ export function resolveLocalTokenContract(
   tokens: Record<string, string>,
   portableTokens: Readonly<Record<string, string>>,
 ): ResolvedLocalTokenContract | undefined {
-  // A root field left undefined is almost always a failed import, so it is
-  // refused by name rather than read as no local tokens.
+  // A root localTokens left undefined is usually a failed import. Refuse it
+  // by name; do not read it as no local tokens.
   if (hasOwn(input, 'localTokens') && input.localTokens === undefined) {
     throw new Error(
       `defineTheme("${input.name}"): localTokens is undefined: omit the field or pass an object.`,

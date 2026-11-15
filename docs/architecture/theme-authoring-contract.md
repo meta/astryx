@@ -130,10 +130,11 @@ pseudo-class block, color-mode block, surface, or adaptation rule is not set: in
 a style key or a color-mode block the inherited value stays, and a restated
 pseudo-class block replaces the inherited one whole. `null` keeps its existing
 meaning. Root `localTokens: undefined` is refused by name, as
-`extends: undefined` is: a root field left undefined is almost always a failed
-import. A local token left `undefined` declares nothing: an adaptation rule that
-writes it still fails with its name, and a `var()` reference to it stays
-external (INV8).
+`extends: undefined` is: a root `localTokens` or `extends` left undefined is
+almost always a failed import. A local token left `undefined` declares nothing:
+an adaptation rule that writes a name no theme in the lineage declares still
+fails with its name, and a `var()` reference to such a name stays external
+(INV8).
 An explicit icon, indicator, or `componentIcons` entry replaces the inherited
 entry for the same key whole. An explicit `iconVariants` list replaces the
 inherited list; an omitted list is inherited. An inherited function entry keeps
