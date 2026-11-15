@@ -439,8 +439,32 @@ export function setEditorThemeList(list) {
 }
 
 /**
+ * The options a command was given on its command line, as they were typed
+ * (`--on card --mode dark --only`), so a line offered for it keeps them:
+ * dropped, a line for one part or mode would change the whole theme.
+ * @param {any} cmd the Commander command
+ * @returns {string} the options, or ''
+ */
+function typedOptions(cmd) {
+  /** @type {string[]} */
+  const out = [];
+  for (const opt of cmd?.options ?? []) {
+    const key = opt.attributeName();
+    if (cmd.getOptionValueSource?.(key) !== 'cli') continue;
+    const value = cmd.getOptionValue(key);
+    const flag = opt.long ?? opt.short;
+    if (typeof value === 'boolean') out.push(flag);
+    else
+      for (const v of Array.isArray(value) ? value : [value])
+        out.push(`${flag} ${quoteCommandArgument(String(v))}`);
+  }
+  return out.join(' ');
+}
+
+/**
  * The theme editor's usage and help suggestions for a missing argument, as
- * the project runs the CLI.
+ * the project runs the CLI. A line that names the missing word keeps the
+ * options typed (typedOptions).
  * @param {any} cmd
  * @returns {Array<{name: string, reason: string}>}
  */
@@ -449,6 +473,9 @@ function editorMissingSuggestions(cmd) {
   for (let node = cmd; node; node = node.parent) parts.unshift(node.name());
   const words = parts.slice(1).join(' ');
   const invocation = getCliInvocation(process.cwd());
+  const typed = typedOptions(cmd);
+  const withTyped = (/** @type {string} */ line) =>
+    typed ? `${line} ${typed}` : line;
   // No theme named, and the app has exactly one editor theme: the command
   // on that theme, when the theme is all it takes.
   const wants = (cmd?.registeredArguments ?? []).filter(
@@ -465,7 +492,7 @@ function editorMissingSuggestions(cmd) {
     if (themes.length === 1)
       return [
         {
-          name: `${invocation} ${words} ${themes[0]}`,
+          name: withTyped(`${invocation} ${words} ${themes[0]}`),
           reason: `do this instead: ${themes[0]} is the theme here`,
         },
         {
@@ -483,7 +510,9 @@ function editorMissingSuggestions(cmd) {
     if (themes.length === 1 && !given.includes(themes[0]))
       return [
         {
-          name: `${invocation} ${words} ${themes[0]} ${given.map((/** @type {string} */ w) => quoteCommandArgument(w)).join(' ')}`,
+          name: withTyped(
+            `${invocation} ${words} ${themes[0]} ${given.map((/** @type {string} */ w) => quoteCommandArgument(w)).join(' ')}`,
+          ),
           reason: `do this instead: ${themes[0]} is the theme here`,
         },
         {
@@ -502,7 +531,7 @@ function editorMissingSuggestions(cmd) {
   if (free)
     return [
       {
-        name: `${invocation} ${words} ${free.word}`,
+        name: withTyped(`${invocation} ${words} ${free.word}`),
         reason: `do this instead: ${free.reason}`,
       },
       {name: `${invocation} ${words} --help`, reason: 'what each argument is'},

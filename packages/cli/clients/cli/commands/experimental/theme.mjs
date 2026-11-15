@@ -2023,14 +2023,20 @@ export function registerExperimentalTheme(group, program) {
                 words.every(w => namesSetting(String(w))))) &&
             !words.some(w => String(w).startsWith('-'));
           const list = listed ? words.join(' ') : null;
+          // Otherwise the words after the thing are its value, typed
+          // unquoted as set takes it (`undo t padding 4px 8px --on card`).
+          const value =
+            which == null
+              ? undefined
+              : [which, ...(c?.args ?? []).slice(3)].map(String).join(' ');
           return (
             (await readOptionsChecked('undo', undoDoc)) ??
             (list
               ? null
-              : (strayOption('undo', undoDoc, [
+              : strayOption('undo', undoDoc, [
                   which,
                   ...(c?.args ?? []).slice(3),
-                ]) ?? extraWords('undo', undoDoc, (c?.args ?? []).slice(3)))) ??
+                ])) ??
             run(
               program,
               () =>
@@ -2040,7 +2046,7 @@ export function registerExperimentalTheme(group, program) {
                     ? {thing: list}
                     : thing == null
                       ? {}
-                      : {thing, value: which}),
+                      : {thing, value}),
                 }),
               r =>
                 r.data.action === 'step'

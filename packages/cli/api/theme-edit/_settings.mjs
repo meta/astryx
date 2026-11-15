@@ -914,17 +914,15 @@ export function loadTheme(
         },
       );
     }
+    const have = fs.existsSync(themeFiles(cwd, 'x').root)
+      ? fs
+          .readdirSync(themeFiles(cwd, 'x').root)
+          .filter(d => slugOk(d) && fs.existsSync(themeFiles(cwd, d).settings))
+          .sort()
+      : [];
     // An empty name (an unset variable, a lone dash): no theme to guess
     // from it, so the themes here are named instead of a new one.
     if (!same && !/[a-z0-9]/i.test(String(slug ?? ''))) {
-      const have = fs.existsSync(themeFiles(cwd, 'x').root)
-        ? fs
-            .readdirSync(themeFiles(cwd, 'x').root)
-            .filter(
-              d => slugOk(d) && fs.existsSync(themeFiles(cwd, d).settings),
-            )
-            .sort()
-        : [];
       refuse(
         ERROR_CODES.ERR_INVALID_ARGUMENT,
         `The theme name is empty${String(slug ?? '').trim() ? ` ("${String(slug).slice(0, 20)}" has no letter or digit)` : ''}.${have.length ? ` Themes here: ${have.slice(0, 6).join(', ')}.` : ''}`,
@@ -940,7 +938,12 @@ export function loadTheme(
       `"${String(slug ?? '').slice(0, 80)}" is not a theme name (${NAME_RULE}).`,
       same
         ? {didYouMean: [same], run: [`${P} show ${same}`]}
-        : {run: [`${P} new ${fixed}`]},
+        : // A setting's name (--color-accent) typed where the theme goes is
+          // never a theme to make, as for a name that is one (below): each
+          // theme here is offered to look at.
+          namesSetting(String(slug ?? ''))
+          ? {run: have.slice(0, 3).map(h => `${P} show ${h}`)}
+          : {run: [`${P} new ${fixed}`]},
     );
   }
   const f = themeFiles(cwd, slug);
@@ -9341,9 +9344,27 @@ function stepText(text, cwd, radii) {
 const TOP_FIELDS = ['name', 'mode', 'like', 'settings', 'lifted'];
 
 /**
+ * What an entry as saved sets: its thing and scope, in any letters, so two
+ * lists can be told apart without reading either.
+ * @param {any} entry
+ */
+function savedEntryScope(entry) {
+  if (!entry || typeof entry !== 'object') return JSON.stringify(entry);
+  /** @type {Record<string, string>} */
+  const at = {};
+  for (const [k, v] of Object.entries(entry))
+    at[k.trim().toLowerCase()] = String(v).trim().toLowerCase();
+  return JSON.stringify(
+    ['thing', 'on', 'when', 'state', 'mode', 'only'].map(k => at[k] ?? ''),
+  );
+}
+
+/**
  * The file's top-level field names in other letters (`Like`, `Settings`,
- * `Mode`) are those fields, as an entry's are (entryFieldNames), in place;
- * a field written both ways keeps the editor's own.
+ * `Mode`) are those fields, as an entry's are (entryFieldNames), in place.
+ * A field written both ways keeps the editor's own, and a note says so; the
+ * settings written both ways are one list, the editor's entry winning for a
+ * thing and scope both hold, so no saved setting is lost without a word.
  * @param {any} data
  * @returns {string[]} a note for each name read
  */
@@ -9353,7 +9374,28 @@ function topFieldNames(data) {
   const notes = [];
   for (const k of Object.keys(data)) {
     const field = TOP_FIELDS.find(f => f === k.trim().toLowerCase());
-    if (!field || field === k || field in data) continue;
+    if (!field || field === k) continue;
+    if (field in data) {
+      if (
+        field === 'settings' &&
+        Array.isArray(data.settings) &&
+        Array.isArray(data[k])
+      ) {
+        const held = new Set(data.settings.map(savedEntryScope));
+        const more = data[k].filter(
+          (/** @type {any} */ e) => !held.has(savedEntryScope(e)),
+        );
+        data.settings.push(...more);
+        notes.push(
+          `the settings file writes both "settings" and "${k}"; read as one list${more.length < data[k].length ? ', "settings" winning where both set one thing' : ''}`,
+        );
+      } else
+        notes.push(
+          `the settings file writes both "${field}" and "${k}"; "${field}" is read`,
+        );
+      delete data[k];
+      continue;
+    }
     data[field] = data[k];
     delete data[k];
     notes.push(
@@ -9389,7 +9431,10 @@ export function settingsRemade(data) {
   if (data === undefined) return true;
   // Entries saved in a form set reads are read, as the settings reader
   // reads them.
+  // Its top-level fields and entries in other letters (`Settings`,
+  // `Thing`) are read as every other command reads them.
   const copy = structuredClone(data);
+  topFieldNames(copy);
   readTypedEntries(copy, []);
   return !settingsEntriesOk(copy);
 }

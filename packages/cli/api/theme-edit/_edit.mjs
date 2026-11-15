@@ -8017,8 +8017,12 @@ async function heldSettingUndos(cwd, word, options) {
     } catch {
       continue;
     }
-    for (const x of settings) {
-      if (x.thing.toLowerCase() !== word.toLowerCase()) continue;
+    const holding = settings.filter(
+      x => x.thing.toLowerCase() === word.toLowerCase(),
+    );
+    if (!holding.length) continue;
+    const before = out.length;
+    for (const x of holding) {
       // A setting for both modes applies in the mode named too.
       if (
         scope.some(
@@ -8039,6 +8043,30 @@ async function heldSettingUndos(cwd, word, options) {
         out.push({
           name: followed.line,
           reason: `do this instead: ${word} is a setting ${slug} holds (${describe(x)})`,
+        });
+    }
+    // A scope typed in another spelling the undo reads (`--state
+    // focusVisible`, `--on Card`, `--mode Dark`): the undo as typed on this
+    // theme, read and followed by undo's own check.
+    const flags = [
+      ...scope.flatMap(k =>
+        options[k] != null
+          ? [`--${k} ${quoteCommandArgument(String(options[k]))}`]
+          : [],
+      ),
+      ...(options.only ? ['--only'] : []),
+    ];
+    if (out.length === before && flags.length) {
+      const followed = await followChangeLine(
+        'undo',
+        slug,
+        `${P} undo ${slug} ${quoteCommandArgument(word)} ${flags.join(' ')}`,
+        cwd,
+      );
+      if (followed.why == null)
+        out.push({
+          name: followed.line,
+          reason: `do this instead: ${word} is a setting ${slug} holds`,
         });
     }
   }
