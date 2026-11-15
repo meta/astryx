@@ -1903,27 +1903,61 @@ export async function themeEditSet(theme, thing, value, options = {}) {
 async function swappedThingValue(e, slug, thing, value, options) {
   // The thing named no setting, or the value names one itself (`neutral
   // base`: a color dial given the base dial's name).
-  // A word shaped like a setting's name (a dial, a token, a property);
-  // set itself says, below, whether the swapped line names one.
-  const nameShaped = (/** @type {string} */ w) =>
-    /^(--)?[a-z][a-z0-9-]*$/i.test(w.trim());
-  const isDialOrToken = (/** @type {string} */ w) => {
-    const x = w.trim().toLowerCase();
-    return Boolean(DIALS[x]) || x.startsWith('--');
-  };
   if (
     !(e instanceof AstryxError) ||
     !value ||
-    !slugOk(slug) ||
     !(
       e.code === E.ERR_THEME_UNKNOWN_THING ||
       (DIALS[value.trim().toLowerCase()] && e.code === E.ERR_THEME_BAD_VALUE) ||
       // A scope refused first (a part, state or mode typo) while the
       // setting and its value are in the other order.
-      (nameShaped(String(value)) && !isDialOrToken(String(thing)))
+      maybeSwapped(String(thing), String(value))
     )
   )
     return e;
+  const swapped = await swappedLines(slug, thing, value, options);
+  if (!swapped) return e;
+  // How for the value typed as the setting answers nothing: left out.
+  const howTyped = `${P} how ${quoteCommandArgument(String(thing))}`;
+  e.suggestions = [
+    ...swapped,
+    ...(e.suggestions ?? []).filter(
+      x => !swapped.some(y => y.name === x.name) && x.name !== howTyped,
+    ),
+  ];
+  return e;
+}
+
+/**
+ * Whether a setting and a value may be in the other order: the value is
+ * shaped like a setting's name (a dial, a token, a property) and the thing
+ * names no dial or token. Set itself says whether the swapped line works.
+ * @param {string} thing
+ * @param {string} value
+ */
+function maybeSwapped(thing, value) {
+  const t = thing.trim().toLowerCase();
+  return (
+    // (A property's name may be typed with spaces: `background color`.)
+    /^(--)?[a-z][a-z0-9-]*(?: [a-z][a-z0-9-]*){0,2}$/i.test(value.trim()) &&
+    !DIALS[t] &&
+    !t.startsWith('--')
+  );
+}
+
+/**
+ * The same set with the setting and the value in the other order, checked
+ * by set with the scope typed, as the lines that carry it out (a step such
+ * as an install first); null when set does not take it, or the line does
+ * not carry the thing typed as its value (the one gate).
+ * @param {string} slug
+ * @param {string} thing
+ * @param {string} value
+ * @param {{cwd?: string, on?: string, when?: string, state?: string, mode?: string, only?: boolean}} options
+ * @returns {Promise<import('../../foundation/response/base').Suggestion[] | null>}
+ */
+async function swappedLines(slug, thing, value, options) {
+  if (!slugOk(slug)) return null;
   const line = `${P} set ${slug} ${[
     value,
     thing,
@@ -1942,9 +1976,8 @@ async function swappedThingValue(e, slug, thing, value, options) {
   );
   // The swapped reading holds only when set takes the value typed as the
   // setting, with the scope typed, and the line carries the thing typed
-  // as its value (the one gate): never a sample command from a refusal of
-  // the swapped line (`bold` is no setting, and no part was named). A line
-  // that works once a step is done (an install) is offered after that step.
+  // as its value: never a sample command from a refusal of the swapped
+  // line (`bold` is no setting, and no part was named).
   const read = readSetLine(followed.line, slug);
   if (
     !read ||
@@ -1954,18 +1987,12 @@ async function swappedThingValue(e, slug, thing, value, options) {
     Boolean(read.flags?.on) !== Boolean(options.on) ||
     !allowedLine({offered: read.value, typed: String(thing), thing: read.thing})
   )
-    return e;
-  const why = `do this instead: ${value} is the setting and ${thing} its value`;
-  if (!readyLines(followed, why).length) return e;
-  // How for the value typed as the setting answers nothing: left out.
-  const howTyped = `${P} how ${quoteCommandArgument(String(thing))}`;
-  e.suggestions = [
-    ...readyLines(followed, why),
-    ...(e.suggestions ?? []).filter(
-      x => x.name !== followed.line && x.name !== howTyped,
-    ),
-  ];
-  return e;
+    return null;
+  const lines = readyLines(
+    followed,
+    `do this instead: ${value} is the setting and ${thing} its value`,
+  );
+  return lines.length ? lines : null;
 }
 
 /**
@@ -2325,7 +2352,16 @@ export async function checkedChangeLine(sub, line, cwd) {
   const slug = splitCommand(line.slice(`${P} ${sub} `.length))?.[0];
   if (!line.startsWith(`${P} ${sub} `) || !slug) return null;
   const followed = await followChangeLine(sub, slug, line, cwd);
-  return followed.why ? null : followed.line;
+  if (!followed.why) return followed.line;
+  // A set refused with the setting and value in the other order: set's
+  // own swap repair, as set gives it when typed so.
+  const read = sub === 'set' ? readSetLine(line, slug) : null;
+  if (!read?.value || !maybeSwapped(read.thing, read.value)) return null;
+  const swapped = await swappedLines(slug, read.thing, read.value, {
+    ...read.flags,
+    cwd,
+  });
+  return swapped?.length === 1 ? swapped[0].name : null;
 }
 
 /**
@@ -4158,6 +4194,27 @@ async function change(sub, slug, thing, value, options) {
           },
         );
     }
+    // An entry's own fields in other letters (`Thing`, `VALUE`, `On`) are
+    // those fields, as setting names are read in any case.
+    const FIELDS = [
+      'thing',
+      'value',
+      'setting',
+      'source',
+      'axis',
+      'on',
+      'when',
+      'state',
+      'mode',
+      'only',
+    ];
+    if (obj && typeof obj === 'object' && !Array.isArray(obj))
+      obj = Object.fromEntries(
+        Object.entries(obj).map(([k, x]) => {
+          const field = FIELDS.find(f => f === k.trim().toLowerCase());
+          return [field && !(field in obj) ? field : k, x];
+        }),
+      );
     // An entry that names its thing under `setting`, as the editor's own
     // results print it, is that entry.
     obj = printedEntry(obj);
@@ -4337,14 +4394,15 @@ async function change(sub, slug, thing, value, options) {
   // declaration, a dash, a var(), invisible spaces).
   /** @type {string | undefined} */
   let dropped;
-  // A whole setting pasted as one argument (`padding = 8 px on card`,
-  // `aspect-ratio: 16,9`): its repairs carry the setting and value read
-  // from it, as a typed pair's do.
+  // A setting pasted in a printed or declared form (`padding = 8 px on
+  // card`, `aspect-ratio: 16,9`, `accent tomato -> tomatoe`), whole or with
+  // its thing apart: its repairs carry the setting and value read from it,
+  // as a typed pair's do.
   let readFromText = false;
   if (typeof thing === 'string') {
     const entry = normalizeEntry(thing, value);
     readFromText =
-      (value == null || String(value).trim() === '') &&
+      Boolean(entry.pasted) &&
       entry.value != null &&
       String(entry.value).trim() !== '';
     thing = entry.thing;
@@ -4691,12 +4749,19 @@ async function changeOnce(
     if (words.length < 2) return;
     // A setting named twice is named once.
     const pieces = [...new Set(words)];
+    // Of a setting saved in several scopes, those in the scope typed (a
+    // part, a state) when it has any there.
+    const inScope = (/** @type {any} */ x) =>
+      ['on', 'when', 'state', 'mode'].every(
+        k =>
+          !(/** @type {any} */ (flags)[k]) ||
+          x[k] === /** @type {any} */ (flags)[k],
+      );
     const listed = pieces.map(w => {
       const meant = things.includes(w) ? w : nearest(w, things)[0];
-      return {
-        w,
-        entries: data.settings.filter(x => x.thing.toLowerCase() === meant),
-      };
+      const all = data.settings.filter(x => x.thing.toLowerCase() === meant);
+      const scoped = all.filter(inScope);
+      return {w, entries: scoped.length ? scoped : all};
     });
     if (!listed.some(l => l.entries.length)) return;
     const none = listed.filter(l => !l.entries.length).map(l => l.w);
@@ -5082,6 +5147,11 @@ async function changeOnce(
   }
   if (sub === 'undo') {
     if (!prev) {
+      // A value word that names another saved setting (`undo t spacing
+      // background-color --on card`): one undo for each setting named,
+      // never a line that removes one of them.
+      if (value != null && value !== '' && namesSaved(value))
+        undoList(`${thing} ${value}`, E.ERR_THEME_NOT_SET);
       // A padding set in the other form (a side for the shorthand, or the
       // shorthand for a side) on the same part is a near one too.
       const PAD = /^padding(?:-(?:inline|block|top|right|bottom|left))?$/;
@@ -5699,12 +5769,15 @@ async function changeOnce(
             ),
         ),
       ];
+      // Each chain starts with the undo of the fill just set: while it
+      // stays, every variant and state keeps it.
+      const undo = `${P} undo ${slug} ${undoArgs(s)}`;
       notes.push(
         `${s.mode ? `in ${s.mode} mode, ` : ''}${t}'s fill now covers the fill Core gives it ${named.length > 1 ? 'in each of' : 'in'} ${named.join(', ')}, so ${named.length > 1 ? 'those no longer differ' : 'that no longer shows'}${
           rest
-            ? `; to change only its fill at rest: ${P} set ${slug} ${rest} ${quoteCommandArgument(String(s.value))} --on ${t}${s.mode ? ` --mode ${s.mode}` : ''}`
+            ? `; to change only its fill at rest: ${undo}, then ${P} set ${slug} ${rest} ${quoteCommandArgument(String(s.value))} --on ${t}${s.mode ? ` --mode ${s.mode}` : ''}`
             : ''
-        }${lines.length ? `; to fill only one of them: ${lines.slice(0, 3).join('; ')}` : ''}`,
+        }${lines.length ? `; to fill only one of them: ${undo}, then ${lines.slice(0, 3).join('; or ')}` : ''}`,
       );
     }
   // A color dial or token that a plain part's own fill covers no longer

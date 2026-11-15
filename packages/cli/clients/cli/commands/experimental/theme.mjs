@@ -52,6 +52,7 @@ import {
 import {
   builtInThemes,
   dialValueFits,
+  modeDialValue,
   newFlagList,
   editorCheckedLine,
   editorCheckedNewLines,
@@ -62,6 +63,7 @@ import {
   editorFollowCompile,
   editorThemesAt,
   editorFreeName,
+  editorNameOk,
   typoNear,
   typoOf,
   editorAfterBuild,
@@ -404,8 +406,17 @@ function newSettings(o, themeName = '<theme>') {
     const all = flagValues(flag);
     if (flag === 'headings' && all.length > 1) out[flag] = all;
     else if (new Set(all).size > 1) {
+      // Each value as the dial reads it (`--mode light` is light-only); a
+      // light and a dark mode together are both modes, the default.
+      const read = all.map(v =>
+        dialValueFits(flag, v) ? v : flag === 'mode' ? modeDialValue(v) : null,
+      );
+      const bothModes =
+        flag === 'mode' &&
+        read.includes('light-only') &&
+        read.includes('dark-only');
       // The suggestion keeps the first value the dial takes, or drops it.
-      const fits = all.find(v => dialValueFits(flag, v));
+      const fits = bothModes ? undefined : (read.find(Boolean) ?? undefined);
       throw new AstryxError(
         `--${flag} was given twice (${all.join(', ')}); give it once. Nothing was changed.`,
         [
@@ -413,9 +424,11 @@ function newSettings(o, themeName = '<theme>') {
             name: cmd(
               `${EDITOR} new ${themeName}${newFlagLine({...o, [key]: fits})}`,
             ),
-            reason: fits
-              ? 'do this instead: the first value it takes'
-              : `do this instead: none of them is a value --${flag} takes`,
+            reason: bothModes
+              ? 'do this instead: a light and a dark mode together are both modes, the default'
+              : fits
+                ? 'do this instead: the first value it takes'
+                : `do this instead: none of them is a value --${flag} takes`,
           },
         ],
         ERROR_CODES.ERR_INVALID_ARGUMENT,
@@ -1592,21 +1605,25 @@ export function registerExperimentalTheme(group, program) {
               // Thrown, as every refusal inside run is: run prints it once
               // (a refusal printed here and then caught again by run would
               // print twice where exit does not end the process).
+              // The line with --like is checked as new checks it (an
+              // install first, other flags' repairs folded in), as the
+              // option reader's lines are.
+              const lines = value
+                ? await checkedOptionLines(
+                    'editor',
+                    'new',
+                    `${EDITOR} new ${quoteCommandArgument(name)}${newFlagLine({...o, like: value})}`,
+                  )
+                : [];
               throw new AstryxError(
                 `new takes the base theme as --like, not --base.`,
-                value
-                  ? [
-                      {
-                        name: `${EDITOR} new ${quoteCommandArgument(name)}${newFlagLine({...o, like: value})}`,
-                        reason: 'do this instead',
-                      },
-                    ]
-                  : [
-                      {
-                        name: `${EDITOR} new --help`,
-                        reason: 'every option it takes',
-                      },
-                    ],
+                [
+                  ...lines,
+                  {
+                    name: `${EDITOR} new --help`,
+                    reason: 'every option it takes',
+                  },
+                ],
                 ERROR_CODES.ERR_INVALID_OPTION,
               );
             }
@@ -1623,6 +1640,51 @@ export function registerExperimentalTheme(group, program) {
               );
             // A word after the name is never dropped without a word.
             const extra = (cmd?.args ?? []).slice(1);
+            // The only word given straight after a dial's value (`new --font
+            // Open Sans`) is more of that value, and no name was given: the
+            // value whole, with a free name, checked as new checks it.
+            {
+              const argv = process.argv;
+              const from = argv.indexOf('new', argv.indexOf('editor') + 1);
+              const at = argv.indexOf(String(name), from + 1);
+              const before = argv[at - 2];
+              const dial = (newDoc.options ?? []).find(
+                opt =>
+                  opt.param === 'options.settings' &&
+                  String(opt.flag).split(' ')[0] === before,
+              );
+              const key = String(before ?? '')
+                .slice(2)
+                .replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+              // Read so only when the word cannot be the name, or the value
+              // alone is no value of the dial (`--accent dark blue`).
+              if (
+                !extra.length &&
+                from >= 0 &&
+                at > from + 2 &&
+                dial &&
+                !argv.slice(from + 1, at).includes('--') &&
+                (!editorNameOk(String(name)) ||
+                  !dialValueFits(before.slice(2), String(o[key])))
+              ) {
+                const given = {...o, [key]: `${o[key]} ${name}`};
+                const free = editorFreeName(process.cwd(), 'my-theme');
+                throw new AstryxError(
+                  `new takes <theme>, and was given none: "${name}" is more of ${before}'s value. A value of more than one word goes in quotes. Nothing was changed.`,
+                  await editorCheckedNewLines(
+                    `${EDITOR} new ${free}${newFlagLine(given)}`,
+                    free,
+                    {
+                      cwd: process.cwd(),
+                      like: given.like,
+                      png: given.png ?? false,
+                      settings: newSettingsGiven(given),
+                    },
+                  ),
+                  ERROR_CODES.ERR_MISSING_ARGUMENT,
+                );
+              }
+            }
             if (extra.length) {
               // Words after `--` that are `--<option> <value>` pairs new
               // takes become options; the other words were most likely

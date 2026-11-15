@@ -221,7 +221,7 @@ export function escapesMeant(thing, value) {
  * Unicode spaces. A thing it cannot read is left as typed.
  * @param {string} thing
  * @param {string | undefined} value
- * @returns {{thing: string, value: string | undefined, dropped?: string, scope?: EntryScope}} `dropped`: a second declaration pasted after the first, which is not set; `scope`: the scope the editor's own printed line names
+ * @returns {{thing: string, value: string | undefined, pasted?: boolean, dropped?: string, scope?: EntryScope}} `pasted`: the setting was read from a pasted form (a declaration, a printed or change line, a quoted key); `dropped`: a second declaration pasted after the first, which is not set; `scope`: the scope the editor's own printed line names
  */
 export function normalizeEntry(thing, value) {
   let t = normalValueText(String(thing ?? '')).trim();
@@ -243,8 +243,12 @@ export function normalizeEntry(thing, value) {
   // `--radius-element: 0.5rem -> 0px`, `--color-accent (light): #1b1b1b ->
   // #ff0000`), whole or with its thing apart: the setting, and the value it
   // changed to, with the scope the line names. No CSS value holds `->`.
+  // A mode label after the thing (`(light)`, `(Dark)`, `(dark mode)`,
+  // `[dark only]`) goes with the scope, read later by the one --mode reader
+  // as a typed --mode is (a typo refused with its line), never into the
+  // old value.
   const changed =
-    /^(\S+?)(?:\s*\((light|dark)\))?\s*:?\s+(\S.*?)\s*->\s*(\S.*?)\s*$/.exec(
+    /^(\S+?)(?:\s*[([]([^)\]]*)[)\]])?\s*:?\s+(\S.*?)\s*->\s*(\S.*?)\s*$/.exec(
       v == null || v.trim() === '' ? t : `${t} ${v}`,
     );
   if (changed) {
@@ -256,8 +260,8 @@ export function normalizeEntry(thing, value) {
       v = printed.value;
       scope = printed.scope;
     }
-    if (changed[2] === 'light' || changed[2] === 'dark')
-      scope = {...scope, mode: changed[2]};
+    if (changed[2] != null && changed[2].trim())
+      scope = {...scope, mode: modeLabel(changed[2])};
   } else if (v == null || v.trim() === '') {
     const m = /^(\S+?)\s*([:=])\s*(.+?)\s*;?\s*$/.exec(t);
     if (m && !/^https?$/i.test(m[1])) {
@@ -366,13 +370,27 @@ export function normalizeEntry(thing, value) {
   return {
     thing: t,
     value: v,
+    ...(pasted ? {pasted} : {}),
     ...(dropped ? {dropped} : {}),
     ...(scope ? {scope} : {}),
   };
 }
 
 /**
- * @typedef {{on?: string, only?: boolean, when?: string, state?: string, mode?: 'light' | 'dark'}} EntryScope
+ * The mode a printed label names, as typed (`Dark`, `dark mode`, `dark
+ * only`, `dark-only` are dark): the word before `only` or `mode`, for the
+ * one --mode reader.
+ * @param {string} label
+ */
+function modeLabel(label) {
+  return label
+    .trim()
+    .replace(/[\s-]*\b(only|mode)$/i, '')
+    .trim();
+}
+
+/**
+ * @typedef {{on?: string, only?: boolean, when?: string, state?: string, mode?: string}} EntryScope
  */
 
 /**
@@ -384,7 +402,7 @@ export function normalizeEntry(thing, value) {
  */
 function printedScope(text) {
   const m =
-    /^(.+?)\s+(?:\(whole theme\)|on ([a-z][a-z0-9-]*)( only)?(?: when (\S+))?(?: :([a-z-]+))?)(?:\s+\[(light|dark) only\])?\s*$/.exec(
+    /^(.+?)\s+(?:\(whole theme\)|on ([a-z][a-z0-9-]*)( only)?(?: when (\S+))?(?: :([a-z-]+))?)(?:\s+\[([^\]]+)\])?\s*$/i.exec(
       text,
     );
   if (!m) return null;
@@ -394,7 +412,7 @@ function printedScope(text) {
   if (m[3]) scope.only = true;
   if (m[4]) scope.when = m[4];
   if (m[5]) scope.state = m[5];
-  if (m[6] === 'light' || m[6] === 'dark') scope.mode = m[6];
+  if (m[6]) scope.mode = modeLabel(m[6]);
   return {value: m[1], scope};
 }
 
@@ -1331,6 +1349,21 @@ export function readsTyped({
               typoNear(ti[i], x) ||
               typoNear(bare(ti[i]), bare(x)))),
       )
+    )
+      return true;
+  }
+  // (7) A var() reference whose name is a typo of the one offered
+  // (`var(--color-eror)` is var(--color-error)), the rest as typed.
+  {
+    const VAR = /var\(\s*(--[a-z0-9-]+)/g;
+    const tNames = [...t.matchAll(VAR)].map(m => m[1]);
+    const oNames = [...o.matchAll(VAR)].map(m => m[1]);
+    if (
+      tNames.length &&
+      tNames.length === oNames.length &&
+      t.replace(VAR, 'var(') === o.replace(VAR, 'var(') &&
+      tNames.some((x, i) => x !== oNames[i]) &&
+      tNames.every((x, i) => x === oNames[i] || typoNear(x, oNames[i]))
     )
       return true;
   }

@@ -70,6 +70,7 @@ import {LIKE, P} from './_tables.mjs';
 /** The preview command, as a person runs it. */
 const PREVIEW_WORDS = P.replace(/ editor$/, ' preview');
 import {setLine} from './_check.mjs';
+export {modeDialValue} from './_check.mjs';
 import {followLine, splitCommand} from './_vet.mjs';
 import {
   SHOWCASE_GROUPS,
@@ -161,6 +162,7 @@ export const showSections = () => [...SHOWCASE_GROUPS];
 export {
   dialTakesText,
   dialValueFits,
+  slugOk as editorNameOk,
   usableNewName as editorFreeName,
 } from './_settings.mjs';
 

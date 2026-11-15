@@ -218,6 +218,25 @@ function ratioPreset(v) {
 }
 
 /**
+ * The value of the mode dial a word means, by the one mode reader (`night`,
+ * `dark mode` and `dark` are dark-only), or null.
+ * @param {string} v
+ * @returns {'both' | 'light-only' | 'dark-only' | null}
+ */
+export function modeDialValue(v) {
+  const lower = String(v)
+    .trim()
+    .toLowerCase()
+    .replace(/^mode\s*[=:]\s*/, '');
+  if (['both', 'light-only', 'dark-only'].includes(lower))
+    return /** @type {'both' | 'light-only' | 'dark-only'} */ (lower);
+  const word = DIAL_WORDS.mode[lower];
+  if (word) return /** @type {'both' | 'light-only' | 'dark-only'} */ (word);
+  const oneMode = modeWord(lower);
+  return oneMode ? `${oneMode}-only` : null;
+}
+
+/**
  * A `set` (or `undo`) command for a setting, with its scope, to suggest;
  * a thing of more than one word (`background color`) is quoted, as its value is.
  * @param {string} slug
@@ -968,7 +987,11 @@ export function storedProblems(ctx, slug, data, skip = '') {
     // as set refuses it.
     const bad = unknownVarRef(String(s.value ?? ''), TOKENS, s.thing);
     if (bad) {
-      found.push({setting: s, why: bad.message});
+      found.push({
+        setting: s,
+        why: bad.message,
+        ...(bad.fixed ? {fix: bad.fixed} : {}),
+      });
       continue;
     }
     try {
@@ -3745,7 +3768,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
         run: [
           ...(bad.fixed
             ? [
-                `${P} set ${slug} ${thing} ${quoteCommandArgument(bad.fixed)}${/** @type {const} */ (['on', 'state', 'when', 'mode']).map(k => (flags[k] ? ` --${k} ${quoteCommandArgument(String(flags[k]))}` : '')).join('')}`,
+                `${P} set ${slug} ${quoteCommandArgument(thing)} ${quoteCommandArgument(bad.fixed)}${/** @type {const} */ (['on', 'state', 'when', 'mode']).map(k => (flags[k] ? ` --${k} ${quoteCommandArgument(String(flags[k]))}` : '')).join('')}`,
               ]
             : []),
           bad.close
@@ -3937,13 +3960,9 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
       refuse(
         E.ERR_INVALID_ARGUMENT,
         `${s.on} is styled on its own already: only ${AUTO_SPREAD.join(' and ')} spread to their group, so drop --only.`,
-        {
-          run: [
-            unset
-              ? `${P} undo ${slug} ${thing}${v ? ` ${quoteCommandArgument(v)}` : ''} --on ${s.on}`
-              : `${P} set ${slug} ${thing} ${quoteCommandArgument(v)} --on ${s.on}`,
-          ],
-        },
+        // The same command with only --only dropped: every other scope
+        // (a variant, a state, a mode) kept, never a wider write.
+        {run: [setLine(slug, thing, v, {...s, only: undefined}, unset)]},
       );
   }
   const isRole = thing === 'font' && FONT_ROLES.includes(s.on ?? '');
@@ -5734,16 +5753,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
         );
       if (!['both', 'light-only', 'dark-only'].includes(v)) {
         const lower = v.toLowerCase().replace(/^mode\s*[=:]\s*/, '');
-        // The one mode reader: a word that means one mode (night, dark
-        // mode) is that mode only.
-        const oneMode = modeWord(lower);
-        const meant =
-          DIAL_WORDS.mode[lower] ??
-          (['both', 'light-only', 'dark-only'].includes(lower)
-            ? lower
-            : oneMode
-              ? `${oneMode}-only`
-              : null);
+        const meant = modeDialValue(v);
         const near = meant
           ? [meant]
           : nearest(lower, ['both', 'light-only', 'dark-only']);
@@ -6981,7 +6991,9 @@ export function unknownVarRef(v, TOKENS, thing, reads) {
         : {}),
     };
   }
-  for (const [, name, comma] of v.matchAll(/var\(\s*(--[a-z0-9-]+)\s*(,)?/gi)) {
+  for (const [ref, name, comma] of v.matchAll(
+    /var\(\s*(--[a-z0-9-]+)\s*(,)?/gi,
+  )) {
     if (name in TOKENS || name.startsWith('--_') || reads?.has(name)) continue;
     // A fallback always gives a value: never "reads nothing" (a likely
     // typo is noted when the setting is made).
@@ -6989,11 +7001,16 @@ export function unknownVarRef(v, TOKENS, thing, reads) {
     const near = nearest(name, Object.keys(TOKENS)).filter(n =>
       typoNear(name, n),
     );
+    // One token within the one typo limit is that token misspelled: the
+    // value with it repaired.
     if (near.length)
       return {
         message: `${name} is not a design token, so var(${name}) would read nothing.`,
         near,
         close: true,
+        ...(near.length === 1
+          ? {fixed: v.replace(ref, ref.replace(name, near[0]))}
+          : {}),
       };
     // Without a fallback, a variable no design token names reads nothing;
     // var(--x, <value>) falls back to the value.
