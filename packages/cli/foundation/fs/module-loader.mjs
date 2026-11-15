@@ -24,6 +24,7 @@
  * to the authoring parser (which seals its own zod schema).
  */
 
+import {STYLESHEET_FILE} from './stylesheet-file.mjs';
 import * as path from 'node:path';
 import {AsyncLocalStorage, createHook} from 'node:async_hooks';
 import nodeModule, {createRequire} from 'node:module';
@@ -173,13 +174,6 @@ const themeModuleLoad = new AsyncLocalStorage();
 let themeModuleLoadsInFlight = 0;
 /** @type {{deregister: () => void} | null} */
 let stylesheetHooks = null;
-
-/**
- * A stylesheet an app's bundler compiles (CSS, or Sass, Less, Stylus or
- * PostCSS source): Node cannot load one, and a theme module may import it.
- */
-const STYLESHEET_FILE =
-  /\.(?:css|scss|sass|less|styl|stylus|pcss|postcss|sss)$/i;
 
 /** @param {string} url */
 function isStylesheetUrl(url) {

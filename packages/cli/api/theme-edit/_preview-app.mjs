@@ -39,6 +39,7 @@ import {baseResolved, installLine, openProject} from './_project.mjs';
 import {P, wordTable} from './_tables.mjs';
 import {
   buildTheme,
+  buildThemeHeld,
   camel,
   editedThemes,
   fontPackages,
@@ -104,6 +105,7 @@ import {
   quoteCommandArgument,
 } from '../../foundation/env/package-manager.mjs';
 import {sha256} from '../../foundation/render/source-block.mjs';
+import {isOtherLanguageStylesheet} from '../../foundation/fs/stylesheet-file.mjs';
 import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
 
@@ -4897,6 +4899,27 @@ async function addPreview(description, options, box) {
  * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditPreviewAppResponse>}
  */
 export async function themeEditPreviewApp(dir, options = {}) {
+  // A stale theme is built before the copy checks read it: a refusal after
+  // that puts the build back, so a refused command changes nothing.
+  /** @type {{undo: (() => void) | null}} */
+  const held = {undo: null};
+  try {
+    return await previewApp(dir, options, held);
+  } catch (e) {
+    held.undo?.();
+    throw e;
+  }
+}
+
+/**
+ * {@link themeEditPreviewApp}'s steps; `held.undo` puts back a build it
+ * made first.
+ * @param {string} dir
+ * @param {import('./theme-edit.type.mjs').ThemeEditPreviewAppOptions} options
+ * @param {{undo: (() => void) | null}} held
+ * @returns {Promise<import('./theme-edit.type.mjs').ThemeEditPreviewAppResponse>}
+ */
+async function previewApp(dir, options, held) {
   const {cwd = process.cwd()} = options;
   if (typeof dir !== 'string' || !dir.trim())
     refuse(
@@ -4951,7 +4974,8 @@ export async function themeEditPreviewApp(dir, options = {}) {
           {run: [`${P} show ${slug}`]},
         );
     } else if (why) {
-      const built = await buildTheme(ctx, slug, theme);
+      const {built, undo} = await buildThemeHeld(ctx, slug, theme);
+      held.undo = undo;
       notes.push(
         `built ${shown(cwd, from.dir)}/ first: its build was not current (${why}), and the app gets a current copy`,
         ...built.notes,
@@ -5157,7 +5181,7 @@ export async function themeEditPreviewApp(dir, options = {}) {
       for (const spec of specs) {
         const pkg = /^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*/i.exec(spec)?.[0];
         if (pkg && !isBuiltin(spec)) imported.add(pkg);
-        if (/\.(scss|sass|less|styl)$/i.test(spec))
+        if (isOtherLanguageStylesheet(spec))
           otherStyles.push(`${shown(cwd, file)} imports '${spec}'`);
       }
       // Each import at the file it loads, resolved as the theme build

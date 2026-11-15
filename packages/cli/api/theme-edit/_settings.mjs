@@ -7851,18 +7851,33 @@ export const OPEN_SECTION = 'overlays';
  * @returns {Promise<{warnings: string[], lifted: string[], notes: string[], removedPictures: string[]}>} `notes`: what the color config kept or replaced of a hand edit; `removedPictures`: the editor's pictures of the look before, removed
  */
 export async function buildTheme(ctx, slug, data) {
+  return (await buildThemeHeld(ctx, slug, data)).built;
+}
+
+/**
+ * {@link buildTheme}, with a way to put back what it wrote: a command that
+ * builds first and refuses later (a preview app whose copy checks fail)
+ * leaves the theme as it found it.
+ * @param {Ctx} ctx
+ * @param {string} slug
+ * @param {ThemeData} data
+ * @returns {Promise<{built: Awaited<ReturnType<typeof buildThemeSteps>>, undo: () => void}>}
+ */
+export async function buildThemeHeld(ctx, slug, data) {
   // A change around the build (commitTheme) owns the rollback of what it
   // writes. With none (a preview command building a stale theme first), a
   // build that fails puts back what it wrote itself: a refused command
   // writes nothing.
-  if (ctx.wrote) return buildThemeSteps(ctx, slug, data);
+  if (ctx.wrote)
+    return {built: await buildThemeSteps(ctx, slug, data), undo: () => {}};
   const dir = themeFiles(ctx.project.cwd, slug).dir;
   const was = snapshotDir(dir);
   /** @type {Map<string, string | null>} */
   const wrote = new Map();
   ctx.wrote = wrote;
   try {
-    return await buildThemeSteps(ctx, slug, data);
+    const built = await buildThemeSteps(ctx, slug, data);
+    return {built, undo: () => void restoreWritten(was, wrote)};
   } catch (e) {
     restoreWritten(was, wrote);
     throw e;
