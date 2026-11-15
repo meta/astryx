@@ -649,7 +649,10 @@ describe('the runtime injection hint', () => {
     for (const name of ['canvas-editor', 'neutral']) {
       const message = hintFor(name);
       expect(message).toContain(
-        'npx @astryxdesign/cli theme build <the file that defines it>',
+        'npx @astryxdesign/cli theme build <the file that defines it> --detail full',
+      );
+      expect(message).toContain(
+        'use the import lines it prints for the built .js and .css',
       );
       expect(message).not.toContain('@astryxdesign/theme-');
       expect(message).not.toMatch(/import \{[^}]*\}/);

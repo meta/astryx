@@ -204,20 +204,16 @@ function useThemeStyleInjection(theme: DefinedTheme): void {
     const themeKey = `astryx-theme-${theme.name}`;
     let entry = injectedThemes.get(themeKey);
     if (entry == null) {
-      // One-time perf hint per theme. A theme records no package or file,
-      // so the hint names none: it gives the build step, true of any
-      // runtime theme.
+      // A theme records no package or file, so the hint names neither.
       warnOnce(
         `theme-injection:${theme.name}`,
         'Theme',
         `"${theme.name}" is using runtime style injection. ` +
           `For better performance, build the theme:\n\n` +
-          `  npx @astryxdesign/cli theme build <the file that defines it>\n\n` +
-          `The build writes the theme's .css and .js beside that file. ` +
-          `Import the theme from the .js, under the name the file exports ` +
-          `it as, and import the .css once. A theme from an Astryx theme ` +
-          `package ships both built: its /built entry and its theme.css ` +
-          `(see the package README).`,
+          `  npx @astryxdesign/cli theme build <the file that defines it> --detail full\n\n` +
+          `and use the import lines it prints for the built .js and .css. ` +
+          `A theme from an Astryx theme package ships both built: its ` +
+          `/built entry and its theme.css (see the package README).`,
       );
       entry = {
         users: new Map(),
