@@ -38,7 +38,7 @@ const FIXED_CLOCK = fileURLToPath(
  * lock, and the others wait until the build is current.
  * @param {string} themeDir
  */
-function buildThemeOnce(themeDir) {
+export function buildThemeOnce(themeDir) {
   ensureBuiltOnce({
     isBuilt: () => fs.existsSync(path.join(themeDir, 'dist')),
     build: () => {

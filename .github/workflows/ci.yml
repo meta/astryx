@@ -1460,6 +1460,16 @@ jobs:
           ASTRYX_RENDER_CHART_BROWSER: '1'
         run: pnpm exec vitest run packages/cli/api/render/render.charts.browser.test.mjs --maxWorkers=1
 
+      # render.templates.phone.browser.test.mjs shows every ready page
+      # template at a 390 px phone screen and fails on horizontal overflow
+      # outside its named list. The Node legs skip it; with
+      # ASTRYX_RENDER_TEMPLATE_PHONE_BROWSER set, a missing browser fails it.
+      - name: Render template phone browser case
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        env:
+          ASTRYX_RENDER_TEMPLATE_PHONE_BROWSER: '1'
+        run: pnpm exec vitest run packages/cli/api/render/render.templates.phone.browser.test.mjs --maxWorkers=1
+
       # The contract runs in the time the job's 15-minute limit leaves, less a
       # minute, counted from the job's start: a contract that runs out of
       # it fails by name with its last lines, before the limit cancels the job
