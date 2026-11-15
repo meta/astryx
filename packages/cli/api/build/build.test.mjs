@@ -424,8 +424,35 @@ describe('build kit — every page starts from a template', () => {
       const r = await build(q, {cwd: REPO});
       if (r.type !== 'build.kit') throw new Error(r.type);
       if (r.data.pages.length) expect(r.data.start?.reason).not.toMatch(/No template matched/);
-      if (r.data.directMatch) expect(r.data.start?.reason).not.toMatch(/none is exactly this page/);
+      if (r.data.directMatch) expect(r.data.start?.reason).not.toMatch(/none is exactly this page|a good fit|a loose fit/);
     }
+  });
+
+  it('says how sure the page pick is of a closest whole-page start', async () => {
+    const GOOD = 'The closest template, and a good fit for this idea.';
+    const LOOSE = 'The closest template, but a loose fit: compare it with the OTHER TEMPLATES below and start from the one whose layout fits best.';
+    const LOOSE_ALONE = 'The closest template, but a loose fit for this idea.';
+    const seen = new Set();
+    for (const q of [
+      'an analytics page with charts of signups by week and a table of top referrers',
+      'a team directory with avatars, roles and a search box',
+      'a weekly planner with tasks grouped by day',
+      'a sign up page with email and password',
+      'a recipe page with ingredients, steps and a photo',
+      'a page for managing team members with roles and invites',
+    ]) {
+      const r = await build(q, {cwd: REPO});
+      if (r.type !== 'build.kit') throw new Error(r.type);
+      const start = r.data.start;
+      if (start?.basis !== 'closest' || /^Search matched/.test(start.reason)) continue;
+      expect([GOOD, LOOSE, LOOSE_ALONE]).toContain(start.reason);
+      // A loose fit points at other templates only when build names some.
+      if (start.reason === LOOSE) expect(start.alternatives.length).toBeGreaterThan(0);
+      if (start.reason === LOOSE_ALONE) expect(start.alternatives).toEqual([]);
+      seen.add(start.reason === GOOD ? 'good' : 'loose');
+    }
+    // Both wordings occur, so the checks above are not vacuous.
+    expect([...seen].sort()).toEqual(['good', 'loose']);
   });
 
   it('names no start when the kit is narrowed to components', async () => {

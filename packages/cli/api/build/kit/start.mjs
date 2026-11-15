@@ -12,7 +12,7 @@ import {asksForNewPage} from './kind.mjs';
 import {pickAlternatives, pickStart} from './rank.mjs';
 import {hasEditPhrase, shellCallScore} from './shellcall.mjs';
 import {isAppShell} from './words.mjs';
-import {blendOrder, blendSummary, weighStart} from './weights.mjs';
+import {blendOrder, blendSummary, startFit, weighStart} from './weights.mjs';
 
 /**
  * @typedef {import('../../search/search.type.mjs').SearchResultEntry} SearchResultEntry
@@ -60,6 +60,31 @@ function placement(kind, inPage) {
       ? 'the idea is a part of a page, so it starts from the page it names.'
       : 'the idea is a part of a page and names no page, so it starts from the app shell.';
   return null;
+}
+
+/**
+ * A closest whole-page start is a clear fit when the page pick gives it at
+ * least even odds against every other page template together (`startFit`).
+ * Below that the start is a guess between near rivals, and the reason sends
+ * the reader to compare it with the alternatives build names beside it.
+ */
+const CLEAR_FIT = 0.5;
+
+/**
+ * The reason a closest start gives when no search match is involved: how sure
+ * the page pick is of it, when the weights can say.
+ * @param {number | null} fit `startFit` for the start
+ * @param {() => boolean} hasAlternatives whether build names other templates
+ *   beside it; asked only for a loose fit
+ * @returns {string}
+ */
+function closestReason(fit, hasAlternatives) {
+  if (fit === null) return 'The closest template; none is exactly this page.';
+  if (fit >= CLEAR_FIT)
+    return 'The closest template, and a good fit for this idea.';
+  return hasAlternatives()
+    ? 'The closest template, but a loose fit: compare it with the OTHER TEMPLATES below and start from the one whose layout fits best.'
+    : 'The closest template, but a loose fit for this idea.';
 }
 
 /**
@@ -207,7 +232,24 @@ export function chooseStart(
             ? 'Matches the idea.'
             : direct
               ? `Search matched \`${direct}\` by name, but this template fits more of the idea.`
-              : 'The closest template; none is exactly this page.',
+              : closestReason(
+                  startFit(
+                    idea,
+                    ranked,
+                    lifted ? pickStart(ranked, 'page') : proposed,
+                    catalog,
+                    loadWeights(),
+                    closest.name,
+                  ),
+                  () =>
+                    pickStartAlternatives(
+                      ranked,
+                      kind,
+                      closest.name,
+                      catalog,
+                      idea,
+                    ).length > 0,
+                ),
     };
   }
   for (const id of FALLBACK_STARTS) {

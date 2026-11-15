@@ -14,7 +14,8 @@
  *   per word, a character per candidate) and the blend numbers.
  * @output `weighStart(idea, ranked, pick, catalog)`: the template id to start
  *   from, null for the app shell, or undefined when no table is available, in
- *   which case the ranker's own pick stands.
+ *   which case the ranker's own pick stands. `startFit` says how sure that
+ *   pick is.
  * @position Beside rank.mjs (api/build/kit/); kit.mjs calls it for every
  *   whole page (a part or an edit follows the ranker's placement rules). A
  *   template the tables do not list competes on its own descriptor's words
@@ -622,6 +623,41 @@ function pickOrder(idea, ranked, pick, catalog, weights) {
     i = j;
   }
   return out;
+}
+
+/**
+ * How sure the page pick is of a template it chose to start from: the
+ * probability its model gives that template against every ready page template
+ * it scored, as the softmax of their scores. With a pick model the app shell
+ * is not a rival, as the pick model only orders pages. Null without weights,
+ * or for a template the tables do not list (an integration's template, or one
+ * added since the tables were fit): its score rests on its own words alone, so
+ * the number says nothing about it.
+ * @param {string} idea
+ * @param {import('./rank.mjs').RankedPage[]} ranked
+ * @param {import('./rank.mjs').RankedPage | null} pick the ranker's own start
+ * @param {DescribedTemplate[]} catalog
+ * @param {WeightsFile | null} weights
+ * @param {string} name the template the start names
+ * @returns {number | null}
+ */
+export function startFit(idea, ranked, pick, catalog, weights, name) {
+  if (!weights || !weights.candidates.includes(name)) return null;
+  const {cands, scores} = blend(
+    readNames(idea, catalog),
+    ranked,
+    pick,
+    catalog,
+    pickModel(weights),
+  );
+  const rivals = cands
+    .map((c, i) => ({c, s: scores[i]}))
+    .filter(x => !(hasPickModel(weights) && x.c === SHELL));
+  const own = rivals.find(x => x.c === name);
+  if (!own) return null;
+  const top = Math.max(...rivals.map(x => x.s));
+  const total = rivals.reduce((sum, x) => sum + Math.exp(x.s - top), 0);
+  return Math.exp(own.s - top) / total;
 }
 
 /**

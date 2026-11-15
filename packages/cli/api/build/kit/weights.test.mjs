@@ -3,7 +3,7 @@
 import {describe, expect, it} from 'vitest';
 
 import {isWeightsFile} from '../_adapter.mjs';
-import {SHELL, blendOrder, stem, weighStart, weightWords} from './weights.mjs';
+import {SHELL, blendOrder, startFit, stem, weighStart, weightWords} from './weights.mjs';
 
 // A made-up table for tests only: three page templates and the app shell.
 const CANDIDATES = [SHELL, 'board', 'charts', 'grid'];
@@ -140,6 +140,43 @@ describe('the pick model', () => {
         weights: WEIGHTS,
       }),
     );
+  });
+});
+
+describe('startFit', () => {
+  // The pick model reads "grid" for "cards" (as in the pick model tests above).
+  const PICK = {
+    tables: [table({[stem('cards')]: [0, 0, 0, 3]})],
+    blend: [1, 0, 0, 0.5, 0, 0, 0],
+  };
+
+  it('is surer of a start the words point at than of one they do not', () => {
+    const sure = startFit('kanban kanban kanban', RANKED, RANKED[0], CATALOG, WEIGHTS, 'board');
+    const unsure = startFit('kanban kanban kanban', RANKED, RANKED[0], CATALOG, WEIGHTS, 'grid');
+    expect(sure).toBeGreaterThan(0.5);
+    expect(sure).toBeLessThanOrEqual(1);
+    expect(unsure).toBeGreaterThan(0);
+    expect(unsure).toBeLessThan(sure ?? 0);
+  });
+
+  it('shares one whole among the pages when a pick model orders them', () => {
+    const weights = {...WEIGHTS, pick: PICK};
+    const total = ['board', 'charts', 'grid'].reduce(
+      (sum, name) =>
+        sum + (startFit('charts and cards', RANKED, RANKED[0], CATALOG, weights, name) ?? 0),
+      0,
+    );
+    expect(total).toBeCloseTo(1, 6);
+  });
+
+  it('says nothing about a template the tables do not list', () => {
+    const catalog = [...CATALOG, {name: 'gauge-fleet', displayName: 'Fleet Gauges'}];
+    const ranked = [page('gauge-fleet', 9, 'Gauges'), ...RANKED];
+    expect(startFit('fleet gauges', ranked, ranked[0], catalog, WEIGHTS, 'gauge-fleet')).toBeNull();
+  });
+
+  it('says nothing without weights', () => {
+    expect(startFit('charts', RANKED, RANKED[0], CATALOG, null, 'charts')).toBeNull();
   });
 });
 
