@@ -16,6 +16,7 @@
 
 import {fileURLToPath} from 'node:url';
 import {keptTreeSummaryAsync} from '../fs/kept-tree.mjs';
+import {skipComponentsFolder} from './name-roots.mjs';
 
 /**
  * @typedef {import('../text/string-utils.mjs').ComponentMatchView} ComponentMatchView
@@ -28,6 +29,7 @@ const VIEWS_CODE = [
     './component-discovery.mjs',
     './component-loader.mjs',
     './module-exports.mjs',
+    './name-roots.mjs',
     '../doc-compiler/read.mjs',
     '../text/string-utils.mjs',
   ].map(rel => fileURLToPath(new URL(rel, import.meta.url))),
@@ -48,7 +50,7 @@ export async function integrationComponentViews(integration) {
       kind: 'integration-component-views',
       roots: [componentsDir],
       code: VIEWS_CODE,
-      skip: name => name === 'node_modules' || name === '__tests__',
+      skip: skipComponentsFolder,
       key: [
         integration.name,
         integration.__packageDir ?? null,
