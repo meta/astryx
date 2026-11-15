@@ -557,7 +557,9 @@ function changeBlocks(r) {
       : `[ok] ${d.theme}: ${d.action === 'set' ? describe(s) : `removed ${describe(s)}; now ${/** @type {any} */ (d).now ?? "the base theme's value"} applies`}`;
   // A problem the change made leads the result, right under the status
   // line, which counts them: a tail-cut or head-cut output still shows it.
-  const {newProblems = [], ...rest} = /** @type {any} */ (d);
+  // What a whole-theme change leaves out comes next, with the lines that
+  // reach it, before the rest a head-cut output drops.
+  const {newProblems = [], leftOut = [], ...rest} = /** @type {any} */ (d);
   const status = newProblems.length
     ? `${done}, but it made ${newProblems.length} new problem${newProblems.length > 1 ? 's' : ''}:`
     : done;
@@ -566,6 +568,16 @@ function changeBlocks(r) {
   return [
     status,
     ...(newProblems.length ? problemList(newProblems) : []),
+    ...(leftOut.length
+      ? [
+          list(
+            leftOut.map((/** @type {{note: string, run: string[]}} */ x) => [
+              x.note,
+              ...x.run,
+            ]),
+          ),
+        ]
+      : []),
     ...changeFields(rest),
   ];
 }

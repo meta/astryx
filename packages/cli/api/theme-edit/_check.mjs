@@ -2605,12 +2605,14 @@ export function pillParts(C) {
 }
 
 /**
- * The surfaces whose border the shared border tokens never reach: the
- * containers, menus and overlays (a part with an elevation shadow, or one
- * the layer runtime places: a tooltip) whose border reads no border width
- * or border color token. Some draw none (a dialog); some draw a fixed
- * line of their own (a popover's 1px), which --border-width does not
- * widen. A family member the census does not record is kept.
+ * The surfaces whose border the shared border tokens never reach, as the
+ * census reads them: the containers, menus and overlays (a part with an
+ * elevation shadow, or one the layer runtime places: a tooltip), a framed
+ * surface (container corners and a fill around other parts: a banner), and
+ * every part that draws a fixed line of its own at rest (a popover's 1px,
+ * a secondary button's edge), whose border reads no border width or
+ * border color token. --border-width does not widen any of them. A family
+ * member the census does not record is kept.
  * @param {any} C the part census
  * @returns {string[]}
  */
@@ -2624,12 +2626,33 @@ export function borderlessSurfaces(C) {
         /--astryx-layer-/.test(String(v)),
       ),
     );
+  /** A box with container corners and a fill around other parts. @param {string} pt */
+  const framed = pt =>
+    (C.partReads(pt, 'corners') ?? []).some(
+      (/** @type {any} */ r) => r.token === '--radius-container' && rest(r),
+    ) &&
+    (C.partReads(pt, 'background') ?? []).some(rest) &&
+    (C.MAP[pt]?.contains ?? []).length > 0;
+  /** A line of a fixed width at rest (not a token, not 0). @param {string} pt */
+  const fixedLine = pt =>
+    Object.entries(C.MAP[pt]?.at ?? {}).some(
+      ([k, v]) =>
+        /^border(-[a-z-]+)?-width$/.test(k) &&
+        Object.entries(/** @type {Record<string, unknown>} */ (v)).some(
+          ([sel, w]) =>
+            !/:/.test(sel) &&
+            !/^\s*0(?:px)?\s*$/.test(String(w)) &&
+            !/var\(/.test(String(w)),
+        ),
+    );
   const candidates = new Set([
     ...(FAMILIES.containers ?? []),
     ...(FAMILIES.menus ?? []),
     ...Object.keys(C.MAP).filter(
       pt =>
         layered(pt) ||
+        framed(pt) ||
+        fixedLine(pt) ||
         (C.partReads(pt, 'shadow') ?? []).some(
           (/** @type {any} */ r) => /^--shadow-/.test(r.token) && rest(r),
         ),
@@ -2647,7 +2670,7 @@ export function borderlessSurfaces(C) {
 /**
  * The parts that draw a divider with the shared border width: one side's
  * border (a table cell's bottom rule) or an inner line (a divider's), not
- * a box around the part. A wider --border-width makes their rules heavy.
+ * a box around the part nor an edge of a cornered box (a list row's). A wider --border-width makes their rules heavy.
  * @param {any} C the part census
  * @returns {string[]}
  */
@@ -2665,7 +2688,12 @@ export function dividerParts(C) {
       (/** @type {string} */ p) =>
         /^(height|width|block-size|inline-size)$/.test(p),
     );
-    return sides.length === 1 || (!sides.length && inner);
+    // A rule, not a box: a part with corners of its own (a list row, a
+    // button) draws an edge of the box it is.
+    const cornered = (C.partReads(pt, 'corners') ?? []).some(
+      (/** @type {{token: string}} */ r) => /^--radius-/.test(r.token),
+    );
+    return !cornered && (sides.length === 1 || (!sides.length && inner));
   });
 }
 

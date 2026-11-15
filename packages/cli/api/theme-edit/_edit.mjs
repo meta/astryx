@@ -1840,26 +1840,23 @@ async function loadedForCheck(cwd, slug, skip) {
 }
 
 /**
- * What a whole-theme change leaves out, by the census, with the line that
- * reaches it: square corners leave the parts drawn as pills round (they
- * read --radius-full); a wider or narrower --border-width does not reach
- * the surfaces that draw no border or a fixed line of their own, and moves
- * every divider's rule with it.
+ * What a whole-theme change leaves out, by the census, each with the lines
+ * that reach it, one per part: square corners leave the parts drawn as
+ * pills round (they read --radius-full); a wider or narrower
+ * --border-width does not reach the surfaces that draw no border or a
+ * fixed line of their own, and moves every divider's rule with it.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
  * @param {string} sub
  * @param {import('./_settings.mjs').Setting} s
- * @returns {string[]}
+ * @returns {Array<{note: string, run: string[]}>}
  */
-function leftOutNotes(ctx, slug, data, sub, s) {
+function leftOutParts(ctx, slug, data, sub, s) {
   if (sub !== 'set' || s.on || s.when || s.state) return [];
   const C = ctx.C;
   const has = (/** @type {string} */ p) => ctx.project.target.has(p);
-  /** @param {string[]} list */
-  const named = list =>
-    `${list.slice(0, 6).join(', ')}${list.length > 6 ? ` and ${list.length - 6} more` : ''}`;
-  /** @type {string[]} */
+  /** @type {Array<{note: string, run: string[]}>} */
   const out = [];
   if (
     s.source === 'dial' &&
@@ -1869,18 +1866,21 @@ function leftOutNotes(ctx, slug, data, sub, s) {
   ) {
     const pills = pillParts(C).filter(has);
     if (pills.length)
-      out.push(
-        `the parts drawn as pills stay round (${named(pills)}): they read --radius-full, which corners leaves as it is; ${P} set ${slug} --radius-full 0px squares them`,
-      );
+      out.push({
+        note: `the parts drawn as pills stay round (${pills.join(', ')}): they read --radius-full, which corners leaves as it is; this squares them:`,
+        run: [`${P} set ${slug} --radius-full 0px`],
+      });
   }
   if (s.source === 'token' && s.thing === '--border-width') {
     const bordered = (/** @type {string} */ p) =>
       data.settings.some(x => x.on === p && /^border(-width)?$/.test(x.thing));
     const bare = borderlessSurfaces(C).filter(p => has(p) && !bordered(p));
+    const line = quoteCommandArgument(`${s.value} solid var(--color-border)`);
     if (bare.length)
-      out.push(
-        `--border-width does not reach the surfaces that draw no border or a fixed line of their own (${bare.join(', ')}); ${P} set ${slug} border ${quoteCommandArgument(`${s.value} solid var(--color-border)`)} --on ${bare[0]} gives ${bare[0]} one, and the same line with each name gives the others one`,
-      );
+      out.push({
+        note: `--border-width does not reach the surfaces that draw no border or a fixed line of their own (${bare.join(', ')}); these give each one:`,
+        run: bare.map(p => `${P} set ${slug} border ${line} --on ${p}`),
+      });
     const own = String(
       ctx.project.core.tokenDefaults?.['--border-width'] ?? '1px',
     );
@@ -1890,9 +1890,12 @@ function leftOutNotes(ctx, slug, data, sub, s) {
       p => has(p) && !bare.includes(p) && !pinned(p),
     );
     if (dividers.length && String(s.value).trim() !== own)
-      out.push(
-        `the dividers draw their rules at --border-width too, so they are ${s.value} now (${dividers.join(', ')}); ${P} set ${slug} --border-width ${own} --on ${dividers[0]} keeps ${dividers[0]}'s at ${own}, and the same line with each name keeps the others'`,
-      );
+      out.push({
+        note: `the dividers draw their rules at --border-width too, so they are ${s.value} now (${dividers.join(', ')}); these keep each at ${own}:`,
+        run: dividers.map(
+          p => `${P} set ${slug} --border-width ${own} --on ${p}`,
+        ),
+      });
   }
   return out;
 }
@@ -4699,6 +4702,7 @@ async function changeOnce(
         styled: styledChanges(compiledBefore, compileTheme(ctx, data, after)),
         kept: [],
         lifted: r.lifted,
+        leftOut: [],
         notes: [
           ...(r.unchanged
             ? [`no change: ${s.thing} is already ${s.value}`]
@@ -5402,7 +5406,6 @@ async function changeOnce(
         : null
     : null;
   if (s.note) notes.push(s.note);
-  notes.push(...leftOutNotes(ctx, slug, data, sub, s));
   // A fill on the plain part covers the paints Core gives its variants and
   // states (a primary button's accent, a checked box's): said, with the
   // lines that change one of them, or only the part at rest.
@@ -5681,6 +5684,9 @@ async function changeOnce(
           ? prev.value
           : null,
       notes,
+      // What the whole-theme change leaves out, with the lines that reach
+      // it; the text output prints it right under the status line.
+      leftOut: leftOutParts(ctx, slug, data, sub, s),
       parts,
       group: group
         ? {

@@ -32,7 +32,12 @@ afterAll(() => {
 });
 
 /** @param {any} r */
-const notesOf = r => (r.data.notes ?? []).join('\n');
+const notesOf = r =>
+  (r.data.leftOut ?? [])
+    .map((/** @type {{note: string, run: string[]}} */ x) =>
+      [x.note, ...x.run].join('\n'),
+    )
+    .join('\n');
 
 describe('a whole-theme change', () => {
   it('square corners names the pills they leave round, with the line', async () => {
