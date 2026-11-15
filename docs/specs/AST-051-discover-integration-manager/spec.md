@@ -56,16 +56,19 @@ discover sources follow it except where this record says otherwise.
   supplies (FR11) that the project's own `package.json`, the nearest one above
   the folder discover runs in, declares in `dependencies`, `devDependencies` or
   `optionalDependencies`, under its name or an npm alias, each with its
-  version, what it adds as one list per kind, and the latest release a source
-  knows. It MUST then list, once per integration, every package its sources
+  version, the `description` in its `package.json` when it has one and is not
+  blank (terminal escape sequences and control characters removed; the text
+  view shows its first sentence), what it adds as one list per kind, and the
+  latest release a source knows. It MUST then list, once per integration, every package its sources
   offer that the project neither loads nor declares as a dependency, each with
   the package-manager command that adds it (FR2), and MUST NOT offer a package
   whose integration the project has under another name. Official packages come
   first in both lists. An integration that failed to load is left out, even an
   official one; the integration-issues warning and Doctor report it.
 - **FR2 — A package page shows its versions and what they add.** `discover
-<package>` MUST show what the shown version adds, grouped by kind, whether
-  the project has the package, its latest release, and its releases newest
+<package>` MUST show its description (a source's, else the `description` in
+  the installed `package.json`), what the shown version adds, grouped by
+  kind, whether the project has the package, its latest release, and its releases newest
   first with their dates and any unreadable status, and MUST count its
   prereleases. `discover <package>@<version>` shows any version, prerelease
   included; the default is the installed version, else the latest release. A
@@ -135,11 +138,12 @@ source, packages}`. `source` has `name`, `generatedAt`, and `complete`. Each
   so. Installed integrations always appear, with or without a source.
 - **FR9 — JSON stays compatible.** Existing response types and fields keep their
   meaning; new information is additive. `discover.list` `data` lists what the
-  project has (FR1), with optional per-kind lists and `latest`;
+  project has (FR1), with optional per-kind lists, `latest`, and an optional
+  `description` that holds an installed package's whole description;
   `meta.available` lists what the project could add and `meta.sources` reports
   each source, the official list last. `discover.detail` carries
-  `installed` and, with a source, `latest`, `aliases`, `source`, `versions`,
-  and `install` or `installedAs`. Items other than installed components use the
+  `installed`, the optional `description` FR2 shows, and, with a source,
+  `latest`, `aliases`, `source`, `versions`, and `install` or `installedAs`. Items other than installed components use the
   `discover.item` type. `discover.search` matches carry `kind` and `installed`,
   `component` holds the item name for every kind, and `data.total` appears when
   `--limit` cut the list. A free-text query returns `discover.search`, never

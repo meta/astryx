@@ -210,24 +210,39 @@ export async function discoverPackages() {
   return {packages, configured: true, project};
 }
 
+/** A terminal escape sequence: CSI (`ESC [ … final`), OSC, or a two-byte one. */
+const ESCAPE_SEQUENCE =
+  // eslint-disable-next-line no-control-regex
+  /\u001b(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007\u001b]*(?:\u0007|\u001b\\)?|[@-Z\\-_])/g;
+/** Every other C0 or C1 control character. */
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARACTER = /[\u0000-\u001f\u007f-\u009f]/g;
+
 /**
  * The `description` in the package.json of an installed package, so the list
  * says what an installed integration is, as it does for one a source lists.
+ * The text is the package's own, so terminal escape sequences and control
+ * characters are removed; a blank one is left out.
  * @param {string | undefined} packageDir
  * @returns {string | undefined}
  */
-function packageDescription(packageDir) {
+export function packageDescription(packageDir) {
   if (!packageDir) return undefined;
+  let raw;
   try {
-    const pkg = JSON.parse(
+    raw = JSON.parse(
       fs.readFileSync(path.join(packageDir, 'package.json'), 'utf-8'),
-    );
-    return typeof pkg?.description === 'string' && pkg.description.trim()
-      ? pkg.description.trim()
-      : undefined;
+    )?.description;
   } catch {
     return undefined;
   }
+  if (typeof raw !== 'string') return undefined;
+  const clean = raw
+    .replace(ESCAPE_SEQUENCE, '')
+    .replace(CONTROL_CHARACTER, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return clean || undefined;
 }
 
 /**
@@ -277,7 +292,7 @@ export async function describeInstalled(project, scanned) {
     const description = packageDescription(integration.__packageDir);
     installed.push({
       ...base,
-      ...(description && !base.description ? {description} : {}),
+      ...(description ? {description} : {}),
       templates: identities.templates.map(t => t.id),
       // Each doc by the name `astryx docs` opens it by, not the name on its
       // file: a doc that adds sections to `theme` opens as `theme`.

@@ -33,6 +33,7 @@ import {
   OFFICIAL_SOURCE_NAME,
 } from '../../../api/discover/discover.mjs';
 import {isValidSemver} from '../../../foundation/env/semver.mjs';
+import {firstSentence} from '../../../foundation/text/string-utils.mjs';
 import {Project} from '../../../foundation/config/project.mjs';
 import {warnOnIntegrationIssues} from '../../../foundation/integrations/integration-warnings.mjs';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
@@ -355,7 +356,12 @@ export function registerDiscover(program) {
               blocks.push(section('Installed'));
               blocks.push(
                 result.data.length > 0
-                  ? records(result.data, listOpts)
+                  ? records(result.data, {
+                      ...listOpts,
+                      // A package's description shows its first sentence;
+                      // `--json` carries it whole.
+                      format: {...listOpts.format, description: firstSentence},
+                    })
                   : text(
                       kind
                         ? `None of this project's integrations add ${kind}.`
@@ -425,7 +431,12 @@ export function registerDiscover(program) {
           case 'discover.detail': {
             const d = result.data;
             /** @type {import('../formatters/index.mjs').Block[]} */
-            const blocks = [record(d, {omit: ['versions', 'install']})];
+            const blocks = [
+              record(d, {
+                omit: ['versions', 'install'],
+                ...(d.installed ? {format: {description: firstSentence}} : {}),
+              }),
+            ];
             if (d.versions && d.versions.length > 0) {
               const shown = d.version;
               const lines = versionLines(d.versions, {

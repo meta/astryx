@@ -84,9 +84,71 @@ describe('astryx discover: an installed integration says what it is', () => {
   );
 
   it(
+    'prints the first sentence in text and the whole description in JSON',
+    async () => {
+      writeProject({
+        name: '@acme/guides',
+        version: '1.0.0',
+        description:
+          'Acme guides for building with Astryx. They cover setup and themes.',
+      });
+
+      const json = await runCli(['--json', 'discover', '@acme/guides'], {
+        cwd: tmpDir,
+      });
+      expect(json.status, json.stderr).toBe(0);
+      expect(JSON.parse(json.stdout).data.description).toBe(
+        'Acme guides for building with Astryx. They cover setup and themes.',
+      );
+
+      for (const argv of [
+        ['discover', '--installed'],
+        ['discover', '@acme/guides'],
+      ]) {
+        const text = await runCli(argv, {cwd: tmpDir});
+        expect(text.status, text.stderr).toBe(0);
+        expect(text.stdout).toMatch(
+          /^description:\s+Acme guides for building with Astryx\.$/m,
+        );
+        expect(text.stdout).not.toContain('They cover setup');
+      }
+    },
+    SLOW,
+  );
+
+  it(
+    'removes terminal escape codes and control characters from the package text',
+    async () => {
+      writeProject({
+        name: '@acme/guides',
+        version: '1.0.0',
+        description:
+          '\u001b[31mAcme\u001b[0m guides\u0007 for\tbuilding.\u001b]0;title\u0007',
+      });
+
+      const json = await runCli(['--json', 'discover', '--installed'], {
+        cwd: tmpDir,
+      });
+      expect(json.status, json.stderr).toBe(0);
+      const entry = JSON.parse(json.stdout).data.find(
+        (/** @type {{name: string}} */ each) => each.name === '@acme/guides',
+      );
+      expect(entry.description).toBe('Acme guides for building.');
+
+      const text = await runCli(['discover', '--installed'], {cwd: tmpDir});
+      expect(text.stdout).not.toMatch(/\u001b|\u0007/);
+    },
+    SLOW,
+  );
+
+  it(
     'adds no description when the package.json has none',
     async () => {
-      writeProject({name: '@acme/guides', version: '1.0.0'});
+      writeProject({
+        name: '@acme/guides',
+        version: '1.0.0',
+        description: '  \u001b[0m  ',
+      });
 
       const json = await runCli(['--json', 'discover', '--installed'], {
         cwd: tmpDir,
