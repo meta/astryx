@@ -11,23 +11,62 @@
  *   `files`), or cannot be asked.
  * @position foundation/integrations; read by the template-asset and logo
  *   checks (validate-contributions.mjs) and the shipped-import check
- *   (shipped-imports.mjs).
+ *   (shipped-imports.mjs). Inside `withOnePackList` (one validation) npm is
+ *   asked once per package folder, however many checks ask.
  */
 
+import {AsyncLocalStorage} from 'node:async_hooks';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {npmCommand} from '../release/cache.mjs';
 
 /**
+ * npm's answer for each package folder while one validation runs
+ * (withOnePackList), by the folder's path.
+ * @type {AsyncLocalStorage<Map<string, {paths: Set<string>} | {error: string}>>}
+ */
+const packLists = new AsyncLocalStorage();
+
+/**
+ * Run `fn`, asking npm at most once per package folder what it packs: the
+ * template-asset, logo and shipped-import checks of one validation each ask,
+ * and npm takes seconds to answer. A nested call shares the outer answers.
+ * Only wrap work that does not change the package's files.
+ * @template T
+ * @param {() => T} fn
+ * @returns {T}
+ */
+export function withOnePackList(fn) {
+  if (packLists.getStore()) return fn();
+  return packLists.run(new Map(), fn);
+}
+
+/**
  * The paths npm packs for the package in `base`, read from
  * `npm pack --dry-run --json --ignore-scripts` (nothing runs, nothing is
  * written), started the way the CLI starts npm everywhere else, or why npm
- * could not answer.
+ * could not answer. Inside `withOnePackList`, the answer it already gave for
+ * the folder.
  * @param {string} base
  * @returns {{paths: Set<string>} | {error: string}}
  */
 export function npmPackedPaths(base) {
+  const lists = packLists.getStore();
+  const folder = path.resolve(base);
+  const known = lists?.get(folder);
+  if (known) return known;
+  const answer = askNpm(folder);
+  lists?.set(folder, answer);
+  return answer;
+}
+
+/**
+ * What npm answers for the package in `base` (npmPackedPaths).
+ * @param {string} base
+ * @returns {{paths: Set<string>} | {error: string}}
+ */
+function askNpm(base) {
   let npm;
   try {
     npm = npmCommand();

@@ -96,6 +96,7 @@ import {
 } from '../../foundation/integrations/shipped-imports.mjs';
 import {runChoice} from '../../foundation/release/run-context.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
+import {withOnePackList} from '../../foundation/integrations/pack-state.mjs';
 
 /** The running CLI is outside the package's `@astryxdesign/cli` peer range. */
 const CLI_PEER_VERSION = 'cli_peer_version';
@@ -760,15 +761,16 @@ function packageJsonFieldIssues(pkg, pkgJsonPath) {
  * at or above `cwd`, resolved the way the project loads it.
  * @param {string} spec package name
  * @param {string} [cwd]
- * @param {{iconSets?: boolean}} [options] `iconSets`: check the package's
- *   experimental icon sets; by default only when the project at `cwd` sets
- *   `experimental.iconSet`
+ * @param {{iconSets?: boolean, shippedImports?: boolean}} [options]
+ *   `iconSets`: check the package's experimental icon sets; by default only
+ *   when the project at `cwd` sets `experimental.iconSet`.
+ *   `shippedImports: false` skips the shipped-import check.
  * @returns {Promise<ValidateResult>}
  */
 export async function validateInstalledIntegration(
   spec,
   cwd = process.cwd(),
-  {iconSets} = {},
+  {iconSets, shippedImports = true} = {},
 ) {
   // The resolver throws (path-safety guard) on a spec with path segments,
   // `..`, or an absolute path. Every other malformed input to this command
@@ -812,7 +814,11 @@ export async function validateInstalledIntegration(
   return validateAtPackageDir(
     packageDir,
     {name: pkg.name ?? spec, version: pkg.version},
-    {cwd, iconSets: iconSets ?? (await projectUsesIconSets(cwd))},
+    {
+      cwd,
+      iconSets: iconSets ?? (await projectUsesIconSets(cwd)),
+      shippedImports,
+    },
   );
 }
 
@@ -904,7 +910,19 @@ async function docTargetNotes(integration) {
  * @param {{cwd?: string}} [options]
  * @returns {Promise<import('./validate-integration.type.mjs').ValidateIntegrationResponse>}
  */
-export async function validateIntegration(pkg, options = {}) {
+export function validateIntegration(pkg, options = {}) {
+  // Its checks read the package and change none of its files, so npm is
+  // asked once what the package packs.
+  return withOnePackList(() => validateIntegrationOnce(pkg, options));
+}
+
+/**
+ * {@link validateIntegration}'s checks, run once.
+ * @param {string | undefined} pkg
+ * @param {{cwd?: string}} options
+ * @returns {Promise<import('./validate-integration.type.mjs').ValidateIntegrationResponse>}
+ */
+async function validateIntegrationOnce(pkg, options) {
   const {cwd = process.cwd()} = options;
   const result = pkg
     ? await validateInstalledIntegration(pkg, cwd)
