@@ -2069,6 +2069,7 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
  * @property {string | null} bad - a hex color written with the wrong number of digits
  * @property {string[]} lengths
  * @property {string | null} state
+ * @property {string | null} [alsoState] - a second state said with the first ("hovered selected tabs"): the part in both at once
  * @property {'light' | 'dark' | null} mode
  * @property {boolean} except - "but not on X": X keeps what the clause before does
  * @property {Record<string, string>} decl - CSS written as `prop: value`
@@ -2865,6 +2866,27 @@ function clausesOf(q, partWords) {
         text,
       );
     const state = stateWord(stateText);
+    // (A second state said beside it, "hovered selected tabs": both at
+    // once.)
+    // (Said by other words than the first: "active" names one state, even
+    // where two readings take that word; "pressed or hovered" is a list.)
+    const firstAt = STATE_WORDS.map(([re]) => re.exec(stateText)).find(
+      m => m != null,
+    );
+    const alsoState =
+      STATE_WORDS.map(([re, s]) => {
+        const m = re.exec(stateText);
+        if (!m || !firstAt || s === state) return null;
+        const overlaps =
+          m.index < firstAt.index + firstAt[0].length &&
+          firstAt.index < m.index + m[0].length;
+        // ("pressed or hovered": each, never both at once.)
+        const between = stateText.slice(
+          Math.min(firstAt.index + firstAt[0].length, m.index + m[0].length),
+          Math.max(firstAt.index, m.index),
+        );
+        return overlaps || /\b(?:or|and|nor)\b|[,/&]/.test(between) ? null : s;
+      }).find(s => s != null) ?? null;
     // A mode phrase names the mode ("dark mode", "in light"); a color word
     // ("dark gray") never does when a mode phrase is there.
     // A mode named where a mode is said (a pasted label, `dark: cards
@@ -2926,6 +2948,7 @@ function clausesOf(q, partWords) {
         ...lengthsIn(withoutAmount(text)),
       ],
       state,
+      alsoState,
       mode,
       except,
       decl,
@@ -3247,18 +3270,31 @@ function drawsOwnShadow(C, TARGET, part) {
  * draws a shadow of its own, which the ring would replace.
  * @param {any} C @param {any} TARGET @param {string} part
  * @param {string} width @param {string} color @param {'light' | 'dark'} mode
+ * @param {string} [state] the state the line is drawn in (a focused
+ *   input's): the shadow the part draws there is the one kept
  */
-function oneModeLine(C, TARGET, part, width, color, mode) {
-  // A part that draws one shadow of its own at rest (a dialog's) keeps it
-  // after the ring; one that draws several (per variant) cannot be kept.
+function oneModeLine(C, TARGET, part, width, color, mode, state) {
+  // A part that draws one shadow of its own at rest (a dialog's), or in
+  // the state the line is for (an input's focus ring), keeps it after the
+  // ring; one that draws several (per variant or status) cannot be kept.
+  const shadows = Object.entries(C.MAP[part]?.at?.['box-shadow'] ?? {}).filter(
+    ([, v]) => !/^\s*none\s*$/.test(String(v)),
+  );
+  const inState = state
+    ? shadows.filter(([sel]) =>
+        new RegExp(`:${state}(?![\\w-])`).test(String(sel)),
+      )
+    : [];
   const rest = [
     ...new Set(
-      Object.entries(C.MAP[part]?.at?.['box-shadow'] ?? {})
-        .filter(([sel, v]) => !/:/.test(sel) && !/^\s*none\s*$/.test(String(v)))
-        .map(([, v]) => String(v).trim()),
+      (inState.length
+        ? inState
+        : shadows.filter(([sel]) => !/:/.test(sel))
+      ).map(([, v]) => String(v).trim()),
     ),
   ];
-  if (drawsOwnShadow(C, TARGET, part) && rest.length !== 1) return null;
+  if ((drawsOwnShadow(C, TARGET, part) || inState.length) && rest.length !== 1)
+    return null;
   const own = rest.length === 1 ? `, ${rest[0]}` : '';
   const half =
     mode === 'dark'
@@ -5989,7 +6025,7 @@ export function draftAnswer(ctx, env, question) {
         c.parts.length &&
         !c.aspects.length &&
         !c.except &&
-        (c.neg || new RegExp(`\\b${REMOVAL_VERBS}\\b`).test(c.text)) &&
+        (c.neg || new RegExp(`\\b(?:${REMOVAL_VERBS}|hide)\\b`).test(c.text)) &&
         c.parts.every(
           p => (C.MAP[(FAMILIES[p.on] ?? [p.on])[0]]?.line ?? []).length > 0,
         )
@@ -6625,7 +6661,9 @@ export function draftAnswer(ctx, env, question) {
         ([k, vals]) =>
           statesOf(p.on).includes(k) && vals.includes(String(c.state)),
       )?.[0];
-      if (st) f.state = st;
+      // (A second state said with it, the part takes too: both at once.)
+      const also = st && c.alsoState ? stateFor(p.on, c.alsoState) : null;
+      if (st) f.state = also && also !== st ? `${st}+${also}` : st;
       else if (byValue && !f.when) f.when = `${byValue}:${c.state}`;
       else f.noState = c.state;
     }
@@ -6917,12 +6955,12 @@ export function draftAnswer(ctx, env, question) {
       const color =
         new RegExp(COLOR_IN_VALUE.source, 'i').exec(value)?.[0] ??
         colorsIn(value)[0];
-      const shows = drawsLine(
-        C,
-        FAMILIES[st.on] ?? [one(st.on)],
-        st.thing,
-        st.state,
-      );
+      // (A state's look keeps the border the part draws at rest: a focused
+      // input's line is its resting one, recolored.)
+      const shows =
+        drawsLine(C, FAMILIES[st.on] ?? [one(st.on)], st.thing, st.state) ||
+        (st.state != null &&
+          drawsLine(C, FAMILIES[st.on] ?? [one(st.on)], st.thing));
 
       if (color && shows)
         return {...st, thing: `${st.thing}-color`, value: color};
@@ -6937,7 +6975,15 @@ export function draftAnswer(ctx, env, question) {
       ) {
         const w =
           /(?:^|\s)(\d*\.?\d+(?:px|rem|em))(?:\s|$)/.exec(value)?.[1] ?? '1px';
-        const ring = oneModeLine(C, TARGET, one(st.on), w, color, c.mode);
+        const ring = oneModeLine(
+          C,
+          TARGET,
+          one(st.on),
+          w,
+          color,
+          c.mode,
+          st.state,
+        );
         if (ring && !(ring.when && st.when))
           return held({
             ...st,
@@ -10602,6 +10648,12 @@ export function draftAnswer(ctx, env, question) {
     if (
       named &&
       !named.bad &&
+      // ("The button text 50% transparent", read as an opacity: the text's
+      // alpha, answered below; an element's opacity fades the whole part.)
+      !(
+        named.prop === 'opacity' &&
+        /\b(?:text|labels?|writing|words)\b/.test(c.text)
+      ) &&
       // A percent padding or gap is an amount of the one there now ("50%
       // bigger", "150%"), answered below: a CSS percent padding is half the
       // container's width.
@@ -10683,27 +10735,49 @@ export function draftAnswer(ctx, env, question) {
       )
     ) {
       const p0 = c.parts[0];
+      // (A part whose paint is a line, a divider: each variant's line
+      // color, or the one variant said.)
+      const lineVariant = /^variant:([\w-]+)$/.exec(String(p0.when ?? ''))?.[1];
+      const lineReads = (C.MAP[one(p0.on)]?.line ?? []).length
+        ? [
+            ...new Set(
+              (C.partReads(one(p0.on), 'background') ?? [])
+                .filter(
+                  r =>
+                    /^--color-/.test(r.token) &&
+                    (!lineVariant ||
+                      r.when.some(w =>
+                        w.split(',').includes(`variant=${lineVariant}`),
+                      )),
+                )
+                .map(r => r.token),
+            ),
+          ]
+        : [];
       const read =
+        lineReads[0] ??
         restRead(C.partReads(one(p0.on), 'border'), p0.when) ??
         restRead(C.partReads(one(p0.on), 'background'), p0.when);
       if (read) {
         // ("half as visible", "50% fainter": the amount said; else 60%.)
         const said = exactFactor(c.text);
         const k = said != null && said > 0 && said < 1 ? said : 0.6;
-        const steps = perMode(
-          read,
-          read,
-          {on: p0.on, ...(p0.when ? {when: p0.when} : {})},
-          now =>
-            parseColor(now)
-              ? withAlpha(now, Math.max(0, alphaOf(now) * k))
-              : null,
-          c,
+        const steps = (lineReads.length ? lineReads : [read]).flatMap(tok =>
+          perMode(
+            tok,
+            tok,
+            {on: p0.on, ...(p0.when ? {when: p0.when} : {})},
+            now =>
+              parseColor(now)
+                ? withAlpha(now, Math.max(0, alphaOf(now) * k))
+                : null,
+            c,
+          ),
         );
         if (steps.length) {
           seenPart(p0.on);
           push({
-            text: `a fainter ${p0.on}: ${read}, the color it is drawn in, at ${Math.round(k * 100)}% of its alpha, on ${p0.on} only${modesSaid(steps)}`,
+            text: `a fainter ${p0.on}: ${lineReads.length ? lineReads.join(' and ') : read}, the color it is drawn in, at ${Math.round(k * 100)}% of its alpha, on ${p0.on} only${modesSaid(steps)}`,
             options: [steps],
             sequence: steps.length > 1,
           });
@@ -12592,7 +12666,7 @@ export function draftAnswer(ctx, env, question) {
           options: [
             [
               ...tokens.map(t => set(t, color, {...scope, ...modeOf(c)})),
-              ...(w.len ? [set('--border-width', w.len, {on})] : []),
+              ...(w.len ? [set('--border-width', w.len, scope)] : []),
             ],
           ],
           sequence: tokens.length > 1 || Boolean(w.len),
@@ -12631,7 +12705,7 @@ export function draftAnswer(ctx, env, question) {
       return len
         ? {
             text: `the divider thickness: --border-width, on the divider only${nowPx != null && !c.lengths[0] ? ` (now ${nowPx}px)` : ''}`,
-            options: [[set('--border-width', len, {on})]],
+            options: [[set('--border-width', len, scope)]],
           }
         : null;
     }
@@ -14364,6 +14438,7 @@ export function draftAnswer(ctx, env, question) {
             width ?? '1px',
             lineColor,
             c.mode,
+            f.state,
           );
           return ring && !(ring.when && f.when)
             ? {
@@ -15134,9 +15209,13 @@ export function draftAnswer(ctx, env, question) {
         // (The share said, "30% fainter", "half as visible", read by the
         // one amount reader; else 40%.)
         const fainterBy = exactFactor(c.text);
+        // "all text 50% transparent", "the text half transparent" (read as
+        // an opacity): the text colors at that alpha, each mode's own ink
+        // kept; an element's opacity would fade the whole part.
+        const absAlpha = /\bopacity\s+(\d*\.?\d+)\b/.exec(c.text)?.[1];
         const relative =
           RELATIVE_ALPHA.exec(c.text) ??
-          (fainterText
+          (fainterText && absAlpha == null
             ? /** @type {RegExpExecArray} */ (
                 /** @type {unknown} */ ([
                   'more transparent',
@@ -15148,26 +15227,33 @@ export function draftAnswer(ctx, env, question) {
                 ])
               )
             : null);
-        const relSubject = relative
-          ? /\bshadows?\b/.test(c.text)
-            ? 'shadow'
-            : /\bborders?\b/.test(c.text)
-              ? 'border'
-              : /\b(?:text|labels?|writing|words)\b/.test(c.text)
-                ? 'text'
-                : /\b(?:backgrounds?|bg|fills?)\b/.test(c.text)
-                  ? 'background'
-                  : !on &&
-                      /\b(?:accent|brand|danger|error|success|warning|info)\b/.test(
-                        c.text,
-                      )
-                    ? 'role'
-                    : null
-          : null;
-        // "all text 50% transparent", "the text half transparent" (read as
-        // an opacity): the theme's text colors at that alpha, each mode's
-        // own ink kept; an element's opacity would fade the whole part.
-        const absAlpha = /\bopacity\s+(\d*\.?\d+)\b/.exec(c.text)?.[1];
+        // (On a part: its text colors at that alpha, as "more transparent"
+        // scales them.)
+        const absText =
+          on &&
+          !relative &&
+          absAlpha != null &&
+          Number(absAlpha) <= 1 &&
+          /\b(?:text|labels?|writing|words)\b/.test(c.text)
+            ? Number(absAlpha)
+            : null;
+        const relSubject =
+          relative || absText != null
+            ? /\bshadows?\b/.test(c.text)
+              ? 'shadow'
+              : /\bborders?\b/.test(c.text)
+                ? 'border'
+                : /\b(?:text|labels?|writing|words)\b/.test(c.text)
+                  ? 'text'
+                  : /\b(?:backgrounds?|bg|fills?)\b/.test(c.text)
+                    ? 'background'
+                    : !on &&
+                        /\b(?:accent|brand|danger|error|success|warning|info)\b/.test(
+                          c.text,
+                        )
+                      ? 'role'
+                      : null
+            : null;
         if (
           !on &&
           !relative &&
@@ -15194,16 +15280,27 @@ export function draftAnswer(ctx, env, question) {
             sequence: steps.length > 1,
           };
         }
-        if (relative && relSubject && !(relSubject === 'shadow' && on)) {
-          const n = Number(relative[1]) / 100;
-          const clearer =
-            (relative[2] === 'more') !== (relative[3] === 'opaque');
+        if (
+          (relative || absText != null) &&
+          relSubject &&
+          !(relSubject === 'shadow' && on)
+        ) {
+          const n = relative ? Number(relative[1]) / 100 : 0;
+          const clearer = relative
+            ? (relative[2] === 'more') !== (relative[3] === 'opaque')
+            : true;
           const k = clearer ? Math.max(0, 1 - n) : 1 + n;
-          const how = `each color's alpha ${relative[1]}% ${clearer ? 'lower' : 'higher'} (× ${Math.round(k * 100) / 100}) than its own`;
+          const how =
+            absText != null || !relative
+              ? `each color at ${Math.round((absText ?? 1) * 100)}% opacity`
+              : `each color's alpha ${relative?.[1]}% ${clearer ? 'lower' : 'higher'} (× ${Math.round(k * 100) / 100}) than its own`;
           /** @param {string} now */
           const scaledColor = now =>
             parseColor(now)
-              ? withAlpha(now, Math.max(0, Math.min(1, alphaOf(now) * k)))
+              ? withAlpha(
+                  now,
+                  absText ?? Math.max(0, Math.min(1, alphaOf(now) * k)),
+                )
               : null;
           if (relSubject === 'shadow') {
             const steps = ['--shadow-low', '--shadow-med', '--shadow-high']
@@ -15319,7 +15416,7 @@ export function draftAnswer(ctx, env, question) {
           const read = restRead(C.partReads(one(on), group), f.when);
           if (!read)
             return {
-              text: `${on} draws no ${relSubject} color of its own that how can read, so there is none to make ${relative[0]}`,
+              text: `${on} draws no ${relSubject} color of its own that how can read, so there is none to make ${relative?.[0] ?? `${Math.round((absText ?? 1) * 100)}% opaque`}`,
               options: [],
             };
           const thing =

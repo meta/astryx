@@ -81,9 +81,10 @@ describe("a divider's line", () => {
     await themeEditNew('f', {cwd, like: 'neutral'});
     const plain = await top('make the divider less visible', 'f');
     expect(plain.commands.length).toBeGreaterThan(0);
+    // (Every variant's line: the strong divider's is its own token.)
     for (const x of plain.commands)
       expect(x).toMatch(
-        /^set f --color-border '#[0-9a-f]{8}' --on divider --mode (light|dark)$/,
+        /^set f --color-border(-emphasized)? '#[0-9a-f]{8}' --on divider --mode (light|dark)$/,
       );
     const strong = await top('make strong dividers less visible', 'f');
     for (const x of strong.commands)

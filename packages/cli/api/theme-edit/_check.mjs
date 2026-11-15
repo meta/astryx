@@ -39,6 +39,7 @@ import {
 import {calcVars, coreFallback, multipliedTokens} from './_parts.mjs';
 import {
   AUTO_SPREAD,
+  COMMON_STATES,
   COLOR_PROP_PARTS,
   COLOR_PROPS,
   CORNERS,
@@ -3339,10 +3340,33 @@ function paintedTogether(ctx, part, pieces) {
       (p === 'disabled' && /disabled/.test(cond))
     );
   };
-  return Object.values(ctx.C.MAP[part]?.at ?? {}).some(byCond =>
-    Object.keys(/** @type {object} */ (byCond)).some(cond =>
-      pieces.every(p => named(cond, p)),
-    ),
+  const conds = Object.values(ctx.C.MAP[part]?.at ?? {}).flatMap(byCond =>
+    Object.keys(/** @type {object} */ (byCond)),
+  );
+  // An interaction the element takes (a hover, a focus) goes with any
+  // state it is drawn in: each needs only a condition of its own (a tab
+  // hovered, a tab selected). States marked by attributes (selected,
+  // pressed, current) must be named together by one condition: a
+  // pagination's current page is never pressed.
+  const interaction = (/** @type {string} */ p) =>
+    COMMON_STATES.includes(p) && p !== 'disabled';
+  const marked = pieces.filter(p => !interaction(p));
+  const markedOk =
+    marked.length <= 1
+      ? marked.every(p => conds.some(cond => named(cond, p)))
+      : conds.some(cond => marked.every(p => named(cond, p)));
+  // (An element people press or focus, a tab's button, takes every
+  // interaction; a box drawn beside its input, a checkbox's indicator,
+  // takes none its part data does not show.)
+  const interactive =
+    (ctx.C.MAP[part]?.tags ?? []).some((/** @type {string} */ t) =>
+      /^(button|a|input|select|textarea|summary)$/.test(t),
+    ) || conds.some(cond => /:(hover|active|focus|focus-visible)\b/.test(cond));
+  return (
+    markedOk &&
+    pieces
+      .filter(interaction)
+      .every(p => interactive || conds.some(cond => named(cond, p)))
   );
 }
 
@@ -4684,8 +4708,9 @@ function checkOne(
     }
     const states = partStates(ctx, s.on);
     // A state the part lists in camelCase (toggle-button's isPressed) typed
-    // in any case or with dashes is that state; one Core paints from an
-    // ARIA attribute (isPressed from aria-pressed), that ARIA state.
+    // in any case or with dashes is that state; a state typed by its prop
+    // name or its ARIA attribute (`isPressed`, `aria-pressed` on a button,
+    // `isSelected` on a tab) is the state of that name.
     if (s.state) s.state = partState(ctx, s.on, s.state);
     // Several states in one --state (`hover,focus-visible`, `hover
     // focus-visible`): one line per state, the value quoted as typed.

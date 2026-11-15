@@ -10201,10 +10201,23 @@ export function partState(ctx, part, state) {
   const states = partStates(ctx, part);
   const flat = (/** @type {string} */ x) =>
     x.replace(/[-_\s]/g, '').toLowerCase();
-  return state
+  // (A state's prop name, `isPressed`, or its ARIA attribute,
+  // `aria-pressed`, names the state too.)
+  const bare = (/** @type {string} */ x) =>
+    flat(x.replace(/^is(?=[A-Z])|^is-(?=[a-z])/, '').replace(/^aria-/i, ''));
+  // (Several at once in one order, the part's own, so either spelling is
+  // one setting.)
+  const pieces = state
     .split('+')
-    .map(p => states.find(x => flat(x) === flat(p)) ?? p)
-    .join('+');
+    .map(
+      p =>
+        states.find(x => flat(x) === flat(p)) ??
+        states.find(x => flat(x) === bare(p)) ??
+        p,
+    );
+  const at = (/** @type {string} */ p) =>
+    states.includes(p) ? states.indexOf(p) : states.length;
+  return [...new Set(pieces)].sort((a, b) => at(a) - at(b)).join('+');
 }
 
 /**

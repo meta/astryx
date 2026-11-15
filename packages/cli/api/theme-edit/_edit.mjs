@@ -5220,7 +5220,7 @@ async function changeOnce(
       x.thing === target.thing &&
       (x.on ?? null) === (flags.on ?? null) &&
       (x.when ?? null) === (flags.when ?? null) &&
-      (x.state ?? null) === (flags.state ?? null) &&
+      stateKeyOf(x.state) === stateKeyOf(flags.state) &&
       (x.mode ?? null) === (flags.mode ?? null) &&
       Boolean(x.only) === Boolean(flags.only),
   );
@@ -5359,7 +5359,7 @@ async function changeOnce(
               x.thing.toLowerCase() === String(thing).toLowerCase() &&
               (x.on ?? null) === (flags.on ?? null) &&
               (x.when ?? null) === (flags.when ?? null) &&
-              (x.state ?? null) === (flags.state ?? null) &&
+              stateKeyOf(x.state) === stateKeyOf(flags.state) &&
               (x.mode ?? null) === (flags.mode ?? null) &&
               // --only names a setting made with it; it is never dropped.
               Boolean(x.only) === Boolean(flags.only),
@@ -5429,7 +5429,7 @@ async function changeOnce(
         const sameScope = (/** @type {any} */ x) =>
           (x.on ?? null) === (flags.on ?? null) &&
           (x.when ?? null) === (flags.when ?? null) &&
-          (x.state ?? null) === (flags.state ?? null) &&
+          stateKeyOf(x.state) === stateKeyOf(flags.state) &&
           (x.mode ?? null) === (flags.mode ?? null);
         const ordered = [
           ...matches.filter(sameScope),
@@ -8127,6 +8127,16 @@ function colorsReport(pal, data, built, slug = '') {
 function colorFiles(slug) {
   const f = paletteFiles(slug);
   return {config: f.config, module: f.palette, receipt: f.receipt};
+}
+
+/**
+ * A setting's state as undo matches it: several at once in any order are
+ * the same (`selected+hover`, `hover+selected`).
+ * @param {unknown} state
+ * @returns {string | null}
+ */
+function stateKeyOf(state) {
+  return state == null ? null : String(state).split('+').sort().join('+');
 }
 
 /**
