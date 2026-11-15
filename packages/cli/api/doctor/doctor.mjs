@@ -124,6 +124,7 @@ import {
   corePeerRange,
   isLocalThemeOwner,
   readThemeState,
+  builtTargetOf,
 } from './_adapter.mjs';
 import {checkBuilt} from './built-checks.mjs';
 
@@ -285,6 +286,18 @@ function projectRootOf(ctx) {
 }
 
 /* ── individual checks ────────────────────────────────────────────────── */
+
+/**
+ * The path `doctor --built` checks for paths given to `doctor` as words, or
+ * null when they are not paths it can check: the path itself when there is
+ * one, else the project folder that holds them all.
+ * @param {string[]} paths
+ * @param {{cwd?: string}} [options]
+ * @returns {string | null}
+ */
+export function builtTarget(paths, {cwd = process.cwd()} = {}) {
+  return builtTargetOf(cwd, paths);
+}
 
 /**
  * Check 1 — running Node version meets the CLI's minimum.
@@ -2414,8 +2427,6 @@ export async function runChecks(options = {}) {
   let projectError = null;
   /** @type {DoctorContext['iconSets']} */
   let iconSets = null;
-  /** @type {DoctorContext['iconPlaceholders']} */
-  let iconPlaceholders = null;
   /** @type {import('../../foundation/config/project.mjs').Project | null} */
   let project = null;
   try {
@@ -2513,9 +2524,6 @@ export async function runChecks(options = {}) {
       }
       try {
         iconSets = await project.iconSets();
-        if (iconSets.choice.configured) {
-          iconPlaceholders = findIconPlaceholders(findPackageRoot(cwd) ?? cwd);
-        }
       } catch {
         iconSets = null;
       }
@@ -2546,8 +2554,34 @@ export async function runChecks(options = {}) {
     configError,
     projectError,
     iconSets,
-    iconPlaceholders,
+    // Set after the docs checks, below.
+    iconPlaceholders: null,
   };
+
+  // The checks that read only files, each kept while every file it read is
+  // unchanged; the Core the project loads is part of what they read. They
+  // run first, though they print last: a kept check depends on every file
+  // its run read before it, and the placeholder-icon scan and the wiring
+  // scan below read the app's source, which the docs never read.
+  const where = {cwd, coreDir: coreDir ?? null};
+  const docsChecks = [
+    await keptFileCheck({name: 'cli-docs', ...where}, () => checkCliDocs(ctx)),
+    await keptFileCheck({name: 'docs-tree', ...where}, () =>
+      checkDocsTree(ctx),
+    ),
+    await keptFileCheck({name: 'docs-progressive', ...where}, () =>
+      checkDocsProgressiveDisclosure(ctx),
+    ),
+  ];
+  // Only a project that names an icon set scans its source for placeholders.
+  if (iconSets?.choice.configured) {
+    try {
+      ctx.iconPlaceholders = findIconPlaceholders(findPackageRoot(cwd) ?? cwd);
+    } catch {
+      // A scan that fails leaves the icon facts unknown.
+      ctx.iconSets = null;
+    }
+  }
 
   /** @type {DoctorCheck[]} */
   const checks = [];
@@ -2608,22 +2642,7 @@ export async function runChecks(options = {}) {
     );
   }
   checks.push(await checkAuthoringDocs(ctx));
-  // The checks that read only files, each kept while every file it read is
-  // unchanged; the Core the project loads is part of what they read.
-  const where = {cwd, coreDir: coreDir ?? null};
-  checks.push(
-    await keptFileCheck({name: 'cli-docs', ...where}, () => checkCliDocs(ctx)),
-  );
-  checks.push(
-    await keptFileCheck({name: 'docs-tree', ...where}, () =>
-      checkDocsTree(ctx),
-    ),
-  );
-  checks.push(
-    await keptFileCheck({name: 'docs-progressive', ...where}, () =>
-      checkDocsProgressiveDisclosure(ctx),
-    ),
-  );
+  checks.push(...docsChecks);
 
   const summary = {pass: 0, warn: 0, fail: 0, info: 0};
   for (const c of checks) summary[c.status] += 1;

@@ -107,9 +107,10 @@ permissions: {}
 # (spec:AST-030 FR23, DEC-17).
 # A pull request's newer push cancels its older run. A re-run takes a group of
 # its own, so re-running an older head never cancels the run for the pull
-# request's current head. The superseded-runs job cancels the other way: each
-# run cancels this pull request's unfinished runs for a head that is no longer
-# its head, and `room` stops a run whose own head is superseded.
+# request's current head. The superseded-runs job cancels the other way, at
+# the start of each run: the newest run wins, so a run cancels this pull
+# request's older unfinished runs for another head, and `room` stops a run
+# that a newer run for another head supersedes.
 concurrency:
   group: "ci-${{ github.event.pull_request.number && (github.run_attempt == '1' && github.event.pull_request.number || format('{0}-rerun-{1}', github.event.pull_request.number, github.run_id)) || github.event.merge_group.head_sha || (github.event_name == 'workflow_dispatch' && inputs.operation == 'interaction-full' && 'interaction-full') || (github.event_name == 'workflow_dispatch' && inputs.operation == 'webkit-weekly' && github.ref == 'refs/heads/main' && 'webkit-weekly') || (github.event_name == 'workflow_dispatch' && github.triggering_actor == 'github-actions[bot]' && 'main-heavy-lanes') || github.run_id }}"
   cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' || (inputs.recheck && github.triggering_actor == 'github-actions[bot]') }}
@@ -119,9 +120,10 @@ jobs:
   # (spec:AST-030 FR16, DEC-16), in two jobs (slim on a pull request, standard
   # on a dispatch): `room` waits until the
   # Storybook build has room and starts it, and `admission` waits for the rest
-  # of the run unless it already fit. Every job here but build-storybook and
-  # ci-full needs admission, directly or through the jobs it needs, so a
-  # waiting run holds only its one waiting job and a build that found room.
+  # of the run unless it already fit. Every job here but build-storybook,
+  # ci-full and superseded-runs needs admission, directly or through the jobs
+  # it needs, so a waiting run holds only its one waiting job, a build that
+  # found room, and the superseded-runs sweep while it runs.
   # Like every other job both skip for a draft or an unlabelled fork, which run
   # no CI (FR17); the required contexts still report through their own status
   # rules. Neither fails, so each job's own condition decides exactly as before,
@@ -176,17 +178,19 @@ jobs:
           path: .ci-admission
           persist-credentials: false
 
-      # A run for a head that is no longer the pull request's head (a re-run
-      # of an older head) stops before it takes room, and the required
-      # contexts fail with the reason, never pass. superseded-runs cancels it.
+      # A run that a newer run for another head supersedes (a re-run of an
+      # older head) stops before it takes room, and the required contexts
+      # fail with the reason, never pass. superseded-runs cancels it.
       - name: Check the pull request's head
         id: head
         uses: ./.ci-admission/.github/actions/superseded-runs
+        with:
+          rule: newest-run
 
       - name: Stop for a superseded head
         if: steps.head.outputs.superseded == 'true'
         run: |
-          echo "::error title=Superseded head::This run's head is no longer the pull request's head. The run for the current head reports the checks."
+          echo "::error title=Superseded head::A newer run of this pull request is for another head, so this run stops. The newest run reports the checks."
           exit 1
 
       # The one Node leg count (scripts/vitest-node-legs.mjs): test-node's
@@ -323,18 +327,19 @@ jobs:
           gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" || true
           exit 1
 
-  # Cancels this pull request's unfinished runs for a head that is no longer
-  # its head, this run included (.github/actions/superseded-runs). A re-run
-  # takes a concurrency group of its own, so a new push does not cancel it:
-  # the run for the new head does it here. It is the one job with
+  # Cancels this pull request's older unfinished runs for another head, or
+  # this run when a newer run for another head supersedes it
+  # (.github/actions/superseded-runs). A re-run takes a concurrency group of
+  # its own, so a new push does not cancel it: the run for the new head does
+  # it here. It starts with the run, before the run waits for room, so a run
+  # that waits or that CI turns away still frees the room the older runs
+  # hold; their results can pass no required check. It is the one job with
   # `actions: write` for this, and it runs only for a pull request from this
-  # repository, since a fork's token is read-only. It starts once admission
-  # found room for the run, or once `room` stopped this run for a superseded
-  # head, so it takes room like every other job. No job needs it, and no
+  # repository, since a fork's token is read-only. `peak` counts it, and a
+  # waiting run's count holds it while it runs. No job needs it, and no
   # required context reads it, so its own failure fails nothing else.
   superseded-runs:
-    needs: [room, admission]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && (needs.admission.result == 'success' || needs.room.outputs.superseded == 'true')) }}
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ubuntu-slim
     timeout-minutes: 5
     continue-on-error: true
@@ -1753,6 +1758,7 @@ jobs:
         pr-interaction,
         pr-interaction-webkit,
         pr-component-a11y-contracts,
+        a11y-dependent-audits-plan,
         pr-a11y-dependent-audits,
       ]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' && always() && !cancelled()) }}
@@ -1865,6 +1871,8 @@ jobs:
           PR_INTERACTION_WEBKIT_RESULT: ${{ needs.pr-interaction-webkit.result }}
           PR_COMPONENT_A11Y_CONTRACTS_RESULT: ${{ needs.pr-component-a11y-contracts.result }}
           PR_A11Y_DEPENDENT_AUDITS_RESULT: ${{ needs.pr-a11y-dependent-audits.result }}
+          A11Y_DEPENDENT_AUDITS_PLAN_RESULT: ${{ needs.a11y-dependent-audits-plan.result }}
+          A11Y_DEPENDENT_AUDITS_COUNT: ${{ needs.a11y-dependent-audits-plan.outputs.count }}
         run: node .github/scripts/ci-test-join.mjs
 
   # Build the packages and Storybook, and analyze components (parallel with
@@ -5899,30 +5907,33 @@ jobs:
           retention-days: 30
 
   # Each leg runs its share of the plan at the head that built the Storybook.
-  # A leg without a share runs on a slim runner and only says so. The `test`
-  # join reads the legs' result, so a failing audit blocks the merge.
+  # A plan that owes no audit starts no leg. A plan that did not succeed
+  # starts one leg on a slim runner, which fails with an error that says to
+  # re-run. The `test` join reads the legs' result, so a failing audit blocks
+  # the merge.
   pr-a11y-dependent-audits:
     name: Dependent audits (${{ matrix.leg }}/${{ strategy.job-total }})
     needs:
       [room, admission, heavy-ci, a11y-dependent-audits-plan, build-storybook]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.room.outputs.superseded != 'true' && needs.admission.outputs.full != 'true')) }}
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.room.outputs.superseded != 'true' && needs.admission.outputs.full != 'true' && (needs.a11y-dependent-audits-plan.result != 'success' || needs.a11y-dependent-audits-plan.outputs.count != '0'))) }}
     # An empty count (the plan skipped) compares as 0.
     runs-on: ${{ needs.a11y-dependent-audits-plan.outputs.count >= matrix.leg && 'ubuntu-latest' || 'ubuntu-slim' }}
     timeout-minutes: 15
     # A first run plans at most three legs; a later run at the same head may
     # plan up to six to run every owed audit. The matrix starts only the
-    # planned legs; without a plan it starts all six, which then stop.
+    # planned legs; a plan that owes no audit starts none (the condition above),
+    # and a plan that did not succeed starts exactly one, which fails.
     strategy:
       fail-fast: false
       matrix:
-        leg: ${{ fromJSON(needs.a11y-dependent-audits-plan.outputs.legs || '[1, 2, 3, 4, 5, 6]') }}
+        leg: ${{ fromJSON(needs.a11y-dependent-audits-plan.result == 'success' && needs.a11y-dependent-audits-plan.outputs.legs || '[1]') }}
     permissions:
       contents: read
     steps:
       - name: Require the dependent-audit plan
         if: needs.a11y-dependent-audits-plan.result != 'success'
         run: |
-          echo "The dependent-audit plan did not succeed (${{ needs.a11y-dependent-audits-plan.result }}), so the audits to run are unknown."
+          echo "::error title=Dependent-audit plan did not run::The dependent-audit plan ended ${{ needs.a11y-dependent-audits-plan.result }}, so the audits this change owes are unknown. Re-run all jobs."
           exit 1
 
       - name: Decide this leg
