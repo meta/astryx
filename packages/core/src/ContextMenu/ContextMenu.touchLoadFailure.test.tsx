@@ -10,7 +10,15 @@
  * @position Testing; the loaded touch layer is in ContextMenu.test.tsx
  */
 
-import {act, cleanup, fireEvent, render, screen} from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react';
+import {createPortal} from 'react-dom';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {contextMenu} from '../motion/uikit/contextMenu';
 import {__resetDevWarnings} from '../utils/devWarning';
@@ -220,6 +228,74 @@ describe('ContextMenu under a finger when its touch layer fails to load', () => 
     await settleLoad();
     press.up();
     expect(layerImport.attempts).toBe(attempts + 1);
+  });
+
+  it('starts no load when a trigger mounts in another document after a failed load, until a touch asks', async () => {
+    renderMenu();
+    await settleLoad();
+    const attempts = layerImport.attempts;
+    const frame = document.createElement('iframe');
+    document.body.appendChild(frame);
+    const otherDocument = frame.contentDocument!;
+    const view = otherDocument.defaultView as Window & typeof globalThis;
+    // The other window paints and idles at once, so a load it scheduled
+    // would start at once.
+    Object.defineProperty(view, 'requestAnimationFrame', {
+      value: (callback: FrameRequestCallback) => {
+        callback(0);
+        return 1;
+      },
+      configurable: true,
+    });
+    Object.defineProperty(view, 'setTimeout', {
+      value: (callback: () => void) => {
+        callback();
+        return 1;
+      },
+      configurable: true,
+    });
+    Object.defineProperty(view, 'matchMedia', {
+      value: window.matchMedia,
+      configurable: true,
+    });
+    try {
+      render(
+        createPortal(
+          <ContextMenu items={[{label: 'Item 2'}]} data-testid="ctx-2">
+            <div>Long-press me too</div>
+          </ContextMenu>,
+          otherDocument.body,
+        ),
+      );
+      await settleLoad();
+      expect(layerImport.attempts).toBe(attempts);
+      // A touch on it is the intent that asks again.
+      const trigger = within(otherDocument.body).getByTestId('ctx-2');
+      const send = (type: 'touchstart' | 'touchend') => {
+        const event = new view.Event(type, {bubbles: true, cancelable: true});
+        const contact = {
+          identifier: 1,
+          clientX: 20,
+          clientY: 20,
+          target: trigger,
+        };
+        Object.defineProperty(event, 'changedTouches', {value: [contact]});
+        Object.defineProperty(event, 'touches', {
+          value: type === 'touchstart' ? [contact] : [],
+        });
+        Object.defineProperty(event, 'timeStamp', {value: performance.now()});
+        trigger.dispatchEvent(event);
+      };
+      send('touchstart');
+      await settleLoad();
+      send('touchend');
+      expect(layerImport.attempts).toBe(attempts + 1);
+    } finally {
+      // Unmount before the frame goes, or React removes nodes from a
+      // document that no longer exists.
+      cleanup();
+      frame.remove();
+    }
   });
 
   // Last: once the layer has loaded, the page keeps it.
