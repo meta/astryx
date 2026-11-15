@@ -82,11 +82,14 @@ export function isGuideRoute(target) {
 /**
  * What the integrations do to one guide the docs tree places, in configured
  * order: a replacement, and the extensions merged onto whatever is there.
+ * Set on the guide's tree node where the project's tree is built.
  * @typedef {object} GuideOverlay
  * @property {DocsTopicRecord | null} replacement the doc readers get at the
  *   route instead of the guide; the last package configured wins
  * @property {Array<{package: string, path: string, providerId?: string}>} extensions
- *   extensions authored after the replacement, if any, in configured order
+ *   every extension of the guide, in configured order, whether it was
+ *   configured before or after a replacement: an extension adds to whatever
+ *   answers its route
  * @property {string} [replacedPackage] the package of the replacement this one
  *   took over from, when the guide was replaced twice
  */
@@ -880,61 +883,21 @@ export class DocsCatalog {
   #treeInputs = [];
   /** @type {Array<{package: string, message: string}>} */
   #issues = [];
-  /** @type {Map<string, GuideOverlay>} lowercased route → what applies there */
-  #guideOverlays = new Map();
   /** @type {DocsTopicRecord[]} every doc that targets a route, in order */
   #guideTargeters = [];
 
   /**
    * Record a doc that replaces or extends a guide the docs tree places, by
-   * its route. Whether the route holds such a guide is known only once the
-   * tree is built: {@link guideOverlay} applies the record there, and a route
-   * that holds none applies nothing.
+   * its route. Whether the route holds such a guide, under that route or one
+   * it moved from, is known only once the tree is built, so the project tree
+   * applies each record there, in configured order ({@link GuideOverlay}); a
+   * route that holds none applies nothing.
    * @param {DocsTopicRecord} record
    * @returns {import('../integrations/issue').AstryxIntegrationIssue | null}
    */
   #targetGuide(record) {
-    const route = /** @type {string} */ (
-      record.replaces ?? record.extendsTopic
-    );
-    const key = route.toLowerCase();
-    const overlay = this.#guideOverlays.get(key) ?? {
-      replacement: null,
-      extensions: [],
-    };
-    if (record.replaces != null) {
-      const earlier = overlay.replacement;
-      if (earlier) {
-        // As with a flat topic, the later-configured doc wins, and reads name
-        // the replacement it took over from. Unlike a flat topic's, this is
-        // no warning: a new failing finding joins only in a minor release
-        // (architecture:cli-surface INV35); `integration validate` lists one
-        // package's two replacements of a guide as a note.
-        overlay.replacedPackage = earlier.package;
-      }
-      // Extensions stay: an extension adds to whatever answers its route, so
-      // configured order alone must not decide whether its sections show.
-      overlay.replacement = record;
-    } else {
-      overlay.extensions.push({
-        package: record.package,
-        path: record.path,
-        ...(record.providerId ? {providerId: record.providerId} : {}),
-      });
-    }
-    this.#guideOverlays.set(key, overlay);
     this.#guideTargeters.push(record);
     return null;
-  }
-
-  /**
-   * What the integrations do to the guide the docs tree places at `route`, or
-   * null when they leave it as it is.
-   * @param {string} route
-   * @returns {GuideOverlay | null}
-   */
-  guideOverlay(route) {
-    return this.#guideOverlays.get(route.toLowerCase()) ?? null;
   }
 
   /**

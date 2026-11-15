@@ -483,32 +483,6 @@ describe('DocsCatalog', () => {
     ]);
   });
 
-  it('keeps an extension of a guide when a doc configured later replaces the guide', () => {
-    const catalog = DocsCatalog.fromBuiltins();
-    const route = 'authoring/quick-start';
-    catalog.add(
-      record({
-        name: 'acme-notes',
-        package: '@acme/notes',
-        path: '/notes/docs/acme-notes.doc.mjs',
-        extendsTopic: route,
-      }),
-    );
-    catalog.add(
-      record({
-        name: 'acme-start',
-        package: '@acme/base',
-        path: '/base/docs/acme-start.doc.mjs',
-        replaces: route,
-      }),
-    );
-    const overlay = catalog.guideOverlay(route);
-    expect(overlay?.replacement?.package).toBe('@acme/base');
-    expect(overlay?.extensions).toEqual([
-      {package: '@acme/notes', path: '/notes/docs/acme-notes.doc.mjs'},
-    ]);
-  });
-
   it('records an extension against its target rather than adding a topic', () => {
     const catalog = DocsCatalog.fromBuiltins({theme: '/cli/theme.doc.mjs'});
     expect(

@@ -7,8 +7,9 @@
  * unless it names where it goes (spec:AST-046 FR11). In an app whose base
  * library replaces a long topic such as `theme`, a reader who reads only the
  * start of that topic never learned that a theme package added a section to
- * it. Whichever order the app configures the two packages in, the section is
- * there, and the read says so at its top.
+ * it. Whichever order the app configures the packages in, the section is
+ * there, for a topic and for a guide replaced by its route, and the read says
+ * so at its top.
  */
 
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
@@ -28,8 +29,11 @@ const section = title => ({
   content: [{type: 'prose', text: `${title}: what this section covers.`}],
 });
 
+const GUIDE = 'authoring/quick-start';
+
 const PACKAGES = {
-  // The app's base library, which replaces `theme` with its own long guide.
+  // The app's base library, which replaces `theme` with its own long guide,
+  // and a guide the CLI places, by its route.
   '@acme/base': {
     'theme.doc.mjs': {
       type: 'generic',
@@ -40,6 +44,25 @@ const PACKAGES = {
       sections: ['Quick start', 'Available themes', 'Light and dark'].map(
         section,
       ),
+    },
+    'acme-start.doc.mjs': {
+      type: 'generic',
+      name: 'acme-start',
+      replaces: GUIDE,
+      title: 'Start with Acme',
+      description: 'Start an Acme integration.',
+      sections: ['Create the package', 'Add a component'].map(section),
+    },
+  },
+  // A package that adds its notes to that guide, by its route.
+  '@acme/notes': {
+    'acme-notes.doc.mjs': {
+      type: 'generic',
+      name: 'acme-notes',
+      extends: GUIDE,
+      title: 'Acme notes',
+      description: 'Notes on starting with Acme.',
+      sections: [section('Acme release notes')],
     },
   },
   // A theme package, which documents itself by adding a section to `theme`.
@@ -94,9 +117,9 @@ afterEach(() => {
 });
 
 describe.each([
-  ['base library first', ['@acme/base', '@acme/glyph-theme']],
-  ['theme package first', ['@acme/glyph-theme', '@acme/base']],
-])('astryx docs theme, %s', (_order, integrations) => {
+  ['base library first', ['@acme/base', '@acme/glyph-theme', '@acme/notes']],
+  ['base library last', ['@acme/glyph-theme', '@acme/notes', '@acme/base']],
+])('astryx docs, %s', (_order, integrations) => {
   beforeEach(() => scaffold(integrations));
 
   it(
@@ -117,6 +140,30 @@ describe.each([
           title: 'Install the Glyph theme',
         }),
       ]);
+    },
+    SLOW,
+  );
+
+  it(
+    'keeps the notes package’s section in the guide the base library replaces',
+    async () => {
+      const read = await runCli(['--json', 'docs', GUIDE], {cwd: tmpDir});
+      expect(read.status).toBe(0);
+      const {package: owner, data} = JSON.parse(read.stdout);
+      expect(owner).toBe('@acme/base');
+      expect(
+        data.sections.filter(
+          (/** @type {{package: string}} */ each) =>
+            each.package === '@acme/notes',
+        ),
+      ).toEqual([
+        expect.objectContaining({
+          id: 'acme-release-notes',
+          title: 'Acme release notes',
+        }),
+      ]);
+      const index = (await runCli(['docs', GUIDE], {cwd: tmpDir})).stdout;
+      expect(index).toContain('sections from @acme/notes: acme-release-notes');
     },
     SLOW,
   );
