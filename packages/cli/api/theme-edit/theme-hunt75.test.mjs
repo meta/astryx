@@ -10,8 +10,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {spawnSync} from 'node:child_process';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
@@ -21,13 +20,18 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {runCli} from '../../test-utils/run-cli.mjs';
+
+// The renders are stood in for: these tests are about settings, files and
+// messages, not the rendered pages.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    await importOriginal(),
+  ),
+);
 
 /** @type {string} */
 let cwd;
-const BIN = path.resolve(
-  import.meta.dirname,
-  '../../clients/cli/bin/astryx.mjs',
-);
 
 beforeAll(() => {
   cwd = makeLinkedFixture('astryx-theme-hunt75-', FIXTURE_PACKAGES);
@@ -41,24 +45,43 @@ afterAll(() => {
 /** @param {string} rel */
 const read = rel => fs.readFileSync(path.join(cwd, rel), 'utf8');
 /** @param {string[]} args @param {string} [at] */
-const cli = (args, at = cwd) =>
-  spawnSync(process.execPath, [BIN, ...args], {cwd: at, encoding: 'utf8'});
+const cli = async (args, at = cwd) => await runCli([...args], at);
+
+/** Install a stand-in @fontsource/inter for the fixture; returns its remover. */
+const installInter = () => {
+  const pkg = path.join(path.dirname(cwd), 'node_modules/@fontsource/inter');
+  fs.mkdirSync(pkg, {recursive: true});
+  fs.writeFileSync(
+    path.join(pkg, 'package.json'),
+    JSON.stringify({
+      name: '@fontsource/inter',
+      version: '5.0.0',
+      exports: {
+        '.': './index.css',
+        './index.css': './index.css',
+        './package.json': './package.json',
+      },
+    }),
+  );
+  fs.writeFileSync(path.join(pkg, 'index.css'), '/* inter */\n');
+  return () => fs.rmSync(pkg, {recursive: true, force: true});
+};
 /** @param {any} r */
 const stale = r => /** @type {any} */ (r.data).appCopyStale;
-const compile = (/** @type {string[]} */ ...args) =>
-  cli(['experimental', 'theme', 'compile', ...args]);
+const compile = async (/** @type {string[]} */ ...args) =>
+  await cli(['experimental', 'theme', 'compile', ...args]);
 
 describe('a check fails when the app copy is behind, saying why', () => {
   it('a hand-edited copy file fails --check with a code and no up-to-date claim', async () => {
     await themeEditNew('c1', {cwd});
     fs.writeFileSync(path.join(cwd, 'src/themes/c1/c1.css'), '/* hand */\n');
-    const r = compile('themes/c1/c1.theme.ts', '--check');
+    const r = await compile('themes/c1/c1.theme.ts', '--check');
     expect(r.status).toBe(1);
     expect(r.stdout + r.stderr).not.toContain('up to date.');
     expect(r.stdout + r.stderr).toContain(
       "c1's app copy in src/themes/c1/ is not up to date: src/themes/c1/c1.css is not the current build",
     );
-    const j = cli([
+    const j = await cli([
       '--json',
       'experimental',
       'theme',
@@ -77,14 +100,16 @@ describe('a check fails when the app copy is behind, saying why', () => {
     await themeEditNew('c13', {cwd});
     await themeEditSet('c13', 'corners', 'pill', {cwd});
     fs.rmSync(path.join(cwd, 'src/themes/c13/c13.js'));
-    const r = compile('themes/c13/c13.theme.ts', '--check');
+    const r = await compile('themes/c13/c13.theme.ts', '--check');
     expect(r.status).toBe(1);
     expect(r.stdout + r.stderr).toContain(
       'src/themes/c13/c13.js is missing from the app copy',
     );
     await themeEditSet('c13', 'corners', 'pill', {cwd});
     expect(fs.existsSync(path.join(cwd, 'src/themes/c13/c13.js'))).toBe(true);
-    expect(compile('themes/c13/c13.theme.ts', '--check').status).toBe(0);
+    expect((await compile('themes/c13/c13.theme.ts', '--check')).status).toBe(
+      0,
+    );
   }, 240_000);
 });
 
@@ -93,7 +118,7 @@ describe('a check never passes over a copy behind its build', () => {
     await themeEditNew('h1', {cwd});
     fs.rmSync(path.join(cwd, 'src/themes/h1/h1.css.d.ts'));
     fs.mkdirSync(path.join(cwd, 'src/themes/h1/h1.css.d.ts'));
-    const j = cli([
+    const j = await cli([
       '--json',
       'experimental',
       'theme',
@@ -119,7 +144,7 @@ describe('a check never passes over a copy behind its build', () => {
     } finally {
       fs.chmodSync(dir, 0o755);
     }
-    const r = compile('themes/t1/t1.theme.ts', '--check');
+    const r = await compile('themes/t1/t1.theme.ts', '--check');
     expect(r.status).toBe(1);
     expect(r.stdout + r.stderr).toContain('is not the current build');
   }, 240_000);
@@ -129,13 +154,9 @@ describe('compile --json says what the text says', () => {
   it('carries appCopyStale, and leaves fonts the copy loads out of its notices and the full help', async () => {
     await themeEditNew('j1', {cwd});
     await themeEditSet('j1', 'font', 'Inter', {cwd});
-    const sheet = path.join(cwd, 'src/themes/j1/j1.fonts.css');
-    const head = read('src/themes/j1/j1.fonts.css').split('\n')[0];
-    fs.writeFileSync(
-      sheet,
-      `${head}\n@import "@fontsource/inter/index.css";\n`,
-    );
-    const j = cli([
+    // The package installed: the copy this compile writes loads it.
+    const remove = installInter();
+    const j = await cli([
       '--json',
       'experimental',
       'theme',
@@ -144,13 +165,7 @@ describe('compile --json says what the text says', () => {
     ]);
     const out = JSON.parse(j.stdout);
     expect(JSON.stringify(out.data.notices ?? [])).not.toContain('"Inter"');
-    // The compile above wrote the copy from the fonts the theme loads now
-    // (none installed here); the sheet is set again as the app loads them.
-    fs.writeFileSync(
-      sheet,
-      `${head}\n@import "@fontsource/inter/index.css";\n`,
-    );
-    const full = cli([
+    const full = await cli([
       'experimental',
       'theme',
       'compile',
@@ -158,16 +173,19 @@ describe('compile --json says what the text says', () => {
       '--detail',
       'full',
     ]);
+    remove();
     expect(full.stdout + full.stderr).not.toMatch(/not load[^\n]*Inter/);
     fs.writeFileSync(path.join(cwd, 'src/themes/j1/j1Theme.ts'), '// mine\n');
     const blocked = JSON.parse(
-      cli([
-        '--json',
-        'experimental',
-        'theme',
-        'compile',
-        'themes/j1/j1.theme.ts',
-      ]).stdout,
+      (
+        await cli([
+          '--json',
+          'experimental',
+          'theme',
+          'compile',
+          'themes/j1/j1.theme.ts',
+        ])
+      ).stdout,
     );
     expect(blocked.data.appCopyStale).toContain(
       'src/themes/j1/j1Theme.ts is yours',
@@ -181,11 +199,15 @@ describe('each copy follows its own build', () => {
     await themeEditNew('c4b', {cwd});
     await themeEditSet('c4a', 'corners', 'pill', {cwd});
     fs.writeFileSync(path.join(cwd, 'src/themes/c4a/c4a.css'), '/* old */\n');
-    fs.writeFileSync(
+    // A source that still carries its settings but fails to build.
+    fs.appendFileSync(
       path.join(cwd, 'themes/c4b/c4b.theme.ts'),
-      'not a theme(\n',
+      '\nconst broken = (;\n',
     );
-    const r = compile('themes/c4a/c4a.theme.ts', 'themes/c4b/c4b.theme.ts');
+    const r = await compile(
+      'themes/c4a/c4a.theme.ts',
+      'themes/c4b/c4b.theme.ts',
+    );
     expect(r.status).not.toBe(0);
     expect(read('src/themes/c4a/c4a.css')).not.toBe('/* old */\n');
   }, 240_000);
@@ -222,7 +244,7 @@ describe('what the copy is, and what stops it', () => {
 describe('copy files are no theme sources', () => {
   it('the copy descriptor, the theme module, a subfolder run and --out into the copy are refused by name', async () => {
     await themeEditNew('c10', {cwd});
-    const doc = cli([
+    const doc = await cli([
       '--json',
       'experimental',
       'theme',
@@ -233,7 +255,7 @@ describe('copy files are no theme sources', () => {
     expect(doc.stdout).toContain('themes/c10/c10.theme.ts');
     expect(doc.stdout).not.toContain('theme template');
     fs.writeFileSync(path.join(cwd, 'src/astryx-themes.ts'), 'export {};\n');
-    const mod = cli([
+    const mod = await cli([
       '--json',
       'experimental',
       'theme',
@@ -243,7 +265,7 @@ describe('copy files are no theme sources', () => {
     expect(mod.stdout).toContain("is the app's theme module");
     fs.rmSync(path.join(cwd, 'src/astryx-themes.ts'));
     fs.mkdirSync(path.join(cwd, 'src/app'), {recursive: true});
-    const sub = cli(
+    const sub = await cli(
       [
         '--json',
         'experimental',
@@ -256,7 +278,7 @@ describe('copy files are no theme sources', () => {
     expect(sub.stdout).toContain('compile it from the app root');
     expect(sub.stdout).not.toContain('ERR_PATH_TRAVERSAL');
     const before = read('src/themes/c10/c10.css');
-    const out = compile(
+    const out = await compile(
       'themes/c10/c10.theme.ts',
       '--out',
       'src/themes/c10/c10.css',
@@ -265,15 +287,15 @@ describe('copy files are no theme sources', () => {
     expect(out.stdout + out.stderr).toContain("in c10's app copy");
     // The folder form of --out, with and without its slash, too.
     for (const folder of ['src/themes/c10', 'src/themes/c10/']) {
-      const r = compile('themes/c10/c10.theme.ts', '--out', folder);
+      const r = await compile('themes/c10/c10.theme.ts', '--out', folder);
       expect(r.status, folder).not.toBe(0);
       expect(r.stdout + r.stderr, folder).toContain("in c10's app copy");
     }
     expect(read('src/themes/c10/c10.css')).toBe(before);
   }, 240_000);
 
-  it('compile help names the app copy', () => {
-    const r = cli(['experimental', 'theme', 'compile', '--help']);
+  it('compile help names the app copy', async () => {
+    const r = await cli(['experimental', 'theme', 'compile', '--help']);
     expect(r.stdout).toContain('src/themes/<theme>/');
   });
 });

@@ -288,11 +288,21 @@ describe.each(Object.entries(WORKFLOWS))(
         for (const lane of vitestLanes) {
           const job = workflow.jobs[lane];
           const legs = job.strategy?.matrix?.shard;
-          expect(Array.isArray(legs), `${lane} has no shard matrix`).toBe(true);
-          // Legs are numbered 1..n exactly once, so --shard i/n covers all n.
-          expect(legs).toEqual(
-            Array.from({length: legs.length}, (_, index) => index + 1),
-          );
+          if (typeof legs === 'string') {
+            // ci.yml's Node legs are as many as room's plan, which numbers
+            // them 1..n (vitest-node-legs.test.mjs).
+            expect(legs).toBe(
+              "${{ fromJSON(needs.room.outputs.node-shards || '[1, 2, 3, 4, 5, 6, 7, 8]') }}",
+            );
+          } else {
+            expect(Array.isArray(legs), `${lane} has no shard matrix`).toBe(
+              true,
+            );
+            // Legs are numbered 1..n exactly once, so --shard i/n covers all n.
+            expect(legs).toEqual(
+              Array.from({length: legs.length}, (_, index) => index + 1),
+            );
+          }
           expect(Object.keys(job.strategy.matrix)).toEqual(['shard']);
           expect(job.strategy['fail-fast']).toBe(false);
           const suites = job.steps.filter(

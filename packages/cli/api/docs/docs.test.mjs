@@ -4,7 +4,8 @@
  * @file Dispatcher-level tests for docs() — the argument-shape routing that
  * sits above the list/detail/section leaves. The leaves have their own tests;
  * this pins the router: docs() -> list, docs(topic) -> detail,
- * docs(topic, section) -> section, plus the unknown-topic/section error codes.
+ * docs(topic, section) -> section, list: true -> list (refused beside a topic
+ * or section), plus the unknown-topic/section error codes.
  * Runs against the real CLI-bundled docs (no cwd/project needed).
  */
 
@@ -39,6 +40,27 @@ describe('docs() dispatcher routing', () => {
 
   it('empty topic -> docs.list (falsy topic routes to list)', async () => {
     expect((await docs('')).type).toBe('docs.list');
+  }, SLOW);
+
+  it('list -> docs.list, the same read as no topic', async () => {
+    const bare = await docs();
+    expect(await docs(undefined, undefined, {list: true})).toEqual(bare);
+    expect(await docs('', undefined, {list: true})).toEqual(bare);
+    expect(await docs(undefined, undefined, {list: true, depth: 1})).toEqual(
+      await docs(undefined, undefined, {depth: 1}),
+    );
+  }, SLOW);
+
+  it('list beside a topic or a section -> ERR_INVALID_ARGUMENT', async () => {
+    for (const [topic, section] of [
+      ['theme', undefined],
+      ['theme', 'quick-start'],
+      [undefined, 'quick-start'],
+    ]) {
+      const err = await docs(topic, section, {list: true}).catch(e => e);
+      expect(err).toBeInstanceOf(AstryxError);
+      expect(err.code).toBe('ERR_INVALID_ARGUMENT');
+    }
   }, SLOW);
 
   it('topic only -> docs.detail, the whole doc', async () => {
