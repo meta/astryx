@@ -101,6 +101,70 @@ function writeInlineScroll(viewport: HTMLElement, logical: number): void {
   viewport.scrollLeft = isReversed ? -logical : logical;
 }
 
+interface InlineRangeInputs {
+  offsets: ReadonlyArray<number>;
+  insetStart: number;
+  insetEnd: number;
+  initialViewportWidth: number;
+  overscan: number;
+}
+
+/** Whether a geometry snapshot gives a usable inline measurement. */
+function isInlineMeasured(snapshot: InlineListWindowGeometry): boolean {
+  return (
+    snapshot.isMeasured &&
+    isPositiveFinite(snapshot.viewportWidth ?? 0) &&
+    Number.isFinite(snapshot.scrollLeft ?? 0)
+  );
+}
+
+/** The space between the insets that shows items, for a snapshot. */
+function getInlineViewportSize(
+  snapshot: InlineListWindowGeometry,
+  {insetStart, insetEnd, initialViewportWidth}: InlineRangeInputs,
+): number {
+  return (
+    (isInlineMeasured(snapshot)
+      ? (snapshot.viewportWidth ?? 0)
+      : initialViewportWidth) -
+    insetStart -
+    insetEnd
+  );
+}
+
+/**
+ * Reads the geometry as the window uses it. While no anchor scroll is
+ * pending, a snapshot whose mounted range and viewport match the last one
+ * returns the last one, so a scroll that keeps the range renders nothing.
+ */
+function createRangeSelector(
+  read: () => InlineListWindowGeometry,
+  inputs: InlineRangeInputs,
+): () => InlineListWindowGeometry {
+  let last: InlineListWindowGeometry | undefined;
+  let lastKey = '';
+  return () => {
+    const snapshot = read();
+    if (last === snapshot) {
+      return snapshot;
+    }
+    const isMeasured = isInlineMeasured(snapshot);
+    const range = calculateVariableListRange({
+      offsets: inputs.offsets,
+      viewportSize: getInlineViewportSize(snapshot, inputs),
+      scrollOffset: isMeasured ? (snapshot.scrollLeft ?? 0) : 0,
+      isMeasured,
+      overscan: inputs.overscan,
+    });
+    const key = `${isMeasured}:${snapshot.viewportWidth}:${range.start}:${range.end}`;
+    if (last === undefined || key !== lastKey) {
+      last = snapshot;
+      lastKey = key;
+    }
+    return last;
+  };
+}
+
 function hasSameValues<T>(a: ReadonlyArray<T>, b: ReadonlyArray<T>): boolean {
   return (
     a === b ||
@@ -120,12 +184,40 @@ export function useInlineListWindow({
   viewport,
   focusContainer,
 }: UseInlineListWindowOptions): InlineListWindowResult {
+  const [tracking, setTracking] = useState<InlineTracking | undefined>();
+  const pending = tracking?.pending;
+  // A new selector for new items or a pending anchor reads the snapshot
+  // fresh. While an anchor scroll is pending, the window reads every
+  // snapshot, so it sees the scroll land.
+  const getSnapshot = useMemo(
+    () =>
+      !canWindow
+        ? getUnmeasured
+        : pending !== undefined
+          ? geometry.getSnapshot
+          : createRangeSelector(geometry.getSnapshot, {
+              offsets,
+              insetStart,
+              insetEnd,
+              initialViewportWidth,
+              overscan,
+            }),
+    [
+      canWindow,
+      pending,
+      geometry,
+      offsets,
+      insetStart,
+      insetEnd,
+      initialViewportWidth,
+      overscan,
+    ],
+  );
   const snapshot = useSyncExternalStore(
     canWindow ? geometry.subscribeInline : subscribeToNothing,
-    canWindow ? geometry.getSnapshot : getUnmeasured,
+    getSnapshot,
     canWindow ? geometry.getServerSnapshot : getUnmeasured,
   );
-  const [tracking, setTracking] = useState<InlineTracking | undefined>();
   const count = Math.max(0, offsets.length - 1);
   // Key work runs when the items change, never on a scroll.
   const keyIndices = useMemo(
@@ -139,16 +231,16 @@ export function useInlineListWindow({
     focusContainer,
   });
 
-  const isMeasured =
-    snapshot.isMeasured &&
-    isPositiveFinite(snapshot.viewportWidth ?? 0) &&
-    Number.isFinite(snapshot.scrollLeft ?? 0);
+  const isMeasured = isInlineMeasured(snapshot);
   // The insets cover the viewport's edges, so only the space between them
   // shows items. The first frame plans for the same space.
-  const viewportSize =
-    (isMeasured ? (snapshot.viewportWidth ?? 0) : initialViewportWidth) -
-    insetStart -
-    insetEnd;
+  const viewportSize = getInlineViewportSize(snapshot, {
+    offsets,
+    insetStart,
+    insetEnd,
+    initialViewportWidth,
+    overscan,
+  });
   // A change of item keys or sizes keeps the first visible item's key and
   // its fractional offset. New arrays with the same values are no change,
   // so a caller that rebuilds its items on each render gets no scroll write.
@@ -156,7 +248,6 @@ export function useInlineListWindow({
   const hasItemChange =
     last !== undefined &&
     (!hasSameValues(last.keys, keys) || !hasSameValues(last.offsets, offsets));
-  const pending = tracking?.pending;
   const isAwaitingAnchor =
     tracking?.source === geometry &&
     pending !== undefined &&

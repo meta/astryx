@@ -6,7 +6,7 @@
  * @output Seed range, spacer structure, column positions, pinned runs and fallback tests
  * @position Colocated Table column virtualization runtime coverage
  */
-import {useEffect, useState} from 'react';
+import {Profiler, useEffect, useState} from 'react';
 import {afterEach, describe, it, expect, vi} from 'vitest';
 import {act, cleanup, render, renderHook, screen} from '@testing-library/react';
 import {renderToStaticMarkup} from 'react-dom/server';
@@ -728,7 +728,7 @@ describe('column range changes', () => {
     expect(built).toHaveLength(entering.length * ROW_COUNT);
   });
 
-  it('renders the column window once for a scroll inside the mounted range', async () => {
+  it('does not render the column window for a scroll inside the mounted range', async () => {
     const viewport = controlledViewport();
     let renders = 0;
     // The header row's transform runs once each time the column window
@@ -747,7 +747,29 @@ describe('column range changes', () => {
     // 90px more stays inside the same columns: none enters or leaves.
     await viewport.scrollTo(295);
     expect(mountedKeys(container)).toEqual(before);
-    expect(renders).toBe(1);
+    expect(renders).toBe(0);
+  });
+
+  it('commits nothing for a scroll inside the mounted range', async () => {
+    const viewport = controlledViewport();
+    let commits = 0;
+    const {container} = render(
+      <Profiler id="table" onRender={() => commits++}>
+        <Fixture />
+      </Profiler>,
+    );
+    await settle();
+    await viewport.scrollTo(205);
+    const before = mountedKeys(container);
+    commits = 0;
+    // 90px more stays inside the same columns: none enters or leaves.
+    await viewport.scrollTo(295);
+    expect(mountedKeys(container)).toEqual(before);
+    expect(commits).toBe(0);
+    // A scroll that brings a column in still commits.
+    await viewport.scrollTo(900);
+    expect(mountedKeys(container)).not.toEqual(before);
+    expect(commits).toBeGreaterThan(0);
   });
 });
 
