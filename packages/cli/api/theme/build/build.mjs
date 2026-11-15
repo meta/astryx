@@ -109,7 +109,7 @@ import {
 } from './font-warning.mjs';
 import {interceptCore} from './core-interception.mjs';
 import {irregularFileKind} from '../../../foundation/fs/regular-file.mjs';
-import {keyPathLine, nullThemeValues} from './null-values.mjs';
+import {keyPathLine, keyValueLine, nullThemeValues} from './null-values.mjs';
 import {typographyInputProblems} from './typography-values.mjs';
 import {sourcePlugins} from './source-syntax.mjs';
 import {
@@ -5033,12 +5033,33 @@ async function themeBuildInternal(
   // this file writes: a theme it extends is judged in its own file. A build
   // that loads the project's own Core captures no input: the values the
   // source writes are read from it.
+  // A build that loads the project's own Core also judges the typography
+  // the theme resolved to, which holds a value the source computes or
+  // imports (a family joined at run time).
+  const levels = fields?.levels ?? [];
   const typographyInput =
     interception?.inputOf(themeDef)?.typography ??
     sourceTypography(themeSource, filePath);
-  const badTypography = placed(
-    typographyInputProblems(typographyInput, fields?.levels ?? []),
-  ).filter(t => t.line != null);
+  /** @type {Map<string, {path: string[], why: string, value: unknown}>} */
+  const typographyProblems = new Map();
+  for (const t of [
+    ...typographyInputProblems(typographyInput, levels),
+    ...(interception
+      ? []
+      : typographyInputProblems(themeDef.__axes?.typography, levels)),
+  ])
+    if (!typographyProblems.has(t.path.join('.')))
+      typographyProblems.set(t.path.join('.'), t);
+  // Each at the line that writes it: its whole key path, a shorter one (a
+  // typography const), or its key beside that value (a role const, a
+  // spread); a value no line writes is named without one, never dropped.
+  const badTypography = [...typographyProblems.values()].map(t => {
+    let line = null;
+    for (let i = 0; line == null && i < t.path.length - 1; i += 1)
+      line = keyPathLine(themeSource, t.path.slice(i), filePath);
+    line ??= keyValueLine(themeSource, t.path.at(-1) ?? '', t.value, filePath);
+    return {...t, line, inherited: false, elsewhere: line == null, from: null};
+  });
 
   // Validate component overrides
   const warnings = await validateComponentOverrides(themeDef);

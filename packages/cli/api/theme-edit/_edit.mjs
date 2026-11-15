@@ -161,6 +161,7 @@ import {
 import {MODAL, isColorToken} from './_compiler.mjs';
 import {fontShorthandFamilyList} from '../theme/build/font-warning.mjs';
 import {
+  isHeadingLevel,
   noLevelWhy,
   noScaleWeightWhy,
   roleWeightTokens,
@@ -3787,8 +3788,13 @@ async function ownTokenProblems(ctx, slug, data) {
     for (const [k, v] of Object.entries(node)) {
       const key = [...path, k].join('.');
       if (v === undefined) continue;
-      if (takes && !takes.includes(k)) {
-        const levels = path.at(-1) === 'weights';
+      // A weights key is a level as Core reads it (`'01'` is level 1).
+      const isLevelKey = path.at(-1) === 'weights';
+      if (
+        takes &&
+        !(isLevelKey ? isHeadingLevel(k, takes) : takes.includes(k))
+      ) {
+        const levels = isLevelKey;
         const near = levels ? undefined : nearest(k, takes)[0];
         const e = typo.find(x => x.key === key || x.key.startsWith(`${key}.`));
         flagged.add(path[0] ?? k);

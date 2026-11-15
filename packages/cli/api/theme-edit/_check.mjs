@@ -1488,14 +1488,20 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
       }
     }
     // Words only (no number or size): part of the name unless the whole
-    // name is unknown and the name without them is known.
+    // name is unknown and a family the editor knows starts the name before
+    // them (Inter Bold, Inter Tight Bold). A family it does not know may end
+    // in such a word (Archivo Black), so its name is kept whole; a number is
+    // no word of a family, so it is read as a weight after any name.
+    const knownStart = base
+      .split(/\s+/)
+      .some((_, i, all) => knownFamily(ctx, all.slice(0, i + 1).join(' ')));
     if (
       tail.every(
         t =>
           t.kind === 'style' ||
           (t.kind === 'weight' && !/^[-+.\d]/.test(t.text)),
       ) &&
-      !(!knownFamily(ctx, name) && knownFamily(ctx, base))
+      !(!knownFamily(ctx, name) && knownStart)
     ) {
       kept.push(name);
       continue;

@@ -162,7 +162,9 @@ const keyOf = p =>
       ? p.key.name
       : p.key.type === 'StringLiteral'
         ? p.key.value
-        : null;
+        : p.key.type === 'NumericLiteral'
+          ? String(p.key.value)
+          : null;
 
 /**
  * @typedef {{file: string, source: string}} SourceFile
