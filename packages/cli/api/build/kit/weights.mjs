@@ -21,6 +21,7 @@
  *   (`ownWords`), so a new template can start a build.
  */
 
+import {readNames} from './words.mjs';
 import {STOPWORDS} from '../../search/search.mjs';
 import {keywordUnits, keywordWordsFor} from './words.mjs';
 import {isWordModel} from './word-model.mjs';
@@ -376,7 +377,9 @@ function blend(idea, ranked, pick, catalog, weights) {
     .filter(n => !shellIds.has(n) && !weights.candidates.includes(n));
   const cands = [...listed, ...extra];
   const position = new Map(weights.candidates.map((c, i) => [c, i]));
-  const words = new Set(weightWords(idea).map(stem));
+  // A template named in any case, separator or with a neighbour-letter swap in a word of six or more letters
+  // reads as its id's words, as the page ranker reads it (readNames).
+  const words = new Set(weightWords(readNames(idea, catalog)).map(stem));
   /** @type {(number | undefined)[][]} */
   const members = weights.tables.map(table => {
     const index = new Map(table.words.map((w, i) => [w, i]));
@@ -634,7 +637,7 @@ function pickOrder(idea, ranked, pick, catalog, weights) {
  */
 export function blendOrder(idea, ranked, pick, catalog, weights) {
   if (!weights) return null;
-  return pickOrder(idea, ranked, pick, catalog, weights);
+  return pickOrder(readNames(idea, catalog), ranked, pick, catalog, weights);
 }
 
 /**
@@ -656,7 +659,11 @@ export function weighStart(
   {weights = null, newPage = false} = {},
 ) {
   if (!weights) return undefined;
-  const {cands, scores, position} = blend(idea, ranked, pick, catalog, weights);
+  // Every reader below sees a template the idea names in any case, separator
+  // or with a neighbour-letter swap in a word of six or more letters as that template's own words
+  // (readNames).
+  const read = readNames(idea, catalog);
+  const {cands, scores, position} = blend(read, ranked, pick, catalog, weights);
   /** @param {(c: string) => boolean} ok */
   const best = ok => {
     let at = -1;
@@ -679,13 +686,13 @@ export function weighStart(
   // and nearly as many; otherwise that listed template starts. Nothing learned about the template is involved,
   // so a new template competes on its own words.
   if (kept && !position.has(kept)) {
-    const listed = bestPage(idea, ranked, pick, catalog, weights, c =>
+    const listed = bestPage(read, ranked, pick, catalog, weights, c =>
       position.has(c),
     );
     if (!listed) return kept;
     // The idea's own words, less search's stopwords: "basically" must not
     // answer the "Basic" of a category.
-    const order = contentWords(idea);
+    const order = contentWords(read);
     const mine = ownWords(kept, catalog, order);
     const theirs = ownWords(listed, catalog, order);
     // An idea that names the template's family before the listed one's
@@ -702,11 +709,11 @@ export function weighStart(
     // whose own descriptor best matches the idea starts (`fullerOfTie`), then
     // the one most typical of the family. Only the templates' descriptors
     // decide this tie, never the tables.
-    return fullerOfTie(kept, idea, ranked, cands, catalog);
+    return fullerOfTie(kept, read, ranked, cands, catalog);
   }
   const top = best(() => true);
   if (top !== SHELL)
-    return bestPage(idea, ranked, pick, catalog, weights) ?? top;
+    return bestPage(read, ranked, pick, catalog, weights) ?? top;
   // An idea that asks for a new page keeps the ranker's template rather than
   // the shell.
   if (newPage && kept) return kept;
@@ -725,7 +732,8 @@ export function weighStart(
  */
 export function blendSummary(idea, ranked, pick, catalog, weights) {
   if (!weights) return null;
-  const {cands, scores} = blend(idea, ranked, pick, catalog, weights);
+  const read = readNames(idea, catalog);
+  const {cands, scores} = blend(read, ranked, pick, catalog, weights);
   let shell = 0;
   const rest = [];
   for (let i = 0; i < cands.length; i++) {
@@ -736,7 +744,7 @@ export function blendSummary(idea, ranked, pick, catalog, weights) {
   return {
     shell,
     best: hasPickModel(weights)
-      ? bestPage(idea, ranked, pick, catalog, weights)
+      ? bestPage(read, ranked, pick, catalog, weights)
       : (rest[0]?.name ?? null),
     bestScore: rest[0]?.score ?? 0,
     secondScore: rest[1]?.score ?? 0,

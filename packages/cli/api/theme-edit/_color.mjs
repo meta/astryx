@@ -334,6 +334,19 @@ function args(fn, body) {
   if (channels.length !== 3) return null;
   const read = channels.map(x => num(x, !legacy));
   if (read.some(x => !x)) return null;
+  // The comma (legacy) syntax as CSS Color 4 takes it: rgb() with all
+  // numbers or all percentages, hsl() with a hue and two percentages. Bare
+  // numbers for saturation and lightness, or mixed rgb() channels, are the
+  // space-separated syntax's only: browsers drop them written with commas.
+  if (legacy) {
+    const units = /** @type {Num[]} */ (read).map(x => x.unit);
+    const ok = /^rgba?$/i.test(fn)
+      ? units.every(u => u === '') || units.every(u => u === '%')
+      : ['', 'deg', 'grad', 'rad', 'turn'].includes(units[0]) &&
+        units[1] === '%' &&
+        units[2] === '%';
+    if (!ok) return null;
+  }
   let a = 1;
   if (alpha !== undefined) {
     const v = num(alpha, !legacy);
@@ -840,6 +853,24 @@ export function isClipped(value) {
 }
 
 /**
+ * A comma (legacy) rgb() or hsl() that CSS does not take as written, in the
+ * space-separated syntax CSS reads the same channels in (`hsl(0, 100, 50)`
+ * is `hsl(0 100 50)`); null for any other value.
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+export function colorAsCssReads(value) {
+  const s = String(value ?? '').trim();
+  const fn = /^(rgba?|hsla?)\((.*)\)$/i.exec(s);
+  if (!fn || !fn[2].includes(',') || readColor(s)) return null;
+  const parts = fn[2].split(',').map(x => x.trim());
+  if (parts.length !== 3 && parts.length !== 4) return null;
+  const name = fn[1].toLowerCase().replace(/a$/, '');
+  const modern = `${name}(${parts.slice(0, 3).join(' ')}${parts[3] ? ` / ${parts[3]}` : ''})`;
+  return readColor(modern) ? modern : null;
+}
+
+/**
  * Why a value cannot seed a color dial, or null when it is one fixed,
  * opaque color: `opaque` is the color without its alpha, for a suggestion.
  * @param {unknown} value
@@ -1038,6 +1069,17 @@ export const isNumber = (v, name = '') => {
 };
 
 /**
+ * A value with each CSS escape (`Gill\ Sans`, `\5FAE`) as one plain
+ * character, as CSS reads it: an escape is part of a name, never a
+ * boundary. A backslash that escapes nothing (at the end, or before a line
+ * break) could join the next declaration, so it stays.
+ * @param {string} v
+ */
+export function withoutCssEscapes(v) {
+  return v.replace(/\\(?:[0-9a-fA-F]{1,6}[ \t]?|[^\n\r\f0-9a-fA-F])/g, 'x');
+}
+
+/**
  * Whether a value can sit in a CSS declaration as it is: no `<>`, control
  * character, comment or `!important` anywhere; outside a quoted string or a
  * `url(data:…)`, no `;{}`; brackets and quotes closed. So `content: "a;b"`
@@ -1057,7 +1099,7 @@ export function isSafeValue(v) {
     )
   )
     return false;
-  const outside = v
+  const outside = withoutCssEscapes(v)
     .replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, '""')
     .replace(/url\(data:[^\s"'()\\]*\)/gi, 'url()');
   if (/[;{}\\<>]/.test(outside)) return false;

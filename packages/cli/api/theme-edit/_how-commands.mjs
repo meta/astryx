@@ -12,6 +12,7 @@ import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {checkSetting} from './_check.mjs';
 import {baseResolved} from './_project.mjs';
+import {readThemeListState} from '../theme/_adapter.mjs';
 import {
   compileTheme,
   editedThemes,
@@ -116,12 +117,25 @@ export async function howTheme(ctx, cwd, name) {
     }
     if (themes.length > 1 && !note)
       note = `the commands are for ${slug}, the theme changed last; --theme picks another of: ${themes.join(', ')}`;
-  } else
-    note = `the app has no theme yet; the commands are for a theme named ${EXAMPLE_THEME}, made first with: ${P} new ${EXAMPLE_THEME} --like ${LIKE[0]}`;
+  }
+  // With no editor theme, the theme the app shows now (its default, read
+  // as `theme add` and doctor read it) is what the answer starts from and
+  // measures against, when it is a base the editor can start from.
+  const appDefault = (() => {
+    try {
+      const d = readThemeListState(cwd).defaultSlug;
+      return d && LIKE.includes(d) ? d : null;
+    } catch {
+      return null;
+    }
+  })();
+  const startLike = appDefault ?? LIKE[0];
+  if (!name && !themes.length)
+    note = `the app has no theme yet; the commands are for a theme named ${EXAMPLE_THEME}, made first with: ${P} new ${EXAMPLE_THEME} --like ${startLike}${appDefault ? ` (${appDefault} is the theme the app shows now)` : ''}`;
   const exists = Boolean(data);
   if (!data) {
     if (!themes.length) slug = EXAMPLE_THEME;
-    data = {name: slug, like: LIKE[0], mode: 'both', settings: []};
+    data = {name: slug, like: startLike, mode: 'both', settings: []};
   }
   const theme = /** @type {import('./_settings.mjs').ThemeData} */ (data);
   const base = await baseResolved(ctx.project, theme.like);
@@ -271,6 +285,7 @@ export async function howTheme(ctx, cwd, name) {
  * @property {boolean} [bound] the question gives a bound ("smaller than 24px"): a space is checked against it too
  * @property {boolean} [contrast] the words ask about contrast ("too light to read"): text in dark mode moves the other way
  * @property {string[]} [than] parts the question compares against ("darker than the page"): a color moves past theirs
+ * @property {string} [from] a theme color the way is taken from ("the accent color but lighter"): a color moves that way from it, not from the part's own
  * @property {'more' | 'less'} [saturation] the colors asked more or less saturated ("more colorful", "more muted")
  * @property {boolean} [literal] a mode is named with lighter or darker: borders and the shared text color move as written
  * @property {'more' | 'less' | null} [shadowDir] the way a shadow's strength moves ("darker shadows": more)
@@ -313,8 +328,10 @@ function resolveIn(v, map, mode) {
   let out = String(v ?? '');
   for (let i = 0; i < 8; i++) {
     const next = out
-      .replace(/var\(\s*(--[a-z0-9-]+)\s*(?:,\s*([^()]*))?\)/gi, (_, t, fb) =>
-        String(map[t] ?? fb ?? ''),
+      // (A variable with no value here and no fallback stays as written:
+      // a value read in part is no value, never the rest of it.)
+      .replace(/var\(\s*(--[a-z0-9-]+)\s*(?:,\s*([^()]*))?\)/gi, (m, t, fb) =>
+        String(map[t] ?? fb ?? m),
       )
       .replace(
         /light-dark\(\s*([^,()]+(?:\([^()]*\))?)\s*,\s*([^()]+(?:\([^()]*\))?)\s*\)/gi,
@@ -517,12 +534,38 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
           w === '' ||
           /^variant=(default|primary|accent|neutral)$|^size=md$/.test(w),
       );
+    // What Core writes for a property in a rule (a card's padding is its
+    // container padding less the border width): the whole declaration, so
+    // a value is never read from one token of several.
+    const declOf = (
+      /** @type {string} */ prop,
+      /** @type {string} */ w,
+      /** @type {string} */ token,
+    ) => {
+      const at = C.MAP[part]?.at?.[prop] ?? {};
+      const attrs = w ? w.split(' ') : [];
+      const key = Object.keys(at).find(k =>
+        attrs.every(x => k.split(',').includes(x)),
+      );
+      // (Only a declaration of several theme tokens: one token alone is
+      // read as that token.)
+      const decl = key ? String(at[key]) : '';
+      const tokens = new Set(
+        [...decl.matchAll(/var\(\s*(--[a-z][a-z0-9-]*)/g)]
+          .map(m => m[1])
+          .filter(t => !/^--(_|astryx-)/.test(t)),
+      );
+      return decl.includes(token) && tokens.size > 1 ? decl : `var(${token})`;
+    };
     for (const g of Object.keys(GROUPS))
       for (const r of C.partReads(part, g) ?? [])
         if (mainWhen(r.when?.length ? r.when : ['']))
           for (const prop of r.props ?? []) {
             const key = `base||${prop}`;
-            if (!raw.has(key)) raw.set(key, `var(${r.token})`);
+            const w = (r.when?.length ? r.when : ['']).find(
+              (/** @type {string} */ x) => mainWhen([x]),
+            );
+            if (!raw.has(key)) raw.set(key, declOf(prop, w ?? '', r.token));
           }
     for (const g of Object.keys(GROUPS))
       for (const r of C.partReads(part, g) ?? [])
@@ -533,7 +576,10 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
               // A variant with no rule of its own takes the part's own base
               // rule over the token it reads.
               if (!raw.has(key))
-                raw.set(key, own.get(`base||${prop}`) ?? `var(${r.token})`);
+                raw.set(
+                  key,
+                  own.get(`base||${prop}`) ?? declOf(prop, w, r.token),
+                );
             }
     /** @type {Map<string, {light: string, dark: string, raw: string}>} */
     const out = new Map();
@@ -668,10 +714,24 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
           typed.has(String(st.value ?? '').toLowerCase()) &&
           familyOf(st.thing) === fam,
       );
+      // A property Core draws from the very token a step writes (a title's
+      // margin from its heading size) moves with it: that token is asked.
+      const sameToken = steps.some(
+        st =>
+          /^--/.test(String(st.thing)) &&
+          Object.keys(GROUPS).some(g =>
+            (C.partReads(part, g) ?? []).some(
+              (/** @type {{token: string, props: string[]}} */ r) =>
+                r.token === st.thing && r.props.includes(prop),
+            ),
+          ) &&
+          steps.some(x => x.thing === st.thing && familyOf(x.thing) !== fam),
+      );
       if (
         intent.families.length &&
         !intent.families.includes(fam) &&
-        !typedHere
+        !typedHere &&
+        !sameToken
       )
         return `it would also change ${part}'s ${prop}, which is not what the question asks to change`;
       for (const mode of /** @type {const} */ (['light', 'dark'])) {
@@ -682,8 +742,19 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
           intent.zero &&
           ['radius', 'space', 'border', 'shadow'].includes(fam)
         ) {
-          const n = measureNumber(after);
-          if (!/^(none|transparent|0)$/.test(after) && n !== 0)
+          // (Core's own composed layers, a card's ring, are no shadow of
+          // the theme's: a shadow of only those is none at rest.)
+          const own = splitTop(after, ',')
+            .map(x => x.trim())
+            .filter(
+              x =>
+                x &&
+                !/^var\(\s*--_/.test(x) &&
+                !/^(?:0(?:px)?\s+)+transparent$/i.test(x),
+            )
+            .join(', ');
+          const n = measureNumber(own);
+          if (own && !/^(none|transparent|0)$/.test(own) && n !== 0)
             return `${part}'s ${prop} would be ${after} in ${mode} mode, not none`;
           continue;
         }
@@ -740,9 +811,17 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
           )
             continue;
           const x = painted(after, tn[mode], mode);
-          const y = painted(before, tw[mode], mode);
+          const y = intent.from
+            ? painted(
+                resolveIn(`var(${intent.from})`, tw[mode], mode),
+                tw[mode],
+                mode,
+              )
+            : painted(before, tw[mode], mode);
+          // (A way from a theme color is that color's way, in every mode.)
           const want =
             mode === 'dark' &&
+            !intent.from &&
             isForeground(prop, intent.contrast, intent.literal)
               ? !intent.lighter
               : intent.lighter;
@@ -862,8 +941,8 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
   // "more colorful", "more muted": the accent colors the theme shows (the
   // accent and the text and icons drawn in it) move that way in saturation
   // together, in each mode shown (a step that dulls them is not more
-  // colorful). A muted wash is a surface drawn from them, as saturated as
-  // the page under it lets it be, so it is not counted.
+  // colorful), and the accent wash, as it paints over the page, never moves
+  // the other way (a faint wash made a solid fill is not less colorful).
   if (intent.saturation)
     for (const mode of /** @type {Array<'light' | 'dark'>} */ (
       visible ? [visible] : ['light', 'dark']
@@ -890,6 +969,19 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
         (intent.saturation === 'more' ? x < y - 0.02 * n : x > y + 0.02 * n)
       )
         return `the accent colors would get ${intent.saturation === 'more' ? 'duller' : 'more saturated'} in ${mode} mode`;
+      const wash = (/** @type {Record<string, string>} */ t) =>
+        t['--color-accent-muted'] == null
+          ? null
+          : saturationOf(
+              painted(resolveIn('var(--color-accent-muted)', t, mode), t, mode),
+            );
+      const [wa, wb] = [wash(tn[mode]), wash(tw[mode])];
+      if (
+        wa != null &&
+        wb != null &&
+        (intent.saturation === 'more' ? wa < wb - 0.02 : wa > wb + 0.02)
+      )
+        return `the accent wash (--color-accent-muted) would get ${intent.saturation === 'more' ? 'duller' : 'more saturated'} in ${mode} mode, as it paints over the page`;
     }
   if (!shadowMoved && steps.some(st => familyOf(st.thing) === 'shadow'))
     return 'the shadows would look the same as they do now (a shadow color at full strength gets no stronger; a bigger or blurrier shadow can)';

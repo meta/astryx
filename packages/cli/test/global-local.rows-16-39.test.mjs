@@ -124,7 +124,7 @@ describe.skipIf(!POSIX)(
       });
       expect(r.status).toBe(0);
       expect(filesIn(dir)).toEqual(before);
-      expect(fs.existsSync(path.join(pc.home, '.config', 'astryx'))).toBe(true);
+      expect(fs.existsSync(pc.configDir)).toBe(true);
       expect(
         userCacheDir({
           home: pc.home,
@@ -206,7 +206,7 @@ describe.skipIf(!POSIX)(
         // held. Wait for both completion records, not for a time: the
         // check's latest release with its lock released, and the agent
         // text written for this release.
-        const stateDir = path.join(pc.home, '.config', 'astryx');
+        const stateDir = pc.configDir;
         const settled = () => {
           const state = readState(pc);
           return (

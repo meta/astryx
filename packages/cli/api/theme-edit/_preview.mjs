@@ -23,6 +23,9 @@ import {
   SHEET_ORDER,
   elementNames,
   pageSource,
+  bindingFrom,
+  SAMPLE_SEARCH_ITEMS,
+  SAMPLE_SOURCE,
 } from './_catalog.mjs';
 import {
   catalogVariants,
@@ -35,15 +38,24 @@ import {OVERVIEW_SECTIONS} from './_overview.mjs';
 import {
   camel,
   folderIsEmpty,
+  builtFontWeights,
   fontPackages,
   modesOf,
   shown,
   themeFiles,
+  APP_COPY_BUILT,
+  appCopyNames,
 } from './_settings.mjs';
 import {writeWhole} from './_palette.mjs';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
 import {importPathOf, installLine} from './_project.mjs';
-import {COLOR_PROP_PARTS, DIRECT, P, wordTable} from './_tables.mjs';
+import {
+  COLOR_PROP_PARTS,
+  DIRECT,
+  P,
+  SHOWCASE_GROUPS,
+  wordTable,
+} from './_tables.mjs';
 import {extractImportedPackages} from '../../foundation/discovery/template-needs.mjs';
 import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
 import {themeFileImports} from '../../foundation/discovery/theme-discovery.mjs';
@@ -56,23 +68,23 @@ const TEMPLATES_DIR = path.resolve(
 );
 
 /** The groups of the theme-building page, in order. */
-export const SHOWCASE_GROUPS = [
-  'actions',
-  'inputs',
-  'selection',
-  'navigation',
-  'feedback',
-  'data',
-  'containers',
-  'overlays',
-  'pages',
-];
+export {SHOWCASE_GROUPS};
+
+/**
+ * Packages whose output is drawn in the browser once the page runs (a
+ * recharts chart measures and draws itself after it mounts): a server
+ * render, which the sheet is, has none of it.
+ */
+const DRAWN_IN_BROWSER = Object.freeze(['recharts']);
 
 /** Real template pages the theme-building page shows in full. */
 const PAGE_TEMPLATES = ['dashboard', 'contact-form', 'settings'];
 
 const SELECTION =
   /Select|Checkbox|Radio|Switch|Segmented|Toggle|Slider|Typeahead|Tokenizer/;
+
+/** Props a doc names that open a part's own menu or list. */
+const OPENERS = ['isMenuOpen', 'isDefaultOpen'];
 
 /**
  * The group a component belongs to on the theme-building page.
@@ -100,7 +112,7 @@ function groupOf(name, category) {
  * whose packages the project has.
  * @param {import('./_project.mjs').ThemeProject} project
  * @param {string | undefined} group only this group
- * @returns {{items: import('./_catalog.mjs').CatalogItem[], imports: Record<string, string>, skipped: string[]}}
+ * @returns {{items: import('./_catalog.mjs').CatalogItem[], imports: Record<string, import('./_catalog.mjs').Binding>, skipped: string[], notes: string[]}}
  */
 export function showcaseItems(project, group) {
   /** @type {import('./_catalog.mjs').CatalogItem[]} */
@@ -119,13 +131,44 @@ export function showcaseItems(project, group) {
     if (!g) continue;
     const inParent = inParentOf(project, name);
     if (inParent === null) continue;
-    for (const v of catalogVariants(project, name, 12, {shown: true}))
+    // A component no Core module exports by its name cannot be imported,
+    // so it would draw an empty cell: it gets none.
+    if (!importPathOf(project, name)) continue;
+    const info = project.components[name];
+    catalogVariants(project, name, 12, {shown: true}).forEach((v, i) =>
       items.push({
         group: g,
         name,
         label: v.label,
         tree: inParent({__element: name, props: v.props}),
-      });
+        // An overlay shown open is drawn open: Core places a popover,
+        // tooltip or hover card only once it is mounted. Any other part, as
+        // first shown, is shown open with the overlays too when a press
+        // opens one from it (the page sees which: _catalog.mjs).
+        ...(info?.opens
+          ? {open: true}
+          : i === 0 && g !== 'overlays'
+            ? {
+                openable: true,
+                // A prop its doc names that opens it opens it; else the
+                // drawing's press does.
+                ...(OPENERS.some(p => info?.props?.[p])
+                  ? {
+                      openTree: inParent({
+                        __element: name,
+                        props: {
+                          ...v.props,
+                          [/** @type {string} */ (
+                            OPENERS.find(p => info?.props?.[p])
+                          )]: true,
+                        },
+                      }),
+                    }
+                  : {}),
+              }
+            : {}),
+      }),
+    );
   }
   items.push({
     group: 'pages',
@@ -135,7 +178,9 @@ export function showcaseItems(project, group) {
   });
   /** @type {string[]} */
   const skipped = [];
-  /** @type {Record<string, string>} */
+  /** What a page in the sheet cannot show, said in the result. @type {string[]} */
+  const notes = [];
+  /** @type {Record<string, import('./_catalog.mjs').Binding>} */
   const templateImports = {};
   for (const t of PAGE_TEMPLATES) {
     const file = path.join(TEMPLATES_DIR, t, 'page.tsx');
@@ -150,8 +195,16 @@ export function showcaseItems(project, group) {
       );
       continue;
     }
+    const drawn = [...extractImportedPackages(src)].filter(pkg =>
+      DRAWN_IN_BROWSER.includes(pkg),
+    );
+    if (drawn.length && (!group || group === 'pages'))
+      notes.push(
+        `the ${t} page's charts are drawn in the browser (${drawn.join(', ')}), so sheet.html and its pictures show the page with their space empty; the in-app preview draws them (astryx experimental theme preview add --template ${t})`,
+      );
     const local = `Template_${t.replace(/-/g, '_')}`;
-    templateImports[local] = `./templates/${t}.tsx`;
+    // A template page is its file's default export.
+    templateImports[local] = {from: `./templates/${t}.tsx`, export: 'default'};
     items.push({
       group: 'pages',
       name: `${t} template`,
@@ -163,10 +216,18 @@ export function showcaseItems(project, group) {
     const i = SHEET_ORDER.indexOf(it.name);
     return SHOWCASE_GROUPS.indexOf(it.group ?? '') * 1000 + (i < 0 ? 500 : i);
   };
+  // The overlays section also shows open each part another section holds
+  // that opens one (a dropdown's menu), and only open.
   const chosen = items
-    .filter(it => !group || it.group === group)
+    .flatMap(it =>
+      !group || it.group === group
+        ? [it]
+        : group === 'overlays' && it.openable
+          ? [{...it, onlyOpen: true}]
+          : [],
+    )
     .sort((a, b) => order(a) - order(b) || compareText(a.name, b.name));
-  /** @type {Record<string, string>} */
+  /** @type {Record<string, import('./_catalog.mjs').Binding>} */
   const imports = {};
   for (const n of elementNames(chosen.map(i => i.tree))) {
     if (templateImports[n]) {
@@ -180,6 +241,7 @@ export function showcaseItems(project, group) {
     items: chosen,
     imports,
     skipped: !group || group === 'pages' ? skipped : [],
+    notes,
   };
 }
 
@@ -228,12 +290,12 @@ function inParentOf(project, name) {
 
 /**
  * Template page modules the theme-building page imports, copied beside it.
- * @param {Record<string, string>} imports
+ * @param {Record<string, import('./_catalog.mjs').Binding>} imports
  * @returns {Array<{name: string, from: string}>}
  */
 function templateFiles(imports) {
-  return Object.values(imports).flatMap(spec => {
-    const m = /^\.\/templates\/([a-z0-9-]+)\.tsx$/.exec(spec);
+  return Object.values(imports).flatMap(b => {
+    const m = /^\.\/templates\/([a-z0-9-]+)\.tsx$/.exec(bindingFrom(b));
     return m
       ? [
           {
@@ -256,7 +318,23 @@ function templateFiles(imports) {
  * @returns {string[]}
  */
 export function baseFontsCss(ctx, data) {
-  if (!data.like) return [];
+  const sheet = baseFontsSheet(ctx, data);
+  return sheet ? [sheet.spec] : [];
+}
+
+/**
+ * The base theme's fonts stylesheet as {@link baseFontsCss} imports it: its
+ * import spec, the families it loads, and the remote stylesheets it loads
+ * them from (a Google Fonts `@import`), which a static page cannot load.
+ * Null when the base ships none or the build names none of its families.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {import('./_settings.mjs').ThemeData} data
+ * With the weights it loads of each family (`weights`, by family; none
+ * for a family whose weights it does not say, such as a variable face).
+ * @returns {{spec: string, families: string[], remote: string[], weights: Map<string, number[]>} | null}
+ */
+export function baseFontsSheet(ctx, data) {
+  if (!data.like) return null;
   const pkg = `@astryxdesign/theme-${data.like}`;
   const sheet = `${pkg}/fonts.css`;
   // Read off disk: the package must export the sheet for an app to import
@@ -265,7 +343,7 @@ export function baseFontsCss(ctx, data) {
   /** @type {string} */
   let text;
   try {
-    if (!found) return [];
+    if (!found) return null;
     const exportsMap = JSON.parse(
       fs.readFileSync(path.join(found.packageDir, 'package.json'), 'utf8'),
     ).exports;
@@ -274,10 +352,10 @@ export function baseFontsCss(ctx, data) {
       typeof exportsMap !== 'object' ||
       !('./fonts.css' in exportsMap)
     )
-      return [];
+      return null;
     text = fs.readFileSync(path.join(found.packageDir, 'fonts.css'), 'utf8');
   } catch {
-    return [];
+    return null;
   }
   // The families the sheet loads; with the theme's build at hand, the sheet
   // is imported only while the build still names one of them.
@@ -293,9 +371,101 @@ export function baseFontsCss(ctx, data) {
   }
   if (built != null && families.length) {
     const css = built;
-    if (!families.some(f => css.includes(f))) return [];
+    if (!families.some(f => css.includes(f))) return null;
   }
-  return [sheet];
+  const remote = [
+    ...text.matchAll(
+      /@import\s+(?:url\(\s*)?["']?((?:[a-z]+:)?\/\/[^"')\s]+)/gi,
+    ),
+  ].map(m => m[1]);
+  // The weights a font service request names: its axes (`wght`,
+  // `ital,wght`, `opsz,wght`) and one tuple of values per face
+  // (`Figtree:wght@400;500`, `Fraunces:opsz,wght@9..144,400`), the weight
+  // at the wght axis's place in each tuple.
+  /** @type {Map<string, number[]>} */
+  const weights = new Map();
+  for (const m of text.matchAll(/family=([^:&'")]+):([a-z,]+)@([0-9;,.]+)/gi)) {
+    const family = decodeURIComponent(m[1].replace(/\+/g, ' '));
+    const at = m[2].toLowerCase().split(',').indexOf('wght');
+    if (at < 0) continue;
+    const values = m[3].split(';').map(t => t.split(',')[at] ?? '');
+    // A range (`100..900`) is a variable face: every weight in it.
+    if (values.some(v => v.includes('..'))) continue;
+    const list = values.map(Number).filter(n => Number.isInteger(n));
+    if (list.length)
+      weights.set(
+        family,
+        [...new Set(list)].sort((a, b) => a - b),
+      );
+  }
+  return {spec: sheet, families, remote, weights};
+}
+
+/**
+ * The stylesheets of an installed font package that load the theme's
+ * fonts in every weight it uses: a variable package's one stylesheet
+ * (every weight); for a package with a stylesheet per weight, as
+ * Fontsource ships them, each weight the theme's build uses that the
+ * package has; else its index stylesheet.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {string} pkg
+ * @returns {string[]}
+ */
+export function fontPackageSheets(ctx, slug, pkg) {
+  const index = `${pkg}/index.css`;
+  const faces = fontPackageWeights(ctx, pkg);
+  if (!faces?.length) return [index];
+  // Each weight the theme uses loads the face CSS font matching shows for
+  // it (550 shows the 600 face), once.
+  const shown = new Set(
+    (builtFontWeights(ctx, slug) ?? [400]).map(w => shownWeight(w, faces)),
+  );
+  return faces.filter(w => shown.has(w)).map(w => `${pkg}/${w}.css`);
+}
+
+/**
+ * The weights an installed font package has a stylesheet of its own for
+ * (`@fontsource/lobster/400.css`), as Fontsource ships a static family;
+ * null for a variable package or one with no stylesheet per weight, which
+ * loads every weight it has from its index stylesheet.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} pkg
+ * @returns {number[] | null}
+ */
+export function fontPackageWeights(ctx, pkg) {
+  if (pkg.startsWith('@fontsource-variable/')) return null;
+  const faces = [100, 200, 300, 400, 500, 600, 700, 800, 900].filter(w => {
+    try {
+      ctx.project.req.resolve(`${pkg}/${w}.css`);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  return faces.length ? faces : null;
+}
+
+/**
+ * The face a browser shows for a font weight among the weights a family
+ * loads, by CSS font matching: from 400 to 500, the weights up to 500
+ * first, then lighter, then heavier; below 400, lighter first; above 500,
+ * heavier first.
+ * @param {number} weight
+ * @param {number[]} faces
+ * @returns {number}
+ */
+export function shownWeight(weight, faces) {
+  if (faces.includes(weight)) return weight;
+  const up = faces.filter(w => w > weight).sort((a, b) => a - b);
+  const down = faces.filter(w => w < weight).sort((a, b) => b - a);
+  const order =
+    weight >= 400 && weight <= 500
+      ? [...up.filter(w => w <= 500), ...down, ...up.filter(w => w > 500)]
+      : weight < 400
+        ? [...down, ...up]
+        : [...up, ...down];
+  return order[0] ?? weight;
 }
 
 /**
@@ -316,7 +486,7 @@ export function themeImports(ctx, slug, data, fromDir) {
   const modes = modesOf(data);
   const fonts = fontPackages(ctx, data)
     .filter(x => x.installed)
-    .map(x => `${x.pkg}/index.css`);
+    .flatMap(x => fontPackageSheets(ctx, slug, x.pkg));
   return {
     module: rel(f.js),
     css: [rel(f.css), ...baseFontsCss(ctx, data), ...fonts],
@@ -540,11 +710,14 @@ export async function renderPreview(ctx, slug, data) {
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
  * @param {{group?: string, out?: string}} [options]
- * @returns {Promise<{file: string, components: number, skipped: string[]}>}
+ * @returns {Promise<{file: string, components: number, skipped: string[], notes: string[]}>} `notes`: what a page in the sheet cannot show
  */
 export async function renderSheet(ctx, slug, data, options = {}) {
   const {project} = ctx;
-  const {items, imports, skipped} = showcaseItems(project, options.group);
+  const {items, imports, skipped, notes} = showcaseItems(
+    project,
+    options.group,
+  );
   const source = pageSource({
     items,
     imports,
@@ -564,6 +737,7 @@ export async function renderSheet(ctx, slug, data, options = {}) {
     file: shown(project.cwd, out),
     components: new Set(items.map(i => i.name)).size,
     skipped,
+    notes,
   };
   // Rendered from the same inputs before: the sheet is as it would be.
   if (renderedFrom(out, key)) return result;
@@ -580,6 +754,7 @@ export async function renderSheet(ctx, slug, data, options = {}) {
     file: shown(project.cwd, out),
     components: new Set(items.map(i => i.name)).size,
     skipped,
+    notes,
   };
 }
 
@@ -743,12 +918,11 @@ const SAFE = [
 ];
 
 /** The search source the page hands a part that needs one: a few fixed items. */
-const SAMPLE_SOURCE = [
+const SAMPLE_SOURCE_LINES = [
   'const SAMPLE_ITEMS = [',
-  "  {id: 'design', label: 'Design'},",
-  "  {id: 'engineering', label: 'Engineering'},",
-  "  {id: 'research', label: 'Research'},",
-  "  {id: 'marketing', label: 'Marketing'},",
+  ...SAMPLE_SEARCH_ITEMS.map(
+    i => `  {id: ${JSON.stringify(i.id)}, label: ${JSON.stringify(i.label)}},`,
+  ),
   '];',
   'const SAMPLE_SOURCE = {',
   '  search: (query: string) => SAMPLE_ITEMS.filter(item => item.label.toLowerCase().includes(query.toLowerCase())),',
@@ -779,7 +953,7 @@ function withSources(project, v) {
       project.components[v.__element]?.props ?? {},
     ))
       if (p.required && p.type.startsWith('SearchSource') && !(k in props))
-        props[k] = {__code: 'SAMPLE_SOURCE'};
+        props[k] = SAMPLE_SOURCE;
     return {
       ...v,
       props,
@@ -834,7 +1008,7 @@ function withHandlers(v) {
  */
 const usesSource = v =>
   isCode(v)
-    ? v.__code === 'SAMPLE_SOURCE'
+    ? v.__code === SAMPLE_SOURCE.__code
     : Boolean(v && typeof v === 'object') &&
       Object.values(/** @type {object} */ (v)).some(usesSource);
 
@@ -992,7 +1166,7 @@ function componentsPage(project, {theme = null, C}) {
     '',
     ...CELL,
     '',
-    ...(usesSource(items) ? [...SAMPLE_SOURCE, ''] : []),
+    ...(usesSource(items) ? [...SAMPLE_SOURCE_LINES, ''] : []),
     'export default function ComponentsPage() {',
     '  return (',
     '    <div>',
@@ -1305,7 +1479,9 @@ export function previewRouteSource({
     '      <AppShell',
     '        height="fill"',
     '        topNav={',
-    `          <TopNav label="Theme preview" heading={<strong>{${JSON.stringify(name)}}</strong>} endContent={`,
+    // Core's own heading, as an app's top bar draws it, so a setting on the
+    // header (its text color) shows here as it does in the app.
+    `          <TopNav label="Theme preview" heading={<TopNavHeading heading={${JSON.stringify(name)}} />} endContent={`,
     ...(mode.length ? mode : ['          null']),
     '          } />',
     '        }',
@@ -1330,7 +1506,7 @@ export function previewRouteSource({
     "import * as React from 'react';",
     "import {AppShell} from '@astryxdesign/core/AppShell';",
     "import {SideNav, SideNavItem} from '@astryxdesign/core/SideNav';",
-    "import {TopNav} from '@astryxdesign/core/TopNav';",
+    "import {TopNav, TopNavHeading} from '@astryxdesign/core/TopNav';",
     ...(theme
       ? [
           // The mode switch only for a theme with both modes: an import the
@@ -1560,7 +1736,9 @@ export async function screenshot(
       ok: false,
       // Advice that can change the result: Playwright's browser only when
       // it is missing; a Chrome to check only when there is one.
-      reason: `No picture was taken (${failed.join('; ')}). ${
+      // What went wrong for this picture, and what can change it; the run
+      // that asked for it says which pictures were and were not taken.
+      reason: `${failed.join('; ')}. ${
         !pwFound
           ? `Install Playwright with its browser (${installLine(project.cwd, ['playwright'])}, then npx playwright install chromium), or`
           : pwMissing
@@ -1785,14 +1963,17 @@ export function writeAppCopyAt(cwd, slug, fontsCss) {
       : dir;
     const at = fs.existsSync(failed) ? failed : path.dirname(failed);
     const rel = path.relative(cwd, at).split(path.sep).join('/');
-    COPY_FAILED.set(
-      failKey,
-      code === 'EACCES' || code === 'EPERM' || code === 'EROFS'
+    const unwritable =
+      code === 'EACCES' || code === 'EPERM' || code === 'EROFS';
+    COPY_FAILED.set(failKey, {
+      why: unwritable
         ? `${rel} is not writable (${code})`
         : code === 'ENOSPC'
           ? `the disk is full (${code})`
           : `${rel} could not be written (${code})`,
-    );
+      // A folder that was not writable, to see whether it still is.
+      ...(unwritable ? {folder: at} : {}),
+    });
     return null;
   }
   COPY_FAILED.delete(failKey);
@@ -1817,30 +1998,12 @@ export function writeAppCopyAt(cwd, slug, fontsCss) {
  * @returns {{appCopyStale?: string}}
  */
 export function appCopyStale(cwd, slug) {
-  const blocker =
-    appCopyBlocker(cwd, slug) ??
-    COPY_FAILED.get(`${path.resolve(cwd)}\0${slug}`) ??
-    null;
+  const blocker = appCopyBlocker(cwd, slug) ?? copyFailure(cwd, slug) ?? null;
   return blocker
     ? {
         appCopyStale: `the app copy in src/themes/${slug}/ was not updated: ${blocker}. The app keeps the theme as it was until that is out of the way; then any set or show writes it.`,
       }
     : {};
-}
-
-/**
- * The names of a theme's app copy files.
- * @param {string} slug
- * @returns {Set<string>}
- */
-function appCopyNames(slug) {
-  const name = `${camel(slug)}Theme`;
-  return new Set([
-    `${name}.doc.mjs`,
-    `${name}.ts`,
-    `${slug}.fonts.css`,
-    ...APP_COPY_BUILT.map(ext => `${slug}${ext}`),
-  ]);
 }
 
 /**
@@ -1953,11 +2116,36 @@ export function appCopyBlocker(cwd, slug) {
     : null;
 }
 
-/** The build outputs of a theme, by their ending after `<theme>`. */
-const APP_COPY_BUILT = ['.css', '.css.d.ts', '.js', '.d.ts', '.variants.d.ts'];
-
-/** Why the last write of a theme's app copy failed, by app and theme. @type {Map<string, string>} */
+/**
+ * Why the last write of a theme's app copy failed, by app and theme, and
+ * the folder that was not writable when that was why.
+ * @type {Map<string, {why: string, folder?: string}>}
+ */
 const COPY_FAILED = new Map();
+
+/**
+ * Why the last write of a theme's app copy failed, while that still holds:
+ * a folder that was not writable and is now is no reason any more (a
+ * process that runs several commands, as an API caller does, reads the
+ * folder as it is now).
+ * @param {string} cwd
+ * @param {string} slug
+ * @returns {string | null}
+ */
+function copyFailure(cwd, slug) {
+  const key = `${path.resolve(cwd)}\0${slug}`;
+  const failed = COPY_FAILED.get(key);
+  if (!failed) return null;
+  if (failed.folder)
+    try {
+      fs.accessSync(failed.folder, fs.constants.W_OK);
+      COPY_FAILED.delete(key);
+      return null;
+    } catch {
+      // Still not writable.
+    }
+  return failed.why;
+}
 
 /** App copies written for the first time in this process, by app and theme. @type {Map<string, string[]>} */
 const FIRST_COPIES = new Map();
