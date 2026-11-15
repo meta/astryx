@@ -89,6 +89,18 @@ export {parseCodemod} from './codemod/parse.mjs';
 export {parseDebugEvent} from './debug/parse.mjs';
 
 // ═══════════════════════════════════════════════════════════════════════
+// EXAMPLES — whether a doc example runs on its own, as a live preview does.
+// ═══════════════════════════════════════════════════════════════════════
+export {previewableExample} from './example/preview.mjs';
+export type {
+  ExampleScope,
+  ExampleScopeName,
+  PreviewableExample,
+  ExampleProblem,
+  ExampleProblemCode,
+} from './example/type.js';
+
+// ═══════════════════════════════════════════════════════════════════════
 // FIELD & SUB-TYPES — the building blocks of the docs above. Import these
 // only to annotate a part directly (or to read/render docs); you rarely
 // need them to author. Names carry the doc kind they belong to.

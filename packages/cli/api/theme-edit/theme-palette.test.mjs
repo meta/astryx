@@ -456,9 +456,11 @@ describe('color dials through the palette generator', () => {
     expect(more.commands).toContain(`set ${theme} vibrancy more`);
     // A theme whose colors are all grays has no color to take out, and
     // says so instead of suggesting a change that does nothing.
+    // (Or refused when the base's faint accent wash would come back as a
+    // solid, more saturated fill: nothing gets more colorful.)
     const less = await ask('less saturated');
     expect(`${less.commands}\n${less.text}`).toMatch(
-      new RegExp(`set ${theme} vibrancy less|is a gray`),
+      new RegExp(`set ${theme} vibrancy less|is a gray|accent wash`),
     );
     // Explanations name the commands in words and pick no color.
     expect((await ask('dark mode colors')).text).toContain('--mode dark');
@@ -1927,10 +1929,10 @@ describe('colors final-3', () => {
     expect(v.run?.[0] ?? JSON.stringify(v)).toContain('--font-family-body');
     const geist = await themeEditSet('p', 'font', 'geist-sans', {cwd});
     expect(geist.data.setting.value).toBe('geist');
-    const medium = await refusal(() =>
-      themeEditSet('p', 'text-size', 'Medium', {cwd}),
-    );
-    expect(JSON.stringify(medium)).toContain('text-size medium');
+    // A dial's own word in any case is that word.
+    const medium = await themeEditSet('p', 'text-size', 'Medium', {cwd});
+    expect(medium.data.setting.value).toBe('medium');
+    await themeEditUndo('p', {cwd, thing: 'text-size'});
     await themeEditUndo('p', {cwd, thing: 'font'});
   });
 
@@ -2142,7 +2144,7 @@ describe('colors11: refusals name a command that works', () => {
 });
 
 describe('colors12', () => {
-  it('splits a per-mode part color at its own comma, in either order', async () => {
+  it('keeps a per-mode part color whole in its own mode block, in either order', async () => {
     for (const [first, second] of [
       [
         ['dark', 'rgb(0, 0, 255)'],
@@ -2167,9 +2169,17 @@ describe('colors12', () => {
       });
       const [light, dark] =
         first[0] === 'light' ? [first[1], second[1]] : [second[1], first[1]];
-      expect(read('p.settings.ts')).toContain(
-        JSON.stringify(`light-dark(${light}, ${dark})`),
-      );
+      // Each mode's color, commas and all, in that mode's block.
+      const src = read('p.settings.ts');
+      for (const [m, v] of [
+        ['light', light],
+        ['dark', dark],
+      ])
+        expect(src).toMatch(
+          new RegExp(
+            `"@${m}": \\{\\s*"backgroundColor": ${JSON.stringify(v).replace(/[()[\]{}.*+?^$|\\]/g, '\\$&')}`,
+          ),
+        );
       for (const m of ['light', 'dark'])
         await themeEditUndo('p', {
           cwd,
@@ -2292,7 +2302,8 @@ describe('colors14', () => {
         themeEditSet('p', prop, value, {cwd, on: 'card'}),
       );
       expect(bad.code, `${prop} ${value}`).toBe('ERR_THEME_BAD_VALUE');
-      expect(bad.run[0], prop).toMatch(new RegExp(` set p ${prop} \\d`));
+      // A negative is no size of the other sign: how, never its positive.
+      expect(bad.run[0], prop).toMatch(new RegExp(` how ${prop}$`));
     }
     await themeEditSet('p', 'margin', '-4px', {cwd, on: 'card'});
     await themeEditUndo('p', {cwd, thing: 'margin', on: 'card'});
@@ -2393,9 +2404,13 @@ describe('colors15', () => {
   });
 
   it('suggests the headings word meant, the font a role keeps, and text sizes the dial takes', async () => {
+    // A word in any case is the word itself.
+    for (const value of ['BOLD', 'Tight']) {
+      const r = await themeEditSet('p', 'headings', value, {cwd});
+      expect(r.data.setting.value, value).toBe(value.toLowerCase());
+      await themeEditUndo('p', {cwd, thing: 'headings'});
+    }
     for (const [value, word] of [
-      ['BOLD', 'bold'],
-      ['Tight', 'tight'],
       ['700', 'bold'],
       ['800', 'heavy'],
       ['900', 'heavy'],
@@ -2594,8 +2609,11 @@ describe('colors17', () => {
     );
     expect(none.code).toBe('ERR_THEME_NO_EFFECT');
     await themeEditSet('p', 'accent', '#7c3aed', {cwd});
+    expect(
+      (await themeEditSet('p', 'vibrancy', 'MORE', {cwd})).data.setting.value,
+    ).toMatch(/^\d+$/);
+    await themeEditUndo('p', {cwd, thing: 'vibrancy'});
     for (const [value, want] of [
-      ['MORE', 'more'],
       ['70%', '70'],
       ['7e1', '70'],
     ]) {
