@@ -16,8 +16,8 @@
  * more than RATIO times its record × the leg factor, and more than MARGIN_S
  * seconds over that. A changed file with no recorded time under its own path
  * fails when it ran more than NEW_FILE_S × the leg factor: the legs' split
- * looks the record up by path, so it counts that file as the median until the
- * path is recorded. That includes a renamed file, whose old entry the failure
+ * looks the record up by path, so it books that file at the ninetieth
+ * percentile of the recorded times until the path is recorded. That includes a renamed file, whose old entry the failure
  * asks to move. Each failure names the one entry to add, move or update.
  *
  * @input --times <file> (the shard watchdog's per-file seconds),
@@ -220,7 +220,7 @@ function main(args) {
       ? `It was renamed from ${from} (recorded at ${fromRecorded} s), so move that entry: replace "${from}" with "${file}": ${suggested} (${value}).`
       : `Add only its entry to ${RECORD}: "${file}": ${suggested} (${value}).`;
     console.log(
-      `::error file=${file},title=Node test file has no recorded time::test file ${file} ran ${now} s and has no recorded time under that path. ${legSentence}; the legs' split looks the record up by path, so it counts this file as the median. ${fix}`,
+      `::error file=${file},title=Node test file has no recorded time::test file ${file} ran ${now} s and has no recorded time under that path. ${legSentence}; the legs' split looks the record up by path, so it books this file at the ninetieth percentile of the recorded times. ${fix}`,
     );
   }
   if (late.length === 0 && unseen.length === 0)

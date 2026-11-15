@@ -129,7 +129,7 @@ describe('the recorded-time check for the test files a change touches', () => {
     expect(drifted(measured, recorded, [CHANGES])).toHaveLength(1);
   });
 
-  it('skips a changed file with no recorded time (the legs count it as the median)', () => {
+  it('skips a changed file with no recorded time (the legs book it at the ninetieth percentile)', () => {
     expect(drifted({'new.test.mjs': 400}, {}, ['new.test.mjs'])).toEqual([]);
   });
 
