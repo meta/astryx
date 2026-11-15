@@ -32,10 +32,9 @@ let cwd;
 
 beforeAll(async () => {
   cwd = makeLinkedFixture('astryx-theme-hunt204-', FIXTURE_PACKAGES);
-  const unbuilt = await installRealBaseThemes(cwd, ['neutral', 'butter']);
+  const unbuilt = await installRealBaseThemes(cwd, ['neutral']);
   if (unbuilt) throw new Error(unbuilt);
   await themeEditNew('ne', {cwd, like: 'neutral'});
-  await themeEditNew('bu', {cwd, like: 'butter'});
   await themeEditNew('o', {cwd, like: 'neutral'});
 }, 600_000);
 
@@ -143,14 +142,14 @@ describe('value questions read what the part draws', () => {
 
 describe('all borders in one mode', () => {
   it('gives every step, the new lines see-through in the other mode', async () => {
-    const w = writes(await how('bu', 'make all borders red in dark mode'));
-    expect(w).toContain("set bu --color-border '#dc2626' --mode dark");
+    const w = writes(await how('ne', 'make all borders red in dark mode'));
+    expect(w).toContain("set ne --color-border '#dc2626' --mode dark");
     expect(w).toContain(
-      "set bu border '1px solid light-dark(transparent, #dc2626)' --on dialog",
+      "set ne border '1px solid light-dark(transparent, #dc2626)' --on dialog",
     );
     // A line's width and style never take --mode.
     expect(
-      w.filter(c => /^set bu border '/.test(c) && /--mode/.test(c)),
+      w.filter(c => /^set ne border '/.test(c) && /--mode/.test(c)),
     ).toEqual([]);
   }, 120_000);
 });
