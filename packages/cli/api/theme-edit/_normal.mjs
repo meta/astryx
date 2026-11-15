@@ -1556,6 +1556,17 @@ export function readsTyped({
         oneOf.push(i);
         continue;
       }
+      // A weight word typed with a typo after a family (`Georgia Blod`) is
+      // that weight, as the font reader reads it.
+      if (
+        i > 0 &&
+        /^font(-family)?$|^--font-family/.test(typedKey) &&
+        WEIGHT_WORDS[o] !== undefined &&
+        typoNear(w, o)
+      ) {
+        oneOf.push(i);
+        continue;
+      }
       if (numberOf(w) && numbersEqual(o, w)) {
         oneOf.push(i);
         continue;

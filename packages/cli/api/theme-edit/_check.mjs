@@ -1107,18 +1107,35 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
           : null;
   };
   const STYLE = /^(italic|oblique)$/i;
+  /** The one weight or style word a typo is near, else null. @param {string} w */
+  const wordTypo = w => {
+    const hits = [
+      ...new Set(
+        [
+          ...Object.keys(HEADING_WEIGHTS),
+          ...Object.keys(WEIGHT_WORDS),
+          'italic',
+          'oblique',
+        ].filter(k => /^[a-z]+$/.test(k) && typoNear(w.toLowerCase(), k)),
+      ),
+    ];
+    return hits.length === 1 ? hits[0] : null;
+  };
   const bare = (/** @type {string} */ w) =>
     w.toLowerCase().replace(/[\s_-]+/g, '');
   /** The family a preset key or a system family names, by lowercase name. */
-  const familyOfKnown = (/** @type {string} */ k) => {
+  /** The family a preset key or a system family names. @param {string} k */
+  const familyNamed = k => {
     const lower = k.toLowerCase();
     const named =
       FONTS[lower]?.[0] ??
       /** @type {Record<string, {family: string}>} */ (OPEN_FONTS)[lower]
         ?.family ??
       k;
-    return bare(named.replace(/["']/g, ''));
+    return named.replace(/["']/g, '');
   };
+  /** That family, by lowercase name. @param {string} k */
+  const familyOfKnown = k => bare(familyNamed(k));
   /** The generic a family the editor does not know is a typo of. */
   const genericOf = (/** @type {string} */ name) => {
     // Written with no dash or a space (sansserif, system ui): that generic.
@@ -1198,7 +1215,7 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
     // end; a weight of two words (extra bold) first.
     const words = name.split(/\s+/);
     let end = words.length;
-    /** @type {Array<{kind: string, text: string, value?: number}>} */
+    /** @type {Array<{kind: string, text: string, value?: number, typo?: boolean}>} */
     const tail = [];
     while (end > 0) {
       // A known family before the words read so far keeps its own last
@@ -1227,6 +1244,25 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
         end -= 1;
       } else if (NUMBERISH.test(w) && /[a-z%]$/i.test(w)) {
         tail.unshift({kind: 'size', text: w});
+        end -= 1;
+      } else if (
+        end >= 2 &&
+        knownFamily(ctx, words.slice(0, end - 1).join(' ')) &&
+        wordTypo(w)
+      ) {
+        // A weight or style word with a typo after a family the editor
+        // knows (Georgia Blod) is that word: the one typo limit reads it.
+        const meant = /** @type {string} */ (wordTypo(w));
+        tail.unshift(
+          STYLE.test(meant)
+            ? {kind: 'style', text: meant, typo: true}
+            : {
+                kind: 'weight',
+                text: meant,
+                value: /** @type {number} */ (weightOf(meant)),
+                typo: true,
+              },
+        );
         end -= 1;
         // A bare number that is no weight is part of the name (Source Sans
         // 3); only a separate list item is a number that is no family.
@@ -1276,19 +1312,18 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
               distance(hit) < distance(best) ? hit : best,
             )
           : null;
-      // The presets are read first: a typo of one (Corier is courier, even
-      // beside Corbel) is that preset, offered at the nearest spelling of
-      // the family it names (Segoe IU is Segoe UI). A preset and the family
-      // it names are one reading.
-      const presetHit = oneReading(
-        presets && pieces.length === 1 ? hitsIn(PRESETS) : [],
-      );
+      // The presets are read first, alone or in a list: a typo of one
+      // (Corier is courier, even beside Corbel) is that preset, offered at
+      // the nearest spelling of the family it names (Segoe IU is Segoe UI).
+      // A preset and the family it names are one reading. In a list, where
+      // a preset's own word is no family, it is offered as its family.
+      const presetHit = oneReading(presets ? hitsIn(PRESETS) : []);
       const presetWord = presetHit
-        ? oneReading(
+        ? (oneReading(
             hitsIn(known).filter(
               h => familyOfKnown(h) === familyOfKnown(presetHit),
             ),
-          )
+          ) ?? familyNamed(presetHit))
         : null;
       const editor = generic ?? presetWord;
       const near = presetWord ?? oneReading(hitsIn(known));
@@ -1368,6 +1403,11 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
       } else number = true;
     }
     kept.push(base);
+    // A word read through a typo keeps the name as typed on offer too.
+    if (tail.some(t => t.typo)) {
+      misspelled = true;
+      asTyped.set(kept.length - 1, JSON.stringify(name));
+    }
   }
   if (
     weight == null &&
