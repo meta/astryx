@@ -356,15 +356,32 @@ export function withoutRecording(fn) {
 }
 
 /**
+ * The lists of states each record has taken (recordStates), by the record. A
+ * list handed in again changes nothing, since a record keeps each path's
+ * fullest state, so it is skipped: a run hands in one kept value's states
+ * once for each step that reuses it.
+ * @type {WeakMap<Map<string, string>, WeakSet<object>>}
+ */
+const takenBy = new WeakMap();
+
+/**
  * Count paths as read by the running operations, each with the state given:
  * what a value kept from an earlier read read. Outside `recordReads` it does
  * nothing.
- * @param {Iterable<[string, string]>} states
+ * @param {Iterable<[string, string]>} states - A list that does not change
+ *   once handed in.
  */
 export function recordStates(states) {
   const runs = reads.getStore();
   if (!runs) return;
   for (const seen of runs) {
+    let taken = takenBy.get(seen);
+    if (!taken) {
+      taken = new WeakSet();
+      takenBy.set(seen, taken);
+    }
+    if (taken.has(states)) continue;
+    taken.add(states);
     for (const [file, state] of states) {
       // The common cases need no rule: a path the record does not hold yet,
       // and one a value reused again in the run handed in already.
