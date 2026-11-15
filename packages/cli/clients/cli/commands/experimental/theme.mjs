@@ -1840,6 +1840,13 @@ export function registerExperimentalTheme(group, program) {
                   open = null;
                   continue;
                 }
+                // A dial word ends the open value: it starts its own setting
+                // (`--accent red corners pill`), read below.
+                if (
+                  open &&
+                  dialFlags.has(`--${w.toLowerCase().replace(/[:=]+$/, '')}`)
+                )
+                  open = null;
                 if (open) {
                   const had = given[open];
                   given[open] = Array.isArray(had)
@@ -1850,19 +1857,40 @@ export function registerExperimentalTheme(group, program) {
                 }
                 words.push(w);
               }
+              /** Settings set gives after the theme is made. @type {Array<[string, string]>} */
+              const later = [];
               // Settings typed after the name, in any form set reads (`accent
               // red`, `corners=pill`, `corners: pill; accent: red`, a pasted
               // JSON object): each is its option (`--accent red`), never
               // part of the name. A dial's value runs to the next dial.
               {
+                // A dial word as set reads it: with its colon or equals sign
+                // apart from the value (`accent:`), in other letters, or
+                // with a typo (`cornres`, the one typo limit).
                 const dialOf = (/** @type {string} */ w) => {
-                  const flag = `--${String(w).trim().toLowerCase()}`;
-                  return dialFlags.has(flag) ? camel(flag) : null;
+                  const word = String(w)
+                    .trim()
+                    .toLowerCase()
+                    .replace(/[:=]+$/, '');
+                  if (!/^[a-z][a-z-]*$/.test(word)) return null;
+                  if (dialFlags.has(`--${word}`)) return camel(`--${word}`);
+                  const near = [...dialFlags].filter(f =>
+                    typoOf(word, f.slice(2)),
+                  );
+                  return near.length === 1 ? camel(near[0]) : null;
                 };
+                /** The flag word a dial word reads as. @param {string} w */
+                const dialName = w =>
+                  String(dialOf(w)).replace(
+                    /[A-Z]/g,
+                    c => `-${c.toLowerCase()}`,
+                  );
                 /** @type {string[]} */
                 const kept = [];
                 /** @type {Array<[string, string]>} */
                 const pairs = [];
+                /** The pasted pair a later word continues, or -1. */
+                let pasted = -1;
                 for (const w of words) {
                   /** @type {unknown} */
                   let json;
@@ -1877,6 +1905,7 @@ export function registerExperimentalTheme(group, program) {
                       : [];
                   if (entries.length && entries.every(([k]) => dialOf(k))) {
                     for (const [k, v] of entries) pairs.push([k, String(v)]);
+                    pasted = -1;
                     continue;
                   }
                   // `corners=pill`, `corners: pill; accent: red`.
@@ -1895,8 +1924,16 @@ export function registerExperimentalTheme(group, program) {
                         /** @type {RegExpExecArray} */ (m)[1],
                         /** @type {RegExpExecArray} */ (m)[2],
                       ]);
+                    // A value typed on across words (`font=Inter, Arial`)
+                    // runs to the next dial, as `font Inter, Arial` does.
+                    pasted = pairs.length - 1;
                     continue;
                   }
+                  if (pasted >= 0 && !dialOf(w)) {
+                    pairs[pasted][1] = `${pairs[pasted][1]} ${w}`;
+                    continue;
+                  }
+                  pasted = -1;
                   kept.push(w);
                 }
                 // `accent red`: a dial word, and its value up to the next dial.
@@ -1921,9 +1958,26 @@ export function registerExperimentalTheme(group, program) {
                 for (const [k, v] of pairs) {
                   const key = /** @type {string} */ (dialOf(k));
                   if (given[key] == null) given[key] = v;
-                  intoValues.push(`${k} ${v}`);
+                  intoValues.push(`${dialName(k)} ${v}`);
                 }
-                words.splice(0, words.length, ...rest);
+                // A setting new takes no option for (`padding 8px`): set
+                // gives it after the theme is made, never a word of the name.
+                const named = [];
+                for (let i = 0; i < rest.length; i++) {
+                  const thing = rest[i].replace(/[:=]+$/, '');
+                  if (
+                    namesSetting(thing) &&
+                    !/^(like|base)$/i.test(thing) &&
+                    rest[i + 1] != null
+                  ) {
+                    const value = rest.slice(i + 1);
+                    later.push([thing, value.join(' ')]);
+                    intoValues.push(`${thing} ${value.join(' ')}`);
+                    break;
+                  }
+                  named.push(rest[i]);
+                }
+                words.splice(0, words.length, ...named);
               }
               // A built-in theme among the words (after a `like` word, or
               // typed as the name with the real name after it) is the base,
@@ -1936,10 +1990,15 @@ export function registerExperimentalTheme(group, program) {
               );
               if (baseAt >= 0 && given.like == null)
                 given.like = all[baseAt].toLowerCase();
+              // (`base stone` is the base as `like stone` is.)
               const nameWords = all.filter(
                 (w, i) =>
                   i !== baseAt &&
-                  !(baseAt >= 0 && /^like$/i.test(w) && i === baseAt - 1),
+                  !(
+                    baseAt >= 0 &&
+                    /^(like|base)$/i.test(w) &&
+                    i === baseAt - 1
+                  ),
               );
               const fixed = nameWords
                 .join('-')
@@ -1949,16 +2008,22 @@ export function registerExperimentalTheme(group, program) {
               const read = Object.keys(given).some(k => given[k] !== o[k]);
               throw new AstryxError(
                 `new takes one theme name; "${(nameWord ? [...intoValues, ...words] : extra).join(' ')}" is extra.${read ? ' A value of more than one word goes in quotes.' : ''} For a base theme, use --like. Nothing was changed.`,
-                await editorCheckedNewLines(
-                  `${EDITOR} new ${quoteCommandArgument(fixed)}${newFlagLine(given)}`,
-                  fixed,
-                  {
-                    cwd: process.cwd(),
-                    like: given.like,
-                    png: given.png ?? false,
-                    settings: newSettingsGiven(given),
-                  },
-                ),
+                [
+                  ...(await editorCheckedNewLines(
+                    `${EDITOR} new ${quoteCommandArgument(fixed)}${newFlagLine(given)}`,
+                    fixed,
+                    {
+                      cwd: process.cwd(),
+                      like: given.like,
+                      png: given.png ?? false,
+                      settings: newSettingsGiven(given),
+                    },
+                  )),
+                  ...later.map(([thing, value]) => ({
+                    name: `${EDITOR} set ${quoteCommandArgument(fixed)} ${quoteCommandArgument(thing)} ${quoteCommandArgument(value)}`,
+                    reason: `then this: new takes no ${thing}; set gives it`,
+                  })),
+                ],
                 ERROR_CODES.ERR_INVALID_ARGUMENT,
               );
             }

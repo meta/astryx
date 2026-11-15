@@ -514,6 +514,7 @@
     "packages/cli/api/theme-edit/theme-edit.test.mjs": 37.6,
     "packages/cli/api/theme-edit/theme-editor-refusals.behavior.test.mjs": 12.7,
     "packages/cli/api/theme-edit/theme-font-known-family.test.mjs": 17.8,
+    "packages/cli/api/theme-edit/theme-g2-final42.test.mjs": 20.0,
     "packages/cli/api/theme-edit/theme-how-families.test.mjs": 18.3,
     "packages/cli/api/theme-edit/theme-how.test.mjs": 175.4,
     "packages/cli/api/theme-edit/theme-hunt.test.mjs": 52.4,

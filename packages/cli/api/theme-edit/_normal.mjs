@@ -1023,7 +1023,8 @@ export function modeWord(text) {
 /**
  * The one mode a word names as {@link modeWord} reads it, or as a typo of
  * light or dark that keeps its letters (`drak`, `darkk`, `ligth`, `lght`,
- * `drak mode`): two swapped, one doubled, dropped or added, never one
+ * `drak mode`, `kdar`): its letters in any order, or one doubled, dropped or
+ * added, never one
  * letter for another, so a word of its own (right, tight, bark, park) is
  * never a mode. The reading of a mode a person types with a typo, wherever
  * it is typed: the `--mode` flag, a mode label in a `set` value or a `how`
@@ -1040,12 +1041,14 @@ export function modeNear(text) {
     .replace(/[\s_]+/g, '-')
     .replace(/-?(?:only|mode)$/, '')
     .replace(/^mode-?/, '');
-  // Same letters in another order, or one letter more or fewer.
-  const near = /** @type {const} */ (['light', 'dark']).filter(
-    mode =>
-      typoNear(stem, mode) &&
-      lettersBeyond(mode, stem) <= (stem.length < mode.length ? 1 : 0) &&
-      lettersBeyond(stem, mode) <= (stem.length > mode.length ? 1 : 0),
+  // Same letters in any order (`kdar`), or one letter more or fewer
+  // within the typo limit.
+  const near = /** @type {const} */ (['light', 'dark']).filter(mode =>
+    stem.length === mode.length
+      ? lettersBeyond(stem, mode) === 0
+      : typoNear(stem, mode) &&
+        lettersBeyond(mode, stem) <= (stem.length < mode.length ? 1 : 0) &&
+        lettersBeyond(stem, mode) <= (stem.length > mode.length ? 1 : 0),
   );
   return near.length === 1 ? near[0] : null;
 }

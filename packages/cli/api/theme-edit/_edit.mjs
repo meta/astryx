@@ -140,6 +140,7 @@ import {
   entryFieldNames,
   entryProblem,
   namesSetting,
+  namesSettingAsTyped,
   skips,
   OPEN_SECTION,
 } from './_settings.mjs';
@@ -915,7 +916,10 @@ async function newTheme(
           : // A setting's name (--color-accent) is never a theme to make, as
             // the other commands read it: a free name instead.
             againLines(
-              usableNewName(cwd, namesSetting(typed) ? 'my-theme' : fixed),
+              usableNewName(
+                cwd,
+                namesSettingAsTyped(typed) ? 'my-theme' : fixed,
+              ),
             ),
       },
     );
@@ -5460,11 +5464,43 @@ async function changeOnce(
         // The setting whose scope is the one typed (no --on: the whole
         // theme's) leads; with none of that scope, the message says so and
         // the others are listed after it.
+        // The scope as typed is read as set's own check read it (`--on
+        // Card`, `cards`, `--mode drak`, `--state hovered`): the scope of
+        // the line its refusal offers for this setting.
+        /** @type {Record<string, string | undefined>} */
+        const meant = {
+          on: flags.on,
+          when: flags.when,
+          state: flags.state,
+          mode: flags.mode,
+        };
+        for (const x of e.suggestions ?? []) {
+          const at = x.name.indexOf(' editor ');
+          const words =
+            at >= 0 ? splitCommand(x.name.slice(at + ' editor '.length)) : null;
+          if (
+            !words ||
+            !['set', 'undo'].includes(words[0]) ||
+            words[1] !== slug
+          )
+            continue;
+          for (const k of /** @type {const} */ ([
+            'on',
+            'when',
+            'state',
+            'mode',
+          ])) {
+            const i = words.indexOf(`--${k}`);
+            if (flags[k] != null && i > 0 && words[i + 1] != null)
+              meant[k] = words[i + 1];
+          }
+          break;
+        }
         const sameScope = (/** @type {any} */ x) =>
-          (x.on ?? null) === (flags.on ?? null) &&
-          (x.when ?? null) === (flags.when ?? null) &&
-          stateKeyOf(x.state) === stateKeyOf(flags.state) &&
-          (x.mode ?? null) === (flags.mode ?? null);
+          (x.on ?? null) === (meant.on ?? null) &&
+          (x.when ?? null) === (meant.when ?? null) &&
+          stateKeyOf(x.state) === stateKeyOf(meant.state) &&
+          (x.mode ?? null) === (meant.mode ?? null);
         const ordered = [
           ...matches.filter(sameScope),
           ...matches.filter(x => !sameScope(x)),
@@ -5473,6 +5509,25 @@ async function changeOnce(
         // A word that is a value the theme holds (`undo t red`) names the
         // setting that holds it: its undo, never a step back that takes back
         // another change.
+        // A value then the setting holding it (`undo t red accent`): the
+        // two in the other order, as set reads them.
+        const swapped =
+          value != null && value !== ''
+            ? data.settings.filter(
+                x =>
+                  x.thing.toLowerCase() === String(value).toLowerCase() &&
+                  valueIs(x.value, typed),
+              )
+            : [];
+        if (swapped.length)
+          throw new AstryxError(
+            `"${thing}" is no setting; ${value} is the setting and ${thing} its value. Nothing was changed.`,
+            swapped.slice(0, 5).map(x => ({
+              name: `${P} undo ${slug} ${setArgs(x, String(x.value))}`,
+              reason: `do this instead: ${x.thing} is the setting and ${thing} its value`,
+            })),
+            e.code,
+          );
         const byValue =
           matches.length || (value != null && value !== '')
             ? []
@@ -8203,10 +8258,12 @@ export async function themeEditUndo(theme, options = {}) {
       // A setting's name is never a theme to make or look at, nor a theme
       // name typed with a typo.
       // (With its value in the same word, `corners pill`, too.)
+      // (`corners:pill`, `corners, accent` and a pasted object too.)
       const firstWord = String(theme ?? '')
         .trim()
-        .split(/\s+/)[0];
-      const settingName = namesSetting(theme) || namesSetting(firstWord);
+        .replace(/^\{\s*"?/, '')
+        .split(/[\s:=,;|"]+/)[0];
+      const settingName = namesSettingAsTyped(theme);
       // A list of themes (t,u) stays a look at each: one theme at a time.
       const shows = (e.suggestions ?? []).filter(x => showOf(x) != null);
       const near = (shows.length === 1 && !settingName ? shows : []).find(x => {
@@ -8255,13 +8312,24 @@ export async function themeEditUndo(theme, options = {}) {
         // A word that is no theme here but a setting a theme here holds
         // (`undo accent`, `undo background-color --on card`): that theme's
         // undo of it, never a new theme or a look named after the setting.
-        const held = await heldSettingUndos(
+        // A value typed unquoted with commas (`undo Inter, Arial`, `undo
+        // rgb(1, 2, 3) --on card`) is read whole, as set reads it.
+        const typedAll = [theme, options.thing, options.value]
+          .filter(w => w != null && w !== '')
+          .join(' ');
+        let held = await heldSettingUndos(
           cwd,
           firstWord !== String(theme ?? '').trim() && namesSetting(firstWord)
             ? firstWord
             : theme,
           options,
         );
+        if (
+          !held.length &&
+          typedAll !== String(theme ?? '') &&
+          /,$/.test(String(theme ?? '').trim())
+        )
+          held = await heldSettingUndos(cwd, typedAll, options);
         const asSetting = held.length > 0 || settingName;
         // An undo never makes a theme from the word: no `new` line, but the
         // one that makes a theme here again whose settings file is gone.

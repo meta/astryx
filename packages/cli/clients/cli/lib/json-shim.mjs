@@ -460,11 +460,15 @@ function optionsBeforeSubcommand(group) {
   /** The subcommand words from the group's own on (`editor set`). @type {string[]} */
   let subWords = [];
   let end = -1;
-  for (let i = 1; i < rest.length && !sub; i++) {
-    const first = named(subs, rest[i]);
-    if (!first || String(rest[i]).startsWith('-')) continue;
-    // Into a nested group (`theme --mode dark editor set …`): the command
-    // the words go on to name is the one the options are read against.
+  /**
+   * The command the words from rest[i] on name: a subcommand, into a nested
+   * group (`theme --mode dark editor set …`) as far as the words go; null
+   * when rest[i] names none.
+   * @param {number} i
+   */
+  const resolve = i => {
+    const first = String(rest[i]).startsWith('-') ? null : named(subs, rest[i]);
+    if (!first) return null;
     let target = first;
     const words = [first.name()];
     let j = i + 1;
@@ -473,20 +477,33 @@ function optionsBeforeSubcommand(group) {
       words.push(target.name());
       j++;
     }
-    // The word straight after an option that command takes with a value is
-    // that value (`--on set set t …`), never the subcommand.
+    return {target, words, end: j};
+  };
+  /** Whether a command takes a flag with a value. @param {any} cmd @param {string} flag */
+  const takesValue = (cmd, flag) =>
+    (cmd.options ?? []).some(
+      (/** @type {any} */ o) =>
+        (o.long === flag || o.short === flag) && (o.required || o.optional),
+    );
+  for (let i = 1; i < rest.length && !sub; i++) {
+    const found = resolve(i);
+    if (!found) continue;
+    // The word straight after an option that this command, or a later one
+    // named after it, takes with a value is that value (`--on set set t …`,
+    // `--on show set t …`), never the subcommand.
     const prev = String(rest[i - 1]);
-    const prevOpt =
-      prev.startsWith('-') && !prev.includes('=')
-        ? (target.options ?? []).find(
-            (/** @type {any} */ o) => o.long === prev || o.short === prev,
-          )
-        : null;
-    if (prevOpt && (prevOpt.required || prevOpt.optional)) continue;
-    sub = target;
+    if (prev.startsWith('-') && !prev.includes('=')) {
+      let valued = takesValue(found.target, prev);
+      for (let k = i + 1; !valued && k < rest.length; k++) {
+        const later = resolve(k);
+        if (later && takesValue(later.target, prev)) valued = true;
+      }
+      if (valued) continue;
+    }
+    sub = found.target;
     index = i;
-    subWords = words;
-    end = j;
+    subWords = found.words;
+    end = found.end;
   }
   if (!sub) return null;
   /** @type {string[]} */
@@ -549,6 +566,25 @@ function optionsBeforeSubcommand(group) {
 }
 
 /**
+ * Whether a parse error came from a theme editor or preview command, whose
+ * missing-argument message names what was given.
+ * @param {unknown} err
+ */
+function isEditorCommand(err) {
+  const parts = [];
+  for (
+    let node = /** @type {any} */ (err)?.[REJECTED_COMMAND];
+    node;
+    node = node.parent
+  )
+    parts.unshift(node.name());
+  return (
+    parts.slice(1, 3).join(' ') === 'experimental theme' &&
+    ['editor', 'preview'].includes(parts[3])
+  );
+}
+
+/**
  * The usage line of the command a parse error came from, as a suggestion, for
  * an option given without its value.
  * @param {unknown} err
@@ -568,6 +604,20 @@ function usageSuggestion(err, code) {
     ['editor', 'preview'].includes(parts[3])
   )
     return editorMissingSuggestions(cmd);
+  // A theme command missing its files (`experimental theme compile`,
+  // `theme build`): its usage and help, as the project runs the CLI.
+  if (
+    code === 'commander.missingArgument' &&
+    (parts[1] === 'theme' ||
+      parts.slice(1, 3).join(' ') === 'experimental theme')
+  ) {
+    const words = parts.slice(1).join(' ');
+    const invocation = getCliInvocation(process.cwd());
+    return [
+      {name: `${invocation} ${words} ${cmd.usage()}`.trim(), reason: 'usage'},
+      {name: `${invocation} ${words} --help`, reason: 'what each argument is'},
+    ];
+  }
   if (code !== 'commander.optionMissingArgument') return undefined;
   // The command's usage with the option in it, as it takes its value
   // (`astryx theme build --out <path> <files...>`).
@@ -1150,7 +1200,9 @@ function finishParseError(err, code, message, exitCode, read, errorCode) {
   // would name the wrong thing.
   const cleaned = answer
     ? answer.message
-    : code === 'commander.missingArgument' && suggestions?.length === 2
+    : code === 'commander.missingArgument' &&
+        suggestions?.length === 2 &&
+        isEditorCommand(err)
       ? editorMissingMessage(err, message)
       : message.replace(/^error:\s*/i, '');
   if (jsonActive()) {

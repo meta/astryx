@@ -552,6 +552,32 @@ export function namesSetting(word) {
 }
 
 /**
+ * Whether text typed where a theme goes names settings, in any form set
+ * reads them: a setting's name (`corners`, `--color-accent`), with its value
+ * (`corners pill`, `corners:pill`, `corners=pill`, `accent: red`), a list of
+ * them (`corners, accent`), or a pasted JSON object (`{"corners":"pill"}`).
+ * Such text is never a theme to make or a list of themes.
+ * @param {unknown} text
+ */
+export function namesSettingAsTyped(text) {
+  const t = String(text ?? '').trim();
+  if (!t) return false;
+  if (namesSetting(t)) return true;
+  if (/^\{/.test(t))
+    try {
+      const keys = Object.keys(JSON.parse(t));
+      return keys.length > 0 && keys.every(k => namesSetting(k));
+    } catch {
+      return false;
+    }
+  const items = t.split(/\s*[,;|]\s*/).filter(Boolean);
+  return (
+    items.length > 0 &&
+    items.every(item => namesSetting(item.split(/[\s:=]+/)[0]))
+  );
+}
+
+/**
  * The themes the editor made in the app (a settings file of its own), by
  * name, or with `changed` the one an editor command changed last first: the
  * undo history is written only by an editor command, so its time is the
@@ -897,6 +923,21 @@ export function loadTheme(
     // A list where one theme goes (t,u or "t;u"): one theme at a time,
     // each that exists named; never a new theme made of the list. A name
     // with spaces ("My Theme") is one name: its theme, found above, wins.
+    const have = fs.existsSync(themeFiles(cwd, 'x').root)
+      ? fs
+          .readdirSync(themeFiles(cwd, 'x').root)
+          .filter(d => slugOk(d) && fs.existsSync(themeFiles(cwd, d).settings))
+          .sort()
+      : [];
+    // Settings typed where the theme goes (`corners, accent`,
+    // `corners:pill`, `{"corners":"pill"}`): never a theme to make or a
+    // list of themes; each theme here is offered to look at.
+    if (!same && namesSettingAsTyped(slug))
+      refuse(
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+        `"${String(slug ?? '').slice(0, 80)}" names a setting, not a theme; the theme comes first.`,
+        {run: have.slice(0, 3).map(h => `${P} show ${h}`)},
+      );
     const words = String(slug ?? '')
       .split(/\s*[,;|]\s*/)
       .map(w => slugFor(w.trim()))
@@ -915,12 +956,6 @@ export function loadTheme(
         },
       );
     }
-    const have = fs.existsSync(themeFiles(cwd, 'x').root)
-      ? fs
-          .readdirSync(themeFiles(cwd, 'x').root)
-          .filter(d => slugOk(d) && fs.existsSync(themeFiles(cwd, d).settings))
-          .sort()
-      : [];
     // An empty name (an unset variable, a lone dash): no theme to guess
     // from it, so the themes here are named instead of a new one.
     if (!same && !/[a-z0-9]/i.test(String(slug ?? ''))) {
@@ -943,12 +978,7 @@ export function loadTheme(
           // (`corners pill`), typed where the theme goes is never a theme
           // to make, as for a name that is one (below): each theme here is
           // offered to look at.
-          namesSetting(String(slug ?? '')) ||
-            namesSetting(
-              String(slug ?? '')
-                .trim()
-                .split(/\s+/)[0],
-            )
+          namesSettingAsTyped(slug)
           ? {run: have.slice(0, 3).map(h => `${P} show ${h}`)}
           : {run: [`${P} new ${fixed}`]},
     );
