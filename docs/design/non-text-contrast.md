@@ -68,7 +68,11 @@ block that, so it does not have to reach the non-text threshold itself.
 - **DR5 — Evidence names what it measured.** Non-text contrast evidence MUST
   name the exact component, state, or graphic part; its adjacent colors; the
   treatment under review; the independent cue and its measured contrast, when
-  DR3 is used; and the visual or manual evidence layer.
+  DR3 is used; and the visual or manual evidence layer. Where the treatment
+  and its adjacent colors are theme tokens, the evidence MUST include a scripted
+  test that computes their contrast in each mode and state it names. A visual or
+  manual review covers only what such a test cannot compute, such as the DR2
+  suppression judgment.
 
 ## Accessibility intent
 
@@ -78,19 +82,19 @@ WCAG 2.2 completeness review in `spec:AST-020` and the theme evidence in
 
 ## Representative examples
 
-No examples are included yet.
+None.
 
 ## Visual references
 
-No normative assets are included yet.
+None.
 
 ## Component contract links
 
-No component contract links are asserted in this draft.
+None.
 
 ## Decision log
 
-No design decision has approved this record yet.
+None.
 
 ## Open questions
 
