@@ -1866,11 +1866,9 @@ function clausesOf(q, partWords) {
   // a list of the part's variants or states before its noun names the part
   // once for each ("primary buttons and secondary buttons …"), so every
   // reader below sees each one.
-  // The ask said after the noun ("… buttons blue and cards red") goes with
-  // each item, so a list followed by another ask is still one ask per item.
   const named = q.replace(
-    /\b([a-z]+(?:\s*,\s*[a-z]+)*\s*,?\s+(?:and|or)\s+[a-z]+)\s+([a-z][a-z-]*)\b([^,;.]*?)(?=\s+(?:and|but|or|then|plus)\s+|[,;.]|$)/gi,
-    (m, list, noun, tail) => {
+    /\b([a-z]+(?:\s*,\s*[a-z]+)*\s*,?\s+(?:and|or)\s+[a-z]+)\s+([a-z][a-z-]*)\b/gi,
+    (m, list, noun) => {
       const words = String(list)
         .split(/\s*,\s*(?:(?:and|or)\s+)?|\s+(?:and|or)\s+/)
         .map(w => w.trim().toLowerCase())
@@ -1880,7 +1878,7 @@ function clausesOf(q, partWords) {
         stateWord(w) != null ||
         partWords.some(([re, x]) => x.when && re.test(` ${w} ${noun} `));
       return isNoun && words.length > 1 && words.every(modifies)
-        ? words.map(w => `${w} ${noun}${tail}`).join(' and ')
+        ? words.map(w => `${w} ${noun}`).join(' and ')
         : m;
     },
   );

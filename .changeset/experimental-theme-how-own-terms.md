@@ -4,11 +4,11 @@
 
 [experimental] `astryx experimental theme editor how` reads more questions through its shared readers:
 
-- **Lists:** a list of variants or states names each one: "primary, secondary and ghost buttons", "hovered and pressed buttons", in an except list too. "except disabled buttons" keeps that state. An except covers the whole ask before it. A prohibition said before the ask ("never round the inputs; make everything rounder") is read the same as one said after it.
+- **Lists:** a list of variants or states before a single ask names each one for that ask: "primary, secondary and ghost buttons rounder", "hovered and pressed buttons orange", in an except list too. "except disabled buttons" keeps that state. An except covers the whole ask before it. A prohibition said before the ask ("never round the inputs; make everything rounder", "don't make cards rounder, make everything rounder") is read the same as one said after it.
 - **One-mode shadows:**
   - A one-mode shadow on a part reads the shared shadows to their layers.
   - It refuses with the true reason when the other mode is unknown, or when nothing of the part's own is there to remove.
-  - A resting shadow is not offered on a part that draws its hover and focus rings in its box-shadow.
+- **Ringed parts:** a resting shadow, or its removal, is not offered on a part that draws its hover and focus rings in its box-shadow, in either mode.
 - **One-mode lines:** a line the part already draws (a border, one side of it, an outline) takes its color by mode. When `set --mode` refuses such a line, it now names working steps instead of ones that repaint the other mode.
 - **Accent colors:** on a theme whose modes show a color in different hues, or that shows only dark mode, a lighter, darker, warmer or cooler accent moves each mode's colors from their own values.
 - **Swaps:** swapping two role colors also swaps their text, icon, wash and label colors in every mode.
