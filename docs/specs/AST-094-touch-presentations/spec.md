@@ -1092,8 +1092,9 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   past its new last page, or when the settle began before the viewport had a
   width. The row lands on its target at once.
 - FR16 gap: on a blocked main thread, a recognizer keeps its outcome, but it
-  reports it later. A deadline that runs late waits 50 ms or more for input
-  still queued, so ContextMenu's menu can show that much later.
+  reports it later. While the latest contact is a finger or a pen, a deadline
+  that runs late waits 50 ms or more for input still queued. So ContextMenu's
+  menu can show that much later.
 - One wait: the arena holds a late deadline for input still queued, for every
   recognizer (FR16). Each touch carries the samples of the input that moved it
   at the times they came with (`inputSamples`). The host begins a late finger
