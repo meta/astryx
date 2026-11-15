@@ -967,7 +967,11 @@ export async function withOtherCommandHint(
     if (!hint) return error;
     const declared =
       hint.tier === MATCH_TIER.keyword
-        ? await declaredNames(error.suggestions ?? [], coreDir)
+        ? await declaredNames(
+            error.suggestions ?? [],
+            coreDir,
+            loadedIntegrations,
+          )
         : new Map();
     return new AstryxError(
       error.message,
@@ -983,18 +987,32 @@ export async function withOtherCommandHint(
 }
 
 /**
- * The keywords and synonyms each suggested Core component declares: its
- * doc's `keywords` and its search card's `synonyms`.
+ * The keywords and synonyms each suggested component declares: a Core
+ * component's doc `keywords` and search card `synonyms`, or the `keywords` of
+ * an integration component's match view (the first integration that has the
+ * name, as the suggestions read it). A name Core has keeps Core's doc.
  * @param {Array<{name: string}>} suggestions
  * @param {string} coreDir
+ * @param {import('../../foundation/integrations/integrations.mjs').LoadedIntegration[]} loadedIntegrations
  * @returns {Promise<Map<string, string[]>>}
  */
-async function declaredNames(suggestions, coreDir) {
+async function declaredNames(suggestions, coreDir, loadedIntegrations) {
   const {readDocView} = await import('../../foundation/doc-compiler/read.mjs');
+  /** @type {Map<string, {keywords?: unknown} | null> | undefined} */
+  let integrationViews;
   /** @type {Map<string, string[]>} */
   const declared = new Map();
   for (const {name} of suggestions) {
     const docPath = findComponentReadme(coreDir, name);
+    if (!docPath && !integrationViews) {
+      integrationViews = new Map();
+      const views = await Promise.all(
+        loadedIntegrations.map(integrationComponentViews),
+      );
+      for (const {name: other, view} of views.flat()) {
+        if (!integrationViews.has(other)) integrationViews.set(other, view);
+      }
+    }
     /** @type {{keywords?: unknown} | null} */
     const doc = docPath
       ? await readDocView(docPath, {
@@ -1002,7 +1020,7 @@ async function declaredNames(suggestions, coreDir) {
           loader: 'native',
           exports: ['docs'],
         }).catch(() => null)
-      : null;
+      : (integrationViews?.get(name) ?? null);
     const keywords = Array.isArray(doc?.keywords) ? doc.keywords : [];
     declared.set(name, [
       ...keywords.filter(keyword => typeof keyword === 'string'),

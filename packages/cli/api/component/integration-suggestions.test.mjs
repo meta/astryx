@@ -68,6 +68,9 @@ function scaffold() {
   writeComponent(components, 'ZorbletField', {
     keywords: ['text input', 'number'],
   });
+  writeComponent(components, 'ZorbletCopier', {
+    keywords: ['copy button'],
+  });
   writeComponent(components, 'AcmeGadgetPanel', {
     usage: {description: 'A panel of gadgets.'},
   });
@@ -139,6 +142,18 @@ describe('suggestions for an unknown component name', () => {
         expect((await suggested(typo))[0]).toBe('TextInput');
       }
       expect((await suggested('number-inpu'))[0]).toBe('NumberInput');
+    },
+    SLOW,
+  );
+
+  it(
+    'place a hook keyword hint after an integration component that declares the same keyword',
+    async () => {
+      const names = await suggested('copy button');
+      const component = names.indexOf('ZorbletCopier');
+      const hook = names.findIndex(n => n.startsWith('astryx hook '));
+      expect(component).toBeGreaterThanOrEqual(0);
+      expect(hook).toBeGreaterThan(component);
     },
     SLOW,
   );
