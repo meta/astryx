@@ -27,7 +27,6 @@ InputGroupInternalContext InputGroupInternalContext InputGroup/InputGroup.doc.mj
 InternationalizationContext InternationalizationContext i18n/InternationalizationProvider.doc.mjs i18n/InternationalizationContext.ts
 ItemDescriptionContext ItemDescriptionContext Item/Item.doc.mjs Item/ItemDescriptionContext.tsx
 ItemMarkerColumnsContext ItemMarkerColumnsContext Item/Item.doc.mjs Item/ItemMarkerColumnsContext.tsx
-ItemSwipeLayer ItemSwipeLayer Item/Item.doc.mjs Item/ItemSwipeLayer.tsx
 LayerContext LayerContext Layer/Layer.doc.mjs Layer/LayerContext.ts
 LayerDepthContext LayerDepthContext Layer/Layer.doc.mjs Layer/LayerDepthContext.tsx
 LayerProvider LayerProvider Layer/Layer.doc.mjs Layer/LayerProvider.tsx
@@ -111,7 +110,7 @@ dataTokens dataTokens theme/MediaTheme.doc.mjs theme/domainTokens/dataTokens.ts
 dayCellUtils dayCellUtils Calendar/Calendar.doc.mjs Calendar/dayCellUtils.ts
 declarationBoundary declarationBoundary theme/MediaTheme.doc.mjs theme/declarationBoundary.ts
 defaultIcons defaultIcons Icon/Icon.doc.mjs Icon/defaultIcons.tsx
-defineSyntaxTheme defineSyntaxTheme theme/MediaTheme.doc.mjs theme/syntax/defineSyntaxTheme.ts
+defineSyntaxTheme defineSyntaxTheme theme/syntax/useSyntaxTheme.doc.mjs theme/syntax/defineSyntaxTheme.ts
 defineTheme defineTheme theme/MediaTheme.doc.mjs theme/defineTheme.ts
 derivedVarRegistry derivedVarRegistry theme/MediaTheme.doc.mjs theme/derivedVarRegistry.ts
 dockerfile dockerfile CodeBlock/CodeBlock.doc.mjs CodeBlock/languages/dockerfile.ts
@@ -191,7 +190,7 @@ popoverOperations popoverOperations Layer/Layer.doc.mjs Layer/popoverOperations.
 powerSearchSheetUtils powerSearchSheetUtils PowerSearch/PowerSearch.doc.mjs PowerSearch/powerSearchSheetUtils.ts
 powershell powershell CodeBlock/CodeBlock.doc.mjs CodeBlock/languages/powershell.ts
 preserveAnimations preserveAnimations Layer/Layer.doc.mjs Layer/preserveAnimations.ts
-presets presets theme/MediaTheme.doc.mjs theme/syntax/presets.ts
+presets presets theme/syntax/useSyntaxTheme.doc.mjs theme/syntax/presets.ts
 pressGroupContext pressGroupContext hooks/useAnimatedLayout.doc.mjs hooks/pressGroupContext.ts
 protocol protocol Markdown/Markdown.doc.mjs Markdown/plugins/protocol.ts
 publicContext publicContext i18n/InternationalizationProvider.doc.mjs i18n/publicContext.ts
@@ -251,7 +250,7 @@ useCalendarConstraints useCalendarConstraints Calendar/useCalendarConstraints.do
 useCalendarDays useCalendarDays Calendar/useCalendarDays.doc.mjs Calendar/hooks/useCalendarDays.ts
 useCalendarNavigation useCalendarNavigation Calendar/useCalendarNavigation.doc.mjs Calendar/hooks/useCalendarNavigation.ts
 useChatComposerTokens useChatComposerTokens Chat/Chat.doc.mjs Chat/useChatComposerTokens.ts
-useChatDictation useChatDictation Chat/Chat.doc.mjs Chat/useChatDictation.ts
+useChatDictation useChatDictation Chat/useChatDictation.doc.mjs Chat/useChatDictation.ts
 useChatNewMessages useChatNewMessages Chat/Chat.doc.mjs Chat/useChatNewMessages.ts
 useChatPasteAsToken useChatPasteAsToken Chat/Chat.doc.mjs Chat/useChatPasteAsToken.ts
 useChatStreamScroll useChatStreamScroll Chat/Chat.doc.mjs Chat/useChatStreamScroll.ts
@@ -295,7 +294,7 @@ useSettledOpen useSettledOpen hooks/useAnimatedLayout.doc.mjs hooks/useSettledOp
 useSheetGestures useSheetGestures BottomSheet/BottomSheet.doc.mjs BottomSheet/useSheetGestures.ts
 useSliderTouch useSliderTouch Slider/Slider.doc.mjs Slider/useSliderTouch.ts
 useSpeechRecognition useSpeechRecognition Chat/Chat.doc.mjs Chat/useSpeechRecognition.ts
-useSwipeAction useSwipeAction Item/Item.doc.mjs Item/useSwipeAction.ts
+useSwipeAction useSwipeAction Swipe/createSwipe.doc.mjs Swipe/useSwipeAction.ts
 useSwitchTouch useSwitchTouch Switch/Switch.doc.mjs Switch/useSwitchTouch.ts
 useTableCellStyles useTableCellStyles Table/Table.doc.mjs Table/useTableCellStyles.ts
 useTableColumnSettingsState useTableColumnSettingsState Table/plugins/columnSettings/useTableColumnSettingsState.doc.mjs Table/plugins/columnSettings/useTableColumnSettingsState.tsx

@@ -13,7 +13,16 @@ export declare function partitionByDuration(
   files: string[],
   count: number,
   seconds: Record<string, number>,
+  options?: {idle?: Set<string>},
 ): string[][];
+export declare function idleSwizzleSlices(
+  files: string[],
+): Promise<Set<string>>;
+export declare function mergeRecord(
+  current: Record<string, number>,
+  recorded: Record<string, number>,
+  exists?: (file: string) => boolean,
+): Record<string, number>;
 export declare function readDurations(file?: string): Record<string, number>;
 export declare function recordDurations(text: string): Record<string, number>;
 declare const DurationShardSequencer: typeof BaseSequencer;

@@ -34,7 +34,7 @@ import React, {useCallback, type ComponentType, type SVGProps} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
-import {useThemeName} from '../theme/useTheme';
+import {useThemeDefinition} from '../theme/useTheme';
 import {resolveIcon} from './globalIconRegistry';
 import type {IconName, NamespacedIconName} from './globalIconRegistry';
 import type {IconVariant} from './index';
@@ -410,8 +410,8 @@ function IconFromRegistry({
   svgRef?: React.Ref<SVGSVGElement>;
   spanProps?: Omit<SVGProps<SVGSVGElement>, 'ref' | 'color'>;
 }) {
-  const themeName = useThemeName();
-  const resolvedIcon = resolveIcon(name, themeName, {size, variant});
+  const theme = useThemeDefinition();
+  const resolvedIcon = resolveIcon(name, theme, {size, variant});
   // The glyph can change while the span stays. Attach the ref again when it
   // does.
   const attachSvgRef = useCallback(
@@ -420,7 +420,7 @@ function IconFromRegistry({
         ? undefined
         : mergeRefs(svgRef)(span?.querySelector('svg') ?? null),
     // eslint-disable-next-line @eslint-react/exhaustive-deps -- resolveIcon's inputs: a new glyph gets a new attach, and a function entry's new element each render does not.
-    [svgRef, name, themeName, size, variant],
+    [svgRef, name, theme, size, variant],
   );
 
   if (resolvedIcon == null) {

@@ -20,6 +20,7 @@ import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import nodeModule from 'node:module';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
@@ -52,6 +53,12 @@ vi.mock('@astryxdesign/core/theme', async importActual => {
 });
 
 vi.setConfig({testTimeout: 30000});
+
+// Node runs module hooks in the loading thread from 22.15. On an older Node
+// the CLI supports (its oldest is 22.13), a stylesheet that a base theme's
+// module imports from another folder fails the load, as a case below shows.
+const hasModuleHooks =
+  typeof (/** @type {any} */ (nodeModule).registerHooks) === 'function';
 
 let tmpDir;
 beforeEach(() => {
@@ -1168,6 +1175,141 @@ describe('themeBuild() — extends', () => {
     const css = fs.readFileSync(path.join(extDir, 'ext-plain.css'), 'utf8');
     expect(css).toContain('--radius-element: 6px;');
     expect(css).toContain('.astryx-switch {');
+  });
+
+  describe('a base theme module that imports its own stylesheet', () => {
+    // Valid JavaScript, so a stylesheet that ran would leave this mark.
+    const STYLESHEET_RAN = '__astryxBaseThemeStylesheetRan';
+    afterEach(() => {
+      Reflect.deleteProperty(globalThis, STYLESHEET_RAN);
+    });
+
+    /**
+     * A package whose `./themes/<slug>` entry imports the theme's stylesheet
+     * from another folder and re-exports the theme object.
+     * @param {string} root the folder whose node_modules holds the package
+     * @param {string} [stylesheet] the stylesheet import the entry writes
+     */
+    function writeStyledBase(root, stylesheet = '../Theme/brand.css') {
+      const pkg = path.join(root, 'node_modules', '@acme', 'brand');
+      fs.mkdirSync(path.join(pkg, 'dist', 'themes'), {recursive: true});
+      fs.mkdirSync(path.join(pkg, 'dist', 'Theme'), {recursive: true});
+      fs.writeFileSync(
+        path.join(pkg, 'package.json'),
+        JSON.stringify({
+          name: '@acme/brand',
+          type: 'module',
+          exports: {
+            './themes/brand': './dist/themes/brand.mjs',
+            './themes/brand.css': './dist/Theme/brand.css',
+          },
+        }),
+      );
+      fs.writeFileSync(
+        path.join(pkg, 'dist', 'Theme', 'brand.css'),
+        `globalThis.${STYLESHEET_RAN} = true;\n`,
+      );
+      fs.writeFileSync(
+        path.join(pkg, 'dist', 'Theme', 'brand-theme.mjs'),
+        BASE_SOURCE,
+      );
+      fs.writeFileSync(
+        path.join(pkg, 'dist', 'themes', 'brand.mjs'),
+        `import '${stylesheet}';\nexport {brandTheme} from '../Theme/brand-theme.mjs';\n`,
+      );
+    }
+
+    const STYLED_CHILD_SOURCE = `import {defineTheme} from '@astryxdesign/core/theme';
+    import {brandTheme} from '@acme/brand/themes/brand';
+    export const styledChildTheme = defineTheme({
+      name: 'styled-child',
+      extends: brandTheme,
+      tokens: {'--color-accent': '#ff0000'},
+    });\n`;
+
+    /** @param {string} dir */
+    function expectBaseInherited(dir) {
+      const css = fs.readFileSync(path.join(dir, 'styled-child.css'), 'utf8');
+      expect(css).toContain('--radius-element: 6px;');
+      expect(css).toContain('.astryx-switch {');
+      expect(css).toContain('--color-accent: #ff0000;');
+      expect(Reflect.get(globalThis, STYLESHEET_RAN)).toBeUndefined();
+    }
+
+    it.skipIf(!hasModuleHooks)(
+      'builds and checks the child, without running the stylesheet',
+      async () => {
+        writeStyledBase(extDir);
+        fs.writeFileSync(
+          path.join(extDir, 'styled-child.mjs'),
+          STYLED_CHILD_SOURCE,
+        );
+
+        await themeBuild('styled-child.mjs', {}, {cwd: extDir});
+        expectBaseInherited(extDir);
+
+        const check = await themeBuild(
+          'styled-child.mjs',
+          {check: true},
+          {cwd: extDir},
+        );
+        expect(check?.data.upToDate).toBe(true);
+      },
+    );
+
+    it.skipIf(!hasModuleHooks)(
+      "builds the child in a folder with no Core, on the CLI's Core",
+      async () => {
+        // No Core beside the theme: the build hands the theme the CLI's Core
+        // and loads it through the synchronous path.
+        const bare = fs.realpathSync(
+          fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-styled-base-')),
+        );
+        try {
+          fs.writeFileSync(
+            path.join(bare, 'package.json'),
+            '{"type": "module"}\n',
+          );
+          writeStyledBase(bare);
+          fs.writeFileSync(
+            path.join(bare, 'styled-child.mjs'),
+            STYLED_CHILD_SOURCE,
+          );
+
+          await themeBuild('styled-child.mjs', {}, {cwd: bare});
+          expectBaseInherited(bare);
+        } finally {
+          fs.rmSync(bare, {recursive: true, force: true});
+        }
+      },
+    );
+
+    it('still fails on a stylesheet that the base module imports and that is missing', async () => {
+      writeStyledBase(extDir, '../Theme/missing.css');
+      fs.writeFileSync(
+        path.join(extDir, 'styled-child.mjs'),
+        STYLED_CHILD_SOURCE,
+      );
+
+      await expect(
+        themeBuild('styled-child.mjs', {}, {cwd: extDir}),
+      ).rejects.toThrow(/missing\.css/);
+    });
+
+    it.skipIf(hasModuleHooks)(
+      'fails on a Node without module hooks, naming the stylesheet',
+      async () => {
+        writeStyledBase(extDir);
+        fs.writeFileSync(
+          path.join(extDir, 'styled-child.mjs'),
+          STYLED_CHILD_SOURCE,
+        );
+
+        await expect(
+          themeBuild('styled-child.mjs', {}, {cwd: extDir}),
+        ).rejects.toThrow(/Unknown file extension "\.css".*brand\.css/);
+      },
+    );
   });
 
   it('fails loudly when the base import resolved to nothing', async () => {

@@ -46,6 +46,7 @@ export const docs = {
           ['motion', 'Every --duration-* token, --ease-entrance and --ease-move (tempo also times the touch springs)', 'tempo? (0.75–1.5), character? (crisp|standard|expressive); and/or a duration scale: fast (ms), medium (ms), ratio, slow?, easing?. The scale wins over tempo for the durations it sets, and explicit tokens win over both. Fixed whatever the knobs say: drags and momentum, rubber band, keyboard, press onset/cancel/flash, hover intent, gesture thresholds, Spinner/Skeleton loops, the 200 ms Reduce Motion cap. See {@link generic:motion}.'],
         ]},
         {type: 'prose', text: 'For dark mode tuples in token values, see the Dark mode section of {@link generic:use-a-theme}.'},
+        {type: 'prose', text: "A theme with one color mode exports `colorModes` beside it: `export const colorModes = ['light'];` (or `['dark']`). `theme build` copies the export into the built module, and `theme add` reads it so the app wires the theme in that mode. A theme with both modes exports none. Any other value is ignored without a warning, and a `--family` build never writes the export."},
       ],
     },
     {

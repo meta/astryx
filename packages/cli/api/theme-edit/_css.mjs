@@ -235,6 +235,17 @@ export function matchType(type, value) {
  */
 function matchWith(value, match) {
   const {lexer, parse} = csstree();
+  // A color function holding a variable (color-mix(…, var(--x))) is a
+  // color whatever the variable holds: it is matched as one, so a value
+  // with many of them is read like the same value with plain colors.
+  for (let i = 0; i < 4; i++) {
+    const next = value.replace(
+      /\b(?:color-mix|light-dark|rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\)/gi,
+      m => (/\bvar\(/i.test(m) ? 'red' : m),
+    );
+    if (next === value) break;
+    value = next;
+  }
   const vars =
     value.match(/(?:var|env)\([^()]*(?:\([^()]*\)[^()]*)*\)/gi) ?? [];
   /** @param {string} v */
@@ -263,7 +274,16 @@ function matchWith(value, match) {
       return null;
     }
   }
-  if (vars.length > 3) return null;
+  // Many variables: each stands for the same kind of value at once.
+  if (vars.length > 3) {
+    for (const stand of VAR_STANDS_FOR) {
+      let v = value;
+      for (const x of vars) v = v.replace(x, stand);
+      const ast = tryOne(v);
+      if (ast) return ast;
+    }
+    return null;
+  }
   /** @param {string} v @param {number} i @returns {any | null} */
   const fill = (v, i) => {
     if (i === vars.length) return tryOne(v);
@@ -786,6 +806,31 @@ export function splitTop(v, sep) {
   }
   if (cur.trim() || sep === ',') out.push(cur);
   return out.filter(x => sep === ',' || x.trim());
+}
+
+/**
+ * Several values of one kind (`-4px -8px`, `1.5 2`, `var(--a) var(--b)`):
+ * the items, split as CSS splits them, and their kind (a number's unit, ''
+ * for a bare number, `var` for a var()), when every item is of the first
+ * one's kind; null otherwise (`all 200`). The one reading of "several
+ * values of one kind" that a repair offers the first of and the repair
+ * gate allows.
+ * @param {string} v
+ * @returns {{items: string[], kind: string} | null}
+ */
+export function sameKindValues(v) {
+  const items = splitTop(String(v).trim(), ' ');
+  /** @param {string} x */
+  const kind = x =>
+    /^var\(/i.test(x)
+      ? 'var'
+      : (/^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?([a-z%]*)$/i
+          .exec(x)?.[1]
+          ?.toLowerCase() ?? null);
+  const first = kind(items[0] ?? '');
+  if (items.length < 2 || first === null || items.some(x => kind(x) !== first))
+    return null;
+  return {items, kind: first};
 }
 
 /** The longhand each type of the `font` grammar sets, where css-tree names a type, not a property. */

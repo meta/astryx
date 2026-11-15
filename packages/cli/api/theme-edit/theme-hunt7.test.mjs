@@ -273,7 +273,8 @@ describe('dials and part properties (final 3)', () => {
           }),
         )
       ).run[0],
-    ).toMatch(/--on button --when size:sm$/);
+      // Nothing near banana: how, never a stock rung.
+    ).toMatch(/ how corners$/);
     fs.rmSync(path.join(cwd, 'themes/l5'), {recursive: true, force: true});
   }, 240_000);
 
@@ -319,8 +320,10 @@ describe('review on #11303', () => {
     await themeEditNew('sg', {cwd});
     await themeEditSet('sg', 'spacing', 'tight', {cwd, on: 'card'});
     await themeEditSet('sg', 'spacing', 'spacious', {cwd, on: 'containers'});
-    const r = await themeEditSet('sg', 'spacing', 'more', {cwd, on: 'card'});
-    expect(r.data.setting.value).toBe('spacious');
+    // A step from spacious (the group's value) goes down to roomy; up from
+    // the largest step is refused.
+    const r = await themeEditSet('sg', 'spacing', 'less', {cwd, on: 'card'});
+    expect(r.data.setting.value).toBe('roomy');
     fs.rmSync(path.join(cwd, 'themes/sg'), {recursive: true, force: true});
   }, 240_000);
 

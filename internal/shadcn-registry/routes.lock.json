@@ -3762,6 +3762,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-chat-dictation-voice-input",
+      "path": "examples/use-chat-dictation/voice-input",
+      "aliases": []
+    },
+    {
       "name": "example-use-clickable-container-clickable-project-card",
       "path": "examples/use-clickable-container/clickable-project-card",
       "aliases": []
@@ -3962,6 +3967,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-syntax-theme-keyword-color",
+      "path": "examples/use-syntax-theme/keyword-color",
+      "aliases": []
+    },
+    {
       "name": "example-use-table-column-resize-draggable-columns",
       "path": "examples/use-table-column-resize/draggable-columns",
       "aliases": []
@@ -4112,6 +4122,11 @@
       "aliases": []
     },
     {
+      "name": "hook-create-swipe",
+      "path": "hooks/create-swipe",
+      "aliases": []
+    },
+    {
       "name": "hook-use-animated-layout",
       "path": "hooks/use-animated-layout",
       "aliases": []
@@ -4144,6 +4159,11 @@
     {
       "name": "hook-use-calendar-navigation",
       "path": "hooks/use-calendar-navigation",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-chat-dictation",
+      "path": "hooks/use-chat-dictation",
       "aliases": []
     },
     {
@@ -4384,6 +4404,11 @@
     {
       "name": "hook-use-streaming-text",
       "path": "hooks/use-streaming-text",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-syntax-theme",
+      "path": "hooks/use-syntax-theme",
       "aliases": []
     },
     {

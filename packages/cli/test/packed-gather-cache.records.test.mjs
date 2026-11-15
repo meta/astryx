@@ -3,7 +3,9 @@
 /**
  * A published CLI keeps the catalog `search` and `build` gather between runs
  * (foundation/fs/gather-cache.mjs) and uses it only while nothing it read has
- * changed: a kept catalog keeps search, build and doctor records, and gathers fresh on a Node without module hooks.
+ * changed. This file: a kept catalog keeps search, build and doctor records, and
+ * gathers fresh on a Node without module hooks; packed-gather-cache.discovery
+ * covers the component list, template discovery, themes and docs.
  * Each case's answer from a kept catalog must equal a fresh gather's.
  */
 
@@ -25,14 +27,12 @@ import {
   CACHE_NAME,
   keptTmp,
   freshTmp,
-  doctorEntries,
   issuesEntries,
   derivedEntries,
   entries,
-  templatesEntries,
-  themeEntries,
   QUERIES,
   hasModuleHooks,
+  readKept,
 } from '../test-utils/packed-gather-cache-fixture.mjs';
 
 usePackedCli();
@@ -50,6 +50,14 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     const plain = row().message;
     expect(plain).toContain(path.join(tmp, CACHE_NAME));
     expect(plain).not.toContain("Plug'n'Play");
+    // Every kind of entry the folder holds is named, the docs not-found
+    // hint's name summaries (kept-tree.mjs) and the CLI's own docs tree
+    // (the docs adapter) included.
+    expect(plain).toContain("the docs not-found hint's name summaries");
+    expect(plain).toContain("the CLI's own docs tree");
+    // The bound on the folder, and on jiti's folder beside it.
+    expect(plain).toContain('at most 64 MB');
+    expect(plain).toContain(path.join(tmp, 'astryx', 'jiti'));
     const pnp = path.join(work, 'as-pnp.cjs');
     fs.writeFileSync(pnp, "process.versions.pnp = '3';\n");
     const underPnp = row({NODE_OPTIONS: `--require ${pnp}`}).message;
@@ -136,7 +144,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
       for (const name of files) {
         const text = fs.readFileSync(path.join(dir, name), 'utf8');
         expect(text, name).not.toContain(secret);
-        for (const [, state] of JSON.parse(text).env ?? []) {
+        for (const [, state] of readKept(path.join(dir, name)).env ?? []) {
           states += 1;
           expect(state === null || /^[0-9a-f]{32}$/.test(state), name).toBe(
             true,
@@ -355,62 +363,6 @@ Module._resolveFilename = function (request, parent, isMain, options) {
     120_000,
   );
 
-  it.skipIf(!hasModuleHooks)(
-    "keeps doctor's docs checks, and a broken link shows on the very next run",
-    () => {
-      const tmp = keptTmp('doctor-docs');
-      const other = makeProject();
-      try {
-        fs.writeFileSync(
-          path.join(other.widgets, 'astryx.integration.mjs'),
-          `export default { docs: './docs' };\n`,
-        );
-        fs.mkdirSync(path.join(other.widgets, 'docs'));
-        // The link lives in a module the doc imports, so an edit to that module
-        // alone must show too.
-        const target = path.join(other.widgets, 'docs', 'target.mjs');
-        const link = (/** @type {string} */ to) =>
-          fs.writeFileSync(target, `export const target = '${to}';\n`);
-        link('quick-start');
-        fs.writeFileSync(
-          path.join(other.widgets, 'docs', 'deploying.doc.mjs'),
-          `import {target} from './target.mjs';\nexport const docs = {type: 'generic', name: 'deploying', title: 'Deploying', description: 'How to deploy.', sections: [{title: 'Overview', content: [{type: 'prose', text: 'Ship it, then see {@link generic:' + target + '}.'}]}]};\n`,
-        );
-        const tree = (/** @type {{stdout: string}} */ r) =>
-          JSON.parse(r.stdout).data.checks.find(
-            (/** @type {{id: string}} */ c) => c.id === 'docs-tree',
-          );
-        const doctor = (/** @type {string} */ at) =>
-          tree(run(['doctor'], {tmp: at, cwd: other.dir}));
-        const fresh = doctor(freshTmp());
-        expect(doctor(tmp)).toEqual(fresh);
-        const kept = doctorEntries(tmp);
-        expect([...kept.keys()].sort()).toEqual([
-          'cli-docs',
-          'docs-progressive-disclosure',
-          'docs-tree',
-        ]);
-        // Read back, not checked again: the same three files.
-        expect(doctor(tmp)).toEqual(fresh);
-        expect(doctorEntries(tmp)).toEqual(kept);
-        // Broken by an edit to the imported module alone: the very next doctor
-        // reports it, as a fresh one does, and checks the docs tree again.
-        link('no-such-topic');
-        const broken = doctor(tmp);
-        expect(JSON.stringify(broken)).toContain('no-such-topic');
-        expect(broken).toEqual(doctor(freshTmp()));
-        const after = doctorEntries(tmp);
-        expect(after.get('docs-tree')).not.toBe(kept.get('docs-tree'));
-        // Fixed: the next doctor no longer reports it.
-        link('quick-start');
-        expect(doctor(tmp)).toEqual(fresh);
-      } finally {
-        fs.rmSync(other.dir, {recursive: true, force: true});
-      }
-    },
-    180_000,
-  );
-
   it('leaves a missing cache folder missing when doctor runs', () => {
     const tmp = freshTmp();
     run(['doctor'], {tmp});
@@ -591,94 +543,6 @@ Module._resolveFilename = function (request, parent, isMain, options) {
     120_000,
   );
 
-  it('keeps template discovery, and discovers again after a template edit', async () => {
-    const tmp = keptTmp('templates');
-    const other = makeProject();
-    try {
-      const templates = path.join(other.widgets, 'templates');
-      fs.mkdirSync(templates, {recursive: true});
-      const doc = path.join(templates, 'tally.doc.mjs');
-      const write = (/** @type {string} */ description) =>
-        fs.writeFileSync(
-          doc,
-          `export default {type: 'page', name: 'tally', description: '${description}', category: 'Widget - Tally'};\n`,
-        );
-      write('Running totals, tallied by team.');
-      fs.writeFileSync(
-        path.join(templates, 'tally.tsx'),
-        `export default function Page() { return null; }\n`,
-      );
-      const ask = ['template', '--list'];
-      const fresh = run(ask, {tmp: freshTmp(), cwd: other.dir, json: false});
-      expect(run(ask, {tmp, cwd: other.dir, json: false})).toEqual(fresh);
-      const kept = templatesEntries(tmp);
-      expect(kept.size).toBe(1);
-      // Read back, not discovered again: the same file, and the same answer.
-      expect(run(ask, {tmp, cwd: other.dir, json: false})).toEqual(fresh);
-      expect(templatesEntries(tmp)).toEqual(kept);
-      write('Grand totals, tallied by week.');
-      const [again, edited] = await Promise.all([
-        runAsync(ask, {tmp, cwd: other.dir, json: false}),
-        runAsync(ask, {tmp: freshTmp(), cwd: other.dir, json: false}),
-      ]);
-      expect(edited.stdout).toContain('Grand totals');
-      expect(again).toEqual(edited);
-    } finally {
-      fs.rmSync(other.dir, {recursive: true, force: true});
-    }
-  }, 120_000);
-
-  it('keeps template records apart for two copies of one build, outside a project', () => {
-    const tmp = keptTmp('two-copies');
-    // A second copy of the same build, in an install of its own, and an
-    // integration beside the first copy only.
-    const second = path.join(
-      work,
-      'install-2',
-      'node_modules',
-      '@astryxdesign',
-      'cli',
-    );
-    fs.cpSync(packed, second, {recursive: true, verbatimSymlinks: true});
-    const beside = path.join(work, 'install', 'node_modules', '@acme', 'tally');
-    const outside = fs.mkdtempSync(path.join(work, 'outside-'));
-    try {
-      fs.mkdirSync(path.join(beside, 'templates'), {recursive: true});
-      fs.writeFileSync(
-        path.join(beside, 'package.json'),
-        JSON.stringify({name: '@acme/tally', version: '1.0.0'}),
-      );
-      fs.writeFileSync(
-        path.join(beside, 'astryx.integration.mjs'),
-        `export default { templates: './templates' };\n`,
-      );
-      fs.writeFileSync(
-        path.join(beside, 'templates', 'zqledger.doc.mjs'),
-        `export default {type: 'page', name: 'zqledger', description: 'Running totals, tallied by team.', category: 'Widget - Tally'};\n`,
-      );
-      fs.writeFileSync(
-        path.join(beside, 'templates', 'zqledger.tsx'),
-        `export default function Page() { return null; }\n`,
-      );
-      const ask = ['template', '--list'];
-      const first = run(ask, {tmp: freshTmp(), cwd: outside});
-      const other = run(ask, {tmp: freshTmp(), cwd: outside, cli: second});
-      // Only the first copy sees the integration beside it.
-      expect(first.stdout).toContain('zqledger');
-      expect(other.stdout).not.toContain('zqledger');
-      run(ask, {tmp, cwd: outside, json: false});
-      run(ask, {tmp, cwd: outside, json: false});
-      // The first copy kept its template records.
-      expect(templatesEntries(tmp).size).toBe(1);
-      expect(run(ask, {tmp, cwd: outside, cli: second})).toEqual(other);
-      expect(run(ask, {tmp, cwd: outside})).toEqual(first);
-    } finally {
-      fs.rmSync(beside, {recursive: true, force: true});
-      fs.rmSync(path.join(work, 'install-2'), {recursive: true, force: true});
-      fs.rmSync(outside, {recursive: true, force: true});
-    }
-  }, 120_000);
-
   it('reports an installed dependency whose manifest fails to load as its issue', () => {
     const tmp = keptTmp('unloadable');
     const other = makeProject();
@@ -763,158 +627,6 @@ Module._resolveFilename = function (request, parent, isMain, options) {
     } finally {
       fs.rmSync(other.dir, {recursive: true, force: true});
     }
-  }, 120_000);
-
-  it("keeps an integration's themes, and finds an edit to a theme or a module it imports", () => {
-    const tmp = keptTmp('themes');
-    const other = makeProject();
-    try {
-      fs.writeFileSync(
-        path.join(other.widgets, 'astryx.integration.mjs'),
-        `export default { themes: './themes' };\n`,
-      );
-      // A package that ships the theme's built files as its exports.
-      const version = JSON.parse(
-        fs.readFileSync(
-          path.join(REPO_ROOT, 'packages', 'cli', 'package.json'),
-          'utf8',
-        ),
-      ).version;
-      fs.writeFileSync(
-        path.join(other.widgets, 'package.json'),
-        JSON.stringify({
-          name: '@acme/widgets',
-          version: '1.0.0',
-          type: 'module',
-          peerDependencies: {'@astryxdesign/core': `^${version}`},
-          exports: {
-            './themes/tally': './dist/tally.js',
-            './themes/tally.css': './dist/tally.css',
-          },
-        }),
-      );
-      fs.mkdirSync(path.join(other.widgets, 'dist'));
-      fs.writeFileSync(
-        path.join(other.widgets, 'dist', 'tally.js'),
-        "export const tallyTheme = {name: 'tally', tokens: {}};\n",
-      );
-      fs.writeFileSync(
-        path.join(other.widgets, 'dist', 'tally.css'),
-        '[data-astryx-theme="tally"] { --color-text: black; }\n',
-      );
-      const theme = path.join(other.widgets, 'themes', 'tally');
-      fs.mkdirSync(theme, {recursive: true});
-      const describe = (/** @type {string} */ text) =>
-        fs.writeFileSync(
-          path.join(theme, 'tallyTheme.doc.mjs'),
-          `/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {type: 'theme', name: 'tally', displayName: 'Tally', description: '${text}', maintained: true};\n`,
-        );
-      describe('Tally theme for ledgers.');
-      fs.writeFileSync(
-        path.join(theme, 'tallyTheme.ts'),
-        "import {tokens} from './tokens';\nexport const tallyTheme = {name: 'tally', tokens};\n",
-      );
-      const tokens = (/** @type {string} */ source) =>
-        fs.writeFileSync(path.join(theme, 'tokens.ts'), source);
-      tokens('export const tokens = {};\n');
-      const ask = ['theme', 'list'];
-      const fresh = () => run(ask, {tmp: freshTmp(), cwd: other.dir});
-      const kept = () => run(ask, {tmp, cwd: other.dir});
-      const first = fresh();
-      expect(first.stdout).toContain('Tally theme for ledgers.');
-      expect(kept()).toEqual(first);
-      // The integration's theme records are kept: one entry, read back (the
-      // same file) on the next run.
-      const keptThemes = themeEntries(tmp);
-      expect(keptThemes.size).toBe(1);
-      expect(kept()).toEqual(first);
-      expect(themeEntries(tmp)).toEqual(keptThemes);
-      // An in-place edit to the theme's doc shows on the next run, which
-      // discovers the themes again.
-      describe('Tally theme, edited.');
-      const edited = kept();
-      expect(edited.stdout).toContain('Tally theme, edited.');
-      expect(edited).toEqual(fresh());
-      expect(themeEntries(tmp)).not.toEqual(keptThemes);
-      // So does an edit to a module the theme imports that breaks it.
-      tokens("export {tokens} from './missing';\n");
-      const broken = kept();
-      expect(broken).toEqual(fresh());
-      expect(broken).not.toEqual(edited);
-    } finally {
-      fs.rmSync(other.dir, {recursive: true, force: true});
-    }
-  }, 180_000);
-
-  it('lets docs read the kept checks, and shows a topic edit on the very next call', () => {
-    const tmp = keptTmp('docs');
-    const other = makeProject();
-    try {
-      fs.writeFileSync(
-        path.join(other.widgets, 'astryx.integration.mjs'),
-        `export default { docs: './docs' };\n`,
-      );
-      fs.mkdirSync(path.join(other.widgets, 'docs'));
-      const topic = (/** @type {string} */ text) =>
-        fs.writeFileSync(
-          path.join(other.widgets, 'docs', 'deploying.doc.mjs'),
-          `export const docs = {type: 'generic', name: 'deploying', title: 'Deploying', description: 'How to deploy.', sections: [{title: 'Overview', content: [{type: 'prose', text: '${text}'}]}]};\n`,
-        );
-      topic('Ship it on Tuesdays.');
-      const ask = ['docs', 'deploying'];
-      const first = run(ask, {tmp: freshTmp(), cwd: other.dir});
-      expect(first.stdout).toContain('Ship it on Tuesdays.');
-      expect(run(ask, {tmp, cwd: other.dir})).toEqual(first);
-      // docs keeps the integration's check results like the other commands.
-      const kept = issuesEntries(tmp);
-      expect(kept.size).toBeGreaterThan(0);
-      expect(run(ask, {tmp, cwd: other.dir})).toEqual(first);
-      expect(issuesEntries(tmp)).toEqual(kept);
-      // An in-place edit to the topic shows on the very next call.
-      topic('Ship it on Thursdays.');
-      const edited = run(ask, {tmp, cwd: other.dir});
-      expect(edited.stdout).toContain('Ship it on Thursdays.');
-      expect(edited).toEqual(run(ask, {tmp: freshTmp(), cwd: other.dir}));
-    } finally {
-      fs.rmSync(other.dir, {recursive: true, force: true});
-    }
-  }, 180_000);
-
-  it('is skipped silently when its folder cannot be used', () => {
-    fs.mkdirSync(path.join(work, 'tmp'), {recursive: true});
-    const notAFolder = path.join(work, 'tmp', 'file-tmp');
-    fs.writeFileSync(notAFolder, '');
-    // Open to others: refused, as one someone else could have planted.
-    const shared = path.join(work, 'tmp', 'shared');
-    fs.mkdirSync(path.join(shared, CACHE_NAME), {recursive: true});
-    fs.chmodSync(path.join(shared, CACHE_NAME), 0o777);
-    const expected = run(QUERIES[0], {tmp: freshTmp()});
-    expect(run(QUERIES[0], {tmp: shared})).toEqual(expected);
-    expect(entries(shared).size).toBe(0);
-
-    expect(derivedEntries(shared)).toEqual([]);
-    const broken = spawnSync(
-      process.execPath,
-      [
-        path.join(packed, 'clients', 'cli', 'bin', 'astryx.mjs'),
-        ...QUERIES[0],
-        '--json',
-      ],
-      {
-        cwd: project,
-        encoding: 'utf8',
-        env: {
-          ...process.env,
-          TMPDIR: notAFolder,
-          XDG_CACHE_HOME: notAFolder,
-          XDG_CONFIG_HOME: userConfig(),
-          NO_UPDATE_NOTIFIER: '1',
-          NODE_DISABLE_COMPILE_CACHE: '1',
-        },
-      },
-    );
-    expect(broken.status).toBe(0);
-    expect(broken.stdout).toBe(expected.stdout);
   }, 120_000);
 });
 

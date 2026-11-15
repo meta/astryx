@@ -96,6 +96,14 @@ registerEnglishFallback(english);
  */
 const PRESSED_ON: string = '[data-astryx-press="on"]';
 
+/**
+ * The button's own popup is open. A press does not scale it then, so the
+ * popup anchors to the button at rest. A disclosure button, with no popup,
+ * keeps its press.
+ */
+const POPUP_OPEN: string =
+  '[aria-expanded="true"][aria-haspopup]:not([aria-haspopup="false"])';
+
 /** `aria-haspopup` values of a trigger that keeps its own press and opening. */
 const MENU_POPUPS: ReadonlySet<string> = new Set(['true', 'menu', 'listbox']);
 
@@ -142,8 +150,11 @@ const styles = stylex.create({
       default: 'pointer',
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
-    transitionProperty:
-      'background-image, background-color, color, opacity, transform',
+    transitionProperty: {
+      default: 'background-image, background-color, color, opacity, transform',
+      // The press scale goes at once as the popup opens.
+      [POPUP_OPEN]: 'background-image, background-color, color, opacity',
+    },
     transitionDuration: {
       default: durationVars['--duration-fast'],
       '@media (prefers-reduced-motion: reduce)': '0s',
@@ -156,7 +167,7 @@ const styles = stylex.create({
       // A mouse press. Under a coarse pointer `:active` is not a press (it
       // paints on the touch and outlives a scroll), so the touch press model
       // writes `data-astryx-press` instead; see interactionOverlay.stylex.ts.
-      ':active:where(:not(:disabled,[aria-disabled="true"]))': {
+      [`:active:where(:not(:disabled,[aria-disabled="true"],${POPUP_OPEN}))`]: {
         default: 'scale(0.98)',
         '@media (pointer: coarse)': 'scale(1)',
         // Under reduced motion a press never scales the button. The overlay
@@ -166,7 +177,7 @@ const styles = stylex.create({
         '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
           'scale(1)',
       },
-      [PRESSED_ON]: {
+      [`${PRESSED_ON}:not(${POPUP_OPEN})`]: {
         default: 'scale(0.98)',
         '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
           'scale(1)',
@@ -184,7 +195,7 @@ const styles = stylex.create({
   pressableTracked: {
     transform: {
       default: 'scale(1)',
-      [PRESSED_ON]: {
+      [`${PRESSED_ON}:not(${POPUP_OPEN})`]: {
         default: 'scale(0.98)',
         '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
           'scale(1)',

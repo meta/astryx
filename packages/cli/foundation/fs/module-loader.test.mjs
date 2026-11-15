@@ -5,6 +5,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {execFileSync} from 'node:child_process';
+import nodeModule from 'node:module';
 import {pathToFileURL} from 'node:url';
 import {z} from 'zod';
 import {
@@ -13,7 +14,15 @@ import {
   importUserModule,
   loadModuleWithParser,
 } from './module-loader.mjs';
+import {importUrl} from './import-url.mjs';
 import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
+
+// Node runs module hooks in the loading thread from 22.15. On an older Node
+// the CLI supports (its oldest is 22.13), a theme module load matches a
+// stylesheet import by its text, from the theme module's folder, as the
+// fallback case below shows.
+const hasModuleHooks =
+  typeof (/** @type {any} */ (nodeModule).registerHooks) === 'function';
 
 let tmpDir;
 
@@ -451,6 +460,101 @@ describe('importThemeArtifact', () => {
       );
     },
   );
+
+  describe('a stylesheet that a package module imports from its own folder', () => {
+    const packageDir = 'node_modules/@acme/brand';
+
+    /**
+     * A package whose `./themes/<slug>` entry imports a stylesheet by a path
+     * relative to itself, in another folder than the built module that
+     * imports the entry.
+     * @param {string} stylesheet the stylesheet import the entry writes
+     */
+    function writeStyledPackage(stylesheet) {
+      write(
+        `${packageDir}/package.json`,
+        JSON.stringify({
+          name: '@acme/brand',
+          type: 'module',
+          exports: {'./themes/brand': './dist/themes/brand.mjs'},
+        }),
+      );
+      write(
+        `${packageDir}/dist/Theme/brand-theme.mjs`,
+        "export const brandTheme = {name: 'brand'};\n",
+      );
+      write(
+        `${packageDir}/dist/themes/brand.mjs`,
+        `import '${stylesheet}';\nexport {brandTheme} from '../Theme/brand-theme.mjs';\n`,
+      );
+      write(
+        'built.js',
+        "import {brandTheme} from '@acme/brand/themes/brand';\nexport const builtTheme = {name: 'built', base: brandTheme.name};\n",
+      );
+    }
+
+    it.skipIf(!hasModuleHooks)('loads it without running it', async () => {
+      writeStyledPackage('../Theme/brand.css');
+      write(
+        `${packageDir}/dist/Theme/brand.css`,
+        `globalThis.${STYLESHEET_RAN} = true;\n`,
+      );
+
+      const mod = await importThemeArtifact('./built.js', tmpDir);
+
+      expect(mod.builtTheme).toEqual({name: 'built', base: 'brand'});
+      expect(Reflect.get(globalThis, STYLESHEET_RAN)).toBeUndefined();
+    });
+
+    it.skipIf(!hasModuleHooks)(
+      "rejects it when it is missing beside the module, though the path exists from the theme module's folder",
+      async () => {
+        writeStyledPackage('./fonts.css');
+        write('fonts.css', 'body { font-family: serif; }\n');
+
+        await expect(importThemeArtifact('./built.js', tmpDir)).rejects.toThrow(
+          /fonts\.css/,
+        );
+      },
+    );
+
+    it.skipIf(!hasModuleHooks)(
+      'leaves a stylesheet that a module loaded at the same time outside the theme load imports failing',
+      async () => {
+        writeStyledPackage('../Theme/brand.css');
+        write(`${packageDir}/dist/Theme/brand.css`, 'body {}\n');
+        write('elsewhere/package.json', JSON.stringify({type: 'module'}));
+        write('elsewhere/page.css', 'body {}\n');
+        write(
+          'elsewhere/page.js',
+          "import './page.css';\nexport const page = 1;\n",
+        );
+
+        const [theme, outside] = await Promise.allSettled([
+          importThemeArtifact('./built.js', tmpDir),
+          importUrl(pathToFileURL(path.join(tmpDir, 'elsewhere/page.js')).href),
+        ]);
+
+        expect(theme.status).toBe('fulfilled');
+        expect(outside).toMatchObject({
+          status: 'rejected',
+          reason: {code: 'ERR_UNKNOWN_FILE_EXTENSION'},
+        });
+      },
+    );
+
+    it.skipIf(hasModuleHooks)(
+      'fails on a Node without module hooks, naming the stylesheet',
+      async () => {
+        writeStyledPackage('../Theme/brand.css');
+        write(`${packageDir}/dist/Theme/brand.css`, 'body {}\n');
+
+        await expect(importThemeArtifact('./built.js', tmpDir)).rejects.toThrow(
+          /Unknown file extension "\.css".*brand\.css/,
+        );
+      },
+    );
+  });
 });
 
 describe('loadModuleWithParser', () => {

@@ -17,6 +17,10 @@ const broad = {
   RELEASE_BUMP_RESULT: 'skipped',
   TEST_UI_RESULT: 'success',
   TEST_NODE_RESULT: 'success',
+  NODE_BROWSER_CONTRACTS_RESULT: 'success',
+  SWIZZLE_PROOF_SCOPE_RESULT: 'success',
+  SWIZZLE_PROOF_MODE: 'none',
+  SWIZZLE_PROOF_RESULT: 'skipped',
   TEST_BUILD_RESULT: 'success',
   TEST_NATIVE_SWIFT_RESULT: 'success',
   PR_INTERACTION_RESULT: 'success',
@@ -52,6 +56,12 @@ describe('pull-request test join', () => {
     for (const [name, value] of [
       ['TEST_UI_RESULT', 'failure'],
       ['TEST_NODE_RESULT', 'cancelled'],
+      ['NODE_BROWSER_CONTRACTS_RESULT', 'failure'],
+      ['NODE_BROWSER_CONTRACTS_RESULT', 'skipped'],
+      ['NODE_BROWSER_CONTRACTS_RESULT', null],
+      ['SWIZZLE_PROOF_SCOPE_RESULT', 'failure'],
+      ['SWIZZLE_PROOF_SCOPE_RESULT', 'skipped'],
+      ['SWIZZLE_PROOF_SCOPE_RESULT', null],
       ['TEST_BUILD_RESULT', 'skipped'],
       ['TEST_NATIVE_SWIFT_RESULT', 'failure'],
       ['TEST_NATIVE_SWIFT_RESULT', 'skipped'],
@@ -74,6 +84,34 @@ describe('pull-request test join', () => {
       ['PR_A11Y_DEPENDENT_AUDITS_RESULT', null],
     ]) {
       expect(run({[name]: value}), name).toMatchObject({status: 1});
+    }
+  });
+
+  it('requires the swizzle-proof legs exactly when the proof scope proves a target', () => {
+    for (const mode of ['affected', 'all']) {
+      expect(
+        run({SWIZZLE_PROOF_MODE: mode, SWIZZLE_PROOF_RESULT: 'success'}),
+        mode,
+      ).toMatchObject({status: 0});
+      for (const result of ['skipped', 'failure', 'cancelled', null]) {
+        expect(
+          run({SWIZZLE_PROOF_MODE: mode, SWIZZLE_PROOF_RESULT: result}),
+          `${mode} ${result}`,
+        ).toMatchObject({status: 1});
+      }
+    }
+    // A scope that proves no target must not have run the legs.
+    for (const result of ['success', 'failure', 'cancelled', null]) {
+      expect(
+        run({SWIZZLE_PROOF_RESULT: result}),
+        `none ${result}`,
+      ).toMatchObject({status: 1});
+    }
+    // An undecided scope fails closed.
+    for (const mode of ['', 'unknown', null]) {
+      expect(run({SWIZZLE_PROOF_MODE: mode}), `mode ${mode}`).toMatchObject({
+        status: 1,
+      });
     }
   });
 

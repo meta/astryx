@@ -595,7 +595,7 @@ export async function createProgram({argv} = {}) {
 
   program
     .name('astryx')
-    .description('Design system CLI — components, themes, and tooling\n\nMaking or changing a theme? Use the experimental theme editor: astryx experimental theme editor new <name> --like neutral, then editor set / editor how "<what you want>"; after each change look at it with astryx experimental theme editor show <name> --png (writes PNGs, changes nothing in the app): a theme change is not done until you have looked. No app yet: astryx experimental theme preview app <dir>.')
+    .description('Design system CLI — components, themes, and tooling\n\nMaking or changing a theme? Use the experimental theme editor: astryx experimental theme editor new <name> --like neutral, then editor set / editor how "<what you want>"; after each change look at it with astryx experimental theme editor show <name> --png (takes pictures of real components): a theme change is not done until you have looked. No app yet: astryx experimental theme preview app <dir>.')
     .version(pkg.version)
     // These four change only the reads named in their text; every other
     // command ignores them.

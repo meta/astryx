@@ -117,6 +117,9 @@ describe('R21-C: a font property pasted with no value', () => {
     const named = await refusal(() =>
       themeEditSet('b', 'font', 'Brand: Sans', {cwd}),
     );
-    expect(named.message).toContain('holds a colon');
+    // A word before a colon is read as a label the editor does not read
+    // for font: refused, with the value alone offered.
+    expect(named.message).toMatch(/holds a colon|not a name the editor reads/);
+    expect(names(named).join('\n')).not.toMatch(/font 'Brand: Sans'/);
   });
 });
