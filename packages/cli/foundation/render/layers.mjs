@@ -32,7 +32,16 @@ export async function layerDocument() {
   await chartDocument();
   const g = /** @type {any} */ (globalThis);
   const proto = g.window.Element.prototype;
-  const rect = {x: 0, y: 0, top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0};
+  const rect = {
+    x: 0,
+    y: 0,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: 0,
+    height: 0,
+  };
   // A box where it sits: a layer opens only beside an anchor that has one.
   proto.getClientRects = function () {
     return [{...rect, right: 1, bottom: 1, width: 1, height: 1}];
@@ -58,7 +67,8 @@ export async function layerDocument() {
   proto.scrollIntoView = () => {};
   const matches = proto.matches;
   proto.matches = function (/** @type {string} */ selector) {
-    if (String(selector).includes(':popover-open')) return this.__astryxPopoverOpen === true;
+    if (String(selector).includes(':popover-open'))
+      return this.__astryxPopoverOpen === true;
     try {
       return matches.call(this, selector);
     } catch {
@@ -70,7 +80,17 @@ export async function layerDocument() {
   g.document.getAnimations = () => [];
   // The DOM classes a component checks against by name (an `instanceof
   // Element` before it measures), as a browser gives them.
-  for (const name of ['Node', 'Element', 'HTMLElement', 'HTMLInputElement', 'Event', 'CustomEvent', 'KeyboardEvent', 'MouseEvent', 'FocusEvent']) {
+  for (const name of [
+    'Node',
+    'Element',
+    'HTMLElement',
+    'HTMLInputElement',
+    'Event',
+    'CustomEvent',
+    'KeyboardEvent',
+    'MouseEvent',
+    'FocusEvent',
+  ]) {
     if (g.window[name]) g[name] ??= g.window[name];
   }
   for (const name of ['MutationObserver', 'IntersectionObserver']) {
@@ -97,13 +117,36 @@ export async function layerDocument() {
  */
 export async function openLayerMarkup(host, flushSync) {
   const g = /** @type {any} */ (globalThis);
-  const tick = () => new Promise(resolve => setTimeout(resolve, 0));
+  // React finishes an update in tasks of its own: a layer opens in one,
+  // then reads its anchor and renders again in the next. A timer alone can
+  // fire before them on a busy machine, and the markup then holds a state
+  // between two renders. So each read waits until the document, and which
+  // layers are open, stay the same for two turns in a row.
+  const state = () =>
+    g.document.body.innerHTML +
+    [...g.document.querySelectorAll('[data-astryx-layer-root]')]
+      .map((/** @type {any} */ l) => (l.__astryxPopoverOpen ? '1' : '0'))
+      .join('');
+  const turn = () =>
+    new Promise(resolve => setTimeout(() => setImmediate(resolve), 0));
+  const tick = async () => {
+    let last = state();
+    let same = 0;
+    for (let i = 0; i < SETTLE_TURNS && same < 2; i++) {
+      await turn();
+      const now = state();
+      same = now === last ? same + 1 : 0;
+      last = now;
+    }
+  };
   /** @type {Set<string>} */
   const seen = new Set();
   /** @type {string[]} */
   const out = [];
   const keep = () => {
-    for (const layer of g.document.querySelectorAll('[data-astryx-layer-root]')) {
+    for (const layer of g.document.querySelectorAll(
+      '[data-astryx-layer-root]',
+    )) {
       const html = layer.outerHTML;
       if (!seen.has(html)) {
         seen.add(html);
@@ -124,19 +167,35 @@ export async function openLayerMarkup(host, flushSync) {
   };
   await tick();
   keep();
-  const controls = [...host.querySelectorAll('[aria-haspopup][aria-expanded="false"], [role="combobox"][aria-expanded="false"]')];
+  const controls = [
+    ...host.querySelectorAll(
+      '[aria-haspopup][aria-expanded="false"], [role="combobox"][aria-expanded="false"]',
+    ),
+  ];
   for (const control of controls) {
     // A press, up to the event that opens it: a control that opens on
     // pointer down would close again on the click that follows.
-    for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
+    for (const type of [
+      'pointerdown',
+      'mousedown',
+      'pointerup',
+      'mouseup',
+      'click',
+    ]) {
       send(control, type, {button: 0, pointerType: 'mouse', detail: 1});
       if (control.getAttribute('aria-expanded') === 'true') break;
     }
-    if (control.getAttribute('aria-expanded') !== 'true' && control.tagName === 'INPUT') {
+    if (
+      control.getAttribute('aria-expanded') !== 'true' &&
+      control.tagName === 'INPUT'
+    ) {
       // Typed as a person types: through the field's own value setter, so
       // React sees a value it did not set itself and calls the change
       // handler (a typeahead searches).
-      Object.getOwnPropertyDescriptor(Object.getPrototypeOf(control), 'value')?.set?.call(control, 'a');
+      Object.getOwnPropertyDescriptor(
+        Object.getPrototypeOf(control),
+        'value',
+      )?.set?.call(control, 'a');
       send(control, 'input');
     }
     await tick();
@@ -145,11 +204,15 @@ export async function openLayerMarkup(host, flushSync) {
   return out;
 }
 
+/** The most turns a read waits for the document to stop changing. */
+const SETTLE_TURNS = 50;
+
 /** The global the render worker installs for parts a page shows open in place. SYNC: page-worker.mjs assigns it by this name. */
 export const LAYER_GLOBAL = '__astryxRenderLayer';
 
 /** Where a part drawn open goes in the server markup. */
-export const LAYER_PLACEHOLDER = /<astryx-layer data-layer="(\d+)"><\/astryx-layer>/g;
+export const LAYER_PLACEHOLDER =
+  /<astryx-layer data-layer="(\d+)"><\/astryx-layer>/g;
 
 /**
  * The marker for the part at `index`, which the worker replaces with the
