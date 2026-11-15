@@ -529,8 +529,8 @@ they are separately named.
   the slowest files never share a leg and the slowest single file sets the
   floor. In the Node legs, a file with no recorded time counts as the ninetieth
   percentile of the recorded times, and which files run never depends on the
-  times. No pull-request check fails on the recorded times. A scheduled job on
-  `main` keeps them fresh: when fewer than nine in ten of the Node project's
+  times. A missing recorded time never fails a pull-request check. A scheduled
+  job on `main` keeps them fresh: when fewer than nine in ten of the Node project's
   test files have a recorded time, it regenerates the record from the Node legs
   of `main`'s latest successful full unit run and opens one durations-only pull
   request on a fixed branch, or updates the open one. It never pushes to
