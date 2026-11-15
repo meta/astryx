@@ -9,9 +9,16 @@
  * @position packages/cli/api/theme-edit — pure helpers, no environment access
  */
 
-import {DIALS, wordTable} from './_tables.mjs';
+import {
+  DIALS,
+  FONTS,
+  MODE_WORDS,
+  OPEN_FONTS,
+  fontStack,
+  wordTable,
+} from './_tables.mjs';
 import {colorProblem, hex, parseColor} from './_color.mjs';
-import {sameKindValues} from './_css.mjs';
+import {sameKindValues, takesWholeNumbersOnly} from './_css.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 
 /**
@@ -249,11 +256,18 @@ export function normalizeEntry(thing, value) {
   if (quotedThing) {
     t = quotedThing[2].trim();
     pasted = true;
-    // Its value in JSON's double quotes is the value (`"#e11d48"`); a font
-    // list keeps its own quotes.
-    if (typeof v === 'string' && !/font/i.test(t)) {
-      const jv = /^\s*"([^"]*)"\s*,?\s*$/.exec(v);
-      if (jv) v = jv[1];
+    // Its value in JSON's double quotes is the string they hold
+    // (`"#e11d48"`, `"Inter, serif"`): the quotes are JSON's, for a font
+    // too; a family that needs its own quotes is written inside the string
+    // (`"\"Open Sans\", serif"`).
+    if (typeof v === 'string') {
+      const jv = /^\s*("(?:[^"\\]|\\.)*")\s*,?\s*$/.exec(v);
+      if (jv)
+        try {
+          v = String(JSON.parse(jv[1]));
+        } catch {
+          // Not a JSON string: read as typed.
+        }
     }
   }
   // Dash-like characters where a token's two dashes go (an em or en dash,
@@ -572,6 +586,55 @@ export function withoutCopyDebris(v) {
     .trim();
 }
 
+/** Number words, longest phrase first. */
+export const NUMBER_WORDS = wordTable(
+  /** @type {Record<string, number>} */ ({
+    zero: 0,
+    one: 1,
+    two: 2,
+    three: 3,
+    four: 4,
+    five: 5,
+    six: 6,
+    seven: 7,
+    eight: 8,
+    nine: 9,
+    ten: 10,
+    eleven: 11,
+    twelve: 12,
+    thirteen: 13,
+    fourteen: 14,
+    fifteen: 15,
+    sixteen: 16,
+    seventeen: 17,
+    eighteen: 18,
+    nineteen: 19,
+    twenty: 20,
+    thirty: 30,
+    forty: 40,
+    fifty: 50,
+    sixty: 60,
+    seventy: 70,
+    eighty: 80,
+    ninety: 90,
+    hundred: 100,
+  }),
+);
+
+/**
+ * A whole number as typed: digits with any white space at the ends and a
+ * zero fraction (`" 3"`, `"3.0"`), or a number word (`"three"`); else null.
+ * @param {unknown} text
+ * @returns {number | null}
+ */
+export function wholeNumberOf(text) {
+  const t = String(text ?? '')
+    .trim()
+    .toLowerCase();
+  if (/^[+-]?\d+(?:\.0+)?$/.test(t)) return Number(t);
+  return Object.hasOwn(NUMBER_WORDS, t) ? NUMBER_WORDS[t] : null;
+}
+
 /**
  * Words with a documented reading on a CSS property: the exact value each
  * one means. A repair may offer these for the word typed.
@@ -663,9 +726,11 @@ export const DENSITY_WORDS = wordTable(
  * comments), and the axes of a Google Fonts family spec (`Inter:wght@400`
  * is the family Inter).
  * @param {string} typed
+ * @param {{thousands?: boolean}} [opts] `thousands` for a setting whose
+ *   numbers are weights (see commaNumbers)
  * @returns {string}
  */
-export function typedReading(typed) {
+export function typedReading(typed, {thousands = false} = {}) {
   let t = String(typed ?? '')
     .replace(/\\(?:u\{?([0-9a-f]{4,6})\}?|x([0-9a-f]{2}))/gi, (_, u, x) =>
       String.fromCodePoint(parseInt(u ?? x, 16)),
@@ -674,6 +739,12 @@ export function typedReading(typed) {
     .normalize('NFKC')
     .trim();
   t = t
+    // A mode's label in any spelling (`dark mode: red`), before the
+    // trailing-label reading can take `mode: red` for one.
+    .replace(
+      /^\s*\{?\s*["']?(?:(?:light|dark)[\s_-]*mode|mode[\s_-]*(?:light|dark))["']?\s*[:=]\s*/i,
+      '',
+    )
     .replace(
       /\s+--(mode|state|on|when)(?:\s*=\s*|\s+)("[^"]*"|'[^']*'|\S+)/gi,
       '',
@@ -690,12 +761,16 @@ export function typedReading(typed) {
     );
   const spec = /^([a-z][a-z +]*):(?:ital,)?(?:wght|ital)@/i.exec(t);
   if (spec) t = spec[1].replace(/\+/g, ' ');
-  t = colorPair(t)
-    ? t
-    : t.replace(
-        /^\s*\{?\s*["']?(?:--)?[a-z][a-z0-9 _-]*["']?\s*[:=](?!\/\/)\s*/i,
-        '',
-      );
+  const labeledPair = colorPair(t);
+  t =
+    labeledPair &&
+    !colorProblem(labeledPair.light) &&
+    !colorProblem(labeledPair.dark)
+      ? t
+      : t.replace(
+          /^\s*\{?\s*["']?(?:--)?[a-z][a-z0-9 _-]*["']?\s*[:=](?!\/\/)\s*/i,
+          '',
+        );
   t = t
     .replace(/["']?\s*\}\s*$/, '')
     .replace(
@@ -711,6 +786,7 @@ export function typedReading(typed) {
       // a unit split off by a space (`20 px`) is its number's.
       .replace(/(\d)\.(?=[a-z%]|\s|$)/gi, '$1')
       .replace(/(\d)\s+(px|rem|em|pt|%)(?![a-z])/gi, '$1$2'),
+    thousands,
   )
     .replace(/\b0x([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})\b/gi, '#$1')
     .toLowerCase();
@@ -721,27 +797,33 @@ export function typedReading(typed) {
     .replace(/^[a-z]+(?:-[a-z]+)?-\[(.+)\]$/, '$1');
   // A light and a dark color typed as a pair (`light: red; dark: blue`,
   // `red / blue`) is that light-dark() pair.
+  // Both halves colors: `Inter, 600` is a family list, no pair.
   const pair = colorPair(t);
-  return pair ? `light-dark(${pair.light}, ${pair.dark})` : t;
+  return pair && !colorProblem(pair.light) && !colorProblem(pair.dark)
+    ? `light-dark(${pair.light}, ${pair.dark})`
+    : t;
 }
 
 /**
  * A text with each comma between digits, outside parentheses, read as a
- * number mark: before exactly three digits after a whole number other than
- * 0 (`1,000`), a thousands mark; otherwise (`1,5`, `0,500`) a decimal
- * point. Inside a function (`rgb(255,0,0)`) a comma separates arguments.
+ * number mark: a decimal point (`1,5rem`, `1,125rem`, `0,500`), or, only
+ * where the setting's numbers are whole thousands (a weight, 1 to 1000), a
+ * thousands mark before exactly three digits after a whole number other
+ * than 0 (`1,000`). Inside a function (`rgb(255,0,0)`) a comma separates
+ * arguments.
  * @param {string} text
+ * @param {boolean} [thousands] whether the setting's numbers are weights
  * @returns {string}
  */
-export function commaNumbers(text) {
-  // Only outside parentheses: inside a function (`rgb(255,0,0)`,
-  // `cubic-bezier(0,0,1,1)`) a comma separates its arguments.
+export function commaNumbers(text, thousands = false) {
   let depth = 0;
   let out = '';
   let plain = '';
   const flush = () => {
-    out += plain.replace(/(\d+),(\d+)(?![\d.,])/g, (_, a, b) =>
-      b.length === 3 && !/^0+$/.test(a) ? `${a}${b}` : `${a}.${b}`,
+    // (A number starts a word: the digits of a hex color or of a word
+    // before a comma are no number.)
+    out += plain.replace(/(?<![\w#.])(\d+),(\d+)(?![\d.,])/g, (_, a, b) =>
+      thousands && b.length === 3 && !/^0+$/.test(a) ? `${a}${b}` : `${a}.${b}`,
     );
     plain = '';
   };
@@ -758,6 +840,78 @@ export function commaNumbers(text) {
   return out;
 }
 
+/**
+ * Whether a comma between a setting's digits groups thousands: its numbers
+ * are weights (whole hundreds up to 1000) or the property takes only whole
+ * numbers (z-index, order), so no comma there can be a decimal one.
+ * @param {string} thing
+ */
+export const thousandsSetting = thing => {
+  const t = String(thing).toLowerCase();
+  return (
+    /^(font-weight|headings)$|^--font-weight/.test(t) ||
+    (/^[a-z][a-z-]*$/.test(t) && takesWholeNumbersOnly(t))
+  );
+};
+
+/**
+ * The one mode a word names, or null: light or dark, written as a mode
+ * value names one (`dark-only`), with the word mode (`darkmode`, `dark
+ * mode`, `mode dark`), or as a word for it (MODE_WORDS: night, day). The
+ * one mode reader: the `--mode` flag, a mode label in a value, a saved
+ * entry's mode and the settings file's mode all read it.
+ * @param {unknown} text
+ * @returns {'light' | 'dark' | null}
+ */
+export function modeWord(text) {
+  const w = String(text ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, '-');
+  const m = /^(?:(light|dark)(?:-?only|-?mode)?|mode-?(light|dark))$/.exec(w);
+  if (m) return /** @type {'light' | 'dark'} */ (m[1] ?? m[2]);
+  return MODE_WORDS[w] ?? null;
+}
+
+/**
+ * A base as written in any of its names: its package (`@astryxdesign/
+ * theme-neutral`, `theme-neutral`), its export (`neutralTheme`), or with
+ * the word theme (`neutral-theme`, `neutral theme`), in any case. The one
+ * reading `set`, `new` and the settings file share; the word as read (a
+ * base name or not).
+ * @param {unknown} v
+ * @returns {string}
+ */
+export function baseWord(v) {
+  return String(v ?? '')
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+    .toLowerCase()
+    .replace(/[\s_]+/g, '-')
+    .replace(/^(@astryxdesign\/)?theme-|-theme$/g, '');
+}
+
+/**
+ * The one reading of a yes/no word, for a flag given a value (`--only=on`)
+ * and a saved `only`: the documented spellings of yes and no, or a typo of
+ * one of them (`ture`); null for any other word, which is neither.
+ * @param {unknown} word
+ * @returns {boolean | null}
+ */
+export function booleanWord(word) {
+  if (typeof word === 'boolean') return word;
+  const w = String(word ?? '')
+    .trim()
+    .toLowerCase();
+  const YES = ['true', 'yes', 'y', 'on', '1'];
+  const NO = ['false', 'no', 'n', 'off', '0'];
+  if (YES.includes(w)) return true;
+  if (NO.includes(w)) return false;
+  const near = [...YES, ...NO].filter(x => x.length > 3 && typoNear(w, x));
+  const read = [...new Set(near.map(x => YES.includes(x)))];
+  return read.length === 1 ? read[0] : null;
+}
+
 /** The CSS functions a value is written in, whose names carry no value. */
 const FORM =
   /\b(?:light-dark|var|calc|(?:repeating-)?(?:linear|radial|conic)-gradient)\(/g;
@@ -770,16 +924,21 @@ const FORM =
  */
 function tokensOf(text) {
   return (
-    String(text)
-      .toLowerCase()
-      .replace(FORM, '(')
-      .match(/[a-z0-9.%]+/g) ?? []
+    String(text).toLowerCase().replace(FORM, '(').match(SIGNED_OR_WORD) ?? []
   );
 }
 
+/**
+ * A token: a number with its minus sign (a sign is one at the start, or
+ * after a space, a parenthesis or a comma: `-8px`, `calc(-1 * 4px)`, never
+ * the minus of `1rem-2px`), or a word or number.
+ */
+const SIGNED_OR_WORD =
+  /(?<![a-z0-9.%)])-(?=\.?\d)\d*\.?\d+(?:e[+-]?\d+)?[a-z%]*|[a-z0-9.%]+/g;
+
 /** @param {string} w */
 const numberOf = w => {
-  const m = /^(\d*\.?\d+(?:e[+-]?\d+)?)(px|rem|em|pt|%)?$/.exec(w);
+  const m = /^(-?\d*\.?\d+(?:e[+-]?\d+)?)(px|rem|em|pt|%)?$/.exec(w);
   return m ? {n: Number(m[1]), unit: m[2] ?? ''} : null;
 };
 
@@ -829,15 +988,19 @@ function numberReadings(w) {
  * @param {string} t the typed value, read
  */
 function numbersEqual(offered, t) {
-  const NUM = /[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?/gi;
+  // A number with its sign (see SIGNED_OR_WORD): -8px is never 8px.
+  const NUM =
+    /(?<![a-z0-9.%)])[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?|(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?/gi;
   const rest = offered
     .replace(NUM, '')
     .replace(/px|rem|em|%|[\s(),/*+-]|calc|var/g, '');
-  const want = offered.match(NUM)?.map(w => Math.abs(Number(w))) ?? [];
+  const want = offered.match(NUM)?.map(Number) ?? [];
   if (!want.length || rest) return false;
   const r2 = (/** @type {number} */ x) => String(Math.round(x * 100) / 100);
   const typedNumbers = (
-    t.match(/\d*\.?\d+(?:e[+-]?\d+)?(?:px|rem|em|pt|%)?/gi) ?? []
+    t.match(
+      /(?<![a-z0-9.%)])-?\d*\.?\d+(?:e[+-]?\d+)?(?:px|rem|em|pt|%)?|\d*\.?\d+(?:e[+-]?\d+)?(?:px|rem|em|pt|%)?/gi,
+    ) ?? []
   ).map(numberReadings);
   // The typed value is numbers only (any words in it are read elsewhere).
   if (
@@ -920,6 +1083,22 @@ export function documentNumericTable(
 const RANGES = [];
 
 /**
+ * The documented words a typed word may be a typo of, item by item in a
+ * list (the CSS generic families, the font presets), registered where each
+ * list is defined.
+ * @type {Set<string>}
+ */
+const TYPO_WORDS = new Set();
+
+/**
+ * Register documented words a typed list item may be a typo of.
+ * @param {Iterable<string>} words
+ */
+export function documentTypoWords(words) {
+  for (const w of words) TYPO_WORDS.add(String(w).toLowerCase());
+}
+
+/**
  * Register a setting's documented range with the repair allowlist.
  * @param {string[]} things as for documentNumericTable
  * @param {number} min
@@ -972,10 +1151,12 @@ const SCALED_DIALS = Object.keys(DIALS).filter(d =>
  * other than the one typed (a keep or unlock line); (4) the setting's
  * documented fallback, or a step (`more`, `less`) on a dial with a scale,
  * offered for that dial or one of its tokens; (5) the correction of a
- * typo (typoOf). Several values of one kind typed for a setting that takes
+ * typo (typoOf); (6) the typed value with each color written as one mode's
+ * half of `light-dark()` (a shadow's color for one mode, which no color
+ * longhand holds), the other half anything. Several values of one kind typed for a setting that takes
  * one (`1.5 2`) may be read as the first.
  * @param {{offered: string, typed: string, thing?: string, typedThing?: string, saved?: Map<string, string[]>, mode?: string}} line
- * @returns {true | number[] | false}
+ * @returns {true | number[] | {oneOf: number[]} | false}
  */
 export function readsTyped({
   offered,
@@ -989,9 +1170,9 @@ export function readsTyped({
     .trim()
     .replace(/^(["'])(.*)\1$/, '$2')
     .toLowerCase();
-  const t = typedReading(typed);
   const key = String(thing).toLowerCase();
   const typedKey = String(typedThing || thing).toLowerCase();
+  const t = typedReading(typed, {thousands: thousandsSetting(typedKey)});
   const T = tokensOf(t);
   const O = tokensOf(o);
   // (1) The value typed.
@@ -1001,8 +1182,64 @@ export function readsTyped({
     O.every((w, i) => sameToken(w, T[i]))
   )
     return true;
-  if (O.length === 1 && T.length > 1 && O[0] === T.join('')) return true;
+  // (6) The typed color as one mode's half of light-dark(), every pair
+  // read as the same mode's half.
+  for (const side of [0, 1]) {
+    const halves = o.replace(
+      /light-dark\(\s*([^,()]+(?:\([^()]*\))?)\s*,\s*([^,()]+(?:\([^()]*\))?)\s*\)/g,
+      (_, light, dark) => String(side === 0 ? light : dark).trim(),
+    );
+    const H = halves === o ? [] : tokensOf(halves);
+    if (
+      H.length &&
+      H.length === T.length &&
+      H.every((w, i) => sameToken(w, T[i]))
+    )
+      return true;
+  }
+  // Words joined into one name (`dark red` is darkred); numbers are never
+  // joined (`12 16px` is two sizes, not 1216px).
+  if (
+    O.length === 1 &&
+    T.length > 1 &&
+    T.every(w => /^[a-z]+$/.test(w)) &&
+    O[0] === T.join('')
+  )
+    return true;
   if (numbersEqual(o, t)) return true;
+  // Two bare numbers typed with a comma between, offered as the slash pair
+  // a grammar takes (`16,9` is `16 / 9`): the comma separated them.
+  {
+    const pair = /^\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*$/.exec(
+      String(typed).replace(/^(["'])(.*)\1$/, '$2'),
+    );
+    if (pair && o.replace(/\s+/g, '') === `${pair[1]}/${pair[2]}`) return true;
+  }
+  // (5) A typo of a documented word in a list, item by item (`Inter,
+  // san-serif` is `Inter, sans-serif`; `sytem` is the system font).
+  {
+    const ti = t.split(',').map(x => x.trim());
+    const oi = o.split(',').map(x => x.trim());
+    const bare = (/** @type {string} */ x) => x.replace(/[\s_-]+/g, '');
+    const same = (/** @type {string} */ a, /** @type {string} */ b) => {
+      const A = tokensOf(a);
+      const B = tokensOf(b);
+      return A.length === B.length && A.every((w, i) => sameToken(w, B[i]));
+    };
+    if (
+      ti.length === oi.length &&
+      oi.some((x, i) => !same(x, ti[i])) &&
+      oi.every(
+        (x, i) =>
+          same(x, ti[i]) ||
+          (TYPO_WORDS.has(x) &&
+            (bare(x) === bare(ti[i]) ||
+              typoNear(ti[i], x) ||
+              typoNear(bare(ti[i]), bare(x)))),
+      )
+    )
+      return true;
+  }
   const color = parseColor(t);
   if (
     /^#[0-9a-f]{3,8}$/.test(o) &&
@@ -1022,7 +1259,15 @@ export function readsTyped({
     if (o === light && DIALS[key] && !key.startsWith('--')) return true;
   }
   // A base named by its package (@astryxdesign/theme-butter is butter).
-  if (key === 'base' && t.replace(/^(@astryxdesign\/)?theme-/, '') === o)
+  if (
+    key === 'base' &&
+    [
+      t,
+      String(typed)
+        .trim()
+        .replace(/^(["'])(.*)\1$/, '$2'),
+    ].some(x => baseWord(x) === o)
+  )
     return true;
   // (2) A documented reading of the whole value.
   const whole = [t, t.replace(/\s+/g, '-'), t.replace(/[\s-]+/g, '')];
@@ -1040,9 +1285,11 @@ export function readsTyped({
       }
     for (const {things, min, max} of RANGES)
       if (names(things, key))
+        // Past an end is that end; a minus sign is no amount past the low
+        // end (-700 is no weight 1).
         if (
           (n.n > max && o === String(max)) ||
-          (n.n < min && o === String(min))
+          (n.n < min && n.n >= 0 && o === String(min))
         )
           return true;
     // A radius at or below zero is square; at or past half, or 1000px, pill.
@@ -1062,11 +1309,20 @@ export function readsTyped({
     /(^|[\s-])(not|no|non|without|never|less)([\s-]|$)|^un|-none$/.test(t)
   )
     return true;
-  // (3) A saved value of the line's own setting, never the one typed.
+  // (3) A saved value of the line's own setting, never the one typed: as
+  // saved, or under the readings a typed value has (`blod` saved for
+  // headings is bold, as set reads it).
   if (
     key &&
     key !== typedKey &&
-    saved?.get(key)?.some(v => typedReading(v) === o)
+    saved
+      ?.get(key)
+      ?.some(
+        v =>
+          typedReading(v) === o ||
+          readsTyped({offered: o, typed: v, thing: key, typedThing: key}) ===
+            true,
+      )
   )
     return true;
   // (4) A documented fallback; a step on a dial with a scale.
@@ -1118,28 +1374,68 @@ export function readsTyped({
   // Part of the value: a run of its tokens, or a documented reading of one.
   // (currentcolor stands for the color another line of the refusal sets:
   // the shape of a border in both modes, its color in one.)
+  // Part of the value: its tokens in the order typed, the others carried
+  // by the refusal's other lines (`Inter, sans-serif` and `semibold` for
+  // `Inter 600, sans-serif`).
   const part = O.filter(w => w !== 'currentcolor');
   if (part.length && part.length < T.length)
     for (const same of [
       (/** @type {string} */ a, /** @type {string} */ b) => a === b,
       sameToken,
-    ])
-      for (let i = 0; i + part.length <= T.length; i += 1)
-        if (part.every((w, j) => same(w, T[i + j])))
-          return Array.from({length: part.length}, (_, j) => i + j);
-  for (const [i, w] of T.entries()) {
-    if (T.length < 2) break;
-    if (READINGS.get(w)?.has(o)) return [i];
-    const m = numberOf(w);
-    if (m)
-      for (const {things, table, domain} of NUMERIC_TABLES)
-        if (names(things, key) && m.n >= domain[0] && m.n <= domain[1]) {
-          const [rung] = table.reduce((a, b) =>
-            Math.abs(b[1] - m.n) < Math.abs(a[1] - m.n) ? b : a,
-          );
-          if (rung === o) return [i];
-        }
-  }
+    ]) {
+      /** @type {number[]} */
+      const at = [];
+      for (const w of part) {
+        const from = at.length ? at[at.length - 1] + 1 : 0;
+        const i = T.findIndex((x, k) => k >= from && same(w, x));
+        if (i < 0) break;
+        at.push(i);
+      }
+      if (at.length === part.length) return at;
+    }
+  // A documented reading of a run of its tokens (`extra bold` in `Inter
+  // extra bold` is heavy).
+  if (T.length > 1)
+    for (let k = T.length - 1; k >= 2; k -= 1)
+      for (let i = 0; i + k <= T.length; i += 1) {
+        const run = T.slice(i, i + k).join(' ');
+        if (
+          [run, run.replace(/\s+/g, '-'), run.replace(/\s+/g, '')].some(r =>
+            READINGS.get(r)?.has(o),
+          )
+        )
+          return Array.from({length: k}, (_, j) => i + j);
+      }
+  // A documented reading of one token (`900` or `black` is heavy): every
+  // token that reads as it is a candidate, and coversTyped gives the line
+  // the one the other lines leave.
+  /** @type {number[]} */
+  const oneOf = [];
+  if (T.length > 1)
+    for (const [i, w] of T.entries()) {
+      if (READINGS.get(w)?.has(o)) {
+        oneOf.push(i);
+        continue;
+      }
+      if (numberOf(w) && numbersEqual(o, w)) {
+        oneOf.push(i);
+        continue;
+      }
+      const m = numberOf(w);
+      if (m)
+        for (const {things, table, domain} of NUMERIC_TABLES)
+          if (names(things, key) && m.n >= domain[0] && m.n <= domain[1]) {
+            const [rung] = table.reduce((a, b) =>
+              Math.abs(b[1] - m.n) < Math.abs(a[1] - m.n) ? b : a,
+            );
+            if (rung === o) {
+              oneOf.push(i);
+              break;
+            }
+          }
+    }
+  if (oneOf.length === 1) return oneOf;
+  if (oneOf.length > 1) return {oneOf};
   return false;
 }
 
@@ -1148,47 +1444,33 @@ export function readsTyped({
  * value: each reads it whole, or the parts they carry cover every typed
  * token. A part alone (`all` for `all 200`, `bold` for `extra bold`) is not
  * offered.
- * @param {Array<true | number[] | false>} reads
+ * @param {Array<true | number[] | {oneOf: number[]} | false>} reads
  * @param {string} typed
+ * @param {string} [thing] the setting typed (its numbers' reading)
  */
-export function coversTyped(reads, typed) {
-  const T = tokensOf(typedReading(typed));
+export function coversTyped(reads, typed, thing = '') {
+  const T = tokensOf(typedReading(typed, {thousands: thousandsSetting(thing)}));
   // By token, counted: two lines may each carry one of two equal words
   // (`normal normal 16px serif`).
   /** @type {Map<string, number>} */
   const carried = new Map();
-  for (const r of reads)
-    if (Array.isArray(r))
-      for (const i of r) carried.set(T[i], (carried.get(T[i]) ?? 0) + 1);
+  /** @param {number} i */
+  const carry = i => carried.set(T[i], (carried.get(T[i]) ?? 0) + 1);
   /** @type {Map<string, number>} */
   const typedCount = new Map();
   for (const w of T) typedCount.set(w, (typedCount.get(w) ?? 0) + 1);
+  for (const r of reads) if (Array.isArray(r)) r.forEach(carry);
+  // A line whose one token may be any of several takes one the others
+  // left.
+  for (const r of reads)
+    if (r && typeof r === 'object' && !Array.isArray(r)) {
+      const left = r.oneOf.find(
+        i => (carried.get(T[i]) ?? 0) < (typedCount.get(T[i]) ?? 0),
+      );
+      carry(left ?? r.oneOf[0]);
+    }
   return [...typedCount].every(([w, n]) => (carried.get(w) ?? 0) >= n);
 }
-
-/**
- * Whether a repair may offer `offered` as the whole typed value (the gate,
- * with no setting named).
- * @param {string} offered
- * @param {string} typed
- */
-export const offersTyped = (offered, typed) =>
-  readsTyped({offered, typed}) === true;
-
-/**
- * Whether the values a refusal offers for one setting carry what was typed
- * (see readsTyped and coversTyped).
- * @param {string[]} offered
- * @param {string} typed
- */
-export function offersAllTyped(offered, typed) {
-  const reads = offered.map(o => readsTyped({offered: o, typed}));
-  if (reads.includes(false)) return false;
-  return reads.every(r => r === true) || coversTyped(reads, typed);
-}
-
-/** The gate's word for the whole typed value (tests and old callers). */
-export const carriesTyped = offersTyped;
 
 documentReadings([
   ['more', 'less'],
@@ -1199,6 +1481,13 @@ documentReadings(Object.values(PROPERTY_WORDS).flatMap(m => Object.entries(m)));
 documentReadings(Object.entries(WEIGHT_WORDS));
 documentReadings(Object.entries(WEIGHT_WORDS).map(([w, n]) => [n, w]));
 documentReadings(Object.entries(DENSITY_WORDS));
+// A font dial word as a part's font-family is the stack it stands for.
+documentReadings(
+  [...Object.keys(FONTS), ...Object.keys(OPEN_FONTS)].map(w => [
+    w,
+    /** @type {string} */ (fontStack(w)),
+  ]),
+);
 
 /**
  * Whether a repair line may offer `offered` as the whole typed value (see

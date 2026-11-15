@@ -12,6 +12,7 @@ import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {checkSetting} from './_check.mjs';
 import {baseResolved} from './_project.mjs';
+import {readThemeListState} from '../theme/_adapter.mjs';
 import {
   compileTheme,
   editedThemes,
@@ -60,7 +61,7 @@ export const EXAMPLE_THEME = 'my-theme';
  * @property {import('./_settings.mjs').ThemeData} data
  * @property {{light: Record<string, string>, dark: Record<string, string>}} base
  * @property {{light: Record<string, string>, dark: Record<string, string>}} [own] - The theme's own values: the base's with its settings applied.
- * @property {(steps: Step[]) => {ok: true} | {ok: false, why: string}} check
+ * @property {(steps: Step[]) => {ok: true} | {ok: false, why: string, run?: string[]}} check
  * @property {(steps: Step[], intent: MeasureIntent) => string | null} measure the measured check: why the built result does not do what the question asks, or null
  */
 
@@ -116,12 +117,25 @@ export async function howTheme(ctx, cwd, name) {
     }
     if (themes.length > 1 && !note)
       note = `the commands are for ${slug}, the theme changed last; --theme picks another of: ${themes.join(', ')}`;
-  } else
-    note = `the app has no theme yet; the commands are for a theme named ${EXAMPLE_THEME}, made first with: ${P} new ${EXAMPLE_THEME} --like ${LIKE[0]}`;
+  }
+  // With no editor theme, the theme the app shows now (its default, read
+  // as `theme add` and doctor read it) is what the answer starts from and
+  // measures against, when it is a base the editor can start from.
+  const appDefault = (() => {
+    try {
+      const d = readThemeListState(cwd).defaultSlug;
+      return d && LIKE.includes(d) ? d : null;
+    } catch {
+      return null;
+    }
+  })();
+  const startLike = appDefault ?? LIKE[0];
+  if (!name && !themes.length)
+    note = `the app has no theme yet; the commands are for a theme named ${EXAMPLE_THEME}, made first with: ${P} new ${EXAMPLE_THEME} --like ${startLike}${appDefault ? ` (${appDefault} is the theme the app shows now)` : ''}`;
   const exists = Boolean(data);
   if (!data) {
     if (!themes.length) slug = EXAMPLE_THEME;
-    data = {name: slug, like: LIKE[0], mode: 'both', settings: []};
+    data = {name: slug, like: startLike, mode: 'both', settings: []};
   }
   const theme = /** @type {import('./_settings.mjs').ThemeData} */ (data);
   const base = await baseResolved(ctx.project, theme.like);
@@ -238,11 +252,18 @@ export async function howTheme(ctx, cwd, name) {
           };
         return {ok: true};
       } catch (e) {
-        if (e instanceof AstryxError)
+        if (e instanceof AstryxError) {
+          // The command the refusal names to run instead, when it names
+          // one ("set t text-size 18").
+          const run = (e.suggestions ?? [])
+            .filter(x => /^do this instead/.test(String(x.reason ?? '')))
+            .map(x => String(x.name));
           return {
             ok: false,
             why: e.message.replace(/ Nothing was changed\.$/, ''),
+            ...(run.length ? {run} : {}),
           };
+        }
         throw e;
       }
     },
@@ -264,6 +285,7 @@ export async function howTheme(ctx, cwd, name) {
  * @property {boolean} [bound] the question gives a bound ("smaller than 24px"): a space is checked against it too
  * @property {boolean} [contrast] the words ask about contrast ("too light to read"): text in dark mode moves the other way
  * @property {string[]} [than] parts the question compares against ("darker than the page"): a color moves past theirs
+ * @property {'more' | 'less'} [saturation] the colors asked more or less saturated ("more colorful", "more muted")
  * @property {boolean} [literal] a mode is named with lighter or darker: borders and the shared text color move as written
  * @property {'more' | 'less' | null} [shadowDir] the way a shadow's strength moves ("darker shadows": more)
  */
@@ -305,8 +327,10 @@ function resolveIn(v, map, mode) {
   let out = String(v ?? '');
   for (let i = 0; i < 8; i++) {
     const next = out
-      .replace(/var\(\s*(--[a-z0-9-]+)\s*(?:,\s*([^()]*))?\)/gi, (_, t, fb) =>
-        String(map[t] ?? fb ?? ''),
+      // (A variable with no value here and no fallback stays as written:
+      // a value read in part is no value, never the rest of it.)
+      .replace(/var\(\s*(--[a-z0-9-]+)\s*(?:,\s*([^()]*))?\)/gi, (m, t, fb) =>
+        String(map[t] ?? fb ?? m),
       )
       .replace(
         /light-dark\(\s*([^,()]+(?:\([^()]*\))?)\s*,\s*([^()]+(?:\([^()]*\))?)\s*\)/gi,
@@ -421,6 +445,21 @@ function painted(v, toks, mode) {
   return rgb.slice(0, 3).map((x, i) => x * a + page[i] * (1 - a));
 }
 
+/**
+ * A color's HSL saturation, 0 to 1, or null when it does not read.
+ * @param {string | number[] | null} v a color, or its RGB
+ */
+function saturationOf(v) {
+  const rgb = Array.isArray(v) ? v : v == null ? null : parseColor(v);
+  if (!rgb) return null;
+  const [r, g, b] = rgb.map(x => x / 255);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  const d = max - min;
+  return d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+}
+
 /** @param {number[]} c */
 const luminance = c => c[0] * 0.299 + c[1] * 0.587 + c[2] * 0.114;
 
@@ -494,12 +533,38 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
           w === '' ||
           /^variant=(default|primary|accent|neutral)$|^size=md$/.test(w),
       );
+    // What Core writes for a property in a rule (a card's padding is its
+    // container padding less the border width): the whole declaration, so
+    // a value is never read from one token of several.
+    const declOf = (
+      /** @type {string} */ prop,
+      /** @type {string} */ w,
+      /** @type {string} */ token,
+    ) => {
+      const at = C.MAP[part]?.at?.[prop] ?? {};
+      const attrs = w ? w.split(' ') : [];
+      const key = Object.keys(at).find(k =>
+        attrs.every(x => k.split(',').includes(x)),
+      );
+      // (Only a declaration of several theme tokens: one token alone is
+      // read as that token.)
+      const decl = key ? String(at[key]) : '';
+      const tokens = new Set(
+        [...decl.matchAll(/var\(\s*(--[a-z][a-z0-9-]*)/g)]
+          .map(m => m[1])
+          .filter(t => !/^--(_|astryx-)/.test(t)),
+      );
+      return decl.includes(token) && tokens.size > 1 ? decl : `var(${token})`;
+    };
     for (const g of Object.keys(GROUPS))
       for (const r of C.partReads(part, g) ?? [])
         if (mainWhen(r.when?.length ? r.when : ['']))
           for (const prop of r.props ?? []) {
             const key = `base||${prop}`;
-            if (!raw.has(key)) raw.set(key, `var(${r.token})`);
+            const w = (r.when?.length ? r.when : ['']).find(
+              (/** @type {string} */ x) => mainWhen([x]),
+            );
+            if (!raw.has(key)) raw.set(key, declOf(prop, w ?? '', r.token));
           }
     for (const g of Object.keys(GROUPS))
       for (const r of C.partReads(part, g) ?? [])
@@ -510,7 +575,10 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
               // A variant with no rule of its own takes the part's own base
               // rule over the token it reads.
               if (!raw.has(key))
-                raw.set(key, own.get(`base||${prop}`) ?? `var(${r.token})`);
+                raw.set(
+                  key,
+                  own.get(`base||${prop}`) ?? declOf(prop, w, r.token),
+                );
             }
     /** @type {Map<string, {light: string, dark: string, raw: string}>} */
     const out = new Map();
@@ -659,8 +727,19 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
           intent.zero &&
           ['radius', 'space', 'border', 'shadow'].includes(fam)
         ) {
-          const n = measureNumber(after);
-          if (!/^(none|transparent|0)$/.test(after) && n !== 0)
+          // (Core's own composed layers, a card's ring, are no shadow of
+          // the theme's: a shadow of only those is none at rest.)
+          const own = splitTop(after, ',')
+            .map(x => x.trim())
+            .filter(
+              x =>
+                x &&
+                !/^var\(\s*--_/.test(x) &&
+                !/^(?:0(?:px)?\s+)+transparent$/i.test(x),
+            )
+            .join(', ');
+          const n = measureNumber(own);
+          if (own && !/^(none|transparent|0)$/.test(own) && n !== 0)
             return `${part}'s ${prop} would be ${after} in ${mode} mode, not none`;
           continue;
         }
@@ -836,6 +915,51 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
         return `${tok} would move the other way in ${mode} mode (${before} to ${after})`;
     }
   }
+  // "more colorful", "more muted": the accent colors the theme shows (the
+  // accent and the text and icons drawn in it) move that way in saturation
+  // together, in each mode shown (a step that dulls them is not more
+  // colorful), and the accent wash, as it paints over the page, never moves
+  // the other way (a faint wash made a solid fill is not less colorful).
+  if (intent.saturation)
+    for (const mode of /** @type {Array<'light' | 'dark'>} */ (
+      visible ? [visible] : ['light', 'dark']
+    )) {
+      let x = 0;
+      let y = 0;
+      let n = 0;
+      for (const tok of Object.keys(tw[mode])) {
+        if (!/^--color-(?:text-|icon-)?accent$/.test(tok)) continue;
+        // (As it paints over the page.)
+        const a = saturationOf(
+          painted(resolveIn(`var(${tok})`, tn[mode], mode), tn[mode], mode),
+        );
+        const b = saturationOf(
+          painted(resolveIn(`var(${tok})`, tw[mode], mode), tw[mode], mode),
+        );
+        if (a == null || b == null) continue;
+        x += a;
+        y += b;
+        n++;
+      }
+      if (
+        n &&
+        (intent.saturation === 'more' ? x < y - 0.02 * n : x > y + 0.02 * n)
+      )
+        return `the accent colors would get ${intent.saturation === 'more' ? 'duller' : 'more saturated'} in ${mode} mode`;
+      const wash = (/** @type {Record<string, string>} */ t) =>
+        t['--color-accent-muted'] == null
+          ? null
+          : saturationOf(
+              painted(resolveIn('var(--color-accent-muted)', t, mode), t, mode),
+            );
+      const [wa, wb] = [wash(tn[mode]), wash(tw[mode])];
+      if (
+        wa != null &&
+        wb != null &&
+        (intent.saturation === 'more' ? wa < wb - 0.02 : wa > wb + 0.02)
+      )
+        return `the accent wash (--color-accent-muted) would get ${intent.saturation === 'more' ? 'duller' : 'more saturated'} in ${mode} mode, as it paints over the page`;
+    }
   if (!shadowMoved && steps.some(st => familyOf(st.thing) === 'shadow'))
     return 'the shadows would look the same as they do now (a shadow color at full strength gets no stronger; a bigger or blurrier shadow can)';
   return null;
@@ -931,18 +1055,23 @@ export function exampleStep(example) {
  * Keep the alternatives that pass, and render them for the theme.
  * @param {HowTheme} env
  * @param {Step[][]} options each a list of steps run in order
- * @returns {{commands: string[], refused: Array<{command: string, why: string}>}}
+ * @returns {{commands: string[], refused: Array<{command: string, why: string, run?: string[]}>}}
  */
 export function checked(env, options) {
   /** @type {string[]} */
   const commands = [];
-  /** @type {Array<{command: string, why: string}>} */
+  /** @type {Array<{command: string, why: string, run?: string[]}>} */
   const refused = [];
   for (const steps of options) {
     const text = steps.map(st => render(st, env.slug));
     const r = env.check(steps);
     if (r.ok) commands.push(...text.filter(c => !commands.includes(c)));
-    else refused.push({command: text.join(' && '), why: r.why});
+    else
+      refused.push({
+        command: text.join(' && '),
+        why: r.why,
+        ...(r.run ? {run: r.run} : {}),
+      });
   }
   return {commands, refused};
 }

@@ -18,6 +18,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {createHash} from 'node:crypto';
 import {lowerDoc} from '../doc-compiler/compile.mjs';
 import {packageSource} from '../doc-compiler/source.mjs';
 import {CLI_ROOT, realDir} from '../fs/paths.mjs';
@@ -157,8 +158,33 @@ class ThemeRuntimeExportError extends Error {}
  */
 function moduleSpecifiers(file, jscodeshift, {withRequire = false} = {}) {
   const parser = /\.(?:ts|tsx|mts|cts)$/u.test(file) ? 'tsx' : 'babel';
-  const j = jscodeshift.withParser(parser);
-  const root = j(fs.readFileSync(file, 'utf-8'));
+  const text = fs.readFileSync(file, 'utf-8');
+  // A module's specifiers follow from its text: one parse per text read
+  // (a command reads the same built theme module several times).
+  const key = `${parser}\0${withRequire}\0${createHash('sha256').update(text).digest('hex')}`;
+  const known = SPECIFIERS.get(key);
+  if (known) return [...known];
+  const found = parsedSpecifiers(text, jscodeshift.withParser(parser), {
+    withRequire,
+  });
+  if (SPECIFIERS.size >= 256) SPECIFIERS.clear();
+  SPECIFIERS.set(key, found);
+  return [...found];
+}
+
+/** The specifiers each module text read names, by parser, mode and text. @type {Map<string, string[]>} */
+const SPECIFIERS = new Map();
+
+/**
+ * The module specifiers a module's text names (imports, re-exports,
+ * import() calls, and with `withRequire` require() calls).
+ * @param {string} text
+ * @param {any} j jscodeshift with its parser
+ * @param {{withRequire: boolean}} options
+ * @returns {string[]}
+ */
+function parsedSpecifiers(text, j, {withRequire}) {
+  const root = j(text);
   /** @type {string[]} */
   const specifiers = [];
   root.find(j.ImportDeclaration).forEach((/** @type {any} */ importPath) => {
