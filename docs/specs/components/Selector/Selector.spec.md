@@ -459,7 +459,7 @@ pointer-sized anchored list unless the caller opts in.
 ### DEC-3 — Long option lists open windowed above 40 options
 
 **Reference:** `component:Selector/DEC-3`
-**Decider:** `cixzhang`, `2026-11-02`
+**Decider:** pending owner confirmation
 
 A Selector with more than 40 options renders only the rows a person can see,
 and fast scrolling never shows a blank or flashing row (PR4); a shorter list
