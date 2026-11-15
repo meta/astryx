@@ -11,8 +11,9 @@
  *
  * The side navigation is the app's global chrome, so AppShell owns it and
  * moves it into its mobile drawer on narrow screens. Channels and direct
- * messages are SideNav rows with presence dots and unread badges; the stream
- * and the thread are built on the Chat component family.
+ * messages are SideNav rows with presence dots and unread badges. The stream
+ * is built on the Chat component family; the thread lists replies as rows
+ * above a ChatComposer.
  *
  * Responsive contract:
  *   >1024px  thread panel beside the stream
