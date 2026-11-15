@@ -320,6 +320,9 @@ Consumer data, columns, props, module signatures and usage remain documented in
 - **ORD6 - Empty/loading and focus.** FR22 gates effective loading by admitted mode,
   replaces only the default initial empty message, and keeps exhaustion focus
   return with the existing command/Scroll-region owner.
+- **ORD7 - Capability layout extension.** A capability may supply an internal
+  layout extension; BaseTable reads it only when supplied; plain tables carry
+  no column-layout code.
 
 ### Performance and resources
 
