@@ -1837,6 +1837,81 @@ export function registerExperimentalTheme(group, program) {
                 }
                 words.push(w);
               }
+              // Settings typed after the name, in any form set reads (`accent
+              // red`, `corners=pill`, `corners: pill; accent: red`, a pasted
+              // JSON object): each is its option (`--accent red`), never
+              // part of the name. A dial's value runs to the next dial.
+              {
+                const dialOf = (/** @type {string} */ w) => {
+                  const flag = `--${String(w).trim().toLowerCase()}`;
+                  return dialFlags.has(flag) ? camel(flag) : null;
+                };
+                /** @type {string[]} */
+                const kept = [];
+                /** @type {Array<[string, string]>} */
+                const pairs = [];
+                for (const w of words) {
+                  /** @type {unknown} */
+                  let json;
+                  try {
+                    json = /^\s*\{/.test(w) ? JSON.parse(w) : undefined;
+                  } catch {
+                    json = undefined;
+                  }
+                  const entries =
+                    json && typeof json === 'object' && !Array.isArray(json)
+                      ? Object.entries(json)
+                      : [];
+                  if (entries.length && entries.every(([k]) => dialOf(k))) {
+                    for (const [k, v] of entries) pairs.push([k, String(v)]);
+                    continue;
+                  }
+                  // `corners=pill`, `corners: pill; accent: red`.
+                  const parts = w
+                    .split(/\s*;\s*/)
+                    .map(x => /^([a-z-]+)\s*[=:]\s*(.+)$/i.exec(x.trim()))
+                    .filter(Boolean);
+                  if (
+                    parts.length &&
+                    parts.every(m =>
+                      dialOf(/** @type {RegExpExecArray} */ (m)[1]),
+                    )
+                  ) {
+                    for (const m of parts)
+                      pairs.push([
+                        /** @type {RegExpExecArray} */ (m)[1],
+                        /** @type {RegExpExecArray} */ (m)[2],
+                      ]);
+                    continue;
+                  }
+                  kept.push(w);
+                }
+                // `accent red`: a dial word, and its value up to the next dial.
+                /** @type {string[]} */
+                const rest = [];
+                for (let i = 0; i < kept.length; i++) {
+                  if (
+                    dialOf(kept[i]) &&
+                    kept[i + 1] != null &&
+                    !dialOf(kept[i + 1])
+                  ) {
+                    const value = [];
+                    let j = i + 1;
+                    while (j < kept.length && !dialOf(kept[j]))
+                      value.push(kept[j++]);
+                    pairs.push([kept[i], value.join(' ')]);
+                    i = j - 1;
+                    continue;
+                  }
+                  rest.push(kept[i]);
+                }
+                for (const [k, v] of pairs) {
+                  const key = /** @type {string} */ (dialOf(k));
+                  if (given[key] == null) given[key] = v;
+                  intoValues.push(`${k} ${v}`);
+                }
+                words.splice(0, words.length, ...rest);
+              }
               // A built-in theme among the words (after a `like` word, or
               // typed as the name with the real name after it) is the base,
               // as --like; every other word is part of the name.
@@ -2022,11 +2097,22 @@ export function registerExperimentalTheme(group, program) {
           // Three or more bare words that each name a setting are a list
           // too (`undo t accent corners spacing`); a setting with a value of
           // several words (`font Inter Tight`) is not.
+          // Commas or "and" make a list only when each item starts with a
+          // setting's name: a value with commas typed unquoted, as set takes
+          // it (`border-color rgb(1, 2, 3)`, `font Inter, Arial`), is that
+          // setting's value.
+          const items = words
+            .map(String)
+            .join(' ')
+            .split(/\s*,\s*|\s+and\s+/)
+            .filter(Boolean);
           const listed =
             words.length > 1 &&
-            (words.some(
+            ((words.some(
               (w, i) => /,$/.test(String(w)) || (i > 0 && w === 'and'),
-            ) ||
+            ) &&
+              items.length > 1 &&
+              items.every(item => namesSetting(item.split(/\s+/)[0]))) ||
               (words.length > 2 &&
                 words.every(w => namesSetting(String(w))))) &&
             !words.some(w => String(w).startsWith('-'));

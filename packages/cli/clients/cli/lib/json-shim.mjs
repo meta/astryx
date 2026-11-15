@@ -327,14 +327,101 @@ function unknownGroupWord(group) {
   let root = group;
   while (root.parent) root = root.parent;
   const argv = /** @type {string[]} */ (root.rawArgs ?? process.argv);
-  const words = argv.slice(2).filter(w => !String(w).startsWith('-'));
-  for (let i = 0; i < chain.length; i++) if (words[i] !== chain[i]) return null;
-  const next = words[chain.length];
   const names = group.commands.flatMap((/** @type {any} */ c) => [
     c.name(),
     ...c.aliases(),
   ]);
+  // The words that are no option, and no option's value: the word after an
+  // option the group does not read is its value unless it names one of the
+  // group's subcommands (`preview --theme t`: t is --theme's).
+  /** @type {string[]} */
+  const words = [];
+  const typed = argv.slice(2).map(String);
+  for (let i = 0; i < typed.length; i++) {
+    const w = typed[i];
+    if (!w.startsWith('-')) {
+      words.push(w);
+      continue;
+    }
+    const next = typed[i + 1];
+    if (
+      words.length >= chain.length &&
+      !w.includes('=') &&
+      next != null &&
+      !next.startsWith('-') &&
+      !names.includes(next)
+    )
+      i++;
+  }
+  for (let i = 0; i < chain.length; i++) if (words[i] !== chain[i]) return null;
+  const next = words[chain.length];
   return next != null && !names.includes(next) ? next : null;
+}
+
+/**
+ * Options typed after a group with no subcommand at all (`preview --theme
+ * t`, `editor --mode light`): each option as typed, with its value, and the
+ * subcommands that take every one of them; null when a word that is no
+ * option's value follows (an unknown subcommand) or a subcommand does.
+ * @param {any} group
+ * @returns {{group: string, typed: string[], takers: any[]} | null}
+ */
+function optionsWithoutSubcommand(group) {
+  const chain = [];
+  for (let node = group; node?.parent; node = node.parent)
+    chain.unshift(node.name());
+  let root = group;
+  while (root.parent) root = root.parent;
+  const argv = /** @type {string[]} */ (root.rawArgs ?? process.argv)
+    .slice(2)
+    .map(String);
+  let at = 0;
+  for (const word of chain) {
+    while (at < argv.length && argv[at] !== word) at++;
+    if (at === argv.length) return null;
+    at++;
+  }
+  const rest = argv.slice(at);
+  if (!rest.length || !rest[0].startsWith('-')) return null;
+  const subs = /** @type {any[]} */ (group.commands);
+  /** @type {string[]} */
+  const flags = [];
+  /** @type {string[]} */
+  const typed = [];
+  for (let i = 0; i < rest.length; i++) {
+    const token = rest[i];
+    // A word that is no option's value: a subcommand or an unknown word,
+    // which other readers name.
+    if (!token.startsWith('-')) return null;
+    const [flag, inline] = token.split(/=(.*)/su);
+    const program = (root.options ?? []).find(
+      (/** @type {any} */ o) => o.long === flag || o.short === flag,
+    );
+    const next = rest[i + 1];
+    const value =
+      inline ??
+      (next != null &&
+      !next.startsWith('-') &&
+      !(program && !(program.required || program.optional)) &&
+      !subs.some(c => c.name() === next || c.aliases().includes(next))
+        ? rest[++i]
+        : undefined);
+    // The program's own options (`--json`) are read wherever they are.
+    if (program) continue;
+    flags.push(flag);
+    typed.push(
+      value === undefined ? flag : `${flag} ${quoteCommandArgument(value)}`,
+    );
+  }
+  if (!typed.length) return null;
+  const takers = subs.filter(c =>
+    flags.every(f =>
+      (c.options ?? []).some(
+        (/** @type {any} */ o) => o.long === f || o.short === f,
+      ),
+    ),
+  );
+  return {group: chain.join(' '), typed, takers};
 }
 
 /**
@@ -364,16 +451,44 @@ function optionsBeforeSubcommand(group) {
   const rest = argv.slice(at);
   if (!rest.length || !String(rest[0]).startsWith('-')) return null;
   const subs = /** @type {any[]} */ (group.commands);
-  const index = rest.findIndex(
-    (w, i) =>
-      i > 0 &&
-      !String(w).startsWith('-') &&
-      subs.some(c => c.name() === w || c.aliases().includes(w)),
-  );
-  if (index < 0) return null;
-  const sub = subs.find(
-    c => c.name() === rest[index] || c.aliases().includes(rest[index]),
-  );
+  /** The command a list of commands names by a word. @param {any[]} list @param {unknown} w */
+  const named = (list, w) =>
+    list.find(c => c.name() === w || c.aliases().includes(w));
+  /** @type {any} */
+  let sub = null;
+  let index = -1;
+  /** The subcommand words from the group's own on (`editor set`). @type {string[]} */
+  let subWords = [];
+  let end = -1;
+  for (let i = 1; i < rest.length && !sub; i++) {
+    const first = named(subs, rest[i]);
+    if (!first || String(rest[i]).startsWith('-')) continue;
+    // Into a nested group (`theme --mode dark editor set …`): the command
+    // the words go on to name is the one the options are read against.
+    let target = first;
+    const words = [first.name()];
+    let j = i + 1;
+    while (target.commands?.length && named(target.commands, rest[j])) {
+      target = named(target.commands, rest[j]);
+      words.push(target.name());
+      j++;
+    }
+    // The word straight after an option that command takes with a value is
+    // that value (`--on set set t …`), never the subcommand.
+    const prev = String(rest[i - 1]);
+    const prevOpt =
+      prev.startsWith('-') && !prev.includes('=')
+        ? (target.options ?? []).find(
+            (/** @type {any} */ o) => o.long === prev || o.short === prev,
+          )
+        : null;
+    if (prevOpt && (prevOpt.required || prevOpt.optional)) continue;
+    sub = target;
+    index = i;
+    subWords = words;
+    end = j;
+  }
+  if (!sub) return null;
   /** @type {string[]} */
   const moved = [];
   /** @type {string[]} */
@@ -414,7 +529,7 @@ function optionsBeforeSubcommand(group) {
   }
   /** @type {string[]} */
   const after = [];
-  const tail = rest.slice(index + 1).map(String);
+  const tail = rest.slice(end).map(String);
   for (let i = 0; i < tail.length; i++) {
     const program = own(tail[i].split('=')[0]);
     if (program) {
@@ -426,11 +541,11 @@ function optionsBeforeSubcommand(group) {
   const line = [
     getCliInvocation(process.cwd()),
     ...chain,
-    sub.name(),
+    ...subWords,
     ...after,
     ...moved,
   ].join(' ');
-  return {sub: `${chain.join(' ')} ${sub.name()}`, line, moved, dropped};
+  return {sub: [...chain, ...subWords].join(' '), line, moved, dropped};
 }
 
 /**
@@ -865,6 +980,42 @@ export function handleCommanderError(err) {
             : 'do this instead: the options after the subcommand',
         },
         {name: help, reason: 'the options it takes'},
+      ],
+    });
+  }
+  // Options with no subcommand at all (`preview --theme t`): no option's
+  // value is a subcommand; the subcommands that take them are named.
+  const bare =
+    code === 'commander.unknownOption' &&
+    group?.commands?.length &&
+    chain.slice(0, 2).join(' ') === 'experimental theme'
+      ? optionsWithoutSubcommand(group)
+      : null;
+  if (bare) {
+    const inv = getCliInvocation(process.cwd());
+    const these = bare.typed.join(' ');
+    const many = bare.typed.length > 1;
+    return finishParseError(err, code, message, exitCode, {
+      message: bare.takers.length
+        ? `${bare.typed.join(', ')} ${many ? 'are' : 'is'} typed with no subcommand of ${bare.group}; ${bare.takers.map(c => c.name()).join(', ')} ${bare.takers.length > 1 ? 'take' : 'takes'} ${many ? 'them' : 'it'}.`
+        : `${bare.group} needs a subcommand, and none of its subcommands takes ${bare.typed.join(', ')}.`,
+      suggestions: [
+        // A subcommand that needs nothing more runs with the options; one
+        // that needs its own words shows them.
+        ...bare.takers.slice(0, 3).map(c =>
+          (c.registeredArguments ?? []).some(
+            (/** @type {any} */ a) => a.required,
+          )
+            ? {
+                name: `${inv} ${bare.group} ${c.name()} --help`,
+                reason: `${c.name()} takes ${these}; what else it needs`,
+              }
+            : {
+                name: `${inv} ${bare.group} ${c.name()} ${these}`,
+                reason: `do this instead: ${c.name()} with ${these}`,
+              },
+        ),
+        {name: `${inv} ${bare.group} --help`, reason: 'its subcommands'},
       ],
     });
   }

@@ -913,7 +913,11 @@ async function newTheme(
       {
         run: exists
           ? [`${P} show ${fixed}`]
-          : againLines(usableNewName(cwd, fixed)),
+          : // A setting's name (--color-accent) is never a theme to make, as
+            // the other commands read it: a free name instead.
+            againLines(
+              usableNewName(cwd, namesSetting(typed) ? 'my-theme' : fixed),
+            ),
       },
     );
   }
@@ -1964,14 +1968,83 @@ export async function themeEditSet(theme, thing, value, options = {}) {
   try {
     return await change('set', theme, thing, value, options);
   } catch (e) {
-    throw await swappedThingValue(
-      await swappedOrder(e, 'set', [theme, thing, value], options),
+    throw await themeLeftOut(
+      await swappedThingValue(
+        await swappedOrder(e, 'set', [theme, thing, value], options),
+        theme,
+        thing,
+        value,
+        options,
+      ),
       theme,
       thing,
       value,
       options,
     );
   }
+}
+
+/**
+ * A refused set whose theme word names a setting (`set padding '4px 8px'
+ * --on card`, `set font Inter Tight`) in an app with one editor theme: the
+ * set on that theme, the words after the setting as its value and every
+ * option kept, followed by set's own check, leads.
+ * @param {unknown} e
+ * @param {string} word the word typed where the theme goes
+ * @param {string} thing
+ * @param {string | undefined} value
+ * @param {ChangeOptions} options
+ * @returns {Promise<unknown>}
+ */
+async function themeLeftOut(e, word, thing, value, options) {
+  // The word names a setting, or no theme: the set on the theme here is
+  // offered only when set's own check passes it (`shadow` as box-shadow).
+  if (
+    !(e instanceof AstryxError) ||
+    !(namesSetting(String(word)) || e.code === E.ERR_UNKNOWN_THEME)
+  )
+    return e;
+  const cwd = options.cwd ?? process.cwd();
+  /** @type {string[]} */
+  let themes;
+  try {
+    themes = editedThemes(cwd);
+  } catch {
+    return e;
+  }
+  if (themes.length !== 1 || themes.includes(word)) return e;
+  const [slug] = themes;
+  const typed = [thing, value].filter(w => w != null && w !== '').join(' ');
+  const flags = [
+    .../** @type {const} */ (['on', 'when', 'state', 'mode']).flatMap(k =>
+      options[k] != null
+        ? [`--${k} ${quoteCommandArgument(String(options[k]))}`]
+        : [],
+    ),
+    ...(options.only ? ['--only'] : []),
+  ];
+  const followed = await followChangeLine(
+    'set',
+    slug,
+    [
+      `${P} set ${slug} ${quoteCommandArgument(String(word))}`,
+      ...(typed ? [quoteCommandArgument(typed)] : []),
+      ...flags,
+    ].join(' '),
+    cwd,
+  );
+  if (followed.why != null) return e;
+  e.suggestions = [
+    {
+      name: followed.line,
+      reason: `do this instead: ${slug} is the theme here`,
+    },
+    // Never a theme named after the setting.
+    ...(e.suggestions ?? []).filter(
+      x => x.name !== followed.line && !x.name.startsWith(`${P} new `),
+    ),
+  ];
+  return e;
 }
 
 /**
@@ -5352,6 +5425,26 @@ async function changeOnce(
           ...matches.filter(x => !sameScope(x)),
         ];
         const scoped = flags.on || flags.when || flags.state || flags.mode;
+        // A word that is a value the theme holds (`undo t red`) names the
+        // setting that holds it: its undo, never a step back that takes back
+        // another change.
+        const byValue =
+          matches.length || (value != null && value !== '')
+            ? []
+            : data.settings.filter(x => valueIs(x.value, typed));
+        if (byValue.length)
+          throw new AstryxError(
+            `"${thing}" is no setting; ${slug} holds it as the value of ${byValue.map(x => describe(x)).join(', ')}. Nothing was changed.`,
+            byValue.slice(0, 5).map(x => ({
+              name: `${P} undo ${slug} ${setArgs(x, String(x.value))}`,
+              reason: `do this instead: ${thing} is the value of ${describe(x)}`,
+            })),
+            e.code,
+          );
+        // A step back takes back the last change, which may be another
+        // setting: it says what it takes back, and a look at the theme
+        // follows it.
+        const takes = steps ? lastStepTakes(cwd, slug, data) : [];
         throw new AstryxError(
           matches.length && !matches.some(sameScope) && scoped
             ? `${e.message.replace(/\s*Nothing was changed\.$/, '')} ${slug} sets ${matches[0].thing} only where these lines name. Nothing was changed.`
@@ -5363,11 +5456,15 @@ async function changeOnce(
                   ? 'do this instead'
                   : `do this instead: ${describe({...x, value: '?'}).replace(' = ?', '')}`,
               }))
-            : [
-                steps && !nearSetting
-                  ? {name: `${P} undo ${slug}`, reason: 'step back one change'}
-                  : {name: `${P} show ${slug}`, reason: 'see what it sets'},
-              ],
+            : steps && !nearSetting
+              ? [
+                  {
+                    name: `${P} undo ${slug}`,
+                    reason: `step back one change${takes.length ? `, which takes back ${takes.join('; ')}` : ''}`,
+                  },
+                  {name: `${P} show ${slug}`, reason: 'see what it sets'},
+                ]
+              : [{name: `${P} show ${slug}`, reason: 'see what it sets'}],
           e.code,
         );
       }
@@ -8029,7 +8126,11 @@ export async function themeEditUndo(theme, options = {}) {
       };
       // A setting's name is never a theme to make or look at, nor a theme
       // name typed with a typo.
-      const settingName = namesSetting(theme);
+      // (With its value in the same word, `corners pill`, too.)
+      const firstWord = String(theme ?? '')
+        .trim()
+        .split(/\s+/)[0];
+      const settingName = namesSetting(theme) || namesSetting(firstWord);
       // A list of themes (t,u) stays a look at each: one theme at a time.
       const shows = (e.suggestions ?? []).filter(x => showOf(x) != null);
       const near = (shows.length === 1 && !settingName ? shows : []).find(x => {
@@ -8078,27 +8179,53 @@ export async function themeEditUndo(theme, options = {}) {
         // A word that is no theme here but a setting a theme here holds
         // (`undo accent`, `undo background-color --on card`): that theme's
         // undo of it, never a new theme or a look named after the setting.
-        const held = await heldSettingUndos(cwd, theme, options);
-        if (held.length || settingName)
-          e.suggestions = [
-            ...held,
-            ...(e.suggestions ?? [])
-              .filter(
-                x =>
-                  !x.name.startsWith(`${P} new `) &&
-                  x.name !== `${P} show ${theme}`,
-              )
-              // With no theme holding it, a look at each theme here says so.
-              .map(x => {
-                const n = showOf(x);
-                return n && !held.length
-                  ? {
-                      ...x,
-                      reason: `do this instead: no theme here holds ${theme}; see what ${n} sets`,
-                    }
-                  : x;
-              }),
-          ];
+        const held = await heldSettingUndos(
+          cwd,
+          firstWord !== String(theme ?? '').trim() && namesSetting(firstWord)
+            ? firstWord
+            : theme,
+          options,
+        );
+        const asSetting = held.length > 0 || settingName;
+        // An undo never makes a theme from the word: no `new` line, but the
+        // one that makes a theme here again whose settings file is gone.
+        e.suggestions = [
+          ...held,
+          ...(e.suggestions ?? [])
+            .filter(
+              x =>
+                // (A theme whose folder is here but whose settings file is
+                // gone is made again under its own name.)
+                (!x.name.startsWith(`${P} new `) ||
+                  (x.name === `${P} new ${theme}` &&
+                    slugOk(theme) &&
+                    fs.existsSync(
+                      path.dirname(themeFiles(cwd, theme).settings),
+                    ))) &&
+                !(asSetting && x.name === `${P} show ${theme}`),
+            )
+            // With no theme holding it, a look at each theme here says so.
+            .map(x => {
+              const n = showOf(x);
+              return n && settingName && !held.length
+                ? {
+                    ...x,
+                    reason: `do this instead: no theme here holds ${theme}; see what ${n} sets`,
+                  }
+                : x;
+            }),
+        ];
+        if (!e.suggestions.length)
+          try {
+            e.suggestions = editedThemes(cwd)
+              .slice(0, 3)
+              .map(n => ({
+                name: `${P} show ${n}`,
+                reason: `do this instead: see what ${n} sets`,
+              }));
+          } catch {
+            // No themes folder: nothing to look at.
+          }
       }
     }
     // Then the theme typed after the setting (`undo corners t`).
@@ -8142,7 +8269,30 @@ async function heldSettingUndos(cwd, word, options) {
     const holding = settings.filter(
       x => x.thing.toLowerCase() === word.toLowerCase(),
     );
-    if (!holding.length) continue;
+    if (!holding.length) {
+      // A typo of a setting's name the theme holds (`acent`), or a value it
+      // holds (`red`, `pill`): that setting's undo, followed by undo's own
+      // check.
+      const near = nearest(word.toLowerCase(), [
+        ...new Set(settings.map(x => x.thing.toLowerCase())),
+      ]);
+      for (const x of settings) {
+        const byName = near.includes(x.thing.toLowerCase());
+        if (!byName && !valueIs(x.value, word)) continue;
+        const followed = await followChangeLine(
+          'undo',
+          slug,
+          `${P} undo ${slug} ${byName ? undoArgs(x) : setArgs(x, String(x.value))}`,
+          cwd,
+        );
+        if (followed.why == null)
+          out.push({
+            name: followed.line,
+            reason: `do this instead: ${byName ? `${word} reads as ${x.thing}` : `${word} is the value of`}, a setting ${slug} holds (${describe(x)})`,
+          });
+      }
+      continue;
+    }
     const before = out.length;
     for (const x of holding) {
       // A setting for both modes applies in the mode named too.
@@ -8193,6 +8343,48 @@ async function heldSettingUndos(cwd, word, options) {
     }
   }
   return out;
+}
+
+/**
+ * Whether a saved value is the word typed: the same text in any case, or
+ * the same color however written (`#f00` is red).
+ * @param {unknown} saved
+ * @param {string} typed
+ */
+function valueIs(saved, typed) {
+  const a = String(saved ?? '')
+    .trim()
+    .toLowerCase();
+  const b = String(typed).trim().toLowerCase();
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const [ca, cb] = [parseColor(a), parseColor(b)];
+  return Boolean(ca && cb && hex(ca) === hex(cb));
+}
+
+/**
+ * What a step back of a theme takes back now: each setting, base and mode
+ * the last step in its history changes (stepTakesBack); none without one.
+ * @param {string} cwd
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} now the settings now
+ * @returns {string[]}
+ */
+function lastStepTakes(cwd, slug, now) {
+  const steps = readHistory(themeFiles(cwd, slug).history).steps;
+  const at = JSON.stringify({...now, lifted: 0, built: 0});
+  for (let i = steps.length - 1; i >= 0; i--) {
+    const before = settingsJson(steps[i]);
+    if (
+      !before ||
+      typeof before !== 'object' ||
+      !Array.isArray(before.settings)
+    )
+      return [];
+    if (JSON.stringify({...before, lifted: 0, built: 0}) === at) continue;
+    return stepTakesBack(now, before);
+  }
+  return [];
 }
 
 /**

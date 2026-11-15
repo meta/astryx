@@ -939,10 +939,16 @@ export function loadTheme(
       `"${String(slug ?? '').slice(0, 80)}" is not a theme name (${NAME_RULE}).`,
       same
         ? {didYouMean: [same], run: [`${P} show ${same}`]}
-        : // A setting's name (--color-accent) typed where the theme goes is
-          // never a theme to make, as for a name that is one (below): each
-          // theme here is offered to look at.
-          namesSetting(String(slug ?? ''))
+        : // A setting's name (--color-accent), alone or with its value
+          // (`corners pill`), typed where the theme goes is never a theme
+          // to make, as for a name that is one (below): each theme here is
+          // offered to look at.
+          namesSetting(String(slug ?? '')) ||
+            namesSetting(
+              String(slug ?? '')
+                .trim()
+                .split(/\s+/)[0],
+            )
           ? {run: have.slice(0, 3).map(h => `${P} show ${h}`)}
           : {run: [`${P} new ${fixed}`]},
     );
