@@ -2,7 +2,7 @@
 
 'use client';
 
-import {useMemo, useState} from 'react';
+import {useState} from 'react';
 import {
   Layout,
   LayoutContent,
@@ -280,6 +280,9 @@ export default function SimpleTableTemplate() {
   );
   // Ids waiting on the remove confirmation; null while the dialog is closed.
   const [pendingRemoval, setPendingRemoval] = useState<string[] | null>(null);
+  // Set when the dialog opens and kept while it closes, so its heading stays
+  // through the closing animation.
+  const [removalTitle, setRemovalTitle] = useState('');
   const showToast = useToast();
 
   const {sortedData, sortConfig} = useTableSortableState<MemberRow>({
@@ -325,16 +328,16 @@ export default function SimpleTableTemplate() {
     setPendingRemoval(null);
   };
 
-  const removalTitle = useMemo(() => {
-    if (!pendingRemoval) {
-      return '';
-    }
-    if (pendingRemoval.length === 1) {
-      const member = members.find(m => m.id === pendingRemoval[0]);
-      return `Remove ${member?.name ?? 'member'}?`;
-    }
-    return `Remove ${pluralize(pendingRemoval.length, 'member')}?`;
-  }, [pendingRemoval, members]);
+  const askRemoval = (ids: string[]) => {
+    const member =
+      ids.length === 1 ? members.find(m => m.id === ids[0]) : undefined;
+    setRemovalTitle(
+      ids.length === 1
+        ? `Remove ${member?.name ?? 'member'}?`
+        : `Remove ${pluralize(ids.length, 'member')}?`,
+    );
+    setPendingRemoval(ids);
+  };
 
   const columns: TableColumn<MemberRow>[] = [
     {
@@ -436,11 +439,23 @@ export default function SimpleTableTemplate() {
               label: 'Copy email',
               icon: DocumentDuplicateIcon,
               onClick: () => {
-                void navigator.clipboard?.writeText(member.email);
-                showToast({
-                  body: `Copied ${member.email}`,
-                  uniqueID: `copy-${member.id}`,
-                });
+                const failed = () =>
+                  showToast({
+                    body: `Could not copy ${member.email}`,
+                    uniqueID: `copy-${member.id}`,
+                  });
+                if (!navigator.clipboard) {
+                  failed();
+                  return;
+                }
+                navigator.clipboard.writeText(member.email).then(
+                  () =>
+                    showToast({
+                      body: `Copied ${member.email}`,
+                      uniqueID: `copy-${member.id}`,
+                    }),
+                  failed,
+                );
               },
             },
             {
@@ -472,7 +487,7 @@ export default function SimpleTableTemplate() {
               label: 'Remove member',
               icon: TrashIcon,
               variant: 'destructive' as const,
-              onClick: () => setPendingRemoval([member.id]),
+              onClick: () => askRemoval([member.id]),
             },
           ]}
         />
@@ -515,9 +530,7 @@ export default function SimpleTableTemplate() {
                         variant="ghost"
                         icon={<Icon icon={TrashIcon} />}
                         onClick={() =>
-                          setPendingRemoval(
-                            Array.from(selectionState.selectedKeys),
-                          )
+                          askRemoval(Array.from(selectionState.selectedKeys))
                         }
                       />
                       {/* Secondary bulk actions stay in an overflow menu so
