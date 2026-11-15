@@ -6446,7 +6446,18 @@ export function draftAnswer(ctx, env, question) {
    * @returns {Step[] | null}
    */
   const byVariant = (on, group, prop, thing, f, fn, c) => {
-    if (f.when || f.state) return null;
+    // (In a state, "disabled button text lighter": each variant from the
+    // color it shows in that state, its rest color where Core gives the
+    // state none of its own, scoped to the variant and the state.)
+    if (f.when) return null;
+    if (f.state) {
+      const stated = Object.keys(
+        /** @type {Record<string, string>} */ (
+          C.MAP[one(on)]?.at?.[prop] ?? {}
+        ),
+      ).some(r => r.split(/[\s,]/).some(x => x.split('=')[0] === f.state));
+      if (stated) return null;
+    }
     /** @type {Map<string, string>} */
     const per = new Map();
     for (const r of C.partReads(one(on), group) ?? []) {
