@@ -365,10 +365,6 @@ const RUNNERS = {
     runs: 'git, sl or hg, to read whether the repository ignores an untracked agent file',
     sites: ['child_process.spawnSync'],
   },
-  'foundation/fonts/font-stylesheet.mjs': {
-    runs: 'postcss, the first time a font stylesheet is read, so commands that read none do not load it',
-    sites: ['require(postcss)'],
-  },
   'foundation/fs/gather-cache.mjs': {
     runs: 'nothing; a module hook that notes each module a search or build loads, with its state, and loads it unchanged',
     sites: ['module.registerHooks'],
@@ -522,11 +518,12 @@ const RUNNERS = {
     sites: ['child_process.spawn'],
   },
   'foundation/runtime/lazy-dependencies.mjs': {
-    runs: 'Babel, jscodeshift and postcss-selector-parser (CommonJS), each on first use rather than when a module that may use it is imported',
+    runs: 'Babel, jscodeshift, postcss and postcss-selector-parser (CommonJS), each on first use rather than when a module that may use it is imported',
     sites: [
       'require(@babel/core)',
       'require(@babel/parser)',
       'require(jscodeshift)',
+      'require(postcss)',
       'require(postcss-selector-parser)',
     ],
   },

@@ -11,13 +11,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {createRequire} from 'node:module';
 import {cssUnescape} from '../text/css-escape.mjs';
-
-/**
- * postcss, loaded the first time a stylesheet is read: most commands read
- * none, and start without it.
- * @returns {typeof import('postcss').default}
- */
-const postcss = () => createRequire(import.meta.url)('postcss');
+import {postcss} from '../runtime/lazy-dependencies.mjs';
 
 /** @param {string} family */
 export const fontKey = family =>
