@@ -36,10 +36,10 @@
  * timestamp runs first, at its own deadline. A long press therefore begins at
  * exactly touch-down + 500 ms even when the main thread was blocked and the
  * timer callback came late, and a test drives the whole machine with explicit
- * timestamps and no real time at all. While the latest contact is a finger or
- * a pen, a deadline whose timer runs late waits while input from before it
- * still reaches the page late. A deadline among a coalesced move's samples
- * runs between them.
+ * timestamps and no real time at all. A deadline whose timer runs late waits
+ * while input from before it still reaches the page late. That holds only
+ * while the latest contact is a finger or a pen. A deadline among a coalesced
+ * move's samples runs between them.
  *
  * SYNC: When modified, update GestureRecognizer.ts and
  * __tests__/arena.test.ts.
