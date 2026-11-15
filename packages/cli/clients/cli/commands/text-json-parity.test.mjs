@@ -323,6 +323,13 @@ function jsonContainsKey(obj, target) {
  * @property {(dir: string) => void} [setup] - Prepare a tmpDir before the run.
  * @property {string[]} [jsonFieldAllowlist] - JSON keys forgiven from text.
  * @property {boolean} [skipFieldChecks] - Skip both record-key and field checks.
+ * @property {string} [dir] - The tmpDir folder `setup` writes, when cases
+ *   of one command each need their own (default: the name).
+ * @property {string[]} [textBlockAllowlist] - Text blocks forgiven from the
+ *   JSON, each `<block> — why` (a code line the text shows: the JSON carries
+ *   its parts).
+ * @property {string[]} [expectData] - Data fields the JSON must carry: the
+ *   command succeeds, so the field checks run on its receipt.
  * @property {boolean} [errorExpected] - The command is expected to error.
  * @property {() => Promise<string>} [prepare] - Make the working directory (instead of `cwd`).
  * @property {(cwd: string) => Promise<void>} [beforeEachRun] - Run before the text run and before the JSON run.
@@ -608,7 +615,12 @@ const CASES = [
     name: 'theme add',
     args: ['theme', 'add', 'brand', '--package', '@acme/ui'],
     cwd: '__TMP__',
+    dir: 'theme add provider',
     setup: providerApp,
+    expectData: ['appProvider'],
+    textBlockAllowlist: [
+      '</Theme> — the closing tag of the wiring the text shows',
+    ],
     // Each run is a first add.
     beforeEachRun: cwd => {
       fs.rmSync(cwd, {recursive: true, force: true});
@@ -621,7 +633,12 @@ const CASES = [
     name: 'theme add',
     args: ['theme', 'add', 'brand', '--package', '@acme/ui'],
     cwd: '__TMP__',
+    dir: 'theme add provider theme prop',
     setup: dir => providerApp(dir, 'theme'),
+    expectData: ['appProvider'],
+    textBlockAllowlist: [
+      '</AcmeThemeProvider> — the closing tag of the wiring the text shows; its opening tag is appProvider.line',
+    ],
     beforeEachRun: cwd => {
       fs.rmSync(cwd, {recursive: true, force: true});
       providerApp(cwd, 'theme');
@@ -634,6 +651,11 @@ const CASES = [
     cwd: '__TMP__',
     setup: dir =>
       providerApp(dir, 'theme', {modeProp: 'themeMode', oneMode: true}),
+    dir: 'theme add provider mode prop',
+    expectData: ['appProvider'],
+    textBlockAllowlist: [
+      '</AcmeThemeProvider> — the closing tag of the wiring the text shows; its opening tag is appProvider.line',
+    ],
     beforeEachRun: cwd => {
       fs.rmSync(cwd, {recursive: true, force: true});
       providerApp(cwd, 'theme', {modeProp: 'themeMode', oneMode: true});
@@ -1007,7 +1029,7 @@ function providerApp(dir, themeProp, more = {}) {
   );
   put(
     'node_modules/@acme/ui/themes/brand/brandTheme.doc.mjs',
-    "export default {type: 'theme', name: 'brand', displayName: 'brand', description: 'brand theme.', maintained: true};\n",
+    "/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {type: 'theme', name: 'brand', displayName: 'brand', description: 'brand theme.', maintained: true};\n",
   );
   put(
     'node_modules/@acme/ui/themes/brand/brandTheme.ts',
@@ -1069,7 +1091,10 @@ describe('text-json-parity', () => {
         async () => {
           let cwd = tc.cwd === '__TMP__' ? tmpDir : tc.cwd || REPO_ROOT;
           if (tc.cwd === '__TMP__') {
-            const sub = path.join(tmpDir, tc.name.replace(/\s+/g, '-'));
+            const sub = path.join(
+              tmpDir,
+              (tc.dir ?? tc.name).replace(/\s+/g, '-'),
+            );
             fs.mkdirSync(sub, {recursive: true});
             if (tc.setup) tc.setup(sub);
             cwd = sub;
@@ -1121,6 +1146,13 @@ describe('text-json-parity', () => {
         if (VERBATIM_TYPES.has(run.json.type)) return;
         expect(run.text).toContain(run.json.package);
       });
+
+      if (tc.expectData)
+        it('returns the receipt with its fields', () => {
+          expect(run.json?.error).toBeUndefined();
+          for (const field of tc.expectData ?? [])
+            expect(run.json?.data, field).toHaveProperty(field);
+        });
 
       if (!tc.skipFieldChecks && !tc.errorExpected) {
         it('every text record key exists in the JSON data', () => {
@@ -1188,6 +1220,8 @@ describe('text-json-parity', () => {
           const items = extractListItems(run.text);
           const textBlocks = extractTextBlocks(run.text);
           const violations = [];
+          /** @type {Set<string>} */
+          const usedBlocks = new Set();
           for (const item of items) {
             // Each list item should match (or be a substring of) some JSON value.
             const found = [...jsonValues].some(
@@ -1209,9 +1243,20 @@ describe('text-json-parity', () => {
               [...jsonValues].some(jv => jv.includes(w)),
             );
             if (!anyOverlap && words.length > 0) {
-              violations.push(`[text] ${block.slice(0, 80)}`);
+              const forgiven = (tc.textBlockAllowlist ?? []).find(
+                a => a.split(' — ')[0] === block,
+              );
+              if (forgiven) usedBlocks.add(forgiven);
+              else violations.push(`[text] ${block.slice(0, 80)}`);
             }
           }
+          const staleBlocks = (tc.textBlockAllowlist ?? []).filter(
+            a => !usedBlocks.has(a),
+          );
+          expect(
+            staleBlocks,
+            `Stale text block allowlist entries — remove them:\n${staleBlocks.join('\n')}`,
+          ).toEqual([]);
           expect(
             violations,
             `Text content not found in JSON data:\n${violations.join('\n')}`,

@@ -122,18 +122,23 @@
  * added theme and deleted the module at `modulePath`: `themes` is empty,
  * `default` is `''`, and the app root must drop the module's wiring.
  * `change.themeModes` is present then when that wiring imported `themeModes`.
- * `appProvider` is present on the first add when an installed package names
- * the provider that wires its themes (its manifest's `themeProvider`): each
- * such provider (`wiredBy`, each `{export, from}` as `theme list` names
- * it, with `themeProp` when the provider takes a theme object), and `wire`,
- * what the text prints: the app may already get its theme from it, then,
- * when it takes a theme object, that the theme is passed to it in the app
- * root (the text's wiring is then that provider, with `line` as its opening
- * JSX, in place of a Theme wrap), else what replacing it costs and what a
- * Theme inside it covers. `themeProp` and `line` are present when a
- * provider takes a theme object; `line` passes the theme's mode too
- * (`themeModes[defaultThemeSlug]`) when the provider names a `modeProp` and
- * an added theme has one color mode. The add reads no app source.
+ * `appProvider` names the provider an installed package declares as the one
+ * that wires its themes (its manifest's `themeProvider`). `wiredBy` lists
+ * each such provider as `theme list` names it, `{export, from}`, with
+ * `themeProp` and `modeProp` when the provider takes the theme and its mode
+ * through those props. `wire` is what the text prints before the wiring.
+ * On the first add it is present whenever such a provider exists: `wire`
+ * says the app may already get its theme from it and names the props it
+ * takes; with exactly one provider, taking the theme, the wiring the text
+ * shows is that provider with the module's theme passed (`themeProp`, and
+ * `line`, its opening JSX), in place of a Theme wrap; otherwise `wire` adds
+ * each provider's trade-off (replacing it drops what else it sets up; a
+ * Theme inside it themes only what it wraps) above the Theme wiring. On a
+ * later add that marks `wireModes`, and on the removal of the last theme,
+ * it is present only when that one provider takes the theme: `wire` says
+ * how its wiring changes, with `line` the provider's opening JSX (passing
+ * the mode when it takes one and an added theme has one color mode). No
+ * receipt reads app source.
  * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean, wireModes?: true, moduleRemoved?: true, themeModes?: true}, notes?: string[], appProvider?: {wiredBy: Array<{export: string, from: string, themeProp?: string, modeProp?: string}>, wire: string, themeProp?: string, line?: string}}} data
  */
 

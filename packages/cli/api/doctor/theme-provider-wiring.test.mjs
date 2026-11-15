@@ -343,7 +343,7 @@ describe('theme add with an installed package that names its provider', () => {
       await runCli(['theme', 'add', 'brand', '--package', '@acme/ui'], dir)
     ).stdout;
     expect(text).toContain(
-      'This app may already get its theme from AcmeThemeProvider (from @acme/ui/theme, declared by @acme/ui). Pass this theme to it in the app root:',
+      'This app may already get its theme from AcmeThemeProvider (from @acme/ui/theme, declared by @acme/ui; it takes the theme as theme). Pass this theme to it in the app root:',
     );
     // The wiring is the provider's, with the module's theme passed to it:
     // one instruction, no Theme wrap beside it.
@@ -371,13 +371,20 @@ describe('theme add with an installed package that names its provider', () => {
   /**
    * An app whose provider takes the theme and, with `modeProp`, its mode;
    * with `oneMode`, the theme has the one color mode dark.
-   * @param {{modeProp?: string, oneMode?: boolean}} opts
+   * @param {{modeProp?: string, oneMode?: boolean, slugs?: string[], themeProp?: string | null}} opts
+   *   `slugs`: the integration's themes (`night`, when listed, has the one
+   *   color mode dark); `themeProp: null` declares none
    */
-  const withProps = ({modeProp, oneMode}) => {
-    const dir = app();
+  const withProps = ({modeProp, oneMode, slugs, themeProp = 'theme'}) => {
+    const dir = app(slugs);
+    if (slugs?.includes('night'))
+      write(
+        path.join(dir, 'node_modules/@acme/ui/dist/night.js'),
+        'export const nightTheme = {name: \'night\', tokens: {}};\nexport const colorModes = ["dark"];\n',
+      );
     write(
       path.join(dir, 'node_modules/@acme/ui/astryx.integration.mjs'),
-      `export default {themes: './themes', themeProvider: ${JSON.stringify({...PROVIDER, themeProp: 'theme', ...(modeProp ? {modeProp} : {})})}};\n`,
+      `export default {themes: './themes', themeProvider: ${JSON.stringify({...PROVIDER, ...(themeProp ? {themeProp} : {}), ...(modeProp ? {modeProp} : {})})}};\n`,
     );
     if (oneMode)
       write(
@@ -420,11 +427,130 @@ describe('theme add with an installed package that names its provider', () => {
     ).stdout;
     expect(text).not.toContain('themeMode=');
     expect(text).not.toContain('themeModes');
+    // The text names the mode prop the provider takes all the same.
+    expect(text).toContain(
+      '(from @acme/ui/theme, declared by @acme/ui; it takes the theme as theme and the mode as themeMode)',
+    );
     const again = withProps({modeProp: 'themeMode'});
     const r = await themeAdd('brand', {cwd: again, package: '@acme/ui'});
     expect(r.data.appProvider.line).toBe(
       '<AcmeThemeProvider theme={themes[defaultThemeSlug]}>',
     );
+  });
+
+  /** @param {string[]} args @param {string} dir */
+  const cliText = async (args, dir) => (await runCli(args, dir)).stdout;
+
+  it('a later one-mode theme passes its mode to the provider, not to a Theme', async () => {
+    const dir = withProps({modeProp: 'themeMode', slugs: ['brand', 'night']});
+    await themeAdd('brand', {cwd: dir, package: '@acme/ui'});
+    const text = await cliText(
+      ['theme', 'add', 'night', '--package', '@acme/ui'],
+      dir,
+    );
+    expect(text).toContain(
+      "The theme module now exports themeModes. Pass the selected theme's mode to AcmeThemeProvider in the app root:",
+    );
+    expect(text).toContain(
+      "import {themes, defaultThemeSlug, themeModes} from './astryx-themes';",
+    );
+    expect(text).toContain(
+      '<AcmeThemeProvider theme={themes[defaultThemeSlug]} themeMode={themeModes[defaultThemeSlug]}>',
+    );
+    expect(text).not.toContain('<Theme ');
+  });
+
+  it('a later one-mode theme leaves the wiring of a provider that takes no mode', async () => {
+    const dir = withProps({slugs: ['brand', 'night']});
+    await themeAdd('brand', {cwd: dir, package: '@acme/ui'});
+    const again = await themeAdd('night', {cwd: dir, package: '@acme/ui'});
+    expect(again.data.change.wireModes).toBe(true);
+    expect(again.data.appProvider?.wire).toBe(
+      'The theme module now exports themeModes; AcmeThemeProvider, which takes the theme, takes no mode, so its wiring stays as it is.',
+    );
+    expect(again.data.appProvider?.line).toBeUndefined();
+  });
+
+  it('removing the last theme undoes the props passed to the provider and keeps it', async () => {
+    const dir = withProps({});
+    await themeAdd('brand', {cwd: dir, package: '@acme/ui'});
+    const text = await cliText(['theme', 'remove', 'brand'], dir);
+    expect(text).toContain(
+      "Undo its wiring in the app root: delete the module's import and the props that pass its theme to AcmeThemeProvider, and keep AcmeThemeProvider, which may set up more than the theme:",
+    );
+    expect(text).toContain(
+      '<AcmeThemeProvider theme={themes[defaultThemeSlug]}>\n  <App />\n</AcmeThemeProvider>',
+    );
+    expect(text).not.toContain('<Theme ');
+  });
+
+  it('with two installed providers, names both and their trade-offs above the Theme wiring', async () => {
+    const dir = withProps({});
+    const beta = path.join(dir, 'node_modules/@beta/ui');
+    write(
+      path.join(dir, 'package.json'),
+      JSON.stringify({
+        name: 'provider-app',
+        private: true,
+        dependencies: {
+          '@acme/ui': '1.0.0',
+          '@beta/ui': '1.0.0',
+          '@astryxdesign/core': CLI_VERSION,
+          '@astryxdesign/theme-neutral': CLI_VERSION,
+        },
+      }),
+    );
+    write(
+      path.join(beta, 'package.json'),
+      JSON.stringify({
+        name: '@beta/ui',
+        version: '1.0.0',
+        type: 'module',
+        exports: {
+          './provider': './dist/provider.js',
+          './themes/sky': './dist/sky.js',
+          './themes/sky.css': './dist/sky.css',
+        },
+      }),
+    );
+    write(
+      path.join(beta, 'astryx.integration.mjs'),
+      "export default {themes: './themes', themeProvider: {export: 'BetaProvider', from: '@beta/ui/provider', themeProp: 'theme'}};\n",
+    );
+    write(
+      path.join(beta, 'dist/provider.js'),
+      'export function BetaProvider({children}) { return children; }\n',
+    );
+    write(
+      path.join(beta, 'themes/sky/skyTheme.doc.mjs'),
+      "/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {type: 'theme', name: 'sky', displayName: 'sky', description: 'sky theme.', maintained: true};\n",
+    );
+    write(
+      path.join(beta, 'themes/sky/skyTheme.ts'),
+      "export const skyTheme = {name: 'sky', tokens: {}};\n",
+    );
+    write(
+      path.join(beta, 'dist/sky.js'),
+      "export const skyTheme = {name: 'sky', tokens: {}};\n",
+    );
+    write(path.join(beta, 'dist/sky.css'), '[data-astryx-theme="sky"] {}\n');
+    const text = await cliText(
+      ['theme', 'add', 'brand', '--package', '@acme/ui'],
+      dir,
+    );
+    expect(text).toContain(
+      'This app may already get its theme from AcmeThemeProvider (from @acme/ui/theme, declared by @acme/ui; it takes the theme as theme) or BetaProvider (from @beta/ui/provider, declared by @beta/ui; it takes the theme as theme).',
+    );
+    expect(text).toContain(
+      'Replacing AcmeThemeProvider applies this theme everywhere but also drops anything else it sets up; a Theme inside it themes only what it wraps.',
+    );
+    expect(text).toContain(
+      'Replacing BetaProvider applies this theme everywhere but also drops anything else it sets up; a Theme inside it themes only what it wraps.',
+    );
+    expect(text).toContain('Wire the generated module once in the app root:');
+    expect(text).toContain('<Theme theme={themes[defaultThemeSlug]}');
+    expect(text).not.toContain('Pass this theme to it');
+    expect(text).not.toContain('<AcmeThemeProvider theme=');
   });
 
   it('says nothing when no installed package names a provider', async () => {

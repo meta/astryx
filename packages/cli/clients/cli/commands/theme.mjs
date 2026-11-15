@@ -841,7 +841,30 @@ function printThemeApp(result) {
   );
   for (const note of result.data.notes ?? []) emit(text(`[note] ${note}`));
   const stem = path.basename(modulePath, path.extname(modulePath));
+  const appProvider = result.data.appProvider;
+  // The one provider that takes the theme (its manifest's themeProp) is the
+  // app's wiring: each receipt shows that provider, with the module's theme
+  // passed to it, in place of a Theme wrap the app does not render.
+  const provider =
+    appProvider?.line && appProvider.wiredBy.length === 1
+      ? appProvider.wiredBy[0]
+      : null;
+  const providerCode = () =>
+    code(
+      `import {${provider?.export}} from '${provider?.from}';\n` +
+        `import {themes, defaultThemeSlug${/\bthemeModes\[/.test(String(appProvider?.line)) ? ', themeModes' : ''}} from './${stem}';\n\n` +
+        `${appProvider?.line}\n  <App />\n</${provider?.export}>`,
+    );
   if (change.moduleRemoved) {
+    if (appProvider && provider) {
+      emit(
+        text(
+          `Removed ${change.slug}, the only added theme, and deleted ${modulePath}. ${appProvider.wire}`,
+        ),
+        providerCode(),
+      );
+      return;
+    }
     emit(
       text(
         `Removed ${change.slug}, the only added theme, and deleted ${modulePath}. Undo its wiring in the app root: delete the module's import (and the Theme import when nothing else uses Theme), and keep only the children of the Theme wrapper:`,
@@ -857,7 +880,11 @@ function printThemeApp(result) {
   if (!change.firstAdd) {
     // The module now lists one-mode themes' modes: the app's wiring, made
     // without them, passes the selected theme's mode from now on.
-    if (change.wireModes)
+    if (change.wireModes) {
+      if (appProvider) {
+        emit(text(appProvider.wire), ...(provider ? [providerCode()] : []));
+        return;
+      }
       emit(
         text(
           "The theme module now exports themeModes. Pass the selected theme's mode to Theme in the app root:",
@@ -868,28 +895,15 @@ function printThemeApp(result) {
             "<Theme theme={themes[defaultThemeSlug]} mode={themeModes[defaultThemeSlug] ?? 'system'}>\n  <App />\n</Theme>",
         ),
       );
+    }
     return;
   }
   // With a theme of one color mode added, the generated module lists each
   // such theme's mode in `themeModes`, and the wiring passes the selected
   // theme's (none for a two-mode theme, which follows the system).
   const modes = result.data.themes.some(t => t.mode);
-  const appProvider = result.data.appProvider;
-  // A provider that takes the theme (its manifest's themeProp) is the
-  // wiring: the generated module's theme passed to it, with no Theme wrap.
-  const taking = appProvider?.themeProp
-    ? appProvider.wiredBy.find(p => p.themeProp === appProvider.themeProp)
-    : undefined;
-  if (appProvider && taking) {
-    const passesMode = /\bthemeModes\[/.test(String(appProvider.line));
-    emit(
-      text(appProvider.wire),
-      code(
-        `import {${taking.export}} from '${taking.from}';\n` +
-          `import {themes, defaultThemeSlug${passesMode ? ', themeModes' : ''}} from './${stem}';\n\n` +
-          `${appProvider.line}\n  <App />\n</${taking.export}>`,
-      ),
-    );
+  if (appProvider && provider) {
+    emit(text(appProvider.wire), providerCode());
     return;
   }
   emit(
