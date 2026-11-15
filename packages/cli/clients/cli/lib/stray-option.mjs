@@ -337,7 +337,14 @@ export function strayOptionAnswer(
     name: formatCliCommand([...path, '--help'].join(' ')),
     reason: 'every option it takes',
   });
-  return {message: `unknown option '${stray}': ${sentence}.`, suggestions};
+  // Commander's near name, when no run can carry it (it needs a value the
+  // call did not give).
+  const similar = /\(Did you mean (--[\w-]+)\?\)/.exec(message)?.[1];
+  const near = !run && similar ? ` Did you mean ${similar}?` : '';
+  return {
+    message: `unknown option '${stray}': ${sentence}.${near}`,
+    suggestions,
+  };
 }
 
 /**

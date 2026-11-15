@@ -697,16 +697,17 @@ async function answerStrayOption(err, rejected, message, exitCode) {
   if (!rejected.parent) {
     const {findEntry, firstWord, unknownCommandAnswer} =
       await import('./unknown-command.mjs');
-    const first = firstWord(words, rejected);
+    // The stray option and its value left out, so the value is not read as
+    // the command (`astryx --format json component Table`).
+    const cleaned = withoutStray(words, stray, rejected.options);
+    const first = firstWord(cleaned, rejected);
     if (
       first &&
       !rejected.commands.some((/** @type {any} */ c) => c.name() === first.word)
     ) {
-      const answer = await unknownCommandAnswer(
-        rejected,
-        withoutStray(words, stray, rejected.options),
-        {findEntry},
-      );
+      const answer = await unknownCommandAnswer(rejected, cleaned, {
+        findEntry,
+      });
       setOutcome('parse-error', {
         exitCode: exitCode || 1,
         error: new Error(answer?.message ?? message),

@@ -240,3 +240,27 @@ describe('an unknown option before an unknown command', () => {
     expect(named.status).toBe(0);
   });
 });
+
+describe('an unknown option with a value before a command', () => {
+  it('reports the unknown option and names the run as meant', async () => {
+    const {status, stdout} = await runCli([
+      '--json',
+      '--format',
+      'json',
+      'component',
+      'Text',
+    ]);
+    expect(status).toBe(1);
+    const envelope = JSON.parse(stdout);
+    expect(envelope.code).toBe('ERR_INVALID_OPTION');
+    expect(envelope.error).toMatch(/^unknown option '--format'/);
+    expect(words(envelope.suggestions[0].name)).toEqual([
+      '--json',
+      'component',
+      'Text',
+    ]);
+
+    const named = await runCli(words(envelope.suggestions[0].name));
+    expect(named.status).toBe(0);
+  });
+});

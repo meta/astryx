@@ -286,9 +286,14 @@ describe('runParses: an option that needs a value', () => {
     expect(
       runs(answer(upgrade, '--frm', ['upgrade', '--frm'], '--from')),
     ).toEqual([]);
-    expect(
-      runs(answer(upgrade, '--frm', ['upgrade', '--frm', '--json'], '--from')),
-    ).toEqual([]);
+    const frm = answer(
+      upgrade,
+      '--frm',
+      ['upgrade', '--frm', '--json'],
+      '--from',
+    );
+    expect(runs(frm)).toEqual([]);
+    expect(frm?.message).toMatch(/ Did you mean --from\?$/);
     expect(
       runs(
         answer(
