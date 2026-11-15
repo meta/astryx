@@ -260,6 +260,10 @@ app to turn on.
 - Unsupported behavior: with no on-screen keyboard, or no visual-viewport
   support, the keyboard height is 0 and nothing changes. During server render it
   renders nothing and reads no viewport.
+- Unsupported behavior: on iPhone Safari with the keyboard up, a control inside
+  the roughly 30 pt band just above the address bar receives no touch; Safari
+  takes it. A tap there reaches the page as no event, so no component can
+  answer it. Measured on an iPhone 14 with iOS 26.2.
 - Browser evidence: Safari on iOS, in the iOS Simulator or on a device and in a
   top-level document, proves the iOS claims of FR2–FR5, and Chrome on Android
   in the Android emulator with Gboard proves FR8, with Firefox for Android in
