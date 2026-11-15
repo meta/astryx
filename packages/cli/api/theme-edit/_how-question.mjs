@@ -3851,9 +3851,12 @@ export function draftAnswer(ctx, env, question) {
       /\b(?:no|remove|without|get rid of|drop)\s+(?:the\s+|all\s+|any\s+)?(?:extra\s+)?(letter[- ]?spacing|tracking)\b/gi,
       '$1 0',
     )
+    // (The way word stays, so what is changed stays: "dividers twice as
+    // thin" is their line, half of now.)
     .replace(
       /\b(?:twice|two times) as (small|thin|narrow|short|tight)\b/gi,
-      '50% of now',
+      (_m, w) =>
+        `50% of now ${{small: 'smaller', thin: 'thinner', narrow: 'narrower', short: 'shorter', tight: 'tighter'}[String(w).toLowerCase()]}`,
     )
     .replace(
       /\b(two|three|four|five|2|3|4|5) (thirds|quarters|fourths|fifths)\b(?:\s+of)?/gi,
