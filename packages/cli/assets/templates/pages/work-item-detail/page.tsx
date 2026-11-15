@@ -257,10 +257,11 @@ const ATTACHMENT_ICONS = {
 };
 
 // Identical for every row, so it is built once rather than per render.
-const ATTACHMENT_ACTIONS: DropdownMenuOption[] = [
-  {label: 'Edit', icon: PencilIcon},
-  {label: 'Delete', icon: TrashIcon, variant: 'destructive'},
-];
+const ATTACHMENT_DELETE: DropdownMenuOption = {
+  label: 'Delete',
+  icon: TrashIcon,
+  variant: 'destructive',
+};
 
 const HEADER_ACTIONS = [
   {label: 'Watch', icon: EyeIcon},
@@ -583,6 +584,7 @@ function SubtasksSection({
 
 // ─── Attachments ────────────────────────────────────────────────────────────
 function AttachmentsSection() {
+  const showToast = useToast();
   return (
     <Section padding={SECTION_PADDING}>
       <VStack gap={4}>
@@ -621,7 +623,19 @@ function AttachmentsSection() {
                 <MoreMenu
                   presentation="adaptive"
                   label={`Actions for ${attachment.title}`}
-                  items={ATTACHMENT_ACTIONS}
+                  items={[
+                    {
+                      label: 'Edit',
+                      icon: PencilIcon,
+                      onClick: () =>
+                        // Demo only: replace this toast with the call that edits the attachment.
+                        showToast({
+                          body: `Demo: ${attachment.title} would open for editing here`,
+                          uniqueID: `edit-${attachment.id}`,
+                        }),
+                    },
+                    ATTACHMENT_DELETE,
+                  ]}
                 />
               </HStack>
             </ClickableCard>
