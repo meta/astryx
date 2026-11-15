@@ -725,36 +725,45 @@ for (const direction of ['ltr', 'rtl'] as const) {
     key: `search-light-${direction}`,
     group: 'search',
     story: 'core-multiselector--searchable',
-    ready: '#storybook-root button[role="combobox"]',
+    ready: '#storybook-root button[aria-haspopup]',
     mode: 'light',
     direction,
     viewport: DESKTOP,
     run: async (page, check, frame) => {
-      const combobox = page.getByRole('combobox', {name: /Countries/});
-      await combobox.click();
-      await expect(combobox).toHaveAttribute('aria-expanded', 'true');
+      // With search, the search input is the combobox and the trigger is a
+      // plain button that opens it.
+      const trigger = page.getByRole('button', {name: /Countries/});
+      const haspopup = await trigger.getAttribute('aria-haspopup');
+      check(haspopup != null, 'trigger advertises no popup');
+      await trigger.click();
+      await expect(trigger).toHaveAttribute('aria-expanded', 'true');
       await settle(page);
       const search = page.locator(
-        '.astryx-multi-selector-search input, .astryx-multi-selector-search [role="combobox"]',
+        '.astryx-multi-selector-search [role="combobox"]',
       );
-      check((await search.count()) >= 1, 'no search input in the search row');
+      check((await search.count()) === 1, 'no search combobox in the row');
       const focused = await search
-        .first()
         .evaluate(el => el === document.activeElement)
         .catch(() => false);
       check(focused, 'search input does not take focus on open');
-      const all = await readPanel(combobox);
+      const all = await readPanel(search);
+      check(
+        all.listboxRole === 'listbox' && all.options.length === 11,
+        `list ${all.listboxRole} with ${all.options.length} rows`,
+      );
       await page.keyboard.type('an');
       await settle(page);
-      const filtered = await readPanel(combobox);
+      const filtered = await readPanel(search);
+      const matches = filtered.options.filter(
+        o => !o.name.startsWith('Select all'),
+      );
       check(
-        filtered.options.filter(
-          o => o.name !== '' && !o.name.startsWith('Select all'),
-        ).length > 0 && filtered.options.length < all.options.length,
-        `filter ${all.options.length} -> ${filtered.options.length}`,
+        matches.length > 0 &&
+          matches.every(o => o.name.toLowerCase().includes('an')),
+        `matches for "an": ${matches.map(o => o.name).join(', ')}`,
       );
       await frame('query', {all: all.options.length, filtered});
-      await page.keyboard.press('Control+A');
+      await page.keyboard.press('ControlOrMeta+A');
       await page.keyboard.type('zzzz');
       await settle(page);
       const emptyShown = await page
@@ -767,7 +776,19 @@ for (const direction of ['ltr', 'rtl'] as const) {
       checkAxe(check, result);
       await frame('no-results', {emptyShown, axe: result});
       await page.keyboard.press('Escape');
-      await expect(combobox).toHaveAttribute('aria-expanded', 'false');
+      await settle(page);
+      const escapes =
+        (await trigger.getAttribute('aria-expanded')) === 'false' ? 1 : 2;
+      if (escapes === 2) {
+        await page.keyboard.press('Escape');
+      }
+      await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      await settle(page);
+      const returned = await trigger.evaluate(
+        el => el === document.activeElement,
+      );
+      check(returned, 'focus did not return to the trigger');
+      await frame('closed', {escapes, returned});
     },
   });
 }
