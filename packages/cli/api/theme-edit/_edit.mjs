@@ -765,6 +765,13 @@ async function newTheme(
         ).map(x => /** @type {[string, string]} */ (['vibrancy', String(x)]))
       : [];
   const unfit = [...badValue, ...noEffect];
+  // A font the font readers refuse (a preset typo, a weight word after the
+  // family) takes any family text by its dial's own test, so a refusal
+  // for the name reads it as new reads it for a free name.
+  const nameRefused =
+    typeof name !== 'string' ||
+    !slugOk(name) ||
+    fs.existsSync(themeFiles(cwd, name).settings);
   const isUnfit = (/** @type {string} */ k, /** @type {unknown} */ x) =>
     unfit.some(([a, b]) => a === k && b === String(x));
   // A value it does not take is repaired as new repairs it for a free name
@@ -775,7 +782,7 @@ async function newTheme(
   // installed here reads them on no base, as nothing it adds is needed to
   // read a dial's value.
   const readings =
-    unfit.length && !repairing
+    (unfit.length || (settings.font != null && nameRefused)) && !repairing
       ? await repairedNewSettings(cwd, {
           ...options,
           like:
@@ -787,6 +794,13 @@ async function newTheme(
       : null;
   // Each reading of the values (one, or one per mode new cannot tell).
   const repaired = readings?.[0] ?? null;
+  // The font as new reads it: refused when its reading differs.
+  if (
+    repaired &&
+    settings.font != null &&
+    JSON.stringify(repaired.font) !== JSON.stringify(settings.font)
+  )
+    for (const x of [settings.font].flat()) unfit.push(['font', String(x)]);
   const keptAs = (/** @type {string} */ k) => repaired?.[k];
   const lostBad = badValue.filter(
     ([k]) => repaired == null || keptAs(k) == null,
@@ -798,8 +812,8 @@ async function newTheme(
   const fitFor = (
     /** @type {Record<string, string | string[]> | null} */ reading,
   ) =>
-    /** @type {Record<string, string | string[] | undefined>} */ (
-      Object.fromEntries(
+    /** @type {Record<string, string | string[] | undefined>} */ ({
+      ...Object.fromEntries(
         Object.entries(settings).map(([k, v]) => [
           k,
           reading && unfit.some(([a]) => a === k)
@@ -810,8 +824,14 @@ async function newTheme(
                 ? undefined
                 : v,
         ]),
-      )
-    );
+      ),
+      // A setting the font's reading adds (the weight its words name).
+      ...(reading && unfit.some(([a]) => a === 'font')
+        ? Object.fromEntries(
+            Object.entries(reading).filter(([k]) => !(k in settings)),
+          )
+        : {}),
+    });
   const fitVariants = (readings ?? [null]).map(fitFor);
   const fitSettings = fitVariants[0];
   const flag = (/** @type {[string, string]} */ [k, x]) =>

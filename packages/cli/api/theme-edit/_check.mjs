@@ -1086,7 +1086,7 @@ const NUMBERISH = /^[+-]?(\d+\.?\d*|\.\d+)(px|rem|em|pt|%)?$/i;
  * @param {string} value
  * @param {any} ctx
  * @param {boolean} [presets] whether a preset name is read (the font dial)
- * @param {Array<{name: string, near: string}>} [notes] filled with each family kept as
+ * @param {Array<{name: string, near: string, rung?: string}>} [notes] filled with each family kept as
  *   typed that is near a font a system ships (a family the editor does not
  *   know may be a real one: Corben is no typo of Corbel)
  * @returns {{why: string, families: string, asTyped: string | null, rung: string | null, size: boolean, textSize: number | null, style: string | null} | null}
@@ -1218,6 +1218,25 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
     let end = words.length;
     /** @type {Array<{kind: string, text: string, value?: number, typo?: boolean}>} */
     const tail = [];
+    /**
+     * Whether the words before index k, past any more weight or style
+     * words (typed exactly or with a typo), are a family the editor knows
+     * (Inter in `Inter Bold Itallic`).
+     * @param {number} k
+     */
+    const familyBefore = k => {
+      let i = k;
+      while (
+        i > 1 &&
+        (weightOf(words[i - 1]) != null ||
+          STYLE.test(words[i - 1]) ||
+          wordTypo(words[i - 1]))
+      )
+        i -= 1;
+      for (let j = k; j >= i; j -= 1)
+        if (j > 0 && knownFamily(ctx, words.slice(0, j).join(' '))) return true;
+      return false;
+    };
     while (end > 0) {
       // A known family before the words read so far keeps its own last
       // word (Arial Black 900 is Arial Black and 900).
@@ -1246,11 +1265,7 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
       } else if (NUMBERISH.test(w) && /[a-z%]$/i.test(w)) {
         tail.unshift({kind: 'size', text: w});
         end -= 1;
-      } else if (
-        end >= 2 &&
-        knownFamily(ctx, words.slice(0, end - 1).join(' ')) &&
-        wordTypo(w)
-      ) {
+      } else if (end >= 2 && wordTypo(w) && familyBefore(end - 1)) {
         // A weight or style word with a typo after a family the editor
         // knows (Georgia Blod) is that word: the one typo limit reads it.
         const meant = /** @type {string} */ (wordTypo(w));
@@ -1375,9 +1390,21 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
         continue;
       }
       if (head.near) {
+        // The family near the name, and the weight its words name set the
+        // way set takes it (Arail Bold: arial, and headings bold).
+        const w = tail.find(t => t.kind === 'weight')?.value;
         notes.push({
           name,
-          near: `${head.near} ${tail.map(t => t.text).join(' ')}`,
+          near: head.near,
+          ...(w != null
+            ? {
+                rung: Object.entries(HEADING_WEIGHTS).reduce((a, b) =>
+                  Math.abs(Number(b[1]) - w) < Math.abs(Number(a[1]) - w)
+                    ? b
+                    : a,
+                )[0],
+              }
+            : {}),
         });
         kept.push(name);
         continue;
@@ -3904,14 +3931,14 @@ export function checkSetting(
       thing === 'font-family' ||
       thing.startsWith('--font-family'))
   ) {
-    /** @type {Array<{name: string, near: string}>} */
+    /** @type {Array<{name: string, near: string, rung?: string}>} */
     const near = [];
     fontListProblem(value, ctx, thing === 'font', near);
     if (near.length)
       s.note = near
         .map(
           n =>
-            `"${n.name}" is kept as typed: the editor does not know that family, and a font a system ships is spelled near it; if that was meant: ${P} set ${slug} ${thing} ${quoteCommandArgument(String(value).replace(n.name, n.near))}${flags.on ? ` --on ${flags.on}` : ''}`,
+            `"${n.name}" is kept as typed: the editor does not know that family, and a font a system ships is spelled near it; if that was meant: ${P} set ${slug} ${thing} ${quoteCommandArgument(String(value).replace(n.name, n.near))}${flags.on ? ` --on ${flags.on}` : ''}${n.rung && thing === 'font' ? ` and ${P} set ${slug} headings ${n.rung}` : ''}`,
         )
         .join('; ');
   }
