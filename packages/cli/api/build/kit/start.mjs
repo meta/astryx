@@ -11,10 +11,11 @@ import {loadWeights} from '../_adapter.mjs';
 import {asksForNewPage} from './kind.mjs';
 import {pickAlternatives, pickStart} from './rank.mjs';
 import {hasEditPhrase, shellCallScore} from './shellcall.mjs';
-import {isAppShell, normalized, readNames} from './words.mjs';
+import {isAppShell, readNames} from './words.mjs';
 import {
   blendOrder,
   blendSummary,
+  namedOutright,
   sharesOwnWord,
   weighStart,
 } from './weights.mjs';
@@ -82,20 +83,6 @@ const LIFT = [
 
 /** The decision replaces the shell with a page when p >= 0.30. */
 const LIFT_AT = 0.3;
-
-/**
- * Whether the idea names a page template: its id's words, written in any case
- * or separator (readNames), or its display name, as one run of words.
- * @param {string} idea
- * @param {{name: string, displayName?: string}} entry
- * @returns {boolean}
- */
-function namesTemplate(idea, entry) {
-  const read = ` ${normalized(readNames(idea, [{name: entry.name}]))} `;
-  return [entry.name, entry.displayName ?? '']
-    .map(normalized)
-    .some(n => n !== '' && read.includes(` ${n} `));
-}
 
 /**
  * The page template that replaces an app-shell start, or null to keep the
@@ -175,7 +162,12 @@ export function chooseStart(
   // A template that is not ready is named only when the idea names it: the
   // reader asked for it, so the reason says why build did not start there.
   const unready =
-    unreadyMatch && namesTemplate(idea, pages[0]) ? unreadyMatch : null;
+    unreadyMatch &&
+    namedOutright([pages[0].name], readNames(idea, [{name: pages[0].name}]), [
+      pages[0],
+    ])[0]
+      ? unreadyMatch
+      : null;
   const shownDirect = unreadyMatch && !unready ? null : direct;
   // The reason never denies a match the same response reports: a direct
   // match the ranker outweighed is named, and so are the loose page matches

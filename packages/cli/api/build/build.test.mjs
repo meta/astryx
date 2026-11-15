@@ -349,18 +349,20 @@ describe('build kit — every page starts from a template', () => {
   });
 
   it('does not start from a direct match that is not ready yet, and says so', async () => {
-    const r = await build('incident console', {cwd: REPO});
-    expect(r.type).toBe('build.kit');
-    if (r.type !== 'build.kit') return;
-    // The response's direct match describes the templates it lists, which
-    // leave out the not-ready one, so none of them is a confident match.
-    expect(r.data.directMatch).toBe(false);
-    for (const page of r.data.pages) expect(page.command).toMatch(/--skeleton$/);
-    expect(r.data.pages.map(p => p.name)).not.toContain('incident-console');
-    expect(r.data.start?.name).not.toBe('incident-console');
-    expect(r.data.start?.reason).toBe(
-      `\`incident-console\` isn't ready yet, so build started from \`${r.data.start?.name}\`.`,
-    );
+    for (const idea of ['incident console', 'incident consoles']) {
+      const r = await build(idea, {cwd: REPO});
+      expect(r.type).toBe('build.kit');
+      if (r.type !== 'build.kit') return;
+      // The response's direct match describes the templates it lists, which
+      // leave out the not-ready one, so none of them is a confident match.
+      expect(r.data.directMatch).toBe(false);
+      for (const page of r.data.pages) expect(page.command).toMatch(/--skeleton$/);
+      expect(r.data.pages.map(p => p.name)).not.toContain('incident-console');
+      expect(r.data.start?.name).not.toBe('incident-console');
+      expect(r.data.start?.reason).toBe(
+        `\`incident-console\` isn't ready yet, so build started from \`${r.data.start?.name}\`.`,
+      );
+    }
   });
 
   it('does not start from a page that matched one incidental word', async () => {
@@ -576,6 +578,9 @@ describe('build kit — every page starts from a template', () => {
   it('never names a template that is not ready when the idea does not name it', async () => {
     const r = await build('a list of incidents with severity and owners', {cwd: REPO});
     if (r.type !== 'build.kit') throw new Error(r.type);
+    const found = await search('a list of incidents with severity and owners', {cwd: REPO});
+    const top = found.data.results.find(x => x.domain === 'template' && x.kind !== 'block');
+    expect(top?.name).toBe('incident-console');
     expect(r.data.start?.name).not.toBe('incident-console');
     expect(JSON.stringify(r.data)).not.toContain('incident-console');
   });
