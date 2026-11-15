@@ -82,6 +82,46 @@ describe('template path safety', () => {
     ]);
   });
 
+  it('names the App Router folder in an app that has one, and the named command writes there', async () => {
+    for (const [router, expected] of [
+      ['app', 'app/blank'],
+      ['src/app', 'src/app/blank'],
+    ]) {
+      const cwd = path.join(tmpDir, `project-${router.replace('/', '-')}`);
+      fs.mkdirSync(path.join(cwd, router), {recursive: true});
+
+      const err = await templateApi('blank', {
+        targetPath: path.join(tmpDir, 'scratch'),
+        cwd,
+      }).catch(e => e);
+      expect(err.code).toBe('ERR_PATH_TRAVERSAL');
+      expect(err.suggestions[0].name).toBe(`astryx template blank ${expected}`);
+
+      const written = await templateApi('blank', {targetPath: expected, cwd});
+      expect(written.data.outputDir).toBe(path.normalize(expected));
+      expect(
+        fs.existsSync(path.join(cwd, 'src', 'pages')),
+        'src/pages beside an app/ folder stops a Next build',
+      ).toBe(false);
+    }
+  });
+
+  it('names a fresh folder when the app already has one for that id', async () => {
+    const cwd = path.join(tmpDir, 'project');
+    fs.mkdirSync(path.join(cwd, 'app', 'blank'), {recursive: true});
+    fs.writeFileSync(path.join(cwd, 'app', 'blank', 'page.tsx'), 'mine\n');
+
+    const err = await templateApi('blank', {
+      targetPath: path.join(tmpDir, 'scratch'),
+      cwd,
+    }).catch(e => e);
+    expect(err.suggestions[0].name).toBe('astryx template blank app/blank-2');
+    await templateApi('blank', {targetPath: 'app/blank-2', cwd});
+    expect(
+      fs.readFileSync(path.join(cwd, 'app', 'blank', 'page.tsx'), 'utf8'),
+    ).toBe('mine\n');
+  });
+
   it('writes an absolute targetPath inside the project as its relative form', async () => {
     const cwd = path.join(tmpDir, 'project');
     fs.mkdirSync(cwd, {recursive: true});
