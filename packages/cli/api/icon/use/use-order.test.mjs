@@ -62,7 +62,23 @@ describe('iconUse with backups', () => {
       unlisted: ['@acme/lines/lines'],
     });
     expect(result.data.next).toBe(
-      '2 icon sets are installed and @acme/lines/lines is not in your list. Add it as backup with `astryx experimental icon use glyphs --backup @acme/lines/lines`, or uninstall it.',
+      '2 icon sets are installed and lines is not in your list. Add it as backup with `astryx experimental icon use glyphs --backup lines`, or uninstall it.',
+    );
+  });
+
+  it('names every set in the fix one way, however the main set was written', async () => {
+    const dir = twoSets();
+    const result = await iconUse('@acme/glyphs/glyphs', {cwd: dir});
+    expect(result.data.next).toBe(
+      '2 icon sets are installed and lines is not in your list. Add it as backup with `astryx experimental icon use glyphs --backup lines`, or uninstall it.',
+    );
+    // A name two packages ship is written as <package>/<set>, for every set.
+    const shared = writeIconSetProject(path.join(tmp, 'shared'), {
+      packages: [{}, {name: '@acme/lines'}, {name: '@other/glyphs'}],
+    });
+    const both = await iconUse('@acme/glyphs/glyphs', {cwd: shared});
+    expect(both.data.next).toBe(
+      '3 icon sets are installed and lines, @other/glyphs/glyphs are not in your list. Add them as backup with `astryx experimental icon use @acme/glyphs/glyphs --backup lines --backup @other/glyphs/glyphs`, or uninstall them.',
     );
   });
 

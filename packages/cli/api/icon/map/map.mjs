@@ -17,6 +17,7 @@ import {
   findLocalIconSet,
   mappableDefinitions,
   refuseOutsideProject,
+  templateMeaningsOf,
   writeGeneratedIcons,
   writeIconSetData,
   definitionNameOf,
@@ -55,9 +56,12 @@ export async function iconMap(definition, icon, options = {}) {
     ],
   );
   if (pairs != null) {
-    return authoring(() => mapMany({cwd, selector, pairs}));
+    return withTemplateMeanings(
+      await authoring(() => mapMany({cwd, selector, pairs})),
+      cwd,
+    );
   }
-  return authoring(async () => {
+  const result = await authoring(async () => {
     if (typeof definition !== 'string' || definition.trim() === '') {
       throw new AstryxError(
         'Name the icon definition to map',
@@ -146,6 +150,21 @@ export async function iconMap(definition, icon, options = {}) {
       },
     };
   });
+  return withTemplateMeanings(result, cwd);
+}
+
+/**
+ * Add the template meanings the set leaves unmapped after the write.
+ * @template {{data: {set: string}}} T
+ * @param {T} result
+ * @param {string} cwd
+ * @returns {Promise<T>}
+ */
+async function withTemplateMeanings(result, cwd) {
+  const templateMeanings = await templateMeaningsOf(cwd, result.data.set);
+  return templateMeanings
+    ? {...result, data: {...result.data, templateMeanings}}
+    : result;
 }
 
 /**

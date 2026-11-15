@@ -5,7 +5,9 @@
  * descriptor's `icons` with the icon definition it draws, so a project's icon
  * set replaces it (AST-084 FR9). The CLI knows no icon library; only this
  * test names the libraries the bundled templates happen to import, to find
- * their icon imports. No icon is exempt.
+ * their icon imports. No icon is exempt. Two different icons in one template
+ * never share a definition: a set draws one icon per definition, so they
+ * would draw the same.
  */
 
 import * as fs from 'node:fs';
@@ -19,6 +21,7 @@ const {
 } = require('../foundation/discovery/template-adapter.mjs');
 /** @type {typeof import('../foundation/discovery/template-icons.mjs')} */
 const {
+  sharedTemplateMeanings,
   undeclaredTemplateIcons,
 } = require('../foundation/discovery/template-icons.mjs');
 /** @type {typeof import('../foundation/discovery/icon-definition-discovery.mjs')} */
@@ -78,6 +81,21 @@ describe('bundled template icon declarations', () => {
     }
     expect(undeclared).toEqual([]);
     expect(problems).toEqual([]);
+  }, 60_000);
+
+  it('give two different icons in one template two different definitions', async () => {
+    /** @type {string[]} */
+    const shared = [];
+    for (const template of await discoverCoreTemplates()) {
+      for (const {definition, keys} of sharedTemplateMeanings(
+        template.icons ?? {},
+      )) {
+        shared.push(
+          `${template.type}/${template.dirName}: ${keys.join(', ')} all declare "${definition}"`,
+        );
+      }
+    }
+    expect(shared).toEqual([]);
   }, 60_000);
 
   it('pass the template_icon_undeclared check that integration check runs', async () => {

@@ -49,7 +49,7 @@ import {
 } from '../../foundation/discovery/docs-discovery.mjs';
 import {discoverIntegrationThemes} from '../../foundation/discovery/theme-discovery.mjs';
 import {inspectPackageExport} from '../../foundation/discovery/package-exports.mjs';
-import {parse as parseModule} from '@babel/parser';
+import {babelParse as parseModule} from '../../foundation/runtime/lazy-dependencies.mjs';
 import {moduleExportsName} from '../../foundation/discovery/module-exports.mjs';
 import {
   ThemeImportError,
@@ -57,7 +57,7 @@ import {
 } from '../../foundation/discovery/theme-imports.mjs';
 import {
   normalizeThemeBuildForCompare,
-  themeBuild,
+  themeBuildWithHandOff,
 } from '../theme/build/build.mjs';
 import {
   discoverIntegrationComponents,
@@ -641,8 +641,12 @@ async function validateIncompleteThemeExports(
     if (outputs.some(output => output.kind !== 'font stylesheet')) {
       // The scratch directory is the write root; the package stays the cwd,
       // so the build selects the package's Core and its paths as before.
-      const scratchBuild = {out: expectedCss, __writeRoot: expectedDir};
-      const receipt = await themeBuild(source, scratchBuild, {cwd: packageDir});
+      const receipt = await themeBuildWithHandOff(
+        source,
+        {out: expectedCss},
+        {cwd: packageDir},
+        {writeRoot: expectedDir},
+      );
       if (receipt == null || receipt.type !== 'theme.build') {
         throw new Error('the theme build produced no complete receipt');
       }
@@ -1079,10 +1083,12 @@ async function validatePackedThemeExports(
     try {
       // The scratch directory is the write root; the package stays the cwd,
       // so the build selects the package's Core and its paths as before.
-      const scratchBuild = {out: expectedCss, __writeRoot: expectedDir};
-      const receipt = await themeBuild(source, scratchBuild, {
-        cwd: localIntegration.__packageDir,
-      });
+      const receipt = await themeBuildWithHandOff(
+        source,
+        {out: expectedCss},
+        {cwd: localIntegration.__packageDir},
+        {writeRoot: expectedDir},
+      );
       if (receipt == null || receipt.type !== 'theme.build') {
         issues.push(
           error(
@@ -1335,7 +1341,11 @@ export async function integrationPackCheck(options = {}) {
   const pkgVersion = typeof pkg.version === 'string' ? pkg.version : null;
 
   // ── Phase 1: structure validation ──
-  const localResult = await validateLocalIntegration(cwd);
+  // The relative imports of the shipped modules are checked once, in the
+  // packed tree below, which holds exactly what npm packs: no npm listing.
+  const localResult = await validateLocalIntegration(cwd, {
+    shippedImports: false,
+  });
   /** @type {Issue[]} */
   const issues = [
     ...localResult.issues,
@@ -1659,6 +1669,17 @@ export async function integrationPackCheck(options = {}) {
       {iconSets: true},
     );
 
+    // Each relative import of a packed module that names no packed file:
+    // validate lists it as a note, and it is a warning here, as the other
+    // listed findings of the local tree are.
+    for (const issue of packedResult.listed ?? []) {
+      if (issue.code !== 'relative_import_not_shipped') continue;
+      issues.push({
+        code: `packed_${issue.code}`,
+        severity: 'warning',
+        message: `Packed: ${issue.message}`,
+      });
+    }
     for (const issue of packedResult.issues) {
       issues.push({
         code: `packed_${issue.code}`,

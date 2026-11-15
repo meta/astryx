@@ -16,7 +16,11 @@ import {sharedKey} from '../../../utils/sharedRealm';
 const CAPABILITY = sharedKey('table/virtualization-capability', 1);
 
 export interface UseTableRowsVirtualizationConfig {
-  /** Total body-row pitch, including padding and collapsed borders, in CSS pixels. */
+  /**
+   * Total body-row pitch, including padding and collapsed borders, in CSS
+   * pixels. Rows never measure shorter. When every mounted row measures
+   * taller, as with enlarged text, windowing uses the measured height.
+   */
   rowHeight: number;
   /**
    * The viewport height in CSS pixels that the first window plans for, on

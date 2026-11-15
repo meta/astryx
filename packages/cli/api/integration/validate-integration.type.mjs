@@ -20,6 +20,7 @@
  * @property {string} [issuesUrl]
  * @property {string[]} [__declaredKeys]
  * @property {string[]} [__unknownKeys]
+ * @property {Array<{field: string, why: string}>} [__ignoredFields]
  * @property {string} __spec
  * @property {string} __packageDir
  * @property {string} __manifestFile
@@ -39,7 +40,7 @@
  * "healthy" — the two are otherwise byte-identical.
  * @typedef {object} ValidateIntegrationResponse
  * @property {'integration.validate'} type
- * @property {{validated: boolean, name: string | null, version: string | null, issues: import('../../foundation/integrations/issue').AstryxIntegrationIssue[], notes?: Array<{code: string, message: string, next?: boolean}>, docTypes?: DocTypesReport, docNames?: DocNamesReport, blockComponents?: BlockComponentsReport, exampleAssets?: {status: 'checked', findings: [], unchecked: Array<{file: string, asset: string, reason: string}>}, publicImports?: PublicImportsReport, templateIcons?: {status: 'checked', findings: [], unchecked: Array<{file: string, icon: string, module: string, reason: string}>}, iconSets?: IconSetCoverage[], olderCliNotes?: OlderCliNote[]}} data
+ * @property {{validated: boolean, name: string | null, version: string | null, issues: import('../../foundation/integrations/issue').AstryxIntegrationIssue[], notes?: Array<{code: string, message: string, next?: boolean}>, docTypes?: DocTypesReport, docNames?: DocNamesReport, blockComponents?: BlockComponentsReport, exampleAssets?: {status: 'checked', findings: [], unchecked: Array<{file: string, asset: string, reason: string}>}, publicImports?: PublicImportsReport, shippedImports?: {status: 'checked', findings: [], unchecked: Array<{file: string, specifier: string, reason: string}>}, exampleCode?: {status: 'checked', findings: [], unchecked: Array<{file: string, example: string, reason: string}>}, templateIcons?: {status: 'checked', findings: [], unchecked: Array<{file: string, icon: string, module: string, reason: string}>}, iconSets?: IconSetCoverage[], olderCliNotes?: OlderCliNote[]}} data
  *   `iconSets` is experimental: it may change or be removed in a patch
  *   release.
  *   `notes`: information beside the issues. A note fails nothing by default;
@@ -140,6 +141,11 @@
  *   cannot prove either way (`icon`); an adapter export it cannot prove
  *   (`adapter`); and a theme map or theme-map entry it cannot read
  *   (`entry`).
+ * @property {{unmapped: Array<{definition: string, templates: number}>}} [templateMeanings]
+ *   The icon definitions the bundled templates use that the set's `map`
+ *   does not name, each with how many templates use it, most used first,
+ *   then by name. A copied template renders a placeholder for each in a
+ *   project that uses only this set. Built-in ones are also error issues.
  */
 
 /**

@@ -28,6 +28,7 @@ import {
 } from './_adapter.mjs';
 import {checkSearchArgs} from './_result.mjs';
 import {SEARCH_TREE} from './tree.mjs';
+import {searchView} from './_named-keywords.mjs';
 
 /**
  * Fields a gathered candidate holds that point into the folder it was read
@@ -35,6 +36,12 @@ import {SEARCH_TREE} from './tree.mjs';
  * leaves them out and reads the same wherever it was made.
  */
 const LOCAL_FIELDS = ['_docPath'];
+
+/**
+ * Fields a gathered candidate holds only for `build`, which reads them from
+ * the gather itself. They never rank, so an index leaves them out.
+ */
+const BUILD_FIELDS = ['_category'];
 
 /**
  * A component candidate's description as `search` prints it: its inline
@@ -53,7 +60,7 @@ const STORED_CORE = 'stored-index';
 function portable(candidate) {
   /** @type {Record<string, unknown>} */
   const out = JSON.parse(JSON.stringify(candidate));
-  for (const field of LOCAL_FIELDS) delete out[field];
+  for (const field of [...LOCAL_FIELDS, ...BUILD_FIELDS]) delete out[field];
   return out;
 }
 
@@ -185,8 +192,14 @@ export async function rankSearchIndex(query, indexes, options = {}) {
     all.push(...index.candidates);
   }
   const {type} = options;
+  // Keywords read as search() reads them (_named-keywords.mjs). The names
+  // come from every stored entry, before the `type` cut.
+  const view = searchView({
+    all,
+    components: all.filter(candidate => candidate.domain === 'component'),
+  }).all;
   const wanted =
-    type == null ? all : all.filter(candidate => candidate.domain === type);
+    type == null ? view : view.filter(candidate => candidate.domain === type);
   const {searchedComponents, coreSkipped} = coreFlags(list, type);
   const response = /** @type {import('./search.type.mjs').SearchResponse} */ (
     await runTree(

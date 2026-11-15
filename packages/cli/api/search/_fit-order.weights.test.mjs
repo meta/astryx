@@ -9,7 +9,6 @@
  */
 
 import {execFileSync} from 'node:child_process';
-import {fileURLToPath} from 'node:url';
 import {describe, expect, it} from 'vitest';
 import {requireNatively} from '../../test-utils/native-require.mjs';
 
@@ -22,10 +21,10 @@ const {loadSearchData} = require('./_adapter.mjs');
 /** A query whose answer the fit pass changes. */
 const QUERY = 'table with row selection';
 
-const SEARCH = fileURLToPath(new URL('./search.mjs', import.meta.url));
-const BUILD_ADAPTER = fileURLToPath(
-  new URL('../build/_adapter.mjs', import.meta.url),
-);
+// The child imports these, so they stay file URLs: a Windows path such as
+// `D:\...` reads to the ESM loader as a URL with the scheme `d:`.
+const SEARCH = new URL('./search.mjs', import.meta.url).href;
+const BUILD_ADAPTER = new URL('../build/_adapter.mjs', import.meta.url).href;
 
 /** @param {any} response */
 const names = response => response.data.results.map(r => r.name);

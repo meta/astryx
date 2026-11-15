@@ -90,9 +90,7 @@ export const ${slug}Theme = {name: '${slug}'};`,
       );
       expect(
         normalizeThemeVerifyForCompare(builtModule('npx astryx', slug)),
-      ).toBe(
-        normalizeThemeVerifyForCompare(builtModule('acme astryx', slug)),
-      );
+      ).toBe(normalizeThemeVerifyForCompare(builtModule('acme astryx', slug)));
       expect(
         normalizeThemeBuildForCompare(builtModule('yarn astryx', slug)),
       ).not.toBe(
@@ -837,6 +835,43 @@ describe('integrationPackCheck', () => {
     );
   });
 
+  it('warns, in the packed tree, on a relative import of a file npm leaves out', async () => {
+    writePackage({
+      files: ['astryx.integration.mjs', 'themes', 'lib/extra.js'],
+    });
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(tmpDir, 'package.json'), 'utf8'),
+    );
+    pkg.exports = {'./extra': './lib/extra.js'};
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify(pkg));
+    fs.mkdirSync(path.join(tmpDir, 'lib', 'icons'), {recursive: true});
+    fs.writeFileSync(
+      path.join(tmpDir, 'lib', 'extra.js'),
+      "export * from './icons';\n",
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'lib', 'icons', 'index.js'),
+      'export const Check = 1;\n',
+    );
+
+    const result = await integrationPackCheck({cwd: tmpDir});
+
+    expect(result.data.packable).toBe(true);
+    expect(
+      result.data.issues.filter(issue =>
+        issue.code.endsWith('relative_import_not_shipped'),
+      ),
+    ).toEqual([
+      {
+        code: 'packed_relative_import_not_shipped',
+        severity: 'warning',
+        message: expect.stringContaining(
+          'Packed: lib/extra.js:1: imports "./icons", which is not a file in the package',
+        ),
+      },
+    ]);
+  });
+
   it('fails when a declared theme export does not resolve', async () => {
     writePackage({
       files: ['astryx.integration.mjs', 'themes'],
@@ -901,6 +936,10 @@ describe('integrationPackCheck', () => {
         fs.writeFileSync(
           path.join(tmpDir, 'themes', 'ocean', 'ocean.fonts.css'),
           '@font-face { font-family: Ocean; src: url(./ocean.woff2); }\n',
+        );
+        fs.writeFileSync(
+          path.join(tmpDir, 'themes', 'ocean', 'ocean.woff2'),
+          'font',
         );
       }
       setThemeExports(exportsMap);
@@ -1862,13 +1901,16 @@ describe('integrationPackCheck', () => {
       );
     const found = async () =>
       (await integrationPackCheck({cwd: tmpDir})).data.issues.filter(
-        (/** @type {{code: string}} */ issue) => issue.code === 'doc_tokens_need_cli',
+        (/** @type {{code: string}} */ issue) =>
+          issue.code === 'doc_tokens_need_cli',
       );
     // An escaped token is shown as written by every release.
     write('escaped', 'Write {@@pm install x} for an install.');
     expect(await found()).toEqual([]);
     write('tokens', 'Run {@command doctor} first.');
-    expect((await found()).map((/** @type {any} */ issue) => issue.severity)).toEqual(['warning']);
+    expect(
+      (await found()).map((/** @type {any} */ issue) => issue.severity),
+    ).toEqual(['warning']);
     const pkgFile = path.join(tmpDir, 'package.json');
     const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf-8'));
     pkg.peerDependencies = {'@astryxdesign/cli': '>=0.7.3'};
@@ -2242,8 +2284,10 @@ describe('integrationPackCheck', () => {
   it('does not execute shell metacharacters embedded in the cwd', async () => {
     const marker = path.join(process.cwd(), 'astryx-pack-check-injected');
     fs.rmSync(marker, {force: true});
+    // npm 10 treats "#" in a directory as a URL fragment.
+    // Semicolons still expose shell execution; "true" absorbs the suffix.
     const weirdDir = fs.mkdtempSync(
-      path.join(REPO_ROOT, '.astryx-;touch astryx-pack-check-injected;#-'),
+      path.join(REPO_ROOT, '.astryx-;touch astryx-pack-check-injected;true '),
     );
     try {
       const pkg = {name: 'safe-pkg', version: '1.0.0'};
@@ -2257,6 +2301,8 @@ describe('integrationPackCheck', () => {
       );
       const result = await integrationPackCheck({cwd: weirdDir});
       expect(result.type).toBe('integration.pack-check');
+      expect(result.data.packable).toBe(true);
+      expect(result.data.tarball?.filename).toBe('safe-pkg-1.0.0.tgz');
       expect(fs.existsSync(marker)).toBe(false);
     } finally {
       fs.rmSync(weirdDir, {recursive: true, force: true});

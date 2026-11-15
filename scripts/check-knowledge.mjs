@@ -17,6 +17,10 @@ import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {collectThemingTargets} from '../packages/cli/foundation/discovery/theming-targets.mjs';
 import {readObjects} from './lib/git-objects.mjs';
+import {
+  findStatusPhrases,
+  isStatusCheckedPath,
+} from './lib/knowledge-status-phrases.mjs';
 
 const require = createRequire(import.meta.url);
 const {
@@ -2602,6 +2606,38 @@ export async function validateKnowledgeRoot(root = DEFAULT_ROOT) {
   return problems;
 }
 
+/**
+ * Warn on temporary project status in spec and architecture records. A
+ * warning never fails the check.
+ */
+export function statusPhraseWarnings(root = DEFAULT_ROOT) {
+  const warnings = [];
+  for (const absolutePath of discoverKnowledgeRecords(root)) {
+    const filePath = path
+      .relative(root, absolutePath)
+      .split(path.sep)
+      .join('/');
+    if (!isStatusCheckedPath(filePath)) continue;
+    for (const hit of findStatusPhrases(fs.readFileSync(absolutePath, 'utf8')))
+      warnings.push({filePath, ...hit});
+  }
+  return warnings;
+}
+
+function printStatusPhraseWarnings(root) {
+  const warnings = statusPhraseWarnings(root);
+  if (!warnings.length) return;
+  console.warn(
+    `Records state temporary project status (${warnings.length}; warning only). Describe the system, or keep one Status line:`,
+  );
+  for (const {filePath, line, phrase} of warnings)
+    console.warn(
+      process.env.GITHUB_ACTIONS === 'true'
+        ? `::warning file=${filePath},line=${line},title=Project status in a record::"${phrase}"`
+        : `- ${filePath}:${line}: "${phrase}"`,
+    );
+}
+
 /** The checkout `--root` names, or this repository. */
 function rootArgument() {
   const rootIndex = process.argv.indexOf('--root');
@@ -2619,6 +2655,7 @@ async function main() {
     );
   }
   const problems = await validateKnowledgeRoot(root);
+  printStatusPhraseWarnings(root);
   const baseIndex = process.argv.indexOf('--base');
   if (baseIndex !== -1) {
     const baseRevision = process.argv[baseIndex + 1];

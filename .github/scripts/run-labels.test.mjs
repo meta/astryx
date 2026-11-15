@@ -278,7 +278,7 @@ describe('each label runs only its own suite', () => {
   // full check's step needs ci:run-visual (ci-heavy-lanes.test.mjs).
   const OWNERS = {
     visual: ['visual-scout'],
-    a11y: ['pr-a11y-guards', 'pr-a11y-specs', 'pr-a11y'],
+    a11y: ['pr-a11y-guards', 'pr-a11y-plan', 'pr-a11y-specs', 'pr-a11y'],
     rtl: ['pr-rtl-shard', 'pr-rtl-merge', 'pr-rtl'],
   };
 

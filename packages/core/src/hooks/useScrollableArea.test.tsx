@@ -12,7 +12,9 @@ import * as stylex from '@stylexjs/stylex';
 import {
   Profiler,
   StrictMode,
+  useLayoutEffect,
   useRef,
+  useState,
   type FocusEvent,
   type ReactNode,
   type Ref,
@@ -1145,6 +1147,62 @@ describe('useScrollableArea', () => {
       expect(document.activeElement).toBe(viewport);
     },
   );
+
+  it('adds no commit when a commit moves focus between two of its descendants', () => {
+    const onCommit = vi.fn();
+    // A viewport with no scrollable axis tracks its focus. The picker's own
+    // commit hands focus from one row to the next, as a sheet's toggle does.
+    function Picker() {
+      const area = useScrollableArea({
+        axis: 'block',
+        keyboardAccess: {owner: 'contentOrViewport', label: 'Picker'},
+      });
+      const [isSecond, setIsSecond] = useState(false);
+      const firstRef = useRef<HTMLButtonElement>(null);
+      const secondRef = useRef<HTMLButtonElement>(null);
+      useLayoutEffect(() => {
+        if (isSecond) {
+          secondRef.current?.focus();
+        }
+      }, [isSecond]);
+      return (
+        <div data-testid="picker" {...area.getViewportProps()}>
+          <div {...area.getContentProps()}>
+            <button
+              ref={firstRef}
+              type="button"
+              onClick={() => {
+                setIsSecond(true);
+              }}>
+              First
+            </button>
+            <button ref={secondRef} type="button">
+              Second
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    render(
+      <Profiler id="picker" onRender={onCommit}>
+        <Picker />
+      </Profiler>,
+    );
+    makeMeasurable(screen.getByTestId('picker'));
+    void act(() => window.dispatchEvent(new Event('resize')));
+    flushFrame();
+    const first = screen.getByRole('button', {name: 'First'});
+    void act(() => first.focus());
+    onCommit.mockClear();
+
+    void act(() => first.click());
+
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', {name: 'Second'}),
+    );
+    expect(onCommit).toHaveBeenCalledTimes(1);
+  });
 
   it('drops the tabindex of an unfocused viewport after an axis change', () => {
     const {rerender} = render(<Fixture axis="both" />);

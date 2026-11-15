@@ -41,6 +41,7 @@ import {
   iconSetIssues,
 } from '../../foundation/discovery/icon-set-checks.mjs';
 import {olderCliNotes} from '../../foundation/discovery/doc-stability.mjs';
+import {templateIconMeanings} from '../../foundation/discovery/template-icon-meanings.mjs';
 import {
   templateIconNotes,
   templateIconUndeclaredNotes,
@@ -49,6 +50,7 @@ import {integrationDocConsistency} from '../../foundation/discovery/doc-consiste
 import {
   integrationDocCommands,
   integrationDocTargets,
+  integrationExampleCode,
   projectUsesIconSets,
 } from './_adapter.mjs';
 import {
@@ -73,6 +75,7 @@ import {
 import {
   blockComponentsCheck,
   componentExamplesCheck,
+  packageListingCheck,
   componentDocNamesCheck,
   INVALID_CLI_COMMAND,
   isListedIssue,
@@ -86,7 +89,14 @@ import {
 import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
 import {cliPeerVersionProblem} from '../../foundation/integrations/cli-peer-version.mjs';
 import {publicImportIssues} from '../../foundation/integrations/public-imports.mjs';
+import {
+  filesOnDisk,
+  shippedFiles,
+  shippedImportFindings,
+} from '../../foundation/integrations/shipped-imports.mjs';
 import {runChoice} from '../../foundation/release/run-context.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
+import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 
 /** The running CLI is outside the package's `@astryxdesign/cli` peer range. */
 const CLI_PEER_VERSION = 'cli_peer_version';
@@ -125,6 +135,8 @@ export {validateLoadedIntegration, isListedIssue};
  *   Which definitions each icon set leaves unmapped (spec:AST-084 FR15).
  * @property {import('../../foundation/discovery/doc-stability.mjs').OlderCliNote[]} [olderCliNotes]
  * @property {import('./validate-integration.type.mjs').PublicImportsReport} [publicImports]
+ * @property {Array<{file: string, specifier: string, reason: string}>} [shippedImports]
+ *   the relative imports whose files npm could not be asked about
  *   what the public-import check could not judge
  * @property {import('../../foundation/discovery/template-icon-notes.mjs').TemplateIconUnchecked[]} [templateIconsUnchecked]
  *   the template icon imports the undeclared-icon check could not judge
@@ -252,7 +264,7 @@ async function findUnreachableContributionIssues(
     try {
       entries = fs
         .readdirSync(dir, {withFileTypes: true})
-        .sort((a, b) => a.name.localeCompare(b.name));
+        .sort((a, b) => compareText(a.name, b.name));
     } catch (err) {
       // One folder the user running astryx cannot read must not end the whole
       // validation: name it and keep checking the rest of the package.
@@ -291,7 +303,7 @@ async function findUnreachableContributionIssues(
       issues.push(
         warning(
           'unreachable_contribution',
-          `Found contribution metadata "${path.relative(packageDir, full)}" outside every declared integration root, so it contributes nothing. ${unreachableFix(context, full, stamp)}`,
+          `Found contribution metadata "${path.relative(packageDir, full).split(path.sep).join('/')}" outside every declared integration root, so it contributes nothing. ${unreachableFix(context, full, stamp)}`,
         ),
       );
     }
@@ -314,8 +326,11 @@ async function findUnreachableContributionIssues(
  * Shared core for the local and installed entry points.
  * @param {string} packageDir
  * @param {{name: string, version?: string}} identity
- * @param {{scanUnreachable?: boolean, own?: boolean, cwd?: string, iconSets?: boolean}} [options]
+ * @param {{scanUnreachable?: boolean, own?: boolean, cwd?: string, iconSets?: boolean, shippedImports?: boolean}} [options]
  *   `own`: the package is the one being authored in the current folder;
+ *   `shippedImports`: check the relative imports of the modules the package
+ *   ships (default true; `integration verify` checks them in the packed
+ *   tree instead, which holds exactly what npm packs);
  *   `cwd`: the folder whose package manager an install command names;
  *   `iconSets`: read the experimental `experimental.iconSets` root (default
  *   true). Off, the root is not resolved or checked and `iconSets` is not
@@ -330,6 +345,7 @@ async function validateAtPackageDir(
     own = false,
     cwd = packageDir,
     iconSets = true,
+    shippedImports = true,
   } = {},
 ) {
   /** @type {Issue[]} */
@@ -375,6 +391,8 @@ async function validateAtPackageDir(
   let manifest;
   /** @type {string[]} */
   let unknownKeys;
+  /** @type {Array<{field: string, why: string}>} */
+  let ignoredFields;
   /** @type {string[]} */
   let declaredKeys;
   /** @type {string | undefined} */
@@ -382,11 +400,17 @@ async function validateAtPackageDir(
   /** @type {string | undefined} */
   let cliCommandError;
   try {
-    ({manifest, unknownKeys, declaredKeys, agentDocsError, cliCommandError} =
-      await loadManifest(
-        manifestFile,
-        `Integration manifest (${path.basename(manifestFile)})`,
-      ));
+    ({
+      manifest,
+      unknownKeys,
+      ignoredFields,
+      declaredKeys,
+      agentDocsError,
+      cliCommandError,
+    } = await loadManifest(
+      manifestFile,
+      `Integration manifest (${path.basename(manifestFile)})`,
+    ));
   } catch (err) {
     issues.push(error('invalid_manifest', /** @type {any} */ (err).message));
     return result;
@@ -447,11 +471,13 @@ async function validateAtPackageDir(
       ? resolveRoot(manifest.experimental?.iconSets, 'experimental.iconSets')
       : undefined,
     issuesUrl: manifest.issuesUrl,
+    logo: manifest.logo,
     agentDocs: manifest.agentDocs,
     cliCommand: manifest.cliCommand,
     __cliCommandError: cliCommandError,
     __agentDocsError: agentDocsError,
     __unknownKeys: unknownKeys,
+    __ignoredFields: ignoredFields,
     __declaredKeys: declaredKeys,
     __spec: identity.name,
     __declaredProviderId: manifest.providerId,
@@ -503,7 +529,11 @@ async function validateAtPackageDir(
     issues.push(...iconSetIssues(packageDir, loaded, unchecked));
     // Which definitions each set leaves unmapped, and what the checks could
     // not judge: listed, never an issue.
-    result.iconSets = iconSetCoverage(loaded, unchecked);
+    result.iconSets = iconSetCoverage(
+      loaded,
+      unchecked,
+      await templateIconMeanings(),
+    );
   }
   // What the docs say that no reader serves: a prop listed twice, an
   // overlay's text for a prop the doc lacks, an empty or unreachable section,
@@ -532,6 +562,24 @@ async function validateAtPackageDir(
       ...publicImports.notes.map(note => ({...note, next: true})),
     );
   result.publicImports = publicImports.report;
+  // Each relative import of the modules the package ships, resolved as an
+  // app's bundler resolves it against the files the package ships: what npm
+  // packs for the package's own folder, and the files on disk for an
+  // installed or packed one, which are exactly what npm packed. Each one no
+  // shipped file answers is a `next` note until the next minor release makes
+  // it a warning (architecture:cli-surface INV35).
+  if (shippedImports) {
+    const shipped = shippedImportFindings(packageDir, {
+      files: own ? shippedFiles(packageDir) : filesOnDisk(packageDir),
+      manifestFile: loaded.__manifestFile,
+    });
+    (result.listed ??= []).push(
+      ...shipped.findings.map(finding => listed(finding.code, finding.message)),
+    );
+    if (shipped.unchecked.length > 0) {
+      result.shippedImports = shipped.unchecked;
+    }
+  }
   if (scanUnreachable) {
     issues.push(
       ...(await findUnreachableContributionIssues(
@@ -579,9 +627,14 @@ async function validateAtPackageDir(
  * + a single sibling astryx.integration.{ts,mjs,js}. A missing manifest yields
  * `found: false` (guidance, not an error) so callers stay exit-0.
  * @param {string} [cwd]
+ * @param {{shippedImports?: boolean}} [options] `shippedImports: false`
+ *   skips the shipped-import check, for a caller that checks the packed tree
  * @returns {Promise<ValidateResult>}
  */
-export async function validateLocalIntegration(cwd = process.cwd()) {
+export async function validateLocalIntegration(
+  cwd = process.cwd(),
+  {shippedImports = true} = {},
+) {
   const pkgJsonPath = findNearestPackageJson(cwd);
   if (!pkgJsonPath) {
     return {found: false, reason: 'no_package_json', issues: []};
@@ -624,7 +677,7 @@ export async function validateLocalIntegration(cwd = process.cwd()) {
   const result = await validateAtPackageDir(
     packageDir,
     {name, version: pkg.version},
-    {scanUnreachable: true, own: true},
+    {scanUnreachable: true, own: true, shippedImports},
   );
   (result.listed ??= []).unshift(
     ...fields,
@@ -717,15 +770,16 @@ function packageJsonFieldIssues(pkg, pkgJsonPath) {
  * at or above `cwd`, resolved the way the project loads it.
  * @param {string} spec package name
  * @param {string} [cwd]
- * @param {{iconSets?: boolean}} [options] `iconSets`: check the package's
- *   experimental icon sets; by default only when the project at `cwd` sets
- *   `experimental.iconSet`
+ * @param {{iconSets?: boolean, shippedImports?: boolean}} [options]
+ *   `iconSets`: check the package's experimental icon sets; by default only
+ *   when the project at `cwd` sets `experimental.iconSet`.
+ *   `shippedImports: false` skips the shipped-import check.
  * @returns {Promise<ValidateResult>}
  */
 export async function validateInstalledIntegration(
   spec,
   cwd = process.cwd(),
-  {iconSets} = {},
+  {iconSets, shippedImports = true} = {},
 ) {
   // The resolver throws (path-safety guard) on a spec with path segments,
   // `..`, or an absolute path. Every other malformed input to this command
@@ -760,7 +814,7 @@ export async function validateInstalledIntegration(
           exists ? 'invalid_package_json' : 'package_not_found',
           exists
             ? `Could not parse ${pkgJsonPath}: ${err instanceof Error ? err.message : String(err)}`
-            : `Could not find installed integration package "${spec}" at ${pkgJsonPath}. Install it first.`,
+            : notInstalledMessage(spec, pkgJsonPath, cwd),
         ),
       ],
     };
@@ -769,8 +823,36 @@ export async function validateInstalledIntegration(
   return validateAtPackageDir(
     packageDir,
     {name: pkg.name ?? spec, version: pkg.version},
-    {cwd, iconSets: iconSets ?? (await projectUsesIconSets(cwd))},
+    {
+      cwd,
+      iconSets: iconSets ?? (await projectUsesIconSets(cwd)),
+      shippedImports,
+    },
   );
+}
+
+/**
+ * Why `spec` is not installed here. This command checks a package the project
+ * in `cwd` installs; when `cwd` is that package's own folder, the check the
+ * author wants is `integration check`.
+ * @param {string} spec
+ * @param {string} pkgJsonPath
+ * @param {string} cwd
+ */
+function notInstalledMessage(spec, pkgJsonPath, cwd) {
+  /** @type {unknown} */
+  let own;
+  try {
+    own = JSON.parse(
+      fs.readFileSync(path.join(cwd, 'package.json'), 'utf-8'),
+    )?.name;
+  } catch {
+    own = undefined;
+  }
+  if (own === spec) {
+    return `"${spec}" is the package in this folder, not one it installs: this command checks a package the project installs. To check the package you are making, run \`${formatCliCommand('integration check', cwd)}\`.`;
+  }
+  return `Could not find installed integration package "${spec}" at ${pkgJsonPath}. Install it first.`;
 }
 
 /**
@@ -862,6 +944,18 @@ async function docTargetNotes(integration) {
  * @returns {Promise<import('./validate-integration.type.mjs').ValidateIntegrationResponse>}
  */
 export async function validateIntegration(pkg, options = {}) {
+  // Its checks read the package and change none of its files: one listing
+  // of each folder, and one answer from npm on what the package packs.
+  return withListingCache(() => validateIntegrationOnce(pkg, options));
+}
+
+/**
+ * {@link validateIntegration}'s checks, run once.
+ * @param {string | undefined} pkg
+ * @param {{cwd?: string}} options
+ * @returns {Promise<import('./validate-integration.type.mjs').ValidateIntegrationResponse>}
+ */
+async function validateIntegrationOnce(pkg, options) {
   const {cwd = process.cwd()} = options;
   const result = pkg
     ? await validateInstalledIntegration(pkg, cwd)
@@ -883,6 +977,16 @@ export async function validateIntegration(pkg, options = {}) {
   // Components no block template shows.
   const examples = integration
     ? await componentExamplesCheck(integration)
+    : undefined;
+  // Component doc examples that are not `kind: 'setup'` but cannot run on
+  // their own, by the rule a live preview uses.
+  const exampleCode = integration
+    ? await integrationExampleCode(integration)
+    : undefined;
+  // What a catalog needs to list the package: a logo, and an example of
+  // its components.
+  const listing = integration
+    ? packageListingCheck(integration, examples?.examples)
     : undefined;
   const docNames = names?.[0].report;
   const blockComponents = names?.[1].report;
@@ -908,6 +1012,10 @@ export async function validateIntegration(pkg, options = {}) {
           each.notes.map(note => ({...note, next: true})),
         ),
         ...(examples?.notes ?? []).map(note => ({...note, next: true})),
+        ...(exampleCode?.notes ?? []).map(note => ({...note, next: true})),
+        // What a catalog needs to list the package is information only:
+        // these notes fail no check, under any flag.
+        ...(listing?.notes ?? []),
       ]
     : [];
   // The doc-syntax findings in the package's topics, as `next` notes with
@@ -921,6 +1029,10 @@ export async function validateIntegration(pkg, options = {}) {
       })),
     );
   }
+  const assetsUnchecked = [
+    ...(examples?.unchecked ?? []),
+    ...(listing?.unchecked ?? []),
+  ];
   return {
     type: 'integration.validate',
     data: {
@@ -950,13 +1062,13 @@ export async function validateIntegration(pkg, options = {}) {
       ...(result.found && result.olderCliNotes
         ? {olderCliNotes: result.olderCliNotes}
         : {}),
-      // Template assets npm could not place, when there are any.
-      ...(examples && examples.unchecked.length > 0
+      // Template assets and logos npm could not place, when there are any.
+      ...(assetsUnchecked.length > 0
         ? {
             exampleAssets: {
               status: 'checked',
               findings: [],
-              unchecked: examples.unchecked,
+              unchecked: assetsUnchecked,
             },
           }
         : {}),
@@ -975,6 +1087,27 @@ export async function validateIntegration(pkg, options = {}) {
       // What the public-import check could not judge: listed, never failed on.
       ...(result.found && result.publicImports
         ? {publicImports: result.publicImports}
+        : {}),
+      // Relative imports whose files npm could not be asked about, when
+      // there are any: listed, never failed on.
+      ...(result.found && result.shippedImports
+        ? {
+            shippedImports: {
+              status: 'checked',
+              findings: [],
+              unchecked: result.shippedImports,
+            },
+          }
+        : {}),
+      // Examples whose names could not be judged, when there are any.
+      ...(exampleCode && exampleCode.unchecked.length > 0
+        ? {
+            exampleCode: {
+              status: 'checked',
+              findings: [],
+              unchecked: exampleCode.unchecked,
+            },
+          }
         : {}),
     },
   };

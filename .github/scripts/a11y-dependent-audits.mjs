@@ -30,7 +30,7 @@ import {
   planLegs,
   renderingFolders,
 } from './a11y-pr-contracts.mjs';
-import {costOf, splitByDuration} from '../../scripts/lib/duration-split.mjs';
+import {costOf, fitLegsToBudget} from '../../scripts/lib/duration-split.mjs';
 import {isA11ySpecFile} from './lib/a11y-spec-files.mjs';
 
 export const PRIMITIVES_FILE = '.github/a11y-shared-primitives.json';
@@ -104,32 +104,23 @@ export function listAuditSpecs(root) {
 }
 
 /**
- * Legs for the files, each about ten minutes or less when `maxLegs` allows:
- * like `planLegs`, with one more leg at a time while the longest is over.
+ * Legs for the files, each ten minutes or less when `maxLegs` allows, from
+ * `planLegs`'s count; an audit longer than that runs in a leg of its own.
  * @param {string[]} files
  * @param {Record<string, number>} seconds
  * @param {number} maxLegs
  */
 export function fitLegs(files, seconds, maxLegs) {
-  const cost = costOf(files, seconds);
-  const split = (/** @type {number} */ count) => {
-    const shares = splitByDuration(files, count, cost);
-    return {
-      count,
-      shares,
-      longestMs: Math.max(
-        ...shares.map(
-          share => share.reduce((total, file) => total + cost(file), 0) * 1000,
-        ),
-      ),
-    };
+  const plan = fitLegsToBudget(files, costOf(files, seconds), {
+    budget: LEG_BUDGET_MS / 1000,
+    maxLegs,
+    start: planLegs(files, seconds, maxLegs).count,
+  });
+  return {
+    count: plan.count,
+    shares: plan.shares,
+    longestMs: plan.longest * 1000,
   };
-  const most = Math.max(1, Math.min(maxLegs, files.length));
-  let plan = split(Math.min(planLegs(files, seconds, maxLegs).count, most));
-  while (plan.longestMs > budgetFor(files, seconds) && plan.count < most) {
-    plan = split(plan.count + 1);
-  }
-  return plan;
 }
 
 /**

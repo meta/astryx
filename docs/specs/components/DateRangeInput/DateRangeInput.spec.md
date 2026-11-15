@@ -196,18 +196,18 @@ fill measures 3.88:1 on the popover surface, under 4.5:1.
 ### `spec:AST-013` FR12 exception — calendars that need `Temporal`
 
 - **Capability:** trigger text and the popover Calendar in calendars other than
-  `gregory`, `iso8601`, `buddhist`, `roc`, and `japanese`, which need the
-  runtime's `Temporal`.
-- **Reduction:** where `Temporal` is missing, as in Safari on macOS and iOS,
-  the field shows Gregorian dates and warns once in development, naming a
-  polyfill (`spec:AST-111` FR5). An application that loads a `Temporal`
-  polyfill gets the full calendar. When a server and a browser use `chinese` or
-  `dangi` implementations that disagree on a month start, React renders the
-  differing text again on the client (`spec:AST-111` FR19).
+  the Gregorian, Buddhist, Minguo, and Japanese calendars, which need
+  the runtime's `Temporal`.
+- **Reduction:** where `Temporal` is missing, as in Safari on macOS and iOS, the
+  field shows Gregorian dates and warns once in development, naming a polyfill
+  (`spec:AST-111` FR5). An application that loads a `Temporal` polyfill gets the
+  full calendar. When a server and a browser use implementations of the Chinese
+  or Dangi calendar that disagree on a month start, React renders the differing
+  text again on the client (`spec:AST-111` FR19).
 - **Preserved obligations:** `spec:AST-013` FR7 and FR8, and FR9 outside that
-  `chinese` and `dangi` case. The Gregorian field keeps every interaction,
-  label, and announcement, and Buddhist, Minguo, and Japanese text works without
-  `Temporal`.
+  case of the Chinese and Dangi calendars. The Gregorian field keeps every
+  interaction, label, and announcement, and Buddhist, Minguo, and Japanese text
+  works without `Temporal`.
 - **Evidence:** real Chromium and Firefox with native `Temporal`, and real
   Chromium, Firefox, and WebKit with `Temporal` removed, with and without a
   polyfill, showing the Persian trigger text.

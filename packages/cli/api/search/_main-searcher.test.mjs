@@ -54,7 +54,7 @@ describe('main searcher', () => {
   it('answers a whole-name query exactly as the lexical ranker does', async () => {
     for (const q of ['Button', 'Dialog', 'useTheme', 'tokens']) {
       expect(top(await search(q, {cwd: REPO}))).toEqual(
-        top(await searchCore(q, {cwd: REPO})),
+        top(await searchCore(q, {cwd: REPO, ownKeywords: true})),
       );
     }
   });
@@ -62,7 +62,7 @@ describe('main searcher', () => {
   it('answers a name typed with spaces for its dashes as the lexical ranker does', async () => {
     for (const q of ['author a theme', 'tokens data']) {
       expect(top(await search(q, {cwd: REPO}))).toEqual(
-        top(await searchCore(q, {cwd: REPO})),
+        top(await searchCore(q, {cwd: REPO, ownKeywords: true})),
       );
     }
   });
@@ -82,8 +82,12 @@ describe('main searcher', () => {
       for (const q of QUERIES) {
         const [mine, lexical, every] = [
           await search(q, {cwd: REPO}),
-          await searchCore(q, {cwd: REPO}),
-          await searchCore(q, {cwd: REPO, limit: Number.MAX_SAFE_INTEGER}),
+          await searchCore(q, {cwd: REPO, ownKeywords: true}),
+          await searchCore(q, {
+            cwd: REPO,
+            limit: Number.MAX_SAFE_INTEGER,
+            ownKeywords: true,
+          }),
         ];
         expect(mine.data.results.length).toBeLessThanOrEqual(
           lexical.data.results.length,

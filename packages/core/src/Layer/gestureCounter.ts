@@ -7,12 +7,16 @@
  * @input Pointer and context-menu events through the shared input stream;
  *   keydown and click on the document
  * @output Exports the gesture identity, whether its click has run, whether a
- *   press is down, and the press claims (claimPress, claimContextMenuPress)
+ *   press is down or being released (afterRelease runs a callback once that
+ *   release is handled), the press claims (claimPress,
+ *   claimContextMenuPress), and the touch tap recognizer (useTapRecognizer,
+ *   TOUCH_POINTER_TYPES)
  * @position Internal to the package, not exported. useLayer reads it to tell
  *   a click that belongs to a dismissing press from a fresh one.
  *   useTouchTrigger, useMenuPress, ContextMenu and DropdownMenu read the
  *   gesture too. A layer or a menu that opens on a press claims that press
- *   here
+ *   here. The tap recognizer lives here, so a trigger that only waits for a
+ *   tap does not carry useTouchTrigger
  *
  * A browser light-dismiss and the trigger's own click come from ONE press, and
  * which of them React sees first is a race. Comparing timestamps against a
@@ -22,14 +26,24 @@
  * the dismissal", no matter how long the main thread was blocked in between.
  */
 
+import {useEffect, useState} from 'react';
 import {subscribeInput} from '../utils/inputStream';
 import {sharedState} from '../utils/sharedRealm';
+import {clearTouchEndMark, isTouchEndCancelled} from '../utils/touchEndMark';
 
 const state = sharedState('layer/gesture-counter/state', 1, () => ({
   gesture: 0,
   clickedGesture: null as number | null,
   contextMenuGesture: null as number | null,
   pressPointerId: null as number | null,
+  // The gesture whose release is being handled: from its pointerup until
+  // its click, or the next task when no click comes.
+  releasingGesture: null as number | null,
+  // Whether a pointerup is being dispatched now: from the window's capture
+  // phase to its bubble phase.
+  isDispatchingRelease: false,
+  // The pointer type of the release in flight.
+  releasingPointerType: '',
   claimedPress: null as {
     layer: HTMLElement;
     pointerId: number;
@@ -39,13 +53,34 @@ const state = sharedState('layer/gesture-counter/state', 1, () => ({
   unsubscribePress: null as (() => void) | null,
 }));
 
+/**
+ * Adds the fields an older copy of Core may have made the shared slot
+ * without, so a page with both copies does not throw.
+ */
+function ensureFields(): void {
+  if (state.releasingGesture === undefined) {
+    state.releasingGesture = null;
+  }
+  if (state.isDispatchingRelease === undefined) {
+    state.isDispatchingRelease = false;
+  }
+  if (state.releasingPointerType === undefined) {
+    state.releasingPointerType = '';
+  }
+}
+
 function advance() {
   state.gesture += 1;
 }
 
 // The page listens for a press's end and its context menu only while a press
-// is down, so at rest it keeps no pointerup listener of its own.
+// is down. At rest it keeps one window pointerup listener, which ends the
+// release's dispatch.
 function startPress(event: PointerEvent) {
+  ensureFields();
+  state.isDispatchingRelease = false;
+  // A mark from an earlier press never reaches this one.
+  clearTouchEndMark();
   advance();
   state.pressPointerId = event.pointerId;
   const view = event.view ?? document.defaultView;
@@ -64,7 +99,21 @@ function startPress(event: PointerEvent) {
   };
 }
 
-function endPress() {
+function endPress(event: PointerEvent) {
+  ensureFields();
+  if (event.type === 'pointerup') {
+    const gesture = state.gesture;
+    state.releasingGesture = gesture;
+    state.releasingPointerType = event.pointerType;
+    state.isDispatchingRelease = true;
+    // A release that brings no click (a touch whose touchend was cancelled)
+    // ends at the next task.
+    setTimeout(() => {
+      if (state.releasingGesture === gesture) {
+        state.releasingGesture = null;
+      }
+    }, 0);
+  }
   state.pressPointerId = null;
   state.unsubscribePress?.();
   state.unsubscribePress = null;
@@ -74,11 +123,29 @@ function markContextMenu() {
   state.contextMenuGesture = state.gesture;
 }
 
-function markClicked() {
+function markClicked(event: MouseEvent) {
+  ensureFields();
   state.clickedGesture = state.gesture;
+  // A click the page dispatches while the release itself is dispatched (a
+  // menu row's activation) comes before the release's light dismiss, so it
+  // does not end the release. Any other click does.
+  if (
+    state.releasingGesture === state.gesture &&
+    !(state.isDispatchingRelease && event.detail === 0)
+  ) {
+    state.releasingGesture = null;
+  }
+}
+
+function endReleaseDispatch() {
+  state.isDispatchingRelease = false;
 }
 
 function listen() {
+  ensureFields();
+  // An older copy of Core may have installed these listeners first. Its
+  // listeners open no release window, so a show during a release is not
+  // deferred, as before.
   if (state.isListening || typeof document === 'undefined') {
     return;
   }
@@ -87,6 +154,8 @@ function listen() {
   const view = document.defaultView;
   if (view != null) {
     subscribeInput(view, 'pointerdown', startPress, {first: true});
+    // The window's bubble phase comes after every handler of the release.
+    view.addEventListener('pointerup', endReleaseDispatch);
   }
   document.addEventListener('keydown', advance, true);
   // Capture phase observes the click even when a consumer stops propagation.
@@ -108,6 +177,72 @@ export function currentGestureHasClicked(): boolean {
   return state.clickedGesture === state.gesture;
 }
 
+/**
+ * Whether the page is handling a press's release that will light-dismiss:
+ * from its `pointerup` until the browser's click for it, or the next task when
+ * no click comes. The browser's light dismiss for that release has not run
+ * yet. A click the page dispatches while the release is dispatched does not
+ * end it. A touch whose touchend the click guard cancels brings no light
+ * dismiss, so its release is not in flight here.
+ */
+export function isReleaseInFlight(): boolean {
+  listen();
+  if (
+    state.releasingGesture === null ||
+    state.releasingGesture !== state.gesture
+  ) {
+    return false;
+  }
+  return !(state.releasingPointerType === 'touch' && isTouchEndCancelled());
+}
+
+/**
+ * Runs `callback` once, after the release in flight: at its click, or at the
+ * next task when no click comes, whichever is first. Returns the cancel.
+ */
+export function afterRelease(doc: Document, callback: () => void): () => void {
+  let isDone = false;
+  const run = () => {
+    if (isDone) {
+      return;
+    }
+    isDone = true;
+    cancel();
+    callback();
+  };
+  // First on the window's capture phase: the browser's light dismiss for the
+  // release ran before the click, and the callback runs inside the click, so
+  // focus it moves counts as made during the click. A click dispatched while
+  // the release is dispatched is not the release's own.
+  const view = doc.defaultView;
+  const stopClick =
+    view == null
+      ? () => {}
+      : subscribeInput(
+          view,
+          'click',
+          event => {
+            if (state.isDispatchingRelease && event.detail === 0) {
+              return;
+            }
+            // The release ends at its click, before the callback runs, so a
+            // show the callback asks for is not held again.
+            if (state.releasingGesture === state.gesture) {
+              state.releasingGesture = null;
+            }
+            run();
+          },
+          {first: true},
+        );
+  const timer = setTimeout(run, 0);
+  function cancel() {
+    isDone = true;
+    stopClick();
+    clearTimeout(timer);
+  }
+  return cancel;
+}
+
 /** Whether a press is down, its release not yet seen by the page. */
 export function isPressInFlight(): boolean {
   listen();
@@ -121,17 +256,23 @@ export function isPressInFlight(): boolean {
  * pointer is outside the layer, the layer captures it, so a release there
  * lands on the layer. Over the layer the capture lets go, so hover works and a
  * release there is inside anyway. The claim ends at that press's release, or
- * when the layer closes; a later press dismisses as usual. A second claim of
- * the same press for the same layer does nothing.
+ * when the layer closes, or when another control takes the pointer; a later
+ * press dismisses as usual. A second claim of the same press for the same
+ * layer does nothing.
  *
  * `releaseTarget` is the control the press began on, which the caller keeps
  * as the popover's invoker. It holds the pointer while the pointer is over
  * it, so its own pointerup and click still reach it. It still gets them when
  * it moves away under a pointer that stays still.
+ *
+ * `onRelease` runs at the release of a claim that is still held then.
  */
 export function claimPress(
   layer: HTMLElement,
-  {releaseTarget = null}: {releaseTarget?: HTMLElement | null} = {},
+  {
+    releaseTarget = null,
+    onRelease,
+  }: {releaseTarget?: HTMLElement | null; onRelease?: () => void} = {},
 ): void {
   listen();
   const pointerId = state.pressPointerId;
@@ -226,9 +367,24 @@ export function claimPress(
       state.claimedPress = null;
     }
   };
+  // A control that takes the pointer during the press keeps it, for example
+  // a row that a swipe moves. The claim then ends, and it neither takes the
+  // pointer back nor cancels the tap.
+  const yieldToTaker = (event: PointerEvent) => {
+    if (
+      event.pointerId === pointerId &&
+      event.target !== layer &&
+      event.target !== releaseTarget
+    ) {
+      stop();
+    }
+  };
   const endClaim = (event: PointerEvent) => {
     if (event.pointerId === pointerId) {
       stop();
+      if (event.type === 'pointerup') {
+        onRelease?.();
+      }
     }
   };
   // A layer that closes while the button is still down lets the pointer go,
@@ -247,6 +403,7 @@ export function claimPress(
   layer.addEventListener('toggle', onToggle, true);
   unsubscribes.push(
     subscribeInput(view, 'pointermove', followPointer),
+    subscribeInput(view, 'gotpointercapture', yieldToTaker),
     subscribeInput(view, 'pointerup', endClaim),
     subscribeInput(view, 'pointercancel', endClaim),
     subscribeInput(view, 'scroll', invalidate),
@@ -264,4 +421,90 @@ export function claimContextMenuPress(layer: HTMLElement): void {
   if (state.contextMenuGesture === state.gesture) {
     claimPress(layer);
   }
+}
+
+/**
+ * Pointer types whose *press* is a tap rather than a click.
+ *
+ * A pen belongs here but not in the arrival path: in detection range it hovers
+ * — firing `pointerenter`/`pointermove` with no contact, exactly as a mouse
+ * does, on a device where `(hover: hover)` matches — and only becomes a tap
+ * once it lands. See `handlePointerEnter` in useTouchTrigger.
+ */
+export const TOUCH_POINTER_TYPES = new Set(['touch', 'pen']);
+
+/** Waits for the tap that a touch or pen press may become. Internal. */
+export interface TapRecognizer {
+  /**
+   * Call on every press. A touch or pen press on `trigger` waits for its tap:
+   * the press's own `click`. A touch the browser takes for a scroll or a
+   * pinch (`pointercancel`) is no tap, and a new press replaces one still
+   * waiting. Returns whether the press is touch or pen.
+   */
+  press(
+    event: PointerEvent,
+    trigger: Element | null,
+    onTap: (tapEvent: Event) => void,
+  ): boolean;
+  /** Stops waiting for a press still waiting for its tap. */
+  forget(): void;
+  /**
+   * Whether a touch or pen press still waits for its tap, with no key press
+   * or new press since. A focus at that time is the press's own focus.
+   */
+  isTouchPressCurrent(): boolean;
+}
+
+/** One tap recognizer for a trigger, released on unmount. Internal. */
+export function useTapRecognizer(): TapRecognizer {
+  const [recognizer] = useState(createTapRecognizer);
+  // Syncs the trigger's tap listeners (click, pointercancel) with its
+  // lifetime: a tap still waiting is released on unmount.
+  useEffect(() => () => recognizer.forget(), [recognizer]);
+  return recognizer;
+}
+
+function createTapRecognizer(): TapRecognizer {
+  let stopWaiting: (() => void) | null = null;
+  let waitingGesture: number | null = null;
+  const forget = () => {
+    stopWaiting?.();
+    stopWaiting = null;
+  };
+  return {
+    press(event, trigger, onTap) {
+      forget();
+      if (!TOUCH_POINTER_TYPES.has(event.pointerType)) {
+        return false;
+      }
+      if (trigger == null) {
+        return true;
+      }
+      // The tap must belong to this press. A key press or a new pointer press
+      // advances the gesture, so a keyboard activation that later fires
+      // `click` on the trigger (Enter on a button) is not mistaken for it.
+      const gesture = currentGesture();
+      waitingGesture = gesture;
+      const stop = () => {
+        trigger.removeEventListener('click', handleTap);
+        trigger.removeEventListener('pointercancel', stop);
+        if (stopWaiting === stop) {
+          stopWaiting = null;
+        }
+      };
+      const handleTap = (tapEvent: Event) => {
+        stop();
+        if (currentGesture() === gesture) {
+          onTap(tapEvent);
+        }
+      };
+      trigger.addEventListener('click', handleTap);
+      trigger.addEventListener('pointercancel', stop);
+      stopWaiting = stop;
+      return true;
+    },
+    forget,
+    isTouchPressCurrent: () =>
+      stopWaiting != null && waitingGesture === currentGesture(),
+  };
 }

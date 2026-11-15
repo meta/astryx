@@ -1,5 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 // @pr-a11y release-only
+// @visits BottomSheet
 
 /**
  * @file BottomSheetFocusReturn.a11y.browser.spec.ts

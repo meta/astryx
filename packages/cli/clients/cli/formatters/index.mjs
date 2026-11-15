@@ -236,7 +236,9 @@ function wrapLine(line, width, indent) {
  * @returns {Block}
  */
 export function section(heading, subtitle) {
-  return new Block(toAscii(subtitle ? `${heading}\n${subtitle}` : String(heading)));
+  return new Block(
+    toAscii(subtitle ? `${heading}\n${subtitle}` : String(heading)),
+  );
 }
 
 /**
@@ -311,9 +313,10 @@ export function records(items, options = {}) {
  * @returns {Block}
  */
 function inlineRecords(items, options) {
-  const [lead, ...rest] = (options.fields ?? Object.keys(items[0] ?? {})).filter(
-    k => !options.omit?.includes(k),
-  );
+  // Columns from every row: an optional field is on some rows only.
+  const [lead, ...rest] = (
+    options.fields ?? [...new Set(items.flatMap(o => Object.keys(o ?? {})))]
+  ).filter(k => !options.omit?.includes(k));
   if (lead == null) return new Block('');
   /** @param {any} o @param {string} k */
   const value = (o, k) => {

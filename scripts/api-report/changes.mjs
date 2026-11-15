@@ -3,13 +3,11 @@
 /**
  * @file Compare API reports and render the pull request's API changes.
  *
- * @input  the merge base's reports (built from the merge base, or as committed
- *         there when no build of it was kept), the reports generated from the
- *         head's build, and the head's committed reports, per package
+ * @input  the merge base's reports, from its built API surface, and the
+ *         reports generated from the head's build, per package
  * @output added, changed, and removed rows per package, each with its
- *         signature and a usage example, plus how many rows the committed
- *         report is behind the head's build; and the advisory Markdown the
- *         pull request report embeds
+ *         signature and a usage example; and the advisory Markdown the pull
+ *         request report embeds
  * @position scripts/api-report — evidence only: nothing here fails a check or
  *           decides acceptance (architecture:public-component-api INV24, INV13)
  */
@@ -78,12 +76,8 @@ export function parseReport(text) {
       });
     }
   }
-  for (const [key, row] of rows) ROW_KEY.set(row, key);
   return rows;
 }
-
-/** Each parsed row's key in its report, for matching rows across two diffs. */
-const ROW_KEY = new WeakMap();
 
 function itemName(line) {
   if (/^[\w$]+ \(/.test(line)) return line.split(' ')[0]; // `Name (./entry)` in an also-exported list
@@ -122,22 +116,12 @@ export function diffReports(base, head) {
   const added = [];
   const changed = [];
   const removed = [];
-  // Every differing key before folding, so a caller can match single members.
-  const keys = new Set();
   for (const [k, row] of b) {
     if (!a.has(k)) added.push(row);
-    else if (a.get(k).line !== row.line) {
-      const change = {...row, before: a.get(k).line};
-      ROW_KEY.set(change, k);
-      changed.push(change);
-    } else continue;
-    keys.add(k);
+    else if (a.get(k).line !== row.line)
+      changed.push({...row, before: a.get(k).line});
   }
-  for (const [k, row] of a)
-    if (!b.has(k)) {
-      removed.push(row);
-      keys.add(k);
-    }
+  for (const [k, row] of a) if (!b.has(k)) removed.push(row);
   // A wholly added or removed item reports once, not once per member.
   const fold = rows => {
     const items = new Set(
@@ -149,7 +133,7 @@ export function diffReports(base, head) {
       r => !r.member || !items.has(`${r.entry}\0${r.section}\0${r.item}`),
     );
   };
-  return {added: fold(added), changed, removed: fold(removed), keys};
+  return {added: fold(added), changed, removed: fold(removed)};
 }
 
 /**
@@ -196,70 +180,26 @@ export function usageFor(pkg, row) {
   return `import {${name}} from '${spec}'`;
 }
 
-/** The rows one report differs from another by, as the changes list them. */
-const rowCount = ({added, changed, removed}) =>
-  added.length + changed.length + removed.length;
-
-/** The rows of a `diffReports` result, in one list. */
-const rowsOf = ({added, changed, removed}) => [
-  ...added,
-  ...changed,
-  ...removed,
-];
-
-/**
- * How many of the pull request's rows its committed report does not show,
- * counted as the pull request report counts them (a wholly added or removed
- * item is one row). Rows a report on main already lacked are not the pull
- * request's, and only a built surface of the merge base tells the two apart:
- * against the merge base's committed report, this counts none.
- */
-function staleOwnRowCount({base, head, committed, baseSource, stale}) {
-  if (!stale || base == null || baseSource === 'committed') return 0;
-  const behind = diffReports(committed, head).keys;
-  const own = diffReports(base, head);
-  const whole = new Set([...own.added, ...own.removed].filter(r => !r.member));
-  // A member or a changed item line matches by its own key; a wholly added
-  // or removed item matches when any of its keys is behind.
-  return rowsOf(own).filter(r => {
-    const key = ROW_KEY.get(r);
-    if (behind.has(key)) return true;
-    return whole.has(r) && [...behind].some(k => k.startsWith(`${key}\0`));
-  }).length;
-}
-
 /**
  * @param {Array<{pkg: string, base: string|null, head: string,
- *   committed: string|null, baseSource?: 'build'|'head'|'committed'|'unknown'}>} packages
+ *   baseSource?: 'build'|'head'|'unknown'}>} packages
  *   `unknown`: the merge base could not be surfaced; `base` is null
  */
 export function computeChanges(packages) {
   return packages
-    .map(({pkg, base, head, committed, baseSource = 'committed'}) => {
+    .map(({pkg, base, head, baseSource = 'build'}) => {
       // With no report at the merge base there is nothing to compare: the
-      // package's report is new, or its merge base could not be surfaced,
-      // and every row would read as added.
+      // package is new there, or its merge base could not be surfaced, and
+      // every row would read as added.
       const baseline = base == null;
       const d = baseline
         ? {added: [], changed: [], removed: []}
         : diffReports(base, head);
-      const stale = committed != null && committed !== head;
       return {
         pkg,
         baseline,
         ...(baseSource === 'unknown' ? {baseUnknown: true} : {}),
         baseSource,
-        stale,
-        // A stale report is one line in the PR report, not its rows.
-        staleRows: stale ? rowCount(diffReports(committed, head)) : 0,
-        staleOwnRows: staleOwnRowCount({
-          base,
-          head,
-          committed,
-          baseSource,
-          stale,
-        }),
-        missing: committed == null,
         counts: {
           added: d.added.length,
           changed: d.changed.length,
@@ -273,26 +213,6 @@ export function computeChanges(packages) {
       };
     })
     .sort((x, y) => (x.pkg < y.pkg ? -1 : x.pkg > y.pkg ? 1 : 0));
-}
-
-/**
- * A GitHub Actions warning for each package whose public API this pull
- * request changed while its committed report stayed behind. It never fails
- * the job (architecture:public-component-api INV24); a report that was stale
- * before this pull request gets only the pull request report's line.
- * @param {ReturnType<typeof computeChanges>} changes
- * @param {(pkg: string) => string} reportFile the package's committed report path
- * @returns {string[]}
- */
-export function staleReportWarnings(changes, reportFile) {
-  return changes
-    .filter(c => c.staleOwnRows > 0)
-    .map(
-      c =>
-        `::warning file=${reportFile(c.pkg)},title=API report not regenerated::` +
-        `This pull request changes ${plural(c.staleOwnRows, 'row')} of ${c.pkg}'s public API ` +
-        `that its committed api-report.md does not show. Run pnpm api:report and commit the report.`,
-    );
 }
 
 // The pull request comment has a size limit; a wide change lists its first rows.
@@ -323,49 +243,41 @@ const where = r =>
   code([r.entry, r.section, r.item].filter(Boolean).join(' · '));
 const short = pkg => code(String(pkg ?? '').replace(/^@astryxdesign\//, ''));
 
-const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
-
 /**
  * The advisory API changes for the pull request report: one visible summary
- * line, with every row inside a closed disclosure.
+ * line, with every row inside a closed disclosure. Fields other than
+ * `baseline`, `baseUnknown`, `counts`, and `rows`, such as those an older
+ * head wrote, are ignored.
  *
- * Changes from version 2 (each package carries `staleRows`) list only the
- * rows the pull request changes; a stale committed report is one line naming
- * how far behind it is. Version 1 changes render as they always did.
+ * With `compared: false` (no built surface of the merge base), the line says
+ * that nothing was compared and names each listed package as unknown. Rows
+ * are not shown: they do not come from a comparison of builds.
  * @param {ReturnType<typeof computeChanges>} changes
- * @returns {string} empty when nothing changed and every report is current
+ * @param {{compared?: boolean}} [options]
+ * @returns {string} empty when no package has a change, or when nothing was
+ *   compared and no package is listed
  */
-export function renderChanges(changes) {
+export function renderChanges(changes, {compared = true} = {}) {
   const list = (Array.isArray(changes) ? changes : []).map(c => ({
     ...c,
     rows: Array.isArray(c?.rows) ? c.rows : [],
   }));
-  if (list.some(c => typeof c?.staleRows === 'number'))
-    return renderBuiltChanges(list);
+  if (!compared) return renderNotCompared(list);
+  const unknown = list.filter(c => c.baseUnknown === true);
   const touched = list.filter(
-    c =>
-      c.rows.length ||
-      c.stale === true ||
-      c.missing === true ||
-      c.baseline === true,
+    c => c.baseUnknown !== true && (c.rows.length || c.baseline === true),
   );
-  if (!touched.length) return '';
-  const parts = touched.map(c => {
-    if (c.baseUnknown === true)
-      return `${short(c.pkg)} unknown: base surface unavailable`;
-    if (c.baseline === true && c.missing !== true)
-      return `${short(c.pkg)} new report${c.stale ? ' (stale: run `pnpm api:report`)' : ''}`;
-    const counts = c.rows.length
-      ? ` +${count(c.counts?.added)} · ~${count(c.counts?.changed)} · −${count(c.counts?.removed)}`
-      : ' no changes';
-    const note =
-      c.missing === true
-        ? ' (report not committed: run `pnpm api:report`)'
-        : c.stale === true
-          ? ' (report stale: run `pnpm api:report`)'
-          : '';
-    return `${short(c.pkg)}${counts}${note}`;
-  });
+  if (!touched.length && !unknown.length) return '';
+  const parts = touched.map(c =>
+    c.baseline === true
+      ? `${short(c.pkg)} not in the merge base's build`
+      : `${short(c.pkg)} +${count(c.counts?.added)} · ~${count(c.counts?.changed)} · −${count(c.counts?.removed)}`,
+  );
+  // Packages the merge base could not surface share one headline entry.
+  if (unknown.length)
+    parts.push(
+      `unknown (base surface unavailable): ${unknown.map(c => short(c.pkg)).join(', ')}`,
+    );
   return (
     [`**API changes:** ${parts.join('; ')}`, ...rowTable(touched)].join('\n') +
     '\n'
@@ -397,7 +309,7 @@ function rowTable(packages) {
       ...(rows.length > MAX_ROWS
         ? [
             '',
-            `…and ${rows.length - MAX_ROWS} more; run \`pnpm api:report\` and read the report diff.`,
+            `…and ${rows.length - MAX_ROWS} more in this run's api-changes.json.`,
           ]
         : []),
       '',
@@ -407,57 +319,11 @@ function rowTable(packages) {
   return L;
 }
 
-/**
- * Version 2: the summary names only the packages this pull request changes
- * (or whose report is new or missing); stale committed reports share one line.
- * @param {ReturnType<typeof computeChanges>} list
- */
-function renderBuiltChanges(list) {
-  // Packages the merge base could not surface share one headline entry.
-  const unknown = list.filter(c => c.baseUnknown === true);
-  const touched = list.filter(
-    c =>
-      c.baseUnknown !== true &&
-      (c.rows.length || c.missing === true || c.baseline === true),
+/** The summary line when the merge base had no built surface. */
+function renderNotCompared(list) {
+  const unknown = list.filter(
+    c => c.baseUnknown === true || c.baseline === true || c.rows.length,
   );
-  const stale = list.filter(c => c.stale === true && c.missing !== true);
-  if (!touched.length && !stale.length && !unknown.length) return '';
-  const parts = touched.map(c => {
-    if (c.baseline === true && c.missing !== true)
-      return `${short(c.pkg)} new report`;
-    const counts = c.rows.length
-      ? ` +${count(c.counts?.added)} · ~${count(c.counts?.changed)} · −${count(c.counts?.removed)}`
-      : ' no changes';
-    const missing =
-      c.missing === true
-        ? ' (report not committed: run `pnpm api:report`)'
-        : '';
-    // No build of the merge base was kept: rows a stale report at the merge
-    // base carried may show here too.
-    const committed =
-      c.rows.length && c.baseSource === 'committed'
-        ? " (against the merge base's committed report)"
-        : '';
-    return `${short(c.pkg)}${counts}${missing}${committed}`;
-  });
-  if (unknown.length)
-    parts.push(
-      `unknown (base surface unavailable): ${unknown.map(c => short(c.pkg)).join(', ')}`,
-    );
-  const L = [
-    `**API changes:** ${parts.length ? parts.join('; ') : 'none in this pull request'}`,
-  ];
-  if (stale.length) {
-    const behind = stale.map(c =>
-      count(c.staleRows)
-        ? `${short(c.pkg)} ${plural(count(c.staleRows), 'row')}`
-        : short(c.pkg),
-    );
-    L.push(
-      '',
-      `Committed API report behind this build: ${behind.join(', ')}; run \`pnpm api:report\`.`,
-    );
-  }
-  L.push(...rowTable(touched));
-  return L.join('\n') + '\n';
+  if (!unknown.length) return '';
+  return `**API changes:** not compared: no built surface of the merge base; unknown: ${unknown.map(c => short(c.pkg)).join(', ')}\n`;
 }

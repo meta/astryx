@@ -35,6 +35,8 @@ import {
   animationStoryboard,
   armHold,
   blockMainThread,
+  CONTROL_RGB,
+  CONTROL_SIDE,
   castStoryboard,
   compareCurve,
   countBetween,
@@ -52,6 +54,7 @@ import {
   thawTimers,
   timeline,
   touchDriver,
+  trackMarker,
   traceRendering,
   watchAnimations,
   withStorybook,
@@ -89,6 +92,104 @@ async function exitOf(surface: Locator): Promise<Exit> {
 /** The layer's opacity t ms into the release: the strength, 1 → 0. */
 const strengthAt = (exit: Exit, t: number) =>
   1 - exit.ease(Math.min(1, Math.max(0, t / exit.ms)));
+
+/** The time into the release, ms, at which the layer shows `strength`. */
+function timeAtStrength(exit: Exit, strength: number): number {
+  let early = 0;
+  let late = exit.ms;
+  for (let step = 0; step < 40; step++) {
+    const middle = (early + late) / 2;
+    if (strengthAt(exit, middle) > strength) {
+      early = middle;
+    } else {
+      late = middle;
+    }
+  }
+  return (early + late) / 2;
+}
+
+/** How long the release clock's box moves past the release's end, ms. */
+const RELEASE_CLOCK_MARGIN_MS = 2 * (1000 / 60);
+
+/**
+ * Arms a clock that runs with the release only. A `CONTROL_RGB` box in the
+ * page's top strip starts to move on the page's own `pointerup`, in the task
+ * that lifts the press. It moves 1 px a ms for `ms`: the release and two
+ * frames more. The compositor samples it with the fade, so its offset in a
+ * frame gives that frame's time. In Chromium, the start that `ready` gives is
+ * the compositor's start, so the clock is on screen from it. WebKit presents a
+ * just-started animation about a frame late under load, so the proof stays
+ * Chromium-only. The box stays still before the lift and after its leg. So it
+ * adds at most two cast frames after the fade. On a loaded runner, frames
+ * added outside the fade made the cast drop frames inside it.
+ */
+async function armReleaseClock(page: Page, ms: number): Promise<void> {
+  await page.evaluate(
+    ({color, side, travel}) => {
+      const box = document.createElement('div');
+      box.style.cssText = `position:fixed;left:0;top:0;margin:0;width:${side}px;height:${side}px;background:rgb(${color.join(',')});z-index:2147483647;pointer-events:none;`;
+      document.body.appendChild(box);
+      window.addEventListener(
+        'pointerup',
+        () => {
+          const leg = box.animate(
+            [
+              {transform: 'translateX(0px)'},
+              {transform: `translateX(${travel}px)`},
+            ],
+            {duration: travel, easing: 'linear', fill: 'forwards'},
+          );
+          void leg.ready.then(() => {
+            (
+              window as unknown as {__releaseClockStart?: number}
+            ).__releaseClockStart =
+              performance.timeOrigin + Number(leg.startTime);
+          });
+        },
+        {capture: true, once: true},
+      );
+    },
+    {color: [...CONTROL_RGB], side: CONTROL_SIDE, travel: Math.round(ms)},
+  );
+}
+
+/**
+ * Each cast frame's time on the release clock (`armReleaseClock`), epoch ms,
+ * by the frame's stamp: the clock's start plus the box's offset. A frame from
+ * before the box moved, or after its leg, gets no time.
+ */
+async function releaseClockTimes(
+  page: Page,
+  frames: ReadonlyArray<CastFrame>,
+  ms: number,
+): Promise<{start: number; times: Map<number, number>}> {
+  const start = await page.evaluate(
+    () =>
+      (window as unknown as {__releaseClockStart?: number}).__releaseClockStart,
+  );
+  if (start == null) {
+    throw new Error(
+      'the release clock did not start: no lift reached the page',
+    );
+  }
+  const tracked = await trackMarker(page, frames, {
+    rgb: CONTROL_RGB,
+    region: {
+      x: 0,
+      y: 0,
+      width: CONTROL_SIDE + Math.round(ms) + 4,
+      height: CONTROL_SIDE + 4,
+    },
+  });
+  const times = new Map<number, number>();
+  for (const frame of tracked) {
+    const offset = frame.box?.x;
+    if (offset != null && offset > 0 && offset < Math.round(ms)) {
+      times.set(frame.t, start + offset);
+    }
+  }
+  return {start, times};
+}
 
 /**
  * How far before the release's end a recorded frame may land and still count
@@ -315,6 +416,9 @@ for (const story of [LIST_ROW, SCROLLER_ROW, TREE_ROW]) {
       'screencast frame evidence is Chromium-only in Playwright; WebKit has its own video proof below',
     );
     const {driver, row, center, probe} = await openRow(page, story);
+    const exit = await exitOf(row);
+    const clockMs = exit.ms + RELEASE_CLOCK_MARGIN_MS;
+    await armReleaseClock(page, clockMs);
     const cast = await startScreencast(page);
     // The page starts the block itself, a frame into the release. A block the
     // test sends after the release starts lands later on a busy machine. The
@@ -328,33 +432,54 @@ for (const story of [LIST_ROW, SCROLLER_ROW, TREE_ROW]) {
     const [release] = await watch.started({minProgressMs: 16});
     await page.waitForTimeout(150);
     const frames = await cast.stop();
-    const pixels = await samplePixel(page, frames, probe);
+    const stamped = await samplePixel(page, frames, probe);
     // The last frame is the row at rest: the release ended inside the block.
     // The first frame can already show the press, because a row outside a
     // scroller paints in the frame the finger lands.
-    const rest = pixels[pixels.length - 1].value;
-    const pressedFrames = pixels.filter(p => p.t < release.from);
+    const rest = stamped[stamped.length - 1].value;
+    const pressedFrames = stamped.filter(p => p.t < release.from);
     const pressed = Math.min(...pressedFrames.map(p => p.value));
     const strength = (v: number) => (rest - v) / (rest - pressed);
+    // A loaded runner's cast can stamp a frame tens of ms after it shows it,
+    // and unevenly. So each frame takes its time from the release clock. The
+    // frames go in their order on it, since the cast sorts by stamp. A frame
+    // stamped late can sort after frames it came before. Every frame of the
+    // fade inside the box's leg must get a time, so none there is left out.
+    const clock = await releaseClockTimes(page, frames, clockMs);
+    const clocked = stamped.map(p => clock.times.has(p.t));
+    const unclocked = stamped.filter((p, i) => {
+      const shown = strength(p.value);
+      return (
+        i > clocked.indexOf(true) &&
+        i < clocked.lastIndexOf(true) &&
+        !clocked[i] &&
+        shown > 0 &&
+        shown < 1
+      );
+    });
+    expect(
+      unclocked.map(p => p.t),
+      'frames of the fade inside the release clock with no time on it',
+    ).toEqual([]);
+    const pixels = stamped
+      .flatMap(p => {
+        const t = clock.times.get(p.t);
+        return t == null ? [] : [{...p, stamp: p.t, t}];
+      })
+      .sort((a, b) => a.t - b.t);
     // Judge the release while it was still visibly moving inside the block.
     const end = Math.min(block.to, release.to) - 10;
     const during = pixels.filter(p => p.t > block.from && p.t <= end);
     const strengths = during.map(p => ({
       t: +(p.t - block.from).toFixed(1),
+      stamp: +(p.stamp - block.from).toFixed(1),
       strength: +strength(p.value).toFixed(3),
     }));
-    const intervals = during
-      .map((p, i) => (i === 0 ? p.t - block.from : p.t - during[i - 1].t))
-      .filter(dt => dt > 0);
-    const longestGap = Math.max(
-      end - (during.at(-1)?.t ?? block.from),
-      ...intervals,
-    );
     await writeEvidence(
       `busy-main-thread/${story.story}`,
       {
         [`${testInfo.project.name}.json`]: JSON.stringify(
-          {block, release, rest, pressed, strengths},
+          {block, release, clockStart: clock.start, rest, pressed, strengths},
           null,
           1,
         ),
@@ -369,7 +494,7 @@ for (const story of [LIST_ROW, SCROLLER_ROW, TREE_ROW]) {
       columns: 6,
       cellScale: 0.45,
       data: t => {
-        const p = pixels.find(f => f.t === t);
+        const p = stamped.find(f => f.t === t);
         return {strength: p == null ? -1 : +strength(p.value).toFixed(3)};
       },
     });
@@ -377,10 +502,31 @@ for (const story of [LIST_ROW, SCROLLER_ROW, TREE_ROW]) {
     // The press painted at full strength before the lift.
     expect(rest - pressed).toBeGreaterThan(10);
     // Frames kept coming through the block, each one further along the fade.
-    expect(during.length, JSON.stringify(strengths)).toBeGreaterThanOrEqual(
-      Math.floor((end - block.from) / (1000 / 60)) - 2,
-    );
-    expect(longestGap).toBeLessThan(40);
+    // The box moves on every frame the compositor presents. So too few
+    // frames, with a gap over the harness's starvation limit, means the cast
+    // delivered none: the runner starved, whatever the fade did.
+    requireFrames(pixels, {
+      min: Math.floor((end - block.from) / (1000 / 60)) - 2,
+      during: 'the release played in the block',
+      where: p => p.t > block.from && p.t <= end,
+    });
+    // Each frame shows the fade where the exit curve has it at that frame's
+    // time on the clock, within one display frame (16.7 ms). A pixel level
+    // spans a range of times, so the range counts. One repeated frame of the
+    // fade stays inside the limit. Two repeats (33 ms) do not, and neither
+    // does a fade that stalls while the box moves on.
+    const level = 0.5 / (rest - pressed);
+    for (const p of during) {
+      const shown = strength(p.value);
+      const from = release.from + timeAtStrength(exit, shown + level);
+      const to = release.from + timeAtStrength(exit, shown - level);
+      expect(p.t, JSON.stringify(strengths)).toBeGreaterThanOrEqual(
+        from - 1000 / 60,
+      );
+      expect(p.t, JSON.stringify(strengths)).toBeLessThanOrEqual(
+        to + 1000 / 60,
+      );
+    }
     for (let i = 1; i < strengths.length; i++) {
       expect(strengths[i].strength).toBeLessThanOrEqual(
         strengths[i - 1].strength + 0.01,

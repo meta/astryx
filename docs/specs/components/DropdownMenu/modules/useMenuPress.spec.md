@@ -28,6 +28,7 @@ references:
     architecture:public-component-api,
     architecture:layer-runtime,
     family:overlay-dismissal,
+    family:action-groups,
   ]
 ---
 
@@ -132,6 +133,10 @@ Consumer migration instructions belong in consumer docs and release notes.
 - Keyboard navigation, typeahead and Enter/Space activation — owned by
   `useListFocus`, `useTypeahead` and the component records.
 - Hover-to-open of sub-menu flyouts — owned by `useMenuHover`.
+- Tracking a held pointer across a group's actions outside menus and
+  Selector's and MultiSelector's options — owned by the one internal module
+  `architecture:interaction-modality` INV13 names for `family:action-groups`
+  members; this module covers menus and those options only.
 - The right mouse button inside a menu: it is not modelled.
 
 ## Public API and concepts

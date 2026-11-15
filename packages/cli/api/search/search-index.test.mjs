@@ -144,6 +144,23 @@ describe('rankSearchIndex over stored indexes', () => {
     for (const dir of dirs) fs.rmSync(dir, {recursive: true, force: true});
   });
 
+  it('keeps fields only build reads out of every index', () => {
+    for (const index of indexes) {
+      for (const candidate of index.candidates) {
+        expect(candidate).not.toHaveProperty('_category');
+      }
+    }
+  });
+
+  it(
+    'never prints a field only build reads',
+    async () => {
+      const response = await search('data table with filters', {cwd: full});
+      expect(JSON.stringify(response)).not.toContain('_category');
+    },
+    SLOW,
+  );
+
   it.each(GOLDEN)(
     '`%s` from the whole-project index answers as search() does there',
     async query => {

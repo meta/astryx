@@ -9,9 +9,14 @@
 
 import {Buffer} from 'node:buffer';
 import fs from 'node:fs';
+import {createRequire} from 'node:module';
 import path from 'node:path';
 import {describe, expect, it, vi} from 'vitest';
 import YAML from 'yaml';
+
+const {TRAINER_WAITING_TEXT} = createRequire(import.meta.url)(
+  './review-signal-decision.cjs',
+);
 
 // The raw file host is offline here, so jobs read their helpers through the API.
 vi.stubGlobal('fetch', async () => {
@@ -47,6 +52,7 @@ async function runSignal({
   commenter = 'engineer',
   engOwners = '@engineer',
   commentBody = `/approve-spec ${HEAD}`,
+  author = {login: 'contributor', type: 'User'},
   // The spec-owner job's decision for a PR that changes no spec record.
   specStatuses = [
     {
@@ -59,7 +65,7 @@ async function runSignal({
 } = {}) {
   const pr = {
     number: 42,
-    user: {login: 'contributor', type: 'User'},
+    user: author,
     base: {sha: baseSha, ref: 'main'},
     head: {sha: HEAD, ref: 'feature'},
     changed_files: 1,
@@ -515,6 +521,78 @@ describe('review-signal appearance-only contract', () => {
     expect(workflow).toContain(
       'Content-based visual classification failed closed',
     );
+  });
+});
+
+describe('a pull request the review app opens waits for a trainer pass (spec:AST-030 FR15)', () => {
+  const APP = 'review-app[bot]';
+  const bot = {login: APP, type: 'Bot'};
+  const review = (login, state, commitId = HEAD) => ({
+    user: {login, type: 'User'},
+    state,
+    commit_id: commitId,
+  });
+  const gate = async options => {
+    const {mutations, github} = await runSignal({
+      eventName: 'pull_request_target',
+      author: bot,
+      reviewApp: APP,
+      ...options,
+    });
+    const calls = mutations.createCommitStatus.mock.calls.map(
+      ([input]) => input,
+    );
+    expect(calls.every(call => call.context === 'review-required')).toBe(true);
+    return {last: calls.at(-1), github};
+  };
+
+  it('keeps review-required pending with no trainer pass at the head', async () => {
+    const {last} = await gate({reviews: []});
+    expect(last).toMatchObject({
+      state: 'pending',
+      description: TRAINER_WAITING_TEXT,
+    });
+  });
+
+  it("keeps it pending when the trainer's approval is for an older head, or was withdrawn", async () => {
+    expect(
+      (await gate({reviews: [review('engineer', 'APPROVED', OLD_BASE)]})).last
+        .state,
+    ).toBe('pending');
+    expect(
+      (
+        await gate({
+          reviews: [
+            review('engineer', 'APPROVED'),
+            review('engineer', 'CHANGES_REQUESTED'),
+          ],
+        })
+      ).last.state,
+    ).toBe('pending');
+  });
+
+  it('keeps it pending when only someone who is not an engineering owner approves', async () => {
+    expect(
+      (await gate({reviews: [review('someone', 'APPROVED')]})).last.state,
+    ).toBe('pending');
+  });
+
+  it('passes once an engineering owner approves the exact head', async () => {
+    const {last} = await gate({reviews: [review('engineer', 'APPROVED')]});
+    expect(last.state).toBe('success');
+    // review-clear's own text, so it re-gates a later withdrawal.
+    expect(last.description).toContain('Cleared by code-owner approval.');
+  });
+
+  it('still exempts other bots, and every bot when no review app is set', async () => {
+    const other = await gate({
+      author: {login: 'dependabot[bot]', type: 'Bot'},
+    });
+    expect(other.last.state).toBe('success');
+    expect(other.last.description).toContain('exempt from code review');
+    const unset = await gate({reviewApp: ''});
+    expect(unset.last.state).toBe('success');
+    expect(unset.last.description).toContain('exempt from code review');
   });
 });
 
