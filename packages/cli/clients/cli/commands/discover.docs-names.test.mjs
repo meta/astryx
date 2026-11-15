@@ -202,10 +202,14 @@ describe('astryx discover: sections an integration adds to another doc', () => {
   );
 
   it(
-    'shows them beside the doc in text, and on the doc’s item page',
+    'prints the read that opens each, beside the doc and on its item page',
     async () => {
+      // The read itself, as printed, so a reader runs it rather than having
+      // to work out the command from a section key.
       const text = await runCli(['discover', '--installed'], {cwd: tmpDir});
-      expect(text.stdout).toContain('theme (sections: apply-the-acme-theme)');
+      expect(text.stdout).toMatch(
+        /theme \(read: \S.* docs theme apply-the-acme-theme\)/,
+      );
       const page = await runCli(['--json', 'discover', '@acme/kit/theme'], {
         cwd: tmpDir,
       });
@@ -214,6 +218,44 @@ describe('astryx discover: sections an integration adds to another doc', () => {
         name: 'theme',
         sections: ['apply-the-acme-theme'],
       });
+      const pageText = await runCli(['discover', '@acme/kit/theme'], {
+        cwd: tmpDir,
+      });
+      expect(pageText.stdout).toMatch(
+        /^Read: \S.* docs theme apply-the-acme-theme$/m,
+      );
+    },
+    SLOW,
+  );
+});
+
+describe('astryx discover: a doc that cannot be read', () => {
+  it(
+    'still lists every package, and names no section of that topic',
+    async () => {
+      // This section's key is already a title query for one of `theme`'s
+      // own sections, so `theme` cannot be read in this project.
+      const docsDir = path.join(tmpDir, 'node_modules', '@acme', 'kit', 'docs');
+      fs.writeFileSync(
+        path.join(docsDir, 'acme-theme.doc.mjs'),
+        `export const docs = ${JSON.stringify({
+          ...DOCS['acme-theme.doc.mjs'],
+          sections: [{...section('Custom'), id: 'custom'}],
+        })};\n`,
+      );
+      expect((await runCli(['docs', 'theme'], {cwd: tmpDir})).status).not.toBe(
+        0,
+      );
+      const result = await runCli(['--json', 'discover'], {cwd: tmpDir});
+      expect(result.status).toBe(0);
+      const entry = JSON.parse(result.stdout).data.find(
+        (/** @type {{name: string}} */ each) => each.name === '@acme/kit',
+      );
+      expect(entry.docs).toContain('theme');
+      expect(entry.docSections).toEqual({
+        'authoring/quick-start': ['acme-notes'],
+      });
+      expect((await runCli(['discover'], {cwd: tmpDir})).status).toBe(0);
     },
     SLOW,
   );

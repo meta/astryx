@@ -1991,7 +1991,14 @@ export async function packageDocSections(catalog, tree, owner) {
           ? guideEntry(found.node)
           : null;
     if (entry == null || entry.package === owner) continue;
-    const node = await lowerTopic(catalog, entry);
+    let node;
+    try {
+      node = await lowerTopic(catalog, entry);
+    } catch {
+      // A topic that cannot be read opens no section, so it lists none; a
+      // read of it names the problem, and doctor reports it.
+      continue;
+    }
     const sectionPackage = sectionPackageOf(entry, node);
     const keys = indexView(node)
       .sections.map(each => each.id)
