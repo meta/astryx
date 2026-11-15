@@ -2138,8 +2138,19 @@ function isShadow(value) {
  *   over the settings and are read too
  * @param {{on?: string, state?: string, when?: string}} [scope] where
  *   the token is set; none for the whole theme
+ * @param {Record<string, unknown>} [element] the custom properties set on
+ *   the element the token is set on, when that is not the theme's root (a
+ *   surface's own tokens): only these are followed
  */
-function checkCycle(thing, value, TOKENS, data, cwd, scope = {}) {
+function checkCycle(
+  thing,
+  value,
+  TOKENS,
+  data,
+  cwd,
+  scope = {},
+  element = undefined,
+) {
   const own = cwd ? ownSourceTokenValues(cwd, data.name) : {};
   // The base theme's own values come under the settings: a base that maps
   // one token to another closes a loop too.
@@ -2178,16 +2189,21 @@ function checkCycle(thing, value, TOKENS, data, cwd, scope = {}) {
     (rule ??= on
       ? partRuleTokens(/** @type {string} */ (cwd), data.name, data.like, on)
       : new Map());
+  // A custom property's var() resolves on the element that sets it, so on
+  // a surface only what that surface sets can loop back; a value from the
+  // page is inherited as it already resolved there.
   /** @param {string} t */
   const globalValue = t =>
-    String(
-      (Object.hasOwn(own, t) ? own[t] : null) ??
-        settings.find(s => s.source === 'token' && s.thing === t && !s.on)
-          ?.value ??
-        baseTokens.get(t) ??
-        TOKENS[t] ??
-        '',
-    );
+    element
+      ? String(Object.hasOwn(element, t) ? (element[t] ?? '') : '')
+      : String(
+          (Object.hasOwn(own, t) ? own[t] : null) ??
+            settings.find(s => s.source === 'token' && s.thing === t && !s.on)
+              ?.value ??
+            baseTokens.get(t) ??
+            TOKENS[t] ??
+            '',
+        );
   const refs = (/** @type {string} */ v) =>
     [...v.matchAll(/var\(\s*(--[a-z0-9-]+)/gi)].map(m => m[1]);
   /** @type {string[]} */
@@ -3375,9 +3391,11 @@ function colorPropDefaults(prop, reads) {
  * @param {string | undefined} value
  * @param {SetFlags} flags
  * @param {boolean} [unset] an undo of one setting: only the identity of the setting is checked
- * @param {{reads?: ReadonlySet<string>}} [scope] `reads`: the custom
+ * @param {{reads?: ReadonlySet<string>, element?: Record<string, unknown>}} [scope] `reads`: the custom
  *   properties the theme itself sets where the value is read, which a var()
- *   in it reads as it reads a design token
+ *   in it reads as it reads a design token; `element`: the custom properties
+ *   set on the element the value is set on, when that is not the theme's
+ *   root (a surface's own tokens), the only ones that can loop back to it
  * @returns {import('./_settings.mjs').Setting}
  */
 export function checkSetting(
@@ -3388,7 +3406,7 @@ export function checkSetting(
   value,
   flags,
   unset = false,
-  {reads} = {},
+  {reads, element} = {},
 ) {
   // Any other dial's value pasted with its property name (`font-size:
   // 18px;` for text-size, `color: #e11d48` for accent) is the value: one
@@ -3957,6 +3975,7 @@ export function checkSetting(
     flags,
     unset,
     reads,
+    element,
   );
   // A var() with a fallback always gives a value; a name one slip from a
   // design token is noted as a likely typo, and the setting stands.
@@ -4017,6 +4036,9 @@ function fallbackVarTypo(v, TOKENS) {
  * @param {SetFlags} flags
  * @param {boolean} [unset]
  * @param {ReadonlySet<string>} [reads] custom properties the theme sets where the value is read
+ * @param {Record<string, unknown>} [element] the custom properties set on
+ *   the element the value is set on, when that is not the theme's root (a
+ *   surface's own tokens): only these can loop back to it
  * @returns {import('./_settings.mjs').Setting}
  */
 function checkSettingAsTyped(
@@ -4028,8 +4050,19 @@ function checkSettingAsTyped(
   flags,
   unset = false,
   reads = undefined,
+  element = undefined,
 ) {
-  const s = checkOne(ctx, slug, data, thing, value, flags, unset, reads);
+  const s = checkOne(
+    ctx,
+    slug,
+    data,
+    thing,
+    value,
+    flags,
+    unset,
+    reads,
+    element,
+  );
   const why = unset ? null : valueProblem(s);
   if (why)
     refuse(
@@ -4058,9 +4091,20 @@ function checkSettingAsTyped(
  * @param {SetFlags} flags
  * @param {boolean} unset
  * @param {ReadonlySet<string>} [reads] custom properties the theme sets where the value is read
+ * @param {Record<string, unknown>} [element] the custom properties set on the element the value is set on, when that is not the theme's root
  * @returns {import('./_settings.mjs').Setting}
  */
-function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
+function checkOne(
+  ctx,
+  slug,
+  data,
+  thing,
+  value,
+  flags,
+  unset,
+  reads,
+  element = undefined,
+) {
   const {C} = ctx;
   const TARGET = ctx.project.target;
   const TOKENS = ctx.project.core.tokenDefaults;
@@ -6276,7 +6320,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
       multipliedTokens(ctx.project).has(thing),
       data.settings.some(x => x.thing === thing),
     );
-    checkCycle(thing, v, TOKENS, data, ctx.project.cwd, s);
+    checkCycle(thing, v, TOKENS, data, ctx.project.cwd, s, element);
     // With no part data, what reads the token is unknown: save, unchecked.
     if (ctx.unchecked) return s;
     const parts = partsOf(ctx, s);

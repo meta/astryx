@@ -4881,6 +4881,7 @@ async function themeBuildInternal(
   ]);
   const badValues = writtenValueProblems(themeDef, {
     reads: tokenDefaults ? name => setNames.has(name) : undefined,
+    rootTokens: tokenDefaults,
   });
   const badValueLines = placed(badValues);
 

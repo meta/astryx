@@ -2754,9 +2754,10 @@ async function ownTokenProblems(ctx, slug, data) {
    * @param {string} value
    * @param {ReadonlySet<string>} [reads] custom properties the theme sets where the value is read
    * @param {Record<string, string>} [flags] set's flags, such as the part a property is on
+   * @param {Record<string, unknown>} [element] the custom properties set on the element the value is set on, when that is not the theme's root
    * @returns {string | null}
    */
-  const refused = (token, value, reads, flags = {}) => {
+  const refused = (token, value, reads, flags = {}, element = undefined) => {
     try {
       checkSetting(
         ctx,
@@ -2768,6 +2769,7 @@ async function ownTokenProblems(ctx, slug, data) {
         false,
         {
           reads,
+          element,
         },
       );
       return null;
@@ -2931,9 +2933,10 @@ async function ownTokenProblems(ctx, slug, data) {
    * @param {unknown} value
    * @param {string} file the file named in a pair's refusal
    * @param {ReadonlySet<string>} reads custom properties the theme sets where the value is read
+   * @param {Record<string, unknown>} [element] the custom properties set on the element the token is set on, when that is not the theme's root (a surface's own)
    * @returns {string | null}
    */
-  const judge = (token, value, file, reads) => {
+  const judge = (token, value, file, reads, element = undefined) => {
     // A null token leaves it unset: the build writes it as it is and warns
     // at its line.
     if (value === null) return null;
@@ -2951,7 +2954,7 @@ async function ownTokenProblems(ctx, slug, data) {
           : `${file} gives ${token} a [light, dark] pair, but only colors differ by mode: the build would write light-dark(), which browsers take only for colors; give it one value`;
       }
       for (const [i, h] of value.entries()) {
-        const why = refused(token, String(h), reads);
+        const why = refused(token, String(h), reads, {}, element);
         if (why) return `its ${i === 0 ? 'light' : 'dark'} half: ${why}`;
       }
       return null;
@@ -2974,7 +2977,7 @@ async function ownTokenProblems(ctx, slug, data) {
     }
     if (/^light-dark\(/i.test(value) && !isColorToken(token))
       return `${file} gives ${token} a [light, dark] pair, but only colors differ by mode: the build would write light-dark(), which browsers take only for colors; give it one value`;
-    return refused(token, value, reads);
+    return refused(token, value, reads, {}, element);
   };
   /**
    * Why a part's CSS property value is refused, or null: text as `set`
@@ -3227,7 +3230,13 @@ async function ownTokenProblems(ctx, slug, data) {
         );
       if (v === undefined) return;
       if (!at.length && !prefix && named.has(k)) return;
-      const why = judge(k, v, fileName(loc), here);
+      // A surface's tokens resolve on the surface, where only what it sets
+      // can loop back.
+      const element =
+        surface && !at.includes('components')
+          ? {...(block.localTokens ?? {}), ...(block.tokens ?? {})}
+          : undefined;
+      const why = judge(k, v, fileName(loc), here, element);
       if (why) refuse(at, k, why, asWritten(v));
     };
     /** @type {Record<string, unknown>} */
@@ -3266,18 +3275,17 @@ async function ownTokenProblems(ctx, slug, data) {
           refuseShadowed(at, k, v, partVar, "in the page's localTokens");
           continue;
         }
-        // Tokens and local tokens are set on one element: a cycle that
-        // passes through a local token leaves each of them no value (one
-        // through tokens alone is judged with the theme's tokens).
+        // Tokens and local tokens are set on one element: tokens that read
+        // each other there have no value, whatever their names. A token
+        // that reads only itself is judged with the theme's tokens, which
+        // also follows the settings and the base theme.
         const cycle = customPropertyCycle(k, onElement);
         if (
           cycle &&
-          cycle.some(
-            n =>
-              block.localTokens &&
+          (cycle.length > 2 ||
+            (block.localTokens &&
               typeof block.localTokens === 'object' &&
-              n in block.localTokens,
-          )
+              k in block.localTokens))
         ) {
           refuse(
             at,

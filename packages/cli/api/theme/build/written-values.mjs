@@ -67,7 +67,7 @@ function tokenValueProblem(key, value, reads) {
   const bad = nonText(key, value);
   if (bad) return bad;
   if (typeof value !== 'string') return null;
-  for (const [, name, comma] of value.matchAll(/var\(\s*(--[\w-]+)\s*(,)?/g)) {
+  for (const [, name, comma] of value.matchAll(/var\(\s*(--[\w-]+)\s*(,)?/gi)) {
     if (comma || name === key) continue;
     if (reads && !reads(name))
       return `${key} reads var(${name}), which no token sets, so it has no value and the browser drops what reads it: read a token, or give a fallback (var(${name}, <value>))`;
@@ -99,7 +99,7 @@ function tokenNameProblem(key, value) {
 const varNames = value =>
   (Array.isArray(value) ? value : [value]).flatMap(part =>
     typeof part === 'string'
-      ? [...part.matchAll(/var\(\s*(--[\w-]+)/g)].map(m => m[1])
+      ? [...part.matchAll(/var\(\s*(--[\w-]+)/gi)].map(m => m[1])
       : [],
   );
 
@@ -152,11 +152,14 @@ export function cycleProblem(name, values) {
  * its tokens and local tokens, and in its parts' properties, on the page,
  * its surfaces (onDark, onLight) and the adaptation rules' values.
  * @param {Record<string, any>} theme
- * @param {{reads?: (name: string) => boolean}} [options] `reads`: whether a
- *   var() of a name reads a value (left out, var() targets are not judged)
+ * @param {{reads?: (name: string) => boolean, rootTokens?: Record<string, unknown>}} [options]
+ *   `reads`: whether a var() of a name reads a value (left out, var()
+ *   targets are not judged); `rootTokens`: the token definitions Core's
+ *   stylesheet sets on the theme's root too, which a loop of the page's
+ *   tokens can run through
  * @returns {WrittenValueProblem[]}
  */
-export function writtenValueProblems(theme, {reads} = {}) {
+export function writtenValueProblems(theme, {reads, rootTokens} = {}) {
   /** @type {WrittenValueProblem[]} */
   const out = [];
   /** @param {any} node @param {string[]} at @param {number} depth */
@@ -189,8 +192,15 @@ export function writtenValueProblems(theme, {reads} = {}) {
       map === 'tokens' && '__inputTokens' in surface
         ? surface.__inputTokens
         : surface[map];
-    // Tokens and local tokens are set on the same element.
+    // Tokens and local tokens are set on the same element; on the page's
+    // root, so are Core's token definitions and the tokens the theme takes
+    // from the theme it extends (the resolved tokens), under the theme's own.
+    const page = at.length === 0;
     const onElement = {
+      ...(page ? (rootTokens ?? {}) : {}),
+      ...(page && '__inputTokens' in surface && isBlock(surface.tokens)
+        ? surface.tokens
+        : {}),
       ...(isBlock(valuesOf('localTokens')) ? valuesOf('localTokens') : {}),
       ...(isBlock(valuesOf('tokens')) ? valuesOf('tokens') : {}),
     };
