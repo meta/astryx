@@ -1061,6 +1061,61 @@ describe('Tooltip layer mounts at its first show', () => {
     expect(describedBy(trigger)).toBe(tooltips[0]);
   });
 
+  it('keeps the trigger described while a show waits for its trigger to get a box, and after that show is cancelled', () => {
+    // A real layout engine with a trigger that has no box yet: the show
+    // waits, and nothing mounts until the box appears.
+    const originalGetAnimations = document.getAnimations;
+    const originalResizeObserver = globalThis.ResizeObserver;
+    document.getAnimations = () => [];
+    globalThis.ResizeObserver = class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    };
+    try {
+      const {rerender} = render(
+        <Tooltip content="Save changes" isOpen>
+          <button type="button">Save</button>
+        </Tooltip>,
+      );
+      const trigger = screen.getByRole('button', {name: 'Save'});
+      expect(describedBy(trigger)).toHaveTextContent('Save changes');
+      rerender(
+        <Tooltip content="Save changes" isOpen={false}>
+          <button type="button">Save</button>
+        </Tooltip>,
+      );
+      expect(describedBy(trigger)).toHaveTextContent('Save changes');
+      expect(trigger).toHaveAccessibleDescription('Save changes');
+    } finally {
+      document.getAnimations = originalGetAnimations;
+      globalThis.ResizeObserver = originalResizeObserver;
+    }
+  });
+
+  it("keeps the hidden copy in a shadow root trigger's own root", async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const shadowRoot = host.attachShadow({mode: 'open'});
+    const container = document.createElement('div');
+    shadowRoot.appendChild(container);
+    try {
+      render(
+        <Tooltip content="Save changes">
+          <button type="button">Save</button>
+        </Tooltip>,
+        {container},
+      );
+      const trigger = container.querySelector('button') as HTMLButtonElement;
+      await waitFor(() => {
+        const id = trigger.getAttribute('aria-describedby') ?? '';
+        expect(shadowRoot.getElementById(id)).toHaveTextContent('Save changes');
+      });
+    } finally {
+      host.remove();
+    }
+  });
+
   it('keeps its layer after it hides, so the next show opens the same layer', async () => {
     render(
       <Tooltip content="Save changes" delay={0}>

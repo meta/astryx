@@ -325,6 +325,9 @@ export const CONFORMING_FIXTURES: readonly string[] = TOOLTIP_FIXTURES.filter(
 ).map(candidate => candidate.id);
 
 export const TOOLTIP_MUTATIONS: Readonly<Record<string, readonly string[]>> = {
+  'tooltip.trigger.description-before-first-show': [
+    'violating-copy-not-described',
+  ],
   'tooltip.trigger.described-before-first-show': [
     'violating-copy-is-tooltip',
     'violating-copy-not-described',

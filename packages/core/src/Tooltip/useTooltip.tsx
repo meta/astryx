@@ -25,6 +25,7 @@ import {
 } from 'react';
 import {createPortal} from 'react-dom';
 import {useCommittedRef} from '../hooks/useCommittedRef';
+import {useIsHydrating} from '../hooks/useIsHydrating';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {TooltipPresentInterestContext} from './tooltipPresentInterest';
 import {createTriggerFocusGate, isFocusOnTrigger} from '../utils/triggerFocus';
@@ -280,33 +281,18 @@ export interface TooltipReturn {
  * ```
  */
 
-/** A flag that turns on once: whether a tooltip's layer has mounted. */
-function createLayerMountFlag() {
-  let isMounted = false;
-  const listeners = new Set<() => void>();
-  return {
-    get: () => isMounted,
-    set: () => {
-      if (isMounted) {
-        return;
-      }
-      isMounted = true;
-      for (const listener of listeners) {
-        listener();
-      }
-    },
-    subscribe: (listener: () => void) => {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-  };
-}
-
 const isNotMounted = () => false;
-const isClient = () => true;
-const subscribeToNothing = () => () => {};
+
+/** Where a trigger's `aria-describedby` can name an element: its shadow root, or its document's body. */
+function descriptionRootOf(
+  trigger: HTMLElement,
+): DocumentFragment | HTMLElement {
+  const root = trigger.getRootNode();
+  const ShadowRootOfWindow = trigger.ownerDocument.defaultView?.ShadowRoot;
+  return ShadowRootOfWindow != null && root instanceof ShadowRootOfWindow
+    ? root
+    : trigger.ownerDocument.body;
+}
 
 export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   const {
@@ -340,39 +326,36 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   const {
     ref: layerRef,
     anchorId: layerAnchorId,
-    show: showMountedLayer,
+    show: showLayer,
     hide: hideLayer,
     isOpen: isLayerOpen,
     id: layerId,
     render: renderLayer,
+    mount: layerMount,
   } = layer;
-  // Until the first show, `aria-describedby` names a hidden copy of the
+  // Until the layer mounts, `aria-describedby` names a hidden copy of the
   // description, so a screen reader reads it before the tooltip opens. The
-  // flag is an external store, as the layer's mount is: both update in the
-  // same commit, so the copy and the layer are never in the page together.
-  const [layerMount] = useState(createLayerMountFlag);
+  // layer's own mount store decides the swap, so the copy leaves in the
+  // commit that mounts the layer: the two are never in the page together,
+  // and a show that waits for its trigger keeps the copy until it runs.
   const isLayerMounted = useSyncExternalStore(
     layerMount.subscribe,
-    layerMount.get,
+    layerMount.isMounted,
     isNotMounted,
   );
   const descriptionId = `${layerId}-description`;
   // The copy renders through a portal, which a server render cannot do, so a
   // server render and the render that hydrates it carry no description and
   // no reference to one.
-  const canPortal = useSyncExternalStore(
-    subscribeToNothing,
-    isClient,
-    isNotMounted,
-  );
-  // A trigger in another document, such as a same-origin iframe, keeps the
-  // copy in that document, where its `aria-describedby` can name it.
-  const [triggerDocument, setTriggerDocument] = useState<Document | null>(null);
-  const descriptionHost = canPortal ? (triggerDocument ?? document).body : null;
-  const showLayer = useCallback(() => {
-    layerMount.set();
-    showMountedLayer();
-  }, [layerMount, showMountedLayer]);
+  const isHydrating = useIsHydrating();
+  // A trigger in a shadow root or another document keeps the copy where its
+  // `aria-describedby` can name it.
+  const [triggerDescriptionRoot, setTriggerDescriptionRoot] = useState<
+    DocumentFragment | HTMLElement | null
+  >(null);
+  const descriptionHost = isHydrating
+    ? null
+    : (triggerDescriptionRoot ?? document.body);
 
   const popoverXstyle = styles.container;
 
@@ -839,9 +822,11 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       el.addEventListener('focusout', onFocusOut);
       el.addEventListener('focusout', onHeldFocusOut);
       triggerRef.current = el;
-      // A trigger in another document keeps the hidden copy there.
-      if (el.ownerDocument !== document) {
-        setTriggerDocument(el.ownerDocument);
+      // A trigger in a shadow root or another document keeps the hidden
+      // copy there.
+      const descriptionRoot = descriptionRootOf(el);
+      if (descriptionRoot !== document.body) {
+        setTriggerDescriptionRoot(descriptionRoot);
       }
 
       // A trigger that attaches again after its wiring was removed

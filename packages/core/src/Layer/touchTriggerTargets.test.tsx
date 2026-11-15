@@ -99,6 +99,18 @@ function layerOf(text: string): HTMLElement | null {
   );
 }
 
+/**
+ * What describes a control with `text`: the tooltip once its layer mounts,
+ * and before that the hidden copy of its text.
+ */
+function descriptionOf(text: string): HTMLElement | null {
+  return (
+    screen
+      .queryByText(text, {exact: false})
+      ?.closest<HTMLElement>('[popover], [id$="-description"]') ?? null
+  );
+}
+
 /** Whether the tooltip holding `text` is open. */
 function isOpen(text: string): boolean {
   return layerOf(text)?.hasAttribute('popover-open') === true;
@@ -109,10 +121,9 @@ function isOpen(text: string): boolean {
  * `aria-describedby` names the reason's tooltip, which is what a finger taps.
  */
 function controlDescribedBy(reason: string): HTMLElement {
-  const layer = layerOf(reason);
-  const id = layer?.id;
+  const id = descriptionOf(reason)?.id;
   if (id == null || id === '') {
-    throw new Error(`no tooltip with an id holds "${reason}"`);
+    throw new Error(`no tooltip description with an id holds "${reason}"`);
   }
   const control = Array.from(
     document.querySelectorAll<HTMLElement>('[aria-describedby]'),

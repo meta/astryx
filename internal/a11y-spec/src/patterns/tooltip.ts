@@ -331,6 +331,33 @@ export const TOOLTIP_PATTERN: PatternContract<TooltipStateFacts> =
         },
       },
       {
+        id: 'tooltip.trigger.description-before-first-show',
+        outcome:
+          "Before the tooltip first shows, the browser computes the hidden copy's text into the trigger's accessible description, so a screen-reader user hears the hint on a control whose tooltip has never opened.",
+        sources: [WCAG_4_1_2, APG_DESCRIBEDBY],
+        covers: ['4.1.2-name-role-value', 'apg-interaction'],
+        appliesWhen: BEFORE_FIRST_SHOW,
+        evidenceLayer: 'accessibility-tree',
+        alsoNeeds: ['dom'],
+        enforcement: 'required',
+        run: async ({harness, subject}) => {
+          const text = (
+            await (await harness.related('description')).textContent()
+          )
+            .replace(/\s+/g, ' ')
+            .trim();
+          if (text === '') {
+            throw new Error('the hidden description has no text');
+          }
+          const {description} = await subject.computed();
+          if (!description.replace(/\s+/g, ' ').includes(text)) {
+            throw new Error(
+              `the trigger's accessible description ("${description}") does not include the hidden description ("${text}")`,
+            );
+          }
+        },
+      },
+      {
         id: 'tooltip.trigger.description',
         outcome:
           "The browser computes the tooltip's text into the trigger's accessible description, so a screen-reader user hears the hint on the control without hovering it.",
