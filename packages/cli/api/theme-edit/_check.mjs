@@ -4420,7 +4420,10 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
         {run: [setLine(slug, thing, v, {...s, mode: undefined})]},
       );
     if (thing === 'corners') {
-      if (s.on) refuseInvisibleCorners(ctx, slug, s, data);
+      if (s.on) {
+        refuseInvisibleCorners(ctx, slug, s, data);
+        refuseFixedCorners(ctx, s);
+      }
       // With no corners setting yet, a step starts from the base theme's
       // own radius.
       if (step) {
@@ -6213,6 +6216,57 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
         ? []
         : nearest(prop, [...Object.keys(DIALS), ...cssProperties()]),
     },
+  );
+}
+
+/**
+ * The radius a part draws as a fixed shape (a radio's circle at 50%): its
+ * corners, and those of every part inside it, read no token, so the corners
+ * dial leaves them. Null when a token reaches them or the part draws none.
+ * @param {any} C the part census
+ * @param {string} part
+ * @returns {string | null}
+ */
+export function fixedCorners(C, part) {
+  /** The radius values a part draws, in any rule. @param {string} t */
+  const radii = t =>
+    Object.entries(C.MAP[t]?.at ?? {})
+      .filter(([prop]) => /radius$/.test(prop))
+      .flatMap(([, rules]) => Object.values(rules ?? {}).map(String));
+  /** A part and every part inside it. @param {string} t @returns {string[]} */
+  const within = (t, seen = new Set()) => {
+    if (seen.has(t)) return [];
+    seen.add(t);
+    return [
+      t,
+      ...(C.MAP[t]?.contains ?? []).flatMap((/** @type {string} */ k) =>
+        within(k, seen),
+      ),
+    ];
+  };
+  const own = radii(part);
+  return own.length &&
+    within(part).every(k => radii(k).every(v => !/var\(/.test(v)))
+    ? own[0].trim()
+    : null;
+}
+
+/**
+ * Refuse the corners dial on a part whose corners are a fixed shape
+ * (fixedCorners). The dial writes radius tokens, so it changes nothing you
+ * see there; a border-radius set on the part itself still changes it.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {import('./_settings.mjs').Setting} s
+ */
+function refuseFixedCorners(ctx, s) {
+  if (ctx.unchecked) return;
+  const parts = partsOf(ctx, s);
+  const shapes = parts.map(t => fixedCorners(ctx.C, t));
+  if (!parts.length || shapes.some(v => v == null)) return;
+  refuse(
+    E.ERR_THEME_NO_EFFECT,
+    `${s.on} draws its corners as a fixed shape (border-radius ${shapes[0]}), not from a radius token, so the corners dial changes nothing you see.`,
+    {run: [`${HOW} ${s.on}`]},
   );
 }
 

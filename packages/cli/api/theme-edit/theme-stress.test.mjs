@@ -862,9 +862,9 @@ describe('review fixes', () => {
       x.startsWith('corners = large on checks'),
     );
     expect(line).toContain('--radius-inner 4px for checkbox-indicator');
-    // The radio list renders from its doc's playground, so its dot's
-    // token is known too.
-    expect(line).toContain('--radius-full 9999px for radio-indicator');
+    // The radio draws its circle as a fixed shape, which the dial leaves.
+    expect(line).toContain('a fixed 50% for radio-indicator');
+    expect(line).toContain('50% (a fixed shape) on radio-indicator');
     await themeEditUndo('s', {cwd, thing: 'corners', on: 'checks'});
   }, 120_000);
 
