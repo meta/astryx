@@ -595,6 +595,23 @@ describe('build kit — every page starts from a template', () => {
     }
   });
 
+  it('echoes the query as the caller typed it, a joined name included', async () => {
+    const r = await build('a KanbanBoard page', {cwd: REPO});
+    if (r.type !== 'build.kit') throw new Error(r.type);
+    expect(r.data.query).toBe('a KanbanBoard page');
+  });
+
+  it('picks the blocks for a joined name that its plain words get', async () => {
+    const joined = await build('a ContactForm page', {cwd: REPO});
+    const spaced = await build('a contact form page', {cwd: REPO});
+    if (joined.type !== 'build.kit' || spaced.type !== 'build.kit') {
+      throw new Error('not a kit');
+    }
+    expect(joined.data.blocks.map(b => b.name)).toEqual(
+      spaced.data.blocks.map(b => b.name),
+    );
+  });
+
   it('never reads an everyday word one letter from a template id as that template', async () => {
     for (const [idea, name] of [
       ['a seating chart page', 'dashboard'],

@@ -92,7 +92,10 @@ const ALWAYS = new Set([...FRAME, ...FOUNDATION]);
 /**
  * Everything build weighs for one request.
  * @typedef {object} KitSignals
- * @property {string} query search's echo of the query
+ * @property {string} query the caller's query, trimmed, as search echoes it
+ * @property {string} idea the query as build matches it: a page template it
+ *   names in any case or with a swapped pair of letters reads as that
+ *   template's own words (readNames)
  * @property {number} matchCount
  * @property {boolean} directMatch
  * @property {BuildStart | null} start the start, its alternatives, and its notes
@@ -276,7 +279,10 @@ export async function kitSignals(query, options = {}) {
   }
 
   return {
-    query: result.data.query,
+    // The caller's own words, as search echoes a query; the names read as
+    // words are for matching only.
+    query: String(query).trim(),
+    idea: searched,
     matchCount,
     directMatch,
     start,

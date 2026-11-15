@@ -637,7 +637,7 @@ function pickOrder(idea, ranked, pick, catalog, weights) {
  */
 export function blendOrder(idea, ranked, pick, catalog, weights) {
   if (!weights) return null;
-  return pickOrder(idea, ranked, pick, catalog, weights);
+  return pickOrder(readNames(idea, catalog), ranked, pick, catalog, weights);
 }
 
 /**
@@ -731,7 +731,8 @@ export function weighStart(
  */
 export function blendSummary(idea, ranked, pick, catalog, weights) {
   if (!weights) return null;
-  const {cands, scores} = blend(idea, ranked, pick, catalog, weights);
+  const read = readNames(idea, catalog);
+  const {cands, scores} = blend(read, ranked, pick, catalog, weights);
   let shell = 0;
   const rest = [];
   for (let i = 0; i < cands.length; i++) {
@@ -742,7 +743,7 @@ export function blendSummary(idea, ranked, pick, catalog, weights) {
   return {
     shell,
     best: hasPickModel(weights)
-      ? bestPage(idea, ranked, pick, catalog, weights)
+      ? bestPage(read, ranked, pick, catalog, weights)
       : (rest[0]?.name ?? null),
     bestScore: rest[0]?.score ?? 0,
     secondScore: rest[1]?.score ?? 0,
