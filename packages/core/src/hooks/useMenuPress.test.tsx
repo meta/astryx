@@ -790,6 +790,19 @@ describe("useMenuPress — a finger's touchend (spec:AST-094 FR21)", () => {
     expect(fireTouch(row('A'), 'touchend', 1).defaultPrevented).toBe(false);
     expect(fireTouch(row('A'), 'touchend', 0).defaultPrevented).toBe(true);
   });
+
+  it('cancels the touchend of a tap whose row leaves the document before it, where the window never hears it (overlay-dismissal FR11)', () => {
+    const onSelect = vi.fn();
+    render(<Harness onSelect={onSelect} />);
+    const picked = row('A');
+    fireEvent.pointerDown(picked, touch(7));
+    fireTouch(picked, 'touchstart', 7);
+    fireEvent.pointerUp(picked, touch(7));
+    expect(onSelect.mock.calls).toEqual([['A']]);
+    // The pick closed the menu: the row the touch began on is gone.
+    picked.remove();
+    expect(fireTouch(picked, 'touchend', 7).defaultPrevented).toBe(true);
+  });
 });
 
 describe('useMenuPress — release outside and cancellation', () => {
