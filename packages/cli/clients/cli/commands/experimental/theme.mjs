@@ -2010,11 +2010,14 @@ export function registerExperimentalTheme(group, program) {
           const words = [thing, which, ...(c?.args ?? []).slice(3)].filter(
             w => typeof w === 'string',
           );
+          // Three or more bare words are a list too (`undo t accent corners
+          // spacing`): two are a setting and its value.
           const listed =
             words.length > 1 &&
-            words.some(
-              (w, i) => /,$/.test(String(w)) || (i > 0 && w === 'and'),
-            ) &&
+            (words.length > 2 ||
+              words.some(
+                (w, i) => /,$/.test(String(w)) || (i > 0 && w === 'and'),
+              )) &&
             !words.some(w => String(w).startsWith('-'));
           const list = listed ? words.join(' ') : null;
           return (

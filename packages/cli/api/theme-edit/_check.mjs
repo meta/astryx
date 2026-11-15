@@ -3119,6 +3119,94 @@ export function inheritedReach(ctx, s, prop) {
 }
 
 /**
+ * How a typed --when reads against the props and values a part (or the
+ * members of a group, between them) has: `written`, the same prop and
+ * value in other letters or with spaces or `=` between (`Variant:
+ * Primary`); `meant`, a prop or value one typo from the one there (the one
+ * typo limit, one reading only). Each is null when it does not apply.
+ * @param {string} when
+ * @param {string[]} props
+ * @param {Record<string, string[]>} variants each prop's values
+ * @returns {{written: string | null, meant: string | null}}
+ */
+function whenReading(when, props, variants) {
+  const conditions = Object.keys(variants);
+  const m = /^\s*([^:=\s]+)\s*[:=]\s*([^:=]+?)\s*$/.exec(when);
+  let written = null;
+  if (m) {
+    const prop = props.find(x => x.toLowerCase() === m[1].toLowerCase());
+    const vals = prop ? (variants[prop] ?? []) : [];
+    const val = vals.length
+      ? vals.find(x => x.toLowerCase() === m[2].toLowerCase())
+      : m[2];
+    const read = prop && val ? `${prop}:${val}` : null;
+    if (read && read !== when) written = read;
+  }
+  const [p, wv, ...more] = when.split(':');
+  if (!wv || more.length) return {written, meant: null};
+  /** @param {string} w @param {string[]} list */
+  const typoIn = (w, list) => {
+    const hits = list.filter(x => typoOf(w, x));
+    return hits.length === 1 ? hits[0] : null;
+  };
+  const propMeant = [...props, ...conditions].includes(p)
+    ? p
+    : typoIn(p, [...new Set([...props, ...conditions])]);
+  const valsMeant = propMeant ? (variants[propMeant] ?? []) : [];
+  const valMeant =
+    !valsMeant.length || valsMeant.includes(wv) ? wv : typoIn(wv, valsMeant);
+  return {
+    written,
+    meant: propMeant && valMeant ? `${propMeant}:${valMeant}` : null,
+  };
+}
+
+/**
+ * A state typed in another case or with dashes (`is-pressed` for
+ * isPressed): the state of that name, or null.
+ * @param {string} state
+ * @param {string[]} states
+ */
+function sameState(state, states) {
+  const flat = (/** @type {string} */ x) =>
+    x.replace(/[-_\s]/g, '').toLowerCase();
+  return states.find(x => flat(x) === flat(state)) ?? null;
+}
+
+/** Other words for a state, each read as the first of these there is. */
+const STATE_SYNONYMS = wordTable(
+  /** @type {Record<string, string[]>} */ ({
+    pressed: ['isPressed', 'active'],
+    press: ['isPressed', 'active'],
+    on: ['isPressed', 'checked', 'selected'],
+    down: ['active'],
+    clicked: ['active'],
+    hovered: ['hover'],
+    focused: ['focus-visible', 'focus-within', 'focus'],
+    checked: ['checked', 'selected'],
+    selected: ['selected', 'checked'],
+    open: ['open', 'expanded'],
+    expanded: ['expanded', 'open'],
+    inactive: ['disabled'],
+  }),
+);
+
+/**
+ * The state a typed one means among those a part (or a group's members)
+ * has: another word for one, else the nearest; null when none is near.
+ * @param {string} state
+ * @param {string[]} states
+ * @returns {string | null}
+ */
+function stateMeant(state, states) {
+  return (
+    (STATE_SYNONYMS[state.toLowerCase()] ?? []).find(x => states.includes(x)) ??
+    nearest(state, states)[0] ??
+    null
+  );
+}
+
+/**
  * The states `set` takes on a part: the ones its doc lists and the ones
  * every part takes, less any a change in it is refused for while the same
  * change without it passes (a state that never applies there). `how` lists
@@ -4295,26 +4383,22 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
       );
     }
     if (s.when) {
+      const variants = C.variantValues(s.on);
+      const conditions = Object.keys(variants);
+      const reading = whenReading(s.when, t.props, variants);
       // A prop and value in other letters, with spaces or `=` between
       // (`Variant: Primary`, `variant=primary`): the working command.
-      const m = /^\s*([^:=\s]+)\s*[:=]\s*([^:=]+?)\s*$/.exec(s.when);
-      if (m) {
-        const prop = t.props.find(x => x.toLowerCase() === m[1].toLowerCase());
-        const vals = prop ? (C.variantValues(s.on)[prop] ?? []) : [];
-        const val = vals.length
-          ? vals.find(x => x.toLowerCase() === m[2].toLowerCase())
-          : m[2];
-        const when = prop && val ? `${prop}:${val}` : null;
-        if (when && when !== s.when)
-          refuse(
-            E.ERR_THEME_UNKNOWN_VARIANT,
-            `--when "${s.when}" is written ${when}.`,
-            {
-              didYouMean: [when],
-              run: [setLine(slug, thing, v, {...s, when}, unset)],
-            },
-          );
-      }
+      if (reading.written)
+        refuse(
+          E.ERR_THEME_UNKNOWN_VARIANT,
+          `--when "${s.when}" is written ${reading.written}.`,
+          {
+            didYouMean: [reading.written],
+            run: [
+              setLine(slug, thing, v, {...s, when: reading.written}, unset),
+            ],
+          },
+        );
       const [p, wv, ...more] = s.when.split(':');
       if (!wv || more.length)
         refuse(
@@ -4322,35 +4406,9 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
           '--when takes <prop>:<value>, such as variant:primary.',
           {run: [`${HOW} ${s.on}`]},
         );
-      const variants = C.variantValues(s.on);
-      const conditions = Object.keys(variants);
-      // A prop or value one typo from the census's one (the one typo
-      // limit; one reading only): the same command with --when put right.
-      /** @param {string} w @param {string[]} list */
-      const typoIn = (w, list) => {
-        const hits = list.filter(x => typoOf(w, x));
-        return hits.length === 1 ? hits[0] : null;
-      };
-      const propMeant = [...t.props, ...conditions].includes(p)
-        ? p
-        : typoIn(p, [...new Set([...t.props, ...conditions])]);
-      const valsMeant = propMeant ? (variants[propMeant] ?? []) : [];
-      const valMeant =
-        !valsMeant.length || valsMeant.includes(wv)
-          ? wv
-          : typoIn(wv, valsMeant);
-      const whenRun =
-        propMeant && valMeant
-          ? [
-              setLine(
-                slug,
-                thing,
-                v,
-                {...s, when: `${propMeant}:${valMeant}`},
-                unset,
-              ),
-            ]
-          : [];
+      const whenRun = reading.meant
+        ? [setLine(slug, thing, v, {...s, when: reading.meant}, unset)]
+        : [];
       if (!t.props.includes(p) && !conditions.includes(p))
         refuse(
           E.ERR_THEME_UNKNOWN_VARIANT,
@@ -4374,30 +4432,8 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
     const states = [...t.states, ...COMMON_STATES];
     // A state the part lists in camelCase (toggle-button's isPressed) typed
     // in any case or with dashes is that state.
-    const flat = (/** @type {string} */ x) =>
-      x.replace(/[-_\s]/g, '').toLowerCase();
-    if (s.state && !states.includes(s.state)) {
-      const same = states.find(x => flat(x) === flat(String(s.state)));
-      if (same) s.state = same;
-    }
-    // Other words for a state, mapped to the one the part has; with none
-    // near, the list of its states (never a guess such as hover).
-    const SYNONYMS = wordTable(
-      /** @type {Record<string, string[]>} */ ({
-        pressed: ['isPressed', 'active'],
-        press: ['isPressed', 'active'],
-        on: ['isPressed', 'checked', 'selected'],
-        down: ['active'],
-        clicked: ['active'],
-        hovered: ['hover'],
-        focused: ['focus-visible', 'focus-within', 'focus'],
-        checked: ['checked', 'selected'],
-        selected: ['selected', 'checked'],
-        open: ['open', 'expanded'],
-        expanded: ['expanded', 'open'],
-        inactive: ['disabled'],
-      }),
-    );
+    if (s.state && !states.includes(s.state))
+      s.state = sameState(s.state, states) ?? s.state;
     // Several states in one --state (`hover,focus-visible`, `hover
     // focus-visible`): one line per state, the value quoted as typed.
     const typedStates = String(flags.state ?? '')
@@ -4419,10 +4455,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
             .map(state => setLine(slug, thing, v, {...s, state}, unset)),
         },
       );
-    const meant =
-      (SYNONYMS[String(s.state ?? '').toLowerCase()] ?? []).find(x =>
-        states.includes(x),
-      ) ?? nearest(String(s.state ?? ''), states)[0];
+    const meant = s.state ? stateMeant(s.state, states) : null;
     if (s.state && !states.includes(s.state))
       refuse(
         E.ERR_THEME_UNKNOWN_STATE,
@@ -4624,6 +4657,18 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
       /** @type {Array<[string, import('../../foundation/discovery/theming-targets.mjs').ThemingTarget]>} */ (
         FAMILIES[s.on].map(m => [m, TARGET.get(m)]).filter(([, t]) => t)
       );
+    // What the members have between them: their props, each prop's values,
+    // their states. A typo or another case on the group is read as on one
+    // part, against all of them.
+    const props = [...new Set(members.flatMap(([, t]) => t.props))];
+    /** @type {Record<string, string[]>} */
+    const variants = {};
+    for (const [m] of members)
+      for (const [k, vals] of Object.entries(C.variantValues(m)))
+        variants[k] = [...new Set([...(variants[k] ?? []), ...vals])];
+    const states = [
+      ...new Set([...members.flatMap(([, t]) => t.states), ...COMMON_STATES]),
+    ];
     if (s.when) {
       const [p, wv, ...more] = s.when.split(':');
       const fits = members.some(([m, t]) => {
@@ -4636,23 +4681,44 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
         const vals = C.variantValues(m)[p] ?? [];
         return !vals.length || vals.includes(wv);
       });
-      if (!fits)
+      if (!fits) {
+        const reading = whenReading(s.when, props, variants);
+        const when = reading.written ?? reading.meant;
         refuse(
           E.ERR_THEME_UNKNOWN_VARIANT,
           `No member of the ${s.on} group has ${s.when}.`,
-          {run: [`${HOW} ${s.on}`]},
+          {
+            ...(when ? {didYouMean: [when]} : {}),
+            run: [
+              ...(when ? [setLine(slug, thing, v, {...s, when}, unset)] : []),
+              `${HOW} ${s.on}`,
+            ],
+          },
         );
+      }
     }
+    if (s.state && !states.includes(s.state))
+      s.state = sameState(s.state, states) ?? s.state;
     const state = s.state;
     if (
       state &&
       !members.some(([, t]) => [...t.states, ...COMMON_STATES].includes(state))
-    )
+    ) {
+      const meant = stateMeant(state, states);
       refuse(
         E.ERR_THEME_UNKNOWN_STATE,
         `"${s.state}" is not a state of any member of the ${s.on} group.`,
-        {run: [`${HOW} ${s.on}`]},
+        {
+          ...(meant ? {didYouMean: [meant]} : {}),
+          run: [
+            ...(meant
+              ? [setLine(slug, thing, v, {...s, state: meant}, unset)]
+              : []),
+            `${HOW} ${s.on}`,
+          ],
+        },
       );
+    }
   }
   // A comparative is a step from the value now (never a rung picked by
   // spelling, which can go the other way).

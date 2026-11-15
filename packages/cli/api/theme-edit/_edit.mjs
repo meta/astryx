@@ -8114,9 +8114,15 @@ export async function themeEditUndo(theme, options = {}) {
           : null;
         return rest && !/\s/.test(rest) ? rest : null;
       };
+      // A setting's name is never a theme to make or look at, nor a theme
+      // name typed with a typo.
+      const settingName =
+        Object.hasOwn(DIALS, theme) ||
+        theme.startsWith('--') ||
+        cssProperties().has(theme);
       // A list of themes (t,u) stays a look at each: one theme at a time.
       const shows = (e.suggestions ?? []).filter(x => showOf(x) != null);
-      const near = (shows.length === 1 ? shows : []).find(x => {
+      const near = (shows.length === 1 && !settingName ? shows : []).find(x => {
         const n = showOf(x);
         return (
           n != null &&
@@ -8163,19 +8169,25 @@ export async function themeEditUndo(theme, options = {}) {
         // (`undo accent`, `undo background-color --on card`): that theme's
         // undo of it, never a new theme or a look named after the setting.
         const held = await heldSettingUndos(cwd, theme, options);
-        // A setting's name is never a theme to make or look at.
-        const settingName =
-          Object.hasOwn(DIALS, theme) ||
-          theme.startsWith('--') ||
-          cssProperties().has(theme);
         if (held.length || settingName)
           e.suggestions = [
             ...held,
-            ...(e.suggestions ?? []).filter(
-              x =>
-                !x.name.startsWith(`${P} new `) &&
-                x.name !== `${P} show ${theme}`,
-            ),
+            ...(e.suggestions ?? [])
+              .filter(
+                x =>
+                  !x.name.startsWith(`${P} new `) &&
+                  x.name !== `${P} show ${theme}`,
+              )
+              // With no theme holding it, a look at each theme here says so.
+              .map(x => {
+                const n = showOf(x);
+                return n && !held.length
+                  ? {
+                      ...x,
+                      reason: `do this instead: no theme here holds ${theme}; see what ${n} sets`,
+                    }
+                  : x;
+              }),
           ];
       }
     }

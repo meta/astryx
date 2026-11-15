@@ -47,13 +47,17 @@ import {
   toErrorEnvelope,
 } from '../../../foundation/response/json.mjs';
 import {answeredBy} from '../../../foundation/release/run-context.mjs';
+import {unknownSubcommandSuggestions} from './cli-error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {
   setCommand,
   setOutcome,
   recordHelp,
 } from '../../../foundation/debug/index.mjs';
-import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
+import {
+  getCliInvocation,
+  quoteCommandArgument,
+} from '../../../foundation/env/package-manager.mjs';
 
 /**
  * Fully-qualified name of a command relative to the root program, e.g.
@@ -200,6 +204,8 @@ function commanderCodeToErrorCode(commanderCode, message) {
       return ERROR_CODES.ERR_UNKNOWN_COMMAND;
     case 'commander.unknownOption':
       return ERROR_CODES.ERR_INVALID_OPTION;
+    case UNKNOWN_SUBCOMMAND:
+      return ERROR_CODES.ERR_UNKNOWN_SUBCOMMAND;
     case 'commander.missingArgument':
     case 'commander.optionMissingArgument':
     case 'commander.missingMandatoryOptionValue':
@@ -294,6 +300,32 @@ function applyShimRecursively(cmd) {
 
 /** Carries the command Commander rejected from exitOverride to the error handler. */
 const REJECTED_COMMAND = Symbol.for('astryx.jsonShim.rejectedCommand');
+
+/** A group given a word that is none of its subcommands. */
+const UNKNOWN_SUBCOMMAND = 'astryx.unknownSubcommand';
+
+/**
+ * The word typed after a group's own words that is none of its
+ * subcommands, read from the command line; null when there is none.
+ * @param {any} group
+ * @returns {string | null}
+ */
+function unknownGroupWord(group) {
+  const chain = [];
+  for (let node = group; node?.parent; node = node.parent)
+    chain.unshift(node.name());
+  let root = group;
+  while (root.parent) root = root.parent;
+  const argv = /** @type {string[]} */ (root.rawArgs ?? process.argv);
+  const words = argv.slice(2).filter(w => !String(w).startsWith('-'));
+  for (let i = 0; i < chain.length; i++) if (words[i] !== chain[i]) return null;
+  const next = words[chain.length];
+  const names = group.commands.flatMap((/** @type {any} */ c) => [
+    c.name(),
+    ...c.aliases(),
+  ]);
+  return next != null && !names.includes(next) ? next : null;
+}
 
 /**
  * The usage line of the command a parse error came from, as a suggestion, for
@@ -413,6 +445,24 @@ function editorMissingSuggestions(cmd) {
       return [
         {
           name: `${invocation} ${words} ${themes[0]}`,
+          reason: `do this instead: ${themes[0]} is the theme here`,
+        },
+        {
+          name: `${invocation} ${words} --help`,
+          reason: 'what each argument is',
+        },
+      ];
+  }
+  // Words given with the theme left out (`set corners pill`), in an app
+  // with one editor theme that none of the words names: the same words on
+  // that theme.
+  const given = (cmd?.args ?? []).map(String);
+  if (given.length && wants[0]?.name() === 'theme' && cmd.name() !== 'new') {
+    const themes = editorThemesHere(process.cwd());
+    if (themes.length === 1 && !given.includes(themes[0]))
+      return [
+        {
+          name: `${invocation} ${words} ${themes[0]} ${given.map((/** @type {string} */ w) => quoteCommandArgument(w)).join(' ')}`,
           reason: `do this instead: ${themes[0]} is the theme here`,
         },
         {
@@ -638,6 +688,27 @@ export function handleCommanderError(err) {
     code: commanderCodeToErrorCode(code, message),
   });
 
+  // A group given a word it does not have, then an option (`experimental
+  // theme preview path --theme t`): the word is what is wrong, named as
+  // when no option follows it, with the group's subcommands closest first.
+  const group = /** @type {any} */ (err)?.[REJECTED_COMMAND];
+  const word =
+    code === 'commander.unknownOption' && group?.commands?.length
+      ? unknownGroupWord(group)
+      : null;
+  if (word) {
+    const chain = [];
+    for (let node = group; node?.parent; node = node.parent)
+      chain.unshift(node.name());
+    return finishParseError(err, UNKNOWN_SUBCOMMAND, message, exitCode, {
+      message: `unknown subcommand '${chain.join(' ')} ${word}'`,
+      suggestions: unknownSubcommandSuggestions(
+        `${getCliInvocation(process.cwd())} ${chain.join(' ')}`,
+        word,
+        group.commands.map((/** @type {any} */ c) => c.name()),
+      ),
+    });
+  }
   // Real error paths. Strip Commander's "error: " prefix once: in the envelope
   // the key is already `error`, and in text mode the Astryx prefix replaces it.
   // An option a theme command does not take is read by the editor's one

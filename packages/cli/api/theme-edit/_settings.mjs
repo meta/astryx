@@ -1065,6 +1065,18 @@ export function loadTheme(
             ? [cleanedHere]
             : nearest(slug, have);
         const newName = usableNewName(cwd, cleaned || slug);
+        // A setting's name (accent, corners, background-color) is never a
+        // theme to make: each theme here is offered to look at instead.
+        if (
+          !same &&
+          (Object.hasOwn(DIALS, slug) ||
+            slug.startsWith('--') ||
+            cssProperties().has(slug))
+        )
+          return {
+            didYouMean: [],
+            run: have.slice(0, 3).map(h => `${P} show ${h}`),
+          };
         // A theme near the name comes first; a new theme of the name as
         // typed only after.
         return {
