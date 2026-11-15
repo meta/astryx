@@ -77,6 +77,24 @@ const DOCS = {
     extends: 'authoring/quick-start',
     sections: [section('Acme notes')],
   },
+  // A guide the CLI places, taken over by its route.
+  'acme-publishing.doc.mjs': {
+    type: 'generic',
+    name: 'acme-publishing',
+    title: 'Publish with Acme',
+    description: 'Publish an Acme integration.',
+    replaces: 'authoring/ship/publishing',
+    sections: [section('Publish')],
+  },
+  // A CLI topic, taken over under a new name.
+  'acme-browsers.doc.mjs': {
+    type: 'generic',
+    name: 'acme-browsers',
+    title: 'Acme browser support',
+    description: 'The browsers the Acme kit supports.',
+    replaces: 'browser-support',
+    sections: [section('Supported browsers')],
+  },
 };
 
 beforeEach(() => {
@@ -127,9 +145,11 @@ describe('astryx discover: docs an installed integration adds', () => {
     async () => {
       expect(await listedDocs()).toEqual([
         'acme',
+        'acme-browsers',
         'acme-setup',
         'acme/getting-started',
         'authoring/quick-start',
+        'authoring/ship/publishing',
         'theme',
       ]);
     },
