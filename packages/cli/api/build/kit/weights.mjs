@@ -659,7 +659,10 @@ export function weighStart(
   {weights = null, newPage = false} = {},
 ) {
   if (!weights) return undefined;
-  const {cands, scores, position} = blend(idea, ranked, pick, catalog, weights);
+  // Every reader below sees a template the idea names in any case, separator
+  // or one slip as that template's own words (readNames).
+  const read = readNames(idea, catalog);
+  const {cands, scores, position} = blend(read, ranked, pick, catalog, weights);
   /** @param {(c: string) => boolean} ok */
   const best = ok => {
     let at = -1;
@@ -682,13 +685,13 @@ export function weighStart(
   // and nearly as many; otherwise that listed template starts. Nothing learned about the template is involved,
   // so a new template competes on its own words.
   if (kept && !position.has(kept)) {
-    const listed = bestPage(idea, ranked, pick, catalog, weights, c =>
+    const listed = bestPage(read, ranked, pick, catalog, weights, c =>
       position.has(c),
     );
     if (!listed) return kept;
     // The idea's own words, less search's stopwords: "basically" must not
     // answer the "Basic" of a category.
-    const order = contentWords(idea);
+    const order = contentWords(read);
     const mine = ownWords(kept, catalog, order);
     const theirs = ownWords(listed, catalog, order);
     // An idea that names the template's family before the listed one's
@@ -705,11 +708,11 @@ export function weighStart(
     // whose own descriptor best matches the idea starts (`fullerOfTie`), then
     // the one most typical of the family. Only the templates' descriptors
     // decide this tie, never the tables.
-    return fullerOfTie(kept, idea, ranked, cands, catalog);
+    return fullerOfTie(kept, read, ranked, cands, catalog);
   }
   const top = best(() => true);
   if (top !== SHELL)
-    return bestPage(idea, ranked, pick, catalog, weights) ?? top;
+    return bestPage(read, ranked, pick, catalog, weights) ?? top;
   // An idea that asks for a new page keeps the ranker's template rather than
   // the shell.
   if (newPage && kept) return kept;

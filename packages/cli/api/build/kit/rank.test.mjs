@@ -222,7 +222,7 @@ describe('rankPages on any catalog', () => {
     for (const idea of [
       'a KanbanBoard page',
       'a kanbanBoard',
-      'a kanban bord page',
+      'a knaban board page',
     ]) {
       expect(rankPages(idea, catalog)[0]?.name).toBe('kanban-board');
     }
@@ -239,6 +239,23 @@ describe('rankPages on any catalog', () => {
     expect(readNames('a DetailPage, please', catalog)).toBe(
       'a detail page, please',
     );
+  });
+
+  it('reads only a swap of two neighbouring letters as a slip', () => {
+    const catalog = [
+      page('settings', 'Settings - Basic', 'Preferences in sections.'),
+      page('table-page', 'Table - Basic', 'Rows of records.'),
+    ];
+    for (const idea of [
+      'a seating chart page',
+      'a sports betting page',
+      'a sitting schedule page',
+      'a cable page',
+      'a setings page',
+    ]) {
+      expect(readNames(idea, catalog)).toBe(idea);
+    }
+    expect(readNames('a stetings page', catalog)).toBe('a settings page');
   });
 
   it('weighs a word by how rare it is among page templates', () => {

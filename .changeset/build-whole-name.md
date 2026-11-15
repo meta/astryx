@@ -2,6 +2,6 @@
 '@astryxdesign/cli': patch
 ---
 
-[fix] `astryx build` reads a page template's name however it is written: "a KanbanBoard page", "a kanban-board page" and a one-letter slip such as "a kanban bord page" start where "a kanban board page" does. A run of words that names a template whole is read as that template's words; a slip counts only in a word no template's description uses, so real words are never respelled.
+[fix] `astryx build` reads a page template's name written joined or with one swapped pair of letters: "a KanbanBoard page", "a CheckoutWizard page" and "a kanabn board page" start where the spaced name does. Only a whole template name counts, and a slip counts only as a swap of two neighbouring letters in a word of six or more letters, so everyday words are not respelled into template names.
 
 @josephfarina

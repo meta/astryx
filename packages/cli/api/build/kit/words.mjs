@@ -288,6 +288,15 @@ export function readNames(idea, pages) {
       const slipped = words.filter(w => !nameWords.includes(w));
       const joined = words.length < nameWords.length;
       if (!joined && slipped.some(w => known.has(stem(w)))) continue;
+      const typedFold = foldWords(typed).join('');
+      const nameFold = foldWords(found).join('');
+      if (
+        typedFold !== nameFold &&
+        (!swapsTwo(typedFold, nameFold) ||
+          slipped.some(w => w.length < SLIP_MIN_LENGTH))
+      ) {
+        continue;
+      }
       name = found;
       matched = n;
     }
@@ -302,6 +311,31 @@ export function readNames(idea, pages) {
     i += matched;
   }
   return out + text.slice(at);
+}
+
+/**
+ * The fewest letters a slipped word has before it can be read as a name:
+ * shorter words are too often other real words one slip away.
+ */
+const SLIP_MIN_LENGTH = 6;
+
+/**
+ * Whether a typed name is a name with two neighbouring letters swapped. A
+ * name takes only this slip: a dropped, changed or added letter turns many
+ * everyday words ("seating", "retail", "galley") into a template name.
+ * @param {string} typed
+ * @param {string} name
+ * @returns {boolean}
+ */
+function swapsTwo(typed, name) {
+  if (typed.length !== name.length) return false;
+  const diff = [...typed].flatMap((c, i) => (c === name[i] ? [] : [i]));
+  return (
+    diff.length === 2 &&
+    diff[1] === diff[0] + 1 &&
+    typed[diff[0]] === name[diff[1]] &&
+    typed[diff[1]] === name[diff[0]]
+  );
 }
 
 /** @type {WeakMap<object, Set<string>>} */

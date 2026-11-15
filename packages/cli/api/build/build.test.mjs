@@ -580,12 +580,30 @@ describe('build kit — every page starts from a template', () => {
   });
 
   it('starts a template named in any case or with one slip where its own words start', async () => {
-    const spaced = await build('a kanban board page', {cwd: REPO});
-    for (const idea of ['a KanbanBoard page', 'a kanbanBoard page', 'a kanban bord page']) {
+    for (const [spacedIdea, others] of [
+      ['a kanban board page', ['a KanbanBoard page', 'a kanbanBoard page', 'a knaban board page']],
+      ['a checkout wizard page', ['a CheckoutWizard page']],
+      ['a theme showcase page', ['a ThemeShowcase page']],
+    ]) {
+      const spaced = await build(spacedIdea, {cwd: REPO});
+      for (const idea of others) {
+        const r = await build(idea, {cwd: REPO});
+        expect(r.type).toBe('build.kit');
+        if (r.type !== 'build.kit' || spaced.type !== 'build.kit') return;
+        expect(r.data.start?.name).toBe(spaced.data.start?.name);
+      }
+    }
+  });
+
+  it('never reads an everyday word one letter from a template id as that template', async () => {
+    for (const [idea, name] of [
+      ['a seating chart page', 'dashboard'],
+      ['a sports betting page', 'shell-top-nav'],
+      ['a sitting schedule page', 'shell-top-nav'],
+    ]) {
       const r = await build(idea, {cwd: REPO});
-      expect(r.type).toBe('build.kit');
-      if (r.type !== 'build.kit' || spaced.type !== 'build.kit') return;
-      expect(r.data.start?.name).toBe(spaced.data.start?.name);
+      if (r.type !== 'build.kit') throw new Error(r.type);
+      expect(r.data.start?.name).toBe(name);
     }
   });
 

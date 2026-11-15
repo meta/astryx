@@ -28,6 +28,7 @@ import {
 } from '../_adapter.mjs';
 import {ideaKind} from './kind.mjs';
 import {rankPages} from './rank.mjs';
+import {readNames} from './words.mjs';
 import {asTemplate, chooseStart, pickStartAlternatives} from './start.mjs';
 
 /** A page at/above this score is a confident direct match. */
@@ -132,9 +133,20 @@ export async function kitSignals(query, options = {}) {
   // search()'s JSDoc @returns widens results to object[]; the SearchResponse
   // shape is the contract (api/search/search.type.mjs). Cast locally rather than
   // tightening the search @returns (a separate follow-up).
+  // A kit narrowed to components or hooks has no page to start from; every
+  // other kit does, so the reader is never left to compose a page from scratch.
+  const wantsPages = !type || type === 'template';
+  const templates = wantsPages
+    ? await loadTemplates(cwd)
+    : {pages: [], blocks: []};
+  const catalog = templates.pages;
+  // Search reads a page template the idea names in any case, separator or
+  // one slip as that template's own words (readNames), as the page ranker
+  // does, so such a name matches by name.
+  const searched = wantsPages ? readNames(query, catalog) : query;
   const result =
     /** @type {import('../../search/search.type.mjs').SearchResponse} */ (
-      await search(query, {
+      await search(searched, {
         cwd,
         type,
         // Search wider than the surfaced kit so a flood of doc matches cannot
@@ -223,13 +235,6 @@ export async function kitSignals(query, options = {}) {
   const blocksKept = toLimit(blocks);
   const domainKept = toLimit(domain);
 
-  // A kit narrowed to components or hooks has no page to start from; every
-  // other kit does, so the reader is never left to compose a page from scratch.
-  const wantsPages = !type || type === 'template';
-  const templates = wantsPages
-    ? await loadTemplates(cwd)
-    : {pages: [], blocks: []};
-  const catalog = templates.pages;
   const ranked = wantsPages ? rankPages(query, catalog) : [];
   // A part of a page starts where it lives (spec:AST-048/FR3); the project's
   // own components say what a part is. The search above already gathered them
