@@ -77,7 +77,6 @@ import {
   lookedUp,
   fileStamp,
   keepState,
-  readStamp,
   recordReads,
   recordStates,
   stillInState,
@@ -418,7 +417,7 @@ export async function recordRun(fn, {armedThroughout = false} = {}) {
             try {
               const file = fileURLToPath(url);
               // The load reads the module's content: its stamp.
-              keepState(reads, file, readStamp, 'stamp');
+              keepState(reads, file, fileStamp, 'stamp');
             } catch {
               // A URL with no file path holds nothing to check.
             }
@@ -613,10 +612,8 @@ function staleReason(stamps, env) {
         : 'an environment variable it read changed';
     }
   }
-  /** @type {Map<string, string>} */
-  const parents = new Map();
   for (const [file, state] of stamps) {
-    if (!stillInState(file, state, parents)) {
+    if (!stillInState(file, state)) {
       return 'a file or folder it read changed';
     }
   }

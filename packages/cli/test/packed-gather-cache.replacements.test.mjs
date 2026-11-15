@@ -140,20 +140,28 @@ function replacementEntries(tmp) {
 
 /**
  * Every kept entry in a temp folder's cache folder, by file name: its inode,
- * key, version, the entries it builds on and the states it stores itself.
+ * key, version, the entries it builds on, the states it stores itself and
+ * its value as text.
  * @param {string} tmp
- * @returns {Map<string, {ino: number, key: string, version: string, deps: [string, string][], stamps: [string, string][]}>}
+ * @returns {Map<string, KeptEntry>}
  */
 function keptEntries(tmp) {
   const dir = path.join(tmp, CACHE_NAME);
-  /** @type {Map<string, {ino: number, key: string, version: string, deps: [string, string][], stamps: [string, string][]}>} */
+  /** @type {Map<string, KeptEntry>} */
   const out = new Map();
   for (const name of fs.readdirSync(dir)) {
     const file = path.join(dir, name);
     try {
-      const {key, version, deps, stamps} = readKept(file);
+      const {key, version, deps, stamps, value} = readKept(file);
       if (typeof key !== 'string' || !Array.isArray(deps)) continue;
-      out.set(name, {ino: fs.statSync(file).ino, key, version, deps, stamps});
+      out.set(name, {
+        ino: fs.statSync(file).ino,
+        key,
+        version,
+        deps,
+        stamps,
+        text: JSON.stringify(value ?? null),
+      });
     } catch {
       // Not a kept gather.
     }
@@ -162,12 +170,25 @@ function keptEntries(tmp) {
 }
 
 /**
- * Each kept entry's inode, by file name: an entry gathered again is a new
- * file.
- * @param {ReturnType<typeof keptEntries>} entries
+ * @typedef {{ino: number, key: string, version: string, deps: [string, string][], stamps: [string, string][], text: string}} KeptEntry
  */
-const inodes = entries =>
-  new Map([...entries].map(([name, entry]) => [name, entry.ino]));
+
+/**
+ * Every state an entry holds: its own, and those of the entries it builds
+ * on.
+ * @param {Map<string, Pick<KeptEntry, 'deps' | 'stamps'>>} entries
+ * @param {Pick<KeptEntry, 'deps' | 'stamps'>} entry
+ * @returns {Map<string, string>}
+ */
+function heldStates(entries, entry) {
+  const held = new Map(entry.stamps);
+  for (const [base] of entry.deps) {
+    for (const [at, state] of entries.get(base)?.stamps ?? []) {
+      if (!held.has(at)) held.set(at, state);
+    }
+  }
+  return held;
+}
 
 /**
  * The deepest link on the way to `file`, or none: the lowest of its folders
@@ -187,41 +208,119 @@ function linkOnTheWay(file) {
 }
 
 /**
- * Every path an entry holds by the folder it is found in (`in:`) through a
- * link is under a folder the same entry, or an entry it builds on, holds by
- * a listing or a stat, at or below that link: the entry checks a folder it
- * reached through the link by that folder's own state, as main's record
- * does, besides the folder identity in the `in:` state.
- * @param {ReturnType<typeof keptEntries>} entries
+ * The entries whose value holds the real path of a file they read through a
+ * link (held by its full stamp), with no state of a folder at or below that
+ * link: a link moved to another version folder that holds the same file
+ * through a hard link keeps the file's stamp, and the value would name the
+ * old folder. Each as [entry, file, link].
+ * @param {Map<string, Pick<KeptEntry, 'deps' | 'stamps' | 'text'>>} entries
+ * @returns {[string, string, string][]}
  */
-function expectFoundThroughLinksCovered(entries) {
+function realPathsUncovered(entries) {
+  /** @type {[string, string, string][]} */
+  const out = [];
   for (const [name, entry] of entries) {
-    /** @type {Map<string, string>} */
-    const held = new Map(entry.stamps);
-    for (const [base] of entry.deps) {
-      for (const [at, state] of entries.get(base)?.stamps ?? []) {
-        if (!held.has(at)) held.set(at, state);
-      }
-    }
+    const held = heldStates(entries, entry);
     for (const [file, state] of held) {
-      if (!state.startsWith('in:')) continue;
+      if (!/^\d/u.test(state)) continue;
       const link = linkOnTheWay(file);
       if (!link) continue;
+      /** @type {string} */
+      let real;
+      try {
+        real = fs.realpathSync(file);
+      } catch {
+        continue;
+      }
+      if (
+        real === file ||
+        !entry.text.includes(JSON.stringify(real).slice(1, -1))
+      ) {
+        continue;
+      }
       const covered = [...held].some(
         ([at, folderState]) =>
           (at === link || at.startsWith(link + path.sep)) &&
           file.startsWith(at + path.sep) &&
-          (folderState.startsWith('dir:') || /^\d/u.test(folderState)) &&
+          (folderState.startsWith('real:') ||
+            folderState.startsWith('dir:') ||
+            /^\d/u.test(folderState)) &&
           fs.statSync(at, {throwIfNoEntry: false})?.isDirectory(),
       );
-      expect(covered, `${name}: ${file} is found through ${link}`).toBe(true);
+      if (!covered) out.push([name, file, link]);
     }
   }
+  return out;
 }
+
+/**
+ * The states that hold a real-path lookup's answer (`real:`) other than the
+ * one the lookup gives now, while nothing changed: each as [entry, path].
+ * @param {Map<string, Pick<KeptEntry, 'stamps'>>} entries
+ * @returns {[string, string][]}
+ */
+function answersNotExact(entries) {
+  /** @type {[string, string][]} */
+  const out = [];
+  for (const [name, entry] of entries) {
+    for (const [at, state] of entry.stamps) {
+      if (!state.startsWith('real:')) continue;
+      /** @type {string} */
+      let real = '';
+      try {
+        real = fs.realpathSync(at);
+      } catch {
+        // absent: never recorded as `real:`
+      }
+      if (state !== `real:${real}`) out.push([name, at]);
+    }
+  }
+  return out;
+}
+
+/**
+ * Each kept entry's inode, by file name: an entry gathered again is a new
+ * file.
+ * @param {ReturnType<typeof keptEntries>} entries
+ */
+const inodes = entries =>
+  new Map([...entries].map(([name, entry]) => [name, entry.ino]));
 
 describe.skipIf(process.platform !== 'linux')(
   'kept component replacement',
   () => {
+    it('finds a value that names the real path of a file read through a link, unless a folder state below the link covers it', () => {
+      const dir = fs.mkdtempSync(path.join(work, 'real-paths-'));
+      try {
+        const version = path.join(dir, 'store', 'pkg@1.0.0');
+        fs.mkdirSync(version, {recursive: true});
+        fs.writeFileSync(path.join(version, 'index.js'), 'export {};\n');
+        const link = path.join(dir, 'node_modules', 'pkg');
+        fs.mkdirSync(path.dirname(link), {recursive: true});
+        fs.symlinkSync(version, link, 'dir');
+        const file = path.join(link, 'index.js');
+        const real = fs.realpathSync(file);
+        const read = /** @type {[string, string]} */ ([file, '9:1:1:1']);
+        const named = {
+          deps: [],
+          stamps: [read],
+          text: JSON.stringify({source: real}),
+        };
+        expect(realPathsUncovered(new Map([['planted', named]]))).toEqual([
+          ['planted', file, link],
+        ]);
+        const covered = {
+          ...named,
+          stamps: [read, /** @type {[string, string]} */ ([link, '4:1:1:2'])],
+        };
+        expect(realPathsUncovered(new Map([['planted', covered]]))).toEqual([]);
+        const unnamed = {...named, text: JSON.stringify({source: 'pkg'})};
+        expect(realPathsUncovered(new Map([['planted', unnamed]]))).toEqual([]);
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true});
+      }
+    });
+
     it.skipIf(!hasModuleHooks)(
       'is kept, and answers as a fresh run while nothing changed',
       () => {
@@ -335,7 +434,8 @@ describe.skipIf(process.platform !== 'linux')(
           };
           same();
           const first = keptEntries(tmp);
-          expectFoundThroughLinksCovered(first);
+          expect(answersNotExact(first)).toEqual([]);
+          expect(realPathsUncovered(first)).toEqual([]);
           const based = [...first].filter(([, entry]) => entry.deps.length > 0);
           expect(based.length).toBeGreaterThan(0);
           // Each names an entry it builds on at the version that entry holds,
