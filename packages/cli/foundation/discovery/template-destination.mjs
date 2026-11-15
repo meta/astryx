@@ -24,10 +24,11 @@ import {
  * project the way its framework reads it.
  *
  * In a Next app (its package.json depends on `next`), a page goes where Next
- * serves it: in the App Router folder (`app/<id>`, or `src/app/<id>`), inside
- * the route group that holds the root layout when that folder has none of
- * its own; else, in an app with only the Pages Router, to the page file
- * `pages/<id>.tsx` (or `src/pages/<id>.tsx`). A block goes beside the routes:
+ * serves it when `tsx` is in its `pageExtensions`, as by default: in the App
+ * Router folder (`app/<id>`, or `src/app/<id>`), inside the route group that
+ * holds the root layout when that folder has none of its own; else, in an
+ * app with only the Pages Router, to the page file `pages/<id>.tsx` (or
+ * `src/pages/<id>.tsx`). A block goes beside the routes:
  * `app/components/<id>` with a root `app/` folder, `components/<id>` with a
  * root `pages/` folder only, else `src/components/<id>`. Every other project
  * gets `src/pages/<id>` for a page and `src/components/<id>` for a block.
