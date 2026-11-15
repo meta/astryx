@@ -110,6 +110,7 @@ import {interceptCore} from './core-interception.mjs';
 import {irregularFileKind} from '../../../foundation/fs/regular-file.mjs';
 import {keyPathLine, nullThemeValues} from './null-values.mjs';
 import {styleKeyProblems} from './style-keys.mjs';
+import {writtenValueProblems} from './written-values.mjs';
 import {levenshteinDistance} from '../../../foundation/text/levenshtein.mjs';
 import {
   installCommandFor,
@@ -3403,7 +3404,13 @@ export async function validateThemePrivateInputs(
 
   const inputs = interception.lineageOf(theme);
   try {
-    return [...new Set(inputs.flatMap(input => validatePrivateVars(input)))];
+    return [
+      ...new Set(
+        inputs.flatMap(input =>
+          validatePrivateVars(input, {defineTheme: _defineTheme}),
+        ),
+      ),
+    ];
   } finally {
     interception.strip(theme);
   }
@@ -4606,18 +4613,42 @@ async function themeBuildInternal(
   // anything is written, at the line that gives it. A null value keeps its
   // meaning (Core writes it as it is), so it is warned at its line.
   const shownSource = path.relative(cwd, filePath) || filePath;
-  const nulls = nullThemeValues(themeDef).map(n => ({
-    ...n,
-    line: keyPathLine(themeSource, n.path),
-  }));
-  /** @param {{path: string[], why: string, line: number | null}} n */
+  // A value the theme this one extends gives, and this file does not write,
+  // is that theme's: it is named as inherited, and a family leaves it to
+  // that theme's own member, which names its file and line.
+  const parentTheme = themeDef.extends ?? interception?.parentOf(themeDef);
+  /** @param {any} value @param {string[]} keys */
+  const valueAt = (value, keys) =>
+    keys.reduce(
+      (/** @type {any} */ v, k) =>
+        v !== null && typeof v === 'object' ? v[k] : undefined,
+      value,
+    );
+  /**
+   * @template {{path: string[]}} T
+   * @param {T[]} items
+   * @returns {Array<T & {line: number | null, inherited: boolean, elsewhere: boolean}>}
+   */
+  const placed = items =>
+    items.flatMap(item => {
+      const line = keyPathLine(themeSource, item.path);
+      const inherited =
+        line == null &&
+        parentTheme != null &&
+        valueAt(parentTheme, item.path) !== undefined;
+      return inherited && handOff.prepareFamily
+        ? []
+        : [{...item, line, inherited, elsewhere: line == null}];
+    });
+  const nulls = placed(nullThemeValues(themeDef));
+  /** @param {{path: string[], why: string, line: number | null, inherited?: boolean, elsewhere?: boolean}} n */
   const nullLine = n =>
-    `${n.path.join('.')}${n.line != null ? ` (line ${n.line})` : ''}: ${n.why}`;
+    `${n.path.join('.')}${n.line != null ? ` (line ${n.line})` : n.inherited ? ' (from the theme it extends)' : n.elsewhere ? ' (not written in this file as it is: from the theme it extends or a module it imports)' : ''}: ${n.why}`;
   const unbuildable = nulls.filter(n => n.unbuildable);
   if (unbuildable.length > 0) {
     const first = unbuildable.find(n => n.line != null);
     throw new AstryxError(
-      `${shownSource} gives null where the build reads a block: ${unbuildable.map(nullLine).join('; ')}. Nothing was written.`,
+      `${shownSource} ${unbuildable.every(n => n.inherited || n.elsewhere) ? 'gets, from another file,' : 'gives'} null where the build reads a block: ${unbuildable.map(nullLine).join('; ')}. Nothing was written.`,
       first
         ? [
             {
@@ -4635,10 +4666,27 @@ async function themeBuildInternal(
   // and a custom property with capitals is set under another name than
   // var() reads. A theme that built before still builds the same: each is
   // warned at its line, with the form that works.
-  const badKeys = styleKeyProblems(themeDef).map(k => ({
-    ...k,
-    line: keyPathLine(themeSource, k.path),
-  }));
+  const badKeys = placed(styleKeyProblems(themeDef));
+  // A value Core writes as it is but no browser reads (an object, a pair
+  // with a missing half, a token that reads itself or a var() no token
+  // sets): warned at its line, the output the same. A var() target is judged
+  // only against the Core that names its tokens.
+  const tokenDefaults = _coreThemeModule?.tokenDefaults;
+  const setNames = new Set([
+    ...Object.keys(tokenDefaults ?? {}),
+    ...[
+      themeDef,
+      themeDef.onDark ?? themeDef.__onDark,
+      themeDef.onLight ?? themeDef.__onLight,
+    ].flatMap((/** @type {any} */ s) => [
+      ...Object.keys(s?.tokens ?? {}),
+      ...Object.keys(s?.localTokens ?? {}),
+    ]),
+  ]);
+  const badValues = writtenValueProblems(themeDef, {
+    reads: tokenDefaults ? name => setNames.has(name) : undefined,
+  });
+  const badValueLines = placed(badValues);
 
   // Validate component overrides
   const warnings = await validateComponentOverrides(themeDef);
@@ -4660,6 +4708,7 @@ async function themeBuildInternal(
       : []),
     ...nulls.filter(n => !n.unbuildable).map(nullLine),
     ...badKeys.map(nullLine),
+    ...badValueLines.map(nullLine),
   ]) {
     warningMessages.push(w);
     logger.warn(`  [warn] ${source}${w}`);
@@ -4670,7 +4719,9 @@ async function themeBuildInternal(
   // output, receipt or success may say otherwise.
   // The message names no file: a batch and a family name the one it is
   // about, and a single build is about the file it was given.
-  const privateVarErrors = validatePrivateVars(themeDef);
+  const privateVarErrors = validatePrivateVars(themeDef, {
+    defineTheme: _defineTheme,
+  });
   if (privateVarErrors.length > 0) {
     const refusal = new AstryxError(
       `${privateVarErrors.join('\n')}\n${privateVarErrors.length} private var error(s). Use standard CSS properties instead.`,

@@ -118,12 +118,50 @@ const textOf = (key, node) =>
   key.slice(node.loc.start.offset - 2, node.loc.end.offset - 2);
 
 /**
+ * What may follow a pseudo-element in its compound selector, as CSS
+ * Pseudo-Elements 4 defines it, for the pseudo-elements that take anything:
+ * an element-backed one stands for a real element, so any pseudo-class and a
+ * further pseudo-element may follow it; a highlight takes :window-inactive;
+ * a scroll marker takes :target-current. Any other pseudo-element ends its
+ * selector (a vendor one, or one that takes arguments such as `::part()`, is
+ * left to the browser).
+ * @type {Record<string, {classes: true | string[], elements: boolean}>}
+ */
+const AFTER_PSEUDO_ELEMENT = {
+  'file-selector-button': {classes: true, elements: true},
+  'details-content': {classes: true, elements: true},
+  selection: {classes: ['window-inactive'], elements: false},
+  'target-text': {classes: ['window-inactive'], elements: false},
+  'spelling-error': {classes: ['window-inactive'], elements: false},
+  'grammar-error': {classes: ['window-inactive'], elements: false},
+  'scroll-marker': {classes: ['target-current'], elements: false},
+};
+
+/**
+ * What may follow a pseudo-element node.
+ * @param {any} element
+ * @returns {{classes: true | string[], elements: boolean}}
+ */
+const afterPseudoElement = element =>
+  element.name.startsWith('-') || element.children
+    ? {classes: true, elements: true}
+    : (AFTER_PSEUDO_ELEMENT[element.name.toLowerCase()] ?? {
+        classes: [],
+        elements: false,
+      });
+
+/**
+ * The pseudo-classes Core reads by name, as written: it adds its disabled
+ * guard to `:hover`, and replaces `:active` with its press model.
+ */
+const CORE_READ_PSEUDO_CLASSES = ['hover', 'active'];
+
+/**
  * Why a pseudo key that parses as one selector still builds a rule the
  * browser drops or Core misreads, or null: a pseudo name with an escape (a
- * name no browser knows), something after a pseudo-element (which ends its
- * selector, unless it is a vendor one or takes arguments, as `::part()`
- * does), or a pseudo name in capitals (a browser reads it either way, but
- * Core reads only the lower-case name as that pseudo-class).
+ * name no browser knows), something after a pseudo-element that it does not
+ * take, or a pseudo-class Core reads by name written in capitals (a browser
+ * reads it either way, but Core does not).
  * @param {string} key
  * @param {any} ast the key parsed after `.p`, with positions
  * @returns {string | null}
@@ -143,7 +181,12 @@ function compoundProblem(key, ast) {
     const colons = node.type === 'PseudoElementSelector' ? '::' : ':';
     if (node.name.includes('\\'))
       why ??= `${key} escapes a character in ${colons}${node.name}, so the browser reads a pseudo name "${node.name.replace(/\\(.)/g, '$1')}" it does not know and drops the rule`;
-    else if (node.name !== node.name.toLowerCase()) capitals.push(node);
+    else if (
+      node.type === 'PseudoClassSelector' &&
+      node.name !== node.name.toLowerCase() &&
+      CORE_READ_PSEUDO_CLASSES.includes(node.name.toLowerCase())
+    )
+      capitals.push(node);
   });
   if (why) return why;
   t.walk(ast, {
@@ -159,14 +202,17 @@ function compoundProblem(key, ast) {
           element = null;
           return;
         }
-        const after =
-          element && !element.name.startsWith('-') && !element.children;
+        const takes = element ? afterPseudoElement(element) : null;
         if (node.type === 'PseudoElementSelector') {
-          if (after)
-            why = `${key} holds two pseudo-elements (${textOf(key, element)}, ${textOf(key, node)}), and a selector takes one, so the browser drops the rule: give each its own key`;
+          if (takes && !takes.elements)
+            why = `${key} holds two pseudo-elements (${textOf(key, element)}, ${textOf(key, node)}), and ${textOf(key, element)} takes none after it, so the browser drops the rule: give each its own key`;
           element = node;
         } else if (node.type === 'PseudoClassSelector') {
-          if (after) {
+          if (
+            takes &&
+            takes.classes !== true &&
+            !takes.classes.includes(node.name.toLowerCase())
+          ) {
             const last = selector.children.last;
             const single =
               selector.children
@@ -177,7 +223,7 @@ function compoundProblem(key, ast) {
             const moved = single
               ? `${key.slice(0, element.loc.start.offset - 2)}${classes.map(c => textOf(key, c)).join('')}${textOf(key, element)}`
               : null;
-            why = `${key} puts ${textOf(key, node)} after ${textOf(key, element)}, and a pseudo-element ends its selector, so the browser drops the rule${moved && !pseudoKeyProblem(moved) ? `: write '${moved}'` : ''}`;
+            why = `${key} puts ${textOf(key, node)} after ${textOf(key, element)}, which takes ${takes.classes.length ? `only ${takes.classes.map(c => `:${c}`).join(', ')}` : 'no pseudo-class'} after it, so the browser drops the rule${moved && !pseudoKeyProblem(moved) ? `; to style it while the part is ${textOf(key, node)}, write '${moved}'` : ''}`;
           }
         }
       });
@@ -196,7 +242,7 @@ function compoundProblem(key, ast) {
       fixed.slice(at, at + node.name.length).toLowerCase() +
       fixed.slice(at + node.name.length);
   }
-  return `${key} writes a pseudo name in capitals, which a browser reads either way, but Core reads only the lower-case name as that pseudo-class (a disabled part's :hover guard, the press model of :active): write '${fixed}'`;
+  return `${key} writes ${capitals.map(n => `:${n.name}`).join(', ')} in capitals, which a browser reads either way, but Core reads :hover and :active by their lower-case names (a disabled part's hover guard, the press model): write '${fixed}'`;
 }
 
 /**
@@ -208,9 +254,19 @@ function compoundProblem(key, ast) {
  * @returns {string | null}
  */
 export function partPropertyNameProblem(name) {
-  if (!/^(webkit|moz|ms|o)([A-Z]|-)/.test(name)) return null;
   const built = name.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`);
-  return `${name} builds ${built}, with no leading dash, a property no browser reads: a vendor prefix starts with a dash, so write '-${built}'`;
+  if (/^(webkit|moz|ms|o)-/.test(built))
+    return `${name} builds ${built}, with no leading dash, a property no browser reads: a vendor prefix starts with a dash, so write '-${built}'`;
+  // A name that builds dash-first is a vendor property only with a vendor
+  // prefix and a name after it (`-webkit-transform`, `WebkitTransform`);
+  // any other (`Color`, `BACKGROUND`, `-webkit-`) is no property.
+  if (built.startsWith('-') && !/^-(webkit|moz|ms|o|khtml)-[a-z]/.test(built)) {
+    const meant = /[a-z]/.test(name)
+      ? name.charAt(0).toLowerCase() + name.slice(1)
+      : name.toLowerCase();
+    return `${name} builds ${built}, a property no browser reads: a property name starts with a lower-case letter${/^[A-Za-z]/.test(name) ? `, such as ${meant}` : ''}`;
+  }
+  return null;
 }
 
 /** The color-mode blocks a style key's block nests. */

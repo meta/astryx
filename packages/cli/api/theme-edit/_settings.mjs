@@ -2723,26 +2723,62 @@ function ownPageTokens(
       n?.type === 'MemberExpression' ||
       n?.type === 'OptionalMemberExpression'
     ) {
-      const key = n.computed ? textOf(unwrap(n.property)) : keyOf(n.property);
+      const property = n.computed ? unwrap(n.property) : n.property;
+      const key = n.computed
+        ? property?.type === 'NumericLiteral'
+          ? String(property.value)
+          : textOf(property)
+        : keyOf(property);
       if (key == null) return null;
       if (n.object?.type === 'Identifier') {
         const namespaced = imported(n.object.name, key);
         if (namespaced?.member) return namespaced;
       }
+      // A member of `await import('./shared')` is that file's export.
+      const loaded = unwrap(n.object);
+      const dynamic =
+        loaded?.type === 'AwaitExpression' &&
+        loaded.argument?.type === 'CallExpression' &&
+        loaded.argument.callee?.type === 'Import'
+          ? textOf(loaded.argument.arguments[0])
+          : null;
+      if (dynamic != null) {
+        const file = localFile(dynamic);
+        return file ? exportedValue(file, key) : null;
+      }
       const base = importedValue(n.object, depth + 1);
-      const prop =
-        base?.obj?.type === 'ObjectExpression'
-          ? base.obj.properties.findLast(
+      const obj = base?.obj;
+      const value =
+        obj?.type === 'ObjectExpression'
+          ? obj.properties.findLast(
               (/** @type {any} */ p) =>
                 p.type === 'ObjectProperty' &&
                 !p.computed &&
                 keyOf(p.key) === key,
-            )
-          : null;
-      return base && prop ? {...base, obj: base.unwrap(prop.value)} : null;
+            )?.value
+          : obj?.type === 'ArrayExpression' && /^\d+$/.test(key)
+            ? obj.elements[Number(key)]
+            : undefined;
+      return base && value ? {...base, obj: base.unwrap(value)} : null;
     }
+    // A value that passes an imported one through (a template, a choice,
+    // a call of a function of the theme file's own or a global, such as
+    // String()) is read where that one is written.
+    /** @param {any[]} parts */
+    const through = parts => {
+      for (const part of parts) {
+        const from = importedValue(part, depth + 1);
+        if (from) return from;
+      }
+      return null;
+    };
+    if (n?.type === 'TemplateLiteral') return through(n.expressions);
+    if (n?.type === 'ConditionalExpression')
+      return through([n.consequent, n.alternate]);
+    if (n?.type === 'LogicalExpression') return through([n.left, n.right]);
     if (n?.type === 'CallExpression') {
       const fn = importedValue(n.callee, depth + 1);
+      if (!fn) return through(n.arguments);
       const f = fn?.obj;
       const body = [
         'ArrowFunctionExpression',

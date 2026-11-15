@@ -148,6 +148,10 @@ import {
 } from './_check.mjs';
 import {MODAL, isColorToken} from './_compiler.mjs';
 import {fontShorthandFamilyList} from '../theme/build/font-warning.mjs';
+import {
+  derivedPrivateCopies,
+  spreadPrivateVarMessage,
+} from '../../foundation/config/theme-private-vars.mjs';
 import {innerBlock, partKeyProblem} from '../theme/build/style-keys.mjs';
 import {colorProblem, hex, parseColor, ratio} from './_color.mjs';
 import {
@@ -3186,7 +3190,18 @@ async function ownTokenProblems(ctx, slug, data) {
       // The exported theme's own tokens are named by token alone.
       const top = path.length === 0 && map === 'tokens';
       const at = top && !prefix ? [] : [...path, map];
+      // Core's own copies, carried by a map spread from a defined theme's
+      // tokens, are no write of the author's.
+      const copies =
+        map === 'tokens'
+          ? derivedPrivateCopies(m, ctx.project.core?.defineTheme)
+          : new Set();
       for (const [k, v] of Object.entries(m)) {
+        if (copies.has(k)) continue;
+        if (copies.size > 0 && k.startsWith('--_')) {
+          refuse(at, k, spreadPrivateVarMessage(k, copies));
+          continue;
+        }
         // The theme's own names go in localTokens, so only a part
         // variable's exact name there is that variable.
         const partVar =

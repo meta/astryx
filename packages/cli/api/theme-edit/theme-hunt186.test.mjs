@@ -81,7 +81,6 @@ describe('part keys the browser drops or Core misreads', () => {
       ['msOverflowStyle', 'none', 'style', "so write '-ms-overflow-style'"],
       ['webkit-transform', 'none', 'style', "so write '-webkit-transform'"],
       [':HOVER', {}, 'style', "write ':hover'"],
-      ['::BEFORE', {}, 'style', "write '::before'"],
       ['::before:hover', {}, 'style', "write ':hover::before'"],
       ['::before::after', {}, 'style', 'holds two pseudo-elements'],
       [':hover\\,', {}, 'style', 'a pseudo name "hover," it does not know'],
