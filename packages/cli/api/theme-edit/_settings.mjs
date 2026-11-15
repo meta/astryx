@@ -8751,7 +8751,12 @@ export async function contrastProblems(ctx, data, res) {
               s,
               side,
               m,
-              /** @type {any} */ (p).groundWhen ?? /** @type {any} */ (p).when,
+              // The ground's own variant; else the variant the text is
+              // drawn in, when the ground is the text's own part (a
+              // secondary button's label on its secondary fill).
+              /** @type {any} */ (p).groundWhen ??
+                /** @type {any} */ (p).when ??
+                (s.target && s.target === p.fg.target ? pairVariant(p) : null),
             ),
         m,
       ) ??
@@ -8955,6 +8960,52 @@ export async function contrastProblems(ctx, data, res) {
       );
     }
   }
+  // Text of a part with a fill of its own inside Core's media surface (a
+  // button on an overlay): that surface sets the text color tokens of what
+  // it holds from --color-on-dark where it is dark and --color-on-light
+  // where it is light, so the part's text is measured with the one its side
+  // gives, on the part's own fill.
+  /** @type {TextPair[]} */
+  const mediaPairs = [];
+  const TEXT_ROLES = ['--color-text-primary', '--color-text-secondary'];
+  // (One pair for each text and side, on the first surface that holds it:
+  // one fix reaches it on every such surface.)
+  const mediaSeen = new Set();
+  for (const [m, rec] of Object.entries(ctx.C.MAP)) {
+    const sides = /** @type {any} */ (rec)?.mediaSides ?? [];
+    const inside = new Set(/** @type {any} */ (rec)?.contains ?? []);
+    if (!(/** @type {any} */ (rec)?.media) || !sides.length || !inside.size)
+      continue;
+    for (const q of [...census.pairs, ...variantPairs]) {
+      const t = q.fg.target;
+      if (
+        !t ||
+        t === m ||
+        !inside.has(t) ||
+        q.bg.target !== t ||
+        !TEXT_ROLES.includes(String(q.fg.tokens[0]))
+      )
+        continue;
+      for (const side of sides) {
+        const k = `${q.text}|${/** @type {any} */ (q).when ?? ''}|${side}`;
+        if (mediaSeen.has(k)) continue;
+        mediaSeen.add(k);
+        mediaPairs.push(
+          /** @type {any} */ ({
+            ...q,
+            text: `${q.text} on ${m}`,
+            fg: {
+              ...q.fg,
+              tokens: [
+                side === 'dark' ? '--color-on-dark' : '--color-on-light',
+              ],
+            },
+            mediaOf: m,
+          }),
+        );
+      }
+    }
+  }
   const {problems, unchecked} = ctx.C.contrast(
     value,
     baseValue,
@@ -8967,7 +9018,7 @@ export async function contrastProblems(ctx, data, res) {
       page: m =>
         res[/** @type {'light' | 'dark'} */ (m)]['--color-background-body'],
     },
-    [...variantPairs, ...headerPairs, ...ownTextPairs],
+    [...variantPairs, ...headerPairs, ...ownTextPairs, ...mediaPairs],
   );
   const slug = data.name;
   const modeFlag = (/** @type {string} */ m) =>
@@ -9025,6 +9076,12 @@ export async function contrastProblems(ctx, data, res) {
             drawn.on && partsOf(ctx, drawn).includes(String(x.textPart));
           return `${P} set ${slug} ${drawn.thing} ${color}${drawn.on ? ` --on ${drawn.on}${drawn.only ? ' --only' : ''}` : ''}${when(drawn.when ?? (onText ? variant : null))}${modeFlag(x.mode)}`;
         }
+        // Text inside Core's media surface (a button on an overlay) takes
+        // the surface's text colors: a color on the part itself (its
+        // variant) reaches it there, and reads the same on its fill
+        // everywhere else.
+        if (/** @type {any} */ (pair).mediaOf && x.textPart)
+          return `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${modeFlag(x.mode)}`;
         // The base theme colors the text on its own part: only a color
         // there changes what is drawn.
         // (Text on a ground part's variants that need opposite text: a color

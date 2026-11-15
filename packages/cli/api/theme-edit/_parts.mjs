@@ -37,7 +37,7 @@ import {
 import {removeOnStop} from '../../foundation/fs/stop-cleanup.mjs';
 
 /** Bump when the shape of the cached part data, or which parts it reaches, changes. */
-const PART_DATA_VERSION = 22;
+const PART_DATA_VERSION = 23;
 
 /**
  * Flags that change what a component does or whether it shows, not how it
@@ -63,6 +63,7 @@ const LIFECYCLE_FLAGS = new Set([
  * @property {Record<string, string[]>} [held] - the tokens the parts inside it draw with there, at rest, and the properties they set with each
  * @property {string[]} [line] - the properties a line inside it with no target of its own draws (a divider's line), recorded as the part's: a setting on the part's own element does not reach them
  * @property {boolean} [media] - Core's media surface sits inside it (a toast's inverted surface), setting the text tokens of what it holds from --color-on-dark and --color-on-light
+ * @property {string[]} [mediaSides] - the sides that media surface took where the census drew it (`dark`, `light`)
  * @property {Record<string, Record<string, string>>} [inline] - state ('' for always) -> property -> the token Core paints it with as an inline style, which no theme rule can replace
  */
 
@@ -1114,7 +1115,7 @@ function resolvePrivate(v, env, tokens, depth = 0) {
  * @returns {{map: Record<string, PartRecord>, pairs: TextPair[]}}
  */
 export function walkMarkup(html, decls, tokens, targets = new Map()) {
-  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, tags: Set<string>, innerCorners: Set<string>, media: boolean, line?: Set<string>, lineAdded?: Array<[string, string, Set<string>, boolean?]>, held?: Record<string, Set<string>>}>} */
+  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, tags: Set<string>, innerCorners: Set<string>, media: boolean, mediaSides?: Set<string>, line?: Set<string>, lineAdded?: Array<[string, string, Set<string>, boolean?]>, held?: Record<string, Set<string>>}>} */
   const map = {};
   /** @type {Array<{env: Record<string, string>, target: string | null, all?: string[], fg: PaintSide | null, bg: PaintSide | null, cond: string}>} */
   const stack = [{env: {}, target: null, fg: null, bg: null, cond: ''}];
@@ -1237,6 +1238,8 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
       // onMediaTokens), so the part's text reads one of them in each mode.
       else if (/\bdata-astryx-media="/.test(attrs)) {
         T.media = true;
+        const side = /\bdata-astryx-media="(dark|light)"/.exec(attrs)?.[1];
+        if (side) (T.mediaSides ??= new Set()).add(side);
         for (const t of ['--color-on-dark', '--color-on-light'])
           if (tokens.has(t)) (T.inside[t] ??= new Set()).add('color');
       }
@@ -1424,6 +1427,7 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
       tags: [...v.tags],
       innerCorners: [...v.innerCorners],
       ...(v.media ? {media: true} : {}),
+      ...(v.mediaSides?.size ? {mediaSides: [...v.mediaSides].sort()} : {}),
       ...(v.line?.size ? {line: [...v.line]} : {}),
       ...(v.held
         ? {
