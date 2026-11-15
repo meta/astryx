@@ -145,6 +145,31 @@ describe('a timer that fires late', () => {
   });
 });
 
+describe('a coalesced move whose samples straddle a deadline', () => {
+  it('delivers the samples stamped before the deadline first: a drift among them fails the press', () => {
+    const {clock, arena, log} = pressArena();
+    // One move reaches the page at 520 with the sample it coalesced: the
+    // finger drifted 40 px at 480, before the press's deadline at 500.
+    clock.time = 520;
+    arena.moved([
+      {id: 1, x: 40, y: 0, time: 520, history: [{x: 40, y: 0, time: 480}]},
+    ]);
+    expect(log.some(entry => entry.startsWith('press:began'))).toBe(false);
+    expect(log).toContain('press:failed@480');
+    arena.ended([{id: 1, x: 40, y: 0, time: 540}]);
+  });
+
+  it('runs the deadline before the samples stamped at or after it', () => {
+    const {clock, arena, log} = pressArena();
+    clock.time = 520;
+    arena.moved([
+      {id: 1, x: 1, y: 0, time: 520, history: [{x: 1, y: 0, time: 480}]},
+    ]);
+    expect(log).toContain('press:began@500');
+    arena.ended([{id: 1, x: 1, y: 0, time: 540}]);
+  });
+});
+
 describe('cancelling an idle recognizer', () => {
   it('leaves it possible, so its next touch counts', () => {
     const h = createHarness();
