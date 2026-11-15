@@ -44,26 +44,25 @@ const reads = new AsyncLocalStorage();
 function note(runs, file, probed = file, kind = 'read') {
   let state;
   let probedState;
-  const key = kind === 'realpath' ? REAL_PATH + probed : probed;
   for (const seen of runs) {
     if (exactRuns.has(seen)) {
-      if (!seen.has(key)) {
-        seen.set(key, (probedState ??= exactState(probed, kind, seen)));
-      } else if (kind === 'read' || kind === 'stat') {
-        // A path first only checked for, or a folder first only probed, now
-        // statted, read or listed: what the later call returned counts, so
-        // it is checked by that from here on.
+      if (!seen.has(probed)) {
+        seen.set(probed, (probedState ??= exactState(probed, kind, seen)));
+      } else if (kind !== 'presence') {
+        // A path first only checked for, or only resolved, or a folder first
+        // only probed, now resolved, statted, read or listed: what the later
+        // call returned counts, so it is checked by that from here on.
         keepState(
           seen,
-          key,
+          probed,
           () => (probedState ??= exactState(probed, kind, seen)),
-          kind === 'read',
+          GIVES[kind],
         );
       }
     } else {
       // A state another record handed in, such as a kept entry's `present`,
       // gives way to what this read returned.
-      keepState(seen, file, () => (state ??= stateOf(file)), true);
+      keepState(seen, file, () => (state ??= stateOf(file)), 'stamp');
     }
   }
 }
@@ -88,8 +87,10 @@ function exactState(file, kind, seen) {
       return stateOf(file);
     case 'presence':
       return presenceState(file);
-    case 'realpath':
-      return realPathState(file, foldersOf(seen));
+    case 'realpath': {
+      const real = realPathState(file, foldersOf(seen));
+      return real === '-' ? '-' : `${RESOLVED}${real}`;
+    }
     default:
       return probeStamp(file);
   }
@@ -150,21 +151,22 @@ const CONTENT_READS = new Set(['readFileSync', 'openSync']);
 export const PRESENT = 'present';
 
 /**
- * What a real-path lookup's record is keyed by, before the path: it records
- * the path the lookup resolved to, beside whatever else the path's own key
- * records.
+ * What a real-path lookup records before where the path resolves
+ * (realPathState): the lookup's answer, and no more, until a stat or a read
+ * of the same path records that call's fuller state instead.
  */
-export const REAL_PATH = '\0realpath:';
+export const RESOLVED = 'real:';
 
 /**
- * The path a recorded key stands for: the key itself, or the path a
- * real-path lookup looked up.
- * @param {string} key
- * @returns {string}
+ * What kind of state each call gives (see keepState).
+ * @type {Record<ReadKind, StateKind>}
  */
-export function recordedPath(key) {
-  return key.startsWith(REAL_PATH) ? key.slice(REAL_PATH.length) : key;
-}
+const GIVES = {
+  read: 'stamp',
+  stat: 'probe',
+  presence: 'probe',
+  realpath: 'resolved',
+};
 
 /**
  * What each recorded call returns about its path (ReadKind). `accessSync`
@@ -364,8 +366,9 @@ function resolvedPath(file) {
  * @returns {boolean}
  */
 export function stillInState(file, state, folders = null) {
-  if (file.startsWith(REAL_PATH)) {
-    return realPathState(file.slice(REAL_PATH.length), folders) === state;
+  if (state.startsWith(RESOLVED)) {
+    const real = realPathState(file, folders);
+    return (real === '-' ? '-' : `${RESOLVED}${real}`) === state;
   }
   if (state === PRESENT) return presenceState(file) === state;
   return (
@@ -425,35 +428,65 @@ export function recordStates(states) {
 
 /**
  * Keep `state` as the state read of `file`, one state per path: the first
- * one, except that a path only checked for takes any other state read later,
- * and a folder only probed takes a full stamp read later. What the later
+ * one, except that a later call's fuller state replaces a weaker one (takes):
+ * present < resolved < a folder's probe state < a full stamp. What the later
  * call returned counts, as when a run reads a path it checked for (see
  * `note`). Every place that adds a state to a record goes through this rule.
  * @param {Map<string, string>} seen
  * @param {string} file
  * @param {string | (() => string)} state - The state, or what gives it, asked
  *   only when the rule could keep it: a stat costs more than the check.
- * @param {boolean} [full] - With `state` given by a function: whether it is a
- *   full stamp, which a folder only probed takes too.
+ * @param {StateKind} [gives] - With `state` given by a function: the kind of
+ *   state it gives.
  */
-export function keepState(seen, file, state, full = false) {
+export function keepState(seen, file, state, gives = 'probe') {
   const had = seen.get(file);
   if (typeof state === 'function') {
-    if (
-      had !== undefined &&
-      had !== PRESENT &&
-      !(full && had.startsWith('dir:'))
-    )
-      return;
+    if (had !== undefined && !mayTake(had, gives)) return;
     state = state();
   }
-  if (
-    had === undefined ||
-    (had === PRESENT && state !== PRESENT) ||
-    (had.startsWith('dir:') && !state.startsWith('dir:') && state !== PRESENT)
-  ) {
-    seen.set(file, state);
+  if (had === undefined || takes(had, state)) seen.set(file, state);
+}
+
+/**
+ * The kind of state a call gives, which says what it may replace: a full
+ * stamp (a read or a listing), a stamp or a folder's probe state (a stat),
+ * or where a path resolves (a real-path lookup).
+ * @typedef {'stamp' | 'probe' | 'resolved'} StateKind
+ */
+
+/**
+ * Whether a state of kind `gives` could replace `had` (keepState): what a
+ * record asks before it works a state out.
+ * @param {string} had
+ * @param {StateKind} gives
+ * @returns {boolean}
+ */
+function mayTake(had, gives) {
+  if (had === PRESENT) return true;
+  if (had.startsWith(RESOLVED)) return gives !== 'resolved';
+  return gives === 'stamp' && had.startsWith('dir:');
+}
+
+/**
+ * Whether `state` replaces `had`: present gives way to any other state;
+ * where a path resolves, to a stat's or a read's state; a folder's probe
+ * state, to a full stamp or absent.
+ * @param {string} had
+ * @param {string} state
+ * @returns {boolean}
+ */
+function takes(had, state) {
+  if (had === PRESENT) return state !== PRESENT;
+  if (had.startsWith(RESOLVED)) {
+    return state !== PRESENT && !state.startsWith(RESOLVED);
   }
+  return (
+    had.startsWith('dir:') &&
+    !state.startsWith('dir:') &&
+    !state.startsWith(RESOLVED) &&
+    state !== PRESENT
+  );
 }
 
 /**

@@ -74,6 +74,7 @@ import {cliDoor} from '../env/cli-command.mjs';
 import {CACHE_LIMIT_BYTES, evictOldest} from './cache-eviction.mjs';
 import {
   PRESENT,
+  RESOLVED,
   fileStamp,
   keepState,
   recordReads,
@@ -416,7 +417,7 @@ export async function recordRun(fn, {armedThroughout = false} = {}) {
             try {
               const file = fileURLToPath(url);
               // The load reads the module's content: its stamp.
-              keepState(reads, file, () => fileStamp(file), true);
+              keepState(reads, file, () => fileStamp(file), 'stamp');
             } catch {
               // A URL with no file path holds nothing to check.
             }
@@ -804,15 +805,18 @@ function chooseBase(file, stamps, confirmed) {
 
 /**
  * Whether a state an entry holds agrees with the state the run read of the
- * same path: the same state, or the entry holds only that the path is there
- * and the run read it there.
+ * same path: the same state, or the entry holds only that the path is there,
+ * or where it resolves (confirmed this run), and the run read it there.
  * @param {string | undefined} read - the run's state of the path
  * @param {string} held - the entry's state of it
  * @returns {boolean}
  */
 function holdsIn(read, held) {
   return (
-    read === held || (held === PRESENT && read !== undefined && read !== '-')
+    read === held ||
+    ((held === PRESENT || held.startsWith(RESOLVED)) &&
+      read !== undefined &&
+      read !== '-')
   );
 }
 

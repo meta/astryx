@@ -54,7 +54,7 @@ import {LOCKFILES} from './same-beside-lockfiles.mjs';
 function gatherRunner(cli, core, pm) {
   const at = (/** @type {string} */ rel) =>
     JSON.stringify(pathToFileURL(path.join(cli, rel)).href);
-  return `const {recordReads, recordedPath} = await import(${at('foundation/fs/read-record.mjs')});
+  return `const {recordReads} = await import(${at('foundation/fs/read-record.mjs')});
 const {selfAuditInputs} = await import(${at('foundation/discovery/stored-self-audit.mjs')});
 const {projectAddsToCatalog} = await import(${at('foundation/discovery/stored-search-catalog.mjs')});
 const {docPackageManager, runWithDocPackageManager} = await import(${at('foundation/env/package-manager.mjs')});
@@ -83,12 +83,11 @@ const within = (root, file) => {
 };
 const packages = [${JSON.stringify(cli)}, ${JSON.stringify(core)}];
 const home = process.env.HOME;
-const liveRead = new Set([...live.keys()].map(recordedPath));
-const uncovered = [...new Set([...probed.keys()].map(recordedPath))].filter(file =>
+const uncovered = [...probed.keys()].filter(file =>
   !within(home, file) &&
   !packages.some(root => within(root, file)) &&
   !/\\.[cm]?js$/.test(file) &&
-  !liveRead.has(file));
+  !live.has(file));
 if (uncovered.length > 0) throw new Error('the gather reads paths outside the packages that the live check does not: ' + uncovered.join(', '));
 process.stdout.write(JSON.stringify({
   pm,

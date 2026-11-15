@@ -259,7 +259,7 @@ describe('an exact run', () => {
       /** @type {Map<string, string>} */
       const seen = new Map();
       fresh.recordReads(seen, () => fs.realpathSync(link), {exact: true});
-      expect([...seen.values()]).toContain(fs.realpathSync(link));
+      expect([...seen.values()]).toContain(`real:${fs.realpathSync(link)}`);
       expect(fresh.unchangedSince(seen)).toBe(true);
       fs.rmSync(link);
       fs.symlinkSync(path.join(dir, 'other.txt'), link);
@@ -410,7 +410,7 @@ describe('an exact run', () => {
     keepState(seen, '/folder', state);
     expect(asked).toBe(0);
     keepState(seen, '/checked', state);
-    keepState(seen, '/folder', state, true);
+    keepState(seen, '/folder', state, 'stamp');
     keepState(seen, '/new', state);
     expect(asked).toBe(3);
     expect(Object.fromEntries(seen)).toEqual({
@@ -419,6 +419,54 @@ describe('an exact run', () => {
       '/folder': '3:1:1:7',
       '/new': '3:1:1:7',
     });
+  });
+
+  it('sees a folder link that was resolved and listed re-pointed between two version folders with the same listing', () => {
+    const {dir} = scratch();
+    for (const version of ['1.0.0', '1.0.1']) {
+      fs.mkdirSync(path.join(dir, version));
+      fs.writeFileSync(path.join(dir, version, 'index.js'), 'same\n');
+    }
+    const pkg = path.join(dir, 'pkg');
+    fs.symlinkSync(path.join(dir, '1.0.0'), pkg);
+    const seen = exact(() => {
+      fs.realpathSync(pkg);
+      fs.readdirSync(pkg);
+    });
+    // The folder's own stamp: its inode and times, which differ between two
+    // folders however alike their listings are.
+    expect(seen.get(pkg)).toMatch(/^\d+:/u);
+    fs.rmSync(pkg);
+    fs.symlinkSync(path.join(dir, '1.0.1'), pkg);
+    expect(unchangedSince(seen)).toBe(false);
+  });
+
+  it('keeps one state per path, the fullest a call gave: present, then where it resolves, then a stamp', () => {
+    const {dir, file} = scratch();
+    const link = path.join(dir, 'link.txt');
+    fs.symlinkSync(file, link);
+    const resolved = exact(() => {
+      fs.existsSync(link);
+      fs.realpathSync(link);
+      fs.existsSync(link);
+    });
+    expect([...resolved.entries()]).toEqual([[link, `real:${file}`]]);
+    const resolvedThenRead = exact(() => {
+      fs.realpathSync(link);
+      fs.readFileSync(link, 'utf8');
+    });
+    const readThenResolved = exact(() => {
+      fs.readFileSync(link, 'utf8');
+      fs.realpathSync(link);
+    });
+    for (const seen of [resolvedThenRead, readThenResolved]) {
+      expect([...seen.keys()]).toEqual([link]);
+      expect(seen.get(link)).toMatch(/^\d+:/u);
+    }
+    // An edit in place keeps where it resolves, not the stamp a read took.
+    fs.writeFileSync(file, 'two, longer');
+    expect(unchangedSince(resolved)).toBe(true);
+    expect(unchangedSince(resolvedThenRead)).toBe(false);
   });
 
   it('keeps a stamp read elsewhere over an existence check, and never the other way', () => {
