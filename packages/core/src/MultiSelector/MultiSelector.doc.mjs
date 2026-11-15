@@ -324,7 +324,7 @@ export const docs = {
           name: 'labelTooltip',
           type: 'string',
           description:
-            'Tooltip text shown by an info icon at the end of the label.',
+            'Tooltip text shown by an info icon at the end of the label. No effect inside an InputGroup or with renderTrigger, which render no label.',
         },
         {
           name: 'isOptional',
@@ -584,7 +584,8 @@ export const docsZh = {
         isOptional: '将字段标记为可选。',
         isRequired: '将字段标记为必填。',
         isLoading: '在触发器中显示加载旋转器。',
-        labelTooltip: '标签末尾信息图标显示的工具提示文本。',
+        labelTooltip:
+          '标签末尾信息图标显示的工具提示文本。在 InputGroup 内或使用 renderTrigger 时无效，因为二者不渲染标签。',
         indicatorPosition:
           '复选框位于选项行的哪一侧。end 将其推到行的远端，全选行也一样。',
         width:
@@ -762,7 +763,8 @@ export const docsDense = {
         isOptional: 'marks optional',
         isRequired: 'marks required',
         isLoading: 'spinner in trigger',
-        labelTooltip: 'info-icon tooltip at end of label',
+        labelTooltip:
+          'info-icon tooltip at end of label; no effect in InputGroup or w/ renderTrigger',
         indicatorPosition: 'checkbox edge of option row: start or end',
         width: 'field width (number = px); sizes label, control, status',
         startIcon: 'icon at start of trigger',

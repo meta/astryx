@@ -310,7 +310,10 @@ async function axe(page: Page) {
     .analyze();
   return {
     violations: results.violations.flatMap(violation =>
-      violation.nodes.map(node => `${violation.id}: ${node.failureSummary}`),
+      violation.nodes.map(
+        node =>
+          `${violation.id} ${node.target.join(' ')}: ${node.failureSummary}`,
+      ),
     ),
     passes: results.passes.map(pass => pass.id),
   };
@@ -438,8 +441,8 @@ for (const mode of ['light', 'dark'] as const) {
         }
         const openAxe = await axe(page);
         checkAxe(check, openAxe);
-        // Recorded, not checked: the component record lists the active
-        // option's perception as a current-state gap.
+        // Recorded, not checked: the active option's fill is an open
+        // finding of this audit, so it must not fail the receipt.
         await frame('open-keyboard', {open, axe: openAxe});
 
         await page.keyboard.press('Enter');
@@ -567,11 +570,23 @@ for (const mode of ['light', 'dark'] as const) {
         observed.Warning.invalid !== 'true',
         `warning aria-invalid ${observed.Warning.invalid}`,
       );
-      // Status pairs color with an icon (never color alone).
+      // Status pairs color with an icon (never color alone): each status
+      // field shows a status icon in place of the disclosure chevron.
       const icons = await page
-        .locator('#storybook-root .astryx-multi-selector svg')
-        .count();
-      check(icons >= 3, `${icons} status or indicator icons`);
+        .locator('#storybook-root .astryx-multi-selector')
+        .evaluateAll(boxes =>
+          boxes.map(box => ({
+            chevrons: box.querySelectorAll(
+              '.astryx-multi-selector-indicator-icon',
+            ).length,
+            icons: box.querySelectorAll('svg').length,
+          })),
+        );
+      check(
+        icons.length === 3 &&
+          icons.every(box => box.chevrons === 0 && box.icons === 1),
+        `status icons per field: ${JSON.stringify(icons)}`,
+      );
       const result = await axe(page);
       checkAxe(check, result);
       await frame('rest', {observed, icons, axe: result});
@@ -676,7 +691,9 @@ for (const mode of ['light', 'dark'] as const) {
         (await combobox.getAttribute('aria-expanded')) === 'false',
         'ArrowDown opened a disabled field',
       );
-      await frame('focus', {c, shown, linked});
+      const result = await axe(page);
+      checkAxe(check, result);
+      await frame('focus', {c, shown, linked, axe: result});
     },
   });
 
@@ -773,11 +790,13 @@ for (const direction of ['ltr', 'rtl'] as const) {
         .catch(() => false);
       check(emptyShown, 'no empty-search state');
       const result = await axe(page);
-      // The empty-panel message is presentational by record, so the list
-      // holds no option here and axe flags the empty listbox. That one rule
-      // is expected in this state; any other violation fails.
+      // The empty-panel message is presentational, so the listbox has no
+      // option children here and axe flags that one listbox. Only that node
+      // is set aside; it is reported as an open finding. Any other violation
+      // fails.
+      const listboxId = await search.getAttribute('aria-controls');
       const expected = result.violations.filter(v =>
-        v.startsWith('aria-required-children:'),
+        v.startsWith(`aria-required-children #${listboxId}:`),
       );
       checkAxe(check, {
         ...result,
@@ -785,19 +804,13 @@ for (const direction of ['ltr', 'rtl'] as const) {
       });
       await frame('no-results', {emptyShown, axe: result, expected});
       await page.keyboard.press('Escape');
-      await settle(page);
-      const escapes =
-        (await trigger.getAttribute('aria-expanded')) === 'false' ? 1 : 2;
-      if (escapes === 2) {
-        await page.keyboard.press('Escape');
-      }
       await expect(trigger).toHaveAttribute('aria-expanded', 'false');
       await settle(page);
       const returned = await trigger.evaluate(
         el => el === document.activeElement,
       );
       check(returned, 'focus did not return to the trigger');
-      await frame('closed', {escapes, returned});
+      await frame('closed', {returned});
     },
   });
 }
