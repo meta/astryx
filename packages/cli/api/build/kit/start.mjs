@@ -11,7 +11,7 @@ import {loadWeights} from '../_adapter.mjs';
 import {asksForNewPage} from './kind.mjs';
 import {pickAlternatives, pickStart} from './rank.mjs';
 import {hasEditPhrase, shellCallScore} from './shellcall.mjs';
-import {isAppShell, readNames} from './words.mjs';
+import {isAppShell, normalized, readNames} from './words.mjs';
 import {
   blendOrder,
   blendSummary,
@@ -91,11 +91,9 @@ const LIFT_AT = 0.3;
  * @returns {boolean}
  */
 function namesTemplate(idea, entry) {
-  const words = (/** @type {string} */ text) =>
-    text.toLowerCase().match(/[a-z0-9]+/g) ?? [];
-  const read = ` ${words(readNames(idea, [{name: entry.name}])).join(' ')} `;
+  const read = ` ${normalized(readNames(idea, [{name: entry.name}]))} `;
   return [entry.name, entry.displayName ?? '']
-    .map(n => words(n).join(' '))
+    .map(normalized)
     .some(n => n !== '' && read.includes(` ${n} `));
 }
 
@@ -148,8 +146,9 @@ function liftFromShell(ranked, kind, catalog, idea, unsupported = null) {
  *
  * `direct` means two independent signals agree: the start is also search's
  * direct match. The ranker sees only ready templates, so a template
- * still marked not ready is never the start; when search matched one directly
- * the reason names it, so the reader knows why the kit starts elsewhere.
+ * still marked not ready is never the start; when the idea names one that
+ * search matched directly, the reason says it is not ready yet and where build
+ * started instead. A not-ready template the idea does not name is never named.
  *
  * @param {import('./rank.mjs').RankedPage[]} ranked
  * @param {import('./rank.mjs').IdeaKind} kind
@@ -194,11 +193,9 @@ export function chooseStart(
    * @param {string} startName
    */
   const placed = (place, startName) =>
-    unready
-      ? notReady(startName)
-      : shownDirect && shownDirect !== startName
-        ? `Search matched \`${shownDirect}\` by name, but ${place}`
-        : place[0].toUpperCase() + place.slice(1);
+    shownDirect && shownDirect !== startName
+      ? `Search matched \`${shownDirect}\` by name, but ${place}`
+      : place[0].toUpperCase() + place.slice(1);
   const proposed = pickStart(ranked, kind);
   // The checked-in word weights (weights.mjs), blended with the ranker's
   // scores, decide the start of a whole page, so it can differ from the

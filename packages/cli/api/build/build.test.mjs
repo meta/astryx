@@ -352,7 +352,10 @@ describe('build kit — every page starts from a template', () => {
     const r = await build('incident console', {cwd: REPO});
     expect(r.type).toBe('build.kit');
     if (r.type !== 'build.kit') return;
-    expect(r.data.directMatch).toBe(true);
+    // The response's direct match describes the templates it lists, which
+    // leave out the not-ready one, so none of them is a confident match.
+    expect(r.data.directMatch).toBe(false);
+    for (const page of r.data.pages) expect(page.command).toMatch(/--skeleton$/);
     expect(r.data.pages.map(p => p.name)).not.toContain('incident-console');
     expect(r.data.start?.name).not.toBe('incident-console');
     expect(r.data.start?.reason).toBe(

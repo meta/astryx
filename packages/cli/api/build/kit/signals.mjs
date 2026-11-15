@@ -214,14 +214,16 @@ export async function kitSignals(query, options = {}) {
    * `start`, which always scaffolds. Copied rather than mutated: these entries
    * come from `search()` and are not this function's to modify.
    */
-  // The kit names only page templates build could start from: a match search
-  // found but the catalog holds as not ready (or not at all) is left out of
-  // the surfaced list. The start's own reason still names an unready direct
-  // match (chooseStart reads every match).
+  // The kit names only page templates build could start from: a match the
+  // catalog holds as not ready is left out of the surfaced list, and the
+  // response's `directMatch` and `--skeleton` describe that list. The start
+  // is still chosen from every match (chooseStart).
   const startable = matchedPages.filter(page =>
     catalog.some(t => t.name === page.name && t.package === page.package),
   );
-  const pages = directMatch
+  const shownDirect =
+    directMatch && startable[0]?.name === matchedPages[0]?.name;
+  const pages = shownDirect
     ? startable
     : startable.map(page => ({
         ...page,
@@ -302,7 +304,7 @@ export async function kitSignals(query, options = {}) {
     query: String(query).trim(),
     idea: searched,
     matchCount,
-    directMatch,
+    directMatch: shownDirect,
     start,
     pages: pagesKept,
     blocks: blocksKept,
