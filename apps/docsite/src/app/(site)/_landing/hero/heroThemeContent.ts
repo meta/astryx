@@ -96,23 +96,26 @@ const REEL_THEMES: ReadonlyArray<string> = [
 ];
 
 // Per-theme card content, keyed by theme name (or the ASTRYX sentinel).
+// The photos are WebP copies of the theme product PNGs, at most 960 px wide.
+// The largest card draws a photo at about 315 px, so 960 px is sharp at 3x
+// pixel density. A PNG that is narrower than 960 px keeps its own width.
 const CONTENT_BY_THEME: Record<string, HeroThemeContent> = {
   [ASTRYX]: {
     // Product photos reuse the Neutral theme's image set (watch / headphones /
     // backpack) now that Neutral is no longer a standalone reel slide.
     product: {
-      image: '/neutral/preview-watch.png',
+      image: '/landing/hero/neutral-watch.webp',
       title: 'Minimalist watch',
       description: 'Clean design, everyday durability.',
       price: '$240',
     },
     feature: {
-      image: '/neutral/preview-headphones.png',
+      image: '/landing/hero/neutral-headphones.webp',
       title: 'Wireless headphones',
       price: '$180',
     },
     mini: {
-      image: '/neutral/preview-backpack.png',
+      image: '/landing/hero/neutral-backpack.webp',
       title: 'Canvas backpack',
       description: 'Water-resistant.',
     },
@@ -127,18 +130,18 @@ const CONTENT_BY_THEME: Record<string, HeroThemeContent> = {
   },
   '@astryxdesign/theme-neutral': {
     product: {
-      image: '/neutral/preview-watch.png',
+      image: '/landing/hero/neutral-watch.webp',
       title: 'Minimalist watch',
       description: 'Clean design, everyday durability.',
       price: '$240',
     },
     feature: {
-      image: '/neutral/preview-headphones.png',
+      image: '/landing/hero/neutral-headphones.webp',
       title: 'Wireless headphones',
       price: '$180',
     },
     mini: {
-      image: '/neutral/preview-backpack.png',
+      image: '/landing/hero/neutral-backpack.webp',
       title: 'Canvas backpack',
       description: 'Water-resistant.',
     },
@@ -153,18 +156,18 @@ const CONTENT_BY_THEME: Record<string, HeroThemeContent> = {
   },
   '@astryxdesign/theme-butter': {
     product: {
-      image: '/images/butter/preview-watch.png',
+      image: '/landing/hero/butter-watch.webp',
       title: 'Butter croissant',
       description: 'Flaky, laminated layers baked golden each morning.',
       price: '$6',
     },
     feature: {
-      image: '/images/butter/preview-backpack.png',
+      image: '/landing/hero/butter-backpack.webp',
       title: 'Belgian waffle',
       price: '$8',
     },
     mini: {
-      image: '/images/butter/preview-headphones.png',
+      image: '/landing/hero/butter-headphones.webp',
       title: 'Pancakes',
       description: 'Stacked tall with melting butter.',
     },
@@ -174,18 +177,18 @@ const CONTENT_BY_THEME: Record<string, HeroThemeContent> = {
   },
   '@astryxdesign/theme-matcha': {
     product: {
-      image: '/images/matcha/preview-watch.png',
+      image: '/landing/hero/matcha-watch.webp',
       title: 'Matcha',
       description: 'Stone-ground ceremonial matcha over cold milk.',
       price: '$6',
     },
     feature: {
-      image: '/images/matcha/preview-headphones.png',
+      image: '/landing/hero/matcha-headphones.webp',
       title: 'Strawberry matcha',
       price: '$7',
     },
     mini: {
-      image: '/images/matcha/preview-tumbler.png',
+      image: '/landing/hero/matcha-tumbler.webp',
       title: 'Ube matcha',
       description: 'Ube and cream matcha.',
     },
@@ -200,18 +203,18 @@ const CONTENT_BY_THEME: Record<string, HeroThemeContent> = {
   },
   '@astryxdesign/theme-gothic': {
     product: {
-      image: '/images/gothic/preview-watch.png',
+      image: '/landing/hero/gothic-watch.webp',
       title: 'Sea holly',
       description: 'A single preserved thistle stem with a steely bloom.',
       price: '$24',
     },
     feature: {
-      image: '/images/gothic/preview-headphones.png',
+      image: '/landing/hero/gothic-headphones.webp',
       title: 'Garden rose',
       price: '$18',
     },
     mini: {
-      image: '/images/gothic/preview-backpack.png',
+      image: '/landing/hero/gothic-backpack.webp',
       title: 'Ranunculus',
       description: 'Layered petals in a soft mauve.',
     },
@@ -221,18 +224,18 @@ const CONTENT_BY_THEME: Record<string, HeroThemeContent> = {
   },
   '@astryxdesign/theme-y2k': {
     product: {
-      image: '/images/y2k/preview-watch.png',
+      image: '/landing/hero/y2k-watch.webp',
       title: 'Phone',
       description: 'Iridescent clamshell with a rainbow screen.',
       price: '$18',
     },
     feature: {
-      image: '/images/y2k/preview-headphones.png',
+      image: '/landing/hero/y2k-headphones.webp',
       title: 'Glow star set',
       price: '$12',
     },
     mini: {
-      image: '/images/y2k/preview-backpack.png',
+      image: '/landing/hero/y2k-backpack.webp',
       title: 'Butterfly',
       description: 'Sparkly stick-on in pastel chrome.',
     },

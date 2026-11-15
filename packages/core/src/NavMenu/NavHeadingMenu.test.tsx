@@ -348,6 +348,28 @@ describe('NavHeadingMenuItem', () => {
 });
 
 describe('keyboard navigation', () => {
+  it('reaches a disabled row with the keys and type-ahead; the row stays inert', async () => {
+    const user = userEvent.setup();
+    const onArchive = vi.fn();
+    render(
+      <NavHeadingMenu>
+        <NavHeadingMenuItem label="Rename" />
+        <NavHeadingMenuItem label="Archive" isDisabled onClick={onArchive} />
+        <NavHeadingMenuItem label="Delete" />
+      </NavHeadingMenu>,
+    );
+    const [rename, archive, del] = screen.getAllByRole('menuitem');
+    rename.focus();
+    fireEvent.keyDown(rename, {key: 'ArrowDown'});
+    expect(archive).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(onArchive).not.toHaveBeenCalled();
+    fireEvent.keyDown(archive, {key: 'ArrowDown'});
+    expect(del).toHaveFocus();
+    fireEvent.keyDown(del, {key: 'a'});
+    expect(archive).toHaveFocus();
+  });
+
   it('keeps arrow navigation when an item handler cancels', () => {
     const onKeyDown = vi.fn((event: KeyboardEvent) => event.preventDefault());
     render(
@@ -495,7 +517,7 @@ describe('keyboard navigation', () => {
     expect(screen.getByRole('menuitem', {name: 'Paste'})).toHaveFocus();
   });
 
-  it('typeahead skips a disabled menuitem (menus-11)', () => {
+  it('typeahead reaches a disabled menuitem, which stays discoverable', () => {
     render(
       <NavHeadingMenu>
         <NavHeadingMenuItem label="Cut" />
@@ -504,14 +526,10 @@ describe('keyboard navigation', () => {
       </NavHeadingMenu>,
     );
     const menu = screen.getByRole('menu');
-    // Typing "p" must land on the enabled "Paste special", never the disabled
-    // "Paste (disabled)" — the disabled item is excluded from the typeahead
-    // selector entirely.
     fireEvent.keyDown(menu, {key: 'p'});
-    expect(screen.getByRole('menuitem', {name: 'Paste special'})).toHaveFocus();
     expect(
       screen.getByRole('menuitem', {name: 'Paste (disabled)'}),
-    ).not.toHaveFocus();
+    ).toHaveFocus();
   });
 });
 

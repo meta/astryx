@@ -9,8 +9,18 @@
  *    90  an exact match in the reading the searched sets favor (below)
  *    80  an exact match in the other reading
  *    60  one of its words starts with the query
- *    40  a partial match: the id or a word contains the query, or every
- *        word of the query starts one of the icon's words or id parts
+ *    40  a partial match: the id or a word contains the query (three
+ *        letters or more), or every word of the query starts one of the
+ *        icon's words or id parts
+ *
+ * A word matches a whole word: a word's plural or singular (`stars` for
+ * `star`) is an exact match, while a longer word that only starts with it
+ * (`start`) is a word-start match, and {@link answeringMatches} keeps
+ * word-start and partial matches only when nothing matches a whole word.
+ * A query is scored as typed first. Only when nothing answers it with a
+ * whole word are the words that only phrase it (`go`, `the`, `icon`) left
+ * out of a query of several words, so `go home` asks for `home` while
+ * `arrow up to line` still names `arrow-up-to-line`.
  *
  * An exact match is a NAME match when the query is the icon's id, or one of
  * its words that is also a part of its id (`trash` for `trash-2`); it is a
@@ -26,7 +36,8 @@
  *
  * Equal scores keep the set order first (the project's set, then load
  * order), so the project's set always leads at a score. Within one set, a
- * name match on the whole id comes before one on a part of it, and a meaning
+ * name match on the whole id (or its plural or singular) comes before one on
+ * a part of it, and a meaning
  * match whose query sits earlier among the icon's tags comes first (sets list
  * an icon's most telling tags first). Remaining ties keep id order, so the
  * same installation always answers the same way.
@@ -93,7 +104,9 @@ const squash = value => value.toLowerCase().replace(/[\s_-]+/g, '');
  * @property {boolean} meaning the query is one of the icon's tags (never
  *   both: a tag is a word that is not the id or one of its parts)
  * @property {number} rank within-tier key, lower first: for a name match 0
- *   (whole id) or 1 (an id part); for a meaning match the tag's position
+ *   (whole id), 1 (the whole id's plural or singular), 2 (an id part), or 3
+ *   (an id part's plural or singular); for a meaning match the tag's
+ *   position
  * @property {string} reason
  */
 
@@ -127,8 +140,25 @@ export function matchIcon(query, icon, definitions = []) {
       tier: 'exact',
       name: wholeId || partWord,
       meaning: !wholeId && !partWord,
-      rank: wholeId ? 0 : partWord ? 1 : tagAt,
+      rank: wholeId ? 0 : partWord ? 2 : tagAt,
       reason: wholeId ? `id "${icon.id}"` : `word "${query}"`,
+    };
+  }
+  const plural = icon.words.find(word => sameWord(word, query));
+  if (plural) {
+    const named = parts.has(plural);
+    return {
+      tier: 'exact',
+      name: named,
+      meaning: !named,
+      // The whole id's plural or singular right after the whole id, then
+      // after the word itself, wherever it sits.
+      rank: named
+        ? plural === icon.id
+          ? 1
+          : 3
+        : tags.length + tags.indexOf(plural),
+      reason: `word "${plural}"`,
     };
   }
   const prefix = icon.words.find(word => word.startsWith(query));
@@ -141,7 +171,11 @@ export function matchIcon(query, icon, definitions = []) {
       reason: `word "${prefix}" starts with "${query}"`,
     };
   }
-  const contains = [icon.id, ...icon.words].find(text => text.includes(query));
+  // A letter or two inside a word (`x` in `box`) says nothing about it.
+  const contains =
+    query.replace(/\s+/gu, '').length >= 3
+      ? [icon.id, ...icon.words].find(text => text.includes(query))
+      : undefined;
   if (contains) {
     return {
       tier: 'partial',
@@ -168,6 +202,72 @@ export function matchIcon(query, icon, definitions = []) {
     }
   }
   return null;
+}
+
+/**
+ * Whether two words are one word's singular and plural (`star`, `stars`;
+ * `box`, `boxes`), never the same word.
+ * @param {string} a
+ * @param {string} b
+ */
+function sameWord(a, b) {
+  if (a === b || /\s/u.test(a) || /\s/u.test(b)) return false;
+  const [short, long] = a.length < b.length ? [a, b] : [b, a];
+  return short.length >= 2 && (long === `${short}s` || long === `${short}es`);
+}
+
+/**
+ * Words that phrase a query without naming anything: left out of a query of
+ * several words that nothing answers as typed (`go home` asks for `home`).
+ */
+const FILLER_WORDS = new Set([
+  'a',
+  'an',
+  'the',
+  'go',
+  'to',
+  'my',
+  'of',
+  'for',
+  'icon',
+  'icons',
+]);
+
+/**
+ * A query as typed: trimmed and lower-case, one space between words.
+ * @param {string} query
+ */
+function typedQuery(query) {
+  return query.trim().toLowerCase().split(/\s+/u).filter(Boolean).join(' ');
+}
+
+/**
+ * The query without the words that only phrase it, when it has several
+ * words and some word names something; else the query as typed.
+ * @param {string} query
+ */
+export function iconQuery(query) {
+  const words = typedQuery(query).split(' ').filter(Boolean);
+  const named = words.filter(word => !FILLER_WORDS.has(word));
+  return (words.length > 1 && named.length > 0 ? named : words).join(' ');
+}
+
+/**
+ * The matches that answer a query: the whole-word ones (a definition or an
+ * exact match, 80 and up) when there are any, else word starts (60) when
+ * there are any, else partial matches. A longer word that only starts with
+ * the query (`start` for `star`) never stands beside a whole-word answer.
+ * @template {{score: number}} T
+ * @param {T[]} ranked best first
+ * @returns {T[]}
+ */
+export function answeringMatches(ranked) {
+  for (const floor of [80, 60]) {
+    if (ranked.some(each => each.score >= floor)) {
+      return ranked.filter(each => each.score >= floor);
+    }
+  }
+  return ranked;
 }
 
 /**
@@ -249,13 +349,30 @@ export function withDefinitionWords(icon, definitions, lookup) {
 }
 
 /**
- * Every icon in `sets` that answers the query, ranked (FR6).
+ * Every icon in `sets` that answers the query, ranked. The query is
+ * scored as typed; when nothing answers it with a whole word (80 and up),
+ * it is scored again without its filler words ({@link iconQuery}).
  * @param {DiscoveredIconSet[]} sets in tie order
  * @param {string} query
  * @returns {IconMatchEntry[]}
  */
 export function rankIcons(sets, query) {
-  const term = query.trim().toLowerCase();
+  const typed = typedQuery(query);
+  const asTyped = rankTerm(sets, typed);
+  if (asTyped.some(each => each.score >= 80)) return asTyped;
+  const named = iconQuery(query);
+  if (named === typed) return asTyped;
+  const withoutFiller = rankTerm(sets, named);
+  return withoutFiller.length > 0 ? withoutFiller : asTyped;
+}
+
+/**
+ * {@link rankIcons} for one normalized query.
+ * @param {DiscoveredIconSet[]} sets
+ * @param {string} term
+ * @returns {IconMatchEntry[]}
+ */
+function rankTerm(sets, term) {
   const astryx = astryxDefinitionsByName();
   /** @type {Array<{set: DiscoveredIconSet, icon: IconSetIcon, definitions: string[], match: IconMatch, setIndex: number}>} */
   const hits = [];

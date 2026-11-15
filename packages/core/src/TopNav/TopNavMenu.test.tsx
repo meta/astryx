@@ -9,6 +9,7 @@
  * SYNC: When TopNavMenu changes, update tests to match new behavior
  */
 
+import {createRef} from 'react';
 import {beforeEach, describe, it, expect, vi} from 'vitest';
 import {render, screen, fireEvent, act} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -266,6 +267,36 @@ describe('TopNavMenu — drawer focus ring', () => {
   });
 });
 
+describe('TopNavMenu — drawer actions', () => {
+  it('makes an expanded onClick-only item a keyboard-operable non-submit button', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <TopNavRenderContext value="drawer">
+        <TopNavMenu label="Help" items={[{title: 'Start tour', onClick}]} />
+      </TopNavRenderContext>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Help'});
+    expect(screen.queryByRole('button', {name: 'Start tour'})).toBeNull();
+    await user.tab();
+    expect(trigger).toHaveFocus();
+    await user.keyboard('{Enter}');
+    const action = screen.getByRole('button', {name: 'Start tour'});
+    expect(action).toHaveAttribute('type', 'button');
+    await user.tab();
+    expect(action).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(onClick).toHaveBeenCalledTimes(1);
+    await user.keyboard(' ');
+    expect(onClick).toHaveBeenCalledTimes(2);
+    await user.click(action);
+    expect(onClick).toHaveBeenCalledTimes(3);
+    await user.click(trigger);
+    expect(screen.queryByRole('button', {name: 'Start tour'})).toBeNull();
+    expect(action.closest('[inert]')).not.toBeNull();
+  });
+});
+
 describe('TopNavMenu — drawer collapsed section', () => {
   it('makes collapsed items inert and hidden from assistive technology', async () => {
     const user = userEvent.setup();
@@ -320,6 +351,22 @@ describe('TopNavMenu pass-through props', () => {
     const trigger = screen.getByRole('button', {name: /Products/});
     expect(trigger).toHaveAttribute('id', 'products-drawer');
     expect(trigger).toHaveAttribute('data-source', 'nav');
+  });
+
+  it('forwards its ref to the trigger button', () => {
+    const ref = createRef<HTMLButtonElement>();
+    render(<TopNavMenu ref={ref} label="Products" items={mockItems} />);
+    expect(ref.current).toBe(screen.getByRole('button', {name: 'Products'}));
+  });
+
+  it('forwards its ref to the drawer trigger', () => {
+    const ref = createRef<HTMLButtonElement>();
+    render(
+      <TopNavRenderContext value="drawer">
+        <TopNavMenu ref={ref} label="Products" items={mockItems} />
+      </TopNavRenderContext>,
+    );
+    expect(ref.current).toBe(screen.getByRole('button', {name: /Products/}));
   });
 
   it('keeps its own popup wiring when a caller passes the same attributes', () => {

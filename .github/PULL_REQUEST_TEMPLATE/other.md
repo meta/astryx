@@ -22,6 +22,8 @@
 
 ## Scope
 
+Components: <!-- the components and modules this PR changes, comma-separated -->
+
 - [ ] This PR has one primary intent.
 - [ ] Independently removable deltas were removed or split.
 - [ ] Public text and artifacts contain no internal Meta context.

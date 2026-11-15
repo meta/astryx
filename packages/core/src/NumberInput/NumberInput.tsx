@@ -4,13 +4,15 @@
 
 /**
  * @file NumberInput.tsx
- * @input Uses React, useId, useState, useMemo, useCallback, Field, Icon, InputGroupContext
- * @output Exports NumberInput component, NumberInputProps
+ * @input Uses React, useId, useState, useMemo, useCallback, useEffect, Field, Icon, InputGroupContext
+ * @output Exports NumberInput component, NumberInputProps, NumberInputEntryError, EntryErrorBehavior; optional steppers are hidden on coarse pointers, and a held one repeats into the draft
  * @position Core implementation; consumed by index.ts, tested by NumberInput.test.tsx
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/NumberInput/numberParser.ts (locale-aware parsing)
  * - /packages/core/src/NumberInput/numberInputCommit.ts (draft commit policy)
+ * - /packages/core/src/Field/useEntryErrorReport.ts (rejection status, alert, and report)
+ * - /packages/core/src/Field/useValueReplacesEntry.ts (when a new value replaces a kept draft)
  * - /packages/core/src/NumberInput/NumberInput.doc.mjs (props table, features, implementation notes)
  * - /packages/core/src/NumberInput/NumberInput.test.tsx (tests for new/changed behavior)
  * - /packages/core/src/NumberInput/index.ts (exports if types change)
@@ -24,11 +26,15 @@ import {
   useState,
   useMemo,
   useCallback,
+  useEffect,
   useRef,
   type FocusEvent,
   type KeyboardEvent,
+  type MouseEvent,
+  type PointerEvent,
   type ReactNode,
 } from 'react';
+import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
@@ -46,15 +52,16 @@ import {
   inputStatusBorderStyles,
   inputStatusHoverShadowStyles,
   inputStatusFocusWithinStyles,
-  type FieldStatusVariant,
 } from '../Field';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {useTooltip} from '../Tooltip';
 import {getInputARIA} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
+import {lockSelection, locksSelectionFor} from '../utils/selectionLock';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useSize} from '../SizeContext/SizeContext';
 import {useInputContainer} from '../hooks/useInputContainer';
@@ -100,7 +107,10 @@ const styles = stylex.create({
     paddingInlineEnd: padInlineEnd,
   },
   wrapperWithNumberSteppers: {
-    paddingInlineEnd: 0,
+    paddingInlineEnd: {
+      default: 0,
+      '@media (pointer: coarse)': padInlineEnd,
+    },
   },
   input: {
     display: 'block',
@@ -142,7 +152,12 @@ const styles = stylex.create({
   },
   numberSteppers: {
     alignSelf: 'stretch',
-    display: 'flex',
+    // These compact buttons are a fine-pointer affordance. Touch users can
+    // enter a value directly; keyboard stepping remains available.
+    display: {
+      default: 'flex',
+      '@media (pointer: coarse)': 'none',
+    },
     flexDirection: 'column',
     flexShrink: 0,
     width: spacingVars['--spacing-4'],
@@ -215,6 +230,8 @@ export type {
   InputStatus as NumberInputStatus,
   InputStatusType as NumberInputStatusType,
 } from '../Field';
+export type {EntryErrorBehavior} from '../FormLayout/FormLayoutContext';
+import type {EntryErrorBehavior} from '../FormLayout/FormLayoutContext';
 import {isImeKeyEvent, mergeProps, mergeRefs} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {
@@ -223,9 +240,57 @@ import {
 } from '../Field/fieldParts';
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator, useLocale} from '../i18n';
+import {useLocale} from '../i18n';
 import {formatEditableNumber} from './numberParser';
-import {parseNumberInput, resolveNumberInputCommit} from './numberInputCommit';
+import {
+  getNumberInputRejection,
+  type NumberInputRejection,
+  parseNumberInput,
+  resolveNumberInputCommit,
+} from './numberInputCommit';
+import {
+  isSameEntryError,
+  useEntryErrorReport,
+} from '../Field/useEntryErrorReport';
+import {useValueReplacesEntry} from '../Field/useValueReplacesEntry';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/NumberInput/NumberInput.generated';
+
+registerEnglishFallback(english);
+
+/**
+ * Why a NumberInput rejects the text that a person typed. The field reports
+ * it through `onEntryErrorChange`, so the app can word its own message.
+ */
+export interface NumberInputEntryError {
+  /**
+   * The reason, independent of the locale:
+   * - `'unreadable'`: text that is not a number
+   * - `'fractional'`: a number with a fraction in an `isIntegerOnly` field
+   * - `'outOfRange'`: any number while `min` is above `max`, so no number fits
+   */
+  kind: 'unreadable' | 'fractional' | 'outOfRange';
+  /** The typed text. */
+  text: string;
+  /** The number that the text names. It is set for `fractional` and `outOfRange`. */
+  value?: number;
+}
+
+function toEntryError(
+  text: string,
+  rejection: NumberInputRejection | null,
+): NumberInputEntryError | null {
+  if (rejection == null) {
+    return null;
+  }
+  return rejection.kind === 'unreadable'
+    ? {kind: 'unreadable', text}
+    : {kind: rejection.kind, text, value: rejection.value};
+}
 
 interface NumberInputPropsBase extends Omit<
   FieldInputBaseProps,
@@ -306,8 +371,63 @@ interface NumberInputPropsBase extends Omit<
    * Status indicator for the input.
    * When set, displays a colored border and status icon.
    * If message is provided, displays a floating message box below the input.
+   *
+   * When Enter or blur keeps typed text that cannot commit, the field shows
+   * its own error message in place of `status`. An `error` status with a
+   * message shows instead of the field's message. A `warning` or `success`
+   * status, or an `error` status without a message, never replaces it.
    */
   status?: InputStatus;
+  /**
+   * Called each time the field's rejection of typed text changes, with `null`
+   * when the rejection ends. A typed number is complete only at commit, so a
+   * rejection starts only at Enter or blur, never while a person types.
+   * `kind` is `'unreadable'` (text that is not a number), `'fractional'` (a
+   * fraction in an `isIntegerOnly` field), or `'outOfRange'` (any number
+   * while `min` is above `max`). `text` is the typed text, and `value` is the
+   * number it names, for `'fractional'` and `'outOfRange'`. A number outside
+   * an ordinary range clamps at commit, so it is not a rejection.
+   *
+   * It also runs when an edit makes the text valid or empty, when a new
+   * `value`, `min`, `max`, or `isIntegerOnly` changes or ends the rejection,
+   * and when disabling the field drops the text, and never twice for the same
+   * rejection. It reports `null` when the field unmounts while a rejection
+   * stands. Passing it lets an `error` `status` word the rejection.
+   *
+   * @example
+   * ```
+   * const [entryError, setEntryError] = useState<NumberInputEntryError | null>(null);
+   * <NumberInput
+   *   label="Seats"
+   *   value={seats}
+   *   onChange={setSeats}
+   *   isIntegerOnly
+   *   onEntryErrorChange={setEntryError}
+   *   status={
+   *     entryError?.kind === 'fractional'
+   *       ? {type: 'error', message: 'Enter a whole number of seats'}
+   *       : undefined
+   *   }
+   * />
+   * ```
+   */
+  onEntryErrorChange?: (error: NumberInputEntryError | null) => void;
+  /**
+   * When the field shows its own entry error: typed text that it rejects,
+   * which `onEntryErrorChange` reports. It sets when the error shows, not when
+   * validation runs, so it is not React Aria's `validationBehavior` (native
+   * versus ARIA validation). It does not change a caller's `status`.
+   *
+   * A typed number is complete only at Enter or blur, so both values behave
+   * the same: `'complete'` and `'blur-or-enter'` show the message,
+   * `aria-invalid`, the invalid styling, the announcement, and the
+   * `onEntryErrorChange` report together at Enter or blur, never while a
+   * person types. An edit that makes the text valid or empty clears the error
+   * at once.
+   *
+   * @default the nearest FormLayout's `defaultEntryErrorBehavior`, else `'complete'`
+   */
+  entryErrorBehavior?: EntryErrorBehavior;
   /**
    * How the status message is placed relative to the input.
    * - 'attached': message overlaps directly below the input (bordered treatment)
@@ -315,7 +435,7 @@ interface NumberInputPropsBase extends Omit<
    * - 'tooltip': no message box; the status icon becomes a focusable info-tip button that reveals the message on hover, keyboard focus, or tap
    * @default 'attached'
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
   /**
    * The size of the input.
    * - 'sm': Compact size (28px height)
@@ -385,6 +505,10 @@ interface NumberInputPropsBase extends Omit<
   isWheelEnabled?: boolean;
   /**
    * Whether to show increment and decrement buttons at the end of the input.
+   * The buttons are hidden on coarse pointers (such as touch screens).
+   * Holding a button with a mouse or a pen repeats the step and commits once,
+   * when the hold ends.
+   * Direct text entry and keyboard stepping remain available.
    * @default false
    */
   hasNumberSteppers?: boolean;
@@ -440,6 +564,32 @@ export type NumberInputProps =
   NumberInputPropsNonClearable | NumberInputPropsClearable;
 
 type StepDirection = -1 | 1;
+
+/**
+ * A held stepper's timing: the first repeat comes `delayMs` after the press.
+ * Each later interval is `acceleration` times the one before, from
+ * `firstIntervalMs` down to `minIntervalMs`.
+ */
+const STEPPER_HOLD = {
+  delayMs: 500,
+  firstIntervalMs: 250,
+  acceleration: 0.9,
+  minIntervalMs: 50,
+} as const;
+
+/**
+ * A held stepper press: its pointer, its next repeat, the value its repeats
+ * reached, whether the field stopped taking them, and the release of its
+ * selection lock.
+ */
+type StepperHold = {
+  pointerId: number;
+  timer: ReturnType<typeof setTimeout> | null;
+  held: number | null;
+  intervalMs: number;
+  isFrozen: boolean;
+  unlockSelection: (() => void) | null;
+};
 
 function getDecimalPlaces(value: number): number {
   const [coefficient, exponentText] = String(value).toLowerCase().split('e');
@@ -546,6 +696,10 @@ export function NumberInput({
   startIcon,
   labelIcon,
   status,
+  onEntryErrorChange,
+  // Both values show a typed number's rejection only at Enter or blur. The
+  // field reads neither the prop nor a form default.
+  entryErrorBehavior: _entryErrorBehavior,
   statusVariant = 'attached',
   size: sizeProp,
   onChange,
@@ -587,7 +741,7 @@ export function NumberInput({
     containerStyle,
   });
   const pressable = usePressFeedback();
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const locale = useLocale();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const size = useSize(sizeProp, 'md');
@@ -606,7 +760,81 @@ export function NumberInput({
 
   // Pending input while user is typing (null = show formatted value)
   const [pendingInput, setPendingInput] = useState<string | null>(null);
+  // The value a held stepper's repeats reached, shown until the hold ends.
+  const [holdDraft, setHoldDraft] = useState<number | null>(null);
+  // A field that turns disabled or read-only drops the held value during
+  // render, so no commit shows a value that the release does not commit.
+  if (holdDraft !== null && (isDisabled || isReadOnly)) {
+    setHoldDraft(null);
+  }
   const [isFocused, setIsFocused] = useState(false);
+
+  // A number has no fixed length, so only Enter or blur shows a rejection.
+  const [shownRejection, setShownRejection] =
+    useState<NumberInputEntryError | null>(null);
+  // While blur keeps a rejected draft, a hidden input posts the committed
+  // number, so the form value does not change.
+  const [isDraftKeptAtBlur, setIsDraftKeptAtBlur] = useState(false);
+  const rejectionRules = useMemo(
+    () => ({min, max, isIntegerOnly, locale}),
+    [isIntegerOnly, locale, max, min],
+  );
+  // A field that turns disabled drops its draft during render, so no
+  // rejection shows or returns once it is editable again.
+  if (
+    isDisabled &&
+    (pendingInput !== null || shownRejection !== null || isDraftKeptAtBlur)
+  ) {
+    setPendingInput(null);
+    setShownRejection(null);
+    setIsDraftKeptAtBlur(false);
+  }
+  // A new value replaces a rejected or blur-kept draft. Each Enter or blur
+  // that keeps a draft sets a new rejection, so a value that arrives with it
+  // keeps the draft.
+  const isValueReplacing = useValueReplacesEntry(value, shownRejection);
+  let isDraftReplaced = false;
+  if (isValueReplacing && (shownRejection !== null || isDraftKeptAtBlur)) {
+    setPendingInput(null);
+    setShownRejection(null);
+    setIsDraftKeptAtBlur(false);
+    isDraftReplaced = true;
+  }
+  // New rules judge a rejected draft again, unless a new value replaced it in
+  // the same update.
+  const [judgedRules, setJudgedRules] = useState(rejectionRules);
+  if (judgedRules !== rejectionRules) {
+    setJudgedRules(rejectionRules);
+    if (!isDraftReplaced && shownRejection !== null && pendingInput !== null) {
+      const rejection = toEntryError(
+        pendingInput,
+        getNumberInputRejection(pendingInput, rejectionRules),
+      );
+      if (!isSameEntryError(rejection, shownRejection)) {
+        setShownRejection(rejection);
+      }
+    }
+  }
+  const entryError = isDisabled ? null : shownRejection;
+
+  // A held stepper shows a value on the grid, so it shows no rejection.
+  const shownEntryError = holdDraft === null ? entryError : null;
+  const invalidNumberMessage = t('@astryx.numberInput.invalidNumber');
+  const {fieldStatus, alertMessage, reportEntryError} = useEntryErrorReport({
+    entryError,
+    rejectionMessage: shownEntryError != null ? invalidNumberMessage : null,
+    status,
+    isStatusAnnounced: !inputGroup,
+    callerErrorPrecedence: 'always',
+    onEntryErrorChange,
+  });
+
+  const endDraft = useCallback(() => {
+    setPendingInput(null);
+    setShownRejection(null);
+    setIsDraftKeptAtBlur(false);
+    reportEntryError(null);
+  }, [reportEntryError]);
 
   // Disabled-reason tooltip. The tooltip listeners attach to the input container (which already exists) and
   // the input stays perceivable via aria-disabled instead of the native
@@ -615,13 +843,7 @@ export function NumberInput({
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   // A disabled field keeps its tab stop but, like a natively disabled one,
   // runs no caller event handler other than focus and blur (`spec:AST-085` FR2).
-  const fieldProps = isDisabled
-    ? Object.fromEntries(
-        Object.entries(rest).filter(
-          ([key]) => !/^on[A-Z]/.test(key) || /^on(Focus|Blur)/.test(key),
-        ),
-      )
-    : rest;
+  const fieldProps = withholdCallerHandlers(rest, isDisabled);
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
     // The container div is not naturally focusable; focusin bubbles up from
@@ -632,7 +854,7 @@ export function NumberInput({
 
   const {statusIcon, describedBy: statusTooltipDescribedBy} =
     useInputStatusIcon({
-      status,
+      status: fieldStatus,
       statusVariant,
       isInGroup: !!inputGroup,
     });
@@ -643,7 +865,7 @@ export function NumberInput({
       description ? descriptionID : null,
       // The status message element is rendered by Field, which is skipped
       // inside an InputGroup — only reference it when it actually exists.
-      !inputGroup && statusVariant !== 'tooltip' && status?.message
+      !inputGroup && statusVariant !== 'tooltip' && fieldStatus?.message
         ? statusMessageID
         : null,
       // The tooltip variant renders no message box; describe the input by the
@@ -676,6 +898,9 @@ export function NumberInput({
   // Preserve pending text while editing. Otherwise show the formatted value
   // at rest and the raw numeric value while focused so it remains editable.
   const displayValue = useMemo(() => {
+    if (holdDraft !== null) {
+      return formatEditableNumber(holdDraft, locale);
+    }
     if (pendingInput !== null) {
       return pendingInput;
     }
@@ -683,15 +908,17 @@ export function NumberInput({
       return '';
     }
     return isFocused ? formatEditableNumber(value, locale) : formattedValue;
-  }, [formattedValue, isFocused, locale, pendingInput, value]);
+  }, [formattedValue, holdDraft, isFocused, locale, pendingInput, value]);
 
-  // Check if current pending input is valid (for styling purposes)
-  const isInputValid = useMemo(() => {
-    if (pendingInput === null || !pendingInput.trim()) {
-      return true;
-    }
-    return parseInput(pendingInput) !== null;
-  }, [pendingInput, parseInput]);
+  // The form value is the committed number as the field shows it with no
+  // draft: raw with `formatValue`, otherwise the plain number at rest and the
+  // locale-formatted number while focused.
+  const hiddenFormValue =
+    value == null
+      ? ''
+      : !formatValue && isFocused
+        ? formatEditableNumber(value, locale)
+        : String(value);
 
   // Keep the whole text edit as a draft until an explicit commit boundary.
   const handleInputChange = useCallback(
@@ -702,18 +929,51 @@ export function NumberInput({
       if (isDisabled || isReadOnly) {
         return;
       }
-      setPendingInput(e.target.value);
+      const text = e.target.value;
+      setPendingInput(text);
+      setIsDraftKeptAtBlur(false);
+      // A shown rejection stays while the draft stays wrong, and ends once
+      // the draft is valid or empty.
+      if (
+        shownRejection !== null &&
+        getNumberInputRejection(text, rejectionRules) === null
+      ) {
+        setShownRejection(null);
+        reportEntryError(null);
+      }
     },
-    [isDisabled, isReadOnly],
+    [isDisabled, isReadOnly, rejectionRules, reportEntryError, shownRejection],
   );
 
   // Handle focus
+  // Tab into the field selects its text so typing replaces it. With
+  // `formatValue` the text at rest differs from the editable text, and putting
+  // the editable text in the input after focus collapses that selection to the
+  // end, so typing would append. When focus arrives with the text selected,
+  // the focus handler commits the swap and selects the swapped-in text itself:
+  // the work one event causes stays in its handler
+  // (architecture:react-component-runtime/INV2).
   const handleFocus = useCallback(
     (e: FocusEvent<HTMLInputElement>) => {
+      const input = e.currentTarget;
+      const editableText =
+        pendingInput ??
+        (value == null ? '' : formatEditableNumber(value, locale));
+      const shouldReselect =
+        input.value.length > 0 &&
+        input.value !== editableText &&
+        input.selectionStart === 0 &&
+        input.selectionEnd === input.value.length;
       setIsFocused(true);
       onFocus?.(e);
+      if (shouldReselect) {
+        // Commit the swap now, so the editable text is in the input to select.
+        // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the editable text must be in the input before the focus event selects it
+        flushSync(() => {});
+        input.setSelectionRange(0, input.value.length);
+      }
     },
-    [onFocus],
+    [onFocus, pendingInput, value, locale],
   );
 
   const commitPendingInput = useCallback(
@@ -724,15 +984,29 @@ export function NumberInput({
       if (isDisabled) {
         // A field disabled mid-entry commits nothing; its draft is dropped, as
         // a natively disabled field's was (spec:AST-085 FR2).
-        setPendingInput(null);
+        endDraft();
         return;
       }
 
+      // A draft that cannot commit stays in the field with its rejection.
+      const rejection = toEntryError(
+        pendingInput,
+        getNumberInputRejection(pendingInput, rejectionRules),
+      );
+      if (rejection != null) {
+        setShownRejection(rejection);
+        reportEntryError(rejection);
+        if (trigger === 'blur') {
+          setIsDraftKeptAtBlur(true);
+        }
+        return;
+      }
+      setShownRejection(null);
+      setIsDraftKeptAtBlur(false);
+      reportEntryError(null);
+
       const decision = resolveNumberInputCommit(pendingInput, {
-        min,
-        max,
-        isIntegerOnly,
-        locale,
+        ...rejectionRules,
         hasClear: !!hasClear,
       });
       if (
@@ -751,14 +1025,13 @@ export function NumberInput({
       }
     },
     [
+      endDraft,
       hasClear,
       isDisabled,
-      isIntegerOnly,
-      locale,
-      max,
-      min,
       onChange,
       pendingInput,
+      rejectionRules,
+      reportEntryError,
       value,
     ],
   );
@@ -807,13 +1080,174 @@ export function NumberInput({
       if (nextValue == null) {
         return;
       }
-      setPendingInput(null);
+      endDraft();
       if (nextValue !== value) {
         onChange(nextValue);
       }
     },
-    [getNextValue, isDisabled, isReadOnly, onChange, value],
+    [endDraft, getNextValue, isDisabled, isReadOnly, onChange, value],
   );
+
+  // A held stepper repeats into its own draft and commits once, when the hold
+  // ends.
+  const stepperHoldRef = useRef<StepperHold | null>(null);
+  const isClickAfterHoldRef = useRef(false);
+  // The pointer of a repeated hold that another press cancelled. Its own
+  // release still swallows the click that follows.
+  const cancelledHoldPointerRef = useRef<number | null>(null);
+
+  // Ends a hold with no commit, and drops the draft its repeats wrote.
+  const cancelStepperHold = useCallback(() => {
+    const hold = stepperHoldRef.current;
+    if (hold == null) {
+      return;
+    }
+    stepperHoldRef.current = null;
+    cancelledHoldPointerRef.current = hold.held != null ? hold.pointerId : null;
+    if (hold.timer != null) {
+      clearTimeout(hold.timer);
+    }
+    hold.unlockSelection?.();
+    setHoldDraft(null);
+  }, []);
+
+  // Syncs the held stepper's repeat timer with the field's editability: a
+  // field that turns disabled or read-only stops the repeats, and the release
+  // commits nothing.
+  useEffect(() => {
+    const hold = stepperHoldRef.current;
+    if (hold == null || !(isDisabled || isReadOnly)) {
+      return;
+    }
+    hold.isFrozen = true;
+    if (hold.timer != null) {
+      clearTimeout(hold.timer);
+      hold.timer = null;
+    }
+  }, [isDisabled, isReadOnly]);
+
+  // The stepper column's removal or unmount ends the hold with no commit, as
+  // its buttons can no longer hear the release.
+  const stepperColumnRef = useCallback(
+    () => () => {
+      cancelStepperHold();
+    },
+    [cancelStepperHold],
+  );
+
+  const startStepperHold = (
+    direction: StepDirection,
+    canStep: boolean,
+    event: PointerEvent<HTMLButtonElement>,
+  ) => {
+    isClickAfterHoldRef.current = false;
+    if (cancelledHoldPointerRef.current === event.pointerId) {
+      cancelledHoldPointerRef.current = null;
+    }
+    // Any new press ends a running hold, whichever pointer made it.
+    cancelStepperHold();
+    // Steppers render only under a non-coarse primary pointer, so a hold is a
+    // mouse or pen press. A finger keeps the single step of its click.
+    if (
+      event.button !== 0 ||
+      event.pointerType === 'touch' ||
+      !canStep ||
+      isDisabled ||
+      isReadOnly
+    ) {
+      return;
+    }
+    const first = getNextValue(direction);
+    if (first == null) {
+      return;
+    }
+    // The release ends the hold wherever the pointer is by then.
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const grid = {direction, min, max, step, isIntegerOnly};
+    const hold: StepperHold = {
+      pointerId: event.pointerId,
+      timer: null,
+      held: null,
+      intervalMs: STEPPER_HOLD.firstIntervalMs,
+      isFrozen: false,
+      // A pen's hold starts no text selection or callout.
+      unlockSelection: locksSelectionFor(event.pointerType)
+        ? lockSelection([event.currentTarget], event.target)
+        : null,
+    };
+    const repeat = () => {
+      const next =
+        hold.held == null
+          ? first
+          : getSteppedValue({currentValue: hold.held, ...grid});
+      // At a bound the repeats stop, and the release still commits.
+      if (next == null || next === hold.held) {
+        hold.timer = null;
+        return;
+      }
+      hold.held = next;
+      setHoldDraft(next);
+      hold.timer = setTimeout(repeat, hold.intervalMs);
+      hold.intervalMs = Math.max(
+        STEPPER_HOLD.minIntervalMs,
+        hold.intervalMs * STEPPER_HOLD.acceleration,
+      );
+    };
+    hold.timer = setTimeout(repeat, STEPPER_HOLD.delayMs);
+    stepperHoldRef.current = hold;
+  };
+
+  const handleStepperContextMenu = (event: MouseEvent<HTMLButtonElement>) => {
+    const hold = stepperHoldRef.current;
+    if (hold == null) {
+      return;
+    }
+    // A pen's hold opens no callout menu. A mouse's context request, such as
+    // a Control-click, ends its hold with no commit and opens the menu.
+    if (hold.unlockSelection != null) {
+      event.preventDefault();
+      return;
+    }
+    cancelStepperHold();
+    // A click that follows the menu steps nothing, as after any ended hold.
+    cancelledHoldPointerRef.current = hold.pointerId;
+    isClickAfterHoldRef.current = true;
+  };
+
+  const endStepperHold = (end: 'release' | 'cancel', pointerId: number) => {
+    const hold = stepperHoldRef.current;
+    // Only the pointer that holds can end the hold.
+    if (hold == null || hold.pointerId !== pointerId) {
+      if (cancelledHoldPointerRef.current === pointerId) {
+        cancelledHoldPointerRef.current = null;
+        // Only arm the swallow here: a lost capture must not clear it.
+        if (end === 'release') {
+          isClickAfterHoldRef.current = true;
+        }
+      }
+      return;
+    }
+    stepperHoldRef.current = null;
+    if (hold.timer != null) {
+      clearTimeout(hold.timer);
+    }
+    hold.unlockSelection?.();
+    // A press released before its first repeat is a click, and its click
+    // steps.
+    if (hold.held == null) {
+      return;
+    }
+    isClickAfterHoldRef.current = end === 'release';
+    setHoldDraft(null);
+    // A frozen hold commits nothing, so a typed draft under it stays.
+    if (hold.isFrozen || isDisabled || isReadOnly) {
+      return;
+    }
+    endDraft();
+    if (hold.held !== value) {
+      onChange(hold.held);
+    }
+  };
 
   // Handle keyboard events
   const handleKeyDown = useCallback(
@@ -892,8 +1326,15 @@ export function NumberInput({
     [ref, wheelListenerRef],
   );
 
-  const canIncrement = getNextValue(1) !== valueForStepping;
-  const canDecrement = getNextValue(-1) !== valueForStepping;
+  // While a hold runs, the steppers follow the value that it shows.
+  const {canIncrement, canDecrement} = useMemo(() => {
+    const base = holdDraft ?? valueForStepping;
+    const grid = {currentValue: base, min, max, step, isIntegerOnly};
+    return {
+      canIncrement: getSteppedValue({...grid, direction: 1}) !== base,
+      canDecrement: getSteppedValue({...grid, direction: -1}) !== base,
+    };
+  }, [holdDraft, isIntegerOnly, max, min, step, valueForStepping]);
 
   // Handle clear button click
   const handleClear = useCallback(
@@ -901,7 +1342,7 @@ export function NumberInput({
       if (hasClear) {
         onChange(null);
       }
-      setPendingInput(null);
+      endDraft();
       if (!e || e.detail === 0) {
         inputRef.current?.focus();
       } else {
@@ -913,7 +1354,7 @@ export function NumberInput({
         inputRef.current?.focus({preventScroll: true});
       }
     },
-    [hasClear, onChange],
+    [endDraft, hasClear, onChange],
   );
 
   // Focus input when clicking anywhere on the wrapper (icons, padding, etc.)
@@ -939,20 +1380,23 @@ export function NumberInput({
       {...mergeProps(
         themeProps('number-input', {
           size,
-          status: status?.type ?? null,
+          status: fieldStatus?.type ?? null,
           disabled: isDisabled ? 'disabled' : null,
           readonly: isReadOnly ? 'readonly' : null,
         }),
         stylex.props(
           inputWrapperStyles.base,
+          inputWrapperStyles.textField,
           styles.wrapper,
           hasNumberSteppers && styles.wrapperWithNumberSteppers,
           sizeStyles[size],
           isDisabled && inputWrapperStyles.disabled,
           isDisabled && inputDisabledFocusStyles.ring,
-          status && inputStatusBorderStyles[status.type],
-          status && !isDisabled && inputStatusHoverShadowStyles[status.type],
-          status && inputStatusFocusWithinStyles[status.type],
+          fieldStatus && inputStatusBorderStyles[fieldStatus.type],
+          fieldStatus &&
+            !isDisabled &&
+            inputStatusHoverShadowStyles[fieldStatus.type],
+          fieldStatus && inputStatusFocusWithinStyles[fieldStatus.type],
           inputGroup && groupStyles.inGroup,
           controlXstyle,
         ),
@@ -965,7 +1409,9 @@ export function NumberInput({
         {...fieldProps}
         ref={mergedInputRef}
         id={id}
-        name={isDisabled || formatValue ? undefined : htmlName}
+        name={
+          isDisabled || formatValue || isDraftKeptAtBlur ? undefined : htmlName
+        }
         type="text"
         inputMode={isIntegerOnly ? 'numeric' : 'decimal'}
         role="spinbutton"
@@ -997,21 +1443,19 @@ export function NumberInput({
         }
         aria-required={isEffectivelyRequired ? 'true' : undefined}
         aria-invalid={
-          status?.type === 'error' || !isInputValid ? 'true' : undefined
+          fieldStatus?.type === 'error' || shownEntryError != null
+            ? 'true'
+            : undefined
         }
         aria-labelledby={inputLabelledBy}
         {...stylex.props(
           styles.input,
           isDisabled && styles.inputDisabled,
-          !isInputValid && styles.inputInvalid,
+          shownEntryError != null && styles.inputInvalid,
         )}
       />
-      {formatValue && htmlName && !isDisabled && (
-        <input
-          type="hidden"
-          name={htmlName}
-          value={value == null ? '' : String(value)}
-        />
+      {htmlName && !isDisabled && (formatValue || isDraftKeptAtBlur) && (
+        <input type="hidden" name={htmlName} value={hiddenFormValue} />
       )}
       {units && (
         <span id={unitsID} {...stylex.props(styles.units)}>
@@ -1019,12 +1463,11 @@ export function NumberInput({
         </span>
       )}
       {/*
-        Live region announcing invalid typed input to assistive technology.
-        The value silently reverts on blur, so without this a screen-reader
-        user would get no feedback that their entry was rejected (WCAG 3.3.1).
+        Announces the rejection message that the field status does not
+        announce. The field status announces the rest.
       */}
       <VisuallyHidden as="div" role="alert" aria-live="assertive">
-        {!isInputValid ? t('@astryx.numberInput.invalidNumber') : ''}
+        {alertMessage}
       </VisuallyHidden>
       {hasClear && value != null && !isDisabled && !isReadOnly && (
         <InputClearButton
@@ -1034,7 +1477,7 @@ export function NumberInput({
       )}
       {statusIcon}
       {hasNumberSteppers && (
-        <div {...stylex.props(styles.numberSteppers)}>
+        <div ref={stepperColumnRef} {...stylex.props(styles.numberSteppers)}>
           <button
             type="button"
             tabIndex={-1}
@@ -1043,8 +1486,25 @@ export function NumberInput({
               isDisabled || isReadOnly || !canIncrement || undefined
             }
             aria-label={t('@astryx.numberInput.incrementLabel', {label})}
-            onPointerDown={event => event.preventDefault()}
-            onClick={() => {
+            onPointerDown={event => {
+              event.preventDefault();
+              startStepperHold(1, canIncrement, event);
+            }}
+            onContextMenu={handleStepperContextMenu}
+            onPointerUp={event => endStepperHold('release', event.pointerId)}
+            onPointerCancel={event => endStepperHold('cancel', event.pointerId)}
+            onLostPointerCapture={event =>
+              endStepperHold('cancel', event.pointerId)
+            }
+            onClick={event => {
+              const isAfterHold = isClickAfterHoldRef.current;
+              isClickAfterHoldRef.current = false;
+              // A pointer's click after a held press's release steps nothing.
+              // A click with no pointer, such as a screen reader's, steps.
+              if (isAfterHold && event.detail > 0) {
+                inputRef.current?.focus();
+                return;
+              }
               // An aria-disabled stepper does nothing, as a natively disabled
               // one did (spec:AST-085 FR2).
               if (isDisabled || isReadOnly || !canIncrement) {
@@ -1074,8 +1534,25 @@ export function NumberInput({
               isDisabled || isReadOnly || !canDecrement || undefined
             }
             aria-label={t('@astryx.numberInput.decrementLabel', {label})}
-            onPointerDown={event => event.preventDefault()}
-            onClick={() => {
+            onPointerDown={event => {
+              event.preventDefault();
+              startStepperHold(-1, canDecrement, event);
+            }}
+            onContextMenu={handleStepperContextMenu}
+            onPointerUp={event => endStepperHold('release', event.pointerId)}
+            onPointerCancel={event => endStepperHold('cancel', event.pointerId)}
+            onLostPointerCapture={event =>
+              endStepperHold('cancel', event.pointerId)
+            }
+            onClick={event => {
+              const isAfterHold = isClickAfterHoldRef.current;
+              isClickAfterHoldRef.current = false;
+              // A pointer's click after a held press's release steps nothing.
+              // A click with no pointer, such as a screen reader's, steps.
+              if (isAfterHold && event.detail > 0) {
+                inputRef.current?.focus();
+                return;
+              }
               // An aria-disabled stepper does nothing, as a natively disabled
               // one did (spec:AST-085 FR2).
               if (isDisabled || isReadOnly || !canDecrement) {
@@ -1122,11 +1599,11 @@ export function NumberInput({
       isDisabled={isDisabled}
       labelIcon={labelIcon}
       status={
-        status
+        fieldStatus
           ? {
-              type: status.type,
-              message: status.message,
-              messageID: status.message ? statusMessageID : undefined,
+              type: fieldStatus.type,
+              message: fieldStatus.message,
+              messageID: fieldStatus.message ? statusMessageID : undefined,
             }
           : undefined
       }

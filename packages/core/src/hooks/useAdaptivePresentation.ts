@@ -4,13 +4,18 @@
 
 /**
  * @file useAdaptivePresentation.ts
- * @input Uses React's external-store subscription over window.matchMedia
- *   and the touch presentation's compact-touch query
+ * @input Uses React's external-store subscription over matchesMediaQuery
+ *   and watchMediaQuery (utils/coarsePointer.ts) and the touch
+ *   presentation's compact-touch query
  * @output Resolves popover/bottom-sheet presentation policy
- * @position Internal overlay policy shared across component families
+ * @position Internal overlay policy shared across component families. A
+ *   component that also switches input modes under a finger resolves its
+ *   `presentation` with usePresentation (utils/presentation.ts), whose
+ *   surface is this one's
  */
 
 import {useCallback, useSyncExternalStore} from 'react';
+import {matchesMediaQuery, watchMediaQuery} from '../utils/coarsePointer';
 import {
   COMPACT_TOUCH_QUERY,
   useCompactDefinition,
@@ -45,18 +50,14 @@ export function useAdaptivePresentation(
   const isAdaptive = presentation === 'adaptive';
   const query = useCompactDefinition().coarsePointerQuery;
   const subscribe = useCallback(
-    (onStoreChange: () => void) => {
-      if (!isAdaptive) {
-        return noSubscription();
-      }
-      const mql = window.matchMedia(query);
-      mql.addEventListener('change', onStoreChange);
-      return () => mql.removeEventListener('change', onStoreChange);
-    },
+    (onStoreChange: () => void) =>
+      isAdaptive
+        ? watchMediaQuery(window, query, onStoreChange)
+        : noSubscription(),
     [isAdaptive, query],
   );
   const getSnapshot = useCallback(
-    () => (isAdaptive ? window.matchMedia(query).matches : false),
+    () => isAdaptive && matchesMediaQuery(window, query),
     [isAdaptive, query],
   );
   const isCompactTouch = useSyncExternalStore(

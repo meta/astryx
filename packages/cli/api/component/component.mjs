@@ -16,6 +16,7 @@ import {
   docPackageManager,
   runWithDocPackageManager,
 } from '../../foundation/env/package-manager.mjs';
+import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {AstryxError} from '../error.mjs';
 import {
@@ -30,6 +31,8 @@ import {
   legacyExternalKeeps,
   resolveCoreSourcePath,
   resolveUnscopedDoc,
+  withExampleBlockPointer,
+  withOtherCommandHint,
   loadComponentDoc,
   scopeSubComponent,
   ComponentAmbiguityError,
@@ -265,13 +268,16 @@ export async function component(name, options = {}) {
   const cwd = options.cwd ?? process.cwd();
   // Every read resolves the links in the doc text it returns (spec:AST-047
   // FR9); a batch's results are each a read of their own. Doc tokens render
-  // for the project in `cwd`.
-  return runWithDocPackageManager(
-    docPackageManager(cwd),
-    async () =>
-      /** @type {any} */ (
-        await linkComponentResponse(await componentRead(name, options), cwd)
-      ),
+  // for the project in `cwd`. A call's lookups walk the same source tree, so
+  // the call reads each directory once.
+  return withListingCache(() =>
+    runWithDocPackageManager(
+      docPackageManager(cwd),
+      async () =>
+        /** @type {any} */ (
+          await linkComponentResponse(await componentRead(name, options), cwd)
+        ),
+    ),
   );
 }
 
@@ -619,7 +625,25 @@ async function componentRead(name, options = {}) {
     });
   }
 
-  const resolved = await resolveUnscopedDoc(dirName, {coreDir, cwd, name});
+  const resolved = await resolveUnscopedDoc(dirName, {
+    coreDir,
+    cwd,
+    name,
+    loadedIntegrations,
+  }).catch(async error => {
+    const pointed = await withExampleBlockPointer(error, dirName, {
+      coreDir,
+      cwd,
+    });
+    // A block's pointer already names `astryx template`.
+    throw pointed === error
+      ? await withOtherCommandHint(error, dirName, {
+          coreDir,
+          cwd,
+          loadedIntegrations,
+        })
+      : pointed;
+  });
   const docs = await loadComponentDoc(resolved.readmePath, docOpts);
 
   // ── Blocks mode ──────────────────────────────────────────────

@@ -7,9 +7,7 @@
  * @output Exports useEntryAnimation hook for mount-only entry animations
  * @position Hook utility; consumed by FieldStatus and available to consumers
  *
- * Provides entry animations for conditionally rendered elements.
- * Only animates when the element is dynamically mounted after the initial
- * page paint — statically rendered elements on page load are not animated.
+ * It animates only an element that mounts after the first page paint.
  * Server-rendered elements hydrate without the entry style and never play it
  * (spec:AST-013 FR13).
  */

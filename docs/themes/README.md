@@ -37,6 +37,7 @@ and other knowledge relationships rather than separate relation fields:
 
 Only `current` records are policy. A draft may link another draft while decisions
 are being developed, but current records may depend only on current records.
-Current theme records require exact-head approval from the committed union of
+Current theme records require approval of their content (`architecture:knowledge-contracts`
+DEC-14) from the committed union of
 `.github/ENGOWNERS` and `.github/DESIGNOWNERS`. Theme records do not declare an
 `owners` field, and record metadata never grants approval rights.

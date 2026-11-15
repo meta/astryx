@@ -26,6 +26,8 @@ import {
 } from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
+import {isRenderable} from '../utils/isRenderable';
+import {textDirectionProps} from '../utils/textDirection';
 import type {BadgeVariantMap} from './index';
 
 /**
@@ -46,7 +48,7 @@ const styles = stylex.create({
     lineHeight: typeScaleVars['--text-supporting-leading'],
     fontWeight: fontWeightVars['--font-weight-medium'],
     whiteSpace: 'nowrap',
-    // A badge is one line by construction — fixed height, `nowrap` — so a
+    // A badge is one line by construction — one line tall, `nowrap` — so a
     // label wider than the space available has to go somewhere. Without these
     // it went *outside* its container: `nowrap` with nothing to clip it
     // neither wraps nor truncates, it just escapes, and lands on whatever sits
@@ -56,6 +58,16 @@ const styles = stylex.create({
     maxWidth: '100%',
     minWidth: 0,
   },
+  // Never shorter than one line of its label: when the text grows (a larger
+  // text size), the pill grows with the label instead of the label spilling
+  // out of it. A minimum rather than a new height, so
+  // the theme's height (`--spacing-5`, or a theme's own, such as Butter's
+  // 30px) holds at the default size, where the line fits. Only with a label:
+  // a color-only badge has no text to hold and keeps the component:Badge FR1
+  // geometry at every text size.
+  grows: {
+    minHeight: '1lh',
+  },
   // The ellipsis goes on the label rather than the badge itself, because
   // `text-overflow` needs a block container and taking the root off
   // `inline-flex` to get one would cost the icon its centring. The label is a
@@ -64,6 +76,7 @@ const styles = stylex.create({
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     minWidth: 0,
+    unicodeBidi: 'isolate',
   },
 });
 
@@ -238,20 +251,29 @@ export function Badge({
       : typeof label === 'string' && label.length > 0
         ? label
         : undefined;
+  // Whether the label renders anything, which is when the badge grows with it.
+  const hasLabel = isRenderable(label);
 
   return (
     <span
       ref={ref}
       {...mergeProps(
         themeProps('badge', {variant}),
-        stylex.props(styles.base, variants[variant], xstyle),
+        stylex.props(
+          styles.base,
+          hasLabel && styles.grows,
+          variants[variant],
+          xstyle,
+        ),
         className,
         style,
       )}
       title={labelTitle}
       {...props}>
       {icon}
-      <span {...stylex.props(styles.label)}>{label}</span>
+      <span {...textDirectionProps(label)} {...stylex.props(styles.label)}>
+        {label}
+      </span>
     </span>
   );
 }

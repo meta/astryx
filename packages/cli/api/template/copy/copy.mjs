@@ -18,8 +18,13 @@ import {
 } from '../../../foundation/fs/path-safety.mjs';
 import {AstryxError, writeFailed} from '../../error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
-import {pkgOf, replaceDemoMedia} from '../../../foundation/discovery/template-adapter.mjs';
+import {
+  pkgOf,
+  replaceTemplateDemos,
+} from '../../../foundation/discovery/template-adapter.mjs';
 import {analyzeTemplateNeeds} from '../../../foundation/discovery/template-needs.mjs';
+import {templateDestination} from '../../../foundation/discovery/template-destination.mjs';
+import {quoteCommandArgument} from '../../../foundation/env/package-manager.mjs';
 import {
   NO_ICON_SETS,
   mapTemplateIcons,
@@ -29,13 +34,21 @@ import {
  * Scaffold an already-resolved template to `targetPath` (relative to `cwd`) and
  * return the `template.copy` receipt.
  * @param {import('../../../foundation/discovery/template-adapter.mjs').DiscoveredTemplate} match
- * @param {{targetPath: string, cwd: string, overwrite?: boolean, iconSets?: Parameters<typeof mapTemplateIcons>[1]}} ctx
- *   `iconSets`: the project's icon sets; without them the icons are unchanged
+ * @param {{targetPath: string, cwd: string, overwrite?: boolean, iconSets?: Parameters<typeof mapTemplateIcons>[1], command?: string}} ctx
+ *   `iconSets`: the project's icon sets; without them the icons are unchanged.
+ *   `command`: the command that selects this template, without a path; the
+ *   refusal of a path outside the project suggests it
  * @returns {import('../template.type.mjs').TemplateCopyResponse}
  */
 export function templateCopy(
   match,
-  {targetPath, cwd, overwrite = false, iconSets = NO_ICON_SETS},
+  {
+    targetPath,
+    cwd,
+    overwrite = false,
+    iconSets = NO_ICON_SETS,
+    command = `astryx template ${match.dirName} --type ${match.type}`,
+  },
 ) {
   if (!fs.existsSync(match.filePath)) {
     throw new AstryxError(
@@ -57,21 +70,42 @@ export function templateCopy(
 
   // Path-safety: the guard sees the file that will be written, not only its
   // directory — a symlink at that name would otherwise carry the write
-  // outside the project root. Runs BEFORE any mkdir/write.
+  // outside the project root. Runs BEFORE any mkdir/write. An absolute path
+  // inside the project is the same write as its relative form.
   let outputFilePath;
   try {
     outputFilePath = assertWithin(fileTarget, cwd, {
+      allowAbsolute: true,
       label: 'template target path',
     });
   } catch (err) {
-    if (err instanceof PathSafetyError) {
+    if (!(err instanceof PathSafetyError)) throw err;
+    // Outside the project there is nothing to write, so the refusal names a
+    // place inside the project and the print that writes nothing.
+    if (
+      path.isAbsolute(targetPath) &&
+      err.code === ERROR_CODES.ERR_PATH_TRAVERSAL &&
+      !err.viaSymlink
+    ) {
+      const folder = templateDestination(cwd, match.type, match.dirName);
       throw new AstryxError(
-        err.message,
-        undefined,
+        `Invalid template target path "${targetPath}": it is outside the project root (${path.resolve(cwd)}). ` +
+          'The template is written only inside the project. Give a path inside it, or print the source.',
+        [
+          {
+            name: `${command} ${quoteCommandArgument(folder)}`,
+            reason: `write the ${match.type} inside the project`,
+          },
+          {name: command, reason: 'print the source and write nothing'},
+        ],
         ERROR_CODES.ERR_PATH_TRAVERSAL,
       );
     }
-    throw err;
+    throw new AstryxError(
+      err.message,
+      undefined,
+      ERROR_CODES.ERR_PATH_TRAVERSAL,
+    );
   }
   const outputDir = path.dirname(outputFilePath);
   const outputFileName = path.basename(outputFilePath);
@@ -89,14 +123,18 @@ export function templateCopy(
     );
   }
 
-  // Strip demo image references so the scaffolded file renders without a
-  // Meta-only network dependency. Read before any write, so a failure below
-  // leaves nothing behind.
-  const {source: withMedia, demoMediaReplaced} = replaceDemoMedia(
-    fs.readFileSync(match.filePath, 'utf-8'),
-  );
-  // Icons follow the project's icon set (AST-084 FR9). An icon with no match
-  // keeps its import, so its library stays a needed dependency below.
+  // Replace docs-only demo content and demo media references so the
+  // scaffolded file renders without anything only Astryx's previews provide.
+  // Read before any write, so a failure below leaves nothing behind.
+  const {
+    source: withMedia,
+    demoContentReplaced,
+    demoMediaReplaced,
+  } = replaceTemplateDemos(fs.readFileSync(match.filePath, 'utf-8'));
+  // Icons follow the project's icon set and its backups (AST-084 FR9). An
+  // icon no set in the list draws a placeholder the file declares, so the
+  // library the template imported it from is no longer a needed dependency
+  // below.
   const {source: outputSource, icons} = mapTemplateIcons(
     withMedia,
     iconSets,
@@ -127,9 +165,11 @@ export function templateCopy(
       fileName: outputFileName,
       filesCopied: 1,
       demoMediaReplaced,
+      demoContentReplaced,
       notes,
       missingPackages: missing,
       installCommand,
+      ...(path.isAbsolute(targetPath) ? {givenPath: targetPath} : {}),
       ...(icons ? {icons} : {}),
     },
   };

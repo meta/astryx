@@ -20,7 +20,6 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import jscodeshift from 'jscodeshift';
 import {isValidSemver} from '../env/semver.mjs';
 import {
   isThemeFolder as readsAsTheme,
@@ -28,6 +27,7 @@ import {
   THEME_MODULE_EXTENSIONS,
   THEME_SLUG_RE,
 } from '../discovery/theme-discovery.mjs';
+import {jscodeshift} from '../runtime/lazy-dependencies.mjs';
 
 /** @typedef {'components' | 'templates' | 'docs' | 'themes'} MetadataRoot */
 
@@ -88,7 +88,14 @@ const ROOT_HOLDS = /** @type {Record<MetadataRoot, string>} */ ({
   themes: 'themes',
 });
 
-const j = jscodeshift.withParser('tsx');
+/** @type {ReturnType<typeof import('jscodeshift').default['withParser']> | undefined} */
+let tsxParser;
+
+/** jscodeshift with the TypeScript parser, made once. */
+function tsx() {
+  tsxParser ??= jscodeshift().withParser('tsx');
+  return tsxParser;
+}
 
 /** @param {any} node @returns {any} */
 function unwrapStaticExpression(node) {
@@ -136,6 +143,7 @@ function staticPropertyNamed(property, name) {
  * @returns {ContributionStamp | null} null when it is not contribution metadata
  */
 export function readContributionStamp(file, templateOnly) {
+  const j = tsx();
   let ast;
   try {
     ast = j(fs.readFileSync(file, 'utf-8'));
@@ -526,7 +534,7 @@ function localImports(entry) {
     /** @type {string[]} */
     const specifiers = [];
     try {
-      const js = jscodeshift.withParser(
+      const js = jscodeshift().withParser(
         /\.(?:ts|tsx|mts)$/u.test(file) ? 'tsx' : 'babel',
       );
       const ast = js(fs.readFileSync(file, 'utf-8'));

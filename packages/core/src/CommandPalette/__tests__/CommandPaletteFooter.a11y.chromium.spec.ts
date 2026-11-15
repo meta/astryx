@@ -12,7 +12,12 @@ import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {expect, test, type Browser, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Browser,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {holdMotionStill} from '@astryxdesign/a11y-spec/chromium';
 import {
   DEFAULT_STORYBOOK_DIR,
@@ -493,7 +498,7 @@ async function capture(page: Page, scenario: Case) {
               ratio: observed.kbdPair.contrastRatio,
               threshold: 4.5,
               exception:
-                'Known shared Kbd contrast gap; tracked by facebook/astryx#7097 and not scored against CommandPaletteFooter.',
+                'Known shared Kbd contrast gap; tracked by meta/astryx#7097 and not scored against CommandPaletteFooter.',
               passed: observed.kbdPair.contrastRatio >= 4.5,
             },
           ]
@@ -533,7 +538,7 @@ async function capture(page: Page, scenario: Case) {
       contrastPairMatrix: contrastRows,
       knownFinding:
         observed.kbdPair && observed.kbdPair.contrastRatio < 4.5
-          ? 'Delegated Kbd glyph contrast is tracked by facebook/astryx#7097; the shared primitive owns the token pair.'
+          ? 'Delegated Kbd glyph contrast is tracked by meta/astryx#7097; the shared primitive owns the token pair.'
           : null,
       browser: browserVersion,
       passed: true,

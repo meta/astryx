@@ -31,7 +31,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          "Choose the hour format (12h or 24h) that matches your audience's locale: 12-hour with AM/PM for US-centric UIs, 24-hour for international or technical contexts.",
+          "Leave hourFormat unset so the field follows the InternationalizationProvider locale's hour cycle (12-hour in en-US, 24-hour in en-GB or de-DE). Set it only when the field itself needs a fixed format, and carry a person's own 12/24-hour preference on the provider locale (e.g. 'en-US-u-hc-h23') rather than on each field.",
       },
       {
         guidance: true,
@@ -206,8 +206,8 @@ export const docs = {
       name: 'hourFormat',
       type: "'12h' | '24h'",
       description:
-        "Controls the display format. '12h' shows AM/PM (e.g. '2:30 PM'); '24h' uses 24-hour notation (e.g. '14:30').",
-      default: "'12h'",
+        "Controls the display format. '12h' shows the locale's day period (e.g. '2:30 PM', '오후 2:30'); '24h' uses 24-hour notation (e.g. '14:30'). When unset, follows the InternationalizationProvider locale's hour cycle: en-US reads 12-hour, en-GB and de-DE read 24-hour. To honor a person's own preference, pass it on the locale tag (e.g. 'en-US-u-hc-h23') rather than per field.",
+      default: "the locale's hour cycle",
     },
     {
       name: 'increment',
@@ -247,7 +247,21 @@ export const docs = {
       name: 'status',
       type: "{type: 'warning' | 'error' | 'success', message?: string}",
       description:
-        'Status indicator that colors the border and displays an icon. When a message is provided it is rendered below the input.',
+        "Status indicator that colors the border and displays an icon. When a message is provided it is rendered below the input. A typed time the field rejects, and a native edit outside min or max, show the field's own error message instead; an error status with a message shows in its place, and the rejection is still announced. A warning or success never replaces a rejection.",
+    },
+    {
+      name: 'onEntryErrorChange',
+      type: "(error: {kind: 'unreadable' | 'outOfRange', text: string, value?: ISOTimeString} | null) => void",
+      description:
+        "Called each time the field's rejection of typed text changes, and with null when the rejection ends. kind is 'unreadable' (text that is not a time) or 'outOfRange' (a time before min or after max); text is the typed text; value is the ISO time the text names, for 'outOfRange'. Under entryErrorBehavior 'complete', a rejection shows once the typed time is complete (in 12-hour text, with its day period unless the hour reads 0 or 13–23), or at Enter or blur; under 'blur-or-enter', only at Enter or blur. Rejected text stays in the field. It also runs when a new min, max, or value, or disabling the field, changes the rejection, never twice for the same rejection, and with null when the field unmounts while a rejection stands. The native and bottom-sheet surfaces take no typed text, so they never report.",
+    },
+    {
+      name: 'entryErrorBehavior',
+      type: "'complete' | 'blur-or-enter'",
+      description:
+        "When the field shows its own entry error: a typed time it rejects, as onEntryErrorChange reports it, or a native edit outside min or max. It sets when the error shows, not when validation runs, so it is not React Aria's validationBehavior (native versus ARIA validation), and it never changes a caller status. 'complete' shows a complete typed time outside min or max, and a native edit outside them, at once, and other rejected text at Enter or blur. 'blur-or-enter' holds every rejection until Enter or blur: the message, aria-invalid, the invalid styling, the announcement, and the onEntryErrorChange report then appear together. Under both values, an edit the field accepts or empties clears the error at once; under 'blur-or-enter', an edit that leaves the entry wrong keeps the shown error until the next Enter or blur. The field's own value wins over the nearest FormLayout's defaultEntryErrorBehavior.",
+      default:
+        "the nearest FormLayout's defaultEntryErrorBehavior, else 'complete'",
     },
     {
       name: 'statusVariant',
@@ -330,7 +344,8 @@ export const docsZh = {
     {
       name: 'isDisabled',
       type: 'boolean',
-      description: '禁用输入框并抑制交互。输入框仍可聚焦并暴露 `aria-disabled`。',
+      description:
+        '禁用输入框并抑制交互。输入框仍可聚焦并暴露 `aria-disabled`。',
       default: 'false',
     },
     {
@@ -387,8 +402,8 @@ export const docsZh = {
       name: 'hourFormat',
       type: "'12h' | '24h'",
       description:
-        "控制显示格式。'12h' 显示 AM/PM（例如 '2:30 PM'）；'24h' 使用 24 小时制（例如 '14:30'）。",
-      default: "'12h'",
+        "控制显示格式。'12h' 使用区域设置的上午/下午用语（例如 '2:30 PM'、'오후 2:30'）；'24h' 使用 24 小时制（例如 '14:30'）。未设置时遵循 InternationalizationProvider 区域设置的小时制：en-US 为 12 小时制，en-GB 和 de-DE 为 24 小时制。要遵循用户自己的偏好，请在区域标签中传入（例如 'en-US-u-hc-h23'），而不是逐个字段设置。",
+      default: '区域设置的小时制',
     },
     {
       name: 'increment',
@@ -428,7 +443,21 @@ export const docsZh = {
       name: 'status',
       type: "{type: 'warning' | 'error' | 'success', message?: string}",
       description:
-        '为边框着色并显示图标的状态指示器。当提供消息时，消息渲染在输入框下方。',
+        '为边框着色并显示图标的状态指示器。当提供消息时，消息渲染在输入框下方。字段拒绝的输入时间，以及超出 min 或 max 的原生编辑，会显示字段自身的错误消息；带消息的 error 状态会显示在其位置，拒绝仍会被播报。warning 或 success 状态不会替代拒绝消息。',
+    },
+    {
+      name: 'onEntryErrorChange',
+      type: "(error: {kind: 'unreadable' | 'outOfRange', text: string, value?: ISOTimeString} | null) => void",
+      description:
+        "每当字段对输入文本的拒绝发生变化时调用，拒绝结束时传入 null。kind 为 'unreadable'（不是时间的文本）或 'outOfRange'（早于 min 或晚于 max 的时间）；text 为输入的文本；value 为文本所指的 ISO 时间，用于 'outOfRange'。在 entryErrorBehavior 为 'complete' 时，输入的时间完整后（12 小时制文本需带上午/下午，除非小时为 0 或 13–23），或按 Enter、失焦时，拒绝才会显示；为 'blur-or-enter' 时仅在按 Enter 或失焦时显示；被拒绝的文本保留在字段中。新的 min、max 或 value，或禁用字段改变拒绝时也会调用；同一拒绝不会重复调用；拒绝仍存在时字段卸载会传入 null。原生和底部面板界面不接受输入文本，因此不会报告。",
+    },
+    {
+      name: 'entryErrorBehavior',
+      type: "'complete' | 'blur-or-enter'",
+      description:
+        "字段何时显示自身的输入错误：即字段拒绝的输入时间（也就是 onEntryErrorChange 报告的拒绝），或超出 min 或 max 的原生编辑。它设定错误何时显示，而不是何时校验，因此不同于 React Aria 的 validationBehavior（原生校验与 ARIA 校验之分），也不会改变调用方的 status。'complete' 立即显示完整输入但超出 min 或 max 的时间，以及超出范围的原生编辑；其他被拒绝的文本在按 Enter 或失焦时显示。'blur-or-enter' 将每个拒绝保留到按 Enter 或失焦：届时消息、aria-invalid、无效样式、播报和 onEntryErrorChange 报告一起出现。两种取值下，字段接受的编辑或清空输入的编辑都会立即清除错误；在 'blur-or-enter' 下，输入仍然错误的编辑会保留已显示的错误，直到下一次按 Enter 或失焦。字段自身的取值优先于最近的 FormLayout 的 defaultEntryErrorBehavior。",
+      default:
+        "最近的 FormLayout 的 defaultEntryErrorBehavior，否则为 'complete'",
     },
     {
       name: 'statusVariant',
@@ -476,7 +505,7 @@ export const docsZh = {
       {
         guidance: true,
         description:
-          "Choose the hour format (12h or 24h) that matches your audience's locale: 12-hour with AM/PM for US-centric UIs, 24-hour for international or technical contexts.",
+          "Leave hourFormat unset so the field follows the InternationalizationProvider locale's hour cycle (12-hour in en-US, 24-hour in en-GB or de-DE). Set it only when the field itself needs a fixed format, and carry a person's own 12/24-hour preference on the provider locale (e.g. 'en-US-u-hc-h23') rather than on each field.",
       },
       {
         guidance: true,
@@ -565,7 +594,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Choose hour format (12h/24h) to match locale: 12h for US, 24h for international.',
+          "Leave hourFormat unset to follow the provider locale's hour cycle; put a person's 12/24h preference on the locale tag (en-US-u-hc-h23), not on each field.",
       },
       {
         guidance: true,
@@ -624,7 +653,7 @@ export const docsDense = {
     hasSeconds: 'Includes seconds in display+parsing.',
     hasClear: 'Shows clear button when value set+not disabled.',
     hourFormat:
-      "Display format. '12h' shows AM/PM; '24h' uses 24-hour notation.",
+      "Display format. '12h' shows the locale's day period; '24h' uses 24-hour notation. Unset follows the provider locale's hour cycle (a -u-hc- tag carries a user preference).",
     increment:
       'Minutes to add/subtract on arrow up/down. Whole minutes only; a fractional value leaves the time unchanged.',
     presentation:
@@ -633,7 +662,12 @@ export const docsDense = {
       "deprecated, use presentation: 'touch'='adaptive-native', 'always'='native', 'never'='text-input'. still works as released; presentation wins if both set.",
     placeholder: 'Placeholder when empty. Focused+empty shows format hint.',
     size: 'Input element height.',
-    status: 'Colored border+icon. Message rendered below input.',
+    status:
+      'Colored border+icon. Message rendered below input. A rejected typed time or native edit outside min/max shows its own error instead; an error status w/ message wins (rejection still announced); warning/success never hide a rejection.',
+    onEntryErrorChange:
+      "(error|null) on each typed-rejection change: kind 'unreadable'|'outOfRange' (min/max), text, value (ISO time, outOfRange); shows when the typed time is complete (12h: day period unless hour 0/13-23) or at Enter/blur under complete, only at Enter/blur under blur-or-enter, text kept; also on new min/max/value, disable; never twice for one rejection; null on unmount mid-rejection; never on native/sheet",
+    entryErrorBehavior:
+      "'complete'|'blur-or-enter': when the field's own rejection shows (not when validation runs; not React Aria validationBehavior; never changes status). complete: complete out-of-range typed time and native out-of-range edit at once, other text at Enter/blur. blur-or-enter: message, aria-invalid, styling, announcement and onEntryErrorChange report all wait for Enter/blur. Accepted or emptied entry clears at once; still-wrong edit keeps a shown error (blur-or-enter). Default: nearest FormLayout defaultEntryErrorBehavior, else complete",
     statusVariant:
       'How status message is placed: attached overlaps below input; detached floats below w/ spacing; tooltip hides the box and shows it on the status icon.',
     labelTooltip: 'Tooltip as info icon at label row end.',

@@ -12,12 +12,13 @@ import {
   renderThemeModule,
   resolveThemeModule,
 } from './theme-state.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 /** @type {string[]} */
 const dirs = [];
 
 function project(pkg = {name: 'app'}) {
-  const dir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-theme-state-'));
+  const dir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-theme-state-'));
   dirs.push(dir);
   fs.writeFileSync(path.join(dir, 'package.json'), `${JSON.stringify(pkg)}\n`);
   return dir;
@@ -132,7 +133,7 @@ describe('generated theme-module state', () => {
   it('rejects a generated-module write through a symlink outside the project', () => {
     const dir = project();
     const outside = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-theme-state-outside-'),
+      path.join(REPO_ROOT, '.astryx-theme-state-outside-'),
     );
     dirs.push(outside);
     fs.symlinkSync(outside, path.join(dir, 'src'));

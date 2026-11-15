@@ -28,7 +28,8 @@
       "Tooltip"
     ],
     "source": "<text>",
-    "demoMediaReplaced": 0
+    "demoMediaReplaced": 0,
+    "demoContentReplaced": 0
   },
   "meta": {
     "answeredBy": {

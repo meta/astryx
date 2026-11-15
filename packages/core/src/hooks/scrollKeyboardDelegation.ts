@@ -2,9 +2,11 @@
 
 /**
  * @file scrollKeyboardDelegation.ts
- * @input A named, overflowing viewport and its real content box
+ * @input A named, overflowing viewport and its real content box (the viewport
+ *   itself when it has no separate content box)
  * @output Focus-time delegation with native forward and reverse Tab traversal
- * @position Private useScrollableArea keyboard behavior; no DOM observers or scrolling
+ * @position Private keyboard behavior of useScrollableArea and of AppShell's main
+ *   region; no DOM observers or scrolling
  */
 
 import {FOCUSABLE_SELECTOR} from './focusableSelector';
@@ -58,8 +60,12 @@ function firstDelegationTarget(
   content: HTMLElement,
 ): HTMLElement | null {
   const candidates = content.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
+  // A viewport that is its own content box is the stop being entered, never
+  // the target it delegates to.
   let first =
-    content.matches(FOCUSABLE_SELECTOR) && isSequential(content)
+    content !== viewport &&
+    content.matches(FOCUSABLE_SELECTOR) &&
+    isSequential(content)
       ? content
       : null;
   for (const candidate of candidates) {

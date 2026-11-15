@@ -33,10 +33,12 @@ function bundle(entry: string): string {
   );
 }
 
-// Numbers only one row carries, as a minified bundle writes them.
+// Values only one row carries, as a minified bundle writes them. The two
+// sheet rows share a response, so their damping tells them apart.
 const KEYBOARD = '555.0265';
 const ALERT = '522.35';
-const SHEET_DETENT = '.3441442326';
+const SHEET_DETENT = 'response:.3441442326,dampingRatio:1}';
+const SHEET_DISMISS_SWIPE = 'response:.3441442326,dampingRatio:.8}';
 const FINGER_TRACKING = '.86';
 const DIRECT_CHANGE = '.825';
 
@@ -64,6 +66,7 @@ describe('spring rows', () => {
     );
     expect(roles).toContain(FINGER_TRACKING);
     expect(roles).toContain(DIRECT_CHANGE);
+    expect(roles).toContain(SHEET_DISMISS_SWIPE);
     for (const other of [KEYBOARD, ALERT, SHEET_DETENT]) {
       expect(roles).not.toContain(other);
     }

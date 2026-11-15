@@ -110,6 +110,59 @@ ruleTester.run('no-hardcoded-i18n-string', noHardcodedI18nStringRule, {
     },
     {code: "function formatLabel() { return 'READY_STATE'; }"},
     {code: "function formatLabel() { return '/assets/icon.svg'; }"},
+    // --- JSX children ---
+    {code: "<span>{t('a.b.c')}</span>"},
+    {code: '<span>{count}</span>'},
+    {code: "<span>{formatValue?.(items) ?? t('a.b.count', {count})}</span>"},
+    // Punctuation and number layout between interpolations is not English
+    {code: '<span>{valueLength}/{maxLength}</span>'},
+    {code: '<span>{`${a} – ${b}`}</span>'},
+    {code: '<span>&times;</span>'},
+    {code: '<span> · </span>'},
+    // Line-break whitespace is not rendered, so this is one identifier-shaped word
+    {code: '<span>\n  ok\n</span>'},
+    // Attribute expression containers are not children
+    {code: "<X data-state={open ? 'Open now' : 'Closed'} />"},
+    // --- Object fields: punctuation-only template chunks ---
+    {code: 'const x = {label: `${field}: ${value}`};'},
+    {code: "const x = {label: t('a.b', {value})};"},
+    // --- Local text-sink bindings ---
+    {code: "const thumbLabel = isRange ? t('slider.min') : undefined;"},
+    {code: 'const ariaLabel = `${prefix}: ${name}`;'},
+    {code: 'const ariaLabel = label;'},
+    // Non-sink names are not checked (no data-flow tracing)
+    {code: "const status = 'Ready to go';"},
+    {code: "const [label] = ['Destructured'];"},
+    {
+      code: "const displayPlaceholder = useMemo(() => placeholder ?? t('time.hint'), []);",
+    },
+    {
+      code: "const thumbLabel = 'Minimum value';",
+      filename: 'Slider.test.tsx',
+    },
+    // --- allowedStringsByFile ---
+    {
+      code: "const thumbLabel = 'Minimum value'; <span>Required</span>;",
+      filename: '/repo/packages/core/src/Slider/Slider.tsx',
+      options: [
+        {
+          allowedStringsByFile: {
+            'Slider/Slider.tsx': ['Minimum value', 'Required'],
+          },
+        },
+      ],
+    },
+    {
+      code: 'const ariaLabel = `Resize column ${key}`;',
+      filename: 'C:\\repo\\Table\\useTableColumnResize.tsx',
+      options: [
+        {
+          allowedStringsByFile: {
+            'Table/useTableColumnResize.tsx': ['Resize column '],
+          },
+        },
+      ],
+    },
     // --- Pre-existing surfaces still behave ---
     {code: "<button aria-label={t('dialog.close')}>x</button>"},
   ],
@@ -244,6 +297,191 @@ ruleTester.run('no-hardcoded-i18n-string', noHardcodedI18nStringRule, {
     {
       code: "<X aria-label={`${open ? 'Close' : 'Open'}`} />",
       errors: [{messageId: 'hardcodedString'}, {messageId: 'hardcodedString'}],
+    },
+    // --- JSX children ---
+    {
+      // A rendered fallback count is visible text, like a `label` prop.
+      code: '<span>{formatValue?.(items) ?? `${items.length} selected`}</span>',
+      errors: [
+        {
+          messageId: 'hardcodedString',
+          data: {value: '" selected"', name: 'children'},
+        },
+      ],
+    },
+    {
+      code: "<span>{count === 1 ? '1 filter' : `${count} filters`}</span>",
+      errors: [{messageId: 'hardcodedString'}, {messageId: 'hardcodedString'}],
+    },
+    // JSX text is judged as rendered: the space next to an expression child
+    // is output, so a one-word count suffix reads like a template chunk.
+    {
+      code: '<span>{count} items</span>',
+      errors: [
+        {
+          messageId: 'hardcodedString',
+          data: {value: '" items"', name: 'children'},
+        },
+      ],
+    },
+    {
+      code: '<span>+{n} more</span>',
+      errors: [
+        {
+          messageId: 'hardcodedString',
+          data: {value: '" more"', name: 'children'},
+        },
+      ],
+    },
+    {
+      code: '<span>\n  {count} items\n</span>',
+      errors: [
+        {
+          messageId: 'hardcodedString',
+          data: {value: '" items"', name: 'children'},
+        },
+      ],
+    },
+    {
+      code: '<VisuallyHidden>Required</VisuallyHidden>',
+      errors: [
+        {
+          messageId: 'hardcodedString',
+          data: {value: '"Required"', name: 'children'},
+        },
+      ],
+    },
+    {
+      code: '<>\n  No results found\n</>',
+      errors: [
+        {
+          messageId: 'hardcodedString',
+          data: {value: '"No results found"', name: 'children'},
+        },
+      ],
+    },
+    // --- Object fields walk templates and fallbacks ---
+    {
+      code: 'const row = {id, label: `Create "${trimmed}"`};',
+      errors: [
+        {
+          messageId: 'hardcodedString',
+          data: {value: '"Create \\""', name: 'label'},
+        },
+      ],
+    },
+    {
+      code: "const item = {title: open ? 'Close panel' : 'Open panel'};",
+      errors: [{messageId: 'hardcodedString'}, {messageId: 'hardcodedString'}],
+    },
+    {
+      code: 'const option = {label: `${amount} ${unit} ago`};',
+      errors: [{messageId: 'hardcodedString'}],
+    },
+    // --- Local text-sink bindings ---
+    {
+      code: "const thumbLabel = isRange ? (index === 0 ? 'Minimum value' : 'Maximum value') : undefined;",
+      errors: [
+        {
+          messageId: 'hardcodedString',
+          data: {value: '"Minimum value"', name: 'thumbLabel'},
+        },
+        {
+          messageId: 'hardcodedString',
+          data: {value: '"Maximum value"', name: 'thumbLabel'},
+        },
+      ],
+    },
+    {
+      code: 'const ariaLabel = `Resize column ${columnKey}`;',
+      errors: [
+        {
+          messageId: 'hardcodedString',
+          data: {value: '"Resize column "', name: 'ariaLabel'},
+        },
+      ],
+    },
+    {
+      code: "const emptyText = trigger.emptySearchText ?? 'No results';",
+      errors: [{messageId: 'hardcodedString'}],
+    },
+    // A function bound to a text-sink name returns text.
+    {
+      code: "const displayPlaceholder = useMemo(() => { if (focused) { return is12h ? 'e.g., 2:30 PM' : 'e.g., 14:30'; } return placeholder; }, []);",
+      errors: [
+        {
+          messageId: 'hardcodedReturn',
+          data: {value: '"e.g., 2:30 PM"', name: 'displayPlaceholder'},
+        },
+        {
+          messageId: 'hardcodedReturn',
+          data: {value: '"e.g., 14:30"', name: 'displayPlaceholder'},
+        },
+      ],
+    },
+    {
+      code: "const emptyLabel = () => 'Nothing here';",
+      errors: [{messageId: 'hardcodedReturn'}],
+    },
+    // allowedStringsByFile is exact-value and file-scoped.
+    {
+      code: "const thumbLabel = 'Minimum value'; const emptyText = 'No results';",
+      filename: '/repo/packages/core/src/Slider/Slider.tsx',
+      options: [
+        {allowedStringsByFile: {'Slider/Slider.tsx': ['Minimum value']}},
+      ],
+      errors: [
+        {
+          messageId: 'hardcodedString',
+          data: {value: '"No results"', name: 'emptyText'},
+        },
+      ],
+    },
+    // An exempted chunk does not exempt the rest of its template.
+    {
+      code: 'const ariaLabel = `Resize column ${h} of ${total} total`;',
+      filename: '/repo/Table/useTableColumnResize.tsx',
+      options: [
+        {
+          allowedStringsByFile: {
+            'Table/useTableColumnResize.tsx': ['Resize column '],
+          },
+        },
+      ],
+      errors: [
+        {
+          messageId: 'hardcodedString',
+          data: {value: '" of "', name: 'ariaLabel'},
+        },
+      ],
+    },
+    {
+      code: 'const x = <span>{count} items</span>;',
+      filename: '/repo/PowerSearch/PowerSearch.tsx',
+      options: [
+        {allowedStringsByFile: {'PowerSearch/PowerSearch.tsx': ['items']}},
+      ],
+      errors: [
+        {
+          messageId: 'hardcodedString',
+          data: {value: '" items"', name: 'children'},
+        },
+      ],
+    },
+    {
+      code: "const thumbLabel = 'Minimum value';",
+      filename: '/repo/packages/core/src/OtherSlider/OtherSlider.tsx',
+      options: [
+        {allowedStringsByFile: {'Slider/Slider.tsx': ['Minimum value']}},
+      ],
+      errors: [{messageId: 'hardcodedString'}],
+    },
+    {
+      code: "const thumbLabel = 'Minimum value';",
+      // A key matches whole path segments: Slider.tsx is not RangeSlider.tsx.
+      filename: '/repo/packages/core/src/RangeSlider/RangeSlider.tsx',
+      options: [{allowedStringsByFile: {'Slider.tsx': ['Minimum value']}}],
+      errors: [{messageId: 'hardcodedString'}],
     },
     // --- Pre-existing surfaces still behave ---
     {

@@ -51,7 +51,14 @@
  * @property {string} [description]
  * @property {string} [displayName]
  * @property {string[]} [templates] Template ids, when it adds any.
- * @property {string[]} [docs] Doc topic names, when it adds any.
+ * @property {string[]} [docs] What `astryx docs` opens each doc it adds by,
+ *   when it adds any: a topic's name, the name of a topic it adds sections
+ *   to, or the route of a namespace doc or guide it places, or of a guide it
+ *   replaces or extends.
+ * @property {Record<string, string[]>} [docSections] For each name in `docs`
+ *   whose topic or guide another package owns, the keys of the sections this
+ *   package adds to it, in reading order: `astryx docs <name> <key>` opens
+ *   one. Present only when it adds such a section.
  * @property {string[]} [themes] Theme slugs, when it adds any.
  * @property {string[]} [codemods] `<version>/<id>`, when it adds any.
  * @property {string[]} [agentDocs] Agent guidance, when a source lists any.
@@ -143,12 +150,15 @@
  *   default?: {variant?: string},
  *   definitions?: string[],
  *   command?: string,
+ *   sections?: string[],
  *   installed: boolean,
  *   installedAs?: string,
  *   install?: string,
  *   source?: string,
- * }} data For an icon set, `title` and `summary` are its display name and
- *   description, and it carries `license`, `iconCount`, `default` (the variant
+ * }} data For a doc whose topic or guide another package owns, `sections`
+ *   holds the keys of the sections the package adds to it: `astryx docs
+ *   <name> <key>` opens one. For an icon set, `title` and `summary` are its
+ *   display name and description, and it carries `license`, `iconCount`, `default` (the variant
  *   an icon's own export draws, when the set names one), the shared icon names
  *   its `map` covers (`definitions`), and `command`, which searches the set's icons. A source's
  *   entry carries `iconCount` and `definitions` when the source lists them.

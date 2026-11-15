@@ -2,11 +2,14 @@
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 /**
- * @file Guards `theming.targets` against the real `themeProps()` call sites (#3741).
+ * @file Guards `theming.targets` against the real `themeProps()` call sites,
+ *   and guards that each prop that selects painted styles reaches
+ *   `themeProps()`.
  * @input Core/Lab component sources (*.tsx/*.ts), their `{Name}.doc.mjs`
  *   files, and the Lab promotion-candidate manifest.
- * @output Vitest failures naming each undocumented class / visual prop on the
- *   stable Core surface or a capability-participating Lab component.
+ * @output Vitest failures naming each undocumented class / visual prop, and
+ *   each painted prop axis that no `themeProps()` call passes, on the stable
+ *   Core surface or a capability-participating Lab component.
  * @position Sibling of derivedVarRegistry.test.ts, which already validates the
  *   OTHER fields of the same `theming` block (`vars`, `derived`). `targets` was
  *   the one field with no machine check, so it drifted — twice (#3652, #3680).
@@ -125,6 +128,50 @@ function conditionalSpreadKeys(expression: ts.Expression): string[] | null {
 }
 
 /**
+ * The keys of a `themeProps()` props argument, and whether any key cannot be
+ * read statically. A bag such as `...rest`, a computed key, or a variable or
+ * call passed as the whole argument makes the result opaque.
+ */
+function themePropsKeys(propsArg: ts.Expression | undefined): {
+  keys: string[];
+  isOpaque: boolean;
+} {
+  const result = {keys: [] as string[], isOpaque: false};
+  if (propsArg == null) {
+    return result;
+  }
+  if (!ts.isObjectLiteralExpression(propsArg)) {
+    result.isOpaque = true;
+    return result;
+  }
+  for (const prop of propsArg.properties) {
+    if (ts.isSpreadAssignment(prop)) {
+      // A conditional spread of an object literal, such as `...(type &&
+      // {type})`, has statically known keys. If it were opaque, the
+      // `astryx-heading` `type` key would stay undocumented, which is the
+      // drift this file exists to catch.
+      const spreadKeys = conditionalSpreadKeys(prop.expression);
+      if (spreadKeys == null) {
+        result.isOpaque = true;
+      } else {
+        result.keys.push(...spreadKeys);
+      }
+      continue;
+    }
+    const name = prop.name;
+    if (
+      name != null &&
+      (ts.isIdentifier(name) || ts.isStringLiteralLike(name))
+    ) {
+      result.keys.push(name.text);
+    } else {
+      result.isOpaque = true;
+    }
+  }
+  return result;
+}
+
+/**
  * Extract every `themeProps('name', {...})` call from a source file.
  *
  * Uses the AST rather than a regex because the call sites use every object
@@ -157,45 +204,12 @@ function extractThemeTargets(
       // Only string-literal component names are resolvable. A dynamic name
       // can't be checked statically; skip rather than guess.
       if (nameArg != null && ts.isStringLiteralLike(nameArg)) {
+        const {keys, isOpaque} = themePropsKeys(propsArg);
         const site: ThemeTargetSite = {
           className: stableClassName(nameArg.text),
-          propKeys: [],
-          isOpaque: false,
+          propKeys: keys,
+          isOpaque,
         };
-
-        if (propsArg != null) {
-          if (ts.isObjectLiteralExpression(propsArg)) {
-            for (const prop of propsArg.properties) {
-              if (ts.isSpreadAssignment(prop)) {
-                // A conditional spread of an object literal — `...(type &&
-                // {type})` — has statically known keys. Treating it as opaque
-                // is how `astryx-heading`'s `type` stayed undocumented: the
-                // same drift this file exists to catch (#3652, #3680).
-                const spreadKeys = conditionalSpreadKeys(prop.expression);
-                if (spreadKeys == null) {
-                  site.isOpaque = true;
-                } else {
-                  site.propKeys.push(...spreadKeys);
-                }
-                continue;
-              }
-              const name = prop.name;
-              if (name == null) {
-                site.isOpaque = true;
-                continue;
-              }
-              if (ts.isIdentifier(name) || ts.isStringLiteralLike(name)) {
-                site.propKeys.push(name.text);
-              } else {
-                // Computed key: themeProps('x', {[k]: v})
-                site.isOpaque = true;
-              }
-            }
-          } else {
-            // A variable or call passed as the props bag.
-            site.isOpaque = true;
-          }
-        }
 
         sites.push(site);
       }
@@ -325,6 +339,395 @@ describe('extractThemeTargets', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Painted prop axes: a prop that selects painted styles must reach themeProps()
+// ---------------------------------------------------------------------------
+
+/**
+ * The shared catalog of style keys that a target can guarantee to a theme. The
+ * guard counts a style map as painting only when one of its namespaces sets
+ * one of these exact keys at the top level, so a prop that selects from that
+ * map is a visual axis. A gap scale sets none of them and is out of scope.
+ *
+ * The guard does not check these shapes:
+ * - a key that is not in the list, such as the longhand
+ *   `borderInlineStartColor`;
+ * - a key inside a nested block, such as a `'::before'` pseudo-element block;
+ * - a namespace written as a function, such as `sm: v => ({fontSize: v})`;
+ * - a map imported from another file;
+ * - a lookup outside a `stylex.props()` call, such as inside
+ *   `focusOutlineProps.focusVisible()`;
+ * - a lookup keyed by an expression, such as `sizeStyles[size ?? 'sm']`, and
+ *   not by a destructured prop name;
+ * - a lookup in a nested function that destructures its own props, when the
+ *   lookup key is a prop of the function around it.
+ */
+const GUARANTEED_STYLE_KEYS: ReadonlySet<string> = new Set([
+  // Paint
+  'color',
+  'backgroundColor',
+  'opacity',
+  'outlineColor',
+  'outlineOffset',
+  'outlineStyle',
+  'outlineWidth',
+  'boxShadow',
+  'textShadow',
+  // Border and shape
+  'borderColor',
+  'borderStyle',
+  'borderWidth',
+  'borderRadius',
+  // Typography
+  'fontFamily',
+  'fontSize',
+  'fontStyle',
+  'fontWeight',
+  'letterSpacing',
+  'lineHeight',
+  'textAlign',
+  'textDecorationColor',
+  'textDecorationLine',
+  'textDecorationStyle',
+  'textDecorationThickness',
+  'textTransform',
+  // Padding
+  'padding',
+  'paddingBlock',
+  'paddingBlockStart',
+  'paddingBlockEnd',
+  'paddingInline',
+  'paddingInlineStart',
+  'paddingInlineEnd',
+]);
+
+interface UnreflectedStyleAxis {
+  /** The function that destructures the prop, e.g. 'ChatComposer'. */
+  component: string;
+  /** The prop name, not its local binding, e.g. 'elevation'. */
+  prop: string;
+  /** The `stylex.create()` map the prop indexes, e.g. 'elevationStyles'. */
+  styleMap: string;
+  line: number;
+}
+
+type FunctionNode =
+  ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction;
+
+function isFunctionNode(node: ts.Node): node is FunctionNode {
+  return (
+    ts.isFunctionDeclaration(node) ||
+    ts.isFunctionExpression(node) ||
+    ts.isArrowFunction(node)
+  );
+}
+
+function isStylexCall(node: ts.Node, method: string): boolean {
+  return (
+    ts.isCallExpression(node) &&
+    ts.isPropertyAccessExpression(node.expression) &&
+    ts.isIdentifier(node.expression.expression) &&
+    node.expression.expression.text === 'stylex' &&
+    node.expression.name.text === method
+  );
+}
+
+/** Names of the `stylex.create()` maps in a file that set a guaranteed key. */
+function paintingStyleMaps(sourceFile: ts.SourceFile): Set<string> {
+  const maps = new Set<string>();
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.initializer != null &&
+      isStylexCall(node.initializer, 'create')
+    ) {
+      const [namespaces] = (node.initializer as ts.CallExpression).arguments;
+      const paints =
+        namespaces != null &&
+        ts.isObjectLiteralExpression(namespaces) &&
+        namespaces.properties.some(
+          namespace =>
+            ts.isPropertyAssignment(namespace) &&
+            ts.isObjectLiteralExpression(namespace.initializer) &&
+            namespace.initializer.properties.some(
+              style =>
+                style.name != null &&
+                (ts.isIdentifier(style.name) ||
+                  ts.isStringLiteralLike(style.name)) &&
+                GUARANTEED_STYLE_KEYS.has(style.name.text),
+            ),
+        );
+      if (paints) {
+        maps.add(node.name.text);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return maps;
+}
+
+/**
+ * Local binding -> prop name for the props a function destructures, from its
+ * first parameter or from `const {...} = props` at the top of its body.
+ */
+function destructuredProps(fn: FunctionNode): Map<string, string> {
+  const bindings = new Map<string, string>();
+  const read = (pattern: ts.ObjectBindingPattern): void => {
+    for (const element of pattern.elements) {
+      if (element.dotDotDotToken != null || !ts.isIdentifier(element.name)) {
+        continue;
+      }
+      const propName = element.propertyName ?? element.name;
+      if (ts.isIdentifier(propName) || ts.isStringLiteralLike(propName)) {
+        bindings.set(element.name.text, propName.text);
+      }
+    }
+  };
+  const [first] = fn.parameters;
+  if (first == null) {
+    return bindings;
+  }
+  if (ts.isObjectBindingPattern(first.name)) {
+    read(first.name);
+  } else if (
+    ts.isIdentifier(first.name) &&
+    fn.body != null &&
+    ts.isBlock(fn.body)
+  ) {
+    const propsName = first.name.text;
+    for (const statement of fn.body.statements) {
+      if (!ts.isVariableStatement(statement)) {
+        continue;
+      }
+      for (const declaration of statement.declarationList.declarations) {
+        if (
+          ts.isObjectBindingPattern(declaration.name) &&
+          declaration.initializer != null &&
+          ts.isIdentifier(declaration.initializer) &&
+          declaration.initializer.text === propsName
+        ) {
+          read(declaration.name);
+        }
+      }
+    }
+  }
+  return bindings;
+}
+
+function functionName(fn: FunctionNode): string {
+  if (fn.name != null) {
+    return fn.name.text;
+  }
+  const {parent} = fn;
+  if (ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) {
+    return parent.name.text;
+  }
+  return '(anonymous)';
+}
+
+/**
+ * Each prop that indexes a painting style map inside `stylex.props()` while no
+ * `themeProps()` call in the same function passes that prop. A theme can then
+ * restyle the target but cannot tell the prop's values apart.
+ *
+ * A function that destructures props is one component. A nested function that
+ * destructures its own props is a separate component and is checked by
+ * itself; a nested callback that does not, such as a render callback, belongs
+ * to the function around it.
+ */
+function findUnreflectedStyleAxes(
+  sourceText: string,
+  fileName = 'source.tsx',
+): UnreflectedStyleAxis[] {
+  const sourceFile = ts.createSourceFile(
+    fileName,
+    sourceText,
+    ts.ScriptTarget.Latest,
+    /* setParentNodes */ true,
+    fileName.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
+  const paintingMaps = paintingStyleMaps(sourceFile);
+  const findings: UnreflectedStyleAxis[] = [];
+
+  const checkComponent = (fn: FunctionNode, props: Map<string, string>) => {
+    const reflected = new Set<string>();
+    let reflectsUnknownKeys = false;
+    const lookups: Omit<UnreflectedStyleAxis, 'component'>[] = [];
+
+    const visit = (node: ts.Node, isInStyleCall: boolean): void => {
+      if (
+        node !== fn &&
+        isFunctionNode(node) &&
+        destructuredProps(node).size > 0
+      ) {
+        return;
+      }
+      if (
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === 'themeProps'
+      ) {
+        const {keys, isOpaque} = themePropsKeys(node.arguments[1]);
+        keys.forEach(key => reflected.add(key));
+        if (isOpaque) {
+          reflectsUnknownKeys = true;
+        }
+      }
+      const isStyleCall = isInStyleCall || isStylexCall(node, 'props');
+      if (
+        isStyleCall &&
+        ts.isElementAccessExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        paintingMaps.has(node.expression.text) &&
+        ts.isIdentifier(node.argumentExpression)
+      ) {
+        const prop = props.get(node.argumentExpression.text);
+        if (prop != null) {
+          lookups.push({
+            prop,
+            styleMap: node.expression.text,
+            line:
+              sourceFile.getLineAndCharacterOfPosition(node.getStart()).line +
+              1,
+          });
+        }
+      }
+      ts.forEachChild(node, child => visit(child, isStyleCall));
+    };
+    visit(fn, false);
+
+    // An opaque props bag may carry the prop; reading it would be a guess.
+    if (reflectsUnknownKeys) {
+      return;
+    }
+    const component = functionName(fn);
+    for (const lookup of lookups) {
+      if (!reflected.has(lookup.prop)) {
+        findings.push({component, ...lookup});
+      }
+    }
+  };
+
+  const visit = (node: ts.Node): void => {
+    if (isFunctionNode(node)) {
+      const props = destructuredProps(node);
+      if (props.size > 0) {
+        checkComponent(node, props);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return findings;
+}
+
+describe('findUnreflectedStyleAxes', () => {
+  it('flags a painted axis that no themeProps() call passes', () => {
+    const source = `
+      const elevationStyles = stylex.create({low: {boxShadow: 'x'}});
+      export function Banner({container, status, elevation = 'low'}) {
+        return (
+          <div {...stylex.props(styles.root, elevationStyles[elevation])}>
+            <div {...mergeProps(themeProps('banner', {container, status}))} />
+          </div>
+        );
+      }
+    `;
+    expect(findUnreflectedStyleAxes(source)).toEqual([
+      {
+        component: 'Banner',
+        prop: 'elevation',
+        styleMap: 'elevationStyles',
+        line: 5,
+      },
+    ]);
+  });
+
+  it('accepts the axis once a themeProps() call passes it', () => {
+    const source = `
+      const elevationStyles = stylex.create({low: {boxShadow: 'x'}});
+      export function Card({elevation}) {
+        return <div {...mergeProps(themeProps('card', {elevation}), stylex.props(elevationStyles[elevation]))} />;
+      }
+    `;
+    expect(findUnreflectedStyleAxes(source)).toEqual([]);
+  });
+
+  it('matches the prop name, not its local binding', () => {
+    const source = `
+      const radiusStyles = stylex.create({3: {borderRadius: 'x'}});
+      export function Skeleton({radius: radiusProp = 3}) {
+        return <div {...mergeProps(themeProps('skeleton', {radius: radiusProp}), stylex.props(radiusStyles[radiusProp]))} />;
+      }
+      export function Broken({radius: radiusProp = 3}) {
+        return <div {...mergeProps(themeProps('broken'), stylex.props(radiusStyles[radiusProp]))} />;
+      }
+    `;
+    expect(
+      findUnreflectedStyleAxes(source).map(f => `${f.component}.${f.prop}`),
+    ).toEqual(['Broken.radius']);
+  });
+
+  it('reads props destructured from a props parameter', () => {
+    const source = `
+      const sizeStyles = stylex.create({sm: {fontSize: 'x'}});
+      export function Code(props) {
+        const {size} = props;
+        return <code {...mergeProps(themeProps('code'), stylex.props(size && sizeStyles[size]))} />;
+      }
+    `;
+    expect(
+      findUnreflectedStyleAxes(source).map(f => `${f.component}.${f.prop}`),
+    ).toEqual(['Code.size']);
+  });
+
+  it('ignores a map that sets only layout keys', () => {
+    const source = `
+      const gapStyles = stylex.create({2: {gap: 'x'}});
+      export function List({gap}) {
+        return <div {...mergeProps(themeProps('list'), stylex.props(gapStyles[gap]))} />;
+      }
+    `;
+    expect(findUnreflectedStyleAxes(source)).toEqual([]);
+  });
+
+  it('ignores a lookup keyed by a value that is not a prop', () => {
+    const source = `
+      const sizeStyles = stylex.create({sm: {fontSize: 'x'}});
+      export function Field({label}) {
+        const size = useContextSize();
+        return <div {...mergeProps(themeProps('field'), stylex.props(sizeStyles[size]))}>{label}</div>;
+      }
+    `;
+    expect(findUnreflectedStyleAxes(source)).toEqual([]);
+  });
+
+  it('counts a lookup inside a render callback for the function around it', () => {
+    const source = `
+      const itemSizeStyles = stylex.create({md: {paddingBlock: 'x'}});
+      export function Menu({items, size}) {
+        const renderItem = item => <div {...stylex.props(itemSizeStyles[size])}>{item}</div>;
+        return <div {...themeProps('menu')}>{items.map(renderItem)}</div>;
+      }
+    `;
+    expect(
+      findUnreflectedStyleAxes(source).map(f => `${f.component}.${f.prop}`),
+    ).toEqual(['Menu.size']);
+  });
+
+  it('skips a function whose themeProps() keys it cannot read', () => {
+    const source = `
+      const sizeStyles = stylex.create({sm: {fontSize: 'x'}});
+      export function Opaque({size, ...rest}) {
+        return <div {...mergeProps(themeProps('opaque', rest), stylex.props(sizeStyles[size]))} />;
+      }
+    `;
+    expect(findUnreflectedStyleAxes(source)).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Discovery: every component dir's rendered classes vs its documented targets
 // ---------------------------------------------------------------------------
 
@@ -341,6 +744,8 @@ interface ComponentInfo {
   packageName: 'core' | 'lab' | 'richtext';
   dir: string;
   sites: ThemeTargetSite[];
+  /** Absolute paths of the source files in `dir`, without tests. */
+  sourceFiles: string[];
   /** The doc blocks that carry theming.targets, by the key they live under. */
   docBlocks: {key: 'docs' | 'docsZh'; file: string; targets: DocTarget[]}[];
 }
@@ -485,7 +890,13 @@ function discoverComponents(
       continue;
     }
 
-    results.push({packageName, dir, sites, docBlocks});
+    results.push({
+      packageName,
+      dir,
+      sites,
+      sourceFiles: sourceFiles.map(f => join(dirPath, f)),
+      docBlocks,
+    });
   }
   return results;
 }
@@ -494,12 +905,14 @@ function discoverComponents(
 // The guard
 // ---------------------------------------------------------------------------
 
+const participatingComponents = [
+  ...discoverComponents(CORE_SRC_DIR, 'core'),
+  ...discoverComponents(LAB_SRC_DIR, 'lab', LAB_PROMOTION_DIRS),
+  ...discoverComponents(RICHTEXT_SRC_DIR, 'richtext'),
+];
+
 describe('theming.targets matches the themeProps() call sites', () => {
-  const components = [
-    ...discoverComponents(CORE_SRC_DIR, 'core'),
-    ...discoverComponents(LAB_SRC_DIR, 'lab', LAB_PROMOTION_DIRS),
-    ...discoverComponents(RICHTEXT_SRC_DIR, 'richtext'),
-  ];
+  const components = participatingComponents;
 
   it('finds participating Core and Lab components', () => {
     // A refactor that renames themeProps or drops the Lab package from this
@@ -586,4 +999,73 @@ describe('theming.targets matches the themeProps() call sites', () => {
       });
     }
   }
+});
+
+/**
+ * Painted axes that do not reach themeProps(). Each key is `Component.prop`.
+ * Each value says why: the record claim that keeps the axis unreflected, or
+ * the gap that blocks a target. Remove a gap entry when the axis reaches
+ * themeProps(). A stale entry fails the guard.
+ */
+const UNREFLECTED_STYLE_AXIS_EXCEPTIONS: ReadonlyMap<string, string> = new Map([
+  [
+    'BaseTypeahead.size',
+    'The size pads the result row, and the result row has no target. The ' +
+      'missing row target is a recorded reachability gap.',
+  ],
+  [
+    'ChatComposer.elevation',
+    'The composer body paints the elevation but has no target. How to expose ' +
+      'the body to themes is an open owner decision.',
+  ],
+  [
+    'Skeleton.radius',
+    'component:Skeleton FR2: radius is callsite geometry, like width and ' +
+      'height, and is not reflected.',
+  ],
+]);
+
+describe('every painted prop axis reaches themeProps()', () => {
+  const findings = participatingComponents.flatMap(
+    ({packageName, dir, sourceFiles}) =>
+      sourceFiles
+        .filter(file => !file.includes('.stories.'))
+        .flatMap(file =>
+          findUnreflectedStyleAxes(readFileSync(file, 'utf-8'), file).map(
+            finding => ({
+              ...finding,
+              key: `${finding.component}.${finding.prop}`,
+              where: `${packageName}/${dir}/${basename(file)}:${finding.line}`,
+            }),
+          ),
+        ),
+  );
+
+  it('reflects every painted axis or lists it as an exception', () => {
+    const unexplained = findings
+      .filter(finding => !UNREFLECTED_STYLE_AXIS_EXCEPTIONS.has(finding.key))
+      .map(
+        finding =>
+          `${finding.where}: ${finding.component} selects painted styles ` +
+          `with \`${finding.styleMap}[${finding.prop}]\`, but no themeProps() ` +
+          `call passes \`${finding.prop}\`. A theme cannot select the ` +
+          `\`${finding.prop}\` values. Add \`${finding.prop}\` to the ` +
+          `themeProps() call on the target that paints it. If a record ` +
+          `keeps the axis unreflected, or no target paints it, add an ` +
+          `UNREFLECTED_STYLE_AXIS_EXCEPTIONS entry that says why.`,
+      );
+    expect(unexplained).toEqual([]);
+  });
+
+  it('has no stale exceptions', () => {
+    const found = new Set(findings.map(finding => finding.key));
+    const stale = [...UNREFLECTED_STYLE_AXIS_EXCEPTIONS.keys()].filter(
+      key => !found.has(key),
+    );
+    expect(
+      stale,
+      'These exceptions no longer match an unreflected painted axis. ' +
+        'Remove them.',
+    ).toEqual([]);
+  });
 });

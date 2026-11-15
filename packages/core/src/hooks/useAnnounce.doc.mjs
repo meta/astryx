@@ -17,14 +17,31 @@ export const docs = {
     'assertive',
     'visually hidden',
     'wcag',
+    'replace',
+    'result count',
   ],
-  params: [],
+  params: [
+    {
+      name: 'options',
+      type: 'UseAnnounceOptions',
+      description: 'Configuration object.',
+      required: false,
+    },
+    {
+      name: 'options.hasReplace',
+      type: 'boolean',
+      description:
+        "The instance states one current state, such as a search's result count: each message it writes withdraws the instance's previous message while that one has not been spoken yet, whatever their politeness, and is spoken at its own politeness. A message already spoken stays. Messages from other instances, and from instances without hasReplace, still join. Give each state a component reports its own instance, for example one for the result count and one for selection changes.",
+      default: 'false',
+      required: false,
+    },
+  ],
   returns: [
     {
       name: 'announce',
       type: '(message: string, politeness?: "polite" | "assertive") => void',
       description:
-        'Speaks a message through the live region the caller can be heard from: the shared one on the page body, or, when the calling component is rendered inside an open Astryx modal (Dialog, modal BottomSheet, modal Drawer, Lightbox, MobileNav, CommandPalette), a persistent region inside that modal, since a native modal hides the page-body region from assistive technology. Politeness defaults to "polite"; messages announced in the same frame are joined, in order, into one announcement, and an identical repeat is kept once. An empty message clears any lingering status, including joined messages not yet spoken, instead of announcing.',
+        'Speaks a message through the live region the caller can be heard from: the shared one on the page body, or, when the calling component is rendered inside an open Astryx modal (Dialog, modal BottomSheet, modal Drawer, Lightbox, MobileNav, CommandPalette), a persistent region inside that modal, since a native modal hides the page-body region from assistive technology. Politeness defaults to "polite"; messages announced in the same frame are joined, in order, into one announcement, and an identical repeat is kept once, except that each message from a hasReplace instance replaces the previous message of that instance not yet spoken. An empty message clears any lingering status, including joined messages not yet spoken, instead of announcing.',
     },
   ],
   usage: {
@@ -47,6 +64,11 @@ export const docs = {
           'Announce the outcome, not the interaction; "12 results" rather than "search ran".',
       },
       {
+        guidance: true,
+        description:
+          'Send a value that keeps changing, such as a result count as the user types, through its own useAnnounce({hasReplace: true}) instance, so input faster than a frame says only the latest count.',
+      },
+      {
         guidance: false,
         description:
           'Announce content that is already visible and correctly labeled in the DOM; that doubles up for screen reader users.',
@@ -63,9 +85,14 @@ export const docs = {
 export const docsDense = {
   description:
     'Imperative screen-reader announcements via a visually-hidden live region: the page-body one, or one inside the open Astryx modal the caller is rendered in (a native modal hides the body region). Polite + assertive regions created empty on first use + kept mounted, so announcements are reliable (most AT ignore a live region inserted together w/ its content). Messages auto-clear after ~2s.',
+  paramDescriptions: {
+    options: 'config object.',
+    'options.hasReplace':
+      "instance states one current state (e.g. a search's result count): each message withdraws the instance's previous one not yet spoken, whatever politeness, spoken at its own; spoken messages stay; other instances + instances w/o hasReplace still join. Default false.",
+  },
   returnDescriptions: {
     announce:
-      'speaks message through the live region the caller is heard from: page body, or inside the open Astryx modal (Dialog, modal BottomSheet/Drawer, Lightbox, MobileNav, CommandPalette) the calling component is rendered in. politeness defaults "polite"; same-frame messages join in order, identical repeat kept once; empty message clears lingering + not-yet-spoken status.',
+      'speaks message through the live region the caller is heard from: page body, or inside the open Astryx modal (Dialog, modal BottomSheet/Drawer, Lightbox, MobileNav, CommandPalette) the calling component is rendered in. politeness defaults "polite"; same-frame messages join in order, identical repeat kept once, except a hasReplace instance replaces its own not-yet-spoken message; empty message clears lingering + not-yet-spoken status.',
   },
   usage: {
     description:
@@ -85,6 +112,11 @@ export const docsDense = {
         guidance: true,
         description:
           'Announce outcome, not interaction; "12 results", not "search ran".',
+      },
+      {
+        guidance: true,
+        description:
+          'Changing value (result count while typing): own useAnnounce({hasReplace: true}) instance, so faster-than-a-frame input says only the latest.',
       },
       {
         guidance: false,

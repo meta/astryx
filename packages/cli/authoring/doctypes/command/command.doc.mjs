@@ -210,6 +210,13 @@ export const doc = {
       description: 'Deprecation notice — a DEP-* id and the replacement.',
     },
     {
+      name: 'replaces',
+      type: 'string[]',
+      stability: 'experimental',
+      description:
+        'The commands this command is meant to replace, by command path (`theme build`). Help shows them as one line ("Will replace: astryx theme build"), and a later deprecation of those commands reads this list. It marks nothing as deprecated.',
+    },
+    {
       name: 'related',
       type: 'string[]',
       description: 'Related command names.',
@@ -234,7 +241,7 @@ export const doc = {
   args: [{name: 'query', param: 'query', required: true}],
   options: [
     {flag: '--type <domain>', param: 'options.type', choices: ['component', 'hook', 'doc', 'template', 'theme']},
-    {flag: '--verbose', cliOnly: true, description: "Also print each result's score and match reason."},
+    {flag: '--verbose', cliOnly: true, description: "Also print each result's score and match reason, and its whole description."},
   ],
   examples: [{label: 'Terminal', cli: 'astryx search button --json'}],
   exitCodes: [{code: 1, when: 'The --type value is not a known domain.'}],

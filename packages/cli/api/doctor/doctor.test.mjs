@@ -29,6 +29,7 @@ import {
   checkImplicitIntegrations,
   checkProviderIdentity,
   checkIntegrationIssues,
+  checkIntegrationCoreRange,
   checkVersionAlignment,
   checkPackageManager,
   checkComputerIntegrationsAvailable,
@@ -36,6 +37,7 @@ import {
 import {installCommandFor} from './_adapter.mjs';
 import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
 import {Project} from '../../foundation/config/project.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
 const cwd = REPO;
@@ -102,11 +104,15 @@ describe('doctor never reads the carried Core (spec AST-081 FR3)', () => {
     const load = vi.spyOn(Project, 'load');
     const coreDir = vi.spyOn(Project.prototype, 'coreDir');
     try {
-      await doctor({cwd: dir});
+      const r = await doctor({cwd: dir});
       // Doctor's own project reads only the installed Core, and no Core a
       // project read during the run is the carried one.
       expect(load.mock.calls.some(([, options]) => options?.core === 'project')).toBe(true);
-      expect(coreDir).toHaveBeenCalled();
+      // Nothing is installed, so the Core check fails. The carried Core would
+      // pass it.
+      expect(
+        r.data.checks.find(check => check.id === 'core-installed'),
+      ).toMatchObject({status: 'fail'});
       for (const result of coreDir.mock.results) expect(result.value).toBeNull();
     } finally {
       load.mockRestore();
@@ -675,7 +681,7 @@ describe('checkDocsProgressiveDisclosure', () => {
   });
 
   it('names a section over the budget and a topic that fails to load', async () => {
-    const dir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-doctor-docs-'));
+    const dir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-doctor-docs-'));
     tmpDirs.push(dir);
     const huge = {
       name: 'huge',
@@ -720,7 +726,7 @@ describe('checkCliDocs', () => {
 
   /** A doc tree under the working directory, as the CLI root. */
   function writeRoot(/** @type {Record<string, any>} */ docsByPath) {
-    const root = fs.mkdtempSync(path.join(process.cwd(), '.astryx-doctor-cli-docs-'));
+    const root = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-doctor-cli-docs-'));
     tmpDirs.push(root);
     for (const [rel, doc] of Object.entries(docsByPath)) {
       const file = path.join(root, rel);
@@ -856,7 +862,7 @@ describe('checkAuthoringDocs against the public authoring surface', () => {
   /** A copy of this repo's authoring tree, to break one piece of at a time. */
   function copyAuthoring() {
     const root = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-doctor-authoring-'),
+      path.join(REPO_ROOT, '.astryx-doctor-authoring-'),
     );
     tmpDirs.push(root);
     fs.cpSync(AUTHORING_ROOT, root, {
@@ -1111,7 +1117,7 @@ describe('doctor docs checks', () => {
 
 describe('checkDocsProgressiveDisclosure languages', () => {
   it('checks every overlay a topic ships, not only English', async () => {
-    const dir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-doctor-lang-'));
+    const dir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-doctor-lang-'));
     tmpDirs.push(dir);
     const deploying = {
       name: 'deploying',
@@ -1258,7 +1264,7 @@ describe('doctor says why it skipped and what it checked', () => {
   /** A project under the working directory, so its config can be imported. */
   function cwdProject(files) {
     const dir = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-doctor-shape-'),
+      path.join(REPO_ROOT, '.astryx-doctor-shape-'),
     );
     tmpDirs.push(dir);
     for (const [rel, content] of Object.entries(files)) {
@@ -1385,7 +1391,7 @@ describe('a configured integration that cannot load fails the gate', () => {
    * @param {string} [at]
    */
   async function report(files, at = '.') {
-    const dir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-doctor-gate-'));
+    const dir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-doctor-gate-'));
     tmpDirs.push(dir);
     for (const [rel, content] of Object.entries(files)) {
       const abs = path.join(dir, rel);
@@ -1483,7 +1489,7 @@ describe('a configured integration that cannot load fails the gate', () => {
   it(
     'fails when node_modules links the configured name back to the authored package and its manifest throws',
     async () => {
-      const dir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-doctor-gate-'));
+      const dir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-doctor-gate-'));
       tmpDirs.push(dir);
       const files = {
         ...CORE_STUB,
@@ -1512,9 +1518,9 @@ describe('a configured integration that cannot load fails the gate', () => {
   it(
     'fails for the self-linked authored package when the working directory is itself a symlink',
     async () => {
-      const real = fs.mkdtempSync(path.join(process.cwd(), '.astryx-doctor-gate-'));
+      const real = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-doctor-gate-'));
       tmpDirs.push(real);
-      const linkParent = fs.mkdtempSync(path.join(process.cwd(), '.astryx-doctor-gate-'));
+      const linkParent = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-doctor-gate-'));
       tmpDirs.push(linkParent);
       const cwd = path.join(linkParent, 'link');
       fs.symlinkSync(real, cwd, 'dir');
@@ -1648,4 +1654,98 @@ describe('no Astryx-owned environment variables (spec:AST-017 FR14)', () => {
     walk(cliDir);
     expect(hits).toEqual([]);
   });
+});
+
+describe('integration-core-range: each loaded integration supports the installed Core', () => {
+  /**
+   * A package folder with this package.json.
+   * @param {object} pkg
+   */
+  const packageDir = pkg => {
+    const dir = mkProject({'package.json': JSON.stringify(pkg)});
+    return dir;
+  };
+  const theme = (range, name = '@acme/theme') =>
+    ({name, __packageDir: packageDir({name, version: '0.2.0', peerDependencies: {'@astryxdesign/core': range}})});
+  /** An installed Core at `version`. @param {string} version */
+  const core = version => packageDir({name: '@astryxdesign/core', version});
+
+  it('is left out when no loaded integration declares a Core range', () => {
+    const plain = {name: '@acme/plain', __packageDir: packageDir({name: '@acme/plain', version: '1.0.0'})};
+    expect(checkIntegrationCoreRange({coreDir: core('0.7.4'), integrations: [plain]})).toBeNull();
+  });
+
+  it('is left out when Core is not installed', () => {
+    expect(checkIntegrationCoreRange({coreDir: null, integrations: [theme('>=0.6.3 <0.7.0')]})).toBeNull();
+  });
+
+  it('passes and names the packages when every range includes the Core', () => {
+    expect(
+      checkIntegrationCoreRange({coreDir: core('0.7.4'), integrations: [theme('>=0.7.0 <0.8.0')]}),
+    ).toEqual({
+      id: 'integration-core-range',
+      label: 'Integrations support the installed Core',
+      status: 'pass',
+      message: '1 loaded integration supports @astryxdesign/core 0.7.4 (@acme/theme).',
+    });
+  });
+
+  it('warns, naming the package, its range and the installed Core, when a range excludes it', () => {
+    const check = checkIntegrationCoreRange({
+      coreDir: core('0.7.4'),
+      integrations: [theme('>=0.6.3 <0.7.0'), theme('^0.7.1', '@acme/ok')],
+    });
+    expect(check).toMatchObject({id: 'integration-core-range', status: 'warn'});
+    expect(check?.message).toBe(
+      '@acme/theme@0.2.0 supports @astryxdesign/core >=0.6.3 <0.7.0, but the project has 0.7.4. Its components, themes and docs were made for another Core and may not work.',
+    );
+    expect(check?.fix).toContain('whose @astryxdesign/core range includes 0.7.4');
+  });
+
+  it('skips a package that failed to load: configured-integrations reports it', () => {
+    const broken = {...theme('>=0.6.3 <0.7.0'), __loadError: new Error('boom')};
+    expect(checkIntegrationCoreRange({coreDir: core('0.7.4'), integrations: [broken]})).toBeNull();
+  });
+
+  it('leaves an added theme package to theme-core-peers, which applies the same rule', () => {
+    const check = checkIntegrationCoreRange({
+      coreDir: core('0.7.4'),
+      addedThemePackages: ['@acme/theme'],
+      integrations: [theme('>=0.6.3 <0.7.0'), theme('^0.7.1', '@acme/ok')],
+    });
+    expect(check).toMatchObject({
+      status: 'pass',
+      message: '1 loaded integration supports @astryxdesign/core 0.7.4 (@acme/ok).',
+    });
+    expect(
+      checkIntegrationCoreRange({
+        coreDir: core('0.7.4'),
+        addedThemePackages: ['@acme/theme'],
+        integrations: [theme('>=0.6.3 <0.7.0')],
+      }),
+    ).toBeNull();
+  });
+
+  it(
+    'doctor warns for an installed theme package made for an older Core',
+    async () => {
+      const dir = mkProject({
+        'package.json': JSON.stringify({name: 'app', dependencies: {'@acme/theme': '0.2.0'}}),
+        'node_modules/@astryxdesign/core/package.json': JSON.stringify({name: '@astryxdesign/core', version: '0.7.4'}),
+        'node_modules/@acme/theme/package.json': JSON.stringify({
+          name: '@acme/theme',
+          version: '0.2.0',
+          peerDependencies: {'@astryxdesign/core': '>=0.6.3 <0.7.0'},
+        }),
+        'node_modules/@acme/theme/astryx.integration.mjs': "export default {docs: './docs'};\n",
+        'node_modules/@acme/theme/docs/acme-theme.doc.mjs':
+          "export default {type: 'guide', name: 'acme-theme', title: 'Acme theme', description: 'Fixture.', sections: [{id: 'use', title: 'Use', content: [{type: 'prose', text: 'Use it.'}]}]};\n",
+      });
+      const {checks} = (await doctor({cwd: dir})).data;
+      const check = checks.find(c => c.id === 'integration-core-range');
+      expect(check?.status).toBe('warn');
+      expect(check?.message).toMatch(/^@acme\/theme@0\.2\.0 supports @astryxdesign\/core >=0\.6\.3 <0\.7\.0, but the project has 0\.7\.4\./);
+    },
+    SLOW,
+  );
 });

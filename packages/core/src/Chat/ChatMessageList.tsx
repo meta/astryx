@@ -26,7 +26,8 @@
 
 import {type ReactNode, useEffect, useMemo, useRef, useTransition} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {spacingVars} from '../theme/tokens.stylex';
+import {focusVars, spacingVars} from '../theme/tokens.stylex';
+import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {
   ChatListContext,
   type ChatDensity,
@@ -37,8 +38,14 @@ import {Spinner} from '../Spinner';
 import type {BaseProps} from '../BaseProps';
 import type {SpacingStep} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Chat/ChatMessageList.generated';
+
+registerEnglishFallback(english);
 
 export interface ChatMessageListProps extends BaseProps<HTMLDivElement> {
   /** Ref forwarded to the root element */
@@ -120,6 +127,14 @@ const styles = stylex.create({
     flexDirection: 'column',
     flex: 1,
     minHeight: 0,
+  },
+  // The log fills the area that scrolls it, which clips at its edges, so its
+  // keyboard ring sits inside its own box instead of around it.
+  focusRingInset: {
+    outlineOffset: {
+      default: null,
+      ':focus-visible': `calc(-1 * ${focusVars['--focus-outline-width']})`,
+    },
   },
   inner: {
     display: 'flex',
@@ -240,7 +255,7 @@ export function ChatMessageList({
   const sentinelRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
   const [isLoadingTop, startTransition] = useTransition();
-  const t = useTranslator();
+  const t = useComponentTranslator();
   // The top loading Spinner sits inside the log and is silent; the list
   // announces its loading through the channel (spec:AST-086 FR4, FR8).
   useBusyAnnouncement(isLoadingTop, t('@astryx.spinner.loading'), innerRef);
@@ -254,11 +269,13 @@ export function ChatMessageList({
   }, [layoutContext]);
 
   const hasChildren =
+    // eslint-disable-next-line @astryx/no-nullish-jsx-guard -- component:ChatMessageList FR4 shows the empty state only for nullish, false or an empty top-level array children
     children != null &&
     children !== false &&
     !(Array.isArray(children) && children.length === 0);
 
-  // IntersectionObserver for scroll-to-top infinite scroll
+  // Syncs an IntersectionObserver on the top sentinel with `scrollToTopAction`.
+  // The action runs when the sentinel comes into view.
   useEffect(() => {
     const scrollContainer = layoutContext?.scrollContainerRef?.current;
     if (!scrollToTopAction || !sentinelRef.current) {
@@ -302,7 +319,14 @@ export function ChatMessageList({
         data-testid={testId}
         {...mergeProps(
           themeProps('chat-message-list', {density}),
-          stylex.props(styles.root, xstyle),
+          // A tab stop: the shared ring, which a theme restyles through the
+          // focus-outline tokens.
+          stylex.props(
+            styles.root,
+            focusOutlineStyles.focusVisible,
+            styles.focusRingInset,
+            xstyle,
+          ),
           className,
           style,
         )}>

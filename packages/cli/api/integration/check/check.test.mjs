@@ -27,6 +27,7 @@ import {
 } from './check.mjs';
 import {validateIntegration} from '../validate-integration.mjs';
 import {discoverCoreTemplates} from '../../../foundation/discovery/template-adapter.mjs';
+import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
 const IDENTITY = {validated: true, name: '@acme/widgets', version: '1.2.3'};
 
@@ -398,7 +399,7 @@ describe('integrationCheck', () => {
   beforeEach(() => {
     // Under the repository, so the components check resolves Core.
     pkg = fs.mkdtempSync(
-      path.join(process.cwd(), '.astryx-integration-check-'),
+      path.join(REPO_ROOT, '.astryx-integration-check-'),
     );
     fs.writeFileSync(
       path.join(pkg, 'package.json'),

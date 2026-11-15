@@ -9,16 +9,24 @@ import {describe, expect, it} from 'vitest';
 
 const script = path.join(import.meta.dirname, 'ci-test-join.mjs');
 const broad = {
-  CHECK_SCOPE_RESULT: 'success',
   DOCSITE_ONLY: 'false',
   SPEC_ONLY: 'false',
   TOOLING_ONLY: 'false',
+  LAB_ONLY: 'false',
+  RELEASE_BUMP: 'false',
+  RELEASE_BUMP_RESULT: 'skipped',
   TEST_UI_RESULT: 'success',
   TEST_NODE_RESULT: 'success',
+  NODE_BROWSER_CONTRACTS_RESULT: 'success',
+  SWIZZLE_PROOF_SCOPE_RESULT: 'success',
+  SWIZZLE_PROOF_MODE: 'none',
+  SWIZZLE_PROOF_RESULT: 'skipped',
   TEST_BUILD_RESULT: 'success',
-  REGISTRY_CONTRACT_RESULT: 'success',
   TEST_NATIVE_SWIFT_RESULT: 'success',
   PR_INTERACTION_RESULT: 'success',
+  PR_INTERACTION_WEBKIT_RESULT: 'success',
+  PR_COMPONENT_A11Y_CONTRACTS_RESULT: 'success',
+  PR_A11Y_DEPENDENT_AUDITS_RESULT: 'success',
 };
 
 // An override of `null` removes the variable, as a missing `needs` result would.
@@ -48,42 +56,98 @@ describe('pull-request test join', () => {
     for (const [name, value] of [
       ['TEST_UI_RESULT', 'failure'],
       ['TEST_NODE_RESULT', 'cancelled'],
+      ['NODE_BROWSER_CONTRACTS_RESULT', 'failure'],
+      ['NODE_BROWSER_CONTRACTS_RESULT', 'skipped'],
+      ['NODE_BROWSER_CONTRACTS_RESULT', null],
+      ['SWIZZLE_PROOF_SCOPE_RESULT', 'failure'],
+      ['SWIZZLE_PROOF_SCOPE_RESULT', 'skipped'],
+      ['SWIZZLE_PROOF_SCOPE_RESULT', null],
       ['TEST_BUILD_RESULT', 'skipped'],
-      ['REGISTRY_CONTRACT_RESULT', 'failure'],
       ['TEST_NATIVE_SWIFT_RESULT', 'failure'],
       ['TEST_NATIVE_SWIFT_RESULT', 'skipped'],
       ['PR_INTERACTION_RESULT', 'failure'],
       ['PR_INTERACTION_RESULT', 'skipped'],
       ['PR_INTERACTION_RESULT', 'cancelled'],
       ['PR_INTERACTION_RESULT', null],
+      ['PR_INTERACTION_WEBKIT_RESULT', 'failure'],
+      ['PR_INTERACTION_WEBKIT_RESULT', 'skipped'],
+      ['PR_INTERACTION_WEBKIT_RESULT', 'cancelled'],
+      ['PR_INTERACTION_WEBKIT_RESULT', null],
+      // A failing component accessibility contract blocks the merge.
+      ['PR_COMPONENT_A11Y_CONTRACTS_RESULT', 'failure'],
+      ['PR_COMPONENT_A11Y_CONTRACTS_RESULT', 'skipped'],
+      ['PR_COMPONENT_A11Y_CONTRACTS_RESULT', 'cancelled'],
+      ['PR_COMPONENT_A11Y_CONTRACTS_RESULT', null],
+      ['PR_A11Y_DEPENDENT_AUDITS_RESULT', 'failure'],
+      ['PR_A11Y_DEPENDENT_AUDITS_RESULT', 'skipped'],
+      ['PR_A11Y_DEPENDENT_AUDITS_RESULT', 'cancelled'],
+      ['PR_A11Y_DEPENDENT_AUDITS_RESULT', null],
     ]) {
       expect(run({[name]: value}), name).toMatchObject({status: 1});
     }
   });
 
-  it.each(['DOCSITE_ONLY', 'SPEC_ONLY', 'TOOLING_ONLY'])(
-    'accepts a skipped Build owner only for %s',
+  it('requires the swizzle-proof legs exactly when the proof scope proves a target', () => {
+    for (const mode of ['affected', 'all']) {
+      expect(
+        run({SWIZZLE_PROOF_MODE: mode, SWIZZLE_PROOF_RESULT: 'success'}),
+        mode,
+      ).toMatchObject({status: 0});
+      for (const result of ['skipped', 'failure', 'cancelled', null]) {
+        expect(
+          run({SWIZZLE_PROOF_MODE: mode, SWIZZLE_PROOF_RESULT: result}),
+          `${mode} ${result}`,
+        ).toMatchObject({status: 1});
+      }
+    }
+    // A scope that proves no target must not have run the legs.
+    for (const result of ['success', 'failure', 'cancelled', null]) {
+      expect(
+        run({SWIZZLE_PROOF_RESULT: result}),
+        `none ${result}`,
+      ).toMatchObject({status: 1});
+    }
+    // An undecided scope fails closed.
+    for (const mode of ['', 'unknown', null]) {
+      expect(run({SWIZZLE_PROOF_MODE: mode}), `mode ${mode}`).toMatchObject({
+        status: 1,
+      });
+    }
+  });
+
+  it.each(['DOCSITE_ONLY', 'SPEC_ONLY', 'TOOLING_ONLY', 'LAB_ONLY'])(
+    'still requires every owner to report success for %s, since each skips its own work',
     scope => {
+      expect(run({[scope]: 'true'})).toMatchObject({status: 0});
       expect(
         run({[scope]: 'true', TEST_BUILD_RESULT: 'skipped'}),
-      ).toMatchObject({status: 0});
-      expect(
-        run({[scope]: 'true', TEST_BUILD_RESULT: 'success'}),
       ).toMatchObject({status: 1});
     },
   );
 
-  it('fails closed when classification failed or omitted', () => {
-    expect(
-      run({CHECK_SCOPE_RESULT: 'failure', TEST_BUILD_RESULT: 'skipped'}),
-    ).toMatchObject({status: 1});
-    expect(
-      run({CHECK_SCOPE_RESULT: '', TEST_BUILD_RESULT: 'skipped'}),
-    ).toMatchObject({status: 1});
+  it('requires the release bump only on a release-branch pull request', () => {
+    const release = {
+      RELEASE_BUMP: 'true',
+      SPEC_ONLY: 'true',
+      TOOLING_ONLY: 'true',
+    };
+    expect(run({...release, RELEASE_BUMP_RESULT: 'success'})).toMatchObject({
+      status: 0,
+    });
+    for (const result of ['failure', 'skipped', 'cancelled', null]) {
+      expect(
+        run({...release, RELEASE_BUMP_RESULT: result}),
+        String(result),
+      ).toMatchObject({status: 1});
+    }
+    expect(run({RELEASE_BUMP_RESULT: 'success'})).toMatchObject({status: 1});
   });
 
   it('rejects missing or invalid scope decisions', () => {
     expect(run({SPEC_ONLY: ''})).toMatchObject({status: 1});
     expect(run({TOOLING_ONLY: 'unknown'})).toMatchObject({status: 1});
+    // A Lab-only decision is required too (spec:AST-030 FR26).
+    expect(run({LAB_ONLY: null})).toMatchObject({status: 1});
+    expect(run({LAB_ONLY: 'maybe'})).toMatchObject({status: 1});
   });
 });

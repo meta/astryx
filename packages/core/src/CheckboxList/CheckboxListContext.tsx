@@ -4,12 +4,14 @@
 
 /**
  * @file CheckboxListContext.tsx
- * @input Uses the private layer-scoped context factory
+ * @input Uses the private layer-scoped context factory and the RequiredGroup
+ *   type
  * @output Exports CheckboxListContext for parent-child communication
  * @position Internal context; consumed by CheckboxList.tsx and CheckboxListItem.tsx
  */
 
 import {createLayerScopedContext} from '../Layer/layerScopedContext';
+import type {RequiredGroup} from './requiredGroup';
 
 export interface CheckboxListContextValue {
   value?: string[];
@@ -28,15 +30,39 @@ export interface CheckboxListContextValue {
    * and AT-discoverable; toggling is still blocked.
    */
   hasDisabledMessage?: boolean;
+  /**
+   * The id of the group's reason tooltip while `hasDisabledMessage` is true.
+   * The reason describes the group (CheckboxList FR1) and every checkbox adds
+   * it to its own `aria-describedby` (FR9): a screen reader announces a
+   * checkbox's description when the checkbox takes focus, which it does not
+   * reliably do for a description on the group.
+   */
+  disabledMessageID?: string;
   isReadOnly: boolean;
+  /**
+   * True when the list has an error `status`. Each checkbox is then
+   * `aria-invalid`. Some screen readers skip a group's invalid state when a
+   * checkbox takes focus.
+   */
+  isInvalid?: boolean;
   /**
    * Values of the items whose `changeAction` is pending. Each matching item
    * renders an in-checkbox spinner and blocks re-toggling; the list is empty
    * when idle.
    */
   loadingValues?: ReadonlyArray<string>;
+  /**
+   * Present when the list is `isRequired`. Each item registers its checkbox,
+   * so that while no box is checked the first enabled box carries native
+   * `required`.
+   */
+  requiredGroup?: RequiredGroup;
 }
 
 export const CheckboxListContext =
-  createLayerScopedContext<CheckboxListContextValue | null>(null);
+  createLayerScopedContext<CheckboxListContextValue | null>(
+    'CheckboxListContext',
+    1,
+    null,
+  );
 CheckboxListContext.displayName = 'CheckboxListContext';

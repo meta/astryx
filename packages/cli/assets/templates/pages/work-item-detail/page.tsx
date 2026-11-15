@@ -25,10 +25,12 @@ import {Avatar} from '@astryxdesign/core/Avatar';
 import {AvatarGroup} from '@astryxdesign/core/AvatarGroup';
 import {Button} from '@astryxdesign/core/Button';
 import {IconButton} from '@astryxdesign/core/IconButton';
+import {useToast} from '@astryxdesign/core/Toast';
 import {MoreMenu} from '@astryxdesign/core/MoreMenu';
 import type {DropdownMenuOption} from '@astryxdesign/core/DropdownMenu';
 import {Link} from '@astryxdesign/core/Link';
 import {Icon} from '@astryxdesign/core/Icon';
+import {rtlStyles} from '@astryxdesign/core/utils';
 import {AspectRatio} from '@astryxdesign/core/AspectRatio';
 import {Divider} from '@astryxdesign/core/Divider';
 import {StatusDot} from '@astryxdesign/core/StatusDot';
@@ -255,10 +257,11 @@ const ATTACHMENT_ICONS = {
 };
 
 // Identical for every row, so it is built once rather than per render.
-const ATTACHMENT_ACTIONS: DropdownMenuOption[] = [
-  {label: 'Edit', icon: PencilIcon},
-  {label: 'Delete', icon: TrashIcon, variant: 'destructive'},
-];
+const ATTACHMENT_DELETE: DropdownMenuOption = {
+  label: 'Delete',
+  icon: TrashIcon,
+  variant: 'destructive',
+};
 
 const HEADER_ACTIONS = [
   {label: 'Watch', icon: EyeIcon},
@@ -381,7 +384,11 @@ function PageHeader({
             <HStack gap={4} vAlign="center" wrap="wrap">
               <Link href="#" type="supporting" color="secondary">
                 <HStack as="span" gap={1} vAlign="center">
-                  <Icon icon={ArrowLeftIcon} size="sm" />
+                  <Icon
+                    icon={ArrowLeftIcon}
+                    size="sm"
+                    xstyle={rtlStyles.mirror}
+                  />
                   All Tasks
                 </HStack>
               </Link>
@@ -516,13 +523,25 @@ function SubtasksSection({
   onSetDone: (id: number, isDone: boolean) => void;
 }) {
   const doneCount = subtasks.filter(task => task.isDone).length;
+  const showToast = useToast();
 
   return (
     <Section padding={SECTION_PADDING}>
       <VStack gap={4}>
         <SectionHeader
           title="Subtasks"
-          action={<Button label="Add subtask" />}
+          action={
+            <Button
+              label="Add subtask"
+              onClick={() =>
+                // Demo only: replace this toast with the call that adds a subtask.
+                showToast({
+                  body: 'Demo: a new subtask would be added here',
+                  uniqueID: 'add-subtask',
+                })
+              }
+            />
+          }
         />
         <HStack gap={3} vAlign="center">
           <Text type="supporting" color="secondary">
@@ -565,6 +584,7 @@ function SubtasksSection({
 
 // ─── Attachments ────────────────────────────────────────────────────────────
 function AttachmentsSection() {
+  const showToast = useToast();
   return (
     <Section padding={SECTION_PADDING}>
       <VStack gap={4}>
@@ -603,7 +623,19 @@ function AttachmentsSection() {
                 <MoreMenu
                   presentation="adaptive"
                   label={`Actions for ${attachment.title}`}
-                  items={ATTACHMENT_ACTIONS}
+                  items={[
+                    {
+                      label: 'Edit',
+                      icon: PencilIcon,
+                      onClick: () =>
+                        // Demo only: replace this toast with the call that edits the attachment.
+                        showToast({
+                          body: `Demo: ${attachment.title} would open for editing here`,
+                          uniqueID: `edit-${attachment.id}`,
+                        }),
+                    },
+                    ATTACHMENT_DELETE,
+                  ]}
                 />
               </HStack>
             </ClickableCard>
@@ -623,6 +655,7 @@ function ActivitySection({
   onCommentChange: (value: string) => void;
 }) {
   const commentFieldRef = useRef<HTMLTextAreaElement>(null);
+  const showToast = useToast();
 
   const focusCommentField = () => {
     const field = commentFieldRef.current;
@@ -696,11 +729,23 @@ function ActivitySection({
             rows={5}
           />
           <HStack gap={2} hAlign="end">
-            <Button label="Cancel" variant="ghost" />
+            <Button
+              label="Cancel"
+              variant="ghost"
+              onClick={() => onCommentChange('')}
+            />
             <Button
               label="Comment"
               variant="primary"
               isDisabled={comment.trim().length === 0}
+              onClick={() => {
+                // Demo only: replace this toast with the call that posts the comment.
+                showToast({
+                  body: 'Demo: the comment would be posted here',
+                  uniqueID: 'comment',
+                });
+                onCommentChange('');
+              }}
             />
           </HStack>
         </VStack>

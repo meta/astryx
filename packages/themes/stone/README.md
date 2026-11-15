@@ -10,14 +10,14 @@ npm install @astryxdesign/theme-stone
 
 ## Usage
 
-Wrap your app with `XDSTheme` and pass the theme:
+Wrap your app with `Theme` and pass the theme:
 
 ```tsx
-import {XDSTheme} from '@astryxdesign/core/theme';
+import {Theme} from '@astryxdesign/core/theme';
 import {stoneTheme} from '@astryxdesign/theme-stone/built';
 
 function App() {
-  return <XDSTheme theme={stoneTheme}>{/* your app */}</XDSTheme>;
+  return <Theme theme={stoneTheme}>{/* your app */}</Theme>;
 }
 ```
 

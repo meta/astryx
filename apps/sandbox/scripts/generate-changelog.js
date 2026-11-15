@@ -14,7 +14,7 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 const OUT_DIR = path.resolve(__dirname, '..', 'src', 'generated');
 const OUT_FILE = path.join(OUT_DIR, 'changelogRegistry.ts');
 
-const GITHUB_REPO = 'facebook/astryx';
+const GITHUB_REPO = 'meta/astryx';
 
 const CHANGELOG_SOURCES = [
   {pkg: '@astryxdesign/core', file: 'packages/core/CHANGELOG.md'},

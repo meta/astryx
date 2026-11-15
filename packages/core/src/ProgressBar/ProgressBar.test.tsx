@@ -7,10 +7,24 @@
  * @position Colocated unit tests; mark geometry is checked in Storybook
  */
 
-import {describe, it, expect, beforeAll} from 'vitest';
+import {describe, it, expect, beforeAll, vi} from 'vitest';
 import {render, screen, waitFor} from '@testing-library/react';
 import {ProgressBar} from './ProgressBar';
 import {getForcedColorsRules} from '../__tests__/forcedColors';
+import {readFileSync} from 'node:fs';
+import path from 'node:path';
+import {
+  progressBar,
+  registerProgressBarTable,
+} from '../motion/uikit/progressBar';
+import {formatMotionRoleValue, motionRole, motionRoleOf} from '../motion/roles';
+import {
+  REDUCED_MOTION_FADE_QUERY,
+  REDUCED_MOTION_INSTANT_QUERY,
+} from '../motion/reducedMotion';
+import {TOUCH_QUERY} from '../utils/touchQueries';
+import {TOUCH_MIN_FILL_PX} from './ProgressBarTouch';
+import {timing} from '../motion/uikit/timing';
 
 // A labeled mark wraps the tick in a lazily-loaded Tooltip (React.lazy +
 // Suspense). Preload that chunk once so the Tooltip (and its
@@ -140,9 +154,9 @@ describe('ProgressBar', () => {
     expect(progressbar).toHaveAttribute('aria-valuenow', '0');
     expect(progressbar.getAttribute('aria-valuetext')).toBe('0%');
     expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
-    // The fill width must be a real percentage, not "NaN%".
+    // The filled share must be a real percentage, not "NaN%".
     const fill = progressbar.firstElementChild as HTMLElement;
-    expect(fill.style.width).toBe('0%');
+    expect(fill.style.getPropertyValue('--_progress-bar-fill')).toBe('0%');
   });
 
   it('treats a NaN max as an empty range instead of leaking "NaN"', () => {
@@ -566,7 +580,7 @@ describe('ProgressBar', () => {
       expect(styleClasses(accentMarks[1])).toBe(styleClasses(errorMarks[1]));
     });
 
-    it('renders every mark as a focusable trigger (label is required, never decorative)', () => {
+    it('renders every mark as a named, focusable image before its tooltip opens', () => {
       const {container} = render(
         <ProgressBar
           value={50}
@@ -579,10 +593,8 @@ describe('ProgressBar', () => {
       // aria-hidden and is always keyboard-focusable to reveal its label.
       expect(mark).not.toHaveAttribute('aria-hidden');
       expect(mark).toHaveAttribute('tabindex', '0');
-      // The name comes from the Tooltip (aria-describedby), not a role/label on
-      // the tick itself, so the progressbar's own subtree stays clean.
-      expect(mark).not.toHaveAttribute('role');
-      expect(mark).not.toHaveAttribute('aria-label');
+      expect(mark).toHaveAttribute('role', 'img');
+      expect(mark).toHaveAttribute('aria-label', 'Goal');
     });
 
     it('reveals a labeled mark via a focusable Tooltip trigger', async () => {
@@ -593,8 +605,8 @@ describe('ProgressBar', () => {
           marks={[{value: 80, label: 'Goal'}]}
         />,
       );
-      // Focusable so keyboard users can reveal the label; named via the
-      // Tooltip's aria-describedby rather than a labeled child of the bar.
+      // Focusable so keyboard users can reveal the label visually; the tick
+      // itself owns its name independently of the Tooltip's description.
       // The Tooltip loads lazily (Suspense), so re-query the live element and
       // wait for it to attach aria-describedby.
       const mark0 = container.querySelector<HTMLElement>(MARK)!;
@@ -653,16 +665,16 @@ describe('ProgressBar', () => {
       );
       const progressbar = screen.getByRole('progressbar');
       const fill = progressbar.firstElementChild as HTMLElement;
-      expect(fill.style.width).toBe('50%');
+      expect(fill.style.getPropertyValue('--_progress-bar-fill')).toBe('50%');
       expect(fill.classList.contains('astryx-progress-bar-mark')).toBe(false);
       expect(container.querySelectorAll(MARK)).toHaveLength(1);
     });
 
-    it('does not clip marks in determinate mode (track carries no overflow:hidden)', () => {
-      // In determinate mode the track must NOT clip, so a themed taller mark
-      // can overhang the bar. (Indeterminate mode re-adds the clip — covered
-      // separately — but marks are suppressed there, so nothing overhangs.)
-      render(
+    it('keeps marks outside the clipping track, so a themed tall mark can still overhang', () => {
+      // The track clips its fill to the rounded rail. Marks sit beside the
+      // track in its unclipped container, never inside it, so a theme that
+      // makes a mark taller than the bar still sees it overhang both edges.
+      const {container} = render(
         <ProgressBar
           value={50}
           label="Progress"
@@ -670,9 +682,36 @@ describe('ProgressBar', () => {
         />,
       );
       const progressbar = screen.getByRole('progressbar');
-      const trackClass = Array.from(progressbar.classList).find(c =>
-        c.startsWith('x'),
-      );
+      const marks = Array.from(container.querySelectorAll<HTMLElement>(MARK));
+      expect(marks).toHaveLength(1);
+      let css = '';
+      for (const sheet of Array.from(document.styleSheets)) {
+        for (const rule of Array.from(sheet.cssRules)) {
+          css += rule.cssText + '\n';
+        }
+      }
+      const clips = (el: Element) =>
+        Array.from(el.classList).some(cls =>
+          new RegExp(`\\.${cls}\\b[^{]*\\{[^}]*overflow:\\s*hidden`, 'i').test(
+            css,
+          ),
+        );
+      for (const mark of marks) {
+        expect(progressbar.contains(mark)).toBe(false);
+        // No ancestor between the mark and the bar's root clips it.
+        let node = mark.parentElement;
+        while (node != null && node !== container) {
+          expect(clips(node)).toBe(false);
+          node = node.parentElement;
+        }
+      }
+    });
+
+    it('clips the track in determinate mode (the fill slides in from the start)', () => {
+      // The determinate fill spans the whole track and is moved back by the
+      // unfilled share; the track's clip keeps the moved-out part hidden.
+      render(<ProgressBar value={30} label="Progress" />);
+      const progressbar = screen.getByRole('progressbar');
       let css = '';
       for (const sheet of Array.from(document.styleSheets)) {
         try {
@@ -683,34 +722,83 @@ describe('ProgressBar', () => {
           // ignore cross-origin sheets
         }
       }
-      css += Array.from(document.querySelectorAll('style'))
-        .map(s => s.textContent || '')
-        .join('\n');
-      // The atomic class that would set overflow:hidden must not be applied to
-      // the track. Sanity-check the bar still rendered with a StyleX class.
-      expect(trackClass).toBeDefined();
-      // No rule targeting the track's classes sets overflow:hidden. (StyleX
-      // atomic classes are unique per declaration; if overflow:hidden were on
-      // the track we'd see it applied. We assert the track element's computed
-      // intent by checking no overflow:hidden atomic is in its class list's
-      // rules — simplest robust check: the track style object omits it.)
       const trackHasOverflowHidden = Array.from(progressbar.classList).some(
-        cls => {
-          const re = new RegExp(
-            `\\.${cls}\\b[^{]*\\{[^}]*overflow:\\s*hidden`,
-            'i',
-          );
-          return re.test(css);
-        },
+        cls =>
+          new RegExp(`\\.${cls}\\b[^{]*\\{[^}]*overflow:\\s*hidden`, 'i').test(
+            css,
+          ),
       );
-      expect(trackHasOverflowHidden).toBe(false);
+      expect(trackHasOverflowHidden).toBe(true);
+    });
+
+    it('moves the determinate fill with a transform, not its width, except under forced colors', () => {
+      // A width transition lays out and repaints on the main thread every
+      // frame, so it stalls while a script runs; a transform transition runs
+      // on the compositor. The fill spans the track and its leading edge sits
+      // at the filled share, mirrored in RTL.
+      render(<ProgressBar value={30} label="Progress" />);
+      const fill = screen.getByRole('progressbar')
+        .firstElementChild as HTMLElement;
+      // The stylesheet's rules, apart and under forced colors.
+      let css = '';
+      let forcedCss = '';
+      const collect = (rules: CSSRuleList, forced: boolean) => {
+        for (const rule of Array.from(rules)) {
+          if ('cssRules' in rule && 'conditionText' in rule) {
+            collect(
+              (rule as CSSMediaRule).cssRules,
+              forced ||
+                /forced-colors:\s*active/.test(
+                  (rule as CSSMediaRule).conditionText,
+                ),
+            );
+          } else if (forced) {
+            forcedCss += rule.cssText + '\n';
+          } else {
+            css += rule.cssText + '\n';
+          }
+        }
+      };
+      for (const sheet of Array.from(document.styleSheets)) {
+        collect(sheet.cssRules, false);
+      }
+      const declarationsIn = (text: string) =>
+        Array.from(fill.classList)
+          .flatMap(cls =>
+            Array.from(
+              text.matchAll(new RegExp(`\\.${cls}\\b[^{]*\\{([^}]*)\\}`, 'g')),
+              m => m[1].trim(),
+            ),
+          )
+          .join('\n');
+      const joined = declarationsIn(css);
+      expect(fill.style.width).toBe('');
+      expect(fill.style.getPropertyValue('--_progress-bar-fill')).toBe('30%');
+      expect(joined).toMatch(/width:\s*100%/);
+      expect(joined).toMatch(/transition-property:\s*transform/);
+      expect(joined).not.toMatch(/transition-property:\s*width/);
+      expect(joined).toMatch(/will-change:\s*transform/);
+      expect(joined).toMatch(
+        /transform:\s*translateX\(calc\(var\(--_progress-bar-fill,\s*0%\) - 100%\)\)/,
+      );
+      expect(css).toMatch(
+        // The bar's own direction (`:dir(rtl)`), not any RTL ancestor.
+        /:dir\(rtl\)[^{]*\{[^}]*transform:\s*translateX\(calc\(100% - var\(--_progress-bar-fill,\s*0%\)\)\)/,
+      );
+      // Under forced colors the fill is sized to the value instead, so the
+      // track's clip never cuts its CanvasText outline (theme-tokens INV11);
+      // the Chromium spec checks the drawn outline.
+      const forced = declarationsIn(forcedCss);
+      expect(forced).toMatch(/width:\s*var\(--_progress-bar-fill,\s*0%\)/);
+      expect(forced).toMatch(/transform:\s*none/);
+      expect(forced).toMatch(/transition-property:\s*width/);
+      expect(forced).toMatch(/will-change:\s*auto/);
     });
 
     it('clips the track in indeterminate mode (the sliding fill must not escape)', () => {
       // Regression: the indeterminate fill slides from translateX -100% to
       // 250%, deliberately overshooting the track, and relies on the track
-      // clipping it to the visible window. Determinate mode drops the clip so
-      // marks can overhang — indeterminate mode must keep it.
+      // clipping it to the visible window.
       render(<ProgressBar isIndeterminate label="Loading" />);
       const progressbar = screen.getByRole('progressbar');
       let css = '';
@@ -837,6 +925,422 @@ describe('ProgressBar theme target names', () => {
     expect(container.querySelector('.astryx-progressbar-track')).toBeNull();
     expect(container.querySelector('.astryx-progressbar-fill')).toBeNull();
     expect(container.querySelector('.astryx-progressbar-mark')).toBeNull();
+  });
+});
+
+/**
+ * The value the browser would give `property` on `el` with this pointer and
+ * reduced-motion preference. That is the last rule (in stylesheet order) for
+ * one of its classes whose media conditions all hold. StyleX rewrites a key
+ * into conditions that negate its later siblings, so this evaluates them
+ * rather than matching their text. `@supports` blocks never hold (no engine
+ * gate).
+ */
+function valueUnder(
+  el: Element,
+  property: string,
+  env: {coarse: boolean; reduce: boolean},
+): string | undefined {
+  const holds = (condition: string): boolean => {
+    const tokens = condition
+      .replace(/\(pointer:\s*coarse\)/g, env.coarse ? ' T ' : ' F ')
+      .replace(
+        /\(prefers-reduced-motion:\s*reduce\)/g,
+        env.reduce ? ' T ' : ' F ',
+      )
+      // A mouse hovers; any other feature is taken as unmet.
+      .replace(/\(hover:\s*hover\)/g, env.coarse ? ' F ' : ' T ')
+      .replace(/\([a-z-]+:[^()]*\)/g, ' F ')
+      .replace(/\(/g, ' ( ')
+      .replace(/\)/g, ' ) ')
+      .trim()
+      .split(/\s+/);
+    let i = 0;
+    const or = (): boolean => {
+      let value = and();
+      while (tokens[i] === 'or') {
+        i += 1;
+        value = and() || value;
+      }
+      return value;
+    };
+    const and = (): boolean => {
+      let value = unary();
+      while (tokens[i] === 'and') {
+        i += 1;
+        value = unary() && value;
+      }
+      return value;
+    };
+    const unary = (): boolean => {
+      const token = tokens[i++];
+      if (token === 'not') {
+        return !unary();
+      }
+      if (token === '(') {
+        const value = or();
+        i += 1; // ')'
+        return value;
+      }
+      if (token === 'T' || token === 'F') {
+        return token === 'T';
+      }
+      throw new Error(`unexpected ${token} in ${condition}`);
+    };
+    return or();
+  };
+  // StyleX raises a conditional rule's specificity by repeating its class,
+  // so the winner is the most specific matching rule, then the last one.
+  let best: {value: string; specificity: number} | undefined;
+  const specificityOf = (selector: string) =>
+    (selector.split(':not(')[0].match(/\./g) ?? []).length;
+  const visit = (rules: CSSRuleList, ok: boolean) => {
+    for (const rule of Array.from(rules)) {
+      if (rule instanceof CSSMediaRule) {
+        visit(
+          rule.cssRules,
+          ok && holds(rule.conditionText ?? rule.media.mediaText),
+        );
+      } else if (rule instanceof CSSSupportsRule) {
+        visit(rule.cssRules, false);
+      } else if (rule instanceof CSSStyleRule) {
+        if (
+          ok &&
+          Array.from(el.classList).some(c =>
+            rule.selectorText.includes(`.${c}`),
+          ) &&
+          rule.style.getPropertyValue(property) !== ''
+        ) {
+          const specificity = specificityOf(rule.selectorText);
+          if (best == null || specificity >= best.specificity) {
+            best = {value: rule.style.getPropertyValue(property), specificity};
+          }
+        }
+      } else if ('cssRules' in rule) {
+        // @layer and other grouping rules hold whatever they wrap.
+        visit((rule as CSSGroupingRule).cssRules, ok);
+      }
+    }
+  };
+  for (const sheet of Array.from(document.styleSheets)) {
+    visit(sheet.cssRules, true);
+  }
+  return best?.value;
+}
+
+/**
+ * The declarations the element's classes carry, as `prop: value`. It reads
+ * rules at the top level (`media` null), inside `@media <media>`, or inside
+ * exactly the nested conditions listed. Those are `@media` texts as they are
+ * and `@supports` ones prefixed, in either nesting order.
+ */
+function rulesOf(
+  el: Element,
+  media: string | null | ReadonlyArray<string>,
+): string[] {
+  const out: string[] = [];
+  const key = (list: ReadonlyArray<string>) => list.slice().sort().join(' & ');
+  const want = key(
+    media == null ? [] : typeof media === 'string' ? [media] : media,
+  );
+  const visit = (rules: CSSRuleList, conditions: ReadonlyArray<string>) => {
+    for (const rule of Array.from(rules)) {
+      if (rule instanceof CSSMediaRule) {
+        visit(rule.cssRules, [
+          ...conditions,
+          rule.conditionText ?? rule.media.mediaText,
+        ]);
+      } else if (rule instanceof CSSSupportsRule) {
+        visit(rule.cssRules, [
+          ...conditions,
+          `@supports ${rule.conditionText}`,
+        ]);
+      } else if (rule instanceof CSSStyleRule && key(conditions) === want) {
+        if (
+          Array.from(el.classList).some(c =>
+            rule.selectorText.includes(`.${c}`),
+          )
+        ) {
+          for (let i = 0; i < rule.style.length; i += 1) {
+            const prop = rule.style[i];
+            out.push(`${prop}: ${rule.style.getPropertyValue(prop)}`);
+          }
+        }
+      }
+    }
+  };
+  for (const sheet of Array.from(document.styleSheets)) {
+    visit(sheet.cssRules, []);
+  }
+  return out;
+}
+
+const valueOf = (declarations: string[], prop: string) =>
+  declarations
+    .filter(d => d.startsWith(`${prop}:`))
+    .map(d => d.slice(prop.length + 1).trim());
+
+describe('ProgressBar under a finger: UIProgressView', () => {
+  const view = progressBar.progressView;
+  // The resolver's touch query, as TOUCH_QUERY spells it: every touch device.
+  const TOUCH = TOUCH_QUERY;
+  const fillOf = () =>
+    screen.getByRole('progressbar').firstElementChild as HTMLElement;
+  const moveOf = () => fillOf().style.getPropertyValue('--_progress-bar-move');
+  const source = () =>
+    readFileSync(path.resolve(__dirname, 'ProgressBar.tsx'), 'utf8');
+
+  it('styles a mark the minimum fill covers as on the fill', () => {
+    // A finger, as the touch presentation resolver reads it, and
+    // a track measured 200 px wide: the 16 px minimum covers its first 8%.
+    const originalMatchMedia = window.matchMedia;
+    const originalObserver = globalThis.ResizeObserver;
+    window.matchMedia = (query: string) => ({
+      matches: /pointer:\s*coarse/.test(query),
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    });
+    class MeasuredTrack {
+      constructor(private readonly callback: ResizeObserverCallback) {}
+      observe(target: Element) {
+        const entry = {target, contentRect: {width: 200}};
+        this.callback([entry as unknown as ResizeObserverEntry], this);
+      }
+      unobserve() {}
+      disconnect() {}
+    }
+    globalThis.ResizeObserver = MeasuredTrack;
+    // The shared observer's first call reads the box itself.
+    const box = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue({width: 200} as unknown as DOMRect);
+    try {
+      render(
+        <ProgressBar
+          value={2}
+          label="Upload"
+          marks={[
+            {value: 5, label: 'Covered'},
+            {value: 20, label: 'Ahead'},
+          ]}
+        />,
+      );
+      const placements = Array.from(
+        document.querySelectorAll('[data-placement]'),
+      ).map(mark => mark.getAttribute('data-placement'));
+      // 5% sits inside the drawn 8%; 20% is out on the track.
+      expect(placements).toEqual(['fill', 'track']);
+    } finally {
+      window.matchMedia = originalMatchMedia;
+      globalThis.ResizeObserver = originalObserver;
+      box.mockRestore();
+    }
+  });
+
+  it('moves linearly for the progress.fillTrackMs role times the share of the track it moved, from the last value', () => {
+    const {rerender} = render(<ProgressBar value={10} label="Upload" />);
+    // Nothing to animate on the first render.
+    expect(moveOf()).toBe('0ms');
+    rerender(<ProgressBar value={60} label="Upload" />);
+    expect(moveOf()).toBe(`${0.5 * progressBar.fillTrackMs}ms`);
+    // A re-render with the same value keeps the running move's length.
+    rerender(<ProgressBar value={60} label="Upload" />);
+    expect(moveOf()).toBe(`${0.5 * progressBar.fillTrackMs}ms`);
+    // The duration is the model change: 60 → 40 is 0.2 of the track.
+    rerender(<ProgressBar value={40} label="Upload" />);
+    expect(moveOf()).toBe(`${0.2 * progressBar.fillTrackMs}ms`);
+    // On the progress.curves.fill role: linear.
+    expect(fillOf().style.getPropertyValue('--_progress-bar-curve')).toBe(
+      formatMotionRoleValue('curve', progressBar.curves.fill),
+    );
+    const touch = {coarse: true, reduce: false};
+    // CSS scales the move by the theme's tempo.
+    expect(valueUnder(fillOf(), 'transition-duration', touch)).toMatch(
+      /^calc\(var\(--_progress-bar-move,\s*0m?s\)\s*\*\s*var\(--_astryx-motion-tempo,\s*1\)\)$/,
+    );
+    expect(valueUnder(fillOf(), 'transition-timing-function', touch)).toMatch(
+      /^var\(--_progress-bar-curve,\s*linear\)$/,
+    );
+    // No engine gate: the touch query alone decides, on every touch device.
+    const css = Array.from(document.querySelectorAll('style'))
+      .map(style => style.textContent ?? '')
+      .join('\n');
+    expect(css).not.toContain('-webkit-touch-callout');
+    // With a mouse or trackpad the theme's tokens still time it.
+    const fine = rulesOf(fillOf(), null);
+    expect(valueOf(fine, 'transition-duration')[0]).toMatch(/^var\(--/);
+    expect(valueOf(fine, 'transition-timing-function')[0]).toMatch(/^var\(--/);
+  });
+
+  it('never draws shorter than two track heights above zero, and paints nothing at zero', () => {
+    const {rerender} = render(<ProgressBar value={0} label="Upload" />);
+    const track = screen.getByRole('progressbar');
+    const trackHeight = Number.parseFloat(
+      valueOf(rulesOf(track, null), 'height')[0],
+    );
+    const minimum = view.minimumFillHeights * trackHeight;
+    expect(TOUCH_MIN_FILL_PX).toBe(minimum);
+    expect(fillOf().style.getPropertyValue('--_progress-bar-min')).toBe(
+      `${minimum}px`,
+    );
+    // Read from the source. The touch transform sits under a negated StyleX
+    // condition (the forced-colors key after it). The jsdom runtime injects
+    // that only in part; the Chromium spec checks what a browser draws.
+    const compact = source().replace(/\s+/g, '');
+    const fill = compact.slice(compact.indexOf('fill:{'));
+    const transform = fill.slice(
+      fill.indexOf('transform:{'),
+      fill.indexOf('willChange:'),
+    );
+    const coarse = transform.slice(
+      transform.indexOf("'@media(pointer:coarse)':{"),
+    );
+    const atLeast =
+      'max(var(--_progress-bar-fill,0%),var(--_progress-bar-min,0px))';
+    expect(coarse).toContain(atLeast);
+    // Mirrored in RTL: the fill stops at the same minimum from the right.
+    expect(coarse).toContain('calc(100%-var(--_progress-bar-min,0px))');
+    // Under forced colors with a finger the sized fill keeps that minimum,
+    // and lands at once: sizing is layout, which touch motion never animates.
+    const width = fill.slice(fill.indexOf('width:{'), fill.indexOf('height:'));
+    expect(width).toContain(atLeast);
+    const duration = fill.slice(
+      fill.indexOf('transitionDuration:{'),
+      fill.indexOf('transitionTimingFunction:'),
+    );
+    expect(duration).toMatch(
+      /'@media\(pointer:coarse\)':\{default:[^}]*'@media\(forced-colors:active\)':'0s'/,
+    );
+    // At zero the fill paints nothing under a finger (UIKit's alpha 0)…
+    expect(view.emptyFillAlpha).toBe(0);
+    expect(valueOf(rulesOf(fillOf(), TOUCH), 'opacity')).toEqual(['0']);
+    // …and is drawn as soon as there is any progress.
+    rerender(<ProgressBar value={1} label="Upload" />);
+    expect(valueOf(rulesOf(fillOf(), TOUCH), 'opacity')).toEqual([]);
+  });
+
+  it('plays the progress table roles, never a literal', () => {
+    registerProgressBarTable();
+    expect(motionRole('progress.fillTrackMs')?.value).toBe(
+      progressBar.fillTrackMs,
+    );
+    expect(motionRoleOf(progressBar.curves.fill)?.id).toBe(
+      'progress.curves.fill',
+    );
+    const text = source();
+    const fill = text.slice(
+      text.indexOf('  fill: {'),
+      text.indexOf('  fillEmpty: {'),
+    );
+    expect(fill).not.toMatch(/\d+m?s\)'|'linear'|\b16px\b/);
+  });
+
+  it('declares 0 s under both shared reduced-motion queries, after the touch key', () => {
+    // The fill's transition-duration declares 0 s under both shared
+    // reduced-motion queries, after the touch key so they win there. Read
+    // from the source: the jsdom runtime injects only some of StyleX's
+    // negated conditions, and the Chromium spec checks what a browser does.
+    const text = source();
+    const fill = text.slice(text.indexOf('  fill: {'));
+    const duration = fill.slice(
+      fill.indexOf('transitionDuration: {'),
+      fill.indexOf('transitionTimingFunction:'),
+    );
+    const keys = [REDUCED_MOTION_INSTANT_QUERY, REDUCED_MOTION_FADE_QUERY].map(
+      query => duration.indexOf(`'@media ${query}':`),
+    );
+    expect(keys.every(index => index >= 0)).toBe(true);
+    expect(duration.indexOf("'@media (pointer: coarse)':")).toBeLessThan(
+      Math.min(...keys),
+    );
+    for (const index of keys) {
+      expect(duration.slice(index).split(',')[0]).toMatch(/'0s'$|\n\s*'0s'$/);
+    }
+  });
+});
+
+describe('ProgressBar under reduced motion: the indeterminate pulse', () => {
+  const fillOf = () =>
+    screen.getByRole('progressbar').firstElementChild as HTMLElement;
+  const source = () =>
+    readFileSync(path.resolve(__dirname, 'ProgressBar.tsx'), 'utf8');
+
+  for (const coarse of [false, true]) {
+    it(`spans the track and only pulses its opacity, with ${coarse ? 'a finger' : 'a mouse'}`, () => {
+      render(<ProgressBar isIndeterminate label="Loading" />);
+      const fill = fillOf();
+      const reduce = {coarse, reduce: true};
+      expect(valueUnder(fill, 'width', reduce)).toBe('100%');
+      expect(valueUnder(fill, 'animation-duration', reduce)).toMatch(
+        /^var\(--_progress-bar-pulse\)$/,
+      );
+      expect(valueUnder(fill, 'animation-timing-function', reduce)).toMatch(
+        /^var\(--_progress-bar-pulse-curve\)$/,
+      );
+      expect(valueUnder(fill, 'animation-direction', reduce)).toBe('alternate');
+      // Without reduced motion the 40% segment still slides.
+      const motion = {coarse, reduce: false};
+      expect(valueUnder(fill, 'width', motion)).toBe('40%');
+      expect(valueUnder(fill, 'animation-duration', motion)).toBe('1.5s');
+      expect(valueUnder(fill, 'animation-direction', motion)).toBeUndefined();
+    });
+  }
+
+  it('pulses from full opacity down to the progress table floor and back', () => {
+    render(<ProgressBar isIndeterminate label="Loading" />);
+    expect(fillOf().style.getPropertyValue('--_progress-bar-pulse-floor')).toBe(
+      String(progressBar.reducedMotionPulseFloor),
+    );
+    expect(progressBar.reducedMotionPulseFloor).toBe(0.84);
+    // jsdom has no CSSKeyframesRule global: match the rule's text.
+    const frames = Array.from(document.styleSheets)
+      .flatMap(sheet => Array.from(sheet.cssRules))
+      .map(rule => rule.cssText.replace(/\s+/g, ''))
+      .filter(text => text.startsWith('@keyframes'))
+      .filter(text => text.includes('--_progress-bar-pulse-floor'));
+    expect(frames).toHaveLength(1);
+    expect(frames[0]).toMatch(/opacity:1/);
+    expect(frames[0]).toMatch(/opacity:var\(--_progress-bar-pulse-floor\)/);
+    // The pulse never moves the fill.
+    expect(frames[0]).not.toMatch(/transform/);
+  });
+
+  it('plays the progress.reducedMotionPulseMs role on the timing.curves.move curve, which tempo does not scale', () => {
+    render(<ProgressBar isIndeterminate label="Loading" />);
+    const fill = fillOf();
+    expect(fill.style.getPropertyValue('--_progress-bar-pulse')).toBe(
+      `${progressBar.reducedMotionPulseMs}ms`,
+    );
+    expect(progressBar.reducedMotionPulseMs).toBe(2000);
+    expect(fill.style.getPropertyValue('--_progress-bar-pulse-curve')).toBe(
+      formatMotionRoleValue('curve', timing.curves.move),
+    );
+    registerProgressBarTable();
+    expect(motionRole('progress.reducedMotionPulseMs')?.value).toBe(
+      progressBar.reducedMotionPulseMs,
+    );
+    // A busy loop: nothing in the indeterminate fill reads the theme's tempo,
+    // and its reduced-motion keys play no literal.
+    const text = source();
+    const block = text.slice(
+      text.indexOf('  indeterminateFill: {'),
+      text.indexOf('  // A mark is a vertical tick'),
+    );
+    expect(block).not.toContain('--_astryx-motion-tempo');
+    const reduceValues = [
+      ...block.matchAll(
+        /'@media \(prefers-reduced-motion: reduce\)':\s*([^,\n]+)/g,
+      ),
+    ].map(match => match[1].trim());
+    expect(reduceValues.length).toBeGreaterThan(0);
+    for (const value of reduceValues) {
+      expect(value).not.toMatch(/^'\d+(\.\d+)?m?s'$|cubic-bezier|ease/);
+    }
   });
 });
 

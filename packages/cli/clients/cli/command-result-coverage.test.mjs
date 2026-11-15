@@ -25,7 +25,7 @@
  */
 
 import {describe, it, expect} from 'vitest';
-import {program} from './index.mjs';
+import {program} from './program.mjs';
 import {reportsResult, reportsResultVia} from './lib/define-command.mjs';
 
 /**

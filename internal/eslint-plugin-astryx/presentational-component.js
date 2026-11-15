@@ -12,7 +12,7 @@
  * Applied to components listed in PRESENTATIONAL_COMPONENTS.
  * useId, useMemo, useCallback, useContext (read-only) are allowed.
  *
- * See: https://github.com/facebook/astryx/issues/493
+ * See: https://github.com/meta/astryx/issues/493
  */
 
 /**
@@ -98,7 +98,7 @@ const presentationalComponentRule = {
         'Prevent presentational components from remembering, watching, or coordinating',
       category: 'Astryx Architecture',
       recommended: true,
-      url: 'https://github.com/facebook/astryx/issues/493',
+      url: 'https://github.com/meta/astryx/issues/493',
     },
     messages: {
       remembers:

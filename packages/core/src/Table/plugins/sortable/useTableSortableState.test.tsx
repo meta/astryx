@@ -8,9 +8,16 @@
  */
 
 import {describe, it, expect, vi} from 'vitest';
-import {render, renderHook, screen, within} from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {useState} from 'react';
+import {Suspense, startTransition, use, useState} from 'react';
 import {Table} from '../../Table';
 import type {TableColumn} from '../../types';
 import {useTableSortable} from './useTableSortable';
@@ -186,9 +193,7 @@ describe('useTableSortableState', () => {
       render(<SortableStateTable />);
 
       // Click Name header to sort ascending
-      await userEvent.click(
-        screen.getByRole('button', {name: /sort by name/i}),
-      );
+      await userEvent.click(screen.getByRole('button', {name: 'Name'}));
       expect(getNameColumnValues()).toEqual([
         'Alice',
         'Bob',
@@ -197,9 +202,7 @@ describe('useTableSortableState', () => {
       ]);
 
       // Click again to sort descending
-      await userEvent.click(
-        screen.getByRole('button', {name: /sort by name/i}),
-      );
+      await userEvent.click(screen.getByRole('button', {name: 'Name'}));
       expect(getNameColumnValues()).toEqual([
         'Diana',
         'Charlie',
@@ -223,7 +226,7 @@ describe('useTableSortableState', () => {
       ]);
 
       // Sort by age instead
-      await userEvent.click(screen.getByRole('button', {name: /sort by age/i}));
+      await userEvent.click(screen.getByRole('button', {name: 'Age'}));
 
       // Age ascending: Alice(28), Diana(31), Charlie(35), Bob(42)
       expect(getNameColumnValues()).toEqual([
@@ -243,13 +246,9 @@ describe('useTableSortableState', () => {
       );
 
       // Click to descending
-      await userEvent.click(
-        screen.getByRole('button', {name: /sort by name/i}),
-      );
+      await userEvent.click(screen.getByRole('button', {name: 'Name'}));
       // Click to unsorted
-      await userEvent.click(
-        screen.getByRole('button', {name: /sort by name/i}),
-      );
+      await userEvent.click(screen.getByRole('button', {name: 'Name'}));
 
       // Back to original order
       expect(getNameColumnValues()).toEqual([
@@ -265,7 +264,7 @@ describe('useTableSortableState', () => {
     it('sorts numbers correctly without custom comparator', async () => {
       render(<SortableStateTable />);
 
-      await userEvent.click(screen.getByRole('button', {name: /sort by age/i}));
+      await userEvent.click(screen.getByRole('button', {name: 'Age'}));
 
       // Age ascending: 28, 31, 35, 42
       expect(getNameColumnValues()).toEqual([
@@ -314,6 +313,41 @@ describe('useTableSortableState', () => {
         'Charlie',
         'Diana',
       ]);
+    });
+  });
+
+  describe('render cost', () => {
+    it('does not re-sort when its parent re-renders with an inline comparators object', () => {
+      let comparisons = 0;
+      function Parent() {
+        const [count, setCount] = useState(0);
+        return (
+          <>
+            <button type="button" onClick={() => setCount(count + 1)}>
+              Bump {count}
+            </button>
+            <SortableStateTable
+              defaultSort={[{sortKey: 'salary', direction: 'ascending'}]}
+              comparators={{
+                salary: (a, b) => {
+                  comparisons++;
+                  return a.salary - b.salary;
+                },
+              }}
+            />
+          </>
+        );
+      }
+      render(<Parent />);
+      expect(comparisons).toBeGreaterThan(0);
+      comparisons = 0;
+
+      act(() => {
+        fireEvent.click(screen.getByRole('button', {name: 'Bump 0'}));
+      });
+
+      expect(screen.getByRole('button', {name: 'Bump 1'})).toBeInTheDocument();
+      expect(comparisons).toBe(0);
     });
   });
 
@@ -397,11 +431,26 @@ describe('useTableSortableState', () => {
 
       render(<ControlledWithSpy />);
 
-      await userEvent.click(
-        screen.getByRole('button', {name: /sort by name/i}),
-      );
+      await userEvent.click(screen.getByRole('button', {name: 'Name'}));
 
       expect(onSortChange).toHaveBeenCalledWith([
+        {sortKey: 'name', direction: 'ascending'},
+      ]);
+    });
+    it('calls the onSortChange from the latest render, not the one from the last sort change', async () => {
+      const first = vi.fn();
+      const second = vi.fn();
+      const sort: TableSortState = [];
+      const {rerender} = render(
+        <SortableStateTable sort={sort} onSortChange={first} />,
+      );
+      // A new handler arrives while the sort state stays the same.
+      rerender(<SortableStateTable sort={sort} onSortChange={second} />);
+
+      await userEvent.click(screen.getByRole('button', {name: 'Name'}));
+
+      expect(first).not.toHaveBeenCalled();
+      expect(second).toHaveBeenCalledWith([
         {sortKey: 'name', direction: 'ascending'},
       ]);
     });
@@ -442,7 +491,7 @@ describe('useTableSortableState', () => {
       // Department ascending: Design(Bob, Diana), Engineering(Alice, Charlie)
       // Now shift+click Name to add secondary sort
       await user.keyboard('{Shift>}');
-      await user.click(screen.getByRole('button', {name: /sort by name/i}));
+      await user.click(screen.getByRole('button', {name: 'Name'}));
       await user.keyboard('{/Shift}');
 
       // Design: Bob, Diana; Engineering: Alice, Charlie
@@ -541,9 +590,7 @@ describe('useTableSortableState', () => {
       // Should render without throwing — table still mounts with empty data
       expect(screen.getByRole('table')).toBeInTheDocument();
       // Sort headers should still be interactive
-      expect(
-        screen.getByRole('button', {name: /sort by name/i}),
-      ).toBeInTheDocument();
+      expect(screen.getByRole('button', {name: 'Name'})).toBeInTheDocument();
     });
   });
 
@@ -588,5 +635,69 @@ describe('useTableSortableState', () => {
       const sorted = capturedApplySort!(subset);
       expect(sorted.map(e => e.name)).toEqual(['Aaron', 'Zara']);
     });
+  });
+  it('calls the sort callback of the last committed render, not one from a render React set aside', () => {
+    const committed = vi.fn();
+    const setAside = vi.fn();
+    const never = new Promise<never>(() => {});
+    function Waits({isWaiting}: {isWaiting: boolean}) {
+      if (isWaiting) {
+        use(never);
+      }
+      return null;
+    }
+    function Harness({
+      onSortChange,
+      isWaiting,
+    }: {
+      onSortChange: (sort: TableSortState<string>) => void;
+      isWaiting: boolean;
+    }) {
+      const {sortConfig} = useTableSortableState<Employee>({
+        data: employees,
+        sort: [],
+        onSortChange,
+      });
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() =>
+              sortConfig.onSortChange([
+                {sortKey: 'name', direction: 'ascending'},
+              ])
+            }>
+            Sort
+          </button>
+          <Waits isWaiting={isWaiting} />
+        </>
+      );
+    }
+    type HarnessProps = {
+      onSortChange: (sort: TableSortState<string>) => void;
+      isWaiting: boolean;
+    };
+    let update: (next: HarnessProps) => void = () => {};
+    function App() {
+      const [props, setProps] = useState<HarnessProps>({
+        onSortChange: committed,
+        isWaiting: false,
+      });
+      update = setProps;
+      return (
+        <Suspense fallback={null}>
+          <Harness {...props} />
+        </Suspense>
+      );
+    }
+    render(<App />);
+    // The transition's render runs the hook with the new callback, then
+    // waits, so React keeps the committed screen.
+    act(() => {
+      startTransition(() => update({onSortChange: setAside, isWaiting: true}));
+    });
+    fireEvent.click(screen.getByRole('button', {name: 'Sort'}));
+    expect(setAside).not.toHaveBeenCalled();
+    expect(committed).toHaveBeenCalledTimes(1);
   });
 });

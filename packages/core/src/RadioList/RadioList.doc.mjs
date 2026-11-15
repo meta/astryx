@@ -148,12 +148,14 @@ export const docs = {
     {
       name: 'containerClassName',
       type: 'string',
-      description: 'Class name for the field container. Same targeting as `containerXstyle`.',
+      description:
+        'Class name for the field container. Same targeting as `containerXstyle`.',
     },
     {
       name: 'containerStyle',
       type: 'CSSProperties',
-      description: 'Inline styles for the field container. Same targeting as `containerXstyle`.',
+      description:
+        'Inline styles for the field container. Same targeting as `containerXstyle`.',
     },
     {
       name: 'controlXstyle',

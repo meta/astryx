@@ -4,7 +4,7 @@
 
 /**
  * @file InternationalizationContext.ts
- * @input React createContext, i18n types
+ * @input createSharedContext, i18n types
  * @output Exports InternationalizationContext and InternationalizationContextValue
  * @position Context definition for client-side locale + messages
  *
@@ -22,27 +22,37 @@
  * - /packages/core/src/i18n/index.ts
  */
 
-import {createContext} from 'react';
 import {getResolve} from './resolve';
 import type {Locale, MessagesByLocale, Overrides} from './types';
+import type {CalendarSystem} from '../utils/calendarSystem';
+import {createSharedContext} from '../utils/sharedContext';
 
 export interface InternationalizationContextValue {
   locale: Locale;
   direction: 'ltr' | 'rtl';
+  /**
+   * The provider's requested calendar system. A context without it means
+   * Gregorian dates.
+   */
+  calendar?: CalendarSystem;
   messages: MessagesByLocale;
   overrides?: Overrides;
   translate: ReturnType<typeof getResolve>;
 }
 
 /**
- * Default value falls through to the shipped en catalog in resolve().
+ * Default value falls through to the shipped English fallback in resolve().
  * A consumer that doesn't render a provider still gets English defaults.
  */
 export const InternationalizationContext =
-  createContext<InternationalizationContextValue>({
-    locale: 'en',
-    direction: 'ltr',
-    messages: {},
-    translate: getResolve('en', {}),
-  });
+  createSharedContext<InternationalizationContextValue>(
+    'InternationalizationContext',
+    1,
+    {
+      locale: 'en',
+      direction: 'ltr',
+      messages: {},
+      translate: getResolve('en', {}),
+    },
+  );
 InternationalizationContext.displayName = 'InternationalizationContext';

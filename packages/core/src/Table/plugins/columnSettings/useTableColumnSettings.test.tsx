@@ -8,8 +8,8 @@
  */
 
 import {describe, it, expect, vi} from 'vitest';
-import {useState} from 'react';
-import {render, screen} from '@testing-library/react';
+import {Suspense, memo, startTransition, use, useState} from 'react';
+import {act, render, screen} from '@testing-library/react';
 import {renderHook} from '@testing-library/react';
 import {Table} from '../../Table';
 import {
@@ -18,6 +18,7 @@ import {
   type ColumnSettingsOption,
 } from './useTableColumnSettings';
 import {useTableColumnSettingsState} from './useTableColumnSettingsState';
+import {InternationalizationProvider} from '../../../i18n/InternationalizationProvider';
 import type {TableColumn} from '../../types';
 
 // =============================================================================
@@ -171,5 +172,74 @@ describe('integration with Table', () => {
     expect(headers[0]).toHaveTextContent('Role');
     expect(headers[1]).toHaveTextContent('Name');
     expect(headers[2]).toHaveTextContent('Email');
+  });
+});
+
+describe('after a render React discards', () => {
+  it('renders the committed columns when the table re-renders on its own', async () => {
+    // A transition that suspends for good: React renders it, then keeps the
+    // committed tree and never commits that render.
+    const forever = new Promise<never>(() => {});
+    function Forever(): null {
+      use(forever);
+      return null;
+    }
+    const onChangeActiveColumnKeys = () => {};
+    const Owner = memo(function Owner({
+      activeKeys,
+    }: {
+      activeKeys: ReadonlyArray<string>;
+    }) {
+      const plugin = useTableColumnSettings<User>({
+        columns: columnOptions,
+        activeColumnKeys: activeKeys,
+        onChangeActiveColumnKeys,
+      });
+      return (
+        <Table
+          data={testUsers}
+          columns={allTableColumns}
+          plugins={{columnSettings: plugin}}
+          idKey="id"
+        />
+      );
+    });
+    function Screen({
+      locale,
+      activeKeys,
+      isPending = false,
+    }: {
+      locale: string;
+      activeKeys: ReadonlyArray<string>;
+      isPending?: boolean;
+    }) {
+      return (
+        <InternationalizationProvider locale={locale}>
+          <Suspense fallback={null}>
+            <Owner activeKeys={activeKeys} />
+            {isPending ? <Forever /> : null}
+          </Suspense>
+        </InternationalizationProvider>
+      );
+    }
+    const committedKeys = ['name', 'email'];
+    const {rerender} = render(
+      <Screen locale="en-US" activeKeys={committedKeys} />,
+    );
+    await act(async () => {
+      startTransition(() => {
+        rerender(
+          <Screen locale="en-US" activeKeys={['name', 'role']} isPending />,
+        );
+      });
+    });
+
+    // The locale changes and the owner does not, so the table re-renders on
+    // its own and applies the plugin again.
+    rerender(<Screen locale="en-GB" activeKeys={committedKeys} />);
+
+    expect(
+      screen.getAllByRole('columnheader').map(header => header.textContent),
+    ).toEqual(['Name', 'Email']);
   });
 });

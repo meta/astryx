@@ -64,7 +64,11 @@ defineTheme({
     motion duration;
   - `character` is `'crisp'`, `'standard'` (default), or `'expressive'`; it
     picks the entrance and move curves and the spring bounce. A continuous bounce
-    is not offered;
+    is not offered. No character turns a curve into a spring or plays a
+    platform-measured curve; which motion springs and which plays the curve
+    tokens is `spec:AST-094` FR45's, and tap-started expand and collapse,
+    including the animated-layout glide (`spec:AST-105` FR4), plays the curve
+    tokens;
   - `reducedMotion` is `'system'` (default) or `'always'`; `'always'` applies
     `design:reduced-motion` DR1–DR3 for everyone, and `'system'` follows each
     person's setting. No value loosens Reduce Motion.
@@ -100,7 +104,12 @@ defineTheme({
   entrance and its exit, a sheet and its scrim, a menu's grow and its content, and a CSS fade
   paired with a JavaScript spring, such as MobileNav's close timed from its
   computed duration and BottomSheet's scrim, whose fade lasts the sheet's
-  computed settle time.
+  computed settle time. When the part must also follow the spring frame by
+  frame, as the scrim does under a touch flick's close, it takes the spring's
+  progress as CSS `linear()` easing. Core's `motion/linearEasing` samples that
+  progress into `linear()` stops, one per frame, for every part that does
+  this. The animator steps a spring in script, and CSS has no spring timing
+  of its own, so no existing module gives a CSS part these stops.
 - **FR4 — Some motion is fixed on purpose.** `tempo` and `character` do not
   move
   finger-following and drag motion, scroll momentum and decay, the rubber
@@ -147,6 +156,9 @@ defineTheme({
 
 - `defineTheme`'s `motion` widens to accept the three knobs beside the existing
   `MotionScaleConfig`; existing themes render exactly as before.
+- Until `reducedMotion: 'always'` ships, the public `motion` type has no
+  `reducedMotion` field and every theme follows each person's setting, as
+  `'system'` does (the known gap in `architecture:theme-authoring-contract`).
 - Core gains `--ease-entrance`, `--ease-move`, and `--ease-exit`, and a
   theme-root mark for `reducedMotion: 'always'` that every component style
   keying reduced motion on `prefers-reduced-motion` also keys on; Carousel's
@@ -166,7 +178,7 @@ defineTheme({
   `spec:AST-012` FR4 (`reducedMotion` stays root-owned),
   `architecture:theme-application` INV1 (`'always'` reaches nested
   providers), `architecture:theme-authoring-contract` (the internal motion resolver),
-  `component:Button` FR15 (its release fade follows `tempo`), the draft `design:motion` DR3, and `spec:AST-090` are amended to
+  `component:Button` FR15 (its release fade follows `tempo` through `--duration-exit`, which references a tempo-scaled duration), the draft `design:motion` DR3, and `spec:AST-090` are amended to
   match.
 
 ## Verification

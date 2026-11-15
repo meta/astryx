@@ -70,6 +70,22 @@ ruleTester.run('focus-outline-shared', rule, {
     {
       code: `const doc = {outline: {':focus-visible': '2px solid blue'}};`,
     },
+    // The focus-owner attribute's owner module writes the wrapper ring.
+    {
+      filename:
+        '/repo/packages/core/src/privateAttributes/focusOwner.stylex.ts',
+      code: `
+        import * as stylex from '@stylexjs/stylex';
+        const styles = stylex.create({
+          focusWithinOwner: {
+            outlineWidth: {
+              default: '0',
+              ':has(> [data-astryx-focus-owner]:focus-visible)': WIDTH,
+            },
+          },
+        });
+      `,
+    },
     // The utility itself is the one place the ring is written.
     {
       filename: '/repo/packages/core/src/utils/focusOutline.stylex.ts',
@@ -108,10 +124,7 @@ ruleTester.run('focus-outline-shared', rule, {
           },
         });
       `,
-      errors: [
-        {messageId: 'handRolledRing'},
-        {messageId: 'handRolledRing'},
-      ],
+      errors: [{messageId: 'handRolledRing'}, {messageId: 'handRolledRing'}],
     },
     // Reading the tokens directly is still a second definition of the ring.
     {

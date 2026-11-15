@@ -4,7 +4,7 @@
 
 import {cleanup, render, screen, waitFor, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {describe, expect, it} from 'vitest';
+import {beforeAll, describe, expect, it} from 'vitest';
 import {
   COMBOBOX_PATTERN,
   expectAccessibilitySpec,
@@ -19,6 +19,13 @@ import {
 import {SELECTOR_COMBOBOX_KNOWN_FAILURES} from './Combobox.a11y.known-failures';
 
 installListboxDialogStubs();
+
+// The bottom sheet is loaded on demand (SelectorBottomSheet's lazy import).
+// Loading its module is not part of an open, so the file waits for it once
+// here, and each scenario's open waits only for the open.
+beforeAll(async () => {
+  await import('../../BottomSheet/BottomSheet');
+});
 
 const hidden = {hidden: true} as const;
 

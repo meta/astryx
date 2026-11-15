@@ -70,7 +70,7 @@ const AST_011_READ_ONLY: AstryxRecord = {
   clause: 'FR4',
   requirement:
     'The focusable read-only value MUST retain `combobox` semantics, expose `aria-readonly="true"` and `aria-expanded="false"`, and preserve its accessible name and rendered value. It MUST NOT expose `aria-controls` or `aria-activedescendant` when no selection surface exists.',
-  url: 'https://github.com/facebook/astryx/blob/f0355e3a4c9ddacb71e4cc9ca045619b76ae3c35/docs/specs/AST-011/spec.md#L47-L51',
+  url: 'https://github.com/meta/astryx/blob/f0355e3a4c9ddacb71e4cc9ca045619b76ae3c35/docs/specs/AST-011/spec.md#L47-L51',
 };
 
 export type ComboboxPopupRole = 'listbox' | 'tree' | 'grid' | 'dialog';

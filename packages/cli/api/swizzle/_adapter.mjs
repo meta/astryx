@@ -8,13 +8,39 @@
  * of swizzlable components: `list` returns the names directly, `copy` uses them
  * for its "component not found" suggestions. Resolving core + listing lives
  * here once so neither leaf re-walks the filesystem. Throws AstryxError
- * (ERR_CORE_NOT_FOUND) when core can't be located.
+ * (ERR_CORE_NOT_FOUND) when core can't be located. The copy receipt's `gh`
+ * lookup is here too, on the shared search-path walk, and so is the copy's
+ * module graph (_moduleGraph.mjs), which reads the owner package's source.
  */
 
+import {executablesOnSearchPath} from '../../foundation/env/search-path.mjs';
 import {findProjectCoreDir, listComponents} from '../../foundation/fs/paths.mjs';
 import {resolveComponentReplacements} from '../../foundation/discovery/component-replacement.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {AstryxError} from '../error.mjs';
+
+export {planCopy, relativeSpecifierBetween, renderFile} from './_moduleGraph.mjs';
+
+/**
+ * Whether an executable `gh` is on `PATH` (with a `PATHEXT` extension on
+ * Windows), found without running it. The copy receipt offers its
+ * `gh issue create` line on it. Running `gh` would make every copy wait on a
+ * process start, and for `gh auth status` on GitHub, before it reports.
+ * @param {NodeJS.ProcessEnv} [env]
+ * @param {NodeJS.Platform} [platform]
+ * @returns {boolean}
+ */
+export function checkGhCli(env = process.env, platform = process.platform) {
+  const names =
+    platform === 'win32'
+      ? (env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD')
+          .split(';')
+          .filter(Boolean)
+          .map(extension => `gh${extension.toLowerCase()}`)
+      : ['gh'];
+  const searchPath = env.PATH ?? env.Path ?? '';
+  return executablesOnSearchPath(names, {searchPath, platform}).length > 0;
+}
 
 /** The package that owns Core's components, hooks, and codemods. */
 export {CORE_PROVIDER_ID as CORE_PACKAGE} from '../../foundation/identity/providers.mjs';

@@ -10,7 +10,8 @@
  * @position foundation/discovery — the one place component replacement is
  *   decided. Component detail, list, search, swizzle, gap-report routing,
  *   Project, and `doctor integration components` read the result instead of
- *   deciding it again.
+ *   deciding it again. The result is kept between runs
+ *   (foundation/fs/gather-cache.mjs), as part of the component list.
  *
  * A component opts in by setting `replaces` in its own doc. The replacement
  * applies only when the component's package also declares a
@@ -19,6 +20,7 @@
  * and every finding about it is a warning.
  */
 
+import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
@@ -31,6 +33,7 @@ import {
   componentReplacesCliProblem,
 } from '../integrations/cli-requirement.mjs';
 import {formatCliCommand} from '../env/package-manager.mjs';
+import {persistedGather} from '../fs/gather-cache.mjs';
 
 /**
  * @typedef {import('../integrations/integrations.mjs').LoadedIntegration} LoadedIntegration
@@ -149,6 +152,132 @@ export async function resolveComponentReplacements(
   coreDir,
   loadedIntegrations,
 ) {
+  // Without an integration that contributes components nothing is read.
+  if (!loadedIntegrations.some(contributesComponents)) {
+    return replacementsNow(coreDir, loadedIntegrations);
+  }
+  // Every file and module the decision reads is stamped by the kept gather.
+  // What it reads from the loaded integrations was read when they loaded,
+  // before the gather, so those values are the key.
+  return persistedGather(
+    ['component-replacements', coreDir, loadedIntegrations.map(integrationKey)],
+    () => replacementsNow(coreDir, loadedIntegrations),
+    replacementsCodec(loadedIntegrations),
+  );
+}
+
+/**
+ * @param {LoadedIntegration | null | undefined} integration
+ * @returns {boolean} whether the decision reads the integration's components
+ */
+function contributesComponents(integration) {
+  return (
+    integration != null &&
+    !integration.__loadError &&
+    Boolean(integration.components)
+  );
+}
+
+/**
+ * The fields of a loaded integration the decision reads: its name, its
+ * components folder, its issues link, its package folder and exports, why it
+ * failed to load, and whether it was autolinked.
+ * @param {LoadedIntegration | null | undefined} integration
+ * @returns {unknown}
+ */
+function integrationKey(integration) {
+  if (integration == null) return null;
+  const exports = integration.__packageExports ?? null;
+  return [
+    integration.name ?? null,
+    integration.components ?? null,
+    integration.issuesUrl ?? null,
+    integration.__packageDir ?? null,
+    exports == null
+      ? null
+      : createHash('sha256').update(JSON.stringify(exports)).digest('hex'),
+    integration.__loadError ? String(integration.__loadError) : null,
+    integration.__autolinked === true,
+  ];
+}
+
+/**
+ * The result with `forTarget` answering from its active replacements.
+ * @param {ActiveComponentReplacement[]} active
+ * @param {ComponentReplacementFinding[]} findings
+ * @returns {ComponentReplacements}
+ */
+function replacementsOf(active, findings) {
+  /** @type {Map<string, ActiveComponentReplacement>} */
+  const byTarget = new Map(active.map(each => [each.target, each]));
+  return {
+    active,
+    findings,
+    forTarget: name =>
+      typeof name === 'string' ? byTarget.get(name) : undefined,
+  };
+}
+
+/**
+ * The kept form of a result: each active replacement names its integration by
+ * its place in `loadedIntegrations`, which the key holds in order, and reads
+ * back as this run's loaded integration.
+ * @param {readonly LoadedIntegration[]} loadedIntegrations
+ */
+function replacementsCodec(loadedIntegrations) {
+  return {
+    /** @param {ComponentReplacements} value */
+    encode: value => ({
+      active: value.active.map(each => ({
+        target: each.target,
+        name: each.name,
+        package: each.package,
+        docPath: each.docPath,
+        sourcePath: each.sourcePath,
+        ...(each.issuesUrl === undefined ? {} : {issuesUrl: each.issuesUrl}),
+        integration: loadedIntegrations.indexOf(each.integration),
+      })),
+      findings: value.findings,
+    }),
+    /** @param {any} stored @returns {ComponentReplacements} */
+    decode: stored =>
+      replacementsOf(
+        stored.active.map((/** @type {any} */ each) => ({
+          target: each.target,
+          name: each.name,
+          package: each.package,
+          docPath: each.docPath,
+          sourcePath: each.sourcePath,
+          issuesUrl: each.issuesUrl,
+          integration: loadedIntegrations[each.integration],
+        })),
+        stored.findings,
+      ),
+    /** @param {ComponentReplacements} value */
+    valid: value =>
+      Array.isArray(value.active) &&
+      Array.isArray(value.findings) &&
+      value.active.every(
+        each =>
+          each.integration != null &&
+          typeof each.target === 'string' &&
+          typeof each.name === 'string',
+      ) &&
+      value.findings.every(
+        finding =>
+          typeof finding?.code === 'string' &&
+          typeof finding.message === 'string',
+      ),
+  };
+}
+
+/**
+ * resolveComponentReplacements, gathered now.
+ * @param {string|null} coreDir
+ * @param {readonly LoadedIntegration[]} loadedIntegrations
+ * @returns {Promise<ComponentReplacements>}
+ */
+async function replacementsNow(coreDir, loadedIntegrations) {
   /** @type {ComponentReplacementFinding[]} */
   const findings = [];
   /** @type {Map<string, ActiveComponentReplacement>} */

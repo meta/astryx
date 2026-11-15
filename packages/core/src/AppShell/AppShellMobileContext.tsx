@@ -4,7 +4,7 @@
 
 /**
  * @file AppShellMobileContext.tsx
- * @input Uses React createContext, use
+ * @input Uses createSharedContext, use
  * @output Exports AppShellMobileContext, useAppShellMobile
  * @position Internal context for mobile nav state; consumed by MobileNavToggle, TopNav (future)
  *
@@ -13,7 +13,8 @@
  * to adapt rendering based on mobile context.
  */
 
-import {createContext, use} from 'react';
+import {use} from 'react';
+import {createSharedContext} from '../utils/sharedContext';
 
 export interface AppShellMobileContextValue {
   /** Whether the viewport is below the mobile breakpoint */
@@ -51,7 +52,11 @@ const defaultValue: AppShellMobileContextValue = {
 };
 
 export const AppShellMobileContext =
-  createContext<AppShellMobileContextValue>(defaultValue);
+  createSharedContext<AppShellMobileContextValue>(
+    'AppShellMobileContext',
+    1,
+    defaultValue,
+  );
 AppShellMobileContext.displayName = 'AppShellMobileContext';
 
 /**

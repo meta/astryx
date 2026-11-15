@@ -33,6 +33,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {createRequire} from 'node:module';
+import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
 
 const require = createRequire(import.meta.url);
@@ -49,6 +50,36 @@ const TSC_BIN = resolveBin('typescript/bin/tsc');
 const ESBUILD_BIN = resolveBin('esbuild/bin/esbuild');
 
 let tmpDir;
+
+/**
+ * Where an esbuild case's consumer lives: under the repository's
+ * `node_modules/.cache`. esbuild reads the listing of every directory above
+ * each file it bundles, and on a shared machine the system temp directory can
+ * hold hundreds of thousands of entries, which cost more than the bundle. tsc's
+ * cases stay in the system temp directory, where no `node_modules/@types`
+ * above the consumer adds types it never installed.
+ */
+const BUNDLER_ROOT = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../../../node_modules/.cache/astryx-block-exports',
+);
+
+/** A fresh consumer project under `root`: its package.json and tsconfig. */
+function createConsumer(root) {
+  fs.mkdirSync(root, {recursive: true});
+  tmpDir = fs.mkdtempSync(path.join(root, 'astryx-block-exports-'));
+  fs.writeFileSync(
+    path.join(tmpDir, 'package.json'),
+    JSON.stringify({name: 'consumer', private: true, type: 'module'}),
+  );
+  writeTsconfig();
+}
+
+/** Moves the consumer for an esbuild case under BUNDLER_ROOT. */
+function useBundlerRoot() {
+  fs.rmSync(tmpDir, {recursive: true, force: true});
+  createConsumer(BUNDLER_ROOT);
+}
 
 /**
  * Build an @acme/widgets fixture: a block template (released `.template.ts` compatibility descriptor +
@@ -165,12 +196,7 @@ function runEsbuild() {
 }
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-block-exports-'));
-  fs.writeFileSync(
-    path.join(tmpDir, 'package.json'),
-    JSON.stringify({name: 'consumer', private: true, type: 'module'}),
-  );
-  writeTsconfig();
+  createConsumer(os.tmpdir());
 });
 
 afterEach(() => {
@@ -200,6 +226,7 @@ describe('integration block-template exports recipe', () => {
   it.runIf(ESBUILD_BIN != null)(
     `CANONICAL: the same import resolves + bundles with a real bundler`,
     () => {
+      useBundlerRoot();
       makeWidgets({'./templates/*.tsx': './templates/*.tsx'});
       writeConsumer(SPEC);
       const {ok, out} = runEsbuild();
@@ -238,6 +265,7 @@ describe('integration block-template exports recipe', () => {
   it.runIf(ESBUILD_BIN != null)(
     'NEGATIVE: an extensionless import does NOT bundle against the .tsx-only export',
     () => {
+      useBundlerRoot();
       makeWidgets({'./templates/*.tsx': './templates/*.tsx'});
       writeConsumer('@acme/widgets/templates/Gauge/GaugeShowcase');
       const {ok} = runEsbuild();

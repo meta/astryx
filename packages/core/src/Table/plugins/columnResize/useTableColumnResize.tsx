@@ -13,7 +13,16 @@
  * - /packages/core/src/Table/index.ts (exports)
  */
 
-import {useRef, useMemo, useCallback, useEffect, type ReactNode} from 'react';
+import {
+  useRef,
+  useMemo,
+  useCallback,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
+import {useIsomorphicLayoutEffect} from '../../../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../../../theme/tokens.stylex';
 import type {
@@ -29,6 +38,20 @@ import {
   DEFAULT_MIN_COLUMN_WIDTH,
 } from '../../columnUtils';
 import {observeResize} from '../../../utils/sharedResizeObserver';
+import {
+  readNoWindowWidth,
+  readWindowWidth,
+  standInMaximum,
+  subscribeToWindowWidth,
+} from '../../../utils/windowExtent';
+import {getNodeText} from '../../../utils/getNodeText';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../../../i18n/useComponentTranslator';
+import english from '../../../i18n/generated-english/Table/plugins/columnResize/useTableColumnResize.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Config Type
@@ -358,6 +381,20 @@ interface DragState {
 // Resize Handle Component
 // =============================================================================
 
+/**
+ * The window's inline extent, which a column with no maximum announces as its
+ * maximum, as an unbounded Resizable region does. Every handle shares one
+ * store and one listener, and render reads the stored width. The server has
+ * no window, so it renders none, and hydration then reads it.
+ */
+function useWindowInlineExtent(): number | null {
+  return useSyncExternalStore(
+    subscribeToWindowWidth,
+    readWindowWidth,
+    readNoWindowWidth,
+  );
+}
+
 interface ResizeHandleProps {
   columnKey: string;
   columnHeader: ReactNode;
@@ -384,6 +421,25 @@ function ResizeHandle({
   isDraggingRef,
   tableRef,
 }: ResizeHandleProps) {
+  const t = useComponentTranslator();
+  // The column's rendered width, which the handle announces. The shared
+  // resize observer reports it after layout, so render never reads layout.
+  // The handle's ref observes its header cell while the handle is attached.
+  const [renderedWidth, setRenderedWidth] = useState<number | null>(null);
+  const observeColumn = useCallback((handle: HTMLDivElement | null) => {
+    const th = handle?.closest('th');
+    if (th == null) {
+      return undefined;
+    }
+    return observeResize(th, entry => {
+      const width =
+        entry.borderBoxSize?.[0]?.inlineSize ??
+        th.getBoundingClientRect().width;
+      if (width > 0) {
+        setRenderedWidth(Math.round(width));
+      }
+    });
+  }, []);
   const setTableDragging = useCallback(
     (dragging: boolean) => {
       const table = tableRef.current;
@@ -743,20 +799,41 @@ function ResizeHandle({
     ],
   );
 
-  const ariaLabel =
-    typeof columnHeader === 'string'
-      ? `Resize column ${columnHeader}`
-      : `Resize column ${columnKey}`;
+  // Named by the column's visible text, also when its header is a node; the
+  // key is the fallback only for a header with no reachable text (AR1).
+  const ariaLabel = t('@astryx.table.columnResize.resizeColumn', {
+    label: getNodeText(columnHeader) || columnKey,
+  });
+
+  // A focusable role="separator" requires a numeric aria-valuenow, so it
+  // falls back to the width the table asked for, then to the column's
+  // minWidth, until the column has been measured.
+  const valueNow = renderedWidth ?? currentWidth ?? minWidth;
+  // Without a maximum, ARIA's default of 100 applies, below most column
+  // widths. So an unbounded column announces a stand-in maximum that it never
+  // goes below. That range is not a real limit, so the handle also says its
+  // value in words.
+  const isUnbounded = !Number.isFinite(maxWidth);
+  const windowExtent = useWindowInlineExtent();
+  // The layout can render a column past its limits (a stretched table), so
+  // the announced range widens to hold the value it reports.
+  const announcedMax = isUnbounded
+    ? standInMaximum(windowExtent, valueNow, minWidth)
+    : Math.max(maxWidth, valueNow);
+  const announcedMin = Math.min(minWidth, valueNow);
+  const valueText = isUnbounded
+    ? t('@astryx.table.columnResize.widthValue', {width: Math.round(valueNow)})
+    : undefined;
 
   return (
     <div
+      ref={observeColumn}
       role="separator"
       aria-orientation="vertical"
-      // A focusable role="separator" requires a numeric aria-valuenow, so fall
-      // back to the column's minWidth before the width has been measured.
-      aria-valuenow={currentWidth ?? minWidth}
-      aria-valuemin={minWidth}
-      aria-valuemax={maxWidth === Infinity ? undefined : maxWidth}
+      aria-valuenow={valueNow}
+      aria-valuemin={announcedMin}
+      aria-valuemax={announcedMax}
+      aria-valuetext={valueText}
       aria-label={ariaLabel}
       tabIndex={0}
       // Lets the height observer find its own handles without matching any
@@ -777,7 +854,11 @@ export function useTableColumnResize<T extends Record<string, unknown>>(
   config: UseTableColumnResizeConfig,
 ): TablePlugin<T> {
   const configRef = useRef(config);
-  configRef.current = config;
+  // Syncs configRef with the committed render. A render that React discards,
+  // as a suspended transition does, must not leave its config behind.
+  useIsomorphicLayoutEffect(() => {
+    configRef.current = config;
+  });
 
   const dragStateRef = useRef<DragState | null>(null);
   const isDraggingRef = useRef(false);
@@ -855,7 +936,7 @@ export function useTableColumnResize<T extends Record<string, unknown>>(
     }
   }, []);
 
-  // Clean up observer on unmount
+  // Releases the table resize observer on unmount.
   useEffect(() => {
     return () => {
       unobserveTableRef.current?.();
@@ -924,6 +1005,7 @@ export function useTableColumnResize<T extends Record<string, unknown>>(
     };
   }, []);
 
+  // Releases the resize gate on unmount.
   useEffect(() => {
     return () => {
       gateCleanupRef.current?.();

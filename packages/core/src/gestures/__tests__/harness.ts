@@ -4,8 +4,9 @@
  * @file harness.ts
  * @input Nothing
  * @output Exports the synthetic-input harness the gesture tests share: a
- *   manual clock, an arena wired to a transition log, and fingers that land,
- *   move and lift at explicit timestamps
+ *   manual clock, an arena wired to a transition log, fingers that land,
+ *   move and lift at explicit timestamps, and a coarse primary pointer for
+ *   tests that go through the document's host
  * @position Test-only helper of packages/core/src/gestures (excluded from the
  *   build with the rest of __tests__)
  */
@@ -19,16 +20,49 @@ import type {
   TouchConsumer,
 } from '../types';
 
-/** A clock that only moves when the test says so. */
+/**
+ * A clock that only moves when the test says so. Its timers run only when a
+ * test calls `runDue`.
+ */
 export class ManualClock implements GestureClock {
   time = 0;
+  private readonly pending = new Map<
+    number,
+    {deadline: number; callback: () => void}
+  >();
+  private nextHandle = 1;
   now(): number {
     return this.time;
   }
-  setTimeout(): number {
-    return 0;
+  setTimeout(callback: () => void, ms: number): number {
+    const handle = this.nextHandle++;
+    this.pending.set(handle, {deadline: this.time + ms, callback});
+    return handle;
   }
-  clearTimeout(): void {}
+  clearTimeout(handle: unknown): void {
+    this.pending.delete(handle as number);
+  }
+  /** Move to `time`, running every timer due by then, earliest first. */
+  runDue(time: number): void {
+    for (;;) {
+      let due: [number, {deadline: number; callback: () => void}] | null = null;
+      for (const entry of this.pending) {
+        if (
+          entry[1].deadline <= time &&
+          (due == null || entry[1].deadline < due[1].deadline)
+        ) {
+          due = entry;
+        }
+      }
+      if (due == null) {
+        break;
+      }
+      this.pending.delete(due[0]);
+      this.time = Math.max(this.time, due[1].deadline);
+      due[1].callback();
+    }
+    this.time = time;
+  }
 }
 
 export interface Harness {
@@ -40,7 +74,13 @@ export interface Harness {
   claims: number[];
   /** Deferred clicks as they resolved. */
   deferredClicks: {id: number; allowed: boolean; time: number}[];
-  environment: {width: number; height: number; rtl: boolean};
+  environment: {
+    width: number;
+    height: number;
+    rtl: boolean;
+    /** The box every recognizer's view measures, when a test sets one. */
+    view?: {left?: number; top?: number; width: number; height: number};
+  };
   finger(id: number): Finger;
   /** Advance the clock and run every timer due by `time`. */
   advance(time: number): void;
@@ -51,7 +91,11 @@ export function createHarness(): Harness {
   const log: string[] = [];
   const claims: number[] = [];
   const deferredClicks: Harness['deferredClicks'] = [];
-  const environment = {width: 390, height: 844, rtl: false};
+  const environment: Harness['environment'] = {
+    width: 390,
+    height: 844,
+    rtl: false,
+  };
   const fingers = new Map<number, Finger>();
   const env: GestureEnvironment = {
     viewportSize: () => ({
@@ -59,6 +103,15 @@ export function createHarness(): Harness {
       height: environment.height,
     }),
     isRtl: () => environment.rtl,
+    viewRect: () =>
+      environment.view == null
+        ? null
+        : {
+            left: environment.view.left ?? 0,
+            top: environment.view.top ?? 0,
+            width: environment.view.width,
+            height: environment.view.height,
+          },
   };
   const arena: GestureArena = new GestureArena({
     clock,
@@ -201,4 +254,32 @@ export function scrollProbe(
   isInsideScroller = true,
 ): NativeScrollProbe {
   return {canScroll, isInsideScroller, allowsNativePan: true};
+}
+
+/**
+ * Declare a phone's primary pointer for a test that goes through the
+ * document's host (`getGestureHost`): these tests exercise the host's
+ * coarse-pointer path, which needs `(pointer: coarse)` to match, and jsdom
+ * has no `matchMedia`. Returns the undo.
+ */
+export function coarsePrimaryPointer(): () => void {
+  const hadOwn = Object.prototype.hasOwnProperty.call(window, 'matchMedia');
+  const original = window.matchMedia;
+  window.matchMedia = (query: string) => ({
+    matches: query === '(pointer: coarse)',
+    media: query,
+    onchange: null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+    dispatchEvent: () => false,
+  });
+  return () => {
+    if (hadOwn) {
+      window.matchMedia = original;
+    } else {
+      delete (window as {matchMedia?: unknown}).matchMedia;
+    }
+  };
 }

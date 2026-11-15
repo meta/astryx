@@ -4,7 +4,8 @@
 
 /**
  * @file Composes a generated component's overview, examples, and detail tabs.
- * @input Component metadata, package metadata, and its showcase block.
+ * @input Component metadata (including its stability), package metadata, and
+ *   its showcase block.
  * @output The interactive component detail article with stable example targets.
  * @position Client content for /components/[name].
  */
@@ -12,6 +13,7 @@
 import * as stylex from '@stylexjs/stylex';
 import {Suspense} from 'react';
 import {useSearchParams, useRouter, usePathname} from 'next/navigation';
+import {Badge, type BadgeVariant} from '@astryxdesign/core/Badge';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {VStack} from '@astryxdesign/core/Layout';
 import {Section} from '@astryxdesign/core/Section';
@@ -30,7 +32,9 @@ import {Theming} from './Theming';
 import {Accessibility} from './Accessibility';
 import {HookSignature} from './HookSignature';
 import {ExampleBlock} from './ExampleBlock';
+import {SetupExampleBlock} from './SetupExampleBlock';
 import {MarkdownText} from '../MarkdownText';
+import {DeprecatedBadge, DeprecationNotice} from '../Deprecation';
 import {
   InteractivePreviewStage,
   useInteractiveState,
@@ -43,7 +47,10 @@ import {PropsTable} from './PropsTable';
 import type {ComponentEntry} from '../../generated/componentRegistry';
 import type {BlockEntry} from '../../generated/blockRegistry';
 import {showcaseRegistry} from '../../generated/showcaseRegistry';
-import {exampleRegistry} from '../../generated/exampleRegistry';
+import {
+  exampleRegistry,
+  setupExampleRegistry,
+} from '../../generated/exampleRegistry';
 import {
   shadcnRegistryIsPreview,
   shadcnRegistryOrigin,
@@ -100,6 +107,15 @@ interface ComponentDetailClientProps {
   pkgVersion: string | undefined;
   showcase: BlockEntry | undefined;
 }
+
+/** The header badge for each stability other than stable, which shows none. */
+const STABILITY_BADGES: Record<
+  NonNullable<ComponentEntry['stability']>,
+  {label: string; variant: BadgeVariant}
+> = {
+  experimental: {label: 'Experimental', variant: 'orange'},
+  lab: {label: 'Lab', variant: 'purple'},
+};
 
 function OverviewContent({
   comp,
@@ -165,7 +181,9 @@ function OverviewContent({
         <PropsTable props={comp.props} heading="Props" />
       )}
 
-      {(exampleRegistry[comp.name] || []).length > 0 && (
+      {(exampleRegistry[comp.name] || []).length +
+        (setupExampleRegistry[comp.name] || []).length >
+        0 && (
         <>
           <VStack gap={4}>
             <Heading level={2} type="display-3">
@@ -178,6 +196,9 @@ function OverviewContent({
           <VStack gap={10}>
             {(exampleRegistry[comp.name] || []).map((entry, i) => (
               <ExampleBlock key={i} entry={entry} componentName={comp.name} />
+            ))}
+            {(setupExampleRegistry[comp.name] || []).map((entry, i) => (
+              <SetupExampleBlock key={`setup-${i}`} entry={entry} />
             ))}
           </VStack>
         </>
@@ -390,6 +411,8 @@ export function ComponentDetailClient({
     accessibilityRequirements.length > 0 ||
     accessibilityThemeCoverage.length > 0;
   const hasTabs = hasPlayground || hasThemingTab || hasAccessibilityTab;
+  const stabilityBadge =
+    comp.stability != null ? STABILITY_BADGES[comp.stability] : null;
 
   return (
     <Section
@@ -406,9 +429,26 @@ export function ComponentDetailClient({
             {!comp.isReady ? 'Canary · ' : ''}
             {pkg}
             {pkgVersion ? ` v${pkgVersion}` : ''} · {comp.moduleName}
+            {stabilityBadge && (
+              <>
+                {' '}
+                <Badge
+                  label={stabilityBadge.label}
+                  variant={stabilityBadge.variant}
+                />
+              </>
+            )}
+            {comp.deprecated && (
+              <>
+                {' '}
+                <DeprecatedBadge />
+              </>
+            )}
             {!comp.isReady && pkg ? ` · npm install ${pkg}@canary` : ''}
           </Text>
         </VStack>
+
+        {comp.deprecated && <DeprecationNotice deprecation={comp.deprecated} />}
 
         {hasTabs ? (
           <Suspense

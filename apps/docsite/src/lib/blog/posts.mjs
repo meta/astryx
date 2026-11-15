@@ -32,7 +32,14 @@ import * as path from 'node:path';
  * The small, stable set of editorial post types used for primary filtering.
  * Keep this in sync with the proposal in issue #2896.
  */
-export const POST_TYPES = ['update', 'guide', 'design', 'story', 'perspective', 'engineering'];
+export const POST_TYPES = [
+  'update',
+  'guide',
+  'design',
+  'story',
+  'perspective',
+  'engineering',
+];
 
 /** Maximum number of tags allowed per post (keeps the index calm and scannable). */
 export const MAX_TAGS = 4;
@@ -48,7 +55,10 @@ function unquote(value) {
     if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
       const inner = trimmed.slice(1, -1);
       if (first === '"') {
-        return inner.replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\\\/g, '\\');
+        return inner
+          .replace(/\\"/g, '"')
+          .replace(/\\n/g, '\n')
+          .replace(/\\\\/g, '\\');
       }
       return inner;
     }
@@ -165,7 +175,9 @@ export function parseYamlFrontmatter(text) {
       const bLine = block[j];
       const trimmed = bLine.trim();
       if (!trimmed.startsWith('- ')) {
-        throw new Error(`Expected a "- " sequence item under "${key}", got: "${bLine}"`);
+        throw new Error(
+          `Expected a "- " sequence item under "${key}", got: "${bLine}"`,
+        );
       }
       const afterDash = trimmed.slice(2);
       const mapField = afterDash.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
@@ -181,7 +193,9 @@ export function parseYamlFrontmatter(text) {
         ) {
           const fld = block[j].trim().match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
           if (!fld) {
-            throw new Error(`Malformed map field under "${key}": "${block[j]}"`);
+            throw new Error(
+              `Malformed map field under "${key}": "${block[j]}"`,
+            );
           }
           obj[fld[1]] = coerceScalar(fld[2]);
           j += 1;
@@ -218,7 +232,8 @@ export function parseFrontmatter(raw) {
 // ── Validation ─────────────────────────────────────────────────────────
 
 function isValidDate(value) {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value))
+    return false;
   const d = new Date(value + 'T00:00:00Z');
   return !Number.isNaN(d.getTime()) && d.toISOString().startsWith(value);
 }
@@ -279,7 +294,8 @@ export function validatePostFrontmatter(slug, data) {
 
   if (
     data.releasePackage != null &&
-    (typeof data.releasePackage !== 'string' || data.releasePackage.trim() === '')
+    (typeof data.releasePackage !== 'string' ||
+      data.releasePackage.trim() === '')
   ) {
     err('"releasePackage" must be a non-empty string when provided');
   }
@@ -290,7 +306,9 @@ export function validatePostFrontmatter(slug, data) {
   }
 
   if (data.updatedAt != null && !isValidDate(data.updatedAt)) {
-    err(`"updatedAt" must be an ISO date (YYYY-MM-DD), got "${data.updatedAt}"`);
+    err(
+      `"updatedAt" must be an ISO date (YYYY-MM-DD), got "${data.updatedAt}"`,
+    );
   }
 
   if (
@@ -407,6 +425,31 @@ export function discoverPosts(postsDir, options = {}) {
   });
 
   return visible;
+}
+
+/**
+ * A post's example assets (spec:AST-033 FR22): the modules in the directory
+ * named after the post, beside its Markdown file (`posts/<slug>/TarotCard.tsx`
+ * next to `posts/<slug>.md`). A `tsx live` block in that post imports one as
+ * `./TarotCard`. They are docs-only demo material: no package exports them and
+ * no catalog lists them, and only their own post's examples can resolve them.
+ *
+ * @param {string} postsDir Absolute path to the directory holding the post.
+ * @param {string} slug The post's slug.
+ * @returns {{specifier: string, file: string}[]} Sorted by specifier; `file`
+ *   is the absolute path of the module.
+ */
+export function collectExampleAssets(postsDir, slug) {
+  const dir = path.join(postsDir, slug);
+  if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return [];
+  return fs
+    .readdirSync(dir)
+    .filter(f => /\.(tsx?|jsx?)$/.test(f) && !/\.(test|spec)\./.test(f))
+    .sort()
+    .map(f => ({
+      specifier: `./${f.replace(/\.(tsx?|jsx?)$/, '')}`,
+      file: path.join(dir, f),
+    }));
 }
 
 /** Distinct post types present in the given posts (ordered by POST_TYPES). */

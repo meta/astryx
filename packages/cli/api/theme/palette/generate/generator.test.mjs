@@ -8,6 +8,7 @@ import {
   PALETTE_RECIPE,
   generatePaletteSet,
   generateTonalPalette,
+  normalizeGenerationRequest,
   perceptualDelta,
   validateStops,
 } from './generator.mjs';
@@ -381,5 +382,106 @@ describe('astryx-oklch-v1 palette generator', () => {
       }).palette.blue.light[50];
 
     expect(hexToOklch(generate(25)).C).toBeLessThan(hexToOklch(generate(75)).C);
+  });
+
+  describe('darkChromaTaper', () => {
+    const taper = {
+      edgeMultiplier: 0.5,
+      throughStop: 25,
+      recoverAtStop: 60,
+      familyMultipliers: {orange: 0.65},
+    };
+    const plain = generateTonalPalette({families}).palette;
+    const muted = generateTonalPalette({
+      families,
+      darkChromaTaper: taper,
+    }).palette;
+    const chroma = hex => hexToOklch(hex).C;
+
+    it('mutes only the dark edge of chromatic families', () => {
+      for (const id of ['blue', 'orange']) {
+        expect(muted[id].light).toEqual(plain[id].light);
+        for (const stop of [0, 60, 65, 100]) {
+          expect(muted[id].dark[stop]).toBe(plain[id].dark[stop]);
+        }
+        for (const stop of [5, 25, 40, 55]) {
+          expect(chroma(muted[id].dark[stop])).toBeLessThan(
+            chroma(plain[id].dark[stop]),
+          );
+        }
+      }
+      expect(muted.neutral).toEqual(plain.neutral);
+    });
+
+    it('keeps the edge share through throughStop and recovers on a smoothstep', () => {
+      const share = (id, stop) =>
+        chroma(muted[id].dark[stop]) / chroma(plain[id].dark[stop]);
+      for (const stop of [10, 25]) {
+        expect(share('blue', stop)).toBeCloseTo(0.5, 1);
+      }
+      expect(share('blue', 45)).toBeGreaterThan(share('blue', 35));
+      expect(share('blue', 55)).toBeGreaterThan(share('blue', 45));
+      expect(share('orange', 25)).toBeCloseTo(0.65, 1);
+    });
+
+    it('reads a family multiplier from own keys only', () => {
+      const prototypeFamily = [{id: 'constructor', seed: '#0074e2'}];
+      const dark = darkChromaTaper =>
+        generateTonalPalette({families: prototypeFamily, darkChromaTaper})
+          .palette.constructor.dark;
+      const edge = dark({edgeMultiplier: 0.5, throughStop: 25, recoverAtStop: 60});
+      const standard = dark(undefined);
+      expect(edge[25]).toMatch(/^#[0-9a-f]{6}$/);
+      expect(chroma(edge[25]) / chroma(standard[25])).toBeCloseTo(0.5, 1);
+    });
+
+    it('records the taper in the normalized request only when asked', () => {
+      expect(normalizeGenerationRequest({families})).not.toHaveProperty(
+        'darkChromaTaper',
+      );
+      expect(
+        normalizeGenerationRequest({families, darkChromaTaper: taper})
+          .darkChromaTaper,
+      ).toEqual(taper);
+      const withoutFamilies = {
+        edgeMultiplier: 0.5,
+        throughStop: 25,
+        recoverAtStop: 60,
+      };
+      expect(
+        normalizeGenerationRequest({families, darkChromaTaper: withoutFamilies})
+          .darkChromaTaper,
+      ).toEqual({...withoutFamilies, familyMultipliers: {}});
+    });
+
+    it('refuses a taper the stop layout or the families cannot honor', () => {
+      const request = darkChromaTaper => () =>
+        normalizeGenerationRequest({families, darkChromaTaper});
+      expect(request([0.5])).toThrow('darkChromaTaper must be an object.');
+      expect(request({...taper, edgeMultiplier: 1.5})).toThrow(
+        'darkChromaTaper.edgeMultiplier must be a number from 0 to 1.',
+      );
+      expect(request({...taper, throughStop: 27})).toThrow(
+        'darkChromaTaper.throughStop must be a stop in the requested stop layout.',
+      );
+      expect(request({...taper, recoverAtStop: 20})).toThrow(
+        'darkChromaTaper.recoverAtStop must be a stop in the requested stop layout after throughStop.',
+      );
+      expect(request({...taper, familyMultipliers: [0.5]})).toThrow(
+        'darkChromaTaper.familyMultipliers must be an object.',
+      );
+      expect(request({...taper, familyMultipliers: {green: 0.5}})).toThrow(
+        'darkChromaTaper.familyMultipliers names unknown family green.',
+      );
+      expect(request({...taper, familyMultipliers: {neutral: 0.5}})).toThrow(
+        'darkChromaTaper.familyMultipliers names neutral family neutral; the taper changes only chromatic families.',
+      );
+      expect(request({...taper, familyMultipliers: {blue: -1}})).toThrow(
+        'darkChromaTaper.familyMultipliers.blue must be a number from 0 to 1.',
+      );
+      expect(request({...taper, curve: 'linear'})).toThrow(
+        'darkChromaTaper does not read curve; it reads edgeMultiplier, throughStop, recoverAtStop, familyMultipliers.',
+      );
+    });
   });
 });

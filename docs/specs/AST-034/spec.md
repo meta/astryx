@@ -26,7 +26,7 @@ and supplies one stable key. The build emits one `<key>.css` containing every me
 one `<key>.js` exporting every complete member, and one matching `<key>.d.ts`.
 Consumers load the CSS once and switch themes by identity.
 
-Public [PR #5687](https://github.com/facebook/astryx/pull/5687) demonstrates the user
+Public [PR #5687](https://github.com/meta/astryx/pull/5687) demonstrates the user
 need and the required cascade result. Its separately loaded base and member files are
 not the accepted output: they can be incomplete, depend on load order, omit a
 zero-delta member, and produce invalid JavaScript when source bindings collide. A

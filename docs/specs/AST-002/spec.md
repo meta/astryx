@@ -172,11 +172,14 @@ A public API proposal is admitted only when it passes both gates:
   behavior without changing public API or behavior beyond current authority MUST do
   so. Any additional public delta follows `architecture:knowledge-contracts`
   independently. A separable contradictory or unsettled tagalong MUST be removed or
-  split before review asks the repair to carry a new owner decision. Existing current
-  authority may settle an intentional remaining delta; only a surviving, intentional
-  gap requires owner judgment. Implementation convenience, removal of an internal
-  wrapper, or exposure of existing internal fields is not evidence that an API should
-  exist.
+  split before review asks the repair to carry a new owner decision, except an
+  undeclared public API row, which goes to human review for an owner's decision
+  rather than being removed or split by review (`architecture:knowledge-contracts`
+  change coupling step 6). Existing current authority may settle an intentional
+  remaining delta; only a surviving, intentional gap, or an undeclared public API
+  row, requires owner judgment. Implementation convenience, removal of an internal
+  wrapper, or exposure of existing internal fields is not evidence that an API
+  should exist.
 - **FR20 — Callsite impact and decision burden are explicit.** A public API change
   shows representative before and after callsites, including defaults and
   compatibility, and names every new choice the caller must understand or make. That
@@ -248,7 +251,7 @@ still determine whether the implementation satisfies it.
   or other behavior its mechanism cannot perform. Solve the component behavior
   first; consider API only when a clear, enforceable caller-owned distinction
   remains.
-- [PR #5373](https://github.com/facebook/astryx/pull/5373) is evidence that
+- [PR #5373](https://github.com/meta/astryx/pull/5373) is evidence that
   parallel public and package-internal operations for one semantic action create
   avoidable surface area. Its particular operation names and options are not
   policy.
@@ -432,7 +435,10 @@ its API and behavior within that contract. Any additional public primitive or
 observable behavior follows `architecture:knowledge-contracts`: first conform,
 remove, or split a separable contradiction or unsettled tagalong; then reuse an
 existing current decision when one settles an intentional surviving delta. Ask the
-owner only for a surviving decision the team actually wants to pursue.
+owner only for a surviving decision the team actually wants to pursue. An
+undeclared public API row is the exception: change coupling step 6 of
+`architecture:knowledge-contracts` sends it to human review for an owner's
+decision, and review does not remove or split it.
 
 Rejected: promoting internal focus targets, gesture memory, DOM slots, timers, or
 other existing fields merely because removing an internal wrapper or fixing one

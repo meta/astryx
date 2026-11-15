@@ -39,6 +39,7 @@ import {DropdownMenu} from '@astryxdesign/core/DropdownMenu';
 import {MoreMenu} from '@astryxdesign/core/MoreMenu';
 import {Toolbar} from '@astryxdesign/core/Toolbar';
 import {useResizable, ResizeHandle} from '@astryxdesign/core/Resizable';
+import {rtlStyles} from '@astryxdesign/core/utils';
 
 import {
   DocumentTextIcon,
@@ -92,6 +93,11 @@ const AI_CHAT_CSS = `
 .ai-chat-resize-handle {
   display: flex;
 }
+/* The scrollbar ends where the handle's grab zone begins, so the zone
+   never covers it. */
+.ai-chat-column-beside-handle {
+  padding-inline-end: var(--spacing-2);
+}
 .ai-chat-artifact-panel {
   overflow: hidden;
   display: flex;
@@ -102,6 +108,9 @@ const AI_CHAT_CSS = `
 @container artifact (max-width: ${MOBILE_MAX_WIDTH}px) {
   .ai-chat-resize-handle {
     display: none;
+  }
+  .ai-chat-column-beside-handle {
+    padding-inline-end: 0;
   }
   .ai-chat-artifact-panel {
     display: none;
@@ -260,7 +269,12 @@ function ArtifactCard({onOpen}: {onOpen: () => void}) {
             </Text>
           </VStack>
         </StackItem>
-        <Icon icon={ChevronRightIcon} size="sm" color="secondary" />
+        <Icon
+          icon={ChevronRightIcon}
+          size="sm"
+          color="secondary"
+          xstyle={rtlStyles.mirror}
+        />
       </HStack>
     </ClickableCard>
   );
@@ -300,7 +314,11 @@ export default function AIChatConversationTemplate() {
           <LayoutContent padding={0}>
             <HStack height="100%">
               {/* Chat column — flexes to fill the space the artifact leaves */}
-              <VStack style={chatColumn}>
+              <VStack
+                style={chatColumn}
+                className={
+                  isArtifactOpen ? 'ai-chat-column-beside-handle' : undefined
+                }>
                 <ChatLayout
                   density="spacious"
                   style={chatLayout}

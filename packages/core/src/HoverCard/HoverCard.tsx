@@ -10,14 +10,24 @@
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/HoverCard/HoverCard.test.tsx
+ * - /packages/core/src/HoverCard/HoverCard.doc.mjs
  * - /packages/core/src/HoverCard/index.ts
  * - /apps/storybook/stories/HoverCard.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/HoverCard/ (showcase blocks)
  */
 
-import {useCallback, useRef, type ReactElement, type ReactNode} from 'react';
+import {
+  useCallback,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
+import {isRenderable} from '../utils/isRenderable';
+import {observeMutations} from '../utils/sharedMutationObserver';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
+import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {
   useHoverCard,
   type HoverCardFocusTrigger,
@@ -31,66 +41,13 @@ export type {
   HoverCardFocusTrigger,
   HoverCardTouchTrigger,
 } from './useHoverCard';
-
-// `aria-haspopup` and `aria-controls` are global, so any trigger may carry
-// them. `aria-expanded` is not. This is the ARIA 1.2 "Supported States and
-// Properties" list for it — deliberately the narrow reading: axe accepts the
-// attribute on rather more roles, since it also allows every subclass of these,
-// so a role outside this set is not necessarily a violation. Widening it is
-// safe; the set is a floor, not the spec's ceiling. The same rule is applied in
-// Chat/useTriggerMenu.tsx, which only emits the combobox attributes once the
-// element is actually a combobox.
-const EXPANDABLE_ROLES = new Set([
-  'application',
-  'button',
-  'checkbox',
-  'columnheader',
-  'combobox',
-  'gridcell',
-  'link',
-  'listbox',
-  'menuitem',
-  'menuitemcheckbox',
-  'menuitemradio',
-  'row',
-  'rowheader',
-  'switch',
-  'tab',
-  'treeitem',
-]);
-
-const BUTTON_INPUT_TYPES = new Set(['button', 'submit', 'reset', 'image']);
-
-// Deliberately partial, and unlisted elements are read as role-less: dropping
-// aria-expanded where it might have been legal costs an AT user a state they
-// can still infer, whereas emitting it where it is illegal is a critical
-// aria-allowed-attr defect.
-function supportsAriaExpanded(el: HTMLElement): boolean {
-  const explicit = el.getAttribute('role')?.trim().split(/\s+/)[0];
-  if (explicit) {
-    return EXPANDABLE_ROLES.has(explicit);
-  }
-  switch (el.tagName) {
-    case 'BUTTON':
-    case 'SUMMARY':
-      return true;
-    case 'A':
-    case 'AREA':
-      return el.hasAttribute('href');
-    case 'INPUT':
-      // The button-flavoured input types map to role="button"; every other
-      // type maps to a textbox-family role, which does not take it.
-      return BUTTON_INPUT_TYPES.has(
-        (el as HTMLInputElement).type?.toLowerCase(),
-      );
-    case 'SELECT':
-      // combobox when it is a single-line picker, listbox otherwise; both
-      // support aria-expanded.
-      return true;
-    default:
-      return false;
-  }
-}
+import {mergeIds} from './mergeIds';
+import {
+  ROLELESS_TRIGGER,
+  applyPopupTriggerAttributes,
+  labelledTriggerAttributes,
+  popupTriggerSupport,
+} from './popupTrigger';
 
 const styles = stylex.create({
   wrapperContents: {
@@ -147,9 +104,10 @@ export interface HoverCardProps extends Pick<
 
   /**
    * When to trigger on focus:
-   * - `auto`: Only if element is naturally focusable
-   * - `always`: Always attach focus listeners
-   * - `never`: Never attach focus listeners (for composite widgets)
+   * - `auto`: focus on the trigger itself, or within a trigger that is
+   *   focusable when focus arrives
+   * - `always`: focus on the trigger or anything inside it
+   * - `never`: never on focus (for composite widgets)
    *
    * @default 'auto'
    */
@@ -190,9 +148,11 @@ export interface HoverCardProps extends Pick<
   onOpenChange?: (isOpen: boolean) => void;
 
   /**
-   * Whether to show hover indication (dashed underline) on the trigger.
-   * - `'auto'`: Show for text-only children
-   * - `true`: Always show
+   * Whether to show hover indication (dashed underline) on a text trigger.
+   * An element trigger keeps its own styling, so this has no effect on it.
+   * - `'auto'`: Show when children is text: strings and numbers, such as
+   *   `Edited {when}`, with holes such as `false` and `null` ignored
+   * - `true`: Show on a text trigger
    * - `false`: Never show
    *
    * @default 'auto'
@@ -200,9 +160,9 @@ export interface HoverCardProps extends Pick<
   hasHoverIndication?: 'auto' | boolean;
 
   /**
-   * Controlled open state. When provided, overrides hover/focus triggers:
+   * Controlled open state. When provided, overrides the hover trigger:
    * - `true`: force-show the hover card (hover/focus hide is suppressed)
-   * - `false`: force-hide the hover card
+   * - `false`: hide the hover card and keep hover and focus from opening it
    * - `undefined`: uncontrolled — hover/focus triggers manage visibility
    *
    * A controlled hover card still takes Escape when it is the top-most layer,
@@ -224,15 +184,26 @@ export interface HoverCardProps extends Pick<
  * Check if children are text-only (no React elements)
  */
 function isTextOnly(children: ReactNode): boolean {
-  return typeof children === 'string' || typeof children === 'number';
-}
-
-/**
- * Utility to merge ARIA ID strings
- */
-function mergeIds(...ids: (string | undefined | null)[]): string | undefined {
-  const filtered = ids.filter(Boolean);
-  return filtered.length > 0 ? filtered.join(' ') : undefined;
+  if (typeof children === 'string' || typeof children === 'number') {
+    return true;
+  }
+  // Text written around an expression, such as `Edited {when}`, reaches React
+  // as several strings. Holes that render nothing do not change that; one
+  // element does.
+  if (!Array.isArray(children)) {
+    return false;
+  }
+  let hasText = false;
+  for (const child of children.flat(Infinity) as ReactNode[]) {
+    if (!isRenderable(child)) {
+      continue;
+    }
+    if (typeof child !== 'string' && typeof child !== 'number') {
+      return false;
+    }
+    hasText = true;
+  }
+  return hasText;
 }
 
 /**
@@ -300,6 +271,28 @@ export function HoverCard({
     onHide: handleHide,
   });
 
+  // The wrapper's first element is the trigger, and it can be replaced after
+  // mount: by new children, or by a child component that swaps its own root
+  // without a render here. Syncs with the DOM: on a replacement the wiring
+  // below re-runs, so the old element is released before the new one is wired.
+  const [triggerReplacements, setTriggerReplacements] = useState(0);
+  const observedTriggerRef = useRef<Element | null>(null);
+  useIsomorphicLayoutEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (textOnly || wrapper == null) {
+      return;
+    }
+    observedTriggerRef.current = wrapper.firstElementChild;
+    return observeMutations(wrapper, {childList: true}, () => {
+      const trigger = wrapper.firstElementChild;
+      if (trigger === observedTriggerRef.current) {
+        return;
+      }
+      observedTriggerRef.current = trigger;
+      setTriggerReplacements(count => count + 1);
+    });
+  }, [textOnly]);
+
   // For element children with display:contents, attach ref to first child
   useIsomorphicLayoutEffect(() => {
     if (textOnly) {
@@ -320,63 +313,32 @@ export function HoverCard({
     hoverCard.ref(firstChild);
 
     if (label) {
-      // When named, the hover card is a dialog. The trigger should advertise the
-      // popup relationship with aria-haspopup/aria-expanded, not describe the
-      // trigger with the dialog's content (aria-describedby is for plain-text
-      // descriptions, not navigable regions). See #5049.
-      //
-      // aria-expanded only goes on a trigger whose role permits it. A role-less
-      // trigger (Timestamp's <time>/<span>) gets haspopup + controls, which are
-      // global, and no expanded state.
-      //
-      // Merge rather than overwrite: the trigger may already carry its own
-      // popup semantics (e.g. a menu button wrapped in a labelled HoverCard),
-      // so preserve the existing values and restore them on cleanup.
-      const existingHaspopup = firstChild.getAttribute('aria-haspopup');
-      const existingControls = firstChild.getAttribute('aria-controls');
-      const existingExpanded = firstChild.getAttribute('aria-expanded');
-      const canExpand = supportsAriaExpanded(firstChild);
-
-      firstChild.setAttribute('aria-haspopup', 'dialog');
-      // Only point aria-controls at the layer while it is open and in the DOM.
-      // While closed, useLayer leaves only an inert <template> marker, so the
-      // id would reference nothing. DateInput gates it the same way. The
-      // trigger's own aria-controls (if any) is preserved either way.
-      if (hoverCard.isOpen) {
-        firstChild.setAttribute(
-          'aria-controls',
-          mergeIds(existingControls, hoverCard.id) ?? '',
-        );
-      } else if (existingControls) {
-        firstChild.setAttribute('aria-controls', existingControls);
-      } else {
-        firstChild.removeAttribute('aria-controls');
-      }
-      if (canExpand) {
-        firstChild.setAttribute('aria-expanded', String(hoverCard.isOpen));
-      } else if (existingExpanded) {
-        firstChild.setAttribute('aria-expanded', existingExpanded);
-      } else {
-        firstChild.removeAttribute('aria-expanded');
-      }
+      // When named, the hover card is a dialog. The trigger names it through
+      // aria-controls, not aria-describedby, which is for plain-text
+      // descriptions, not navigable regions. The trigger's own popup
+      // attributes (e.g. a menu button's) come back on cleanup.
+      const own = {
+        haspopup: firstChild.getAttribute('aria-haspopup'),
+        controls: firstChild.getAttribute('aria-controls'),
+        expanded: firstChild.getAttribute('aria-expanded'),
+      };
+      applyPopupTriggerAttributes(
+        firstChild,
+        labelledTriggerAttributes(popupTriggerSupport(firstChild), own, {
+          id: hoverCard.id,
+          isOpen: hoverCard.isOpen,
+        }),
+      );
 
       return () => {
         hoverCard.ref(null);
-        if (existingHaspopup) {
-          firstChild.setAttribute('aria-haspopup', existingHaspopup);
-        } else {
-          firstChild.removeAttribute('aria-haspopup');
-        }
-        if (existingControls) {
-          firstChild.setAttribute('aria-controls', existingControls);
-        } else {
-          firstChild.removeAttribute('aria-controls');
-        }
-        if (existingExpanded) {
-          firstChild.setAttribute('aria-expanded', existingExpanded);
-        } else {
-          firstChild.removeAttribute('aria-expanded');
-        }
+        applyPopupTriggerAttributes(
+          firstChild,
+          labelledTriggerAttributes(ROLELESS_TRIGGER, own, {
+            id: null,
+            isOpen: false,
+          }),
+        );
       };
     }
 
@@ -404,6 +366,7 @@ export function HoverCard({
     hoverCard.id,
     hoverCard.isOpen,
     hoverCard.describedBy,
+    triggerReplacements,
   ]);
 
   // While closed, useLayer leaves only an inert <template> marker at this JSX
@@ -423,12 +386,19 @@ export function HoverCard({
         <span
           ref={hoverCard.ref}
           tabIndex={0}
-          aria-haspopup={label ? 'dialog' : undefined}
-          aria-controls={label && hoverCard.isOpen ? hoverCard.id : undefined}
-          // No aria-expanded: this wrapper is a role-less <span>, and
-          // aria-expanded is invalid on it (see EXPANDABLE_ROLES above).
+          // The wrapper is a role-less <span>: when labelled, it names the
+          // open card through aria-controls only.
+          {...(label
+            ? labelledTriggerAttributes(
+                ROLELESS_TRIGGER,
+                {},
+                {id: hoverCard.id, isOpen: hoverCard.isOpen},
+              )
+            : null)}
           aria-describedby={label ? undefined : hoverCard.describedBy}
-          {...stylex.props(
+          // The span is a tab stop Astryx adds: it draws the shared ring,
+          // which a theme restyles through the focus-outline tokens.
+          {...focusOutlineProps.focusVisible(
             styles.wrapperInline,
             showHoverIndication && styles.hoverIndication,
           )}>

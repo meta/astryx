@@ -3,7 +3,7 @@
 /**
  * @file layerDismissalFamilies.test.tsx
  * @input Uses vitest, @testing-library/react, BottomSheet, Dialog, Lightbox,
- *   MobileNav, HoverCard, Tooltip
+ *   MobileNav, HoverCard, Tooltip (also pinned through InfoTip's show() hold)
  * @output Tests that every overlay family shares the one dismissal stack
  * @position Colocated with layerStack; the families' own behavior is tested in
  *   their own files, this one only asks who takes the press
@@ -37,6 +37,7 @@ import {Dialog} from '../Dialog/Dialog';
 import {HoverCard} from '../HoverCard/HoverCard';
 import {Lightbox} from '../Lightbox/Lightbox';
 import {MobileNav} from '../MobileNav/MobileNav';
+import {InfoTip} from '../InfoTip/InfoTip';
 import {Tooltip} from '../Tooltip/Tooltip';
 import {resetLayerStackForTests} from './layerStack';
 
@@ -429,6 +430,36 @@ describe('overlay families on the shared dismissal stack', () => {
 
       expect(onCardChange).toHaveBeenCalledWith(false);
       expect(HTMLElement.prototype.hidePopover).not.toHaveBeenCalled();
+      expect(onDialogChange).not.toHaveBeenCalled();
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    it('a Tooltip a press pinned takes the Escape first, and the Dialog stays open (spec:AST-003 FR4)', () => {
+      const onDialogChange = vi.fn();
+
+      render(
+        <Dialog isOpen={true} onOpenChange={onDialogChange} aria-label="Host">
+          <InfoTip content="Pinned tip" label="Info" />
+        </Dialog>,
+      );
+      fireEvent.click(screen.getByRole('button', {name: 'Info'}));
+      expect(HTMLElement.prototype.showPopover).toHaveBeenCalled();
+      expect(screen.getByRole('button', {name: 'Info'})).toHaveAttribute(
+        'aria-expanded',
+        'true',
+      );
+      vi.mocked(HTMLElement.prototype.hidePopover).mockClear();
+
+      let event = new KeyboardEvent('keydown');
+      act(() => {
+        event = pressEscape();
+      });
+
+      expect(HTMLElement.prototype.hidePopover).toHaveBeenCalled();
+      expect(screen.getByRole('button', {name: 'Info'})).toHaveAttribute(
+        'aria-expanded',
+        'false',
+      );
       expect(onDialogChange).not.toHaveBeenCalled();
       expect(event.defaultPrevented).toBe(true);
     });

@@ -4,11 +4,12 @@
 /**
  * @file chromium.chromium.spec.ts
  * @input Uses @playwright/test and the public Chromium harness seam
- * @output Focused accessibility-tree mapping, clipping-aware rendered-visibility, and pointer hover/away tests
+ * @output Focused accessibility-tree mapping, clipping-aware rendered-visibility, pointer hover/away and pointer reach tests
  * @position Harness regression coverage; proves browser AX properties are exposed without DOM substitution.
  */
 
-import {expect, test} from '@playwright/test';
+import {expect, test} from '../playwright';
+import type {Page} from '../playwright';
 import {createChromiumHarness, holdMotionStill} from './chromium';
 
 test('computed node exposes selected state for tabs', async ({page}) => {
@@ -281,4 +282,326 @@ test('pointerAway refuses when every candidate point is on a watched subject', a
   await expect(harness.pointerAway()).rejects.toThrow(
     'nowhere to move the pointer away to',
   );
+});
+
+/**
+ * Keeps the page's main thread busy for `ms` from its next task, as on a
+ * starved machine: no script, frame or event handler runs meanwhile.
+ */
+async function busyMainThread(page: Page, ms: number): Promise<void> {
+  await page.evaluate(duration => {
+    setTimeout(() => {
+      const end = performance.now() + duration;
+      while (performance.now() < end) {
+        // Busy on purpose.
+      }
+    }, 0);
+  }, ms);
+}
+
+// Longer than the 2 s that 120 frames take on an idle page.
+const BUSY_MS = 3_000;
+
+// At 40 ms of script in every frame, the page renders about 25 frames each
+// second.
+const BUSY_FRAME_MS = 40;
+
+test('a click reaches a control while the page is busy for longer than 120 idle frames take', async ({
+  page,
+}) => {
+  await page.setContent(
+    '<button id="go" onclick="this.dataset.clicks = Number(this.dataset.clicks || 0) + 1">Go</button>',
+  );
+  const cdp = await page.context().newCDPSession(page);
+  const harness = createChromiumHarness({
+    page,
+    subject: page.locator('#go'),
+    cdp,
+  });
+  const subject = await harness.subject();
+
+  await busyMainThread(page, BUSY_MS);
+  await harness.click(subject);
+
+  await expect(page.locator('#go')).toHaveAttribute('data-clicks', '1');
+});
+
+test('hover reaches a subject while the page is busy for longer than 120 idle frames take', async ({
+  page,
+}) => {
+  await page.setContent(
+    '<button id="go" onmouseenter="this.dataset.entered = \'yes\'">Go</button>',
+  );
+  const cdp = await page.context().newCDPSession(page);
+  const harness = createChromiumHarness({
+    page,
+    subject: page.locator('#go'),
+    cdp,
+  });
+  const subject = await harness.subject();
+
+  await busyMainThread(page, BUSY_MS);
+  await harness.hover(subject);
+
+  await expect(page.locator('#go')).toHaveAttribute('data-entered', 'yes');
+});
+
+test('canReceivePointer is true for a control while the page is busy for longer than 120 idle frames take', async ({
+  page,
+}) => {
+  await page.setContent('<button id="go">Go</button>');
+  const cdp = await page.context().newCDPSession(page);
+  const subject = await createChromiumHarness({
+    page,
+    subject: page.locator('#go'),
+    cdp,
+  }).subject();
+
+  await busyMainThread(page, BUSY_MS);
+
+  expect(await subject.canReceivePointer()).toBe(true);
+});
+
+test('a control under a covering element cannot receive a pointer, and a click on it says why', async ({
+  page,
+}) => {
+  await page.setContent(`
+    <button id="go">Go</button>
+    <div id="shield" style="position:fixed;inset:0"></div>
+  `);
+  const cdp = await page.context().newCDPSession(page);
+  const harness = createChromiumHarness({
+    page,
+    subject: page.locator('#go'),
+    cdp,
+  });
+  const subject = await harness.subject();
+
+  expect(await subject.canReceivePointer()).toBe(false);
+  const error = await harness.click(subject).then(
+    () => null,
+    (thrown: unknown) => thrown,
+  );
+  expect(error).toBeInstanceOf(Error);
+  expect((error as Error).message).toMatch(
+    /^a pointer could not reach this control within /,
+  );
+  // The failure names the element that takes the pointer.
+  const cause = (error as Error).cause as Error | undefined;
+  expect(`${(error as Error).message} ${cause?.message ?? ''}`).toContain(
+    'shield',
+  );
+});
+
+test('a control that never holds still cannot receive a pointer', async ({
+  page,
+}) => {
+  await page.setContent(`
+    <style>
+      @keyframes drift {
+        from { transform: translateX(0); }
+        to { transform: translateX(80px); }
+      }
+      #go { animation: drift 0.5s linear infinite; }
+    </style>
+    <button id="go">Go</button>
+  `);
+  const cdp = await page.context().newCDPSession(page);
+  const subject = await createChromiumHarness({
+    page,
+    subject: page.locator('#go'),
+    cdp,
+  }).subject();
+
+  // The button moves from one frame to the next before the check starts.
+  const moves = await page.locator('#go').evaluate(
+    button =>
+      new Promise<boolean>(resolve => {
+        requestAnimationFrame(() => {
+          const before = button.getBoundingClientRect().x;
+          requestAnimationFrame(() => {
+            resolve(button.getBoundingClientRect().x !== before);
+          });
+        });
+      }),
+  );
+  expect(moves).toBe(true);
+
+  expect(await subject.canReceivePointer()).toBe(false);
+});
+
+test('a click on the trigger of an open popover closes it', async ({page}) => {
+  // The press decides from the state it starts in, as a menu trigger does.
+  // Light dismiss closes the popover. The click opens it only when the press
+  // started with it closed.
+  await page.setContent(`
+    <button id="trigger">Menu</button>
+    <div id="menu" popover>Choices</div>
+    <script>
+      let openAtPress = false;
+      trigger.addEventListener('pointerdown', () => {
+        openAtPress = menu.matches(':popover-open');
+      });
+      trigger.addEventListener('click', () => {
+        if (!openAtPress) menu.showPopover();
+      });
+    </script>
+  `);
+  const cdp = await page.context().newCDPSession(page);
+  const harness = createChromiumHarness({
+    page,
+    subject: page.locator('#trigger'),
+    cdp,
+  });
+  const subject = await harness.subject();
+
+  await harness.click(subject);
+  await expect(page.locator('#menu')).toBeVisible();
+  await harness.click(subject);
+  await expect(page.locator('#menu')).toBeHidden();
+});
+
+/**
+ * Spends `ms` of every frame in script from now on, as on a machine that stays
+ * busy: the page keeps rendering, only more slowly.
+ */
+async function busyEveryFrame(page: Page, ms: number): Promise<void> {
+  await page.evaluate(duration => {
+    const burn = () => {
+      const end = performance.now() + duration;
+      while (performance.now() < end) {
+        // Busy on purpose.
+      }
+      requestAnimationFrame(burn);
+    };
+    requestAnimationFrame(burn);
+  }, ms);
+}
+
+test('a pointer reaches a control on a page that spends most of every frame in script', async ({
+  page,
+}) => {
+  await page.setContent(
+    '<button id="go" onclick="this.dataset.clicks = Number(this.dataset.clicks || 0) + 1">Go</button>',
+  );
+  const cdp = await page.context().newCDPSession(page);
+  const harness = createChromiumHarness({
+    page,
+    subject: page.locator('#go'),
+    cdp,
+  });
+  const subject = await harness.subject();
+
+  await busyEveryFrame(page, BUSY_FRAME_MS);
+
+  expect(await subject.canReceivePointer()).toBe(true);
+  await harness.click(subject);
+  await expect(page.locator('#go')).toHaveAttribute('data-clicks', '1');
+});
+
+test('a hover onto a subject that hides as the pointer leaves the trigger returns', async ({
+  page,
+}) => {
+  // The tip hides when the pointer leaves the trigger, so moving onto it hides
+  // it. The hover still returns, and the page shows what happened.
+  await page.setContent(`
+    <div style="padding:40px">
+      <button id="trigger">Trigger</button>
+      <div id="tip" hidden style="margin-top:24px;padding:8px">Tip</div>
+    </div>
+    <script>
+      trigger.addEventListener('mouseenter', () => { tip.hidden = false; });
+      trigger.addEventListener('mouseleave', () => { tip.hidden = true; });
+    </script>
+  `);
+  const cdp = await page.context().newCDPSession(page);
+  const harness = createChromiumHarness({
+    page,
+    subject: page.locator('#trigger'),
+    cdp,
+    related: {tip: page.locator('#tip')},
+  });
+
+  await harness.hover(await harness.subject());
+  await expect(page.locator('#tip')).toBeVisible();
+  await harness.hover(await harness.related('tip'));
+  await expect(page.locator('#tip')).toBeHidden();
+});
+
+test('a link that wraps onto two lines can receive a pointer', async ({
+  page,
+}) => {
+  await page.setContent(`
+    <p style="width:200px;margin:0;font:16px/24px monospace">
+      aaaaaaaaaaaaa
+      <a id="go" href="#" onclick="event.preventDefault(); this.dataset.clicks = Number(this.dataset.clicks || 0) + 1">bbbbbb cccccccc</a>
+      dddd eeee
+    </p>
+  `);
+  const cdp = await page.context().newCDPSession(page);
+  const harness = createChromiumHarness({
+    page,
+    subject: page.locator('#go'),
+    cdp,
+  });
+  const subject = await harness.subject();
+  // The link has two boxes, and the centre of its whole box is not the link.
+  const layout = await page.locator('#go').evaluate(link => {
+    const box = link.getBoundingClientRect();
+    const hit = document.elementFromPoint(
+      box.left + box.width / 2,
+      box.top + box.height / 2,
+    );
+    return {
+      parts: link.getClientRects().length,
+      centreIsLink: hit === link || link.contains(hit),
+    };
+  });
+  expect(layout).toEqual({parts: 2, centreIsLink: false});
+
+  expect(await subject.canReceivePointer()).toBe(true);
+  await harness.click(subject);
+  await expect(page.locator('#go')).toHaveAttribute('data-clicks', '1');
+});
+
+test('a control under a sticky header can receive a pointer', async ({
+  page,
+}) => {
+  await page.setContent(`
+    <style>
+      body { margin: 0; }
+      #bar { position: fixed; top: 0; left: 0; right: 0; height: 120px; background: #eee; }
+    </style>
+    <div id="bar">Header</div>
+    <div style="height:1500px"></div>
+    <button id="go" onclick="this.dataset.clicks = Number(this.dataset.clicks || 0) + 1">Go</button>
+    <div style="height:1500px"></div>
+  `);
+  await page.evaluate(() => {
+    const button = document.getElementById('go');
+    if (button != null) {
+      window.scrollTo(0, button.offsetTop - 40);
+    }
+  });
+  const cdp = await page.context().newCDPSession(page);
+  const harness = createChromiumHarness({
+    page,
+    subject: page.locator('#go'),
+    cdp,
+  });
+  const subject = await harness.subject();
+  // The header covers the button where it starts.
+  const covered = await page.locator('#go').evaluate(button => {
+    const box = button.getBoundingClientRect();
+    const hit = document.elementFromPoint(
+      box.left + box.width / 2,
+      box.top + box.height / 2,
+    );
+    return hit?.id ?? null;
+  });
+  expect(covered).toBe('bar');
+
+  expect(await subject.canReceivePointer()).toBe(true);
+  await harness.click(subject);
+  await expect(page.locator('#go')).toHaveAttribute('data-clicks', '1');
 });

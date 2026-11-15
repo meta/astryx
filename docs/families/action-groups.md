@@ -131,29 +131,32 @@ Selector's and MultiSelector's options FR1–FR5
 
 ## Cross-component invariants
 
-- **FR1 — The lift decides.** In a member, a press on an action that slides
-  across its siblings acts on the action the pointer lifts on, through that
-  action's own activation; a press that never leaves its action acts on it.
-  One gesture acts at most once (`spec:AST-094` FR26). After a slide, focus does what
-  a click on the lifted action does.
+- **FR1 — The lift decides.** Under the touch presentation (`spec:AST-094`
+  FR13), in a member, a press on an action that slides across its siblings
+  acts on the action the pointer lifts on, through that action's own
+  activation; a press that never leaves its action acts on it. One gesture
+  acts at most once (`spec:AST-094` FR26). After a slide, focus does what a
+  click on the lifted action does. A mouse press acts as the platform's
+  native button does: on the action it began on, released over that action.
 - **FR2 — The highlight follows the pointer.** While the pointer is held, the
   enabled action under it is highlighted, at most one at a time, and nothing
   is highlighted over a disabled action, a gap, or outside the group
   (`spec:AST-094` FR27).
 - **FR3 — Sliding off cancels.** A press that lifts outside the group acts on
-  nothing; a cancelled pointer, a second finger, or the window losing focus
-  ends the gesture with nothing acting (`spec:AST-094` FR28). Whether a
-  member that opened for the gesture stays open stays with the member.
+  nothing; a second finger ends the gesture with nothing acting (`spec:AST-094`
+  FR28), as a lost focus or a cancelled pointer does (`spec:AST-094` FR44).
+  Whether a member that opened for the gesture stays open stays with the
+  member.
 - **FR4 — A toggle group toggles only the lifted action.** In a toggle group,
   only the action lifted on toggles; sliding across never toggles the actions
   passed over.
-- **FR5 — Every pointer, one target rule.** The behavior applies to every web
-  pointer, mouse and pen as well as a finger. Under a fine pointer a group
-  keeps one `pointerdown` listener on its element, cancelable where the member
-  needs it, adds document listeners only during a press and removes them at
-  the release, and may arm one per-document click swallower from the release
-  until that gesture's click; nothing else is idle (`spec:AST-094` FR19,
-  FR24). The 44 px target is each member's hit
+- **FR5 — A finger and a pen, one target rule.** Under the touch presentation
+  the behavior applies to a finger and a pen; a mouse press acts as FR1 says.
+  While it tracks, a group keeps one `pointerdown` listener on its element,
+  cancelable where the member needs it, adds document listeners only during a
+  press and removes them at the release, and may arm one per-document click
+  swallower from the release until that gesture's click; nothing else is idle
+  (`spec:AST-094` FR19, FR24). The 44 px target is each member's hit
   expansion under a coarse pointer only. Keyboard and assistive-technology
   behavior is unchanged.
 
@@ -161,8 +164,12 @@ Selector's and MultiSelector's options FR1–FR5
 
 - What an action does on activation, and how a member shows its highlight,
   stay with the member.
-- Menus keep their own opening and handoff (`spec:AST-094` FR29) and their
-  scrolling rules.
+- Menus keep their own opening and handoff (`spec:AST-094` FR29), their
+  press and drag under every pointer, and their scrolling rules; FR1's touch
+  scope and FR5 do not change them.
+- Selector's and MultiSelector's options keep the menu press model's press
+  and drag under every pointer (`component:Selector` FR7); FR1's touch scope
+  and FR5 do not change them.
 - A wheel is a scroll container: a drag scrolls it, as it does today, and a
   tap acts on the option under it; only a press that does not scroll tracks.
 
@@ -203,6 +210,16 @@ they are outside the family.
 
 - `spec:AST-094/DEC-17` — every group of sibling actions tracks a held
   pointer the same way.
+
+### DEC-1 — The slide across actions is for touch only
+
+**Decider:** `cixzhang`, `2026-11-03`
+
+The slide-across press runs under the touch presentation only. A desktop
+mouse press behaves as a native button does: only the pressed action
+activates, with no drag across the others.
+
+Rejected: every pointer.
 
 ## Open questions
 

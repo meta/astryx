@@ -153,3 +153,36 @@ describe('scroll keyboard delegation', () => {
     expect(document.activeElement).toBe(viewport);
   });
 });
+
+describe('a viewport that is its own content box', () => {
+  function attachToItself(markup: string) {
+    detach?.();
+    viewport.innerHTML = markup;
+    const query = viewport.querySelectorAll.bind(viewport);
+    vi.spyOn(viewport, 'querySelectorAll').mockImplementation(selector => {
+      const result = query(selector);
+      return selector === FOCUSABLE_SELECTOR
+        ? ([...result].sort((a, b) =>
+            a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING
+              ? -1
+              : 1,
+          ) as unknown as NodeListOf<Element>)
+        : result;
+    });
+    detach = attachScrollKeyboardDelegation(viewport, viewport);
+  }
+
+  it('delegates Tab entry to its first link or button, never to itself', () => {
+    attachToItself(
+      '<p>Text</p><a href="#first">First link</a><button>Later</button>',
+    );
+    enter();
+    expect(document.activeElement).toBe(viewport.querySelector('a'));
+  });
+
+  it('keeps the stop on itself when nothing inside is focusable', () => {
+    attachToItself('<p>Only text</p>');
+    enter();
+    expect(document.activeElement).toBe(viewport);
+  });
+});

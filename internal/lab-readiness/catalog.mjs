@@ -26,11 +26,11 @@ export const SCHEMA_VERSION = 1;
 export const REPORT_KIND = 'astryx-lab-readiness-report';
 
 const SPEC_PROTOCOL =
-  'https://github.com/facebook/astryx/wiki/Component-Specification-Protocol';
+  'https://github.com/meta/astryx/wiki/Component-Specification-Protocol';
 const BUILD_PROTOCOL =
-  'https://github.com/facebook/astryx/wiki/Component-Build-Protocol';
+  'https://github.com/meta/astryx/wiki/Component-Build-Protocol';
 const HARDEN_PROTOCOL =
-  'https://github.com/facebook/astryx/wiki/Component-Hardening-Protocol';
+  'https://github.com/meta/astryx/wiki/Component-Hardening-Protocol';
 
 /** @typedef {'not_started' | 'in_progress' | 'passed' | 'blocked'} CheckState */
 

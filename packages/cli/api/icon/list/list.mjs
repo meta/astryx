@@ -2,14 +2,20 @@
 
 /**
  * @file `icon.list` leaf (AST-084 FR7): every installed icon set with the
- * icon definitions its `map` covers, the project's set, and the sets
- * withdrawn with why.
+ * icon definitions its `map` covers, the project's main set and backups in
+ * order, the look the project's icons draw, and the sets withdrawn with why.
  *
  * @output the `icon.list` envelope
  * @position api/icon/list — dispatched by ../icon.mjs
  */
 
-import {astryxIconDefinitions, loadIconSets} from '../_adapter.mjs';
+import {
+  astryxIconDefinitions,
+  ICON_USE_ORDER_COMMAND,
+  iconSetKey,
+  iconSetLook,
+  loadIconSets,
+} from '../_adapter.mjs';
 
 /**
  * List the installed icon sets.
@@ -20,6 +26,8 @@ export async function iconList({cwd}) {
   const {sets, withdrawn, choice} = await loadIconSets(cwd);
   const astryx = astryxIconDefinitions().definitions.map(each => each.doc);
   const builtIn = astryx.filter(doc => doc.builtIn).map(doc => doc.name);
+  const order = choice.status === 'selected' ? (choice.order ?? []) : [];
+  const unchosen = choice.status === 'ambiguous' && !choice.configured;
   return {
     type: 'icon.list',
     data: {
@@ -28,7 +36,20 @@ export async function iconList({cwd}) {
         ? `${choice.set.package}/${choice.set.name}`
         : null,
       reason: choice.reason,
+      order: order.map(iconSetKey),
+      variant: choice.variant ?? null,
+      backups: (choice.backups ?? []).map(each => ({
+        iconSet: each.selector,
+        status: each.status,
+        reason: each.reason,
+      })),
+      ...(unchosen
+        ? {
+            next: `${sets.length} icon sets are installed and none is your main set: run \`${ICON_USE_ORDER_COMMAND}\`.`,
+          }
+        : {}),
       sets: sets.map(set => {
+        const rank = order.indexOf(set);
         const mapped = new Set(Object.keys(set.data.map ?? {}));
         return {
           name: set.name,
@@ -52,6 +73,17 @@ export async function iconList({cwd}) {
             own: set.definitions.map(each => each.doc.name),
           },
           project: set === choice.set,
+          role:
+            rank === 0
+              ? /** @type {const} */ ('main')
+              : rank > 0
+                ? /** @type {const} */ ('backup')
+                : null,
+          rank: rank === -1 ? null : rank + 1,
+          // A set the list leaves out draws no look in the project.
+          ...(choice.variant
+            ? {look: rank === -1 ? null : iconSetLook(set, choice.variant)}
+            : {}),
         };
       }),
       withdrawn: withdrawn.map(each => ({

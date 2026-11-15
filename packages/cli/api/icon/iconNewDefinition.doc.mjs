@@ -19,7 +19,8 @@ export const doc = {
     {
       name: 'name',
       type: 'string',
-      description: 'camelCase definition name.',
+      description:
+        'The definition name, in camelCase (`rocketLaunch`) or kebab-case (`rocket-launch`); it is written in camelCase.',
       required: true,
     },
     {
@@ -66,7 +67,7 @@ export const doc = {
   throws: [
     {
       code: 'ERR_INVALID_ARGUMENT',
-      when: 'the name is not camelCase, or Astryx already has it',
+      when: 'the name is neither camelCase nor kebab-case, or Astryx already has it',
     },
     {
       code: 'ERR_MISSING_ARGUMENT',

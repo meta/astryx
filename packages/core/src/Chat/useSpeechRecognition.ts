@@ -14,7 +14,15 @@
  */
 
 import {useState, useCallback, useEffect, useMemo, useRef} from 'react';
-import {useLocale, useTranslator} from '../i18n';
+import {useLocale} from '../i18n';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Chat/useSpeechRecognition.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Types
@@ -259,7 +267,7 @@ function getDefaultAudioContext(): AudioContext {
 export function useSpeechRecognition(
   options: UseSpeechRecognitionOptions = {},
 ): UseSpeechRecognitionReturn {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const providerLocale = useLocale();
   const {
     lang,
@@ -289,7 +297,6 @@ export function useSpeechRecognition(
 
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const getAudioContextRef = useRef(getAudioContext);
-  getAudioContextRef.current = getAudioContext;
   const analyserRef = useRef<VolumeAnalyser | null>(null);
   const rafRef = useRef<number>(0);
 
@@ -301,15 +308,23 @@ export function useSpeechRecognition(
     onEnd,
     transformTranscript,
   });
-  callbacksRef.current = {
-    onTranscript,
-    onResult,
-    onError,
-    onStart,
-    onEnd,
-    transformTranscript,
-  };
+  // Recognition events read the latest callbacks and audio context. Write
+  // them at commit: a render React discards, as a suspended transition does,
+  // must not leave its values behind.
+  useIsomorphicLayoutEffect(() => {
+    getAudioContextRef.current = getAudioContext;
+    callbacksRef.current = {
+      onTranscript,
+      onResult,
+      onError,
+      onStart,
+      onEnd,
+      transformTranscript,
+    };
+  });
 
+  // Releases speech recognition, the audio analyser and the animation frame on
+  // unmount.
   useEffect(() => {
     return () => {
       recognitionRef.current?.abort();

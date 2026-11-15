@@ -3,6 +3,7 @@
 import {describe, it, expect} from 'vitest';
 import {relativeLuminance, compositeOver, contrastRatio} from './contrast';
 import {parseColor} from '../utils/color';
+import {resolveThemeToken} from './tokens';
 
 describe('relativeLuminance', () => {
   it('is 0 for black and 1 for white', () => {
@@ -90,5 +91,15 @@ describe('compositeOver', () => {
     expect(out.g).toBeCloseTo(127.5, 5);
     expect(out.b).toBeCloseTo(127.5, 5);
     expect(out.a).toBe(1);
+  });
+});
+
+describe('the stock accent pair', () => {
+  // --color-on-accent is the label on every --color-accent fill, such as a
+  // primary Button's, which is normal-size text (WCAG 1.4.3: 4.5:1).
+  it.each(['light', 'dark'] as const)('meets 4.5:1 in the %s theme', mode => {
+    const accent = resolveThemeToken(null, '--color-accent', {mode});
+    const onAccent = resolveThemeToken(null, '--color-on-accent', {mode});
+    expect(contrastRatio(onAccent, accent)).toBeGreaterThanOrEqual(4.5);
   });
 });

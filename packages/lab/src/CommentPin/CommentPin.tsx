@@ -15,7 +15,7 @@
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/lab/src/CommentPin/CommentPin.doc.mjs
- * - /packages/lab/src/CommentPin/CommentPin.spec.md
+ * - /docs/specs/components/CommentPin/CommentPin.spec.md
  * - /packages/lab/src/CommentPin/CommentPin.test.tsx
  * - /packages/lab/src/CommentPin/index.ts
  * - /apps/storybook/stories/CommentPin.stories.tsx
@@ -204,6 +204,21 @@ const styles = stylex.create({
     opacity: {
       default: 0.45,
       '@media (forced-colors: active)': 1,
+    },
+  },
+  // An aria-disabled button gets no system disabled paint in forced colors;
+  // GrayText is the platform's disabled affordance there. Defaults repeat the
+  // base values, since StyleX merges per property. Only unselected pins take
+  // it — the selected treatment keeps its forced-colors Highlight, so a
+  // selected disabled pin stays prominent (ORD4).
+  disabledUnselected: {
+    borderColor: {
+      default: 'transparent',
+      '@media (forced-colors: active)': 'GrayText',
+    },
+    color: {
+      default: colorVars['--color-text-secondary'],
+      '@media (forced-colors: active)': 'GrayText',
     },
   },
   avatarRail: {
@@ -463,7 +478,34 @@ export function CommentPin({
       type="button"
       aria-label={label}
       aria-pressed={isSelected}
-      disabled={isDisabled}
+      // A disabled pin keeps its tab stop and is announced as disabled through
+      // aria-disabled instead of the native attribute (spec:AST-085 FR1). The
+      // activation guards below keep it inert (FR2); focus is kept when the
+      // pin becomes disabled while focused (FR4), and the shared focus outline
+      // still paints, dimmed with the rest of the pin (FR6).
+      aria-disabled={isDisabled ? 'true' : undefined}
+      onClick={e => {
+        if (isDisabled) {
+          // A natively disabled element dispatched no click at all, so an
+          // aria-disabled pin must not reach the caller's handler, and the
+          // click must not leak to a clickable ancestor (annotation surface)
+          // the native attribute never let it reach either (FR2).
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        rest.onClick?.(e);
+      }}
+      // The keyboard paths to activation are Enter and Space; other keys still
+      // reach caller handlers, as on an enabled pin (FR2).
+      onKeyDown={e => {
+        if (isDisabled && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        rest.onKeyDown?.(e);
+      }}
       {...mergeProps(
         themeProps('comment-pin', {
           size: resolvedSize,
@@ -482,6 +524,7 @@ export function CommentPin({
           isDimmed && !isSelected && styles.dimmed,
           isSelected && styles.selected,
           isDisabled && styles.disabled,
+          isDisabled && !isSelected && styles.disabledUnselected,
           xstyle,
         ),
         className,

@@ -15,7 +15,7 @@ const styles = stylex.create({
 });
 
 const meta: Meta<typeof Markdown> = {
-  title: 'Core/Markdown/Plugins/Heading links',
+  title: 'Core/Markdown',
   component: Markdown,
 };
 
@@ -25,7 +25,7 @@ type Story = StoryObj<typeof Markdown>;
 const SOURCE = [
   '# Linkable headings',
   '',
-  'Hover a heading area or move keyboard focus to reveal the `#` copy button. On touch it stays visible. Activating it copies the full permalink without changing the current hash, scroll position, or page.',
+  'Hover a heading area or move keyboard focus to reveal the `#` copy button. On a phone or tablet it stays visible. Activating it copies the full permalink without changing the current hash, scroll position, or page.',
   '',
   '> ## Nested heading',
   '',
@@ -60,7 +60,7 @@ const compactPlugins = [
   createMarkdownHeadingLinks({headingIdPrefix: 'heading-links-compact'}),
 ];
 
-export const Overview: Story = {
+export const HeadingLinks: Story = {
   name: 'Heading links',
   parameters: {
     docs: {

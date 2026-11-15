@@ -182,7 +182,9 @@ function Columns({render}: {render: () => React.ReactNode}) {
 // =============================================================================
 
 const meta: Meta = {
-  title: 'Core/Icon/Size Theming',
+  title: 'Core/Themes/Icon Size',
+  // The ids the visual baseline keys these stories by, from their earlier title.
+  id: 'core-icon-size-theming',
   tags: ['autodocs'],
   parameters: {
     docs: {

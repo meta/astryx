@@ -59,9 +59,15 @@ function TreeTable(
     data?: FileRow[];
     hasExpandAllControl?: boolean;
     hasRowClickExpansion?: boolean;
+    getRowLabel?: (item: FileRow) => string;
   },
 ) {
-  const {hasExpandAllControl, hasRowClickExpansion, ...stateProps} = props;
+  const {
+    hasExpandAllControl,
+    hasRowClickExpansion,
+    getRowLabel,
+    ...stateProps
+  } = props;
   const {visibleData, treeConfig} = useTableTreeState<FileRow>({
     data: props.data ?? fileTree,
     idKey: 'id',
@@ -71,6 +77,7 @@ function TreeTable(
     ...treeConfig,
     hasExpandAllControl,
     hasRowClickExpansion,
+    getRowLabel,
   });
 
   return (
@@ -106,6 +113,48 @@ describe('useTableTreeData — expander', () => {
 
     const readmeRow = getRowByText('README.md');
     expect(within(readmeRow).queryByRole('button')).toBeNull();
+  });
+
+  it('names top-level and nested expansion controls when getRowLabel is provided', () => {
+    render(
+      <TreeTable
+        defaultExpandedIds={['src']}
+        getRowLabel={item => item.name}
+      />,
+    );
+
+    expect(
+      within(getRowByText('src')).getByRole('button', {name: 'Collapse src'}),
+    ).toBeInTheDocument();
+    expect(
+      within(getRowByText('components')).getByRole('button', {
+        name: 'Expand components',
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it('falls back to the generic label when getRowLabel returns blank text', () => {
+    render(<TreeTable getRowLabel={() => '   '} />);
+
+    expect(
+      within(getRowByText('src')).getByRole('button', {name: 'Expand row'}),
+    ).toBeInTheDocument();
+  });
+
+  it('updates expansion control names when getRowLabel changes', () => {
+    const {rerender} = render(<TreeTable getRowLabel={item => item.name} />);
+
+    expect(
+      within(getRowByText('src')).getByRole('button', {name: 'Expand src'}),
+    ).toBeInTheDocument();
+
+    rerender(<TreeTable getRowLabel={item => `Folder ${item.name}`} />);
+
+    expect(
+      within(getRowByText('src')).getByRole('button', {
+        name: 'Expand Folder src',
+      }),
+    ).toBeInTheDocument();
   });
 
   it('expands children on click and relabels the button "Collapse row"', async () => {
@@ -433,16 +482,20 @@ describe('useTableTreeData — row ARIA', () => {
     expect(getRowByText('README.md')).toHaveAttribute('aria-level', '1');
   });
 
-  it('sets aria-expanded on expandable rows and omits it on leaves', () => {
+  it('body rows carry no aria-expanded; the expander button does', () => {
     render(<TreeTable defaultExpandedIds={['src']} />);
 
-    expect(getRowByText('src')).toHaveAttribute('aria-expanded', 'true');
-    expect(getRowByText('components')).toHaveAttribute(
-      'aria-expanded',
-      'false',
-    );
-    expect(getRowByText('utils.ts')).not.toHaveAttribute('aria-expanded');
-    expect(getRowByText('README.md')).not.toHaveAttribute('aria-expanded');
+    for (const row of getBodyRows()) {
+      expect(row).not.toHaveAttribute('aria-expanded');
+    }
+    expect(
+      within(getRowByText('src')).getByRole('button', {name: 'Collapse row'}),
+    ).toHaveAttribute('aria-expanded', 'true');
+    expect(
+      within(getRowByText('components')).getByRole('button', {
+        name: 'Expand row',
+      }),
+    ).toHaveAttribute('aria-expanded', 'false');
   });
 });
 
@@ -665,8 +718,8 @@ describe('useTableTreeData — treeColumnKey', () => {
   });
 
   it('falls back to the first column when the configured column is absent', () => {
-    // e.g. columnSettings hid the configured tree column — the expander
-    // must not vanish while rows still announce aria-expanded.
+    // e.g. columnSettings hid the configured tree column — the expander,
+    // which carries the row's expansion state, must not vanish.
     render(<TreeTable treeColumnKey="not-a-column" />);
 
     const srcRow = getRowByText('src');

@@ -10,6 +10,7 @@
 
 import {describe, expect, test, beforeEach, vi} from 'vitest';
 import {__resetForTests, getResolve, resolveLocaleChain} from '../resolve';
+import {registerFullEnglishFallback} from '../fullEnglishFallback';
 import type {
   Catalog,
   MessagesByLocale,
@@ -23,6 +24,11 @@ const resolve = (
     ...Parameters<typeof getResolve>,
   ]
 ) => getResolve(locale, messages, overrides)(key, values);
+
+// The resolver falls back to the English registered by loaded modules. These
+// tests cover lookup over every shipped key, as the public paths register it;
+// englishFallback.test.ts covers a component's own English.
+registerFullEnglishFallback();
 
 // Reset caches between tests so warn-once and formatter cache don't bleed.
 beforeEach(() => {

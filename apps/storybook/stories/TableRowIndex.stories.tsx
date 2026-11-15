@@ -60,7 +60,7 @@ type Story = StoryObj;
  */
 export const Default: Story = {
   render: () => {
-    const rowIndex = useTableRowIndex<Track>({data: tracks});
+    const rowIndex = useTableRowIndex<Track>();
     return (
       <Table
         data={tracks}
@@ -79,7 +79,6 @@ export const Default: Story = {
 export const CustomLabelAndStart: Story = {
   render: () => {
     const rowIndex = useTableRowIndex<Track>({
-      data: tracks,
       label: 'No.',
       startFrom: 0,
     });
@@ -96,9 +95,9 @@ export const CustomLabelAndStart: Story = {
 };
 
 /**
- * The index reflects the current view: with sorting active, pass the **sorted**
- * data to `useTableRowIndex` so numbering renumbers as the order changes. Sort
- * by Plays to see rows renumber 1..n in the new order.
+ * The index reflects the current view: Table gives each row its position, so
+ * numbering renumbers as the sort order changes. Sort by Plays to see rows
+ * renumber 1..n in the new order.
  */
 export const RenumbersWithSort: Story = {
   render: () => {
@@ -111,11 +110,7 @@ export const RenumbersWithSort: Story = {
       onSortChange: setSort,
     });
     const sortPlugin = useTableSortable<Track>(sortConfig);
-    // Pass the sorted data + a stable key so the index tracks the sorted order.
-    const rowIndex = useTableRowIndex<Track>({
-      data: sortedData,
-      getRowKey: item => item.id,
-    });
+    const rowIndex = useTableRowIndex<Track>();
     const plugins = useMemo(
       () => ({rowIndex, sort: sortPlugin}),
       [rowIndex, sortPlugin],
