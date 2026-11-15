@@ -2364,6 +2364,86 @@ console.log(JSON.stringify({inside, outside}));
   }, 60_000);
 });
 
+describe('render(): media queries asked in JavaScript', () => {
+  it("names each media query the page asks with Core's hook or matchMedia, and says to fold the layout with CSS", async () => {
+    put(
+      'screen-query.tsx',
+      `import {useEffect, useState} from 'react';
+import {useMediaQuery} from '@astryxdesign/core/hooks';
+function useDark() {
+  const [dark, setDark] = useState(false);
+  useEffect(() => setDark(window.matchMedia(\`(prefers-color-scheme: dark)\`).matches), []);
+  return dark;
+}
+export default function Page() {
+  const narrow = useMediaQuery('(max-width: 768px)');
+  const alsoNarrow = useMediaQuery('(max-width: 768px)');
+  const dark = useDark();
+  return <main>{narrow && alsoNarrow ? 'One column' : 'Two columns'}{dark ? ' dark' : ''}</main>;
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('screen-query.tsx', {cwd: dir}));
+    const warnings = result.data.warnings.filter((/** @type {any} */ w) => w.code === 'screen-query');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0].message).toBe(
+      "The page asks matchMedia('(prefers-color-scheme: dark)'), useMediaQuery('(max-width: 768px)') in JavaScript, which this file never runs: readers on every screen get its server answer, so fold the layout with CSS: Grid columns={{minWidth}}, or a StyleX @media or @container style.",
+    );
+  }, 60_000);
+
+  it("names the hook imported from Core's root entry, and an optional matchMedia call", async () => {
+    put(
+      'screen-query-root.tsx',
+      `import {useEffect, useState} from 'react';
+import {useMediaQuery} from '@astryxdesign/core';
+export default function Page() {
+  const wide = useMediaQuery('(min-width: 1024px)');
+  const [motion, setMotion] = useState(true);
+  useEffect(() => setMotion(!window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches), []);
+  return <main>{wide ? 'Wide' : 'Narrow'}{motion ? '' : ' still'}</main>;
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('screen-query-root.tsx', {cwd: dir}));
+    const warning = result.data.warnings.find((/** @type {any} */ w) => w.code === 'screen-query');
+    expect(warning?.message).toContain("The page asks useMediaQuery('(min-width: 1024px)'), matchMedia('(prefers-reduced-motion: reduce)') in JavaScript");
+  }, 60_000);
+
+  it("names the hook called through a namespace import of Core, and a call with no query, without failing the render", async () => {
+    put(
+      'screen-query-namespace.tsx',
+      `import * as core from '@astryxdesign/core';
+function never() {
+  return [window.matchMedia?.(), matchMedia(), core.useMediaQuery()];
+}
+export default function Page() {
+  const narrow = core.useMediaQuery('(max-width: 600px)');
+  return <main>{narrow ? 'Narrow' : 'Wide'}{typeof never}</main>;
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('screen-query-namespace.tsx', {cwd: dir}));
+    expect(result.type).toBe('render.page');
+    const warning = result.data.warnings.find((/** @type {any} */ w) => w.code === 'screen-query');
+    expect(warning?.message).toContain("The page asks matchMedia(), useMediaQuery(), useMediaQuery('(max-width: 600px)') in JavaScript");
+  }, 60_000);
+
+  it('says nothing for a page that asks no media query, or calls a function of its own named like the hook', async () => {
+    put(
+      'no-screen-query.tsx',
+      `function useMediaQuery(query: string) {
+  return query.length > 100;
+}
+export default function Page() {
+  return <main>{useMediaQuery('(max-width: 768px)') ? 'narrow' : 'wide'}</main>;
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('no-screen-query.tsx', {cwd: dir}));
+    expect(result.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('screen-query');
+  }, 60_000);
+});
+
 describe('render(): charts', () => {
   const DATA = "const data = [{d: 'a', v: 1}, {d: 'b', v: 3}, {d: 'c', v: 2}];";
 
