@@ -24,6 +24,7 @@ import {
   type UseMenuPressReturn,
 } from './useMenuPress';
 import {MENU_PRESS_HANDOFF_PX, MENU_PRESS_SETTLE_MS} from './menuPressGesture';
+import {useCommittedRefInto} from './useCommittedRef';
 import {holdInput, isInputShield} from '../Layer/inputHold';
 import {
   isMenuPressLit,
@@ -119,6 +120,7 @@ function Harness({
 }: HarnessProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const fallbackPressRef = useRef<UseMenuPressReturn | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const open = (next: boolean) => {
     setIsOpen(next);
@@ -148,9 +150,7 @@ function Harness({
         ? undefined
         : (longPressDelayMs ?? MENU_PRESS_LONG_PRESS_MS),
   });
-  if (pressRef != null) {
-    pressRef.current = press;
-  }
+  useCommittedRefInto(pressRef ?? fallbackPressRef, press);
   return (
     <>
       <button
