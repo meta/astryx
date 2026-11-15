@@ -260,6 +260,32 @@ describe('the early warning', () => {
     expect(body).toContain(`- \`${missing[0]}\`: 100 s`);
   });
 
+  it('lists drifted files under their own heading, apart from the heaviest unrecorded files', () => {
+    const reasons = {
+      ...refreshReasons({nodeFiles, recorded, log}),
+      drifted: [{file: 'late.test.mjs', recorded: 20, measured: 200}],
+    };
+    const body = prBody({
+      reasons,
+      after: coverage(nodeFiles, recorded),
+      runUrl: 'https://example.test/run/1',
+    });
+    const list = body.indexOf(`- \`${missing[0]}\`: 100 s`);
+    const heading = body.indexOf(
+      "Recorded files that ran far past their entry in main's run:\n\n- `late.test.mjs` ran 200 s",
+    );
+    expect(list).toBeGreaterThan(0);
+    expect(heading).toBeGreaterThan(list);
+  });
+
+  it('reads a run log longer than a call can take as arguments', () => {
+    const line = `test-node (1)\tRun tests\t2026-01-01T00:00:00.0000000Z  ✓  node  ${missing[0]} (1 test) 7ms`;
+    const longLog = Array.from({length: 160_000}, () => line).join('\n');
+    expect(heaviestUnrecorded(longLog, [missing[0]])).toEqual([
+      {file: missing[0], measured: 0},
+    ]);
+  });
+
   function warn(seconds) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'node-record-warn-'));
     try {

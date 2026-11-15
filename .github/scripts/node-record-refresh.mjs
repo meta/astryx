@@ -117,12 +117,13 @@ export function driftedEntries(log, recorded) {
  */
 export function heaviestUnrecorded(log, missing) {
   const lacking = new Set(missing);
-  const measured = Object.assign(
-    {},
-    ...log
+  // One parse of the Node legs' lines: a long log holds more lines than a
+  // call can take as arguments.
+  const measured = recordDurations(
+    log
       .split('\n')
       .filter(line => NODE_LEG_JOB.test(line.split('\t')[0]))
-      .map(line => recordDurations(line)),
+      .join('\n'),
   );
   return Object.entries(measured)
     .filter(([file]) => lacking.has(file))
@@ -194,6 +195,9 @@ export function prBody({reasons, after, runUrl}) {
           earlyWarning(before, reasons.unrecorded ?? []),
           '',
         ]),
+    ...(reasons.drifted.length > 0 && !before.fresh
+      ? ["Recorded files that ran far past their entry in main's run:", '']
+      : []),
     ...reasons.drifted.map(
       ({file, recorded, measured}) =>
         `- \`${file}\` ran ${measured} s against its recorded ${recorded} s.`,
