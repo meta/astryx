@@ -30,7 +30,7 @@
 import {useCallback, useId, useMemo, useRef, type ReactNode} from 'react';
 import type {Reorderable} from '../reorderable/createReorderable';
 import * as stylex from '@stylexjs/stylex';
-import {spacingVars} from '../theme/tokens.stylex';
+import {focusVars, spacingVars} from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
 import {
   ListContext,
@@ -189,6 +189,11 @@ export interface ListProps extends BaseProps<
 // Styles
 // =============================================================================
 
+// How far a row's focus ring reaches past the row: its offset plus its width.
+const FOCUS_RING_REACH = `calc(${focusVars['--focus-outline-offset']} + ${focusVars['--focus-outline-width']})`;
+const RING_ROOM_VAR = '--_list-ring-room';
+const RING_ROOM = `var(${RING_ROOM_VAR})`;
+
 const styles = stylex.create({
   root: {
     display: 'flex',
@@ -211,6 +216,22 @@ const styles = stylex.create({
     // They stay below a page-level sticky header at the same z-index. With a
     // mouse nothing rises, so the list keeps its stacking.
     isolation: {default: null, '@media (pointer: coarse)': 'isolate'},
+  },
+  // The inline clip cuts at the list's padding edge, so it would cut a focused
+  // row's ring. While a ring is drawn in the list, the list pads by the
+  // ring's reach and takes it back as negative margin: the ring paints whole
+  // and the rows stay in place. At rest the list keeps its box, so a
+  // scrolling ancestor gains no overflow. 'outset' and 'bleed' lists take no
+  // room, so their rows never paint past the host's padding edge.
+  ringRoom: {
+    [RING_ROOM_VAR]: {
+      default: '0px',
+      ':has(:focus-visible)': FOCUS_RING_REACH,
+    },
+    paddingInlineStart: RING_ROOM,
+    paddingInlineEnd: RING_ROOM,
+    marginInlineStart: `calc(-1 * ${RING_ROOM})`,
+    marginInlineEnd: `calc(-1 * ${RING_ROOM})`,
   },
   // A list under an `animatedLayout` handle isolates for every pointer. A row
   // that slides across others rides above them with a mouse too, and it must
@@ -438,7 +459,9 @@ export function List({
           animatedLayout != null && styles.animatedIsolation,
           isOrdered && styles.numberColumns,
           hasDividers && styles.withDividers,
-          reachesContainerPadding && styles.reachesContainerPadding,
+          reachesContainerPadding
+            ? styles.reachesContainerPadding
+            : styles.ringRoom,
           edge === 'bleed' && header == null && styles.bleedCorners,
           listStyle !== 'none' &&
             (start != null && start !== 1
