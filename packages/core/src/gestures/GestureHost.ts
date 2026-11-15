@@ -3081,7 +3081,7 @@ export class GestureHost {
   };
 
   /**
-   * Begins, now, the fingers of a `touchstart` this host did not hear: a
+   * Begins, now, the fingers of a `touchstart` this host did not hear. A
    * recognizer that attaches while a finger is down on its element hands
    * over that finger's own touchstart. The caller passes only a touchstart
    * whose fingers are still down.

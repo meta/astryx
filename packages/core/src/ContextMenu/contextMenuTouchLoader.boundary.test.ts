@@ -4,9 +4,9 @@
  * @file contextMenuTouchLoader.boundary.test.ts
  * @input The static import graphs of the ContextMenu entry and of Table's
  *   context-menu module, and every core source file
- * @output The source boundary check for ContextMenu's touch layer: no entry's
+ * @output The source boundary check for ContextMenu's touch layer. No entry's
  *   static graph reaches the layer, its recognizer or the gesture code under
- *   it, and only the loader imports the layer, through `import()`
+ *   it. Only the loader imports the layer, through `import()`.
  * @position Testing; the before-load behavior is in ContextMenu.test.tsx
  */
 

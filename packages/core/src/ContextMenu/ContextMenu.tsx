@@ -91,6 +91,7 @@ import {useMenuPress} from '../hooks/useMenuPress';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {shadowHostOf} from '../utils/flatTree';
 import {usePresentation} from '../utils/presentation';
+import {contextMenu} from '../motion/uikit/contextMenu';
 import type {ContextMenuTouchHandle} from './ContextMenuTouchLayer';
 import {useContextMenuTouchLayer} from './contextMenuTouchLoader';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
@@ -293,6 +294,27 @@ function keepAnchorInside(offset: number, size: number): number {
   return offset > size - 1 && offset <= size ? Math.max(size - 1, 0) : offset;
 }
 
+/**
+ * Whether a move takes the finger of a kept touchstart past the press's drift
+ * tolerance on either axis, from where it landed. A touch move names its
+ * finger by `identifier`; the primary touch pointer's move names none. The
+ * touch layer judges later moves itself; this judges the moves before it
+ * loads.
+ */
+function driftsPastTolerance(
+  touchStart: TouchEvent,
+  to: {readonly clientX: number; readonly clientY: number},
+  identifier?: number,
+): boolean {
+  const {allowableMovement} = contextMenu.press;
+  return Array.from(touchStart.changedTouches).some(
+    landed =>
+      (identifier === undefined || landed.identifier === identifier) &&
+      (Math.abs(to.clientX - landed.clientX) > allowableMovement ||
+        Math.abs(to.clientY - landed.clientY) > allowableMovement),
+  );
+}
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -415,6 +437,7 @@ export function ContextMenu({
   onTouchMove: onTouchMoveProp,
   onTouchEnd: onTouchEndProp,
   onTouchCancel: onTouchCancelProp,
+  onPointerMove: onPointerMoveProp,
   'data-testid': testId,
   ...rest
 }: ContextMenuProps) {
@@ -878,6 +901,16 @@ export function ContextMenu({
   );
   const handleTriggerTouchMove = useCallback(
     (event: React.TouchEvent<HTMLElement>) => {
+      const touchStart = lateTouchRef.current;
+      if (
+        touchStart != null &&
+        Array.from(event.nativeEvent.changedTouches).some(touch =>
+          driftsPastTolerance(touchStart, touch, touch.identifier),
+        )
+      ) {
+        // A finger that drifts too far before the layer loads gets no menu.
+        lateTouchRef.current = null;
+      }
       handleLongPressTouchMove(event);
       onTouchMoveProp?.(event);
     },
@@ -898,6 +931,23 @@ export function ContextMenu({
       onTouchCancelProp?.(event);
     },
     [handleLongPressTouchCancel, onTouchCancelProp],
+  );
+  const handleTriggerPointerMove = useCallback(
+    (event: React.PointerEvent<HTMLElement>) => {
+      const touchStart = lateTouchRef.current;
+      // Before the touch layer loads, Chromium sends a small drift's
+      // pointermove but not its touchmove.
+      if (
+        touchStart != null &&
+        event.pointerType === 'touch' &&
+        event.isPrimary &&
+        driftsPastTolerance(touchStart, event)
+      ) {
+        lateTouchRef.current = null;
+      }
+      onPointerMoveProp?.(event);
+    },
+    [onPointerMoveProp],
   );
 
   // ContextMenu owns invocation. Consumer handlers are notified too, but
@@ -1069,6 +1119,7 @@ export function ContextMenu({
         onTouchMove={handleTriggerTouchMove}
         onTouchEnd={handleTriggerTouchEnd}
         onTouchCancel={handleTriggerTouchCancel}
+        onPointerMove={handleTriggerPointerMove}
         data-testid={testId}
         {...stylex.props(
           styles.trigger,
