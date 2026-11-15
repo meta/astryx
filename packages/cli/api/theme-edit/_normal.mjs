@@ -239,7 +239,26 @@ export function normalizeEntry(thing, value) {
   }
   /** The scope the editor's own printed line names after its value. @type {EntryScope | undefined} */
   let scope;
-  if (v == null || v.trim() === '') {
+  // The editor's own change line pasted back (`corners pill -> round`,
+  // `--radius-element: 0.5rem -> 0px`, `--color-accent (light): #1b1b1b ->
+  // #ff0000`), whole or with its thing apart: the setting, and the value it
+  // changed to, with the scope the line names. No CSS value holds `->`.
+  const changed =
+    /^(\S+?)(?:\s*\((light|dark)\))?\s*:?\s+(\S.*?)\s*->\s*(\S.*?)\s*$/.exec(
+      v == null || v.trim() === '' ? t : `${t} ${v}`,
+    );
+  if (changed) {
+    t = changed[1];
+    v = changed[4];
+    pasted = true;
+    const printed = printedScope(v);
+    if (printed) {
+      v = printed.value;
+      scope = printed.scope;
+    }
+    if (changed[2] === 'light' || changed[2] === 'dark')
+      scope = {...scope, mode: changed[2]};
+  } else if (v == null || v.trim() === '') {
     const m = /^(\S+?)\s*([:=])\s*(.+?)\s*;?\s*$/.exec(t);
     if (m && !/^https?$/i.test(m[1])) {
       t = m[1];

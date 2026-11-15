@@ -967,6 +967,11 @@ function optionsAsWritten(
     const near = all.filter(o => typoNear(w, o.slice(2)));
     return near.length === 1 ? near[0] : null;
   };
+  // Any run of up to three hyphens and dash-like characters (an en or em
+  // dash, a minus sign, a non-breaking hyphen: `-—on`, `−−on`) is the
+  // option's dashes, as normalizeEntry reads a token's.
+  const optionShape =
+    /^([-\u2010-\u2015\u2212\ufe58\ufe63\uff0d]{1,3})([A-Za-z][A-Za-z-]*)(?:=(.*))?$/;
   const argv = process.argv;
   const at = argv.indexOf(command, argv.indexOf(where.group) + 1);
   if (at < 0) return null;
@@ -981,13 +986,7 @@ function optionsAsWritten(
       words.push(...argv.slice(i));
       break;
     }
-    // Any run of up to three hyphens and dash-like characters (an en or em
-    // dash, a minus sign, a non-breaking hyphen: `-—on`, `−−on`) is the
-    // option's dashes, as normalizeEntry reads a token's.
-    const m =
-      /^([-\u2010-\u2015\u2212\ufe58\ufe63\uff0d]{1,3})([A-Za-z][A-Za-z-]*)(?:=(.*))?$/.exec(
-        a,
-      );
+    const m = optionShape.exec(a);
     const flag = m ? meant(m[2]) : null;
     if (!m || !flag) {
       if (a !== '--json') words.push(a);
@@ -1025,13 +1024,21 @@ function optionsAsWritten(
       }
       continue;
     }
-    // An option that takes a value, given none, is left out of the line.
-    if (m[3] == null && (next == null || /^-/.test(next))) {
+    // An option that takes a value, given none, is left out of the line. A
+    // next word that starts with a dash is its value unless it names an
+    // option the command takes (`--font -apple-system`, `--text-size -1`).
+    const opt = next == null ? null : optionShape.exec(next);
+    const nextIsOption = next === '--' || Boolean(opt && meant(opt[2]));
+    if (m[3] == null && (next == null || nextIsOption)) {
       if (valued.includes(flag)) why ??= `${flag} was given no value`;
       continue;
     }
     words.push(flag);
     if (m[3] != null) words.push(m[3]);
+    else if (/^-/.test(next)) {
+      words.push(next);
+      i += 1;
+    }
   }
   if (!why) return null;
   return {

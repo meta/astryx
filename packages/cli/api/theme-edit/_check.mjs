@@ -217,7 +217,8 @@ function ratioPreset(v) {
 }
 
 /**
- * A `set` (or `undo`) command for a setting, with its scope, to suggest.
+ * A `set` (or `undo`) command for a setting, with its scope, to suggest;
+ * a thing of more than one word (`background color`) is quoted, as its value is.
  * @param {string} slug
  * @param {string} thing
  * @param {string} value
@@ -225,7 +226,7 @@ function ratioPreset(v) {
  * @param {boolean} [unset]
  */
 export const setLine = (slug, thing, value, s, unset = false) =>
-  `${P} ${unset ? 'undo' : 'set'} ${slug} ${thing}${value ? ` ${quoteCommandArgument(value)}` : ''}${s.on ? ` --on ${s.on}` : ''}${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}${s.only ? ' --only' : ''}`;
+  `${P} ${unset ? 'undo' : 'set'} ${slug} ${quoteCommandArgument(thing)}${value ? ` ${quoteCommandArgument(value)}` : ''}${s.on ? ` --on ${s.on}` : ''}${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}${s.only ? ' --only' : ''}`;
 
 /** @param {string} v */
 const cornerPxOf = v =>

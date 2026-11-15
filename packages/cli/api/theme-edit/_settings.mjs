@@ -1121,37 +1121,41 @@ export function loadTheme(
   // removes that entry only; a step back loses the last change.
   const damaged = problem ? damagedEntry(data, problem) : null;
   if (damaged)
-    throw new AstryxError(
-      `themes/${slug}/${slug}.settings.json: ${problem}. Remove that setting with ${P} undo ${slug} ${undoArgs(damagedUndo(damaged))}; nothing else needs to change${steps ? `, or step back to the settings before the last change with ${P} undo ${slug} (the last change is then lost)` : ''}. Nothing was changed.`,
-      [
-        {
-          name: `${P} undo ${slug} ${undoArgs(damagedUndo(damaged))}`,
-          reason: 'do this instead: removes only that setting',
-        },
-        // A dial saved for one mode: the dial as set takes it, for both
-        // modes, once that entry is removed.
-        ...(damaged.source === 'dial' &&
-        (damaged.mode === 'light' || damaged.mode === 'dark') &&
-        (typeof damaged.value === 'string' || typeof damaged.value === 'number')
-          ? [
-              {
-                name: `${P} set ${slug} ${setArgs({...damaged, mode: undefined}, String(damaged.value))}`,
-                reason:
-                  'then this, once the undo above has removed that setting: a dial is the same in light and dark',
-              },
-            ]
-          : []),
-        ...(steps
-          ? [
-              {
-                name: `${P} undo ${slug}`,
-                reason:
-                  'or step back to the settings before the last change (the last change is then lost)',
-              },
-            ]
-          : []),
-      ],
-      ERROR_CODES.ERR_THEME_INVALID,
+    throw withDamaged(
+      damaged,
+      new AstryxError(
+        `themes/${slug}/${slug}.settings.json: ${problem}. Remove that setting with ${P} undo ${slug} ${undoArgs(damagedUndo(damaged))}; nothing else needs to change${steps ? `, or step back to the settings before the last change with ${P} undo ${slug} (the last change is then lost)` : ''}. Nothing was changed.`,
+        [
+          {
+            name: `${P} undo ${slug} ${undoArgs(damagedUndo(damaged))}`,
+            reason: 'do this instead: removes only that setting',
+          },
+          // A dial saved for one mode: the dial as set takes it, for both
+          // modes, once that entry is removed.
+          ...(damaged.source === 'dial' &&
+          (damaged.mode === 'light' || damaged.mode === 'dark') &&
+          (typeof damaged.value === 'string' ||
+            typeof damaged.value === 'number')
+            ? [
+                {
+                  name: `${P} set ${slug} ${setArgs({...damaged, mode: undefined}, String(damaged.value))}`,
+                  reason:
+                    'then this, once the undo above has removed that setting: a dial is the same in light and dark',
+                },
+              ]
+            : []),
+          ...(steps
+            ? [
+                {
+                  name: `${P} undo ${slug}`,
+                  reason:
+                    'or step back to the settings before the last change (the last change is then lost)',
+                },
+              ]
+            : []),
+        ],
+        ERROR_CODES.ERR_THEME_INVALID,
+      ),
     );
   // A value made under looser rules is not damage: the command that
   // changes or removes that setting still works, with the other bad ones
@@ -1668,6 +1672,26 @@ function readEntryWords(data) {
         s.thing = read;
       }
     }
+    // A token saved in another form (`var(--color-accent)`) is that token,
+    // as set reads the name typed (the one thing reader).
+    if (
+      !s.thing.startsWith('--') &&
+      ['token', undefined, null, ''].includes(s.source)
+    ) {
+      const entry = normalizeEntry(s.thing, String(s.value ?? ''));
+      const read =
+        String(entry.value ?? '') === String(s.value ?? '')
+          ? String(entry.thing ?? '')
+          : '';
+      const held = data.settings.some(
+        (/** @type {any} */ x) =>
+          x !== s && x?.thing === read && (x.on ?? null) === (s.on ?? null),
+      );
+      if (read.startsWith('--') && !held) {
+        notes.push(`${s.thing} was saved as "${s.thing}", read as ${read}`);
+        s.thing = read;
+      }
+    }
     if (typeof s.mode === 'string' && s.mode !== 'light' && s.mode !== 'dark') {
       const read = modeWord(s.mode);
       if (read) {
@@ -1824,6 +1848,17 @@ function onlyFits(s) {
   return Boolean(
     fam && !FAMILIES[s.on] && AUTO_SPREAD.includes(/** @type {string} */ (fam)),
   );
+}
+
+/**
+ * A refusal of one saved entry, with that entry (`damaged`), so the
+ * repair set offers for it as typed goes beside the undo.
+ * @param {any} entry
+ * @param {AstryxError} e
+ * @returns {AstryxError}
+ */
+function withDamaged(entry, e) {
+  return Object.assign(e, {damaged: entry});
 }
 
 /**

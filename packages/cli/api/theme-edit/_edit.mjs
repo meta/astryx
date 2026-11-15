@@ -23,6 +23,7 @@ import {
 } from './_vet.mjs';
 import {
   allowedLine,
+  booleanWord,
   colorPair,
   coversTyped,
   readsTyped,
@@ -599,6 +600,7 @@ async function vetNewLines(e, cwd, typed, like) {
         ...x,
         name,
         flagsKept: flags.map(([k]) => k),
+        flagsUnread: untyped.map(([k]) => k),
         reasonFor: reason,
       }),
     );
@@ -608,10 +610,22 @@ async function vetNewLines(e, cwd, typed, like) {
   const kept = new Set(
     out.flatMap(y => /** @type {any} */ (y).flagsKept ?? []),
   );
+  // A line that lost a flag another line carries a reading of is that line
+  // without the setting typed: never offered, as its reason no longer
+  // holds.
+  for (let i = out.length - 1; i >= 0; i -= 1) {
+    const unreadHere = /** @type {any} */ (out[i]).flagsUnread ?? [];
+    if (
+      unreadHere.length &&
+      unreadHere.every((/** @type {string} */ k) => kept.has(k))
+    )
+      out.splice(i, 1);
+  }
   for (const y of out) {
     const z = /** @type {any} */ (y);
     if (z.reasonFor) z.reason = z.reasonFor(kept);
     delete z.flagsKept;
+    delete z.flagsUnread;
     delete z.reasonFor;
   }
   // What such a setting takes, as set ends for the same value.
@@ -1413,11 +1427,24 @@ function asNewRefusal(e, slug, settings, like, png = false, at = null) {
 function modeColorsOf(typed) {
   /** @type {Record<string, string>} */
   const pair = {};
+  /** @type {Record<string, boolean>} */
+  const marked = {};
   for (const m of typed.matchAll(
-    /\b(light|dark)\b\s*(?:mode\s*)?[:=]?\s*(#[0-9a-f]{3,8}\b|[a-z]+\([^)]*\)|[a-z]+)/gi,
-  ))
-    pair[m[1].toLowerCase()] = m[2];
-  return pair;
+    /\b(light|dark)\b\s*(mode\s*)?([:=])?\s*(#[0-9a-f]{3,8}\b|[a-z]+\([^)]*\)|[a-z]+)/gi,
+  )) {
+    const mode = m[1].toLowerCase();
+    pair[mode] = m[4];
+    // A mode word marked as a label (a colon, an equals sign, the word
+    // mode) or followed by a hex or a color function.
+    marked[mode] = Boolean(m[2] || m[3]) || !/^[a-z]+$/i.test(m[4]);
+  }
+  // CSS names colors that start with light or dark (`light blue` is
+  // lightblue): a mode word followed by a bare name is one only beside the
+  // other mode's half, or marked as a label.
+  if (pair.light && pair.dark) return pair;
+  return Object.fromEntries(
+    Object.entries(pair).filter(([mode]) => marked[mode]),
+  );
 }
 
 /**
@@ -1772,13 +1799,24 @@ export async function themeEditSet(theme, thing, value, options = {}) {
 async function swappedThingValue(e, slug, thing, value, options) {
   // The thing named no setting, or the value names one itself (`neutral
   // base`: a color dial given the base dial's name).
+  // A word shaped like a setting's name (a dial, a token, a property);
+  // set itself says, below, whether the swapped line names one.
+  const nameShaped = (/** @type {string} */ w) =>
+    /^(--)?[a-z][a-z0-9-]*$/i.test(w.trim());
+  const isDialOrToken = (/** @type {string} */ w) => {
+    const x = w.trim().toLowerCase();
+    return Boolean(DIALS[x]) || x.startsWith('--');
+  };
   if (
     !(e instanceof AstryxError) ||
     !value ||
     !slugOk(slug) ||
     !(
       e.code === E.ERR_THEME_UNKNOWN_THING ||
-      (DIALS[value.trim().toLowerCase()] && e.code === E.ERR_THEME_BAD_VALUE)
+      (DIALS[value.trim().toLowerCase()] && e.code === E.ERR_THEME_BAD_VALUE) ||
+      // A scope refused first (a part, state or mode typo) while the
+      // setting and its value are in the other order.
+      (nameShaped(String(value)) && !isDialOrToken(String(thing)))
     )
   )
     return e;
@@ -1807,15 +1845,21 @@ async function swappedThingValue(e, slug, thing, value, options) {
   if (
     !read ||
     read.thing.toLowerCase() !== String(value).trim().toLowerCase() ||
-    (read.flags?.on ?? undefined) !== (options.on ?? undefined) ||
+    // A part named, or none: set's own repair of a typed part may name it
+    // as it is spelled, never a part where none was named.
+    Boolean(read.flags?.on) !== Boolean(options.on) ||
     !allowedLine({offered: read.value, typed: String(thing), thing: read.thing})
   )
     return e;
   const why = `do this instead: ${value} is the setting and ${thing} its value`;
   if (!readyLines(followed, why).length) return e;
+  // How for the value typed as the setting answers nothing: left out.
+  const howTyped = `${P} how ${quoteCommandArgument(String(thing))}`;
   e.suggestions = [
     ...readyLines(followed, why),
-    ...(e.suggestions ?? []).filter(x => x.name !== followed.line),
+    ...(e.suggestions ?? []).filter(
+      x => x.name !== followed.line && x.name !== howTyped,
+    ),
   ];
   return e;
 }
@@ -1993,11 +2037,18 @@ async function withSavedRepair(e, slug, cwd) {
   /** @type {any} */
   const scoped = {...bad};
   for (const [k, v] of Object.entries(read.scope)) scoped[k] ??= v;
+  // A scope saved empty (`"mode": ""`) names no scope.
+  for (const k of ['on', 'when', 'state', 'mode'])
+    if (typeof scoped[k] === 'string' && !scoped[k].trim()) delete scoped[k];
   const line = `${P} set ${slug} ${setArgs({...scoped, thing}, saved)}`;
   // The lines set offers for the value, as for a typed one: each checked
   // as set checks it, and offered only when they carry the saved value
   // (the one gate; a family and its size may take two lines).
-  const loaded = await loadedForCheck(cwd, slug, bad);
+  // An entry whose own mode, source or `only` means nothing stops the
+  // theme from loading at all: it is read as removed while its value is
+  // checked, as its undo removes it.
+  const without = entryDamage(bad) ? {...bad, removing: true} : bad;
+  const loaded = await loadedForCheck(cwd, slug, without);
   if (!loaded) return e;
   /** @type {string[]} */
   let lines;
@@ -2026,7 +2077,7 @@ async function withSavedRepair(e, slug, cwd) {
   /** @type {string[]} */
   const working = [];
   for (const l of lines) {
-    const followed = await followChangeLine('set', slug, l, cwd, bad);
+    const followed = await followChangeLine('set', slug, l, cwd, without);
     if (!followed.why) working.push(followed.line);
   }
   const reads = working.map(l => {
@@ -3877,7 +3928,11 @@ async function change(sub, slug, thing, value, options) {
       : value == null || value === ''
         ? /^\s*(\[\s*)?\{[\s\S]*\}(\s*\])?\s*$/.test(thing)
           ? thing
-          : null
+          : // Its entries with no braces, as copied from inside the
+            // settings file (`"thing": "corners", "value": "pill",`).
+            /^\s*(["'])[^"']+\1\s*:[\s\S]*,/.test(thing)
+            ? `{${thing.trim().replace(/,$/, '')}}`
+            : null
         : /^\s*(\[\s*)?\{?\s*["']/.test(thing) && /["']\s*:/.test(String(value))
           ? `${thing}:${value}`
           : null;
@@ -3925,6 +3980,19 @@ async function change(sub, slug, thing, value, options) {
             ),
           },
         );
+    }
+    // An entry that names its thing under `setting`, as the editor's own
+    // results print it, is that entry.
+    if (
+      obj &&
+      typeof obj === 'object' &&
+      !Array.isArray(obj) &&
+      !('thing' in obj) &&
+      typeof obj.setting === 'string' &&
+      'value' in obj
+    ) {
+      const {setting, ...others} = obj;
+      obj = {thing: setting, ...others};
     }
     // The fields the editor adds to an entry in its own results (show's
     // parts, set's note) are no part of the setting.
@@ -3975,6 +4043,19 @@ async function change(sub, slug, thing, value, options) {
             thing: rest[0],
             value: String(obj[rest[0]] ?? ''),
           };
+      // Its `only` read by the one yes/no reader (`"no"`, `"0"` say no);
+      // one that says neither is refused, never read as yes.
+      if ('only' in entry && typeof entry.only !== 'boolean') {
+        const yes = booleanWord(entry.only);
+        if (yes == null)
+          refuse(
+            E.ERR_INVALID_ARGUMENT,
+            `This is one setting${savedForm ? ' in the form the settings file saves it' : ' with its scope'}, and its "only" is ${JSON.stringify(entry.only)}, which reads as neither yes nor no: give it true to set only that part, or leave it out.`,
+            {run: []},
+          );
+        if (yes) entry.only = true;
+        else delete entry.only;
+      }
       refuse(
         E.ERR_INVALID_ARGUMENT,
         `This is one setting${savedForm ? ' in the form the settings file saves it' : ' with its scope'}; ${sub} takes its thing${sub === 'set' ? ' and value' : ''}, with its scope as flags.${unread.length ? ` ${unread.map(k => JSON.stringify(k)).join(', ')} ${unread.length === 1 ? 'is no field' : 'are no fields'} the editor reads, so ${unread.length === 1 ? 'it is' : 'they are'} left out.` : ''}`,
@@ -4089,8 +4170,16 @@ async function change(sub, slug, thing, value, options) {
   // declaration, a dash, a var(), invisible spaces).
   /** @type {string | undefined} */
   let dropped;
+  // A whole setting pasted as one argument (`padding = 8 px on card`,
+  // `aspect-ratio: 16,9`): its repairs carry the setting and value read
+  // from it, as a typed pair's do.
+  let readFromText = false;
   if (typeof thing === 'string') {
     const entry = normalizeEntry(thing, value);
+    readFromText =
+      (value == null || String(value).trim() === '') &&
+      entry.value != null &&
+      String(entry.value).trim() !== '';
     thing = entry.thing;
     value = entry.value;
     dropped = entry.dropped;
@@ -4240,8 +4329,8 @@ async function change(sub, slug, thing, value, options) {
         await savedDamageRefusal(e, slug, options.cwd ?? process.cwd(), seen),
         sub,
         slug,
-        oneEntry ? thing : typedThing,
-        oneEntry ? value : typedValue,
+        oneEntry || readFromText ? thing : typedThing,
+        oneEntry || readFromText ? value : typedValue,
         seen.data ?? savedAsWritten(options.cwd ?? process.cwd(), slug),
         options.cwd ?? process.cwd(),
       ),
