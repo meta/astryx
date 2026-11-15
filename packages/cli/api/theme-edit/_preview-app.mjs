@@ -11,6 +11,11 @@
  */
 
 import {typoNear, wholeNumberOf} from './_normal.mjs';
+import {
+  assetRef,
+  CSS_URL,
+  cssUrlRef,
+} from '../../foundation/render/render-page.mjs';
 import {IMPORTER_SCAN_MAX, pageImporters} from './_importers.mjs';
 import {parse as parseModule} from '@babel/parser';
 import * as fs from 'node:fs';
@@ -42,6 +47,7 @@ import {
   windowsReserved,
   isEditorPage,
   fontsourceSuggestion,
+  builtFontWeights,
 } from './_settings.mjs';
 import {
   baseFontsCss,
@@ -62,6 +68,7 @@ import {
   tempFor,
   writeWhole,
   refuseIfLockLost,
+  readRegularFile,
 } from './_palette.mjs';
 import {build} from '../build/build.mjs';
 import {search} from '../search/search.mjs';
@@ -89,6 +96,8 @@ import {compareText} from '../../foundation/text/compare-text.mjs';
 
 const E = ERROR_CODES;
 
+/** The most bytes one file read takes in Node (2 GiB less one byte). */
+const NODE_READ_MAX = 2 ** 31 - 1;
 /** The preview's data file: the pages it shows and the files it wrote. */
 const PREVIEW_DATA = 'theme-preview.json';
 const PREVIEW = 'astryx experimental theme preview';
@@ -715,13 +724,25 @@ function typeScriptNotes(cwd, dir, added) {
 }
 
 /**
+ * A file's text when it is a regular file that can be read, else null.
+ * @param {string} file
+ */
+const regularText = file => {
+  try {
+    return readRegularFile(file, 'utf8');
+  } catch {
+    return null;
+  }
+};
+
+/**
  * Why a file cannot be read (its error code), or null when it can.
  * @param {string} file
  * @returns {string | null}
  */
 function unreadable(file) {
   try {
-    fs.closeSync(fs.openSync(file, 'r'));
+    readRegularFile(file);
     return null;
   } catch (e) {
     const code = /** @type {any} */ (e)?.code;
@@ -2070,13 +2091,21 @@ function readPreview(cwd, dir, pf = '', opts = {}) {
   let text;
   try {
     // A byte-order mark (Notepad, PowerShell) is not part of the JSON.
-    text = fs
-      .readFileSync(path.join(dir, PREVIEW_DATA), 'utf8')
-      .replace(/^\uFEFF/, '');
+    text = readRegularFile(path.join(dir, PREVIEW_DATA), 'utf8').replace(
+      /^\uFEFF/,
+      '',
+    );
   } catch (e) {
     const code = /** @type {any} */ (e)?.code;
     if (code === 'ENOENT' || code === 'ENOTDIR') return null;
-    damagedPreview(cwd, dir, `it cannot be read (${code})`, pf);
+    damagedPreview(
+      cwd,
+      dir,
+      code === 'ENOTREG'
+        ? 'it is not a regular file (a pipe, a device or a folder), so it is never read'
+        : `it cannot be read (${code})`,
+      pf,
+    );
   }
   /** @type {any} */
   let data;
@@ -2371,13 +2400,15 @@ function editedByHand(dir, data, rel) {
   const was = data.hashes?.[rel];
   if (!was) return false;
   try {
-    const text = fs.readFileSync(path.join(dir, rel));
+    const text = readRegularFile(path.join(dir, rel));
     if (was.startsWith('v2:') || was.startsWith('v3:'))
       return !sameAsRecorded(text, was);
     // Older records hold the exact or the earlier normalized hash.
     return oldContentHash(text) !== was && digest(text) !== was;
-  } catch {
-    return false;
+  } catch (e) {
+    // Something that is not a regular file (a pipe) where the page was is
+    // no longer the preview's own: never read, never replaced.
+    return /** @type {any} */ (e)?.code === 'ENOTREG';
   }
 }
 
@@ -2441,7 +2472,7 @@ function checkWrite(cwd, dir, data, w, elsewhere) {
       `${name} is ${st.isDirectory() ? 'a folder' : 'not a plain file'}, where the preview writes a file; it is never replaced.`,
       {run: [elsewhere]},
     );
-  if (fs.readFileSync(file, 'utf8') === w.text) return 'same';
+  if (readRegularFile(file, 'utf8') === w.text) return 'same';
   const page = /^_?pages\/([^/]+)\.tsx$/.exec(w.rel)?.[1];
   if (!data.files.includes(w.rel))
     refuse(
@@ -2501,7 +2532,7 @@ function commitPreview(cwd, dir, data, writes, deletes, again) {
   const touched = [];
   const before = (/** @type {string} */ file) => {
     try {
-      return fs.readFileSync(file);
+      return readRegularFile(file);
     } catch {
       return null;
     }
@@ -2651,7 +2682,7 @@ function unrecordedPages(dir) {
   let listed = [];
   try {
     const files = JSON.parse(
-      fs.readFileSync(path.join(dir, PREVIEW_DATA), 'utf8'),
+      readRegularFile(path.join(dir, PREVIEW_DATA), 'utf8'),
     )?.files;
     if (Array.isArray(files)) listed = files.map(String);
   } catch {
@@ -2748,7 +2779,7 @@ function recoverPreview(cwd, dir) {
     return `removed ${shown(cwd, pendingFile)}, a damaged step record of a preview change that was stopped${strays.length ? `; ${strays.join(', ')} ${strays.length > 1 ? 'are' : 'is'} in no preview record and may be from that change, so ${strays.length > 1 ? 'they stay' : 'it stays'} until you remove ${strays.length > 1 ? 'them' : 'it'}` : ''}`;
   };
   try {
-    p = JSON.parse(fs.readFileSync(pendingFile, 'utf8'));
+    p = JSON.parse(readRegularFile(pendingFile, 'utf8'));
   } catch (e) {
     // No step record: temp files a stopped command left (one killed before
     // it wrote the record) go, once their process is gone.
@@ -2775,7 +2806,7 @@ function recoverPreview(cwd, dir) {
   // the record stays as it was; else it is finished.
   const route = (() => {
     try {
-      return fs.readFileSync(inside('page.tsx'));
+      return readRegularFile(inside('page.tsx'));
     } catch {
       return null;
     }
@@ -2786,7 +2817,7 @@ function recoverPreview(cwd, dir) {
   /** @param {string} rel */
   const onDisk = rel => {
     try {
-      return fs.readFileSync(inside(rel));
+      return readRegularFile(inside(rel));
     } catch {
       return null;
     }
@@ -2882,7 +2913,7 @@ function undoStopped(cwd, dir, record, old) {
   /** @param {string} rel */
   const onDisk = rel => {
     try {
-      return fs.readFileSync(inside(rel));
+      return readRegularFile(inside(rel));
     } catch {
       return null;
     }
@@ -2936,17 +2967,14 @@ function movedPages(cwd, dir, data) {
     /** @type {string | null} */
     let text = null;
     try {
-      text = fs.readFileSync(
+      text = readRegularFile(
         confined(path.join(dir, from), dir, 'a preview file'),
         'utf8',
       );
     } catch {
       // Gone already: only the record moves.
     }
-    if (
-      fs.existsSync(target) &&
-      (text == null || fs.readFileSync(target, 'utf8') !== text)
-    )
+    if (fs.existsSync(target) && (text == null || regularText(target) !== text))
       refuse(
         E.ERR_FILE_EXISTS,
         `${shown(cwd, target)} exists and the preview did not write it; the preview moves its pages there.`,
@@ -3284,12 +3312,11 @@ export async function refreshPreviewRoute(cwd, slug) {
     ).filter(w => {
       const file = confined(path.join(dir, w.rel), dir, 'a preview file');
       if (!data.files.includes(w.rel)) return false;
-      if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === w.text)
-        return false;
+      if (regularText(file) === w.text) return false;
       if (editedByHand(dir, data, w.rel)) {
         const standIn =
           w.rel === `${COLORS_PAGE.file}.tsx` &&
-          fs.readFileSync(file, 'utf8').includes(`${slug}.palette`) &&
+          Boolean(regularText(file)?.includes(`${slug}.palette`)) &&
           paletteStandIn(cwd, slug);
         stale.push(
           standIn
@@ -3347,7 +3374,7 @@ const previewsFile = (cwd, slug) =>
  */
 function recordedPreviews(cwd, slug) {
   try {
-    const list = JSON.parse(fs.readFileSync(previewsFile(cwd, slug), 'utf8'));
+    const list = JSON.parse(readRegularFile(previewsFile(cwd, slug), 'utf8'));
     return (Array.isArray(list) ? list : [])
       .map(rel => path.resolve(cwd, String(rel)))
       .filter(dir => !path.relative(cwd, dir).startsWith('..'));
@@ -3504,7 +3531,7 @@ export function seeLine(cwd, slug, focus, notChecked = null, extra = {}) {
     /** @type {any} */
     let data;
     try {
-      data = JSON.parse(fs.readFileSync(path.join(dir, PREVIEW_DATA), 'utf8'));
+      data = JSON.parse(readRegularFile(path.join(dir, PREVIEW_DATA), 'utf8'));
     } catch (e) {
       // A record that is there but damaged: the preview commands refuse
       // it until it is fixed, so no add tip, the repair instead.
@@ -3684,19 +3711,6 @@ async function showablePages(cwd, appRoot, ids, n) {
     }
   }
   return out;
-}
-
-/**
- * The page a refusal's example adds: the first page template this app can
- * show (app frames left out), or null when there is none.
- * @param {string} cwd
- * @returns {Promise<string | null>}
- */
-async function examplePage(cwd) {
-  const pages = (await pageTemplates(cwd))
-    .filter(t => !/^Shell\b/.test(t.category ?? ''))
-    .map(t => t.id);
-  return (await showablePages(cwd, appRootOf(cwd, cwd), pages, 1))[0] ?? null;
 }
 
 /**
@@ -4092,6 +4106,19 @@ function wornTheme(cwd, slug, again, without) {
       .replace(/^\.?\/?themes\//, '')
       .replace(/\/+$/, '');
     const themes = editedThemes(cwd);
+    // An empty name: the same preview command with each theme here, and
+    // without --theme (its default), never a look at a theme instead.
+    if (!name)
+      refuse(
+        code ?? E.ERR_INVALID_ARGUMENT,
+        String(/** @type {any} */ (e)?.message).replace(
+          /\s*Nothing was changed\.$/,
+          '',
+        ),
+        {
+          run: [...themes.map(t => again(t)), `${again(null)}  # ${without}`],
+        },
+      );
     if (!themes.includes(name) && isPackageTheme(cwd, name)) {
       const missing =
         name !== 'neutral' && !installed(cwd, `@astryxdesign/theme-${name}`);
@@ -4355,6 +4382,19 @@ async function addPreview(description, options, box) {
     askedId != null &&
     (blank(description) || isDefault(description)) &&
     (blank(options.template) || isDefault(options.template));
+  // The command without --top, as typed: a default page as a word or
+  // with --template, else the page --template names, else the default
+  // pages (what preview add does with nothing named), never an arbitrary
+  // page.
+  const withoutTop = `${PREVIEW} add${
+    askedId != null
+      ? isDefault(description)
+        ? ` ${askedId}`
+        : ` --template ${askedId}`
+      : !blank(options.template)
+        ? ` --template ${quoteCommandArgument(String(options.template).trim())}`
+        : ''
+  }`;
   if (again) {
     description = undefined;
     options = {...options, template: undefined};
@@ -4362,11 +4402,6 @@ async function addPreview(description, options, box) {
   const said = (description ?? '').trim();
   const named =
     options.template == null ? null : String(options.template).trim();
-  // A refusal's example is a page this app can show.
-  const example = async () => {
-    const id = await examplePage(cwd);
-    return id ? [`${PREVIEW} add --template ${id}${tf}${pf}`] : [];
-  };
   // An empty --template falls back to what preview add does without it
   // (the description's pages, else the default pages), never an arbitrary
   // page.
@@ -4381,17 +4416,28 @@ async function addPreview(description, options, box) {
         ],
       },
     );
-  if (said && named != null)
+  if (said && named != null) {
+    // The page --template names is offered only when this app can add it
+    // now (a default page, or a template whose packages it has), as a
+    // typo's pages are.
+    const addable =
+      isDefault(named) ||
+      (await showablePages(cwd, appRootOf(cwd, cwd), [named], 1)).length > 0;
     refuse(
       E.ERR_INVALID_ARGUMENT,
-      '--template names the page; a description asks the ranking to pick one, so drop one of them.',
+      `--template names the page; a description asks the ranking to pick one, so drop one of them.${addable ? '' : ` The ${named} page cannot be added here as it is (a package it needs is missing, or no page template has that id).`}`,
       {
         run: [
-          `${PREVIEW} add --template ${quoteCommandArgument(named)}${tf}${pf}`,
+          ...(addable
+            ? [
+                `${PREVIEW} add --template ${quoteCommandArgument(named)}${tf}${pf}`,
+              ]
+            : []),
           `${PREVIEW} add ${quoteCommandArgument(said)}${tf}${pf}`,
         ],
       },
     );
+  }
   const top = options.top == null ? 1 : Number(String(options.top));
   if (options.top != null && !/^[1-3]$/.test(String(options.top))) {
     // The way on is read from what was typed: its exact reading (3 for
@@ -4407,24 +4453,17 @@ async function addPreview(description, options, box) {
           ? [
               `${PREVIEW} add ${quoteCommandArgument(said)}${offer === 1 ? '' : ` --top ${offer}`}${tf}${pf}`,
             ]
-          : await example(),
+          : [`${withoutTop}${tf}${pf}`],
       },
     );
   }
   if (options.top != null && !said)
     refuse(
       E.ERR_INVALID_ARGUMENT,
-      named != null
-        ? '--top says how many ranked pages to add; --template names one page, so drop --top.'
-        : '--top says how many pages to add for a description, and there is none.',
-      {
-        run:
-          named != null
-            ? [
-                `${PREVIEW} add --template ${quoteCommandArgument(named)}${tf}${pf}`,
-              ]
-            : await example(),
-      },
+      named != null || askedId != null
+        ? `--top says how many ranked pages to add; ${askedId ?? '--template'} names one page, so drop --top.`
+        : '--top says how many pages to add for a description, and there is none; without one, preview add adds the default pages.',
+      {run: [`${withoutTop}${tf}${pf}`]},
     );
   /** @type {string[]} */
   const notes = [];
@@ -4797,7 +4836,7 @@ async function addPreview(description, options, box) {
       !refreshed.includes(p.id) &&
       !rewrote.includes(p.id) &&
       fs.existsSync(path.join(at.dir, `${p.file}.tsx`)) &&
-      fs.readFileSync(path.join(at.dir, `${p.file}.tsx`), 'utf8') !==
+      regularText(path.join(at.dir, `${p.file}.tsx`)) !==
         writes.get(`${p.file}.tsx`)?.text
     )
       refreshed.push(p.id);
@@ -4974,6 +5013,37 @@ export async function themeEditPreviewApp(dir, options = {}) {
     const recorded = readWrittenRecord(cwd, slug);
     /** Links in the theme folder: never read through, so left out, and named. @type {string[]} */
     const links = [];
+    /**
+     * A file of the theme folder, read for the copy before anything is
+     * written: one too large for a read, or one that cannot be read, is
+     * refused by name (a read, never called a write).
+     * @param {string} file
+     */
+    const readForCopy = file => {
+      const {size} = fs.statSync(file);
+      if (size > NODE_READ_MAX)
+        refuse(
+          E.ERR_INVALID_ARGUMENT,
+          `${shown(cwd, file)} is ${(size / 1073741824).toFixed(1)} GB, more than one file read can take, so ${slug} cannot be copied into a new app.`,
+          {
+            fix: `move it out of ${shown(cwd, from.dir)}/ (a theme's build does not need it), then run the command again`,
+            run: [appCommand(dir, slug)],
+          },
+        );
+      try {
+        return fs.readFileSync(file);
+      } catch (e) {
+        const code = /** @type {any} */ (e)?.code;
+        refuse(
+          E.ERR_READ_FAILED,
+          `${shown(cwd, file)} could not be read (${code ?? String(e)}), so ${slug} cannot be copied into a new app.`,
+          {
+            fix: `make it readable (chmod u+r ${quoteCommandArgument(shown(cwd, file))}) or move it out of ${shown(cwd, from.dir)}/, then run the command again`,
+            run: [appCommand(dir, slug)],
+          },
+        );
+      }
+    };
     /** @param {string} rel */
     const copyDir = rel => {
       for (const entry of fs.readdirSync(path.join(from.dir, rel), {
@@ -4999,7 +5069,7 @@ export async function themeEditPreviewApp(dir, options = {}) {
         )
           themeCopy.push({
             rel: path.join(to.dir, sub),
-            text: fs.readFileSync(path.join(from.dir, sub)),
+            text: readForCopy(path.join(from.dir, sub)),
           });
       }
     };
@@ -5023,6 +5093,32 @@ export async function themeEditPreviewApp(dir, options = {}) {
         })
         .map(spec => `${shown(cwd, file)} imports '${spec}'`);
     });
+    // A stylesheet's url() that leads out of the theme folder (an image in
+    // the project's own folders) is resolved by the app's bundler as a
+    // module: the new app does not have it, so its build would fail. Read
+    // with the renderer's own url reader; a `/` url is the app's public/
+    // folder, which the bundler leaves alone.
+    for (const c of themeCopy) {
+      const rel = path.relative(to.dir, c.rel);
+      if (!/\.css$/.test(rel)) continue;
+      const file = path.join(from.dir, rel);
+      for (const m of String(c.text).matchAll(
+        new RegExp(CSS_URL.source, 'g'),
+      )) {
+        const named = assetRef(cssUrlRef(m), {
+          dir: path.dirname(file),
+          root: cwd,
+        });
+        if (!named || named.kind === 'remote' || named.ref.startsWith('/'))
+          continue;
+        const at =
+          named.kind === 'missing'
+            ? path.resolve(path.dirname(file), named.ref)
+            : named.file;
+        if (at !== from.dir && !at.startsWith(from.dir + path.sep))
+          outside.push(`${shown(cwd, file)} uses url(${named.ref})`);
+      }
+    }
     if (outside.length)
       refuse(
         E.ERR_INVALID_ARGUMENT,
@@ -5066,6 +5162,23 @@ export async function themeEditPreviewApp(dir, options = {}) {
     for (const font of fonts)
       dependencies[font.pkg] =
         readVersion(project, font.pkg) ?? OPEN_FONT_RANGE;
+    // A package the new app adds and this project has not installed: which
+    // weights it ships is unknown here (Lato has no 500), and importing one
+    // it lacks would stop the app's build. Its index sheet (weight 400)
+    // loads; every other weight the theme uses is named, with the import
+    // that loads it once installed.
+    const used = (builtFontWeights(ctx, slug) ?? [400]).filter(w => w !== 400);
+    for (const font of fonts) {
+      const sheets = fontPackageSheets(ctx, slug, font.pkg);
+      if (
+        used.length &&
+        sheets.length === 1 &&
+        sheets[0] === `${font.pkg}/index.css`
+      )
+        notes.push(
+          `the new app loads ${font.family} at weight 400 only (${font.pkg}/index.css): ${slug} also uses ${used.join(', ')}, which show as a bold drawn by the browser until loaded; after installing, import ${used.map(w => `'${font.pkg}/${w}.css'`).join(', ')} in its root layout (each weight the family ships)`,
+        );
+    }
     // A family the CLI cannot vouch for as an open font (and this project
     // has no package of) is not installed in the new app: said, with the
     // package that would load it.
@@ -5418,7 +5531,7 @@ function themeElsewhere(cwd, dir, slug) {
   /** @type {string} */
   let route;
   try {
-    route = fs.readFileSync(path.join(dir, 'page.tsx'), 'utf8');
+    route = readRegularFile(path.join(dir, 'page.tsx'), 'utf8');
   } catch {
     return null;
   }
@@ -5532,7 +5645,7 @@ async function removePreview(page, options, box) {
   let removing = [];
   try {
     const pend = JSON.parse(
-      fs.readFileSync(path.join(at.dir, PENDING), 'utf8'),
+      readRegularFile(path.join(at.dir, PENDING), 'utf8'),
     );
     const ids = (/** @type {any} */ r) =>
       Array.isArray(r?.pages)
@@ -5855,7 +5968,7 @@ async function removePreview(page, options, box) {
       );
       continue;
     }
-    plan.push({file, before: fs.readFileSync(file)});
+    plan.push({file, before: readRegularFile(file)});
   }
   // theme-preview.json goes last, so an interrupted remove can run again.
   plan.sort(

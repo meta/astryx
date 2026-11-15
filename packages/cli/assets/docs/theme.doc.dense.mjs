@@ -4,7 +4,7 @@
 
 export const docsDense = {
   description:
-    'how themes work: wrap app in a theme; create/change one: astryx experimental theme editor new <name> --like neutral (rest = first sections).',
+    'how themes work: wrap app in a theme; create/change one (also denser/roomier, one kind of part): astryx experimental theme editor new <name> --like neutral (rest = first sections).',
   sections: [
     {
       section: 'Make or change a theme',

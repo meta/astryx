@@ -155,9 +155,10 @@ describe('readers the lists lean on', () => {
       );
       expect(pill.first[0]).toBe('set ch corners less --on button');
       expect(has(pill.first, '--when variant:ghost')).toBe(true);
-      expect((await answer('make card titles red')).first[0]).toBe(
-        "set n color '#dc2626' --on heading",
-      );
+      // Core has no card title part: said, never every heading.
+      const titles = await answer('make card titles red');
+      expect(titles.first).toEqual([]);
+      expect(titles.text).toMatch(/no card title part of its own/);
       expect(
         (await answer('side nav selected items should be #dbeafe')).first,
       ).toEqual([
@@ -193,9 +194,11 @@ describe('readers the lists lean on', () => {
     'shadows how cannot measure get a true reason',
     async test => {
       needsBases(test);
+      // (The census sees a popover drawn open: its shadow is measured, and
+      // softer starts from it, on the popover.)
       const pop = await answer('lighter shadows on popovers');
-      expect(pop.first).toEqual([]);
-      expect(pop.text).toMatch(/not seen it drawn/);
+      expect(pop.first.join('\n')).not.toMatch(/'var\(--shadow-low\)'/);
+      expect(pop.first.join('\n')).toMatch(/--on popover$/);
       const card = await answer('make card shadows softer in light mode');
       expect(card.first).toEqual([]);
       expect(card.text).toMatch(/draws no shadow of its own at rest/);

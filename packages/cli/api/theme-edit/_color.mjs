@@ -334,6 +334,19 @@ function args(fn, body) {
   if (channels.length !== 3) return null;
   const read = channels.map(x => num(x, !legacy));
   if (read.some(x => !x)) return null;
+  // The comma (legacy) syntax as CSS Color 4 takes it: rgb() with all
+  // numbers or all percentages, hsl() with a hue and two percentages. Bare
+  // numbers for saturation and lightness, or mixed rgb() channels, are the
+  // space-separated syntax's only: browsers drop them written with commas.
+  if (legacy) {
+    const units = /** @type {Num[]} */ (read).map(x => x.unit);
+    const ok = /^rgba?$/i.test(fn)
+      ? units.every(u => u === '') || units.every(u => u === '%')
+      : ['', 'deg', 'grad', 'rad', 'turn'].includes(units[0]) &&
+        units[1] === '%' &&
+        units[2] === '%';
+    if (!ok) return null;
+  }
   let a = 1;
   if (alpha !== undefined) {
     const v = num(alpha, !legacy);
@@ -837,6 +850,24 @@ export function parseColor(value) {
  */
 export function isClipped(value) {
   return readColor(String(value ?? '').trim()) != null && clipped;
+}
+
+/**
+ * A comma (legacy) rgb() or hsl() that CSS does not take as written, in the
+ * space-separated syntax CSS reads the same channels in (`hsl(0, 100, 50)`
+ * is `hsl(0 100 50)`); null for any other value.
+ * @param {unknown} value
+ * @returns {string | null}
+ */
+export function colorAsCssReads(value) {
+  const s = String(value ?? '').trim();
+  const fn = /^(rgba?|hsla?)\((.*)\)$/i.exec(s);
+  if (!fn || !fn[2].includes(',') || readColor(s)) return null;
+  const parts = fn[2].split(',').map(x => x.trim());
+  if (parts.length !== 3 && parts.length !== 4) return null;
+  const name = fn[1].toLowerCase().replace(/a$/, '');
+  const modern = `${name}(${parts.slice(0, 3).join(' ')}${parts[3] ? ` / ${parts[3]}` : ''})`;
+  return readColor(modern) ? modern : null;
 }
 
 /**

@@ -18,6 +18,7 @@ import * as path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {AstryxError} from '../error.mjs';
 import {publishNewFile} from '../../foundation/fs/publish-file.mjs';
+import {irregularFileKind} from '../../foundation/fs/regular-file.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {findLocalIntegrationManifestOrNull} from '../../foundation/integrations/manifest-writer.mjs';
 import {loadManifestObject} from '../../foundation/integrations/integrations.mjs';
@@ -342,6 +343,15 @@ export function applyWrites(plans) {
     for (const plan of plans) {
       fs.mkdirSync(path.dirname(plan.path), {recursive: true});
       assertNotSymlink(plan.path);
+      // A named pipe or a device is never opened: a read of one can wait
+      // for good.
+      const kind = irregularFileKind(plan.path);
+      if (kind && kind !== 'a folder')
+        throw new AstryxError(
+          `${plan.path} is ${kind}, not a file, so it is not replaced: remove it, then run again.`,
+          undefined,
+          ERROR_CODES.ERR_FILE_EXISTS,
+        );
       const exists = fs.existsSync(plan.path);
       if (plan.createOnly && exists) {
         throw new AstryxError(

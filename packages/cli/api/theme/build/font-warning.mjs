@@ -82,15 +82,7 @@ export const SYSTEM_FONTS_BY_PLATFORM = {
     '-apple-system',
     'blinkmacsystemfont',
     'helvetica neue',
-    'sf mono',
-    'sf pro',
-    'sf pro text',
-    'sf pro display',
-    'sf pro rounded',
-    'sf compact',
-    'sf compact text',
-    'sf compact display',
-    'new york',
+    'apple color emoji',
     'monaco',
     'menlo',
     'palatino',
@@ -211,7 +203,7 @@ export const SYSTEM_FONTS_BY_PLATFORM = {
     '宋体',
     '黑体',
   ],
-  'Android and ChromeOS': ['roboto'],
+  'Android and ChromeOS': ['roboto', 'noto color emoji'],
   // Linux staples — the shipped themes' fallback stacks name these on
   // purpose (e.g. neutral's code stack ends in Liberation Mono).
   Linux: [
@@ -223,8 +215,46 @@ export const SYSTEM_FONTS_BY_PLATFORM = {
   ],
 };
 
-/** Every family a system ships, by lowercase name. */
-const SYSTEM_FAMILIES = new Set(Object.values(SYSTEM_FONTS_BY_PLATFORM).flat());
+/**
+ * Apple's own interface faces, by lowercase name, with the generic family
+ * that reaches each. Apple systems hide them from a lookup by family name,
+ * so a page reaches them only through these generics: by name, every
+ * system shows the next font in the stack. No package loads them.
+ */
+export const APPLE_FACE_GENERICS = /** @type {Record<string, string>} */ ({
+  'sf pro': 'system-ui',
+  'sf pro text': 'system-ui',
+  'sf pro display': 'system-ui',
+  'sf pro rounded': 'ui-rounded',
+  'sf compact': 'system-ui',
+  'sf compact text': 'system-ui',
+  'sf compact display': 'system-ui',
+  'sf compact rounded': 'ui-rounded',
+  'sf mono': 'ui-monospace',
+  'new york': 'ui-serif',
+});
+
+/**
+ * The generic family that reaches one of Apple's interface faces, or null
+ * for any other family.
+ * @param {string} family without quotes
+ * @returns {string | null}
+ */
+export function appleFaceGeneric(family) {
+  return (
+    APPLE_FACE_GENERICS[family.trim().replace(/\s+/g, ' ').toLowerCase()] ??
+    null
+  );
+}
+
+/**
+ * Every family a system ships, by lowercase name, and Apple's interface
+ * faces: nothing loads those either, and no install line applies to them.
+ */
+const SYSTEM_FAMILIES = new Set([
+  ...Object.values(SYSTEM_FONTS_BY_PLATFORM).flat(),
+  ...Object.keys(APPLE_FACE_GENERICS),
+]);
 
 /**
  * Split a CSS font-family value into clean family names. Complete `var()`
