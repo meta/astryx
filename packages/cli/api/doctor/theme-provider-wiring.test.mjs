@@ -291,38 +291,19 @@ describe('a theme its integration wires with its own provider', () => {
     const text = (await runCli(['theme', 'list', '--package', '@acme/ui'], dir))
       .stdout;
     expect(text).toMatch(/added:\s+no/);
-    // The app does not render the provider: the line says when it would.
-    expect(text).toContain(
-      'wiredBy:     wired by AcmeThemeProvider from @acme/ui/theme when the app renders it',
-    );
-    expect(text).not.toContain("This app's theme");
-  });
-
-  it('theme list says where the app renders the provider, and which theme that is', async () => {
-    const dir = app();
+    // The list reads no app source: the line says when the provider applies
+    // and that doctor checks where, even when the app renders it.
     write(path.join(dir, 'app/layout.tsx'), RENDERS);
-    const r = await themeListAvailable({cwd: dir});
-    expect(r.data.find(t => t.slug === 'brand')).toMatchObject({
-      renderedIn: 'app/layout.tsx',
-      added: false,
-    });
-    expect(r.meta?.appTheme).toEqual([
-      {
-        wiredBy: 'AcmeThemeProvider from @acme/ui/theme',
-        file: 'app/layout.tsx',
-        themes: ['brand'],
-      },
-    ]);
-    const text = (await runCli(['theme', 'list'], dir)).stdout;
-    expect(text).toContain(
-      "This app's theme comes from AcmeThemeProvider from @acme/ui/theme (brand), rendered in app/layout.tsx.",
+    const shown = (
+      await runCli(['theme', 'list', '--package', '@acme/ui'], dir)
+    ).stdout;
+    expect(shown).toMatch(
+      /wiredBy:\s+wired by AcmeThemeProvider from @acme\/ui\/theme when the app renders it; `.* doctor` checks where/,
     );
-    expect(text.indexOf("This app's theme")).toBeLessThan(
-      text.indexOf('Themes'),
-    );
-    expect(text).toContain(
-      'wiredBy:     wired by AcmeThemeProvider from @acme/ui/theme, rendered in app/layout.tsx',
-    );
-    expect(text).toMatch(/added:\s+no/);
+    expect(shown).not.toContain('rendered in');
+    expect(shown).toMatch(/added:\s+no/);
+    const json = await themeListAvailable({cwd: dir, package: '@acme/ui'});
+    expect(json.data[0]).not.toHaveProperty('renderedIn');
+    expect(json.meta?.appTheme).toBeUndefined();
   });
 });

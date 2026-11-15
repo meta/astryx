@@ -621,18 +621,15 @@ function themeNextSteps(run, words = THEME_WORDS) {
 }
 
 /**
- * The list's `wiredBy` line: the provider a theme's package wires it with,
- * and the file that renders it when doctor's scan found one.
+ * The list's `wiredBy` line: the provider a theme's package wires it with.
+ * The list reads no app source; doctor checks where the app renders it.
  * @param {import('../../../api/theme/theme.type.mjs').ThemeListEntry} theme
  */
 function wiredByLine(theme) {
   if (!theme.wiredBy) return theme;
-  const by = `wired by ${theme.wiredBy.export} from ${theme.wiredBy.from}`;
   return {
     ...theme,
-    wiredBy: theme.renderedIn
-      ? `${by}, rendered in ${theme.renderedIn}`
-      : `${by} when the app renders it`,
+    wiredBy: `wired by ${theme.wiredBy.export} from ${theme.wiredBy.from} when the app renders it; \`${getCliInvocation()} doctor\` checks where`,
   };
 }
 
@@ -643,35 +640,21 @@ function wiredByLine(theme) {
  * @param {import('../../../api/theme/theme.type.mjs').ThemeUnmigratedCopy[]} [unmigratedCopies]
  * @param {ThemeCommandWords} [words]
  * @param {Array<{slug: string, path: string, reason: string}>} [skippedThemes]
- * @param {Array<{wiredBy: string, file: string, themes: string[]}>} [appTheme] where the app renders a package's provider, and the theme it wires
  */
 function printThemeList(
   themes,
   unmigratedCopies = [],
   words = THEME_WORDS,
   skippedThemes = [],
-  appTheme = [],
 ) {
   const run = getCliInvocation();
   const more = text(
     `More themes in packages you could add: ${run} discover theme`,
   );
-  // The theme the app has, when doctor's scan found the provider that wires
-  // it rendered: first, so "added: no" is not read as "no theme".
-  const using = appTheme.map(x =>
-    x.themes.length === 1
-      ? `This app's theme comes from ${x.wiredBy} (${x.themes[0]}), rendered in ${x.file}.`
-      : `This app's theme comes from ${x.wiredBy}, rendered in ${x.file}: one of ${x.themes.join(', ')}.`,
-  );
   if (themes.length === 0) {
-    emit(
-      ...using.map(line => text(line)),
-      text('No themes are available in this project.'),
-      more,
-    );
+    emit(text('No themes are available in this project.'), more);
   } else {
     emit(
-      ...using.map(line => text(line)),
       section('Themes', `${themes.length} available`),
       records(themes.map(wiredByLine), {
         fields: [
@@ -1819,7 +1802,6 @@ function registerThemeCommands(theme, program, docs, words) {
         result.meta?.unmigratedCopies,
         words,
         result.meta?.skippedThemes,
-        result.meta?.appTheme,
       );
       return answered;
     },

@@ -73,22 +73,6 @@ export async function themeListAvailable(options = {}) {
   const cwd = options.cwd ?? process.cwd();
   const state = readThemeListState(cwd);
   const {themes, skipped} = await listAvailableThemeState(cwd);
-  // Where the app renders the provider a package wires its themes with, as
-  // doctor's wiring scan finds it: run only when a theme names one.
-  // Doctor's scan is loaded only then: the theme commands start without
-  // doctor's modules and their dependencies.
-  const wiring = themes.some(theme => theme.provider)
-    ? await (
-        await import('../../doctor/theme-checks.mjs')
-      ).themeImportWiring(cwd)
-    : {wired: [], unconfirmed: []};
-  const byProvider = wiring.wired.filter(entry => entry.wiredBy);
-  const renderedIn = (/** @type {{slug: string, package: string}} */ theme) =>
-    byProvider.find(
-      entry =>
-        entry.slug === theme.slug &&
-        entry.owner === themeRecordOwner(/** @type {any} */ (theme)),
-    )?.file;
   const data = themes
     .filter(theme => themeInPackage(theme, options.package))
     .map(theme => {
@@ -112,10 +96,6 @@ export async function themeListAvailable(options = {}) {
               },
             }
           : {}),
-        // The app file that renders that provider for this theme.
-        ...(theme.provider && renderedIn(theme)
-          ? {renderedIn: renderedIn(theme)}
-          : {}),
       };
     });
   const upgradeCommand = `${getCliInvocation(state.projectDir)} upgrade --from 0.6.4 --path . --apply`;
@@ -135,37 +115,14 @@ export async function themeListAvailable(options = {}) {
     upgradeCommand,
   }));
   const skippedThemes = options.package == null ? skipped : [];
-  // Where the app renders a provider and the theme it wires, or the themes
-  // it may be when doctor cannot tell which.
-  const appTheme = [
-    ...byProvider.map(entry => ({
-      wiredBy: /** @type {string} */ (entry.wiredBy),
-      file: entry.file,
-      themes: [entry.slug],
-    })),
-    ...wiring.unconfirmed.flatMap(entry =>
-      entry.wiredBy
-        ? [
-            {
-              wiredBy: entry.wiredBy,
-              file: entry.file,
-              themes: entry.themes ?? [],
-            },
-          ]
-        : [],
-    ),
-  ];
   return {
     type: 'theme.list',
     data,
-    ...(unmigratedCopies.length > 0 ||
-    skippedThemes.length > 0 ||
-    appTheme.length > 0
+    ...(unmigratedCopies.length > 0 || skippedThemes.length > 0
       ? {
           meta: {
             unmigratedCopies,
             ...(skippedThemes.length > 0 ? {skippedThemes} : {}),
-            ...(appTheme.length > 0 ? {appTheme} : {}),
           },
         }
       : {}),
