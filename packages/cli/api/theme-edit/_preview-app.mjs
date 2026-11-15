@@ -48,6 +48,7 @@ import {
   isEditorPage,
   fontsourceSuggestion,
   builtFontWeights,
+  localModuleFile,
 } from './_settings.mjs';
 import {
   baseFontsCss,
@@ -90,6 +91,7 @@ import {
   lookAtPictures,
 } from './_context.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {AstryxError} from '../error.mjs';
 import {
   formatCliCommand,
   quoteCommandArgument,
@@ -4199,6 +4201,19 @@ function wornTheme(cwd, slug, again, without) {
         `There is no theme "${slug}" under themes/.`,
         {run: near.map(n => again(n))},
       );
+    // A refusal that names the theme meant (a path, a list): the same
+    // preview command with that theme, never a look at it instead.
+    if (e instanceof AstryxError && e.suggestions?.length) {
+      const show = `${EDITOR} show `;
+      e.suggestions = e.suggestions.map(x => {
+        const t = x.name.startsWith(show)
+          ? x.name.slice(show.length)
+          : undefined;
+        return t && themes.includes(t)
+          ? {name: again(t), reason: 'do this instead'}
+          : x;
+      });
+    }
     throw e;
   }
 }
@@ -5108,11 +5123,30 @@ export async function themeEditPreviewApp(dir, options = {}) {
         );
       }
     };
+    /**
+     * A folder of the theme folder, listed for the copy: one that cannot be
+     * read is refused by name, as a file that cannot be read is (a read,
+     * never called a write).
+     * @param {string} folder
+     */
+    const listForCopy = folder => {
+      try {
+        return fs.readdirSync(folder, {withFileTypes: true});
+      } catch (e) {
+        const code = /** @type {any} */ (e)?.code;
+        return refuse(
+          E.ERR_READ_FAILED,
+          `${shown(cwd, folder)}/ could not be read (${code ?? String(e)}), so ${slug} cannot be copied into a new app.`,
+          {
+            fix: `make it readable (chmod u+rx ${quoteCommandArgument(shown(cwd, folder))}) or move it out of ${shown(cwd, from.dir)}/, then run the command again`,
+            run: [appCommand(dir, slug)],
+          },
+        );
+      }
+    };
     /** @param {string} rel */
     const copyDir = rel => {
-      for (const entry of fs.readdirSync(path.join(from.dir, rel), {
-        withFileTypes: true,
-      })) {
+      for (const entry of listForCopy(path.join(from.dir, rel))) {
         const sub = path.join(rel, entry.name);
         // A repository's own folder (.git, a file in a worktree) and
         // installed packages are not the theme's: never copied whole.
@@ -5232,11 +5266,15 @@ export async function themeEditPreviewApp(dir, options = {}) {
         const pkg = /^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*/i.exec(spec)?.[0];
         if (pkg && !isBuiltin(spec)) imported.add(pkg);
       }
+      // Each import at the file it loads, resolved as the theme build
+      // resolves it (`./helpers` is helpers.ts), so a link it loads is
+      // seen; one that names no file stays at its path.
       return specs
         .filter(spec => spec.startsWith('.'))
         .filter(spec =>
           check(
-            path.resolve(path.dirname(file), spec),
+            localModuleFile(path.dirname(file), spec) ??
+              path.resolve(path.dirname(file), spec),
             `${shown(cwd, file)} imports '${spec}'`,
           ),
         )
@@ -5249,6 +5287,8 @@ export async function themeEditPreviewApp(dir, options = {}) {
     // folder, which the bundler leaves alone.
     /** Root urls the previews read from this project's public/. @type {Set<string>} */
     const publicRefs = new Set();
+    /** Urls that name no file. @type {string[]} */
+    const missing = [];
     for (const c of themeCopy) {
       const rel = path.relative(to.dir, c.rel);
       if (!/\.css$/.test(rel)) continue;
@@ -5274,8 +5314,21 @@ export async function themeEditPreviewApp(dir, options = {}) {
             : named.file;
         if (check(at, `${shown(cwd, file)} uses url(${named.ref})`))
           outside.push(`${shown(cwd, file)} uses url(${named.ref})`);
+        // A url that names no file (a wrong-case path): the new app's
+        // bundler resolves it as a module and fails.
+        else if (named.kind === 'missing')
+          missing.push(`${shown(cwd, file)} uses url(${named.ref})`);
       }
     }
+    if (missing.length)
+      refuse(
+        E.ERR_INVALID_ARGUMENT,
+        `${slug} cannot be copied into a new app: ${missing.slice(0, 3).join('; ')}, and there is no such file in ${shown(cwd, from.dir)}/ (names are matched with their case), so the new app's bundler cannot resolve it and its theme would not build there.`,
+        {
+          fix: `name the file as it is spelled in ${shown(cwd, from.dir)}/, or put it there, then run the command again`,
+          run: [appCommand(dir, slug)],
+        },
+      );
     if (outside.length)
       refuse(
         E.ERR_INVALID_ARGUMENT,
@@ -5900,11 +5953,22 @@ async function removePreview(page, options, box) {
       // Several previews, or none.
     }
     const pageArg = page != null ? ` ${quoteCommandArgument(page)}` : '';
+    // Add is offered only where add takes the folder, checked as add checks
+    // it (a root layout, the routes folder, the folder's own kind). Where
+    // add refuses, the lines add itself offers there take its place.
+    const addRetry = (/** @type {string | null} */ p) =>
+      `${PREVIEW} add${p == null ? '' : ` --path ${quoteCommandArgument(p)}`}`;
     let addable = true;
+    /** @type {string[]} */
+    let addWays = [];
     try {
-      previewDir(cwd, options.path, {write: true, retry});
-    } catch {
+      previewDir(cwd, options.path, {write: true, retry: addRetry});
+    } catch (e) {
+      if (!(e instanceof AstryxError)) throw e;
       addable = false;
+      addWays = (e.suggestions ?? [])
+        .map(x => x.name)
+        .filter(n => !n.startsWith(`${PREVIEW} add`));
     }
     refuse(
       E.ERR_NOT_FOUND,
@@ -5918,11 +5982,13 @@ async function removePreview(page, options, box) {
           ),
           ...(others.length
             ? []
-            : [
-                addable && !holdsApp(cwd, at.dir)
-                  ? `${PREVIEW} add${pf}`
-                  : `${PREVIEW} add`,
-              ]),
+            : addable
+              ? [
+                  holdsApp(cwd, at.dir)
+                    ? `${PREVIEW} add`
+                    : `${PREVIEW} add${pf}`,
+                ]
+              : addWays),
         ],
       },
     );

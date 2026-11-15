@@ -18,6 +18,8 @@ import * as path from 'node:path';
 import {spawn} from 'node:child_process';
 import * as os from 'node:os';
 import {fileURLToPath} from 'node:url';
+import {AstryxError} from '../error.mjs';
+import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
   SAMPLE_PAGE,
   SHEET_ORDER,
@@ -709,6 +711,23 @@ export function pageInTheWay(file) {
 }
 
 /**
+ * Refuse to write a page over a pipe, a device or a socket at its name: a
+ * write renamed into place would replace it, and something of yours at a
+ * page's name is never written over.
+ * @param {string} cwd
+ * @param {string} file
+ * @param {string} page what goes there
+ */
+function refuseOverIrregular(cwd, file, page) {
+  if (pageInTheWay(file) !== 'other') return;
+  throw new AstryxError(
+    `${inTheWayPhrase(shown(cwd, file), 'other', page)}; it is left as it is. Move it, then run the command again.`,
+    [],
+    ERROR_CODES.ERR_WRITE_FAILED,
+  );
+}
+
+/**
  * What {@link pageInTheWay} found, said: `<file> is a link, and the editor
  * writes nothing through a link`, `… is a folder, where <page> goes`, `…
  * is a file the editor did not write, and it is left as it is`.
@@ -842,6 +861,7 @@ export async function renderPreview(ctx, slug, data) {
   // Rendered from the same inputs before: the page is as it would be.
   if (renderedFrom(out, key)) return shown(project.cwd, out);
   const {html} = await renderGenerated(project, `preview-${slug}.mjs`, source);
+  refuseOverIrregular(project.cwd, out, 'the sample page');
   // Written whole and renamed in, never through a link.
   writeWhole(out, withRenderKey(html, key));
   return shown(project.cwd, out);
@@ -892,6 +912,7 @@ export async function renderSheet(ctx, slug, data, options = {}) {
     templateFiles(imports),
   );
   fs.mkdirSync(path.dirname(out), {recursive: true});
+  refuseOverIrregular(project.cwd, out, 'the sheet');
   // Written whole and renamed in, never through a link.
   writeWhole(out, withRenderKey(html, key));
   return {

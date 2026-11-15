@@ -1136,11 +1136,13 @@ export async function previewAfter(ctx, slug, data, png) {
   let preview = null;
   let cause = ctx.unchecked ?? null;
   const f0 = themeFiles(ctx.project.cwd, slug);
-  // Something of yours at preview.html is left as it is: the sample page is
-  // not made, so the change is not rendered, which the result says.
-  // (A folder there is named by the write that fails, below.)
+  // Something of yours at preview.html (a file, a link, a pipe) is left as
+  // it is: the sample page is not made, so the change is not rendered,
+  // which the result says. (A folder there is named by the write that
+  // fails, below.)
   const inWay = pageInTheWay(f0.preview);
-  const previewInWay = inWay === 'file' || inWay === 'link' ? inWay : null;
+  const previewInWay =
+    inWay === 'file' || inWay === 'link' || inWay === 'other' ? inWay : null;
   if (previewInWay)
     cause ??= `${inTheWayPhrase(shown(ctx.project.cwd, f0.preview), previewInWay, 'the sample page')}, so the sample page was not made and the change was not rendered; move ${previewInWay === 'link' ? 'the link' : 'it'}, then run ${P} show ${slug}`;
   else

@@ -6854,7 +6854,7 @@ const MODULE_EXTENSIONS = [
  * @param {string} spec
  * @returns {string | undefined}
  */
-function localModuleFile(dir, spec) {
+export function localModuleFile(dir, spec) {
   const base = path.resolve(dir, spec);
   const ext = path.extname(base);
   const stem = base.slice(0, base.length - ext.length);

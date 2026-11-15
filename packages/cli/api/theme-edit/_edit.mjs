@@ -6598,7 +6598,7 @@ export async function themeEditShow(theme, options = {}) {
   const sheetFile = section
     ? path.join(f.dir, `sheet-${section}.html`)
     : f.sheet;
-  /** @type {Array<{html: string, png: string, kind: 'link' | 'file', page: string}>} */
+  /** @type {Array<{html: string, png: string, kind: 'link' | 'file' | 'other', page: string}>} */
   const leftPages = noPages
     ? []
     : [
@@ -6609,10 +6609,13 @@ export async function themeEditShow(theme, options = {}) {
           page: section ? `the ${section} sheet` : 'the sheet',
         },
       ].flatMap(x => {
-        // A folder (or a pipe) there is refused by the write itself, by
-        // name, as before: no page can be made over it.
+        // A folder there is refused by the write itself, by name: no page
+        // can be made over it. A pipe or a device is left as it is and
+        // named, as at the open states page's name.
         const kind = pageInTheWay(x.html);
-        return kind === 'file' || kind === 'link' ? [{...x, kind}] : [];
+        return kind === 'file' || kind === 'link' || kind === 'other'
+          ? [{...x, kind}]
+          : [];
       });
   const left = (/** @type {string} */ file) =>
     leftPages.some(x => x.html === file);
