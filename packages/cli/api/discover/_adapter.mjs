@@ -211,6 +211,26 @@ export async function discoverPackages() {
 }
 
 /**
+ * The `description` in the package.json of an installed package, so the list
+ * says what an installed integration is, as it does for one a source lists.
+ * @param {string | undefined} packageDir
+ * @returns {string | undefined}
+ */
+function packageDescription(packageDir) {
+  if (!packageDir) return undefined;
+  try {
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(packageDir, 'package.json'), 'utf-8'),
+    );
+    return typeof pkg?.description === 'string' && pkg.description.trim()
+      ? pkg.description.trim()
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Every integration the project loads, with what it adds. An integration with
  * no components root is included with `components: []`; one that failed to
  * load is left out (the integration-issues nudge and Doctor report it).
@@ -254,8 +274,10 @@ export async function describeInstalled(project, scanned) {
     const {sets, withdrawn} = optedIntoIconSets(project)
       ? discoverIntegrationIconSets(integration, {projectDir: project.cwd})
       : {sets: [], withdrawn: []};
+    const description = packageDescription(integration.__packageDir);
     installed.push({
       ...base,
+      ...(description && !base.description ? {description} : {}),
       templates: identities.templates.map(t => t.id),
       // Each doc by the name `astryx docs` opens it by, not the name on its
       // file: a doc that adds sections to `theme` opens as `theme`.
