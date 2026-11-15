@@ -1157,6 +1157,55 @@ describe('one Tab stop', () => {
     }
   });
 
+  it('restores the original tab indexes when a second Tab press comes before the restore', () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <RadioList label="Notify" value="sms" onChange={() => {}}>
+          <RadioListItem label="Email" value="email" />
+          <RadioListItem label="SMS" value="sms" />
+          <RadioListItem label="Push" value="push" />
+        </RadioList>,
+      );
+      const email = screen.getByRole('radio', {name: 'Email'});
+      const sms = screen.getByRole('radio', {name: 'SMS'});
+      const push = screen.getByRole('radio', {name: 'Push'});
+      email.focus();
+      fireEvent.keyDown(email, {key: 'Tab'});
+      fireEvent.keyDown(email, {key: 'Tab', shiftKey: true});
+      expect(sms.tabIndex).toBe(-1);
+      vi.runAllTimers();
+      expect(sms).not.toHaveAttribute('tabindex');
+      expect(push).not.toHaveAttribute('tabindex');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('restores the tab indexes when focus leaves the group before the restore', () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <>
+          <RadioList label="Notify" value="sms" onChange={() => {}}>
+            <RadioListItem label="Email" value="email" />
+            <RadioListItem label="SMS" value="sms" />
+          </RadioList>
+          <button type="button">Next</button>
+        </>,
+      );
+      const email = screen.getByRole('radio', {name: 'Email'});
+      const sms = screen.getByRole('radio', {name: 'SMS'});
+      email.focus();
+      fireEvent.keyDown(email, {key: 'Tab'});
+      expect(sms.tabIndex).toBe(-1);
+      screen.getByRole('button', {name: 'Next'}).focus();
+      expect(sms).not.toHaveAttribute('tabindex');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("restores a nested group's radios after a Tab press in it", () => {
     vi.useFakeTimers();
     try {

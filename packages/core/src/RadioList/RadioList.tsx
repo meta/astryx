@@ -368,6 +368,16 @@ export function RadioList({
     [value],
   );
 
+  // Puts back the tab indexes that the last Tab press took away. It runs
+  // after that press, and also before the next press and when focus leaves
+  // the group, so a second press never saves the temporary values.
+  const pendingTabRestoreRef = useRef<(() => void) | null>(null);
+  const restoreTabIndexes = useCallback(() => {
+    const restore = pendingTabRestoreRef.current;
+    pendingTabRestoreRef.current = null;
+    restore?.();
+  }, []);
+
   // A radio group is one Tab stop. Chromium moves Tab from a radio that
   // script focused to the group's checked radio when that radio comes next in
   // order. For this one key press the other radios leave the Tab order, so Tab
@@ -377,6 +387,7 @@ export function RadioList({
       if (e.key !== 'Tab' || e.ctrlKey || e.metaKey) {
         return;
       }
+      restoreTabIndexes();
       const group = groupRef.current;
       const from = e.target;
       // A RadioList inside another one's option bubbles its key presses to the
@@ -403,7 +414,7 @@ export function RadioList({
       for (const radio of others) {
         radio.tabIndex = -1;
       }
-      setTimeout(() => {
+      pendingTabRestoreRef.current = () => {
         for (const [radio, tabIndex] of savedTabIndexes) {
           if (tabIndex == null) {
             radio.removeAttribute('tabindex');
@@ -411,9 +422,10 @@ export function RadioList({
             radio.setAttribute('tabindex', tabIndex);
           }
         }
-      }, 0);
+      };
+      setTimeout(restoreTabIndexes, 0);
     },
-    [name],
+    [name, restoreTabIndexes],
   );
 
   return (
@@ -464,6 +476,7 @@ export function RadioList({
         aria-labelledby={joinAriaIDs(labelID, ariaLabelledByProp)}
         onFocus={composeEventHandlers(handleFocus, onFocus)}
         onKeyDown={composeEventHandlers(handleKeyDown, rest.onKeyDown)}
+        onBlur={composeEventHandlers(restoreTabIndexes, rest.onBlur)}
         aria-describedby={
           [
             ariaDescribedByProp,
