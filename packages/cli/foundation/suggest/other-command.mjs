@@ -477,7 +477,7 @@ export async function findOtherCommand(
       if (match.tier === MATCH_TIER.exact) break;
     }
   }
-  if (!best && coreDir && !isPath && NEAR_HOOK_FROM.has(from)) {
+  if (!best && coreDir && !isPath && from != null && NEAR_HOOK_FROM.has(from)) {
     try {
       const {discoverHookKeywords} =
         await import('../discovery/hook-discovery.mjs');
