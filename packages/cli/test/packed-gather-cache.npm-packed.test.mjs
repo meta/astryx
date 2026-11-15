@@ -135,7 +135,7 @@ const settle = () => {
 };
 
 describe("npm's list, kept for a package's check of itself", () => {
-  it('is read back after an edit inside a file, and asked again after each change that can change it', () => {
+  it('is read back after an edit inside a file, in place or by rename, and asked again after each change that can change it', () => {
     fs.writeFileSync(userNpmrc(), '');
     const dir = makePackage();
     const tmp = keptTmp('npm-packed');
@@ -160,6 +160,16 @@ describe("npm's list, kept for a package's check of itself", () => {
     readBack(first);
     // An edit inside a file, in place, keeps the list.
     fs.appendFileSync(path.join(dir, 'templates', 'card.tsx'), '// edited\n');
+    settle();
+    expect(same()).toBe(first);
+    // So does a save that renames a new copy over the file, as many editors
+    // save.
+    const card = path.join(dir, 'templates', 'card.tsx');
+    fs.writeFileSync(
+      `${card}.tmp`,
+      `${fs.readFileSync(card, 'utf8')}// saved\n`,
+    );
+    fs.renameSync(`${card}.tmp`, card);
     settle();
     expect(same()).toBe(first);
 

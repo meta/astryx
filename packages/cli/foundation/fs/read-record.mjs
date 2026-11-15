@@ -20,6 +20,7 @@
  */
 
 import {AsyncLocalStorage} from 'node:async_hooks';
+import {createHash} from 'node:crypto';
 import {createRequire, syncBuiltinESMExports} from 'node:module';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -184,6 +185,50 @@ const statSyncRaw = fs.statSync;
 
 /** fs.realpathSync as loaded, before installRecorder wraps it. */
 const realpathSyncRaw = fs.realpathSync;
+
+/** fs.readdirSync as loaded, before installRecorder wraps it. */
+const readdirSyncRaw = fs.readdirSync;
+
+/** How a folder's listing stamp ({@link listingStamp}) begins. */
+export const LISTED = 'list:';
+
+/**
+ * A folder's entries as a stamp: their names and types. A save that renames
+ * a new copy over an entry keeps it; an entry added, removed or renamed, or a
+ * changed type, changes it. The folder's own times are left out, as a save
+ * by rename changes them on every save.
+ * @param {import('node:fs').Dirent[]} dirents the folder's entries
+ * @returns {string}
+ */
+export function listingOf(dirents) {
+  const entries = dirents
+    .map(entry => {
+      const type = entry.isDirectory()
+        ? 'd'
+        : entry.isFile()
+          ? 'f'
+          : entry.isSymbolicLink()
+            ? 'l'
+            : 'o';
+      return `${type}${entry.name}`;
+    })
+    .sort();
+  return `${LISTED}${createHash('sha256').update(entries.join('\0')).digest('hex')}`;
+}
+
+/**
+ * The listing stamp of the folder at `dir` now ({@link listingOf}), absent
+ * when nothing is there, or one fixed stamp while it cannot be read.
+ * @param {string} dir
+ * @returns {string}
+ */
+export function listingStamp(dir) {
+  try {
+    return listingOf(readdirSyncRaw(dir, {withFileTypes: true}));
+  } catch {
+    return fileStamp(dir) === '-' ? '-' : `${LISTED}unreadable`;
+  }
+}
 
 /**
  * Wrap fs's read calls once so that, inside `reads.run`, each path they are

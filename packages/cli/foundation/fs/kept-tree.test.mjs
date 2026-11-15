@@ -143,12 +143,21 @@ describe('keptTreeSummary', () => {
       expect(summary()).toEqual(['Alpha', 'one.doc.mjs', 'two.txt']);
       expect(made).toBe(3);
 
-      // A file the summary did not read can change without a new summary.
+      // A file the summary did not read can change without a new summary,
+      // in place or by a save that renames a new copy over it.
       fs.writeFileSync(path.join(root, 'a', 'b', 'two.txt'), 'Gamma');
       summary();
       expect(made).toBe(3);
+      fs.writeFileSync(path.join(root, 'a', 'b', 'two.txt.tmp'), 'Epsilon');
+      fs.renameSync(
+        path.join(root, 'a', 'b', 'two.txt.tmp'),
+        path.join(root, 'a', 'b', 'two.txt'),
+      );
+      summary();
+      expect(made).toBe(3);
 
-      // A new file in a nested folder is seen.
+      // A new file in a nested folder is seen. A folder's listing holds no
+      // time, so the new summary is kept at once.
       fs.writeFileSync(path.join(root, 'a', 'b', 'three.txt'), '');
       expect(summary()).toEqual([
         'Alpha',
@@ -157,31 +166,27 @@ describe('keptTreeSummary', () => {
         'two.txt',
       ]);
       expect(made).toBe(4);
-
-      await sleep(SETTLE_WAIT_MS);
       summary();
-      expect(made).toBe(5);
-      summary();
-      expect(made).toBe(5);
+      expect(made).toBe(4);
 
-      // So is an edit to a file the summary read.
+      // So is an edit to a file the summary read, kept once it settles.
       fs.writeFileSync(path.join(root, 'a', 'one.doc.mjs'), 'Delta');
       expect(summary()).toContain('Delta');
-      expect(made).toBe(6);
+      expect(made).toBe(5);
 
       await sleep(SETTLE_WAIT_MS);
       summary();
-      expect(made).toBe(7);
+      expect(made).toBe(6);
       summary();
-      expect(made).toBe(7);
+      expect(made).toBe(6);
 
       // And a removed file, nested or read.
       fs.rmSync(path.join(root, 'a', 'b', 'three.txt'));
       expect(summary()).toEqual(['Delta', 'one.doc.mjs', 'two.txt']);
-      expect(made).toBe(8);
+      expect(made).toBe(7);
       fs.rmSync(path.join(root, 'a', 'one.doc.mjs'));
       expect(summary()).toEqual(['two.txt']);
-      expect(made).toBe(9);
+      expect(made).toBe(8);
     },
     SLOW,
   );
@@ -232,10 +237,17 @@ describe('keptTreeSummary', () => {
       expectWarmHit(['Alpha.doc.mjs', 'Beta.doc.mjs']);
       expectWarmHit(['Alpha.doc.mjs', 'Beta.doc.mjs']);
 
+      // A new name walks again, and the new listing is kept at once.
       fs.writeFileSync(path.join(root, 'inner', 'Gamma.doc.mjs'), '');
       expectWalk(['Alpha.doc.mjs', 'Beta.doc.mjs', 'Gamma.doc.mjs']);
-      await sleep(SETTLE_WAIT_MS);
-      expectWalk(['Alpha.doc.mjs', 'Beta.doc.mjs', 'Gamma.doc.mjs']);
+      expectWarmHit(['Alpha.doc.mjs', 'Beta.doc.mjs', 'Gamma.doc.mjs']);
+
+      // A save that renames a new copy over a file keeps every name.
+      fs.writeFileSync(path.join(root, 'inner', 'Beta.doc.mjs.tmp'), 'x');
+      fs.renameSync(
+        path.join(root, 'inner', 'Beta.doc.mjs.tmp'),
+        path.join(root, 'inner', 'Beta.doc.mjs'),
+      );
       expectWarmHit(['Alpha.doc.mjs', 'Beta.doc.mjs', 'Gamma.doc.mjs']);
 
       fs.renameSync(
@@ -243,15 +255,19 @@ describe('keptTreeSummary', () => {
         path.join(root, 'inner', 'Delta.doc.mjs'),
       );
       expectWalk(['Alpha.doc.mjs', 'Delta.doc.mjs', 'Gamma.doc.mjs']);
-      await sleep(SETTLE_WAIT_MS);
-      expectWalk(['Alpha.doc.mjs', 'Delta.doc.mjs', 'Gamma.doc.mjs']);
       expectWarmHit(['Alpha.doc.mjs', 'Delta.doc.mjs', 'Gamma.doc.mjs']);
 
       fs.unlinkSync(path.join(root, 'Alpha.doc.mjs'));
       expectWalk(['Delta.doc.mjs', 'Gamma.doc.mjs']);
-      await sleep(SETTLE_WAIT_MS);
-      expectWalk(['Delta.doc.mjs', 'Gamma.doc.mjs']);
       expectWarmHit(['Delta.doc.mjs', 'Gamma.doc.mjs']);
+
+      // A name whose type changes walks again.
+      fs.unlinkSync(path.join(root, 'inner', 'Gamma.doc.mjs'));
+      fs.mkdirSync(path.join(root, 'inner', 'Gamma.doc.mjs'));
+      const before = made;
+      const {value} = names();
+      expect(value).toEqual(['Delta.doc.mjs']);
+      expect(made).toBe(before + 1);
     },
     SLOW,
   );

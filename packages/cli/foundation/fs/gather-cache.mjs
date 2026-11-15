@@ -77,10 +77,12 @@ import {hostedRun} from '../runtime/package-root.mjs';
 import {cliDoor} from '../env/cli-command.mjs';
 import {CACHE_LIMIT_BYTES, evictOldest} from './cache-eviction.mjs';
 import {
+  LISTED,
   PRESENT,
   lookedUp,
   fileStamp,
   keepState,
+  listingStamp,
   recordReads,
   recordStates,
   stillInState,
@@ -1092,7 +1094,8 @@ const SUMMARY_SETTLE_MS = 2000;
 function settled(stamps) {
   const limit = Date.now() - SUMMARY_SETTLE_MS;
   return stamps.every(([, stamp]) => {
-    if (stamp === '-') return true;
+    // A folder's listing holds no time.
+    if (stamp === '-' || stamp.startsWith(LISTED)) return true;
     const [, mtime, ctime] = stamp.split(':').map(Number);
     return mtime < limit && ctime < limit;
   });
@@ -1101,7 +1104,8 @@ function settled(stamps) {
 /**
  * A summary of files and folders, made at once, kept as an entry beside the
  * gathers, in or out of a recorded run: the stored value while every path
- * `make` stamped has the stamp it was stored with (the CLI's own files are
+ * `make` stamped has the stamp it was stored with, a folder's listing
+ * (read-record.mjs listingStamp) by its entries' names and types (the CLI's own files are
  * covered by the build id instead: inCliBuild), else the one
  * `make` gives now, which is stored unless a stamp is younger than
  * {@link SUMMARY_SETTLE_MS}. The folder, the build id, the Yarn Plug'n'Play
@@ -1194,7 +1198,9 @@ function storedSummary({file, entry}) {
       Array.isArray(stored.stamps) &&
       stored.stamps.every(
         (/** @type {[string, string]} */ [at, stamp]) =>
-          typeof at === 'string' && fileStamp(at) === stamp,
+          typeof at === 'string' &&
+          (stamp.startsWith(LISTED) ? listingStamp(at) : fileStamp(at)) ===
+            stamp,
       )
     ) {
       try {

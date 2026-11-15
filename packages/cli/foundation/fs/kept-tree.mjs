@@ -20,7 +20,14 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {persistedSummary, persistedSummaryAsync} from './gather-cache.mjs';
-import {PRESENT, RESOLVED, fileStamp, recordReads} from './read-record.mjs';
+import {
+  PRESENT,
+  RESOLVED,
+  fileStamp,
+  listingOf,
+  listingStamp,
+  recordReads,
+} from './read-record.mjs';
 
 /** The module's own file: its code decides every summary's shape. */
 const OWN_FILE = fileURLToPath(import.meta.url);
@@ -34,9 +41,10 @@ const OWN_FILE = fileURLToPath(import.meta.url);
 
 /**
  * The tree under `root`, folder by folder, outside any folder `skip` names.
- * Each folder's stamp goes into `stamps` before the folder is read, so a
- * change during the read shows as a change. A folder that cannot be read has
- * no entries.
+ * Each folder's stamp is its listing (read-record.mjs listingOf): its
+ * entries' names and types, as the walk read them, so a save that renames a
+ * new copy over a file keeps it, and an entry added, removed or renamed
+ * changes it. A folder that cannot be read has no entries.
  * @param {string} root
  * @param {(name: string) => boolean} skip
  * @param {Array<[string, string]>} stamps
@@ -48,13 +56,14 @@ function walkTree(root, skip, stamps) {
   /** @param {string} rel */
   const visit = rel => {
     const full = rel === '' ? root : path.join(root, rel);
-    stamps.push([rel, fileStamp(full)]);
     /** @type {fs.Dirent[]} */
     let dirents;
     try {
       dirents = fs.readdirSync(full, {withFileTypes: true});
+      stamps.push([rel, listingOf(dirents)]);
     } catch {
       dirents = [];
+      stamps.push([rel, listingStamp(full)]);
     }
     const entries = dirents.map(entry => ({
       name: entry.name,
