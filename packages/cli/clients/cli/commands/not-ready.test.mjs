@@ -36,7 +36,7 @@ const SLOW = 120_000;
  */
 const TEMPLATE_RESULTS = {
   search: ['search', 'quokka roster'],
-  'build.kit': ['build', 'a quokka roster page'],
+  'build.kit': ['build', 'a quokka roster page with a quokka table'],
   'template.list': ['template', '--list'],
   'template.show': ['template', 'quokka-unready', '--type', 'page'],
   'template.skeleton': [
@@ -54,7 +54,9 @@ const TEMPLATE_RESULTS = {
 const TEXT_MARKS = {
   search:
     'name:        quokka-unready\ndomain:      template\npackage:     @acme/pages\ndisplayName: Quokka Roster\nkind:        page (not ready)\n',
-  'build.kit': 'quokka-unready (not ready) (@acme/pages)',
+  // Build starts only from a ready page and lists only pages it could start
+  // from, so its kit names the unready block alone.
+  'build.kit': 'QuokkaTable (not ready)',
   'template.list': 'name:        Quokka Roster (not ready)\n',
   'template.show': 'template: quokka-unready (not ready)\n',
   'template.skeleton': '\n# quokka-unready (not ready) ',

@@ -305,7 +305,7 @@ export const doc = {
     {
       value: 'build.kit',
       description:
-        "The template to start from and its kit: query, hasResults, matchCount (never a cap), directMatch, start {name, package, command, basis, reason, alternatives, ..., isReady} (the start and each alternative name the package that owns the template, and carry isReady), pages (search's closest templates), blocks and domain as SearchResultEntry[] (each naming its package; each template with isReady), frame and foundation (Core component names), and hint {reason, commands} when thin.",
+        "The template to start from and its kit: query, hasResults, matchCount (never a cap), directMatch, start {name, package, command, basis, reason, alternatives, ..., isReady} (the start and each alternative name the package that owns the template, and carry isReady), pages (search's closest templates that build could start from), blocks and domain as SearchResultEntry[] (each naming its package; each template with isReady), frame and foundation (Core component names), and hint {reason, commands} when thin.",
     },
 
     // swizzle
