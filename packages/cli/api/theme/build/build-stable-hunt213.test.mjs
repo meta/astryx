@@ -254,6 +254,21 @@ describe('N16: a theme module that prints', () => {
   });
 });
 
+describe('N17: a timer a theme module waits on while it loads', () => {
+  it('keeps its promise form: promisify(setTimeout) resolves, and the build reads the theme', async () => {
+    write(
+      'p/p.mjs',
+      `import {promisify} from 'node:util';\nawait promisify(setTimeout)(5);\nawait new Promise(resolve => setTimeout(resolve, 5));\n${THEME}`,
+    );
+    const {err} = await captured(() => themeBuild('p/p.mjs', {}, {cwd: dir}));
+    expect(err).toBeUndefined();
+    expect(read('p/p.css')).toContain('#123456');
+    // Outside a theme load the timers are Node's own, promise form included.
+    const {promisify} = await import('node:util');
+    await expect(promisify(setTimeout)(1, 'v')).resolves.toBe('v');
+  });
+});
+
 describe('N17: a theme module that leaves a timer running', () => {
   it('never keeps build or --check from exiting', () => {
     write('p/p.ts', `setInterval(() => {}, 1000);\n${THEME}`);

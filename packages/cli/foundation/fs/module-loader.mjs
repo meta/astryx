@@ -28,6 +28,7 @@ import * as path from 'node:path';
 import {AsyncLocalStorage} from 'node:async_hooks';
 import nodeModule, {createRequire} from 'node:module';
 import {pathToFileURL} from 'node:url';
+import {promisify} from 'node:util';
 import * as fs from 'node:fs';
 import {findPresentFiles} from './present-files.mjs';
 import {importUrl} from './import-url.mjs';
@@ -277,22 +278,25 @@ export class ThemeModuleExitError extends Error {
 function wrapTimers() {
   if (timersWrapped) return;
   timersWrapped = true;
-  for (const name of /** @type {const} */ ([
-    'setTimeout',
-    'setInterval',
-    'setImmediate',
-  ])) {
-    const real = /** @type {any} */ (globalThis[name]);
-    /** @type {any} */ (globalThis)[name] = function (
-      /** @type {any[]} */ ...args
-    ) {
-      const handle = real.apply(globalThis, args);
-      const load = guardedLoad.getStore();
-      if (load?.done) handle?.unref?.();
-      else if (load) load.timers.push(handle);
-      return handle;
-    };
-  }
+  /** @param {Function} real */
+  const letGo = real => {
+    const wrapped = /** @type {any} */ (
+      function (/** @type {any[]} */ ...args) {
+        const handle = real.apply(globalThis, args);
+        const load = guardedLoad.getStore();
+        if (load?.done) handle?.unref?.();
+        else if (load) load.timers.push(handle);
+        return handle;
+      }
+    );
+    // `promisify(setTimeout)` still gives the promise form it gives Node's.
+    const custom = /** @type {any} */ (real)[promisify.custom];
+    if (custom) wrapped[promisify.custom] = custom;
+    return wrapped;
+  };
+  globalThis.setTimeout = letGo(globalThis.setTimeout);
+  globalThis.setInterval = letGo(globalThis.setInterval);
+  globalThis.setImmediate = letGo(globalThis.setImmediate);
 }
 
 /**
