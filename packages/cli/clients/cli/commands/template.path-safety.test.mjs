@@ -377,15 +377,38 @@ describe('template path safety', () => {
     async () => {
       const cwd = path.join(tmpDir, 'project');
       fs.mkdirSync(cwd, {recursive: true});
+      // A folder in /tmp that is not there: where /tmp holds the home folder
+      // the template refuses it before it writes anything.
+      const unmade = path.join(
+        '/tmp',
+        `astryx-scratch-${path.basename(tmpDir)}`,
+        'dash',
+      );
+      if (tempFolderOf(unmade) === null) {
+        await expect(
+          templateApi('blank', {targetPath: unmade, cwd}),
+        ).rejects.toMatchObject({code: 'ERR_PATH_TRAVERSAL'});
+        expect(fs.existsSync(path.dirname(unmade))).toBe(false);
+        return;
+      }
+      let tmpWritable = true;
+      try {
+        fs.accessSync('/tmp', fs.constants.W_OK);
+      } catch {
+        tmpWritable = false;
+      }
+      if (!tmpWritable) {
+        // This process may not write to /tmp (a container that sets TMPDIR
+        // elsewhere): the template still takes the path as a scratch copy,
+        // and only the write fails.
+        await expect(
+          templateApi('blank', {targetPath: unmade, cwd}),
+        ).rejects.toMatchObject({code: 'ERR_WRITE_FAILED'});
+        return;
+      }
       const scratch = fs.mkdtempSync('/tmp/astryx-scratch-');
       try {
         const target = path.join(scratch, 'dash');
-        if (tempFolderOf(target) === null) {
-          await expect(
-            templateApi('blank', {targetPath: target, cwd}),
-          ).rejects.toMatchObject({code: 'ERR_PATH_TRAVERSAL'});
-          return;
-        }
         const written = await templateApi('blank', {targetPath: target, cwd});
         expect(written.data.outputDir).toBe(target);
       } finally {
