@@ -52,6 +52,9 @@ async function runSignal({
   commenter = 'engineer',
   engOwners = '@engineer',
   commentBody = `/approve-spec ${HEAD}`,
+  files = [{filename: 'README.md', status: 'modified'}],
+  // The pull request's timeline, oldest first; an Error makes the read fail.
+  timeline = [],
   author = {login: 'contributor', type: 'User'},
   // The spec-owner job's decision for a PR that changes no spec record.
   specStatuses = [
@@ -113,9 +116,7 @@ async function runSignal({
         get: vi.fn(async () => ({data: pr})),
         // Like GitHub's list endpoint, the listed PR omits changed_files.
         list: vi.fn(async () => ({data: [{...pr, changed_files: undefined}]})),
-        listFiles: vi.fn(async () => ({
-          data: [{filename: 'README.md', status: 'modified'}],
-        })),
+        listFiles: vi.fn(async () => ({data: files})),
         listReviews: async () => ({data: reviews}),
         requestReviewers: mutations.requestReviewers,
       },
@@ -134,6 +135,10 @@ async function runSignal({
       issues: {
         addLabels: mutations.addLabels,
         removeLabel: mutations.removeLabel,
+        listEventsForTimeline: vi.fn(async () => {
+          if (timeline instanceof Error) throw timeline;
+          return {data: timeline};
+        }),
       },
       rateLimit: {
         get: vi.fn(async () => ({
@@ -786,5 +791,68 @@ describe("a fork's held review run blocks nothing the owner command and a dispat
       'Only the review-clear reconcile waits on the held review run',
     );
     expect(gate).toContain('run the "Review signal" workflow by hand');
+  });
+});
+
+describe('the advisory design label at a head an owner already cleared', () => {
+  const THEME = [
+    {filename: 'packages/themes/acme/src/tokens.ts', status: 'modified'},
+  ];
+  const push = sha => ({event: 'committed', sha});
+  const removed = login => ({
+    event: 'unlabeled',
+    actor: {login},
+    label: {name: 'needs:design-review'},
+  });
+  const designAdded = mutations =>
+    mutations.addLabels.mock.calls.some(([input]) =>
+      input.labels.includes('needs:design-review'),
+    );
+
+  it('adds the label to a design-affecting change as before', async () => {
+    const {mutations} = await runSignal({files: THEME});
+    expect(designAdded(mutations)).toBe(true);
+  });
+
+  it('does not add it back when a design owner removed it at this head, and says so', async () => {
+    const {mutations, core} = await runSignal({
+      files: THEME,
+      timeline: [push('0'.repeat(40)), push(HEAD), removed('designer')],
+    });
+    expect(designAdded(mutations)).toBe(false);
+    expect(core.info).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'needs:design-review not added back: @designer removed it at this head',
+      ),
+    );
+  });
+
+  it('adds it again after a push that follows the removal', async () => {
+    const {mutations} = await runSignal({
+      files: THEME,
+      timeline: [push('0'.repeat(40)), removed('designer'), push(HEAD)],
+    });
+    expect(designAdded(mutations)).toBe(true);
+  });
+
+  it('adds it when someone who is not an owner removed it', async () => {
+    const {mutations} = await runSignal({
+      files: THEME,
+      timeline: [push(HEAD), removed('contributor')],
+    });
+    expect(designAdded(mutations)).toBe(true);
+  });
+
+  it('adds it, with a warning, when the timeline cannot be read', async () => {
+    const {mutations, core} = await runSignal({
+      files: THEME,
+      timeline: new Error('HTTP 502'),
+    });
+    expect(designAdded(mutations)).toBe(true);
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Could not read the timeline; needs:design-review is added: HTTP 502',
+      ),
+    );
   });
 });

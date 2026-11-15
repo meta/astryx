@@ -121,6 +121,46 @@ function resolveReviewApprovals({
   };
 }
 
+/**
+ * Whether an owner removed an advisory label at the current head: the newest
+ * event in the pull request's timeline that changes the head (a push or a
+ * force push) comes before the newest removal of `label` by an engineering or
+ * design owner, and that push is the current head. The timeline lists events
+ * in the order they happened, a push at the time it was pushed. Then the
+ * owner has seen this head, and the label is not added back to it.
+ * @param {object} options
+ * @param {Array<{event?: string, actor?: {login?: string}, label?: {name?: string}, sha?: string, commit_id?: string}>} options.events
+ *   the timeline, oldest first
+ * @param {string} options.label
+ * @param {string} options.headSha
+ * @param {string[]} options.owners lowercase logins
+ * @returns {{removedAtHead: boolean, by: string | null}}
+ */
+function ownerRemovedLabelAtHead({events, label, headSha, owners}) {
+  let lastPush = -1;
+  let pushedSha = null;
+  let removal = -1;
+  let by = null;
+  events.forEach((event, index) => {
+    if (event.event === 'committed') {
+      lastPush = index;
+      pushedSha = event.sha ?? null;
+    } else if (event.event === 'head_ref_force_pushed') {
+      lastPush = index;
+      pushedSha = event.commit_id ?? null;
+    } else if (event.event === 'unlabeled' && event.label?.name === label) {
+      const login = event.actor?.login?.toLowerCase();
+      if (login && owners.includes(login)) {
+        removal = index;
+        by = login;
+      }
+    }
+  });
+  const removedAtHead =
+    removal > lastPush && lastPush >= 0 && pushedSha === headSha;
+  return {removedAtHead, by: removedAtHead ? by : null};
+}
+
 // A pull request the review app opens is the app's own work, which it cannot
 // approve: its code review is a trainer pass, an engineering owner's approval
 // of its exact head. Other bots stay exempt.
@@ -369,6 +409,7 @@ module.exports = {
   isSafeSpace,
   needsTrainerPass,
   normalizeReviewApp,
+  ownerRemovedLabelAtHead,
   resolveReviewApprovals,
   trainerPassed,
 };

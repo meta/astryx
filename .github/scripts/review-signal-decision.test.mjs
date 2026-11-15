@@ -16,6 +16,7 @@ const {
   resolveReviewApprovals,
   TRAINER_WAITING_TEXT,
   needsTrainerPass,
+  ownerRemovedLabelAtHead,
   trainerPassed,
   OWNER_CLEARED_TEXT,
 } = require('./review-signal-decision.cjs');
@@ -458,5 +459,56 @@ describe("a trainer pass for the review app's own pull requests", () => {
       true,
     );
     expect(TRAINER_WAITING_TEXT.length).toBeLessThanOrEqual(140);
+  });
+});
+
+describe('ownerRemovedLabelAtHead', () => {
+  const LABEL = 'needs:design-review';
+  const owners = ['engineer', 'designer'];
+  const push = sha => ({event: 'committed', sha});
+  const forced = sha => ({event: 'head_ref_force_pushed', commit_id: sha});
+  const removed = (login, name = LABEL) => ({
+    event: 'unlabeled',
+    actor: {login},
+    label: {name},
+  });
+  const decide = events =>
+    ownerRemovedLabelAtHead({events, label: LABEL, headSha: head2, owners});
+
+  it('sees an owner removal at the current head', () => {
+    expect(decide([push(head1), push(head2), removed('designer')])).toEqual({
+      removedAtHead: true,
+      by: 'designer',
+    });
+    // An engineering owner counts too, and logins compare case-insensitively.
+    expect(decide([push(head2), removed('Engineer')]).removedAtHead).toBe(true);
+  });
+
+  it('does not carry a removal past a later push or force push', () => {
+    expect(decide([push(head1), removed('designer'), push(head2)])).toEqual({
+      removedAtHead: false,
+      by: null,
+    });
+    expect(
+      decide([push(head2), removed('designer'), forced(head2)]).removedAtHead,
+    ).toBe(false);
+  });
+
+  it('does not count a removal by someone who is not an owner', () => {
+    expect(decide([push(head2), removed('contributor')]).removedAtHead).toBe(
+      false,
+    );
+  });
+
+  it('counts only the label itself, and only when the last push is this head', () => {
+    expect(
+      decide([push(head2), removed('designer', 'needs:code-review')])
+        .removedAtHead,
+    ).toBe(false);
+    // A timeline whose last push is another commit proves nothing about this head.
+    expect(decide([push(head1), removed('designer')]).removedAtHead).toBe(
+      false,
+    );
+    expect(decide([removed('designer')]).removedAtHead).toBe(false);
   });
 });
