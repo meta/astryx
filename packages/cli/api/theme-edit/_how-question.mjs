@@ -1286,6 +1286,22 @@ function exampleOf(prop) {
 }
 
 /**
+ * A bound on a color the words give ("but not darker than #1e3a8a", "never
+ * lighter than white"), or null: the way it holds (darker: the color may be
+ * no darker than the bound) and the bound as written.
+ * @param {string} t
+ * @returns {{darker: boolean, color: string, said: string} | null}
+ */
+function colorBoundOf(t) {
+  const m =
+    /\b(?:no|not|never)\s+(darker|lighter)\s+than\s+(#[0-9a-f]{3,8}\b|(?:rgba?|hsla?|oklch|oklab)\([^)]*\)|[a-z]+)/i.exec(
+      t,
+    );
+  if (!m || !parseColor(m[2])) return null;
+  return {darker: m[1].toLowerCase() === 'darker', color: m[2], said: m[0]};
+}
+
+/**
  * A bound on a length the words give, or null: the way it holds (up: at
  * least or past it), whether the bound itself is outside it (strict), the
  * limit in px, and the words as written. One reader for "bigger than 4px",
@@ -1308,7 +1324,7 @@ function boundOf(t) {
     unit: /** @type {'px' | 'em' | ''} */ (u === 'em' ? 'em' : u ? 'px' : ''),
   });
   const cmp = new RegExp(
-    `\\b(?:(no|not)\\s+)?(bigger|larger|more|wider|roomier|rounder|thicker|taller|heavier|bolder|looser|smaller|less|tighter|narrower|sharper|thinner|shorter|lighter)\\s+than\\s+(-?\\d*\\.?\\d+)${unit}(?![\\w%])`,
+    `\\b(?:(no|not|never)\\s+)?(bigger|larger|more|wider|roomier|rounder|thicker|taller|heavier|bolder|looser|smaller|less|tighter|narrower|sharper|thinner|shorter|lighter)\\s+than\\s+(-?\\d*\\.?\\d+)${unit}(?![\\w%])`,
     'i',
   ).exec(t);
   if (cmp) {
@@ -2445,13 +2461,29 @@ function clausesOf(q, partWords) {
         colorRef = ref.on;
         parts.splice(parts.indexOf(ref), 1);
       }
-      // "input borders 3:1 against the page": the part measured against.
+    }
+    // "input borders 3:1 against the page", "the text 4.5:1 against the
+    // page": the part after "against" is what is measured against, read
+    // and never changed, whether or not a part is named before it (the text
+    // of the theme is the subject then).
+    if (parts.length) {
+      /** Where the clause names a part, by any of its words. @param {{on: string}} p */
+      const firstAt = p =>
+        partWords
+          .filter(([, x]) => x.on === p.on)
+          .map(([re]) => new RegExp(re.source, 'g').exec(text))
+          .filter(m => m != null)
+          .map(m => m.index)
+          .sort((x, y) => x - y)[0] ?? null;
       const ground = parts.find(p => {
-        const where = at(p);
+        const at = firstAt(p);
         return (
-          where != null &&
-          where.index > first &&
-          /\bagainst\s+(?:the\s+|my\s+)?$/.test(text.slice(0, where.index))
+          at != null &&
+          at > 0 &&
+          /\S/.test(
+            text.slice(0, at).replace(/\bagainst\s+(?:the\s+|my\s+)?$/, ''),
+          ) &&
+          /\bagainst\s+(?:the\s+|my\s+)?$/.test(text.slice(0, at))
         );
       });
       if (ground) {
@@ -2964,6 +2996,21 @@ export function draftAnswer(ctx, env, question) {
       /\b(?:in the day|during the day|day ?(?:mode|theme)|day ?time)\b/gi,
       'in light mode',
     );
+  // "darker but not darker than #1e3a8a": a color bound is a limit every
+  // color the answer writes is held to (after the answers are made), never
+  // the color asked for nor a clause of its own, so it is read out of the
+  // words here.
+  const colorBound = colorBoundOf(question);
+  if (colorBound)
+    question = question
+      .replace(
+        new RegExp(
+          `\\s*,?\\s*(?:\\bbut\\s+)?${colorBound.said.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
+          'i',
+        ),
+        ' ',
+      )
+      .trim();
   // The one keep reader: every way of keeping something as it is, in any
   // position ("…, but keep cards as they are", "keep the dialogs as they
   // are and …", "…, not the primary ones"), joins the ask's one except list.
@@ -3521,7 +3568,7 @@ export function draftAnswer(ctx, env, question) {
   // else is a way of the color before it, one segment.)
   const segments = question
     .split(
-      /\s*(?:,(?![^(]*\))(?!\s*but\s+(?:(?:a )?(?:bit|little|touch|lot)\s+|slightly\s+|much\s+|\d{1,2}\s?%\s+)?(?:lighter|darker|brighter|paler|deeper|warmer|cooler)\s*(?:$|[;.!?]))|[;\n|]|\s[/+]\s(?![^(]*\))|\.{2,}|[.?!](?=\s)|\bjust\b|\bthen\b|\s[-\u2013\u2014]\s|\bstep \d+\b|\bbut\b(?= (?:make|set|change|use|give|turn|remove|add)\b)|\b(?:but|and)\b(?=\s+(?:don'?t|do not|never|leave|keep)\b)|(?<=\S)(?<!\b(?:don'?t|never|do not|not|to|please|and|you|we|i|let'?s|can|could|would|will))\s+(?=(?:make|set|change|give|turn) (?:it|them|the|my|this|that|those|these)\b)|(?<=\S)\s+(?=(?:do|does|will) \w+ (?:follow|match)\b))\s*/i,
+      /\s*(?:,(?![^(]*\))(?!\s*but\s+(?:(?:a )?(?:bit|little|touch|lot)\s+|slightly\s+|much\s+|\d{1,2}\s?%\s+)?(?:lighter|darker|brighter|paler|deeper|warmer|cooler)\s*(?:$|[;.!?]))|[;\n|]|\s[/+]\s(?![^(]*\))|\.{2,}|[.?!](?=\s)|\bjust\b|\bthen\b|\s[-\u2013\u2014]\s|\bstep \d+\b|\bbut\b(?= (?:make|set|change|use|give|turn|remove|add)\b)|\b(?:but|and)\b(?=\s+(?:don'?t|do not|never(?! [a-z]+er than\b)|leave|keep)\b)|(?<=\S)(?<!\b(?:don'?t|never|do not|not|to|please|and|you|we|i|let'?s|can|could|would|will))\s+(?=(?:make|set|change|give|turn) (?:it|them|the|my|this|that|those|these)\b)|(?<=\S)\s+(?=(?:do|does|will) \w+ (?:follow|match)\b))\s*/i,
     )
     .map(x => x.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, ''))
     .filter(x => x.trim());
@@ -4246,7 +4293,7 @@ export function draftAnswer(ctx, env, question) {
     // "8px more but at most 20px": a bound after "but" limits the amount
     // before it, in the same clause.
     .replace(
-      /\s*,?\s*\bbut\s+(?=(?:at (?:most|least)|(?:no|not) (?:more|less|[a-z]+er) than|(?:a )?(?:max|min)(?:imum)? of)\b)/gi,
+      /\s*,?\s*\bbut\s+(?=(?:at (?:most|least)|(?:no|not|never) (?:more|less|[a-z]+er) than|(?:a )?(?:max|min)(?:imum)? of)\b)/gi,
       ' ',
     )
     // "the accent color but lighter": a way after "but" with nothing else
@@ -8358,7 +8405,7 @@ export function draftAnswer(ctx, env, question) {
     // before "the same as" is the color compared.)
     {
       const cmp =
-        /\b(?:(?:the )?same (?:colou?r )?as|match(?:es|ing)?|colou?red like)\s+(?:the\s+|my\s+)?/.exec(
+        /\b(?:(?:the )?same (?:colou?r )?as|(?:equal|identical) to|match(?:es|ing)?|colou?red like)\s+(?:the\s+|my\s+)?/.exec(
           c.text,
         );
       const ordered = cmp ? inOrder() : [];
@@ -8473,7 +8520,7 @@ export function draftAnswer(ctx, env, question) {
     // of that property now, written out; the other part is not changed.
     {
       const measure =
-        /\bas (round(?:ed)?|tall|high|bold|big|large) as\b|\bsame (corners?|radius|roundness|padding|height|font size|text size|weight) as\b|\b(?:match(?:es|ing)?|(?<!\b(?:i'?d|i|would|we'?d|you'?d)\s)like)\b[^.]*?\b(corners?|radius|padding|height)\b|\b(corners?|radius|padding|height)\b[^.]*?\b(?:bigger|larger|more|smaller|less|tighter|rounder|squarer) than\b|\b(rounder|squarer|sharper) than\b|\b(corners?|radius|padding|height)\b[^.]*?\b(?:the )?same as\b/.exec(
+        /\bas (round(?:ed)?|tall|high|bold|big|large) as\b|\bsame (corners?|radius|roundness|padding|height|font size|text size|weight) as\b|\b(?:match(?:es|ing)?|(?<!\b(?:i'?d|i|would|we'?d|you'?d)\s)like)\b[^.]*?\b(corners?|radius|padding|height)\b|\b(corners?|radius|padding|height)\b[^.]*?\b(?:bigger|larger|more|smaller|less|tighter|rounder|squarer) than\b|\b(rounder|squarer|sharper) than\b|\b(corners?|radius|padding|height)\b[^.]*?\b(?:(?:the )?same as|(?:equal|identical) to)\b/.exec(
           c.text,
         );
       const word = measure ? (measure.slice(1).find(Boolean) ?? '') : '';
@@ -9633,6 +9680,34 @@ export function draftAnswer(ctx, env, question) {
       .sort();
   }
 
+  /**
+   * The parts inside `part` that draw what `part` has none of its own
+   * for (a table's lines and padding are its cells'): the parts rendered
+   * inside it whose rest reads that group's color (or, for padding, that
+   * have one), each drawing it with the same token or value as the first;
+   * null when nothing inside it does.
+   * @param {string} part
+   * @param {'border' | 'padding'} group
+   * @returns {{parts: string[], token: string | null, value: string | null} | null}
+   */
+  function drawnInside(part, group) {
+    /** @type {Array<{part: string, key: string}>} */
+    const found = [];
+    for (const inner of C.MAP[one(part)]?.contains ?? []) {
+      const key =
+        group === 'padding'
+          ? partPropNow(inner, 'padding')
+          : restColorRead(C.partReads(inner, 'border'), undefined);
+      if (key) found.push({part: inner, key: String(key)});
+    }
+    if (!found.length) return null;
+    const same = found.filter(x => x.key === found[0].key);
+    return {
+      parts: same.map(x => x.part).sort(),
+      token: group === 'padding' ? null : same[0].key,
+      value: group === 'padding' ? same[0].key : null,
+    };
+  }
   /**
    * A part's value of a property now: its own setting, else the token its
    * plain rule reads for it, written out.
@@ -11807,7 +11882,12 @@ export function draftAnswer(ctx, env, question) {
           : undefined;
         if (on && partRatio && !outline) {
           const target = Number(partRatio);
-          const read = restColorRead(C.partReads(one(on), 'border'), f.when);
+          const ownRead = restColorRead(C.partReads(one(on), 'border'), f.when);
+          // A part whose lines its inner parts draw (a table's, on its
+          // cells): the token they read, set on this part, as a darker
+          // border on it is.
+          const inside = ownRead ? null : drawnInside(on, 'border');
+          const read = ownRead ?? inside?.token ?? null;
           if (!read)
             return {
               text: `${on} draws no border color of its own that how can read, so there is no border to hold at ${target}:1`,
@@ -11817,9 +11897,13 @@ export function draftAnswer(ctx, env, question) {
             part === 'page'
               ? '--color-background-body'
               : restColorRead(C.partReads(one(part), 'background'), undefined);
+          // (Lines its inner parts draw sit on the page and on their own
+          // fills.)
           const grounds = c.groundRef
             ? [fillOf(c.groundRef)]
-            : ['--color-background-body', fillOf(on)];
+            : inside
+              ? ['--color-background-body', ...inside.parts.map(fillOf)]
+              : ['--color-background-body', fillOf(on)];
           const groundTokens = /** @type {string[]} */ (
             grounds.filter(Boolean)
           );
@@ -11827,8 +11911,14 @@ export function draftAnswer(ctx, env, question) {
           const missed = [];
           const steps = perMode(
             read,
-            'border-color',
-            f,
+            inside ? read : 'border-color',
+            inside
+              ? {
+                  on,
+                  ...(f.state ? {state: f.state} : {}),
+                  ...(f.when ? {when: f.when} : {}),
+                }
+              : f,
             (now, m) => {
               const v = inkAtRatio(
                 now,
@@ -11847,7 +11937,7 @@ export function draftAnswer(ctx, env, question) {
             };
           return {
             text: steps.length
-              ? `the border${where}: ${read} moved the least that measures ${target}:1 against ${groundTokens.join(' and ')} (its own ink, stronger, or a deeper shade of it)${modesSaid(steps)}`
+              ? `the border${where}: ${read}${inside ? ` (the lines its ${inside.parts.join(' and ')} parts draw), on ${on} only,` : ''} moved the least that measures ${target}:1 against ${groundTokens.join(' and ')} (its own ink, stronger, or a deeper shade of it)${modesSaid(steps)}`
               : `the border${where} (${read}) is already the least change that measures ${target}:1 against ${groundTokens.join(' and ')}: nothing to change`,
             options: steps.length ? [steps] : [],
             sequence: steps.length > 1,
@@ -13470,6 +13560,87 @@ export function draftAnswer(ctx, env, question) {
             .length
             ? `--color-text-${roleWord}`
             : null;
+        // "the text 4.5:1 against the page", "links 4.5:1 contrast": the
+        // color the text reads (a link's accent text token, a part's own
+        // text color, else the theme's text color), moved the least that
+        // measures that ratio against what it sits on (the part named
+        // after "against", else the page and the part's own fill), in each
+        // mode; a text that measures it already is kept.
+        const textRatio = /\b(\d+(?:\.\d+)?)\s*:\s*1\b/.exec(c.text)?.[1];
+        if (textRatio && !colorsIn(c.text).length) {
+          const target = Number(textRatio);
+          const own = on
+            ? restColorRead(C.partReads(one(on), 'text'), f.when)
+            : null;
+          const read =
+            on === 'link'
+              ? '--color-text-accent'
+              : (own ??
+                roleTok ??
+                (/\bsecondary\b/.test(c.text)
+                  ? '--color-text-secondary'
+                  : '--color-text-primary'));
+          // A link's color is the accent text token it reads; a part's
+          // own text, its color on the part; the theme's text, its token.
+          const thing = on && on !== 'link' ? 'color' : read;
+          const flags = on && on !== 'link' ? f : {};
+          const fillOf = (/** @type {string} */ part) =>
+            part === 'page'
+              ? '--color-background-body'
+              : restColorRead(C.partReads(one(part), 'background'), undefined);
+          const groundTokens = /** @type {string[]} */ (
+            (c.groundRef
+              ? [fillOf(c.groundRef)]
+              : [
+                  '--color-background-body',
+                  ...(on && on !== 'link' ? [fillOf(on)] : []),
+                ]
+            ).filter(Boolean)
+          );
+          /** @type {string[]} */
+          const missed = [];
+          const steps = perMode(
+            read,
+            thing,
+            flags,
+            (now, m) => {
+              const grounds = groundTokens.map(g => String(current(g, m)));
+              const ink = parseColor(now);
+              const meets =
+                ink &&
+                grounds.every(g => {
+                  const under = parseColor(g);
+                  return (
+                    under &&
+                    ratio(
+                      /** @type {[number, number, number]} */ (
+                        compositeOver(ink, alphaOf(now), under)
+                      ),
+                      under,
+                    ) >= target
+                  );
+                });
+              if (meets) return null;
+              const v = inkAtRatio(now, grounds, target);
+              if (!v) missed.push(m);
+              return v;
+            },
+            c,
+          );
+          const against = groundTokens.join(' and ');
+          if (missed.length)
+            return {
+              text: `no text color made from the one the text${where} reads (${read}) measures ${target}:1 against ${against} in ${missed.join(' and ')} mode; name a color instead ("${on ?? 'text'} color #595959")`,
+              options: [],
+            };
+          return {
+            text: steps.length
+              ? `the text${where}: ${read} moved the least that measures ${target}:1 against ${against}${on === 'link' ? ' (the token a link reads; it also colors other accent text)' : ''}${modesSaid(steps)}`
+              : `the text${where} (${read}) already measures ${target}:1 against ${against}: nothing to change`,
+            options: steps.length ? [steps] : [],
+            sequence: steps.length > 1,
+          };
+        }
         const recolor =
           (/\b(dim|dimmer|soften|darken|lighten|brighten|tone down)\b/.test(
             c.text,
@@ -15404,6 +15575,79 @@ export function draftAnswer(ctx, env, question) {
           d.text = `${d.text} (${[...refs].join(', ')} is only what the ask compares against, so it is not changed)`;
       }
   }
+  // "darker but not darker than #1e3a8a": every color an answer writes is
+  // held at the bound in each mode it is for (by its brightness over the
+  // page), and the answer says so.
+  {
+    const cb = colorBound;
+    if (cb) {
+      const shown = env.data.mode === 'dark-only' ? 'dark' : 'light';
+      /** @param {string} v @param {'light' | 'dark'} m */
+      const bright = (v, m) => {
+        const rgb = parseColor(v);
+        if (!rgb) return null;
+        const page = parseColor(current('--color-background-body', m)) ?? [
+          255, 255, 255,
+        ];
+        const a = alphaOf(v);
+        const [r, g, b] = rgb.map((x, i) => x * a + page[i] * (1 - a));
+        return r * 0.299 + g * 0.587 + b * 0.114;
+      };
+      for (const d of result) {
+        /** @type {string[]} */
+        const held = [];
+        /** @type {Array<{m: string, was: string}>} */
+        const past = [];
+        for (const o of d.options)
+          for (const st of o) {
+            if (!/color|^--color-/.test(st.thing)) continue;
+            const m = /** @type {'light' | 'dark'} */ (st.mode ?? shown);
+            const v = String(st.value ?? '');
+            const vb = bright(v, m);
+            const bb = bright(cb.color, m);
+            if (vb == null || bb == null) continue;
+            if (cb.darker ? vb < bb : vb > bb) {
+              // Past the bound already before the change: the bound
+              // cannot be kept by moving it the way asked.
+              // (A part's color: its own setting, else the token it reads
+              // at rest, in that mode.)
+              const group =
+                st.thing === 'color'
+                  ? 'text'
+                  : st.thing === 'border-color'
+                    ? 'border'
+                    : 'background';
+              const restTok = st.on
+                ? restColorRead(C.partReads(one(st.on), group), st.when)
+                : null;
+              const was = /^--/.test(st.thing)
+                ? current(st.thing, m)
+                : st.on
+                  ? (partValue(st.on, st.thing) ??
+                    (restTok ? current(restTok, m) : null))
+                  : null;
+              const wb = was ? bright(String(was), m) : null;
+              if (wb != null && (cb.darker ? wb <= bb : wb >= bb)) {
+                past.push({m, was: String(was)});
+                st.value = undefined;
+                continue;
+              }
+              st.value = cb.color;
+              held.push(st.mode ? `${st.mode} mode` : 'every mode');
+            }
+          }
+        if (past.length) {
+          d.options = d.options
+            .map(o => o.filter(st => st.value !== undefined))
+            .filter(o => o.length);
+          const pastModes = [...new Set(past.map(x => x.m))];
+          d.text = `${d.text}: already ${cb.darker ? 'darker' : 'lighter'} than ${cb.color} in ${pastModes.join(' and ')} mode (${past.length > 1 ? `${past.length} of its values, such as ` : ''}${past[0].was}), so it cannot get ${cb.darker ? 'darker' : 'lighter'} there and keep "${cb.said}"`;
+        }
+        if (held.length)
+          d.text = `${d.text} (${cb.said}: held at ${cb.color} in ${[...new Set(held)].join(' and ')})`;
+      }
+    }
+  }
   // A question about what a part has now ("how much padding do buttons
   // have", "how rounded are cards", "what color is the button"): its value
   // now, as show reads it; never a change.
@@ -15477,6 +15721,15 @@ export function draftAnswer(ctx, env, question) {
       /\b(disabled|hover(?:ed)?|focus(?:ed)?|pressed|active|selected|checked)\b/.exec(
         qWords,
       )?.[1];
+    // A part whose padding its inner parts give (a table's, on its
+    // cells): theirs, named as theirs.
+    const insideNow = () => {
+      if (!named || asked !== 'padding') return null;
+      const inner = drawnInside(named, 'padding');
+      return inner?.value
+        ? `${inner.value} (on its ${inner.parts.join(' and ')} parts, which hold its content)`
+        : null;
+    };
     const anyRead = () => {
       if (!named) return null;
       const all = Object.keys(GROUPS).flatMap(
@@ -15635,80 +15888,101 @@ export function draftAnswer(ctx, env, question) {
     const fontSize =
       asked === 'font-size' ||
       /\b(?:text|font|type) size\b|\bfont-size\b/.test(qWords);
-    /** @type {{token: string, what: string, example: string} | null} */
+    /** @type {{token: string, tokens?: string[], what: string, example: string} | null} */
     const themeAsk =
       named && named !== 'body'
         ? null
-        : role
+        : asked === 'box-shadow'
           ? {
-              token:
-                ROLE_COLOR_TOKENS[role === 'error' ? 'danger' : role] ??
-                '--color-error',
-              what: `the ${role} color`,
-              example: `${role} color #dc2626`,
+              // The shared shadow steps every part's shadow reads.
+              token: '--shadow-med',
+              tokens: ['--shadow-low', '--shadow-med', '--shadow-high'],
+              what: 'the shadows',
+              example: 'softer shadows',
             }
-          : /\b(?:accent|brand|primary colou?r)\b/.test(qWords)
+          : role
             ? {
-                token: '--color-accent',
-                what: 'the accent color',
-                example: 'accent #2563eb',
+                token:
+                  ROLE_COLOR_TOKENS[role === 'error' ? 'danger' : role] ??
+                  '--color-error',
+                what: `the ${role} color`,
+                example: `${role} color #dc2626`,
               }
-            : /\bborders?\b/.test(qWords)
-              ? asked === 'border-width' ||
-                /\b(?:width|wide|thick|thickness)\b/.test(qWords)
-                ? {
-                    token: '--border-width',
-                    what: 'the border width',
-                    example: 'borders 2px',
-                  }
-                : {
-                    token: '--color-border',
-                    what: 'the border color',
-                    example: 'borders #d4d4d4',
-                  }
-              : asked === 'border-radius' ||
-                  /\b(?:corners?|radius|round(?:ed|ness)?)\b/.test(qWords)
-                ? {
-                    token: '--radius-element',
-                    what: 'the corner radius',
-                    example: 'corners 8px',
-                  }
-                : /\b(?:spacing|padding|room|density|dense|roomy|spacious|compact|tight|airy|crowded|cramped)\b/.test(
-                      qWords,
-                    )
+            : /\b(?:accent|brand|primary colou?r)\b/.test(qWords)
+              ? {
+                  token: '--color-accent',
+                  what: 'the accent color',
+                  example: 'accent #2563eb',
+                }
+              : /\bborders?\b/.test(qWords)
+                ? asked === 'border-width' ||
+                  /\b(?:width|wide|thick|thickness)\b/.test(qWords)
                   ? {
-                      token: '--spacing-4',
-                      what: 'the base spacing step (the spacing dial scales every step with it)',
-                      example: 'spacing roomy',
+                      token: '--border-width',
+                      what: 'the border width',
+                      example: 'borders 2px',
                     }
-                  : !fontSize &&
-                      (asked === 'font-family' ||
-                        /\b(?:font|typeface|family)\b/.test(qWords))
-                    ? /\bheadings?\b/.test(qWords)
-                      ? {
-                          token: '--font-family-heading',
-                          what: 'the heading font',
-                          example: 'heading font Georgia',
-                        }
-                      : {
-                          token: '--font-family-body',
-                          what: 'the body font',
-                          example: 'font Georgia',
-                        }
-                    : fontSize
-                      ? {
-                          token: '--text-body-size',
-                          what: 'the body text size',
-                          example: 'body text 15px',
-                        }
-                      : asked === 'color' &&
-                          /\b(?:text|writing|words)\b/.test(qWords)
+                  : {
+                      token: '--color-border',
+                      what: 'the border color',
+                      example: 'borders #d4d4d4',
+                    }
+                : asked === 'border-radius' ||
+                    /\b(?:corners?|radius|round(?:ed|ness)?)\b/.test(qWords)
+                  ? {
+                      token: '--radius-element',
+                      what: 'the corner radius',
+                      example: 'corners 8px',
+                    }
+                  : /\b(?:spacing|padding|room|density|dense|roomy|spacious|compact|tight|airy|crowded|cramped)\b/.test(
+                        qWords,
+                      )
+                    ? {
+                        token: '--spacing-4',
+                        what: 'the base spacing step (the spacing dial scales every step with it)',
+                        example: 'spacing roomy',
+                      }
+                    : !fontSize &&
+                        (asked === 'font-family' ||
+                          /\b(?:font|typeface|family)\b/.test(qWords))
+                      ? /\bheadings?\b/.test(qWords)
                         ? {
-                            token: '--color-text-primary',
-                            what: 'the main text color',
-                            example: 'text #111827',
+                            token: '--font-family-heading',
+                            what: 'the heading font',
+                            example: 'heading font Georgia',
                           }
-                        : null;
+                        : {
+                            token: '--font-family-body',
+                            what: 'the body font',
+                            example: 'font Georgia',
+                          }
+                      : fontSize
+                        ? {
+                            token: '--text-body-size',
+                            what: 'the body text size',
+                            example: 'body text 15px',
+                          }
+                        : asked === 'color' &&
+                            /\b(?:text|writing|words)\b/.test(qWords)
+                          ? {
+                              token: '--color-text-primary',
+                              what: 'the main text color',
+                              example: 'text #111827',
+                            }
+                          : null;
+    if (themeAsk?.tokens && !unshown) {
+      const listed = themeAsk.tokens
+        .map(t => [t, resolvedValue(t) || current(t, shownModes[0])])
+        .filter(([, v]) => v);
+      if (listed.length) {
+        result.splice(0, result.length, {
+          text: `${themeAsk.what} of ${env.slug} are ${listed.map(([t, v]) => `${t}: ${v}`).join('; ')} now (nothing is changed); to change them, ask for the change ("${themeAsk.example}")`,
+          options: [],
+          lookup: `${HOW} ${themeAsk.token}`,
+        });
+        return {parts: partsSeen, aspects: aspectsSeen, drafts: result};
+      }
+    }
     if (themeAsk && !unshown) {
       const color = /^--color-/.test(themeAsk.token);
       const modes = color
@@ -15737,7 +16011,8 @@ export function draftAnswer(ctx, env, question) {
           stateNow() ??
           variantNow() ??
           partPropNow(named, asked) ??
-          anyRead())
+          anyRead() ??
+          insideNow())
         : null;
     result.splice(0, result.length, {
       text: unshown
@@ -15817,7 +16092,7 @@ export function valueAsked(q) {
   // Only the question part ("how rounded are cards? make them 12px").
   const t = q.toLowerCase().trim().split('?')[0];
   if (
-    !/^(?:how (?:much|many|big|round(?:ed)?|thick|wide|tall|bold|dark|light|transparent|opaque|dense|roomy|spacious|compact|tight|airy|crowded|cramped)|what(?:(?:'s| is| are)(?: the| my)?(?: [a-z-]+){0,2}?|(?: the)?) (?:colou?r|size|padding|gap|spacing|density|radius|corner radius|font|weight|font size|shadow|border|opacity|font family|typeface|background|fill)|which (?:colou?r|font))\b/.test(
+    !/^(?:how (?:much|many|big|round(?:ed)?|thick|wide|tall|bold|dark|light|transparent|opaque|dense|roomy|spacious|compact|tight|airy|crowded|cramped)|what(?:(?:'s| is| are)(?: the| my)?(?: [a-z-]+){0,2}?|(?: the)?) (?:colou?r|size|padding|gap|spacing|density|radius|corner radius|font|weight|font size|shadow|border|opacity|font family|typeface|background|fill)s?|which (?:colou?r|font))\b/.test(
       t,
     )
   )
@@ -15837,7 +16112,7 @@ export function valueAsked(q) {
     )
   )
     return 'padding';
-  if (/\bshadow\b/.test(t)) return 'box-shadow';
+  if (/\bshadows?\b/.test(t)) return 'box-shadow';
   if (/\b(background|fill|bg)\b/.test(t)) return 'background-color';
   if (/\bborder\b/.test(t))
     return /\bcolou?r\b/.test(t) ? 'border-color' : 'border-width';
