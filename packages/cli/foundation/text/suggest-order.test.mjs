@@ -2,12 +2,59 @@
 
 import {describe, expect, it} from 'vitest';
 import {
+  matchWholeName,
   nameWords,
   orderByAffinity,
   orderRouteSuggestions,
   rankComponentSuggestions,
   synonymMatches,
 } from './suggest-order.mjs';
+
+describe('matchWholeName', () => {
+  const names = ['kanban-board', 'dashboard', 'detail-page', 'ide', 'editor'];
+
+  it('reads a name in any case or separator as that name', () => {
+    expect(matchWholeName('KanbanBoard', names)).toBe('kanban-board');
+    expect(matchWholeName('kanbanBoard', names)).toBe('kanban-board');
+    expect(matchWholeName('kanban_board', names)).toBe('kanban-board');
+    expect(matchWholeName('Kanban Boards', names)).toBe('kanban-board');
+  });
+
+  it('reads one slip in a long name as that name', () => {
+    expect(matchWholeName('dashbaord', names)).toBe('dashboard');
+    expect(matchWholeName('kanban bord', names)).toBe('kanban-board');
+  });
+
+  it('allows no slip in a short name', () => {
+    expect(matchWholeName('ida', names)).toBeNull();
+    expect(matchWholeName('edito', names)).toBeNull();
+  });
+
+  it('reads a separator, a plural or a singular as the same words', () => {
+    expect(matchWholeName('kanban-board', names)).toBe('kanban-board');
+    expect(matchWholeName('detail pages', names)).toBe('detail-page');
+    expect(matchWholeName('setting', ['settings'])).toBe('settings');
+  });
+
+  it('counts a swap, a missing letter and a wrong letter as one slip', () => {
+    expect(matchWholeName('dashbaord', names)).toBe('dashboard');
+    expect(matchWholeName('dashoard', names)).toBe('dashboard');
+    expect(matchWholeName('dashbeard', names)).toBe('dashboard');
+    expect(matchWholeName('dshbaord', names)).toBeNull();
+  });
+
+  it('answers null when two names share the exact words', () => {
+    expect(
+      matchWholeName('data table', ['data-table', 'DataTable']),
+    ).toBeNull();
+  });
+
+  it('answers null when more than one name is that close', () => {
+    expect(
+      matchWholeName('detail pane', ['detail-page', 'detail-pine']),
+    ).toBeNull();
+  });
+});
 
 describe('nameWords', () => {
   it('reads every spelling of a name as the same words', () => {

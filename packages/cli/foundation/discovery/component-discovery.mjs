@@ -18,6 +18,7 @@ import {
 import {existsCaseExact} from '../fs/paths.mjs';
 import {CORE_PROVIDER_ID} from '../identity/providers.mjs';
 import {loadComponentDoc} from './component-loader.mjs';
+import {COMPONENT_NAME_RE} from './entry-name-files.mjs';
 import {
   checkedComponentList,
   storedComponentList,
@@ -1094,8 +1095,8 @@ export function findExternalComponentDoc(docsDir, name) {
 // by package and route source/issues correctly.
 
 // A doc's `name` can name another export of its file, and a family doc's full
-// entries are components under their own names; every other doc reads as before.
-const COMPONENT_NAME_RE = /^[A-Z][\w$]*$/;
+// entries are components under their own names; every other doc reads as
+// before. Such a name has the shape COMPONENT_NAME_RE.
 
 /** @type {Map<string, {stamp: string, value: Record<string, any> | null}>} doc reads, reused while the doc file is unchanged */
 const docReads = new Map();

@@ -32,13 +32,21 @@ import {
  * Scaffold an already-resolved template to `targetPath` (relative to `cwd`) and
  * return the `template.copy` receipt.
  * @param {import('../../../foundation/discovery/template-adapter.mjs').DiscoveredTemplate} match
- * @param {{targetPath: string, cwd: string, overwrite?: boolean, iconSets?: Parameters<typeof mapTemplateIcons>[1]}} ctx
- *   `iconSets`: the project's icon sets; without them the icons are unchanged
+ * @param {{targetPath: string, cwd: string, overwrite?: boolean, iconSets?: Parameters<typeof mapTemplateIcons>[1], command?: string}} ctx
+ *   `iconSets`: the project's icon sets; without them the icons are unchanged.
+ *   `command`: the command that selects this template, without a path; the
+ *   refusal of a path outside the project suggests it
  * @returns {import('../template.type.mjs').TemplateCopyResponse}
  */
 export function templateCopy(
   match,
-  {targetPath, cwd, overwrite = false, iconSets = NO_ICON_SETS},
+  {
+    targetPath,
+    cwd,
+    overwrite = false,
+    iconSets = NO_ICON_SETS,
+    command = `astryx template ${match.dirName} --type ${match.type}`,
+  },
 ) {
   if (!fs.existsSync(match.filePath)) {
     throw new AstryxError(
@@ -60,21 +68,46 @@ export function templateCopy(
 
   // Path-safety: the guard sees the file that will be written, not only its
   // directory — a symlink at that name would otherwise carry the write
-  // outside the project root. Runs BEFORE any mkdir/write.
+  // outside the project root. Runs BEFORE any mkdir/write. An absolute path
+  // inside the project is the same write as its relative form.
   let outputFilePath;
   try {
     outputFilePath = assertWithin(fileTarget, cwd, {
+      allowAbsolute: true,
       label: 'template target path',
     });
   } catch (err) {
-    if (err instanceof PathSafetyError) {
+    if (!(err instanceof PathSafetyError)) throw err;
+    // Outside the project there is nothing to write, so the refusal names a
+    // place inside the project and the print that writes nothing.
+    if (
+      path.isAbsolute(targetPath) &&
+      err.code === ERROR_CODES.ERR_PATH_TRAVERSAL &&
+      !err.viaSymlink
+    ) {
+      const folder = path.posix.join(
+        'src',
+        match.type === 'block' ? 'components' : 'pages',
+        match.dirName,
+      );
       throw new AstryxError(
-        err.message,
-        undefined,
+        `Invalid template target path "${targetPath}": it is outside the project root (${path.resolve(cwd)}). ` +
+          'The template is written only inside the project. Give a path inside it, or print the source.',
+        [
+          {
+            name: `${command} ${folder}`,
+            reason: `write the ${match.type} inside the project`,
+          },
+          {name: command, reason: 'print the source and write nothing'},
+        ],
         ERROR_CODES.ERR_PATH_TRAVERSAL,
       );
     }
-    throw err;
+    throw new AstryxError(
+      err.message,
+      undefined,
+      ERROR_CODES.ERR_PATH_TRAVERSAL,
+    );
   }
   const outputDir = path.dirname(outputFilePath);
   const outputFileName = path.basename(outputFilePath);
@@ -138,6 +171,7 @@ export function templateCopy(
       notes,
       missingPackages: missing,
       installCommand,
+      ...(path.isAbsolute(targetPath) ? {givenPath: targetPath} : {}),
       ...(icons ? {icons} : {}),
     },
   };

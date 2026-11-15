@@ -40,6 +40,8 @@ import {
   unlabeledThemeName,
   usableNewName,
   windowsReserved,
+  isEditorPage,
+  fontsourceSuggestion,
 } from './_settings.mjs';
 import {
   baseFontsCss,
@@ -48,10 +50,12 @@ import {
   overviewPageSource,
   previewRouteSource,
   appCopyBlocker,
+  fontPackageSheets,
   themeImports,
 } from './_preview.mjs';
 import {
   isEditorTemp,
+  readWrittenRecord,
   PALETTE_STAND_IN,
   paletteFiles,
   paletteMapping,
@@ -68,7 +72,12 @@ import {
   parsedSpecifiers,
 } from '../../foundation/discovery/template-needs.mjs';
 import {detectStylingSystem} from '../../foundation/agent-docs/agent-docs.mjs';
-import {coreApp, requireProject, context} from './_context.mjs';
+import {
+  coreApp,
+  requireProject,
+  context,
+  familiesNothingLoads,
+} from './_context.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
   formatCliCommand,
@@ -3703,9 +3712,19 @@ async function examplePage(cwd) {
  * @param {string[]} notes notes for the result
  * @param {string} flags the caller's other flags, for the suggestions
  * @param {string | null} [appRoot] the app whose packages a page needs
+ * @param {{typed: string, why: string} | null} [cut] a long description
+ *   cut to its first words: as typed, and the sentence saying so, for a
+ *   refusal
  * @returns {Promise<Array<{name: string, displayName: string, why: string}>>}
  */
-async function rankedPages(words, cwd, notes, flags, appRoot = null) {
+async function rankedPages(
+  words,
+  cwd,
+  notes,
+  flags,
+  appRoot = null,
+  cut = null,
+) {
   const kit =
     /** @type {import('../build/build.type.mjs').BuildKitResponse} */ (
       await build(words, {cwd})
@@ -3832,7 +3851,9 @@ async function rankedPages(words, cwd, notes, flags, appRoot = null) {
     );
     refuse(
       E.ERR_NOT_FOUND,
-      `No page template relates to "${words}". Name a page to add it anyway.`,
+      cut
+        ? `No page template relates to "${cut.typed}". ${cut.why}: put the words that name the page first, or name a page to add it anyway.`
+        : `No page template relates to "${words}". Name a page to add it anyway.`,
       {
         run: [
           ...suggest(offered),
@@ -4137,9 +4158,19 @@ const BASE_THEMES = path.join(CLI_PACKAGE, 'assets', 'templates', 'themes');
  * @param {string} cwd
  * @param {string} id
  * @param {string} flags the caller's other flags
+ * @param {() => Promise<readonly string[]>} [defaults] the default pages it
+ *   can add now, which a typo may name (asked only for a refusal)
+ * @param {string | null} [appRoot] the app whose packages a page needs: a
+ *   typo names only a page template it can add now
  * @returns {Promise<{name: string, displayName: string, why: string}>}
  */
-async function namedTemplate(cwd, id, flags) {
+async function namedTemplate(
+  cwd,
+  id,
+  flags,
+  defaults = async () => DEFAULT_PAGE_IDS,
+  appRoot = null,
+) {
   const pages = await pageTemplates(cwd);
   // Page ids are lowercase: LOGIN names login.
   const hit =
@@ -4168,11 +4199,15 @@ async function namedTemplate(cwd, id, flags) {
     /** @type {any} */ (await template(undefined, {list: true, cwd})).data
   );
   const other = all.find(t => t.id === id);
-  // Every page --template adds is a candidate: the default pages too, which
-  // the template list never shows.
-  const near = [...DEFAULT_PAGE_IDS, ...pages.map(t => t.id)].filter(n =>
-    typoNear(id, n),
-  );
+  // Every page --template adds now is a candidate: the default pages it can
+  // add (which the template list never shows) and the page templates.
+  // A page template the app cannot add now (a package it needs is missing)
+  // is never offered: following it would be refused.
+  const nearPages = pages.map(t => t.id).filter(n => typoNear(id, n));
+  const near = [
+    ...(await defaults()).filter(n => typoNear(id, n)),
+    ...(await showablePages(cwd, appRoot ?? cwd, nearPages, nearPages.length)),
+  ];
   refuse(
     E.ERR_UNKNOWN_TEMPLATE,
     other
@@ -4278,17 +4313,28 @@ function themeArg(v) {
 async function addPreview(description, options, box) {
   options = {...options, theme: themeArg(options.theme)};
   const {cwd = process.cwd()} = options;
-  if (isOutsideProject(cwd))
-    refuse(
-      E.ERR_PROJECT_REQUIRED,
-      'No package.json here, so there is no app to put the preview in.',
-      {
-        run: [
-          `${PREVIEW} add  # run in your app`,
-          `${PREVIEW} app <dir>  # a new starter app with the preview in it`,
-        ],
-      },
-    );
+  // A workspace root, or a package that does not use Core, gets the shared
+  // app finder's answer (the workspace's app to cd into, or what to
+  // install); only with no package.json at or above is there no project.
+  if (isOutsideProject(cwd)) {
+    let d = path.resolve(cwd);
+    while (
+      !fs.existsSync(path.join(d, 'package.json')) &&
+      path.dirname(d) !== d
+    )
+      d = path.dirname(d);
+    if (fs.existsSync(path.join(d, 'package.json'))) requireProject(cwd);
+    else
+      refuse(
+        E.ERR_PROJECT_REQUIRED,
+        'No package.json here, so there is no app to put the preview in.',
+        {
+          run: [
+            `${PREVIEW} app <dir>  # a new starter app with the preview in it`,
+          ],
+        },
+      );
+  }
   const pf =
     options.path != null ? ` --path ${quoteCommandArgument(options.path)}` : '';
   const tf =
@@ -4321,13 +4367,20 @@ async function addPreview(description, options, box) {
     const id = await examplePage(cwd);
     return id ? [`${PREVIEW} add --template ${id}${tf}${pf}`] : [];
   };
+  // An empty --template falls back to what preview add does without it
+  // (the description's pages, else the default pages), never an arbitrary
+  // page.
   if (named === '')
-    refuse(E.ERR_INVALID_ARGUMENT, '--template needs a page template id.', {
-      run: [
-        ...(await example()),
-        formatCliCommand('template --list --type page', cwd),
-      ],
-    });
+    refuse(
+      E.ERR_INVALID_ARGUMENT,
+      `--template needs a page template id; without it, preview add adds ${said ? 'the pages the description names' : 'the default pages'}.`,
+      {
+        run: [
+          `${PREVIEW} add${said ? ` ${quoteCommandArgument(said)}` : ''}${tf}${pf}`,
+          formatCliCommand('template --list --type page', cwd),
+        ],
+      },
+    );
   if (said && named != null)
     refuse(
       E.ERR_INVALID_ARGUMENT,
@@ -4377,6 +4430,8 @@ async function addPreview(description, options, box) {
   const notes = [];
   let words = said;
   const allWords = said ? said.split(/\s+/) : [];
+  /** A description cut to its first words: as typed, and what was read. @type {{typed: string, why: string} | null} */
+  let cut = null;
   if (allWords.length > MAX_WORDS) {
     const seen = new Set();
     words = allWords
@@ -4391,6 +4446,10 @@ async function addPreview(description, options, box) {
     notes.push(
       `the description has ${allWords.length} words; the first ${MAX_WORDS} different ones picked the page`,
     );
+    cut = {
+      typed: said ?? '',
+      why: `Only the first ${MAX_WORDS} different words of a description are read, and this one has ${allWords.length}`,
+    };
   }
   const retry = (/** @type {string | null} */ p) =>
     `${PREVIEW} add${said ? ` ${quoteCommandArgument(said)}` : ''}${named != null ? ` --template ${quoteCommandArgument(named)}` : ''}${options.top != null ? ` --top ${quoteCommandArgument(String(options.top))}` : ''}${tf}${p == null ? '' : ` --path ${quoteCommandArgument(p)}`}`;
@@ -4539,9 +4598,42 @@ async function addPreview(description, options, box) {
     }
   } else {
     const flags = `${tf}${pf}`;
+    // The default pages a typo may name: those this preview can add now (the
+    // Colors page only for a theme with generated colors), and not already
+    // in it.
+    const addable = async () => {
+      const can = [
+        'overview',
+        'components',
+        ...(data.theme && (await colorsPage(cwd, at.dir, data.theme)).colors
+          ? [COLORS_PAGE.id]
+          : []),
+      ];
+      return can.filter(id => {
+        const there = data.pages.find(p => p.id === id);
+        return !(
+          there && fs.existsSync(path.join(at.dir, `${there.file}.tsx`))
+        );
+      });
+    };
     const picks = explicit
-      ? [await namedTemplate(cwd, /** @type {string} */ (named), flags)]
-      : await rankedPages(words, cwd, notes, flags, appRootOf(cwd, at.dir));
+      ? [
+          await namedTemplate(
+            cwd,
+            /** @type {string} */ (named),
+            flags,
+            addable,
+            appRootOf(cwd, at.dir),
+          ),
+        ]
+      : await rankedPages(
+          words,
+          cwd,
+          notes,
+          flags,
+          appRootOf(cwd, at.dir),
+          cut,
+        );
     for (const [i, pick] of picks.entries()) {
       if (add.length >= (explicit ? 1 : top)) break;
       const shownTemplate =
@@ -4588,7 +4680,7 @@ async function addPreview(description, options, box) {
   if (!add.length)
     refuse(
       E.ERR_DEP_MISSING,
-      `No page was added: ${skipped.map(s => `the ${s.page} page ${s.reason}`).join('; ')}.`,
+      `No page was added: ${skipped.map(s => `the ${s.page} page ${s.reason}`).join('; ')}.${cut ? ` ${cut.why}, so the pages were picked from those: put the words that name the page first.` : ''}`,
       {
         run: [
           ...new Set(runs),
@@ -4811,6 +4903,10 @@ export async function themeEditPreviewApp(dir, options = {}) {
     );
   options = {...options, theme: themeArg(options.theme)};
   const slug = options.theme ?? null;
+  // A theme the app wears is one of an app's own: from a folder that is no
+  // app (a workspace root), the one app finder's answer (the `cd` to the
+  // app) comes first, never a "no such theme".
+  if (slug != null) requireProject(cwd);
   const theme =
     slug == null
       ? null
@@ -4875,6 +4971,9 @@ export async function themeEditPreviewApp(dir, options = {}) {
     );
     // The whole folder, tokens/ included, as bytes: a font or a picture
     // there must arrive as it is.
+    const recorded = readWrittenRecord(cwd, slug);
+    /** Links in the theme folder: never read through, so left out, and named. @type {string[]} */
+    const links = [];
     /** @param {string} rel */
     const copyDir = rel => {
       for (const entry of fs.readdirSync(path.join(from.dir, rel), {
@@ -4883,14 +4982,18 @@ export async function themeEditPreviewApp(dir, options = {}) {
         const sub = path.join(rel, entry.name);
         if (entry.isDirectory()) copyDir(sub);
         else if (
+          entry.isSymbolicLink() &&
+          !(rel === '' && skip.has(entry.name)) &&
+          !(rel === '' && isEditorPage(entry.name, recorded))
+        )
+          links.push(shown(cwd, path.join(from.dir, sub)));
+        else if (
           entry.isFile() &&
           !(rel === '' && skip.has(entry.name)) &&
-          // No picture or preview page of any kind (dark pictures, section
-          // sheets): the new app builds its own.
-          !(
-            rel === '' &&
-            /^(preview|sheet)(-[a-z0-9-]+)?\.(html|png)$/.test(entry.name)
-          ) &&
+          // No page or picture the editor wrote (dark pictures, section
+          // sheets): the new app builds its own. A file of the user's named
+          // like one (sheet-old.png) comes along.
+          !(rel === '' && isEditorPage(entry.name, recorded)) &&
           // A temp file a stopped command left is no part of the theme.
           !isEditorTemp(entry.name)
         )
@@ -4901,6 +5004,10 @@ export async function themeEditPreviewApp(dir, options = {}) {
       }
     };
     copyDir('');
+    if (links.length)
+      notes.push(
+        `left out ${links.join(', ')}: ${links.length === 1 ? 'a link' : 'links'}, which the editor never reads through; put a copy of the file there to bring it along`,
+      );
     // A source file of the theme that imports a file outside its folder
     // would not build in the new app, where that file is not: refused,
     // naming the import, before anything is written.
@@ -4959,13 +5066,22 @@ export async function themeEditPreviewApp(dir, options = {}) {
     for (const font of fonts)
       dependencies[font.pkg] =
         readVersion(project, font.pkg) ?? OPEN_FONT_RANGE;
+    // A family the CLI cannot vouch for as an open font (and this project
+    // has no package of) is not installed in the new app: said, with the
+    // package that would load it.
+    for (const family of familiesNothingLoads(ctx, theme, fonts)) {
+      const s = fontsourceSuggestion(family);
+      notes.push(
+        `"${family}" is not a font the CLI knows to be open, and this project has no package of it, so the new app does not install it and shows the next font in the stack${s ? `; if Fontsource publishes it, ${installLine(cwd, [s.pkg])} in the new app installs it (then import '${s.pkg}' in its root layout)` : ''}`,
+      );
+    }
     routeTheme = {
       name: slug,
       module: fromRoute(to.js),
       css: [
         fromRoute(to.css),
         ...baseFontsCss(ctx, theme),
-        ...fonts.map(x => `${x.pkg}/index.css`),
+        ...fonts.flatMap(x => fontPackageSheets(ctx, slug, x.pkg)),
       ],
       mode: themeImports(ctx, slug, theme, path.join(cwd, routeDir)).mode,
     };

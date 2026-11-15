@@ -108,11 +108,15 @@ described.
   does not read `ASTRYX_THEME` (DEC-7).
 - **FR4 — The set and the default are managed by command.**
   `theme remove <slug>` removes a theme from the app, and `theme use <slug>`
-  makes an added theme the default. Removing the default theme MUST fail and
-  name `theme use` with another added theme, or `theme list` when it is the
-  only one; `theme use` or `theme remove` on a theme that is not added MUST
-  fail and name the import command when a theme with that slug is available,
-  or `theme list` when none is. Each command regenerates the module (FR2).
+  makes an added theme the default. Removing the default theme while other
+  themes are added MUST fail and name `theme use` with another added theme.
+  Removing the only added theme deletes the module when it is exactly what the
+  CLI writes for its record, and the receipt names the module wiring the app
+  root must drop; when the module has changes the CLI did not write, the
+  command MUST fail, leave the module, and say how to finish by hand. `theme
+use` or `theme remove` on a theme that is not added MUST fail and name the
+  import command when a theme with that slug is available, or `theme list`
+  when none is. Each other change regenerates the module (FR2).
 - **FR5 — One receipt describes the app's themes.** The importing `theme add`,
   `theme remove`, and `theme use` MUST return the `theme.app` response: every
   added theme with its slug, owner, and the module and stylesheet it imports;

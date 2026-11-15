@@ -52,7 +52,7 @@ import * as preview from './_preview-app.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {findPackageRoot} from '../../foundation/fs/paths.mjs';
-import {context, coreApp} from './_context.mjs';
+import {baseWeightNotes, context, coreApp} from './_context.mjs';
 import {APP_COPY_MARK} from './_marks.mjs';
 import {
   fontKey,
@@ -84,11 +84,13 @@ import {
   buildColorModes,
   camel,
   folderIsEmpty,
+  editorMadeFolder,
   loadTheme,
   setAfterBuild,
   editedThemes,
   themeFiles,
   fontsourcePackageOf,
+  fontsourceSuggestion,
   themeSourceRefusal,
   typedThemeName,
 } from './_settings.mjs';
@@ -153,7 +155,11 @@ export const editorBaseIn = (slug, cwd) =>
 /** The sections `show --section` takes. */
 export const showSections = () => [...SHOWCASE_GROUPS];
 
-export {dialValueFits, usableNewName as editorFreeName} from './_settings.mjs';
+export {
+  dialTakesText,
+  dialValueFits,
+  usableNewName as editorFreeName,
+} from './_settings.mjs';
 
 /**
  * The project a command acts on: the Astryx project at or above `cwd`, found
@@ -777,11 +783,15 @@ export const themeEditPreviewRemove = (page, options = {}) =>
  * does not).
  * @param {string} root
  * @param {string} word a path or a name
+ * @param {{made?: boolean}} [options] `made`: a folder the editor made that
+ *   lost its settings counts too (the editor commands refuse it, and so
+ *   does compile)
  * @returns {{root: string, slug: string} | null}
  */
-function editorThemeAt(root, word) {
+function editorThemeAt(root, word, {made = false} = {}) {
   const has = (/** @type {string} */ r, /** @type {string} */ slug) =>
-    fs.existsSync(path.join(r, 'themes', slug, `${slug}.settings.json`));
+    fs.existsSync(path.join(r, 'themes', slug, `${slug}.settings.json`)) ||
+    (made && editorMadeFolder(r, slug));
   if (/^[a-z][a-z0-9-]*$/.test(word))
     return has(root, word) ? {root, slug: word} : null;
   // Through a link, the real path decides (a linked theme folder is the
@@ -1235,9 +1245,21 @@ export async function editorCompileProblem(
         ERROR_CODES.ERR_INVALID_ARGUMENT,
       );
     }
-    const at = editorThemeAt(cwdRoot, abs);
+    const at = editorThemeAt(cwdRoot, abs, {made: true});
     if (!at || !editorOwnFile(at.slug, file)) continue;
     const {root, slug} = at;
+    // An editor theme that lost its settings is refused as every editor
+    // command refuses it, with the line that makes it again: a plain build
+    // of it would drop the editor's settings and app copy.
+    if (
+      !fs.existsSync(path.join(root, 'themes', slug, `${slug}.settings.json`))
+    )
+      try {
+        loadTheme(root, slug);
+      } catch (e) {
+        if (e instanceof AstryxError) return e;
+        throw e;
+      }
     const source = `themes/${slug}/${slug}.theme.ts`;
     // An editor theme is built from its project's root, as every editor
     // command runs there: from a subfolder the build would write outside
@@ -1314,12 +1336,10 @@ export async function editorCompileProblem(
         )
       )
         why = null;
-      // A missing built output is one compile writes itself.
-      if (
-        why &&
-        !check &&
-        /^[^/]+\.(css|js|d\.ts|css\.d\.ts) was missing$/.test(why)
-      )
+      // A missing built output is one compile writes itself, and one a
+      // check names in its own result (the stale outputs, upToDate false):
+      // never a reason to refuse either.
+      if (why && /^[^/]+\.(css|js|d\.ts|css\.d\.ts) was missing$/.test(why))
         why = null;
       // Saved settings the editor no longer accepts: show refuses them too,
       // so the refusal names the undo that removes each.
@@ -1591,18 +1611,35 @@ export function editorFontHelp(file, cwd) {
   const at = editorThemeAt(root, path.resolve(cwd, file));
   if (!at || path.basename(file) !== `${at.slug}.theme.ts`) return null;
   const copy = `src/themes/${at.slug}/${at.slug}.fonts.css`;
+  /** @param {string} family */
+  const notice = family => {
+    const s = fontsourceSuggestion(family);
+    return s
+      ? `Font "${family}" is named by this theme but not loaded; ${s.known ? '' : 'if Fontsource publishes it, '}${installLine(root, [s.pkg])} installs its package, which ${copy} then imports`
+      : `Font "${family}" is named by this theme but not loaded, and no font package is named for it: the app must load it, or it falls back`;
+  };
   return {
-    notice: family =>
-      `Font "${family}" is named by this theme but not loaded; if Fontsource publishes it, ${installLine(root, [fontsourcePackageOf(family)])} installs its package, which ${copy} then imports`,
-    recipe:
-      families => `  The built CSS only sets font-family. ${at.slug}'s app copy loads a family
-  once its package is installed (if Fontsource publishes it), importing it in
-  ${copy} on the next compile, set or show:
-
-    ${installLine(root, families.map(fontsourcePackageOf))}
-
+    notice,
+    recipe: families => {
+      const all = families.map(fontsourceSuggestion).filter(s => s !== null);
+      // Packages the editor knows Fontsource publishes go on one install
+      // line; a name it cannot vouch for gets its own, so one that does
+      // not exist never stops the others installing.
+      const known = all.filter(s => s.known).map(s => s.pkg);
+      const guessed = all.filter(s => !s.known).map(s => s.pkg);
+      const lines = [
+        ...(known.length ? [installLine(root, known)] : []),
+        ...guessed.map(
+          pkg => `${installLine(root, [pkg])}   (if Fontsource publishes it)`,
+        ),
+      ];
+      return `  The built CSS only sets font-family. ${at.slug}'s app copy loads a family
+  once its package is installed, importing it in ${copy} on the next
+  compile, set or show:
+${lines.length ? `\n${lines.map(l => `    ${l}`).join('\n')}\n` : '\n    (no Fontsource package is named for these families: load them in your app)\n'}
   Recipe and fallback-stack guidance: ${runLine(root, 'docs typography')}
-`,
+`;
+    },
   };
 }
 
@@ -1749,7 +1786,12 @@ export async function editorBuildExtra(file, cwd, opts) {
     /** @type {string[]} */
     let notices;
     try {
-      notices = edit.ownPhoneNotes(root, slug, loadTheme(root, slug));
+      const data = loadTheme(root, slug);
+      notices = [
+        ...edit.ownPhoneNotes(root, slug, data),
+        // A weight the base theme's font stylesheet does not load.
+        ...baseWeightNotes(await context(root), data),
+      ];
     } catch {
       notices = [];
     }
@@ -1843,8 +1885,10 @@ export async function editorLoadedFonts(file, cwd) {
   // A family the build names whose @fontsource package is installed: the
   // copy written after this build imports that package (copyFontsCss).
   /** @param {string} family */
-  const installed = family =>
-    packageInstalled(root, fontsourcePackageOf(family));
+  const installed = family => {
+    const pkg = fontsourcePackageOf(family);
+    return pkg !== null && packageInstalled(root, pkg);
+  };
   return family => loaded.has(fontKey(family)) || installed(family);
 }
 

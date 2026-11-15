@@ -233,11 +233,14 @@ describe('words of a flag value typed unquoted on new', () => {
         expect((await follow(names(r)[0])).error).toBeUndefined();
         drop('n2');
       }
-      // With the option typed before the name, the name ends its value: a
-      // word after the name is never put into it.
+      // With the option typed before the name, the words straight after its
+      // value are more of it while a later word is left for the name; the
+      // name ends the value, and no word after the name is put into it.
       const before = await cli([...ED, 'new', '--font', 'Open', 'Sans', 'n2']);
       for (const n of names(before)) expect(n).not.toMatch(/--font '?Open n2/);
-      expect(names(before)[0]).toMatch(/ editor new sans-n2 --font Open$/);
+      expect(names(before)[0]).toMatch(/ editor new n2 --font 'Open Sans'$/);
+      expect((await follow(names(before)[0])).error).toBeUndefined();
+      drop('n2');
     },
     T,
   );

@@ -69,6 +69,15 @@ export function assetDataUri(file) {
       {module: file},
     );
   }
+  // A pipe, a device or a folder is never read: a read of one can wait for
+  // good (a named pipe with no writer) or never end (/dev/zero).
+  if (!stat.isFile()) {
+    throw new RenderAssetError(
+      'ERR_FILE_NOT_FOUND',
+      `The page uses ${file}, which is not a regular file`,
+      {module: file},
+    );
+  }
   if (stat.size > MAX_ASSET_BYTES) {
     throw new RenderAssetError(
       'ERR_RENDER_ASSET_TOO_LARGE',
@@ -76,7 +85,9 @@ export function assetDataUri(file) {
       {file, bytes: stat.size, limit: MAX_ASSET_BYTES},
     );
   }
-  const mime = MIME[path.extname(file).slice(1).toLowerCase()] ?? 'application/octet-stream';
+  const mime =
+    MIME[path.extname(file).slice(1).toLowerCase()] ??
+    'application/octet-stream';
   return `data:${mime};base64,${fs.readFileSync(file).toString('base64')}`;
 }
 
@@ -90,13 +101,36 @@ export function assetDataUri(file) {
 export function isAssetBytes(bytes) {
   const at = (/** @type {number} */ i, /** @type {string} */ text) =>
     bytes.subarray(i, i + text.length).toString('latin1') === text;
-  const b = (/** @type {number[]} */ ...xs) => xs.every((x, i) => bytes[i] === x);
-  if (at(0, '\x89PNG\r\n\x1a\n') || b(0xff, 0xd8, 0xff) || at(0, 'GIF87a') || at(0, 'GIF89a')) return true;
+  const b = (/** @type {number[]} */ ...xs) =>
+    xs.every((x, i) => bytes[i] === x);
+  if (
+    at(0, '\x89PNG\r\n\x1a\n') ||
+    b(0xff, 0xd8, 0xff) ||
+    at(0, 'GIF87a') ||
+    at(0, 'GIF89a')
+  )
+    return true;
   if (at(0, 'RIFF') && (at(8, 'WEBP') || at(8, 'WAVE'))) return true;
   if (at(4, 'ftyp')) return true; // AVIF, MP4
   if (at(0, 'BM') || b(0, 0, 1, 0)) return true; // BMP, ICO
-  if (at(0, 'wOFF') || at(0, 'wOF2') || at(0, 'OTTO') || at(0, 'true') || b(0, 1, 0, 0)) return true;
-  if (b(0x1a, 0x45, 0xdf, 0xa3) || at(0, 'ID3') || (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0)) return true;
-  const head = bytes.subarray(0, 4096).toString('utf8').replace(/^\uFEFF/, '').trimStart();
+  if (
+    at(0, 'wOFF') ||
+    at(0, 'wOF2') ||
+    at(0, 'OTTO') ||
+    at(0, 'true') ||
+    b(0, 1, 0, 0)
+  )
+    return true;
+  if (
+    b(0x1a, 0x45, 0xdf, 0xa3) ||
+    at(0, 'ID3') ||
+    (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0)
+  )
+    return true;
+  const head = bytes
+    .subarray(0, 4096)
+    .toString('utf8')
+    .replace(/^\uFEFF/, '')
+    .trimStart();
   return head.startsWith('<') && /<svg[\s>]/i.test(head);
 }

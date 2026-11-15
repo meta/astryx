@@ -3,7 +3,7 @@
   "type": "search",
   "data": {
     "query": "experimental",
-    "matchCount": 7,
+    "matchCount": 12,
     "results": [
       {
         "domain": "doc",
@@ -105,6 +105,81 @@
         "title": "<text>",
         "command": "astryx docs theme --index",
         "parent": "astryx docs guides",
+        "mentions": [
+          "description mentions \"experimental\""
+        ]
+      },
+      {
+        "domain": "doc",
+        "name": "theme",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs theme make-or-change",
+        "parent": "astryx docs theme --index",
+        "mentions": [
+          "description mentions \"experimental\""
+        ]
+      },
+      {
+        "domain": "doc",
+        "name": "theme",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs theme look-after-each-change",
+        "parent": "astryx docs theme --index",
+        "mentions": [
+          "description mentions \"experimental\""
+        ]
+      },
+      {
+        "domain": "doc",
+        "name": "theme",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs theme denser-or-roomier",
+        "parent": "astryx docs theme --index",
+        "mentions": [
+          "description mentions \"experimental\""
+        ]
+      },
+      {
+        "domain": "doc",
+        "name": "theme",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs theme one-kind-of-part",
+        "parent": "astryx docs theme --index",
+        "mentions": [
+          "description mentions \"experimental\""
+        ]
+      },
+      {
+        "domain": "doc",
+        "name": "theme",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs theme no-app-yet",
+        "parent": "astryx docs theme --index",
         "mentions": [
           "description mentions \"experimental\""
         ]

@@ -6,11 +6,68 @@ export const docs = {
   name: 'theme',
   title: 'Theming',
   category: 'guide',
-  keywords: ['theme', 'theming', 'theme system', 'dark mode', 'defineTheme', 'provider'],
+  keywords: [
+    'theme',
+    'theming',
+    'theme system',
+    'dark mode',
+    'defineTheme',
+    'provider',
+  ],
   description:
-    'To create or change a theme, use the experimental theme editor: `astryx experimental theme editor new <name> --like neutral`, then `editor set` / `editor how "<what you want>"`, wire it with `astryx theme add <name>`, and after each change look at it with `astryx experimental theme editor show <name> --png` (takes pictures of real components): a theme change is not done until you have looked. A denser or roomier app is a theme change too, not page code: `astryx experimental theme editor set <name> spacing tight` (or `roomy`), then look again. A change to one kind of part (the sidebar, its selected item, the gaps in a form) is a theme change too, not props or styles on one page: `astryx experimental theme editor how "<ask>"` names the `set … --on <part>` line. No app yet: `astryx experimental theme preview app <dir>` makes a starter app that shows the theme. How to use and create themes: see Use a theme for applying themes, and Author a theme for creating and customizing them.',
+    'How Astryx themes work: wrap your app in a theme, and create or change one with `astryx experimental theme editor new <name> --like neutral` (the first sections of this topic give the rest).',
 
   sections: [
+    {
+      id: 'make-or-change',
+      title: 'Make or change a theme',
+      content: [
+        {
+          type: 'prose',
+          text: 'Use the experimental theme editor: `astryx experimental theme editor new <name> --like neutral`, then `editor set` / `editor how "<what you want>"`, and wire it with `astryx theme add <name>`.',
+        },
+      ],
+    },
+    {
+      id: 'look-after-each-change',
+      title: 'Look after each change',
+      content: [
+        {
+          type: 'prose',
+          text: 'After each change look at it with `astryx experimental theme editor show <name> --png` (takes pictures of real components): a theme change is not done until you have looked.',
+        },
+      ],
+    },
+    {
+      id: 'denser-or-roomier',
+      title: 'A denser or roomier app',
+      content: [
+        {
+          type: 'prose',
+          text: 'A denser or roomier app is a theme change too, not page code: `astryx experimental theme editor set <name> spacing tight` (or `roomy`), then look again.',
+        },
+      ],
+    },
+    {
+      id: 'one-kind-of-part',
+      title: 'One kind of part',
+      content: [
+        {
+          type: 'prose',
+          text: 'A change to one kind of part (the sidebar, its selected item, the gaps in a form) is a theme change too, not props or styles on one page: `astryx experimental theme editor how "<ask>"` names the `set … --on <part>` line.',
+        },
+      ],
+    },
+    {
+      id: 'no-app-yet',
+      title: 'No app yet',
+      content: [
+        {
+          type: 'prose',
+          text: '`astryx experimental theme preview app <dir>` makes a starter app that shows the theme. How to use and create themes: see Use a theme for applying themes, and Author a theme for creating and customizing them.',
+        },
+      ],
+    },
     {
       id: 'quick-start',
       title: 'Wrap your app in a theme',

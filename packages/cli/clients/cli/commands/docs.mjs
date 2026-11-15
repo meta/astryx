@@ -285,7 +285,9 @@ function treeRows(children, root, owner) {
         ? `${childRow(child, owner).summary} (${docsBelow(child.childCount)})`
         : childRow(child, owner).summary,
     },
-    ...(child.slots ?? []).flatMap(slot => treeRows(slot.children, root, owner)),
+    ...(child.slots ?? []).flatMap(slot =>
+      treeRows(slot.children, root, owner),
+    ),
   ]);
 }
 
@@ -424,10 +426,13 @@ function linkLines(links) {
   if (!links) return [];
   return [
     `Up: ${formatCliCommand(links.up)}`,
-    ...(links.previous ? [`Previous: ${formatCliCommand(links.previous)}`] : []),
+    ...(links.previous
+      ? [`Previous: ${formatCliCommand(links.previous)}`]
+      : []),
     ...(links.next ? [`Next: ${formatCliCommand(links.next)}`] : []),
     ...(links.related ?? []).map(
-      (command, i) => `${i === 0 ? 'Related: ' : '         '}${formatCliCommand(command)}`,
+      (command, i) =>
+        `${i === 0 ? 'Related: ' : '         '}${formatCliCommand(command)}`,
     ),
   ];
 }
@@ -456,6 +461,32 @@ function replacedLine(data) {
 }
 
 /**
+ * One line per other package whose sections a topic holds, at the top of the
+ * read. Another package's section joins the end of the topic unless it names
+ * where it goes (spec:AST-046 FR11), so a reader who reads only the start of a
+ * long topic would never learn an installed integration added to it.
+ * @param {ReadonlyArray<{id?: string, package?: string}>} sections each
+ *   section as a read returns it, by the key a section read takes
+ * @param {string} owner the package that owns the topic
+ */
+function addedSectionLines(sections, owner) {
+  /** @type {Map<string, string[]>} */
+  const byPackage = new Map();
+  for (const each of sections) {
+    if (each.id == null || each.package == null || each.package === owner) {
+      continue;
+    }
+    byPackage.set(each.package, [
+      ...(byPackage.get(each.package) ?? []),
+      each.id,
+    ]);
+  }
+  return [...byPackage].map(([pkg, ids]) =>
+    text(`sections from ${pkg}: ${ids.join(', ')}`),
+  );
+}
+
+/**
  * A topic's section index: what the topic is, one line per section with the
  * key to read it by, and how to read further.
  * @param {import('../../../api/docs/docs.type.mjs').DocsIndex} index
@@ -470,6 +501,7 @@ function emitIndex(index, owner, run) {
     ),
     record({package: owner}),
     ...replacedLine(index),
+    ...addedSectionLines(index.sections, owner),
     // Summaries wrap rather than being cut: the summary is how a reader picks
     // the one section to open. A section another package wrote says which one.
     records(
@@ -510,7 +542,8 @@ function childRow(child, owner) {
     child.title !== child.name;
   return {
     // A child another package owns says which one.
-    name: child.package === owner ? child.name : `${child.name} (${child.package})`,
+    name:
+      child.package === owner ? child.name : `${child.name} (${child.package})`,
     // An experimental child is marked as help marks an experimental command,
     // unless its own summary already opens by saying so.
     summary: prefixCliCommands(
@@ -579,7 +612,9 @@ function emitNode(node, detail, run) {
           // A child's route is its parent's route and its name, except a flat
           // topic in a topic level, which keeps its own name.
           node.slots.every(slot =>
-            slot.children.every(child => child.route.startsWith(`${node.route}/`)),
+            slot.children.every(child =>
+              child.route.startsWith(`${node.route}/`),
+            ),
           )
             ? `Open one: ${run} docs ${node.route}/<name>`
             : `Open one: ${run} docs <name>`,
@@ -789,6 +824,7 @@ export function registerDocs(program) {
           emit(
             record({package: owner}),
             ...replacedLine(result.data),
+            ...addedSectionLines(result.data.sections, owner),
             code(
               formatReferenceFull(
                 {

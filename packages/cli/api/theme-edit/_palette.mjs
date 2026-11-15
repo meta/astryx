@@ -1493,9 +1493,20 @@ function syncPaletteFiles(cwd, slug, data, base) {
  * @returns {Record<string, string>}
  */
 export function readWrittenRecord(cwd, slug) {
+  return readRecordIn(path.join(cwd, 'themes', slug), slug);
+}
+
+/**
+ * The record of what the editor wrote, read from a theme folder as it is
+ * (a copy of one included); empty when there is none or it is damaged.
+ * @param {string} dir
+ * @param {string} slug
+ * @returns {Record<string, string>}
+ */
+export function readRecordIn(dir, slug) {
   try {
     const json = JSON.parse(
-      fs.readFileSync(writtenRecordFile(cwd, slug), 'utf8'),
+      fs.readFileSync(path.join(dir, `${slug}.pictures.json`), 'utf8'),
     );
     return json && typeof json === 'object' && !Array.isArray(json) ? json : {};
   } catch {
