@@ -691,23 +691,11 @@ function showBlocks(d) {
         ]
       : []),
     ...(colorNotes.length ? [section('colorNotes:'), list(colorNotes)] : []),
-    colorFiles
-      ? [section('colorFiles:'), record(colorFiles)]
-      : record({colorFiles: 'none'}),
-    // Last, so the end of the output names what the theme still gets wrong
-    // (none, as an empty list in the JSON, prints nothing).
-    openProblems.length
-      ? [
-          section(
-            `openProblems: ${openProblems.length} the theme has now; each fix line fixes one`,
-          ),
-          ...problemList(openProblems),
-        ]
-      : [],
     // What the theme's own changes did not reach, counted, six with the
     // line that reaches each; the other parts on the base's look are
-    // counted, and listed in the JSON. Last before the closing look line,
-    // so a tail of the output keeps them.
+    // counted, and listed in the JSON. Just before the generated files
+    // (which stay last, before the closing look line), so a tail of the
+    // output keeps them.
     ...(missed.length
       ? [
           section(
@@ -736,6 +724,19 @@ function showBlocks(d) {
           ]
         : [];
     })(),
+    colorFiles
+      ? [section('colorFiles:'), record(colorFiles)]
+      : record({colorFiles: 'none'}),
+    // Last, so the end of the output names what the theme still gets wrong
+    // (none, as an empty list in the JSON, prints nothing).
+    openProblems.length
+      ? [
+          section(
+            `openProblems: ${openProblems.length} the theme has now; each fix line fixes one`,
+          ),
+          ...problemList(openProblems),
+        ]
+      : [],
     lookLine,
   ].flat();
 }

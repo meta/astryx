@@ -108,7 +108,7 @@ describe('what a change says', () => {
   );
 
   it(
-    'show lists the missed parts last, where a tail keeps them',
+    'show lists the missed parts just before the generated files, where a tail keeps them',
     async () => {
       await themeEditSet('t', 'neutral', '#6b7280', {cwd});
       const out = (await runCli([...ED, 'show', 't'], {cwd})).stdout
@@ -116,8 +116,15 @@ describe('what a change says', () => {
         .split('\n');
       const at = out.findIndex(l => /^missed \(\d+ parts?/.test(l));
       expect(at).toBeGreaterThan(-1);
-      // Within the last 20 lines: a `| tail -20` keeps the whole list.
-      expect(out.length - at).toBeLessThanOrEqual(20);
+      // The generated files stay last, right after the missed block.
+      const files = out.findIndex(l => /^colorFiles:/.test(l));
+      expect(files).toBeGreaterThan(at);
+      expect(
+        out.slice(at, files).some(l => /^(colors|colorNotes):/.test(l)),
+      ).toBe(false);
+      // The block itself is short: six parts with their lines and the
+      // count (the open problems, when there are any, come after the files).
+      expect(files - at).toBeLessThanOrEqual(18);
     },
     T,
   );
