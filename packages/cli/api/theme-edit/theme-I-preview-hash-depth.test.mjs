@@ -63,10 +63,11 @@ describe('a preview page whose JSX nests deep', () => {
   it('is read once per element: a change by hand is told at once', async () => {
     await themeEditPreviewAdd(undefined, {cwd, theme: 't'});
     const page = path.join(cwd, ROUTE, '_pages/overview.tsx');
-    fs.appendFileSync(page, deep(40));
+    fs.appendFileSync(page, deep(25));
     const started = Date.now();
     const r = await themeEditPreviewRemove(undefined, {cwd});
-    // Forty levels read twice at each level would be 2^40 reads.
+    // Twenty-five levels read twice at each level would be 2^25 reads:
+    // slow enough to fail the bound, never so slow that it holds the leg.
     expect(Date.now() - started).toBeLessThan(20_000);
     expect(r.data.notes.join(' ')).toContain('changed by hand');
     expect(fs.existsSync(page)).toBe(true);
