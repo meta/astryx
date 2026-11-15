@@ -526,9 +526,10 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   // there. A browser also sends the arrival when the trigger appears or
   // moves under a still pointer, after a layout change or a scroll. The user
   // did not point at the trigger then, so only a move over it opens the
-  // tooltip. A pointer that moves onto the trigger moves over it in the same
-  // frame, so the delay starts as before. Firefox sends that `pointermove`
-  // before the `mouseenter`, so the `mousemove` that follows it counts too.
+  // tooltip. A pointer that moves onto the trigger also moves over it in the
+  // same frame, so a real hover opens after `delay`. Firefox sends that
+  // `pointermove` before the `mouseenter`, so the `mousemove` that follows it
+  // counts too.
   const isArrivalUnmovedRef = useRef(false);
   const handleMouseEnter = useCallback(() => {
     isArrivalUnmovedRef.current = !isTouchPointerRef.current;
