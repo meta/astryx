@@ -133,9 +133,10 @@ function DotGLInteractiveCanvas({
   data: Record<string, unknown>[];
   renderTooltip?: (datum: Record<string, unknown>, index: number) => ReactNode;
 }) {
-  const visCanvasRef = useRef<HTMLCanvasElement>(null);
-  const pickCanvasRef = useRef<HTMLCanvasElement>(null);
-  const lostContextsRef = useRef<WEBGL_lose_context[]>([]);
+  const visHostRef = useRef<HTMLDivElement>(null);
+  const pickHostRef = useRef<HTMLDivElement>(null);
+  const visCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const pickCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const [hoverIndex, setHoverIndex] = useState<number>(-1);
   const [mousePos, setMousePos] = useState<{x: number; y: number} | null>(null);
   // Bumped on context restore to force the render effect to rebuild + repaint.
@@ -183,6 +184,54 @@ function DotGLInteractiveCanvas({
     }
     return colors;
   }, [resolved.length]);
+
+  // Create both canvases in their hosts and wire context-loss recovery. The
+  // canvases belong to this effect, not to React's tree. A context lost on
+  // purpose stays lost, so when React runs the effects again on this instance
+  // (StrictMode, a hidden and shown Activity), they start on fresh canvases.
+  useEffect(() => {
+    const visHost = visHostRef.current;
+    const pickHost = pickHostRef.current;
+    if (!visHost || !pickHost) {
+      return;
+    }
+    const visCanvas = document.createElement('canvas');
+    visCanvas.style.display = 'block';
+    visCanvas.style.width = '100%';
+    visCanvas.style.height = '100%';
+    visCanvas.style.pointerEvents = 'none';
+    const pickCanvas = document.createElement('canvas');
+    pickCanvas.style.display = 'none';
+    visHost.append(visCanvas);
+    pickHost.append(pickCanvas);
+    visCanvasRef.current = visCanvas;
+    pickCanvasRef.current = pickCanvas;
+    const unregisterVis = registerContextLossHandlers(
+      visCanvas,
+      () => {
+        visGLRef.current = null;
+        visBufRef.current = null;
+      },
+      () => setContextEpoch(e => e + 1),
+    );
+    const unregisterPick = registerContextLossHandlers(
+      pickCanvas,
+      () => {
+        pickGLRef.current = null;
+        pickPosBufRef.current = null;
+        pickColBufRef.current = null;
+      },
+      () => setContextEpoch(e => e + 1),
+    );
+    return () => {
+      unregisterVis();
+      unregisterPick();
+      visCanvas.remove();
+      pickCanvas.remove();
+      visCanvasRef.current = null;
+      pickCanvasRef.current = null;
+    };
+  }, []);
 
   // Render both passes. Contexts, programs, buffers, framebuffer, and pick
   // texture are created once and reused; only vertex data + uniforms upload per
@@ -373,55 +422,9 @@ function DotGLInteractiveCanvas({
     contextEpoch,
   ]);
 
-  // Register context-loss recovery for both canvases (runs once post-mount).
+  // Release both GL contexts and all their resources on unmount.
   useEffect(() => {
-    const cleanups: Array<() => void> = [];
-    const visCanvas = visCanvasRef.current;
-    if (visCanvas) {
-      cleanups.push(
-        registerContextLossHandlers(
-          visCanvas,
-          () => {
-            visGLRef.current = null;
-            visBufRef.current = null;
-          },
-          () => setContextEpoch(e => e + 1),
-        ),
-      );
-    }
-    const pickCanvas = pickCanvasRef.current;
-    if (pickCanvas) {
-      cleanups.push(
-        registerContextLossHandlers(
-          pickCanvas,
-          () => {
-            pickGLRef.current = null;
-            pickPosBufRef.current = null;
-            pickColBufRef.current = null;
-          },
-          () => setContextEpoch(e => e + 1),
-        ),
-      );
-    }
     return () => {
-      for (const c of cleanups) {
-        c();
-      }
-    };
-  }, []);
-
-  // Release both GL contexts and all their resources on unmount. React keeps
-  // these canvases when it runs the effects again on the same instance
-  // (StrictMode, a hidden and shown Activity), and a context lost on purpose
-  // stays lost. So a rerun restores the contexts this cleanup lost; their
-  // restored events then redraw through the handlers above.
-  useEffect(() => {
-    for (const extension of lostContextsRef.current) {
-      extension.restoreContext();
-    }
-    lostContextsRef.current = [];
-    return () => {
-      const lost: WEBGL_lose_context[] = [];
       const vis = visGLRef.current;
       if (vis) {
         const {gl, prog} = vis;
@@ -429,10 +432,7 @@ function DotGLInteractiveCanvas({
           gl.deleteBuffer(visBufRef.current);
         }
         gl.deleteProgram(prog);
-        const extension = loseContext(gl);
-        if (extension) {
-          lost.push(extension);
-        }
+        loseContext(gl);
       }
       const pick = pickGLRef.current;
       if (pick) {
@@ -446,17 +446,13 @@ function DotGLInteractiveCanvas({
         gl.deleteFramebuffer(fb);
         gl.deleteTexture(tex);
         gl.deleteProgram(prog);
-        const extension = loseContext(gl);
-        if (extension) {
-          lost.push(extension);
-        }
+        loseContext(gl);
       }
       visGLRef.current = null;
       visBufRef.current = null;
       pickGLRef.current = null;
       pickPosBufRef.current = null;
       pickColBufRef.current = null;
-      lostContextsRef.current = lost;
     };
   }, []);
 
@@ -535,10 +531,7 @@ function DotGLInteractiveCanvas({
         width={width}
         height={height}
         style={{overflow: 'hidden'}}>
-        <canvas
-          ref={visCanvasRef}
-          style={{width, height, pointerEvents: 'none'}}
-        />
+        <div ref={visHostRef} style={{width, height}} />
       </foreignObject>
 
       <foreignObject
@@ -547,7 +540,7 @@ function DotGLInteractiveCanvas({
         width={0}
         height={0}
         style={{overflow: 'hidden'}}>
-        <canvas ref={pickCanvasRef} style={{display: 'none'}} />
+        <div ref={pickHostRef} />
       </foreignObject>
 
       <rect

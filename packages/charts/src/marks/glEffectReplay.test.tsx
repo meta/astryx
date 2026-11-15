@@ -5,8 +5,8 @@
  * @input dotGL, dotGLInteractive, heatmapGL and streamGL inside a Chart, under
  *   StrictMode and inside an Activity boundary that hides and shows, over a
  *   fake WebGL context that behaves like a browser's: one context per canvas,
- *   and a context lost through WEBGL_lose_context stays lost until
- *   restoreContext() runs
+ *   a context lost through WEBGL_lose_context stays lost, and restoreContext()
+ *   works only after a listener prevented the lost event
  * @output Proof that each WebGL mark draws again after React runs its effect
  *   cleanups and then its effects on the same instance
  * @position Charts unit tests; the no-WebGL fallbacks are in marks.test.tsx
@@ -37,13 +37,25 @@ const contexts = new Map<HTMLCanvasElement, FakeContext>();
  */
 function fakeContext(canvas: HTMLCanvasElement): FakeContext {
   let isLost = false;
+  // Whether a listener prevented the last webglcontextlost event. A browser
+  // refuses restoreContext() otherwise.
+  let isRestorable = false;
   const state: FakeContext = {isContextLost: () => isLost, liveDraws: 0};
   const extension = {
     loseContext() {
       isLost = true;
-      canvas.dispatchEvent(new Event('webglcontextlost', {cancelable: true}));
+      isRestorable = false;
+      // A browser fires the lost event later, not inside this call.
+      queueMicrotask(() => {
+        isRestorable = !canvas.dispatchEvent(
+          new Event('webglcontextlost', {cancelable: true}),
+        );
+      });
     },
     restoreContext() {
+      if (!isLost || !isRestorable) {
+        return;
+      }
       isLost = false;
       queueMicrotask(() =>
         canvas.dispatchEvent(new Event('webglcontextrestored')),
