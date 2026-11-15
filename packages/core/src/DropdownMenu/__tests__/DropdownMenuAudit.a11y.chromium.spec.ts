@@ -118,7 +118,7 @@ const CASES: Case[] = [
     'pointer-open',
     'default',
     'pointer-open',
-    'Pointer open: menu container focused, no row highlighted',
+    'Pointer open: first row focused without a keyboard ring',
   ),
   c('hover-row', 'default', 'hover-second-row', OVERLAY),
   c('hover-row-dark', 'default', 'hover-second-row', OVERLAY, {mode: 'dark'}),
@@ -519,10 +519,11 @@ function assertClaimedState(
   }
   if (state === 'pointer-open' || state === 'header-footer') {
     expectAnchored();
-    expect(observed.activeIsMenu, `${state}: the menu itself is focused`).toBe(
-      true,
-    );
-    expect(observed.focusedRowIndex, `${state}: no row focused`).toBe(-1);
+    expect(
+      observed.activeIsMenu,
+      `${state}: the menu itself is not focused`,
+    ).toBe(false);
+    expect(observed.focusedRowIndex, `${state}: first row focused`).toBe(0);
     if (state === 'header-footer') {
       expect(observed.regionControls.inputs).toContain('Filter labels');
       expect(observed.regionControls.buttons).toContain('Create label');
