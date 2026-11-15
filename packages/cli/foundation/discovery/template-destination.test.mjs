@@ -81,9 +81,20 @@ describe('templateDestination', () => {
     );
   });
 
-  it('puts a block in src/components in every project', () => {
+  it('puts a block beside the routes of a Next app whose App Router folder is app/', () => {
     nextApp();
     mkdir('app');
+    expect(templateDestination(dir, 'block', 'ButtonShowcase')).toBe(
+      'app/components/ButtonShowcase',
+    );
+  });
+
+  it('puts a block in src/components in every other project', () => {
+    expect(templateDestination(dir, 'block', 'ButtonShowcase')).toBe(
+      'src/components/ButtonShowcase',
+    );
+    nextApp();
+    mkdir('src/app');
     expect(templateDestination(dir, 'block', 'ButtonShowcase')).toBe(
       'src/components/ButtonShowcase',
     );
@@ -95,9 +106,9 @@ describe('templateDestination', () => {
     mkdir('app/settings-2');
     fs.writeFileSync(path.join(dir, 'app', 'settings-3'), '');
     expect(templateDestination(dir, 'page', 'settings')).toBe('app/settings-4');
-    mkdir('src/components/CardShowcase');
+    mkdir('app/components/CardShowcase');
     expect(templateDestination(dir, 'block', 'CardShowcase')).toBe(
-      'src/components/CardShowcase-2',
+      'app/components/CardShowcase-2',
     );
   });
 });

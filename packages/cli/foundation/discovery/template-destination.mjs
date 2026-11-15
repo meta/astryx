@@ -14,30 +14,20 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 /**
- * The folder a page template goes to. In a Next app with an App Router
- * folder, that folder, so the page is a route and Next builds it: Next
- * refuses to build a `pages/` folder that is not beside the `app/` folder,
- * so such an app never gets `src/pages/`. Every other project gets
- * `src/pages/`, which no other framework reads as a route folder.
- * @param {string} projectDir
- * @returns {string}
- */
-function pageFolder(projectDir) {
-  if (dependsOnNext(projectDir)) {
-    if (isDirectory(path.join(projectDir, 'app'))) return 'app';
-    if (isDirectory(path.join(projectDir, 'src', 'app'))) return 'src/app';
-  }
-  return 'src/pages';
-}
-
-/**
- * The project-relative folder to scaffold a template into. A page goes to
- * `app/<id>` in a Next app with an `app/` folder, to `src/app/<id>` in one
- * with `src/app/`, and to `src/pages/<id>` everywhere else; a block goes to
- * `src/components/<id>`. When that path already exists (a route or a folder
- * the app has), it is `<id>-2`, `<id>-3` and so on, the first one that does
- * not exist, so the command runs as printed and never writes into a folder
- * the app owns.
+ * The project-relative folder to scaffold a template into.
+ *
+ * In a Next app with an App Router folder, a page goes in that folder
+ * (`app/<id>` or `src/app/<id>`), so it is a route and Next builds it. Next
+ * refuses to build a `pages/` folder that is not beside the `app/` folder, so
+ * such an app never gets `src/pages/`. A block goes to `app/components/<id>`
+ * in a Next app whose routes are in `app/`: that app often has no `src/`
+ * folder, and its build and style compiler cover the folders it has, while
+ * Next reads no route from a block's file name. Every other project gets
+ * `src/pages/<id>` for a page and `src/components/<id>` for a block.
+ *
+ * When that path already exists (a route or a folder the app has), it is
+ * `<id>-2`, `<id>-3` and so on, the first one that does not exist, so the
+ * command runs as printed and never writes into a folder the app owns.
  *
  * @param {string} projectDir the folder the command runs in
  * @param {'page' | 'block'} type
@@ -45,12 +35,31 @@ function pageFolder(projectDir) {
  * @returns {string}
  */
 export function templateDestination(projectDir, type, id) {
-  const parent = type === 'block' ? 'src/components' : pageFolder(projectDir);
+  const router = appRouterFolder(projectDir);
+  const parent =
+    type === 'block'
+      ? router === 'app'
+        ? 'app/components'
+        : 'src/components'
+      : (router ?? 'src/pages');
   let folder = `${parent}/${id}`;
   for (let n = 2; fs.existsSync(path.join(projectDir, folder)); n++) {
     folder = `${parent}/${id}-${n}`;
   }
   return folder;
+}
+
+/**
+ * The App Router folder of a Next app (`app`, else `src/app`, as Next looks
+ * for it), or null when the project is not a Next app or has neither.
+ * @param {string} projectDir
+ * @returns {'app' | 'src/app' | null}
+ */
+function appRouterFolder(projectDir) {
+  if (!dependsOnNext(projectDir)) return null;
+  if (isDirectory(path.join(projectDir, 'app'))) return 'app';
+  if (isDirectory(path.join(projectDir, 'src', 'app'))) return 'src/app';
+  return null;
 }
 
 /**
