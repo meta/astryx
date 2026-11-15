@@ -264,7 +264,7 @@ describe('the stored search catalog', () => {
       expect(textAnswer.stdout).not.toContain('(not ready)');
       expect(textAnswer).toEqual(runLive(text));
       const jsonAnswer = run(packed, json);
-      expect('isReady' in consoleResult(jsonAnswer.stdout)).toBe(false);
+      expect(consoleResult(jsonAnswer.stdout).isReady).toBe(true);
       expect(jsonAnswer).toEqual(runLive(json));
     });
     expect(storeAnswers()).toBe(true);

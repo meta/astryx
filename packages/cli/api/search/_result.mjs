@@ -77,9 +77,7 @@ export function toResult(
         displayName: c._displayName,
         kind: c._kind,
         command: `astryx template ${c._commandName ?? c.name} --type ${c._kind}`,
-        // Only an unready template carries the field, so a ready template's
-        // result keeps its shape.
-        ...(c._notReady ? {isReady: false} : {}),
+        isReady: !c._notReady,
       };
       break;
     case 'theme':

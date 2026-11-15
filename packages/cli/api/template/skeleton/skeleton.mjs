@@ -260,6 +260,7 @@ export function templateSkeleton(match, templates) {
       description: match.description,
       components: componentsInSource(source),
       skeleton: extractSkeleton(source),
+      isReady: match.isReady !== false,
     },
   };
 }

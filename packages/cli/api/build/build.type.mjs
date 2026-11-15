@@ -48,6 +48,7 @@
  * @property {string} reason One sentence saying the same as `basis`, for a reader.
  * @property {BuildAlternative[]} alternatives The next closest page templates (≤2), for when the start's layout is wrong: for a whole page in the page-pick model's order, else in the ranker's.
  * @property {string[]} [notes] Setup notes: what the template needs that the project lacks (missing packages, missing StyleX compiler). Present only when the start template imports packages the project does not have or needs a StyleX compiler the project has not configured.
+ * @property {boolean} isReady Whether the template is ready, as its doc's `isReady` says (`true` when the doc leaves it out). Build starts only from a ready template.
  */
 
 /**
@@ -59,6 +60,7 @@
  * @property {string} description What the page is: its layout and the ideas it serves.
  * @property {string} package The npm package that owns this template.
  * @property {string} command The scaffold command, in the same form as the start's.
+ * @property {boolean} isReady Whether the template is ready, as for the start.
  */
 
 /**

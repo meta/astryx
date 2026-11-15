@@ -171,6 +171,7 @@ export function templateCopy(
       installCommand,
       ...(path.isAbsolute(targetPath) ? {givenPath: targetPath} : {}),
       ...(icons ? {icons} : {}),
+      isReady: match.isReady !== false,
     },
   };
 }

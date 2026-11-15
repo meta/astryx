@@ -143,7 +143,7 @@ function liftFromShell(ranked, kind, catalog, idea, unsupported = null) {
  * @param {string} idea
  * @param {(t: PageTemplate) => string | null} [placeOf] the path a template
  *   is scaffolded to, quoted for a shell; null when none is known
- * @returns {Omit<BuildStart, 'alternatives'> | null}
+ * @returns {Omit<BuildStart, 'alternatives' | 'isReady'> | null}
  */
 export function chooseStart(
   ranked,

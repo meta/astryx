@@ -1,14 +1,15 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file A template whose doc sets `isReady: false` stays in search's answer,
- * in the same place, and is marked: its JSON result carries `isReady: false`
- * and its text record reads `page (not ready)`. A ready template and one whose
- * doc leaves `isReady` out keep today's result.
+ * @file Every template result carries `isReady`, after its other fields: false
+ * for a template whose doc sets `isReady: false`, true for a ready template
+ * and for one whose doc leaves it out. An unready template stays in the same
+ * place, and its text record reads `page (not ready)`. Build's pages and
+ * blocks carry the same field.
  *
  * @input a project with made-up integration templates: ready, unready, and
  *   one that leaves `isReady` out
- * @output each template's result, its place, and its text record
+ * @output each template's result, its place, its text record, and build's kit
  * @position packages/cli/api/search — search results
  */
 
@@ -23,6 +24,8 @@ import {requireNatively} from '../../test-utils/native-require.mjs';
 const require = requireNatively(import.meta.url);
 /** @type {typeof import('./search.mjs')} */
 const {search} = require('./search.mjs');
+/** @type {typeof import('../build/build.mjs')} */
+const {build} = require('../build/build.mjs');
 
 const SLOW = 60_000;
 const CLI = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -84,7 +87,25 @@ afterAll(() => fs.rmSync(dir, {recursive: true, force: true}));
 
 describe('an unready template in search', () => {
   it(
-    'carries isReady: false; a ready template and one without isReady carry nothing new',
+    "gives every page and block in build's kit isReady, after its other fields",
+    async () => {
+      const kit = (await build('a quokka roster page with a table', {cwd: dir}))
+        .data;
+      const rows = [...kit.pages, ...kit.blocks];
+      expect(kit.pages.length).toBeGreaterThan(0);
+      expect(kit.blocks.length).toBeGreaterThan(0);
+      for (const row of rows) {
+        expect(typeof row.isReady, row.name).toBe('boolean');
+        expect(Object.keys(row).at(-1), row.name).toBe('isReady');
+      }
+      const unready = kit.pages.find(p => p.name === 'quokka-unready');
+      if (unready) expect(unready.isReady).toBe(false);
+    },
+    SLOW,
+  );
+
+  it(
+    'carries isReady: false on an unready template and true on the others, after every other field',
     async () => {
       const found = quokkas(
         (await search('quokka roster', {cwd: dir, type: 'template'})).data
@@ -97,13 +118,29 @@ describe('an unready template in search', () => {
         'quokka-unready',
       ]);
       expect(byName['quokka-unready'].isReady).toBe(false);
+      expect(byName['quokka-ready'].isReady).toBe(true);
+      expect(byName['quokka-plain'].isReady).toBe(true);
       // The field comes after every field a template result had.
-      expect(Object.keys(byName['quokka-unready'])).toEqual([
-        ...Object.keys(byName['quokka-ready']),
-        'isReady',
-      ]);
-      expect('isReady' in byName['quokka-ready']).toBe(false);
-      expect('isReady' in byName['quokka-plain']).toBe(false);
+      for (const result of found) {
+        expect(Object.keys(result)).toEqual([
+          'domain',
+          'name',
+          'package',
+          'score',
+          'reason',
+          'description',
+          'displayName',
+          'kind',
+          'command',
+          'isReady',
+        ]);
+      }
+      const others = (await search('quokka roster', {cwd: dir})).data.results;
+      for (const result of others) {
+        expect('isReady' in result, result.name).toBe(
+          result.domain === 'template',
+        );
+      }
     },
     SLOW,
   );
@@ -121,6 +158,11 @@ describe('an unready template in search', () => {
       try {
         const after = await order();
         expect(after).toEqual(before);
+        // The second search saw the flip.
+        const flipped = (
+          await search('quokka roster', {cwd: dir, type: 'template'})
+        ).data.results.find(r => r.name === 'quokka-unready');
+        expect(flipped?.isReady).toBe(true);
       } finally {
         writePage('quokka-unready', 'isReady: false,');
       }

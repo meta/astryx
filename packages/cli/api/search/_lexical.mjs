@@ -102,7 +102,7 @@ import {COMPONENT_NAME_RE} from '../../foundation/text/entry-names.mjs';
  * @property {string} [_resultName]
  * @property {string} [_commandName]
  * @property {true} [_notReady] - A template whose doc sets `isReady: false`.
- *   Its result carries `isReady: false`; ranking never reads it.
+ *   Its result's `isReady` is false; ranking never reads it.
  * @property {'file'|'doc'} [_hold] - How an integration component holds its
  *   name, for the owner rule.
  * @property {string} [_docPath] - An integration component's doc.

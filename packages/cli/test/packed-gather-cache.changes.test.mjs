@@ -102,11 +102,11 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
         const kept = allInodes(tmp);
         const cold = run(ask, {tmp});
         expect(allInodes(tmp)).not.toEqual(kept);
-        expect('isReady' in tally(cold)).toBe(false);
+        expect(tally(cold).isReady).toBe(true);
         expect(cold).toEqual(run(ask, {tmp: freshTmp()}));
         run(ask, {tmp, json: false});
         const [ready] = expectWarmHit(tmp, [ask]);
-        expect('isReady' in tally(ready)).toBe(false);
+        expect(tally(ready).isReady).toBe(true);
         const [readyText] = expectWarmHit(tmp, [ask], {json: false});
         expect(readyText.stdout).toContain('kind:        page\n');
         expect(readyText.stdout).not.toContain('(not ready)');

@@ -29,6 +29,7 @@ import {jsonOut} from '../../../foundation/response/json.mjs';
 import {resultSetOf} from '../../../foundation/debug/index.mjs';
 import {emit, formatDeprecation, section, text, records} from '../formatters/index.mjs';
 import {cliError} from '../lib/cli-error.mjs';
+import {markNotReady} from '../lib/not-ready.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {search as searchApi} from '../../../api/search/search.mjs';
 import {Project} from '../../../foundation/config/project.mjs';
@@ -178,7 +179,7 @@ export function registerSearch(program) {
             ? `Results for "${q}" (${results.length} of ${matchCount})`
             : `Results for "${q}" (${results.length})`,
         ),
-        records(results.map(markNotReady), {
+        records(results.map(withNotReadyKind), {
           fields,
           format: {
             command: formatCliCommand,
@@ -203,9 +204,9 @@ export function registerSearch(program) {
  * `page (not ready)`. The JSON carries the same fact as `isReady: false`.
  * @param {import('../../../api/search/search.type.mjs').SearchResultEntry} result
  */
-function markNotReady(result) {
+function withNotReadyKind(result) {
   return result.isReady === false
-    ? {...result, kind: `${result.kind} (not ready)`}
+    ? {...result, kind: markNotReady(String(result.kind), false)}
     : result;
 }
 
