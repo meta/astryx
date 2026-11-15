@@ -13,6 +13,7 @@ import {GestureArena, type GestureClock} from '../GestureArena';
 import {LongPressGestureRecognizer} from '../LongPressGestureRecognizer';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
 import {TapGestureRecognizer} from '../TapGestureRecognizer';
+import type {PointerKind} from '../types';
 import {createHarness} from './harness';
 
 /** A clock whose timers run one task at a time, as an event loop does. */
@@ -44,7 +45,7 @@ class TaskClock implements GestureClock {
   }
 }
 
-function pressArena(): {
+function pressArena(pointerType: PointerKind = 'touch'): {
   clock: TaskClock;
   arena: GestureArena;
   press: LongPressGestureRecognizer;
@@ -64,7 +65,7 @@ function pressArena(): {
       x: 0,
       y: 0,
       time: 0,
-      pointerType: 'touch',
+      pointerType,
       target: null,
       scroll: null,
       recognizers: [press],
@@ -142,6 +143,36 @@ describe('a timer that fires late', () => {
     arena.moved([{id: 1, x: 1, y: 0, time: 820}]);
     expect(log).toContain('press:began@500');
     arena.ended([{id: 1, x: 1, y: 0, time: 840}]);
+  });
+
+  it('ends the wait when its own timer runs late with nothing queued, with no second wait', () => {
+    const {clock, arena, log} = pressArena();
+    // The deadline's timer runs late: it waits until 850.
+    clock.runTask(800);
+    // That wait's own timer runs 50 ms late behind another block. No input
+    // from before the deadline came late, so the deadline runs now.
+    clock.runTask(900);
+    expect(log).toContain('press:began@500');
+    arena.ended([{id: 1, x: 0, y: 0, time: 920}]);
+  });
+
+  it('keeps the one-task yield for a mouse: its late deadline runs after the next task, with no wait', () => {
+    const {clock, arena, log} = pressArena('mouse');
+    clock.runTask(800);
+    expect(log.some(entry => entry.startsWith('press:began'))).toBe(false);
+    clock.runTask(800);
+    expect(log).toContain('press:began@500');
+    arena.ended([{id: 1, x: 0, y: 0, time: 820}]);
+  });
+
+  it('waits for a pen’s late deadline as for a finger’s', () => {
+    const {clock, arena, log} = pressArena('pen');
+    clock.runTask(800);
+    clock.runTask(800);
+    expect(log.some(entry => entry.startsWith('press:began'))).toBe(false);
+    clock.runTask(850);
+    expect(log).toContain('press:began@500');
+    arena.ended([{id: 1, x: 0, y: 0, time: 870}]);
   });
 
   it('runs a deadline that came due during a wait just after it, with no second wait', () => {
