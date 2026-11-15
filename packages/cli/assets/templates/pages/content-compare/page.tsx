@@ -21,6 +21,7 @@ import {HStack, VStack, StackItem} from '@astryxdesign/core/Stack';
 import {TextArea} from '@astryxdesign/core/TextArea';
 import {useToast} from '@astryxdesign/core/Toast';
 import {useMediaQuery} from '@astryxdesign/core/hooks';
+import {rtlStyles} from '@astryxdesign/core/utils';
 import {
   ArrowsRightLeftIcon,
   ChevronLeftIcon,
@@ -216,18 +217,21 @@ export default function ContentComparePage() {
   const only = (lines: string[], numbers: number[]) =>
     numbers.map(n => lines[n - 1]).join('\n');
 
+  // Narrow screens have no view switch, so they always show the full text.
+  const onlyChanges = view === 'changes' && !isMobile;
+
   const pane = (v: Version, lines: string[], marked: number[]) => (
     <CodeBlock
       title={`${v.name} · ${v.version}`}
       code={
-        view === 'changes'
+        onlyChanges
           ? only(lines, marked) || 'No changed lines on this side.'
           : lines.join('\n')
       }
       language="markdown"
       hasLanguageLabel={false}
-      hasLineNumbers={view !== 'changes'}
-      highlightLines={view === 'changes' ? [] : marked}
+      hasLineNumbers={!onlyChanges}
+      highlightLines={onlyChanges ? [] : marked}
       isWrapped
       width="100%"
       endContent={<Badge label={`${wordCount(v.text)} words`} />}
@@ -402,14 +406,16 @@ export default function ContentComparePage() {
                 label="Previous pair"
                 variant="ghost"
                 isIconOnly
-                icon={<Icon icon={ChevronLeftIcon} />}
+                icon={<Icon icon={ChevronLeftIcon} xstyle={rtlStyles.mirror} />}
                 onClick={() => goTo(index - 1)}
               />
               <Button
                 label="Next pair"
                 variant="ghost"
                 isIconOnly
-                icon={<Icon icon={ChevronRightIcon} />}
+                icon={
+                  <Icon icon={ChevronRightIcon} xstyle={rtlStyles.mirror} />
+                }
                 onClick={() => goTo(index + 1)}
               />
               <StackItem size="fill" />
