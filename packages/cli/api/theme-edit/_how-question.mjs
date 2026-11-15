@@ -2041,6 +2041,8 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
   [/\b(invalid|errors? state|has an error|with an error)\b/, 'invalid'],
   [/\bvisited\b/, 'visited'],
   [/\b(opened|expanded)\b/, 'open'],
+  // (A page or step shown as the one you are on: aria-current.)
+  [/\bcurrent\b/, 'current'],
   // Words for states a part may not have: the answer says so.
   [/\bread-?only\b/, 'readonly'],
   [/\bindeterminate\b/, 'indeterminate'],
@@ -5487,11 +5489,22 @@ export function draftAnswer(ctx, env, question) {
   // "links on cards", "buttons inside cards", "links in the sidebar": the
   // place is never changed. A token the answer writes is set on it, so it
   // holds there only (the token cascades to the parts inside); a part's
-  // own property cannot be kept to a place, which is said.
+  // own property cannot be kept to a place, which is said. "The current
+  // page in pagination": the words before "in" or "of" name an element of
+  // that part and its state; the page they seem to name (which holds every
+  // part, so it is never inside one) is that element, the part inside the
+  // place that takes the state.
   for (const c of clauses) {
+    const inPlaceText = c.text.replace(/\s+(?:on|when) \w+$/, '');
+    // ("Of" names a place only for an element of it: "twice the padding
+    // of buttons" compares with them.)
+    const ofOnly =
+      !/\b(?:inside|within|on|in(?! (?:dark|light)\b))\s+(?:the\s+|a\s+|an\s+|my\s+)?([a-z][a-z -]*)$/.test(
+        inPlaceText,
+      );
     const place =
-      /\b(?:inside|within|on|in(?! (?:dark|light)\b))\s+(?:the\s+|a\s+|an\s+|my\s+)?([a-z][a-z -]*)$/.exec(
-        c.text.replace(/\s+(?:on|when) \w+$/, ''),
+      /\b(?:inside|within|on|of|in(?! (?:dark|light)\b))\s+(?:the\s+|a\s+|an\s+|my\s+)?([a-z][a-z -]*)$/.exec(
+        inPlaceText,
       );
     if (!place || c.parts.length < 2) continue;
     const at = c.text.indexOf(place[0]);
@@ -5509,8 +5522,41 @@ export function draftAnswer(ctx, env, question) {
       !c.parts.filter(y => !inPlace.includes(y)).every(y => C.MAP[y.on])
     )
       continue;
+    if (ofOnly) {
+      // (Only the element reading below takes "of".)
+      const holder0 = inPlace.length === 1 ? inPlace[0].on : null;
+      const rest0 = c.parts.filter(x => !inPlace.includes(x));
+      if (!holder0 || !c.state || !rest0.every(x => /^(page|body)$/.test(x.on)))
+        continue;
+    }
     c.parts = c.parts.filter(x => !inPlace.includes(x));
-    if (inPlace.length === 1) c.container = inPlace[0].on;
+    if (inPlace.length === 1) {
+      const holder = inPlace[0].on;
+      const holds = C.MAP[holder]?.contains ?? [];
+      // (The page, which holds every part, is never an element inside
+      // one: "the current page in pagination" names pagination's own.)
+      const strangers = c.state
+        ? c.parts.filter(x => x.on !== holder && /^(page|body)$/.test(x.on))
+        : [];
+      if (strangers.length === c.parts.length) {
+        // (The part inside it that takes the state named, if one does;
+        // else the place itself.)
+        const taking = c.state
+          ? holds.filter(k =>
+              settableStates(ctx, env.slug, env.data, k).includes(
+                /** @type {string} */ (c.state),
+              ),
+            )
+          : [];
+        if (taking.length === 1) {
+          c.parts = [{on: taking[0]}];
+          c.container = holder;
+        } else {
+          c.parts = [inPlace[0]];
+          continue;
+        }
+      } else c.container = holder;
+    }
     placeNotes.push({
       c,
       text: `the editor themes ${c.parts.map(x => x.on).join(', ')} everywhere: it cannot keep ${inPlace.map(x => x.on).join(', ')} apart, so this applies to every ${c.parts.map(x => x.on).join(', ')} (${inPlace.map(x => x.on).join(', ')} is not changed)`,
