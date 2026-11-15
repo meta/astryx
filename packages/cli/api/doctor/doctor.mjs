@@ -1996,7 +1996,7 @@ function newestReleaseCheck(ctx) {
     return {
       ...base,
       message:
-        'Update check: none recorded here, so the newest release is not known. A copy installed for the computer checks in the background once a day, after a command; a copy that a tool runs for you is kept current by that tool.',
+        "Update check: none recorded here, so the newest release is not known. Only a copy installed for the computer checks, in the background once a day after a command; a project's own copy changes only when the project upgrades it, and a tool that runs its own copy chooses its release.",
     };
   }
   if (
