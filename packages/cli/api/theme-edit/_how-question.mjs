@@ -1673,33 +1673,72 @@ export function exactFactor(text) {
     const f = down ? 1 - share : 1 + share;
     return f >= 0 ? f : null;
   };
-  const fraction = (/** @type {string} */ w) =>
-    ({
-      half: 0.5,
-      'a half': 0.5,
-      'a third': 1 / 3,
-      'a quarter': 0.25,
-      '1/2': 0.5,
-      '1/3': 1 / 3,
-      '1/4': 0.25,
-    })[w] ?? null;
+  // A share in words or figures: "a third", "two thirds", "three
+  // quarters", "a fifth", "1/3", "2/3".
+  const SHARE = String.raw`(?:(?:a|an|one|two|three|four|five|six|seven|eight|nine)\s+(?:halves|half|thirds?|quarters?|fifths?|sixths?|eighths?|tenths?)|half|\d+\/\d+)`;
+  const fraction = (/** @type {string} */ w) => {
+    const fig = /^(\d+)\/(\d+)$/.exec(w);
+    if (fig) return Number(fig[2]) > 0 ? Number(fig[1]) / Number(fig[2]) : null;
+    if (w === 'half') return 0.5;
+    const m = /^(\w+)\s+(\w+)$/.exec(w);
+    if (!m) return null;
+    const n = /** @type {Record<string, number>} */ ({
+      a: 1,
+      an: 1,
+      one: 1,
+      two: 2,
+      three: 3,
+      four: 4,
+      five: 5,
+      six: 6,
+      seven: 7,
+      eight: 8,
+      nine: 9,
+    })[m[1]];
+    const d = /** @type {Record<string, number>} */ ({
+      half: 2,
+      halves: 2,
+      third: 3,
+      thirds: 3,
+      quarter: 4,
+      quarters: 4,
+      fifth: 5,
+      fifths: 5,
+      sixth: 6,
+      sixths: 6,
+      eighth: 8,
+      eighths: 8,
+      tenth: 10,
+      tenths: 10,
+    })[m[2]];
+    return n && d && n < d ? n / d : null;
+  };
+  // (More see-through is less of the color: a share of it is fainter.)
+  const WAY = String.raw`bigger|larger|more|wider|taller|thicker|higher|stronger|smaller|less|tighter|narrower|thinner|shorter|lower|fainter|weaker`;
+  const seeThrough = /\bmore (?:transparent|translucent|see-through)\b/.test(t);
   // "half again as big": one and a half; "a third again": four thirds.
   if (/\bhalf again\b/.test(t)) return 1.5;
   const again = /\b(a third|a quarter|1\/3|1\/4) again\b/.exec(t);
   if (again) return /third|3/.test(again[1]) ? 4 / 3 : 1.25;
-  // "a quarter bigger", "a third smaller", "cut by a third", "reduce by half".
+  // "a quarter bigger", "two thirds fainter", "fainter by a third", "a
+  // third more transparent", "cut by a third", "reduce by half".
   const share =
-    /\b(a half|half|a third|a quarter|1\/2|1\/3|1\/4)\s+(bigger|larger|more|wider|taller|thicker|higher|stronger|smaller|less|tighter|narrower|thinner|shorter|lower|fainter|weaker)\b/.exec(
-      t,
-    );
+    new RegExp(String.raw`\b(${SHARE})\s+(${WAY})\b`).exec(t) ??
+    (() => {
+      const m = new RegExp(String.raw`\b(${WAY})\s+by\s+(${SHARE})\b`).exec(t);
+      return m ? [m[0], m[2], m[1]] : null;
+    })();
   if (share) {
     const f = fraction(share[1]);
-    if (f != null) return by(f, SHRINK.test(share[2]));
+    if (f != null)
+      return by(
+        f,
+        SHRINK.test(share[2]) || (seeThrough && share[2] === 'more'),
+      );
   }
-  const cut =
-    /\b(cut|reduce|lower|shrink|decrease|increase|raise|grow)\b[^.]*?\bby (a half|half|a third|a quarter|1\/2|1\/3|1\/4)\b/.exec(
-      t,
-    );
+  const cut = new RegExp(
+    String.raw`\b(cut|reduce|lower|shrink|decrease|increase|raise|grow)\b[^.]*?\bby (${SHARE})\b`,
+  ).exec(t);
   if (cut) {
     const f = fraction(cut[2]);
     if (f != null) return by(f, !/^(increase|raise|grow)$/.test(cut[1]));
@@ -1712,7 +1751,10 @@ export function exactFactor(text) {
       t,
     );
   if (pctBy && Number(pctBy[1]) > 0)
-    return by(Number(pctBy[1]) / 100, SHRINK.test(pctBy[2]));
+    return by(
+      Number(pctBy[1]) / 100,
+      SHRINK.test(pctBy[2]) || (seeThrough && pctBy[2] === 'more'),
+    );
   const pct = /\b(\d{1,3}(?:\.\d+)?)\s?%\s*(?:strength|of|as)\b/.exec(t);
   if (pct && Number(pct[1]) > 0) return Number(pct[1]) / 100;
   if (/\b(half|halve|halved|1\/2)\b/.test(t)) return 0.5;
@@ -2081,6 +2123,7 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
  * @property {{prop: string, value: string, bad?: string} | null} named - a CSS property the clause names, with its value as typed
  * @property {string} [colorRef] - a part whose color the clause names as a value ("the sidebar the page color"): read, never changed
  * @property {boolean} [unknownSubject] - an elided clause whose subject is no part ("and the gizmo red")
+ * @property {[number, number]} [colorRefSpan] - where the clause names its reference, with its own word ("the muted card")
  * @property {string} [colorRefWhen] - the reference's own status or variant ("the error banner": status:error; "?:error" for a word whose axis the part's values give)
  * @property {string} [colorRefProp] - the paint of the reference named ("the card border color": border-color)
  * @property {string} [groundRef] - a part the clause measures against ("input borders 3:1 against the page"): read, never changed
@@ -2621,17 +2664,83 @@ function clausesOf(q, partWords) {
     /** @type {string | undefined} */
     let colorRefWhen;
     let refSaid = '';
+    /** (Where the clause names the reference, with its own word.) @type {[number, number] | undefined} */
+    let refSpan;
     /** @type {string | undefined} */
     let groundRef;
+    // (Every place the clause names a part, by any of its words.)
+    // (Each with the look its words name, "destructive button".)
+    const placesOf = (/** @type {{on: string}} */ p) =>
+      partWords
+        .filter(([, x]) => x.on === p.on)
+        .flatMap(([re, x]) =>
+          [...text.matchAll(new RegExp(re.source, 'g'))].map(m => ({
+            index: m.index ?? 0,
+            end: (m.index ?? 0) + m[0].length,
+            ...(x.when ? {when: x.when} : {}),
+          })),
+        )
+        .sort((x, y) => x.index - y.index || y.end - x.end)
+        // (One place where several words match inside each other: the
+        // longest.)
+        .filter(
+          (x, i, all) =>
+            !all.some(
+              (y, j) =>
+                j !== i &&
+                y.index <= x.index &&
+                y.end >= x.end &&
+                (y.end - y.index > x.end - x.index || j < i),
+            ),
+        );
+    // (A word before the reference that names no part is its status or
+    // variant: "the error banner color".)
+    const ownWord = String.raw`(?:(?!(?:the|my|a|of|as|and|or)\b)[a-z]+\s+)?`;
+    const isOwnWord = (/** @type {string} */ before) => {
+      const w = /([a-z]+)\s+$/.exec(before)?.[1];
+      return !w || !partWords.some(([re]) => re.test(` ${w} `));
+    };
+    // "the card background the color of the muted card": the same part
+    // named again as the reference is its own color in that look.
+    if (parts.length >= 1 && parts.every(p => p.on === parts[0].on)) {
+      const places = placesOf(parts[0]);
+      const again = places
+        .slice(1)
+        .find(
+          where =>
+            new RegExp(
+              String.raw`\bcolou?r of\s+(?:the\s+|my\s+)?${ownWord}$`,
+            ).test(text.slice(0, where.index)) &&
+            isOwnWord(text.slice(0, where.index)),
+        );
+      if (again) {
+        colorRef = parts[0].on;
+        refSaid = text.slice(again.index, again.end);
+        refSpan = [
+          again.index -
+            (/([a-z]+\s+)$/.exec(text.slice(0, again.index))?.[1].length ?? 0),
+          again.end,
+        ];
+        const before = /([a-z]+)\s+$/.exec(text.slice(0, again.index))?.[1];
+        colorRefWhen =
+          again.when ??
+          (before && !/^(?:the|my|a|of|as)$/.test(before)
+            ? `?:${before === 'danger' ? 'error' : before}`
+            : undefined);
+        // (That look is the reference's, never the part changed: the part
+        // is named once, as the clause names it first.)
+        const said = before === 'danger' ? 'error' : before;
+        const subject = parts.find(
+          p =>
+            !(said && p.when?.endsWith(`:${said}`)) &&
+            !(again.when && p.when === again.when),
+        ) ?? {on: parts[0].on};
+        parts.splice(0, parts.length, subject);
+      }
+    }
     if (parts.length > 1) {
       // Where the clause first names a part, by any of its words.
-      const at = (/** @type {{on: string}} */ p) =>
-        partWords
-          .filter(([, x]) => x.on === p.on)
-          .map(([re]) => new RegExp(re.source, 'g').exec(text))
-          .filter(m => m != null)
-          .map(m => ({index: m.index, end: m.index + m[0].length}))
-          .sort((x, y) => x.index - y.index)[0] ?? null;
+      const at = (/** @type {{on: string}} */ p) => placesOf(p)[0] ?? null;
       const first = Math.min(...parts.map(p => at(p)?.index ?? Infinity));
       const ref = parts.find(p => {
         const where = at(p);
@@ -2641,8 +2750,12 @@ function clausesOf(q, partWords) {
           // "the page color", "the page's colour"; "the color of the page";
           // and a color named like another part's, "grey like the
           // dialogs", "the same grey as the page".
-          // ("The card border color": the color of that paint of it.)
-          ((/\b(?:the|my|a)\s+$/.test(text.slice(0, where.index)) &&
+          // ("The card border color": the color of that paint of it; "the
+          // error banner color", of that look of it.)
+          ((new RegExp(String.raw`\b(?:the|my|a)\s+${ownWord}$`).test(
+            text.slice(0, where.index),
+          ) &&
+            isOwnWord(text.slice(0, where.index)) &&
             /^(?:'s)?\s+(?:(?:border|text|background|fill|line)\s+)?colou?r\b/.test(
               text.slice(where.end),
             )) ||
@@ -2972,6 +3085,7 @@ function clausesOf(q, partWords) {
       text,
       parts,
       ...(colorRef ? {colorRef} : {}),
+      ...(refSpan ? {colorRefSpan: refSpan} : {}),
       ...(colorRefWhen ? {colorRefWhen} : {}),
       ...(colorRefProp ? {colorRefProp} : {}),
       ...(groundRef ? {groundRef} : {}),
@@ -4050,20 +4164,26 @@ export function draftAnswer(ctx, env, question) {
     )
     // "exactly 36px": the value said.
     .replace(/\bexactly\s+(?=\d*\.?\d+\s?(?:px|rem|em|%)\b)/gi, '')
+    // (A share before a way, "two thirds fainter", "1/3 bigger", is that
+    // share more or less, "N% fainter"; elsewhere that share of now.)
     .replace(
-      /\b(two|three|four|five|2|3|4|5) (thirds|quarters|fourths|fifths)\b(?:\s+of)?/gi,
-      (_m, n, d) => {
+      /\b(two|three|four|five|2|3|4|5) (thirds|quarters|fourths|fifths)\b(\s+of)?(?=(\s+[a-z]+er\b|\s+more\b|\s+less\b)?)/gi,
+      (_m, n, d, of, way) => {
         const num = WORD_NUMBERS[String(n).toLowerCase()] ?? Number(n);
         /** @type {Record<string, number>} */
         const DENS = {thirds: 3, quarters: 4, fourths: 4, fifths: 5};
         const den = DENS[String(d).toLowerCase()] ?? 1;
-        return num < den ? `${Number(((num / den) * 100).toFixed(3))}% of` : _m;
+        const pct = Number(((num / den) * 100).toFixed(3));
+        return num < den ? (way && !of ? `${pct}%` : `${pct}% of`) : _m;
       },
     )
-    .replace(/(?<![\d./#-])([1-9])\/([2-9])(?![\d./])(?:\s+of)?/g, (m, n, d) =>
-      Number(n) < Number(d)
-        ? `${Number(((Number(n) / Number(d)) * 100).toFixed(3))}% of`
-        : m,
+    .replace(
+      /(?<![\d./#-])([1-9])\/([2-9])(?![\d./])(\s+of)?(?=(\s+[a-z]+er\b|\s+more\b|\s+less\b)?)/g,
+      (m, n, d, of, way) => {
+        if (Number(n) >= Number(d)) return m;
+        const pct = Number(((Number(n) / Number(d)) * 100).toFixed(3));
+        return way && !of ? `${pct}%` : `${pct}% of`;
+      },
     )
     .replace(/\bflatten (?:the )?([a-z]+)/gi, 'make the $1 flat')
     .replace(/\b([a-z][a-z -]*?)\s*\+\+/gi, 'more $1')
@@ -5438,7 +5558,15 @@ export function draftAnswer(ctx, env, question) {
       const vals = C.variantValues(member);
       const nouns = lex.parts.filter(([, x]) => x.on === p.on && !x.when);
       // Every pair of words in turn ("make blue cards": "blue cards" too).
-      const words = c.text.split(/[^a-z]+/).filter(Boolean);
+      // (Never the reference's own words: "the color of the muted card"
+      // names the look read, not the cards changed.)
+      const words = (
+        c.colorRefSpan
+          ? `${c.text.slice(0, c.colorRefSpan[0])} ${c.text.slice(c.colorRefSpan[1])}`
+          : c.text
+      )
+        .split(/[^a-z]+/)
+        .filter(Boolean);
       // A way to move ("darker", "rounder"): a color word before the part
       // then says WHICH parts, never the color to give.
       const moves =
@@ -8126,7 +8254,9 @@ export function draftAnswer(ctx, env, question) {
           : []),
       ]) {
         const v = refNow(c.colorRef, prop, c.colorRefWhen);
-        if (v) return v;
+        // (A see-through paint shows no color of its own: the next paint
+        // it draws is its color, butter's outlined secondary button.)
+        if (v && !/^(?:transparent|none)$/i.test(v)) return v;
       }
       return kind === 'text' || !C.MAP[one(c.colorRef)]
         ? null
@@ -9665,7 +9795,14 @@ export function draftAnswer(ctx, env, question) {
           c.text,
         );
       if ((al || more) && c.parts.length) {
-        const a = al ? Number(al[1]) : 0.6;
+        // (The share said, "20% more transparent", "a third more
+        // see-through", of the fill as it is; else 0.6.)
+        const by = more ? exactFactor(c.text) : null;
+        const a = al
+          ? Number(al[1])
+          : by != null && by > 0 && by < 1
+            ? Number(by.toFixed(2))
+            : 0.6;
         for (const p of c.parts) {
           seenPart(p.on);
           const {noState: _n, ...f} = flagsFor(c, p);
@@ -11620,6 +11757,21 @@ export function draftAnswer(ctx, env, question) {
     };
   }
   /**
+   * The value the base theme writes for a part's property in a look
+   * (`variant:secondary`), as it is (a literal, a token, transparent), or
+   * null when it writes none.
+   * @param {string} part @param {string} prop @param {string} when
+   * @returns {string | null}
+   */
+  function baseOwnLook(part, prop, when) {
+    const camel = prop.replace(/-([a-z])/g, (_m, x) => x.toUpperCase());
+    const rule = /** @type {any} */ (env.base).components?.[one(part)]?.[when];
+    const v =
+      rule?.[camel] ??
+      (prop === 'background-color' ? rule?.background : undefined);
+    return v != null && typeof v !== 'object' ? String(v).trim() : null;
+  }
+  /**
    * A part's color as it shows it in a status or variant ("the error
    * banner", "the primary button"): the token it reads there, else its
    * resting value. `when` may name only the value ("?:error"): its axis
@@ -11629,12 +11781,32 @@ export function draftAnswer(ctx, env, question) {
    */
   function refNow(part, prop, when) {
     let w = when;
+    // (The look the base theme writes for it, as it is, comes first.)
+    const fromBase = (/** @type {string | undefined} */ ww) =>
+      ww ? baseOwnLook(part, prop, ww) : null;
     if (w?.startsWith('?:')) {
-      const value = w.slice(2);
+      // (The one role said in other words: error, danger and destructive
+      // name it alike.)
+      const said = w.slice(2);
+      const words = /^(?:error|danger|destructive)$/.test(said)
+        ? [said, 'error', 'danger', 'destructive']
+        : [said];
       const vals = C.variantValues(one(part)) ?? {};
-      const axis = Object.keys(vals).find(k => (vals[k] ?? []).includes(value));
-      w = axis ? `${axis}:${value}` : undefined;
+      // (Its variant before any other axis that has the word.)
+      const axes = Object.keys(vals).sort(
+        (x, y) => Number(y === 'variant') - Number(x === 'variant'),
+      );
+      const hit = axes
+        .flatMap(axis =>
+          words
+            .filter(value => (vals[axis] ?? []).includes(value))
+            .map(value => ({axis, value})),
+        )
+        .find(Boolean);
+      w = hit ? `${hit.axis}:${hit.value}` : undefined;
     }
+    const own = fromBase(w);
+    if (own) return own;
     if (w && /color/.test(prop)) {
       const group =
         prop === 'color'
@@ -19631,6 +19803,26 @@ export function draftAnswer(ctx, env, question) {
         ? `${shown(own)} when ${sel === ':hover' ? 'hovered' : 'pressed'}${suffix}`
         : null;
     };
+    // (The look the base theme writes for the variant asked, as it is, is
+    // what the part shows there, before what Core reads: butter's
+    // secondary button is transparent.)
+    const baseLookNow = () => {
+      if (!named || stateWord || !vWord) return null;
+      const v = baseOwnLook(named, asked, `${vAxis}:${vWord}`);
+      return v && !/^var\(/.test(v) ? shownIn(v) : null;
+    };
+    /** A value as shown in the mode asked (both halves when none). @param {string} v */
+    const shownIn = v => {
+      const pair = /^light-dark\(\s*([^,]+?)\s*,\s*([^)]+?)\s*\)$/.exec(
+        v.trim(),
+      );
+      const shown = pair
+        ? qMode || readMode
+          ? pair[(qMode ?? readMode) === 'dark' ? 2 : 1]
+          : `${pair[1]} in light mode, ${pair[2]} in dark mode`
+        : v;
+      return `${shown}${qMode ? ` in ${qMode} mode` : ''}${vWord ? ` (${vWord})` : ''}`;
+    };
     const variantNow = () => {
       if (!named || (!vWord && !readMode)) return null;
       const when = vWord ? `${vAxis}:${vWord}` : 'base';
@@ -19906,6 +20098,7 @@ export function draftAnswer(ctx, env, question) {
           (asked === 'box-shadow' && censusNow('box-shadow', null)
             ? `${censusNow('box-shadow', null)}${qModeSaid}`
             : null) ??
+          baseLookNow() ??
           stateNow() ??
           variantNow() ??
           perKeyNow() ??
