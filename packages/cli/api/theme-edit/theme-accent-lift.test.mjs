@@ -39,19 +39,31 @@ it('keeps the official secondary text lift on a new accent while it reads', asyn
     return test.skip();
   }
   await themeEditNew('t', {cwd, like: 'neutral'});
+  // A media surface restates the root's scheme-dependent values; those
+  // copies are not lifts of their own.
+  const MEDIA_BLOCK = /\[data-astryx-media="(?:dark|light)"\] \{[^}]*\}/g;
   /** @param {string} css */
   const lifts = css =>
-    [...css.matchAll(/--color-text-secondary: (light-dark\([^;]*\));/g)]
+    [
+      ...css
+        .replace(MEDIA_BLOCK, '')
+        .matchAll(/--color-text-secondary: (light-dark\([^;]*\));/g),
+    ]
       .slice(1)
       .map(m => m[1]);
-  const before = lifts(
-    fs.readFileSync(path.join(cwd, 'themes/t/t.css'), 'utf8'),
-  );
+  /** @param {string} css */
+  const mediaCopies = css =>
+    (css.match(MEDIA_BLOCK) ?? []).filter(block =>
+      block.includes('--color-text-secondary:'),
+    ).length;
+  const beforeCss = fs.readFileSync(path.join(cwd, 'themes/t/t.css'), 'utf8');
+  const before = lifts(beforeCss);
   expect(before.length).toBe(5);
+  expect(mediaCopies(beforeCss)).toBe(2);
   const r = await themeEditSet('t', 'accent', '#E11D48', {cwd});
-  const after = lifts(
-    fs.readFileSync(path.join(cwd, 'themes/t/t.css'), 'utf8'),
-  );
+  const afterCss = fs.readFileSync(path.join(cwd, 'themes/t/t.css'), 'utf8');
+  const after = lifts(afterCss);
   expect(after).toEqual(before);
+  expect(mediaCopies(afterCss)).toBe(2);
   expect(r.data.styled.filter(x => /color-text-secondary/.test(x))).toEqual([]);
 }, 240_000);

@@ -626,6 +626,47 @@ describe('generateOnMediaCSS scheme-dependent replays', () => {
     ).not.toHaveProperty('--color-border-emphasized');
   });
 
+  it("takes the theme's value for a reference to a token that ignores the scheme", () => {
+    const mixed = defineTheme({
+      name: 'media-scheme-replay-constant-reference',
+      tokens: {
+        '--color-text-secondary': ['#555555', '#aaaaaa'],
+        '--color-background-muted': '#00ff00',
+        '--color-border':
+          'color-mix(in srgb, var(--color-text-secondary) 50%, var(--color-background-muted))',
+      },
+    });
+    // The surface does not re-declare the muted background, so the theme's
+    // value keeps the root's result for a value set between the root and the
+    // surface. The secondary text stays a reference: the surface re-declares
+    // it under its own scheme.
+    for (const surface of ['dark', 'light'] as const) {
+      const declared = mediaDeclarations(generateOnMediaCSS(mixed), surface);
+      expect(declared).not.toHaveProperty('--color-background-muted');
+      expect(declared['--color-border']).toBe(
+        'color-mix(in srgb, var(--color-text-secondary) 50%, #00ff00)',
+      );
+    }
+  });
+
+  it('keeps a reference to a token the theme leaves unset', () => {
+    const coreMixed = defineTheme({
+      name: 'media-scheme-replay-core-mix',
+      tokens: {
+        '--color-text-secondary': ['#555555', '#aaaaaa'],
+        '--color-border':
+          'color-mix(in srgb, var(--color-text-secondary) 50%, var(--color-background-muted))',
+      },
+    });
+    expect(
+      mediaDeclarations(generateOnMediaCSS(coreMixed), 'dark')[
+        '--color-border'
+      ],
+    ).toBe(
+      'color-mix(in srgb, var(--color-text-secondary) 50%, var(--color-background-muted))',
+    );
+  });
+
   it('restates an adaptation value over the base replay under its query', () => {
     const adapted = defineTheme({
       name: 'media-scheme-replay-adapted',
