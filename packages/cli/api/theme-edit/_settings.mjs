@@ -9237,8 +9237,22 @@ export async function contrastProblems(ctx, data, res) {
       /** @type {any} */ (p).groundWhen ?? when,
     );
   };
+  /**
+   * The mode a side of a pair is drawn in: the scheme of Core's media
+   * surface around it (a lightbox's dark island draws what it holds in its
+   * dark scheme, whatever the page's mode), for the text and the fill of a
+   * part inside it; else the page's mode. The ground the surface itself
+   * draws stays in the page's mode.
+   * @param {TextPair} p @param {'fg' | 'bg'} side @param {string} m
+   */
+  const inScheme = (p, side, m) => {
+    const drawnIn = /** @type {any} */ (p).drawnIn;
+    if (!drawnIn) return m;
+    return side === 'fg' || p.bg !== /** @type {any} */ (p).over ? drawnIn : m;
+  };
   /** @type {(p: TextPair, side: 'fg' | 'bg', m: string) => string | null} */
-  const value = (p, side, m) => {
+  const value = (p, side, m0) => {
+    const m = inScheme(p, side, m0);
     const s = p[side];
     const tokens = side === 'fg' ? textTokens(p, m, value) : s.tokens;
     return (
@@ -9268,7 +9282,8 @@ export async function contrastProblems(ctx, data, res) {
     );
   };
   /** @type {(p: TextPair, side: 'fg' | 'bg', m: string) => string | null} */
-  const baseValue = (p, side, m) => {
+  const baseValue = (p, side, m0) => {
+    const m = inScheme(p, side, m0);
     // Lifted text on the tint is held to 4.5:1, never excused by an
     // unlifted base pair.
     if (onTint(p, m) != null) return null;
@@ -9504,13 +9519,15 @@ export async function contrastProblems(ctx, data, res) {
               ],
             },
             mediaOf: m,
+            drawnIn: side,
+            pageOf: q,
             ...(ground ? {over: {target: m, tokens: [ground], raw: null}} : {}),
           }),
         );
       }
     }
   }
-  const {problems, unchecked} = ctx.C.contrast(
+  const {problems: measured, unchecked} = ctx.C.contrast(
     value,
     baseValue,
     modesOf(data),
@@ -9524,6 +9541,17 @@ export async function contrastProblems(ctx, data, res) {
     },
     [...variantPairs, ...headerPairs, ...ownTextPairs, ...mediaPairs],
   );
+  // Text on a media surface is drawn in the surface's scheme whatever the
+  // page's mode: one problem for it, not one for each mode.
+  const mediaProblems = new Set();
+  const problems = measured.filter(x => {
+    const p = /** @type {any} */ (x.pair);
+    if (!p?.drawnIn) return true;
+    const k = `${x.part}|${p.when ?? ''}|${p.drawnIn}`;
+    if (mediaProblems.has(k)) return false;
+    mediaProblems.add(k);
+    return true;
+  });
   const slug = data.name;
   const modeFlag = (/** @type {string} */ m) =>
     modesOf(data).length > 1 ? ` --mode ${m}` : '';
@@ -9534,7 +9562,7 @@ export async function contrastProblems(ctx, data, res) {
       // What the problem is, whatever its ratio: the text, the token or
       // property that draws it, what it sits on, its variant and mode.
       key: `text|${x.part}|${x.textPart ?? ''}|${x.fgToken ?? ''}|${x.bgPart ?? ''}|${/** @type {any} */ (x.pair)?.bg?.tokens?.join('+') ?? ''}|${x.when ?? ''}|${x.sample}|${x.mode}`,
-      text: `text in ${x.part} ("${x.sample}") is ${x.ratio}:1 in ${x.mode} (${x.fg} on ${x.bgPart ?? 'the page'}'s ${x.bg}${x.over ? ` over ${x.over}` : ''}); text needs 4.5:1`,
+      text: `text in ${x.part} ("${x.sample}") is ${x.ratio}:1 in ${/** @type {any} */ (x.pair)?.drawnIn ? `${/** @type {any} */ (x.pair).drawnIn} (${/** @type {any} */ (x.pair).mediaOf} draws it in its ${/** @type {any} */ (x.pair).drawnIn} scheme)` : x.mode} (${x.fg} on ${x.bgPart ?? 'the page'}'s ${x.bg}${x.over ? ` over ${x.over}` : ''}); text needs 4.5:1`,
       // The fix sets what draws the text: the setting that wins in CSS,
       // where one does, else the text token where the text sits.
       fix: (() => {
@@ -9587,8 +9615,37 @@ export async function contrastProblems(ctx, data, res) {
         // (Text on a toast's own surface takes a color on the toast: a
         // text token there never reaches it.)
         const onMedia = /** @type {any} */ (pair).mediaOf;
+        // (On a media surface the part is drawn in the surface's scheme: a
+        // color for that mode reaches it there, and the page's parts in
+        // that mode, which sit on a ground of the same kind.)
+        const drawnIn = /** @type {any} */ (pair).drawnIn;
+        // (When the part's own fill lets the surface's ground through (a
+        // transparent button) and the same text on the page in that mode
+        // needs the other color, the two grounds disagree, and no color on
+        // the part fixes both: no line.)
+        if (onMedia && drawnIn) {
+          const q = /** @type {TextPair} */ (/** @type {any} */ (pair).pageOf);
+          const v = q ? value(q, 'bg', drawnIn) : null;
+          const page = parseColor(
+            String(
+              res[/** @type {'light' | 'dark'} */ (drawnIn)][
+                '--color-background-body'
+              ],
+            ),
+          );
+          const c = parseColor(String(v ?? ''));
+          const a = alphaOf(String(v ?? ''));
+          const through =
+            !/gradient\(|url\(/.test(String(v ?? '')) && (!c || a < 1);
+          const ground = !through
+            ? null
+            : c && page
+              ? compositeOver(c, a, page)
+              : page;
+          if (ground && plainOn(ground) !== plainOn(x.ground)) return null;
+        }
         if (x.textPart && (onMedia || autoMediaPart(ctx, x.textPart)))
-          return `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${modeFlag(x.mode)}`;
+          return `${P} set ${slug} color ${color} --on ${x.textPart}${only(x.textPart)}${when(variant)}${modeFlag(drawnIn ?? x.mode)}`;
         // The base theme colors the text on its own part: only a color
         // there changes what is drawn.
         // (Text on a ground part's variants that need opposite text: a color
