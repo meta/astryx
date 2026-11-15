@@ -1124,6 +1124,8 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
     // A word the editor knows as itself (tight is a headings tracking
     // word, as in Inter Tight) is no typo of another word.
     if (HEADING_TRACKING[w.toLowerCase()] !== undefined) return null;
+    // A typo keeps the word's first letter: another first letter makes
+    // another word (Night, Right and Tight are no typos of light).
     // A weight number typed with a letter O for a zero (6OO) is that number.
     if (/^\d[\dOo]{2,3}$/.test(w) && /[Oo]/.test(w)) {
       const n = w.replace(/[Oo]/g, '0');
@@ -1136,7 +1138,12 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
           ...Object.keys(WEIGHT_WORDS),
           'italic',
           'oblique',
-        ].filter(k => /^[a-z]+$/.test(k) && typoNear(w.toLowerCase(), k)),
+        ].filter(
+          k =>
+            /^[a-z]+$/.test(k) &&
+            k[0] === w[0]?.toLowerCase() &&
+            typoNear(w.toLowerCase(), k),
+        ),
       ),
     ];
     return hits.length === 1 ? hits[0] : null;
@@ -1286,14 +1293,19 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
         end -= 1;
       } else if (
         end >= 2 &&
-        /^\d{3,4}$/.test(w) &&
-        Number(w) >= 1 &&
-        Number(w) <= 1000 &&
+        /^\d+(?:\.\d+)?$/.test(w) &&
         familyBefore(end - 1)
       ) {
-        // Any weight number after a family the editor knows (Inter 650) is
-        // a weight, as CSS reads it; the rung offered is the nearest.
-        tail.unshift({kind: 'weight', text: w, value: Number(w)});
+        // A number after a family the editor knows is no part of its name:
+        // from 1 to 1000 (Inter 650, Inter 450.5, Inter 50) a weight, as
+        // CSS reads it, the rung offered the nearest; any other number
+        // (Inter 1500) a number where a family goes.
+        const n = Number(w);
+        tail.unshift(
+          n >= 1 && n <= 1000
+            ? {kind: 'weight', text: w, value: n}
+            : {kind: 'number', text: w},
+        );
         end -= 1;
       } else if (end >= 2 && wordTypo(w) && familyBefore(end - 1)) {
         // A weight or style word with a typo after a family the editor
@@ -1444,8 +1456,7 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
     // name is unknown and the name without them is known.
     if (
       tail.every(
-        t =>
-          t.kind === 'style' || (t.kind === 'weight' && !/^\d+$/.test(t.text)),
+        t => t.kind === 'style' || (t.kind === 'weight' && !/^\d/.test(t.text)),
       ) &&
       !(!knownFamily(ctx, name) && knownFamily(ctx, base))
     ) {
@@ -1497,7 +1508,7 @@ function fontListProblem(value, ctx, presets = false, notes = []) {
           : style
             ? 'holds a style where a family goes, so the browser reads it as a family named that and falls back'
             : number
-              ? 'holds a number where a family goes (a weight is a whole hundred, a size has a unit), so the browser reads it as a family named that and falls back'
+              ? 'holds a number where a family goes (a weight is a number from 1 to 1000, a size has a unit), so the browser reads it as a family named that and falls back'
               : quotedGeneric
                 ? 'quotes a generic family, which makes it a family named that, so there is no generic to fall back to'
                 : joined && !misspelled
@@ -4442,6 +4453,21 @@ function checkOne(
         {run: [setLine(slug, thing, v, {...s, only: undefined}, unset)]},
       );
   }
+  // A font role in other letters (Body, CODE) is that role.
+  if (
+    thing === 'font' &&
+    s.on &&
+    !FONT_ROLES.includes(s.on) &&
+    FONT_ROLES.includes(s.on.toLowerCase())
+  )
+    refuse(
+      E.ERR_THEME_UNKNOWN_PART,
+      `"${s.on}" is the ${s.on.toLowerCase()} font role, written in lowercase.`,
+      {
+        didYouMean: [s.on.toLowerCase()],
+        run: [setLine(slug, thing, v, {...s, on: s.on.toLowerCase()}, unset)],
+      },
+    );
   const isRole = thing === 'font' && FONT_ROLES.includes(s.on ?? '');
   if (s.on && !isRole && !FAMILIES[s.on]) {
     const t = TARGET.get(s.on);
