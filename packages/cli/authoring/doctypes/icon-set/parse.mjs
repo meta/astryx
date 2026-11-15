@@ -43,17 +43,27 @@ const EXPORT_RE = /^[$A-Z_a-z][$\w]*$/u;
 // absolute, so no path in the data file can leave the package (FR5).
 // A path inside the set's package, from its root: `./src/icons.js`.
 const PACKAGE_PATH_RE = /^\.\/(?:[A-Za-z0-9._~@-]+\/)*[A-Za-z0-9._~@-]+$/u;
+
+/**
+ * Whether a value is a path the data file accepts for a file in the set's
+ * package: `./` first, then plain segments, none of them `.` or `..`.
+ * @param {string} value
+ * @returns {boolean}
+ */
+export function isPackagePath(value) {
+  return (
+    PACKAGE_PATH_RE.test(value) &&
+    !value
+      .split('/')
+      .slice(1)
+      .some(part => part === '..' || part === '.')
+  );
+}
+
 const packagePathSchema = z
   .string()
   .regex(PACKAGE_PATH_RE, 'must be a ./ path inside the package')
-  .refine(
-    value =>
-      !value
-        .split('/')
-        .slice(1)
-        .some(part => part === '..' || part === '.'),
-    {message: 'must not contain "." or ".." segments'},
-  );
+  .refine(isPackagePath, {message: 'must not contain "." or ".." segments'});
 const MODULE_RE =
   /^(?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*(?:\/[A-Za-z0-9._~-]+)*$/u;
 

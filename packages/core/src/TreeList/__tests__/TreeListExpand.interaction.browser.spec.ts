@@ -28,13 +28,17 @@ import {
   releaseAnimations,
   requireFrames,
   seekAnimations,
+  startBusyControl,
   startCompositorTrace,
   startScreencast,
   touchDriver,
   trackMarker,
   withStorybook,
   writeEvidence,
+  type Box,
+  type CastFrame,
   type HeldAnimation,
+  watchAnimations,
 } from '@astryxdesign/interaction-harness';
 import {expectReducedMotionCrossFade} from '../../List/__tests__/reducedMotion';
 
@@ -108,6 +112,8 @@ async function open(page: Page, story = STORY) {
 /** What one frame of an expand or a collapse shows, in px. */
 interface Frame {
   readonly t: number;
+  /** When the page's frame callback for this frame began, ms. */
+  readonly callbackAt: number;
   /** The bottom of the folder's own row. */
   readonly parentBottom: number;
   /**
@@ -178,6 +184,7 @@ async function recordFrames(
         : Number.parseFloat(value.split(' ')[1] ?? '0');
     };
     const tick = () => {
+      const callbackAt = performance.now();
       const parent = item('components');
       const below = item('app');
       const last = item('index');
@@ -254,6 +261,7 @@ async function recordFrames(
         ring = {top: box.top - reach, bottom: box.bottom + reach};
       }
       w.__frames.push({
+        callbackAt,
         t: performance.now(),
         parentBottom: rowBox(parent).getBoundingClientRect().bottom,
         group: shownGroup,
@@ -299,6 +307,92 @@ const blankBands = (frames: ReadonlyArray<Frame>) =>
 
 /** How far a frame may put the rows that glide off the group's shown part. */
 const BAND_ALLOWANCE = 1.5;
+
+const FRAME_MS = 1000 / 60;
+
+/**
+ * The frames whose reads ran late, each with how late, ms. Two kinds of
+ * callback read late. One starts a frame late: it comes 1.5 frame intervals
+ * or more after the one before, and the next comes within half a frame. That
+ * gives one frame. The other starts on time, but its reads span more than a
+ * frame. That gives the span. A frame of both kinds gives both. In WebKit
+ * such a frame reads the group's rows and the rows below up to that far
+ * apart. Under load the late callbacks ran 11 to 17 ms late, after gaps of
+ * 26 to 34 ms. The slow reads spanned 21 to 70 ms. Chromium reads every value
+ * in a callback at its frame's own time, so no frame of its reads late. Every
+ * other frame reads on time.
+ */
+function lateReads(
+  frames: ReadonlyArray<Frame>,
+  browserName: string,
+): Map<Frame, number> {
+  const late = new Map<Frame, number>();
+  if (browserName !== 'webkit') {
+    return late;
+  }
+  for (let i = 1; i + 1 < frames.length; i++) {
+    const gap = frames[i].callbackAt - frames[i - 1].callbackAt;
+    const next = frames[i + 1].callbackAt - frames[i].callbackAt;
+    const span = frames[i].t - frames[i].callbackAt;
+    const lateBy =
+      (gap >= 1.5 * FRAME_MS && next <= 0.5 * FRAME_MS ? FRAME_MS : 0) +
+      (span > FRAME_MS ? span : 0);
+    if (lateBy > 0) {
+      late.set(frames[i], lateBy);
+    }
+  }
+  return late;
+}
+
+/** When a frame's callback ran and how long its reads took. */
+function callbackGaps(frames: ReadonlyArray<Frame>, i: number): string {
+  const before = frames[i - 1];
+  const after = frames[i + 1];
+  return `its callback ${before == null ? '-' : (frames[i].callbackAt - before.callbackAt).toFixed(0)} ms after the one before and ${after == null ? '-' : (after.callbackAt - frames[i].callbackAt).toFixed(0)} ms before the next, its reads spanned ${(frames[i].t - frames[i].callbackAt).toFixed(0)} ms`;
+}
+
+/**
+ * Judges `excess` (how far a frame breaks a bound, px) on every frame. A
+ * frame that read late may break it by the moving row's travel over that
+ * time. The frames before and after it give the pace, and a fault in the
+ * late frame moves neither of them. `travel` is that travel where a late read
+ * widens the excess, and negative where it can only shrink it, which gets
+ * no allowance. The proof names such a frame. A larger excess fails there
+ * too.
+ */
+function judgeFrames(
+  frames: ReadonlyArray<Frame>,
+  late: Map<Frame, number>,
+  {
+    excess,
+    travel,
+    what,
+  }: {
+    excess: (frame: Frame) => number;
+    travel: (before: Frame, after: Frame) => number;
+    what: string;
+  },
+) {
+  for (const [i, frame] of frames.entries()) {
+    const over = excess(frame);
+    const before = frames[i - 1];
+    const after = frames[i + 1];
+    const lateBy = late.get(frame) ?? 0;
+    const allowance =
+      lateBy > 0 && before != null && after != null
+        ? (Math.max(0, travel(before, after)) * lateBy) /
+          (after.callbackAt - before.callbackAt)
+        : 0;
+    const detail = `frame ${i}, ${callbackGaps(frames, i)}: ${JSON.stringify(frame)}`;
+    expect(over, `${what}, ${detail}`).toBeLessThan(allowance);
+    if (over > 0) {
+      test.info().annotations.push({
+        type: 'too little to judge',
+        description: `frame ${i}: ${what} ${over.toFixed(2)} px past the bound, within its travel of ${allowance.toFixed(2)} px over ${lateBy.toFixed(0)} ms; ${callbackGaps(frames, i)}`,
+      });
+    }
+  }
+}
 
 /**
  * Whether a frame shows the row below inside its travel, between a tenth and
@@ -411,6 +505,125 @@ async function seekThroughGlide(
  */
 const RECORDED_GLIDE_MS = 1200;
 
+/** How long the page is held past a glide's end, ms. */
+const TAIL_BLOCK_MS = 500;
+
+/** A pixel darker than this, on a 0 to 255 grey, is ink. */
+const INK_BELOW = 230;
+
+/**
+ * How many ink pixels of each frame inside `box`, and of `rest`, have no ink
+ * within one pixel in the other. A motion drawn within half a pixel of its
+ * end matches, as does text a layer draws a shade lighter. Two frames of one
+ * scene count 0 in both engines. Frames are decoded in a scratch page, as
+ * trackMarker decodes them.
+ */
+async function inkOffRest(
+  page: Page,
+  frames: ReadonlyArray<CastFrame>,
+  rest: CastFrame,
+  box: Box,
+): Promise<number[]> {
+  const scratch = await page.context().newPage();
+  try {
+    const counts: number[] = [];
+    for (let i = 0; i < frames.length; i += 12) {
+      counts.push(
+        ...(await scratch.evaluate(
+          async ({items, base, area, below}) => {
+            const inkOf = async (frame: typeof base) => {
+              const blob = await (
+                await fetch(`data:image/${frame.format};base64,${frame.data}`)
+              ).blob();
+              const bitmap = await createImageBitmap(blob);
+              const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+              const context = canvas.getContext('2d');
+              if (context == null) {
+                throw new Error('no 2d context');
+              }
+              context.drawImage(bitmap, 0, 0);
+              const scale = bitmap.width / frame.viewportWidth;
+              const {data, width, height} = context.getImageData(
+                Math.floor(area.x * scale),
+                Math.floor(area.y * scale),
+                Math.ceil(area.width * scale),
+                Math.ceil(area.height * scale),
+              );
+              const ink = new Uint8Array(width * height);
+              for (let p = 0; p < ink.length; p += 1) {
+                const grey =
+                  (data[p * 4] + data[p * 4 + 1] + data[p * 4 + 2]) / 3;
+                ink[p] = grey < below ? 1 : 0;
+              }
+              return {ink, width, height};
+            };
+            // Ink in `a` with no ink in `b` within one pixel.
+            const missing = (
+              a: Uint8Array,
+              b: Uint8Array,
+              width: number,
+              height: number,
+            ) => {
+              let count = 0;
+              for (let y = 0; y < height; y += 1) {
+                for (let x = 0; x < width; x += 1) {
+                  if (a[y * width + x] === 0) {
+                    continue;
+                  }
+                  let isNear = false;
+                  for (let dy = -1; dy <= 1 && !isNear; dy += 1) {
+                    for (let dx = -1; dx <= 1 && !isNear; dx += 1) {
+                      const ny = y + dy;
+                      const nx = x + dx;
+                      isNear =
+                        ny >= 0 &&
+                        ny < height &&
+                        nx >= 0 &&
+                        nx < width &&
+                        b[ny * width + nx] === 1;
+                    }
+                  }
+                  if (!isNear) {
+                    count += 1;
+                  }
+                }
+              }
+              return count;
+            };
+            const at = await inkOf(base);
+            const out: number[] = [];
+            for (const item of items) {
+              const {ink} = await inkOf(item);
+              out.push(
+                missing(ink, at.ink, at.width, at.height) +
+                  missing(at.ink, ink, at.width, at.height),
+              );
+            }
+            return out;
+          },
+          {
+            items: frames.slice(i, i + 12).map(f => ({
+              data: f.data,
+              format: f.format,
+              viewportWidth: f.viewportWidth,
+            })),
+            base: {
+              data: rest.data,
+              format: rest.format,
+              viewportWidth: rest.viewportWidth,
+            },
+            area: box,
+            below: INK_BELOW,
+          },
+        )),
+      );
+    }
+    return counts;
+  } finally {
+    await scratch.close();
+  }
+}
+
 /** Sets the glide's duration where the tree reads it, as a theme does. */
 const lengthenGlide = async (page: Page, ms: number) =>
   page
@@ -447,35 +660,54 @@ const glideMs = async (page: Page) =>
       : Number.parseFloat(value) * 1000;
   });
 
-/** The durations of the motion a toggle starts, read on its first frame. */
-async function startedDurations(page: Page) {
-  return page.evaluate(async () => {
-    await new Promise(requestAnimationFrame);
-    const parent = document.querySelector(
-      '[role="treeitem"][data-tree-id="components"]',
-    );
-    const durationOf = (el: Element | null | undefined) =>
-      el
-        ?.getAnimations()
-        .map(animation =>
-          Number(animation.effect?.getComputedTiming().duration),
-        ) ?? [];
-    return {
-      group: durationOf(parent?.querySelector(':scope > [role="group"]')),
-      below: durationOf(
-        document.querySelector('[role="treeitem"][data-tree-id="app"]'),
-      ),
-      chevron: durationOf(
-        parent?.querySelector(
-          ':scope > :not([role="group"]) [data-tree-toggle] .astryx-icon',
+/**
+ * The property each part of the expand animates itself. A watch also reports
+ * runs inside its element, such as the group's rows' glides.
+ */
+const OWN_MOTION = {
+  group: 'opacity',
+  below: 'translate',
+  chevron: 'transform',
+} as const;
+
+/**
+ * Watches the expand's parts before a tap, so the durations of the motion it
+ * starts are read even once it has ended. Await it before the tap, and await
+ * what it returns after.
+ */
+async function watchStartedDurations(
+  page: Page,
+  names: ReadonlyArray<'group' | 'below' | 'chevron'> = [
+    'group',
+    'below',
+    'chevron',
+  ],
+) {
+  const all = parts(page);
+  const watches = await Promise.all(
+    names.map(async name => [name, await watchAnimations(all[name])] as const),
+  );
+  return async () =>
+    Object.fromEntries(
+      await Promise.all(
+        watches.map(
+          async ([name, watch]) =>
+            [
+              name,
+              (await watch.started())
+                .filter(run =>
+                  run.keyframes.some(frame => OWN_MOTION[name] in frame),
+                )
+                .map(run => run.durationMs),
+            ] as const,
         ),
       ),
-    };
-  });
+    ) as Partial<Record<'group' | 'below' | 'chevron', number[]>>;
 }
 
 test('expand under a finger: the rows below glide while the group fades in, and no frame shows a blank band', async ({
   page,
+  browserName,
 }) => {
   await open(page);
   await lengthenGlide(page, RECORDED_GLIDE_MS);
@@ -488,20 +720,24 @@ test('expand under a finger: the rows below glide while the group fades in, and 
   const moving = frames.filter(frame => frame.group != null);
   expect(moving.length, 'frames with the group').toBeGreaterThan(4);
   const height = moving[0].group?.height ?? 0;
-  // The checks below judge at least two frames of the glide. A page starved
-  // of frames fails by name.
+  // The checks below judge at least two frames of the glide, on time. A page
+  // starved of frames fails by name.
+  const late = lateReads(frames, browserName);
+  const travel = insideTravel(before, before + height);
   requireFrames(frames, {
     min: 2,
     during: 'the rows below glide down',
-    where: insideTravel(before, before + height),
+    where: frame => travel(frame) && !late.has(frame),
   });
   // Every frame: the row below sits right under the part of the group that
   // shows. A blank band between them is the flicker.
-  for (const [i, band] of blankBands(moving).entries()) {
-    expect(band, `frame ${i}: ${JSON.stringify(moving[i])}`).toBeLessThan(
-      BAND_ALLOWANCE,
-    );
-  }
+  judgeFrames(moving, late, {
+    excess: frame => blankBands([frame])[0] - BAND_ALLOWANCE,
+    // A late read finds the rows below further along: lower in an expand,
+    // which widens a band, higher in a collapse.
+    travel: (before, after) => after.belowTop - before.belowTop,
+    what: 'a blank band',
+  });
   // The group fades in from its first frame: it does not show at rest first.
   expect(moving[0].group?.opacity ?? 1).toBeLessThan(1);
   expect(frames[frames.length - 1].belowTop - before).toBeCloseTo(height, 0);
@@ -535,6 +771,7 @@ test('expand under a finger: the rows below glide while the group fades in, and 
 
 test('collapse under a finger: the group fades out as the rows below glide up, with no jump and no blank band', async ({
   page,
+  browserName,
 }) => {
   await open(page);
   await tapToggle(page);
@@ -550,10 +787,12 @@ test('collapse under a finger: the group fades out as the rows below glide up, w
   );
   // The checks below judge at least two frames of the glide, three of the
   // fade and five of the leaving group. A page starved of frames fails by name.
+  const late = lateReads(frames, browserName);
+  const travel = insideTravel(expanded, expanded - height);
   requireFrames(frames, {
     min: 2,
     during: 'the rows below glide up',
-    where: insideTravel(expanded, expanded - height),
+    where: frame => travel(frame) && !late.has(frame),
   });
   requireFrames(frames, {
     min: 5,
@@ -569,9 +808,13 @@ test('collapse under a finger: the group fades out as the rows below glide up, w
   for (const frame of fading) {
     expect(frame.group?.isInert, JSON.stringify(frame)).toBe(true);
   }
-  for (const [i, band] of blankBands(frames).entries()) {
-    expect(band, `frame ${i}: ${JSON.stringify(frames[i])}`).toBeLessThan(1.5);
-  }
+  judgeFrames(frames, late, {
+    excess: frame => blankBands([frame])[0] - 1.5,
+    // A late read finds the rows below further along: lower in an expand,
+    // which widens a band, higher in a collapse.
+    travel: (before, after) => after.belowTop - before.belowTop,
+    what: 'a blank band',
+  });
   expect(expanded - frames[frames.length - 1].belowTop).toBeCloseTo(height, 0);
   await expect(parts(page).group).toHaveCount(0);
   // How many frames land inside the collapse depends on the runner, so its
@@ -608,6 +851,67 @@ test('collapse under a finger: the group fades out as the rows below glide up, w
   }
   await releaseAnimations(page, {finish: true});
   await expect(group).toHaveCount(0);
+});
+
+test('collapse under a finger: a long task over the end of the glide draws the tree as it rests, its leaving rows and chevron included', async ({
+  page,
+}) => {
+  await open(page);
+  await tapToggle(page);
+  await expect(parts(page).child).toBeVisible();
+  await treeAtRest(page);
+  await lengthenGlide(page, RECORDED_GLIDE_MS);
+  const {below, group} = parts(page);
+  // The compositor's own box keeps frames coming while the page is held.
+  const control = await startBusyControl(page);
+  const cast = await startScreencast(page);
+  await expect
+    .poll(() => cast.frameCount(), {
+      message: 'the screencast delivers frames',
+      timeout: 5000,
+    })
+    .toBeGreaterThan(0);
+  // The page holds its main thread from nine tenths of the glide to past its
+  // end, like a long task as a collapse ends.
+  const blocked = blockMainThread(page, TAIL_BLOCK_MS, {
+    during: below,
+    minProgressMs: RECORDED_GLIDE_MS * 0.9,
+  });
+  await tapToggle(page);
+  const block = await blocked;
+  await treeAtRest(page);
+  await expect(group).toHaveCount(0);
+  // One more frame once the tree rests, while the control still moves.
+  const atRest = cast.frameCount();
+  await expect
+    .poll(() => cast.frameCount(), {
+      message: 'a frame of the tree at rest',
+      timeout: 5000,
+    })
+    .toBeGreaterThan(atRest);
+  const frames = await cast.stop();
+  await control.remove();
+  // The glide ends at most a tenth of it after the block begins. Each frame
+  // two frames past that, while the page is held, is judged.
+  const ended = block.from + RECORDED_GLIDE_MS * 0.1 + 34;
+  const held = requireFrames(frames, {
+    min: 3,
+    during: 'the page is held past the end of the glide',
+    where: frame => frame.t > ended && frame.t < block.to,
+  });
+  // Each held frame draws the tree as its frame at rest does: the rows below
+  // at their place, no leaving row, the chevron turned.
+  const box = await page.locator('[role="tree"]').boundingBox();
+  if (box == null) {
+    throw new Error('the tree has no box');
+  }
+  const off = await inkOffRest(page, held, frames[frames.length - 1], box);
+  for (const [index, count] of off.entries()) {
+    expect(
+      count,
+      JSON.stringify({frame: Math.round(held[index].t - block.from), off}),
+    ).toBe(0);
+  }
 });
 
 test('collapse under a finger: no row of the tree paints past its bottom edge onto the content after it', async ({
@@ -675,17 +979,42 @@ test('a focus ring on a row at the edge of a moving tree stays whole, while the 
 
 test('the guide lines beside a group show and hide with it: none runs past the last row it joins', async ({
   page,
+  browserName,
 }) => {
   await open(page);
-  const expand = await recordFrames(page, async () => tapToggle(page));
-  const collapse = await recordFrames(page, async () => tapToggle(page));
-  for (const phase of [expand, collapse]) {
-    for (const [i, frame] of phase.entries()) {
-      expect(
-        frame.guideBottom,
-        `frame ${i}: ${JSON.stringify(frame)}`,
-      ).toBeLessThan(frame.lastBottom + BAND_ALLOWANCE);
-    }
+  // Long enough that frames read on time land inside the travel.
+  await lengthenGlide(page, RECORDED_GLIDE_MS);
+  const expand = await recordFrames(
+    page,
+    async () => tapToggle(page),
+    RECORDED_GLIDE_MS + 400,
+  );
+  const collapse = await recordFrames(
+    page,
+    async () => tapToggle(page),
+    RECORDED_GLIDE_MS + 400,
+  );
+  for (const [name, phase] of [
+    ['expands', expand],
+    ['collapses', collapse],
+  ] as const) {
+    const late = lateReads(phase, browserName);
+    const moving = insideTravel(
+      phase[0].belowTop,
+      phase[phase.length - 1].belowTop,
+    );
+    requireFrames(phase, {
+      min: 2,
+      during: `the group ${name}`,
+      where: frame => moving(frame) && !late.has(frame),
+    });
+    judgeFrames(phase, late, {
+      excess: frame => frame.guideBottom - frame.lastBottom - BAND_ALLOWANCE,
+      // A late read finds the last row further along than the guide's clip:
+      // higher in a collapse, which widens an overrun, lower in an expand.
+      travel: (before, after) => before.lastBottom - after.lastBottom,
+      what: 'a guide line past the last row',
+    });
   }
 });
 
@@ -694,8 +1023,9 @@ test('the rows below, the group and the chevron move on one timing: the theme’
 }) => {
   await open(page);
   const ms = await glideMs(page);
+  const durations = await watchStartedDurations(page);
   await tapToggle(page);
-  const started = await startedDurations(page);
+  const started = await durations();
   expect(started.group, JSON.stringify(started)).toContain(ms);
   expect(started.below, JSON.stringify(started)).toContain(ms);
   expect(started.chevron, JSON.stringify(started)).toContain(ms);
@@ -721,8 +1051,9 @@ for (const [written, value] of [
         value,
       );
     expect(await glideMs(page)).toBe(600);
+    const durations = await watchStartedDurations(page, ['group', 'below']);
     await tapToggle(page);
-    const started = await startedDurations(page);
+    const started = await durations();
     expect(started.group, JSON.stringify(started)).toContain(600);
     expect(started.below, JSON.stringify(started)).toContain(600);
   });
@@ -799,11 +1130,10 @@ test('Android: a tap expands with the same motion (one touch model)', async ({
   test.skip(browserName !== 'chromium', 'Android is Chromium');
   await open(page);
   const {child, below} = parts(page);
+  const durations = await watchStartedDurations(page, ['below']);
   await tapToggle(page);
   await expect(child).toBeVisible();
-  expect(await below.evaluate(el => el.getAnimations().length)).toBeGreaterThan(
-    0,
-  );
+  expect((await durations()).below?.length).toBeGreaterThan(0);
   await expect.poll(async () => translateY(below)).toBe(0);
 });
 
@@ -946,11 +1276,15 @@ test("right to left: the chevron's quarter turn mirrors", async ({page}) => {
   await tapToggle(page);
   await expect(child).toBeVisible();
   // The mirror lives in the chevron's transform: its horizontal scale is
-  // negative, while its angle turns as it does left to right.
+  // negative, while its angle turns as it does left to right. The sign of
+  // the matrix's determinant shows the mirror at every angle, at rest too.
   expect(
-    await chevron.evaluate(el =>
-      Number(/matrix\(([^,]+)/.exec(getComputedStyle(el).transform)?.[1]),
-    ),
+    await chevron.evaluate(el => {
+      const {a, b, c, d} = new DOMMatrixReadOnly(
+        getComputedStyle(el).transform,
+      );
+      return a * d - b * c;
+    }),
   ).toBeLessThan(0);
   await expect.poll(async () => rotation(chevron)).toBeCloseTo(90, 1);
 });
@@ -1055,6 +1389,19 @@ test('the rows below keep moving on every frame while the main thread is blocked
     {[`${testInfo.project.name}.json`]: JSON.stringify(proof, null, 1)},
     testInfo,
   );
+  // The frames the compositor presented in the judged part. A machine that
+  // starves the compositor of frames fails here by name, not on the stall
+  // bound below.
+  requireFrames(
+    (presented.length > 0 ? presented : tracked.map(frame => frame.t)).map(
+      t => ({t}),
+    ),
+    {
+      min: 8,
+      during: 'the block, in its judged part',
+      where: ({t}) => t >= proof.judged.from && t <= proof.judged.to,
+    },
+  );
   // Frames kept coming through the block, each one further down.
   expect(proof.changed, JSON.stringify(proof)).toBeGreaterThanOrEqual(3);
   expect(proof.monotonic, JSON.stringify(proof)).toBe(true);
@@ -1067,6 +1414,13 @@ test(
   async ({page}, testInfo) => {
     await open(page);
     const ms = await glideMs(page);
+    // The page holds the expand as it starts: a hold sent after the tap can
+    // come too late on a busy machine. It waits for three motions: the
+    // group's fade, the rows below and the chevron.
+    const hold = await armHold(page, page.locator('[role="tree"]'), {
+      count: 3,
+      judges: {target: parts(page).below, property: 'translate'},
+    });
     await tapToggle(page);
     const {storyboard} = await animationStoryboard(page, {
       name: 'tree-list-expand',
@@ -1074,7 +1428,7 @@ test(
       times: [0, 1, 2, 3, 4, 5, 6, 7].map(k => Math.round((k * ms) / 7)),
       columns: 8,
       cellScale: 0.45,
-      judges: {target: parts(page).below, property: 'translate'},
+      held: await hold.held(),
     });
     await releaseAnimations(page, {finish: true});
     await storyboard.write(testInfo);

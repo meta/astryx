@@ -5,7 +5,9 @@
  * descriptor's `icons` with the icon definition it draws, so a project's icon
  * set replaces it (AST-084 FR9). The CLI knows no icon library; only this
  * test names the libraries the bundled templates happen to import, to find
- * their icon imports.
+ * their icon imports. No icon is exempt. Two different icons in one template
+ * never share a definition: a set draws one icon per definition, so they
+ * would draw the same.
  */
 
 import * as fs from 'node:fs';
@@ -17,6 +19,11 @@ const require = requireNatively(import.meta.url);
 const {
   discoverCoreTemplates,
 } = require('../foundation/discovery/template-adapter.mjs');
+/** @type {typeof import('../foundation/discovery/template-icons.mjs')} */
+const {
+  sharedTemplateMeanings,
+  undeclaredTemplateIcons,
+} = require('../foundation/discovery/template-icons.mjs');
 /** @type {typeof import('../foundation/discovery/icon-definition-discovery.mjs')} */
 const {
   astryxDefinitionsByName,
@@ -25,46 +32,6 @@ const {
 /** The icon libraries the bundled templates import. */
 const ICON_MODULE_RE =
   /^(?:@heroicons\/react\/(?:16|20|24)\/(?:outline|solid)|lucide-react)$/u;
-
-/**
- * Icons no Astryx icon definition fits yet. A template keeps these as it
- * wrote them. The list only shrinks: add a definition, declare the icon, and
- * remove it here.
- */
-const NO_DEFINITION_YET = new Set([
-  'Aperture',
-  'ArrowDownToLine',
-  'ArrowUpToLine',
-  'ArrowsRightLeftIcon',
-  'Bars3BottomLeftIcon',
-  'Baseline',
-  'CaseLower',
-  'CaseUpper',
-  'CloudIcon',
-  'Contrast',
-  'DeviceTabletIcon',
-  'FingerPrintIcon',
-  'FireIcon',
-  'FoldVertical',
-  'Frame',
-  'GiftIcon',
-  'Group',
-  'PaintBrushIcon',
-  'PanelBottom',
-  'PanelLeftRightDashed',
-  'PanelTopBottomDashed',
-  'PuzzlePieceIcon',
-  'RectangleStackIcon',
-  'RotateCcw',
-  'Scan',
-  'ScissorsIcon',
-  'SquareRoundCorner',
-  'SquareSquare',
-  'TextAlignJustify',
-  'TriangleRight',
-  'Type',
-  'UserMinusIcon',
-]);
 
 /** @param {string} source @returns {string[]} imported icon names */
 function iconImports(source) {
@@ -92,16 +59,11 @@ describe('bundled template icon declarations', () => {
     const undeclared = [];
     /** @type {string[]} */
     const problems = [];
-    const seenNoDefinition = new Set();
     for (const template of await discoverCoreTemplates()) {
       const imported = iconImports(fs.readFileSync(template.filePath, 'utf-8'));
       const declared = template.icons ?? {};
       for (const name of imported) {
         if (Object.hasOwn(declared, name)) continue;
-        if (NO_DEFINITION_YET.has(name)) {
-          seenNoDefinition.add(name);
-          continue;
-        }
         undeclared.push(`${template.type}/${template.dirName}: ${name}`);
       }
       for (const [name, definition] of Object.entries(declared)) {
@@ -119,9 +81,32 @@ describe('bundled template icon declarations', () => {
     }
     expect(undeclared).toEqual([]);
     expect(problems).toEqual([]);
-    // A name no template imports any more leaves the list.
-    expect(
-      [...NO_DEFINITION_YET].filter(name => !seenNoDefinition.has(name)),
-    ).toEqual([]);
+  }, 60_000);
+
+  it('give two different icons in one template two different definitions', async () => {
+    /** @type {string[]} */
+    const shared = [];
+    for (const template of await discoverCoreTemplates()) {
+      for (const {definition, keys} of sharedTemplateMeanings(
+        template.icons ?? {},
+      )) {
+        shared.push(
+          `${template.type}/${template.dirName}: ${keys.join(', ')} all declare "${definition}"`,
+        );
+      }
+    }
+    expect(shared).toEqual([]);
+  }, 60_000);
+
+  it('pass the template_icon_undeclared check that integration check runs', async () => {
+    const templates = (await discoverCoreTemplates()).map(template => ({
+      id: `${template.type}/${template.dirName}`,
+      source: fs.readFileSync(template.filePath, 'utf-8'),
+      declared: template.icons ?? {},
+    }));
+    expect(undeclaredTemplateIcons(templates)).toEqual({
+      undeclared: [],
+      unchecked: [],
+    });
   }, 60_000);
 });

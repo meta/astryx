@@ -357,3 +357,67 @@ describe('useTableStickyColumns', () => {
     );
   });
 });
+
+describe('useTableStickyColumns key changes', () => {
+  const pinColumns: TableColumn<Record<string, string>>[] = Array.from(
+    {length: 6},
+    (_, index) => ({key: `c${index}`, header: `Column ${index}`}),
+  );
+  const pinData = Array.from({length: 3}, (_, row) => {
+    const item: Record<string, string> = {id: `r${row}`};
+    for (const column of pinColumns) {
+      item[column.key] = `${row}:${column.key}`;
+    }
+    return item;
+  });
+  function Pinned({startKeys}: {startKeys?: string[]}) {
+    const sticky = useTableStickyColumns<Record<string, string>>({startKeys});
+    return (
+      <Table
+        aria-label="Pinned"
+        data={pinData}
+        columns={pinColumns}
+        idKey="id"
+        plugins={{sticky}}
+      />
+    );
+  }
+  function firstColumnPinned(container: HTMLElement) {
+    const header = container.querySelector('thead [data-column-key="c0"]');
+    return {
+      header: header?.hasAttribute('data-astryx-table-pinned'),
+      body: Array.from(container.querySelectorAll('tbody tr')).map(row =>
+        (row as HTMLTableRowElement).cells[0].hasAttribute(
+          'data-astryx-table-pinned',
+        ),
+      ),
+    };
+  }
+
+  it('pins and unpins body cells with their header when the keys change', () => {
+    const {container, rerender} = render(<Pinned />);
+    rerender(<Pinned startKeys={['c0']} />);
+    expect(firstColumnPinned(container)).toEqual({
+      header: true,
+      body: [true, true, true],
+    });
+    rerender(<Pinned />);
+    expect(firstColumnPinned(container)).toEqual({
+      header: false,
+      body: [false, false, false],
+    });
+  });
+
+  it('keeps one plugin object while the keys keep their values', () => {
+    const seen = new Set<unknown>();
+    function Recorder({startKeys}: {startKeys: string[]}) {
+      seen.add(useTableStickyColumns({startKeys}));
+      return null;
+    }
+    const {rerender} = render(<Recorder startKeys={['c0']} />);
+    rerender(<Recorder startKeys={['c0']} />);
+    expect(seen.size).toBe(1);
+    rerender(<Recorder startKeys={['c0', 'c1']} />);
+    expect(seen.size).toBe(2);
+  });
+});

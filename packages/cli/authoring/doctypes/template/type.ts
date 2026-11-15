@@ -29,6 +29,15 @@ export interface BaseTemplateDoc extends AuthoredDocGraphFields {
   /** Search keywords for CLI discovery: the ideas, domains, and other names a
    *  builder might use for what this template serves (e.g. `['monitoring',
    *  'uptime', 'on-call']` for a service-health dashboard). Lowercase.
+   *  One keyword names one concept: write a list of words as separate
+   *  keywords (`['kpi', 'tiles']`, not `'kpi tiles'`). Write several words as
+   *  one keyword only for a term the words do not mean apart, such as
+   *  `'table of contents'` or `'reading pane'`: when `astryx build` chooses
+   *  the start and its alternatives, such a keyword counts only when the
+   *  request names the whole phrase, in order, never through its words
+   *  alone. Inside a phrase, build skips search's
+   *  stopwords and one-letter words, so `'sign in'` matches as `'sign'` and
+   *  `'on-call'` as `'call'`.
    *  `astryx search` matches them as it matches the description, and
    *  `astryx build` ranks page templates on them, so the `description` can
    *  stay a description of the layout. Integration templates need
@@ -55,9 +64,11 @@ export interface BaseTemplateDoc extends AuthoredDocGraphFields {
    *  (`{TrashIcon: 'delete'}`), keyed by the name a named import reads
    *  (`{Trash as TrashIcon}` is `Trash`) or a default import's local name
    *  (`import DeleteIcon from …` is `DeleteIcon`). When the project has an
-   *  icon set, each declared icon is replaced by the set's icon for that
-   *  definition (`astryx docs cli/experimental/icon-definitions`), and every
-   *  key is reported as mapped or kept. A name imported from two modules
+   *  icon set, each declared icon is replaced by the icon for that
+   *  definition (`astryx docs cli/experimental/icon-definitions`) from the
+   *  first set in the project's list that maps it, or by a placeholder the
+   *  copied file declares when no set does, and every key is reported as mapped, a
+   *  placeholder, or kept. A name imported from two modules
    *  (`TrashIcon` from an outline and a solid module) needs one key.
    *  @experimental May change or be removed in a patch release. */
   icons?: Record<string, string>;

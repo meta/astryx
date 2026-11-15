@@ -13,13 +13,33 @@
  * @position foundation/render — used by the render subject's adapter
  */
 
-import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {parse} from '@babel/parser';
-import {PAGE_EXTENSIONS} from './embedded-files.mjs';
+import {babelParse as parse} from '../runtime/lazy-dependencies.mjs';
+import {MODULE_EXTENSIONS} from './embedded-files.mjs';
 import postcss from 'postcss';
-import {matchPath, readPathsIn} from './ts-paths.mjs';
+import {builtinModules} from 'node:module';
+import {matchPath, pathsFor} from './ts-paths.mjs';
 import {isAssetPath} from './assets.mjs';
+import {climbsOut} from '../fs/paths.mjs';
+
+/** A name npm gives a package, scoped or not (older names may have capitals). */
+const PACKAGE_NAME = /^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9-][\w.-]*$/i;
+
+/**
+ * Whether only a path alias can resolve an import: its name cannot be a
+ * package's, a Node built-in's, or a package's own subpath import
+ * (`@/components/Header` and `~/lib/data` cannot; `react`, `@acme/ui`, `fs`
+ * and `#utils`, which a package.json `imports` maps, can). A received file's
+ * record of alias imports counts only for these, so it can never remap a
+ * package, or the reader's own imports, for the reader.
+ * @param {string} spec
+ */
+export function aliasOnly(spec) {
+  if (spec.startsWith('node:') || spec.startsWith('#')) return false;
+  const segments = spec.split('/');
+  const name = spec.startsWith('@') ? segments.slice(0, 2).join('/') : segments[0];
+  return !PACKAGE_NAME.test(name) && !builtinModules.includes(name);
+}
 
 /**
  * What a stylesheet's `@import` rules load, read with postcss so comments
@@ -28,22 +48,42 @@ import {isAssetPath} from './assets.mjs';
  * @returns {string[]}
  */
 export function cssImports(css) {
-  /** @type {string[]} */
-  const out = [];
+  return cssReferences(css)?.imports.map(each => each.url) ?? [];
+}
+
+/**
+ * Every file reference a stylesheet makes, each with its line: what its
+ * `@import` rules load (in any letter case), and each `url()` in a
+ * declaration. Null when it is not valid CSS.
+ * @param {string} css
+ * @returns {{imports: Array<{url: string, line?: number}>, urls: Array<{url: string, line?: number}>} | null}
+ */
+export function cssReferences(css) {
+  /** @type {Array<{url: string, line?: number}>} */
+  const imports = [];
+  /** @type {Array<{url: string, line?: number}>} */
+  const urls = [];
   try {
-    postcss.parse(css).walkAtRules(/^import$/i, rule => {
+    const root = postcss.parse(css);
+    root.walkAtRules(/^import$/i, rule => {
       const m = /^\s*(?:url\(\s*(['"]?)([\s\S]*?)\1\s*\)|(['"])([\s\S]*?)\3)/.exec(rule.params);
       const url = m ? (m[2] ?? m[4]) : '';
-      if (url) out.push(url);
+      if (url) imports.push({url, line: rule.source?.start?.line});
+    });
+    root.walkDecls(decl => {
+      for (const m of decl.value.matchAll(/url\(\s*(['"]?)([^'")]*?)\1\s*\)/gi)) {
+        if (m[2]) urls.push({url: m[2], line: decl.source?.start?.line});
+      }
     });
   } catch {
     // Not valid CSS: it imports nothing a restore needs.
+    return null;
   }
-  return out;
+  return {imports, urls};
 }
 
 /** Extensions an extensionless import may stand for, in resolution order. */
-const RESOLVE_EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js', '.mjs', '.json'];
+const RESOLVE_EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js', '.mjs', '.mts', '.cts', '.cjs', '.json'];
 
 /**
  * The string specifiers one module imports.
@@ -53,6 +93,19 @@ const RESOLVE_EXTENSIONS = ['.tsx', '.ts', '.jsx', '.js', '.mjs', '.json'];
  */
 export function importSpecifiers(source, file) {
   return scanModule(source, file).imports;
+}
+
+/**
+ * Each string specifier one module imports, with its line and whether it
+ * brings in types only (`import type`, `export type`, or named bindings that
+ * are each an inline `type`), which a bundler drops. Null when the module
+ * does not parse.
+ * @param {string} source
+ * @param {string} file for the parser's TypeScript/JSX choice
+ * @returns {Array<{specifier: string, line?: number, typeOnly: boolean}> | null}
+ */
+export function moduleImports(source, file) {
+  return scanModule(source, file).records;
 }
 
 /**
@@ -72,11 +125,39 @@ export function assetRefsIn(text) {
 }
 
 /**
+ * The images, fonts and media a carried file names by a relative path: in a
+ * module's strings, or in a stylesheet. A render carries each one that
+ * exists, and {@link reachableFiles} expects each one back.
+ * @param {string} source
+ * @param {string} file its path; a `.css` file is read as a stylesheet
+ * @returns {string[]}
+ */
+export function assetRefsOf(source, file) {
+  return /\.css$/i.test(file) ? assetRefsIn(source) : scanModule(source, file).assets;
+}
+
+/**
+ * Whether an import or re-export brings in types only: `import type`,
+ * `export type`, or named bindings that are each an inline `type`.
+ * @param {any} node
+ */
+function typesOnly(node) {
+  if (node.importKind === 'type' || node.exportKind === 'type') return true;
+  const specifiers = node.specifiers ?? [];
+  return (
+    specifiers.length > 0 &&
+    specifiers.every((/** @type {any} */ each) => each.importKind === 'type' || each.exportKind === 'type')
+  );
+}
+
+/**
  * One module's imports, and the relative asset paths its strings name
- * (`<img src="./logo.png">`, `url(./bg.png)` in a style).
+ * (`<img src="./logo.png">`, `url(./bg.png)` in a style). `records` holds
+ * each import with its line and whether it is types only; null when the
+ * module does not parse.
  * @param {string} source
  * @param {string} file
- * @returns {{imports: string[], assets: string[]}}
+ * @returns {{imports: string[], assets: string[], records: Array<{specifier: string, line?: number, typeOnly: boolean}> | null}}
  */
 function scanModule(source, file) {
   /** @type {string[]} */
@@ -91,10 +172,13 @@ function scanModule(source, file) {
       plugins: /\.(tsx?|mts|cts)$/.test(file) ? ['jsx', 'typescript'] : ['jsx'],
     });
   } catch {
-    return {imports: [], assets: []};
+    return {imports: [], assets: [], records: null};
   }
-  /** @type {string[]} */
-  const out = [];
+  /** @type {Array<{specifier: string, line?: number, typeOnly: boolean}>} */
+  const records = [];
+  /** @param {string} specifier @param {any} node @param {boolean} [typeOnly] */
+  const add = (specifier, node, typeOnly = false) =>
+    records.push({specifier, line: node.loc?.start?.line, typeOnly});
   /** @param {any} node */
   const visit = node => {
     if (!node || typeof node.type !== 'string') return;
@@ -106,19 +190,19 @@ function scanModule(source, file) {
         node.type === 'ExportAllDeclaration') &&
       node.source?.type === 'StringLiteral'
     ) {
-      out.push(node.source.value);
+      add(node.source.value, node, typesOnly(node));
     } else if (
       node.type === 'ImportExpression' &&
       node.source?.type === 'StringLiteral'
     ) {
-      out.push(node.source.value);
+      add(node.source.value, node);
     } else if (
       node.type === 'CallExpression' &&
       node.arguments?.[0]?.type === 'StringLiteral' &&
       (node.callee?.type === 'Import' ||
         (node.callee?.type === 'Identifier' && node.callee.name === 'require'))
     ) {
-      out.push(node.arguments[0].value);
+      add(node.arguments[0].value, node);
     }
     for (const key of Object.keys(node)) {
       if (key === 'loc' || key === 'start' || key === 'end' || key === 'extra') continue;
@@ -128,26 +212,18 @@ function scanModule(source, file) {
     }
   };
   visit(ast.program);
-  return {imports: out, assets};
+  return {imports: records.map(each => each.specifier), assets, records};
 }
 
 /**
- * The path aliases (`compilerOptions.paths`) of the project that holds
- * `dir`, by TypeScript's rules (see ts-paths.mjs).
- * @param {string} dir
+ * The path aliases (`compilerOptions.paths`) that TypeScript reads for a page
+ * written at `file`, by its rules (see ts-paths.mjs). The file and its
+ * folders need not exist yet.
+ * @param {string} file absolute
  * @returns {import('./ts-paths.mjs').PathPattern[]}
  */
-export function receivingAliases(dir) {
-  let d = dir;
-  while (!fs.existsSync(d) && path.dirname(d) !== d) d = path.dirname(d);
-  for (;;) {
-    const found = readPathsIn(d);
-    if (found) return found;
-    if (fs.existsSync(path.join(d, 'package.json'))) return [];
-    const up = path.dirname(d);
-    if (up === d) return [];
-    d = up;
-  }
+export function receivingAliases(file) {
+  return pathsFor(file);
 }
 
 /**
@@ -156,18 +232,23 @@ export function receivingAliases(dir) {
  *   page), so it goes where the page's layout puts it.
  * @property {Set<string>} aliased - Absolute paths a receiving-project alias
  *   import names for it, so it also goes there.
+ * @property {Set<string>} unaliased - Alias imports that name it where no
+ *   receiving-project alias does: the render recorded the file each named,
+ *   so it goes where the page's layout puts it, and the page needs the alias.
  */
 
 /**
  * The embedded files the page reaches through its imports.
  * @param {{path: string, base64: string}[]} files the embedded files, page
  *   first; every path appears once (callers refuse duplicates first)
- * @param {{aliases?: import('./ts-paths.mjs').PathPattern[]}} [options] the
- *   receiving project's path aliases (see receivingAliases)
+ * @param {{aliases?: import('./ts-paths.mjs').PathPattern[], recorded?: unknown}} [options]
+ *   the receiving project's path aliases (see receivingAliases), and the
+ *   alias imports the render recorded (an untrusted record: only an entry
+ *   that names a carried file counts)
  * @returns {{reached: Map<string, Reach>, missing: string[]}} the reached
  *   tree paths, and the relative imports the file does not carry
  */
-export function reachableFiles(files, {aliases = []} = {}) {
+export function reachableFiles(files, {aliases = [], recorded} = {}) {
   const byPath = new Map(files.map(f => [f.path, f]));
   /** @type {Map<string, Reach>} */
   const reached = new Map();
@@ -203,7 +284,7 @@ export function reachableFiles(files, {aliases = []} = {}) {
     let r = reached.get(p);
     const fresh = !r;
     if (!r) {
-      r = {relative: false, aliased: new Set()};
+      r = {relative: false, aliased: new Set(), unaliased: new Set()};
       reached.set(p, r);
     }
     return {r, fresh};
@@ -217,7 +298,7 @@ export function reachableFiles(files, {aliases = []} = {}) {
   while (queue.length > 0) {
     const current = /** @type {string} */ (queue.shift());
     const ext = path.posix.extname(current).toLowerCase();
-    const isModule = PAGE_EXTENSIONS.includes(ext);
+    const isModule = MODULE_EXTENSIONS.includes(ext);
     if (!isModule && ext !== '.css') continue;
     const entry = byPath.get(current);
     if (!entry) continue;
@@ -225,7 +306,7 @@ export function reachableFiles(files, {aliases = []} = {}) {
     // Images and fonts a module or stylesheet names by a relative path are
     // part of the page too.
     const scanned = isModule
-      ? scanModule(source, current)
+      ? {imports: importSpecifiers(source, current), assets: assetRefsOf(source, current)}
       : {
           // A stylesheet's own `@import`s count as imports.
           // A stylesheet's own relative `@import`s count as imports (read
@@ -237,11 +318,11 @@ export function reachableFiles(files, {aliases = []} = {}) {
             // carries one, else a package's.
             .filter(ref => ref.startsWith('.') || byPath.has(path.posix.normalize(path.posix.join(path.posix.dirname(current), ref))))
             .map(ref => (ref.startsWith('.') ? ref : `./${ref}`)),
-          assets: assetRefsIn(source),
+          assets: assetRefsOf(source, current),
         };
     for (const ref of scanned.assets) {
       const joined = path.posix.normalize(path.posix.join(path.posix.dirname(current), ref));
-      if (joined.startsWith('..')) continue;
+      if (climbsOut(joined)) continue;
       if (!byPath.has(joined)) {
         missing.add(joined);
         continue;
@@ -252,7 +333,7 @@ export function reachableFiles(files, {aliases = []} = {}) {
       const bare = spec.split('?')[0];
       if (bare.startsWith('./') || bare.startsWith('../')) {
         const joined = path.posix.normalize(path.posix.join(path.posix.dirname(current), bare));
-        const target = joined.startsWith('..') ? null : resolveIn(joined);
+        const target = climbsOut(joined) ? null : resolveIn(joined);
         if (!target) {
           missing.add(joined);
           continue;
@@ -317,6 +398,16 @@ export function reachableFiles(files, {aliases = []} = {}) {
           r.aliased.add(chosen.abs);
           if (fresh) queue.push(chosen.hit.path);
         }
+        continue;
+      }
+      // No alias here names it, but the render recorded the carried file it
+      // named: that file comes back in the page's own layout.
+      const sent = aliasOnly(bare) && recorded && typeof recorded === 'object' && Object.hasOwn(recorded, bare) ? /** @type {Record<string, unknown>} */ (recorded)[bare] : undefined;
+      if (typeof sent === 'string' && byPath.has(sent)) {
+        const {r, fresh} = reach(sent);
+        r.relative = true;
+        r.unaliased.add(bare);
+        if (fresh) queue.push(sent);
       }
     }
   }

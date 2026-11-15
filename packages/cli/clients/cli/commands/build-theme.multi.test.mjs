@@ -2,7 +2,7 @@
 
 /**
  * @file Tests for `astryx theme build <a> <b> …` — several themes per
- * invocation (kt-lc9s).
+ * invocation.
  *
  * The load-bearing guarantee is equivalence: one invocation over N theme files
  * must write exactly the bytes N serial invocations write. Everything else here
@@ -144,5 +144,117 @@ describe('theme build with several files', () => {
     const r = await runCli(['theme', 'build', '*.mjs'], dir);
     expect(r.status).toBe(1);
     expect(r.stderr).toMatch(/expanded by your shell/);
+  }, 120_000);
+
+  it('refuses a file given twice before writing anything', async () => {
+    const dir = themeDir();
+    const r = await runCli(
+      ['--json', 'theme', 'build', 'alpha.mjs', './alpha.mjs'],
+      dir,
+    );
+    expect(r.status).toBe(1);
+    expect(JSON.parse(r.stdout)).toMatchObject({code: 'ERR_THEME_INVALID'});
+    expect(fs.existsSync(path.join(dir, 'alpha.css'))).toBe(false);
+  }, 120_000);
+
+  it('refuses two themes with the same name before writing either', async () => {
+    const dir = themeDir();
+    fs.writeFileSync(
+      path.join(dir, 'alpha2.mjs'),
+      `export default { name: 'alpha', tokens: { '--color-bg': '#000000' } };\n`,
+    );
+    const r = await runCli(
+      ['--json', 'theme', 'build', 'alpha.mjs', 'alpha2.mjs'],
+      dir,
+    );
+    expect(r.status).toBe(1);
+    expect(JSON.parse(r.stdout)).toMatchObject({
+      code: 'ERR_THEME_INVALID',
+      error:
+        'alpha.mjs and alpha2.mjs both build alpha.css. Give each theme its own name; nothing was written.',
+    });
+    expect(fs.existsSync(path.join(dir, 'alpha.css'))).toBe(false);
+  }, 120_000);
+
+  it('prints no [ok] line for a theme a refused batch never writes', async () => {
+    const dir = themeDir();
+    fs.writeFileSync(
+      path.join(dir, 'alpha2.mjs'),
+      `export default { name: 'alpha', tokens: { '--color-bg': '#000000' } };\n`,
+    );
+    for (const detail of [[], ['--detail', 'full']]) {
+      const r = await runCli(
+        [...detail, 'theme', 'build', 'alpha.mjs', 'alpha2.mjs'],
+        dir,
+      );
+      expect(r.status).toBe(1);
+      expect(r.stdout + r.stderr).not.toMatch(/\[ok\].*alpha\.css/);
+      expect(r.stderr).toContain('nothing was written');
+      expect(fs.existsSync(path.join(dir, 'alpha.css'))).toBe(false);
+    }
+  }, 120_000);
+
+  it('shows the warnings of a theme that fails in a batch, after the themes before it', async () => {
+    const dir = themeDir();
+    // The theme warns about an unknown component, then fails: its output is a
+    // folder.
+    fs.writeFileSync(
+      path.join(dir, 'loud.mjs'),
+      "export default { name: 'loud', tokens: { '--color-bg': '#000000' }, components: { 'not-a-part': { base: { color: 'red' } } } };\n",
+    );
+    fs.mkdirSync(path.join(dir, 'loud.css'));
+    const r = await runCli(['theme', 'build', 'alpha.mjs', 'loud.mjs'], dir);
+    expect(r.status).toBe(1);
+    const out = r.stdout + r.stderr;
+    expect(out).toMatch(/\[ok\] alpha\.css/);
+    expect(out).toContain('Unknown component "not-a-part"');
+    expect(r.stderr).toContain('loud.mjs: The output loud.css is a folder');
+    expect(out.indexOf('[ok] alpha.css')).toBeLessThan(
+      out.indexOf('Unknown component'),
+    );
+    expect(fs.existsSync(path.join(dir, 'alpha.css'))).toBe(true);
+  }, 120_000);
+
+  it('prints each theme of a batch after it is written', async () => {
+    const dir = themeDir();
+    const r = await runCli(['theme', 'build', 'alpha.mjs', 'beta.mjs'], dir);
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).toMatch(/\[ok\] alpha\.css/);
+    expect(r.stdout).toMatch(/\[ok\] beta\.css/);
+  }, 120_000);
+
+  it('suggests the theme source when given a bare theme name', async () => {
+    const dir = themeDir();
+    fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"app"}\n');
+    fs.mkdirSync(path.join(dir, 'themes', 'brand'), {recursive: true});
+    fs.writeFileSync(
+      path.join(dir, 'themes', 'brand', 'brand.theme.ts'),
+      THEMES['alpha.mjs'],
+    );
+    const r = await runCli(['--json', 'theme', 'build', 'brand'], dir);
+    expect(r.status).toBe(1);
+    const parsed = JSON.parse(r.stdout);
+    expect(parsed.code).toBe('ERR_FILE_NOT_FOUND');
+    expect(parsed.suggestions).toEqual([
+      {
+        name: expect.stringMatching(
+          / theme build themes\/brand\/brand\.theme\.ts$/,
+        ),
+        reason: 'a theme source that exists',
+      },
+    ]);
+  }, 120_000);
+
+  it('suggests the path with / when given one with backslashes', async () => {
+    const dir = themeDir();
+    fs.mkdirSync(path.join(dir, 'hand'));
+    fs.writeFileSync(path.join(dir, 'hand', 'ocean.mjs'), THEMES['alpha.mjs']);
+    const r = await runCli(
+      ['--json', 'theme', 'build', 'hand\\ocean.mjs'],
+      dir,
+    );
+    expect(JSON.parse(r.stdout).suggestions[0].name).toMatch(
+      / theme build hand\/ocean\.mjs$/,
+    );
   }, 120_000);
 });

@@ -16,14 +16,19 @@ import {
   act,
   fireEvent,
   waitFor,
+  within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
   Profiler,
+  Suspense,
+  startTransition,
+  use,
   useCallback,
   useEffect,
   useLayoutEffect,
   useState,
+  type ReactNode,
 } from 'react';
 import {hydrateRoot} from 'react-dom/client';
 import {renderToString} from 'react-dom/server';
@@ -47,6 +52,7 @@ import type {
 } from './useLayer';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {observeBrowserHide} from './popoverOperations';
+import {watchOutsidePans} from './outsidePanClaim';
 
 vi.mock('./preserveAnimations', async importOriginal => {
   const actual: {preserveAnimations: typeof preserveAnimations} =
@@ -229,6 +235,28 @@ function KeptLazyContextHarness({
         <section data-testid="safe-host">{renderedLayer}</section>
       )}
     </>
+  );
+}
+
+// A transition that suspends for good: React renders its element, then keeps
+// the committed tree and never commits that render.
+const foreverPending = new Promise<never>(() => {});
+function ForeverPending(): null {
+  use(foreverPending);
+  return null;
+}
+function Discardable({
+  children,
+  isPending = false,
+}: {
+  children: ReactNode;
+  isPending?: boolean;
+}) {
+  return (
+    <Suspense fallback={null}>
+      {children}
+      {isPending ? <ForeverPending /> : null}
+    </Suspense>
   );
 }
 
@@ -1467,6 +1495,54 @@ describe('useLayer', () => {
       expect(popover).not.toHaveAttribute('data-open');
     });
 
+    it('replays a parked show with the committed onShow after React discards a render with another', async () => {
+      const {browserHide, runToggleTasks} = installBrowserHidePopoverApi();
+      const errors: unknown[] = [];
+      const onError = (event: ErrorEvent) => {
+        errors.push(event.error);
+        event.preventDefault();
+      };
+      window.addEventListener('error', onError);
+      const onTooltipShow = vi.fn();
+      const discardedOnTooltipShow = vi.fn();
+      const {getByRole, rerender} = render(
+        <Discardable>
+          <FocusReturnHarness onTooltipShow={onTooltipShow} />
+        </Discardable>,
+      );
+      const trigger = getByRole('button', {name: 'Trigger'});
+      const inside = getByRole('button', {name: 'Inside', hidden: true});
+      const popover = getByRole('dialog', {hidden: true});
+      act(() => trigger.focus());
+      fireEvent.click(trigger);
+      act(() => inside.focus());
+      runToggleTasks();
+      expect(onTooltipShow).toHaveBeenCalledTimes(1);
+      // The browser's own hide returns focus to the trigger, and the
+      // tooltip's show parks until that hide ends.
+      act(() => browserHide(popover));
+      window.removeEventListener('error', onError);
+      await act(async () => {});
+      expect(errors).toEqual([]);
+      expect(onTooltipShow).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        startTransition(() => {
+          rerender(
+            <Discardable isPending>
+              <FocusReturnHarness onTooltipShow={discardedOnTooltipShow} />
+            </Discardable>,
+          );
+        });
+      });
+
+      // The hide ends at its toggle, and the parked show replays.
+      act(() => runToggleTasks());
+      await act(async () => {});
+
+      expect(onTooltipShow).toHaveBeenCalledTimes(2);
+      expect(discardedOnTooltipShow).not.toHaveBeenCalled();
+    });
+
     it('lets a replay the browser refuses again reach the page, and parks nothing more', async () => {
       const {showSpy, browserHide, runToggleTasks, refuseNextShow} =
         installBrowserHidePopoverApi();
@@ -1519,6 +1595,47 @@ describe('useLayer', () => {
         'data-open',
       );
       expect(onTooltipShow).toHaveBeenCalledTimes(1);
+    });
+
+    it('reports a close start to the committed callback after React discards a render with another', async () => {
+      const {runToggleTasks} = installBrowserHidePopoverApi();
+      function Harness({onCloseStart}: {onCloseStart: () => void}) {
+        const layer = useLayerInternal({mode: 'context', onCloseStart});
+        return (
+          <>
+            <button type="button" ref={layer.ref} onClick={layer.show}>
+              Trigger
+            </button>
+            <button type="button" onClick={layer.hide}>
+              Close
+            </button>
+            {layer.render(<span>Content</span>)}
+          </>
+        );
+      }
+      const committed = vi.fn();
+      const discarded = vi.fn();
+      const {getByRole, rerender} = render(
+        <Discardable>
+          <Harness onCloseStart={committed} />
+        </Discardable>,
+      );
+      fireEvent.click(getByRole('button', {name: 'Trigger'}));
+      act(() => runToggleTasks());
+      await act(async () => {
+        startTransition(() => {
+          rerender(
+            <Discardable isPending>
+              <Harness onCloseStart={discarded} />
+            </Discardable>,
+          );
+        });
+      });
+
+      fireEvent.click(getByRole('button', {name: 'Close'}));
+
+      expect(committed).toHaveBeenCalledOnce();
+      expect(discarded).not.toHaveBeenCalled();
     });
 
     it('reports a close start as a hide starts, before its toggle: the browser\u2019s own hide and hide() alike', () => {
@@ -1731,6 +1848,178 @@ describe('useLayer', () => {
       expect(getByText('Tip').closest('[popover]')).not.toHaveAttribute(
         'data-open',
       );
+    });
+
+    /**
+     * One layer with two triggers, as a view with one popover for many
+     * items has: each press shows the layer from its own trigger, and a
+     * press on the open trigger hides it. `log` records what the parent
+     * sees, as a controlled `onOpenChange` would.
+     */
+    function TwoTriggerHarness({log}: {log: string[]}) {
+      const [openKey, setOpenKey] = useState<string | null>(null);
+      const layer = useLayerInternal({
+        mode: 'context',
+        onHide: () => {
+          log.push('hide');
+          setOpenKey(null);
+        },
+      });
+      const press = (key: string, button: HTMLButtonElement) => {
+        if (layer.isOpen && openKey === key) {
+          layer.hide();
+          return;
+        }
+        log.push(`show ${key}`);
+        setOpenKey(key);
+        layer.ref(button);
+        layer.show();
+      };
+      return (
+        <>
+          {['A', 'B'].map(key => (
+            <button
+              key={key}
+              type="button"
+              onClick={event => press(key, event.currentTarget)}>
+              {key}
+            </button>
+          ))}
+          <span data-testid="open-key">{openKey ?? 'none'}</span>
+          {layer.render(<span>Layer content</span>, {placement: 'below'})}
+        </>
+      );
+    }
+
+    /** A press that the browser's light dismiss answers before its click. */
+    function pressWithLightDismiss(
+      button: HTMLElement,
+      popover: HTMLElement,
+      browserHide: (popover: HTMLElement) => void,
+    ) {
+      fireEvent.pointerDown(button);
+      act(() => browserHide(popover));
+      fireEvent.click(button);
+    }
+
+    it('opens the layer at another trigger when the press on it light-dismissed the layer', async () => {
+      const {browserHide, runToggleTasks} = installBrowserHidePopoverApi();
+      const log: string[] = [];
+      const {container, getByRole, getByTestId} = render(
+        <TwoTriggerHarness log={log} />,
+      );
+      const popover = container.querySelector('[popover]') as HTMLElement;
+      fireEvent.click(getByRole('button', {name: 'A'}));
+      act(() => runToggleTasks());
+      expect(popover).toHaveAttribute('data-open', 'true');
+
+      pressWithLightDismiss(
+        getByRole('button', {name: 'B'}),
+        popover,
+        browserHide,
+      );
+      act(() => runToggleTasks());
+      await act(async () => {});
+
+      // The layer moved to B: it is open there, and A's close is not
+      // reported, as a controlled parent would see it.
+      expect(popover).toHaveAttribute('data-open', 'true');
+      expect(getByTestId('open-key')).toHaveTextContent('B');
+      expect(log).toEqual(['show A', 'show B']);
+    });
+
+    it('ends closed when the press on the open trigger light-dismissed the layer', async () => {
+      const {browserHide, runToggleTasks} = installBrowserHidePopoverApi();
+      const log: string[] = [];
+      const {container, getByRole} = render(<TwoTriggerHarness log={log} />);
+      const popover = container.querySelector('[popover]') as HTMLElement;
+      const a = getByRole('button', {name: 'A'});
+      fireEvent.click(a);
+      act(() => runToggleTasks());
+
+      pressWithLightDismiss(a, popover, browserHide);
+      act(() => runToggleTasks());
+      await act(async () => {});
+
+      expect(popover).not.toHaveAttribute('data-open');
+      expect(log.filter(entry => entry === 'hide')).toHaveLength(1);
+    });
+
+    it('keeps a controlled layer and its state in step when another control toggles it during a light dismiss', async () => {
+      const {browserHide, runToggleTasks} = installBrowserHidePopoverApi();
+      function ControlledHarness() {
+        const [open, setOpen] = useState(false);
+        const layer = useLayerInternal({
+          mode: 'context',
+          onHide: () => setOpen(false),
+        });
+        useLayoutEffect(() => {
+          if (open && !layer.isOpen) {
+            layer.show();
+          } else if (!open && layer.isOpen) {
+            layer.hide();
+          }
+        });
+        return (
+          <>
+            <button type="button" ref={layer.ref}>
+              Anchor
+            </button>
+            <button type="button" onClick={() => setOpen(value => !value)}>
+              Toggle
+            </button>
+            <span data-testid="state">{open ? 'open' : 'closed'}</span>
+            {layer.render(<span>Layer content</span>, {placement: 'below'})}
+          </>
+        );
+      }
+      const {container, getByRole, getByTestId} = render(<ControlledHarness />);
+      const popover = container.querySelector('[popover]') as HTMLElement;
+      const toggle = getByRole('button', {name: 'Toggle'});
+      fireEvent.click(toggle);
+      act(() => runToggleTasks());
+      expect(popover).toHaveAttribute('data-open', 'true');
+
+      // The press on the control light-dismisses the layer before its click.
+      pressWithLightDismiss(toggle, popover, browserHide);
+      act(() => runToggleTasks());
+      await act(async () => {});
+
+      expect(popover).not.toHaveAttribute('data-open');
+      expect(getByTestId('state')).toHaveTextContent('closed');
+    });
+
+    it('fires onHide once for a browser close followed by hide() in the same task', async () => {
+      const {browserHide, runToggleTasks} = installBrowserHidePopoverApi();
+      const onHide = vi.fn();
+      function Harness() {
+        const layer = useLayerInternal({mode: 'context', onHide});
+        return (
+          <>
+            <button type="button" ref={layer.ref} onClick={layer.show}>
+              Trigger
+            </button>
+            <button type="button" onClick={layer.hide}>
+              Hide
+            </button>
+            {layer.render(<span>Layer content</span>, {placement: 'below'})}
+          </>
+        );
+      }
+      const {container, getByRole} = render(<Harness />);
+      const popover = container.querySelector('[popover]') as HTMLElement;
+      fireEvent.click(getByRole('button', {name: 'Trigger'}));
+      act(() => runToggleTasks());
+
+      act(() => {
+        browserHide(popover);
+        getByRole('button', {name: 'Hide'}).click();
+      });
+      act(() => runToggleTasks());
+      await act(async () => {});
+
+      expect(onHide).toHaveBeenCalledTimes(1);
+      expect(popover).not.toHaveAttribute('data-open');
     });
   });
 
@@ -2802,17 +3091,9 @@ describe('useLayer public return types', () => {
     const fixedHasKeepOpenProps: 'keepOpenProps' extends keyof FixedLayerReturn
       ? true
       : false = false;
-    const contextHasGuard: 'wasJustDismissed' extends keyof ContextLayerReturn
-      ? true
-      : false = false;
-    const fixedHasGuard: 'wasJustDismissed' extends keyof FixedLayerReturn
-      ? true
-      : false = false;
 
     expect(contextHasKeepOpenProps).toBe(false);
     expect(fixedHasKeepOpenProps).toBe(false);
-    expect(contextHasGuard).toBe(false);
-    expect(fixedHasGuard).toBe(false);
   });
 });
 
@@ -2832,6 +3113,131 @@ describe('internal keep-open props (controls on the trigger, #5004)', () => {
       </>
     );
   }
+
+  it('names the control an invoker after React discards a render that says the layer is closed', async () => {
+    function KeepOpenHarness({isOpen}: {isOpen: boolean}) {
+      const keepOpenProps = useKeepLayerOpenProps('some-layer', isOpen);
+      return (
+        <button type="button" {...keepOpenProps}>
+          Clear
+        </button>
+      );
+    }
+    const {getByRole, rerender} = render(
+      <Discardable>
+        <KeepOpenHarness isOpen />
+      </Discardable>,
+    );
+    await act(async () => {
+      startTransition(() => {
+        rerender(
+          <Discardable isPending>
+            <KeepOpenHarness isOpen={false} />
+          </Discardable>,
+        );
+      });
+    });
+    const clear = getByRole('button', {name: 'Clear'});
+
+    fireEvent.pointerDown(clear);
+
+    // The committed layer is open, so the press names the control an invoker.
+    expect(clear.getAttribute('popovertarget')).toBe('some-layer');
+    fireEvent.pointerUp(clear);
+  });
+
+  // A show the runtime makes in a transition that never commits: the layer is
+  // shown while its open state stays false.
+  function PendingShowHarness() {
+    const layer = useLayer({mode: 'context'});
+    const keepOpenProps = useKeepLayerOpenProps(layer.id, layer.isOpen);
+    const [isPending, setIsPending] = useState(false);
+    return (
+      <>
+        <button
+          type="button"
+          ref={layer.ref}
+          onClick={() => {
+            startTransition(() => {
+              layer.show();
+              setIsPending(true);
+            });
+          }}>
+          Trigger
+        </button>
+        <button type="button" {...keepOpenProps}>
+          Clear
+        </button>
+        {layer.render(<span>Layer content</span>, {placement: 'below'})}
+        <Suspense fallback={null}>
+          {isPending ? <ForeverPending /> : null}
+        </Suspense>
+      </>
+    );
+  }
+
+  // Presses Clear on a pending show rendered into `container`. The browser's
+  // popover state, which jsdom lacks, is shown and hidden by the element's own
+  // methods and read through `:popover-open`.
+  async function pressClearOnPendingShow(container: HTMLElement) {
+    const originalShow = HTMLElement.prototype.showPopover;
+    const originalHide = HTMLElement.prototype.hidePopover;
+    const originalMatches = HTMLElement.prototype.matches;
+    HTMLElement.prototype.showPopover = function (this: HTMLElement) {
+      this.setAttribute('data-test-popover-open', '');
+    };
+    HTMLElement.prototype.hidePopover = function (this: HTMLElement) {
+      this.removeAttribute('data-test-popover-open');
+    };
+    HTMLElement.prototype.matches = function (
+      this: HTMLElement,
+      selector: string,
+    ): boolean {
+      return selector === ':popover-open'
+        ? this.hasAttribute('data-test-popover-open')
+        : originalMatches.call(this, selector);
+    } as typeof originalMatches;
+    try {
+      render(<PendingShowHarness />, {container});
+      const view = within(container);
+      await act(async () => {
+        fireEvent.click(view.getByRole('button', {name: 'Trigger'}));
+      });
+      const popover = container.querySelector('[popover]') as HTMLElement;
+      expect(popover).toHaveAttribute('data-test-popover-open');
+      const clear = view.getByRole('button', {name: 'Clear'});
+
+      fireEvent.pointerDown(clear);
+
+      // The layer is shown, so the press names the control an invoker.
+      expect(clear.getAttribute('popovertarget')).toBe(popover.id);
+      fireEvent.pointerUp(clear);
+    } finally {
+      HTMLElement.prototype.showPopover = originalShow;
+      HTMLElement.prototype.hidePopover = originalHide;
+      HTMLElement.prototype.matches = originalMatches;
+    }
+  }
+
+  it('names the control an invoker while a layer shown in a pending transition has not committed open', async () => {
+    const container = document.body.appendChild(document.createElement('div'));
+    try {
+      await pressClearOnPendingShow(container);
+    } finally {
+      container.remove();
+    }
+  });
+
+  it('names the control an invoker for a pending show inside a shadow root', async () => {
+    const host = document.body.appendChild(document.createElement('div'));
+    const shadowRoot = host.attachShadow({mode: 'open'});
+    const container = shadowRoot.appendChild(document.createElement('div'));
+    try {
+      await pressClearOnPendingShow(container);
+    } finally {
+      host.remove();
+    }
+  });
 
   it('names the control an invoker for the duration of the press', async () => {
     const user = userEvent.setup();
@@ -2899,8 +3305,9 @@ describe('internal keep-open props (controls on the trigger, #5004)', () => {
   });
 });
 
-describe('wasJustDismissed (light dismiss vs. the trigger click, #5004)', () => {
-  function GuardedTriggerHarness() {
+describe('light dismiss vs. the trigger click', () => {
+  /** A trigger that calls show()/hide() directly, checking nothing. */
+  function TriggerHarness() {
     const layer = useLayerInternal({mode: 'context'});
     return (
       <>
@@ -2908,9 +3315,6 @@ describe('wasJustDismissed (light dismiss vs. the trigger click, #5004)', () => 
           type="button"
           ref={layer.ref}
           onClick={() => {
-            if (layer.wasJustDismissed()) {
-              return;
-            }
             if (layer.isOpen) {
               layer.hide();
             } else {
@@ -2944,9 +3348,7 @@ describe('wasJustDismissed (light dismiss vs. the trigger click, #5004)', () => 
 
   it('absorbs the trigger click that follows a light dismiss', async () => {
     const user = userEvent.setup();
-    const {container, getByRole, getByTestId} = render(
-      <GuardedTriggerHarness />,
-    );
+    const {container, getByRole, getByTestId} = render(<TriggerHarness />);
     const trigger = getByRole('button', {name: 'Trigger'});
 
     await user.click(trigger);
@@ -2962,9 +3364,7 @@ describe('wasJustDismissed (light dismiss vs. the trigger click, #5004)', () => 
 
   it('acts on a deliberate second press', async () => {
     const user = userEvent.setup();
-    const {container, getByRole, getByTestId} = render(
-      <GuardedTriggerHarness />,
-    );
+    const {container, getByRole, getByTestId} = render(<TriggerHarness />);
     const trigger = getByRole('button', {name: 'Trigger'});
 
     await user.click(trigger);
@@ -2979,7 +3379,7 @@ describe('wasJustDismissed (light dismiss vs. the trigger click, #5004)', () => 
 
   it('leaves a programmatic hide unguarded', async () => {
     const user = userEvent.setup();
-    const {getByRole, getByTestId} = render(<GuardedTriggerHarness />);
+    const {getByRole, getByTestId} = render(<TriggerHarness />);
     const trigger = getByRole('button', {name: 'Trigger'});
 
     // Three presses with no browser-initiated close between them.
@@ -2992,9 +3392,7 @@ describe('wasJustDismissed (light dismiss vs. the trigger click, #5004)', () => 
 
   it('acts on a synthesized click after a stopped click-first dismissal', async () => {
     const user = userEvent.setup();
-    const {container, getByRole, getByTestId} = render(
-      <GuardedTriggerHarness />,
-    );
+    const {container, getByRole, getByTestId} = render(<TriggerHarness />);
     const trigger = getByRole('button', {name: 'Trigger'});
 
     await user.click(trigger);
@@ -3013,38 +3411,6 @@ describe('wasJustDismissed (light dismiss vs. the trigger click, #5004)', () => 
     });
 
     expect(getByTestId('state')).toHaveTextContent('open');
-  });
-
-  /** A trigger that calls show()/hide() directly, checking nothing. */
-  function PlainTriggerHarness() {
-    const layer = useLayerInternal({mode: 'context'});
-    return (
-      <>
-        <button
-          type="button"
-          ref={layer.ref}
-          onClick={() => (layer.isOpen ? layer.hide() : layer.show())}>
-          Trigger
-        </button>
-        <span data-testid="state">{layer.isOpen ? 'open' : 'closed'}</span>
-        {layer.render(<span>Layer content</span>, {placement: 'below'})}
-      </>
-    );
-  }
-
-  it('absorbs the click for a trigger that never calls wasJustDismissed', async () => {
-    const user = userEvent.setup();
-    const {container, getByRole, getByTestId} = render(<PlainTriggerHarness />);
-    const trigger = getByRole('button', {name: 'Trigger'});
-
-    await user.click(trigger);
-    expect(getByTestId('state')).toHaveTextContent('open');
-
-    fireEvent.pointerDown(trigger);
-    lightDismiss(container);
-    fireEvent.click(trigger);
-
-    expect(getByTestId('state')).toHaveTextContent('closed');
   });
 });
 
@@ -3178,6 +3544,82 @@ describe('a light-dismiss layer opened by a context-menu press', () => {
   });
 });
 
+describe('a touch that pans outside an open light-dismiss layer', () => {
+  function PanHarness({ownsOutsidePan}: {ownsOutsidePan: boolean}) {
+    const layer = useLayerInternal({
+      mode: 'context',
+      lightDismiss: true,
+      watchesOutsidePans: ownsOutsidePan ? undefined : watchOutsidePans,
+    });
+    return (
+      <>
+        <button type="button" ref={layer.ref} onClick={() => layer.show()}>
+          Trigger
+        </button>
+        <button type="button" onClick={() => layer.hide()}>
+          Close
+        </button>
+        <div data-testid="page" />
+        {layer.render(<span>Layer content</span>, {placement: 'below'})}
+      </>
+    );
+  }
+
+  const touch = (pointerId: number, y: number) => ({
+    pointerType: 'touch',
+    pointerId,
+    isPrimary: true,
+    clientX: 10,
+    clientY: y,
+  });
+
+  let captured: {element: Element; pointerId: number}[] = [];
+  beforeEach(() => {
+    captured = [];
+    HTMLElement.prototype.setPointerCapture = function (pointerId: number) {
+      captured.push({element: this, pointerId});
+    };
+  });
+  afterEach(() => {
+    delete (HTMLElement.prototype as Partial<HTMLElement>).setPointerCapture;
+  });
+
+  /** A finger that presses the page and pans 20 px, then lifts. */
+  function panOnPage(page: Element, pointerId: number) {
+    fireEvent.pointerDown(page, touch(pointerId, 300));
+    fireEvent.pointerMove(page, touch(pointerId, 280));
+    fireEvent.pointerUp(page, touch(pointerId, 280));
+  }
+
+  it('claims the pan for a layer given the watch, so its release lands on the layer', () => {
+    const {container, getByRole, getByTestId} = render(
+      <PanHarness ownsOutsidePan={false} />,
+    );
+    fireEvent.click(getByRole('button', {name: 'Trigger'}));
+    panOnPage(getByTestId('page'), 5);
+    expect(captured).toEqual([
+      {element: container.querySelector('[popover]'), pointerId: 5},
+    ]);
+  });
+
+  it('claims nothing once the layer is closed', () => {
+    const {getByRole, getByTestId} = render(
+      <PanHarness ownsOutsidePan={false} />,
+    );
+    fireEvent.click(getByRole('button', {name: 'Trigger'}));
+    fireEvent.click(getByRole('button', {name: 'Close'}));
+    panOnPage(getByTestId('page'), 5);
+    expect(captured).toEqual([]);
+  });
+
+  it('watches no pans for a layer given no watch (an anchored menu)', () => {
+    const {getByRole, getByTestId} = render(<PanHarness ownsOutsidePan />);
+    fireEvent.click(getByRole('button', {name: 'Trigger'}));
+    panOnPage(getByTestId('page'), 5);
+    expect(captured).toEqual([]);
+  });
+});
+
 describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
   function ClearHarness({placement}: {placement?: LayerPlacement}) {
     const layer = useLayerInternal({mode: 'context', keepsAnchorClear: true});
@@ -3248,6 +3690,47 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('reads its box once when it shows, and gives the entrance its side from that read', async () => {
+    const user = userEvent.setup();
+    viewport720();
+    // Directly below the trigger and clear of it, so it is not placed afresh.
+    const reads = placeBoxes(TRIGGER, rect(330, 400, 100, 200));
+    const {container} = render(<ClearHarness />);
+    const layer = container.querySelector<HTMLElement>('[popover]')!;
+    reads.mockClear();
+    await user.click(container.querySelector('button')!);
+    const layerReads = reads.mock.contexts.filter(context => context === layer);
+    expect(layerReads).toHaveLength(1);
+    expect(layer.style.getPropertyValue('--_astryx-layer-enter-y')).toBe('-1');
+  });
+
+  it('leaves the entrance side to a component that writes it after its own commit', async () => {
+    function WritesSideHarness() {
+      const layer = useLayerInternal({
+        mode: 'context',
+        writesEntranceSide: true,
+      });
+      return (
+        <>
+          <button type="button" ref={layer.ref} onClick={layer.show}>
+            Trigger
+          </button>
+          {layer.render(<span>Layer content</span>)}
+        </>
+      );
+    }
+    const user = userEvent.setup();
+    const reads = placeBoxes(TRIGGER, rect(330, 400, 100, 200));
+    const {container} = render(<WritesSideHarness />);
+    const layer = container.querySelector<HTMLElement>('[popover]')!;
+    reads.mockClear();
+    await user.click(container.querySelector('button')!);
+    expect(
+      reads.mock.contexts.filter(context => context === layer),
+    ).toHaveLength(0);
+    expect(layer.style.getPropertyValue('--_astryx-layer-enter-y')).toBe('');
   });
 
   it('lists the other block side at its own size, then beside the trigger, and only then each block side sized to its room', () => {

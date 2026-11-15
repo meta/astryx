@@ -1,7 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 /**
  * @file index.ts
  * @input Imports from component directories (Button/, Card/, Layout/, Layer/, Toast/)
@@ -76,6 +74,7 @@ export * from './InfoTip';
 export * from './Indicator';
 export * from './InputGroup';
 export * from './Item';
+export * from './Swipe';
 export * from './Text';
 export * from './TextInput';
 export * from './TabList';

@@ -40,13 +40,19 @@ import {
 import {itemKeyOf} from '../privateAttributes/itemKey.stylex';
 import {isLeaving, markLeaving} from '../privateAttributes/leaving.stylex';
 import {markTravelling} from '../privateAttributes/travelling.stylex';
+import {sharedWeakMap} from '../utils/sharedRealm';
 
 /**
  * The rows each list reported for the commit in progress, the only rows that
  * can exit. A row that leaves keeps what it showed on screen for its exit
  * (`keepPresentation`) only when its list reported it.
  */
-const reportedRows = new WeakMap<Element, ReadonlySet<Element>>();
+// Shared by every copy of Core: a package List and a swizzled ListItem (or the
+// reverse) report and read the same rows.
+const reportedRows = sharedWeakMap<Element, ReadonlySet<Element>>(
+  'list/list-layout-updates/reported-rows',
+  1,
+);
 
 /** Whether `row`'s list reported it for the commit in progress. */
 export function isReportedRow(row: Element): boolean {
@@ -136,10 +142,12 @@ function keyedRows(list: HTMLElement): Map<string, HTMLElement> {
  * such as a swipe's travel. `keepPresentation` records them, and the row's
  * exit writes them back.
  */
-const keptStyles = new WeakMap<
+// Shared by every copy of Core: a ListItem keeps a leaving row's presentation,
+// and its List writes it back as the row exits.
+const keptStyles = sharedWeakMap<
   HTMLElement,
   ReadonlyArray<readonly [HTMLElement | SVGElement, string]>
->();
+>('list/list-layout-updates/kept-styles', 1);
 
 /**
  * Records what the Web Animations running on `row` and its parts present (a

@@ -373,7 +373,9 @@ async function runNow(args, cwd, allCommands, run) {
       // and non-JSON callers get the Astryx `Error: …` line. handleCommanderError
       // calls process.exit, which our trap re-raises as an ExitSignal.
       try {
-        handleCommanderError(e);
+        // A theme command's reader checks its suggestions before the
+        // answer is written: awaited, as the CLI's process waits for it.
+        await handleCommanderError(e);
         status = /** @type {any} */ (e).exitCode ?? 1;
       } catch (e2) {
         if (e2 instanceof ExitSignal) status = e2.code;

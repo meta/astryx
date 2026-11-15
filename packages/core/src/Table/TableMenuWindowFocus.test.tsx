@@ -14,6 +14,8 @@ beforeAll(warmMenuBottomSheet, 20000);
 import {Table} from './Table';
 import type {BodyCellRenderProps, BodyRowRenderProps} from './types';
 import {useTableRowsVirtualization} from './plugins/virtualization/useTableRowsVirtualization';
+import {useTableColumnsVirtualization} from './plugins/virtualization/useTableColumnsVirtualization';
+import {pixel} from './columnUtils';
 const data = Array.from({length: 100}, (_, i) => ({
   id: String(i),
   name: `Row ${i}`,
@@ -26,7 +28,7 @@ afterEach(() => {
 function Fixture({items = data}: {items?: typeof data}) {
   const virtualization = useTableRowsVirtualization({
     rowHeight: 56,
-    viewportHeight: 240,
+    initialViewportHeight: 240,
   });
   const menu = useMemo(
     () => ({
@@ -230,5 +232,155 @@ describe('Table recognized menu focus under windowing', () => {
     fireEvent.keyDown(item, {key: 'Escape'});
     await waitFor(() => expect(document.activeElement).toBe(row));
     expect(row.isConnected).toBe(true);
+  });
+});
+
+describe('Table recognized menu focus under column windowing', () => {
+  const wideColumns = Array.from({length: 40}, (_, index) => ({
+    key: `c${index}`,
+    header: `Column ${index}`,
+    width: pixel(100),
+  }));
+  const wideData = Array.from({length: 3}, (_, row) => {
+    const item: Record<string, string> = {id: `row-${row}`};
+    wideColumns.forEach((column, index) => {
+      item[column.key] = `${row}:${index}`;
+    });
+    return item;
+  });
+  function ColumnFixture({
+    tableColumns = wideColumns,
+  }: {
+    tableColumns?: typeof wideColumns;
+  }) {
+    const virtualization = useTableColumnsVirtualization({
+      initialViewportWidth: 400,
+    });
+    const menu = useMemo(
+      () => ({
+        rowModel: 'flat' as const,
+        transformBodyCell(props: BodyCellRenderProps) {
+          return {
+            ...props,
+            htmlProps: {...props.htmlProps, tabIndex: 0},
+            contextMenuActions: [
+              {id: 'inspect', label: 'Inspect cell', onSelect: () => {}},
+              {id: 'copy', label: 'Copy cell', onSelect: () => {}},
+            ],
+          };
+        },
+      }),
+      [],
+    );
+    return (
+      <Table
+        data={wideData}
+        columns={tableColumns}
+        idKey="id"
+        virtualization={virtualization}
+        plugins={{menu}}
+      />
+    );
+  }
+  function mountScrollable() {
+    const result = render(<ColumnFixture />);
+    const viewport = result.container.querySelector(
+      '.astryx-table-scroll-wrapper',
+    ) as HTMLDivElement;
+    let left = 0;
+    Object.defineProperties(viewport, {
+      clientHeight: {configurable: true, value: 240},
+      clientWidth: {configurable: true, value: 400},
+      scrollHeight: {configurable: true, value: 240},
+      scrollWidth: {configurable: true, value: 4000},
+      scrollLeft: {
+        configurable: true,
+        get: () => left,
+        set: (value: number) => {
+          left = value;
+        },
+      },
+    });
+    fireEvent.scroll(viewport);
+    async function scrollTo(next: number) {
+      left = next;
+      fireEvent.scroll(viewport);
+      await waitFor(() =>
+        expect(
+          result.container.querySelector(
+            `thead [data-column-key="c${Math.floor(next / 100)}"]`,
+          ),
+        ).not.toBeNull(),
+      );
+    }
+    return {...result, scrollTo};
+  }
+
+  it.each([true, false])(
+    'retains the cell column while its menu owns focus (cell focused first=%s)',
+    async isCellFocused => {
+      const {container, scrollTo} = mountScrollable();
+      const cell = container.querySelector(
+        'tbody tr td[aria-colindex="3"]',
+      ) as HTMLTableCellElement;
+      expect(cell).not.toBeNull();
+      if (isCellFocused) {
+        cell.focus();
+      }
+      fireEvent.contextMenu(cell.firstElementChild ?? cell, {
+        clientX: 50,
+        clientY: 50,
+      });
+      const item = (
+        await screen.findAllByRole('menuitem', {
+          name: 'Inspect cell',
+          hidden: true,
+        })
+      )[0];
+      item.focus();
+      expect(document.activeElement).toBe(item);
+      await scrollTo(3000);
+      expect(cell.isConnected).toBe(true);
+      expect(document.activeElement).toBe(item);
+      if (isCellFocused) {
+        fireEvent.keyDown(item, {key: 'Escape'});
+        await waitFor(() => expect(document.activeElement).toBe(cell));
+        expect(cell.isConnected).toBe(true);
+      }
+    },
+  );
+
+  it('keeps the opening cell column when columns change while its menu owns focus', async () => {
+    const {container, rerender, scrollTo} = mountScrollable();
+    const cell = container.querySelector(
+      'tbody tr td[aria-colindex="4"]',
+    ) as HTMLTableCellElement;
+    fireEvent.contextMenu(cell.firstElementChild ?? cell, {
+      clientX: 50,
+      clientY: 50,
+    });
+    const [inspect] = await screen.findAllByRole('menuitem', {
+      name: 'Inspect cell',
+      hidden: true,
+    });
+    inspect.focus();
+    // A new first column moves the opening cell from column 4 to column 5.
+    rerender(
+      <ColumnFixture
+        tableColumns={[
+          {key: 'added', header: 'Added', width: pixel(100)},
+          ...wideColumns,
+        ]}
+      />,
+    );
+    expect(cell).toHaveAttribute('aria-colindex', '5');
+    const [copy] = await screen.findAllByRole('menuitem', {
+      name: 'Copy cell',
+      hidden: true,
+    });
+    copy.focus();
+    await scrollTo(3100);
+    expect(cell.isConnected).toBe(true);
+    expect(document.activeElement).toBe(copy);
   });
 });

@@ -920,11 +920,11 @@ describe('the default variant over an existing set', () => {
     const plan = await runCli([...declare, '--dry-run'], pkg);
     expect(plan.code, plan.stdout).toBe(0);
     expect(plan.stdout).toContain('Icon set update plan');
-    expect(plan.stdout).not.toContain('New icon set');
+    expect(plan.stdout).not.toContain('would be created');
     const updated = await runCli(declare, pkg);
     expect(updated.code, updated.stdout).toBe(0);
     expect(updated.stdout).toContain('Icon set updated');
-    expect(updated.stdout).not.toContain('New icon set');
+    expect(updated.stdout).not.toContain('Icon set created');
     const again = await json(declare);
     expect(again.body.data.updated).toBe(true);
     const unchanged = await runCli(declare, pkg);

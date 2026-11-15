@@ -18,6 +18,7 @@
  */
 
 import {levenshteinDistance} from './levenshtein.mjs';
+import {compareText} from './compare-text.mjs';
 
 /**
  * The score of a near name (nearNameSlips), less a little per slip: above any
@@ -58,6 +59,67 @@ export function nameWords(text) {
     for (const w of found) words.push(singular(w.toLowerCase()));
   }
   return words;
+}
+
+/**
+ * The one name a typed name means, read whole. Two tiers, in order:
+ * 1. Exact words: the typed name and a name have the same words after
+ *    folding (nameWords: any case, separator, singular or plural), so
+ *    `DataTable`, `data_table` and `data tables` all mean `data-table`.
+ * 2. One near name: when no name has the exact words, the only name whose
+ *    folded words are within `maxDistance` edits (1 by default; an adjacent
+ *    swap is one edit), when both are `minLength` letters or more (6 by
+ *    default).
+ * Null when no name, or more than one in the same tier, matches.
+ * @param {string} typed
+ * @param {string[]} names
+ * @param {{maxDistance?: number, minLength?: number}} [options]
+ * @returns {string | null}
+ */
+export function matchWholeName(
+  typed,
+  names,
+  {maxDistance = 1, minLength = 6} = {},
+) {
+  const folded = foldedName(typed);
+  if (!folded) return null;
+  let exact = null;
+  let near = null;
+  let nearCount = 0;
+  for (const n of names) {
+    const f = foldedName(n);
+    if (f === folded) {
+      if (exact) return null;
+      exact = n;
+    } else if (
+      folded.length >= minLength &&
+      f.length >= minLength &&
+      Math.abs(f.length - folded.length) <= maxDistance &&
+      levenshteinDistance(folded, f, maxDistance, {swaps: true}) <= maxDistance
+    ) {
+      near = n;
+      nearCount++;
+    }
+  }
+  if (exact) return exact;
+  return nearCount === 1 ? near : null;
+}
+
+/** @type {Map<string, string>} */
+const folds = new Map();
+
+/**
+ * A name's words joined: one form for every case and separator.
+ * @param {string} text
+ * @returns {string}
+ */
+function foldedName(text) {
+  let f = folds.get(text);
+  if (f === undefined) {
+    f = nameWords(text).join('');
+    folds.set(text, f);
+  }
+  return f;
 }
 
 /**
@@ -204,6 +266,33 @@ function orderByWords(typedName, items, namesOf, options) {
   if (top === 0) return scored.map(s => s.item);
   const need = Math.min(top, 2);
   return scored.filter((_, i) => tiers[i] >= need).map(s => s.item);
+}
+
+/**
+ * Whether a name carries a typed word longer than one character: the words
+ * the `closest` cut of {@link orderByAffinity} counts. When no candidate
+ * carries one, that cut leaves every candidate in.
+ * @param {string} typedName
+ * @param {string} name
+ * @returns {boolean}
+ */
+export function carriesTypedWord(typedName, name) {
+  const words = nameWords(typedName).filter(w => w.length > 1);
+  return affinityOf(words, name) >= 10;
+}
+
+/**
+ * How closely `name` matches a typed name when it is a near name (one or two
+ * slips, as the `typos` option of {@link orderByAffinity} counts them) or
+ * carries every typed word; 0 for any other name. Higher is closer, on the
+ * scale {@link orderByAffinity} ranks by.
+ * @param {string} typedName
+ * @param {string} name
+ * @returns {number}
+ */
+export function closeNameScore(typedName, name) {
+  const score = affinityOf(nameWords(typedName), name, {typos: true});
+  return score >= 20 || isNearScore(score) ? score : 0;
 }
 
 /**
@@ -468,7 +557,7 @@ export function rankComponentSuggestions(
         a.keywordAt - b.keywordAt ||
         a.distance - b.distance ||
         b.lead - a.lead ||
-        a.name.localeCompare(b.name),
+        compareText(a.name, b.name),
     )
     .map(({name, score, reason}) => ({name, score, reason}));
 }

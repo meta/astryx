@@ -22,14 +22,7 @@ import {
   validateIntegration,
 } from '../../../api/integration/validate-integration.mjs';
 import {jsonOut} from '../../../foundation/response/json.mjs';
-import {
-  emit,
-  list,
-  section,
-  record,
-  records,
-  text,
-} from '../formatters/index.mjs';
+import {emit, list, section, records, text} from '../formatters/index.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {doc as doctorCommand} from './doctor.doc.mjs';
 import {doc as doctorIntegrationGroup} from './doctor-integration.doc.mjs';
@@ -47,6 +40,7 @@ import {cliError} from '../lib/cli-error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
 import {isOutsideProject} from '../../../foundation/env/project-scope.mjs';
+import {templateMeaningsLine} from '../../../foundation/text/template-meanings-line.mjs';
 
 const STATUS = {
   pass: '[ok]',
@@ -56,6 +50,15 @@ const STATUS = {
   error: '[fail]',
   info: '[info]',
 };
+
+/** A doctor check's fields in text order: the status column, then the rest. */
+const CHECK_FIELDS = /** @type {const} */ ([
+  'status',
+  'id',
+  'label',
+  'message',
+  'fix',
+]);
 
 /** @param {string} status */
 function statusToken(status) {
@@ -79,15 +82,21 @@ function printHuman(report) {
         ? 'No failures — but review the [warn] warnings above when you can.'
         : 'All checks passed. Your Astryx setup looks healthy.';
 
-  // Field names are the JSON keys, so text and --json map one to one.
+  // One check per line, status first so the counted value stays a column.
+  // The legend names each field by its JSON key, so text and --json map one
+  // to one.
+  const summaryFields = /** @type {const} */ (['pass', 'warn', 'fail', 'info']);
   emit(
-    section('astryx doctor — diagnosing your setup'),
+    section('astryx doctor', `Each check: ${CHECK_FIELDS.join(', ')}`),
     records(report.checks, {
-      fields: ['id', 'status', 'label', 'message', 'fix'],
-      format: {status: statusToken},
+      fields: [...CHECK_FIELDS],
+      layout: 'inline',
+      format: {status: statusToken, fix: fix => `fix: ${fix}`},
     }),
-    section('summary'),
-    record(report.summary, {fields: ['pass', 'warn', 'fail', 'info']}),
+    section(
+      'summary',
+      summaryFields.map(key => `${key}: ${report.summary[key]}`).join(', '),
+    ),
     text(closing),
   );
 }
@@ -274,7 +283,9 @@ function printIntegrationValidation(data, seen) {
       : [text('[ok] No integration issues found.')]),
     ...(data.notes ?? []).map(note =>
       // A note marked next fails --strict from the next minor release.
-      text(`note (${note.code}): ${note.next ? '[next minor] ' : ''}${note.message}`),
+      text(
+        `note (${note.code}): ${note.next ? '[next minor] ' : ''}${note.message}`,
+      ),
     ),
     text(
       `Summary: ${errors} error${errors === 1 ? '' : 's'}, ` +
@@ -302,6 +313,26 @@ function printIntegrationValidation(data, seen) {
           ),
           records(data.publicImports.unchecked, {
             fields: ['file', 'specifier', 'reason'],
+          }),
+        ]
+      : []),
+    ...(data.shippedImports && data.shippedImports.unchecked.length > 0
+      ? [
+          text(
+            `[info] Relative imports whose packing was not checked: ${data.shippedImports.unchecked.length}:`,
+          ),
+          records(data.shippedImports.unchecked, {
+            fields: ['file', 'specifier', 'reason'],
+          }),
+        ]
+      : []),
+    ...(data.exampleCode && data.exampleCode.unchecked.length > 0
+      ? [
+          text(
+            `[info] Examples not checked: ${data.exampleCode.unchecked.length}:`,
+          ),
+          records(data.exampleCode.unchecked, {
+            fields: ['file', 'example', 'reason'],
           }),
         ]
       : []),
@@ -340,6 +371,31 @@ function iconSetCoverageBlocks(sets) {
         ]
       : []),
     ...unmappedBlocks(listed),
+    ...templateMeaningBlocks(sets ?? []),
+  ];
+}
+
+/**
+ * The template meanings each set leaves unmapped: one line per set. Listed,
+ * never counted.
+ * @param {import('../../../api/integration/validate-integration.type.mjs').IconSetCoverage[]} sets
+ * @returns {import('../formatters/index.mjs').Block[]}
+ */
+function templateMeaningBlocks(sets) {
+  const lines = sets.flatMap(each => {
+    const line = templateMeaningsLine(
+      each.templateMeanings?.unmapped ?? [],
+      each.set,
+    );
+    return line ? [`${each.set}: ${line}`] : [];
+  });
+  if (lines.length === 0) return [];
+  return [
+    section('Template icon meanings not mapped'),
+    list(lines),
+    text(
+      "A copied template shows a placeholder for each meaning the project's sets do not map. This list never fails a check.",
+    ),
   ];
 }
 
@@ -868,7 +924,8 @@ export function registerDoctor(program) {
       : null;
   defineCommand(integrationCmd, doctorIntegrationValidateCommand, {
     fn: validateIntegrationFn,
-    action: async pkg => refuseBuilt() ?? runIntegrationValidation(program, pkg),
+    action: async pkg =>
+      refuseBuilt() ?? runIntegrationValidation(program, pkg),
   });
   defineCommand(integrationCmd, doctorIntegrationTemplatesCommand, {
     fn: integrationTemplateConflictsFn,
@@ -882,6 +939,7 @@ export function registerDoctor(program) {
   });
   defineCommand(integrationCmd, doctorIntegrationDocsCommand, {
     fn: integrationDocConflictsFn,
-    action: async pkg => refuseBuilt() ?? runAuthoringCheck(program, pkg, 'docs'),
+    action: async pkg =>
+      refuseBuilt() ?? runAuthoringCheck(program, pkg, 'docs'),
   });
 }

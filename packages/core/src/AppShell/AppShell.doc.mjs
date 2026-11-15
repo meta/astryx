@@ -38,7 +38,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Give every nav slot an accessible name. AppShell renders TopNav and SideNav as separate navigation landmarks, and a screen reader lists them by name, so pass `label` to each one.',
+          'Give every nav slot an accessible name. AppShell renders TopNav and SideNav as separate navigation landmarks, and a screen reader lists them by name. Pass `label` to TopNav. SideNav has a translated default name; pass `aria-label` to rename it.',
       },
       {
         guidance: true,
@@ -346,7 +346,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Give every nav slot an accessible name: TopNav and SideNav are separate navigation landmarks, so pass `label` to each.',
+          'Give every nav slot an accessible name: TopNav and SideNav are separate navigation landmarks. Pass `label` to TopNav; SideNav has a translated default name, and `aria-label` renames it.',
       },
       {
         guidance: true,

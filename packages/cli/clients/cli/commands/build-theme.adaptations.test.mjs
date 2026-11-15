@@ -700,9 +700,13 @@ describe('theme build adaptations', () => {
     const result = await build(project, themeFile);
     expect(result.code).toBe(1);
     expect(`${result.stdout}${result.stderr}`).toContain('private var');
-    expect(fs.existsSync(path.join(themesDir, 'rule-private.css'))).toBe(true);
-    expect(fs.existsSync(path.join(themesDir, 'rule-private.js'))).toBe(true);
-    expect(fs.existsSync(path.join(themesDir, 'rule-private.d.ts'))).toBe(true);
+    expect(`${result.stdout}${result.stderr}`).not.toContain('[ok]');
+    // A refused theme writes nothing.
+    expect(fs.existsSync(path.join(themesDir, 'rule-private.css'))).toBe(false);
+    expect(fs.existsSync(path.join(themesDir, 'rule-private.js'))).toBe(false);
+    expect(fs.existsSync(path.join(themesDir, 'rule-private.d.ts'))).toBe(
+      false,
+    );
   });
 
   it('rejects cycles across co-matching rules before writing output', async () => {

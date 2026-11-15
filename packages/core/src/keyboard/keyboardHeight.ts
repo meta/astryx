@@ -19,10 +19,11 @@
 import {armClickGuard} from '../utils/clickGuard';
 import {matchesMediaQuery} from '../utils/coarsePointer';
 import {subscribeInput} from '../utils/inputStream';
-import {isNode} from '../utils/nodeType';
+import {isElement, isHTMLElement, isNode} from '../utils/nodeType';
 import {layoutViewportHeight} from '../utils/layoutViewport';
 import {PRESS_SLOP_PX} from '../utils/pressGesture';
 import {caretAt} from '../utils/selectionLock';
+import {sharedWeakMap} from '../utils/sharedRealm';
 
 // A shortfall smaller than this is rounding, not a keyboard.
 export const KEYBOARD_EPSILON = 1;
@@ -107,7 +108,10 @@ interface KeyboardStore {
   detachFocus: (() => void) | null;
 }
 
-const stores = new WeakMap<Window, KeyboardStore>();
+const stores = sharedWeakMap<Window, KeyboardStore>(
+  'keyboard/keyboard-height/stores',
+  1,
+);
 
 function storeOf(win: Window): KeyboardStore {
   let store = stores.get(win);
@@ -302,28 +306,26 @@ export function getKeyboardHeight(win: Window): number {
 export function isTextEntryControl(
   element: Element | null,
 ): element is HTMLElement {
-  if (
-    element instanceof HTMLElement &&
-    element.getAttribute('inputmode') === 'none'
-  ) {
+  // Reads the kind by name, so an element of another window (a same-origin
+  // iframe, a Picture-in-Picture window) passes too.
+  if (!isHTMLElement(element) || element.getAttribute('inputmode') === 'none') {
     return false;
   }
-  if (element instanceof HTMLTextAreaElement) {
-    return !element.disabled && !element.readOnly;
+  if (element.localName === 'textarea') {
+    const textArea = element as HTMLTextAreaElement;
+    return !textArea.disabled && !textArea.readOnly;
   }
-  if (element instanceof HTMLInputElement) {
+  if (element.localName === 'input') {
+    const input = element as HTMLInputElement;
     return (
-      !element.disabled &&
-      !element.readOnly &&
+      !input.disabled &&
+      !input.readOnly &&
       !NON_TEXT_INPUT_TYPES.has(
-        (element.getAttribute('type') ?? 'text').toLowerCase(),
+        (input.getAttribute('type') ?? 'text').toLowerCase(),
       )
     );
   }
-  return (
-    element instanceof HTMLElement &&
-    element.matches('[contenteditable]:not([contenteditable="false"])')
-  );
+  return element.matches('[contenteditable]:not([contenteditable="false"])');
 }
 
 /** The text-entry control inside `container` that `target` is or labels. */
@@ -331,7 +333,7 @@ export function findTextEntryControl(
   target: EventTarget | null,
   container: HTMLElement,
 ): HTMLElement | null {
-  if (!(target instanceof Element)) {
+  if (!isElement(target)) {
     return null;
   }
 
@@ -343,7 +345,7 @@ export function findTextEntryControl(
   }
 
   const label = target.closest('label');
-  const control = label instanceof HTMLLabelElement ? label.control : null;
+  const control = isHTMLElement(label) ? label.control : null;
   return container.contains(control) && isTextEntryControl(control)
     ? control
     : null;
@@ -362,13 +364,13 @@ export interface RefuseFocusRevealOptions {
 // One shared `blur` subscription per document serves every caller of
 // refuseFocusReveal in it, so listeners do not grow with the number of
 // instances. The first caller adds it, and the last removes it.
-const focusTakeovers = new WeakMap<
+const focusTakeovers = sharedWeakMap<
   Document,
   {
     stop: () => void;
     callers: Set<(event: FocusEvent) => void>;
   }
->();
+>('keyboard/keyboard-height/focus-takeovers', 1);
 
 /**
  * Delivers the focus moves `claim` accepts with `preventScroll`, so the
@@ -485,10 +487,10 @@ export interface RevealPanWatch {
 // One shared touch subscription per document serves every reveal-pan watch
 // in it, so no instance adds a listener. The first watch adds it, and the
 // last removes it.
-const touchStartWatches = new WeakMap<
+const touchStartWatches = sharedWeakMap<
   Document,
   {stop: () => void; watches: Set<() => void>}
->();
+>('keyboard/keyboard-height/touch-start-watches', 1);
 
 function watchTouchStarts(doc: Document, onTouchStart: () => void): () => void {
   let shared = touchStartWatches.get(doc);

@@ -57,6 +57,16 @@ export interface WheelInput {
   readonly ctrl?: boolean;
 }
 
+/**
+ * How long a trackpad scroll may pause before Core's gesture host ends it,
+ * ms. It is per axis: vertical for a sheet's pull, horizontal for a pager's
+ * or a row's swipe. A burst a component reads as one scroll passes its
+ * axis's pause as `maxGapMs`. The harness cannot import Core: Core's
+ * wheelEnd.harness.test.ts checks that the gesture host splits a scroll at
+ * these gaps.
+ */
+export const WHEEL_SCROLL_END_MS = {vertical: 180, horizontal: 220} as const;
+
 /** A run of wheel steps at one point: one continuous wheel gesture. */
 export interface WheelBurst {
   readonly x: number;
@@ -68,26 +78,27 @@ export interface WheelBurst {
   /** Hold Control through the run. */
   readonly ctrl?: boolean;
   /**
-   * The longest gap the page may see between two received steps, ms (see
-   * `wheelArrivals`). Past it, the proof's component would treat the run as
-   * more than one gesture. Past it `wheelBurst` throws
-   * `WheelPageStallError` when the page held the gap, and `WheelPacingError`
-   * otherwise. The page holds it while it handles the step before, or while
-   * it draws no frame.
+   * The gap that ends the proof's component's gesture, ms: the page must
+   * receive each step less than this after the one before (see
+   * `wheelArrivals`). A gap this long or longer splits the run, as Core's
+   * gesture host ends a trackpad scroll after `WHEEL_SCROLL_END_MS`. Then
+   * `wheelBurst` throws `WheelPageStallError` when the page held the gap,
+   * and `WheelPacingError` otherwise. The page holds it while it handles the
+   * step before, or while it draws no frame. Without it, no gap is judged.
    */
   readonly maxGapMs?: number;
 }
 
 /**
- * The page received a wheel burst's steps further apart than the proof's
- * `maxGapMs`, and its wheel listeners did not hold the step back: the step
- * reached the page later than one frame after they finished the one before,
- * or the gap was no wider than the harness's own spacing of the sends (the
- * page can only widen a gap, so a starved renderer that also held the step
- * lands here). The dispatch stalled before the page, so a loaded runner
- * splits what the driver sent as one gesture. Other work between steps that
- * leaves the page's frames running also lands here. Such a stall is the
- * runner's or that work's, never the wheel listeners'.
+ * The page received two of a wheel burst's steps `maxGapMs` or more apart.
+ * Its wheel listeners did not hold the step back. The step reached the page
+ * later than one frame after they finished the one before. Or the gap was no
+ * wider than the harness's own spacing of the sends. The page can only widen
+ * a gap, so a starved renderer that also held the step lands here. The
+ * dispatch stalled before the page, so a loaded runner splits what the
+ * driver sent as one gesture. Other work between steps that leaves the
+ * page's frames running also lands here. Such a stall is the runner's or that
+ * work's, never the wheel listeners'.
  */
 export class WheelPacingError extends Error {
   constructor(
@@ -95,15 +106,15 @@ export class WheelPacingError extends Error {
     readonly receivedGapsMs: readonly number[],
   ) {
     super(
-      `webInputDriver: the page received the wheel burst with a gap of ${Math.max(...receivedGapsMs).toFixed(0)} ms, over its ${maxGapMs} ms (gaps ${receivedGapsMs.map(g => g.toFixed(0)).join(', ')} ms): the dispatch stalled before the page, so the page saw more than one gesture`,
+      `webInputDriver: the page received the wheel burst with a gap of ${Math.max(...receivedGapsMs).toFixed(0)} ms, at or over its ${maxGapMs} ms (gaps ${receivedGapsMs.map(g => g.toFixed(0)).join(', ')} ms): the dispatch stalled before the page, so the page saw more than one gesture`,
     );
     this.name = 'WheelPacingError';
   }
 }
 
 /**
- * The page received a wheel burst's steps further apart than the proof's
- * `maxGapMs` while its main thread was held. Its own wheel listeners were
+ * The page received two of a wheel burst's steps `maxGapMs` or more apart
+ * while its main thread was held. Its own wheel listeners were
  * still handling the step before, or the page drew no frame across the gap.
  * WebKit dispatches the next step only once the thread is free. Both
  * times are page wall time. On a starved runner they include the page's wait
@@ -118,8 +129,8 @@ export class WheelPageStallError extends Error {
   ) {
     super(
       stall.frameGapMs == null
-        ? `webInputDriver: the page's own wheel listeners took ${stall.handlingMs.toFixed(0)} ms of page wall time to handle a step, so the next reached it ${stall.gapMs.toFixed(0)} ms later, over its ${maxGapMs} ms: the page split the run. On a starved runner that time includes the page's wait for a CPU: judge a page stall from a run with CI's CPU limits`
-        : `webInputDriver: the page drew no frame for ${stall.frameGapMs.toFixed(0)} ms around a ${stall.gapMs.toFixed(0)} ms gap between two wheel steps, over its ${maxGapMs} ms (engine or page work), while its own wheel listeners took ${stall.handlingMs.toFixed(0)} ms: the page split the run. On a starved runner the renderer draws no frame either: judge a page stall from a run with CI's CPU limits`,
+        ? `webInputDriver: the page's own wheel listeners took ${stall.handlingMs.toFixed(0)} ms of page wall time to handle a step, so the next reached it ${stall.gapMs.toFixed(0)} ms later, at or over its ${maxGapMs} ms: the page split the run. On a starved runner that time includes the page's wait for a CPU: judge a page stall from a run with CI's CPU limits`
+        : `webInputDriver: the page drew no frame for ${stall.frameGapMs.toFixed(0)} ms around a ${stall.gapMs.toFixed(0)} ms gap between two wheel steps, at or over its ${maxGapMs} ms (engine or page work), while its own wheel listeners took ${stall.handlingMs.toFixed(0)} ms: the page split the run. On a starved runner the renderer draws no frame either: judge a page stall from a run with CI's CPU limits`,
     );
     this.name = 'WheelPageStallError';
   }
@@ -207,8 +218,10 @@ export function wheelSendGaps(
 }
 
 /**
- * Sorts a burst's gaps past `maxGapMs` by cause. `stamps` are when the
- * received steps reached the page (`wheelArrivals`). `handledAt` is when the
+ * Sorts a burst's gaps of `maxGapMs` or more by cause. A gap that long
+ * splits the run, as Core's gesture host ends a wheel gesture at a pause of
+ * its end window or more. `stamps` are when the received steps reached the
+ * page (`wheelArrivals`). `handledAt` is when the
  * page's wheel listeners had finished with each, NaN unseen. For a step whose
  * propagation the page stopped, it is when a task queued at its arrival ran.
  * `sendGapsMs` is how far apart the harness sent the steps behind each gap
@@ -240,7 +253,7 @@ export function wheelGapCauses(
   const dispatchStalls: number[] = [];
   for (let i = 1; i < stamps.length; i++) {
     const gapMs = stamps[i] - stamps[i - 1];
-    if (gapMs <= maxGapMs) {
+    if (gapMs < maxGapMs) {
       continue;
     }
     const sendGapMs = sendGapsMs[i - 1];
@@ -319,10 +332,10 @@ export interface WebInputDriver {
    * handles one step when the next arrives, the engine coalesces them, as it
    * does a trackpad's: the page can receive fewer, larger steps with the same
    * total. Returns how many steps the page received and the gaps between
-   * their arrivals (`wheelArrivals`), ms. With `maxGapMs`, a longer gap throws
-   * `WheelPageStallError` when the page held it, and `WheelPacingError`
-   * otherwise. The page holds a gap while it handles the step before, or
-   * while it draws no frame.
+   * their arrivals (`wheelArrivals`), ms. With `maxGapMs`, a gap that long or
+   * longer throws `WheelPageStallError` when the page held it, and
+   * `WheelPacingError` otherwise. The page holds a gap while it handles the
+   * step before, or while it draws no frame.
    */
   wheelBurst(burst: WheelBurst): Promise<{
     readonly receivedSteps: number;
