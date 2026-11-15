@@ -1,5 +1,118 @@
 # @astryxdesign/richtext
 
+# 0.7.16
+
+#### New Features
+
+- `RichTextEditorToolbar`'s Link button, and Cmd/Ctrl+K in the editor, open a popover anchored to the button instead of a modal dialog. The popover holds one URL field, applied with Enter, and Apply, Remove (when the selection is in a link), and Cancel icon buttons with tooltips. It is not modal: Escape or Cancel closes it and returns focus and the selection to the editor, and a URL that cannot be linked shows an error under the field, which keeps focus. The URL rules (`sanitizeUrl`), `hasNewTabLinks`, and `promptForUrl` are unchanged; with `promptForUrl` the Link button opens no popover, as it opened no dialog. ([#8717](https://github.com/meta/astryx/pull/8717))
+  The popover opens above the toolbar and flips below it only when there is no room above. Apply and Cancel use the shared `check` and `close` icons, so a theme that restyles those icons restyles them too; Remove's glyph is fixed artwork. `RICHTEXT_ICON_KEYS` is unchanged.
+
+#### Fixes
+
+- Pasting into a `RichTextEditor` table no longer drops the paste or empties cells. A pasted table fills the cells one by one from the caret's cell, or within the selected cells. A merged cell in it fills only the cell where it starts instead of emptying the cells it covered, and a table whose rows differ in length arrives whole. A table pasted together with other content, as a web page copies it, goes into the cell as text instead of being discarded. ([#8577](https://github.com/meta/astryx/pull/8577))
+- A link typed without a scheme, whose host has a dot or is `localhost`, followed by a port, such as `example.com:8080`, `www.example.com:8080/docs` or `localhost:3000`, now gets the default `https://` like `example.com` does, instead of being read as an unknown scheme and turned into `about:blank` ([#11042](https://github.com/meta/astryx/pull/11042))
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @emilyhorsman
+- @ernestt
+- @kevin9327
+
+---
+
+# 0.7.15
+
+#### Fixes
+
+- useLinkify and RichTextEditorAutoLinkPlugin: email detection now takes linear time. A long word with no email in it, such as a pasted hash or base64 string, no longer freezes the page for seconds. Valid email addresses link as before, with three exceptions. In the rich-text editor, an address directly after a period no longer links, and a quoted local part ends at the next quote. In useLinkify, a fragment glued to the end of an earlier address no longer links on its own. (#11306)
+- RichTextEditor: importing Markdown no longer freezes the page on a block that has a backtick and, below its first line, a line with a `|`, a dash and a long run of spaces. The check for a table delimiter row now takes linear time; which lines count as delimiter rows is unchanged. (#11338)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @ChenyangLi4288
+- @cixzhang
+
+---
+
+# 0.7.14
+
+---
+
+# 0.7.13
+
+---
+
+# 0.7.12
+
+#### New Features
+
+- In `RichTextEditor`, Tab and Shift+Tab in a code block indent and outdent every line the selection touches, by the indent the block already uses (a tab when one of its lines starts with a tab, otherwise the fewest leading spaces of any indented line, kept between 2 and 8, otherwise 2 spaces). The selection stays on the same characters and each press is one undo step. Tab used to put a tab character in place of the selection, and Shift+Tab did the same. Escape then Tab still moves focus out of the editor. (#8579)
+
+#### Fixes
+
+- Declare renderer-owned DOM boundaries so decorator overlays mount outside managed content without changing safe inline hosting. RichTextEditor also mirrors its `dir` prop onto the wrapper around the editable surface, so the editing surface and its content blocks, the placeholder, UI rendered through `plugins`, and relocated overlays follow `dir`; the editing surface previously kept the surrounding direction. (#7633)
+- `RichTextEditorAutoLinkPlugin` no longer turns a URL inside a code block into a link. A URL typed or pasted into a code block, or one in an imported fence, now stays code. Before, the link nested inside the code block, and the exported Markdown fence lost it. (#10664)
+- In `RichTextEditor`, pasting rich content into a code block inserts plain text: the plain text on the clipboard, or, when there is none, each pasted block as one line of its text. Headings, lists, tables, and formatting used to land inside the code block, where the Markdown export wrote them as plain lines of the fence, so the document read back differently from what the editor showed. (#8580)
+- A link inside a disabled `RichTextEditor` no longer navigates, shows no pointer cursor, and is not a tab stop. Before, a disabled editor's links acted as live links: a click or Enter opened them, and Tab stopped on each one. (#10679)
+- TextInput, TextArea, NumberInput, DateInput, DateRangeInput, DateTimeInput, TimeInput, Tokenizer, Typeahead, PowerSearch, ChatComposer and RichTextEditor: when the primary pointer is coarse (a phone or tablet), the focus look shows at once, with no fade, so a tapped field repaints once while the keyboard rises. With a fine primary pointer, such as a mouse, a click and the Tab key keep the fade. ChatComposer's focus depth also shows at once under reduced motion, as the other fields' focus look already does. (#10611)
+
+#### Documentation
+
+- `RichTextView`, `RichTextEditorToolbar` and `RichTextEditorAutoLinkPlugin` each ship a doc file, so `astryx component`, `astryx discover` and the docs list their props, defaults and usage. (#10407)
+- A source comment in the editor theme now says that core `Markdown` gives each block the direction of its own text, while the editor keeps blocks in the surface's direction. (#10293)
+- RichTextEditor documents how to switch between reading and editing in place without reflow: set the field's inset and border outside the reading width with `xstyle`, so every paragraph keeps its line count across the switch. A standalone editor keeps its form width. (#10429)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+- @emilyhorsman
+- @ernestt
+- @freddymeta
+- @vjeux
+
+---
+
+# 0.7.11
+
+#### Fixes
+
+- In `RichTextEditor`, Backspace at the very start of a code block turns it into a paragraph holding its lines, with the caret at its start. It used to merge the code into the block above, so a heading above took the code in, and the Markdown read back as a longer heading and a stray paragraph. A code block with nothing above it, which already became a paragraph, now keeps its lines when its Markdown is read back. (#8581)
+- RichText: an image in Markdown, inline (`![alt](url)`) or by reference (`![alt][ref]`), comes back exactly as written after you edit the text around it; a shortcut reference image (`![alt]`) followed directly by a link is written in its collapsed form (`![alt][]`), so the link stays a link. Before, an edit in an image's paragraph could escape its brackets (`!\[\](…)`), so other Markdown readers saw text instead of an image. RichText has no image node: an image shows as its Markdown source, one token that Backspace deletes whole and autolinking leaves alone. A caret placed inside it moves to its edge, so typing adds text beside the image instead of replacing it. Copying it, or splitting or joining its paragraph, keeps the source. (#10356)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+- @emilyhorsman
+- @ernestt
+
+---
+
+# 0.7.10
+
+---
+
+# 0.7.9
+
+#### Fixes
+
+- RichTextExtensionNode is constructible with no arguments, as a registered node class must be. A Yjs collaboration binding builds one instance of every registered node class, with no arguments, to read its default properties, so creating a binding over an editor with this package's default nodes threw `TypeError: Cannot read properties of undefined (reading 'display')` before any document was loaded. Its `facts` now default to the same empty values the class already reads for damaged stored state, so a no-argument node reports an empty inline extension instead of throwing. A node built with facts is unchanged.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @potatowagon
+
+---
+
 # 0.7.8
 
 #### New Features

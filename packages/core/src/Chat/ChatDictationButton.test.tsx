@@ -84,7 +84,7 @@ describe('ChatDictationButton', () => {
 
     expect(
       screen.getByRole('button', {name: 'Start dictation'}),
-    ).toBeDisabled();
+    ).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('forwards the root ref and accepted span props', () => {

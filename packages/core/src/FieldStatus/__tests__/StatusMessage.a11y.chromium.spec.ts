@@ -88,6 +88,7 @@ async function bindSubject(
       name: facts.initialMessage,
     });
   } else {
+    await expect(candidates).toContainText([facts.initialMessage]);
     const texts = await candidates.evaluateAll(elements =>
       elements.map(element =>
         (element.textContent ?? '').replace(/\s+/g, ' ').trim(),
@@ -139,6 +140,22 @@ async function transition(page: Page, name: string): Promise<void> {
   );
 }
 
+async function expectSpinnerIndicator(
+  page: Page,
+  cdp: CDPSession,
+  name: string,
+): Promise<void> {
+  const harness = createChromiumHarness({
+    page,
+    cdp,
+    subject: page.getByRole('progressbar', {name}),
+  });
+  expect(await (await harness.subject()).computed()).toMatchObject({
+    role: 'progressbar',
+    name,
+  });
+}
+
 async function runState(
   page: Page,
   cdp: CDPSession,
@@ -152,6 +169,12 @@ async function runState(
     knownFailures: CORE_STATUS_MESSAGE_KNOWN_FAILURES,
     mount: async () => {
       await mountState(page, state);
+      if (
+        state.binding === 'Spinner announcement channel' &&
+        state.facts.kind === 'live-region'
+      ) {
+        await expectSpinnerIndicator(page, cdp, state.facts.initialMessage);
+      }
       return createChromiumHarness({
         page,
         cdp,
@@ -180,6 +203,12 @@ for (const state of CORE_STATUS_MESSAGE_BINDING_STATES) {
     test.setTimeout(2 * 60 * 1000);
     const cdp = await page.context().newCDPSession(page);
     const result = await runState(page, cdp, state);
+    if (
+      state.binding === 'Spinner announcement channel' &&
+      state.facts.kind === 'live-region'
+    ) {
+      await expectSpinnerIndicator(page, cdp, state.facts.replacement);
+    }
     recorded.set(state.id, result);
     const report = summarize(STATUS_MESSAGE_PATTERN, [result]);
     // eslint-disable-next-line no-console -- the report is this run's artifact
@@ -190,7 +219,7 @@ for (const state of CORE_STATUS_MESSAGE_BINDING_STATES) {
   });
 }
 
-test('every expectation is exercised by at least one Core binding state', async ({
+test('every Core-applicable expectation is exercised by a binding state', async ({
   page,
 }) => {
   test.setTimeout(4 * 60 * 1000);
@@ -199,7 +228,9 @@ test('every expectation is exercised by at least one Core binding state', async 
   for (const state of CORE_STATUS_MESSAGE_BINDING_STATES) {
     results.push(recorded.get(state.id) ?? (await runState(page, cdp, state)));
   }
-  expect(neverExercised(results)).toEqual([]);
+  expect(neverExercised(results)).toEqual([
+    'status-message.message.name-exposed',
+  ]);
   expect(
     unmatchedKnownFailures(CORE_STATUS_MESSAGE_KNOWN_FAILURES, results),
   ).toEqual([]);

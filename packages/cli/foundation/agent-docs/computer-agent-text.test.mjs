@@ -341,7 +341,7 @@ describe('links and the copy', () => {
       writeComputerAgentText({home, command: 'astryx'});
       // A link as 0.7.x wrote it: relative to ~/.claude/skills, which the
       // system reads from ~/dotfiles/.claude/skills, so it dangles.
-      fs.rmSync(CLAUDE());
+      fs.unlinkSync(CLAUDE());
       fs.symlinkSync(
         path.relative(path.dirname(CLAUDE()), FOLDER()),
         CLAUDE(),

@@ -28,8 +28,14 @@
  */
 
 import type {RuntimeCatalog} from './types';
+import {realmValue, sharedKey} from '../utils/sharedRealm';
 
-const registered: Record<string, string> = {};
+// Every copy of Core registers into one map, so a context that one copy
+// created resolves the English of another copy's components.
+const registered = realmValue(
+  sharedKey('i18n/english-fallback', 1),
+  (): Record<string, string> => ({}),
+);
 
 /** The English registered so far, keyed by catalog key. */
 export const englishFallback: RuntimeCatalog = registered;

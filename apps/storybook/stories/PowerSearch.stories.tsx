@@ -10,6 +10,7 @@ import type {
 import type {SearchSource, SearchableItem} from '@astryxdesign/core/Typeahead';
 import {Button} from '@astryxdesign/core/Button';
 import {MagnifyingGlassIcon} from '@heroicons/react/24/outline';
+import {TextInput} from '@astryxdesign/core/TextInput';
 
 // =============================================================================
 // Sample data
@@ -616,24 +617,29 @@ export const NearFullTokenRow: Story = {
     const firstTokenRect = firstToken.getBoundingClientRect();
     const tokenRect = finalToken.getBoundingClientRect();
     const clearRect = clearButton.getBoundingClientRect();
-    let clearHitLeft = 0;
-    let clearHitRight = 0;
+    let clearHitRect = {left: clearRect.left, right: clearRect.right};
     if (isCoarsePointer) {
-      const clearHitStyle = getComputedStyle(clearButton, '::after');
-      clearHitLeft = Number.parseFloat(clearHitStyle.left);
-      clearHitRight = Number.parseFloat(clearHitStyle.right);
+      // Button draws its touch band as the `::after` of an element inside
+      // it, so find whichever element in the button carries the band.
+      const bandHost = [clearButton, ...clearButton.querySelectorAll('*')].find(
+        element => getComputedStyle(element, '::after').content !== 'none',
+      );
+      const bandStyle = bandHost && getComputedStyle(bandHost, '::after');
+      const bandLeft = Number.parseFloat(bandStyle?.left ?? '');
+      const bandRight = Number.parseFloat(bandStyle?.right ?? '');
       if (
-        clearHitStyle.content === 'none' ||
-        !Number.isFinite(clearHitLeft) ||
-        !Number.isFinite(clearHitRight)
+        !bandHost ||
+        !Number.isFinite(bandLeft) ||
+        !Number.isFinite(bandRight)
       ) {
         throw new Error('Clear all did not expose its coarse-pointer hit area');
       }
+      const bandHostRect = bandHost.getBoundingClientRect();
+      clearHitRect = {
+        left: bandHostRect.left + bandLeft,
+        right: bandHostRect.right - bandRight,
+      };
     }
-    const clearHitRect = {
-      left: clearRect.left + clearHitLeft,
-      right: clearRect.right - clearHitRight,
-    };
     if (Math.abs(firstTokenRect.top - tokenRect.top) > 0.5) {
       throw new Error(
         `Fixture tokens wrapped before the empty combobox check: first token top ${firstTokenRect.top.toFixed(2)}, final token top ${tokenRect.top.toFixed(2)}`,
@@ -2263,5 +2269,428 @@ export const SheetPresentationStates: Story = {
     );
   },
   name: 'Bottom sheet states',
+  parameters: {viewport: {defaultViewport: 'mobile2'}},
+};
+
+// =============================================================================
+// Bottom sheet with a realistic config
+// =============================================================================
+
+// Sized like real product filter bars: 17 fields in groups, most with 4–8
+// operators and some with 10, choice lists of 11 and 60 options, labels up to
+// 29 characters, a few descriptions, option labels that carry counts, and
+// every value type PowerSearch edits. Every name is generic.
+
+const realisticRegions = Array.from({length: 60}, (_, index) => ({
+  value: `region_${index + 1}`,
+  label: `Region ${String(index + 1).padStart(2, '0')} · ${(
+    (index * 7919) %
+    9000
+  ).toLocaleString('en-US')} items`,
+}));
+
+const realisticStages = [
+  'Draft',
+  'Submitted',
+  'In triage',
+  'Accepted',
+  'In progress',
+  'Blocked by dependency',
+  'In review',
+  'Ready to release',
+  'Released',
+  'Won’t do',
+  'Archived',
+].map((label, index) => ({value: `stage_${index}`, label}));
+
+const realisticOwnerSource: SearchSource = {
+  search: async (query: string) => {
+    await new Promise(resolve => setTimeout(resolve, 150));
+    return users.filter(user =>
+      user.label.toLowerCase().includes(query.toLowerCase()),
+    );
+  },
+  bootstrap: () => users,
+};
+
+const realisticTagSource: SearchSource = {
+  search: (query: string) =>
+    tagValues
+      .filter(tag => tag.label.toLowerCase().includes(query.toLowerCase()))
+      .map(tag => ({id: tag.value, label: tag.label})),
+  bootstrap: () => tagValues.map(tag => ({id: tag.value, label: tag.label})),
+};
+
+function RealisticCodeEditor({
+  value,
+  onChange,
+  placeholder,
+  isDisabled,
+}: {
+  value: string | null;
+  onChange: (value: string | null) => void;
+  placeholder: string;
+  isDisabled?: boolean;
+}) {
+  return (
+    <TextInput
+      label="Code"
+      isLabelHidden
+      value={value ?? ''}
+      placeholder={placeholder}
+      isDisabled={isDisabled}
+      width="100%"
+      onChange={next => onChange(next === '' ? null : next.toUpperCase())}
+    />
+  );
+}
+
+const realisticTextOperators: PowerSearchConfig['fields'][number]['operators'] =
+  [
+    {key: 'contains', label: 'contains', value: {type: 'string'}},
+    {key: 'not_contains', label: 'does not contain', value: {type: 'string'}},
+    {key: 'is', label: 'is exactly', value: {type: 'string'}},
+    {key: 'is_not', label: 'is not exactly', value: {type: 'string'}},
+    {key: 'starts', label: 'starts with', value: {type: 'string'}},
+    {key: 'ends', label: 'ends with', value: {type: 'string'}},
+    {key: 'any', label: 'is any of', value: {type: 'string_list'}},
+    {key: 'none', label: 'is none of', value: {type: 'string_list'}},
+    {key: 'set', label: 'is set', value: {type: 'empty'}},
+    {key: 'unset', label: 'is not set', value: {type: 'empty'}},
+  ];
+
+function realisticNumberOperators(
+  type: 'integer' | 'float',
+  units?: string,
+): PowerSearchConfig['fields'][number]['operators'] {
+  const value = {type, minValue: 0, units} as const;
+  return [
+    {key: 'eq', label: 'equals', value},
+    {key: 'ne', label: 'does not equal', value},
+    {key: 'gt', label: 'is greater than', value},
+    {key: 'gte', label: 'is at least', value},
+    {key: 'lt', label: 'is less than', value},
+    {key: 'lte', label: 'is at most', value},
+    {key: 'set', label: 'is set', value: {type: 'empty'}},
+    {key: 'unset', label: 'is not set', value: {type: 'empty'}},
+  ];
+}
+
+const realisticConfig: PowerSearchConfig = {
+  name: 'RealisticSearch',
+  fields: [
+    {
+      key: 'title',
+      label: 'Title',
+      group: 'Basics',
+      defaultOperator: 'contains',
+      operators: realisticTextOperators,
+    },
+    {
+      key: 'stage',
+      label: 'Stage',
+      group: 'Basics',
+      description: 'Where the item is in its workflow, from draft to archived.',
+      operators: [
+        {
+          key: 'is',
+          label: 'is',
+          value: {type: 'enum', values: realisticStages},
+        },
+        {
+          key: 'is_not',
+          label: 'is not',
+          value: {type: 'enum', values: realisticStages},
+        },
+        {
+          key: 'any',
+          label: 'is any of',
+          value: {type: 'enum_list', values: realisticStages},
+        },
+        {
+          key: 'none',
+          label: 'is none of',
+          value: {type: 'enum_list', values: realisticStages},
+        },
+        {key: 'set', label: 'is set', value: {type: 'empty'}},
+        {key: 'unset', label: 'is not set', value: {type: 'empty'}},
+      ],
+    },
+    {
+      key: 'priority',
+      label: 'Priority',
+      group: 'Basics',
+      operators: [
+        {key: 'is', label: 'is', value: {type: 'enum', values: priorityValues}},
+        {
+          key: 'is_not',
+          label: 'is not',
+          value: {type: 'enum', values: priorityValues},
+        },
+        {
+          key: 'any',
+          label: 'is any of',
+          value: {type: 'enum_list', values: priorityValues},
+        },
+        {
+          key: 'none',
+          label: 'is none of',
+          value: {type: 'enum_list', values: priorityValues},
+        },
+      ],
+    },
+    {
+      key: 'region',
+      label: 'Primary delivery region',
+      group: 'Basics',
+      operators: [
+        {
+          key: 'is',
+          label: 'is',
+          value: {type: 'enum', values: realisticRegions},
+        },
+        {
+          key: 'any',
+          label: 'is any of',
+          value: {type: 'enum_list', values: realisticRegions},
+        },
+        {
+          key: 'none',
+          label: 'is none of',
+          value: {type: 'enum_list', values: realisticRegions},
+        },
+      ],
+    },
+    {
+      key: 'owner',
+      label: 'Owner',
+      group: 'People',
+      operators: [
+        {
+          key: 'any',
+          label: 'is any of',
+          value: {type: 'entity_list', searchSource: realisticOwnerSource},
+        },
+        {
+          key: 'none',
+          label: 'is none of',
+          value: {type: 'entity_list', searchSource: realisticOwnerSource},
+        },
+        {key: 'set', label: 'is set', value: {type: 'empty'}},
+        {key: 'unset', label: 'is not set', value: {type: 'empty'}},
+      ],
+    },
+    {
+      key: 'reviewer',
+      label: 'Reviewer (searches as you type)',
+      group: 'People',
+      operators: [
+        {
+          key: 'is',
+          label: 'is',
+          value: {type: 'string', searchSource: realisticOwnerSource},
+        },
+        {
+          key: 'is_not',
+          label: 'is not',
+          value: {type: 'string', searchSource: realisticOwnerSource},
+        },
+      ],
+    },
+    {
+      key: 'labels',
+      label: 'Labels',
+      group: 'People',
+      operators: [
+        {
+          key: 'include',
+          label: 'include',
+          value: {
+            type: 'string_list',
+            searchSource: realisticTagSource,
+            isArbitraryStringAllowed: true,
+          },
+        },
+        {
+          key: 'exclude',
+          label: 'exclude',
+          value: {
+            type: 'string_list',
+            searchSource: realisticTagSource,
+            isArbitraryStringAllowed: true,
+          },
+        },
+      ],
+    },
+    {
+      key: 'estimate',
+      label: 'Estimate',
+      group: 'Numbers',
+      operators: realisticNumberOperators('integer', 'points'),
+    },
+    {
+      key: 'budget',
+      label: 'Approved budget',
+      group: 'Numbers',
+      description:
+        'The amount approved at the last planning review, in US dollars.',
+      operators: realisticNumberOperators('float', 'USD'),
+    },
+    {
+      key: 'created',
+      label: 'Created',
+      group: 'Dates',
+      operators: [
+        {
+          key: 'on',
+          label: 'is on',
+          value: {type: 'date_absolute', isDateOnly: true},
+        },
+        {
+          key: 'before',
+          label: 'is before',
+          value: {type: 'date_absolute', isDateOnly: true},
+        },
+        {
+          key: 'after',
+          label: 'is after',
+          value: {type: 'date_absolute', isDateOnly: true},
+        },
+        {
+          key: 'within',
+          label: 'is within the last',
+          value: {
+            type: 'date_relative',
+            isPastAllowed: true,
+            isFutureAllowed: false,
+          },
+        },
+        {key: 'between', label: 'is between', value: {type: 'date_range'}},
+        {key: 'set', label: 'is set', value: {type: 'empty'}},
+      ],
+    },
+    {
+      key: 'due',
+      label: 'Due',
+      group: 'Dates',
+      operators: [
+        {
+          key: 'before',
+          label: 'is before',
+          value: {type: 'date_absolute', isDateOnly: false},
+        },
+        {
+          key: 'after',
+          label: 'is after',
+          value: {type: 'date_absolute', isDateOnly: false},
+        },
+        {
+          key: 'next',
+          label: 'is within the next',
+          value: {
+            type: 'date_relative',
+            isPastAllowed: false,
+            isFutureAllowed: true,
+          },
+        },
+        {key: 'unset', label: 'is not set', value: {type: 'empty'}},
+      ],
+    },
+    {
+      key: 'window',
+      label: 'Maintenance window',
+      group: 'Dates',
+      operators: [
+        {key: 'between', label: 'is between', value: {type: 'date_range'}},
+      ],
+    },
+    {
+      key: 'start_time',
+      label: 'Daily start time',
+      group: 'Dates',
+      operators: [
+        {key: 'before', label: 'is before', value: {type: 'time'}},
+        {key: 'after', label: 'is after', value: {type: 'time'}},
+      ],
+    },
+    {
+      key: 'code',
+      label: 'Cost center code',
+      group: 'Other',
+      operators: [
+        {
+          key: 'is',
+          label: 'is',
+          value: {
+            type: 'custom',
+            Editor: RealisticCodeEditor,
+            getString: value => value,
+          },
+        },
+      ],
+    },
+    {
+      key: 'flagged',
+      label: 'Flagged for follow-up only',
+      group: 'Other',
+      operators: [{key: 'yes', label: '', value: {type: 'empty'}}],
+    },
+    {
+      key: 'notes',
+      label: 'Notes',
+      group: 'Other',
+      defaultOperator: 'contains',
+      operators: realisticTextOperators.slice(0, 6),
+    },
+    {
+      key: 'any_of_group',
+      label: 'Any of these conditions',
+      group: 'Other',
+      operators: [
+        {key: 'match_any', label: 'match any', value: {type: 'nested'}},
+        {key: 'match_all', label: 'match all', value: {type: 'nested'}},
+      ],
+    },
+  ],
+};
+
+const realisticPresetFilters: ReadonlyArray<PowerSearchFilter> = [
+  {
+    field: 'stage',
+    operator: 'any',
+    value: {type: 'enum_list', value: ['stage_1', 'stage_4', 'stage_6']},
+  },
+  {field: 'priority', operator: 'is', value: {type: 'enum', value: 'p1'}},
+];
+
+/**
+ * The bottom-sheet presentation with a config sized like real product filter
+ * bars, covering every value type PowerSearch edits: text with ten operators,
+ * a text field that searches as you type, text lists, single and multiple
+ * choice (11 and 60 options), people, whole and decimal numbers with units,
+ * dates with and without a time, relative dates past and future, date
+ * ranges, a time of day, a custom editor, a one-tap filter, and a nested
+ * group.
+ */
+export const SheetPresentationRealisticConfig: Story = {
+  render: args => {
+    const [filters, setFilters] = useState<ReadonlyArray<PowerSearchFilter>>(
+      realisticPresetFilters,
+    );
+    return (
+      <PhoneFrame>
+        <PowerSearch
+          {...args}
+          config={realisticConfig}
+          filters={filters}
+          onChange={next => setFilters(next)}
+          timezoneID="America/Los_Angeles"
+          presentation="bottom-sheet"
+        />
+        <FilterDump filters={filters} />
+      </PhoneFrame>
+    );
+  },
+  name: 'Sheet presentation · realistic config',
   parameters: {viewport: {defaultViewport: 'mobile2'}},
 };

@@ -38,6 +38,7 @@ import {
   SCROLLABLE_OVERFLOW as SCROLLABLE,
   type AllowedPans,
 } from '../utils/scrollView';
+import {isElement} from '../utils/nodeType';
 
 export {parentAcrossShadow};
 
@@ -77,7 +78,7 @@ function buildChain(target: Element, readsTouchAction: boolean): Chain {
     node != null;
     node = parentAcrossShadow(node)
   ) {
-    if (!(node instanceof Element)) {
+    if (!isElement(node)) {
       continue;
     }
     const style = view.getComputedStyle(node);
@@ -111,7 +112,7 @@ function buildChain(target: Element, readsTouchAction: boolean): Chain {
       break;
     }
   }
-  if (!reachedRoot && root instanceof Element) {
+  if (!reachedRoot && isElement(root)) {
     chain.push({
       element: root,
       x: allowX && SCROLLABLE.has(rootOverflow(doc, 'x')),
@@ -204,10 +205,9 @@ export function createNativeScrollProbe(
 ): NativeScrollProbe {
   let chain: Chain | null = null;
   const getChain = (): ChainEntry[] => {
-    chain ??=
-      target instanceof Element
-        ? buildChain(target, readsTouchAction)
-        : {entries: [], allowsPan: false};
+    chain ??= isElement(target)
+      ? buildChain(target, readsTouchAction)
+      : {entries: [], allowsPan: false};
     return chain.entries;
   };
   return {
@@ -239,8 +239,7 @@ export function createNativeScrollProbe(
     },
     get isInsideScroller(): boolean {
       return (
-        target instanceof Element &&
-        isInsideScrollView(target, {readsTouchAction})
+        isElement(target) && isInsideScrollView(target, {readsTouchAction})
       );
     },
   };

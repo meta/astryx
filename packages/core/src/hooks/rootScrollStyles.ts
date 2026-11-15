@@ -16,6 +16,8 @@
  * - /packages/core/src/hooks/useScrollLock.ts
  */
 
+import {sharedState} from '../utils/sharedRealm';
+
 /** The root scroll styles a caller can hold. */
 export interface RootScrollStyle {
   /** `hidden` or `clip` stops wheel, keyboard and scrollbar scrolling of the page. */
@@ -38,12 +40,6 @@ interface Claim {
   readonly id: number;
   readonly value: string;
 }
-
-const claims: Record<RootScrollProperty, Claim[]> = {
-  overflow: [],
-  overscrollBehaviorY: [],
-  scrollbarGutter: [],
-};
 
 type SavedStyle =
   | 'overflow'
@@ -72,9 +68,22 @@ interface HeldTarget {
   written: string;
 }
 
-const held = new Map<RootScrollProperty, HeldTarget[]>();
-
-let nextClaimId = 0;
+// Every copy of Core uses this one state, so a swizzled overlay and the
+// package's stack their claims and locks on the same page.
+const state = sharedState('hooks/root-scroll-styles/state', 1, () => {
+  const claims: Record<RootScrollProperty, Claim[]> = {
+    overflow: [],
+    overscrollBehaviorY: [],
+    scrollbarGutter: [],
+  };
+  return {
+    claims,
+    held: new Map<RootScrollProperty, HeldTarget[]>(),
+    nextClaimId: 0,
+    lockCount: 0,
+    lockListeners: new Set<(isActive: boolean) => void>(),
+  };
+});
 
 /**
  * The element whose `overflow` the viewport uses. That is the root, unless the
@@ -121,11 +130,11 @@ function claimTargets(
 }
 
 function applyTopClaim(property: RootScrollProperty): void {
-  const targets = held.get(property);
+  const targets = state.held.get(property);
   if (targets == null) {
     return;
   }
-  const stack = claims[property];
+  const stack = state.claims[property];
   const top = stack[stack.length - 1];
   for (const target of targets) {
     const {style} = target.element;
@@ -147,7 +156,7 @@ function applyTopClaim(property: RootScrollProperty): void {
     }
   }
   if (top == null) {
-    held.delete(property);
+    state.held.delete(property);
   }
 }
 
@@ -169,16 +178,16 @@ export function claimRootScrollStyle(claim: RootScrollStyle): () => void {
   if (typeof document === 'undefined') {
     return () => {};
   }
-  nextClaimId += 1;
-  const id = nextClaimId;
+  state.nextClaimId += 1;
+  const id = state.nextClaimId;
   const claimed: RootScrollProperty[] = [];
   for (const property of PROPERTIES) {
     const value = claim[property];
     if (value == null) {
       continue;
     }
-    if (claims[property].length === 0) {
-      held.set(
+    if (state.claims[property].length === 0) {
+      state.held.set(
         property,
         claimTargets(property, document).map(element => {
           const pageValues: Partial<Record<SavedStyle, string>> = {};
@@ -189,7 +198,7 @@ export function claimRootScrollStyle(claim: RootScrollStyle): () => void {
         }),
       );
     }
-    claims[property].push({id, value});
+    state.claims[property].push({id, value});
     claimed.push(property);
     applyTopClaim(property);
   }
@@ -201,7 +210,7 @@ export function claimRootScrollStyle(claim: RootScrollStyle): () => void {
     }
     released = true;
     for (const property of claimed) {
-      const stack = claims[property];
+      const stack = state.claims[property];
       const index = stack.findIndex(entry => entry.id === id);
       if (index !== -1) {
         stack.splice(index, 1);
@@ -211,12 +220,9 @@ export function claimRootScrollStyle(claim: RootScrollStyle): () => void {
   };
 }
 
-let lockCount = 0;
-const lockListeners = new Set<(isActive: boolean) => void>();
-
 /** Whether a scroll lock (useScrollLock) currently holds the page. */
 export function isScrollLockActive(): boolean {
-  return lockCount > 0;
+  return state.lockCount > 0;
 }
 
 /**
@@ -227,21 +233,21 @@ export function isScrollLockActive(): boolean {
 export function subscribeScrollLock(
   listener: (isActive: boolean) => void,
 ): () => void {
-  lockListeners.add(listener);
+  state.lockListeners.add(listener);
   return () => {
-    lockListeners.delete(listener);
+    state.lockListeners.delete(listener);
   };
 }
 
 /** For scroll locks: one lock taken (`1`) or released (`-1`). */
 export function reportScrollLock(delta: 1 | -1): void {
-  const wasActive = lockCount > 0;
-  lockCount = Math.max(0, lockCount + delta);
-  const isActive = lockCount > 0;
+  const wasActive = state.lockCount > 0;
+  state.lockCount = Math.max(0, state.lockCount + delta);
+  const isActive = state.lockCount > 0;
   if (isActive === wasActive) {
     return;
   }
-  for (const listener of [...lockListeners]) {
+  for (const listener of [...state.lockListeners]) {
     listener(isActive);
   }
 }

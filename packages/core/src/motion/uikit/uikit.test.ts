@@ -71,7 +71,12 @@ function leavesOf(file: string): Leaf[] {
   // of them is checked where it is declared.
   const exported = new Set<string>();
   lines.forEach((line, index) => {
-    const match = /^export const (\w+) = \{/.exec(line);
+    // A spring role row is built by `springRole(name, {...})`, which
+    // registers it as it loads.
+    const match =
+      /^export const (\w+) = (?:\{|\/\* @__PURE__ \*\/ springRole\()/.exec(
+        line,
+      );
     if (match == null) {
       return;
     }

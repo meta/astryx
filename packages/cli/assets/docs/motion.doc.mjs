@@ -150,7 +150,7 @@ const styles = stylex.create({
       content: [
         {
           type: 'prose',
-          text: "A theme sets how motion feels with two knobs in `defineTheme`'s `motion`. They drive the CSS motion tokens; the springs of touch motion don't read them yet. Every theme follows each person's Reduce Motion setting; no theme loosens it.",
+          text: "A theme sets how motion feels with two knobs in `defineTheme`'s `motion`. They drive the CSS motion tokens, and `tempo` also times the springs of touch motion; those springs don't follow `character` yet. Every theme follows each person's Reduce Motion setting; no theme loosens it.",
         },
         {
           type: 'list',

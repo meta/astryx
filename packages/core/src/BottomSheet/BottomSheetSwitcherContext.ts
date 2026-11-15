@@ -19,10 +19,11 @@ import type {
   MouseEvent as ReactMouseEvent,
   SyntheticEvent,
 } from 'react';
-import {createContext} from 'react';
+
 import type {BaseProps} from '../BaseProps';
 import type {DialogPurpose} from '../Dialog';
 import type {BottomSheetStackView} from './bottomSheetStack';
+import {createSharedContext} from '../utils/sharedContext';
 
 export type BottomSheetSwitcherPhase =
   | 'entering'
@@ -115,6 +116,10 @@ export interface BottomSheetSwitcherContextValue {
 }
 
 export const BottomSheetSwitcherContext =
-  createContext<BottomSheetSwitcherContextValue | null>(null);
+  createSharedContext<BottomSheetSwitcherContextValue | null>(
+    'BottomSheetSwitcherContext',
+    1,
+    null,
+  );
 
 BottomSheetSwitcherContext.displayName = 'BottomSheetSwitcherContext';

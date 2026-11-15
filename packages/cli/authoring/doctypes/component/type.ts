@@ -10,6 +10,7 @@ import type {
   ComponentAnatomyElement,
   ComponentBestPractice,
   ComponentExampleDoc,
+  ComponentIconSlotDoc,
   ComponentPlaygroundConfig,
   ComponentPropDoc,
   ComponentThemingDerivedVar,
@@ -162,6 +163,10 @@ export interface ComponentBaseDoc extends AuthoredDocGraphFields {
      *  on this component, also emit the internal var.
      *  @see ComponentThemingDerivedVar */
     derived?: ComponentThemingDerivedVar[];
+    /** Component icon slots this component resolves through the theme's
+     *  `componentIcons`. Each entry corresponds to a slot in
+     *  `ComponentIconSlotMap`. */
+    componentIcons?: ComponentIconSlotDoc[];
   };
   /** Component usage documentation — concise summary, best practices,
    *  and optional visual anatomy. */

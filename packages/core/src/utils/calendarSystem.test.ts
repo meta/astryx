@@ -9,6 +9,7 @@ import {
   calendarAddMonths,
   calendarDateFromFields,
   calendarDayOfMonth,
+  calendarMonthFromYearMonth,
   calendarMonthOf,
   calendarMonthsInYear,
   calendarShiftMonths,
@@ -26,6 +27,7 @@ import {
 import {
   DATE_FORMAT_WITH_WEEKDAY,
   formatSharedDate,
+  getDaysInMonth,
   type PlainDate,
   plainDateAddDays,
   plainDateFormat,
@@ -235,6 +237,62 @@ describe('calendar month and year steps', () => {
     expect(
       plainDateToISO(calendarShiftYears('gregory', iso('2024-02-29'), 1)),
     ).toBe('2025-02-28');
+  });
+});
+
+describe('calendarMonthFromYearMonth past the end of its year', () => {
+  const alignedYears: [CalendarSystem, number][] = [
+    ['gregory', 2026],
+    ['iso8601', 2026],
+    ['buddhist', 2569],
+    ['roc', 115],
+    ['japanese', 2026],
+  ];
+
+  it.each(alignedYears)(
+    '%s constrains a month past December to December',
+    (calendar, year) => {
+      const december = calendarMonthFromYearMonth(calendar, {year, month: 12});
+      for (const month of [13, 14, 99]) {
+        expect(calendarMonthFromYearMonth(calendar, {year, month})).toEqual(
+          december,
+        );
+      }
+      expect(december).toEqual({
+        start: {year: 2026, month: 12, day: 1},
+        end: {year: 2026, month: 12, day: 31},
+        length: 31,
+      });
+    },
+  );
+
+  it.each(alignedYears)(
+    '%s keeps every in-range month and its year offset',
+    (calendar, year) => {
+      for (const month of [1, 2, 6, 12]) {
+        const built = calendarMonthFromYearMonth(calendar, {year, month});
+        expect(built.start).toEqual({year: 2026, month, day: 1});
+        expect(built.length).toBe(getDaysInMonth(2026, month));
+        expect(built.end).toEqual({
+          year: 2026,
+          month,
+          day: getDaysInMonth(2026, month),
+        });
+      }
+    },
+  );
+
+  it('constrains a Hebrew month past the end of its year, leap or not', () => {
+    const elul = calendarMonthFromYearMonth('hebrew', {year: 5784, month: 13});
+    expect(
+      calendarMonthFromYearMonth('hebrew', {year: 5784, month: 14}),
+    ).toEqual(elul);
+    expect(
+      calendarMonthFromYearMonth('hebrew', {year: 5784, month: 99}),
+    ).toEqual(elul);
+    expect(
+      calendarMonthFromYearMonth('hebrew', {year: 5783, month: 13}),
+    ).toEqual(calendarMonthFromYearMonth('hebrew', {year: 5783, month: 12}));
   });
 });
 

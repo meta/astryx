@@ -17,8 +17,8 @@ import {describe, expect, it} from 'vitest';
 import * as utils from './index';
 import * as overlay from './interactionOverlay.stylex';
 
-const ROW_LAYER_STYLES = ['cell', 'cellOnImage'];
-const ROW_LAYER_EXPORTS = ['rowPressLayerStyles'];
+const ROW_LAYER_STYLES = ['cell', 'cellOnImage', 'control'];
+const ROW_LAYER_EXPORTS = ['rowPressLayerStyles', 'controlPressLayerStyles'];
 
 describe("the list row's press layer stays internal", () => {
   it('is not exported from @astryxdesign/core/utils/interactionOverlay.stylex', () => {

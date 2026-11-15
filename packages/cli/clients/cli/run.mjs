@@ -28,6 +28,55 @@
  *   when, in a hosted run, that release's host entry answered
  */
 export async function runCli({cliRoot, argv, declinedProjectCli}) {
+  // A folder deleted under the shell (another terminal, `git clean`): every
+  // command reads the working folder first, so say so once, plainly, in
+  // text and in --json, instead of a stack trace.
+  try {
+    process.cwd();
+  } catch (e) {
+    if (/** @type {any} */ (e)?.code !== 'ENOENT') throw e;
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const os = await import('node:os');
+    let up = process.env.PWD ? path.dirname(process.env.PWD) : null;
+    while (up && !fs.existsSync(up) && path.dirname(up) !== up)
+      up = path.dirname(up);
+    const cd = up && fs.existsSync(up) ? up : '~';
+    // Help, the version and docs read no folder: run them from an existing
+    // one.
+    const first = argv.find(a => !a.startsWith('-'));
+    if (
+      argv.length === 0 ||
+      argv.some(a => ['--help', '-h', '--version', '-V'].includes(a)) ||
+      first === 'docs' ||
+      first === 'help'
+    ) {
+      process.chdir(cd === '~' ? os.homedir() : cd);
+      return runCli({cliRoot, argv, declinedProjectCli});
+    }
+    const message =
+      'The current folder no longer exists (it was deleted or moved). Nothing was written. cd to an existing folder and run the command again.';
+    const {quoteCommandArgument} =
+      await import('../../foundation/env/package-manager.mjs');
+    const suggestions = [
+      {
+        name: `cd ${cd === '~' ? cd : quoteCommandArgument(cd)}`,
+        reason: 'an existing folder',
+      },
+    ];
+    if (argv.includes('--json')) {
+      const {toErrorEnvelope} =
+        await import('../../foundation/response/json.mjs');
+      fs.writeSync(
+        1,
+        `${JSON.stringify(toErrorEnvelope(message, suggestions, 'ERR_PROJECT_REQUIRED'), null, 2)}\n`,
+      );
+    } else {
+      fs.writeSync(2, `Error: ${message}\n  ${suggestions[0].name}\n`);
+    }
+    process.exitCode = 1;
+    return undefined;
+  }
   const {startRun} = await import('../../foundation/release/handoff.mjs');
   const answered = await startRun({cliRoot, argv, declinedProjectCli});
   if (answered) return answered;

@@ -13,8 +13,9 @@
  * `tempo` scales every motion duration token, clamped to 0.75–1.5.
  * `character` picks the entrance and move curves. Every theme follows each
  * person's Reduce Motion setting (`reducedMotion` resolves to `'system'`).
- * No spring reads the knobs yet. With the defaults (tempo 1, `'standard'`, `'system'`) every token is
- * today's.
+ * The animator's springs follow `tempo` (motion/themeTempo.ts), but not
+ * `character` yet. With the defaults (tempo 1, `'standard'`, `'system'`)
+ * every token is today's.
  *
  * A `MotionScaleConfig` keeps generating its duration tokens, and its fields
  * win over `tempo` (FR5); explicit `tokens` win over both in
@@ -82,9 +83,10 @@ function msOf(value: string): number {
 
 /**
  * The private custom property a theme with a `tempo` writes beside its
- * duration tokens, for a style that scales a clock of its own by it
- * (ProgressBar's move). A press release needs none: it plays
- * `--duration-exit`, which already follows the tempo.
+ * duration tokens. A layer whose durations come from a duration scale alone
+ * writes 1. The animator's springs read it (motion/themeTempo.ts), and so does
+ * a style that scales a clock of its own (ProgressBar's move). A press release
+ * needs none: it plays `--duration-exit`, which already follows the tempo.
  */
 export const MOTION_TEMPO_PROPERTY = '--_astryx-motion-tempo';
 

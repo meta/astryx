@@ -12,7 +12,7 @@
  */
 
 import {use} from 'react';
-import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
 
 export type SegmentedControlSize = 'sm' | 'md' | 'lg';
 export type SegmentedControlLayout = 'hug' | 'fill';
@@ -38,7 +38,11 @@ export interface SegmentedControlContextValue {
 }
 
 export const SegmentedControlContext =
-  createContext<SegmentedControlContextValue | null>(null);
+  createLayerScopedContext<SegmentedControlContextValue | null>(
+    'SegmentedControlContext',
+    1,
+    null,
+  );
 SegmentedControlContext.displayName = 'SegmentedControlContext';
 
 export function useSegmentedControlContext(): SegmentedControlContextValue {

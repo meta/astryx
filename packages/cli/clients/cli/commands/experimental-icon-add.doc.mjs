@@ -30,7 +30,7 @@ export const doc = {
       flag: '--new-definition <name>',
       param: 'options.newDefinition',
       description:
-        "Add your set's own definition, then map the icon to it; needs --description and --words",
+        "Add your set's own definition, named in camelCase (aiHelper) or kebab-case (ai-helper), then map the icon to it; needs --description and --words",
     },
     {
       flag: '--description <text>',

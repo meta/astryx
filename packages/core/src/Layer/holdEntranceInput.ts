@@ -8,10 +8,12 @@
  * @output holdEntranceInput: under a coarse primary pointer, a finger's or a
  *   pen's input held away from the layer until its entrance ends
  * @position The entrance hold for layers that enter through CSS (Dialog,
- *   Drawer, MobileNav), on the Layer module's input hold (inputHold.ts)
+ *   Drawer, MobileNav, DropdownMenu), on the Layer module's input hold
+ *   (inputHold.ts)
  *
  * SYNC: When modified, update holdEntranceInput.test.ts and its callers
- * (Dialog.tsx, Drawer/useDrawerDialogPresence.ts, MobileNav/MobileNav.tsx).
+ * (Dialog.tsx, Drawer/useDrawerDialogPresence.ts, MobileNav/MobileNav.tsx,
+ * DropdownMenu/DropdownMenu.tsx).
  */
 
 import {isCoarsePointer} from '../utils/coarsePointer';

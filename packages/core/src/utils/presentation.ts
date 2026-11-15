@@ -37,6 +37,7 @@
 
 import {useCallback, useMemo, useSyncExternalStore} from 'react';
 import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
+import {matchesMediaQuery, watchMediaQuery} from './coarsePointer';
 import type {CompactDefinition} from '../theme/themeAdaptations';
 import {
   readTouchPresentation,
@@ -101,22 +102,19 @@ const matchesNothing = () => false;
 
 /**
  * A media query's match, subscribed only while `query` is given. False on
- * the server and while hydrating.
+ * the server, while hydrating, and where the window has no `matchMedia`, as
+ * in a test DOM.
  */
 function useMatchWhileRead(query: string | null): boolean {
   const subscribe = useCallback(
-    (onStoreChange: () => void) => {
-      if (query == null) {
-        return noSubscription();
-      }
-      const mql = window.matchMedia(query);
-      mql.addEventListener('change', onStoreChange);
-      return () => mql.removeEventListener('change', onStoreChange);
-    },
+    (onStoreChange: () => void) =>
+      query == null
+        ? noSubscription()
+        : watchMediaQuery(window, query, onStoreChange),
     [query],
   );
   const getSnapshot = useCallback(
-    () => query != null && window.matchMedia(query).matches,
+    () => query != null && matchesMediaQuery(window, query),
     [query],
   );
   return useSyncExternalStore(subscribe, getSnapshot, matchesNothing);

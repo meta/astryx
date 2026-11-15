@@ -5,7 +5,8 @@
  * @input keyboardHeight.ts, the keyboard layout guide, a stand-in visual
  *   viewport
  * @output Tests for the on-screen keyboard module: the height, where it
- *   measures, its one set of listeners and the focus refusal
+ *   measures, a hide reported in steps, its one set of listeners and the
+ *   focus refusal
  * @position Keyboard module tests
  */
 
@@ -15,11 +16,17 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {act} from '@testing-library/react';
 import {bringsUpKeyboard, getKeyboardLayoutGuide} from './keyboardLayoutGuide';
 import {
+  __resetClickGuardForTest,
+  CLICK_GUARD_WINDOW_MS,
+} from '../utils/clickGuard';
+import {
   __resetLayoutViewportForTest,
   layoutViewportHeight,
 } from '../utils/layoutViewport';
 import {
+  claimTapFocus,
   findTextEntryControl,
+  focusAtPoint,
   getKeyboardHeight,
   isKeyboardMeasurable,
   isTextEntryControl,
@@ -65,6 +72,7 @@ afterEach(() => {
     Reflect.deleteProperty(document.documentElement, key);
   }
   __resetLayoutViewportForTest();
+  __resetClickGuardForTest();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -329,6 +337,179 @@ describe('where the keyboard is measured (FR6, FR7)', () => {
     expect(isKeyboardMeasurable(inner)).toBe(false);
     expect(measureKeyboardHeight(inner)).toBe(0);
     frame.remove();
+  });
+});
+
+describe('a hide Chrome reports in steps under Remove animations (FR8)', () => {
+  // Each test's subscriptions end after it, also when an expectation fails.
+  const stops: (() => void)[] = [];
+  afterEach(() => {
+    for (const stop of stops.splice(0)) {
+      stop();
+    }
+    vi.useRealTimers();
+  });
+  // Android's Remove animations setting reads as prefers-reduced-motion.
+  const reduceMotion = (reduce: boolean) =>
+    vi.stubGlobal(
+      'matchMedia',
+      (query: string) =>
+        ({
+          matches: reduce && query === '(prefers-reduced-motion: reduce)',
+          media: query,
+        }) as unknown as MediaQueryList,
+    );
+  const withVirtualKeyboard = () =>
+    Object.defineProperty(window.navigator, 'virtualKeyboard', {
+      configurable: true,
+      value: {overlaysContent: false},
+    });
+  const heightsOf = (listener: ReturnType<typeof vi.fn>) =>
+    listener.mock.calls.map(([event]) => (event as KeyboardHeightEvent).height);
+  const keyboard = (height: number) =>
+    report({height: window.innerHeight - height});
+
+  it('reports the hide once, with the report of none, and keeps the shown height until then', () => {
+    withVirtualKeyboard();
+    reduceMotion(true);
+    const listener = vi.fn();
+    stops.push(subscribeKeyboardHeight(window, listener));
+    keyboard(300);
+    for (const step of [200, 120, 60]) {
+      keyboard(step);
+      expect(getKeyboardHeight(window)).toBe(300);
+    }
+    keyboard(0);
+    expect(heightsOf(listener)).toEqual([300, 0]);
+    expect(getKeyboardHeight(window)).toBe(0);
+  });
+
+  it('gives the keyboard layout guide one hide for the steps, and no change', () => {
+    withVirtualKeyboard();
+    reduceMotion(true);
+    const kinds: string[] = [];
+    stops.push(
+      getKeyboardLayoutGuide(window).subscribe(transition => {
+        kinds.push(transition.kind);
+      }),
+    );
+    keyboard(300);
+    for (const step of [200, 120, 60]) {
+      keyboard(step);
+    }
+    keyboard(0);
+    expect(kinds).toEqual(['show', 'hide']);
+  });
+
+  it('reports a lower keyboard that stays up after a quiet spell', () => {
+    vi.useFakeTimers();
+    withVirtualKeyboard();
+    reduceMotion(true);
+    const listener = vi.fn();
+    stops.push(subscribeKeyboardHeight(window, listener));
+    keyboard(300);
+    keyboard(250);
+    act(() => {
+      vi.advanceTimersByTime(299);
+    });
+    expect(heightsOf(listener)).toEqual([300]);
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(heightsOf(listener)).toEqual([300, 250]);
+  });
+
+  it('keeps a step waiting through a pan, which reports the same height', () => {
+    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout', 'performance']});
+    withVirtualKeyboard();
+    reduceMotion(true);
+    const listener = vi.fn();
+    stops.push(subscribeKeyboardHeight(window, listener));
+    keyboard(300);
+    keyboard(250);
+    for (const offsetTop of [20, 40, 60]) {
+      act(() => {
+        vi.advanceTimersByTime(90);
+      });
+      Object.assign(viewport, {offsetTop});
+      act(() => {
+        viewport.dispatchEvent(new Event('scroll'));
+      });
+    }
+    act(() => {
+      vi.advanceTimersByTime(30);
+    });
+    expect(heightsOf(listener)).toEqual([300, 250]);
+  });
+
+  it('waits 1 s at most in all, however long the steps go on', () => {
+    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout', 'performance']});
+    withVirtualKeyboard();
+    reduceMotion(true);
+    const listener = vi.fn();
+    stops.push(subscribeKeyboardHeight(window, listener));
+    keyboard(300);
+    for (const step of [280, 260, 240, 220]) {
+      keyboard(step);
+      act(() => {
+        vi.advanceTimersByTime(250);
+      });
+    }
+    expect(heightsOf(listener)).toEqual([300, 220]);
+  });
+
+  it('reports a keyboard that comes back up at once', () => {
+    withVirtualKeyboard();
+    reduceMotion(true);
+    const listener = vi.fn();
+    stops.push(subscribeKeyboardHeight(window, listener));
+    keyboard(300);
+    keyboard(200);
+    keyboard(300);
+    expect(heightsOf(listener)).toEqual([300, 300]);
+  });
+
+  it('reports every report of a show at once', () => {
+    withVirtualKeyboard();
+    reduceMotion(true);
+    const listener = vi.fn();
+    stops.push(subscribeKeyboardHeight(window, listener));
+    keyboard(44);
+    keyboard(300);
+    expect(heightsOf(listener)).toEqual([44, 300]);
+  });
+
+  it.each([
+    ['without Remove animations', true, false],
+    ['without the VirtualKeyboard API', false, true],
+  ])('reports every step %s', (_, hasApi, reduce) => {
+    if (hasApi) {
+      withVirtualKeyboard();
+    }
+    reduceMotion(reduce);
+    const listener = vi.fn();
+    stops.push(subscribeKeyboardHeight(window, listener));
+    keyboard(300);
+    for (const step of [200, 120, 60]) {
+      keyboard(step);
+    }
+    keyboard(0);
+    expect(heightsOf(listener)).toEqual([300, 200, 120, 60, 0]);
+  });
+
+  it('stops waiting when the last reader leaves', () => {
+    vi.useFakeTimers();
+    withVirtualKeyboard();
+    reduceMotion(true);
+    const listener = vi.fn();
+    const stop = subscribeKeyboardHeight(window, listener);
+    keyboard(300);
+    keyboard(200);
+    stop();
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(heightsOf(listener)).toEqual([300]);
   });
 });
 
@@ -772,5 +953,257 @@ describe('the text-entry predicate', () => {
         element.remove();
       }
     }
+  });
+});
+
+describe('the tap route (FR4)', () => {
+  // A touch event as the browser raises it: its fingers, and cancelable.
+  const touchEvent = (
+    type: string,
+    points: {x: number; y: number}[],
+    changed = points,
+  ) => {
+    const event = new Event(type, {bubbles: true, cancelable: true});
+    const list = (ps: {x: number; y: number}[]) =>
+      ps.map((p, identifier) => ({identifier, clientX: p.x, clientY: p.y}));
+    Object.assign(event, {
+      touches: list(points),
+      changedTouches: list(changed),
+    });
+    return event;
+  };
+
+  function setup() {
+    const region = document.createElement('div');
+    const field = document.createElement('div');
+    region.append(field);
+    document.body.append(region);
+    const deliver = vi.fn();
+    const stop = claimTapFocus(region, {
+      claim: target => (target === field ? field : null),
+      deliver,
+    });
+    return {region, field, deliver, stop};
+  }
+
+  it('delivers a tap on a claimed field itself, and cancels the browser\u2019s', () => {
+    const {region, field, deliver, stop} = setup();
+    field.dispatchEvent(touchEvent('touchstart', [{x: 10, y: 10}]));
+    const end = touchEvent('touchend', [], [{x: 12, y: 11}]);
+    field.dispatchEvent(end);
+    expect(end.defaultPrevented).toBe(true);
+    expect(deliver).toHaveBeenCalledWith(field, 12, 11, expect.anything());
+    stop();
+    region.remove();
+  });
+
+  it('leaves a touch that moves past the scroll slop, or a second finger, to the browser', () => {
+    const {region, field, deliver, stop} = setup();
+    field.dispatchEvent(touchEvent('touchstart', [{x: 10, y: 10}]));
+    field.dispatchEvent(touchEvent('touchmove', [{x: 10, y: 30}]));
+    const moved = touchEvent('touchend', [], [{x: 10, y: 30}]);
+    field.dispatchEvent(moved);
+    expect(moved.defaultPrevented).toBe(false);
+
+    field.dispatchEvent(
+      touchEvent('touchstart', [
+        {x: 10, y: 10},
+        {x: 40, y: 10},
+      ]),
+    );
+    const pinch = touchEvent('touchend', [], [{x: 10, y: 10}]);
+    field.dispatchEvent(pinch);
+    expect(pinch.defaultPrevented).toBe(false);
+    expect(deliver).not.toHaveBeenCalled();
+    stop();
+    region.remove();
+  });
+
+  it('listens on the region only, and follows a touch only while it is down', () => {
+    const {region, field, stop} = setup();
+    const add = vi.spyOn(region, 'addEventListener');
+    const remove = vi.spyOn(region, 'removeEventListener');
+    const documentAdd = vi.spyOn(document, 'addEventListener');
+    field.dispatchEvent(touchEvent('touchstart', [{x: 10, y: 10}]));
+    expect(add.mock.calls.map(([type]) => type)).toEqual([
+      'touchmove',
+      'touchend',
+      'touchcancel',
+    ]);
+    field.dispatchEvent(touchEvent('touchend', [], [{x: 10, y: 10}]));
+    expect(remove.mock.calls.map(([type]) => type)).toEqual([
+      'touchmove',
+      'touchend',
+      'touchcancel',
+    ]);
+    // No document listener: the swallower of the mouse events Safari may
+    // still send rides the window's one shared input stream.
+    expect(documentAdd).not.toHaveBeenCalled();
+    stop();
+    region.remove();
+  });
+
+  it('swallows the mouse events Safari still sends for a delivered tap, wherever they land, until its click', () => {
+    const {region, field, deliver, stop} = setup();
+    const elsewhere = document.createElement('button');
+    document.body.append(elsewhere);
+    const pressed = vi.fn();
+    elsewhere.addEventListener('mousedown', pressed);
+    elsewhere.addEventListener('click', pressed);
+    // Safari's events for a tap carry its click count.
+    const mouse = (type: string) => {
+      const event = new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        detail: 1,
+      });
+      elsewhere.dispatchEvent(event);
+      return event;
+    };
+    field.dispatchEvent(touchEvent('touchstart', [{x: 10, y: 10}]));
+    field.dispatchEvent(touchEvent('touchend', [], [{x: 12, y: 11}]));
+    expect(deliver).toHaveBeenCalledTimes(1);
+    // Aimed at what is under the finger now.
+    expect(mouse('mousedown').defaultPrevented).toBe(true);
+    expect(mouse('click').defaultPrevented).toBe(true);
+    expect(pressed).not.toHaveBeenCalled();
+    // The tap's click ends it.
+    expect(mouse('click').defaultPrevented).toBe(false);
+    expect(pressed).toHaveBeenCalledTimes(1);
+    stop();
+    elsewhere.remove();
+    region.remove();
+  });
+
+  it('lets go when no click comes and a new press starts, or after the click guard’s window', () => {
+    const {region, field, stop} = setup();
+    const mousedown = () => {
+      const event = new MouseEvent('mousedown', {
+        bubbles: true,
+        cancelable: true,
+        detail: 1,
+      });
+      document.body.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    field.dispatchEvent(touchEvent('touchstart', [{x: 10, y: 10}]));
+    field.dispatchEvent(touchEvent('touchend', [], [{x: 10, y: 10}]));
+    // A new press anywhere: a touch's or a mouse's, which starts with its
+    // pointerdown.
+    document.body.dispatchEvent(new Event('pointerdown', {bubbles: true}));
+    expect(mousedown()).toBe(false);
+
+    field.dispatchEvent(touchEvent('touchstart', [{x: 10, y: 10}]));
+    field.dispatchEvent(touchEvent('touchend', [], [{x: 10, y: 10}]));
+    // A key's own click (detail 0) goes through.
+    const keyClick = new MouseEvent('click', {bubbles: true, cancelable: true});
+    document.body.dispatchEvent(keyClick);
+    expect(keyClick.defaultPrevented).toBe(false);
+
+    // The guard ends after its window, also when the route goes first.
+    vi.useFakeTimers();
+    field.dispatchEvent(touchEvent('touchstart', [{x: 10, y: 10}]));
+    field.dispatchEvent(touchEvent('touchend', [], [{x: 10, y: 10}]));
+    stop();
+    expect(mousedown()).toBe(true);
+    vi.advanceTimersByTime(CLICK_GUARD_WINDOW_MS);
+    expect(mousedown()).toBe(false);
+    vi.useRealTimers();
+    region.remove();
+  });
+
+  it('leaves a touch outside what the caller claims to the browser', () => {
+    const {region, deliver, stop} = setup();
+    region.dispatchEvent(touchEvent('touchstart', [{x: 10, y: 10}]));
+    const end = touchEvent('touchend', [], [{x: 10, y: 10}]);
+    region.dispatchEvent(end);
+    expect(end.defaultPrevented).toBe(false);
+    expect(deliver).not.toHaveBeenCalled();
+    stop();
+    region.remove();
+  });
+});
+
+describe('the caret a claimed tap places', () => {
+  // Installs (or, with undefined, removes) one caret-from-point API on the
+  // document, as each engine has its own.
+  function stubCaretApi(
+    name: 'caretPositionFromPoint' | 'caretRangeFromPoint',
+    value: unknown,
+  ) {
+    Object.defineProperty(document, name, {configurable: true, value});
+  }
+
+  function editable(): {element: HTMLElement; text: Text} {
+    const element = document.createElement('div');
+    element.setAttribute('contenteditable', 'true');
+    // jsdom does not compute isContentEditable.
+    Object.defineProperty(element, 'isContentEditable', {value: true});
+    const text = document.createTextNode('Hello there');
+    element.append(text);
+    document.body.append(element);
+    return {element, text};
+  }
+
+  afterEach(() => {
+    Reflect.deleteProperty(document, 'caretPositionFromPoint');
+    Reflect.deleteProperty(document, 'caretRangeFromPoint');
+    document.body.replaceChildren();
+  });
+
+  it('reads the standard caretPositionFromPoint, the only one Firefox has', () => {
+    const {element, text} = editable();
+    stubCaretApi(
+      'caretPositionFromPoint',
+      vi.fn(() => ({offsetNode: text, offset: 3})),
+    );
+
+    focusAtPoint(element, 20, 10);
+
+    expect(document.activeElement).toBe(element);
+    const selection = document.getSelection();
+    expect(selection?.anchorNode).toBe(text);
+    expect(selection?.anchorOffset).toBe(3);
+    expect(selection?.isCollapsed).toBe(true);
+  });
+
+  it('puts a text control\u2019s caret where the browser maps the point into it, or after its text', () => {
+    const textarea = document.createElement('textarea');
+    textarea.value = 'A long draft';
+    document.body.append(textarea);
+    const focus = vi.spyOn(textarea, 'focus');
+    stubCaretApi(
+      'caretPositionFromPoint',
+      vi.fn(() => ({offsetNode: textarea, offset: 3})),
+    );
+    focusAtPoint(textarea, 20, 10);
+    expect(focus).toHaveBeenCalledWith({preventScroll: true});
+    expect(document.activeElement).toBe(textarea);
+    expect([textarea.selectionStart, textarea.selectionEnd]).toEqual([3, 3]);
+
+    textarea.blur();
+    stubCaretApi(
+      'caretPositionFromPoint',
+      vi.fn(() => null),
+    );
+    focusAtPoint(textarea, 20, 10);
+    expect([textarea.selectionStart, textarea.selectionEnd]).toEqual([12, 12]);
+  });
+
+  it('falls back to caretRangeFromPoint where only WebKit\u2019s exists', () => {
+    const {element, text} = editable();
+    stubCaretApi(
+      'caretRangeFromPoint',
+      vi.fn(() => {
+        const range = document.createRange();
+        range.setStart(text, 5);
+        range.collapse(true);
+        return range;
+      }),
+    );
+
+    focusAtPoint(element, 20, 10);
+
+    expect(document.getSelection()?.anchorOffset).toBe(5);
   });
 });

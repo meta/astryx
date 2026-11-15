@@ -26,7 +26,11 @@
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
-import {webInputDriver, WHEEL_SKIP} from '@astryxdesign/interaction-harness';
+import {
+  webInputDriver,
+  WHEEL_SCROLL_END_MS,
+  WHEEL_SKIP,
+} from '@astryxdesign/interaction-harness';
 
 /**
  * Chromium's driver sends each wheel as one notch, `wheelDeltaY` -120
@@ -349,6 +353,45 @@ async function logTouchMoves(page: Page): Promise<void> {
 async function readTouchMoves(page: Page): Promise<boolean[]> {
   return page.evaluate(
     () => (window as unknown as {__moves: boolean[]}).__moves,
+  );
+}
+
+/**
+ * Record each touchmove's travel from its touch's start along y, px, and
+ * whether it reached the page cancelled.
+ */
+async function logTouchTravel(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const moves: {travel: number; cancelled: boolean}[] = [];
+    (window as unknown as {__travel: typeof moves}).__travel = moves;
+    let startY = 0;
+    window.addEventListener(
+      'touchstart',
+      event => {
+        startY = event.touches[0]?.clientY ?? 0;
+      },
+      {passive: true},
+    );
+    window.addEventListener(
+      'touchmove',
+      event => {
+        moves.push({
+          travel: Math.round((event.touches[0]?.clientY ?? 0) - startY),
+          cancelled: event.defaultPrevented,
+        });
+      },
+      {passive: true},
+    );
+  });
+}
+
+async function readTouchTravel(
+  page: Page,
+): Promise<{travel: number; cancelled: boolean}[]> {
+  return page.evaluate(
+    () =>
+      (window as unknown as {__travel: {travel: number; cancelled: boolean}[]})
+        .__travel,
   );
 }
 
@@ -1151,6 +1194,49 @@ test('a zero-delay hold that brings its own lock turns selection off only for a 
   expect(held.lens).toEqual([true, false]);
 });
 
+test('one context request per gesture from a finger held still, a right click and Shift+F10, each naming its input (spec:AST-094 FR43)', async ({
+  page,
+  browserName,
+}) => {
+  const driver = await openBare(page, browserName);
+  await page.evaluate(() => {
+    const {attachContextRequest} = window.__api;
+    document.body.innerHTML =
+      '<div id="row" tabindex="0" style="height: 80px">Row</div>';
+    attachContextRequest(document.getElementById('row') as HTMLElement, {
+      onRequest: request =>
+        window.__requests.push(
+          `${request.kind}:${request.pointerType ?? 'none'}`,
+        ),
+    });
+  });
+  const at = await center(page, 'row');
+  // Held past the long press: one request. Android fires its own context
+  // menu during the hold too, as a touch's. The request refuses that one and
+  // makes no second request.
+  await driver.play([{t: 0, down: [{id: 1, ...at}]}]);
+  await page.waitForTimeout(900);
+  const nativeMenuRefused = await page.evaluate(() => {
+    const menu = new PointerEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      pointerType: 'touch',
+    });
+    document.getElementById('row')?.dispatchEvent(menu);
+    return menu.defaultPrevented;
+  });
+  await driver.play([{t: 0, down: []}]);
+  expect(nativeMenuRefused).toBe(true);
+  await page.mouse.click(at.x, at.y, {button: 'right'});
+  await page.focus('#row');
+  await page.keyboard.press('Shift+F10');
+  expect(await page.evaluate(() => window.__requests)).toEqual([
+    'hold:touch',
+    'pointer:mouse',
+    'keyboard:none',
+  ]);
+});
+
 test('a tap recognizer replaces the click: no ghost click, no compatibility mouse events', async ({
   page,
   browserName,
@@ -1289,23 +1375,47 @@ test('scroll edge: at the top the pull is the sheet’s at once', async ({
   expect(await scrollTop(page, 'sheetBody')).toBe(0);
 });
 
-test("scroll edge: at the top the sheet cancels the pull's moves from the first one, before it begins (spec:AST-094 FR19, DEC-18)", async ({
+test("scroll edge: at the top the sheet leaves a tap's wobble to the browser, then cancels the pull's moves from the one that reaches 5 px, before it begins (spec:AST-094 FR19, DEC-30)", async ({
   page,
   browserName,
 }) => {
   const driver = await open(page, browserName);
-  await logTouchMoves(page);
+  await logTouchTravel(page);
   const start = await center(page, 'sheetBody');
   await driver.play(drag(start, {x: start.x, y: start.y + 24}));
-  const moves = await readTouchMoves(page);
+  const moves = await readTouchTravel(page);
   // WebKit sends the first move at 2 px, well before the sheet's 10 px begin;
-  // Chromium sends none inside its own 15 px slop. Every move the page sees
-  // is cancelled, the first one included.
+  // Chromium sends none inside its own 15 px slop. A move under 5 px stays
+  // the browser's, so a tap keeps its click. Every move from 5 px is
+  // cancelled, before Mobile Safari could commit its native pan.
   expect(moves.length).toBeGreaterThan(0);
-  expect(moves).toEqual(moves.map(() => true));
+  expect(moves).toEqual(
+    moves.map(({travel}) => ({travel, cancelled: travel >= 5})),
+  );
   const sheet = (await log(page)).filter(entry => entry.name === 'sheet');
   expect(sheet[0]?.state).toBe('began');
   expect(await scrollTop(page, 'sheetBody')).toBe(0);
+});
+
+test('scroll edge: at the top a tap that wobbles under 5 px keeps every move, so WebKit keeps its click (spec:AST-094 FR19, DEC-30)', async ({
+  page,
+  browserName,
+}) => {
+  const driver = await open(page, browserName);
+  await logTouchTravel(page);
+  const at = await center(page, 'sheetBody');
+  await driver.play([
+    {t: 0, down: [{id: 1, x: at.x, y: at.y}]},
+    {t: 30, down: [{id: 1, x: at.x, y: at.y + 2}]},
+    {t: 60, down: [{id: 1, x: at.x, y: at.y + 4}]},
+    {t: 90, down: []},
+  ]);
+  // WebKit ends a touch's click when one of its moves is cancelled.
+  expect(
+    (await readTouchTravel(page)).filter(({cancelled}) => cancelled),
+  ).toEqual([]);
+  const sheet = (await log(page)).filter(entry => entry.name === 'sheet');
+  expect(sheet.some(entry => entry.state === 'began')).toBe(false);
 });
 
 test('a drag that began as a scroll stays the browser’s (AST-094 FR14): the content scrolls to its top and the sheet never begins', async ({
@@ -1356,6 +1466,107 @@ function spread(at: Point, from: number, by: number, drift = 0): Step[] {
   steps.push({t: 30 + 13 * 16, down: []});
   return steps;
 }
+
+/**
+ * A page pointerup listener that runs `ms`, as a busy app's can. WebKit
+ * stamps the touchend that follows only once it is done.
+ */
+async function holdEveryLift(page: Page, ms: number): Promise<void> {
+  await page.evaluate(spin => {
+    addEventListener('pointerup', () => {
+      const end = performance.now() + spin;
+      while (performance.now() < end) {
+        // The listener's own work.
+      }
+    });
+  }, ms);
+}
+
+test('a flick keeps its release speed when a page pointerup listener holds its touchend: the lift is read where the moves were', async ({
+  page,
+  browserName,
+}) => {
+  const driver = await open(page, browserName);
+  const start = await center(page, 'hpan');
+  const flickOnPan = () => drag(start, {x: start.x + 120, y: start.y}, 6);
+  await driver.play(flickOnPan());
+  const releases = async () =>
+    page.evaluate(() => ({
+      drag: window.__releases.hpan ?? 0,
+      scroll: window.__releases.hpanScroll ?? 0,
+    }));
+  const free = await releases();
+  await holdEveryLift(page, 50);
+  await driver.play(flickOnPan());
+  const held = await releases();
+  expect(free.drag).toBeGreaterThan(0);
+  expect(free.scroll).toBeGreaterThan(0);
+  // On the touchend's clock, the held lift read as a resting finger: 0. That
+  // holds for a dragged surface (a sheet, a pop) and a scrolling one (a pager).
+  expect(held.drag).toBeGreaterThan(free.drag / 2);
+  expect(held.scroll).toBeGreaterThan(free.scroll / 2);
+});
+
+test('a pinch keeps its release speed when a page pointerup listener holds its touchend', async ({
+  page,
+  browserName,
+}) => {
+  const driver = await open(page, browserName);
+  const at = await center(page, 'pinchable');
+  await driver.play(spread(at, 20, 40));
+  const free = await page.evaluate(() => window.__releases.pinch ?? 0);
+  await holdEveryLift(page, 50);
+  await driver.play(spread(at, 20, 40));
+  const held = await page.evaluate(() => window.__releases.pinch ?? 0);
+  expect(free).toBeGreaterThan(0);
+  expect(held).toBeGreaterThan(free / 2);
+});
+
+test('a tap lifted before the long press’s time stays a tap when a page pointerup listener holds its touchend past that time', async ({
+  page,
+  browserName,
+}) => {
+  const driver = await openBare(page, browserName);
+  await page.evaluate(() => {
+    const target = document.createElement('div');
+    target.id = 'tapOrHold';
+    target.style.height = '80px';
+    document.body.prepend(target);
+    const {host, LongPressGestureRecognizer, TapGestureRecognizer} =
+      window.__api;
+    const seen: string[] = [];
+    Object.assign(window, {__tapOrHold: seen});
+    const tap = new TapGestureRecognizer({name: 'tap'});
+    tap.addListener(r => {
+      if (r.state === 'ended') {
+        seen.push('tap');
+      }
+    });
+    const hold = new LongPressGestureRecognizer({name: 'hold'});
+    hold.addListener(r => {
+      if (r.state === 'began') {
+        seen.push('hold');
+      }
+    });
+    host.attach(target, tap);
+    host.attach(target, hold);
+  });
+  const at = await center(page, 'tapOrHold');
+  await holdEveryLift(page, 160);
+  await driver.play([
+    {t: 0, down: [{...at, id: 1}]},
+    {t: 380, down: []},
+  ]);
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(
+          () => (window as unknown as {__tapOrHold: string[]}).__tapOrHold,
+        ),
+      {message: 'the tap stays a tap'},
+    )
+    .toEqual(['tap']);
+});
 
 test('pinch-zoom stays the browser’s on an element without a pinch recognizer', async ({
   page,
@@ -1903,6 +2114,60 @@ test.describe('under a fine primary pointer (spec:AST-094 FR43, FR24)', () => {
 
 test.describe('where the primary pointer is fine', () => {
   test.use({hasTouch: false, isMobile: false});
+  test('a pan on its own scroller takes the trackpad scroll a finger would pan, a scroller inside it takes the wheel first, and a mouse wheel scrolls natively (spec:AST-094 FR43)', async ({
+    page,
+    browserName,
+  }) => {
+    await page.goto('about:blank');
+    await page.setContent(
+      '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><body style="margin: 0"></body>',
+    );
+    await page.addScriptTag({content: bareBundle});
+    await page.evaluate(() => {
+      const {host, PanGestureRecognizer} = window.__api;
+      document.body.innerHTML =
+        '<div id="row" style="width: 300px; overflow-x: auto; white-space: nowrap"><div id="inner" style="display: inline-block; width: 150px; overflow-x: auto"><div style="width: 600px; height: 60px">inner</div></div><div style="display: inline-block; width: 900px; height: 60px">row</div></div>';
+      const pan = new PanGestureRecognizer({
+        direction: 'horizontal',
+        allowedScrollTypes: ['continuous'],
+      });
+      pan.addTransitionListener((_recognizer, _from, to) =>
+        window.__wheelLog.push(`pan:${to}`),
+      );
+      host.attach(document.getElementById('row') as HTMLElement, pan);
+    });
+    const driver = await webInputDriver(page);
+    test.skip(!driver.wheels, WHEEL_SKIP);
+    const read = async () =>
+      page.evaluate(() => ({
+        row: (document.getElementById('row') as HTMLElement).scrollLeft,
+        inner: (document.getElementById('inner') as HTMLElement).scrollLeft,
+        log: window.__wheelLog.splice(0),
+      }));
+    const swipe = async (x: number) => {
+      for (let step = 0; step < 4; step += 1) {
+        await driver.wheel({x, y: 30, dx: 16});
+      }
+      await page.waitForTimeout(250);
+      return read();
+    };
+    if (browserName === 'chromium') {
+      // Chromium's driver wheels read as a mouse's: the row scrolls natively.
+      const mouse = await swipe(250);
+      expect(mouse.row).toBeGreaterThan(0);
+      expect(mouse.log).toEqual([]);
+      return;
+    }
+    // On the row itself, a trackpad scroll is the pan's, and the row holds.
+    const own = await swipe(250);
+    expect(own.log[0]).toBe('pan:began');
+    expect(own.row).toBe(0);
+    // Over the scroller inside it, the inner scroller scrolls first.
+    const inner = await swipe(50);
+    expect(inner.inner).toBeGreaterThan(0);
+    expect(inner.log).toEqual([]);
+  });
+
   test('a scroll-edge pan takes a trackpad scroll only at the top of the page that scrolls it, pulling the content down; mid-page the page scrolls (spec:AST-094 FR43, FR19)', async ({
     page,
     browserName,
@@ -1989,17 +2254,32 @@ test.describe('where the primary pointer is fine', () => {
     const driver = await webInputDriver(page);
     test.skip(!driver.wheels, WHEEL_SKIP);
     const card = await center(page, 'card');
-    // Six 16 px steps at a still cursor: the card leaves it after two.
-    for (let step = 0; step < 6; step += 1) {
-      await driver.wheel({...card, dx: 16});
-    }
+    // One trackpad scroll at a still cursor, a step a frame. Its first 48 px
+    // step takes the card off the cursor at once. The three 16 px steps after
+    // it land off the card, merged or not, so only the latch carries them.
+    // Awaited steps land a round trip apart, which a loaded runner stretches
+    // past the scroll's end. The burst keeps a frame between steps and fails
+    // a split by name.
+    const {receivedSteps} = await driver.wheelBurst({
+      ...card,
+      steps: [{dx: 48}, {dx: 16}, {dx: 16}, {dx: 16}],
+      maxGapMs: WHEEL_SCROLL_END_MS.horizontal,
+    });
     await page.waitForTimeout(250);
     const pan = await page.evaluate(() =>
       window.__wheelLog.filter(entry => entry.startsWith('pan:')),
     );
     const moved = pan.filter(entry => entry.startsWith('pan:changed:'));
     // Every step after the first moved the card, and none scrolled the page.
-    expect(moved).toHaveLength(5);
+    // WebKit merges the steps it holds while the page is busy, as it does a
+    // trackpad's. So the count is of the steps the page received. The card
+    // took all 96 px past the 10 px hysteresis.
+    expect(moved).toHaveLength(receivedSteps - 1);
+    const shown = pan.filter(entry => /^pan:(began|changed):/.test(entry));
+    expect(shown.at(-1)?.split(':')[2]).toBe('-86');
+    // The card had left the cursor, half its 60 px width, before the last
+    // wheel reached the page. So the latch carried that wheel.
+    expect(Number(shown.at(-2)?.split(':')[2])).toBeLessThan(-30);
     expect(pan.slice(-2).map(entry => entry.split(':')[1])).toEqual([
       'ended',
       'possible',
@@ -2179,9 +2459,15 @@ test.describe('where the primary pointer is fine', () => {
     const driver = await webInputDriver(page);
     test.skip(!driver.wheels, WHEEL_SKIP);
     const strip = await center(page, 'strip');
-    for (let step = 0; step < 6; step += 1) {
-      await driver.wheel({...strip, dx: 8});
-    }
+    // Six 8 px steps a frame apart. WebKit reads them as one trackpad scroll,
+    // whose first step stays under the pan's 10 px hysteresis, so a split
+    // fails the burst by name. Chromium's notches are no trackpad scroll.
+    await driver.wheelBurst({
+      ...strip,
+      steps: Array.from({length: 6}, () => ({dx: 8})),
+      maxGapMs:
+        browserName === 'webkit' ? WHEEL_SCROLL_END_MS.horizontal : undefined,
+    });
     await page.waitForTimeout(250);
     const pan = await page.evaluate(() =>
       window.__wheelLog.filter(entry => entry.startsWith('pan:')),
@@ -2197,9 +2483,10 @@ test.describe('where the primary pointer is fine', () => {
       // WebKit's sends a trackpad's precise deltas, which the pan follows.
       expect(pan[0]).toMatch(/^pan:began:/);
       expect(pan.some(entry => entry.startsWith('pan:ended:'))).toBe(true);
-      // The content moves the way the fingers do: a scroll right drags it left.
-      const moved = pan.filter(entry => entry.startsWith('pan:changed:'));
-      expect(Number(moved.at(-1)?.split(':')[2])).toBeLessThan(0);
+      // The content moves the way the fingers do: a scroll right drags it
+      // left. WebKit may merge the steps into the pan's first move.
+      const shown = pan.filter(entry => /^pan:(began|changed):/.test(entry));
+      expect(Number(shown.at(-1)?.split(':')[2])).toBeLessThan(0);
       expect(await page.evaluate(() => window.scrollX)).toBe(0);
     }
     // Across the pan's axis the wheel is the page's.
@@ -3061,4 +3348,165 @@ test('a watcher follows a touch the browser scrolls with to the lift, and cancel
     'ended',
     'possible',
   ]);
+});
+
+test("a pan on an element in a same-origin iframe follows a finger: the host reads that window's nodes and touches", async ({
+  page,
+  browserName,
+}) => {
+  const driver = await openBare(page, browserName);
+  // The page's code drives an iframe's document, as a component rendered into
+  // another window's document does. The iframe's nodes and touch events
+  // belong to its own window.
+  const start = await page.evaluate(() => {
+    const frame = document.createElement('iframe');
+    frame.style.cssText =
+      'position: absolute; left: 0; top: 0; width: 320px; height: 480px; border: 0';
+    document.body.append(frame);
+    const doc = frame.contentDocument as Document;
+    doc.body.style.margin = '0';
+    doc.body.innerHTML =
+      '<div id="pad" style="width: 240px; height: 240px; background: #ddd"></div>';
+    const pad = doc.getElementById('pad') as HTMLElement;
+    const {getGestureHost, PanGestureRecognizer} = window.__api;
+    const pan = new PanGestureRecognizer();
+    const states: string[] = [];
+    (window as unknown as {__frameStates: string[]}).__frameStates = states;
+    pan.addTransitionListener((_current, _from, to) => states.push(to));
+    getGestureHost(doc).attach(pad, pan);
+    const box = pad.getBoundingClientRect();
+    return {x: box.left + box.width / 2, y: box.top + box.height / 2};
+  });
+  await driver.play(drag(start, {x: start.x + 80, y: start.y + 4}));
+  const states = await page.evaluate(
+    () => (window as unknown as {__frameStates: string[]}).__frameStates,
+  );
+  expect(states[0]).toBe('began');
+  expect(states).toContain('changed');
+  expect(states.slice(-2)).toEqual(['ended', 'possible']);
+});
+
+test('a pan on an element the page moves into a same-origin iframe keeps its touch-action and follows a finger', async ({
+  page,
+  browserName,
+}) => {
+  const driver = await openBare(page, browserName);
+  // Document Picture-in-Picture moves the page's own elements into another
+  // window's document, where they keep the page's classes. A pan on the page
+  // gives the expected touch-action.
+  const start = await page.evaluate(() => {
+    const {getGestureHost, PanGestureRecognizer} = window.__api;
+    const reference = document.createElement('div');
+    document.body.append(reference);
+    getGestureHost(document).attach(reference, new PanGestureRecognizer());
+    const expected = getComputedStyle(reference).touchAction;
+    reference.remove();
+    const frame = document.createElement('iframe');
+    frame.style.cssText =
+      'position: absolute; left: 0; top: 0; width: 320px; height: 480px; border: 0';
+    document.body.append(frame);
+    const doc = frame.contentDocument as Document;
+    doc.body.style.margin = '0';
+    const pad = document.createElement('div');
+    pad.style.cssText = 'width: 240px; height: 240px; background: #ddd';
+    doc.body.append(pad);
+    const pan = new PanGestureRecognizer();
+    const states: string[] = [];
+    (window as unknown as {__movedStates: string[]}).__movedStates = states;
+    pan.addTransitionListener((_current, _from, to) => states.push(to));
+    getGestureHost(doc).attach(pad, pan);
+    const box = pad.getBoundingClientRect();
+    return {
+      x: box.left + box.width / 2,
+      y: box.top + box.height / 2,
+      expected,
+      touchAction: (doc.defaultView as Window).getComputedStyle(pad)
+        .touchAction,
+    };
+  });
+  expect(start.expected).not.toBe('auto');
+  expect(start.touchAction).toBe(start.expected);
+  await driver.play(drag(start, {x: start.x + 80, y: start.y + 4}));
+  const states = await page.evaluate(
+    () => (window as unknown as {__movedStates: string[]}).__movedStates,
+  );
+  expect(states[0]).toBe('began');
+  expect(states).toContain('changed');
+  expect(states.slice(-2)).toEqual(['ended', 'possible']);
+});
+
+test("a press in a same-origin iframe's scroll view waits the content-touch delay from the touch, on that window's clock (spec:AST-094 FR11)", async ({
+  page,
+  browserName,
+}) => {
+  const driver = await openBare(page, browserName);
+  // An iframe's clock starts when its document does, after the page's. Its
+  // touches carry times on that clock.
+  const {clockGap, ...start} = await page.evaluate(async () => {
+    // The iframe opens well after the page, as a popup or a late iframe does.
+    await new Promise(resolve => {
+      setTimeout(resolve, Math.max(0, 400 - performance.now()));
+    });
+    const frame = document.createElement('iframe');
+    frame.style.cssText =
+      'position: absolute; left: 0; top: 0; width: 320px; height: 480px; border: 0';
+    document.body.append(frame);
+    const doc = frame.contentDocument as Document;
+    const view = doc.defaultView as Window;
+    doc.body.style.margin = '0';
+    doc.body.innerHTML =
+      '<div style="height: 300px; overflow-y: auto"><div id="row" style="height: 80px; background: #ddd"></div><div style="height: 900px"></div></div>';
+    const row = doc.getElementById('row') as HTMLElement;
+    const times: {touch?: number; handled?: number; highlight?: number} = {};
+    (window as unknown as {__frameTimes: typeof times}).__frameTimes = times;
+    // On the window's capture phase, added before the host's listener there,
+    // so this reads its clocks first. The host reads its own after, never
+    // before, however long a busy machine holds the page between them.
+    view.addEventListener(
+      'touchstart',
+      event => {
+        times.touch = event.timeStamp;
+        times.handled = view.performance.now();
+      },
+      {capture: true},
+    );
+    const {getGestureHost, createPressTracker} = window.__api;
+    const tracker = createPressTracker({
+      getBounds: () => row.getBoundingClientRect(),
+      onHighlightChange: isHighlighted => {
+        if (isHighlighted && times.highlight == null) {
+          times.highlight = view.performance.now();
+        }
+      },
+    });
+    getGestureHost(doc).attachConsumer(row, tracker);
+    const box = row.getBoundingClientRect();
+    return {
+      x: box.left + box.width / 2,
+      y: box.top + box.height / 2,
+      clockGap: view.performance.timeOrigin - performance.timeOrigin,
+    };
+  });
+  // The case needs the clocks apart: an age read on the page's clock then
+  // cuts the wait short.
+  expect(clockGap).toBeGreaterThan(150);
+  await driver.play([{t: 0, down: [{...start, id: 1}]}]);
+  await page.waitForFunction(
+    () =>
+      (window as unknown as {__frameTimes: {highlight?: number}}).__frameTimes
+        .highlight != null,
+  );
+  await driver.play([{t: 0, down: []}]);
+  const times = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __frameTimes: {touch: number; handled: number; highlight: number};
+        }
+      ).__frameTimes,
+  );
+  // The wait counts from the touch. Chromium's driver stamps a touch ahead of
+  // its delivery, and a time ahead of now counts as now.
+  const touchedAt = Math.min(times.touch, times.handled);
+  expect(times.highlight - touchedAt).toBeGreaterThanOrEqual(145);
 });

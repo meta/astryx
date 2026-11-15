@@ -19,8 +19,12 @@ import {
   type ISODateTimeString,
 } from '../DateTimeInput/DateTimeInput';
 import {InternationalizationProvider} from '../i18n/InternationalizationProvider';
-import {createMonthModel} from './monthGeometry';
-import type {CalendarSystem} from '../utils/calendarSystem';
+import {createMonthModel, dateInMonth} from './monthGeometry';
+import {
+  type CalendarSystem,
+  calendarDateFromFields,
+  calendarDayOfMonth,
+} from '../utils/calendarSystem';
 import type {ISODateString} from '../utils/dateTypes';
 import {plainDateAddDays, plainDateFromISO} from '../utils/plainDate';
 
@@ -213,9 +217,12 @@ describe('the bottom sheet in a calendar', () => {
     ).not.toContain('Adar I 5785');
   });
 
+  // English names the Ethiopic era "ERA1" in CLDR 47, which has no name for
+  // it, and "AM" in CLDR 48. Any other version expects "AM".
+  const era = process.versions.cldr?.startsWith('47.') ? 'ERA1' : 'AM';
   it.each([
-    ['a common year', '2026-09-08', 'Pagumen 2018 AM', 5, '2026-09-06'],
-    ['a leap year', '2027-09-08', 'Pagumen 2019 AM', 6, '2027-09-06'],
+    ['a common year', '2026-09-08', `Pagumen 2018 ${era}`, 5, '2026-09-06'],
+    ['a leap year', '2027-09-08', `Pagumen 2019 ${era}`, 6, '2027-09-06'],
   ])(
     'keeps six rows for the Ethiopic thirteenth month in %s',
     (_name, value, label, length, first) => {
@@ -472,5 +479,35 @@ describe('the month model', () => {
       year: 5785,
       month: 6,
     });
+  });
+
+  it('moves a date by calendar months, keeping its day of the month', () => {
+    const persian = createMonthModel('persian');
+    const mehr = persian.indexOfYearMonth(1405, 7);
+    // Shahrivar has 31 days and Mehr 30, so the 31st becomes the 30th.
+    for (const [day, expected] of [
+      [15, 15],
+      [31, 30],
+    ] as const) {
+      const shahrivar = calendarDateFromFields('persian', {
+        year: 1405,
+        month: 6,
+        day,
+      })!;
+      const moved = dateInMonth(persian, shahrivar, mehr);
+      expect(persian.indexOf(moved)).toBe(mehr);
+      expect(calendarDayOfMonth('persian', moved)).toBe(expected);
+    }
+    // Adar I has 30 days in the leap year 5784; Adar of 5785 has 29.
+    const hebrew = createMonthModel('hebrew');
+    const adar = hebrew.indexOfYearMonth(5785, 6);
+    const adarI30 = calendarDateFromFields('hebrew', {
+      year: 5784,
+      month: 6,
+      day: 30,
+    })!;
+    const moved = dateInMonth(hebrew, adarI30, adar);
+    expect(hebrew.indexOf(moved)).toBe(adar);
+    expect(calendarDayOfMonth('hebrew', moved)).toBe(29);
   });
 });

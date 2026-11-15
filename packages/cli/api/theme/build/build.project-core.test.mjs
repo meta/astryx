@@ -17,7 +17,11 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
-import {coreUnavailableMessage, themeBuild} from './build.mjs';
+import {
+  coreUnavailableMessage,
+  themeBuild,
+  validateThemePrivateInputs,
+} from './build.mjs';
 import {fetchCarriedThemeCoreDir} from '../_adapter.mjs';
 
 vi.mock('../_adapter.mjs', async importOriginal => {
@@ -135,6 +139,50 @@ describe('theme build generates with the Core the project installed', () => {
         .replace(/^\/\*[\s\S]*?\*\/\n/, '');
     expect(rules(app)).toBe(rules(bare));
     expect(rules(app)).toContain('#0a0a0a');
+  });
+
+  it('loads the app’s installed root only for a theme that imports it', async () => {
+    const app = makeDir();
+    installCore(app);
+    fs.writeFileSync(
+      path.join(app, 'harbor.mjs'),
+      "import {defineTheme} from '@astryxdesign/core';\nexport default defineTheme({name: 'harbor', tokens: {'--color-bg': '#0b0b0b'}});\n",
+    );
+    await themeBuild('harbor.mjs', {}, {cwd: app});
+    expect(globalThis.__astryxProjectCoreLoads).toEqual(['theme', 'root']);
+    expect(fs.readFileSync(path.join(app, 'harbor.css'), 'utf-8')).toContain(
+      '#0b0b0b',
+    );
+  });
+
+  it('checks a theme’s private inputs without loading the app’s installed root when the theme does not import it', async () => {
+    // The doctor's check: the CommonJS patch wraps the installed Core for a
+    // `.cjs` dependency, and wraps its root only if something requires it.
+    const app = makeDir();
+    installCore(app);
+    expect(await validateThemePrivateInputs('ocean.mjs', {cwd: app})).toEqual(
+      [],
+    );
+    expect(globalThis.__astryxProjectCoreLoads).toEqual(['theme']);
+  });
+
+  it('checks the private inputs of every theme beside an installed Core whose theme entry fails to load', async () => {
+    // Doctor runs this check for each added theme. A `.cjs` dependency could
+    // not load that entry either, so the CommonJS patch skips it.
+    const app = makeDir();
+    installCore(app, {
+      themeModule: "throw new Error('the theme entry failed to load');\n",
+    });
+    fs.writeFileSync(
+      path.join(app, 'harbor.mjs'),
+      "export default {name: 'harbor', tokens: {'--_card-radius': '4px'}};\n",
+    );
+    expect(await validateThemePrivateInputs('ocean.mjs', {cwd: app})).toEqual(
+      [],
+    );
+    const errors = await validateThemePrivateInputs('harbor.mjs', {cwd: app});
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain('--_card-radius');
   });
 
   it('keeps the CLI’s own Core when the project has none', async () => {

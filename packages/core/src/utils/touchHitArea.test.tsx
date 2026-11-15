@@ -5,10 +5,10 @@
  * @input Vitest, Testing Library, StyleX's injected rules, and a stubbed
  *   watchHitArea (utils/hitArea.ts)
  * @output Tests for the shared touch hit area hook and layer. They cover what
- *   the hook watches, a measurement while the parent moves, the stop, and the
- *   layer's CSS.
+ *   the hook watches, an owner's growth and press check, a measurement while
+ *   the parent moves, the stop, and the layer's CSS.
  * @position Unit test for utils/touchHitArea.ts and
- *   utils/touchHitArea.stylex.ts. List/ListItem.hitArea.test.tsx covers the
+ *   internal/touchHitArea.stylex.ts. List/ListItem.hitArea.test.tsx covers the
  *   row wiring.
  */
 
@@ -17,7 +17,7 @@ import * as stylex from '@stylexjs/stylex';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import type * as HitAreaModule from './hitArea';
-import {HIT_INSET_PROPERTIES, type HitInsets} from './hitArea';
+import {HIT_INSET_PROPERTIES, type HitInsets, type HitRect} from './hitArea';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 
 const watches = vi.hoisted(
@@ -26,6 +26,7 @@ const watches = vi.hoisted(
       element: Element;
       onInsets: (insets: HitInsets) => void;
       minSize: number | undefined;
+      options: HitAreaModule.WatchHitAreaOptions | undefined;
       stop: ReturnType<typeof vi.fn>;
     }[],
 );
@@ -37,17 +38,23 @@ vi.mock('./hitArea', async importOriginal => {
     watchHitArea: (
       element: Element,
       onInsets: (insets: HitInsets) => void,
-      options?: {readonly minSize?: number},
+      options?: HitAreaModule.WatchHitAreaOptions,
     ) => {
       const stop = vi.fn();
-      watches.push({element, onInsets, minSize: options?.minSize, stop});
+      watches.push({
+        element,
+        onInsets,
+        minSize: options?.minSize,
+        options,
+        stop,
+      });
       return stop;
     },
   };
 });
 
 import {useTouchHitArea} from './touchHitArea';
-import {touchHitAreaStyles} from './touchHitArea.stylex';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 
 function Host({
   enabled,
@@ -81,8 +88,11 @@ function Host({
   );
 }
 
-/** The element's injected `::after` rules, split by the touch gate. */
-function afterRules(el: Element): {touch: string[]; other: string[]} {
+/** The element's injected rules for `pseudo`, split by the touch gate. */
+function pseudoRules(
+  el: Element,
+  pseudo: '::after' | '::before' = '::after',
+): {touch: string[]; other: string[]} {
   const classes = el.className
     .split(/\s+/)
     .filter(Boolean)
@@ -92,7 +102,7 @@ function afterRules(el: Element): {touch: string[]; other: string[]} {
     for (const rule of Array.from(rules)) {
       if (rule instanceof CSSStyleRule) {
         if (
-          rule.selectorText.includes('::after') &&
+          rule.selectorText.includes(pseudo) &&
           classes.some(cls => rule.selectorText.startsWith(cls))
         ) {
           (touch ? out.touch : out.other).push(
@@ -152,6 +162,36 @@ describe('useTouchHitArea', () => {
     host.unmount();
     await Promise.resolve();
     expect(watches[1].stop).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes an owner's growth, with the element, its press check and its descendant-touch choice to the watch; a plain watch keeps the defaults", () => {
+    const grown = {top: 1, right: 2, bottom: 3, left: 4};
+    const growth = vi.fn(() => grown);
+    const options = {growth, checkAtPress: false, ownsDescendantTouches: false};
+    function Owner() {
+      const hitAreaRef = useTouchHitArea(true, options);
+      return <span data-testid="owner" ref={hitAreaRef} />;
+    }
+    render(
+      <>
+        <Owner />
+        <Host enabled />
+      </>,
+    );
+    const owner = screen.getByTestId('owner');
+    const ownerWatch = watches.find(watch => watch.element === owner);
+    const plainWatch = watches.find(
+      watch => watch.element === screen.getByTestId('host'),
+    );
+    expect(ownerWatch?.options?.checkAtPress).toBe(false);
+    expect(ownerWatch?.options?.ownsDescendantTouches).toBe(false);
+    const box = {left: 0, top: 0, right: 32, bottom: 32};
+    const toLayout = (rect: HitRect) => rect;
+    expect(ownerWatch?.options?.growth?.(box, toLayout)).toBe(grown);
+    expect(growth).toHaveBeenCalledWith(box, toLayout, owner);
+    expect(plainWatch?.options?.growth).toBeUndefined();
+    expect(plainWatch?.options?.checkAtPress).toBeUndefined();
+    expect(plainWatch?.options?.ownsDescendantTouches).toBe(true);
   });
 
   it('follows a replaced element: the new element is watched and the old one’s watch stops', async () => {
@@ -315,7 +355,7 @@ describe('useTouchHitArea across re-renders', () => {
 describe('touchHitAreaStyles.layer', () => {
   it('is a coarse-only ::after grown on all four sides by the inset properties past the host’s border, the element as its clip-path hole, with no z-index of its own, painting nothing, and the host starting no stacking context', () => {
     render(<Host enabled={false} />);
-    const {touch, other} = afterRules(screen.getByTestId('host'));
+    const {touch, other} = pseudoRules(screen.getByTestId('host'));
     const layer = touch.join('\n');
     expect(layer).toContain('position: absolute');
     // Offset from the host's padding box: the inset, plus the border the host
@@ -338,5 +378,30 @@ describe('touchHitAreaStyles.layer', () => {
     );
     // With a mouse: no pseudo-element.
     expect(other).toEqual([]);
+  });
+});
+
+describe('touchHitAreaStyles.layerBelowChildren', () => {
+  it("is the same coarse-only band as the host's ::before, so the host's positioned children paint over its edge, and draws no ::after", () => {
+    render(
+      <>
+        <span
+          data-testid="below"
+          {...stylex.props(touchHitAreaStyles.layerBelowChildren)}
+        />
+        <span data-testid="above" {...stylex.props(touchHitAreaStyles.layer)} />
+      </>,
+    );
+    const below = screen.getByTestId('below');
+    const declarations = (rules: string[]) =>
+      rules.map(rule => rule.slice(rule.indexOf('{'))).sort();
+    const band = pseudoRules(below, '::before');
+    expect(band.touch.length).toBeGreaterThan(0);
+    expect(declarations(band.touch)).toEqual(
+      declarations(pseudoRules(screen.getByTestId('above')).touch),
+    );
+    // With a mouse: no pseudo-element, and never an `::after`.
+    expect(band.other).toEqual([]);
+    expect(pseudoRules(below)).toEqual({touch: [], other: []});
   });
 });

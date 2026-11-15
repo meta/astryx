@@ -548,7 +548,7 @@ describe('useTablePagination', () => {
       const nextButton = screen.getByRole('button', {
         name: 'Go to next page',
       });
-      expect(nextButton).not.toBeDisabled();
+      expect(nextButton).not.toHaveAttribute('aria-disabled');
     });
 
     it('passes onPageSizeChange and pageSizeOptions', () => {
@@ -610,8 +610,8 @@ describe('useTablePagination', () => {
       const nextButton = screen.getByRole('button', {
         name: 'Go to next page',
       });
-      expect(prevButton).toBeDisabled();
-      expect(nextButton).toBeDisabled();
+      expect(prevButton).toHaveAttribute('aria-disabled', 'true');
+      expect(nextButton).toHaveAttribute('aria-disabled', 'true');
     });
 
     it('handles rapid page changes', async () => {
@@ -664,7 +664,7 @@ describe('useTablePagination', () => {
       const prevButton = screen.getByRole('button', {
         name: 'Go to previous page',
       });
-      expect(prevButton).toBeDisabled();
+      expect(prevButton).toHaveAttribute('aria-disabled', 'true');
     });
   });
 });

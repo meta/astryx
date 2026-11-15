@@ -267,6 +267,36 @@ describe('TopNavMenu — drawer focus ring', () => {
   });
 });
 
+describe('TopNavMenu — drawer actions', () => {
+  it('makes an expanded onClick-only item a keyboard-operable non-submit button', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <TopNavRenderContext value="drawer">
+        <TopNavMenu label="Help" items={[{title: 'Start tour', onClick}]} />
+      </TopNavRenderContext>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Help'});
+    expect(screen.queryByRole('button', {name: 'Start tour'})).toBeNull();
+    await user.tab();
+    expect(trigger).toHaveFocus();
+    await user.keyboard('{Enter}');
+    const action = screen.getByRole('button', {name: 'Start tour'});
+    expect(action).toHaveAttribute('type', 'button');
+    await user.tab();
+    expect(action).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(onClick).toHaveBeenCalledTimes(1);
+    await user.keyboard(' ');
+    expect(onClick).toHaveBeenCalledTimes(2);
+    await user.click(action);
+    expect(onClick).toHaveBeenCalledTimes(3);
+    await user.click(trigger);
+    expect(screen.queryByRole('button', {name: 'Start tour'})).toBeNull();
+    expect(action.closest('[inert]')).not.toBeNull();
+  });
+});
+
 describe('TopNavMenu — drawer collapsed section', () => {
   it('makes collapsed items inert and hidden from assistive technology', async () => {
     const user = userEvent.setup();

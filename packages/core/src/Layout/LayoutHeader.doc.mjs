@@ -6,11 +6,7 @@ export const docs = {
   name: 'LayoutHeader',
   subComponentOf: 'Layout',
   displayName: 'Layout Header',
-  keywords: [
-    'pageheader',
-    'appheader',
-    'header',
-  ],
+  keywords: ['pageheader', 'appheader', 'header'],
   isHiddenFromOverview: true,
   description: 'Top bar for page titles, app bars, and toolbars.',
   playground: {
@@ -31,18 +27,26 @@ export const docs = {
     {
       name: 'hasDivider',
       type: 'boolean',
-      description: 'Border at bottom edge.',
+      description:
+        "Border at bottom edge. When unset, the parent Layout's defaultHasDividers decides.",
       default: 'false',
     },
     {
       name: 'height',
       type: 'SizeValue',
-      description: 'Header height. Numbers are treated as pixels, strings are used as-is.',
+      description:
+        'Header height. Numbers are treated as pixels, strings are used as-is.',
     },
     {
       name: 'label',
       type: 'string',
       description: 'Accessible label for the landmark element.',
+    },
+    {
+      name: 'padding',
+      type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10',
+      description:
+        'Internal padding on every edge, using the spacing scale. Replaces the inset from the layout; 0 is full bleed.',
     },
     {
       name: 'paddingBlockEnd',
@@ -54,6 +58,11 @@ export const docs = {
       name: 'role',
       type: 'AriaRole',
       description: 'ARIA landmark role.',
+    },
+    {
+      name: 'ref',
+      type: 'React.Ref<HTMLDivElement>',
+      description: 'Ref forwarded to the header element.',
     },
   ],
 };
@@ -72,7 +81,8 @@ export const docsZh = {
     {
       name: 'hasDivider',
       type: 'boolean',
-      description: '底部边缘的边框。',
+      description:
+        '底部边缘的边框。未设置时，由父级 Layout 的 defaultHasDividers 决定。',
       default: 'false',
     },
     {
@@ -86,6 +96,12 @@ export const docsZh = {
       description: '地标元素的无障碍标签。',
     },
     {
+      name: 'padding',
+      type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10',
+      description:
+        '所有边的内边距，使用间距刻度。替换布局提供的内边距；0 表示全出血。',
+    },
+    {
       name: 'paddingBlockEnd',
       type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10',
       description:
@@ -95,6 +111,11 @@ export const docsZh = {
       name: 'role',
       type: 'AriaRole',
       description: 'ARIA 地标角色。',
+    },
+    {
+      name: 'ref',
+      type: 'React.Ref<HTMLDivElement>',
+      description: '转发到页眉元素的 ref。',
     },
   ],
 };
@@ -106,11 +127,14 @@ export const docsDense = {
   description: 'Top bar for page titles, app bars, toolbars.',
   propDescriptions: {
     children: 'Header content.',
-    hasDivider: 'Border at bottom edge.',
+    hasDivider: 'Border at bottom edge; unset uses the Layout default.',
     height: 'Header height.',
     label: 'Accessible label for landmark element.',
+    padding:
+      'Padding on every edge; replaces the layout inset. 0 is full bleed.',
     paddingBlockEnd:
       'Block-end (bottom) padding override; wins over padding on that edge. 0 docks the last child on the header bottom edge.',
     role: 'ARIA landmark role.',
+    ref: 'Ref forwarded to the header element.',
   },
 };

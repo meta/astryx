@@ -159,7 +159,7 @@ describe('IconButton', () => {
     );
 
     const button = screen.getByRole('button');
-    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute('aria-disabled', 'true');
     await user.click(button);
     expect(handleClick).not.toHaveBeenCalled();
   });

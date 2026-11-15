@@ -18,7 +18,7 @@ export const docs = {
       {guidance: false, description: 'Use Banner for short-lived messages that disappear on their own; use Toast instead.'},
       {guidance: false, description: 'Stack multiple banners with the same status; combine related messages into one banner.'},
       {guidance: true, description: 'Set collapsible={false} when the user needs the content to act on the message, like the list of fields that failed validation. Keep the default toggle when the detail is long enough to bury the banner\'s own message.'},
-      {guidance: true, description: 'Banner status controls color and icon only; it does not create a live region. Announce async outcomes from the transition handler with useAnnounce. Add an explicit role="status" only when the visible banner is intended as a persistent semantic mirror; reserve role="alert" for genuinely urgent, interruptive content.'},
+      {guidance: true, description: 'Banner status controls color and icon only; it does not create a live region. Announce async outcomes from the transition handler with useAnnounce. Pass role="alert" only for an urgent message the person must act on now: Banner puts it on the title and description, so controls, endContent and supporting content are not read as part of the alert. Do not also announce that message with useAnnounce.'},
       {guidance: false, description: 'Rely on the status color or icon alone to carry meaning; say which status it is in the title text, because the icon is decorative to a screen reader.'},
     ],
     anatomy: [
@@ -196,7 +196,7 @@ export const docsZh = {
       {guidance: true, description: 'Keep titles short and scannable: "Payment failed" not "There was a problem processing your most recent payment."'},
       {guidance: false, description: 'Use Banner for short-lived messages that disappear on their own; use Toast instead.'},
       {guidance: false, description: 'Stack multiple banners with the same status; combine related messages into one banner.'},
-      {guidance: true, description: 'Banner 的 status 仅控制颜色和图标，不创建实时区域。异步结果应在实际的状态转换处理函数中调用 useAnnounce。仅当可见 Banner 需要作为持久语义镜像时显式添加 role="status"；只有真正紧急、需要打断当前朗读的内容才使用 role="alert"。'},
+      {guidance: true, description: 'Banner 的 status 仅控制颜色和图标，不创建实时区域。异步结果应在实际的状态转换处理函数中调用 useAnnounce。仅当消息紧急、用户必须立即处理时才传入 role="alert"：Banner 会把它放在标题和描述上，因此控件、endContent 和补充内容不会作为警报的一部分被朗读。不要再用 useAnnounce 重复播报同一条消息。'},
       {guidance: false, description: '不要只依赖 status 的颜色或图标传达含义；请在标题文本中明确说明状态，因为屏幕阅读器会忽略这个装饰性图标。'},
     ],
     anatomy: [
@@ -285,7 +285,7 @@ export const docsDense = {
       {guidance: true, description: 'Keep titles short: "Payment failed" not "There was a problem processing your payment."'},
       {guidance: false, description: 'Use for auto-dismissing messages; use Toast instead.'},
       {guidance: false, description: 'Stack multiple banners of the same status; combine into one.'},
-      {guidance: true, description: 'Status controls color + icon only; Banner is non-live by default. Announce async outcomes from the transition handler with useAnnounce. Add role="status" only for a persistent semantic mirror; reserve role="alert" for genuinely urgent interruption.'},
+      {guidance: true, description: 'Status controls color + icon only; Banner is non-live by default. Announce async outcomes from the transition handler with useAnnounce. role="alert" only for urgent messages; it lands on title + description, not controls or content. Never both.'},
       {guidance: false, description: 'Rely on status color or icon alone; state the status in the title text, since the icon is decorative to a screen reader.'},
     ],
     anatomy: [

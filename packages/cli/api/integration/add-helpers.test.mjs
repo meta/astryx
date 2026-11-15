@@ -4,11 +4,12 @@ import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {applyWrites, packageJsonFilesUpdate} from './add-helpers.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-add-helpers-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-add-helpers-'));
 });
 
 afterEach(() => {

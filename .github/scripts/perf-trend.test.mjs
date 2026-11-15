@@ -18,12 +18,14 @@ import {
   appendRun,
   baselineMedians,
   evaluateRun,
+  findNoBaseline,
   findRegressions,
   isRecordable,
   isRegression,
   lastGoodRun,
   median,
   readResults,
+  readRunner,
   renderSummary,
   runReport,
 } from './perf-trend.mjs';
@@ -41,12 +43,18 @@ const SCENE = {
   listenerDelta: 0,
 };
 
+const CPU_A = 'AMD EPYC 7763 64-Core Processor';
+const CPU_B = 'Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz';
+const RUNNER_A = {cpu: CPU_A, calibrationMs: 40};
+const RUNNER_B = {cpu: CPU_B, calibrationMs: 75};
+
 function run(days, scenes = {table: SCENE}, extra = {}) {
   return {
     sha: `sha-${days}`,
     runId: days,
     date: daysBefore(days),
     good: true,
+    runner: RUNNER_A,
     scenes,
     ...extra,
   };
@@ -222,6 +230,7 @@ describe('evaluateRun', () => {
       scenes: {table: {...SCENE, mountLongTaskMs: 200}},
       history,
       run: NIGHTLY,
+      runner: RUNNER_A,
     });
     expect(report.regressions.map(r => r.metric)).toEqual(['mountLongTaskMs']);
     expect(report.pending).toEqual([]);
@@ -239,6 +248,7 @@ describe('evaluateRun', () => {
       scenes: {table: {...SCENE, mountLongTaskMs: 200}},
       history: firstTime,
       run: NIGHTLY,
+      runner: RUNNER_A,
     });
     expect(report.regressions).toEqual([]);
     expect(report.pending.map(r => r.metric)).toEqual(['mountLongTaskMs']);
@@ -254,6 +264,7 @@ describe('evaluateRun', () => {
       scenes: {table: {...SCENE, mountLayouts: 20}},
       history,
       run: NIGHTLY,
+      runner: RUNNER_A,
     });
     expect(report.regressions).toEqual([]);
     expect(report.pending.map(r => r.metric)).toEqual(['mountLayouts']);
@@ -264,6 +275,7 @@ describe('evaluateRun', () => {
       scenes: {table: {...SCENE, mountLongTaskMs: 200}},
       history: firstTime,
       run: NIGHTLY,
+      runner: RUNNER_A,
     });
     expect(report.regressions).toEqual([]);
   });
@@ -273,6 +285,7 @@ describe('evaluateRun', () => {
       scenes: {table: SCENE},
       history,
       run: NIGHTLY,
+      runner: RUNNER_A,
     });
     expect(report.regressions).toEqual([]);
     expect(report.pending).toEqual([]);
@@ -288,10 +301,160 @@ describe('evaluateRun', () => {
       scenes: {table: {...SCENE, mountLongTaskMs: 200}},
       history,
       run: {...NIGHTLY, event: 'pull_request', ref: 'refs/pull/1/merge'},
+      runner: RUNNER_A,
     });
     expect(report.regressions).toHaveLength(1);
     expect(report.recorded).toBe(false);
     expect(nextHistory).toBe(history);
+  });
+});
+
+describe('timing metrics on different CPU models', () => {
+  // Five nights on CPU A, then the previous night on CPU B, where the same
+  // commit's timing metrics are about 75% higher.
+  const slow = {...SCENE, mountLongTaskMs: 175, interactionMs: 140};
+  const crossCpu = {
+    version: 1,
+    runs: [
+      run(6),
+      run(5),
+      run(4),
+      run(3),
+      run(2),
+      run(
+        1,
+        {table: slow},
+        {
+          runner: RUNNER_B,
+          good: false,
+          noBaseline: ['table/mountLongTaskMs', 'table/interactionMs'],
+        },
+      ),
+    ],
+  };
+
+  it('does not call a slower CPU model a regression, and reports no baseline instead', () => {
+    const {report, nextHistory} = evaluateRun({
+      scenes: {table: slow},
+      history: crossCpu,
+      run: NIGHTLY,
+      runner: RUNNER_B,
+    });
+    expect(report.regressions).toEqual([]);
+    expect(report.pending).toEqual([]);
+    expect(report.noBaseline).toEqual([
+      {scene: 'table', metric: 'mountLongTaskMs', runs: 1},
+      {scene: 'table', metric: 'interactionMs', runs: 1},
+    ]);
+    // Never a silent pass: the run records which metrics had no baseline.
+    expect(nextHistory.runs.at(-1)).toMatchObject({
+      good: true,
+      runner: RUNNER_B,
+      noBaseline: ['table/mountLongTaskMs', 'table/interactionMs'],
+    });
+  });
+
+  it('still finds a timing regression on the same CPU model', () => {
+    const history = {
+      version: 1,
+      runs: [
+        run(4, {table: slow}, {runner: RUNNER_B}),
+        run(3, {table: slow}, {runner: RUNNER_B}),
+        run(2, {table: slow}, {runner: RUNNER_B}),
+        run(
+          1,
+          {table: {...slow, mountLongTaskMs: 260}},
+          {
+            runner: RUNNER_B,
+            good: false,
+            overThreshold: ['table/mountLongTaskMs'],
+          },
+        ),
+      ],
+    };
+    const {report} = evaluateRun({
+      scenes: {table: {...slow, mountLongTaskMs: 260}},
+      history,
+      run: NIGHTLY,
+      runner: RUNNER_B,
+    });
+    expect(report.regressions.map(r => r.metric)).toEqual(['mountLongTaskMs']);
+    expect(report.noBaseline).toEqual([]);
+  });
+
+  it('compares count metrics with every CPU model', () => {
+    const {report} = evaluateRun({
+      scenes: {table: {...slow, interactionLayouts: 20}},
+      history: crossCpu,
+      run: NIGHTLY,
+      runner: RUNNER_B,
+    });
+    expect(report.pending.map(r => r.metric)).toEqual(['interactionLayouts']);
+  });
+
+  it('gives a first run on a CPU model no baseline for its timing metrics', () => {
+    const {report, nextHistory} = evaluateRun({
+      scenes: {table: SCENE},
+      history: {version: 1, runs: []},
+      run: NIGHTLY,
+      runner: RUNNER_A,
+    });
+    expect(report.noBaseline.map(r => r.metric)).toEqual([
+      'mountLongTaskMs',
+      'interactionMs',
+    ]);
+    expect(nextHistory.runs.at(-1).noBaseline).toEqual([
+      'table/mountLongTaskMs',
+      'table/interactionMs',
+    ]);
+  });
+
+  it('gives a run with no CPU model no timing baseline', () => {
+    expect(
+      findNoBaseline(
+        {table: SCENE},
+        baselineMedians({version: 1, runs: [run(3), run(2), run(1)]}, NOW),
+      ).map(r => r.metric),
+    ).toEqual(['mountLongTaskMs', 'interactionMs']);
+  });
+
+  it('counts only same-CPU runs in a timing baseline, and every run in a count baseline', () => {
+    const baseline = baselineMedians(crossCpu, NOW, CPU_A);
+    expect(baseline.table.mountLongTaskMs).toEqual({median: 100, runs: 5});
+    expect(baseline.table.mountLayouts).toEqual({median: 10, runs: 6});
+  });
+
+  it('lists the metrics with no baseline in the summary', () => {
+    const summary = renderSummary({
+      scenes: {table: slow},
+      baseline: baselineMedians(crossCpu, NOW, CPU_B),
+      regressions: [],
+      noBaseline: [{scene: 'table', metric: 'mountLongTaskMs', runs: 1}],
+      runner: RUNNER_B,
+    });
+    expect(summary).toContain(`no baseline on ${CPU_B}`);
+    expect(summary).toContain('175 ms (no baseline)');
+    expect(summary).toContain(`Runner: ${CPU_B}, calibration 75 ms`);
+  });
+});
+
+describe('readRunner', () => {
+  it('reads the runner file, and skips it among the scene results', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'perf-trend-'));
+    fs.writeFileSync(path.join(dir, 'runner.json'), JSON.stringify(RUNNER_B));
+    fs.writeFileSync(
+      path.join(dir, 'table.json'),
+      JSON.stringify({scene: 'table', samples: [SCENE], median: SCENE}),
+    );
+    expect(readRunner(dir)).toEqual(RUNNER_B);
+    expect(Object.keys(readResults(dir))).toEqual(['table']);
+    fs.rmSync(dir, {recursive: true, force: true});
+  });
+
+  it('reads no CPU model when the driver wrote no runner file', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'perf-trend-'));
+    expect(readRunner(dir)).toEqual({cpu: null, calibrationMs: null});
+    fs.rmSync(dir, {recursive: true, force: true});
   });
 });
 
@@ -303,6 +466,10 @@ describe('runReport', () => {
     fs.writeFileSync(
       path.join(results, 'table.json'),
       JSON.stringify({scene: 'table', samples: [SCENE], median: SCENE}),
+    );
+    fs.writeFileSync(
+      path.join(results, 'runner.json'),
+      JSON.stringify(RUNNER_A),
     );
     const out = path.join(dir, 'out');
     const {report, summary, earlierRuns} = runReport({
@@ -318,6 +485,9 @@ describe('runReport', () => {
       fs.readFileSync(path.join(out, 'perf-history.json'), 'utf8'),
     );
     expect(written.runs).toHaveLength(1);
+    // runner.json reaches the history and the summary.
+    expect(written.runs[0].runner).toEqual(RUNNER_A);
+    expect(summary).toContain(`Runner: ${CPU_A}`);
     expect(fs.existsSync(path.join(out, 'report.json'))).toBe(true);
     fs.rmSync(dir, {recursive: true, force: true});
   });

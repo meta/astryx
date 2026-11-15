@@ -17,9 +17,9 @@
  *   open; Escape and
  *   the backdrop dismissing by purpose with focus returned to the opener;
  *   and one steady scrim through a handoff. The handoff cases hold it phase
- *   by phase with the interaction harness (sheet panel transitions stretched
- *   and held, the page's timers frozen), so neither depends on how fast the
- *   machine runs.
+ *   by phase with the interaction harness. The page holds each phase's panel
+ *   transitions as they start, and its timers are frozen, so neither case
+ *   depends on how fast the machine runs.
  * @position Cross-browser proof; jsdom presents no dialog and contains no
  *   focus, so BottomSheetSwitcher.test.tsx can only assert the calls. WebKit
  *   here is desktop WebKit under Playwright, not iOS Safari.
@@ -37,14 +37,14 @@ import {
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
 import {
+  armHold,
   freezeTimers,
-  holdAnimations,
   installTimerGate,
   releaseAnimations,
   seekAnimations,
   thawTimers,
   waitForRest,
-  watchAnimations,
+  type HeldAnimation,
 } from '@astryxdesign/interaction-harness';
 
 let storybook: StaticServer;
@@ -421,28 +421,18 @@ test('the lock holds a backdrop drag when the flow renders inside a scrolling co
   expect(await page.evaluate(() => window.scrollY)).toBe(scrollY);
 });
 
-/** How long a held phase's panel transitions are stretched to run, ms. */
-const HELD_RUN_MS = 1_000_000;
-
 /** The sheet the flow's Continue presents over the opener's. */
 const ENTERING = 'Notification frequency';
 
 /**
  * Prepares the switcher's handoff to be held phase by phase, so however busy
  * the machine, nothing moves it on until the test ends a phase. Once the open
- * sheet is at rest, panel transitions are stretched to `HELD_RUN_MS` and the
- * page's timers are frozen (the panels' backstop for a `transitionend` that
- * never comes among them). On a busy runner a 300ms transition can run out
- * before a hold sent from the test reaches it, a round trip later; a
- * stretched one is still near its start when held, and the tests read it by
- * progress, so its length doesn't change what they read. From here on, every
+ * sheet is at rest, the page's timers are frozen (the panels' backstop for a
+ * `transitionend` that never comes among them). From here on, every
  * `::backdrop` transition is listed in `window.__backdropRuns`.
  */
 async function prepareHandoffHold(page: Page) {
   await waitForRest(page.locator('dialog[open]'));
-  await page.addStyleTag({
-    content: `.astryx-bottom-sheet { transition-duration: ${HELD_RUN_MS}ms !important; }`,
-  });
   await page.evaluate(() => {
     const runs: string[] = [];
     (window as unknown as {__backdropRuns: string[]}).__backdropRuns = runs;
@@ -474,28 +464,27 @@ function sheetPanel(page: Page, label: string): Locator {
 }
 
 /**
- * Runs `action`, which starts the handoff's next phase, waits until a
- * `property` transition runs on each of `movers` (the sheet panels that move
- * in that phase), and holds every running animation. Both sheet dialogs are
- * open through every phase.
+ * Arms the page to hold the `property` transition of each of `movers`, the
+ * sheet panels that move in the handoff's next phase. Then it runs `action`,
+ * which starts that phase, and returns what the page held. The page holds the
+ * transitions as they start. A hold sent from the test after the action
+ * reaches the page a round trip later. On a busy runner, a transition can end
+ * before it. Both sheet dialogs are open through every phase.
  */
 async function holdPhase(
   page: Page,
   movers: Locator[],
   property: 'transform' | 'opacity',
   action: () => Promise<void>,
-) {
-  const watches = [];
-  for (const mover of movers) {
-    watches.push(await watchAnimations(mover));
-  }
+): Promise<HeldAnimation[]> {
+  const hold = await armHold(page, undefined, {
+    count: movers.length,
+    judges: movers.map(mover => ({target: mover, property})),
+  });
   await action();
-  for (const watch of watches) {
-    const started = await watch.started({timeout: 10_000});
-    expect(started.map(animation => animation.name)).toContain(property);
-  }
-  await holdAnimations(page);
+  const held = await hold.held();
   await expect(page.locator('dialog[open]')).toHaveCount(2);
+  return held;
 }
 
 /**
@@ -503,7 +492,7 @@ async function holdPhase(
  * one, which moves to line up with it.
  */
 async function holdSlide(page: Page) {
-  await holdPhase(
+  return holdPhase(
     page,
     [sheetPanel(page, ENTERING), sheetPanel(page, OPENER)],
     'transform',
@@ -516,7 +505,7 @@ async function holdSlide(page: Page) {
  * retained sheet's fade.
  */
 async function holdFade(page: Page) {
-  await holdPhase(page, [sheetPanel(page, OPENER)], 'opacity', async () =>
+  return holdPhase(page, [sheetPanel(page, OPENER)], 'opacity', async () =>
     releaseAnimations(page, {finish: true}),
   );
 }
@@ -666,21 +655,21 @@ test('one steady scrim through a handoff: no dip and no double dim', async ({
       }
       return Number((1 - combined).toFixed(3));
     });
-  // The held phase read from 0 to 100% of its run in 5% steps.
-  const readHeldPhase = async () => {
+  // The held phase is read from 0 to 100% of its run in 5% steps. The run
+  // spans the held transitions' earliest start to their latest end.
+  const readHeldPhase = async (held: HeldAnimation[]) => {
+    const run = Math.max(...held.map(a => a.offsetMs + a.curveEndMs));
     const dims: number[] = [];
     for (let step = 0; step <= 20; step += 1) {
-      await seekAnimations(page, (HELD_RUN_MS * step) / 20);
+      await seekAnimations(page, (run * step) / 20);
       dims.push(await combinedDim());
     }
     return dims;
   };
   const steady = await combinedDim();
   expect(steady).toBeGreaterThan(0.3);
-  await holdSlide(page);
-  const slide = await readHeldPhase();
-  await holdFade(page);
-  const fade = await readHeldPhase();
+  const slide = await readHeldPhase(await holdSlide(page));
+  const fade = await readHeldPhase(await holdFade(page));
   // The retained dialog closes and the entering one takes the scrim.
   await releaseAnimations(page, {finish: true});
   await expect(page.locator('dialog[open]')).toHaveCount(1);

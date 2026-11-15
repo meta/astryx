@@ -19,6 +19,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {loadProjectContext} from './_adapter.mjs';
 import {Project, providerLedgerOf} from '../../foundation/config/project.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 let originalCwd;
@@ -26,7 +27,7 @@ let originalCwd;
 beforeEach(() => {
   originalCwd = process.cwd();
   tmpDir = fs.mkdtempSync(
-    path.join(process.cwd(), '.astryx-upgrade-agreement-'),
+    path.join(REPO_ROOT, '.astryx-upgrade-agreement-'),
   );
   process.chdir(tmpDir);
 });

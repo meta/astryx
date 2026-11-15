@@ -5,12 +5,14 @@
  * @file MenuPress.a11y.chromium.spec.ts
  * @input Built DropdownMenu and Selector stories and real Chromium mouse,
  *   touch (CDP) and pen (CDP) input
- * @output Browser evidence for the menu press model: the row under the
- *   release acts once (a link row included: no native link drag cancels a
- *   mouse press), the highlight follows the pointer, a release outside
- *   closes under a mouse and not under a finger, a touch pan in an
- *   overflowing menu cancels the gesture, a pen behaves like a finger, and
- *   Escape after a press-open returns focus to the trigger
+ * @output Browser evidence for the menu press model. The row under the
+ *   release acts once, a link row included: no native link drag cancels a
+ *   mouse press. The highlight follows the pointer. A release outside closes
+ *   under a mouse and not under a finger. A touch pan in an overflowing menu
+ *   cancels the gesture. A cancelled touch and the window losing focus end a
+ *   finger's gesture with nothing acting and its lit row cleared. A pen
+ *   behaves like a finger, and Escape after a press-open returns focus to
+ *   the trigger.
  * @position Real-engine proof for module:DropdownMenu/useMenuPress — the
  *   paths jsdom cannot exercise (hit testing, touch synthesis, scrolling)
  */
@@ -45,6 +47,25 @@ const SELECTOR_STORY = 'core-selector--default';
 async function mount(page: Page, story: string) {
   await page.goto(`${storybook.origin}/iframe.html?id=${story}&viewMode=story`);
   await expect(page.locator('#storybook-root')).toBeVisible();
+}
+
+/**
+ * Waits until the open menu has finished entering. Under a finger, input that
+ * lands during the entrance is held, as UIMenu takes none until it is shown.
+ * The entrance runs on the surface, the layer's child.
+ */
+async function presented(page: Page) {
+  const layer = page.locator('[popover]:has([role="menu"])').first();
+  await expect
+    .poll(async () =>
+      layer.evaluate(
+        element =>
+          [element, element.firstElementChild]
+            .flatMap(node => node?.getAnimations() ?? [])
+            .filter(animation => animation.playState === 'running').length,
+      ),
+    )
+    .toBe(0);
 }
 
 /** The story items log `<label> clicked`; that line is the activation. */
@@ -306,6 +327,7 @@ test.describe('DropdownMenu press model (Chromium)', () => {
     await touch.tap(cdp, await center(page, TRIGGER));
     const menu = page.getByRole('menu');
     await expect(menu).toBeVisible();
+    await presented(page);
 
     const edit = await center(page, 'menuitem', 'Edit');
     const del = await center(page, 'menuitem', 'Delete');
@@ -328,6 +350,7 @@ test.describe('DropdownMenu press model (Chromium)', () => {
     await mount(page, MENU_STORY);
     await touch.tap(cdp, await center(page, TRIGGER));
     await expect(page.getByRole('menu')).toBeVisible();
+    await presented(page);
     await touch.tap(cdp, await center(page, 'menuitem', 'Duplicate'));
     await page.waitForTimeout(500);
     expect(activations).toEqual(['Duplicate clicked']);
@@ -342,9 +365,81 @@ test.describe('DropdownMenu press model (Chromium)', () => {
     await touch.tap(cdp, await center(page, TRIGGER));
     const menu = page.getByRole('menu');
     await expect(menu).toBeVisible();
+    await presented(page);
     const edit = await center(page, 'menuitem', 'Edit');
     await touch.start(cdp, edit);
     await touch.slide(cdp, edit, {x: edit.x + 400, y: edit.y + 200});
+    await touch.end(cdp);
+    await page.waitForTimeout(300);
+    await expect(menu).toBeVisible();
+    expect(activations).toEqual([]);
+  });
+
+  test('touch: a cancelled touch ends the gesture: nothing acts and the lit row clears (spec:AST-094 FR28)', async ({
+    page,
+  }) => {
+    const activations = collectActivations(page);
+    const cdp = await enableTouch(page);
+    await mount(page, MENU_STORY);
+    await touch.tap(cdp, await center(page, TRIGGER));
+    const menu = page.getByRole('menu');
+    await expect(menu).toBeVisible();
+    // Measure the rows once the menu has landed: under a finger it may
+    // still be growing out of its trigger.
+    await expect
+      .poll(async () =>
+        menu.evaluate(
+          element =>
+            (element.closest('[popover]') ?? element)
+              .getAnimations({subtree: true})
+              .filter(animation => animation.playState === 'running').length,
+        ),
+      )
+      .toBe(0);
+    const edit = await center(page, 'menuitem', 'Edit');
+    await touch.start(cdp, edit);
+    await expect.poll(async () => activeRowName(page)).toBe('Edit');
+    // The browser takes the touch.
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchCancel',
+      touchPoints: [],
+    });
+    await expect.poll(async () => activeRowName(page)).toBeNull();
+    await page.waitForTimeout(300);
+    await expect(menu).toBeVisible();
+    expect(activations).toEqual([]);
+  });
+
+  test('touch: the window losing focus ends the gesture: nothing acts, the lit row clears, and the lift acts on nothing (spec:AST-094 FR28)', async ({
+    page,
+  }) => {
+    const activations = collectActivations(page);
+    const cdp = await enableTouch(page);
+    await mount(page, MENU_STORY);
+    await touch.tap(cdp, await center(page, TRIGGER));
+    const menu = page.getByRole('menu');
+    await expect(menu).toBeVisible();
+    // Measure the rows once the menu has landed: under a finger it may
+    // still be growing out of its trigger.
+    await expect
+      .poll(async () =>
+        menu.evaluate(
+          element =>
+            (element.closest('[popover]') ?? element)
+              .getAnimations({subtree: true})
+              .filter(animation => animation.playState === 'running').length,
+        ),
+      )
+      .toBe(0);
+    const edit = await center(page, 'menuitem', 'Edit');
+    await touch.start(cdp, edit);
+    await expect.poll(async () => activeRowName(page)).toBe('Edit');
+    // The window loses focus with the finger down (a headless page keeps
+    // focus, so the blur is dispatched to the window).
+    await page.evaluate(() => {
+      window.dispatchEvent(new FocusEvent('blur'));
+    });
+    await expect.poll(async () => activeRowName(page)).toBeNull();
     await touch.end(cdp);
     await page.waitForTimeout(300);
     await expect(menu).toBeVisible();
@@ -378,6 +473,7 @@ test.describe('DropdownMenu press model (Chromium)', () => {
     await touch.tap(cdp, await center(page, TRIGGER));
     const menu = page.getByRole('menu');
     await expect(menu).toBeVisible();
+    await presented(page);
     await expect
       .poll(async () =>
         menu.evaluate(el => el.scrollHeight > el.clientHeight + 1),
@@ -410,6 +506,42 @@ test.describe('DropdownMenu press model (Chromium)', () => {
     await expect
       .poll(async () => menu.evaluate(el => getComputedStyle(el).touchAction))
       .toBe('pinch-zoom');
+  });
+
+  test('pen and mouse on the trigger, a fine primary pointer: a pen opens the menu as it presses, as a finger does, and a mouse press opens it at once, as before (spec:AST-094 FR29, FR43; spec:AST-017 FR59)', async ({
+    page,
+  }) => {
+    const activations = collectActivations(page);
+    const cdp = await page.context().newCDPSession(page);
+    await mount(page, MENU_STORY);
+    const trigger = page.getByRole('button', {name: /Actions|File/});
+    expect(
+      await page.evaluate(() => matchMedia('(pointer: fine)').matches),
+    ).toBe(true);
+    const at = await center(page, TRIGGER);
+
+    // A pen: the menu opens with the pen still down, well before the
+    // 500 ms hold the released behavior waited for.
+    await pen.press(cdp, at);
+    await expect(page.getByRole('menu')).toBeVisible({timeout: 300});
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    // Its lift, and the click the browser sends for it, pick nothing and
+    // leave the menu open.
+    await pen.release(cdp, at);
+    await page.waitForTimeout(300);
+    await expect(page.getByRole('menu')).toBeVisible();
+    expect(activations).toEqual([]);
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('menu')).toBeHidden();
+
+    // A mouse: unchanged, its press opens the menu at once.
+    await page.mouse.move(at.x, at.y);
+    await page.mouse.down();
+    await expect(page.getByRole('menu')).toBeVisible({timeout: 300});
+    await page.mouse.up();
+    await page.waitForTimeout(300);
+    await expect(page.getByRole('menu')).toBeVisible();
+    expect(activations).toEqual([]);
   });
 
   test('pen: a drag released over another row acts on it once; a release outside leaves the menu open', async ({

@@ -182,7 +182,7 @@ export const y2kTheme = defineTheme({
 
     // Text
     '--color-text-primary': [neutral.light[15], neutral.dark[95]],
-    '--color-text-secondary': [neutral.light[40], neutral.dark[70]],
+    '--color-text-secondary': [neutral.light[35], neutral.dark[70]],
     '--color-text-disabled': [neutral.light[80], neutral.dark[35]],
     '--color-text-accent': [neutral.light[15], neutral.dark[95]],
     '--color-on-dark': neutral.light[100],
@@ -236,7 +236,7 @@ export const y2kTheme = defineTheme({
     '--color-tint-hover': [neutral.light[15], neutral.dark[95]],
 
     // Typography override
-    '--text-supporting-size': '12px',
+    '--text-supporting-size': '0.75rem', // 12px at the default root size
 
     // Categorical colors
     '--color-background-green': [green.light[80], green.dark[80]],

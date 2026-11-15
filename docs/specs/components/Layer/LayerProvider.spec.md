@@ -13,6 +13,8 @@ review_triggers: [public-api, behavior, layout]
 verified_by:
   [
     packages/core/src/Layer/LayerProvider.test.tsx,
+    packages/core/src/Layer/toastHost.test.tsx,
+    packages/core/src/Layer/toastHost.lateRegistration.test.tsx,
     apps/storybook/stories/Layer.stories.tsx,
   ]
 modules: []
@@ -30,10 +32,10 @@ system_specs: [spec:AST-059, spec:AST-038]
 | Area                    | Contract                                                                                                                                                                                                                                   |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Public contract         | `LayerProvider` with `children`, `toast` (`{position, maxVisible, inset}`), and `inset` (`{blockStart, blockEnd, inlineStart, inlineEnd}`).                                                                                                |
-| Behavior                | The outermost provider supplies layer configuration and mounts the app's one toast viewport around `children`. A nested provider renders its children unchanged, except that a nested `inset` narrows the inset for layers in its subtree. |
+| Behavior                | The outermost provider supplies layer configuration and renders the one toast viewport once Toast is imported. A nested provider renders its children unchanged, except that a nested `inset` narrows the inset for layers in its subtree. |
 | End-user impact         | Toasts appear in one configured corner, and anchored layers and toasts stay clear of a declared floating bar.                                                                                                                              |
 | Builder impact          | None.                                                                                                                                                                                                                                      |
-| Compatibility/readiness | Records shipped behavior; no public change.                                                                                                                                                                                                |
+| Compatibility/readiness | Records shipped behavior, except that the toast viewport waits for a Toast import (FR1); no public change.                                                                                                                                 |
 | Review checks           | Reject a second toast viewport from a nested provider, a provider that hosts trigger-associated layers, or a default provider that renders layers differently from no provider.                                                            |
 | Governing rules         | `spec:AST-059` FR6 (the inset); `architecture:layer-runtime` INV10–INV11; `component:Toast`.                                                                                                                                               |
 
@@ -49,7 +51,8 @@ This record owns what the provider itself renders.
 ## Compatibility and migration
 
 - Released default preserved: `yes`
-- Compatibility class: records shipped behavior; no public change
+- Compatibility class: records shipped behavior, except that the toast
+  viewport waits for a Toast import (FR1); no public change
 - Controlled/uncontrolled behavior: not applicable
 - Migration decision: none
 
@@ -79,7 +82,7 @@ No component-local concept beyond the consumer props.
 
 | ID  | Invariant                                                                                                                                                                                                                                                                                                     | Basis                              |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| FR1 | A provider with no LayerProvider above it supplies the layer context (`toast` configuration and `inset`) and wraps `children` in one toast viewport configured by `toast.position`, `toast.maxVisible`, `toast.inset`, and `inset`.                                                                           | Current source and tests           |
+| FR1 | A provider with no LayerProvider above it supplies the layer context (`toast` configuration and `inset`) and the toast context. Once Toast is imported, it renders one toast viewport after `children`, configured by `toast.position`, `toast.maxVisible`, `toast.inset`, and `inset`; before that, none.    | Current source and tests           |
 | FR2 | A provider nested under another mounts no toast viewport. Without `inset` it renders its children unchanged; with `inset`, each edge it declares applies to the layers in its subtree, and it keeps the outer `toast` configuration. What an edge it leaves unset reads in that subtree is uncontracted here. | Current source; `spec:AST-059` FR6 |
 | FR3 | With nothing declared, a provider changes no layer geometry, so layers under a default provider match layers with no provider.                                                                                                                                                                                | `spec:AST-059` FR6; tests          |
 
@@ -91,7 +94,7 @@ No component-local concept beyond the consumer props.
 
 | State                | Required invariant                              | Allowed variation |
 | -------------------- | ----------------------------------------------- | ----------------- |
-| Root provider        | One toast viewport; context supplied.           | Toast config.     |
+| Root provider        | Context supplied; a viewport once Toast loads.  | Toast config.     |
 | Nested without inset | Children unchanged; no second viewport.         | —                 |
 | Nested with inset    | Subtree inset narrowed; toast config unchanged. | Inset.            |
 
@@ -125,15 +128,13 @@ No component-local concept beyond the consumer props.
 
 ## Verification map
 
-| Contract | Verification             | Representative states                        | Mutation or failure expectation                                                   | Audit section                  |
-| -------- | ------------------------ | -------------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------ |
-| FR1–FR3  | `LayerProvider.test.tsx` | Default, declared inset, nested, toast inset | A default-provider difference, or an inset that does not reach its layers, fails. | `audit:LayerProvider/behavior` |
+| Contract | Verification                                                                                                                                                                                                                                                                          | Representative states                                         | Mutation or failure expectation                                                                                   | Audit section                  |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| FR1–FR3  | `LayerProvider.test.tsx`; for FR1 also `toastHost.test.tsx` and `toastHost.lateRegistration.test.tsx`; `LayerProvider.test.tsx` toast-configuration suite for `toast.maxVisible` and for a nested provider without `inset` (one viewport, outer configuration kept, no added element) | Default, declared inset, nested, toast inset, no Toast import | A default-provider difference, an inset that does not reach its layers, or a viewport with no Toast import fails. | `audit:LayerProvider/behavior` |
 
 Read from source, with no focused test yet:
 
-- FR1: `toast.position` and `toast.maxVisible` reaching the viewport.
-- FR2: a nested provider without `inset` mounting no second viewport and
-  rendering its children unchanged, and the outer `toast` configuration being kept.
+- FR1: `toast.position` reaching the viewport.
 
 ## Decision log
 

@@ -23,7 +23,13 @@
  * - /packages/core/src/Chat/index.ts (exports)
  */
 
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {
+  useCallback,
+  useEffect,
+  useInsertionEffect,
+  useRef,
+  useState,
+} from 'react';
 import {observeResize} from '../utils/sharedResizeObserver';
 
 // =============================================================================
@@ -69,10 +75,12 @@ export function useChatNewMessages({
   const [hasNewMessages, setHasNewMessages] = useState(false);
   const lastMessageRef = useRef<Element | null>(null);
   const isLockedRef = useRef(isLocked);
-  isLockedRef.current = isLocked;
-
   const onResizeRef = useRef(onResize);
-  onResizeRef.current = onResize;
+  // The ref callback and the observer's first call run before layout Effects.
+  useInsertionEffect(() => {
+    isLockedRef.current = isLocked;
+    onResizeRef.current = onResize;
+  });
 
   // Track the current content element. When the callback ref fires,
   // we tear down the old observer and set up a new one.

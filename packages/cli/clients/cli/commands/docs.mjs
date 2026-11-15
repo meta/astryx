@@ -16,6 +16,7 @@
  *
  * Usage:
  *   astryx docs                          List available topics
+ *   astryx docs --list                   The same list, asked for by flag
  *   astryx docs <topic>                  List the topic's sections (a topic
  *                                        with one section prints whole)
  *   astryx docs <topic> <section>        Print one section
@@ -284,7 +285,9 @@ function treeRows(children, root, owner) {
         ? `${childRow(child, owner).summary} (${docsBelow(child.childCount)})`
         : childRow(child, owner).summary,
     },
-    ...(child.slots ?? []).flatMap(slot => treeRows(slot.children, root, owner)),
+    ...(child.slots ?? []).flatMap(slot =>
+      treeRows(slot.children, root, owner),
+    ),
   ]);
 }
 
@@ -423,10 +426,13 @@ function linkLines(links) {
   if (!links) return [];
   return [
     `Up: ${formatCliCommand(links.up)}`,
-    ...(links.previous ? [`Previous: ${formatCliCommand(links.previous)}`] : []),
+    ...(links.previous
+      ? [`Previous: ${formatCliCommand(links.previous)}`]
+      : []),
     ...(links.next ? [`Next: ${formatCliCommand(links.next)}`] : []),
     ...(links.related ?? []).map(
-      (command, i) => `${i === 0 ? 'Related: ' : '         '}${formatCliCommand(command)}`,
+      (command, i) =>
+        `${i === 0 ? 'Related: ' : '         '}${formatCliCommand(command)}`,
     ),
   ];
 }
@@ -455,6 +461,32 @@ function replacedLine(data) {
 }
 
 /**
+ * One line per other package whose sections a topic holds, at the top of the
+ * read. Another package's section joins the end of the topic unless it names
+ * where it goes (spec:AST-046 FR11), so a reader who reads only the start of a
+ * long topic would never learn an installed integration added to it.
+ * @param {ReadonlyArray<{id?: string, package?: string}>} sections each
+ *   section as a read returns it, by the key a section read takes
+ * @param {string} owner the package that owns the topic
+ */
+function addedSectionLines(sections, owner) {
+  /** @type {Map<string, string[]>} */
+  const byPackage = new Map();
+  for (const each of sections) {
+    if (each.id == null || each.package == null || each.package === owner) {
+      continue;
+    }
+    byPackage.set(each.package, [
+      ...(byPackage.get(each.package) ?? []),
+      each.id,
+    ]);
+  }
+  return [...byPackage].map(([pkg, ids]) =>
+    text(`sections from ${pkg}: ${ids.join(', ')}`),
+  );
+}
+
+/**
  * A topic's section index: what the topic is, one line per section with the
  * key to read it by, and how to read further.
  * @param {import('../../../api/docs/docs.type.mjs').DocsIndex} index
@@ -469,6 +501,7 @@ function emitIndex(index, owner, run) {
     ),
     record({package: owner}),
     ...replacedLine(index),
+    ...addedSectionLines(index.sections, owner),
     // Summaries wrap rather than being cut: the summary is how a reader picks
     // the one section to open. A section another package wrote says which one.
     records(
@@ -509,7 +542,8 @@ function childRow(child, owner) {
     child.title !== child.name;
   return {
     // A child another package owns says which one.
-    name: child.package === owner ? child.name : `${child.name} (${child.package})`,
+    name:
+      child.package === owner ? child.name : `${child.name} (${child.package})`,
     // An experimental child is marked as help marks an experimental command,
     // unless its own summary already opens by saying so.
     summary: prefixCliCommands(
@@ -578,7 +612,9 @@ function emitNode(node, detail, run) {
           // A child's route is its parent's route and its name, except a flat
           // topic in a topic level, which keeps its own name.
           node.slots.every(slot =>
-            slot.children.every(child => child.route.startsWith(`${node.route}/`)),
+            slot.children.every(child =>
+              child.route.startsWith(`${node.route}/`),
+            ),
           )
             ? `Open one: ${run} docs ${node.route}/<name>`
             : `Open one: ${run} docs <name>`,
@@ -616,6 +652,32 @@ function summarize(result) {
 // ─── Command ─────────────────────────────────────────────────────────────────
 
 /**
+ * Every namespace of the list and, where a `--depth` read carried them, the
+ * docs below it, in reading order and in one flat list: each row's `topic` is
+ * the route that opens it, so the depth of a row never changes how a reader
+ * uses it, and each names the package that owns it.
+ * @param {Array<import('../../../api/docs/docs.type.mjs').DocsListNamespace | import('../../../api/docs/docs.type.mjs').DocsListChild>} rows
+ * @returns {Array<{topic: string, description: string, package: string}>}
+ */
+function flattenNamespaces(rows) {
+  return rows.flatMap(row => [
+    {
+      topic: row.topic,
+      // An experimental doc is marked here as it is wherever else it is
+      // listed, so a reader cannot take a row of this list for a stable doc.
+      description:
+        'stability' in row &&
+        row.stability === 'experimental' &&
+        !/^experimental\b/iu.test(row.description)
+          ? `[experimental] ${row.description}`
+          : row.description,
+      package: row.package,
+    },
+    ...flattenNamespaces(row.children ?? []),
+  ]);
+}
+
+/**
  * @param {import('commander').Command} program
  */
 export function registerDocs(program) {
@@ -624,7 +686,7 @@ export function registerDocs(program) {
     action: async (
       /** @type {string | undefined} */ topic,
       /** @type {string | undefined} */ sectionName,
-      /** @type {{index?: boolean, full?: boolean, depth?: string}} */ options = {},
+      /** @type {{list?: boolean, index?: boolean, full?: boolean, depth?: string}} */ options = {},
     ) => {
       const run = getCliInvocation();
       const lang = program.opts().lang || null;
@@ -671,6 +733,7 @@ export function registerDocs(program) {
           lang,
           zh,
           dense,
+          list: options.list,
           index: listSections,
           ...(depth != null ? {depth, detail: childDetail} : {}),
         });
@@ -703,8 +766,10 @@ export function registerDocs(program) {
           // The text view mirrors the JSON list, with the docs tree's
           // namespaces (`meta.namespaces`) first under their own heading: that
           // is where the CLI's own docs start, and a namespace reads
-          // differently from a topic.
-          const namespaces = result.meta?.namespaces ?? [];
+          // differently from a topic. With --depth each branch is flattened
+          // into the same list, so every line is a route a reader can pass
+          // straight back to `docs`.
+          const namespaces = flattenNamespaces(result.meta?.namespaces ?? []);
           const topics = result.data;
           emit(
             ...(namespaces.length > 0
@@ -759,6 +824,7 @@ export function registerDocs(program) {
           emit(
             record({package: owner}),
             ...replacedLine(result.data),
+            ...addedSectionLines(result.data.sections, owner),
             code(
               formatReferenceFull(
                 {

@@ -3,10 +3,10 @@
 /**
  * @file resolveMotion.test.ts
  * @input resolveMotion.ts, the shared UIKit tables, a stubbed computed style
- * @output Proof that, with the per-role tables internal (spec:AST-094
- *   DEC-15), a role plays its table value whatever a scope's CSS variable
- *   says, reads no style, and leaves values that are not roles alone; and
- *   that the animator plays the table's spring
+ * @output Proof that a role plays its table value whatever a scope's CSS
+ *   variable says (spec:AST-094 DEC-15). No role's variable is read, and
+ *   values that are not roles are left alone. The animator plays the table's
+ *   spring. The theme's tempo has its own file: resolveMotion.tempo.test.ts
  * @position Testing for /packages/core/src/motion/resolveMotion.ts (the
  *   browser proof: animator.interaction.browser.spec.ts)
  */
@@ -35,8 +35,11 @@ beforeEach(() => {
   vi.spyOn(window, 'getComputedStyle').mockImplementation(
     () =>
       ({
-        getPropertyValue: () => {
-          reads += 1;
+        getPropertyValue: (name: string) => {
+          // The theme's tempo is the one property a role may read.
+          if (name !== '--_astryx-motion-tempo') {
+            reads += 1;
+          }
           return '';
         },
       }) as unknown as CSSStyleDeclaration,
@@ -74,7 +77,7 @@ describe('resolveMotion while the per-role tables stay internal (DEC-15)', () =>
       timing.stateChangeMs,
     );
     expect(resolveMotion(null, springs.settle)).toBe(springs.settle);
-    // No style is read to resolve a role.
+    // No role's variable is read to resolve a role.
     expect(reads).toBe(0);
   });
 

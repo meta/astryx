@@ -80,7 +80,7 @@ export const docs = {
       {
         guidance: false,
         description:
-          'Set a new React state on every `changed` event; write the element’s style in `onPan` instead, so a drag costs no render.',
+          'Hold the drag offset in a large component’s state: each `changed` event renders the component that holds it.',
       },
       {
         guidance: false,
@@ -108,7 +108,7 @@ export const docs = {
   relatedComponents: ['BottomSheet', 'Carousel'],
   relatedHooks: ['useLongPress', 'createPanGesture'],
   importPath: '@astryxdesign/core/hooks',
-  category: 'interaction',
+  category: 'motion & gestures',
 };
 
 /** @type {import('@astryxdesign/cli/authoring').HookTranslationDoc} */
@@ -150,8 +150,7 @@ export const docsDense = {
       },
       {
         guidance: false,
-        description:
-          'Set React state on every changed event; write the style in onPan.',
+        description: 'Hold the drag offset in a large component’s state.',
       },
       {guidance: false, description: 'Recognize taps or long presses with it.'},
     ],

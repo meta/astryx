@@ -4,6 +4,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+import {REPO_ROOT} from '../../../test-utils/repo-root.mjs';
 
 const SLOW = 60_000;
 
@@ -11,7 +12,7 @@ const SLOW = 60_000;
 let tmpDir;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-docs-depth-test-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-docs-depth-test-'));
 });
 
 afterEach(() => {
@@ -213,6 +214,54 @@ describe('astryx docs --depth', () => {
       ]);
       expect(result.status).toBe(1);
       expect(JSON.parse(result.stdout).code).toBe('ERR_INVALID_ARGUMENT');
+    },
+    SLOW,
+  );
+
+  it(
+    'marks an experimental doc on the list as every other listing marks it',
+    async () => {
+      const list = await runCli(['docs', '--depth', 'all']);
+      expect(list.status).toBe(0);
+      const row = list.stdout
+        .split('\n')
+        .find(line => line.includes('cli/api/functions/render'));
+      expect(row).toBeDefined();
+      expect(row).toContain('[experimental]');
+      // The namespace read marks the same doc the same way.
+      const read = await runCli(['docs', 'cli/api/functions']);
+      expect(read.stdout).toContain('[experimental]');
+      // A stable neighbour is not marked.
+      const stable = list.stdout
+        .split('\n')
+        .find(line => line.includes('cli/api/functions/search'));
+      expect(stable).toBeDefined();
+      expect(stable).not.toContain('[experimental]');
+    },
+    SLOW,
+  );
+
+  it(
+    'the topic list names the docs below each namespace with a depth',
+    async () => {
+      const plain = await runCli(['docs']);
+      expect(plain.stdout).toContain('tokens');
+      // Today's list names the namespace and stops there.
+      expect(plain.stdout).not.toContain('tokens/tokens-color');
+      const deep = await runCli(['docs', '--depth', '1']);
+      expect(deep.status).toBe(0);
+      expect(deep.stdout).toContain('tokens/tokens-color');
+      // Each row is the route that opens it, whatever its depth.
+      const json = await runCli(['--json', 'docs', '--depth', '1']);
+      const listed = JSON.parse(json.stdout);
+      const tokens = listed.meta.namespaces.find(
+        (/** @type {{topic: string}} */ one) => one.topic === 'tokens',
+      );
+      expect(tokens.children.map((/** @type {{topic: string}} */ c) => c.topic)).toContain(
+        'tokens/tokens-color',
+      );
+      const read = await runCli(['docs', 'tokens/tokens-color']);
+      expect(read.status).toBe(0);
     },
     SLOW,
   );

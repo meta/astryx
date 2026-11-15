@@ -260,7 +260,7 @@ export const butterTheme = defineTheme({
     '--color-tint-hover': [neutral.light[0], neutral.dark[100]],
 
     // Typography override
-    '--text-supporting-size': '12px',
+    '--text-supporting-size': '0.75rem', // 12px at the default root size
 
     // Element sizes — slightly taller defaults so the new input padding
     // (--spacing-2 block) has room to breathe.
@@ -394,8 +394,8 @@ export const butterTheme = defineTheme({
       // Radius intentionally not pinned, so buttons keep core's
       // `var(--_button-radius, --radius-element)`: standalone buttons stay 8px,
       // while the chat composer (which sets --_button-radius) rounds them fully.
+      // Inline padding only. Button sets its own block padding and height.
       base: {
-        paddingBlock: 'var(--spacing-3)',
         paddingInline: 'var(--spacing-4)',
       },
       'variant:secondary': SECONDARY_BUTTON,

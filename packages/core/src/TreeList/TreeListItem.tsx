@@ -31,7 +31,7 @@ import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {
-  cancelNestedTouchPress,
+  cancelNestedPress,
   hasInteractiveAncestor,
   useClickableContainer,
 } from '../hooks/useClickableContainer';
@@ -93,9 +93,9 @@ const styles = stylex.create({
     // collapse, so adjacent rows end up a full gap apart — and it rides the
     // `rowWrapper`, which carries no theme target, so the paintable
     // `tree-list-item` stays a pure paint seam (layout lives off it). The <li>s
-    // stay contiguous — the gap is padding INSIDE each <li>, not space between
-    // them — so the per-<li> connector guide can still span it and read as a
-    // continuous line (see TreeListBranches). The lever's default is a subtle
+    // stay contiguous, because the gap is padding inside each <li>, not space
+    // between them. So the per-row connector guide can still span it and read
+    // as one line (see TreeListBranches). The lever's default is a subtle
     // `--spacing-0-5` (2px, set on the tree-list root); a theme widens or closes
     // it via the `tree-list` target.
     paddingBlock: 'calc(var(--tree-list-row-gap, 0px) / 2)',
@@ -508,7 +508,7 @@ export function TreeListItem({
       chevron.contains(event.target)
         ? chevron
         : (linkRef.current ?? actionButtonRef.current);
-    cancelNestedTouchPress(event, event.currentTarget, ownAction);
+    cancelNestedPress(event, event.currentTarget, ownAction);
   };
   const {onMouseUp: openLinkOnMiddleClick} = useClickableContainer({
     containerRef: linkRowRef,
@@ -712,16 +712,16 @@ export function TreeListItem({
       data-tree-level={nestedLevel + 1}
       data-tree-disabled={isDisabled || undefined}
       {...focusOutlineProps.publishFocusVisibleVars(styles.wrapper)}>
-      {variant !== 'noGuides' && (
-        <div {...stylex.props(styles.treeBranches)}>
-          <TreeListBranches
-            ancestorsIsLast={ancestorsIsLast}
-            isLast={isLast}
-            nestedLevel={nestedLevel}
-          />
-        </div>
-      )}
       <div {...stylex.props(styles.rowWrapper)}>
+        {variant !== 'noGuides' && (
+          <div {...stylex.props(styles.treeBranches)}>
+            <TreeListBranches
+              ancestorsIsLast={ancestorsIsLast}
+              isLast={isLast}
+              nestedLevel={nestedLevel}
+            />
+          </div>
+        )}
         <div
           {...(isInteractive || (hasChildren && onClick == null)
             ? pressable

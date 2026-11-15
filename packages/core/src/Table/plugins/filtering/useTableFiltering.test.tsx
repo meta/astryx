@@ -9,8 +9,9 @@
 
 import {describe, it, expect} from 'vitest';
 import {useState} from 'react';
-import {render, screen} from '@testing-library/react';
+import {fireEvent, render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import {FormLayout} from '../../../FormLayout/FormLayout';
 import {Table} from '../../Table';
 import {useTableFiltering, toSearchFilters} from './useTableFiltering';
 import type {
@@ -123,6 +124,7 @@ const allFilterColumns: TableColumn<TestRow>[] = [
 function FilterTable({
   columns = defaultColumns,
   variant = 'popover' as TableFilterVariant,
+  config = searchConfig,
 }) {
   const [filters, setFilters] = useState<TableFilterState>({});
 
@@ -138,7 +140,7 @@ function FilterTable({
       });
     },
     variant,
-    searchConfig,
+    searchConfig: config,
   });
 
   return (
@@ -353,5 +355,33 @@ describe('useTableFiltering', () => {
         render(<FilterTable columns={noFilterColumns} />),
       ).not.toThrow();
     });
+  });
+});
+
+describe('date filter editor inside a FormLayout', () => {
+  it('keeps its own entry error timing under a blur-or-enter form default', () => {
+    const config: PowerSearchConfig = {
+      name: 'dates',
+      fields: [
+        {
+          key: 'due',
+          label: 'Due',
+          defaultOperator: 'on',
+          operators: [{key: 'on', label: 'on', value: {type: 'date_absolute'}}],
+        },
+      ],
+    };
+    render(
+      <FormLayout defaultEntryErrorBehavior="blur-or-enter">
+        <FilterTable
+          columns={[{key: 'name', header: 'Due', filter: 'due'}]}
+          variant="inline"
+          config={config}
+        />
+      </FormLayout>,
+    );
+    const input = screen.getByRole('combobox', {name: /Due/});
+    fireEvent.change(input, {target: {value: '02/31/2026'}});
+    expect(input).toHaveAttribute('aria-invalid', 'true');
   });
 });

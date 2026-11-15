@@ -44,7 +44,7 @@ import {
   ErrorBanner,
 } from './CommentParts';
 import {CommentRow, THREAD_DIVIDERS, type ThreadDivider} from './CommentRow';
-import {useStatusAnnouncement} from './useStatusAnnouncement';
+import {useStatusAnnouncement} from '../useStatusAnnouncement';
 import {
   CommentsContextProvider,
   useCommentsController,
@@ -255,7 +255,6 @@ export function Comments({
   // (spec:AST-086 FR2, FR5).
   const loadErrorRef = useRef<HTMLDivElement>(null);
   useStatusAnnouncement(
-    loadErrorRef,
     loadError != null
       ? t('@astryx.comments.errorAnnouncement', {
           title: t('@astryx.comments.loadFailed'),
@@ -263,6 +262,7 @@ export function Comments({
         })
       : null,
     'assertive',
+    {ref: loadErrorRef},
   );
   const rootRef = useRef<HTMLElement | null>(null);
   const setRootRef = useCallback(

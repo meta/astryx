@@ -261,6 +261,18 @@ export const docs = {
       description: 'Callback when the dropdown opens or closes.',
     },
     {
+      name: 'menu',
+      type: 'BaseTypeaheadMenu',
+      description:
+        "What the menu shows. role 'listbox' (default) is the result list; its optional render({listbox, query, isBusy, isEmptySearch, close}) places information such as a header or a hint around it, and anything a person acts on stays a result so the arrow keys reach it. role 'dialog' shows render({query, close}) in a dialog named by label that takes focus; Escape, an outside press or close() returns focus to where it was when the menu opened. Astryx owns the layer either way. Switching from listbox to dialog keeps the menu open: call handleRef.open() from onChange.",
+    },
+    {
+      name: 'handleRef',
+      type: 'React.Ref<BaseTypeaheadHandle>',
+      description:
+        'Imperative handle: open() opens the menu (a dialog at once; a listbox shows or loads its results) and close() closes it. There is no controlled open state; onOpenChange reports changes.',
+    },
+    {
       name: 'width',
       type: 'SizeValue',
       description:

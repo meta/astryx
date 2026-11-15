@@ -12,6 +12,7 @@ export const docs = {
   title: 'Quick Start',
   category: 'guide',
   keywords: [
+    'authoring',
     'make a package',
     'make an integration',
     'first integration',

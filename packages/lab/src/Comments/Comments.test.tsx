@@ -274,6 +274,10 @@ beforeAll(() => {
       if (selector === ':popover-open') {
         return popoverOpenState.get(this) ?? false;
       }
+      // showModal below marks the dialog open; jsdom has no modal top layer.
+      if (selector === ':modal') {
+        return this instanceof HTMLDialogElement && this.open;
+      }
       return originalMatches.call(this, selector);
     },
   });
@@ -501,7 +505,7 @@ describe('Comments rendering', () => {
     const article = articleByAuthor('Avery Kim');
     expect(
       within(article).getByRole('button', {name: 'Like: 2'}),
-    ).toBeDisabled();
+    ).toHaveAttribute('aria-disabled', 'true');
     expect(within(article).queryByRole('button', {name: 'Reply'})).toBeNull();
     expect(
       within(article).queryByRole('button', {
@@ -957,6 +961,67 @@ describe('Comments threads', () => {
     ).toBeTruthy();
   });
 
+  it('names, shows and announces a failed link copy', async () => {
+    writeText.mockRejectedValueOnce(new Error('clipboard denied'));
+    render(
+      <Sized>
+        <Comments
+          comments={[{...COMMENTS[0], replies: []}]}
+          currentUser={OTHER}
+        />
+      </Sized>,
+    );
+    await click(screen.getByRole('button', {name: 'Copy comment link'}));
+    await flush();
+    expect(
+      screen.getByRole('button', {name: 'Failed to copy value to clipboard.'}),
+    ).toBeTruthy();
+    // A failure is an error, so it goes to the assertive region.
+    await waitFor(() =>
+      expect(
+        document.querySelector('[data-astryx-live-region="assertive"]'),
+      ).toHaveTextContent('Failed to copy value to clipboard.'),
+    );
+  });
+
+  it('stops the failed-copy reset when the comment unmounts', async () => {
+    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+    const setTimer = vi.spyOn(globalThis, 'setTimeout');
+    const clearTimer = vi.spyOn(globalThis, 'clearTimeout');
+    try {
+      writeText.mockRejectedValueOnce(new Error('clipboard denied'));
+      const {unmount} = render(
+        <Sized>
+          <Comments
+            comments={[{...COMMENTS[0], replies: []}]}
+            currentUser={OTHER}
+          />
+        </Sized>,
+      );
+      await click(screen.getByRole('button', {name: 'Copy comment link'}));
+      await act(() => vi.advanceTimersByTimeAsync(0));
+      expect(
+        screen.getByRole('button', {
+          name: 'Failed to copy value to clipboard.',
+        }),
+      ).toBeTruthy();
+      unmount();
+      // The failure shows for two seconds, as a copied link does. After the
+      // unmount, only the shared live region's own two-second clear may still
+      // be pending: the comment's reset is stopped.
+      const cleared = new Set(clearTimer.mock.calls.map(call => call[0]));
+      const pending = setTimer.mock.calls.flatMap((call, index) => {
+        const id = setTimer.mock.results[index]?.value;
+        return call[1] === 2000 && !cleared.has(id) ? [id] : [];
+      });
+      expect(pending.length).toBeLessThanOrEqual(1);
+    } finally {
+      setTimer.mockRestore();
+      clearTimer.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps the copied label for the full time after a second copy', async () => {
     vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
     const wait = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
@@ -1039,6 +1104,29 @@ describe('Comments threads', () => {
     expect(loadVersions).toHaveBeenCalledWith('root-1');
     expect(document.body.textContent).toContain('Previous wording');
     expect(document.body.textContent).toContain('Current version');
+  });
+
+  it('announces the history load through the shared dialog channel, then clears it (AST-086 FR8, FR14)', async () => {
+    const loadVersions = vi.fn(() => new Promise<never>(() => {}));
+    render(
+      <Sized>
+        <Comments comments={COMMENTS} loadVersions={loadVersions} />
+      </Sized>,
+    );
+    await click(screen.getByRole('button', {name: 'View edit history'}));
+    await flush();
+    const dialog = screen.getByRole('dialog');
+    const region = await waitFor(() => {
+      const regions = dialog.querySelectorAll(
+        ':scope > [data-astryx-modal-live-region="polite"]',
+      );
+      expect(regions).toHaveLength(1);
+      expect(regions[0]).toHaveTextContent('Loading edit history');
+      return regions[0];
+    });
+    await new Promise(resolve => setTimeout(resolve, 2100));
+    expect(region).toBeEmptyDOMElement();
+    expect(within(dialog).getByText('Loading edit history')).toBeVisible();
   });
 
   it('retries a comment that failed to send', async () => {

@@ -15,13 +15,13 @@
  * - /packages/core/src/BottomSheet/BottomSheetStacking.test.tsx
  */
 
+import {createSharedContext} from '../utils/sharedContext';
+
 // A sheet rendered in another sheet's content is presented only while its
 // host is open. Without this, a host that closes from code would leave the
 // inner dialog open in the top layer with no box: an invisible modal that
 // blocks the page. The host never writes the inner sheet's state. At the
 // root the context is null, which reads as open.
-
-import {createContext} from 'react';
 
 export interface BottomSheetHostContextValue {
   /** Whether the host sheet is open; a closing host reads false at once. */
@@ -29,7 +29,11 @@ export interface BottomSheetHostContextValue {
 }
 
 export const BottomSheetHostContext =
-  createContext<BottomSheetHostContextValue | null>(null);
+  createSharedContext<BottomSheetHostContextValue | null>(
+    'BottomSheetHostContext',
+    1,
+    null,
+  );
 BottomSheetHostContext.displayName = 'BottomSheetHostContext';
 
 export const OPEN_BOTTOM_SHEET_HOST: BottomSheetHostContextValue = {
