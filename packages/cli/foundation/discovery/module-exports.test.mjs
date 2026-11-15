@@ -11,6 +11,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   elementPropOrigins,
+  rendersElement,
   followedExportNames,
   moduleExportOrigin,
   moduleExportOrigins,
@@ -210,6 +211,35 @@ describe('a library of thousands of icons', () => {
       fs.rmSync(dir, {recursive: true, force: true});
     }
   }, 60_000);
+});
+
+describe('rendersElement', () => {
+  const PROVIDER = {sources: new Set(['@acme/ui/theme']), name: 'Provider'};
+
+  it('is true for an element imported by name, renamed or not', () => {
+    const app = write(
+      'Layout.tsx',
+      "import {Provider as P} from '@acme/ui/theme';\nexport const L = ({c}: any) => <P>{c}</P>;\n",
+    );
+    expect(rendersElement(app, PROVIDER)).toBe(true);
+  });
+
+  it('is false for an import never rendered, a type-only one, or another module', () => {
+    const imported = write(
+      'Imported.tsx',
+      "import {Provider} from '@acme/ui/theme';\nexport const p = Provider;\n",
+    );
+    const typeOnly = write(
+      'TypeOnly.tsx',
+      "import type {Provider} from '@acme/ui/theme';\nexport const L = () => <Provider />;\n",
+    );
+    const other = write(
+      'Other.tsx',
+      "import {Provider} from './Provider';\nexport const L = () => <Provider />;\n",
+    );
+    for (const file of [imported, typeOnly, other])
+      expect(rendersElement(file, PROVIDER)).toBe(false);
+  });
 });
 
 describe('elementPropOrigins', () => {

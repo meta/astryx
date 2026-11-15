@@ -5010,6 +5010,8 @@ export function compileTheme(ctx, data, base) {
         const derived = token => `${radiusAt(base, s.value, token)}px`;
         if (parts.length)
           for (const t of parts.flatMap(p => cornerParts(ctx, p))) {
+            // A radio's circle is no corner: the dial leaves it.
+            if (radioCircle(ctx.C, t)) continue;
             // A rung on a part gives what the whole-theme rung gives the
             // radius token the part reads; an exact size is as given.
             {
@@ -7837,6 +7839,50 @@ export function paddedParts(ctx, part) {
       Object.keys(ctx.C.MAP[t]?.own ?? {}).some(k => /^padding/.test(k)),
   );
   return inner.length ? inner : [part];
+}
+
+/**
+ * Whether a part is a radio's circle, as the part data records it: a part
+ * with a checked state, a square box of a fixed size, and corners at 50%
+ * that no token reaches, in it and in every part inside it (its dot). The
+ * circle marks a radio; it is no corner, so the corners dial leaves it.
+ * @param {any} C the part census
+ * @param {string} part
+ * @returns {boolean}
+ */
+export function radioCircle(C, part) {
+  const at = C.MAP[part]?.at ?? {};
+  /** A fixed px size at rest. @param {string} k */
+  const fixed = k =>
+    Object.entries(at[k] ?? {}).find(
+      ([sel, v]) => !/:/.test(sel) && /^\s*\d*\.?\d+px\s*$/.test(String(v)),
+    )?.[1];
+  /** The radius values a part draws, in any rule. @param {string} t */
+  const radii = t =>
+    Object.entries(C.MAP[t]?.at ?? {})
+      .filter(([prop]) => /radius$/.test(prop))
+      .flatMap(([, rules]) => Object.values(rules ?? {}).map(String));
+  /** A part and every part inside it. @param {string} t @returns {string[]} */
+  const within = (t, seen = new Set()) => {
+    if (seen.has(t)) return [];
+    seen.add(t);
+    return [
+      t,
+      ...(C.MAP[t]?.contains ?? []).flatMap((/** @type {string} */ k) =>
+        within(k, seen),
+      ),
+    ];
+  };
+  const w = fixed('width');
+  const own = radii(part);
+  return (
+    (C.MAP[part]?.attrs?.checked ?? []).length > 0 &&
+    w != null &&
+    String(w).trim() === String(fixed('height') ?? '').trim() &&
+    own.length > 0 &&
+    own.every(v => v.trim() === '50%') &&
+    within(part).every(k => radii(k).every(v => !/var\(/.test(v)))
+  );
 }
 
 /**

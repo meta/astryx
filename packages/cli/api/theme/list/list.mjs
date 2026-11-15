@@ -88,6 +88,16 @@ export async function themeListAvailable(options = {}) {
         added,
         default: added && state.defaultSlug === theme.slug,
         source: theme.source,
+        // The package wires its themes with its own provider component, not
+        // with Astryx's Theme: the app renders that component.
+        ...(theme.provider
+          ? {
+              wiredBy: {
+                export: theme.provider.export,
+                from: theme.provider.from,
+              },
+            }
+          : {}),
         // What `theme add` records and the app imports: a bundled theme's
         // descriptor ships in the CLI, its built output in its own package.
         owner,

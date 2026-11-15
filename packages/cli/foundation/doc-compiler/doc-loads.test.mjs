@@ -521,6 +521,10 @@ const RUNNERS = {
       'require(postcss-selector-parser)',
     ],
   },
+  'foundation/suggest/name-index.mjs': {
+    runs: "docs discovery, to load each integration doc once and keep the name it declares in the not-found hint's name index, when no kept index answers",
+    sites: ['import(../discovery/docs-discovery.mjs)'],
+  },
   'host/index.mjs': {
     runs: "another release's host entry, from one of the host's package sets, when that release answers a hosted run",
     sites: ['import(<computed>)'],
@@ -535,6 +539,10 @@ const RUNNERS = {
   },
   'scripts/generate-component-list.mjs': {
     runs: "node, to work out Core's component list on a copy of exactly the files Core publishes (at `prepack`)",
+    sites: ['child_process.spawnSync'],
+  },
+  'scripts/generate-docs-routes.mjs': {
+    runs: "node, to build the CLI's own docs tree on a copy of exactly the files the package publishes and store its routes (at `prepack`)",
     sites: ['child_process.spawnSync'],
   },
   'scripts/generate-search-catalog.mjs': {
@@ -576,6 +584,8 @@ const LOADER_MODULES = {
     'discoverIntegrationDocs',
     'GRAPH_BLOCK_TYPES',
     'GRAPH_ONLY_FIELDS',
+    'integrationDocDeclaration',
+    'integrationDocsCatalog',
     'isGuideRoute',
     'mergeTopic',
     'mergeTopicReport',

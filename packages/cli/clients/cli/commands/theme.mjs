@@ -699,6 +699,19 @@ function themeNextSteps(run, words = THEME_WORDS) {
 }
 
 /**
+ * The list's `wiredBy` line: the provider a theme's package wires it with.
+ * The list reads no app source; doctor checks where the app renders it.
+ * @param {import('../../../api/theme/theme.type.mjs').ThemeListEntry} theme
+ */
+function wiredByLine(theme) {
+  if (!theme.wiredBy) return theme;
+  return {
+    ...theme,
+    wiredBy: `wired by ${theme.wiredBy.export} from ${theme.wiredBy.from} when the app renders it; \`${getCliInvocation()} doctor\` checks where`,
+  };
+}
+
+/**
  * Print every field in the `theme.list` entries. Duplicate slugs stay separate
  * because each record names its owner.
  * @param {import('../../../api/theme/theme.type.mjs').ThemeListEntry[]} themes
@@ -721,7 +734,7 @@ function printThemeList(
   } else {
     emit(
       section('Themes', `${themes.length} available`),
-      records(themes, {
+      records(themes.map(wiredByLine), {
         fields: [
           'slug',
           'displayName',
@@ -731,6 +744,7 @@ function printThemeList(
           'source',
           'owner',
           'installed',
+          'wiredBy',
           'added',
           'default',
         ],

@@ -11,23 +11,37 @@
  *   `files`), or cannot be asked.
  * @position foundation/integrations; read by the template-asset and logo
  *   checks (validate-contributions.mjs) and the shipped-import check
- *   (shipped-imports.mjs).
+ *   (shipped-imports.mjs). Inside `withListingCache` (one validation) npm is
+ *   asked once per package folder, however many checks ask.
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {npmCommand} from '../release/cache.mjs';
+import {oncePerListing} from '../fs/listing-cache.mjs';
 
 /**
  * The paths npm packs for the package in `base`, read from
  * `npm pack --dry-run --json --ignore-scripts` (nothing runs, nothing is
  * written), started the way the CLI starts npm everywhere else, or why npm
- * could not answer.
+ * could not answer. Inside `withListingCache`, the answer it already gave for
+ * the folder: the template-asset, logo and shipped-import checks of one
+ * validation each ask, and npm takes seconds to answer.
  * @param {string} base
  * @returns {{paths: Set<string>} | {error: string}}
  */
 export function npmPackedPaths(base) {
+  const folder = path.resolve(base);
+  return oncePerListing(`npm-pack\0${folder}`, () => askNpm(folder));
+}
+
+/**
+ * What npm answers for the package in `base` (npmPackedPaths).
+ * @param {string} base
+ * @returns {{paths: Set<string>} | {error: string}}
+ */
+function askNpm(base) {
   let npm;
   try {
     npm = npmCommand();
