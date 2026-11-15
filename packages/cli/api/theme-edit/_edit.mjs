@@ -7498,6 +7498,26 @@ async function missedParts(ctx, slug, data, res, base, opts = {}) {
         !/^--color-overlay-/.test(r.token) &&
         r.props.some(prop),
     );
+  /** The tokens a part's text reads at rest. @param {string} q */
+  const textTokensOf = q => [
+    ...new Set(
+      fills(q, x => x === 'color')
+        .filter((/** @type {any} */ r) =>
+          r.when.some((/** @type {string} */ w) => !/:|selected/.test(w)),
+        )
+        .map((/** @type {any} */ r) => /** @type {string} */ (r.token)),
+    ),
+  ];
+  /** The parts drawn at rest on the inverted surface. */
+  const onInverted = Object.keys(C.MAP).filter(
+    q =>
+      has(q) &&
+      fills(q).some(
+        (/** @type {any} */ r) =>
+          r.token === '--color-background-inverted' &&
+          r.when.some((/** @type {string} */ w) => !/:|selected/.test(w)),
+      ),
+  );
   // The status colors, by the word their tokens carry, and the dial that
   // generates each with the text that reads on it.
   const STATUS = /** @type {Record<string, [string, string]>} */ ({
@@ -7532,8 +7552,8 @@ async function missedParts(ctx, slug, data, res, base, opts = {}) {
       : [];
     // (Only a surface that holds text: a placeholder block is no surface
     // a reader looks for.)
-    const holdsText =
-      Boolean(C.MAP[p]?.media) || fills(p, x => x === 'color').length > 0;
+    const textTokens = textTokensOf(p);
+    const holdsText = Boolean(C.MAP[p]?.media) || textTokens.length > 0;
     if (
       surfaces &&
       restKept &&
@@ -7558,24 +7578,46 @@ async function missedParts(ctx, slug, data, res, base, opts = {}) {
           swap.length !== lost.length
             ? []
             : inverted === '--color-background-inverted'
-              ? lost.map(m => ({
-                  thing: '--color-background-inverted',
-                  value: 'var(--color-background-surface)',
-                  mode: m,
-                }))
-              : lost.flatMap(m => [
+              ? // The theme's inverted surface turns to its light surface
+                // (as the color it is: a part may read the surface token
+                // for its text), and the text of each part drawn on it
+                // that reads a token (a tooltip's) turns to the text
+                // color; a toast picks its own text from the surface.
+                lost.flatMap(m => [
+                  {
+                    thing: '--color-background-inverted',
+                    value: String(res[m]?.['--color-background-surface']),
+                    mode: m,
+                  },
+                  ...onInverted.flatMap(q =>
+                    textTokensOf(q).map(thing => ({
+                      thing,
+                      value: String(res[m]?.['--color-text-primary']),
+                      on: q,
+                      mode: m,
+                    })),
+                  ),
+                ])
+              : // The surface and the text as the colors they are in that
+                // mode (a tooltip's text reads the surface token itself, so
+                // a token reference would turn the fill back): the fill,
+                // then each token the part's text reads, or its text color
+                // when it reads none.
+                lost.flatMap(m => [
                   {
                     thing: 'background-color',
-                    value: 'var(--color-background-surface)',
+                    value: String(res[m]?.['--color-background-surface']),
                     on: p,
                     mode: m,
                   },
-                  {
-                    thing: 'color',
-                    value: 'var(--color-text-primary)',
-                    on: p,
-                    mode: m,
-                  },
+                  ...(textTokens.length ? textTokens : ['color']).map(
+                    thing => ({
+                      thing,
+                      value: String(res[m]?.['--color-text-primary']),
+                      on: p,
+                      mode: m,
+                    }),
+                  ),
                 ]),
       });
     }
