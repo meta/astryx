@@ -5124,8 +5124,12 @@ async function themeBuildInternal(
       'onLight',
       'adaptations',
     ];
+    // A resolved theme always carries its tokens (an empty map when it sets
+    // none), so a theme without them, a name alone or a name and component
+    // styles, is raw input too.
     const needsResolution =
       INPUT_ONLY_FIELDS.some(field => themeDef[field] !== undefined) ||
+      themeDef.tokens === undefined ||
       ('localTokens' in themeDef && themeDef.__localTokenLineage === undefined);
     if (needsResolution) {
       try {
