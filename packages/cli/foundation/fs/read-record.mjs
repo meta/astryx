@@ -189,27 +189,35 @@ const realpathSyncRaw = fs.realpathSync;
 /** fs.readdirSync as loaded, before installRecorder wraps it. */
 const readdirSyncRaw = fs.readdirSync;
 
+/** fs.readlinkSync as loaded, before installRecorder wraps it. */
+const readlinkSyncRaw = fs.readlinkSync;
+
 /** How a folder's listing stamp ({@link listingStamp}) begins. */
 export const LISTED = 'list:';
 
 /**
- * A folder's entries as a stamp: their names and types. A save that renames
- * a new copy over an entry keeps it; an entry added, removed or renamed, or a
- * changed type, changes it. The folder's own times are left out, as a save
- * by rename changes them on every save.
+ * A folder's entries as a stamp: their names and types, and where each link
+ * points. A save that renames a new copy over an entry keeps it; an entry
+ * added, removed or renamed, a changed type, or a link re-pointed changes it.
+ * The folder's own times are left out, as a save by rename changes them on
+ * every save.
  * @param {import('node:fs').Dirent[]} dirents the folder's entries
+ * @param {string} dir the folder
  * @returns {string}
  */
-export function listingOf(dirents) {
+export function listingOf(dirents, dir) {
   const entries = dirents
     .map(entry => {
-      const type = entry.isDirectory()
-        ? 'd'
-        : entry.isFile()
-          ? 'f'
-          : entry.isSymbolicLink()
-            ? 'l'
-            : 'o';
+      if (entry.isSymbolicLink()) {
+        let target = '';
+        try {
+          target = String(readlinkSyncRaw(path.join(dir, entry.name)));
+        } catch {
+          // A link that cannot be read is listed by its name alone.
+        }
+        return `l${entry.name}\0${target}`;
+      }
+      const type = entry.isDirectory() ? 'd' : entry.isFile() ? 'f' : 'o';
       return `${type}${entry.name}`;
     })
     .sort();
@@ -224,7 +232,7 @@ export function listingOf(dirents) {
  */
 export function listingStamp(dir) {
   try {
-    return listingOf(readdirSyncRaw(dir, {withFileTypes: true}));
+    return listingOf(readdirSyncRaw(dir, {withFileTypes: true}), dir);
   } catch {
     return fileStamp(dir) === '-' ? '-' : `${LISTED}unreadable`;
   }

@@ -61,7 +61,7 @@ function walkTree(root, skip, stamps) {
     let dirents;
     try {
       dirents = fs.readdirSync(full, {withFileTypes: true});
-      stamps.push([rel, listingOf(dirents)]);
+      stamps.push([rel, listingOf(dirents, full)]);
     } catch {
       dirents = [];
       stamps.push([rel, listingStamp(full)]);

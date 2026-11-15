@@ -398,6 +398,40 @@ describe('keptTreeSummary', () => {
     SLOW,
   );
 
+  it(
+    'walks again when a link inside the tree is re-pointed to a folder that lists the same names',
+    async () => {
+      const root = path.join(TEMP_ROOT, 'inner-link');
+      const versions = path.join(TEMP_ROOT, 'inner-link-versions');
+      for (const version of ['1.0.0', '1.0.1']) {
+        fs.mkdirSync(path.join(versions, version), {recursive: true});
+        fs.writeFileSync(path.join(versions, version, 'Same.doc.mjs'), 'same');
+      }
+      fs.mkdirSync(root, {recursive: true});
+      const link = path.join(root, 'current');
+      fs.symlinkSync(path.join(versions, '1.0.0'), link);
+      let made = 0;
+      // A value that names where the link inside the tree resolves.
+      const where = () =>
+        keptTreeSummary(
+          {kind: 'test-inner-link', roots: [root], code: []},
+          () => {
+            made++;
+            return fs.realpathSync(link);
+          },
+        );
+      await sleep(SETTLE_WAIT_MS);
+      expect(where()).toBe(fs.realpathSync(path.join(versions, '1.0.0')));
+      expect(where()).toBe(fs.realpathSync(path.join(versions, '1.0.0')));
+      expect(made).toBe(1);
+      fs.rmSync(link);
+      fs.symlinkSync(path.join(versions, '1.0.1'), link);
+      expect(where()).toBe(fs.realpathSync(path.join(versions, '1.0.1')));
+      expect(made).toBe(2);
+    },
+    SLOW,
+  );
+
   it('keeps one summary per key', async () => {
     const root = path.join(TEMP_ROOT, 'keyed');
     fs.mkdirSync(root, {recursive: true});
