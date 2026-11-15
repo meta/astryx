@@ -969,6 +969,24 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
       if (!o && k.split('|')[0] !== 'base' && !k.split('|')[1]) {
         const was = drawnUnder(prop0);
         if (was && was.light === v.light && was.dark === v.dark) continue;
+        // (A type property the look never set draws what it inherits, the
+        // body's: a pin of the body's value keeps it as it drew.)
+        const BODY = /** @type {Record<string, string>} */ ({
+          'font-weight': '--text-body-weight',
+          'font-family': '--font-family-body',
+          'font-size': '--text-body-size',
+          'line-height': '--text-body-line-height',
+        });
+        const bodyTok = BODY[prop0];
+        if (!was && !a.get(`base||${prop0}`) && bodyTok) {
+          const inh = (/** @type {'light' | 'dark'} */ m) =>
+            resolveIn(`var(${bodyTok})`, tw[m], m);
+          const same = (/** @type {'light' | 'dark'} */ m) => {
+            const x = String(inh(m) ?? '').trim();
+            return x !== '' && !/^var\(/.test(x) && x === String(v[m]).trim();
+          };
+          if (same('light') && same('dark')) continue;
+        }
       }
       // A border color on a look that draws no border (no width there, as
       // a date input's own box, whose field draws the line) shows nothing.

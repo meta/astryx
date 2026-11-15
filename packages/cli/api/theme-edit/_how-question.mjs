@@ -8237,6 +8237,18 @@ export function draftAnswer(ctx, env, question) {
         });
         continue;
       }
+      const between =
+        c.parts.length && !c.except && c.text
+          ? unknownSlot(c.text, false, true)
+          : null;
+      if (between) {
+        push({
+          text: `no part or word called "${between.word}": nothing is written. Name the part and what to change, or list the parts`,
+          options: [],
+          lookup: `${HOW} --list parts`,
+        });
+        continue;
+      }
     }
     // "make --color-accent and --color-error darker", "--text-heading-1-size
     // and --text-heading-2-size bigger": the tokens typed, each moved that
@@ -8491,6 +8503,20 @@ export function draftAnswer(ctx, env, question) {
           x.when = 'status:error';
           delete x.state;
         }
+      // ("keep the error inputs": a word the group has as a status and no
+      // member has as a variant is that status.)
+      for (const x of exceptedAll) {
+        const v = /^variant:([\w-]+)$/.exec(String(x.when ?? ''))?.[1];
+        if (!v) continue;
+        const members = [x.on, ...(FAMILIES[x.on] ?? [])];
+        const asVariant = members.some(m =>
+          (C.variantValues(one(m)).variant ?? []).includes(v),
+        );
+        const asStatus = members.some(m =>
+          (C.variantValues(one(m)).status ?? []).includes(v),
+        );
+        if (!asVariant && asStatus) x.when = `status:${v}`;
+      }
       const excepted = exceptedAll.filter(
         (x, i) =>
           exceptedAll.findIndex(
@@ -9022,6 +9048,27 @@ export function draftAnswer(ctx, env, question) {
         for (let i = keeps.length - 1; i >= 0; i--) {
           const k = keeps[i];
           const members = k.on ? FAMILIES[k.on] : undefined;
+          // (One part's variant that draws no line in any of its looks, a
+          // muted card's: its border is kept by writing none back.)
+          if (
+            !members &&
+            k.on &&
+            /^variant:/.test(String(k.when ?? '')) &&
+            /^border(?:-color|-width)?$/.test(k.thing)
+          ) {
+            const v = String(k.when).replace(':', '=');
+            const ws = Object.entries(
+              /** @type {Record<string, string>} */ (
+                C.MAP[one(k.on)]?.at?.['border-width'] ?? {}
+              ),
+            ).filter(([r]) => r.split(/[\s,]/).includes(v));
+            if (
+              ws.length &&
+              ws.every(([, x]) => /^0(?:px)?$/.test(String(x).trim()))
+            )
+              keeps.splice(i, 1);
+            continue;
+          }
           if (!members || !k.when) continue;
           // Any other property: a member with no look of its own under the
           // condition (a date input's error look, which its field draws)
@@ -18349,7 +18396,7 @@ export function draftAnswer(ctx, env, question) {
    *   with ("and the gizmo red")
    * @returns {{word: string, parts: string[]} | null}
    */
-  function unknownSlot(text, subject = false) {
+  function unknownSlot(text, subject = false, between = false) {
     // The part slot: the noun after "from", "on" or "to", the noun right
     // after the verb, or the noun before the thing changed ("the zorp
     // padding"). A word there that how knows as nothing (no part, group,
@@ -18358,26 +18405,56 @@ export function draftAnswer(ctx, env, question) {
     // (Only a noun after a determiner: "the zorp", "from the blorp".)
     const DET = String.raw`(?:the|my|our|all|every|each|its|their)\s+`;
     const THING = String.raw`(?:padding|spacing|shadows?|borders?|corners?|radius|background|fill|text|font|colou?r|outline|gap|size|height|width)`;
-    const slots = [
-      new RegExp(
-        String.raw`\b(?:from|on)\s+${DET}([a-z]{3,})\b(?!\s+(?:mode|theme)\b)`,
-      ).exec(text)?.[1],
-      new RegExp(
-        String.raw`^(?:please\s+)?(?:make|set|give|turn|change|remove|drop|add|round)\s+${DET}([a-z]{3,})\b`,
-      ).exec(text)?.[1],
-      new RegExp(String.raw`\b${DET}([a-z]{3,})\s+${THING}\b`).exec(text)?.[1],
-      // (The subject of an elided clause that starts with it, "… and the
-      // gizmo red".)
-      subject
-        ? new RegExp(String.raw`^${DET}([a-z]{3,})\b`).exec(text.trim())?.[1]
-        : undefined,
-      // (A plural right after the verb or "from" needs no determiner:
-      // "make widgets rounder", "from widgets".)
-      /\b(?:from|on)\s+([a-z]{3,}s)\b(?!\s+(?:mode|theme)\b)/.exec(text)?.[1],
-      /^(?:please\s+)?(?:make|set|give|turn|change|remove|drop|add|round)\s+([a-z]{3,}s)\b/.exec(
-        text,
-      )?.[1],
-    ];
+    // (Between a part and the thing changed, "the card zorp border": a
+    // word there that is no part, state, variant, aspect, color or known
+    // modifier is read nowhere, so the change is not guessed at.)
+    const betweenWord = (() => {
+      const m = new RegExp(
+        String.raw`\b${DET}([a-z]+)\s+([a-z]{3,})\s+${THING}\b`,
+      ).exec(text);
+      // (Never a function word, "the badges the color of …", nor the
+      // second word of a part's own name, "the header bar border".)
+      return m &&
+        lex.parts.some(([re]) => re.test(` ${m[1]} `)) &&
+        // (Nor a generic noun a part's name ends with, "the header bar".)
+        !/^(?:the|and|but|for|with|from|into|than|like|same|its|their|all|every|each|not|own|are|was|has|have|use|any|too|bar|area|section|region|panel|box|element|component|container|part|piece|block|wrapper)$/.test(
+          m[2],
+        ) &&
+        !lex.parts.some(([re]) => {
+          const x = re.exec(` ${m[1]} ${m[2]} `);
+          return x != null && x[0].includes(m[2]);
+        })
+        ? m[2]
+        : undefined;
+    })();
+    const slots = between
+      ? [betweenWord]
+      : [
+          new RegExp(
+            String.raw`\b(?:from|on)\s+${DET}([a-z]{3,})\b(?!\s+(?:mode|theme)\b)`,
+          ).exec(text)?.[1],
+          new RegExp(
+            String.raw`^(?:please\s+)?(?:make|set|give|turn|change|remove|drop|add|round)\s+${DET}([a-z]{3,})\b`,
+          ).exec(text)?.[1],
+          new RegExp(String.raw`\b${DET}([a-z]{3,})\s+${THING}\b`).exec(
+            text,
+          )?.[1],
+          // (The subject of an elided clause that starts with it, "… and the
+          // gizmo red".)
+          subject
+            ? new RegExp(String.raw`^${DET}([a-z]{3,})\b`).exec(
+                text.trim(),
+              )?.[1]
+            : undefined,
+          // (A plural right after the verb or "from" needs no determiner:
+          // "make widgets rounder", "from widgets".)
+          /\b(?:from|on)\s+([a-z]{3,}s)\b(?!\s+(?:mode|theme)\b)/.exec(
+            text,
+          )?.[1],
+          /^(?:please\s+)?(?:make|set|give|turn|change|remove|drop|add|round)\s+([a-z]{3,}s)\b/.exec(
+            text,
+          )?.[1],
+        ];
     for (const w of slots) {
       if (!w || /(?:ss|us|is)$/.test(w) || stateWord(w) != null) continue;
       const word = singular(w);
@@ -18400,6 +18477,15 @@ export function draftAnswer(ctx, env, question) {
         // which how answers by name, "the scrollbar".)
         ROLE_WORDS.test(w) ||
         /^(?:scrollbars?|scroll|carets?|cursors?|selections?)$/.test(w) ||
+        (between &&
+          (/^(?:own|outer|inner|whole|main|full|bottom|top|left|right|side|each|every|default|plain|base)$/.test(
+            w,
+          ) ||
+            Object.values(C.MAP).some(m =>
+              Object.values(m.attrs ?? {}).some(
+                vals => Array.isArray(vals) && vals.includes(w),
+              ),
+            ))) ||
         parseColor(w) ||
         /^(?:dark|light|darker|lighter|bigger|smaller|more|less|least|most|much|very|bit|lot|whole|entire|whole|entire|overall|main|page|app|site|everything|everywhere|default|global|general|base|theme|themes|screen|screens|current|other|same|top|bottom|left|right|inner|outer|side|sides|plus|thus|always|sometimes|its|this|that|these|those|them|they|was|has|does|yes|minus|options|things|thing|ones|one|edges|tokens|settings|variables|parts|part|modes|mode|pixels|steps|step|levels|level|times|default|normal|regular|primary|secondary|small|large|medium|subtle|strong|soft|hard|new|old|nice|good|bad|ugly|pretty|heavy|thin|thick|bold|round|rounded|square|flat|clean|modern|fancy|simple|minimal|same|their|your|mine|ours|any|some|every|each|first|last|second|third|letter|letters|word|words|line|lines|link|links|title|titles|label|labels|heading|headings|body|copy|content|everything)$/.test(
           w,
