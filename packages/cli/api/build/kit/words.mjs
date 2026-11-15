@@ -48,6 +48,14 @@ export const CONTAINER_PHRASE =
   /\b(?:in|inside|within)\s+(?:a|an|the)\s+([a-z-]+)(?:\s+([a-z-]+))?/gi;
 
 /**
+ * A place phrase: a preposition of place, then a determiner ("above the
+ * table", "into my dashboard"). CONTAINER_PHRASE is the narrower class of
+ * frames a page lives in ("in a modal"); this one names where a piece goes.
+ */
+export const PLACE_PHRASE =
+  /\b(?:to|into|onto|in|inside|within|on|above|below|beside|under|next to)\s+(?:the|a|an|my|our|this|each|every|existing)\b/i;
+
+/**
  * Where a phrase ends, for finding the word that heads it: punctuation and
  * the words that join phrases.
  */
@@ -128,6 +136,87 @@ export function containersOf(query) {
     }
   }
   return found;
+}
+
+/**
+ * A template's keywords as the units a request can match, each read with the
+ * caller's own word reader. A one-word keyword is that word. A longer keyword
+ * is one phrase unit, its words joined by single spaces: a request matches it
+ * only when it names those words in that order (`phrasesIn`), and its words
+ * never count alone. So "table of contents" on a docs page adds no "table" to
+ * that page, and a table request still reads as a table.
+ * @param {readonly string[]} keywords
+ * @param {(text: string) => string[]} read the caller's word reader
+ * @returns {string[]}
+ */
+export function keywordUnits(keywords, read) {
+  return keywords.map(keyword => read(keyword).join(' ')).filter(Boolean);
+}
+
+/**
+ * The phrase units (two or more words) a request names: the unit's words
+ * appear next to each other, in order, in the request's words as the same
+ * reader reads them.
+ * @param {readonly string[]} words the request's words, in order
+ * @param {Iterable<string>} units
+ * @returns {Set<string>}
+ */
+export function phrasesIn(words, units) {
+  const text = ` ${words.join(' ')} `;
+  const found = new Set();
+  for (const unit of units) {
+    if (unit.includes(' ') && text.includes(` ${unit} `)) found.add(unit);
+  }
+  return found;
+}
+
+/**
+ * The words a template's keyword units give an idea: each one-word keyword,
+ * and every word of each phrase keyword the idea names (`phrasesIn`). A named
+ * phrase carries all of its words, as the same words listed one by one would;
+ * a phrase the idea does not name gives none of them.
+ * @param {readonly string[]} units the template's keyword units (`keywordUnits`)
+ * @param {readonly string[]} words the idea's words, in order, read the same way
+ * @returns {string[]}
+ */
+export function keywordWordsFor(units, words) {
+  const named = phrasesIn(words, units);
+  return units.flatMap(unit =>
+    !unit.includes(' ') ? [unit] : named.has(unit) ? unit.split(' ') : [],
+  );
+}
+
+/**
+ * What each frame of an idea holds: for every container phrase ("settings in
+ * a modal", "in a settings modal"), the frame's terms with the words that
+ * name what sits in it: the head of the phrase right before the container
+ * phrase, and the container phrase's own other words. In "a toggle in a modal
+ * on the settings page" the modal holds the toggle, not the settings page.
+ * @param {string} query
+ * @returns {Map<string, Set<string>>} frame term -> terms it holds
+ */
+export function framesOf(query) {
+  const text = String(query);
+  /** @type {Map<string, Set<string>>} */
+  const held = new Map();
+  for (const m of text.matchAll(CONTAINER_PHRASE)) {
+    const frames = terms(`${m[1]} ${m[2] ?? ''}`).filter(t =>
+      OVERLAY_FRAMES.has(t),
+    );
+    if (frames.length === 0) continue;
+    const before = text.slice(0, m.index).toLowerCase().split(PHRASE_END);
+    const lead = terms(before[before.length - 1] ?? '');
+    const holds = new Set([
+      ...lead.slice(-1),
+      ...terms(`${m[1]} ${m[2] ?? ''}`).filter(t => !OVERLAY_FRAMES.has(t)),
+    ]);
+    for (const f of frames) {
+      const set = held.get(f) ?? new Set();
+      for (const t of holds) set.add(t);
+      held.set(f, set);
+    }
+  }
+  return held;
 }
 
 /** @param {string} text */

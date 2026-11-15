@@ -8,16 +8,24 @@ export const doc = {
   name: 'theme remove',
   displayName: 'astryx theme remove',
   namespace: 'cli/commands',
-  summary: 'Remove a non-default theme from the app',
+  summary: 'Remove a theme from the app',
   description:
-    'Removes one added theme from the generated module and regenerates the whole module. Choose another default with theme use before removing the current default. A theme whose local folder or package is gone can be removed, and theme use still works when the default is the one that is gone.',
+    'Removes one added theme from the generated module and regenerates the whole module. While other themes are added, choose another default with theme use before removing the current default. Removing the only added theme removes the module file and prints the lines the app root must drop; a module with changes the CLI did not write stays. A theme whose local folder or package is gone can be removed, and theme use still works when the default is the one that is gone.',
   fn: 'themeRemove',
   args: [{name: 'slug', param: 'slug', required: true}],
-  examples: [{label: 'Remove an added theme', cli: 'astryx theme remove ocean'}],
+  examples: [
+    {label: 'Remove an added theme', cli: 'astryx theme remove ocean'},
+  ],
   outsideProject: 'refuse',
   exitCodes: [
-    {code: 0, when: 'the module is regenerated without the theme'},
-    {code: 1, when: 'the theme is not added, is the default, or state is invalid'},
+    {
+      code: 0,
+      when: 'the module is regenerated without the theme, or removed with the only added theme',
+    },
+    {
+      code: 1,
+      when: 'the theme is not added, is the default while other themes are added, is the only one and the module has changes the CLI did not write, or state is invalid',
+    },
   ],
   related: ['theme add', 'theme use', 'theme list'],
   notes: [

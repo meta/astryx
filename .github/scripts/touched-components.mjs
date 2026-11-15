@@ -521,7 +521,7 @@ export function summaryMarkdown(report) {
       report.foundations?.length > 0
         ? `it changes shared styles (${report.foundations.join(', ')})`
         : `it touches ${report.componentCount} components (more than ${MAX_TOUCHED_COMPONENTS})`;
-    return `### Touched components\n\nWide change (${report.componentCount} components): the touched-components check did not run because ${reason}. Add \`ci:run-visual\`, \`ci:run-a11y\` or \`ci:run-rtl\` to run the full suite.\n`;
+    return `### Touched components\n\nWide change (${report.componentCount} components): the touched-components check did not run because ${reason}. Each label runs only its own full suite: \`ci:run-visual\` for Visual, \`ci:run-a11y\` for Accessibility, \`ci:run-rtl\` for RTL.\n`;
   }
   if (report.components.length === 0) {
     return '### Touched components\n\nNo component changed.\n';
@@ -539,7 +539,7 @@ export function summaryMarkdown(report) {
   if (report.broad) {
     lines.push(
       '',
-      'This change reaches shared code the analysis could not scope; only the touched components were audited. Add `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl` to audit everything it reaches.',
+      'This change reaches shared code the analysis could not scope; only the touched components were audited. To audit everything it reaches, add `ci:run-visual` for Visual, `ci:run-a11y` for Accessibility, `ci:run-rtl` for RTL.',
     );
   }
   return `${lines.join('\n')}\n`;
