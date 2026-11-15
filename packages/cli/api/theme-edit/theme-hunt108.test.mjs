@@ -276,12 +276,14 @@ describe('asks it used to drop', () => {
   it(
     'a shadow typed for one mode goes into light-dark() on a part with no shadow',
     async () => {
-      expect(
-        (await answer('popover shadow 0 4px 12px #00000080 in dark mode'))
-          .first,
-      ).toEqual([
-        "set q box-shadow '0 4px 12px light-dark(transparent, #00000080)' --on popover",
-      ]);
+      // (What a popover shows in the other mode is unknown here: Core
+      // gives it a shared shadow the census never saw drawn, so a one-mode
+      // shadow that would blank it is refused with that reason.)
+      const pop = await answer(
+        'popover shadow 0 4px 12px #00000080 in dark mode',
+      );
+      expect(pop.first).toEqual([]);
+      expect(pop.text).toMatch(/what popover shows in light mode is unknown/);
       // A card shows no shadow at rest (its selection ring is a state of
       // its own): the light half is transparent too.
       expect(

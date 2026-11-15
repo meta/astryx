@@ -2476,6 +2476,39 @@ function oneModeOfTheme(data) {
 }
 
 /**
+ * Whether any of the parts draws a line of that kind (a border, one side's
+ * border, an outline) with a width, at rest or in the state named: then its
+ * color alone can differ by mode.
+ * @param {any} C the part census
+ * @param {string[]} parts
+ * @param {string} prop border, border-<side> or outline
+ * @param {string | undefined | null} [state]
+ * @returns {boolean}
+ */
+export function drawsLine(C, parts, prop, state) {
+  // (A side's line is drawn by the side's own width or the shared one.)
+  const keys =
+    prop === 'border'
+      ? [
+          'border-width',
+          ...['top', 'right', 'bottom', 'left'].map(x => `border-${x}-width`),
+        ]
+      : prop.startsWith('border-')
+        ? [`${prop}-width`, 'border-width']
+        : [`${prop}-width`];
+  return parts.some(t => {
+    const at = C.MAP[t]?.at ?? {};
+    return keys.some(k =>
+      Object.entries(at[k] ?? {}).some(
+        ([sel, w]) =>
+          !/^\s*0(?:px)?\s*$/.test(String(w)) &&
+          (state ? sel.includes(state) : !/:/.test(sel)),
+      ),
+    );
+  });
+}
+
+/**
  * What a text property CSS inherits, set on a part, also reaches: the parts
  * inside it that set no such property of their own, said in one line; null
  * for any other property or when none does.
@@ -5911,11 +5944,19 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
           : longhandOf('color') && COLOR_PROPS.test(`${prop}-color`)
             ? `${prop}-color`
             : null;
+      // A line (a border, one side's border, an outline) the part does not
+      // draw now would appear in the other mode too, with its current
+      // color: only a line the part draws takes its color by mode here.
+      const lined = /^(?:border(?:-(?:top|right|bottom|left))?|outline)$/.test(
+        prop,
+      );
+      const undrawn =
+        lined && !drawsLine(C, partsOf(ctx, s), prop, s.state ?? null);
       // On a part whose variants each have their own color, the color per
       // mode is set for one variant at a time (as that refusal says): the
       // step names the default one, or the first.
       let altWhen = '';
-      if (alt && !s.when) {
+      if (alt === 'background-color' && !s.when) {
         const g = C.groupOfProp(alt);
         const variants = [
           ...new Set(
@@ -5977,7 +6018,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
             )
           : null;
       const runs = alt
-        ? shapeRuns.length < shapeLines.length
+        ? shapeRuns.length < shapeLines.length || undrawn
           ? null
           : [
               ...shapeRuns,
@@ -5990,11 +6031,13 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
           : null;
       refuse(
         E.ERR_THEME_NO_MODE,
-        alt
-          ? `--mode takes a plain color; ${prop} mixes a color with ${words.length > 1 ? 'other words' : 'nothing else'}, so its color goes per mode through ${alt}${shapeLines.length ? `, and its ${prop === 'text-decoration' ? 'line and style' : 'width and style'} for both modes` : ''}.`
-          : colorWord && /shadow$/.test(prop)
-            ? `--mode takes a plain color; ${prop} mixes a color with sizes, so --mode cannot hold it. Its color can still differ between light and dark: write it in the value as light-dark(<light>, <dark>).`
-            : `--mode works on plain colors; ${prop} is not a color, so it is set for both modes.`,
+        alt && undrawn
+          ? `--mode takes a plain color; ${s.on} draws no ${prop} now, and a line's width and style are the same in both modes, so it would show in the other mode too. Write its color in the value as light-dark(<light>, <dark>), with transparent for the mode that shows none.`
+          : alt
+            ? `--mode takes a plain color; ${prop} mixes a color with ${words.length > 1 ? 'other words' : 'nothing else'}, so its color goes per mode through ${alt}${shapeLines.length ? `, and its ${prop === 'text-decoration' ? 'line and style' : 'width and style'} for both modes` : ''}.`
+            : colorWord && /shadow$/.test(prop)
+              ? `--mode takes a plain color; ${prop} mixes a color with sizes, so --mode cannot hold it. Its color can still differ between light and dark: write it in the value as light-dark(<light>, <dark>).`
+              : `--mode works on plain colors; ${prop} is not a color, so it is set for both modes.`,
         {
           run: runs ?? [
             colorWord

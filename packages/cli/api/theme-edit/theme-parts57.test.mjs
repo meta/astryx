@@ -91,16 +91,27 @@ describe('a shorthand with --mode', () => {
   it('does so for outline and a border side too', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('o', {cwd, like: 'neutral'});
+    // (The outline a button draws is its focus ring; at rest it draws
+    // none, so a one-mode outline there would show in the other mode too.)
     const outline = await refusal(() =>
+      themeEditSet('o', 'outline', '2px dashed red', {
+        cwd,
+        on: 'button',
+        state: 'focus-visible',
+        mode: 'light',
+      }),
+    );
+    expect(outline.run.at(-1)).toMatch(
+      /set o outline-color red --on button --state focus-visible --mode light$/,
+    );
+    const atRest = await refusal(() =>
       themeEditSet('o', 'outline', '2px dashed red', {
         cwd,
         on: 'button',
         mode: 'light',
       }),
     );
-    expect(outline.run.at(-1)).toMatch(
-      /set o outline-color red --on button --mode light$/,
-    );
+    expect(atRest.message).toMatch(/button draws no outline now/);
     const top = await refusal(() =>
       themeEditSet('o', 'border-top', '3px solid blue', {
         cwd,

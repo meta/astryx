@@ -516,8 +516,10 @@ async function buildProjectTree(catalog, fresh) {
     if (record.replaces != null) {
       node.guideOverlay = {
         replacement: record,
-        // Extensions were authored against the content that just went away.
-        extensions: [],
+        // An extension adds to whatever answers its route, so it stays: the
+        // order integrations are configured in must not decide whether its
+        // sections show.
+        extensions: overlay.extensions,
         ...(overlay.replacement
           ? {replacedPackage: overlay.replacement.package}
           : {}),
@@ -1179,6 +1181,35 @@ async function includedContent(catalog, tree, block, found) {
 }
 
 /**
+ * Whether a package owns a topic: it wrote the topic, or adds sections to it.
+ * @param {import('../../foundation/discovery/docs-discovery.mjs').DocsTopicEntry} entry
+ * @param {string} owner the package
+ * @returns {boolean}
+ */
+function ownsTopic(entry, owner) {
+  return (
+    entry.package === owner ||
+    entry.extensions.some(extension => extension.package === owner)
+  );
+}
+
+/**
+ * Whether a package owns a node of the docs tree: it placed the node, or
+ * replaces or extends the guide there by its route.
+ * @param {TreeNode} node
+ * @param {string} owner the package
+ * @returns {boolean}
+ */
+function ownsNode(node, owner) {
+  return (
+    node.provider === owner ||
+    node.guideOverlay?.replacement?.package === owner ||
+    (node.guideOverlay?.extensions.some(each => each.package === owner) ??
+      false)
+  );
+}
+
+/**
  * Every link in the project's docs that names no doc: in each topic, each
  * guide the tree places, and each typed doc.
  * @param {DocsCatalog} catalog
@@ -1206,15 +1237,7 @@ export async function docsLinkProblems(
     }
   };
   for (const entry of catalog.entries()) {
-    // A package owns a topic it wrote, and the sections it adds to another
-    // package's topic.
-    if (
-      owner != null &&
-      entry.package !== owner &&
-      !entry.extensions.some(extension => extension.package === owner)
-    ) {
-      continue;
-    }
+    if (owner != null && !ownsTopic(entry, owner)) continue;
     try {
       note(entry.name, await topicLinkProblems(catalog, entry));
     } catch {
@@ -1222,16 +1245,7 @@ export async function docsLinkProblems(
     }
   }
   for (const node of tree.nodes.values()) {
-    // A package owns a guide it placed, and a guide it replaces or extends by
-    // its route.
-    if (
-      owner != null &&
-      node.provider !== owner &&
-      node.guideOverlay?.replacement?.package !== owner &&
-      !node.guideOverlay?.extensions.some(each => each.package === owner)
-    ) {
-      continue;
-    }
+    if (owner != null && !ownsNode(node, owner)) continue;
     if (node.kind === 'generic' && node.ref?.topicFile) {
       try {
         note(node.route, await topicLinkProblems(catalog, guideEntry(node)));
@@ -1914,6 +1928,43 @@ export function holdsOwnName(tree, catalog, entry) {
     owner.entry.name === entry.name &&
     owner.entry.package === entry.package
   );
+}
+
+/**
+ * The names `astryx docs` opens a package's docs by, sorted: the one rule
+ * every surface that lists a package's docs names them by, so each name it
+ * prints opens (`astryx discover` lists an installed integration's docs this
+ * way). The docs are what the package's docs root ships, and each opens where
+ * it lands, not by the name on its file: a topic the package wrote or took
+ * over opens by its own name; a doc that adds sections to another topic opens
+ * with that topic, by its name; a namespace doc or guide the package places,
+ * and a guide it replaces or extends by its route, open by that route. A topic
+ * whose name opens another doc is left out, as the topic list leaves it out
+ * (spec:AST-046 FR11). Typed docs of the package's other contributions, such
+ * as an icon set's own icon definitions, are listed with those contributions,
+ * not here.
+ * @param {DocsCatalog} catalog
+ * @param {DocsTree} tree
+ * @param {string} owner the package
+ * @returns {string[]}
+ */
+export function packageDocNames(catalog, tree, owner) {
+  /** @type {Set<string>} */
+  const names = new Set();
+  for (const entry of catalog.entries()) {
+    if (ownsTopic(entry, owner) && holdsOwnName(tree, catalog, entry)) {
+      names.add(entry.name);
+    }
+  }
+  for (const node of tree.nodes.values()) {
+    // What a docs root ships to the tree: a namespace doc, or a guide (a topic
+    // file the tree places). A generated level has no doc of its own, and a
+    // topic the tree files in one opens by its name, named above.
+    if (node.generated) continue;
+    if (node.kind !== 'namespace' && node.ref?.topicFile == null) continue;
+    if (ownsNode(node, owner)) names.add(node.route);
+  }
+  return [...names].sort();
 }
 
 /**

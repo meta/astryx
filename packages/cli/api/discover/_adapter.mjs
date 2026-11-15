@@ -30,6 +30,7 @@ import {hostedRun} from '../../foundation/runtime/package-root.mjs';
 import {scanAllPackages, findComponentInPackages} from './_package-scanner.mjs';
 import {loadDocs} from '../../foundation/discovery/component-loader.mjs';
 import {collectIdentities} from '../../foundation/integrations/contribution-inventory.mjs';
+import {packageDocNames, projectTree} from '../docs/_adapter.mjs';
 import {discoverIntegrationIconSets} from '../../foundation/discovery/icon-set-discovery.mjs';
 import {detectPackageManager} from '../../foundation/env/package-manager.mjs';
 import {isValidSemver, semverCompare} from '../../foundation/env/semver.mjs';
@@ -221,6 +222,7 @@ export async function discoverPackages() {
 export async function describeInstalled(project, scanned) {
   if (project == null) return scanned;
   const byName = new Map(scanned.map(pkg => [pkg.name, pkg]));
+  const docs = await projectDocs(project);
   /** @type {InstalledPackage[]} */
   const installed = [];
   for (const integration of project.loadedIntegrations) {
@@ -238,10 +240,12 @@ export async function describeInstalled(project, scanned) {
     // Components come from the scan above; loading every component doc again
     // here would only slow the list down.
     // Icon sets are read below, only with the opt-in.
+    // Docs are named from the project's docs catalog, below.
     const {identities} = await collectIdentities({
       ...integration,
       components: undefined,
       iconSets: undefined,
+      docs: undefined,
     });
     // Icon sets are listed the way every icon surface sees them: a set that
     // is invalid or whose module does not resolve answers nothing (FR9).
@@ -253,7 +257,11 @@ export async function describeInstalled(project, scanned) {
     installed.push({
       ...base,
       templates: identities.templates.map(t => t.id),
-      docs: identities.docs,
+      // Each doc by the name `astryx docs` opens it by, not the name on its
+      // file: a doc that adds sections to `theme` opens as `theme`.
+      docs: docs
+        ? packageDocNames(docs.catalog, docs.tree, integration.name)
+        : [],
       themes: identities.themes.map(t => t.slug),
       codemods: identities.codemods.map(c => `${c.version}/${c.id}`),
       iconSets: sets.map(set => set.name),
@@ -278,6 +286,31 @@ export async function describeInstalled(project, scanned) {
     });
   }
   return installed;
+}
+
+/**
+ * The project's docs catalog and tree, as a docs read builds them, so discover
+ * names each doc the way `astryx docs` opens it. Null when no integration
+ * ships docs, so there is nothing to name and nothing is built, or when they
+ * cannot be built: a docs read then answers from the CLI's own topics alone,
+ * so no integration doc opens.
+ * @param {Project} project
+ * @returns {Promise<{catalog: import('../../foundation/discovery/docs-discovery.mjs').DocsCatalog, tree: import('../../foundation/doc-compiler/tree.mjs').DocsTree} | null>}
+ */
+async function projectDocs(project) {
+  if (
+    !project.loadedIntegrations.some(
+      integration => !integration.__loadError && integration.docs,
+    )
+  ) {
+    return null;
+  }
+  try {
+    const catalog = await project.docs();
+    return {catalog, tree: await projectTree(catalog)};
+  } catch {
+    return null;
+  }
 }
 
 /**

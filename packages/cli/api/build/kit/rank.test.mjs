@@ -425,6 +425,25 @@ describe('pickStart on parts and edits (spec:AST-048/FR3)', () => {
     expect(await start('compact status pill with a tooltip')).toBeNull();
   });
 
+  it('never takes a template kept off the gallery as the app shell for a part', () => {
+    const pages = [
+      page('frame-top', 'Shell - Top Nav', 'An app frame with top navigation.'),
+      {
+        ...page(
+          'frame-preview',
+          'Shell - Top Nav',
+          'Sample product screens for a theme preview, with top navigation.',
+          ['theme preview'],
+        ),
+        hidden: true,
+      },
+    ];
+    const shellFor = (/** @type {string} */ idea) =>
+      pickStart(rankPages(idea, pages), 'part')?.name ?? null;
+    expect(shellFor('a theme preview frame with top navigation')).toBeNull();
+    expect(shellFor('an app frame with top navigation')).toBe('frame-top');
+  });
+
   it('starts an edit of an existing page or part from the app shell', async () => {
     for (const idea of [
       'add a sparkline column to the existing incidents table',

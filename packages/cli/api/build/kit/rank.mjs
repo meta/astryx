@@ -53,7 +53,7 @@
 
 import {
   HEAD_END,
-  SHELL_FAMILY,
+  isAppShell,
   terms,
   modifiersOf,
   pairsOf,
@@ -290,6 +290,7 @@ export function rankPages(query, pages) {
         family,
         base,
         matched,
+        hidden: page.hidden === true,
       };
     })
     .sort((a, b) => b.score - a.score || Number(b.base) - Number(a.base));
@@ -417,7 +418,7 @@ export function pickStart(ranked, kind = 'page') {
     // when one leads ("a frame with sidebar navigation"), else none, for the
     // kit's neutral fallback.
     const lead = pickStart(ranked);
-    return lead?.family === SHELL_FAMILY ? lead : null;
+    return isAppShell(lead) ? lead : null;
   }
   const top = ranked[0];
   if (!top || top.score < START_SCORE) return null;
