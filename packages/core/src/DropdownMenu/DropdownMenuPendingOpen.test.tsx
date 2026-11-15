@@ -12,6 +12,7 @@
  */
 
 import {act, fireEvent, render, screen} from '@testing-library/react';
+import {useState} from 'react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {DropdownMenu} from './DropdownMenu';
 import {DropdownMenuItem} from './DropdownMenuItem';
@@ -124,6 +125,25 @@ describe('DropdownMenu open that the layer holds until its trigger is an anchor'
     });
   }
 
+  /** Starts a running entrance on `element`; the returned call ends it. */
+  function startEntrance(element: Element): () => Promise<void> {
+    let finish = () => {};
+    animations.push({
+      effect: new FakeKeyframeEffect(element),
+      timeline: document.timeline,
+      playState: 'running',
+      finished: new Promise<void>(resolve => {
+        finish = resolve;
+      }),
+    });
+    return async () => {
+      await act(async () => {
+        finish();
+        await Promise.resolve();
+      });
+    };
+  }
+
   function renderMenu(onClick: () => void) {
     render(
       <div data-testid="card">
@@ -133,25 +153,11 @@ describe('DropdownMenu open that the layer holds until its trigger is an anchor'
         </DropdownMenu>
       </div>,
     );
-    const card = screen.getByTestId('card');
     // The card runs its entrance, so the layer settles before it opens.
-    let finish = () => {};
-    animations.push({
-      effect: new FakeKeyframeEffect(card),
-      timeline: document.timeline,
-      playState: 'running',
-      finished: new Promise<void>(resolve => {
-        finish = resolve;
-      }),
-    });
+    const finishEntrance = startEntrance(screen.getByTestId('card'));
     return {
       trigger: screen.getByRole('button', {name: 'Actions'}),
-      finishEntrance: async () => {
-        await act(async () => {
-          finish();
-          await Promise.resolve();
-        });
-      },
+      finishEntrance,
     };
   }
 
@@ -167,6 +173,44 @@ describe('DropdownMenu open that the layer holds until its trigger is an anchor'
 
     // The box arrives while the card still runs its entrance. The layer
     // waits for the entrance, then opens. The menu takes focus a frame later.
+    boxes.set(trigger, {width: 80, height: 24});
+    signal();
+    flushFrame();
+    await finishEntrance();
+    flushFrame();
+    flushFrame();
+
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    expect(
+      screen.getByRole('menu', {name: 'Actions', hidden: true}),
+    ).toHaveFocus();
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens a controlled menu whose parent renders again while the open waits', async () => {
+    const onClick = vi.fn();
+    function ControlledMenu({tick}: {tick: number}) {
+      const [isOpen, setIsOpen] = useState(false);
+      return (
+        <div data-testid="card" data-tick={tick}>
+          <DropdownMenu
+            button={{label: 'Actions'}}
+            isMenuOpen={isOpen}
+            onOpenChange={setIsOpen}
+            onClick={onClick}>
+            <DropdownMenuItem label="Rename" onClick={() => {}} />
+          </DropdownMenu>
+        </div>
+      );
+    }
+    const {rerender} = render(<ControlledMenu tick={0} />);
+    const finishEntrance = startEntrance(screen.getByTestId('card'));
+    const trigger = screen.getByRole('button', {name: 'Actions'});
+
+    fireEvent.click(trigger, {detail: 1});
+    // The controller hears of the open only when it happens. A render before
+    // then must not cancel it.
+    rerender(<ControlledMenu tick={1} />);
     boxes.set(trigger, {width: 80, height: 24});
     signal();
     flushFrame();

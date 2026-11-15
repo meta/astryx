@@ -1241,8 +1241,10 @@ function DropdownMenuPopover({
           pendingControlledOpenRef.current;
         pendingControlledOpenRef.current = false;
         popover.hide();
-      } else if (openPendingRef.current) {
-        // The controller closed the menu before its pending open happened.
+      } else if (openPendingRef.current && !pendingControlledOpenRef.current) {
+        // The controller closed the menu before its pending open happened. A
+        // trigger open waits for the controller to hear of it, and a render
+        // before then is no close.
         disarmOpen();
         popover.hide();
       }
