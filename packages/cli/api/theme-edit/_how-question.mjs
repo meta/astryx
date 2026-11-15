@@ -1887,12 +1887,19 @@ export function partLexicon(ctx) {
     /** @type {Array<[RegExp, PartRef]>} */
     const out = [];
     const inside = ctx.C.MAP[key]?.contains ?? [];
-    for (const piece of PIECES) {
-      // A select's chevron or caret is the indicator icon it holds
+    // Every catalog part named after this one is a piece of it by the rest
+    // of its name ("checkbox check" for checkbox-indicator-check).
+    // (A rest that names a part of its own, "heading", keeps that reading.)
+    const named = [...keys]
+      .filter(k => k.startsWith(`${key}-`))
+      .map(k => k.slice(key.length + 1))
+      .filter(rest => !keys.has(rest));
+    for (const piece of [...new Set([...PIECES, ...named])]) {
+      // A select's chevron, caret or arrow is the indicator icon it holds
       // (selector-indicator-icon); a field's segment, the one segment
       // part it holds.
       const held =
-        piece === 'chevron' || piece === 'caret'
+        piece === 'chevron' || piece === 'caret' || piece === 'arrow'
           ? inside.filter(k =>
               new RegExp(`^${key}-(indicator|toggle|chevron)(-icon)?$`).test(k),
             )
@@ -1912,7 +1919,9 @@ export function partLexicon(ctx) {
       // named by its own name, so none is missing.
       if (!real && held.length > 1) continue;
       out.push([
-        new RegExp(`(?:${source})(?:'s)?[\\s-]${piece}s?\\b`),
+        new RegExp(
+          `(?:${source})(?:'s)?[\\s-]${piece.replace(/-/g, '[\\s-]?')}s?\\b`,
+        ),
         real ? {on: real} : {on: key, missing: `${said} ${piece}`},
       ]);
     }
@@ -3108,6 +3117,51 @@ function valueKind(words) {
   )
     return 'font';
   return undefined;
+}
+
+/**
+ * Whether a part draws a shadow of its own somewhere (a shadow token or a
+ * box-shadow value at rest, or an elevation prop), so a box-shadow written
+ * on it would take that shadow away.
+ * @param {any} C @param {any} TARGET @param {string} part
+ */
+function drawsOwnShadow(C, TARGET, part) {
+  void TARGET;
+  return Object.entries(C.MAP[part]?.at?.['box-shadow'] ?? {}).some(
+    ([sel, v]) => !/:/.test(sel) && !/^\s*none\s*$/.test(String(v)),
+  );
+}
+
+/**
+ * A line in one mode on a part that draws no line: an inset ring in the
+ * box-shadow, see-through in the other mode, so it takes no room in
+ * either mode (a border would take its width in both); null when the part
+ * draws a shadow of its own, which the ring would replace.
+ * @param {any} C @param {any} TARGET @param {string} part
+ * @param {string} width @param {string} color @param {'light' | 'dark'} mode
+ */
+function oneModeLine(C, TARGET, part, width, color, mode) {
+  // A part that draws one shadow of its own at rest (a dialog's) keeps it
+  // after the ring; one that draws several (per variant) cannot be kept.
+  const rest = [
+    ...new Set(
+      Object.entries(C.MAP[part]?.at?.['box-shadow'] ?? {})
+        .filter(([sel, v]) => !/:/.test(sel) && !/^\s*none\s*$/.test(String(v)))
+        .map(([, v]) => String(v).trim()),
+    ),
+  ];
+  if (drawsOwnShadow(C, TARGET, part) && rest.length !== 1) return null;
+  const own = rest.length === 1 ? `, ${rest[0]}` : '';
+  const half =
+    mode === 'dark'
+      ? `light-dark(transparent, ${color})`
+      : `light-dark(${color}, transparent)`;
+  // A part that rises with an elevation prop (a floating button) draws its
+  // elevation's shadow there: the ring goes on its flat renders only.
+  const flat = (TARGET.get(part)?.props ?? []).includes('elevation')
+    ? 'elevation:none'
+    : undefined;
+  return {value: `inset 0 0 0 ${width} ${half}${own}`, when: flat};
 }
 
 /**
@@ -5657,6 +5711,20 @@ export function draftAnswer(ctx, env, question) {
   // card with white text"); one with values but no aspect takes the aspect
   // of a neighbor ("cards: 8px radius; buttons: 4px").
   const fillAspect = () => {
+    // A part whose paint is a line (the part data records it drawn by a
+    // line inside it: a divider) taken away with no aspect named ("remove
+    // the dividers") is its line taken away.
+    for (const c of clauses)
+      if (
+        c.parts.length &&
+        !c.aspects.length &&
+        !c.except &&
+        (c.neg || new RegExp(`\\b${REMOVAL_VERBS}\\b`).test(c.text)) &&
+        c.parts.every(
+          p => (C.MAP[(FAMILIES[p.on] ?? [p.on])[0]]?.line ?? []).length > 0,
+        )
+      )
+        c.aspects.push('border');
     for (const c of clauses)
       if (
         c.parts.length &&
@@ -6572,19 +6640,27 @@ export function draftAnswer(ctx, env, question) {
 
       if (color && shows)
         return {...st, thing: `${st.thing}-color`, value: color};
-      // A border drawn where the part shows none: its width and style are
-      // the same in both modes, so its color carries the mode, see-through
-      // in the other (light-dark()), and the line takes no --mode.
-      if (color && (c.mode === 'light' || c.mode === 'dark')) {
-        const half =
-          c.mode === 'dark'
-            ? `light-dark(transparent, ${color})`
-            : `light-dark(${color}, transparent)`;
-        return held({
-          ...st,
-          mode: undefined,
-          value: value.replace(color, half),
-        });
+      // A border drawn where the part shows none: a border takes its width
+      // in both modes (the other would grow), so the line in one mode is an
+      // inset ring in the box-shadow, see-through in the other, where the
+      // part draws no shadow of its own.
+      if (
+        color &&
+        (c.mode === 'light' || c.mode === 'dark') &&
+        !st.thing.includes('-')
+      ) {
+        const w =
+          /(?:^|\s)(\d*\.?\d+(?:px|rem|em))(?:\s|$)/.exec(value)?.[1] ?? '1px';
+        const ring = oneModeLine(C, TARGET, one(st.on), w, color, c.mode);
+        if (ring && !(ring.when && st.when))
+          return held({
+            ...st,
+            thing: 'box-shadow',
+            mode: undefined,
+            value: ring.value,
+            ...(ring.when ? {when: ring.when} : {}),
+          });
+        shadowWhy = `${one(st.on)} draws no border now, so a border in ${c.mode} mode would take its width in the other mode too, and it draws a shadow of its own, so a ring in its box-shadow would take that away`;
       }
       return st;
     };
@@ -6618,7 +6694,15 @@ export function draftAnswer(ctx, env, question) {
           oneModeBorder(oneModePartShadow(oneModeShadowToken(modeHalf(st)))),
         ),
       )
-      .filter(o => o.every(modal))
+      // A dial in the option (the buttons dial's outline) is the same in
+      // both modes: kept beside the per-mode steps, and said.
+      .filter(
+        o =>
+          o.some(modal) &&
+          o.every(
+            st => modal(st) || (!st.on && Object.hasOwn(DIALS, st.thing)),
+          ),
+      )
       .map(o =>
         o.map(st => {
           const one =
@@ -6629,14 +6713,44 @@ export function draftAnswer(ctx, env, question) {
           // carries the mode already.)
           // (A shadow holds both modes only as light-dark() colors, so it
           // carries the mode in its value.)
-          return one.mode || inValue.has(one)
+          return one.mode ||
+            inValue.has(one) ||
+            (!one.on && Object.hasOwn(DIALS, one.thing))
             ? one
             : {...one, mode: c.mode ?? undefined};
         }),
       );
+    const dials = options
+      .flat()
+      .filter(st => !st.on && Object.hasOwn(DIALS, st.thing));
+    // A border drawn as a ring at the edge (in the box-shadow): the
+    // shadow is what the answer writes for that line.
+    const rings = options
+      .flat()
+      .some(
+        st =>
+          st.thing === 'box-shadow' &&
+          d.options.flat().some(x => x.on === st.on && /^border/.test(x.thing)),
+      );
     if (options.length)
       return {
         ...d,
+        ...(rings
+          ? {
+              intent: (() => {
+                const it = d.intent ?? intentOf(c, []);
+                return {
+                  ...it,
+                  families: [...new Set([...it.families, 'shadow'])],
+                };
+              })(),
+            }
+          : {}),
+        ...(dials.length
+          ? {
+              text: `${d.text} (${dials.map(st => `the ${st.thing} dial`).join(', ')} is the same in light and dark; the colors go to ${c.mode} mode only)`,
+            }
+          : {}),
         ...(d.options.flat().some(st => oneModeShadowToken(st) !== st)
           ? {
               text: `${d.text.replace(/: set each shared shadow token to none$/, '')}: each shared shadow's colors go transparent in ${c.mode} mode only; the other mode keeps its shadows`,
@@ -6647,7 +6761,11 @@ export function draftAnswer(ctx, env, question) {
     // What cannot go in one mode, and the nearest line that does.
     const sized = d.options
       .flat()
-      .find(st => /^(border(?:-[a-z]+)*|box-shadow)$/.test(st.thing));
+      .find(st =>
+        /^(border(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?(?:-(?:width|style))?|box-shadow)$/.test(
+          st.thing,
+        ),
+      );
     const sizedColor = sized
       ? (colorsIn(String(sized.value ?? ''))[0] ?? null)
       : null;
@@ -6655,7 +6773,9 @@ export function draftAnswer(ctx, env, question) {
       text: sized
         ? sized.thing === 'box-shadow'
           ? `${d.text}: set takes --mode only for colors, and ${shadowWhy || 'this shadow cannot be kept to one mode'}`
-          : `${d.text}: set takes --mode only for colors, and ${sized.thing} sets a width or style, which is the same in light and dark${sizedColor ? `; its color can differ: border-color ${sizedColor}${sized.on ? ` --on ${sized.on}` : ''} --mode ${c.mode}` : `; ${sized.on ?? 'the part'} shows no border of its own to color in one mode`}`
+          : shadowWhy
+            ? `${d.text}: ${shadowWhy}`
+            : `${d.text}: set takes --mode only for colors, and ${sized.thing} sets a width or style, which is the same in light and dark${sizedColor ? `; its color can differ: border-color ${sizedColor}${sized.on ? ` --on ${sized.on}` : ''} --mode ${c.mode}` : `; ${sized.on ?? 'the part'} shows no border of its own to color in one mode`}`
         : `${d.text}: this is the same in light and dark (only colors differ by mode), so it cannot be ${c.mode} mode only`,
       options: [],
     };
@@ -7005,7 +7125,12 @@ export function draftAnswer(ctx, env, question) {
     const things = steps.map(x => `${x.thing} ${x.value ?? ''}`.toLowerCase());
     for (const [re, want] of /** @type {Array<[RegExp, RegExp]>} */ ([
       [/\bshadows?\b/, /shadow|elevation/],
-      [/\bborders?\b(?![\s-]*radius)/, /border|outline/],
+      // (A ring at the edge, an inset box-shadow that takes no room, is a
+      // border drawn there.)
+      [
+        /\bborders?\b(?![\s-]*radius)/,
+        /border|outline|box-shadow inset 0 0 0 /,
+      ],
       [/\b(?:corners?|radius|radii)\b/, /radius|corners/],
       [/\bpadding\b/, /padding|spacing/],
       [/\bon-?(?:accent|primary|danger|error|success|warning|info)\b/, /on-/],
@@ -11978,16 +12103,48 @@ export function draftAnswer(ctx, env, question) {
         options: [[set(prop, `${next}ms`, f)]],
       };
     }
-    // A divider draws with the border tokens: its thickness and color.
+    // A divider draws its line with the border tokens: its color (each
+    // variant's own token, as the part data records the line: subtle reads
+    // --color-border, strong --color-border-emphasized) and its thickness.
     if (
       on === 'divider' &&
       ['border', 'size', 'background', 'text'].includes(a)
     ) {
+      const asked = /^variant:([\w-]+)$/.exec(String(f.when ?? ''))?.[1];
+      const lineReads = (C.partReads('divider', 'background') ?? []).filter(r =>
+        /^--color-/.test(r.token),
+      );
+      /** The color tokens the line reads, for the variant asked or every one. */
+      const lineTokens = [
+        ...new Set(
+          lineReads
+            .filter(
+              r =>
+                !asked ||
+                r.when.some(w => w.split(',').includes(`variant=${asked}`)),
+            )
+            .map(r => r.token),
+        ),
+      ];
+      const tokens = lineTokens.length ? lineTokens : ['--color-border'];
+      const scope = {on, ...(asked ? {when: f.when} : {})};
+      const named = tokens.join(' and ');
       const color = colorFor(c, 'fill');
+      // "remove the dividers", "no dividers": the line drawn in no color
+      // (it keeps its place, as a border taken away does).
+      if (c.neg || /\b(remove|hide|get rid of)\b/.test(c.text))
+        return {
+          text: `no divider line${asked ? ` (variant ${asked})` : ''}: ${named}, the color its line is drawn in, transparent on the divider only`,
+          options: [
+            tokens.map(t => set(t, 'transparent', {...scope, ...modeOf(c)})),
+          ],
+          sequence: tokens.length > 1,
+        };
       if (color && (a === 'background' || a === 'text' || a === 'border'))
         return {
-          text: 'the divider color: --color-border, on the divider only',
-          options: [[set('--color-border', color, {on, ...modeOf(c)})]],
+          text: `the divider color: ${named}, the color its line is drawn in, on the divider only`,
+          options: [tokens.map(t => set(t, color, {...scope, ...modeOf(c)}))],
+          sequence: tokens.length > 1,
         };
       // "the divider lighter / darker": its color, never its thickness.
       if (
@@ -11997,34 +12154,47 @@ export function draftAnswer(ctx, env, question) {
       ) {
         const lighter = /\blight(er|en)?\b/.test(noMode(c.text));
         const amount = colorAmount(c.text, 0.2);
-        const steps = perMode(
-          '--color-border',
-          '--color-border',
-          {on},
-          (now, m) =>
-            shiftKeepAlpha(
-              now,
-              lighter ? amount : -amount,
-              current('--color-background-body', m),
-            ),
-          c,
+        const steps = tokens.flatMap(t =>
+          perMode(
+            t,
+            t,
+            scope,
+            (now, m) =>
+              shiftKeepAlpha(
+                now,
+                lighter ? amount : -amount,
+                current('--color-background-body', m),
+              ),
+            c,
+          ),
         );
         if (steps.length)
           return {
-            text: `a ${lighter ? 'lighter' : 'darker'} divider: --color-border, on the divider only${modesSaid(steps)}`,
+            text: `a ${lighter ? 'lighter' : 'darker'} divider: ${named}, on the divider only${modesSaid(steps)}`,
             options: [steps],
             sequence: steps.length > 1,
           };
       }
       // Thinner or thicker steps from the thickness its line shows now
-      // (the border width it reads), as a border's width does: never a
-      // stock width that may be the width already.
+      // (the border width it reads), by the amount said ("three times",
+      // "50%") or one step, as a border's width does.
       const nowRaw =
         partValue(on, '--border-width') ?? current('--border-width');
       const nm = /^(\d*\.?\d+)(px|rem)$/.exec(String(nowRaw ?? ''));
       const nowPx = nm ? Number(nm[1]) * (nm[2] === 'rem' ? 16 : 1) : null;
       const thinner = c.dir === 'less' || /\bthin/.test(c.text);
       const thicker = !thinner && (c.dir === 'more' || /\bthick/.test(c.text));
+      const pct = /\b(\d{1,3})\s?%\s+(thicker|thinner)\b/.exec(c.text);
+      const exact = pct ? null : exactFactor(c.text);
+      const factor = pct
+        ? 1 + (Number(pct[1]) / 100) * (pct[2] === 'thinner' ? -1 : 1)
+        : exact != null
+          ? thinner && exact > 1
+            ? 1 / exact
+            : exact
+          : null;
+      const round = (/** @type {number} */ n) =>
+        `${Math.max(0.5, Math.round(n * 100) / 100)}px`;
       const len =
         c.lengths[0] ??
         (nowPx == null
@@ -12033,11 +12203,13 @@ export function draftAnswer(ctx, env, question) {
             : thicker
               ? '2px'
               : null
-          : thinner
-            ? `${Math.max(0.5, nowPx <= 1 ? nowPx / 2 : nowPx - 1)}px`
-            : thicker
-              ? `${nowPx + 1}px`
-              : null);
+          : factor != null && (thinner || thicker)
+            ? round(nowPx * factor)
+            : thinner
+              ? round(nowPx <= 1 ? nowPx / 2 : nowPx - 1)
+              : thicker
+                ? round(nowPx + 1)
+                : null);
       return len
         ? {
             text: `the divider thickness: --border-width, on the divider only${nowPx != null && !c.lengths[0] ? ` (now ${nowPx}px)` : ''}`,
@@ -13554,19 +13726,84 @@ export function draftAnswer(ctx, env, question) {
         // A part with no border of its own whose lines are drawn by the
         // parts inside it (a table row's dividers are its cells' borders):
         // the color those borders read, on this part, so they take it.
+        // A part that draws no border, made thicker or thinner (a slider's
+        // track): its own thickness, the fixed height (or width) it draws
+        // at rest, per render, stepped by half or the amount said.
+        if (!hasBorder && !color && !style && !side && (thicker || thinner)) {
+          const sizes = ['height', 'width'].flatMap(prop =>
+            Object.entries(C.MAP[one(on)]?.at?.[prop] ?? {})
+              .filter(
+                ([sel, v]) =>
+                  !/:/.test(sel) && /^\d*\.?\d+px$/.test(String(v).trim()),
+              )
+              .map(([sel, v]) => ({prop, sel, px: parseFloat(String(v))})),
+          );
+          // The smaller side is the thickness (a track is wide and thin).
+          const thin = sizes
+            .filter(x => x.px <= 16)
+            .sort((x, y) => x.px - y.px)[0];
+          if (thin) {
+            const exact = exactFactor(c.text);
+            const next = c.lengths[0]
+              ? c.lengths[0]
+              : `${Math.max(1, Math.round(thin.px * (exact != null ? (thinner && exact > 1 ? 1 / exact : exact) : thinner ? 0.5 : 1.5) * 100) / 100)}px`;
+            const props = thin.sel
+              .split(',')
+              .map(kv => kv.split('='))
+              .filter(
+                ([k]) =>
+                  (C.variantValues(one(on))[k] ?? []).length > 1 &&
+                  !/^(size|density|elevation)$/.test(k),
+              );
+            const when =
+              f.when ??
+              (props.length === 1
+                ? `${props[0][0]}:${props[0][1]}`
+                : undefined);
+            const it = intentOf(c, []);
+            return {
+              text: `${on} draws no border, so its own thickness: ${thin.prop} ${next} (now ${thin.px}px)${when ? ` where it is drawn ${when.replace(':', ' ')}` : ''}`,
+              options: [
+                [set(thin.prop, next, {...f, ...(when ? {when} : {})})],
+              ],
+              // (Its thickness is its size.)
+              intent: {
+                ...it,
+                families: [...new Set([...it.families, 'space'])],
+              },
+            };
+          }
+        }
         if (!hasBorder && color && !width && !style && !side) {
           const lineRead = (/** @type {{props: string[]}} */ r) =>
             r.props.some(x =>
               /^border(-(top|bottom|left|right))?(-color)?$/.test(x),
             );
-          const kids = (C.MAP[one(on)]?.contains ?? []).filter(k =>
-            C.partReads(k, 'border').some(lineRead),
+          // (Only parts that draw a line at rest: a ghost button inside a
+          // toast reads the border color but draws a 0px border.)
+          const kids = (C.MAP[one(on)]?.contains ?? []).filter(
+            k =>
+              C.partReads(k, 'border').some(lineRead) &&
+              drawsLine(C, [k], 'border'),
           );
+          // (Only colors the parts inside this one draw with there: the
+          // part data records what each element inside it declares.)
+          const drawnHere = {
+            ...(C.MAP[one(on)]?.inside ?? {}),
+            ...(C.MAP[one(on)]?.held ?? {}),
+          };
           const tokens = [
             ...new Set(
               kids.flatMap(k =>
                 C.partReads(k, 'border')
-                  .filter(r => lineRead(r) && /^--color-/.test(r.token))
+                  .filter(
+                    r =>
+                      lineRead(r) &&
+                      /^--color-/.test(r.token) &&
+                      (drawnHere[r.token] ?? []).some(
+                        (/** @type {string} */ x) => /^border/.test(x),
+                      ),
+                  )
                   .map(r => r.token),
               ),
             ),
@@ -13677,21 +13914,57 @@ export function draftAnswer(ctx, env, question) {
           ]);
           return {text: `the border${where}`, options: opts};
         }
-        // One mode on a part that draws no line now: the line in that mode
-        // alone, see-through in the other, so the other stays as it is.
+        // One mode on a part that draws no line now: a border would take
+        // its width in the other mode too, so an inset ring in the
+        // box-shadow, see-through in the other mode, where the part draws
+        // no shadow of its own.
         const lineColor = color ?? 'var(--color-border)';
-        const oneMode =
-          c.mode === 'dark'
-            ? `light-dark(transparent, ${lineColor})`
-            : c.mode === 'light'
-              ? `light-dark(${lineColor}, transparent)`
-              : lineColor;
+        if ((c.mode === 'light' || c.mode === 'dark') && !side && !style) {
+          const ring = oneModeLine(
+            C,
+            TARGET,
+            one(on),
+            width ?? '1px',
+            lineColor,
+            c.mode,
+          );
+          return ring && !(ring.when && f.when)
+            ? {
+                text: `a border${where}, in ${c.mode} mode only: ${on} draws no border now, and a border would take its width in the other mode too, so a ring inside its edge (box-shadow), see-through in the other mode${ring.when ? ` (on its flat renders: a raised one keeps its elevation's shadow)` : ''}`,
+                options: [
+                  [
+                    set('box-shadow', ring.value, {
+                      ...f,
+                      ...(ring.when ? {when: ring.when} : {}),
+                    }),
+                  ],
+                ],
+                ...(c.mode ? {modeInValue: true} : {}),
+                // (The line asked is drawn in the box-shadow.)
+                intent: (() => {
+                  const it = intentOf(c, []);
+                  return {
+                    ...it,
+                    families: [...new Set([...it.families, 'shadow'])],
+                  };
+                })(),
+              }
+            : {
+                text: `${on} draws no border now: a border in ${c.mode} mode only would take its width in the other mode too, and ${on} draws a shadow of its own, so a ring in its box-shadow would take that away`,
+                options: [],
+              };
+        }
         return {
-          text: `a border${where}: ${prop}${c.mode ? `, in ${c.mode} mode only (${on} draws no border now)` : ''}`,
+          text: `a border${where}: ${prop}`,
           options: [
-            [set(prop, `${width ?? '1px'} ${style ?? 'solid'} ${oneMode}`, f)],
+            [
+              set(
+                prop,
+                `${width ?? '1px'} ${style ?? 'solid'} ${lineColor}`,
+                f,
+              ),
+            ],
           ],
-          ...(c.mode ? {modeInValue: true} : {}),
         };
       }
       case 'spacing': {

@@ -2308,8 +2308,11 @@ const QUESTIONS_G = [
   ['modal rounder', {top: /^set q corners more --on dialog$/}],
   ['carrd rounder', {top: /^set q corners more --on card$/}],
   [
+    // (Each variant's line: the strong divider draws with its own token.)
     'divider lines #e5e7eb',
-    {top: /^set q --color-border '#e5e7eb' --on divider$/},
+    {
+      top: /^set q --color-border '#e5e7eb' --on divider && set q --color-border-emphasized '#e5e7eb' --on divider$/,
+    },
   ],
   // a CSS property named in the question is set as named
   [
@@ -2986,7 +2989,12 @@ const QUESTIONS_I = [
   ],
   // the divider
   ['divider thicker', {top: /^set q --border-width 2px --on divider$/}],
-  ['divider color red', {top: /^set q --color-border '#dc2626' --on divider$/}],
+  [
+    'divider color red',
+    {
+      top: /^set q --color-border '#dc2626' --on divider && set q --color-border-emphasized '#dc2626' --on divider$/,
+    },
+  ],
   ['make the divider 2px', {top: /^set q --border-width 2px --on divider$/}],
   // typography and complaints
   [

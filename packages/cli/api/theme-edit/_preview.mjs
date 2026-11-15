@@ -1236,11 +1236,20 @@ function changeLine(project, C, name, theme) {
     ['border', '"1px solid <color>"'],
     ['text', '"<color>"'],
   ]))
-    if (C.partReads(part, aspect).length)
+    if (C.partReads(part, aspect).length) {
+      // A part whose paint is a line inside it (a divider) takes the token
+      // its line reads: a fill on its own element would be under the line.
+      const lineToken =
+        aspect === 'background' &&
+        (C.MAP[part]?.line ?? []).includes('background-color')
+          ? Object.keys(C.MAP[part]?.own?.['background-color']?.tokens ?? {})[0]
+          : null;
+      if (lineToken) return `${P} set ${t} ${lineToken} ${value} --on ${part}`;
       // A part whose color comes from its color prop takes the text token.
       return aspect === 'text' && COLOR_PROP_PARTS.includes(part)
         ? `${P} set ${t} --color-text-primary ${value}`
         : `${P} set ${t} ${DIRECT[aspect]} ${value} --on ${part}`;
+    }
   if (C.showsCorners(part)) return `${P} set ${t} corners round --on ${part}`;
   return `${P} how ${part}`;
 }

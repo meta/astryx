@@ -5604,6 +5604,45 @@ export function compileTheme(ctx, data, base) {
       )
     )
       withRingStates({...s, state: undefined}, target, null);
+    // A state shadow for the whole part that keeps Core's ring in it (an
+    // input's hover ring, kept in the mode a one-mode shadow leaves): each
+    // status that rings itself its own way in that state keeps its own
+    // ring there, in place of the plain one.
+    if (
+      kebab(prop) === 'box-shadow' &&
+      s.state &&
+      !s.when &&
+      typeof v === 'string'
+    ) {
+      const at = ctx.C.MAP[target]?.at?.['box-shadow'] ?? {};
+      const inState = (/** @type {string} */ k) =>
+        new RegExp(`\\s:${s.state}(?![\\w-])`).test(k);
+      const plain = Object.entries(at).find(
+        ([k, x]) =>
+          inState(k) && !/\bstatus=/.test(k) && !/^\s*none\s*$/.test(String(x)),
+      )?.[1];
+      if (plain && v.includes(String(plain)))
+        for (const [k, ring] of Object.entries(at)) {
+          const status = /\bstatus=([\w-]+)/.exec(k)?.[1];
+          if (!status || !inState(k) || String(ring) === String(plain))
+            continue;
+          if (
+            data.settings.some(
+              y =>
+                y.source === 'property' &&
+                kebab(y.thing) === 'box-shadow' &&
+                y.state === s.state &&
+                y.when === `status:${status}` &&
+                partsOf(ctx, y).includes(target),
+            )
+          )
+            continue;
+          block({...s, when: `status:${status}`}, target).boxShadow = v.replace(
+            String(plain),
+            String(ring),
+          );
+        }
+    }
   };
   /**
    * A resting shadow on a part that draws rings in its box-shadow in some
@@ -6429,9 +6468,37 @@ export function compileTheme(ctx, data, base) {
     );
   /** The color a token shows in a mode, opaque, as hex, or null. @param {string} k @param {'light' | 'dark'} m */
   const written = (k, m) => {
-    const v = tok[k]?.[m];
-    const rgb = v == null ? null : parseColor(String(v).trim());
-    return rgb && alphaOf(String(v)) >= 1 ? hex(rgb) : null;
+    // (A value written for both modes in one light-dark() is read by its
+    // half for the mode, and a token it names to that token's color.)
+    /** @param {unknown} raw @param {number} depth @returns {string | null} */
+    const half = (raw, depth) => {
+      if (raw == null || depth > 4) return null;
+      let v = String(raw).trim();
+      const pair = /^light-dark\((.*)\)$/s.exec(v);
+      if (pair) {
+        let depthP = 0;
+        let cut = -1;
+        for (let i = 0; i < pair[1].length; i++) {
+          const ch = pair[1][i];
+          if (ch === '(') depthP++;
+          else if (ch === ')') depthP--;
+          else if (ch === ',' && depthP === 0) {
+            cut = i;
+            break;
+          }
+        }
+        if (cut < 0) return null;
+        v = (
+          m === 'light' ? pair[1].slice(0, cut) : pair[1].slice(cut + 1)
+        ).trim();
+      }
+      const ref = /^var\(\s*(--[a-z0-9-]+)\s*\)$/i.exec(v)?.[1];
+      if (ref) return half(tok[ref]?.[m] ?? base[m]?.[ref], depth + 1);
+      return v;
+    };
+    const v = half(tok[k]?.[m], 0);
+    const rgb = v == null ? null : parseColor(v);
+    return rgb && alphaOf(v) >= 1 ? hex(rgb) : null;
   };
   /** The base theme's opaque color for a token in a mode, or null. @param {string} k @param {'light' | 'dark'} m */
   const baseColor = (k, m) => {
@@ -8637,7 +8704,12 @@ export async function contrastProblems(ctx, data, res) {
   // is measured per variant too, from what each variant reads.
   /** @type {TextPair[]} */
   const variantPairs = [];
-  for (const p of /** @type {any} */ (ctx).parts.pairs) {
+  const censusPairs = /** @type {any[]} */ (
+    /** @type {any} */ (ctx).parts.pairs
+  );
+  /** @type {Set<string>} */
+  const seenVariant = new Set();
+  for (const p of censusPairs) {
     const t = p.fg.target;
     if (!t || t !== p.bg.target) continue;
     const fgReads = ctx.C.partReads(t, 'text');
@@ -8657,13 +8729,27 @@ export async function contrastProblems(ctx, data, res) {
         p.fg.tokens[0];
       if (!bgTok || !fgTok) continue;
       if (bgTok === p.bg.tokens[0] && fgTok === p.fg.tokens[0]) continue;
+      if (seenVariant.has(`${t}|${v}`)) continue;
+      seenVariant.add(`${t}|${v}`);
+      // The census draws every variant now: its own unscoped pair for this
+      // variant is measured only as the scoped copy (its sample kept), so
+      // the problem is listed once, with a fix for that variant.
+      const twin = censusPairs.find(
+        q =>
+          q !== p &&
+          q.fg.target === t &&
+          q.bg.target === t &&
+          q.fg.tokens[0] === fgTok &&
+          q.bg.tokens[0] === bgTok,
+      );
       variantPairs.push(
         /** @type {any} */ ({
-          ...p,
-          text: `${p.text} (variant ${v})`,
+          ...(twin ?? p),
+          text: `${(twin ?? p).text} (variant ${v})`,
           when: `variant:${v}`,
-          fg: {...p.fg, tokens: [fgTok]},
-          bg: {...p.bg, tokens: [bgTok]},
+          fg: {...(twin ?? p).fg, tokens: [fgTok]},
+          bg: {...(twin ?? p).bg, tokens: [bgTok]},
+          ...(twin ? {replaces: twin} : {}),
         }),
       );
     }

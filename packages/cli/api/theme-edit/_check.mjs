@@ -3075,6 +3075,52 @@ export function dividerParts(C) {
 }
 
 /**
+ * Refuses a property the part data records from a line inside the part
+ * with no target of its own (a divider's line): written on the part's own
+ * element, it paints under the line and never shows. The lines offered set
+ * the token the line reads for it, per variant.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').Setting} s
+ * @param {string} prop
+ * @param {string} v
+ */
+function lineRefusal(ctx, slug, s, prop, v) {
+  const parts = partsOf(ctx, s);
+  const drawn = (/** @type {string} */ t) =>
+    (ctx.C.MAP[t]?.line ?? []).includes(prop) ||
+    (prop === 'background' &&
+      (ctx.C.MAP[t]?.line ?? []).includes('background-color'));
+  if (!parts.length || !parts.every(drawn)) return;
+  const part = parts[0];
+  const key = prop === 'background' ? 'background-color' : prop;
+  const asked = /^variant:([\w-]+)$/.exec(String(s.when ?? ''))?.[1];
+  /** @type {Map<string, string[]>} token -> variants */
+  const byToken = new Map();
+  for (const [token, conds] of Object.entries(
+    ctx.C.MAP[part]?.own?.[key]?.tokens ?? {},
+  ))
+    for (const cond of /** @type {string[]} */ (conds)) {
+      const variant = /\bvariant=([\w-]+)/.exec(cond)?.[1] ?? '';
+      if (asked && variant && variant !== asked) continue;
+      byToken.set(token, [...(byToken.get(token) ?? []), variant]);
+    }
+  const isColor = /color|^background/.test(key);
+  refuse(
+    E.ERR_THEME_NO_EFFECT,
+    `${part}'s line is drawn by an element inside it, so ${prop} on ${part} paints under the line and never shows${byToken.size ? `; the line reads ${[...byToken.keys()].join(' and ')} for it` : ''}.`,
+    {
+      run: isColor
+        ? [...byToken.keys()].map(
+            tok =>
+              `${P} set ${slug} ${tok} ${quoteCommandArgument(v)} --on ${s.on ?? part}${asked ? ` --when ${s.when}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}`,
+          )
+        : [`${HOW} ${part}`],
+    },
+  );
+}
+
+/**
  * Refuses an outline's color, width or offset on a part whose outline Core
  * draws as none in every rule (an input, which shows focus with a ring in
  * its box-shadow), when the theme sets no outline style for it either.
@@ -6335,7 +6381,7 @@ function checkOne(
             t,
             baseComponentReads(ctx.project.cwd, data.like, t).has(thing)
               ? null
-              : C.checkTokenOn(slug, t, thing, v, P),
+              : C.checkTokenOn(slug, t, thing, v, P, s.when),
           ]),
       );
       const recorded = results.filter(([, r]) => !r?.soft);
@@ -6698,6 +6744,10 @@ function checkOne(
     // sets it from the on-dark and on-light colors, which the part takes.
     if (!unset && !s.state && prop === 'color')
       mediaTextRefusal(ctx, slug, s, v);
+    // A property the part data records from a line inside the part (a
+    // divider's line fill) is drawn by that line, not the part's element:
+    // set on the part, it paints under the line and never shows.
+    if (!unset) lineRefusal(ctx, slug, s, prop, v);
     // An outline's color, width or offset on a part that draws no outline
     // (Core's outline: none, an input's) never shows while no outline
     // style is set for it.

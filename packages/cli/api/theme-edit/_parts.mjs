@@ -37,7 +37,7 @@ import {
 import {removeOnStop} from '../../foundation/fs/stop-cleanup.mjs';
 
 /** Bump when the shape of the cached part data, or which parts it reaches, changes. */
-const PART_DATA_VERSION = 20;
+const PART_DATA_VERSION = 21;
 
 /**
  * Flags that change what a component does or whether it shows, not how it
@@ -60,6 +60,8 @@ const LIFECYCLE_FLAGS = new Set([
  * @property {string[]} contains - parts rendered inside it
  * @property {string[]} [tags] - the elements it is rendered as (`tr` for a table row)
  * @property {string[]} [innerCorners] - the radius tokens of the corners Core draws by place on the parts directly inside it (a button group's end buttons)
+ * @property {Record<string, string[]>} [held] - the tokens the parts inside it draw with there, at rest, and the properties they set with each
+ * @property {string[]} [line] - the properties a line inside it with no target of its own draws (a divider's line), recorded as the part's: a setting on the part's own element does not reach them
  * @property {boolean} [media] - Core's media surface sits inside it (a toast's inverted surface), setting the text tokens of what it holds from --color-on-dark and --color-on-light
  * @property {Record<string, Record<string, string>>} [inline] - state ('' for always) -> property -> the token Core paints it with as an inline style, which no theme rule can replace
  */
@@ -1057,7 +1059,7 @@ function resolvePrivate(v, env, tokens, depth = 0) {
  * @returns {{map: Record<string, PartRecord>, pairs: TextPair[]}}
  */
 export function walkMarkup(html, decls, tokens, targets = new Map()) {
-  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, tags: Set<string>, innerCorners: Set<string>, media: boolean}>} */
+  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, tags: Set<string>, innerCorners: Set<string>, media: boolean, line?: Set<string>, lineAdded?: Array<[string, string, Set<string>, boolean?]>, held?: Record<string, Set<string>>}>} */
   const map = {};
   /** @type {Array<{env: Record<string, string>, target: string | null, fg: PaintSide | null, bg: PaintSide | null, cond: string}>} */
   const stack = [{env: {}, target: null, fg: null, bg: null, cond: ''}];
@@ -1206,6 +1208,17 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         if (!ownsTarget)
           for (const k of toks) (T.inside[k] ??= new Set()).add(d.prop);
         if (asOwn && (ownsTarget || lineProp)) {
+          // (Drawn by the line inside the part, not the part's own element:
+          // a setting on the part does not reach it.)
+          if (lineProp && !ownsTarget) {
+            (T.line ??= new Set()).add(d.prop);
+            // (Undone at the end for a part that holds other parts: its
+            // own element is no bare line.)
+            if (!T.own[d.prop])
+              (T.lineAdded ??= []).push([d.prop, cond || 'always', toks]);
+            else if (!(T.at[d.prop] ?? {})[cond || 'always'])
+              (T.lineAdded ??= []).push([d.prop, cond || 'always', toks, true]);
+          }
           const P = (T.own[d.prop] ??= {tokens: {}, values: new Set()});
           (T.at[d.prop] ??= {})[cond || 'always'] ??= resolvePrivate(
             d.value,
@@ -1267,7 +1280,17 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
     }
     for (const t of ownsTarget ? named.map(c => c.slice(7)) : [])
       for (const anc of stack)
-        if (anc.target && anc.target !== t) map[anc.target].contains.add(t);
+        if (anc.target && anc.target !== t) {
+          map[anc.target].contains.add(t);
+          // What the parts inside it draw with there, at rest (a table
+          // row's cells' border color; a toast's ghost button declares
+          // none).
+          const A = map[anc.target];
+          for (const d of own)
+            if (!d.cond && !d.prop.startsWith('--'))
+              for (const tk of expand(d.value, env, tokens))
+                ((A.held ??= {})[tk] ??= new Set()).add(d.prop);
+        }
     if (ownsTarget) {
       for (const t of named) map[t.slice(7)].tags.add(tag.toLowerCase());
       // Corners Core draws on a part by its place among its siblings (a
@@ -1291,6 +1314,22 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
     if (!selfClose && !VOID.has(tag.toLowerCase()))
       stack.push({env, target, fg, bg, cond: condHere});
   }
+  // A part that holds other parts (a layout, an outline, a slider's
+  // control) is no bare line: what an empty element inside it painted
+  // stays what that element draws.
+  for (const v of Object.values(map))
+    if (v.contains.size && v.lineAdded) {
+      for (const [prop, cond, toks, kept] of v.lineAdded) {
+        if (!kept) {
+          delete v.own[prop];
+          delete v.at[prop];
+          continue;
+        }
+        delete v.at[prop]?.[cond];
+        for (const tk of toks) v.own[prop]?.tokens[tk]?.delete(cond);
+      }
+      v.line = undefined;
+    }
   /** @type {Record<string, PartRecord>} */
   const out = {};
   for (const [t, v] of Object.entries(map)) {
@@ -1320,6 +1359,14 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
       tags: [...v.tags],
       innerCorners: [...v.innerCorners],
       ...(v.media ? {media: true} : {}),
+      ...(v.line?.size ? {line: [...v.line]} : {}),
+      ...(v.held
+        ? {
+            held: Object.fromEntries(
+              Object.entries(v.held).map(([k, s]) => [k, [...s]]),
+            ),
+          }
+        : {}),
     };
   }
   return {map: out, pairs: [...pairs.values()]};

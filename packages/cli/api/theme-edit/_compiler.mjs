@@ -325,9 +325,10 @@ export function makeCompiler(project, parts) {
    * @param {string} token
    * @param {string} value
    * @param {string} P
+   * @param {string} [when] the --when the token is set under (`variant:strong`)
    * @returns {CheckFailure | null}
    */
-  function checkTokenOn(theme, target, token, value, P) {
+  function checkTokenOn(theme, target, token, value, P, when) {
     if (!MAP[target]) {
       return {
         soft: true,
@@ -337,6 +338,55 @@ export function makeCompiler(project, parts) {
       };
     }
     const g = groupOfToken(token);
+    // Under a variant: only what the part reads in that variant's rules (or
+    // rules that name no variant) counts.
+    const [wProp, wVal] = String(when ?? '').split(':');
+    if (wProp && wVal && allReads(target).has(token)) {
+      const conds = [
+        ...Object.values(MAP[target]?.own ?? {}).flatMap(
+          x => /** @type {string[]} */ (x.tokens?.[token] ?? []),
+        ),
+      ];
+      const inVariant = (/** @type {string} */ c) => {
+        const attrs = c.split(' ')[0].split(',');
+        const own = attrs.find(a => a.startsWith(`${wProp}=`));
+        return !own || own === `${wProp}=${wVal}`;
+      };
+      // (What a line inside the part declares is recorded as the part's
+      // own already; any other part inside it that reads the token takes
+      // it.)
+      const inside =
+        !MAP[target]?.line?.length &&
+        (MAP[target]?.inside?.[token] ?? []).length > 0;
+      if (conds.length && !conds.some(inVariant) && !inside) {
+        const there = [
+          ...new Set(
+            Object.values(MAP[target]?.own ?? {}).flatMap(x =>
+              Object.entries(x.tokens ?? {})
+                .filter(([, cs]) =>
+                  /** @type {string[]} */ (cs).some(inVariant),
+                )
+                .map(([t]) => t)
+                .filter(
+                  t =>
+                    groupOfToken(t) === g &&
+                    /^--color-/.test(t) === /^--color-/.test(token),
+                ),
+            ),
+          ),
+        ];
+        return {
+          message: `${target} (${wProp} ${wVal}) never reads ${token}: only its other ${wProp}s do.${there.length ? ` There it reads ${there.slice(0, 4).join(', ')}.` : ''}`,
+          run: there
+            .slice(0, 3)
+            .map(
+              t =>
+                `${P} set ${theme} ${t} ${quoteCommandArgument(value)} --on ${target} --when ${when}`,
+            ),
+          also: [],
+        };
+      }
+    }
     if (allReads(target).has(token)) {
       // Read, but maybe only for another property: an error color that feeds
       // only the focus outline does not paint the background.

@@ -110,7 +110,8 @@ describe("a divider's line", () => {
     expect(r.commands.length).toBeGreaterThan(0);
     for (const x of r.commands)
       expect(x).toMatch(
-        /^set k --color-border '#[0-9a-f]{6,8}' --on divider --mode (light|dark)$/,
+        // (Each variant's line token: the strong divider's is its own.)
+        /^set k --color-border(-emphasized)? '#[0-9a-f]{6,8}' --on divider --mode (light|dark)$/,
       );
   }, 240_000);
 });
