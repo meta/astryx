@@ -48,7 +48,7 @@ function note(runs, file, probed = file, kind = 'read') {
   for (const seen of runs) {
     if (exactRuns.has(seen)) {
       if (!seen.has(key)) {
-        seen.set(key, (probedState ??= exactState(probed, kind)));
+        seen.set(key, (probedState ??= exactState(probed, kind, seen)));
       } else if (kind === 'read' || kind === 'stat') {
         // A path first only checked for, or a folder first only probed, now
         // statted, read or listed: what the later call returned counts, so
@@ -56,7 +56,7 @@ function note(runs, file, probed = file, kind = 'read') {
         keepState(
           seen,
           key,
-          () => (probedState ??= exactState(probed, kind)),
+          () => (probedState ??= exactState(probed, kind, seen)),
           kind === 'read',
         );
       }
@@ -79,19 +79,42 @@ function note(runs, file, probed = file, kind = 'read') {
  * The state an exact run records of `file` for a call of `kind`.
  * @param {string} file
  * @param {ReadKind} kind
+ * @param {Map<string, string>} seen - The run recording it.
  * @returns {string}
  */
-function exactState(file, kind) {
+function exactState(file, kind, seen) {
   switch (kind) {
     case 'read':
       return stateOf(file);
     case 'presence':
       return presenceState(file);
     case 'realpath':
-      return realPathState(file);
+      return realPathState(file, foldersOf(seen));
     default:
       return probeStamp(file);
   }
+}
+
+/**
+ * The folders each exact run has resolved while it recorded real-path
+ * lookups, by the run's record: a run resolves each folder once, however
+ * many paths under it it looks up. A check resolves afresh (stillInState).
+ * @type {WeakMap<Map<string, string>, Map<string, string>>}
+ */
+const resolvedInRun = new WeakMap();
+
+/**
+ * The folders the run recording into `seen` has resolved (resolvedInRun).
+ * @param {Map<string, string>} seen
+ * @returns {Map<string, string>}
+ */
+function foldersOf(seen) {
+  let folders = resolvedInRun.get(seen);
+  if (!folders) {
+    folders = new Map();
+    resolvedInRun.set(seen, folders);
+  }
+  return folders;
 }
 
 /**
@@ -273,15 +296,17 @@ function presenceState(file) {
  * a change, and it is worked out the same way when it is recorded and when it
  * is checked.
  *
- * A path whose last part is a link, or the root, is resolved whole. Any other
+ * A path whose last part is a link, or the root, or a path ending in a
+ * separator, is resolved whole. Any other
  * resolves through its folder, so the state is the folder's resolved path
  * with the last part's name: one lstat per path, and one lookup per folder,
  * which `folders` shares across the paths one check reads. A file replaced
  * whole keeps the state, as it keeps its path; what a step read of its
  * content has a stamp of its own.
  * @param {string} file
- * @param {Map<string, string> | null} [folders] - Folders already resolved in
- *   this check, by path; never shared beyond one check.
+ * @param {Map<string, string> | null} [folders] - Folders already resolved,
+ *   by path: by this check, or by the run that records the lookup; never
+ *   shared beyond one check or one run.
  * @returns {string}
  */
 function realPathState(file, folders = null) {
@@ -294,7 +319,11 @@ function realPathState(file, folders = null) {
   }
   if (!stat) return '-';
   const parent = path.dirname(file);
-  if (stat.isSymbolicLink() || parent === file) return resolvedPath(file);
+  // A path ending in a separator (a folder URL) has its last part followed
+  // by lstat, so a link there is resolved whole too.
+  if (stat.isSymbolicLink() || parent === file || file.endsWith(path.sep)) {
+    return resolvedPath(file);
+  }
   let real = folders?.get(parent);
   if (real === undefined) {
     real = resolvedPath(parent);

@@ -10,6 +10,7 @@ import {createRequire} from 'node:module';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {
   keepState,
   recordContentRead,
@@ -305,6 +306,22 @@ describe('an exact run', () => {
       fs.symlinkSync(where === 'last' ? path.join(two, 'file.txt') : two, link);
       expect(unchangedSince(seen)).toBe(false);
     }
+  });
+
+  it('sees a folder link looked up by a URL that ends in a separator re-pointed', () => {
+    const {dir} = scratch();
+    const one = path.join(dir, 'one');
+    const two = path.join(dir, 'two');
+    fs.mkdirSync(one);
+    fs.mkdirSync(two);
+    const link = path.join(dir, 'assets');
+    fs.symlinkSync(one, link);
+    const url = pathToFileURL(`${link}${path.sep}`);
+    const seen = exact(() => fs.realpathSync(url));
+    expect(unchangedSince(seen)).toBe(true);
+    fs.rmSync(link);
+    fs.symlinkSync(two, link);
+    expect(unchangedSince(seen)).toBe(false);
   });
 
   it('sees a file one store links into two version folders move between them', () => {
