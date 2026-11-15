@@ -111,13 +111,22 @@ function tokenValueProblem(key, value, reads) {
     const missing = value.findIndex(h => h === null || h === undefined);
     if (missing !== -1)
       return `${key} gives no ${missing === 0 ? 'light' : 'dark'} half, so the build writes ${shown}, and the browser drops the whole value, in both modes: give both halves, or one value for both modes`;
-    const half = value.find(h => {
-      const v = boxed(h) ? h.valueOf() : h;
-      return typeof v !== 'string' && typeof v !== 'number';
-    });
-    return half === undefined
-      ? null
-      : `${key} holds a half that is no text (${typeof half}), so the build writes ${shown}, which the browser drops: give each half a CSS value in quotes`;
+    const halves = value.map(h => (boxed(h) ? h.valueOf() : h));
+    const half = halves.find(
+      h => typeof h !== 'string' && typeof h !== 'number',
+    );
+    if (half !== undefined)
+      return `${key} holds a half that is no text (${typeof half}), so the build writes ${shown}, which the browser drops: give each half a CSS value in quotes`;
+    // light-dark() takes two colors: an empty half or a number is none.
+    const empty = halves.findIndex(
+      h => typeof h === 'string' && h.trim() === '',
+    );
+    if (empty !== -1)
+      return `${key} gives an empty ${empty === 0 ? 'light' : 'dark'} half, so the build writes ${shown}, and the browser drops the whole value, in both modes: give both halves a color, or one value for both modes`;
+    const number = halves.findIndex(h => typeof h === 'number');
+    if (number !== -1)
+      return `${key} gives the number ${halves[number]} as its ${number === 0 ? 'light' : 'dark'} half, so the build writes ${shown}, and light-dark() takes colors only, so the browser drops the whole value, in both modes: give both halves a color, or one value for both modes`;
+    return null;
   }
   const bad = nonText(key, value);
   if (bad) return bad;
@@ -231,8 +240,6 @@ export function writtenValueProblems(
         part(v, [...at, k], depth + 1);
         continue;
       }
-      // Core writes an object a part holds as a value (an array, a boxed
-      // string, a Date) as its JSON text.
       if (typeof v === 'symbol') {
         out.push({
           path: [...at, k],
@@ -241,13 +248,18 @@ export function writtenValueProblems(
         });
         continue;
       }
+      // A boxed primitive is handed to Core as its primitive, so it is
+      // judged as that.
+      if (boxed(v)) {
+        const why = nonText(k, /** @type {any} */ (v).valueOf());
+        if (why) out.push({path: [...at, k], why});
+        continue;
+      }
+      // Core writes an object a part holds as a value (an array, a Date) as
+      // its JSON text.
       if (Array.isArray(v) || isBlock(v)) {
         const text = partJsonText(v);
-        const what = Array.isArray(v)
-          ? 'an array'
-          : boxed(v)
-            ? `a ${Object.prototype.toString.call(v).slice(8, -1)} object`
-            : 'an object';
+        const what = Array.isArray(v) ? 'an array' : 'an object';
         out.push(
           text == null
             ? {
@@ -257,7 +269,7 @@ export function writtenValueProblems(
               }
             : {
                 path: [...at, k],
-                why: `${k} holds ${what}, which the build writes as JSON text (${text}), a value no browser reads: give it ${boxed(v) ? `the text itself, '${String(v)}'` : 'a CSS value in quotes'}`,
+                why: `${k} holds ${what}, which the build writes as JSON text (${text}), a value no browser reads: give it a CSS value in quotes`,
               },
         );
         continue;

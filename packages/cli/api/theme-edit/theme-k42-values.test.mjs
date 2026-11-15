@@ -172,7 +172,7 @@ describe('a BigInt inside a part', () => {
 
 describe('a boxed string', () => {
   it(
-    'is judged by what Core writes for it',
+    'is written as its text, as a token, a pair half or a part value',
     () => {
       plain(
         "tokens: {'--radius-element': new String('4px') as any, '--color-accent': [new String('#fff'), '#000'] as any}",
@@ -181,8 +181,10 @@ describe('a boxed string', () => {
       plain(
         "components: {button: {base: {padding: new String('4px') as any}}}",
       );
-      expect(warned(build('plain/p.ts'))).toContain(
-        `padding holds a String object, which the build writes as JSON text (\\"4px\\"), a value no browser reads: give it the text itself, '4px'`,
+      const p = build('plain/p.ts');
+      expect(p.env.data.warnings).toEqual([]);
+      expect(fs.readFileSync(path.join(cwd, 'plain/p.css'), 'utf8')).toContain(
+        'padding: 4px',
       );
     },
     T,

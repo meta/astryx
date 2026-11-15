@@ -24,9 +24,16 @@ import {
 } from '../../../foundation/runtime/css-tree.mjs';
 import {levenshteinDistance} from '../../../foundation/text/levenshtein.mjs';
 
-/** @param {unknown} value @returns {value is Record<string, any>} */
+/**
+ * A block of keys: a plain object. An array, a Date or a boxed primitive is
+ * a value, which the value judge names.
+ * @param {unknown} value
+ * @returns {value is Record<string, any>}
+ */
 const isBlock = value =>
-  value !== null && typeof value === 'object' && !Array.isArray(value);
+  value !== null &&
+  typeof value === 'object' &&
+  Object.prototype.toString.call(value) === '[object Object]';
 
 /** The closer each opener in a selector waits for. */
 const CLOSERS = /** @type {Record<string, string>} */ ({

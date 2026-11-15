@@ -327,26 +327,28 @@ const bigIntAsText = (_key, value) =>
 
 /**
  * A value with each BigInt in it, in plain objects and arrays at any depth,
- * replaced by its digits; the same object where it holds none, so a theme
- * without one is handed on as it is.
+ * replaced by its digits, and each boxed primitive (`new String('4px')`) by
+ * its primitive; the same object where it holds none, so a theme without
+ * one is handed on as it is.
  * @template T
  * @param {T} value
  * @param {Map<any, any>} [done] each object already replaced, for one that holds itself
  * @returns {T}
  */
-function bigIntsAsText(value, done = new Map()) {
+function writtenPrimitives(value, done = new Map()) {
   if (typeof value === 'bigint') return /** @type {any} */ (String(value));
   if (value === null || typeof value !== 'object') return value;
-  const plain =
-    Array.isArray(value) ||
-    Object.prototype.toString.call(value) === '[object Object]';
+  const kind = Object.prototype.toString.call(value);
+  if (/^\[object (?:String|Number|Boolean)\]$/.test(kind))
+    return /** @type {any} */ (value).valueOf();
+  const plain = Array.isArray(value) || kind === '[object Object]';
   if (!plain) return value;
   if (done.has(value)) return done.get(value);
   done.set(value, value);
   /** @type {any} */
   let copy = null;
   for (const [k, v] of Object.entries(value)) {
-    const next = bigIntsAsText(v, done);
+    const next = writtenPrimitives(v, done);
     if (next === v) continue;
     copy ??= Array.isArray(value) ? [...value] : {...value};
     copy[k] = next;
@@ -5310,8 +5312,10 @@ async function themeBuildInternal(
     }
 
     // Core writes a BigInt it meets as a value as its digits, but a BigInt
-    // inside an object it writes as JSON text throws: it gets the digits too.
-    resolvedTheme = bigIntsAsText(resolvedTheme);
+    // inside an object it writes as JSON text throws: it gets the digits
+    // too. A boxed primitive in a part would be written as JSON text (with
+    // its quotes), where a token writes its text: it gets its primitive.
+    resolvedTheme = writtenPrimitives(resolvedTheme);
 
     const scopeSelector = themeScopeStart(themeDef.name);
     const scopeTo = THEME_SCOPE_TO;

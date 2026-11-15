@@ -396,6 +396,8 @@ export function sourceFieldProblems(entry, fields, load) {
   const {inputs, objectOf} = themeInputs(entry, load);
   /** @type {Array<{path: string[], file: string, line: number | null, why: string}>} */
   const out = [];
+  /** @type {Set<any>} the objects a check is inside, for a spread that reaches back */
+  const checking = new Set();
   /**
    * @param {{node: any, mod: any}} object
    * @param {string[]} at
@@ -408,7 +410,18 @@ export function sourceFieldProblems(entry, fields, load) {
   const check = (object, at, takes, why, values_ = false) => {
     /** @type {Map<string, {node: any, mod: any}>} */
     const values = new Map();
+    if (checking.has(object.node)) return values;
+    checking.add(object.node);
     for (const p of object.node.properties) {
+      // A spread's fields are fields of this object, where the source shows
+      // the object it spreads.
+      if (p.type === 'SpreadElement') {
+        const spread = objectOf(p.argument, object.mod);
+        if (spread)
+          for (const [k, v] of check(spread, at, takes, why, values_))
+            values.set(k, v);
+        continue;
+      }
       const k = keyOf(p);
       if (k == null) continue;
       const literal = p.type === 'ObjectProperty' ? unwrap(p.value) : null;
@@ -433,6 +446,7 @@ export function sourceFieldProblems(entry, fields, load) {
         why: why(k, nearField(k, takes)),
       });
     }
+    checking.delete(object.node);
     return values;
   };
   const did = (/** @type {string | null} */ near) =>
@@ -506,6 +520,11 @@ export function sourceTypography(source, file = '') {
     /** @type {Record<string, any>} */
     const out = {};
     for (const p of object.node.properties) {
+      if (p.type === 'SpreadElement') {
+        const spread = plain(p.argument, object.mod);
+        if (spread && typeof spread === 'object') Object.assign(out, spread);
+        continue;
+      }
       const k = keyOf(p);
       if (k == null || p.type !== 'ObjectProperty') continue;
       const v = plain(p.value, object.mod);
