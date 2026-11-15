@@ -81,7 +81,8 @@ const BREAKS = {
       : Object.values(entry.value ?? {});
   },
   'an entry table with no fields': (/** @type {any} */ entry) => {
-    if (entry.value && 'fields' in entry.value) entry.value.fields = {};
+    if (entry.value instanceof Object && 'fields' in entry.value)
+      entry.value.fields = {};
     else delete entry.value;
   },
   'a value whose decode throws': (/** @type {any} */ entry) => {
@@ -215,7 +216,7 @@ describe.skipIf(process.platform !== 'linux' || !hasModuleHooks)(
       expect(keptInodes(primed)).toEqual(warm);
       // The catalog, its table and block catalog, the integration's checks,
       // the issue list, the template records, the integration's theme
-      // records and doctor's docs checks.
+      // records, doctor's docs checks and the CLI's own docs tree.
       expect(
         new Set(
           [...keptInodes(primed).keys()].map(file =>
@@ -232,6 +233,7 @@ describe.skipIf(process.platform !== 'linux' || !hasModuleHooks)(
           'template-sources',
           'integration-themes',
           'doctor-check',
+          'docs-tree-inputs',
         ]),
       );
     });
