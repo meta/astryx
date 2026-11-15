@@ -41,6 +41,7 @@ import {
   packageInstallCommand,
   themeBuild,
   themeRecordOwner,
+  themeShippedImportFindings,
   validateThemePrivateInputs,
 } from './_adapter.mjs';
 import {
@@ -1017,6 +1018,12 @@ export async function checkAppThemes(cwd) {
   const resolved = [];
   /** @type {Array<{slug: string, owner: string, message: string}>} */
   const resolutionProblems = [];
+  /**
+   * Added package themes whose module loads but names a file the package
+   * does not ship.
+   * @type {Array<{slug: string, owner: string, message: string}>}
+   */
+  const unshippedImports = [];
   const ownerCounts = new Map();
   for (const theme of available) {
     const owner = themeRecordOwner(theme);
@@ -1072,6 +1079,18 @@ export async function checkAppThemes(cwd) {
           message: `Theme "${slug}" from ${owner} could not load its built module: ${detail}.`,
         });
         continue;
+      }
+      // Loading the module in Node does not prove an app can build it: a
+      // stylesheet loads as an empty module, so its imports are never read.
+      // A relative import that names no file the package ships is a warning:
+      // the module itself loads.
+      const unshipped = themeShippedImportFindings(resolvedTheme);
+      if (unshipped.length > 0) {
+        unshippedImports.push({
+          slug,
+          owner,
+          message: `Theme "${slug}" from ${owner}: its built module loads, but it or its stylesheet names a file the package does not ship, so an app's bundler cannot build it: ${unshipped.map(finding => finding.message).join(' ')}`,
+        });
       }
       resolved.push(resolvedTheme);
     }
@@ -1174,12 +1193,20 @@ export async function checkAppThemes(cwd) {
         )
         .join(' '),
     });
+  } else if (unshippedImports.length > 0) {
+    checks.push({
+      id: 'theme-owners',
+      label: 'Theme owners and built imports',
+      status: 'warn',
+      message: unshippedImports.map(each => each.message).join(' '),
+      fix: `Install a release of ${[...new Set(unshippedImports.map(each => each.owner))].join(', ')} that ships the named file, or ask its owner to publish one.`,
+    });
   } else {
     checks.push({
       id: 'theme-owners',
       label: 'Theme owners and built imports',
       status: 'pass',
-      message: `${resolved.length} added theme${resolved.length === 1 ? '' : 's'} resolve to built modules and stylesheets, and every built module loads.`,
+      message: `${resolved.length} added theme${resolved.length === 1 ? '' : 's'} resolve to built modules and stylesheets, every built module loads, and every relative import of a package theme names a file its package ships.`,
     });
   }
 

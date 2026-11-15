@@ -11,6 +11,7 @@ import {loadWeights} from '../_adapter.mjs';
 import {asksForNewPage} from './kind.mjs';
 import {pickAlternatives, pickStart} from './rank.mjs';
 import {hasEditPhrase, shellCallScore} from './shellcall.mjs';
+import {isAppShell} from './words.mjs';
 import {blendOrder, blendSummary, weighStart} from './weights.mjs';
 
 /**
@@ -168,7 +169,7 @@ export function chooseStart(ranked, kind, pages, directMatch, catalog, idea) {
     weighed === undefined
       ? proposed
       : weighed === null
-        ? proposed?.family === 'Shell' || (proposed && direct && !unready)
+        ? isAppShell(proposed) || (proposed && direct && !unready)
           ? proposed
           : null
         : (ranked.find(r => r.name === weighed) ?? proposed);

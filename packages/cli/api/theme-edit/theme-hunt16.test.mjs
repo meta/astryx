@@ -196,8 +196,9 @@ describe('corrected new commands keep every option', () => {
         '--mode',
         'dark-only',
       ],
-      // The nearest base is guessed only among installed ones (none here).
-      / new y (?!.*--like)/,
+      // A typo of a built-in base is that base, installed or not: its
+      // install comes first, then this line.
+      / new y --like neutral --accent red --mode dark-only$/,
     ],
     [
       ['new', 'z', '--accent', '#ggg', '--mode', 'light-only', '--png'],

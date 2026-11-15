@@ -341,8 +341,8 @@ function realOrSelf(file) {
 /**
  * `target` spelled through real directories: the deepest ancestor that exists
  * is resolved through its symlinks, and the missing rest is appended as given.
- * The build confines its outputs by it, and the theme editor's compile guard
- * reads paths through it too, so both read a path the same way.
+ * The build groups and locates its outputs by it, and the theme editor's
+ * compile guard reads paths through it too, so both read a path the same way.
  * @param {string} target absolute path
  * @returns {string}
  */
@@ -796,9 +796,9 @@ const FAMILY_REMEDY =
 /**
  * Refuse an output outside `root`: every write is confined, whether `out` names
  * the path or it defaults to the theme file's directory (architecture:cli-surface
- * INV10). Both sides are compared by real location, so an absolute path that
- * reaches the working directory through a symlink is inside it, and a symlink
- * inside it that leads elsewhere is not.
+ * INV10). assertWithin reads the absolute path, so a path that reaches the
+ * working directory through a symlink is inside it, and a symlink inside it
+ * that leads elsewhere is not.
  * @param {string} dest absolute output path
  * @param {string} root the directory writes stay inside: the working directory
  * @param {string} remedy what to do instead; ends the error message
@@ -806,7 +806,7 @@ const FAMILY_REMEDY =
  */
 function confineOutput(dest, root, remedy, shown = dest) {
   try {
-    assertWithin(realLocation(dest), realOrSelf(path.resolve(root)), {
+    assertWithin(dest, root, {
       allowAbsolute: true,
       label: 'output path',
     });
@@ -3016,7 +3016,18 @@ function themeLoadReason(error) {
     // Node's "Require stack" names absolute paths; the package is the fact.
     return `Cannot find module '${missing}'.\nThe theme imports ${missing}, which is not installed. Install it, then build again.`;
   }
-  return `${message}\nMake sure all imports in the theme file are resolvable.`;
+  const alias = unresolvedAlias(error);
+  if (alias)
+    return `Cannot find module '${alias}'.\nThe theme imports ${alias}, which names no package: a path alias (tsconfig paths, a bundler alias) or a # subpath import with no "imports" entry, which the theme loader does not map. Import it by a path relative to the theme file (such as '../lib/c'), then build again.`;
+  // A module that did not resolve: the import hint. Any other failure (the
+  // theme's own code, or Core refusing its input) is told as it is.
+  const unresolved =
+    /^(?:ERR_MODULE_NOT_FOUND|MODULE_NOT_FOUND)$/.test(
+      String(/** @type {any} */ (error).code ?? ''),
+    ) || /Cannot (?:find|resolve) (?:module|package)/.test(message);
+  return unresolved
+    ? `${message}\nMake sure all imports in the theme file are resolvable.`
+    : message;
 }
 
 /** A theme module that loaded but exports no theme object. */
@@ -3071,11 +3082,46 @@ function themeLoadSuggestions(error, shown, cwd, mode = {}) {
  */
 export function missingThemePackage(error) {
   const message = error instanceof Error ? error.message : String(error);
-  return (
-    /Cannot find (?:module|package) '((?:@[^/']+\/)?[^/'.][^/']*)/.exec(
-      message,
-    )?.[1] ?? null
-  );
+  const specifier = /Cannot find (?:module|package) '([^']+)'/.exec(
+    message,
+  )?.[1];
+  return specifier ? (packageNameOf(specifier) ?? null) : null;
+}
+
+/**
+ * The package an import specifier names, or undefined when it names none:
+ * a relative or absolute path, a `#` subpath import, or a path alias such
+ * as `@/lib/c` or `~/lib/c`, which a bundler or tsconfig maps and the
+ * theme loader does not. A package name is `name` or `@scope/name`, of
+ * the characters npm takes, never starting with `.` or `_`.
+ * @param {string} specifier
+ * @returns {string | undefined}
+ */
+export function packageNameOf(specifier) {
+  const m =
+    /^((?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*)(?:\/|$)/i.exec(
+      specifier,
+    );
+  return m ? m[1] : undefined;
+}
+
+/**
+ * The import a theme load failed on that names no package (a path alias,
+ * a `#` subpath import with no entry), or null.
+ * @param {unknown} error
+ * @returns {string | null}
+ */
+function unresolvedAlias(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  const specifier = /Cannot find (?:module|package) '([^']+)'/.exec(
+    message,
+  )?.[1];
+  return specifier &&
+    !/^\.{0,2}\//.test(specifier) &&
+    !path.isAbsolute(specifier) &&
+    !packageNameOf(specifier)
+    ? specifier
+    : null;
 }
 
 /**

@@ -432,6 +432,20 @@ export async function renderGenerated(project, file, source, extra = []) {
     const end = body.indexOf('<script type=');
     return {html, markup: end >= 0 ? body.slice(0, end) : body};
   } catch (e) {
+    // A theme file too large for a page to carry is the file's size, not
+    // React: it is named with its size and where it is.
+    if (e instanceof RenderError && e.code === 'ERR_RENDER_ASSET_TOO_LARGE') {
+      const d = /** @type {{file?: string, bytes?: number, limit?: number}} */ (
+        e.detail ?? {}
+      );
+      throw new AstryxError(
+        d.file && d.bytes && d.limit
+          ? `${path.relative(project.cwd, d.file).split(path.sep).join('/')} is ${(d.bytes / 1048576).toFixed(1)} MB, more than the ${d.limit / 1048576} MB a preview page carries per file: use a smaller copy of it (the app itself can keep the large one).`
+          : e.message,
+        [],
+        ERROR_CODES.ERR_RENDER_ASSET_TOO_LARGE,
+      );
+    }
     if (e instanceof RenderError) {
       const missing = e.code === 'ERR_RENDER_MISSING_DEPENDENCY';
       // A render stopped by its time limit on the editor's own page is the
@@ -705,6 +719,41 @@ export function coreFallback(project, name) {
     }
   }
   return null;
+}
+
+/** @type {Map<string, string>} */
+const coreCssCache = new Map();
+
+/**
+ * Every value Core's stylesheet gives a variable of its own (a card's
+ * `--_card-elevation` is a shared shadow at each elevation; its
+ * `--_card-ring` is a colored ring), deduplicated. Empty with no
+ * stylesheet.
+ * @param {any} project
+ * @param {string} name
+ * @returns {string[]}
+ */
+export function coreVarValues(project, name) {
+  /** @type {string} */
+  let file;
+  try {
+    file = project.req.resolve('@astryxdesign/core/astryx.css');
+  } catch {
+    return [];
+  }
+  let css = coreCssCache.get(file);
+  if (css == null) {
+    css = fs.readFileSync(file, 'utf8');
+    coreCssCache.set(file, css);
+  }
+  const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return [
+    ...new Set(
+      [...css.matchAll(new RegExp(`${esc}\\s*:\\s*([^;}]+)`, 'g'))].map(m =>
+        m[1].trim(),
+      ),
+    ),
+  ];
 }
 
 /** @type {Map<string, Set<string>>} */

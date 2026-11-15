@@ -1038,6 +1038,17 @@ export const isNumber = (v, name = '') => {
 };
 
 /**
+ * A value with each CSS escape (`Gill\ Sans`, `\5FAE`) as one plain
+ * character, as CSS reads it: an escape is part of a name, never a
+ * boundary. A backslash that escapes nothing (at the end, or before a line
+ * break) could join the next declaration, so it stays.
+ * @param {string} v
+ */
+export function withoutCssEscapes(v) {
+  return v.replace(/\\(?:[0-9a-fA-F]{1,6}[ \t]?|[^\n\r\f0-9a-fA-F])/g, 'x');
+}
+
+/**
  * Whether a value can sit in a CSS declaration as it is: no `<>`, control
  * character, comment or `!important` anywhere; outside a quoted string or a
  * `url(data:…)`, no `;{}`; brackets and quotes closed. So `content: "a;b"`
@@ -1057,12 +1068,7 @@ export function isSafeValue(v) {
     )
   )
     return false;
-  // A CSS escape (`Gill\ Sans`, `\5FAE`) is one character of a name, as
-  // CSS reads it, never a boundary; a backslash that escapes nothing (at
-  // the end, or before a line break) could join the next declaration, so
-  // it stays and is refused.
-  const outside = v
-    .replace(/\\(?:[0-9a-fA-F]{1,6}[ \t]?|[^\n\r\f0-9a-fA-F])/g, 'x')
+  const outside = withoutCssEscapes(v)
     .replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, '""')
     .replace(/url\(data:[^\s"'()\\]*\)/gi, 'url()');
   if (/[;{}\\<>]/.test(outside)) return false;

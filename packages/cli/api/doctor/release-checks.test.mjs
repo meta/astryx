@@ -44,6 +44,22 @@ describe('checkNewestRelease', () => {
     });
   });
 
+  it('with no update check recorded, says which copies check, in a project too', () => {
+    const check = checkNewestRelease({
+      nodeVersion: '24.0.0',
+      answeredBy,
+      latest: null,
+      projectLag: null,
+    });
+    expect(check).toEqual({
+      id: 'newest-release',
+      label: 'Newest release',
+      status: 'info',
+      message:
+        "Update check: none recorded here, so the newest release is not known. Only a copy installed for the computer checks, in the background once a day after a command; a project's own copy changes only when the project upgrades it, and a tool that runs its own copy chooses its release.",
+    });
+  });
+
   it('adds the last notice skip and a held state lock, for diagnosis', () => {
     const check = checkNewestRelease({
       nodeVersion: '24.0.0',

@@ -301,7 +301,9 @@ export interface DefineThemeInput<
    * Unified typography configuration — fonts, scale, and weights.
    *
    * Scale controls sizing; roles (body, heading, code) declare
-   * fonts, fallbacks, and weights. Heading inherits from body if omitted.
+   * fonts, fallbacks, and weights. A heading with no `family` takes the
+   * body's whole font list; with its own `family`, only its own
+   * `fallbacks`. `fallbacks` with no `family` build nothing.
    *
    * Font loading is the consumer's responsibility — add a <link> or
    * @import for your fonts before rendering the theme.
