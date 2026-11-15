@@ -1450,6 +1450,30 @@ jobs:
           ASTRYX_THEME_EDITOR_BROWSER: '1'
         run: pnpm exec vitest run packages/cli/api/theme-edit/theme-real-bases.test.mjs -t 'renders own and editor sides|names what it waited on' --maxWorkers=1
 
+      # render.charts.browser.test.mjs shows a rendered page's charts at a
+      # phone's, a tablet's and a desktop's width. The Node legs run without
+      # a browser and skip it; with ASTRYX_RENDER_CHART_BROWSER set, a
+      # missing browser fails it.
+      - name: Render chart browser case
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        env:
+          ASTRYX_RENDER_CHART_BROWSER: '1'
+        run: pnpm exec vitest run packages/cli/api/render/render.charts.browser.test.mjs --maxWorkers=1
+
+      # template-phone-fit.browser.test.mjs builds every ready page template
+      # into one Vite app and shows each in Chromium's phone emulation at
+      # 390 px, with touch and with a mouse; it fails on horizontal overflow.
+      # It needs the build package's Vite plugin, built here. The Node legs
+      # skip it; with ASTRYX_TEMPLATE_PHONE_FIT_BROWSER set, a missing browser
+      # fails it.
+      - name: Template phone fit browser case
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        env:
+          ASTRYX_TEMPLATE_PHONE_FIT_BROWSER: '1'
+        run: |
+          pnpm -F @astryxdesign/build build
+          pnpm exec vitest run .github/scripts/template-phone-fit.browser.test.mjs --maxWorkers=1
+
       # The contract runs in the time the job's 15-minute limit leaves, less a
       # minute, counted from the job's start: a contract that runs out of
       # it fails by name with its last lines, before the limit cancels the job
@@ -1551,8 +1575,26 @@ jobs:
       - name: Build core package
         run: pnpm -F @astryxdesign/core build
 
+      # The shard watchdog (scripts/vitest-shard-watchdog.mjs) fires a minute
+      # before the job's 15-minute limit, as in test-node, so a slow slice
+      # fails and names its file instead of being cancelled. It also writes
+      # the slice's seconds for the recorded-time check below.
       - name: Run this slice of the swizzle proof
-        run: pnpm test:node packages/cli/test/swizzle-proof/swizzle-proof.${{ matrix.slice }}.test.mjs
+        id: slice
+        env:
+          VITEST_SHARD_TIMES_FILE: ${{ runner.temp }}/node-file-times.json
+        run: |
+          started=$(ps -o etimes= -C Runner.Worker 2>/dev/null | sort -n | tail -1 | tr -d ' ')
+          VITEST_SHARD_WATCHDOG_SECONDS=$(( 14 * 60 - ${started:-180} ))
+          export VITEST_SHARD_WATCHDOG_SECONDS
+          WATCHDOG=(--reporter=default --reporter=github-actions --reporter=./scripts/vitest-shard-watchdog.mjs)
+          pnpm test:node "${WATCHDOG[@]}" packages/cli/test/swizzle-proof/swizzle-proof.${{ matrix.slice }}.test.mjs
+
+      # As in test-node: a slice file this change touches that now runs far
+      # past its recorded time fails here, naming both times.
+      - name: Check the recorded time of this slice
+        if: always() && github.event_name == 'pull_request' && steps.slice.outcome != 'skipped'
+        run: node .github/scripts/node-time-drift.mjs --times "$RUNNER_TEMP/node-file-times.json" --changed HEAD^1
 
   # The one pre-job left: a runner must be picked before its job starts, so
   # this decides on a free slim runner whether native Swift changed, and

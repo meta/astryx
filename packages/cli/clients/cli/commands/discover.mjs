@@ -33,6 +33,7 @@ import {
   OFFICIAL_SOURCE_NAME,
 } from '../../../api/discover/discover.mjs';
 import {isValidSemver} from '../../../foundation/env/semver.mjs';
+import {firstSentence} from '../../../foundation/text/string-utils.mjs';
 import {Project} from '../../../foundation/config/project.mjs';
 import {warnOnIntegrationIssues} from '../../../foundation/integrations/integration-warnings.mjs';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
@@ -130,6 +131,42 @@ function summarize(result) {
         resultKind: resultKindOf(result.data.matches.map(m => m.kind)),
       });
   }
+}
+
+/**
+ * The commands that open the sections a package adds to a doc another package
+ * owns, one per section: the read itself, not only the section's key, so a
+ * reader runs it as printed.
+ * @param {string} name the doc the sections are in, as `astryx docs` opens it
+ * @param {string[]} keys the sections' keys
+ * @param {string} run the invocation commands print with
+ * @returns {string[]}
+ */
+function sectionReads(name, keys, run) {
+  return keys.map(key => `${run} docs ${name} ${key}`);
+}
+
+/**
+ * A package as the text views show it: a doc that adds sections to another
+ * package's topic prints, beside the doc, the read that opens each of them
+ * (`theme (read: … docs theme install-and-apply)`), so a reader can open its
+ * own section straight away. The JSON keeps `docs` and `docSections` apart.
+ * @template {{docs?: string[], docSections?: Record<string, string[]>}} T
+ * @param {T} entry
+ * @param {string} run the invocation commands print with
+ * @returns {Omit<T, 'docSections'>}
+ */
+function withDocSections(entry, run) {
+  const {docSections, ...rest} = entry;
+  if (!docSections || !rest.docs) return rest;
+  return {
+    ...rest,
+    docs: rest.docs.map(name =>
+      docSections[name]
+        ? `${name} (read: ${sectionReads(name, docSections[name], run).join('; ')})`
+        : name,
+    ),
+  };
 }
 
 /**
@@ -355,7 +392,18 @@ export function registerDiscover(program) {
               blocks.push(section('Installed'));
               blocks.push(
                 result.data.length > 0
-                  ? records(result.data, listOpts)
+                  ? records(
+                      result.data.map(entry => withDocSections(entry, run)),
+                      {
+                        ...listOpts,
+                        // A package's description shows its first sentence;
+                        // `--json` carries it whole.
+                        format: {
+                          ...listOpts.format,
+                          description: firstSentence,
+                        },
+                      },
+                    )
                   : text(
                       kind
                         ? `None of this project's integrations add ${kind}.`
@@ -369,7 +417,10 @@ export function registerDiscover(program) {
               blocks.push(section('Available', sourceSubtitle(sources)));
               blocks.push(
                 available.length > 0
-                  ? records(available, listOpts)
+                  ? records(available, {
+                      ...listOpts,
+                      format: {...listOpts.format, description: firstSentence},
+                    })
                   : text(
                       !sources.some(s => s.status !== 'failed')
                         ? 'No source answered, so there is nothing to list.'
@@ -425,7 +476,12 @@ export function registerDiscover(program) {
           case 'discover.detail': {
             const d = result.data;
             /** @type {import('../formatters/index.mjs').Block[]} */
-            const blocks = [record(d, {omit: ['versions', 'install']})];
+            const blocks = [
+              record(withDocSections(d, run), {
+                omit: ['versions', 'install'],
+                format: {description: firstSentence},
+              }),
+            ];
             if (d.versions && d.versions.length > 0) {
               const shown = d.version;
               const lines = versionLines(d.versions, {
@@ -499,6 +555,17 @@ export function registerDiscover(program) {
             const d = result.data;
             emit(
               record(d, {omit: ['install']}),
+              // A doc that adds sections to another package's topic says how
+              // to read each one.
+              ...(d.kind === 'doc' && d.sections
+                ? [
+                    text(
+                      sectionReads(d.name, d.sections, run)
+                        .map(read => `Read: ${read}`)
+                        .join('\n'),
+                    ),
+                  ]
+                : []),
               ...(d.install
                 ? addBlocks(
                     d.install,

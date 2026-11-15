@@ -53,7 +53,7 @@
 
 import {
   HEAD_END,
-  SHELL_FAMILY,
+  isAppShell,
   terms,
   modifiersOf,
   pairsOf,
@@ -64,6 +64,7 @@ import {
   keywordUnits,
   keywordWordsFor,
   framesOf,
+  readNames,
 } from './words.mjs';
 import {namedOutright, tieReading} from './weights.mjs';
 import {compareText} from '../../../foundation/text/compare-text.mjs';
@@ -141,11 +142,12 @@ const START_TERMS = 2;
  * by how strongly each one's own descriptor answers the idea, then by how
  * typical of its family it is, then by name (`settleTies`).
  *
- * @param {string} query
+ * @param {string} idea
  * @param {PageTemplate[]} pages
  * @returns {RankedPage[]}
  */
-export function rankPages(query, pages) {
+export function rankPages(idea, pages) {
+  const query = readNames(idea, pages);
   const docs = pages.map(page => {
     const [family = '', ...variantParts] = page.category.split(' - ');
     const keywords = page.keywords ?? [];
@@ -290,6 +292,7 @@ export function rankPages(query, pages) {
         family,
         base,
         matched,
+        hidden: page.hidden === true,
       };
     })
     .sort((a, b) => b.score - a.score || Number(b.base) - Number(a.base));
@@ -417,7 +420,7 @@ export function pickStart(ranked, kind = 'page') {
     // when one leads ("a frame with sidebar navigation"), else none, for the
     // kit's neutral fallback.
     const lead = pickStart(ranked);
-    return lead?.family === SHELL_FAMILY ? lead : null;
+    return isAppShell(lead) ? lead : null;
   }
   const top = ranked[0];
   if (!top || top.score < START_SCORE) return null;

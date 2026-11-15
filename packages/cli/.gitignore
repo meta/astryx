@@ -41,6 +41,9 @@ clients/cli/commands.generated.json
 # Written at prepack (scripts/generate-self-audit.mjs); never committed.
 assets/self-audit.generated.json
 
+# Written at prepack (scripts/generate-docs-routes.mjs); never committed.
+assets/docs-routes.generated.json
+
 # Written at prepack (scripts/generate-manifest.mjs); never committed.
 clients/cli/manifest.generated.json
 

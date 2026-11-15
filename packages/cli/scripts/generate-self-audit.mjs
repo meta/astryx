@@ -15,17 +15,12 @@
 
 import {spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {isDeepStrictEqual} from 'node:util';
-import {CLI_ROOT} from '../foundation/fs/paths.mjs';
 import {SELF_AUDIT_FILE} from '../foundation/discovery/stored-self-audit.mjs';
 import {assertSameBesideLockfiles} from './same-beside-lockfiles.mjs';
-import {copyPublishedFiles} from './published-files.mjs';
-
-/** The repository's folder, two levels above the package. */
-const REPO_DIR = path.resolve(CLI_ROOT, '..', '..');
+import {withPublishedCopy} from './published-copy.mjs';
 
 /**
  * What runs the audit in the copy and prints its inputs and value.
@@ -65,25 +60,7 @@ function runAudit(pkg, cwd) {
  * @returns {string}
  */
 export function selfAuditText() {
-  const stage = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-self-audit-'));
-  try {
-    const pkg = path.join(stage, 'packages', 'cli');
-    copyPublishedFiles(CLI_ROOT, pkg);
-    const link = (/** @type {string} */ target, /** @type {string} */ at) => {
-      if (!fs.existsSync(target)) return;
-      fs.mkdirSync(path.dirname(at), {recursive: true});
-      fs.symlinkSync(
-        target,
-        at,
-        process.platform === 'win32' ? 'junction' : 'dir',
-      );
-    };
-    link(path.join(CLI_ROOT, 'node_modules'), path.join(pkg, 'node_modules'));
-    link(path.join(REPO_DIR, 'node_modules'), path.join(stage, 'node_modules'));
-    link(
-      path.join(REPO_DIR, 'packages', 'core'),
-      path.join(stage, 'packages', 'core'),
-    );
+  return withPublishedCopy('astryx-self-audit-', ({stage, pkg}) => {
     const {name, inputs, value} = runAudit(pkg, stage);
     // Stored only as plain data that reads back the same.
     if (!isDeepStrictEqual(JSON.parse(JSON.stringify(value)), value)) {
@@ -97,9 +74,7 @@ export function selfAuditText() {
       dir => runAudit(pkg, dir).value,
     );
     return JSON.stringify({[name]: {inputs, value}}) + '\n';
-  } finally {
-    fs.rmSync(stage, {recursive: true, force: true});
-  }
+  });
 }
 
 const isMain =

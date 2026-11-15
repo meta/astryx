@@ -241,14 +241,19 @@ describe('wrong writes that are no longer accepted', () => {
     'a swap swaps each mode',
     async test => {
       needsBases(test);
-      expect(
-        (await answer('swap the accent and danger colors', 'b')).first,
-      ).toEqual([
+      // (Every color of each role swaps, text and icons too.)
+      const {first} = await answer('swap the accent and danger colors', 'b');
+      expect(first.slice(0, 2)).toEqual([
         "set b accent '#821b00'",
         "set b danger '#225bff'",
-        "set b --color-accent '#ffc5b5' --mode dark",
-        "set b --color-error '#fdee8c' --mode dark",
       ]);
+      expect(first).toEqual(
+        expect.arrayContaining([
+          "set b --color-accent '#ffc5b5' --mode dark",
+          "set b --color-error '#fdee8c' --mode dark",
+          "set b --color-text-error '#fdee8c' --mode dark",
+        ]),
+      );
     },
     T,
   );
@@ -295,10 +300,13 @@ describe('asks it used to drop', () => {
       expect(
         (await answer('swap the accent and danger colors in dark mode', 'b'))
           .first,
-      ).toEqual([
-        "set b --color-accent '#ffc5b5' --mode dark",
-        "set b --color-error '#fdee8c' --mode dark",
-      ]);
+      ).toEqual(
+        expect.arrayContaining([
+          "set b --color-accent '#ffc5b5' --mode dark",
+          "set b --color-error '#fdee8c' --mode dark",
+          "set b --color-text-accent '#ffb09b' --mode dark",
+        ]),
+      );
     },
     T,
   );

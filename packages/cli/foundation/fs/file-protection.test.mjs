@@ -87,6 +87,26 @@ describe('working-tree .gitattributes', () => {
     expect(declarations('generated output/theme.js')).toHaveLength(1);
   });
 
+  it('decodes quoted UTF-8 paths written as consecutive octal escapes', () => {
+    write(
+      '.gitattributes',
+      [
+        '"caf\\303\\251.js" linguist-generated',
+        '"caf\\303\\251-vendored.js" linguist-vendored',
+        '',
+      ].join('\n'),
+    );
+    write('café.js', 'export {};');
+    write('café-vendored.js', 'export {};');
+
+    expect(declarations('café.js')).toContain(
+      'linguist-generated in .gitattributes:1',
+    );
+    expect(declarations('café-vendored.js')).toContain(
+      'linguist-vendored in .gitattributes:2',
+    );
+  });
+
   it('matches basename patterns below the declaring directory', () => {
     write('.gitattributes', '*.gen.ts linguist-generated\n');
     write('src/deep/theme.gen.ts', 'export {};');
