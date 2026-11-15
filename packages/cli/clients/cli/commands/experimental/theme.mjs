@@ -577,6 +577,7 @@ function changeBlocks(r) {
 function problemList(problems) {
   return cappedList(
     problems.map(p => (p.fix ? [p.problem, `fix: ${p.fix}`] : p.problem)),
+    'every one, each with its fix',
   );
 }
 
@@ -587,14 +588,13 @@ const PROBLEMS_SHOWN = 8;
  * A list the text cuts after the first few, counting the rest; the JSON has
  * every item.
  * @param {Array<string | string[]>} items
+ * @param {string} [jsonHas] What the JSON holds for each item.
  */
-function cappedList(items) {
+function cappedList(items, jsonHas = 'every one') {
   const rest = items.length - PROBLEMS_SHOWN;
   return [
     list(items.slice(0, PROBLEMS_SHOWN)),
-    ...(rest > 0
-      ? [`and ${rest} more (--json lists every one, each with its fix)`]
-      : []),
+    ...(rest > 0 ? [`and ${rest} more (--json lists ${jsonHas})`] : []),
   ];
 }
 
@@ -1726,7 +1726,7 @@ export function registerExperimentalTheme(group, program) {
           },
           r => [
             `[ok] made theme "${r.data.theme}"${r.data.like ? ` on top of ${r.data.like}` : ''}`,
-            ...project(/** @type {any} */ (r.data)),
+            ...changeFields(/** @type {any} */ (r.data)),
             `Tip: ${EDITOR} set ${r.data.theme} <thing> <value>, or ${HOW} "<what you want>"`,
             `Look at it after each change (this changes nothing in your app): ${EDITOR} show ${r.data.theme} --png writes themes/${r.data.theme}/preview.png (a sample page), sheet-overlays.png (every menu, tooltip, popover and list, open) and sheet.png (every component) from real components; open preview.png and sheet-overlays.png and check them against the request`,
           ],
