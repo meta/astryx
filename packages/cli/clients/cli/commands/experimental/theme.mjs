@@ -606,11 +606,12 @@ function showBlocks(d) {
       ? [section('settings:'), records(settings.map(s => flatRecord(s)))]
       : []),
     ...others,
-    // The parts the look leaves as the base has them, on one line.
+    // The parts the look leaves as the base has them, on one line: the
+    // most visible ten, and how many more (the JSON lists them all).
     ...(unreached?.length
       ? [
           record({
-            unreached: `${unreached.join(', ')} (no setting reaches them, and none of the tokens they read changed)`,
+            unreached: `${unreached.slice(0, 10).join(', ')}${unreached.length > 10 ? `, and ${unreached.length - 10} more (show --json)` : ''} (their fill or text color is still the base's, and no setting is on them)`,
           }),
         ]
       : []),

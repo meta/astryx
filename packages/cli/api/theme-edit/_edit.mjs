@@ -6548,10 +6548,13 @@ function ownSourceMaskNotes(ctx, cwd, slug, data, base) {
 
 /**
  * The parts with a fill of their own that the theme leaves on its base's
- * look: no setting is on them, and none of the tokens they read (from the
- * part data, in any state) has a value other than the base's in either
- * mode. What an agent reads to see which parts its look did not reach
- * (toast, banner, badge). None for a theme with no settings.
+ * look: no setting is on them, and their fill or their text color (the
+ * tokens the part data says they paint them with, in any state) has the
+ * base's value in both modes. A part counts as reached only when both its
+ * fill and its text changed (a part with no text color of its own, by its
+ * fill). The most visible first (overlays, feedback, navigation, then the
+ * rest), so an agent sees which parts its look did not reach (toast,
+ * banner, a selected nav item). None for a theme with no settings.
  * @param {any} ctx
  * @param {import('./_settings.mjs').ThemeData} data
  * @param {Record<string, Record<string, string>>} res
@@ -6567,16 +6570,38 @@ function unreachedParts(ctx, data, res, base) {
   const set = new Set(
     data.settings.filter(s => s.on).flatMap(s => partsOf(ctx, s)),
   );
-  return Object.keys(ctx.C.MAP).filter(part => {
+  /** The color tokens a part paints a property with. @param {any[]} reads @param {(prop: string) => boolean} prop */
+  const painting = (reads, prop) =>
+    reads
+      .filter(r => /^--color-/.test(r.token) && r.props.some(prop))
+      .map(r => r.token);
+  const unreached = Object.keys(ctx.C.MAP).filter(part => {
     if (set.has(part)) return false;
     const reads = ctx.C.partReads(part, null);
-    const filled = reads.some(
-      (/** @type {any} */ r) =>
-        /^--color-/.test(r.token) &&
-        r.props.some((/** @type {string} */ x) => /^background/.test(x)),
-    );
-    return filled && !reads.some((/** @type {any} */ r) => changed(r.token));
+    const fill = painting(reads, x => /^background/.test(x));
+    if (!fill.length) return false;
+    const text = painting(reads, x => x === 'color');
+    return !(fill.some(changed) && (!text.length || text.some(changed)));
   });
+  // The most visible first: by the category of the component the part
+  // belongs to.
+  const RANK = ['overlay', 'feedback & status', 'navigation', 'action'];
+  /** @param {string} part */
+  const rank = part => {
+    const name = ctx.project.target.get(part)?.component;
+    const info = name ? ctx.project.components[name] : null;
+    const parent = info?.subComponentOf
+      ? ctx.project.components[info.subComponentOf]
+      : null;
+    const at = RANK.indexOf(
+      String(info?.category || parent?.category || '').toLowerCase(),
+    );
+    return at < 0 ? RANK.length : at;
+  };
+  return unreached
+    .map((part, i) => ({part, i, r: rank(part)}))
+    .sort((a, b) => a.r - b.r || a.i - b.i)
+    .map(x => x.part);
 }
 
 /**
