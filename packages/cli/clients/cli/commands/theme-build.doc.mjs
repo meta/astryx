@@ -22,9 +22,11 @@ export const doc = {
     'the required --family-key, ready for one CSS load and identity-only switching. ' +
     'A local module the built module imports (an icon registry, a slot value, ' +
     'the helpers they import) that is TypeScript or JSX is compiled to JavaScript ' +
-    'under the output folder (beside the outputs for a module beside the theme ' +
-    'source, at the same relative place for one elsewhere), and each local import ' +
-    'names its file with its extension, ' +
+    'named after its source (icons.tsx → icons.tsx.js) under the output folder: ' +
+    "beside the outputs while every compiled module sits in the theme's folder; " +
+    'when any sits outside it, every module is mirrored under the output folder ' +
+    'from the folder that holds them all. Each local import names its file with ' +
+    'its extension, ' +
     'so the built module loads in any bundler and in plain Node; package imports ' +
     'stay as they are. ' +
     'With --check it writes nothing and reports source drift. --icons-specifier keeps ' +

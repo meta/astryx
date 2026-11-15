@@ -22,7 +22,7 @@ import {createRequire} from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {logger} from '../../logger.mjs';
-import {themeBuild, themeBuildFamily} from './build.mjs';
+import {themeBuild, themeBuildFamily, themeSourceFiles} from './build.mjs';
 import {ensureCoreBuilt} from '../../../clients/cli/commands/ensure-core-built.mjs';
 import {
   filesOnDisk,
@@ -97,6 +97,47 @@ function plainImport(rel) {
   );
 }
 
+const BIN = path.join(CLI_ROOT, 'clients/cli/bin/astryx.mjs');
+/** Run the CLI in its own process. @param {string[]} args */
+const cli = args =>
+  spawnSync(process.execPath, [BIN, ...args], {
+    cwd: dir,
+    encoding: 'utf8',
+    timeout: 120_000,
+  });
+
+/**
+ * Run a build with what it prints kept.
+ * @param {() => Promise<unknown>} run
+ */
+async function captured(run) {
+  /** @type {string[]} */
+  const lines = [];
+  const silent = logger.silent;
+  const {warn, log, error} = logger;
+  logger.setSilent(false);
+  logger.warn = (/** @type {string} */ l) => lines.push(l);
+  logger.log = (/** @type {string} */ l) => lines.push(l);
+  logger.error = (/** @type {string} */ l) => lines.push(l);
+  try {
+    let result;
+    let err;
+    try {
+      result = await run();
+    } catch (e) {
+      err = e;
+    }
+    return {
+      result: /** @type {any} */ (result),
+      err: /** @type {any} */ (err),
+      lines,
+    };
+  } finally {
+    Object.assign(logger, {warn, log, error});
+    logger.setSilent(silent);
+  }
+}
+
 const ICONS_TSX = `import * as React from 'react';\nimport {size} from './helper';\nexport const w98Icons = {close: <svg width={size} height={size} />};\n`;
 const HELPER_TS = `export const size: number = 16;\n`;
 const THEME = `import {defineTheme} from '@astryxdesign/core/theme';\nimport {w98Icons} from './icons';\nexport const w98Theme = defineTheme({name: 'w98', icons: w98Icons, tokens: {'--color-accent': '#000080'}});\n`;
@@ -109,14 +150,14 @@ describe('a theme whose icon registry is TypeScript with JSX', () => {
     await quiet(() => themeBuild('themes/w98/w98Theme.ts', {}, {cwd: dir}));
 
     const js = read('themes/w98/w98.js');
-    expect(js).toContain("import { w98Icons } from './icons.js';");
+    expect(js).toContain("import { w98Icons } from './icons.tsx.js';");
     expect(js).not.toMatch(/from '\.\/icons'/);
-    expect(read('themes/w98/icons.js')).toContain(
+    expect(read('themes/w98/icons.tsx.js')).toContain(
       'Source: themes/w98/icons.tsx',
     );
-    expect(read('themes/w98/icons.js')).toContain('from "./helper.js"');
-    expect(read('themes/w98/icons.js')).toContain('react/jsx-runtime');
-    expect(read('themes/w98/helper.js')).not.toContain(': number');
+    expect(read('themes/w98/icons.tsx.js')).toContain('from "./helper.ts.js"');
+    expect(read('themes/w98/icons.tsx.js')).toContain('react/jsx-runtime');
+    expect(read('themes/w98/helper.ts.js')).not.toContain(': number');
 
     const loaded = plainImport('themes/w98/w98.js');
     expect(loaded.status, loaded.stderr).toBe(0);
@@ -138,7 +179,7 @@ describe('a theme whose icon registry is TypeScript with JSX', () => {
     );
     expect(stale.data.upToDate).toBe(false);
     expect(stale.data.stale.map((/** @type {any} */ s) => s.path)).toContain(
-      'themes/w98/helper.js',
+      'themes/w98/helper.ts.js',
     );
     await quiet(() => themeBuild('themes/w98/w98Theme.ts', {}, {cwd: dir}));
     expect(JSON.parse(plainImport('themes/w98/w98.js').stdout).size).toBe(24);
@@ -151,10 +192,10 @@ describe('a theme whose icon registry is TypeScript with JSX', () => {
     await quiet(() =>
       themeBuild('themes/w98/w98Theme.ts', {out: 'dist/w98.css'}, {cwd: dir}),
     );
-    expect(read('dist/w98.js')).toContain("from './icons.js'");
-    expect(exists('dist/icons.js')).toBe(true);
-    expect(exists('dist/helper.js')).toBe(true);
-    expect(exists('themes/w98/icons.js')).toBe(false);
+    expect(read('dist/w98.js')).toContain("from './icons.tsx.js'");
+    expect(exists('dist/icons.tsx.js')).toBe(true);
+    expect(exists('dist/helper.ts.js')).toBe(true);
+    expect(exists('themes/w98/icons.tsx.js')).toBe(false);
     const loaded = plainImport('dist/w98.js');
     expect(loaded.status, loaded.stderr).toBe(0);
   });
@@ -164,9 +205,9 @@ describe('a theme whose icon registry is TypeScript with JSX', () => {
     write('themes/w98/helper.ts', HELPER_TS);
     write('themes/w98/w98Theme.ts', THEME);
     const mine = '// my own build of the icons\nexport const w98Icons = {};\n';
-    write('themes/w98/icons.js', mine);
+    write('themes/w98/icons.tsx.js', mine);
     await quiet(() => themeBuild('themes/w98/w98Theme.ts', {}, {cwd: dir}));
-    expect(read('themes/w98/icons.js')).toBe(mine);
+    expect(read('themes/w98/icons.tsx.js')).toBe(mine);
     expect(read('themes/w98/w98.js')).toContain("from './icons'");
   });
 });
@@ -224,9 +265,9 @@ describe('a theme family whose member’s registry is TypeScript', () => {
       ),
     );
     const js = read('fam/ocean-family.js');
-    expect(js).toContain('"./icons.js"');
-    expect(js).not.toContain('icons.ts');
-    expect(read('fam/icons.js')).toContain('calm-close');
+    expect(js).toContain('"./icons.ts.js"');
+    expect(js).not.toContain('"./icons.ts"');
+    expect(read('fam/icons.ts.js')).toContain('calm-close');
   });
 });
 
@@ -256,10 +297,10 @@ describe('a family whose members each keep ./icons.ts in their own folder', () =
       ),
     );
     const js = read('fam/ocean/ocean-family.js');
-    expect(js).toContain('"./ocean/icons.js"');
-    expect(js).toContain('"./calm/icons.js"');
-    expect(read('fam/ocean/ocean/icons.js')).toContain('ocean-close');
-    expect(read('fam/ocean/calm/icons.js')).toContain('calm-close');
+    expect(js).toContain('"./ocean/icons.ts.js"');
+    expect(js).toContain('"./calm/icons.ts.js"');
+    expect(read('fam/ocean/ocean/icons.ts.js')).toContain('ocean-close');
+    expect(read('fam/ocean/calm/icons.ts.js')).toContain('calm-close');
     const loaded = spawnSync(
       process.execPath,
       [
@@ -290,10 +331,10 @@ describe('a helper outside the theme folder', () => {
       themeBuild('themes/w98/w98Theme.ts', {out: 'dist/w98.css'}, {cwd: dir}),
     );
     // Placed as under the folder that holds the theme and the helper.
-    expect(read('dist/w98.js')).toContain("from './themes/w98/icons.js'");
-    expect(exists('dist/themes/w98/icons.js')).toBe(true);
-    expect(exists('dist/shared/size.js')).toBe(true);
-    expect(exists('shared/size.js')).toBe(false);
+    expect(read('dist/w98.js')).toContain("from './themes/w98/icons.tsx.js'");
+    expect(exists('dist/themes/w98/icons.tsx.js')).toBe(true);
+    expect(exists('dist/shared/size.ts.js')).toBe(true);
+    expect(exists('shared/size.ts.js')).toBe(false);
     const loaded = plainImport('dist/w98.js');
     expect(loaded.status, loaded.stderr).toBe(0);
     expect(JSON.parse(loaded.stdout).size).toBe(20);
@@ -305,12 +346,74 @@ describe('a helper outside the theme folder', () => {
       themeBuild('w98Theme.ts', {}, {cwd: path.join(dir, 'themes/w98')}),
     );
     expect(result?.type).toBe('theme.build');
-    expect(exists('shared/size.js')).toBe(false);
-    expect(exists('themes/w98/shared/size.js')).toBe(true);
-    expect(exists('themes/w98/themes/w98/icons.js')).toBe(true);
+    expect(exists('shared/size.ts.js')).toBe(false);
+    expect(exists('themes/w98/shared/size.ts.js')).toBe(true);
+    expect(exists('themes/w98/themes/w98/icons.tsx.js')).toBe(true);
     const loaded = plainImport('themes/w98/w98.js');
     expect(loaded.status, loaded.stderr).toBe(0);
     expect(JSON.parse(loaded.stdout).size).toBe(20);
+  });
+});
+
+describe('a compiled module is an output of its own source', () => {
+  it('two themes built in one command share one registry, written once', () => {
+    write(
+      'themes/icons.tsx',
+      `import * as React from 'react';\nexport const seaIcons = {close: <svg width={16} />};\n`,
+    );
+    write(
+      'themes/ocean.ts',
+      `import {defineTheme} from '@astryxdesign/core/theme';\nimport {seaIcons} from './icons';\nexport const ocean = defineTheme({name: 'ocean', icons: seaIcons, tokens: {'--color-accent': '#0066cc'}});\n`,
+    );
+    write(
+      'themes/calm.ts',
+      `import {defineTheme} from '@astryxdesign/core/theme';\nimport {ocean} from './ocean';\nimport {seaIcons} from './icons';\nexport const calm = defineTheme({extends: ocean, name: 'calm', icons: seaIcons});\n`,
+    );
+    const r = cli(['theme', 'build', 'themes/ocean.ts', 'themes/calm.ts']);
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    expect(read('themes/ocean.js')).toContain("from './icons.tsx.js'");
+    expect(read('themes/calm.js')).toContain("from './icons.tsx.js'");
+    expect(read('themes/icons.tsx.js')).toContain('react/jsx-runtime');
+    for (const name of ['ocean', 'calm']) {
+      const loaded = plainImport(`themes/${name}.js`);
+      expect(loaded.status, loaded.stderr).toBe(0);
+    }
+  });
+
+  it('an --out rebuild replaces its compiled modules without a warning', async () => {
+    write('themes/w98/icons.tsx', ICONS_TSX);
+    write('themes/w98/helper.ts', HELPER_TS);
+    write('themes/w98/w98Theme.ts', THEME);
+    const build = () =>
+      captured(() =>
+        themeBuild('themes/w98/w98Theme.ts', {out: 'dist/w98.css'}, {cwd: dir}),
+      );
+    await build();
+    const again = await build();
+    expect(again.err).toBeUndefined();
+    expect(again.lines.filter(l => /^Warning/.test(l))).toEqual([]);
+    expect(again.result.data.warnings ?? []).toEqual([]);
+  });
+
+  it('a .jsx registry: the compiled copy never shadows it, and a watch follows the source', async () => {
+    write(
+      'themes/w98/icons.jsx',
+      `import * as React from 'react';\nexport const w98Icons = {close: <svg width={16} />};\n`,
+    );
+    write('themes/w98/w98Theme.ts', THEME);
+    await quiet(() => themeBuild('themes/w98/w98Theme.ts', {}, {cwd: dir}));
+    expect(exists('themes/w98/icons.jsx.js')).toBe(true);
+    expect(exists('themes/w98/icons.js')).toBe(false);
+    const watched = themeSourceFiles(path.join(dir, 'themes/w98/w98Theme.ts'));
+    expect(watched).toContain(path.join(dir, 'themes/w98/icons.jsx'));
+    expect(watched).not.toContain(path.join(dir, 'themes/w98/icons.jsx.js'));
+    // The registry edited: the next build reads the source, not the copy.
+    write(
+      'themes/w98/icons.jsx',
+      `import * as React from 'react';\nexport const w98Icons = {close: <svg width={32} />};\n`,
+    );
+    await quiet(() => themeBuild('themes/w98/w98Theme.ts', {}, {cwd: dir}));
+    expect(read('themes/w98/icons.jsx.js')).toContain('32');
   });
 });
 

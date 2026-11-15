@@ -17,10 +17,8 @@
  */
 
 import * as path from 'node:path';
-import {
-  babelCore,
-  babelParse,
-} from '../../../foundation/runtime/lazy-dependencies.mjs';
+import {babelCore} from '../../../foundation/runtime/lazy-dependencies.mjs';
+import {moduleImports} from '../../../foundation/render/embedded-imports.mjs';
 
 /**
  * How the module reads the theme's local files, given by the theme adapter.
@@ -68,41 +66,21 @@ function importOf(fromDir, file) {
   return rel.startsWith('./') || rel.startsWith('../') ? rel : `./${rel}`;
 }
 
-/** The source a compiled module of each extension is built from. */
-const SOURCE_OF = Object.freeze({
-  '.js': ['.ts', '.tsx', '.jsx'],
-  '.mjs': ['.mts'],
-  '.cjs': ['.cts'],
-});
-
 /**
  * The file a local import names, resolved as an app's bundler resolves it,
  * TypeScript first (with an extension or a folder's index); null for a
- * package, a file that is not there, or one in `node_modules`. A module an
- * earlier build compiled names its source instead, so a change to the
- * source is compiled again.
+ * package, a file that is not there, or one in `node_modules`.
  * @param {LocalModuleFiles} files
  * @param {string} specifier
  * @param {string} fromFile
- * @param {string} marker the build header's mark
  * @returns {string | null}
  */
-function localFile(files, specifier, fromFile, marker) {
+function localFile(files, specifier, fromFile) {
   if (!isRelative(specifier)) return null;
   const resolved = files.resolve(specifier, fromFile, LOCAL_EXTENSIONS);
-  if (!resolved || resolved.split(path.sep).includes('node_modules'))
-    return null;
-  const extension = /** @type {keyof typeof SOURCE_OF} */ (
-    path.extname(resolved).toLowerCase()
-  );
-  if (SOURCE_OF[extension] && !holdsOtherFile(files, resolved, marker)) {
-    const stem = resolved.slice(0, -extension.length);
-    const source = SOURCE_OF[extension]
-      .map(ext => `${stem}${ext}`)
-      .find(file => files.exists(file));
-    if (source) return source;
-  }
-  return resolved;
+  return resolved && !resolved.split(path.sep).includes('node_modules')
+    ? resolved
+    : null;
 }
 
 /**
@@ -118,48 +96,16 @@ function holdsOtherFile(files, file, marker) {
 }
 
 /**
- * The relative module specifiers a source writes (static imports and
- * re-exports, dynamic imports with a literal), each with where it is.
+ * The relative imports a module makes that bring in code (type-only
+ * imports aside).
  * @param {string} source
  * @param {string} file
- * @returns {Array<{value: string, start: number, end: number}>}
+ * @returns {string[]}
  */
-function specifiersOf(source, file) {
-  /** @type {import('@babel/parser').ParserPlugin[]} */
-  const plugins = [];
-  if (/\.[cm]?tsx?$/i.test(file)) plugins.push('typescript');
-  if (/\.(?:tsx|jsx)$/i.test(file) || /\.[cm]?js$/i.test(file))
-    plugins.push('jsx');
-  const ast = babelParse(source, {sourceType: 'module', plugins});
-  /** @type {Array<{value: string, start: number, end: number}>} */
-  const found = [];
-  /** @param {any} node */
-  const visit = node => {
-    if (!node || typeof node !== 'object') return;
-    const source =
-      node.type === 'ImportDeclaration' ||
-      node.type === 'ExportNamedDeclaration' ||
-      node.type === 'ExportAllDeclaration'
-        ? node.source
-        : node.type === 'ImportExpression'
-          ? node.source
-          : node.type === 'CallExpression' && node.callee?.type === 'Import'
-            ? node.arguments?.[0]
-            : null;
-    if (
-      source?.type === 'StringLiteral' &&
-      isRelative(source.value) &&
-      node.importKind !== 'type' &&
-      node.exportKind !== 'type'
-    )
-      found.push({value: source.value, start: source.start, end: source.end});
-    for (const value of Object.values(node))
-      if (Array.isArray(value))
-        value.forEach(child => child?.type && visit(child));
-      else if (value?.type) visit(value);
-  };
-  visit(ast.program);
-  return found;
+function codeImportsOf(source, file) {
+  return (moduleImports(source, file) ?? [])
+    .filter(each => !each.typeOnly && isRelative(each.specifier))
+    .map(each => each.specifier);
 }
 
 /**
@@ -188,11 +134,16 @@ function commonFolder(dirs) {
  * Make built modules' carried imports load anywhere. Each relative import
  * that names a TypeScript or JSX module is compiled, with the local
  * TypeScript or JSX modules it imports, to JavaScript under the output
- * folder, and the import names the compiled file. A compiled module goes
- * to the place under the output folder that its source has under the folder
- * holding every theme source and compiled source (beside the outputs for a
- * registry beside the theme source), so two sources never share one
- * compiled file and nothing is written into the source tree. A relative
+ * folder, and the import names the compiled file, the source's name with
+ * `.js` added (`icons.tsx.js`), so an import of the source still finds the
+ * source. Each compiled module goes to the place under the output folder
+ * that its source has under the folder holding every theme source and
+ * compiled source: beside the outputs while they all sit in the theme's
+ * folder; when any sits outside it, every module is mirrored under the
+ * output folder from the folder that holds them all. Two sources never
+ * share one compiled file, nothing is written into the source tree, and a
+ * compiled module is an output of its source, shared by every theme that
+ * imports it. A relative
  * import of a plain JavaScript module stays as the source writes it, with
  * the file's extension written out. A compiled module is never written
  * over a file the build did not write: the imports of that source are kept
@@ -204,7 +155,7 @@ function commonFolder(dirs) {
  *   `header`: the build header for a compiled module, from its source file;
  *   `files`: the theme adapter's file reader;
  *   `keep`: a binding written as given (an --icons-specifier)
- * @returns {{entries: Array<{bindings: Array<{importPath: string, importedName: string, localName: string}>, renamed: Map<string, string>, compiled: Map<string, string>}>, writes: Array<{dest: string, content: string}>}}
+ * @returns {{entries: Array<{bindings: Array<{importPath: string, importedName: string, localName: string}>, renamed: Map<string, string>, compiled: Map<string, string>}>, writes: Array<{dest: string, content: string, source: string}>}}
  *   for each entry, `renamed`: each import path as it was, to the one the
  *   module writes; `compiled`: each import path, as it was, whose module was
  *   compiled, to that module's source file
@@ -226,8 +177,8 @@ export function selfContainedImports(entries, options) {
     /** @type {Array<{value: string, target: string}>} */
     const imports = [];
     graph.set(file, {source, imports});
-    for (const {value} of specifiersOf(source, file)) {
-      const target = localFile(files, value, file, marker);
+    for (const value of codeImportsOf(source, file)) {
+      const target = localFile(files, value, file);
       if (!target) continue;
       imports.push({value, target});
       if (COMPILED_SOURCE.test(target)) visit(target);
@@ -236,12 +187,7 @@ export function selfContainedImports(entries, options) {
   for (const entry of entries)
     for (const binding of entry.bindings) {
       if (kept(binding)) continue;
-      const target = localFile(
-        files,
-        binding.importPath,
-        entry.sourceFile,
-        marker,
-      );
+      const target = localFile(files, binding.importPath, entry.sourceFile);
       if (target && COMPILED_SOURCE.test(target)) visit(target);
     }
 
@@ -254,19 +200,15 @@ export function selfContainedImports(entries, options) {
   /** @type {Set<string>} */
   const claimed = new Set();
   for (const file of graph.keys()) {
-    const ext = /\.mts$/i.test(file)
-      ? '.mjs'
-      : /\.cts$/i.test(file)
-        ? '.cjs'
-        : '.js';
-    const rel = path.relative(root, file).replace(/\.[^./\\]+$/u, ext);
-    const dest = path.join(outDir, rel);
+    // `icons.tsx` → `icons.tsx.js`: an import of `./icons` still finds the
+    // source, so a build, a watch and an editor never read the compiled copy.
+    const dest = path.join(outDir, `${path.relative(root, file)}.js`);
     if (claimed.has(dest) || holdsOtherFile(files, dest, marker)) continue;
     claimed.add(dest);
     destOf.set(file, dest);
   }
 
-  /** @type {Array<{dest: string, content: string}>} */
+  /** @type {Array<{dest: string, content: string, source: string}>} */
   const writes = [];
   for (const [file, {source, imports}] of graph) {
     const dest = destOf.get(file);
@@ -281,6 +223,7 @@ export function selfContainedImports(entries, options) {
       dest,
       content:
         header(file) + compileModule(files, file, source, rewrite) + '\n',
+      source: file,
     });
   }
 
@@ -293,12 +236,7 @@ export function selfContainedImports(entries, options) {
       const compiledPaths = new Map();
       const bindings = entry.bindings.map(binding => {
         if (kept(binding)) return binding;
-        const target = localFile(
-          files,
-          binding.importPath,
-          entry.sourceFile,
-          marker,
-        );
+        const target = localFile(files, binding.importPath, entry.sourceFile);
         if (!target) return binding;
         // A plain JavaScript module keeps the import as the source writes it
         // (an app may put its compiled registry beside the output), with its

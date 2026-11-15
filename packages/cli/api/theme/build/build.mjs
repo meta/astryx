@@ -1396,6 +1396,10 @@ function assertOutputsReplaceable(
   }
   for (const write of writes) {
     const key = outputKey(write.dest);
+    // A compiled local module is its own source's output, shared by every
+    // theme that imports it: judged against that source, and never claimed
+    // by one theme.
+    const owner = /** @type {{source?: string}} */ (write).source ?? filePath;
     if (key === sourceKey) {
       throw new AstryxError(
         `The output ${rel(write.dest)} is the theme source itself. Pick another --out.`,
@@ -1418,7 +1422,7 @@ function assertOutputsReplaceable(
     }
     seen.add(key);
     const earlier = claimed?.get(key);
-    if (earlier !== undefined) {
+    if (earlier !== undefined && earlier !== sharedClaim(write)) {
       const collision = new AstryxError(
         `${earlier} and ${rel(filePath)} both build ${rel(write.dest)}. Give each theme its own name; nothing was written.`,
         undefined,
@@ -1443,7 +1447,7 @@ function assertOutputsReplaceable(
     // Only a path --out names is checked: at the default paths beside the
     // source, a build replaces what is there, as it always has.
     const otherSource = refuseUnmarked
-      ? builtFromOtherSource(write.dest, filePath, cwd)
+      ? builtFromOtherSource(write.dest, owner, cwd)
       : null;
     if (otherSource && !OUT_REFUSES_OTHER_SOURCE) {
       // One warning per build: every output of that source goes together.
@@ -1498,6 +1502,16 @@ function assertOutputsReplaceable(
     else logger.warn(`Warning: ${message}`);
     onWarning?.(message);
   }
+}
+
+/**
+ * How a batch records a compiled local module it writes: by its source, so
+ * a second theme that imports the same module shares it; null for a theme's
+ * own output.
+ * @param {{dest: string, source?: string}} write
+ */
+function sharedClaim(write) {
+  return write.source ? `\0shared:${path.resolve(write.source)}` : undefined;
 }
 
 /**
@@ -5147,10 +5161,19 @@ async function themeBuildInternal(
 
   // A batch publishes every theme's outputs after all of them are built, so
   // two themes that build the same files are refused before either writes.
-  if (handOff.deferredWrites) handOff.deferredWrites.push(writes);
-  else writeBuildOutputs(writes);
+  // A compiled module an earlier theme of the batch writes is written once.
+  const ownWrites = writes.filter(
+    write =>
+      !sharedClaim(write) ||
+      handOff.claimedOutputs?.get(outputKey(write.dest)) !== sharedClaim(write),
+  );
+  if (handOff.deferredWrites) handOff.deferredWrites.push(ownWrites);
+  else writeBuildOutputs(ownWrites);
   for (const write of writes) {
-    handOff.claimedOutputs?.set(outputKey(write.dest), sourceRelative);
+    handOff.claimedOutputs?.set(
+      outputKey(write.dest),
+      sharedClaim(write) ?? sourceRelative,
+    );
   }
 
   if (!report.compact) {
