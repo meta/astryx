@@ -516,8 +516,10 @@ async function buildProjectTree(catalog, fresh) {
     if (record.replaces != null) {
       node.guideOverlay = {
         replacement: record,
-        // Extensions were authored against the content that just went away.
-        extensions: [],
+        // An extension adds to whatever answers its route, so it stays: the
+        // order integrations are configured in must not decide whether its
+        // sections show.
+        extensions: overlay.extensions,
         ...(overlay.replacement
           ? {replacedPackage: overlay.replacement.package}
           : {}),
