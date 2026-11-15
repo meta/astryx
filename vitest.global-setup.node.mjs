@@ -32,10 +32,6 @@ import {
 } from './packages/cli/clients/cli/commands/ensure-core-built.mjs';
 import {packCli} from './packages/cli/test-utils/pack-cli.mjs';
 import {
-  themeCacheFolder,
-  warmThemeCache,
-} from './packages/cli/test-utils/theme-cache.mjs';
-import {
   sweepTrash,
   trashFolder,
 } from './packages/cli/test-utils/run-folder.mjs';
@@ -95,10 +91,24 @@ export default async function setup(project) {
     // component to build. They are built once here, and each fixture starts
     // with a copy (test-utils/theme-cache.mjs). A build that fails leaves
     // each fixture to build its own.
-    const themeCache = themeCacheFolder();
-    process.env.ASTRYX_TEST_THEME_CACHE = themeCache;
+    const themeCache = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'astryx-test-theme-cache-'),
+    );
     try {
-      await warmThemeCache(themeCache);
+      execFileSync(
+        process.execPath,
+        [
+          fileURLToPath(
+            new URL(
+              './packages/cli/test-utils/theme-cache-warm.mjs',
+              import.meta.url,
+            ),
+          ),
+          themeCache,
+        ],
+        {stdio: 'ignore'},
+      );
+      project.provide('astryxThemeCacheDir', themeCache);
     } catch {
       // Each fixture builds its own.
     }
