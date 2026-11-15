@@ -22,6 +22,7 @@ import {
   themeFiles,
 } from './_settings.mjs';
 import {FAMILIES, GROUPS, LIKE, P} from './_tables.mjs';
+import {hexToOklch} from '../theme/palette/generate/color.mjs';
 import {
   COLOR_IN_VALUE,
   alphaOf,
@@ -447,19 +448,28 @@ function painted(v, toks, mode) {
 }
 
 /**
- * A color's HSL saturation, 0 to 1, or null when it does not read.
+ * How colorful a color looks: its OKLCH chroma, the measure the palette
+ * generator's vibrancy moves, or null when it does not read. (HSL
+ * saturation rates a pale yellow near full and a deeper, more colorful one
+ * lower.)
  * @param {string | number[] | null} v a color, or its RGB
  */
 function saturationOf(v) {
   const rgb = Array.isArray(v) ? v : v == null ? null : parseColor(v);
   if (!rgb) return null;
-  const [r, g, b] = rgb.map(x => x / 255);
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const l = (max + min) / 2;
-  const d = max - min;
-  return d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  const hexOf = rgb
+    .slice(0, 3)
+    .map(x =>
+      Math.round(Math.max(0, Math.min(255, x)))
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('');
+  return hexToOklch(`#${hexOf}`).C;
 }
+
+/** The chroma change, per color, too small to count as a move. */
+const CHROMA_STEP = 0.005;
 
 /** @param {number[]} c */
 const luminance = c => c[0] * 0.299 + c[1] * 0.587 + c[2] * 0.114;
@@ -966,7 +976,9 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
       }
       if (
         n &&
-        (intent.saturation === 'more' ? x < y - 0.02 * n : x > y + 0.02 * n)
+        (intent.saturation === 'more'
+          ? x < y - CHROMA_STEP * n
+          : x > y + CHROMA_STEP * n)
       )
         return `the accent colors would get ${intent.saturation === 'more' ? 'duller' : 'more saturated'} in ${mode} mode`;
       const wash = (/** @type {Record<string, string>} */ t) =>
@@ -979,7 +991,9 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
       if (
         wa != null &&
         wb != null &&
-        (intent.saturation === 'more' ? wa < wb - 0.02 : wa > wb + 0.02)
+        (intent.saturation === 'more'
+          ? wa < wb - CHROMA_STEP
+          : wa > wb + CHROMA_STEP)
       )
         return `the accent wash (--color-accent-muted) would get ${intent.saturation === 'more' ? 'duller' : 'more saturated'} in ${mode} mode, as it paints over the page`;
     }

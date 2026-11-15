@@ -452,8 +452,14 @@ describe('color dials through the palette generator', () => {
     expect((await ask('brand color #7c3aed')).commands).toContain(
       `set ${theme} accent '#7c3aed'`,
     );
+    // (Core's own blue is as colorful as sRGB lets it be: a vibrancy moves
+    // it no further, and seeding it draws its text a deeper, less colorful
+    // shade, which the answer says instead of offering a change that dulls
+    // it.)
     const more = await ask('make it more colorful');
-    expect(more.commands).toContain(`set ${theme} vibrancy more`);
+    expect(`${more.commands}\n${more.text}`).toMatch(
+      new RegExp(`set ${theme} vibrancy (?:more|\\d+)|would get duller`),
+    );
     // A theme whose colors are all grays has no color to take out, and
     // says so instead of suggesting a change that does nothing.
     // (Or the first vibrancy, in steps of 10, at which the accents it

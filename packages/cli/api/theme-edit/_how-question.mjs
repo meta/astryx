@@ -13,6 +13,7 @@ import {
   COLOR_IN_VALUE,
   COLOR_NAMES,
   alphaOf,
+  compositeOver,
   hex,
   parseColor,
   ratio,
@@ -851,6 +852,37 @@ function stronger(color, f, mode) {
 }
 
 /**
+ * A border ink at the lowest alpha (in steps of 1/255, as a hex alpha
+ * writes it) whose color, drawn over each ground, measures `target` against
+ * that ground; null when even the ink at full strength does not.
+ * @param {string} ink
+ * @param {string[]} grounds opaque colors the border is drawn on
+ * @param {number} target
+ */
+function inkAtRatio(ink, grounds, target) {
+  const rgb = parseColor(ink);
+  const under = /** @type {Array<[number, number, number]>} */ (
+    grounds
+      .filter(g => g && alphaOf(g) >= 1)
+      .map(g => parseColor(g))
+      .filter(Boolean)
+  );
+  if (!rgb || !under.length) return null;
+  for (let n = 1; n <= 255; n++) {
+    const a = n / 255;
+    const meets = under.every(
+      g =>
+        ratio(
+          /** @type {[number, number, number]} */ (compositeOver(rgb, a, g)),
+          g,
+        ) >= target,
+    );
+    if (meets) return withAlpha(hex(rgb), a);
+  }
+  return null;
+}
+
+/**
  * A font weight written in a clause: a number from 100 to 900, or a weight
  * word ("semibold").
  * @param {{text: string}} c
@@ -1271,6 +1303,16 @@ function ownWay(t) {
  */
 function shadowWay(text) {
   const t = noMode(text).replace(/\btoo \w+/g, ' ');
+  // "more transparent", "less opaque": a fainter shadow; "less see-through",
+  // "more opaque": a stronger one.
+  if (
+    /\bmore (?:transparent|translucent|see-through)\b|\bless opaque\b/.test(t)
+  )
+    return 'less';
+  if (
+    /\bless (?:transparent|translucent|see-through)\b|\bmore opaque\b/.test(t)
+  )
+    return 'more';
   // Comparatives only: "a soft shadow" names a shadow, not a way.
   const less =
     /\b(softer|subtler|lighter|gentler|less|weaker|fainter|smaller)\b/.test(t);
@@ -2208,9 +2250,9 @@ function clausesOf(q, partWords) {
       parts.push(p);
       rest = rest.replace(re, ' ');
     }
-    // "the sidebar the page color", "the header the card color": a part
-    // named as "the <part> color" after another part is a color to take,
-    // read from that part and never changed.
+    // "the sidebar the page color", "the header the card color", "cards
+    // the color of the page": a part named as its color after another part
+    // is a color to take, read from that part and never changed.
     /** @type {string | undefined} */
     let colorRef;
     if (parts.length > 1) {
@@ -2228,8 +2270,12 @@ function clausesOf(q, partWords) {
         return (
           where != null &&
           where.index > first &&
-          /\b(?:the|my|a)\s+$/.test(text.slice(0, where.index)) &&
-          /^(?:'s)?\s+colou?r\b/.test(text.slice(where.end))
+          // "the page color", "the page's colour"; "the color of the page".
+          ((/\b(?:the|my|a)\s+$/.test(text.slice(0, where.index)) &&
+            /^(?:'s)?\s+colou?r\b/.test(text.slice(where.end))) ||
+            /\bcolou?r of\s+(?:the\s+|my\s+)?$/.test(
+              text.slice(0, where.index),
+            ))
         );
       });
       if (ref) {
@@ -3206,7 +3252,7 @@ export function draftAnswer(ctx, env, question) {
   // else is a way of the color before it, one segment.)
   const segments = question
     .split(
-      /\s*(?:,(?![^(]*\))(?!\s*but\s+(?:(?:a )?(?:bit|little|touch|lot)\s+|slightly\s+|much\s+)?(?:lighter|darker|brighter|paler|deeper|warmer|cooler)\s*(?:$|[;.!?]))|[;\n|]|\s[/+]\s(?![^(]*\))|\.{2,}|[.?!](?=\s)|\bjust\b|\bthen\b|\s[-\u2013\u2014]\s|\bstep \d+\b|\bbut\b(?= (?:make|set|change|use|give|turn|remove|add)\b)|\b(?:but|and)\b(?=\s+(?:don'?t|do not|never|leave|keep)\b)|(?<=\S)(?<!\b(?:don'?t|never|do not|not|to|please|and|you|we|i|let'?s|can|could|would|will))\s+(?=(?:make|set|change|give|turn) (?:it|them|the|my|this|that|those|these)\b)|(?<=\S)\s+(?=(?:do|does|will) \w+ (?:follow|match)\b))\s*/i,
+      /\s*(?:,(?![^(]*\))(?!\s*but\s+(?:(?:a )?(?:bit|little|touch|lot)\s+|slightly\s+|much\s+|\d{1,2}\s?%\s+)?(?:lighter|darker|brighter|paler|deeper|warmer|cooler)\s*(?:$|[;.!?]))|[;\n|]|\s[/+]\s(?![^(]*\))|\.{2,}|[.?!](?=\s)|\bjust\b|\bthen\b|\s[-\u2013\u2014]\s|\bstep \d+\b|\bbut\b(?= (?:make|set|change|use|give|turn|remove|add)\b)|\b(?:but|and)\b(?=\s+(?:don'?t|do not|never|leave|keep)\b)|(?<=\S)(?<!\b(?:don'?t|never|do not|not|to|please|and|you|we|i|let'?s|can|could|would|will))\s+(?=(?:make|set|change|give|turn) (?:it|them|the|my|this|that|those|these)\b)|(?<=\S)\s+(?=(?:do|does|will) \w+ (?:follow|match)\b))\s*/i,
     )
     .map(x => x.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, ''))
     .filter(x => x.trim());
@@ -3909,7 +3955,7 @@ export function draftAnswer(ctx, env, question) {
     // "the accent color but lighter": a way after "but" with nothing else
     // is a way of the value before it, in the same clause.
     .replace(
-      /\s*,?\s*\bbut\s+(?=(?:(?:a )?(?:bit|little|touch|lot)\s+|slightly\s+|much\s+)?(?:lighter|darker|brighter|paler|deeper|warmer|cooler)\s*(?:$|[,;.!]))/gi,
+      /\s*,?\s*\bbut\s+(?=(?:(?:a )?(?:bit|little|touch|lot)\s+|slightly\s+|much\s+|\d{1,2}\s?%\s+)?(?:lighter|darker|brighter|paler|deeper|warmer|cooler)\s*(?:$|[,;.!]))/gi,
       ' ',
     )
     // "cards, buttons or inputs": a comma list of parts ending in "or" names
@@ -10884,6 +10930,45 @@ export function draftAnswer(ctx, env, question) {
               text: `thick borders: the shared border width one pixel past what it is (${bwNow0} to ${wide})`,
               options: [[set('--border-width', wide)]],
             };
+          // "borders 3:1 contrast": the border color that measures that
+          // ratio against the grounds it is drawn on (the page, surfaces and
+          // cards), in each mode, from the ink it has now.
+          const ratioAsked = /\b(\d+(?:\.\d+)?)\s*:\s*1\b/.exec(c.text)?.[1];
+          if (ratioAsked) {
+            const target = Number(ratioAsked);
+            const GROUNDS = [
+              '--color-background-body',
+              '--color-background-surface',
+              '--color-background-card',
+            ];
+            /** @type {string[]} */
+            const missed = [];
+            const steps = perMode(
+              '--color-border',
+              '--color-border',
+              {},
+              (now, m) => {
+                const v = inkAtRatio(
+                  now,
+                  GROUNDS.map(g => current(g, m)),
+                  target,
+                );
+                if (!v) missed.push(m);
+                return v;
+              },
+              c,
+            );
+            if (missed.length)
+              return {
+                text: `no border color made from the one --color-border has now measures ${target}:1 against the page, surfaces and cards in ${missed.join(' and ')} mode; name a color instead ("borders #767676")`,
+                options: [],
+              };
+            return {
+              text: `the border color of the whole theme: --color-border at the lowest strength that measures ${target}:1 against the page, surfaces and cards${modesSaid(steps)}`,
+              options: steps.length ? [steps] : [],
+              sequence: steps.length > 1,
+            };
+          }
           // Darker, lighter, subtler or more contrast asks for the color.
           if (
             /\b(darker|lighter|subtle\w*|contrast|stronger|fainter|softer|visible|invisible|too (dark|light|faint|strong|harsh|heavy))\b/.test(
@@ -11896,6 +11981,35 @@ export function draftAnswer(ctx, env, question) {
               partValue(on, 'box-shadow') ?? (tok ? current(tok) : null);
             const now =
               shown && shown !== 'none' ? shown : current('--shadow-med');
+            // "50% more transparent", "20% less opaque": a change from
+            // each layer's own alpha, never one alpha for every layer.
+            const relative =
+              /\b(\d{1,3})%\s+(more|less)\s+(transparent|translucent|see-through|opaque)\b/.exec(
+                c.text,
+              );
+            if (relative && !(shown && shown !== 'none'))
+              return {
+                text: `${one(on)} draws no shadow of its own that how can read, so there is no shadow to make ${relative[0]}; to give it one, ask for it ("${one(on)} shadow soft")`,
+                options: [],
+              };
+            if (relative && now && now !== 'none') {
+              const n = Number(relative[1]) / 100;
+              const clearer =
+                (relative[2] === 'more') !== (relative[3] === 'opaque');
+              const k = clearer ? Math.max(0, 1 - n) : 1 + n;
+              return {
+                text: `the shadow${where} with each layer's alpha ${clearer ? `${relative[1]}% lower` : `${relative[1]}% higher`} (× ${Math.round(k * 100) / 100}) than its own${c.mode ? ` in ${c.mode} mode` : ', in each mode'}, its layers kept (now ${now})`,
+                options: [
+                  [
+                    set(
+                      'box-shadow',
+                      shadowAlphaScaled(now, k, c.mode ?? null),
+                      f,
+                    ),
+                  ],
+                ],
+              };
+            }
             return now && now !== 'none'
               ? {
                   text: `the shadow${where} with its colors at ${Math.round(a * 100)}% alpha, its layers kept (now ${now})`,
@@ -14229,6 +14343,42 @@ export function draftAnswer(ctx, env, question) {
         ? `${vals.map(([m, v]) => `${v}${modes.length > 1 || qMode ? ` in ${m} mode` : ''}`).join(', ')} (${pageToken}, which paints the page)`
         : null;
     };
+    // A question that names no part (or the body) asks the theme: "what
+    // color is the text" reads the main text token, "the accent" the accent,
+    // "the body text size" the body size, in each mode the theme shows.
+    const themeAsk =
+      !named || named === 'body'
+        ? /\b(?:accent|brand|primary colou?r)\b/.test(qWords)
+          ? {token: '--color-accent', what: 'the accent color'}
+          : asked === 'font-size' ||
+              /\b(?:text|font|type) size\b|\bfont-size\b/.test(qWords)
+            ? {token: '--text-body-size', what: 'the body text size'}
+            : asked === 'color' && /\b(?:text|writing|words)\b/.test(qWords)
+              ? {token: '--color-text-primary', what: 'the main text color'}
+              : null
+        : null;
+    if (themeAsk && !unshown) {
+      const color = /^--color-/.test(themeAsk.token);
+      const modes = color
+        ? /** @type {Array<'light' | 'dark'>} */ (qMode ? [qMode] : shownModes)
+        : /** @type {Array<'light' | 'dark'>} */ ([shownModes[0]]);
+      const vals = modes
+        .map(m => [
+          m,
+          color
+            ? current(themeAsk.token, m)
+            : resolvedValue(themeAsk.token) || current(themeAsk.token, m),
+        ])
+        .filter(([, v]) => v);
+      if (vals.length) {
+        result.splice(0, result.length, {
+          text: `${themeAsk.what} of ${env.slug} is ${vals.map(([m, v]) => `${v}${color && (modes.length > 1 || qMode) ? ` in ${m} mode` : ''}`).join(', ')} (${themeAsk.token}) now (nothing is changed); to change it, ask for the change ("${themeAsk.token === '--color-accent' ? 'accent #2563eb' : color ? 'text #111827' : 'body text 15px'}")`,
+          options: [],
+          lookup: `${HOW} ${themeAsk.token}`,
+        });
+        return {parts: partsSeen, aspects: aspectsSeen, drafts: result};
+      }
+    }
     const now =
       named && !unshown
         ? (pageNow() ?? variantNow() ?? partPropNow(named, asked) ?? anyRead())
