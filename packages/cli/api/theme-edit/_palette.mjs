@@ -2334,7 +2334,7 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
               }
             : moved
               ? {
-                  note: `${names.on} uses ${textName(o.on)} text in ${m}, not ${textName(o.first)}, so it reads at ${round(o.r)}:1 on ${what}, where ${textName(o.other)} text reads at only ${round(o.otherR)}:1`,
+                  note: `${names.on} uses ${textName(o.on)} text in ${m}, not ${textName(o.first)}, so it reads at ${round(o.r)}:1 on ${what}, where ${textName(o.other)} text reads at only ${round(o.otherR)}:1 (button and badge labels are normal-size text, which needs ${TEXT}:1); to keep ${textName(o.other)} text anyway, set ${names.on} exactly`,
                 }
               : {}),
         });
@@ -2406,16 +2406,38 @@ export function paletteMapping(cwd, slug, data, base, tokenDefaults) {
           );
     };
 
-    const text = each(m =>
-      pick(
-        names.text,
-        f.id,
-        m,
-        at(TEXT_STOP[side(m)]),
-        [...surfaces(m, f.id), ...mutedSeen(m)],
-        TEXT,
-      ),
-    );
+    // Accent text and icons are the color you gave where it reads on what
+    // they sit on (the surfaces and the tint), in each mode its fill is
+    // your exact color; only where it does not do they move, to the
+    // nearest shade that reads, and the result says so.
+    const text = each(m => {
+      const grounds = [...surfaces(m, f.id), ...mutedSeen(m)];
+      const own = fill[m]?.exact ? ref(f.id, m, S) : null;
+      if (own) {
+        const r = Math.min(...grounds.map(([, bg]) => contrast(own.color, bg)));
+        if (r >= TEXT) {
+          if (reports(names.text))
+            checks.push({
+              token: names.text,
+              mode: m,
+              stop: S,
+              preferred: S,
+              against: grounds.map(([n]) => n).join(', '),
+              ratio: round(r),
+              needs: TEXT,
+              pass: true,
+            });
+          return own;
+        }
+        const before = checks.length;
+        const moved = pick(names.text, f.id, m, S, grounds, TEXT);
+        const last = checks.length > before ? checks[checks.length - 1] : null;
+        if (last && moved.stop !== S)
+          last.note = `${names.text} ${m}: your exact color (${own.color}) reads at only ${round(r)}:1 on ${grounds.map(([n]) => n).join(', ')} (text needs ${TEXT}:1), so links and accent text use shade ${shade(moved.stop)} (${moved.color}), the nearest that reads; the fill keeps your color, and an exact ${names.text} keeps any color you give it`;
+        return moved;
+      }
+      return pick(names.text, f.id, m, at(TEXT_STOP[side(m)]), grounds, TEXT);
+    });
     put(names.text, f.id, text);
     put(names.icon, f.id, text);
     if (names.onMuted) {
