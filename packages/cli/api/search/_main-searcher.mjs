@@ -18,7 +18,7 @@ import {entryTable} from './_entries.mjs';
 import {FIT_PLACES, withFitOrder, withLimit} from './_fit-order.mjs';
 import {orderMatches} from './_order.mjs';
 import {routeProbs} from './_query-words.mjs';
-import {identifierReading, namesWhole, rankLexical} from './_lexical.mjs';
+import {namesWhole, rankLexical} from './_lexical.mjs';
 
 /** @typedef {{w: number[], mu: number[], sd: number[]}} SearcherWeights */
 
@@ -85,12 +85,6 @@ export function rankWith(request, catalog, weights) {
   const term = String(query).trim().toLowerCase();
   const loose = looseName(term);
   if (catalog.all.some(c => namesWhole(c, term) || namesLoosely(c, loose))) {
-    return rankLexical(query, options, catalog);
-  }
-  // So does an identifier read as its words for the text that mentions it:
-  // that text, and the entries its words name, come first in the lexical
-  // order, and no other signal moves a words-only match above them.
-  if (identifierReading(query, catalog.all).mentioned.size) {
     return rankLexical(query, options, catalog);
   }
   const table = entryTable(catalog.all, catalog.data.cards);

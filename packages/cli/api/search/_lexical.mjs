@@ -140,9 +140,6 @@ export function readsMentionAsWords(query) {
   return COMPONENT_NAME_RE.test(query.trim());
 }
 
-/** Each catalog's readings of a query, worked out once. @type {WeakMap<object, Map<string, {split: boolean, mentioned: Set<Candidate>}>>} */
-const readings = new WeakMap();
-
 /**
  * How a one-identifier query is read. It is read as its words when, read
  * whole, it matches nothing: a prop or hook name (camelCase) a doc already
@@ -156,11 +153,7 @@ const readings = new WeakMap();
  * @param {Candidate[]} all
  * @returns {{split: boolean, mentioned: Set<Candidate>}}
  */
-export function identifierReading(query, all) {
-  let byQuery = readings.get(all);
-  if (!byQuery) readings.set(all, (byQuery = new Map()));
-  const known = byQuery.get(query);
-  if (known) return known;
+function identifierReading(query, all) {
   const term = String(query).trim().toLowerCase();
   const spelled = spellIdentifiers(String(query).trim());
   const oneIdentifier =
@@ -184,9 +177,7 @@ export function identifierReading(query, all) {
       mentioned.add(candidate);
     }
   const split = oneIdentifier && (!wholeHit || (mentionsSplit && !otherHit));
-  const reading = {split, mentioned: split ? mentioned : new Set()};
-  byQuery.set(query, reading);
-  return reading;
+  return {split, mentioned: split ? mentioned : new Set()};
 }
 
 /**
