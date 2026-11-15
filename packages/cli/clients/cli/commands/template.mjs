@@ -4,6 +4,7 @@
  * @file template command — thin CLI wrapper around api/template.mjs
  */
 
+import path from 'node:path';
 import {jsonOut} from '../../../foundation/response/json.mjs';
 import {
   emit,
@@ -322,12 +323,18 @@ export function registerTemplate(program) {
               givenPath,
             } = result.data;
             const file = `${outputDir}/${fileName}`;
+            const writtenFile = path.join(outputDir, fileName);
+            const givenRelative =
+              givenPath !== undefined &&
+              givenPath.endsWith(`${path.sep}${writtenFile}`)
+                ? writtenFile
+                : outputDir;
             const iconText = iconLines(icons);
             emit(
               text(`Copied template to ${file}`),
               givenPath !== undefined &&
                 text(
-                  `${givenPath} is inside the project, so it was written as its relative path, ${outputDir}.`,
+                  `${givenPath} is inside the project, so it was written as its relative path, ${givenRelative}.`,
                 ),
               record({package: result.package}),
               demoMediaReplaced > 0 &&

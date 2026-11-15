@@ -290,6 +290,19 @@ describe('template path text output', () => {
     );
   }, 60_000);
 
+  it('says an absolute file path inside the project was written as its relative file path', async () => {
+    const cwd = fs.realpathSync(fs.mkdtempSync(path.join(tmpDir, 'cli-')));
+    const result = await runCli(
+      ['template', 'blank', path.join(cwd, 'app', 'home.tsx')],
+      cwd,
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Copied template to app/home.tsx');
+    expect(result.stdout).toContain(
+      `${path.join(cwd, 'app', 'home.tsx')} is inside the project, so it was written as its relative path, ${path.join('app', 'home.tsx')}.`,
+    );
+  }, 60_000);
+
   it('names the commands that work when the path is outside the project', async () => {
     const cwd = fs.realpathSync(fs.mkdtempSync(path.join(tmpDir, 'cli-')));
     const scratch = path.join(tmpDir, 'astryx_dash');
