@@ -36,7 +36,8 @@
  * timestamp runs first, at its own deadline. A long press therefore begins at
  * exactly touch-down + 500 ms even when the main thread was blocked and the
  * timer callback came late, and a test drives the whole machine with explicit
- * timestamps and no real time at all.
+ * timestamps and no real time at all. A deadline whose timer runs late waits
+ * while input from before it still reaches the page late.
  *
  * SYNC: When modified, update GestureRecognizer.ts and
  * __tests__/arena.test.ts.
@@ -58,6 +59,24 @@ import type {
   TouchSample,
 } from './types';
 import {DEFAULT_ENVIRONMENT} from './types';
+
+/**
+ * A deadline's timer counts as late when it runs this long after it was due.
+ * In ms: one frame at 60 Hz.
+ */
+const LATE_TIMER_MS = 17;
+
+/**
+ * An input counts as late when it reaches the page this long after its own
+ * time. In ms: two frames at 60 Hz.
+ */
+const LATE_INPUT_MS = 33;
+
+/**
+ * How long a late deadline waits for input still queued before it. In ms:
+ * three frames at 60 Hz.
+ */
+const LATE_INPUT_WAIT_MS = 50;
 import {internals} from './recognizerInternals';
 
 export interface GestureClock {
@@ -162,6 +181,8 @@ export class GestureArena {
   private currentTime: number | null = null;
   /** The latest time processed: input never moves the clock backwards. */
   private latestTime = Number.NEGATIVE_INFINITY;
+  /** The latest input that reached the page late: its own time, and when. */
+  private lateInput: {time: number; arrivedAt: number} | null = null;
   private depth = 0;
   /** Open `deferResolution` calls: what their stops unblock waits. */
   private deferDepth = 0;
@@ -222,6 +243,7 @@ export class GestureArena {
     if (inputs.length === 0) {
       return;
     }
+    this.noteArrival(inputs[0].time);
     this.run(inputs[0].time, () => {
       const newTouches = new Map<GestureRecognizer, GestureTouch[]>();
       const created: TouchRecord[] = [];
@@ -316,6 +338,7 @@ export class GestureArena {
    * gesture hear of it, as of any touch off their hit path.
    */
   untrackedBegan(input: TouchBeganInput): void {
+    this.noteArrival(input.time);
     if (!this.active.some(recognizer => recognizer.numberOfTouches > 0)) {
       return;
     }
@@ -350,6 +373,7 @@ export class GestureArena {
     if (inputs.length === 0) {
       return;
     }
+    this.noteArrival(inputs[0].time);
     this.run(inputs[0].time, () => {
       const changed = this.update(inputs, 'moved');
       if (changed.length === 0) {
@@ -383,6 +407,7 @@ export class GestureArena {
     if (inputs.length === 0) {
       return dispositions;
     }
+    this.noteArrival(inputs[0].time);
     this.run(inputs[0].time, () => {
       const changed = this.update(inputs, 'ended');
       const context = this.context();
@@ -407,6 +432,7 @@ export class GestureArena {
 
   /** The system took these contacts (`touchcancel`, a mouse `pointercancel`). */
   cancelled(ids: ReadonlyArray<number>, time: number): void {
+    this.noteArrival(time);
     this.run(time, () => {
       const touches = this.liveTouches(ids);
       for (const touch of touches) {
@@ -437,6 +463,7 @@ export class GestureArena {
    * browser took stays the browser's (FR14).
    */
   browserTookOver(ids: ReadonlyArray<number>, time: number): void {
+    this.noteArrival(time);
     this.run(time, () => {
       const touches = this.liveTouches(ids).filter(
         touch => !touch.takenByBrowser,
@@ -553,7 +580,7 @@ export class GestureArena {
   /** Cancel an active recognizer, or fail a possible one. */
   stop(recognizer: GestureRecognizer): void {
     // A cancel from code between events happens at the last event's time:
-    // wall time would run deadlines ahead of input still queued (FR16).
+    // wall time would run deadlines ahead of input still queued.
     const time =
       this.currentTime ??
       (Number.isFinite(this.latestTime) ? this.latestTime : this.clock.now());
@@ -1005,6 +1032,27 @@ export class GestureArena {
     return clamped;
   }
 
+  /** Notes an input that reaches the page late, against its own time. */
+  private noteArrival(time: number): void {
+    const arrivedAt = this.clock.now();
+    if (arrivedAt - time > LATE_INPUT_MS) {
+      this.lateInput = {time, arrivedAt};
+    }
+  }
+
+  /**
+   * Whether input from before `deadline` reached the page late within the
+   * last `LATE_INPUT_WAIT_MS`, so more of it may still be queued.
+   */
+  private hasLateInputBefore(deadline: number, now: number): boolean {
+    const input = this.lateInput;
+    return (
+      input != null &&
+      input.time < deadline &&
+      now - input.arrivedAt < LATE_INPUT_WAIT_MS
+    );
+  }
+
   /**
    * One external entry: run the timers due by `time`, then `body`, then
    * settle (release held deliveries, reset finished recognizers, forget
@@ -1138,22 +1186,45 @@ export class GestureArena {
       return;
     }
     const delay = Math.max(0, earliest - this.clock.now());
-    const fire = (mayYield: boolean): void => {
+    const fire = (
+      after: 'deadline' | 'yield' | 'wait',
+      dueAt: number,
+    ): void => {
       this.realTimer = null;
       this.realTimerDeadline = Number.POSITIVE_INFINITY;
-      if (mayYield && this.clock.now() > earliest) {
+      const now = this.clock.now();
+      if (
+        after !== 'yield' &&
+        (now - dueAt > LATE_TIMER_MS || this.hasLateInputBefore(earliest, now))
+      ) {
+        // Behind a blocked page, input from before the deadline can still be
+        // queued, and a touch move can reach the page a frame after other
+        // input. Wait while that input still comes. An input stamped at or
+        // past the deadline runs the deadline first, which ends the wait.
+        this.realTimerDeadline = earliest;
+        const waitUntil = now + LATE_INPUT_WAIT_MS;
+        this.realTimer = this.clock.setTimeout(
+          () => fire('wait', waitUntil),
+          LATE_INPUT_WAIT_MS,
+        );
+        return;
+      }
+      if (after === 'deadline' && now > earliest) {
         // Late: a long task held the main thread past the deadline, and
         // input queued behind it may come before the deadline (a lift that
         // fails a long press). Let that input dispatch first, once.
         this.realTimerDeadline = earliest;
-        this.realTimer = this.clock.setTimeout(() => fire(false), 0);
+        this.realTimer = this.clock.setTimeout(() => fire('yield', now), 0);
         return;
       }
       // The event clock moves to the deadline only, so input still queued
       // keeps its own timestamps.
       this.advanceTime(earliest);
     };
-    this.realTimer = this.clock.setTimeout(() => fire(true), delay);
+    this.realTimer = this.clock.setTimeout(
+      () => fire('deadline', earliest),
+      delay,
+    );
   }
 }
 
