@@ -8,11 +8,11 @@
  *   MenuBottomSheetActionList
  * @output Exports MenuBottomSheet and MenuBottomSheetActionList wrappers that
  *   load the touch sheet on first render
- * @position Internal to DropdownMenu
+ * @position Internal to DropdownMenu and ContextMenu
  *
  * The touch sheet (BottomSheet, its gestures, and the touch action list) only
  * renders for the bottom-sheet presentation. Loading it on demand keeps it out
- * of pages whose dropdowns only open as anchored popovers. Each wrapper keeps
+ * of pages whose menus only open as anchored popovers. Each wrapper keeps
  * the wrapped component's props and renders nothing until its module loads.
  *
  * The action list preloads at rest, and the preload's result says whether it

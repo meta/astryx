@@ -693,8 +693,8 @@ function printThemeList(
 }
 
 /**
- * Print every `theme.app` receipt field and the one-time app wiring on the first
- * add.
+ * Print every `theme.app` receipt field, the one-time app wiring on the first
+ * add, and the wiring to drop when the last theme's module is deleted.
  * @param {import('../../../api/theme/theme.type.mjs').ThemeAppResponse} result
  */
 function printThemeApp(result) {
@@ -724,6 +724,8 @@ function printThemeApp(result) {
           changed: change.changed,
           firstAdd: change.firstAdd,
           ...(change.wireModes ? {wireModes: true} : {}),
+          ...(change.moduleRemoved ? {moduleRemoved: true} : {}),
+          ...(change.themeModes ? {themeModes: true} : {}),
         },
       ],
       {
@@ -735,6 +737,8 @@ function printThemeApp(result) {
           'changed',
           'firstAdd',
           'wireModes',
+          'moduleRemoved',
+          'themeModes',
         ],
         layout: 'stacked',
       },
@@ -742,6 +746,19 @@ function printThemeApp(result) {
   );
   for (const note of result.data.notes ?? []) emit(text(`[note] ${note}`));
   const stem = path.basename(modulePath, path.extname(modulePath));
+  if (change.moduleRemoved) {
+    emit(
+      text(
+        `Removed ${change.slug}, the only added theme, and deleted ${modulePath}. Undo its wiring in the app root: delete the module's import (and the Theme import when nothing else uses Theme), and keep only the children of the Theme wrapper:`,
+      ),
+      code(
+        "import {Theme} from '@astryxdesign/core/theme';\n" +
+          `import {themes, defaultThemeSlug${change.themeModes ? ', themeModes' : ''}} from './${stem}';\n\n` +
+          `<Theme theme={themes[defaultThemeSlug]}${change.themeModes ? " mode={themeModes[defaultThemeSlug] ?? 'system'}" : ''}>\n  <App />\n</Theme>`,
+      ),
+    );
+    return;
+  }
   if (!change.firstAdd) {
     // The module now lists one-mode themes' modes: the app's wiring, made
     // without them, passes the selected theme's mode from now on.
