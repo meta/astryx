@@ -15,10 +15,13 @@ import yaml from 'yaml';
 import {
   BRANCH,
   DRIFT_MARGIN_S,
+  HEAVIEST_SHOWN,
   MIN_RECORDED_SHARE,
   TITLE,
   coverage,
   driftedEntries,
+  earlyWarning,
+  heaviestUnrecorded,
   openOrRefresh,
   prBody,
   refreshReasons,
@@ -133,21 +136,24 @@ describe('the Node record refresh workflow', () => {
 });
 
 describe('the coverage check', () => {
-  it('keeps nine in ten as the bar', () => {
-    expect(MIN_RECORDED_SHARE).toBe(0.9);
+  it('keeps nineteen in twenty as the bar: past one file in twenty without a time, it warns', () => {
+    expect(MIN_RECORDED_SHARE).toBe(0.95);
   });
 
-  it('is fresh at exactly nine in ten, and stale below it', () => {
-    const files = Array.from({length: 10}, (_, i) => `f${i}.test.mjs`);
-    const nine = Object.fromEntries(files.slice(0, 9).map(file => [file, 1]));
-    expect(coverage(files, nine)).toMatchObject({
-      total: 10,
-      recorded: 9,
+  it('is fresh at exactly nineteen in twenty, and stale below it', () => {
+    const files = Array.from({length: 20}, (_, i) => `f${i}.test.mjs`);
+    const timed = count =>
+      Object.fromEntries(files.slice(0, count).map(file => [file, 1]));
+    expect(coverage(files, timed(19))).toMatchObject({
+      total: 20,
+      recorded: 19,
       fresh: true,
-      missing: ['f9.test.mjs'],
+      missing: ['f19.test.mjs'],
     });
-    const eight = Object.fromEntries(files.slice(0, 8).map(file => [file, 1]));
-    expect(coverage(files, eight)).toMatchObject({recorded: 8, fresh: false});
+    expect(coverage(files, timed(18))).toMatchObject({
+      recorded: 18,
+      fresh: false,
+    });
   });
 
   it('counts a file recorded at 0 s as recorded', () => {
@@ -199,6 +205,113 @@ describe('regenerating the record from a run log', () => {
     } finally {
       fs.rmSync(dir, {recursive: true, force: true});
     }
+  });
+});
+
+describe('the early warning', () => {
+  // Six files in a hundred have no recorded time: past the line.
+  const stale = nodeFiles.slice(0, Math.ceil(nodeFiles.length * 0.06));
+  const recorded = Object.fromEntries(
+    nodeFiles.slice(stale.length).map(file => [file, 20]),
+  );
+  // The first few missing files take distinct, larger times; the build job's
+  // own line for one of them books no leg time.
+  const missing = stale.slice(0, HEAVIEST_SHOWN + 2);
+  const log = [
+    ...nodeFiles.map((file, i) =>
+      legLine(file, i, missing.includes(file) ? 100 - i : 5),
+    ),
+    `build\tRun tests\t2026-01-01T00:00:00.0000000Z  ✓  node  ${missing[11]} (3 tests) 999.0s`,
+  ].join('\n');
+
+  it('says nothing while the record times enough files', () => {
+    const files = Array.from({length: 20}, (_, i) => `f${i}.test.mjs`);
+    const timed = Object.fromEntries(files.slice(0, 19).map(file => [file, 1]));
+    expect(earlyWarning(coverage(files, timed))).toBe('');
+  });
+
+  it('names how many files have no time, and the heaviest of them by their time in the Node legs', () => {
+    const heaviest = heaviestUnrecorded(log, stale);
+    expect(heaviest).toHaveLength(HEAVIEST_SHOWN);
+    expect(heaviest.map(({file}) => file)).toEqual(
+      missing.slice(0, HEAVIEST_SHOWN),
+    );
+    expect(heaviest[0]).toEqual({file: missing[0], measured: 100});
+    const files = Array.from({length: 20}, (_, i) => `f${i}.test.mjs`);
+    const timed = Object.fromEntries(files.slice(0, 18).map(file => [file, 1]));
+    const warning = earlyWarning(coverage(files, timed), heaviest);
+    expect(warning).toContain(
+      'Early warning: 2 of 20 Node test files (10%) have no recorded time, past the 5% line.',
+    );
+    expect(warning).toContain('nothing fails on it');
+    expect(warning).toContain(`- \`${missing[0]}\`: 100 s`);
+  });
+
+  it('opens the refresh with the warning in its pull request', () => {
+    const reasons = refreshReasons({nodeFiles, recorded, log});
+    expect(reasons.refresh).toBe(true);
+    expect(reasons.unrecorded).toHaveLength(HEAVIEST_SHOWN);
+    const body = prBody({
+      reasons,
+      after: coverage(nodeFiles, recorded),
+      runUrl: 'https://example.test/run/1',
+    });
+    expect(body).toContain('Early warning:');
+    expect(body).toContain(`- \`${missing[0]}\`: 100 s`);
+  });
+
+  function warn(seconds) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'node-record-warn-'));
+    try {
+      const record = path.join(dir, 'durations.json');
+      const summary = path.join(dir, 'summary.md');
+      fs.writeFileSync(record, JSON.stringify({seconds}));
+      fs.writeFileSync(summary, '');
+      const stdout = execFileSync(
+        process.execPath,
+        ['.github/scripts/node-record-refresh.mjs', 'warn'],
+        {
+          cwd: ROOT,
+          env: {
+            ...process.env,
+            VITEST_DURATIONS_FILE: record,
+            GITHUB_STEP_SUMMARY: summary,
+          },
+          encoding: 'utf8',
+        },
+      );
+      return {stdout, summary: fs.readFileSync(summary, 'utf8')};
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  }
+
+  it("warns on main's run past the line and exits 0, so it never fails", () => {
+    // execFileSync throws on a non-zero exit.
+    const {stdout, summary} = warn(recorded);
+    expect(stdout).toContain(
+      '::warning title=Node test record::Early warning:',
+    );
+    expect(summary).toContain('Early warning:');
+  });
+
+  it('writes nothing to the summary when the record times enough files', () => {
+    const all = Object.fromEntries(nodeFiles.map(file => [file, 1]));
+    const {stdout, summary} = warn(all);
+    expect(stdout).toContain('times enough files');
+    expect(summary).toBe('');
+  });
+
+  it('runs once per full unit run of main, in its first Node leg, and can never fail that run', () => {
+    const main = yaml.parse(
+      fs.readFileSync(path.join(ROOT, '.github/workflows/deploy.yml'), 'utf8'),
+    );
+    const warnStep = main.jobs['test-node'].steps.find(
+      each => each.run === 'node .github/scripts/node-record-refresh.mjs warn',
+    );
+    expect(warnStep).toBeDefined();
+    expect(warnStep['continue-on-error']).toBe(true);
+    expect(warnStep.if).toBe('${{ always() && matrix.shard == 1 }}');
   });
 });
 
@@ -314,7 +427,8 @@ describe('the one refresh pull request', () => {
   });
 
   it('describes a durations-only change with the shares before and after', () => {
-    expect(body).toContain('8 of 10 Node test files (80%), below the 90% bar');
+    expect(body).toContain('8 of 10 Node test files (80%), below the 95% bar');
+    expect(body).toContain('Early warning: 2 of 10 Node test files (20%)');
     expect(body).toContain('1 of 1 Node test files recorded (100%)');
     expect(body).toContain('Durations only.');
     expect(body).toContain('- CI impact (for a change to workflows');

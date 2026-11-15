@@ -4,8 +4,9 @@
 # fresh from main's own runs. A missing or low entry costs leg balance and can
 # make a leg run long until the next refresh; no pull request fails on the
 # record. After each successful full unit run of main, this compares the
-# record with that run's measured times. When fewer than nine in ten of the
-# Node project's test files have a recorded time, or a recorded file ran far
+# record with that run's measured times. When more than one in twenty of the
+# Node project's test files have no recorded time (an early warning, named in
+# the job summary and the pull request), or a recorded file ran far
 # past its entry, it regenerates the record from that run's Node legs and
 # opens one durations-only pull request on a fixed branch, or force-updates
 # that branch and refreshes the open one
