@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] Selector, MultiSelector: a pick in the list returns focus to the trigger again, whatever container the list sits in. Before, when the list sat inside a container with `tabIndex={-1}`, such as a dialog's content box, the press moved focus to that container and focus stayed there, so keyboard and screen-reader users lost their place. A press outside the list still leaves focus on the Tab stop it lands on, such as another field. A press that lands on no Tab stop returns focus to the trigger.
+[fix] Selector, MultiSelector: focus returns to the trigger again after a mouse pick in a Selector and when a MultiSelector closes after a pick. It also returns after a press that lands on no Tab stop, such as a container with `tabIndex={-1}` around the list. Before, inside such a container, as a dialog's content box can be, focus stayed on the container, so keyboard and screen-reader users lost their place. A press outside the list still leaves focus on the Tab stop it lands on, such as another field or a card with `tabIndex={0}`.
 
 @vjeux
