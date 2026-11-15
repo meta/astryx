@@ -31,6 +31,7 @@ import {Icon} from '../Icon';
 import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
 import {InternationalizationProvider} from '../i18n';
+import {getTooltipDescription} from '../__tests__/tooltipDescription';
 
 describe('DateRangeInput', () => {
   it('renders with label', () => {
@@ -678,17 +679,17 @@ describe('DateRangeInput', () => {
 
       const trigger = getButton(/Range:/);
       const container = trigger.parentElement as HTMLElement;
-      const tooltip = screen.getByRole('tooltip', h);
-      expect(tooltip).toHaveTextContent('You need the Editor role');
+      const tooltip = () => getTooltipDescription();
+      expect(tooltip()).toHaveTextContent('You need the Editor role');
 
       fireEvent.mouseEnter(container);
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(tooltip()).toHaveAttribute('popover-open');
       });
 
       fireEvent.mouseLeave(container);
       await waitFor(() => {
-        expect(tooltip).not.toHaveAttribute('popover-open');
+        expect(tooltip()).not.toHaveAttribute('popover-open');
       });
     });
 
@@ -696,11 +697,11 @@ describe('DateRangeInput', () => {
       const user = userEvent.setup();
       renderDisabled({disabledMessage: 'You need the Editor role'});
 
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = () => getTooltipDescription();
       await user.tab();
       expect(getButton(/Range:/)).toHaveFocus();
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(tooltip()).toHaveAttribute('popover-open');
       });
     });
 
@@ -731,7 +732,7 @@ describe('DateRangeInput', () => {
     it('links the reason tooltip from the trigger via aria-describedby', () => {
       renderDisabled({disabledMessage: 'You need the Editor role'});
       const trigger = getButton(/Range:/);
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltipDescription();
       expect(trigger.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 

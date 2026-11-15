@@ -14,6 +14,7 @@ import {InternationalizationProvider} from '../i18n';
 import {InputGroup, InputGroupText} from '../InputGroup';
 import {resetDateSegmentProbe} from '../DateInput/nativeDateSegments';
 import type {ISOTimeString} from '../utils';
+import {getTooltipDescription} from '../__tests__/tooltipDescription';
 
 const HOVER_CAPABLE = /\(\s*hover\s*:\s*hover\s*\)/;
 
@@ -253,7 +254,7 @@ describe('TimeInput nativePicker', () => {
     expect(
       screen.getByRole('button', {name: 'Open Start time'}),
     ).toHaveAttribute('aria-disabled', 'true');
-    const tooltip = document.querySelector<HTMLElement>('[role="tooltip"]');
+    const tooltip = getTooltipDescription();
     expect(tooltip).not.toBeNull();
     expect(input.getAttribute('aria-describedby')).toContain(tooltip?.id);
   });

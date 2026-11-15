@@ -24,6 +24,7 @@ import {generateThemeCSS} from '../theme/generateThemeRules';
 import {Theme} from '../theme/Theme';
 import {resetThemes} from '../theme/themeRegistry';
 import {__resetDevWarnings} from '../utils/devWarning';
+import {getTooltipDescriptions} from '../__tests__/tooltipDescription';
 
 function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
   const {prose, component} = generateThemeCSS(theme);
@@ -223,9 +224,7 @@ describe('CodeBlock', () => {
     // The button carries a visible "Copy code" hover/focus hint (tooltip). It
     // repeats the name, so it adds no description (Button FR12).
     expect(
-      screen
-        .getAllByRole('tooltip', {hidden: true})
-        .some(el => el.textContent === 'Copy code'),
+      getTooltipDescriptions().some(el => el.textContent === 'Copy code'),
     ).toBe(true);
     expect(copyButton).not.toHaveAttribute('aria-describedby');
   });

@@ -36,6 +36,18 @@ import {
   type ListInputProps,
 } from './ListInput';
 
+/**
+ * Every tooltip and every hidden copy of a tooltip's content: a tooltip
+ * that has not shown yet describes its trigger through the copy.
+ */
+function tooltipDescriptions(): HTMLElement[] {
+  return Array.from(
+    document.querySelectorAll<HTMLElement>(
+      '[role="tooltip"], body > span[hidden][id$="-description"]',
+    ),
+  );
+}
+
 type Guest = {
   id: string;
   name: string;
@@ -769,9 +781,9 @@ describe('ListInput', () => {
     expect(screen.getByText('This guest is duplicated')).toBeInTheDocument();
     const firstInput = screen.getAllByRole('textbox')[0];
     expect(firstInput).toHaveAttribute('aria-invalid', 'true');
-    const tooltip = screen
-      .getAllByRole('tooltip', {hidden: true})
-      .find(node => node.textContent === 'Enter a different name');
+    const tooltip = tooltipDescriptions().find(
+      node => node.textContent === 'Enter a different name',
+    );
     expect(tooltip).toBeDefined();
     expect(tooltip).toHaveTextContent('Enter a different name');
     expect(firstInput.getAttribute('aria-describedby')).toContain(tooltip!.id);
@@ -957,9 +969,7 @@ describe('ListInput', () => {
       screen.getByRole('textbox', {name: 'Name, guest 2 of 2'}),
     ).toHaveAttribute('aria-invalid', 'true');
     expect(
-      screen
-        .getAllByRole('tooltip', {hidden: true})
-        .some(node => node.textContent === 'Enter a name'),
+      tooltipDescriptions().some(node => node.textContent === 'Enter a name'),
     ).toBe(true);
   });
 

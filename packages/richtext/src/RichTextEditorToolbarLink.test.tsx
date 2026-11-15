@@ -139,7 +139,8 @@ function linksIn(editor: LexicalEditor) {
 
 /**
  * The text of the tooltip a button shows. A tooltip that repeats the
- * button's name is not its description, so the layer's own text is read.
+ * button's name is not its description, so the tooltip's own text is read:
+ * its layer once it has shown, or before then the hidden copy of its text.
  */
 function tooltipOf(button: HTMLElement): string {
   const described = (button.getAttribute('aria-describedby') ?? '')
@@ -151,10 +152,12 @@ function tooltipOf(button: HTMLElement): string {
     return described;
   }
   const name = button.getAttribute('aria-label') ?? '';
-  const layer = screen
-    .queryAllByRole('tooltip', {hidden: true})
-    .find(tooltip => tooltip.textContent === name);
-  return layer?.textContent ?? '';
+  const tooltip = Array.from(
+    document.querySelectorAll<HTMLElement>(
+      '[role="tooltip"], body > span[hidden][id$="-description"]',
+    ),
+  ).find(element => element.textContent === name);
+  return tooltip?.textContent ?? '';
 }
 
 async function openFromLinkButton() {

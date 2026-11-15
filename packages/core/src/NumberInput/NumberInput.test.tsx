@@ -23,6 +23,7 @@ import {NumberInput} from './NumberInput';
 import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
+import {getTooltipDescription} from '../__tests__/tooltipDescription';
 
 // jsdom cannot match `:focus-visible`: compare the ring's StyleX class hash.
 const RING = stylex
@@ -1837,17 +1838,17 @@ describe('NumberInput', () => {
 
       const input = screen.getByRole('spinbutton');
       const container = input.parentElement as HTMLElement;
-      const tooltip = screen.getByRole('tooltip', h);
-      expect(tooltip).toHaveTextContent('You need the Editor role');
+      const tooltip = () => getTooltipDescription();
+      expect(tooltip()).toHaveTextContent('You need the Editor role');
 
       fireEvent.mouseEnter(container);
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(tooltip()).toHaveAttribute('popover-open');
       });
 
       fireEvent.mouseLeave(container);
       await waitFor(() => {
-        expect(tooltip).not.toHaveAttribute('popover-open');
+        expect(tooltip()).not.toHaveAttribute('popover-open');
       });
     });
 
@@ -1863,11 +1864,11 @@ describe('NumberInput', () => {
         />,
       );
 
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = () => getTooltipDescription();
       await user.tab();
       expect(screen.getByRole('spinbutton')).toHaveFocus();
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(tooltip()).toHaveAttribute('popover-open');
       });
     });
 
@@ -1922,7 +1923,7 @@ describe('NumberInput', () => {
         />,
       );
       const input = screen.getByRole('spinbutton');
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltipDescription();
       expect(input.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 

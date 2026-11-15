@@ -25,6 +25,7 @@ import {FormLayout} from '../FormLayout/FormLayout';
 import {LinkProvider} from '../Link/LinkProvider';
 import {InternationalizationProvider} from '../i18n';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
+import {getTooltipDescriptions} from '../__tests__/tooltipDescription';
 
 afterEach(() => {
   __resetLiveRegionsForTest();
@@ -186,14 +187,14 @@ describe('Pagination', () => {
       const prev = screen.getByRole('button', {name: 'Go to previous page'});
       const next = screen.getByRole('button', {name: 'Go to next page'});
       expect(
-        screen
-          .getAllByRole('tooltip', {hidden: true})
-          .some(el => el.textContent === 'Go to previous page'),
+        getTooltipDescriptions().some(
+          el => el.textContent === 'Go to previous page',
+        ),
       ).toBe(true);
       expect(
-        screen
-          .getAllByRole('tooltip', {hidden: true})
-          .some(el => el.textContent === 'Go to next page'),
+        getTooltipDescriptions().some(
+          el => el.textContent === 'Go to next page',
+        ),
       ).toBe(true);
       expect(prev).not.toHaveAttribute('aria-describedby');
       expect(next).not.toHaveAttribute('aria-describedby');
@@ -2263,9 +2264,7 @@ describe('Pagination', () => {
       );
       // First and Previous are unavailable on page 1. Next and Last are links.
       expect(
-        screen
-          .getAllByRole('tooltip', {hidden: true})
-          .map(tooltip => tooltip.textContent),
+        getTooltipDescriptions().map(tooltip => tooltip.textContent),
       ).toEqual(['Go to next page', 'Go to last page']);
     });
 

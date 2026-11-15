@@ -31,6 +31,7 @@ import {
   getAllInjectedCss,
   getForcedColorsRules,
 } from '../__tests__/forcedColors';
+import {getTooltipDescription} from '../__tests__/tooltipDescription';
 
 // Mock showPopover/hidePopover (not implemented in jsdom) so the tooltip layer
 // reflects its open state via a `popover-open` attribute the tests can assert.
@@ -823,21 +824,23 @@ describe('SegmentedControl disabled state', () => {
 
     it('shows the reason tooltip on hover when the control is disabled with a reason', async () => {
       renderControl();
-      const tooltip = screen.getByRole('tooltip', h);
-      expect(tooltip).toHaveTextContent('Choose a project to switch views');
+      const tooltip = () => getTooltipDescription();
+      expect(tooltip()).toHaveTextContent('Choose a project to switch views');
       const group = screen.getByRole('radiogroup');
       fireEvent.mouseEnter(group);
-      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      await waitFor(() => expect(tooltip()).toHaveAttribute('popover-open'));
       fireEvent.mouseLeave(group);
-      await waitFor(() => expect(tooltip).not.toHaveAttribute('popover-open'));
+      await waitFor(() =>
+        expect(tooltip()).not.toHaveAttribute('popover-open'),
+      );
     });
 
     it('shows the reason tooltip on keyboard focus', async () => {
       const user = userEvent.setup();
       renderControl();
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = () => getTooltipDescription();
       await user.tab();
-      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      await waitFor(() => expect(tooltip()).toHaveAttribute('popover-open'));
     });
 
     it('does not render a tooltip when not disabled', () => {
@@ -983,7 +986,7 @@ describe('SegmentedControl disabled state', () => {
     it('opens the reason on a tap and selects nothing', async () => {
       const onChange = vi.fn();
       renderControl({onChange});
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = () => getTooltipDescription();
       const list = screen.getByRole('radio', {name: 'List'});
       // A tap, in the order a browser dispatches it.
       fireEvent.pointerEnter(list, {pointerType: 'touch'});
@@ -991,7 +994,7 @@ describe('SegmentedControl disabled state', () => {
       fireEvent.pointerUp(list, {pointerType: 'touch'});
       fireEvent.mouseEnter(list);
       fireEvent.click(list);
-      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      await waitFor(() => expect(tooltip()).toHaveAttribute('popover-open'));
       expect(onChange).not.toHaveBeenCalled();
     });
   });

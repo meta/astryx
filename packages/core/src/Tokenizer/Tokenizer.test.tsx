@@ -35,6 +35,7 @@ import {InternationalizationProvider} from '../i18n';
 import type * as TokenModule from '../Token';
 import {Token} from '../Token/Token';
 import {FormLayout} from '../FormLayout/FormLayout';
+import {getTooltipDescription} from '../__tests__/tooltipDescription';
 
 // Every Token render, in order, by label.
 //
@@ -2517,24 +2518,24 @@ describe('Tokenizer', () => {
 
     it('shows the reason tooltip on hover when disabled with a reason', async () => {
       renderTokenizer();
-      const tooltip = screen.getByRole('tooltip', h);
-      expect(tooltip).toHaveTextContent(
+      const tooltip = () => getTooltipDescription();
+      expect(tooltip()).toHaveTextContent(
         'You need edit access to change members',
       );
       const wrapper = screen.getByRole('group', {name: 'Members'});
       fireEvent.mouseEnter(wrapper);
-      await waitFor(() => expect(isOpen(tooltip)).toBe(true));
+      await waitFor(() => expect(isOpen(tooltip())).toBe(true));
       fireEvent.mouseLeave(wrapper);
-      await waitFor(() => expect(isOpen(tooltip)).toBe(false));
+      await waitFor(() => expect(isOpen(tooltip())).toBe(false));
     });
 
     it('shows the reason tooltip on keyboard focus', async () => {
       const user = userEvent.setup();
       renderTokenizer();
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = () => getTooltipDescription();
       await user.tab();
       expect(screen.getByRole('combobox')).toHaveFocus();
-      await waitFor(() => expect(isOpen(tooltip)).toBe(true));
+      await waitFor(() => expect(isOpen(tooltip())).toBe(true));
     });
 
     it('does not render a tooltip when not disabled', () => {
@@ -2573,7 +2574,7 @@ describe('Tokenizer', () => {
     it('links the reason tooltip via aria-describedby', () => {
       renderTokenizer();
       const input = screen.getByRole('combobox');
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltipDescription();
       expect(input.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 
@@ -2905,7 +2906,7 @@ describe('Tokenizer', () => {
 
       const group = screen.getByRole('group', {name: 'Recipients'});
       const input = screen.getByRole('combobox', {name: 'Recipients People'});
-      const tooltip = screen.getByRole('tooltip', {hidden: true});
+      const tooltip = getTooltipDescription();
       const describedByIDs =
         input.getAttribute('aria-describedby')?.split(' ') ?? [];
 
@@ -3081,7 +3082,7 @@ describe('Tokenizer', () => {
 
       const group = screen.getByRole('group', {name: 'Recipients'});
       const input = screen.getByRole('combobox', {name: 'Recipients People'});
-      const tooltip = screen.getByRole('tooltip', {hidden: true});
+      const tooltip = getTooltipDescription();
 
       expect(input.getAttribute('aria-describedby')?.split(' ')).toEqual([
         ...(group.getAttribute('aria-describedby')?.split(' ') ?? []),

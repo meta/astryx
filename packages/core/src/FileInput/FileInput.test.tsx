@@ -26,6 +26,7 @@ import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {InternationalizationProvider} from '../i18n';
 import {Theme} from '../theme/Theme';
 import {defineTheme} from '../theme/defineTheme';
+import {getTooltipDescription} from '../__tests__/tooltipDescription';
 
 // The `=1` branch names the file; the `other` branch must not. Both come from
 // this test, so neither can pass against a hardcoded English string.
@@ -1435,8 +1436,8 @@ describe('FileInput', () => {
         />,
       );
 
-      const tooltip = screen.getByRole('tooltip', h);
-      expect(tooltip).toHaveTextContent('You need the Editor role');
+      const tooltip = () => getTooltipDescription();
+      expect(tooltip()).toHaveTextContent('You need the Editor role');
 
       // The trigger button is visually hidden, so the disabled-reason tooltip
       // anchors its hover listeners to the visible container surface.
@@ -1445,12 +1446,12 @@ describe('FileInput', () => {
       ) as HTMLElement;
       fireEvent.mouseEnter(surface);
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(tooltip()).toHaveAttribute('popover-open');
       });
 
       fireEvent.mouseLeave(surface);
       await waitFor(() => {
-        expect(tooltip).not.toHaveAttribute('popover-open');
+        expect(tooltip()).not.toHaveAttribute('popover-open');
       });
     });
 
@@ -1466,11 +1467,11 @@ describe('FileInput', () => {
         />,
       );
 
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = () => getTooltipDescription();
       await user.tab();
       expect(screen.getByRole('button')).toHaveFocus();
       await waitFor(() => {
-        expect(tooltip).toHaveAttribute('popover-open');
+        expect(tooltip()).toHaveAttribute('popover-open');
       });
     });
 
@@ -1524,7 +1525,7 @@ describe('FileInput', () => {
         />,
       );
       const trigger = screen.getByRole('button');
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltipDescription();
       expect(trigger.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 
@@ -1646,7 +1647,7 @@ describe('FileInput statusVariant forwarding', () => {
     expect(
       screen.getByRole('button', {name: 'Error details'}),
     ).toBeInTheDocument();
-    expect(screen.getByRole('tooltip', h)).toHaveTextContent(message);
+    expect(getTooltipDescription()).toHaveTextContent(message);
     const trigger = screen.getByRole('button', {name: 'Upload'});
     const describedBy = (trigger.getAttribute('aria-describedby') ?? '')
       .split(' ')
@@ -1716,7 +1717,7 @@ describe('FileInput statusVariant forwarding', () => {
 describe('FileInput status tooltip press', () => {
   it.each(['input', 'dropzone'] as const)(
     'a click on the tooltip text does not open the picker in %s mode',
-    mode => {
+    async mode => {
       render(
         <FileInput
           label="Upload"
@@ -1728,11 +1729,10 @@ describe('FileInput status tooltip press', () => {
         />,
       );
       const openPicker = vi.spyOn(fileInputEl(), 'click');
-      fireEvent.click(
-        within(screen.getByRole('tooltip', h)).getByText(
-          'File must be under 10MB',
-        ),
-      );
+      // The status tooltip's layer mounts at its first show.
+      fireEvent.mouseEnter(screen.getByRole('button', {name: 'Error details'}));
+      const tooltip = await screen.findByRole('tooltip', h);
+      fireEvent.click(within(tooltip).getByText('File must be under 10MB'));
       expect(openPicker).not.toHaveBeenCalled();
       // Positive control: a click on the surface itself still opens it.
       fireEvent.click(screen.getByRole('button', {name: 'Upload'}));

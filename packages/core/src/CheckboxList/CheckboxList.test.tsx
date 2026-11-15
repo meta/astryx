@@ -34,6 +34,7 @@ import {
   hasPressedArm,
   hasReleaseFade,
 } from '../__tests__/pressState';
+import {getTooltipDescription} from '../__tests__/tooltipDescription';
 
 // FieldStatus announces status messages through the persistent useAnnounce
 // singletons; remove them between tests so role/aria-live queries in this
@@ -1311,28 +1312,30 @@ describe('CheckboxListItem ARIA props', () => {
 
     it('shows the reason tooltip on hover when the group is disabled with a reason', async () => {
       renderGroup();
-      const tooltip = screen.getByRole('tooltip', h);
-      expect(tooltip).toHaveTextContent(
+      const tooltip = () => getTooltipDescription();
+      expect(tooltip()).toHaveTextContent(
         'Notifications are managed by your administrator',
       );
       const group = screen.getByRole('group');
       fireEvent.mouseEnter(group);
-      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      await waitFor(() => expect(tooltip()).toHaveAttribute('popover-open'));
       fireEvent.mouseLeave(group);
-      await waitFor(() => expect(tooltip).not.toHaveAttribute('popover-open'));
+      await waitFor(() =>
+        expect(tooltip()).not.toHaveAttribute('popover-open'),
+      );
     });
 
     it('shows the reason tooltip on keyboard focus', async () => {
       const user = userEvent.setup();
       renderGroup();
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = () => getTooltipDescription();
       await user.tab();
-      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      await waitFor(() => expect(tooltip()).toHaveAttribute('popover-open'));
     });
 
     it('describes each checkbox with the reason', () => {
       renderGroup();
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltipDescription();
       for (const name of ['Email', 'SMS']) {
         const checkbox = screen.getByRole('checkbox', {name});
         expect(checkbox.getAttribute('aria-describedby')?.split(' ')).toContain(
@@ -1359,7 +1362,7 @@ describe('CheckboxListItem ARIA props', () => {
           />
         </CheckboxList>,
       );
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltipDescription();
       const checkbox = screen.getByRole('checkbox', {name: 'Email'});
       const ids = checkbox.getAttribute('aria-describedby')!.split(' ');
       expect(ids).toHaveLength(2);
@@ -1392,7 +1395,7 @@ describe('CheckboxListItem ARIA props', () => {
       __resetInteractionModalityForTest();
       const onChange = vi.fn();
       renderGroup({onChange});
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = () => getTooltipDescription();
       const sms = screen.getByRole('checkbox', {name: 'SMS'});
       // A tap, in the order a browser dispatches it.
       fireEvent.pointerEnter(sms, {pointerType: 'touch'});
@@ -1400,7 +1403,7 @@ describe('CheckboxListItem ARIA props', () => {
       fireEvent.pointerUp(sms, {pointerType: 'touch'});
       fireEvent.mouseEnter(sms);
       fireEvent.click(sms);
-      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      await waitFor(() => expect(tooltip()).toHaveAttribute('popover-open'));
       expect(onChange).not.toHaveBeenCalled();
     });
 
@@ -1456,7 +1459,7 @@ describe('CheckboxListItem ARIA props', () => {
     it('links the reason tooltip from the group via aria-describedby', () => {
       renderGroup();
       const group = screen.getByRole('group');
-      const tooltip = screen.getByRole('tooltip', h);
+      const tooltip = getTooltipDescription();
       expect(group.getAttribute('aria-describedby')).toContain(tooltip.id);
     });
 

@@ -8,20 +8,25 @@
  */
 
 /**
+ * Returns every tooltip and every hidden copy of a tooltip's content in the
+ * document: a tooltip that has shown is its layer, and one that has not is
+ * its hidden copy.
+ */
+export function getTooltipDescriptions(): HTMLElement[] {
+  return Array.from(
+    document.querySelectorAll<HTMLElement>(
+      '[role="tooltip"], body > span[hidden][id$="-description"]',
+    ),
+  );
+}
+
+/**
  * Returns the element a tooltip's trigger names in `aria-describedby`: the
  * hidden copy of the content before the tooltip first shows, then the
  * tooltip. Throws unless exactly one such element is in the document.
  */
 export function getTooltipDescription(): HTMLElement {
-  const tooltips = Array.from(
-    document.querySelectorAll<HTMLElement>('[role="tooltip"]'),
-  );
-  const copies = Array.from(
-    document.querySelectorAll<HTMLElement>(
-      'body > span[hidden][id$="-description"]',
-    ),
-  );
-  const found = [...tooltips, ...copies];
+  const found = getTooltipDescriptions();
   if (found.length !== 1) {
     throw new Error(
       `expected one tooltip description in the document, found ${found.length}`,
