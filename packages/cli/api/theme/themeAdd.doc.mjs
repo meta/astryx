@@ -59,7 +59,7 @@ export const doc = {
     {
       type: 'theme.app',
       description:
-        'The complete generated-module state and add change. Its envelope package names the npm package that owns the added theme, except for a local theme. data.notes, present only when needed, says which owner was chosen when a local theme shadows a package theme with the same slug, names a replaced recorded owner, and names added themes left out because their local folder or package is gone (a theme that is only broken or not installed yet still fails the command).',
+        "The complete generated-module state and add change. Its envelope package names the npm package that owns the added theme, except for a local theme. data.notes, present only when needed, says which owner was chosen when a local theme shadows a package theme with the same slug, names a replaced recorded owner, and names added themes left out because their local folder or package is gone (a theme that is only broken or not installed yet still fails the command). data.appProvider, present on the first add when an installed package names the provider that wires its themes, gives each such provider as wiredBy ({export, from}, as theme list names it) and wire, the two sentences the text prints: the app may already get its theme from it, and the outermost Theme sets the page's theme and mode while an inner Theme covers only what it wraps. The add reads no app source.",
     },
   ],
   throws: [

@@ -602,6 +602,20 @@ const CASES = [
     skipFieldChecks: true,
   },
   {
+    // The receipt of a first add in an app whose installed package names
+    // the provider that wires its themes (AST-017 FR13): its note in text
+    // and JSON.
+    name: 'theme add',
+    args: ['theme', 'add', 'brand', '--package', '@acme/ui'],
+    cwd: '__TMP__',
+    setup: providerApp,
+    // Each run is a first add.
+    beforeEachRun: cwd => {
+      fs.rmSync(cwd, {recursive: true, force: true});
+      providerApp(cwd);
+    },
+  },
+  {
     name: 'theme remove',
     args: ['theme', 'remove', 'does-not-exist'],
     errorExpected: true,
@@ -920,6 +934,66 @@ const CASES = [
     ],
   },
 ];
+
+/**
+ * An app whose installed package, `@acme/ui`, names the provider that wires
+ * its one theme, `brand`.
+ * @param {string} dir
+ */
+function providerApp(dir) {
+  /** @param {string} rel @param {string} content */
+  const put = (rel, content) => {
+    const file = path.join(dir, rel);
+    fs.mkdirSync(path.dirname(file), {recursive: true});
+    fs.writeFileSync(file, content);
+  };
+  put('tsconfig.json', '{}\n');
+  put(
+    'package.json',
+    JSON.stringify({
+      name: 'provider-app',
+      private: true,
+      dependencies: {'@acme/ui': '1.0.0'},
+    }),
+  );
+  put(
+    'node_modules/@acme/ui/package.json',
+    JSON.stringify({
+      name: '@acme/ui',
+      version: '1.0.0',
+      type: 'module',
+      exports: {
+        './theme': './dist/theme.js',
+        './themes/brand': './dist/brand.js',
+        './themes/brand.css': './dist/brand.css',
+      },
+    }),
+  );
+  put(
+    'node_modules/@acme/ui/astryx.integration.mjs',
+    "export default {themes: './themes', themeProvider: {export: 'AcmeThemeProvider', from: '@acme/ui/theme'}};\n",
+  );
+  put(
+    'node_modules/@acme/ui/dist/theme.js',
+    'export function AcmeThemeProvider({children}) { return children; }\n',
+  );
+  put(
+    'node_modules/@acme/ui/themes/brand/brandTheme.doc.mjs',
+    "export default {type: 'theme', name: 'brand', displayName: 'brand', description: 'brand theme.', maintained: true};\n",
+  );
+  put(
+    'node_modules/@acme/ui/themes/brand/brandTheme.ts',
+    "export const brandTheme = {name: 'brand', tokens: {}};\n",
+  );
+  put(
+    'node_modules/@acme/ui/dist/brand.js',
+    "export const brandTheme = {name: 'brand', tokens: {}};\n",
+  );
+  put(
+    'node_modules/@acme/ui/dist/brand.css',
+    '[data-astryx-theme="brand"] { --color-text: black; }\n',
+  );
+}
 
 // ─── Suite ──────────────────────────────────────────────────────────────────
 

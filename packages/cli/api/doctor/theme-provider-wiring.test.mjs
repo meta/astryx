@@ -316,15 +316,16 @@ describe('theme add with an installed package that names its provider', () => {
       await runCli(['theme', 'add', 'brand', '--package', '@acme/ui'], dir)
     ).stdout;
     expect(text).toMatch(
-      /This app may already get its theme from AcmeThemeProvider \(declared by @acme\/ui\)\. The outermost Theme sets the page's theme and mode, and an inner Theme covers only what it wraps; `.* doctor` checks where the app renders it\./,
+      /This app may already get its theme from AcmeThemeProvider \(from @acme\/ui\/theme, declared by @acme\/ui\)\. The outermost Theme sets the page's theme and mode, and an inner Theme covers only what it wraps\./,
     );
 
     // In JSON, on the first add only.
     const again = app();
     const r = await themeAdd('brand', {cwd: again, package: '@acme/ui'});
     expect(r.data.appProvider).toMatchObject({
-      wiredBy: ['AcmeThemeProvider from @acme/ui/theme'],
+      wiredBy: [{export: 'AcmeThemeProvider', from: '@acme/ui/theme'}],
     });
+    expect(r.data.appProvider.wire).not.toContain('doctor');
     const second = await themeAdd('brand', {cwd: again, package: '@acme/ui'});
     expect(second.data.appProvider).toBeUndefined();
   });
