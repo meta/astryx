@@ -78,7 +78,9 @@ describe('exceptions that hold', () => {
       const {first} = await answer('all borders thicker except on inputs');
       expect(first[0]).toMatch(/^set q --border-width /);
       expect(
-        first.some(c => /^set q border-width \S+ --on text-input/.test(c)),
+        // (The token on the part: its border and the padding that makes
+        // room for it both stay.)
+        first.some(c => /^set q --border-width \S+ --on text-input/.test(c)),
       ).toBe(true);
     },
     T,

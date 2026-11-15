@@ -8,7 +8,10 @@
  * not a page, and the system's own components say what a part is: an idea
  * whose head noun is a word of a component's name or keywords, Core's or an
  * integration's, asks for that part, unless the noun is a family word ("a data
- * table") or the idea lists a page's worth of pieces. Words search drops as
+ * table") or the idea lists a page's worth of pieces. A component named with
+ * its listed contents ("a side panel with an owner, a status, and a history")
+ * is still one part, unless the component holds records: its category declares
+ * a page family (a list, a table). Words search drops as
  * stopwords ("page", "screen", "app", "view") name no component, so "a calendar
  * page" asks for a page and "a calendar" for a part. A part starts from the
  * base template of the family the idea names ("an empty state for a settings
@@ -26,6 +29,7 @@
  * new dashboard").
  */
 
+import {COMPONENT_CATEGORIES} from '../../../authoring/doctypes/component/categories.mjs';
 import {stem} from '../../search/search.mjs';
 import {
   HEAD_END,
@@ -46,7 +50,7 @@ import {
 /**
  * How many listed pieces make an idea a page: a part is one thing with a detail
  * or two ("a status pill with a tooltip"), while three pieces, two commas
- * apart, describe a page.
+ * apart, describe a page, unless they are one component's contents.
  */
 const PAGE_PIECES = 3;
 
@@ -71,7 +75,8 @@ const NEW = /\bnew\b/;
 /**
  * What an idea asks for (spec:AST-048/FR3): a whole `page`; a `part` of one,
  * when its head noun names one of the system's components and it lists fewer
- * than PAGE_PIECES pieces; or an `edit` of a page the builder already has.
+ * than PAGE_PIECES pieces or only that component's contents; or an `edit` of a
+ * page the builder already has.
  *
  * @param {string} query
  * @param {PageTemplate[]} pages
@@ -87,19 +92,121 @@ export function ideaKind(query, pages, components) {
   // calendar", "page" the noun of "a calendar page". An overlay frame names
   // where the thing lives, not the thing: "drafts" is the noun of "drafts in
   // a modal".
-  const head = (text.split(HEAD_END)[0] ?? '').replace(CONTAINER_PHRASE, m =>
+  const rawHead = text.split(HEAD_END)[0] ?? '';
+  const head = rawHead.replace(CONTAINER_PHRASE, m =>
     containersOf(m).size > 0 ? ' ' : m,
   );
-  const words = (head.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter(
-    w => w.length >= 2,
-  );
-  const noun = stem(words[words.length - 1] ?? '');
+  const noun = lastNoun(head);
   if (familyWords.has(noun)) return 'page';
+  const holdsRecords = (/** @type {string} */ word) =>
+    namedComponents(word, components).some(c => namesFamily(c, familyWords));
+  if (
+    describesOnePart(text, rawHead, noun, familyWords, components) &&
+    !holdsRecords(noun)
+  )
+    return 'part';
   const pieces = (text.match(/,/g) ?? []).length + 1;
   if (pieces >= PAGE_PIECES) return 'page';
-  return components.some(c => componentTerms(c).includes(noun))
+  const namesPart = (/** @type {string} */ word) =>
+    components.some(c => componentTerms(c).includes(word));
+  if (!namesPart(noun)) return 'page';
+  // A component that holds records, followed by "of", is a page of those
+  // records ("a list of jobs"), unless what follows names a component ("a list
+  // of buttons") or a page family ("a list of settings toggles").
+  if (!holdsRecords(noun) || !endsOnOf(text)) return 'part';
+  const phrase = madeOf(text);
+  return terms(phrase).some(t => familyWords.has(t)) ||
+    namesPart(lastNoun(phrase))
     ? 'part'
     : 'page';
+}
+
+/**
+ * Whether an idea describes one part and its contents: its head names a
+ * component by name and ends on a word ("a side panel with a, b and c"), not
+ * on a comma or a colon that starts a list of peers, and no word of the idea
+ * names a page family. Such an idea is a part however many pieces it lists.
+ * @param {string} text
+ * @param {string} head the idea's head, before any frame is removed
+ * @param {string} noun
+ * @param {Map<string, string>} familyWords
+ * @param {ComponentWords[]} components
+ * @returns {boolean}
+ */
+function describesOnePart(text, head, noun, familyWords, components) {
+  const end = text.slice(head.length).match(/^\s*([a-z]+)/i);
+  return (
+    end !== null &&
+    components.some(c => nameTerms(c).includes(noun)) &&
+    !terms(text).some(t => familyWords.has(t))
+  );
+}
+
+/**
+ * The components a word names: the one whose whole name is the word
+ * ("button" names Button), else every component whose name holds it.
+ * @param {string} word
+ * @param {ComponentWords[]} components
+ * @returns {ComponentWords[]}
+ */
+function namedComponents(word, components) {
+  const whole = components.filter(c => {
+    const name = nameTerms(c);
+    return name.length === 1 && name[0] === word;
+  });
+  return whole.length > 0
+    ? whole
+    : components.filter(c => nameTerms(c).includes(word));
+}
+
+/**
+ * Whether a component's doc files it under a category that declares a page
+ * family the project has ("Table & List" declares the table family): such a
+ * component holds the records a page of that family shows.
+ * @param {ComponentWords} component
+ * @param {Map<string, string>} familyWords
+ * @returns {boolean}
+ */
+function namesFamily(component, familyWords) {
+  const family = Object.hasOwn(COMPONENT_CATEGORIES, component.category ?? '')
+    ? COMPONENT_CATEGORIES[component.category ?? ''].pageFamily
+    : undefined;
+  return family !== undefined && [...familyWords.values()].includes(family);
+}
+
+/**
+ * The stem of a phrase's last word.
+ * @param {string} phrase
+ * @returns {string}
+ */
+function lastNoun(phrase) {
+  const words = (phrase.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter(
+    w => w.length >= 2,
+  );
+  return stem(words[words.length - 1] ?? '');
+}
+
+/**
+ * Whether an idea's head ends on "of" ("a list of jobs").
+ * @param {string} text
+ * @returns {boolean}
+ */
+function endsOnOf(text) {
+  return text.match(HEAD_END)?.[0].toLowerCase() === 'of';
+}
+
+/**
+ * What a head that ends on "of" is made of: the phrase after "of", up to the
+ * next head end, without an overlay frame.
+ * @param {string} text
+ * @returns {string}
+ */
+function madeOf(text) {
+  const end = text.match(HEAD_END);
+  const rest = text.slice((end?.index ?? 0) + (end?.[0].length ?? 0));
+  return (rest.split(HEAD_END)[0] ?? '').replace(CONTAINER_PHRASE, m =>
+    containersOf(m).size > 0 ? ' ' : m,
+  );
 }
 
 /**
