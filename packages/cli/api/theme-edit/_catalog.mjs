@@ -16,14 +16,16 @@
 
 /**
  * @typedef {{__element: string, props?: Record<string, unknown>, children?: unknown}} Tree
- * @typedef {{name: string, label: string, tree: unknown, group?: string, open?: boolean, openable?: boolean, onlyOpen?: boolean, openTree?: unknown}} CatalogItem
+ * @typedef {{name: string, label: string, tree: unknown, group?: string, open?: boolean, openable?: boolean, onlyOpen?: boolean, openTree?: unknown, strip?: boolean, anchored?: boolean}} CatalogItem
  *   `open`: drawn open in a document after the server render (a popover,
  *   tooltip or menu, which Core places only once mounted: layers.mjs);
  *   `openable`: also shown open in the overlays section when it holds an
  *   overlay a press opens (a dropdown's menu, a selector's list);
  *   `onlyOpen`: in the page for that open look alone; `openTree`: the part
  *   as shown open, when a prop its doc names opens it (a dropdown's
- *   `isMenuOpen`)
+ *   `isMenuOpen`); `strip`: on the sample page, drawn open in the strip of
+ *   overlays below it; `anchored`: an overlay placed beside its trigger (it
+ *   takes a placement), small, shown before the panels over the page
  */
 
 import {LAYER_GLOBAL} from '../../foundation/render/layers.mjs';
@@ -251,9 +253,17 @@ export const SAMPLE_SOURCE = Object.freeze({__code: 'SAMPLE_SOURCE'});
  *   module and css are import specifiers relative to the page
  * @param {'catalog' | 'sheet' | 'page'} spec.layout
  * @param {string} [spec.title]
+ * @param {string} [spec.section] the section a sheet shows alone, as a class on its page
  * @returns {string}
  */
-export function pageSource({items, imports, theme, layout, title = ''}) {
+export function pageSource({
+  items,
+  imports,
+  theme,
+  layout,
+  title = '',
+  section = '',
+}) {
   /** @type {Map<string, Array<[string, string]>>} element and export, per module */
   const byModule = new Map();
   for (const [name, b] of Object.entries(imports)) {
@@ -324,6 +334,7 @@ export function pageSource({items, imports, theme, layout, title = ''}) {
     'function modes(tree, open) { if (!theme || MODE !== "system") { const one = html(tree, MODE, open); return one == null ? null : {one}; } const light = html(tree, "light", open); const dark = html(tree, "dark", open); if (light == null && dark == null) return null; return light === dark ? {one: light} : {light: light ?? "", dark: dark ?? ""}; }',
   );
   lines.push(`const LAYOUT = ${JSON.stringify(layout)};`);
+  lines.push(`const SECTION = ${JSON.stringify(section ?? '')};`);
   lines.push(`const TITLE = ${JSON.stringify(title)};`);
   lines.push(`const SHEET_CSS = ${JSON.stringify(SHEET_CSS)};`);
   // The parts as live elements, for drawing the overlays they show or open
@@ -363,10 +374,26 @@ export default function Page() {
     : h('div', {className: 'cs-bar'}, h('strong', null, TITLE), h('span', null, MODE + ' only'));
   let body;
   if (LAYOUT === 'page') {
-    body = done.map((it, i) => part(it.markup, i));
+    // The page, then the overlays drawn open in a strip below it.
+    const strip = done.filter(it => it.strip || it.opened);
+    body = [
+      ...done.filter(it => !it.strip && !it.opened).map((it, i) => part(it.markup, i)),
+      strip.length
+        ? h('section', {key: 'strip', className: 'cs-strip'},
+            h('div', {className: 'cs-strip-name'}, 'open overlays'),
+            h('div', {className: 'cs-strip-row'}, strip.map((it, i) => h('div', {key: i, className: 'cs-strip-item'},
+              h('div', {className: 'cs-label'}, it.name),
+              part(it.markup)))))
+        : null,
+    ];
   } else {
     const groups = [];
-    for (const it of done) {
+    // In the overlays section the small overlays drawn open beside their
+    // triggers (a tooltip, a menu, a list) come first; a panel over the
+    // whole page (a dialog, a drawer) after them.
+    const small = it => it.opened || (it.open && it.anchored);
+    const ordered = [...done.filter(small), ...done.filter(it => !small(it))];
+    for (const it of ordered) {
       let g = groups.find(x => x.name === (it.group ?? ''));
       if (!g) { g = {name: it.group ?? '', cells: []}; groups.push(g); }
       let c = g.cells.find(x => x.name === it.name);
@@ -381,7 +408,7 @@ export default function Page() {
           x.label ? h('div', {className: 'cs-label'}, x.label) : null,
           x.opened ? h('div', {className: 'cs-open'}, part(x.markup)) : part(x.markup)))))))));
   }
-  const page = h('div', {className: 'cs-page', style: {background: 'var(--color-background-body)', color: 'var(--color-text-primary)', minHeight: '100vh'}}, bar, body);
+  const page = h('div', {className: SECTION ? 'cs-page cs-section-' + SECTION : 'cs-page', style: {background: 'var(--color-background-body)', color: 'var(--color-text-primary)', minHeight: '100vh'}}, bar, body);
   return h('main', null, h('style', {dangerouslySetInnerHTML: {__html: SHEET_CSS}}), theme ? h(Theme, {theme, mode: MODE}, page) : page);
 }`);
   return `${lines.join('\n')}\n`;
@@ -419,8 +446,20 @@ export const SHEET_CSS = [
   // (its root alone: a hidden helper popover inside it stays hidden), and a
   // panel over the page (a drawer, a bottom sheet, a lightbox) at the size
   // of its cell.
+  '.cs-strip{padding:16px 14px;border-top:1px dashed #8885}',
+  '.cs-strip-name{font:600 12px ui-monospace,monospace;opacity:.6;margin-bottom:8px}',
+  '.cs-strip-row{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start}',
+  '.cs-strip-item{max-width:300px;position:relative}',
+  '.cs-strip [popover][data-astryx-layer-root]{display:block!important;position:relative!important;inset:auto!important;margin:8px 0 0!important;translate:none!important;transform:none!important}',
   '.cs-cell [popover][data-astryx-layer-root]{display:block!important;position:relative!important;inset:auto!important;margin:8px 0 0!important;translate:none!important;transform:none!important}',
   // A part shown for its open look that opened nothing has no cell.
   '.cs-cell:has(.cs-open):not(:has(.cs-open [data-astryx-layer-root])){display:none}',
+  // The overlays section's own page (sheet-overlays.png): five to a row,
+  // each cell at most 300px tall (a panel over the page cropped to its
+  // top), so its picture stays under about 1600px, the small overlays
+  // first. The full sheet keeps each at a window's height.
+  '.cs-section-overlays .cs-open-group .cs-sheet{grid-template-columns:repeat(5,minmax(0,1fr))}',
+  '.cs-section-overlays .cs-open-group .cs-cell{max-height:300px}',
+  '.cs-section-overlays .cs-open-group .cs-cell dialog{max-height:260px!important}',
   '.cs-cell dialog{display:block!important;position:relative!important;inset:auto!important;margin:0!important;max-width:100%!important;max-height:300px!important;translate:none!important;transform:none!important}',
 ].join('');

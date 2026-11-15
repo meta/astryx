@@ -83,6 +83,9 @@ const PAGE_TEMPLATES = ['dashboard', 'contact-form', 'settings'];
 const SELECTION =
   /Select|Checkbox|Radio|Switch|Segmented|Toggle|Slider|Typeahead|Tokenizer/;
 
+/** The overlays the preview's strip draws open, in its order: one of each kind a look styles (a tooltip, a popover, a menu, a select list). */
+const PREVIEW_OVERLAYS = ['Tooltip', 'Popover', 'DropdownMenu', 'Selector'];
+
 /** Props a doc names that open a part's own menu or list. */
 const OPENERS = ['isMenuOpen', 'isDefaultOpen'];
 
@@ -135,6 +138,11 @@ export function showcaseItems(project, group) {
     // so it would draw an empty cell: it gets none.
     if (!importPathOf(project, name)) continue;
     const info = project.components[name];
+    // On the overlays section's own page, a part of an overlay (a dialog's
+    // header, a command palette's list) shows inside the overlay it belongs
+    // to, never alone beside it: that page stays one or two screens.
+    if (group === 'overlays' && g === 'overlays' && info?.subComponentOf)
+      continue;
     catalogVariants(project, name, 12, {shown: true}).forEach((v, i) =>
       items.push({
         group: g,
@@ -146,8 +154,10 @@ export function showcaseItems(project, group) {
         // first shown, is shown open with the overlays too when a press
         // opens one from it (the page sees which: _catalog.mjs).
         ...(info?.opens
-          ? {open: true}
-          : i === 0 && g !== 'overlays'
+          ? {open: true, ...(info?.props?.placement ? {anchored: true} : {})}
+          : i === 0 &&
+              g !== 'overlays' &&
+              !(group === 'overlays' && info?.subComponentOf)
             ? {
                 openable: true,
                 // A prop its doc names that opens it opens it; else the
@@ -744,13 +754,34 @@ const withRenderKey = (html, key) => {
  */
 function previewInputs(ctx, slug, data) {
   const {project} = ctx;
-  const imports = /** @type {Record<string, string>} */ ({});
+  /** @type {Record<string, import('./_catalog.mjs').Binding>} */
+  const imports = {};
   for (const n of elementNames(SAMPLE_PAGE)) {
     const spec = importPathOf(project, n);
     if (spec) imports[n] = spec;
   }
+  // Below the sample page, a strip of overlays drawn open (a tooltip, a
+  // popover, a menu, a select list), from the overlays the sheet draws, so
+  // the one picture every look starts from shows them too.
+  const overlays = showcaseItems(project, 'overlays');
+  /** @type {import('./_catalog.mjs').CatalogItem[]} */
+  const strip = [];
+  for (const name of PREVIEW_OVERLAYS) {
+    const it = overlays.items.find(
+      x => x.name === name && (x.open || x.openable),
+    );
+    if (!it) continue;
+    strip.push({
+      ...it,
+      label: '',
+      strip: true,
+      ...(it.openable ? {onlyOpen: true} : {}),
+    });
+    for (const n of elementNames([it.tree, it.openTree ?? it.tree]))
+      if (overlays.imports[n]) imports[n] = overlays.imports[n];
+  }
   const source = pageSource({
-    items: [{name: 'page', label: '', tree: SAMPLE_PAGE}],
+    items: [{name: 'page', label: '', tree: SAMPLE_PAGE}, ...strip],
     imports,
     theme: themeImports(ctx, slug, data, renderDir(project)),
     layout: 'page',
@@ -813,6 +844,7 @@ export async function renderSheet(ctx, slug, data, options = {}) {
     imports,
     theme: themeImports(ctx, slug, data, renderDir(project)),
     layout: 'sheet',
+    section: options.group,
     title: `${slug}: every component${options.group ? ` (${options.group})` : ''}`,
   });
   // One section goes to its own file, so the full sheet stays whole.

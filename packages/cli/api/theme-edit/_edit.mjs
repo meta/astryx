@@ -6103,6 +6103,18 @@ async function changeOnce(
         ...problemLines(r.newProblems),
         ...colorFails.map(problem => ({problem, fix: null})),
       ],
+      // How many parts the theme's own changes still do not reach (show
+      // lists each with the line that reaches it).
+      missed: (
+        await missedParts(
+          ctx,
+          slug,
+          data,
+          r.res,
+          await baseResolved(ctx.project, data.like),
+          {count: true},
+        ).catch(() => [])
+      ).length,
       warnings: r.warnings,
       ...p,
     },
@@ -7250,9 +7262,11 @@ function unreachedParts(ctx, data, res, base) {
  * @param {import('./_settings.mjs').ThemeData} data
  * @param {Record<string, Record<string, string>>} res
  * @param {Record<string, any>} base
+ * @param {{count?: boolean}} [opts] `count`: the entries alone, their lines
+ *   not built (a change counts them; show lists each with its line)
  * @returns {Promise<Array<{part: string, state?: string, why: string, line: string}>>}
  */
-async function missedParts(ctx, slug, data, res, base) {
+async function missedParts(ctx, slug, data, res, base, opts = {}) {
   if (!data.settings.length) return [];
   const C = ctx.C;
   const modes = Object.keys(res).filter(m => m === 'light' || m === 'dark');
@@ -7513,6 +7527,13 @@ async function missedParts(ctx, slug, data, res, base) {
     }
   /** @type {Array<{part: string, state?: string, why: string, line: string}>} */
   const out = [];
+  if (opts.count)
+    return ordered.map(x => ({
+      part: x.part,
+      ...(x.state ? {state: x.state} : {}),
+      why: x.why,
+      line: '',
+    }));
   for (const x of ordered) {
     /** @type {string[]} */
     const lines = [];

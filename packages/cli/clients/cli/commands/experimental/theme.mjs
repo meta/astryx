@@ -570,7 +570,12 @@ function changeBlocks(r) {
   // line, which counts them: a tail-cut or head-cut output still shows it.
   // What a whole-theme change leaves out comes next, with the lines that
   // reach it, before the rest a head-cut output drops.
-  const {newProblems = [], leftOut = [], ...rest} = /** @type {any} */ (d);
+  const {
+    newProblems = [],
+    leftOut = [],
+    missed = 0,
+    ...rest
+  } = /** @type {any} */ (d);
   const status = newProblems.length
     ? `${done}, but it made ${newProblems.length} new problem${newProblems.length > 1 ? 's' : ''}:`
     : done;
@@ -587,6 +592,15 @@ function changeBlocks(r) {
               ...x.run,
             ]),
           ),
+        ]
+      : []),
+    // The parts the theme's own changes still do not reach, counted near
+    // the top, so a head of the output keeps it; show lists each.
+    ...(missed
+      ? [
+          record({
+            missed: `${missed} part${missed > 1 ? 's' : ''} the theme's changes did not reach (show lists each with its line)`,
+          }),
         ]
       : []),
     ...changeFields(rest),
@@ -667,13 +681,37 @@ function showBlocks(d) {
       ? [section('settings:'), records(settings.map(s => flatRecord(s)))]
       : []),
     ...others,
-    // What the theme's own changes did not reach (six at most), each with
-    // the line that reaches it; the other parts on the base's look are
-    // counted, and listed in the JSON.
+    ...(colors.length
+      ? [
+          section('colors:'),
+          ...colors.flatMap(c => [
+            record({color: c.color, seed: c.seed}),
+            record(c.tokens),
+          ]),
+        ]
+      : []),
+    ...(colorNotes.length ? [section('colorNotes:'), list(colorNotes)] : []),
+    colorFiles
+      ? [section('colorFiles:'), record(colorFiles)]
+      : record({colorFiles: 'none'}),
+    // Last, so the end of the output names what the theme still gets wrong
+    // (none, as an empty list in the JSON, prints nothing).
+    openProblems.length
+      ? [
+          section(
+            `openProblems: ${openProblems.length} the theme has now; each fix line fixes one`,
+          ),
+          ...problemList(openProblems),
+        ]
+      : [],
+    // What the theme's own changes did not reach, counted, six with the
+    // line that reaches each; the other parts on the base's look are
+    // counted, and listed in the JSON. Last before the closing look line,
+    // so a tail of the output keeps them.
     ...(missed.length
       ? [
           section(
-            "missed (parts the theme's own changes did not reach; each line reaches one):",
+            `missed (${missed.length} part${missed.length > 1 ? 's' : ''} the theme's own changes did not reach; each line reaches one):`,
           ),
           // Each part and why, then the line that reaches it.
           missed
@@ -698,29 +736,6 @@ function showBlocks(d) {
           ]
         : [];
     })(),
-    ...(colors.length
-      ? [
-          section('colors:'),
-          ...colors.flatMap(c => [
-            record({color: c.color, seed: c.seed}),
-            record(c.tokens),
-          ]),
-        ]
-      : []),
-    ...(colorNotes.length ? [section('colorNotes:'), list(colorNotes)] : []),
-    colorFiles
-      ? [section('colorFiles:'), record(colorFiles)]
-      : record({colorFiles: 'none'}),
-    // Last, so the end of the output names what the theme still gets wrong
-    // (none, as an empty list in the JSON, prints nothing).
-    openProblems.length
-      ? [
-          section(
-            `openProblems: ${openProblems.length} the theme has now; each fix line fixes one`,
-          ),
-          ...problemList(openProblems),
-        ]
-      : [],
     lookLine,
   ].flat();
 }

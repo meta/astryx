@@ -1016,7 +1016,11 @@ export function lookAtPictures(files) {
     files.some(f => /-dark\.png$/.test(f)) &&
     files.some(f => /(?<!-dark)\.png$/.test(f));
   return `open ${[
-    ...(preview ? [`${preview} (the sample page)`] : []),
+    ...(preview
+      ? [
+          `${preview} (the sample page, a tooltip, a menu and a list drawn open below it)`,
+        ]
+      : []),
     ...(open
       ? [`${open} (every menu, tooltip, popover and list, drawn open)`]
       : []),

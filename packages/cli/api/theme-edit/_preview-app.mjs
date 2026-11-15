@@ -3625,7 +3625,8 @@ export function seeLine(cwd, slug, focus, notChecked = null, extra = {}) {
       : `the change is saved, but the components could not be rendered here (${notChecked.cause}), so ${shown(cwd, f.preview)} still shows the theme as it was and --png takes no pictures until that is fixed`
     : look
       ? `look without changing your app: ${look}`
-      : `look without changing your app: open or screenshot ${shown(cwd, f.preview)} (one self-contained page, current after this change; ${EDITOR} show ${slug} also writes ${shown(cwd, f.sheet)}, every component), or ${pngNote}`;
+      : // The pictures first: the one command that writes the two to open.
+        `look without changing your app: ${extra.pictureProblem ? pngNote : `${EDITOR} show ${slug} --png writes ${shown(cwd, f.previewPng)} (the sample page, with a tooltip, a menu and a list drawn open below it) and ${shown(cwd, path.join(f.dir, 'sheet-overlays.png'))} (every menu, tooltip, popover and list, drawn open) to open, with no dev server (it needs a Playwright or a Chrome)`}; or open ${shown(cwd, f.preview)} (one self-contained page, current after this change)`;
   const edited = handEdited.length
     ? `; the in-app preview in ${handEdited.slice(0, 2).join(', ')}/ ${stale.some(f => /could not be written/.test(f)) && !stale.some(f => /changed by hand/.test(f)) ? 'could not be written' : 'was changed by hand'}, so it does not follow this change (previewStale says what to move out, then ${PREVIEW} add writes it again)`
     : '';
