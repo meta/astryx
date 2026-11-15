@@ -288,14 +288,19 @@ describe.skipIf(process.platform !== 'linux')(
           const based = [...first].filter(([, entry]) => entry.deps.length > 0);
           expect(based.length).toBeGreaterThan(0);
           // Each names an entry it builds on at the version that entry holds,
-          // and stores none of the states that entry stores.
+          // and stores none of the states that entry stores: it stores a path
+          // that entry holds only when that entry holds just that the path is
+          // there, and it read more of it.
           for (const [, entry] of based) {
-            const own = new Set(entry.stamps.map(([file]) => file));
+            const own = new Map(entry.stamps);
             for (const [name, version] of entry.deps) {
               const base = first.get(name);
               expect(base?.version).toBe(version);
-              for (const [file] of base?.stamps ?? []) {
-                expect(own.has(file)).toBe(false);
+              for (const [file, state] of base?.stamps ?? []) {
+                if (own.has(file)) {
+                  expect(state).toBe('present');
+                  expect(own.get(file)).not.toBe(state);
+                }
               }
             }
           }

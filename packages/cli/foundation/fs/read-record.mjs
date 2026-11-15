@@ -7,7 +7,8 @@
  * @input An operation run inside `recordReads(seen, fn)`.
  * @output `seen` gets every file whose content the operation read through fs
  *   or imported as a doc module (`recordContentRead`), and every folder it
- *   listed or probed, each with its state when first read;
+ *   listed or probed, each with its state when first read; an exact run
+ *   records each probed path by what the call returned instead.
  *   `unchangedSince(seen)` says whether all are still in that state.
  * @position Used by search's adapter to reuse a gathered catalog only while
  *   it is exact, by the docs adapter to rebuild the CLI's own docs tree after
@@ -37,27 +38,56 @@ const reads = new AsyncLocalStorage();
  * @param {string} file - What a run checks: the file read, or the folder of
  *   the path probed.
  * @param {string} [probed] - The path itself, which an exact run checks.
+ * @param {ReadKind} [kind] - What the call returned, which is what an exact
+ *   run records of the path.
  */
-function note(runs, file, probed = file) {
+function note(runs, file, probed = file, kind = 'read') {
   let state;
   let probedState;
+  const key = kind === 'realpath' ? REAL_PATH + probed : probed;
   for (const seen of runs) {
     if (exactRuns.has(seen)) {
-      const had = seen.get(probed);
+      const had = seen.get(key);
       if (had === undefined) {
-        seen.set(
-          probed,
-          (probedState ??=
-            probed === file ? stateOf(probed) : probeStamp(probed)),
-        );
-      } else if (probed === file && had.startsWith('dir:')) {
-        // A folder first only probed, now listed: its listing counts, so it
-        // is checked by its full stamp from here on.
-        seen.set(probed, (state ??= stateOf(file)));
+        seen.set(key, (probedState ??= exactState(probed, kind)));
+      } else if (
+        (had === PRESENT && (kind === 'read' || kind === 'stat')) ||
+        (kind === 'read' && had.startsWith('dir:'))
+      ) {
+        // A path first only checked for, or a folder first only probed, now
+        // statted, read or listed: what the later call returned counts, so
+        // it is checked by that from here on.
+        seen.set(key, (probedState ??= exactState(probed, kind)));
       }
     } else if (!seen.has(file)) {
       seen.set(file, (state ??= stateOf(file)));
     }
+  }
+}
+
+/**
+ * What a call returns about a path, which an exact run records: a read or a
+ * listing the content, a stat the path's stamp, an existence check whether
+ * it is there, a real-path lookup the path it resolves to.
+ * @typedef {'read' | 'stat' | 'presence' | 'realpath'} ReadKind
+ */
+
+/**
+ * The state an exact run records of `file` for a call of `kind`.
+ * @param {string} file
+ * @param {ReadKind} kind
+ * @returns {string}
+ */
+function exactState(file, kind) {
+  switch (kind) {
+    case 'read':
+      return stateOf(file);
+    case 'presence':
+      return presenceState(file);
+    case 'realpath':
+      return realPathState(file);
+    default:
+      return probeStamp(file);
   }
 }
 
@@ -87,10 +117,52 @@ const RECORDED = [
 /** The reads that see a file's content, so the file itself is checked. */
 const CONTENT_READS = new Set(['readFileSync', 'openSync']);
 
+/**
+ * What an existence check of a present path records: only that it is there,
+ * all the check returns. An absent path records `-`, as every kind does.
+ */
+export const PRESENT = 'present';
+
+/**
+ * What a real-path lookup's record is keyed by, before the path: it records
+ * the path the lookup resolved to, beside whatever else the path's own key
+ * records.
+ */
+export const REAL_PATH = '\0realpath:';
+
+/**
+ * The path a recorded key stands for: the key itself, or the path a
+ * real-path lookup looked up.
+ * @param {string} key
+ * @returns {string}
+ */
+export function recordedPath(key) {
+  return key.startsWith(REAL_PATH) ? key.slice(REAL_PATH.length) : key;
+}
+
+/**
+ * What each recorded call returns about its path (ReadKind). `accessSync`
+ * answers by the file's mode too, so it is recorded as a stat.
+ * @param {string} name
+ * @returns {ReadKind}
+ */
+function readKind(name) {
+  if (CONTENT_READS.has(name) || name === 'readdirSync') return 'read';
+  if (name === 'existsSync') return 'presence';
+  if (name === 'realpathSync') return 'realpath';
+  return 'stat';
+}
+
 let recording = false;
 
 /** fs.statSync as loaded, before installRecorder wraps it. */
 const statSyncRaw = fs.statSync;
+
+/** fs.realpathSync as loaded, before installRecorder wraps it. */
+const realpathSyncRaw = fs.realpathSync;
+
+/** fs.realpathSync's native lookup, which installRecorder never wraps. */
+const realpathNative = fs.realpathSync.native;
 
 /**
  * Wrap fs's read calls once so that, inside `reads.run`, each path they are
@@ -115,16 +187,14 @@ function installRecorder() {
           typeof target === 'string'
             ? path.resolve(target)
             : fileURLToPath(target);
-        // A file read is checked itself; a probe or listing is checked by its
-        // folder, whose time changes when an entry is added, removed or
-        // renamed.
-        const checked =
-          CONTENT_READS.has(name) || name === 'readdirSync'
-            ? file
-            : path.dirname(file);
+        // A file read or a folder listed is checked itself; a probe is
+        // checked by its folder, whose time changes when an entry is added,
+        // removed or renamed, or, in an exact run, by what it returned.
+        const kind = readKind(name);
+        const checked = kind === 'read' ? file : path.dirname(file);
         // Its state is taken when it is first read, before the read, so a
         // change made while the operation runs shows as a change afterwards.
-        note(runs, checked, file);
+        note(runs, checked, file, kind);
       }
       return original.apply(this, args);
     };
@@ -177,13 +247,57 @@ function probeStamp(file) {
 }
 
 /**
+ * Whether `file` is there, as an existence check answers: `present`, or
+ * absent.
+ * @param {string} file
+ * @returns {string}
+ */
+function presenceState(file) {
+  try {
+    return statSyncRaw(file, {throwIfNoEntry: false}) ? PRESENT : '-';
+  } catch {
+    return '-';
+  }
+}
+
+/**
+ * The path `file` resolves to, or absent: a real-path lookup's state.
+ *
+ * The program still receives what its own lookup returned; this state only
+ * shows a change. The native lookup resolves the same links in a fraction of
+ * the time, which counts when a check reads hundreds of these, and where it
+ * differs it shows more changes, never fewer: at worst an extra miss. Where
+ * it fails for a reason other than a missing path, the program's own lookup
+ * gives the state, so the state cannot flip between the two.
+ * @param {string} file
+ * @returns {string}
+ */
+function realPathState(file) {
+  try {
+    return realpathNative(file);
+  } catch (error) {
+    const code = /** @type {NodeJS.ErrnoException} */ (error)?.code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return '-';
+  }
+  try {
+    return realpathSyncRaw(file);
+  } catch {
+    return '-';
+  }
+}
+
+/**
  * Whether a recorded path is still in the state recorded for it, by the kind
  * of state that was recorded.
- * @param {string} file
+ * @param {string} file - The recorded key: a path, or a real-path lookup's.
  * @param {string} state
  * @returns {boolean}
  */
 export function stillInState(file, state) {
+  if (file.startsWith(REAL_PATH)) {
+    return realPathState(file.slice(REAL_PATH.length)) === state;
+  }
+  if (state === PRESENT) return presenceState(file) === state;
   return (
     (state.startsWith('dir:') ? probeStamp(file) : stateOf(file)) === state
   );
@@ -239,8 +353,10 @@ export function recordStates(states) {
 
 /**
  * Keep `state` as the state read of `file`, one state per path: the first
- * one, except that a folder only probed takes a full stamp read later. The
- * listing counts, as when a run lists a folder it probed (see `note`).
+ * one, except that a path only checked for takes any other state read later,
+ * and a folder only probed takes a full stamp read later. What the later
+ * call returned counts, as when a run reads a path it checked for (see
+ * `note`).
  * @param {Map<string, string>} seen
  * @param {string} file
  * @param {string} state
@@ -249,7 +365,8 @@ export function keepState(seen, file, state) {
   const had = seen.get(file);
   if (
     had === undefined ||
-    (had.startsWith('dir:') && !state.startsWith('dir:'))
+    (had === PRESENT && state !== PRESENT) ||
+    (had.startsWith('dir:') && !state.startsWith('dir:') && state !== PRESENT)
   ) {
     seen.set(file, state);
   }
@@ -261,11 +378,13 @@ export function keepState(seen, file, state) {
  * @template T
  * @param {Map<string, string>} seen
  * @param {() => T} fn
- * @param {{exact?: boolean}} [options] - `exact`: record a probe (an
- *   existence check, a stat, a real path) by the path probed, with its state,
- *   instead of by its folder; a listing and a content read are recorded as
- *   ever. A folder's time changes whenever any entry in it is added or
- *   renamed, so a record kept between runs stays valid longer this way.
+ * @param {{exact?: boolean}} [options] - `exact`: record a probe by the
+ *   path probed, with what the call returned, instead of by its folder: an
+ *   existence check whether the path is there, a real-path lookup the path
+ *   it resolves to, a stat the path's stamp. A listing and a content read
+ *   are recorded as ever. A folder's time changes whenever any entry in it is
+ *   added or renamed, and a file's whenever it is written, so a record kept
+ *   between runs stays valid longer this way.
  * @returns {T}
  */
 export function recordReads(seen, fn, {exact = false} = {}) {
