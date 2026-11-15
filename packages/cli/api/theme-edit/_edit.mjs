@@ -144,7 +144,7 @@ import {
   partCustomPropertyProblem,
   pseudoKeyProblem,
 } from '../theme/build/style-keys.mjs';
-import {colorProblem, hex, parseColor} from './_color.mjs';
+import {colorProblem, hex, parseColor, ratio} from './_color.mjs';
 import {
   PALETTE_DIALS,
   VIBRANCY_DEFAULT,
@@ -6919,9 +6919,20 @@ function unreachedParts(ctx, data, res, base) {
   /** @param {string} token */
   const changed = token =>
     modes.some(m => String(res[m]?.[token]) !== String(base[m]?.[token]));
-  const set = new Set(
-    data.settings.filter(s => s.on).flatMap(s => partsOf(ctx, s)),
-  );
+  /** A setting at rest on the part that covers its fill or its text color:
+   * a background or color property, or a color token it paints them with.
+   * A setting of another property or of a state leaves it on the list.
+   * @param {string} part @param {string[]} tokens */
+  const covered = (part, tokens) =>
+    data.settings.some(
+      x =>
+        x.on &&
+        !x.state &&
+        !x.when &&
+        partsOf(ctx, x).includes(part) &&
+        (/^(background(-color|-image)?|color)$/.test(x.thing) ||
+          tokens.includes(x.thing)),
+    );
   /** The color tokens a part paints a property with: never the shared
    * hover and pressed tints (--color-overlay-*), which lie over whatever
    * fill a part has and no setting moves, so they are no fill of its own.
@@ -6936,8 +6947,14 @@ function unreachedParts(ctx, data, res, base) {
       )
       .map(r => r.token);
   const unreached = Object.keys(ctx.C.MAP).filter(part => {
-    if (set.has(part)) return false;
     const reads = ctx.C.partReads(part, null);
+    if (
+      covered(
+        part,
+        painting(reads, x => /^background|^color$/.test(x)),
+      )
+    )
+      return false;
     const fill = painting(reads, x => /^background/.test(x));
     if (!fill.length) return false;
     const text = painting(reads, x => x === 'color');
@@ -6966,14 +6983,18 @@ function unreachedParts(ctx, data, res, base) {
 
 /**
  * The parts the theme's own changes should have reached and did not, most
- * flagged first, each with why and the one line that reaches it (its state
- * named): with the accent changed, a part or state that paints an inverted
- * surface (a toast, a tooltip), a disabled part drawn as the accent at
- * reduced opacity (a button), a selected state still on the base's fill (a
- * nav item), a status fill (an info banner); with the corners changed, a
- * pill still fully round; with the border width changed, a surface still
- * borderless. Each line is checked as set checks it; one set refuses names
- * `how` instead. None for a theme with no settings.
+ * flagged first, each with why and the line that reaches it, its steps
+ * joined with && (its state and variant named): with the accent changed, a
+ * disabled part drawn as the accent at reduced opacity (a button), a
+ * selected look still on the base's fill (a nav item), a status fill still
+ * the base's (an info banner); with the page surfaces changed, a part on the
+ * base's inverted surface (a toast); with the corners changed, a pill still
+ * fully round; with the border width changed, a surface still borderless.
+ * A setting that covers the aspect (the fill at rest or in that state, the
+ * corners, the border) takes the part off. Each step is checked as set
+ * checks it; one set refuses names `how` instead. Each line leaves the part
+ * readable: the text that sits on a fill changes with it. None for a theme
+ * with no settings.
  * @param {any} ctx
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
@@ -6992,18 +7013,26 @@ async function missedParts(ctx, slug, data, res, base) {
   const any = (/** @type {RegExp} */ re) =>
     tokens.some(t => re.test(t) && changed(t));
   const accent = any(/^--color-(accent|on-accent|text-accent)/);
+  const surfaces = any(/^--color-background-(body|surface)$/);
   const corners = any(/^--radius-(?!full$)/);
   const borders = any(/^--border-width/);
   const has = (/** @type {string} */ p) => ctx.project.target.has(p);
-  /** A setting on the part (and state) already. @param {string} p @param {string} [state] */
-  const set = (p, state) =>
+  /**
+   * A setting on the part that covers an aspect: one of the properties or
+   * tokens named, in the state named (at rest with none).
+   * @param {string} p @param {RegExp} things @param {string} [state]
+   */
+  const covers = (p, things, state) =>
     data.settings.some(
       x =>
         x.on &&
+        (x.state ?? '') === (state ?? '') &&
         partsOf(ctx, x).includes(p) &&
-        (state == null || x.state === state),
+        things.test(x.thing),
     );
-  /** @type {Array<{kind: number, part: string, state?: string, why: string, thing: string, value: string}>} */
+  const FILL = /^(background(-color|-image)?|--color-background-[\w-]+)$/;
+  /** @typedef {{thing: string, value: string, on?: string, when?: string, state?: string, mode?: string}} Step */
+  /** @type {Array<{kind: number, part: string, state?: string, why: string, steps: Step[], aspect: string}>} */
   const found = [];
   /** The fills of a part (never the shared hover and pressed tints). @param {string} p @param {(prop: string) => boolean} prop */
   const fills = (p, prop = x => /^background/.test(x)) =>
@@ -7013,105 +7042,209 @@ async function missedParts(ctx, slug, data, res, base) {
         !/^--color-overlay-/.test(r.token) &&
         r.props.some(prop),
     );
-  if (accent)
-    for (const p of Object.keys(C.MAP).filter(has)) {
-      const reads = fills(p);
-      const rest = reads.filter((/** @type {any} */ r) => r.when.includes(''));
-      const restToken = rest.find(
-        (/** @type {any} */ r) => !changed(r.token),
-      )?.token;
-      if (
-        !set(p) &&
-        restToken &&
-        !rest.some((/** @type {any} */ r) => changed(r.token))
-      ) {
-        if (/inverted|--color-text-primary$/.test(restToken))
-          found.push({
-            kind: 0,
-            part: p,
-            why: `still the base's inverted surface (${restToken})`,
+  // The status colors, by the word their tokens carry, and the dial that
+  // generates each with the text that reads on it.
+  const STATUS = /** @type {Record<string, [string, string]>} */ ({
+    info: ['info', '--color-info'],
+    success: ['success', '--color-success'],
+    warning: ['warning', '--color-warning'],
+    error: ['danger', '--color-error'],
+  });
+  for (const p of Object.keys(C.MAP).filter(has)) {
+    const reads = fills(p);
+    const rest = reads.filter((/** @type {any} */ r) => r.when.includes(''));
+    const restKept =
+      rest.length && !rest.some((/** @type {any} */ r) => changed(r.token));
+    // A part on the base's inverted surface that no longer stands out from
+    // the theme's page (under 3:1 against it in a mode): an inverted
+    // surface that still stands out is drawn so on purpose. The surface and
+    // the text on it change together, so the line is how's answer for it.
+    if (
+      surfaces &&
+      restKept &&
+      rest.some(
+        (/** @type {any} */ r) => r.token === '--color-background-inverted',
+      ) &&
+      !covers(p, FILL) &&
+      modes.some(m => {
+        const a = parseColor(String(res[m]?.['--color-background-inverted']));
+        const b = parseColor(String(res[m]?.['--color-background-body']));
+        return Boolean(a && b && ratio(a, b) < 3);
+      })
+    )
+      found.push({
+        kind: 0,
+        part: p,
+        why: "still the base's inverted surface (--color-background-inverted), which no longer stands out from the page",
+        aspect: 'background',
+        steps: [],
+      });
+    if (!accent) continue;
+    // A status fill still the base's: the status color generated at the
+    // theme's vibrancy (its dial), with the text that reads on it.
+    const status = restKept
+      ? /** @type {string | undefined} */ (
+          rest
+            .map(
+              (/** @type {any} */ r) =>
+                /-(info|success|warning|error)(-|$)/.exec(r.token)?.[1],
+            )
+            .find(Boolean)
+        )
+      : undefined;
+    if (
+      status &&
+      !covers(p, FILL) &&
+      !data.settings.some(
+        x => x.source === 'dial' && x.thing === STATUS[status][0],
+      )
+    )
+      found.push({
+        kind: 3,
+        part: p,
+        why: `still the base's ${status} color (${rest[0].token}): the ${STATUS[status][0]} color is not generated`,
+        aspect: 'background',
+        steps: [
+          {
+            thing: STATUS[status][0],
+            value: String(base.light?.[STATUS[status][1]] ?? '#1f2937'),
+          },
+        ],
+      });
+    // A disabled part drawn as the accent at reduced opacity: with the
+    // accent changed, a translucent block of the new accent. Only the
+    // variants drawn as the accent, with the text on them.
+    const name = ctx.project.target.get(p)?.component;
+    const disables = Boolean(
+      name && ctx.project.components[name]?.props?.isDisabled,
+    );
+    const dims = (C.MAP[p]?.own?.opacity?.values ?? []).some(
+      (/** @type {unknown} */ v) => Number(v) > 0 && Number(v) < 1,
+    );
+    const accentVariants = [
+      ...new Set(
+        reads
+          .filter((/** @type {any} */ r) => r.token === '--color-accent')
+          .flatMap((/** @type {any} */ r) => r.when)
+          .filter((/** @type {string} */ w) => !/:/.test(w))
+          .map(
+            (/** @type {string} */ w) => /(?:^|\s)variant=(\S+)/.exec(w)?.[1],
+          )
+          .filter(Boolean),
+      ),
+    ];
+    // (A part drawn as the accent in every variant, a checked indicator,
+    // keeps it: its fill says checked or not.)
+    if (
+      disables &&
+      dims &&
+      accentVariants.length &&
+      !covers(p, FILL, 'disabled')
+    ) {
+      const whens = accentVariants.map(v => `variant:${v}`);
+      found.push({
+        kind: 1,
+        part: p,
+        state: 'disabled',
+        why: `disabled, the ${accentVariants.join(', ')} variant is drawn as the accent at reduced opacity, a translucent block of the new accent`,
+        aspect: 'background',
+        steps: whens.flatMap(when => [
+          {
             thing: 'background-color',
-            value: 'var(--color-background-popover)',
-          });
-        else if (/-(info|success|warning|error)(-|$)/.test(restToken))
-          found.push({
-            kind: 3,
-            part: p,
-            why: `still the base's status color (${restToken})`,
-            thing: 'background-color',
-            value: 'var(--color-accent-muted)',
-          });
-      }
-      // A disabled part drawn as its fill at reduced opacity: with the
-      // accent changed, a translucent block of the new accent.
-      const name = ctx.project.target.get(p)?.component;
-      const disables = Boolean(
-        name && ctx.project.components[name]?.props?.isDisabled,
-      );
-      const dims = (C.MAP[p]?.own?.opacity?.values ?? []).some(
-        (/** @type {unknown} */ v) => Number(v) > 0 && Number(v) < 1,
+            value: 'var(--color-neutral)',
+            on: p,
+            when,
+            state: 'disabled',
+          },
+          {
+            thing: 'color',
+            value: 'var(--color-text-primary)',
+            on: p,
+            when,
+            state: 'disabled',
+          },
+        ]),
+      });
+    }
+    // A state the part draws as a look of its own (a selected item): one
+    // whose fill, by the part data, is not the fill the part draws without
+    // that state (the same variant and status, the state left out), still
+    // the base's. A state that keeps that fill (a readonly field on its
+    // surface, a checked switch's thumb) is drawn so on purpose: no line
+    // paints it.
+    const states = (ctx.project.target.get(p)?.states ?? []).filter(
+      (/** @type {string} */ st) => !COMMON_STATES.includes(st),
+    );
+    for (const st of states) {
+      const term = new RegExp(`(^|[\\s,])${st}=\\S+`);
+      /** The condition without the state. @param {string} w */
+      const without = w => w.replace(term, ' ').replace(/\s+/g, ' ').trim();
+      // A tint the state lays over any fill (an overlay token) follows
+      // the fill; only a fill of its own is kept from the base.
+      const inState = reads.filter(
+        (/** @type {any} */ r) =>
+          !/^--color-overlay-/.test(r.token) &&
+          r.when.some(
+            (/** @type {string} */ w) =>
+              term.test(w) &&
+              !/:/.test(w) &&
+              // The same fill without the state: no look of its own.
+              !r.when.includes(without(w)),
+          ),
       );
       if (
-        disables &&
-        dims &&
-        reads.some((/** @type {any} */ r) => /accent/.test(r.token)) &&
-        !set(p, 'disabled')
+        inState.length &&
+        !inState.some((/** @type {any} */ r) => changed(r.token)) &&
+        !covers(p, FILL, st)
       )
         found.push({
-          kind: 1,
+          kind: 2,
           part: p,
-          state: 'disabled',
-          why: 'disabled, it is drawn as the accent at reduced opacity, a translucent block of the new accent',
-          thing: 'background-color',
-          value: 'var(--color-neutral)',
+          state: st,
+          why: `${st}, it keeps the base's fill (${inState[0].token})`,
+          aspect: 'background',
+          steps: [
+            {
+              thing: 'background-color',
+              value: 'var(--color-accent-muted)',
+              on: p,
+              state: st,
+            },
+          ],
         });
-      // A state of the part that keeps the base's fill (a selected item).
-      const states = (ctx.project.target.get(p)?.states ?? []).filter(
-        (/** @type {string} */ st) => !COMMON_STATES.includes(st),
-      );
-      for (const st of states) {
-        // A tint the state lays over any fill (an overlay token) follows
-        // the fill; only a fill of its own is kept from the base.
-        const inState = reads.filter(
-          (/** @type {any} */ r) =>
-            !/^--color-overlay-/.test(r.token) &&
-            r.when.some(
-              (/** @type {string} */ w) =>
-                new RegExp(`(^|[\\s,])${st}=`).test(w) && !/:/.test(w),
-            ),
-        );
-        if (
-          inState.length &&
-          !inState.some((/** @type {any} */ r) => changed(r.token)) &&
-          !set(p, st)
-        )
-          found.push({
-            kind: 2,
-            part: p,
-            state: st,
-            why: `${st}, it keeps the base's fill (${inState[0].token})`,
-            thing: 'background-color',
-            value: 'var(--color-accent-muted)',
-          });
-      }
     }
+  }
   if (corners)
-    for (const p of pillParts(C).filter(x => has(x) && !set(x)))
+    for (const p of pillParts(C).filter(
+      x => has(x) && !covers(x, /^(border-radius|corners|--radius-[\w-]+)$/),
+    ))
       found.push({
         kind: 4,
         part: p,
         why: 'still a full pill: it reads --radius-full, which the corners leave as they are',
-        thing: 'border-radius',
-        value: 'var(--radius-element)',
+        aspect: 'corners',
+        steps: [
+          {thing: 'border-radius', value: 'var(--radius-element)', on: p},
+        ],
       });
   if (borders)
-    for (const p of borderlessSurfaces(C).filter(x => has(x) && !set(x)))
+    for (const p of borderlessSurfaces(C).filter(
+      x =>
+        has(x) &&
+        !covers(x, /^(border(-width|-style|-color)?|--border-[\w-]+)$/),
+    ))
       found.push({
         kind: 5,
         part: p,
         why: 'still borderless: the border width reaches no border it does not draw',
-        thing: 'border',
-        value: 'var(--border-width) solid var(--color-border)',
+        aspect: 'border',
+        steps: [
+          {
+            thing: 'border',
+            value: 'var(--border-width) solid var(--color-border)',
+            on: p,
+          },
+        ],
       });
   // One of each kind first, in the order the kinds are missed most (an
   // inverted surface, a disabled part, a selected state, a status fill,
@@ -7131,20 +7264,28 @@ async function missedParts(ctx, slug, data, res, base) {
   /** @type {Array<{part: string, state?: string, why: string, line: string}>} */
   const out = [];
   for (const x of ordered) {
-    const typed = `${P} set ${slug} ${x.thing} ${quoteCommandArgument(x.value)} --on ${x.part}${x.state ? ` --state ${x.state}` : ''}`;
-    const followed = await followChangeLine(
-      'set',
-      slug,
-      typed,
-      ctx.project.cwd,
-    );
+    /** @type {string[]} */
+    const lines = [];
+    let refused = false;
+    for (const st of x.steps) {
+      const typed = `${P} set ${slug} ${st.thing} ${quoteCommandArgument(st.value)}${st.on ? ` --on ${st.on}` : ''}${st.when ? ` --when ${st.when}` : ''}${st.state ? ` --state ${st.state}` : ''}${st.mode ? ` --mode ${st.mode}` : ''}`;
+      const followed = await followChangeLine(
+        'set',
+        slug,
+        typed,
+        ctx.project.cwd,
+      );
+      if (followed.why) refused = true;
+      else lines.push(followed.line);
+    }
     out.push({
       part: x.part,
       ...(x.state ? {state: x.state} : {}),
       why: x.why,
-      line: followed.why
-        ? `${P} how ${quoteCommandArgument(`${x.part}${x.state ? ` ${x.state}` : ''} ${x.thing === 'border' ? 'border' : x.thing === 'border-radius' ? 'corners' : 'background'}`)}`
-        : followed.line,
+      line:
+        refused || !x.steps.length
+          ? `${P} how ${quoteCommandArgument(`${x.part}${x.state ? ` ${x.state}` : ''} ${x.aspect}`)}`
+          : lines.join(' && '),
     });
   }
   return out;

@@ -50,20 +50,21 @@ describe('missed', () => {
       /** @type {string} */ [state] = [],
     ) =>
       list.findIndex(m => m.part === part && (m.state ?? '') === (state ?? ''));
-    expect(list[0].part).toBe('toast');
-    expect(list[0].line).toBe(
-      `${P} set t background-color 'var(--color-background-popover)' --on toast`,
+    // The toast's inverted surface still stands out from the page: drawn
+    // so on purpose, not missed.
+    expect(list.some(m => /inverted/.test(m.why))).toBe(false);
+    expect(list[0].part).toBe('button');
+    expect(list[0].line).toMatch(
+      new RegExp(
+        `^${P} set t background-color 'var\\(--color-neutral\\)' --on button --when variant:primary --state disabled && `,
+      ),
     );
-    expect(at('button', ['disabled'])).toBeLessThan(6);
-    expect(list[at('button', ['disabled'])].line).toMatch(
-      /--on button --state disabled$/,
-    );
-    expect(at('side-nav-item', ['selected'])).toBeLessThan(6);
-    expect(at('banner')).toBeLessThan(6);
-    // Six lines reach six kinds: the pills (corners) and a borderless
-    // surface (border width) are among them.
-    const kinds = list.slice(0, 6).map(m => m.why.split(':')[0].split(',')[0]);
-    expect(new Set(kinds).size).toBe(6);
+    expect(at('side-nav-item', ['selected'])).toBeLessThan(5);
+    expect(at('banner')).toBeLessThan(5);
+    // The first lines reach five kinds (disabled, selected, status, pills,
+    // borderless), never several of one.
+    const kinds = list.slice(0, 5).map(m => m.why.split(/[:,(]/)[0].trim());
+    expect(new Set(kinds).size).toBe(5);
   }, 240_000);
 
   it('a part whose only fill is the shared hover or pressed tint is never unreached', async () => {
@@ -73,13 +74,14 @@ describe('missed', () => {
   }, 240_000);
 
   it('a followed line takes its part off the list', async () => {
-    await themeEditSet(
-      't',
-      'background-color',
-      'var(--color-background-popover)',
-      {cwd, on: 'toast'},
-    );
-    expect((await missed()).map(m => m.part)).not.toContain('toast');
+    await themeEditSet('t', 'background-color', 'var(--color-accent-muted)', {
+      cwd,
+      on: 'side-nav-item',
+      state: 'selected',
+    });
+    expect(
+      (await missed()).map(m => `${m.part}:${m.state ?? ''}`),
+    ).not.toContain('side-nav-item:selected');
   }, 240_000);
 
   it('the text shows six with their lines and counts the rest', async () => {
@@ -93,7 +95,9 @@ describe('missed', () => {
       .filter(l => l.startsWith('  line: '));
     expect(items.length).toBeGreaterThan(0);
     expect(items.length).toBeLessThan(7);
-    expect(items.every(l => / --on /.test(l))).toBe(true);
+    expect(
+      items.every(l => / experimental theme editor (set|how) /.test(l)),
+    ).toBe(true);
     expect(text).toMatch(/\nunreached: +\d+ more parts keep the base's fill/);
   }, 240_000);
 });
