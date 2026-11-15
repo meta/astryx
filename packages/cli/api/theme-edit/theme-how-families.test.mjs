@@ -8,9 +8,8 @@
  * @position api/theme-edit — tests
  */
 
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import * as path from 'node:path';
-import {spawnSync} from 'node:child_process';
 import {themeEditHow, themeEditNew} from './theme-edit.mjs';
 import {doc} from '../../clients/cli/commands/experimental-theme-editor-how.doc.mjs';
 import {
@@ -21,12 +20,17 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {runCli} from '../../test-utils/run-cli.mjs';
+
+// The renders are stood in for: these tests are about settings, files and
+// messages, not the rendered pages.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    await importOriginal(),
+  ),
+);
 
 const LABEL = 'Asks how understands: ';
-const BIN = path.resolve(
-  import.meta.dirname,
-  '../../clients/cli/bin/astryx.mjs',
-);
 
 /** Each listed ask, by its kind, read back from the help's examples. */
 const asks = (doc.examples ?? [])
@@ -83,11 +87,9 @@ describe('a question how cannot answer', () => {
       /See .*experimental theme editor how --help for the asks it understands\./,
     );
     expect(data.run[0]).toMatch(/ experimental theme editor how --help$/);
-    const help = spawnSync(
-      process.execPath,
-      [BIN, 'experimental', 'theme', 'editor', 'how', '--help'],
-      // From this checkout, so this CLI's own help prints.
-      {cwd: path.resolve(import.meta.dirname, '../..'), encoding: 'utf8'},
+    const help = await runCli(
+      ['experimental', 'theme', 'editor', 'how', '--help'],
+      path.resolve(import.meta.dirname, '../..'),
     );
     expect(help.status).toBe(0);
     for (const [kind, ask] of asks) {

@@ -32,6 +32,7 @@ import {
   entries,
   QUERIES,
   hasModuleHooks,
+  readKept,
 } from '../test-utils/packed-gather-cache-fixture.mjs';
 
 usePackedCli();
@@ -50,8 +51,10 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     expect(plain).toContain(path.join(tmp, CACHE_NAME));
     expect(plain).not.toContain("Plug'n'Play");
     // Every kind of entry the folder holds is named, the docs not-found
-    // hint's name summaries (kept-tree.mjs) included.
+    // hint's name summaries (kept-tree.mjs) and the CLI's own docs tree
+    // (the docs adapter) included.
     expect(plain).toContain("the docs not-found hint's name summaries");
+    expect(plain).toContain("the CLI's own docs tree");
     // The bound on the folder, and on jiti's folder beside it.
     expect(plain).toContain('at most 64 MB');
     expect(plain).toContain(path.join(tmp, 'astryx', 'jiti'));
@@ -141,7 +144,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
       for (const name of files) {
         const text = fs.readFileSync(path.join(dir, name), 'utf8');
         expect(text, name).not.toContain(secret);
-        for (const [, state] of JSON.parse(text).env ?? []) {
+        for (const [, state] of readKept(path.join(dir, name)).env ?? []) {
           states += 1;
           expect(state === null || /^[0-9a-f]{32}$/.test(state), name).toBe(
             true,

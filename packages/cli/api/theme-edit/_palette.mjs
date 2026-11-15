@@ -542,6 +542,33 @@ const isGray = seed => hexToOklch(seed).C < GRAY_CHROMA;
 /** Whether a seed (or no seed) has no color to saturate. @param {string | null} seed */
 export const isGraySeed = seed => !seed || isGray(seed);
 
+/**
+ * Whether a color dial's seed comes out different at two vibrancies: the
+ * ramp the generator grows from it, light and dark, compared shade by
+ * shade. A seed with no saturation to change (a pure gray) gives the same
+ * ramp at every vibrancy. A gray-ish seed is grown as the editor grows it
+ * (a neutral), so a warm or cool gray counts by what it shows.
+ * @param {string} dial
+ * @param {string | null} seed
+ * @param {number} from
+ * @param {number} to
+ */
+export function vibrancyMoves(dial, seed, from, to) {
+  if (!seed || from === to) return false;
+  const kind = dial === 'neutral' || isGray(seed) ? 'neutral' : 'chromatic';
+  const ramp = (/** @type {number} */ vibrancy) =>
+    JSON.stringify(
+      /** @type {any} */ (
+        generate({
+          vibrancy,
+          ...(kind === 'neutral' ? {neutralProfile: 'custom'} : {}),
+          families: [{id: 'seed', seed, kind}],
+        }).palette.seed
+      ),
+    );
+  return ramp(from) !== ramp(to);
+}
+
 /** @param {unknown} a @param {unknown} b */
 function sameColor(a, b) {
   try {
