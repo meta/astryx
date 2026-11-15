@@ -8238,59 +8238,79 @@ export async function outputsDrift(ctx, slug) {
 }
 
 /**
- * The side Core's auto media surface takes inside each part whose fill the
- * theme sets (a toast with a light background): Core measures the painted
- * fill in the app, and a static render takes its fallback from the
- * inverted token instead, so the pictures would show the other side. Per
- * mode the theme draws: the side whose text stands out most on the fill
- * (dark on a light fill), as the contrast model reads it. Only parts with
- * an opaque fill of their own set at rest.
+ * The side Core's auto media surface takes inside each part that holds one
+ * (a toast): in the app Core measures the fill painted behind it and takes
+ * the side whose text reads there, and a static render takes a fallback
+ * from the inverted token instead. Here the side comes from the fill the
+ * part draws, by the rule the contrast checks use (the text that stands
+ * out most on it: dark on a light fill, light on a dark one), for each mode
+ * the theme draws and each type the part is drawn in (`type=error`, '' for
+ * none): the fill a setting gives it there, else the token it reads.
  * @param {Ctx} ctx
  * @param {string} slug
  * @param {ThemeData} data
- * @returns {Promise<Record<string, Record<string, 'light' | 'dark'>>>}
+ * @returns {Promise<Record<string, Record<string, Record<string, 'light' | 'dark'>>>>} part -> condition -> mode -> side
  */
 export async function mediaSurfaceSides(ctx, slug, data) {
-  /** @type {Record<string, Record<string, 'light' | 'dark'>>} */
+  /** @type {Record<string, Record<string, Record<string, 'light' | 'dark'>>>} */
   const out = {};
   const parts = Object.keys(ctx.C.MAP).filter(t => ctx.C.MAP[t]?.media);
   if (!parts.length) return out;
+  const res = await resolvedTokens(ctx, slug).catch(() => null);
+  if (!res) return out;
   const fills = data.settings.filter(
     x =>
       x.source === 'property' &&
       /^background(-color)?$/.test(kebab(x.thing)) &&
       !x.state &&
-      !x.when &&
       x.on,
   );
-  if (!fills.length) return out;
-  const res = await resolvedTokens(ctx, slug).catch(() => null);
-  if (!res) return out;
-  for (const t of parts)
-    for (const m of modesOf(data)) {
-      const x = [...fills]
-        .reverse()
-        .find(y => (!y.mode || y.mode === m) && partsOf(ctx, y).includes(t));
-      if (!x) continue;
-      const raw = String(x.value).trim();
-      const split = /^light-dark\((.*),\s*([^,]*)\)$/.exec(raw);
-      const side = split ? split[m === 'dark' ? 2 : 1].trim() : raw;
-      const ref = /^var\((--[\w-]+)\)$/.exec(side);
-      const v = ref ? res[/** @type {'light' | 'dark'} */ (m)][ref[1]] : side;
-      const c = parseColor(String(v ?? ''));
-      if (!c || alphaOf(String(v)) < 1) continue;
-      (out[t] ??= {})[m] =
-        ratio([255, 255, 255], c) >= ratio([0, 0, 0], c) ? 'dark' : 'light';
-    }
+  /** @param {string} raw @param {string} m */
+  const colorOf = (raw, m) => {
+    const split = /^light-dark\((.*),\s*([^,]*)\)$/.exec(raw.trim());
+    const side = split ? split[m === 'dark' ? 2 : 1].trim() : raw.trim();
+    const ref = /^var\((--[\w-]+)\)$/.exec(side);
+    return ref ? res[/** @type {'light' | 'dark'} */ (m)][ref[1]] : side;
+  };
+  for (const t of parts) {
+    const reads = ctx.C.partReads(t, 'background') ?? [];
+    const types = /** @type {string[]} */ ([
+      ...(ctx.C.MAP[t]?.attrs?.type ?? []),
+    ]);
+    for (const type of ['', ...types])
+      for (const m of modesOf(data)) {
+        const cond = type ? `type=${type}` : '';
+        const set = [...fills]
+          .reverse()
+          .find(
+            y =>
+              (!y.mode || y.mode === m) &&
+              (!y.when || y.when === `type:${type}`) &&
+              partsOf(ctx, y).includes(t),
+          );
+        const read =
+          reads.find(r => cond && r.when.includes(cond)) ??
+          reads.find(r => r.when.includes(''));
+        const v = set
+          ? colorOf(String(set.value), m)
+          : read
+            ? res[/** @type {'light' | 'dark'} */ (m)][read.token]
+            : null;
+        const c = parseColor(String(v ?? ''));
+        if (!c || alphaOf(String(v)) < 1) continue;
+        ((out[t] ??= {})[cond] ??= {})[m] =
+          ratio([255, 255, 255], c) >= ratio([0, 0, 0], c) ? 'dark' : 'light';
+      }
+  }
   return out;
 }
 
 /**
  * Each auto media surface inside a part in a rendered page set to the side
- * `sides` gives it for the mode it is drawn in (the page's mode, or the
- * light or dark copy it sits in).
+ * `sides` gives it for the type the part is drawn in and the mode it is
+ * drawn in (the page's mode, or the light or dark copy it sits in).
  * @param {string} html
- * @param {Record<string, Record<string, 'light' | 'dark'>>} sides
+ * @param {Record<string, Record<string, Record<string, 'light' | 'dark'>>>} sides
  * @param {string} mode the page's mode: light, dark or system
  * @returns {string}
  */
@@ -8298,22 +8318,27 @@ export function settleMediaSides(html, sides, mode) {
   const names = Object.keys(sides);
   if (!names.length) return html;
   const re = new RegExp(
-    `class="(cs-light|cs-dark)"|class="astryx-(${names.join('|')})[ "]|data-astryx-media="(dark|light)"`,
+    `class="(cs-light|cs-dark)"|(<[a-z]+\\b[^>]*\\bclass="astryx-(?:${names.join('|')})[ "][^>]*>)|data-astryx-media="(dark|light)"`,
     'g',
   );
   let at = mode === 'system' ? 'light' : mode;
-  /** @type {string | null} */
+  /** @type {Record<string, Record<string, 'light' | 'dark'>> | null} */
   let part = null;
-  return html.replace(re, (all, copy, name) => {
+  /** @type {string} */
+  let cond = '';
+  return html.replace(re, (all, copy, tag) => {
     if (copy) {
       at = copy === 'cs-dark' ? 'dark' : 'light';
       return all;
     }
-    if (name) {
-      part = name;
+    if (tag) {
+      const name = /class="astryx-([\w-]+)/.exec(tag)?.[1] ?? '';
+      part = sides[name] ?? null;
+      const type = /\bdata-type="([\w-]+)"/.exec(tag)?.[1];
+      cond = type ? `type=${type}` : '';
       return all;
     }
-    const side = part ? sides[part]?.[at] : undefined;
+    const side = part ? (part[cond] ?? part[''])?.[at] : undefined;
     part = null;
     return side ? `data-astryx-media="${side}"` : all;
   });
