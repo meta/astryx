@@ -308,7 +308,7 @@ describe('a part variable in the page tokens', () => {
 const coreSkipsUndefinedLocal = await import('@astryxdesign/core/theme')
   .then(core => {
     try {
-      core.defineTheme({name: 'probe', localTokens: undefined});
+      core.defineTheme({name: 'probe', localTokens: {'--b': undefined}});
       return true;
     } catch {
       return false;
@@ -318,11 +318,15 @@ const coreSkipsUndefinedLocal = await import('@astryxdesign/core/theme')
 
 describe.skipIf(!coreSkipsUndefinedLocal)('local tokens left undefined', () => {
   it(
-    'builds as not set',
+    'refuses localTokens: undefined by name, and builds a local token left undefined as not set',
     async () => {
       await themeEditNew('n11', {cwd});
       own('n11', 'localTokens: undefined');
-      expect(compileOwn('n11').status).toBe(0);
+      const root = compileOwn('n11');
+      expect(root.status).toBe(1);
+      expect(root.env.error).toContain(
+        'localTokens is undefined: omit the field or pass an object',
+      );
       own('n11', "localTokens: {'--brand': 'red', '--brand-2': undefined}");
       expect(compileOwn('n11').status).toBe(0);
       expect(
