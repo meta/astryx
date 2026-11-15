@@ -530,11 +530,11 @@ they are separately named.
   floor. In the Node legs, a file with no recorded time counts as the ninetieth
   percentile of the recorded times, and which files run never depends on the
   times. A missing recorded time never fails a pull-request check. A scheduled
-  job on `main` keeps them fresh: when fewer than nine in ten of the Node project's
-  test files have a recorded time, it regenerates the record from the Node legs
-  of `main`'s latest successful full unit run and opens one durations-only pull
-  request on a fixed branch, or updates the open one. It never pushes to
-  `main`. A dispatch may name `sha`, a commit in `main`'s history that has the
+  job on `main` keeps them fresh: when fewer than nine in ten of the Node
+  project's test files have a recorded time, it regenerates the record from the
+  Node legs of `main`'s latest successful full unit run and opens one
+  durations-only pull request on a fixed branch, or updates the open one. It
+  never pushes to `main`. A dispatch may name `sha`, a commit in `main`'s history that has the
   size records the build lane keeps, and every lane checks that commit out;
   without it the run validates `main`'s tip. A person's `sha` run waits for no
   other validation and replaces nothing; like every Main run, it waits for room
