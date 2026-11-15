@@ -3762,6 +3762,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-chat-dictation-voice-input",
+      "path": "examples/use-chat-dictation/voice-input",
+      "aliases": []
+    },
+    {
       "name": "example-use-chat-paste-as-token-long-paste",
       "path": "examples/use-chat-paste-as-token/long-paste",
       "aliases": []
@@ -3897,6 +3902,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-outline-from-dom-article",
+      "path": "examples/use-outline-from-dom/article",
+      "aliases": []
+    },
+    {
       "name": "example-use-outline-from-markdown-docs-article",
       "path": "examples/use-outline-from-markdown/docs-article",
       "aliases": []
@@ -3957,8 +3967,18 @@
       "aliases": []
     },
     {
+      "name": "example-use-speech-recognition-transcript",
+      "path": "examples/use-speech-recognition/transcript",
+      "aliases": []
+    },
+    {
       "name": "example-use-streaming-text-streaming-response",
       "path": "examples/use-streaming-text/streaming-response",
+      "aliases": []
+    },
+    {
+      "name": "example-use-syntax-theme-keyword-color",
+      "path": "examples/use-syntax-theme/keyword-color",
       "aliases": []
     },
     {
@@ -3972,8 +3992,18 @@
       "aliases": []
     },
     {
+      "name": "example-use-table-columns-virtualization-wide-table",
+      "path": "examples/use-table-columns-virtualization/wide-table",
+      "aliases": []
+    },
+    {
       "name": "example-use-table-grouped-rows-collapsible-groups",
       "path": "examples/use-table-grouped-rows/collapsible-groups",
+      "aliases": []
+    },
+    {
+      "name": "example-use-table-infinite-scroll-load-more-products",
+      "path": "examples/use-table-infinite-scroll/load-more-products",
       "aliases": []
     },
     {
@@ -4024,6 +4054,11 @@
     {
       "name": "example-use-table-tree-data-tree-table",
       "path": "examples/use-table-tree-data/tree-table",
+      "aliases": []
+    },
+    {
+      "name": "example-use-theme-name-active-theme",
+      "path": "examples/use-theme-name/active-theme",
       "aliases": []
     },
     {
@@ -4097,6 +4132,11 @@
       "aliases": []
     },
     {
+      "name": "hook-create-swipe",
+      "path": "hooks/create-swipe",
+      "aliases": []
+    },
+    {
       "name": "hook-use-animated-layout",
       "path": "hooks/use-animated-layout",
       "aliases": []
@@ -4129,6 +4169,11 @@
     {
       "name": "hook-use-calendar-navigation",
       "path": "hooks/use-calendar-navigation",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-chat-dictation",
+      "path": "hooks/use-chat-dictation",
       "aliases": []
     },
     {
@@ -4307,6 +4352,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-outline-from-dom",
+      "path": "hooks/use-outline-from-dom",
+      "aliases": []
+    },
+    {
       "name": "hook-use-outline-from-markdown",
       "path": "hooks/use-outline-from-markdown",
       "aliases": []
@@ -4367,8 +4417,18 @@
       "aliases": []
     },
     {
+      "name": "hook-use-speech-recognition",
+      "path": "hooks/use-speech-recognition",
+      "aliases": []
+    },
+    {
       "name": "hook-use-streaming-text",
       "path": "hooks/use-streaming-text",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-syntax-theme",
+      "path": "hooks/use-syntax-theme",
       "aliases": []
     },
     {
@@ -4387,6 +4447,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-table-columns-virtualization",
+      "path": "hooks/use-table-columns-virtualization",
+      "aliases": []
+    },
+    {
       "name": "hook-use-table-filter-state",
       "path": "hooks/use-table-filter-state",
       "aliases": []
@@ -4399,6 +4464,11 @@
     {
       "name": "hook-use-table-grouped-rows",
       "path": "hooks/use-table-grouped-rows",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-infinite-scroll",
+      "path": "hooks/use-table-infinite-scroll",
       "aliases": []
     },
     {
@@ -4464,6 +4534,11 @@
     {
       "name": "hook-use-theme",
       "path": "hooks/use-theme",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-theme-name",
+      "path": "hooks/use-theme-name",
       "aliases": []
     },
     {

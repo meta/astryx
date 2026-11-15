@@ -12,6 +12,7 @@
  * same transaction. Side-effect-free outside of {@link applyWrites}.
  */
 
+import {stillHolds} from '../../foundation/release/folder-lock.mjs';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {randomUUID} from 'node:crypto';
@@ -376,6 +377,10 @@ export function applyWrites(plans) {
       staged.push({...plan, temporary, original, mode});
     }
 
+    // Under a folder lock (the theme editor's), a run that lost the lock
+    // while it was stopped publishes nothing. Outside a lock this does
+    // nothing.
+    stillHolds();
     for (const plan of staged) {
       if (plan.original == null) {
         publishNewFile(plan.temporary, plan.path);

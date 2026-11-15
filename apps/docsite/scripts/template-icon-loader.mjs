@@ -83,7 +83,7 @@ const iconSetsByKey = new Map();
  * @param {string} projectDir the docsite folder, where the sets are installed
  * @param {string[]} list
  */
-function iconSetsFor(projectDir, list) {
+export function previewIconSets(projectDir, list) {
   const key = `${projectDir}\0${list.join(',')}`;
   let found = iconSetsByKey.get(key);
   if (!found) {
@@ -121,7 +121,7 @@ export async function rewriteTemplatePreview(source, file, options) {
   options.onDoc?.(template.docPath);
   const declared = template.icons;
   if (declared == null || typeof declared !== 'object') return source;
-  const iconSets = await iconSetsFor(options.projectDir, options.list);
+  const iconSets = await previewIconSets(options.projectDir, options.list);
   return mapTemplateIcons(source, iconSets, declared).source;
 }
 

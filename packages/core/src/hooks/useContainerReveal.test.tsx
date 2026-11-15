@@ -21,10 +21,41 @@
 import {describe, it, expect, vi, afterEach} from 'vitest';
 import {renderHook, render} from '@testing-library/react';
 import {useContainerReveal} from './useContainerReveal';
+import {TOUCH_QUERY} from '../utils/touchQueries';
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
+
+/** The media of every injected rule on `className` that sets `property`. */
+function mediaDeclaring(
+  className: string | undefined,
+  property: string,
+): string[] {
+  const classes = (className ?? '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(name => `.${name}`);
+  const medias: string[] = [];
+  const walk = (rules: CSSRuleList, media: string | null) => {
+    for (const rule of Array.from(rules)) {
+      if (rule instanceof CSSMediaRule) {
+        walk(rule.cssRules, rule.media.mediaText);
+      } else if (
+        media !== null &&
+        rule instanceof CSSStyleRule &&
+        classes.some(cls => rule.selectorText.startsWith(cls)) &&
+        rule.style.getPropertyValue(property) !== ''
+      ) {
+        medias.push(media);
+      }
+    }
+  };
+  for (const sheet of Array.from(document.styleSheets)) {
+    walk(sheet.cssRules, null);
+  }
+  return medias;
+}
 
 describe('useContainerReveal', () => {
   it('returns spreadable getter props for container and content', () => {
@@ -129,6 +160,34 @@ describe('useContainerReveal', () => {
     expect(props.className).not.toBe(
       result.current.getContainerProps({hoverDelay: 120}).className,
     );
+  });
+
+  it('keeps content revealed for a coarse primary pointer only, so a touchscreen laptop used with a mouse still reveals on hover', () => {
+    const {result} = renderHook(() => useContainerReveal());
+    const containers = {
+      auto: result.current.getContainerProps().className,
+      inactive: result.current.getContainerProps({forceState: 'inactive'})
+        .className,
+      active: result.current.getContainerProps({forceState: 'active'})
+        .className,
+    };
+    const touchProperties = [
+      '--_reveal-opacity',
+      '--_reveal-position',
+      '--_reveal-delay',
+      '--_reveal-delay-reduced',
+      '--_fade-delay',
+    ];
+    for (const [state, className] of Object.entries(containers)) {
+      for (const property of touchProperties) {
+        expect(
+          mediaDeclaring(className, property).filter(media =>
+            media.includes('pointer'),
+          ),
+          `${state} ${property}`,
+        ).toEqual([TOUCH_QUERY]);
+      }
+    }
   });
 
   it('ignores container options while disabled', () => {

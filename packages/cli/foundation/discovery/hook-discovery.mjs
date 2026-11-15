@@ -9,6 +9,7 @@ import * as path from 'node:path';
 import {listDir, listDirEntries, pathExists} from '../fs/listing-cache.mjs';
 import {existsCaseExact} from '../fs/paths.mjs';
 import {levenshteinDistance} from '../text/string-utils.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 const SKIP_DIRS = new Set(['utils', '__tests__', 'node_modules']);
 
@@ -74,9 +75,13 @@ function hookNameFromFile(fileName) {
  * Categories from HookDoc.category: focus, layout, animation, interaction, data, media, streaming
  * Hooks without a category go in 'Other'.
  * @param {string} coreDir
+ * @param {(name: string) => boolean} [keep] the hooks to read; the others are
+ *   left out, and their docs are not read
+ * @param {Set<string>} [tops] the top folders of `src` outside `hooks` to
+ *   read, when only these can hold a hook `keep` accepts
  * @returns {Record<string, string[]>}
  */
-export function discoverHooks(coreDir) {
+export function discoverHooks(coreDir, keep = () => true, tops) {
   const srcDir = path.join(coreDir, 'src');
   const hooksDir = path.join(srcDir, 'hooks');
 
@@ -90,6 +95,7 @@ export function discoverHooks(coreDir) {
       if (!entry.isFile()) continue;
       if (!entry.name.endsWith('.doc.mjs')) continue;
       const hookName = hookNameFromFile(entry.name);
+      if (!keep(hookName)) continue;
       const docPath = path.join(hooksDir, entry.name);
       const {category} = readHookMeta(docPath);
       hookCategories.set(hookName, category || 'Other');
@@ -102,8 +108,9 @@ export function discoverHooks(coreDir) {
     const topEntries = listDirEntries(srcDir);
     for (const entry of topEntries) {
       if (!entry.isDirectory() || SKIP_DIRS.has(entry.name) || entry.name === 'hooks') continue;
+      if (tops && !tops.has(entry.name)) continue;
       const dirPath = path.join(srcDir, entry.name);
-      scanDirForHookDocs(dirPath, hookCategories);
+      scanDirForHookDocs(dirPath, hookCategories, keep);
     }
   }
 
@@ -124,7 +131,7 @@ export function discoverHooks(coreDir) {
   const sortedEntries = Array.from(groups.entries()).sort((a, b) => {
     if (a[0] === 'Other') return 1;
     if (b[0] === 'Other') return -1;
-    return a[0].localeCompare(b[0]);
+    return compareText(a[0], b[0]);
   });
 
   /** @type {Record<string, string[]>} */
@@ -140,17 +147,22 @@ export function discoverHooks(coreDir) {
  * Recursively scan a directory for use*.doc.mjs files.
  * @param {string} dirPath
  * @param {Map<string, string>} hookCategories
+ * @param {(name: string) => boolean} keep
  */
-function scanDirForHookDocs(dirPath, hookCategories) {
+function scanDirForHookDocs(dirPath, hookCategories, keep) {
   if (!pathExists(dirPath)) return;
   const entries = listDirEntries(dirPath);
   for (const entry of entries) {
     if (entry.isDirectory() && !SKIP_DIRS.has(entry.name)) {
-      scanDirForHookDocs(path.join(dirPath, entry.name), hookCategories);
+      scanDirForHookDocs(path.join(dirPath, entry.name), hookCategories, keep);
     } else if (entry.isFile() && HOOK_DOC_FILE_RE.test(entry.name)) {
       const hookName = hookNameFromFile(entry.name);
       const docPath = path.join(dirPath, entry.name);
-      if (!hookCategories.has(hookName) && !isBesideOwnHook(docPath, hookName)) {
+      if (
+        keep(hookName) &&
+        !hookCategories.has(hookName) &&
+        !isBesideOwnHook(docPath, hookName)
+      ) {
         const {category} = readHookMeta(docPath);
         hookCategories.set(hookName, category || 'Other');
       }
@@ -258,9 +270,11 @@ function searchDirForHookDoc(dirPath, candidates) {
 /**
  * Get all discovered hook names as a flat array (for fuzzy matching).
  * @param {string} coreDir
+ * @param {(name: string) => boolean} [keep] as for {@link discoverHooks}
+ * @param {Set<string>} [tops] as for {@link discoverHooks}
  * @returns {string[]}
  */
-export function getAllHookNames(coreDir) {
-  const hooks = discoverHooks(coreDir);
+export function getAllHookNames(coreDir, keep, tops) {
+  const hooks = discoverHooks(coreDir, keep, tops);
   return Object.values(hooks).flat();
 }

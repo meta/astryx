@@ -30,7 +30,8 @@ import {
   resolveBuiltPath,
 } from './_adapter.mjs';
 import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
-import {parse as parseModule} from '@babel/parser';
+import {babelParse as parseModule} from '../../foundation/runtime/lazy-dependencies.mjs';
+import {compareText} from '../../foundation/text/compare-text.mjs';
 
 /** Source files, read for imports and JSX. */
 const SOURCE_EXT = new Set(['.tsx', '.jsx', '.ts', '.js', '.mjs', '.cjs']);
@@ -71,6 +72,7 @@ function hasJsx(text) {
         sourceType: 'unambiguous',
         plugins,
         errorRecovery: true,
+        attachComment: false,
       });
       break;
     } catch {
@@ -254,14 +256,24 @@ let lineCache = {text: null, starts: [0]};
  * @param {string} text
  */
 function withoutComments(text, ext = '', parsed = commentRanges(text, ext)) {
-  if (parsed) {
-    const out = text.split('');
-    for (const [start, end] of parsed) {
-      for (let j = start; j < end; j++) if (out[j] !== '\n') out[j] = ' ';
-    }
-    return out.join('');
+  return parsed ? blankRanges(text, parsed) : scanOutComments(text);
+}
+
+/**
+ * Text with each range blanked, every character but a line break made a
+ * space, so every offset and line stays where it was.
+ * @param {string} text
+ * @param {Array<[number, number]>} ranges in order, none overlapping
+ */
+function blankRanges(text, ranges) {
+  let out = '';
+  let at = 0;
+  for (const [start, end] of ranges) {
+    out +=
+      text.slice(at, start) + text.slice(start, end).replace(/[^\n]/g, ' ');
+    at = end;
   }
-  return scanOutComments(text);
+  return out + text.slice(at);
 }
 
 /**
@@ -287,6 +299,8 @@ function parseSource(text, ext) {
         sourceType: 'unambiguous',
         plugins,
         errorRecovery: true,
+        // The checks read the file's list of comments, never a node's.
+        attachComment: false,
       });
     } catch {
       // try the next set of syntax plugins
@@ -312,14 +326,23 @@ function commentRanges(text, ext, ast = parseSource(text, ext)) {
 }
 
 /**
+ * Whether a source can hold a `require()` or `import()` call: the word
+ * `require`, `import` followed by a parenthesis or a comment, or a Unicode
+ * escape, which can spell `require`. A source with none of these has no such
+ * call, so its syntax tree is not walked for one.
+ */
+const MAY_CALL = /\brequire\b|\bimport\s*(?:\(|\/[*/]|<!--|-->)|\\u/;
+
+/**
  * The imports a parsed source file makes, read from its syntax tree so that
  * an import written in a string, a template literal or JSX text (a code
  * sample on a page) is not one: import and export-from declarations, and
  * `require()` and `import()` of a string.
  * @param {any} ast
+ * @param {string} source the file's text
  * @returns {{spec: string, names: string[], at: number}[]}
  */
-function astImports(ast) {
+function astImports(ast, source) {
   /** @type {{spec: string, names: string[], at: number}[]} */
   const found = [];
   for (const node of ast.program.body) {
@@ -354,7 +377,7 @@ function astImports(ast) {
     }
   }
   /** @type {any[]} */
-  const stack = [ast.program];
+  const stack = MAY_CALL.test(source) ? [ast.program] : [];
   while (stack.length > 0) {
     const node = stack.pop();
     if (!node || typeof node.type !== 'string') continue;
@@ -384,7 +407,8 @@ function astImports(ast) {
  * @param {string} text
  */
 function scanOutComments(text) {
-  const out = text.split('');
+  /** @type {Array<[number, number]>} */
+  const comments = [];
   /** @type {string | null} the quote of the string being read */
   let quote = null;
   for (let i = 0; i < text.length; i++) {
@@ -405,10 +429,10 @@ function scanOutComments(text) {
       next === '/'
         ? (text.indexOf('\n', i) + 1 || text.length + 1) - 1
         : (text.indexOf('*/', i + 2) + 1 || text.length - 1) + 1;
-    for (let j = i; j < end; j++) if (out[j] !== '\n') out[j] = ' ';
+    comments.push([i, end]);
     i = end - 1;
   }
-  return out.join('');
+  return blankRanges(text, comments);
 }
 
 /**
@@ -634,7 +658,9 @@ export function scanBuilt(target, packages, {fileLimit} = {}) {
     const astryxNames = new Set();
     const iconNames = new Set();
     let fileImports = 0;
-    for (const {spec, names, at} of ast ? astImports(ast) : importsOf(text)) {
+    for (const {spec, names, at} of ast
+      ? astImports(ast, raw)
+      : importsOf(text)) {
       if (isAstryxSpecifier(spec, packages)) {
         fileImports++;
         imported.add(
@@ -691,7 +717,7 @@ export function scanBuilt(target, packages, {fileLimit} = {}) {
     }
   }
   scan.packages = [...imported].sort();
-  scan.findings.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
+  scan.findings.sort((a, b) => compareText(a.file, b.file) || a.line - b.line);
   return scan;
 }
 

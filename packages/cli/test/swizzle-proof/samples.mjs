@@ -538,6 +538,13 @@ export const samples = {
     }
     return React.createElement(Sample);
   },
+  core__Swipe: ({React, mod, Core}) =>
+    React.createElement(Core.Item, {
+      label: 'Inbox',
+      swipe: mod.createSwipe({
+        trailing: [{id: 'archive', label: 'Archive', onActivate() {}}],
+      }),
+    }),
 };
 
 /**

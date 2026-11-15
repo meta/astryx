@@ -10,9 +10,20 @@
  */
 
 import {DIRECT, GROUPS, HOW} from './_tables.mjs';
+import {splitTop} from './_css.mjs';
+import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
 /** Only these token types may differ between light and dark. */
 export const MODAL = new Set(['color', 'shadow']);
+
+/**
+ * Whether a token is a color by its name, as Core's color groups and the
+ * token table type it: `--color-*`, `--syntax-*` and `--focus-outline-color`.
+ * Settings are checked by it where no installed Core is read.
+ * @param {string} name
+ */
+export const isColorToken = name =>
+  /^--color-|^--syntax-|^--focus-outline-color$/.test(name);
 
 /** Tokens a component may read only in some states: never refused globally. */
 /**
@@ -60,11 +71,10 @@ export function makeCompiler(project, parts) {
   put(groupVars(core.easeVars), 'easing');
   for (const k of Object.keys(core.tokenDefaults ?? {})) {
     if (TYPE[k]) continue;
-    if (/^--color-|^--syntax-/.test(k)) TYPE[k] = 'color';
+    if (isColorToken(k)) TYPE[k] = 'color';
     else if (/^--font-family/.test(k)) TYPE[k] = 'font';
     else if (/^--font-weight|^--text-.*-weight$/.test(k)) TYPE[k] = 'number';
     else if (/^--shadow/.test(k)) TYPE[k] = 'shadow';
-    else if (/^--focus-outline-color/.test(k)) TYPE[k] = 'color';
     else if (
       /^--(radius|spacing|size|text-.*-size|border-width|focus-outline-(width|offset))/.test(
         k,
@@ -76,6 +86,8 @@ export function makeCompiler(project, parts) {
   }
   /** @param {string} tok */
   const typeOf = tok => TYPE[tok] ?? 'other';
+  /** Whether Core defines the token. @param {string} tok */
+  const isToken = tok => Object.hasOwn(TYPE, tok);
 
   /** @param {string} p */
   const groupOfProp = p =>
@@ -101,13 +113,21 @@ export function makeCompiler(project, parts) {
     if (cond === 'always') return '';
     const attrs = MAP[target]?.attrs ?? {};
     const [attrPart, ...css] = cond.split(' ');
+    const t = TARGET.get(target);
     const kept = (attrPart.includes('=') ? attrPart.split(',') : []).filter(
       kv => {
         const [k] = kv.split('=');
+        // Only the part's own visual props are read down to what a person
+        // acts on (a size or an elevation the render happened to use is not
+        // a condition). Anything else stays: a runtime state of the part, a
+        // prop of another target on the same element (a selectable card's
+        // selection on its card), and the place another component puts the
+        // part in (the part data's aria context conditions); none is the
+        // part at rest.
+        if (!t?.props.includes(k) || t.states.includes(k)) return true;
         return (
-          k === 'selected' ||
-          (['variant', 'status', 'tone', 'color'].includes(k) &&
-            (attrs[k]?.length ?? 0) > 1)
+          ['variant', 'status', 'tone', 'color'].includes(k) &&
+          (attrs[k]?.length ?? 0) > 1
         );
       },
     );
@@ -230,9 +250,6 @@ export function makeCompiler(project, parts) {
       .slice(0, 4)
       .join(', ');
 
-  /** @param {string} v */
-  const quote = v => (/[\s"#(]/.test(v) ? `"${v.replace(/"/g, '\\"')}"` : v);
-
   /**
    * Whether a token set on a part can take effect there: the part, or a part
    * inside it, must read it. A part with no record is checked through the
@@ -270,8 +287,24 @@ export function makeCompiler(project, parts) {
       void fed;
       return null;
     }
-    const reads = g ? partReads(target, g) : [];
-    const v = quote(value);
+    // Only a token of the same kind takes the value: a weight never goes to
+    // a line height, a line height never to a weight.
+    // Font tokens share a type across kinds (a weight and a leading are
+    // both numbers), so the kind is read from the name.
+    const kindOf = (/** @type {string} */ t) =>
+      /family/.test(t)
+        ? 'family'
+        : /weight/.test(t)
+          ? 'weight'
+          : /leading|line-height/.test(t)
+            ? 'leading'
+            : /tracking|letter-spacing/.test(t)
+              ? 'tracking'
+              : typeOf(t);
+    const reads = g
+      ? partReads(target, g).filter(r => kindOf(r.token) === kindOf(token))
+      : [];
+    const v = quoteCommandArgument(value);
     /** @type {string[]} */
     const run = [];
     if (reads.length)
@@ -346,7 +379,7 @@ export function makeCompiler(project, parts) {
       : [];
     return {
       message: `No component reads ${token}, so setting it changes nothing.${near.length ? ` Tokens components do read for ${g}: ${near.join(', ')}.` : ''}`,
-      run: [`${HOW} ${quote(token)}`],
+      run: [`${HOW} ${quoteCommandArgument(token)}`],
       also: [],
     };
   }
@@ -360,7 +393,16 @@ export function makeCompiler(project, parts) {
   function variantValues(target) {
     const comp = TARGET.get(target)?.component;
     const info = comp ? project.components[comp] : undefined;
+    // The component named like the part (Heading for heading) owns its
+    // values before any other component whose docs name the same class.
+    const pascal = target.replace(/(^|-)([a-z0-9])/g, (_, __, ch) =>
+      ch.toUpperCase(),
+    );
+    const own = project.components?.[pascal]?.targets?.find(
+      (/** @type {any} */ x) => x.className === `astryx-${target}`,
+    );
     const t =
+      own ??
       info?.targets.find(x => x.className === `astryx-${target}`) ??
       info?.targets[0];
     const fromDocs = t?.values ?? {};
@@ -369,7 +411,53 @@ export function makeCompiler(project, parts) {
     const out = {};
     for (const p of TARGET.get(target)?.props ?? [])
       out[p] = fromDocs[p]?.length ? fromDocs[p] : (seen[p] ?? []);
+    // A state Core marks with more than one value (a checkbox's checked and
+    // indeterminate looks) is a condition --when names by value.
+    for (const st of TARGET.get(target)?.states ?? [])
+      if ((seen[st] ?? []).some(v => v !== st)) out[st] = seen[st];
     return out;
+  }
+
+  /**
+   * The color stops of a background made of gradients, or null when any
+   * layer is an image or any stop has no color the editor can name.
+   * @param {string} v
+   * @returns {string[] | null}
+   */
+  function gradientStops(v) {
+    /** The parts between commas outside parentheses. @param {string} x */
+    const top = x =>
+      splitTop(x, ',')
+        .map(part => part.trim())
+        .filter(Boolean);
+    /** @type {string[]} */
+    const stops = [];
+    for (const layer of top(v)) {
+      const m =
+        /^(?:repeating-)?(?:linear|radial|conic)-gradient\((.*)\)$/s.exec(
+          layer,
+        );
+      if (!m) {
+        // A layer that is one color (the shorthand's last) is a stop too.
+        if (/url\(|gradient\(/.test(layer)) return null;
+        stops.push(layer);
+        continue;
+      }
+      for (const arg of top(m[1])) {
+        // The direction, shape or position comes first, with no color.
+        if (
+          /^(to\b|at\b|from\b|-?[\d.]+(deg|turn|rad|grad)\b|circle\b|ellipse\b|closest|farthest)/.test(
+            arg,
+          )
+        )
+          continue;
+        // A stop is its color and up to two positions after it.
+        const color = arg.replace(/(\s+-?[\d.]+(%|px|rem|em)?)+$/, '').trim();
+        if (!color || /^-?[\d.]+(%|px|rem|em)?$/.test(color)) continue;
+        stops.push(color);
+      }
+    }
+    return stops.length ? stops : null;
   }
 
   /**
@@ -383,37 +471,42 @@ export function makeCompiler(project, parts) {
    * @param {{parseColor: (v: unknown) => [number, number, number] | null, ratio: (a: number[], b: number[]) => number, alphaOf: (v: unknown) => number, compositeOver: (over: [number, number, number], alpha: number, under: [number, number, number]) => [number, number, number], page: (mode: string) => string | null | undefined}} helpers
    *   `page` is the page color in a mode: a see-through background is drawn
    *   over it, and see-through text over that background, before measuring.
+   * @param {TextPair[]} [extra] more pairs to measure (a part's variants)
    */
   function contrast(
     value,
     baseValue,
     modes,
     {parseColor, ratio, alphaOf, compositeOver, page},
+    extra = [],
   ) {
     /**
-     * The opaque colors the eye sees for a pair, or null with no fixed color.
+     * The opaque colors the eye sees for a pair, or null with no fixed color:
+     * a see-through background is drawn over what is beneath it (the region
+     * the part sits in, else the page).
      * @param {unknown} fg @param {unknown} bg @param {string} m
+     * @param {unknown} [beneath]
      */
-    const drawn = (fg, bg, m) => {
+    const drawn = (fg, bg, m, beneath = page(m)) => {
       /** @type {[number, number, number]} */
       const ground =
-        parseColor(page(m)) ?? (m === 'dark' ? [0, 0, 0] : [255, 255, 255]);
+        parseColor(beneath) ??
+        parseColor(page(m)) ??
+        (m === 'dark' ? [0, 0, 0] : [255, 255, 255]);
       const bgAlpha = alphaOf(bg);
       const back = parseColor(bg);
       const under =
-        bgAlpha === 0
-          ? ground
-          : back && compositeOver(back, bgAlpha, ground);
+        bgAlpha === 0 ? ground : back && compositeOver(back, bgAlpha, ground);
       const top = parseColor(fg);
       if (!under || !top) return null;
       return [compositeOver(top, alphaOf(fg), under), under];
     };
-    /** @type {Array<{part: string, mode: string, ratio: number, sample: string, fg: string, bgPart: string | null, bg: string}>} */
+    /** @type {Array<{part: string, mode: string, ratio: number, sample: string, fg: string, bgPart: string | null, bg: string, over: string | null}>} */
     const out = [];
     const seen = new Set();
     /** @type {Set<string>} */
     const unchecked = new Set();
-    for (const p of parts.pairs) {
+    for (const p of [...parts.pairs, ...extra]) {
       if (
         p.fg.target !== p.bg.target &&
         p.bg.target &&
@@ -422,9 +515,45 @@ export function makeCompiler(project, parts) {
         continue;
       for (const m of modes) {
         const fg = value(p, 'fg', m);
-        const bg = value(p, 'bg', m);
-        if (/gradient|url\(/.test(String(bg))) continue;
-        const pair = drawn(fg, bg, m);
+        const whole = value(p, 'bg', m);
+        // The region a part sits in shows through its see-through background.
+        const region = p.over ? {...p, bg: p.over} : null;
+        const beneath = region ? value(region, 'bg', m) : page(m);
+        const baseBeneath = region ? baseValue(region, 'bg', m) : page(m);
+        // Over a region, only a see-through background shows it: an opaque
+        // one is measured as the pair itself already is.
+        if (
+          region &&
+          alphaOf(whole) >= 1 &&
+          !/gradient|url\(/.test(String(whole))
+        )
+          continue;
+        // A gradient is measured at each of its color stops, the worst one
+        // counting; an image, or a stop with no fixed color, is not checked.
+        const stops = /gradient|url\(/.test(String(whole))
+          ? gradientStops(String(whole))
+          : [whole];
+        if (!stops) {
+          if (whole !== baseValue(p, 'bg', m)) unchecked.add(String(whole));
+          continue;
+        }
+        const measured = stops.map(stop => ({
+          stop,
+          pair: drawn(fg, stop, m, beneath),
+        }));
+        if (stops.length > 1 && measured.some(x => !x.pair)) {
+          if (whole !== baseValue(p, 'bg', m)) unchecked.add(String(whole));
+          continue;
+        }
+        const worst = measured.reduce((a, b) =>
+          a.pair &&
+          b.pair &&
+          ratio(b.pair[0], b.pair[1]) < ratio(a.pair[0], a.pair[1])
+            ? b
+            : a,
+        );
+        const bg = worst.stop;
+        const pair = worst.pair;
         if (!pair) {
           for (const [v, side] of /** @type {const} */ ([
             [fg, 'fg'],
@@ -441,9 +570,14 @@ export function makeCompiler(project, parts) {
         }
         const r = ratio(pair[0], pair[1]);
         if (r >= 4.5) continue;
-        const was = drawn(baseValue(p, 'fg', m), baseValue(p, 'bg', m), m);
+        const was = drawn(
+          baseValue(p, 'fg', m),
+          baseValue(p, 'bg', m),
+          m,
+          baseBeneath,
+        );
         if (was && ratio(was[0], was[1]) <= r + 0.05) continue;
-        const key = `${p.text}|${fg}|${bg}|${m}`;
+        const key = `${p.text}|${fg}|${bg}|${beneath}|${m}`;
         if (seen.has(key)) continue;
         seen.add(key);
         out.push({
@@ -451,9 +585,25 @@ export function makeCompiler(project, parts) {
           mode: m,
           ratio: Number(r.toFixed(2)),
           sample: p.sample,
-          fg: p.fg.tokens[0] ?? String(fg),
+          // A side the theme changed is named by the value it set, not the
+          // token the part reads without it.
+          fg:
+            fg !== baseValue(p, 'fg', m)
+              ? String(fg)
+              : (p.fg.tokens[0] ?? String(fg)),
           bgPart: p.bg.target,
-          bg: p.bg.tokens[0] ?? String(bg),
+          // What shows through a see-through background, when it is the
+          // region the part sits in.
+          over:
+            region && alphaOf(bg) < 1
+              ? `${p.over?.target}'s ${beneath !== baseBeneath ? String(beneath) : (p.over?.tokens[0] ?? String(beneath))}`
+              : null,
+          bg:
+            stops.length > 1
+              ? `${bg}, a stop of its gradient`
+              : bg !== baseValue(p, 'bg', m)
+                ? String(bg)
+                : (p.bg.tokens[0] ?? String(bg)),
         });
       }
     }
@@ -498,9 +648,35 @@ export function makeCompiler(project, parts) {
     return false;
   }
 
+  /** @type {Map<string, string[]>} */
+  const propsCache = new Map();
+  /**
+   * The CSS properties anything in the catalog reads a token in.
+   * @param {string} tok
+   */
+  const propsReading = tok => {
+    let r = propsCache.get(tok);
+    if (!r) {
+      /** @type {Set<string>} */
+      const out = new Set();
+      for (const t of Object.values(MAP)) {
+        for (const [prop, v] of Object.entries(t.own ?? {}))
+          if (tok in v.tokens) out.add(prop);
+        for (const [k, v] of Object.entries(t.inside ?? {}))
+          if (k === tok)
+            for (const p of /** @type {string[]} */ (v)) out.add(p);
+      }
+      r = [...out];
+      propsCache.set(tok, r);
+    }
+    return r;
+  };
+
   return {
     MAP,
     typeOf,
+    isToken,
+    propsReading,
     feeds,
     fmtFeeds,
     showsCorners,

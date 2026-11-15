@@ -85,9 +85,6 @@ describe('usePopover public return type', () => {
     const hasKeepOpenProps: 'keepOpenProps' extends keyof UsePopoverReturn
       ? true
       : false = false;
-    const hasDismissalGuard: 'wasJustDismissed' extends keyof UsePopoverReturn
-      ? true
-      : false = false;
     type PublicToggleParameters = Parameters<UsePopoverReturn['toggle']>;
     const publicToggleTakesNoOptions: PublicToggleParameters extends []
       ? true
@@ -99,7 +96,6 @@ describe('usePopover public return type', () => {
       ? true
       : false = false;
     expect(hasKeepOpenProps).toBe(false);
-    expect(hasDismissalGuard).toBe(false);
     expect(publicToggleTakesNoOptions).toBe(true);
     expect(hasInternalFocusTarget).toBe(false);
   });
@@ -1225,6 +1221,47 @@ describe('Popover', () => {
       fireEvent.keyDown(document, {key: 'Escape'});
       expect(trigger).toHaveAttribute('aria-expanded', 'false');
       expect(trigger).toHaveFocus();
+    });
+
+    it('keeps the trigger as the return target when show() runs again with focus inside', async () => {
+      // A controlled popover's sync can call show() again after initial focus
+      // moved inside. That call comes before the open state turns on, so
+      // before the focus trap activates. It must keep the trigger as the
+      // opener, so a close returns focus to it.
+      const popoverRef: {current: UsePopoverReturn | null} = {current: null};
+      function Harness() {
+        const popover = usePopover({hasAutoFocus: true});
+        popoverRef.current = popover;
+        return (
+          <>
+            <button type="button" ref={popover.triggerRef}>
+              Open hook
+            </button>
+            {popover.render(<button type="button">Inside hook</button>)}
+          </>
+        );
+      }
+      render(<Harness />);
+      const trigger = screen.getByRole('button', {name: 'Open hook'});
+      // Mount the content once, so it is in the document as the layer shows.
+      act(() => popoverRef.current?.show());
+      act(() => popoverRef.current?.hide());
+      const inside = screen.getByRole('button', {
+        name: 'Inside hook',
+        hidden: true,
+      });
+      trigger.focus();
+
+      act(() => {
+        popoverRef.current?.show();
+        // Initial focus moves inside as the layer shows.
+        inside.focus();
+        popoverRef.current?.show();
+      });
+      expect(inside).toHaveFocus();
+      act(() => popoverRef.current?.hide());
+
+      await waitFor(() => expect(trigger).toHaveFocus());
     });
 
     it('leaves focus on a control inside that took it before the first frame', () => {

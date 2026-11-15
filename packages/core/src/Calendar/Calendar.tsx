@@ -45,6 +45,7 @@ import {
   plainDateToISO,
   plainDateToDate,
   plainDateAddDays,
+  plainDateDayOfWeek,
   plainDateDiffDays,
   plainDateIsAfter,
   plainDateIsBefore,
@@ -271,6 +272,15 @@ function formatDateLabel(
   locale: string,
 ): string {
   return formatCalendarDate(calendar, date, DATE_FORMAT_WITH_WEEKDAY, locale);
+}
+
+/**
+ * ISO 8601 numbers a week by its Thursday. For any week start, the row's
+ * Thursday is in the ISO week that holds most of the row's days.
+ */
+function rowThursday(week: ReadonlyArray<CalendarDay>): PlainDate {
+  const first = week[0].date;
+  return plainDateAddDays(first, (4 - plainDateDayOfWeek(first) + 7) % 7);
 }
 
 // =============================================================================
@@ -1208,7 +1218,7 @@ function MonthGrid({
 
         {weeks.map(week => {
           const weekDate = week.find(d => !d.isOutside)?.date || week[0].date;
-          const weekNum = plainDateGetWeekNumber(weekDate);
+          const weekNum = plainDateGetWeekNumber(rowThursday(week));
 
           return (
             <div

@@ -210,6 +210,19 @@ const flyoutStyles = stylex.create({
     borderRadius: 'var(--_dropdown-menu-radius)',
     backgroundColor: colorVars['--color-background-popover'],
     boxShadow: shadowVars['--shadow-low'],
+    // Forced colors removes box-shadow, which is this surface's only edge.
+    borderWidth: {
+      default: null,
+      '@media (forced-colors: active)': '1px',
+    },
+    borderStyle: {
+      default: null,
+      '@media (forced-colors: active)': 'solid',
+    },
+    borderColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
     opacity: 1,
     transitionProperty: 'opacity',
     transitionDuration: durationVars['--duration-fast'],

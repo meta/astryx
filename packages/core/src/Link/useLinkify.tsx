@@ -73,14 +73,16 @@ export interface UseLinkifyOptions {
 // URL pattern: matches http(s) URLs
 const URL_PATTERN: LinkifyPattern = {
   pattern: /https?:\/\/[^\s<>'")\]},]+/g,
-  href: (match) => match[0],
+  href: match => match[0],
   isExternal: true,
 };
 
-// Email pattern: matches email addresses
+// A match starts only where a local part starts. The scan then reads each run
+// of local-part characters once.
 const EMAIL_PATTERN: LinkifyPattern = {
-  pattern: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
-  href: (match) => `mailto:${match[0]}`,
+  pattern:
+    /(?<![a-zA-Z0-9._%+-])[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
+  href: match => `mailto:${match[0]}`,
 };
 
 const BUILTIN_PATTERNS: LinkifyPattern[] = [URL_PATTERN, EMAIL_PATTERN];
@@ -197,11 +199,7 @@ export function useLinkify(
 
       // The link
       nodes.push(
-        <Link
-          key={`linkify-${i}`}
-          href={m.href}
-          isExternalLink={m.isExternal}
-        >
+        <Link key={`linkify-${i}`} href={m.href} isExternalLink={m.isExternal}>
           {m.label}
         </Link>,
       );

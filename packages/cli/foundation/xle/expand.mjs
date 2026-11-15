@@ -18,6 +18,7 @@
 
 import {PAYLOAD_PROPS} from './validate.mjs';
 import {mergeImports, renderImport, prepareSpliceModule} from './splice.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 const INDENT = '  ';
 /** The most copies one `*N` repeat expands to. */
@@ -736,7 +737,7 @@ export function expand(doc, registry, options = {}) {
   if (emitter.states.length > 0) emitter.addNamedImport('react', 'useState');
 
   const importLines = [];
-  const sortedImports = [...emitter.imports.entries()].sort(([a], [b]) => a.localeCompare(b));
+  const sortedImports = [...emitter.imports.entries()].sort(([a], [b]) => compareText(a, b));
   for (const [importPath, entry] of sortedImports) {
     importLines.push(renderImport(importPath, entry));
   }

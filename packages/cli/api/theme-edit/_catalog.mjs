@@ -20,262 +20,29 @@
  */
 
 /** @param {string} name @param {Record<string, unknown>} [props] @param {...unknown} children @returns {Tree} */
-const h = (name, props = {}, ...children) => ({
+export const h = (name, props = {}, ...children) => ({
   __element: name,
   props,
   ...(children.length ? {children} : {}),
 });
-
-/** Components without playground defaults, set up by hand. @type {Array<[string, Array<[string, Tree]>]>} */
-export const EXTRA = [
-  [
-    'Heading',
-    [1, 2, 3, 4].map(level => [
-      `level ${level}`,
-      h('Heading', {level}, `Heading ${level}`),
-    ]),
-  ],
-  [
-    'TextInput',
-    [
-      ['', h('TextInput', {label: 'Name', value: 'Jordan'})],
-      [
-        'disabled',
-        h('TextInput', {label: 'Disabled', value: '-', isDisabled: true}),
-      ],
-    ],
-  ],
-  [
-    'ButtonGroup',
-    [
-      [
-        '',
-        h(
-          'ButtonGroup',
-          {label: 'Actions'},
-          h('Button', {label: 'Copy', variant: 'secondary'}),
-          h('Button', {label: 'Paste', variant: 'secondary'}),
-          h('Button', {label: 'Delete', variant: 'secondary'}),
-        ),
-      ],
-    ],
-  ],
-  ['TextArea', [['', h('TextArea', {label: 'Notes', value: 'Some notes'})]]],
-  ['NumberInput', [['', h('NumberInput', {label: 'Count', value: 3})]]],
-  [
-    'CheckboxInput',
-    [
-      ['on', h('CheckboxInput', {label: 'Checked', value: true})],
-      ['off', h('CheckboxInput', {label: 'Unchecked', value: false})],
-    ],
-  ],
-  [
-    'Switch',
-    [
-      ['on', h('Switch', {label: 'On', value: true})],
-      ['off', h('Switch', {label: 'Off', value: false})],
-    ],
-  ],
-  [
-    'ProgressBar',
-    ['accent', 'success', 'warning', 'error'].map(v => [
-      v,
-      h('ProgressBar', {label: v, variant: v, value: 60}),
-    ]),
-  ],
-  [
-    'TabList',
-    [
-      [
-        '',
-        h(
-          'TabList',
-          {value: 'a'},
-          h('Tab', {value: 'a', label: 'Selected'}),
-          h('Tab', {value: 'b', label: 'Other'}),
-        ),
-      ],
-    ],
-  ],
-  [
-    'SegmentedControl',
-    [
-      [
-        '',
-        h(
-          'SegmentedControl',
-          {label: 'Range', value: 'a'},
-          h('SegmentedControlItem', {value: 'a', label: 'Day'}),
-          h('SegmentedControlItem', {value: 'b', label: 'Week'}),
-        ),
-      ],
-    ],
-  ],
-  [
-    'TopNav',
-    [
-      [
-        '',
-        h(
-          'TopNav',
-          {label: 'Top', heading: 'App'},
-          h('TopNavItem', {label: 'Selected', href: '#', isSelected: true}),
-          h('TopNavItem', {label: 'Other', href: '#'}),
-        ),
-      ],
-    ],
-  ],
-  [
-    'SideNav',
-    [
-      [
-        '',
-        h(
-          'SideNav',
-          {label: 'Side'},
-          h('SideNavItem', {label: 'Selected', href: '#', isSelected: true}),
-          h('SideNavItem', {label: 'Other', href: '#'}),
-        ),
-      ],
-    ],
-  ],
-  [
-    'StatusDot',
-    ['success', 'warning', 'error', 'accent', 'neutral'].map(v => [
-      v,
-      h('StatusDot', {variant: v, label: v}),
-    ]),
-  ],
-];
-
-/** Overlays rendered open, so their surfaces, borders and shadows show. */
-export const OPEN_OVERLAYS =
-  /** @type {Array<[string, Array<[string, Tree]>]>} */ ([
-    [
-      'Dialog',
-      [
-        [
-          'open',
-          {
-            __element: 'Dialog',
-            props: {isOpen: true, isInline: true, width: 360},
-            children: [
-              {
-                __element: 'VStack',
-                props: {gap: 2},
-                children: [
-                  {
-                    __element: 'Heading',
-                    props: {level: 3},
-                    children: ['Dialog title'],
-                  },
-                  {
-                    __element: 'Text',
-                    props: {type: 'body'},
-                    children: ['Are you sure you want to proceed?'],
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      ],
-    ],
-    [
-      'AlertDialog',
-      [
-        [
-          'open',
-          {
-            __element: 'AlertDialog',
-            props: {
-              isOpen: true,
-              isInline: true,
-              title: 'Delete item?',
-              description: 'This cannot be undone.',
-              actionLabel: 'Delete',
-            },
-          },
-        ],
-      ],
-    ],
-    [
-      'Popover',
-      [
-        [
-          'open',
-          {
-            __element: 'Popover',
-            props: {
-              isOpen: true,
-              label: 'Details',
-              content: {
-                __element: 'Text',
-                props: {type: 'body'},
-                children: ['Popover content'],
-              },
-            },
-            children: [
-              {
-                __element: 'Button',
-                props: {label: 'Anchor', variant: 'secondary'},
-              },
-            ],
-          },
-        ],
-      ],
-    ],
-    [
-      'Tooltip',
-      [
-        [
-          'open',
-          {
-            __element: 'Tooltip',
-            props: {isOpen: true, content: 'Tooltip text'},
-            children: [
-              {
-                __element: 'Button',
-                props: {label: 'Hover me', variant: 'secondary'},
-              },
-            ],
-          },
-        ],
-      ],
-    ],
-    [
-      'HoverCard',
-      [
-        [
-          'open',
-          {
-            __element: 'HoverCard',
-            props: {
-              isOpen: true,
-              content: {
-                __element: 'Text',
-                props: {type: 'body'},
-                children: ['More details'],
-              },
-            },
-            children: [
-              {
-                __element: 'Link',
-                props: {href: '#'},
-                children: ['Hover for details'],
-              },
-            ],
-          },
-        ],
-      ],
-    ],
-  ]);
 
 const ROWS = [
   {id: 1, task: 'Review Q4 roadmap', owner: 'Alex', status: 'In progress'},
   {id: 2, task: 'Ship onboarding flow', owner: 'Sam', status: 'Done'},
   {id: 3, task: 'Fix login timeout', owner: 'Riley', status: 'Blocked'},
 ];
+
+/**
+ * The Core components the in-app preview's top bar draws (its title and
+ * its light/dark/system switch). The route imports these, and the contrast
+ * check measures each one's text over the header, as the app shows it.
+ */
+export const TOP_BAR_COMPONENTS = Object.freeze([
+  'TopNav',
+  'TopNavHeading',
+  'SegmentedControl',
+  'SegmentedControlItem',
+]);
 
 /** The sample app page every preview shows. */
 export const SAMPLE_PAGE = h(
@@ -396,27 +163,6 @@ export const SAMPLE_PAGE = h(
   ),
 );
 
-/** Components left off the contact sheet: they cover the page, or only lay out others. */
-export const SHEET_SKIP = new Set([
-  'Lightbox',
-  'CommandPalette',
-  'Drawer',
-  'BottomSheet',
-  'Overlay',
-  'Toast',
-  'Tooltip',
-  'HoverCard',
-  'Popover',
-  'Dialog',
-  'AlertDialog',
-  'AspectRatio',
-  'Center',
-  'Layout',
-  'ScrollableArea',
-  'Grid',
-  'Stack',
-]);
-
 /** Components first on the contact sheet, in this order. */
 export const SHEET_ORDER = [
   'Heading',
@@ -457,6 +203,16 @@ export function elementNames(v, out = new Set()) {
 }
 
 /**
+ * Where an element of a page comes from: a module specifier, bound to the
+ * export named like the element, or a module and the export it is (a
+ * template page is its file's `default`).
+ * @typedef {string | {from: string, export: string}} Binding
+ */
+
+/** The module a binding imports. @param {Binding} b */
+export const bindingFrom = b => (typeof b === 'string' ? b : b.from);
+
+/**
  * The page module source for a list of items. Each item renders on its own,
  * so one component that throws leaves the rest of the page. With a theme,
  * each item renders inside `<Theme>`; a theme with both modes follows the
@@ -464,7 +220,9 @@ export function elementNames(v, out = new Set()) {
  * flips it, since the file runs no script.
  * @param {object} spec
  * @param {CatalogItem[]} spec.items
- * @param {Record<string, string>} spec.imports component name -> module specifier
+ * @param {Record<string, Binding>} spec.imports element name -> the module
+ *   it comes from (bound to the export of the same name), or the module and
+ *   the export it is
  * @param {{module: string, css: string[], mode: 'system' | 'light' | 'dark'} | null} spec.theme
  *   module and css are import specifiers relative to the page
  * @param {'catalog' | 'sheet' | 'page'} spec.layout
@@ -472,11 +230,12 @@ export function elementNames(v, out = new Set()) {
  * @returns {string}
  */
 export function pageSource({items, imports, theme, layout, title = ''}) {
-  /** @type {Map<string, string[]>} */
+  /** @type {Map<string, Array<[string, string]>>} element and export, per module */
   const byModule = new Map();
-  for (const [name, spec] of Object.entries(imports)) {
+  for (const [name, b] of Object.entries(imports)) {
+    const spec = bindingFrom(b);
     const list = byModule.get(spec) ?? [];
-    list.push(name);
+    list.push([name, typeof b === 'string' ? name : b.export]);
     byModule.set(spec, list);
   }
   const lines = [
@@ -493,8 +252,8 @@ export function pageSource({items, imports, theme, layout, title = ''}) {
   let i = 0;
   for (const [spec, names] of byModule) {
     lines.push(`import * as M${i} from ${JSON.stringify(spec)};`);
-    for (const n of names)
-      entries.push(`${JSON.stringify(n)}: M${i}[${JSON.stringify(n)}]`);
+    for (const [n, exp] of names)
+      entries.push(`${JSON.stringify(n)}: M${i}[${JSON.stringify(exp)}]`);
     i++;
   }
   lines.push(`const C = {${entries.join(', ')}};`);
@@ -503,10 +262,13 @@ export function pageSource({items, imports, theme, layout, title = ''}) {
     'const HANDLERS = ["onChange", "onClick", "onDismiss", "onOpenChange", "onSelect", "onValueChange"];',
   );
   lines.push(
+    'const isEl = v => Boolean(v && typeof v === "object" && !Array.isArray(v) && v.__element);',
+  );
+  lines.push(
     'function el(v) { if (Array.isArray(v)) return v.map(el); if (v && typeof v === "object" && v.__element) { const T = C[v.__element]; if (!T) return null; return React.createElement(T, fix(v.props ?? {}), ...[].concat(v.children ?? []).map(el)); } return v; }',
   );
   lines.push(
-    'function fix(p) { const o = {}; for (const [k, v] of Object.entries(p)) o[k] = v && typeof v === "object" && !Array.isArray(v) && v.__element ? el(v) : v; for (const k of HANDLERS) if (!(k in o)) o[k] = noop; return o; }',
+    'function fix(p) { const o = {}; for (const [k, v] of Object.entries(p)) o[k] = isEl(v) || (Array.isArray(v) && v.some(isEl)) ? el(v) : v; for (const k of HANDLERS) if (!(k in o)) o[k] = noop; return o; }',
   );
   lines.push(`const ITEMS = ${JSON.stringify(items)};`);
   lines.push(
@@ -516,7 +278,14 @@ export function pageSource({items, imports, theme, layout, title = ''}) {
   );
   lines.push(`const MODE = ${JSON.stringify(theme?.mode ?? 'light')};`);
   lines.push(
-    'function html(tree) { try { const node = el(tree); return renderToStaticMarkup(theme ? React.createElement(Theme, {theme, mode: MODE}, node) : node); } catch { return null; } }',
+    'function html(tree, mode = MODE) { try { const node = el(tree); return renderToStaticMarkup(theme ? React.createElement(Theme, {theme, mode}, node) : node); } catch { return null; } }',
+  );
+  // A theme with both modes: each part is rendered in light and in dark, as
+  // the app renders it in each (a part that picks its look from the mode as
+  // it renders, such as a Toast's text on its inverted surface, differs);
+  // a part whose two renders are the same is written once.
+  lines.push(
+    'function modes(tree) { if (!theme || MODE !== "system") { const one = html(tree); return one == null ? null : {one}; } const light = html(tree, "light"); const dark = html(tree, "dark"); if (light == null && dark == null) return null; return light === dark ? {one: light} : {light: light ?? "", dark: dark ?? ""}; }',
   );
   lines.push(`const LAYOUT = ${JSON.stringify(layout)};`);
   lines.push(`const TITLE = ${JSON.stringify(title)};`);
@@ -529,14 +298,17 @@ export default function Page() {
       return markup == null ? null : h('section', {key: i, 'data-cat': it.name, dangerouslySetInnerHTML: {__html: markup}});
     }));
   }
-  const done = ITEMS.map(it => ({...it, markup: html(it.tree)})).filter(it => it.markup != null);
+  const done = ITEMS.map(it => ({...it, markup: modes(it.tree)})).filter(it => it.markup != null);
+  const part = (m, key) => m.one != null
+    ? h('div', {key, dangerouslySetInnerHTML: {__html: m.one}})
+    : h(React.Fragment, {key}, h('div', {className: 'cs-light', dangerouslySetInnerHTML: {__html: m.light}}), h('div', {className: 'cs-dark', dangerouslySetInnerHTML: {__html: m.dark}}));
   const bar = MODE === 'system'
     ? h('div', {className: 'cs-bar'}, h('strong', null, TITLE),
         ['auto', 'light', 'dark'].map(m => h('label', {key: m}, h('input', {type: 'radio', name: 'cs-mode', id: 'cs-' + m, defaultChecked: m === 'auto'}), ' ' + m)))
     : h('div', {className: 'cs-bar'}, h('strong', null, TITLE), h('span', null, MODE + ' only'));
   let body;
   if (LAYOUT === 'page') {
-    body = done.map((it, i) => h('div', {key: i, dangerouslySetInnerHTML: {__html: it.markup}}));
+    body = done.map((it, i) => part(it.markup, i));
   } else {
     const groups = [];
     for (const it of done) {
@@ -552,7 +324,7 @@ export default function Page() {
         h('div', {className: 'cs-name'}, c.name),
         h('div', {className: 'cs-row'}, c.list.map((x, j) => h('div', {key: j, className: 'cs-item'},
           x.label ? h('div', {className: 'cs-label'}, x.label) : null,
-          h('div', {dangerouslySetInnerHTML: {__html: x.markup}})))))))));
+          part(x.markup)))))))));
   }
   const page = h('div', {className: 'cs-page', style: {background: 'var(--color-background-body)', color: 'var(--color-text-primary)', minHeight: '100vh'}}, bar, body);
   return h('main', null, h('style', {dangerouslySetInnerHTML: {__html: SHEET_CSS}}), theme ? h(Theme, {theme, mode: MODE}, page) : page);
@@ -566,6 +338,11 @@ export const SHEET_CSS = [
   '.cs-bar{position:sticky;top:0;z-index:100;display:flex;gap:14px;align-items:center;padding:8px 14px;font:12px ui-monospace,monospace;background:Canvas;color:CanvasText;border-bottom:1px solid #8884}',
   'body:has(#cs-light:checked),body:has(#cs-light:checked) [data-astryx-theme]{color-scheme:light!important}',
   'body:has(#cs-dark:checked),body:has(#cs-dark:checked) [data-astryx-theme]{color-scheme:dark!important}',
+  // A part rendered in each mode: the render of the mode the page shows.
+  '.cs-dark{display:none}',
+  '@media (prefers-color-scheme:dark){.cs-light{display:none}.cs-dark{display:block}}',
+  'body:has(#cs-light:checked) .cs-light,body:has(#cs-dark:checked) .cs-dark{display:block!important}',
+  'body:has(#cs-light:checked) .cs-dark,body:has(#cs-dark:checked) .cs-light{display:none!important}',
   '.cs-group-name{font:600 14px ui-monospace,monospace;margin:16px 14px 0;opacity:.75}',
   '.cs-sheet{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;padding:14px}',
   '.cs-pages{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;padding:14px}',

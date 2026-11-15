@@ -2,7 +2,8 @@
 
 /**
  * @file popoverSurfaceFrame.ts
- * @input The popover's box and its source's, and UIKit's popover values
+ * @input The popover's box and its source's, the layer runtime's entrance
+ *   side, and UIKit's popover values
  * @output Exports `popoverCollapsedState`, where the popover grows from and
  *   the shape it starts as. Exports `popoverFrame`, the surface at a progress
  *   of the growth. Also exports the theme tokens that time the motion, the
@@ -12,10 +13,12 @@
  *   its own, and popoverSurfaceMotion.ts plays it.
  *
  * SYNC: When modified, update:
+ * - /packages/core/src/Layer/layerEntranceSide.ts
  * - /packages/core/src/Popover/popoverSurfaceMotion.ts
  * - /packages/core/src/Popover/popoverSurfaceMotion.test.ts
  */
 
+import {layerEntranceSide} from '../Layer/layerEntranceSide';
 import type {LayerExitBox} from '../Layer/layerExitCopy';
 import type {ThemeTimingTokens} from '../motion/themeTiming';
 import {popover} from '../motion/uikit/popover';
@@ -76,57 +79,31 @@ export interface PopoverFrame {
   opacity: number;
 }
 
-/** How far the edges may sit apart and still count as touching, px. */
-const EDGE_TOLERANCE = 1;
-
-const clamp = (value: number, min: number, max: number) =>
-  Math.min(Math.max(value, min), max);
-
 /**
  * Where the popover meets its source, and the shape it grows from. The point
  * is the middle of the source on the popover's edge facing it (the arrow's
- * tip), kept on that edge.
+ * tip), kept on that edge. The layer runtime's entrance finds the side and
+ * the point by the same rule, so a finger and a mouse grow from one place. A
+ * popover over its source's center has no side. It grows from that center
+ * by scale only, as the pointer entrance does.
  */
 export function popoverCollapsedState({
   surface,
   source,
 }: PopoverSurfaceGeometry): PopoverCollapsedState {
-  const gaps = {
-    below: surface.top - (source.top + source.height),
-    above: source.top - (surface.top + surface.height),
-    right: surface.left - (source.left + source.width),
-    left: source.left - (surface.left + surface.width),
-  };
-  // The side with the widest gap is the one the popover was placed on. A
-  // popover that overlaps its source grows from below, as the default.
-  let side: keyof typeof gaps = 'below';
-  for (const candidate of ['above', 'right', 'left'] as const) {
-    if (gaps[candidate] > gaps[side]) {
-      side = candidate;
-    }
-  }
-  if (gaps[side] < -EDGE_TOLERANCE) {
-    side = 'below';
-  }
-  const centerX = clamp(
-    source.left + source.width / 2 - surface.left,
-    0,
-    surface.width,
-  );
-  const centerY = clamp(
-    source.top + source.height / 2 - surface.top,
-    0,
-    surface.height,
-  );
-  const vertical = side === 'below' || side === 'above';
-  const fullLength = vertical ? surface.height : surface.width;
+  const side = layerEntranceSide(surface, source);
+  const horizontal = side != null && side.x !== 0;
+  const overSource = side != null && side.x === 0 && side.y === 0;
+  const fullLength = horizontal ? surface.width : surface.height;
   return {
-    originX: vertical ? centerX : side === 'right' ? 0 : surface.width,
-    originY: vertical ? (side === 'below' ? 0 : surface.height) : centerY,
-    axis: vertical ? 'y' : 'x',
+    originX: side?.originX ?? 0,
+    originY: side?.originY ?? 0,
+    axis: horizontal ? 'x' : 'y',
     scale: popover.collapsedScale,
     length:
-      fullLength > 0 ? Math.min(1, popover.collapsedLengthPx / fullLength) : 1,
+      !overSource && fullLength > 0
+        ? Math.min(1, popover.collapsedLengthPx / fullLength)
+        : 1,
   };
 }
 

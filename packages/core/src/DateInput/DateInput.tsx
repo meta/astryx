@@ -4,8 +4,8 @@
 
 /**
  * @file DateInput.tsx
- * @input Uses React, useId, useCallback, useRef, useTypedDateField, Field, Icon, Calendar, usePopover, InputGroupContext
- * @output Exports DateInput component, DateInputProps
+ * @input Uses React, useId, useCallback, useRef, useTypedDateField, useEntryErrorBehavior, Field, Icon, Calendar, usePopover, InputGroupContext
+ * @output Exports DateInput component, DateInputProps, DateInputEntryError, and EntryErrorBehavior
  * @position Core implementation; consumed by index.ts, tested by DateInput.test.tsx
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -26,6 +26,8 @@ import {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
+import {useEntryErrorBehavior} from '../Field/useEntryErrorBehavior';
+import type {EntryErrorBehavior} from '../FormLayout/FormLayoutContext';
 import {
   colorVars,
   sizeVars,
@@ -75,7 +77,7 @@ import {getInputARIA, isImeKeyEvent} from '../utils';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
 import type {CalendarSystem} from '../utils/calendarSystem';
 import {isRenderable} from '../utils/isRenderable';
-import {useTypedDateField} from './useTypedDate';
+import {type DateInputEntryError, useTypedDateField} from './useTypedDate';
 import type {TimestampFormat} from '../Timestamp';
 import {
   resolvePickerPresentation,
@@ -193,6 +195,8 @@ export type {
   InputStatus as DateInputStatus,
   InputStatusType as DateInputStatusType,
 } from '../Field';
+export type {DateInputEntryError} from './useTypedDate';
+export type {EntryErrorBehavior} from '../FormLayout/FormLayoutContext';
 import {mergeProps, isFocusDetached} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
 import {
@@ -333,8 +337,75 @@ export interface DateInputProps extends Omit<
    * Status indicator for the input.
    * When set, displays a colored border and status icon.
    * If message is provided, displays below the input.
+   *
+   * For a date the field rejects, typed or picked in the native control, and
+   * for unreadable or unfinished text that Enter or blur keeps, the field
+   * shows its own error message in place of `status`. With `onEntryErrorChange`, an
+   * `error` status with a message shows instead, and the field's own message
+   * applies only without one. A `warning` or `success` status never replaces
+   * a rejection.
    */
   status?: InputStatus;
+
+  /**
+   * Called each time the field's rejection of typed text changes, with `null`
+   * when the rejection ends. `kind` is `'unreadable'`, `'incomplete'`,
+   * `'nonexistent'` (a date the calendar does not have), `'outOfRange'` (before
+   * `min` or after `max`), or `'unavailable'` (a day `dateConstraints` rules
+   * out). `text` is the typed text, and `date` is the Gregorian ISO date the
+   * text names, for `'outOfRange'` and `'unavailable'`.
+   *
+   * It also runs when a new `min`, `max`, `dateConstraints`, or `value`, a
+   * calendar pick, disabling the field, or Enter or blur changes the
+   * rejection, and never twice for the same rejection. It reports `null` when
+   * the typed field leaves while its rejection stands, as when a presentation
+   * or pointer change shows the native or touch picker. Passing it lets an
+   * `error` `status` word the rejection (see `status`). A rejection that
+   * starts under an unchanged error message announces that message once. The
+   * native and touch pickers take no typed text, so they report no rejection.
+   *
+   * @example
+   * ```
+   * const [entryError, setEntryError] = useState<DateInputEntryError | null>(null);
+   * <DateInput
+   *   label="Due"
+   *   value={date}
+   *   onChange={setDate}
+   *   max="2026-12-31"
+   *   onEntryErrorChange={setEntryError}
+   *   status={
+   *     entryError?.kind === 'outOfRange'
+   *       ? {type: 'error', message: 'Pick a date this year'}
+   *       : undefined
+   *   }
+   * />
+   * ```
+   */
+  onEntryErrorChange?: (error: DateInputEntryError | null) => void;
+
+  /**
+   * When the field shows its own entry error: a typed date that it rejects,
+   * which `onEntryErrorChange` reports. It sets when the error shows, not when
+   * validation runs, so it is not React Aria's `validationBehavior` (native
+   * versus ARIA validation). It does not change a caller's `status`.
+   *
+   * - `'complete'` — a date the calendar does not have, or one outside `min`,
+   *   `max`, or `dateConstraints`, shows as soon as the typed date is
+   *   complete. Unreadable or unfinished text shows at Enter or blur.
+   * - `'blur-or-enter'` — every rejection waits for Enter or blur. The
+   *   message, `aria-invalid`, the invalid styling, the announcement, and the
+   *   `onEntryErrorChange` report then appear together. An edit that makes
+   *   the text a date or empties it clears the error at once. An edit that
+   *   leaves the text wrong keeps the shown error until the next Enter or
+   *   blur.
+   *
+   * A date that the native control refuses shows at Enter or blur under both
+   * values.
+   *
+   * @default the nearest FormLayout's `defaultEntryErrorBehavior`, else `'complete'`
+   */
+  entryErrorBehavior?: EntryErrorBehavior;
+
   /**
    * How the status message is placed relative to the input.
    * - 'attached': message overlaps directly below the input (bordered treatment)
@@ -545,6 +616,8 @@ function PointerDateField({
   placeholder: placeholderFromProps,
   size: sizeProp,
   status,
+  onEntryErrorChange,
+  entryErrorBehavior,
   statusVariant = 'attached',
   labelTooltip,
   hasClear = false,
@@ -577,6 +650,11 @@ function PointerDateField({
     onKeyDown: onKeyDownProp,
     ...controlProps
   } = rest;
+  // Form attributes pass through untyped, as other input attributes do.
+  const formControl = controlProps as typeof controlProps & {
+    name?: string;
+    form?: string;
+  };
   const t = useComponentTranslator();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =
@@ -650,11 +728,13 @@ function PointerDateField({
   const navigateToTypedDate = useCallback((date: ISODateString) => {
     calendarRef.current?.navigateTo(date);
   }, []);
+  const resolvedEntryErrorBehavior = useEntryErrorBehavior(entryErrorBehavior);
   const {
     typedDate,
     displayValue,
     formatHint,
     isPending,
+    hiddenFormValue,
     isInvalid,
     fieldStatus,
     alertMessage,
@@ -678,7 +758,9 @@ function PointerDateField({
     isDisabled: isEffectivelyDisabled,
     status,
     isStatusAnnounced: !inputGroup,
+    onEntryErrorChange,
     hasPlaceholder: placeholderFromProps != null,
+    entryErrorBehavior: resolvedEntryErrorBehavior,
   });
 
   const {statusIcon, describedBy: statusTooltipDescribedBy} =
@@ -934,6 +1016,7 @@ function PointerDateField({
       </button>
       <input
         {...controlProps}
+        name={hiddenFormValue === null ? formControl.name : undefined}
         ref={useMergedRefs(ref, inputRef)}
         id={id}
         type="text"
@@ -973,9 +1056,17 @@ function PointerDateField({
           isInvalid && styles.inputInvalid,
         )}
       />
+      {hiddenFormValue !== null && formControl.name != null && (
+        <input
+          type="hidden"
+          name={formControl.name}
+          form={formControl.form}
+          value={hiddenFormValue}
+        />
+      )}
       {/*
-          Announces a typed rejection that the field status does not announce.
-          The field status announces the rest.
+          Announces the rejection message that the field status does not
+          announce. The field status announces the rest.
         */}
       <VisuallyHidden as="div" role="alert" aria-live="assertive">
         {alertMessage}
@@ -1118,11 +1209,22 @@ export function DateInput(props: DateInputProps) {
     presentation: _presentation,
     nativePicker: _nativePicker,
     calendar: _calendar,
+    // Only the pointer field takes typed text. The native field reads only
+    // whether the callback is set. Its refused dates wait for Enter or blur
+    // under every entry error behavior.
+    onEntryErrorChange,
+    entryErrorBehavior,
     ...rest
   } = props;
   switch (surface) {
     case 'native':
-      return <NativeDateField {...rest} isDisabled={isDisabled} />;
+      return (
+        <NativeDateField
+          {...rest}
+          isDisabled={isDisabled}
+          onEntryErrorChange={onEntryErrorChange}
+        />
+      );
     case 'sheet':
       return (
         <TouchDateField
@@ -1139,6 +1241,8 @@ export function DateInput(props: DateInputProps) {
           {...rest}
           calendar={calendar}
           isDisabled={isDisabled}
+          onEntryErrorChange={onEntryErrorChange}
+          entryErrorBehavior={entryErrorBehavior}
         />
       );
   }
