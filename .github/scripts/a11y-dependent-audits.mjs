@@ -272,8 +272,9 @@ export function undecidedMessage(plan, truncated) {
 }
 
 /**
- * The legs job's matrix: one entry per planned leg, or a single leg that only
- * says it has no share.
+ * The legs job's matrix: one entry per planned leg. A plan with no leg gives
+ * one entry: a pull request's legs job reads the count and starts no leg, and
+ * the at-head dispatch's one leg only says it has no share.
  * @param {number} count
  */
 export function legsFor(count) {

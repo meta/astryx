@@ -1673,7 +1673,11 @@ export async function integrationPackCheck(options = {}) {
     // validate lists it as a note, and it is a warning here, as the other
     // listed findings of the local tree are.
     for (const issue of packedResult.listed ?? []) {
-      if (issue.code !== 'relative_import_not_shipped') continue;
+      if (
+        issue.code !== 'relative_import_not_shipped' &&
+        issue.code !== 'built_module_imports_typescript'
+      )
+        continue;
       issues.push({
         code: `packed_${issue.code}`,
         severity: 'warning',

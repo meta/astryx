@@ -826,8 +826,9 @@ describe('themeBuild() — icon registry detection', () => {
     const result = await themeBuild('live.mjs', {}, {cwd: tmpDir});
 
     const generated = fs.readFileSync(path.join(tmpDir, 'live.js'), 'utf8');
+    // The source's path, with the extension of the file it names.
     expect(iconImportLine(generated)).toBe(
-      "import { liveIcons } from './icons';",
+      "import { liveIcons } from './icons.mjs';",
     );
     expect(generated).toContain('icons: liveIcons,');
     expect(generated).toContain('export { liveIcons };');
@@ -877,7 +878,7 @@ describe('themeBuild() — icon registry detection', () => {
     // and emitted `./old-icons` — the live import must win.
     const generated = fs.readFileSync(path.join(tmpDir, 'both.js'), 'utf8');
     expect(iconImportLine(generated)).toBe(
-      "import { realIcons } from './icons';",
+      "import { realIcons } from './icons.mjs';",
     );
     expect(generated).not.toContain('old-icons');
     expect(result?.data.warnings).toEqual([]);

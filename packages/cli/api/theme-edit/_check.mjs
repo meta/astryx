@@ -2374,6 +2374,7 @@ const STATE_WORDS = [
   'disabled',
   'pressed',
   'selected',
+  'highlighted',
   'checked',
   'open',
   'expanded',
