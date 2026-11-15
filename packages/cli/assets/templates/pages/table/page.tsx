@@ -17,6 +17,7 @@ import {Avatar} from '@astryxdesign/core/Avatar';
 import {StatusDot} from '@astryxdesign/core/StatusDot';
 import {Icon} from '@astryxdesign/core/Icon';
 import {DropdownMenu} from '@astryxdesign/core/DropdownMenu';
+import {MoreMenu} from '@astryxdesign/core/MoreMenu';
 import {AlertDialog} from '@astryxdesign/core/AlertDialog';
 import {useToast} from '@astryxdesign/core/Toast';
 import {
@@ -509,26 +510,6 @@ export default function SimpleTableTemplate() {
                   selection={selectionState}
                   startContent={
                     <>
-                      <DropdownMenu
-                        button={{label: 'Change role', variant: 'ghost'}}
-                        items={ROLE_ORDER.map(role => ({
-                          label: ROLE_LABEL[role],
-                          onClick: () =>
-                            updateMembers(selectionState.selectedKeys, {role}),
-                        }))}
-                      />
-                      <Button
-                        label="Export"
-                        variant="ghost"
-                        icon={<Icon icon={ArrowDownTrayIcon} />}
-                        onClick={() =>
-                          // Demo only: replace this toast with the export call.
-                          showToast({
-                            body: `Exported ${pluralize(selectionState.selectedKeys.size, 'member')}`,
-                            uniqueID: 'export-members',
-                          })
-                        }
-                      />
                       <Button
                         label="Remove"
                         variant="ghost"
@@ -538,6 +519,33 @@ export default function SimpleTableTemplate() {
                             Array.from(selectionState.selectedKeys),
                           )
                         }
+                      />
+                      {/* Secondary bulk actions stay in an overflow menu so
+                          the toolbar fits a phone-width screen. */}
+                      <MoreMenu
+                        label="More bulk actions"
+                        items={[
+                          {
+                            label: 'Change role',
+                            items: ROLE_ORDER.map(role => ({
+                              label: ROLE_LABEL[role],
+                              onClick: () =>
+                                updateMembers(selectionState.selectedKeys, {
+                                  role,
+                                }),
+                            })),
+                          },
+                          {
+                            label: 'Export',
+                            icon: ArrowDownTrayIcon,
+                            onClick: () =>
+                              // Demo only: replace this toast with the export call.
+                              showToast({
+                                body: `Exported ${pluralize(selectionState.selectedKeys.size, 'member')}`,
+                                uniqueID: 'export-members',
+                              }),
+                          },
+                        ]}
                       />
                     </>
                   }
