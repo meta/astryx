@@ -4594,6 +4594,82 @@ describe('Selector light dismiss focus (spec:Popover AR4)', () => {
 
     expect(trigger).toHaveFocus();
   });
+
+  it('returns focus to the trigger after a pick that moved focus to a focusable container around the list', async () => {
+    const user = userEvent.setup();
+    let focusAtPick: Element | null = null;
+    render(
+      <div tabIndex={-1} data-testid="container">
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {
+            focusAtPick = document.activeElement;
+          }}
+          placement="below"
+        />
+      </div>,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    await user.click(
+      screen.getByRole('option', {name: 'Cherry', hidden: true}),
+    );
+
+    // The press on the option moved focus to the container before the pick.
+    expect(focusAtPick).toBe(screen.getByTestId('container'));
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveFocus();
+  });
+
+  it('returns focus to the trigger after a press on a focusable container around the list', async () => {
+    const user = userEvent.setup();
+    render(
+      <div tabIndex={-1} data-testid="container">
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {}}
+          placement="below"
+        />
+      </div>,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    act(() => {
+      screen.getByTestId('container').focus();
+    });
+    closeByLightDismiss();
+
+    expect(trigger).toHaveFocus();
+  });
+
+  it('leaves focus on a field a press moved it to inside the same focusable container', async () => {
+    const user = userEvent.setup();
+    render(
+      <div tabIndex={-1}>
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {}}
+          placement="below"
+        />
+        <input aria-label="Notes" />
+      </div>,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    const notes = screen.getByRole('textbox', {name: 'Notes'});
+    act(() => {
+      notes.focus();
+    });
+    closeByLightDismiss();
+
+    expect(notes).toHaveFocus();
+  });
 });
 
 describe('Selector option-row theme target', () => {

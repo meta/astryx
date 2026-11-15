@@ -1725,3 +1725,34 @@ export const SearchableRequired: Story = {
     );
   },
 };
+
+/**
+ * A Selector inside a container that takes focus but is no control, such as
+ * a dialog's content box with `tabIndex={-1}`, below another field. A press
+ * inside the open list, or on the container, moves the browser's focus to
+ * that container.
+ */
+export const InsideFocusableContainer: Story = {
+  tags: ['!autodocs'],
+  render: () => {
+    const [value, setValue] = useState<string | undefined>(undefined);
+    const [notes, setNotes] = useState('');
+    return (
+      <div
+        tabIndex={-1}
+        data-testid="focusable-container"
+        style={{padding: 32}}>
+        <VStack gap={4}>
+          <TextInput label="Notes" value={notes} onChange={setNotes} />
+          <Selector
+            label="Fruit"
+            options={['Apple', 'Banana', 'Cherry']}
+            value={value}
+            onChange={v => setValue(v)}
+            placement="below"
+          />
+        </VStack>
+      </div>
+    );
+  },
+};
