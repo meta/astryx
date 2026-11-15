@@ -172,7 +172,7 @@ describe('a picture run that stops part way', () => {
          fs.writeFileSync(${JSON.stringify(count)}, String(n));
          if (n > 1) throw new Error('crashed on start ' + n);
          return {
-           async newPage() { return {async goto() {}, async screenshot({path}) { fs.writeFileSync(path, Buffer.from(${JSON.stringify(PNG.toString('base64'))}, 'base64')); }}; },
+           async newPage() { return {async route() {}, async goto() {}, async screenshot({path}) { fs.writeFileSync(path, Buffer.from(${JSON.stringify(PNG.toString('base64'))}, 'base64')); }}; },
            async close() {},
          };
        }};`,
@@ -238,16 +238,21 @@ describe('suggestions from what was typed', () => {
   }, 240_000);
 
   it('--template offers a default page within a typo', async () => {
+    // A preview of its own, which holds no page yet: each default page can
+    // be added there.
     for (const [typed, page] of [
       ['overveiw', 'overview'],
       ['componets', 'components'],
-      ['colours', 'colors'],
     ]) {
       const e = await refusal(() =>
-        themeEditPreviewAdd(undefined, {cwd, template: typed}),
+        themeEditPreviewAdd(undefined, {
+          cwd,
+          template: typed,
+          path: 'app/typos',
+        }),
       );
       expect(names(e)).toContain(
-        `astryx experimental theme preview add --template ${page}`,
+        `astryx experimental theme preview add --template ${page} --path app/typos`,
       );
     }
   }, 240_000);

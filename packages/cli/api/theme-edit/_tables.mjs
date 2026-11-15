@@ -10,7 +10,13 @@
  */
 
 import {discoverBundledThemes} from '../../foundation/discovery/theme-discovery.mjs';
-import {collectUnloadedFonts} from '../theme/build/font-warning.mjs';
+import {
+  SYSTEM_FONTS_BY_PLATFORM,
+  collectUnloadedFonts,
+  systemFontFamilies,
+} from '../theme/build/font-warning.mjs';
+
+export {systemFontFamilies};
 
 /**
  * A lookup table that only answers for its own keys: a word typed by a
@@ -133,6 +139,7 @@ export const DENSITY = /** @type {const} */ ({
     'relaxed',
     'comfortable',
     'sparse',
+    'padded',
     'generous',
     'spread out',
   ],
@@ -214,46 +221,9 @@ export const isSystemFamily = family =>
  * not load everywhere.
  */
 const ONE_SYSTEM_FAMILIES = new Map(
-  Object.entries({
-    macOS: [
-      '-apple-system',
-      'blinkmacsystemfont',
-      'helvetica neue',
-      'sf mono',
-      'sf pro',
-      'sf pro text',
-      'sf pro display',
-      'monaco',
-      'menlo',
-      'palatino',
-      'lucida grande',
-      'gill sans',
-      'snell roundhand',
-    ],
-    Windows: [
-      'segoe ui',
-      'segoe ui emoji',
-      'segoe ui symbol',
-      'segoe ui light',
-      'segoe ui semilight',
-      'segoe ui semibold',
-      'segoe ui black',
-      'consolas',
-      'cambria',
-      'calibri',
-      'lucida console',
-      'brush script mt',
-      'old english text mt',
-    ],
-    'Android and ChromeOS': ['roboto'],
-    Linux: [
-      'liberation mono',
-      'liberation sans',
-      'liberation serif',
-      'dejavu sans',
-      'dejavu sans mono',
-    ],
-  }).flatMap(([system, names]) => names.map(n => [n, system])),
+  Object.entries(SYSTEM_FONTS_BY_PLATFORM)
+    .filter(([system]) => system !== 'everywhere')
+    .flatMap(([system, names]) => names.map(n => [n, system])),
 );
 
 /** @param {string} family */
@@ -829,6 +799,98 @@ export const WRAPPED_PARTS = /** @type {Record<string, {box: string}>} */ ({
   'chat-composer': {box: 'the rounded composer body'},
 });
 
+/**
+ * The pseudo-classes of CSS Selectors (Level 4 and 5, and the HTML, media,
+ * view-transition, scroll-marker and interest states browsers ship), by
+ * name: the names a part's `:name` block is read against, so one a typo
+ * away from a name here is named as that typo.
+ */
+export const CSS_PSEUDO_CLASSES = new Set([
+  'active',
+  'active-view-transition',
+  'active-view-transition-type',
+  'any-link',
+  'autofill',
+  'blank',
+  'buffering',
+  'checked',
+  'closed',
+  'current',
+  'default',
+  'defined',
+  'dir',
+  'disabled',
+  'empty',
+  'enabled',
+  'first',
+  'first-child',
+  'first-of-type',
+  'focus',
+  'focus-visible',
+  'focus-within',
+  'fullscreen',
+  'future',
+  'has',
+  'has-slotted',
+  'heading',
+  'host',
+  'host-context',
+  'hover',
+  'in-range',
+  'indeterminate',
+  'interest-source',
+  'interest-target',
+  'invalid',
+  'is',
+  'lang',
+  'last-child',
+  'last-of-type',
+  'left',
+  'link',
+  'local-link',
+  'modal',
+  'muted',
+  'not',
+  'nth-child',
+  'nth-col',
+  'nth-last-child',
+  'nth-last-col',
+  'nth-last-of-type',
+  'nth-of-type',
+  'only-child',
+  'only-of-type',
+  'open',
+  'optional',
+  'out-of-range',
+  'past',
+  'paused',
+  'picture-in-picture',
+  'placeholder-shown',
+  'playing',
+  'popover-open',
+  'read-only',
+  'read-write',
+  'required',
+  'right',
+  'root',
+  'scope',
+  'seeking',
+  'stalled',
+  'state',
+  'target',
+  'target-after',
+  'target-before',
+  'target-current',
+  'target-within',
+  'user-invalid',
+  'user-valid',
+  'valid',
+  'visited',
+  'volume-locked',
+  'where',
+  'xr-overlay',
+]);
+
 /** States every part takes, beyond the ones its doc lists. */
 export const COMMON_STATES = [
   'hover',
@@ -870,3 +932,16 @@ for (const table of [
   MODE_WORDS,
 ])
   Object.setPrototypeOf(table, null);
+
+/** The groups of the theme-building page (its sections), in order. */
+export const SHOWCASE_GROUPS = Object.freeze([
+  'actions',
+  'inputs',
+  'selection',
+  'navigation',
+  'feedback',
+  'data',
+  'containers',
+  'overlays',
+  'pages',
+]);

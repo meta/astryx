@@ -11,6 +11,7 @@ import DurationShardSequencer, {
   readDurations,
   recordDurations,
   idleSwizzleSlices,
+  durationsFile,
 } from './vitest-shard-sequencer.mjs';
 import {splitByDuration} from './lib/duration-split.mjs';
 import {
@@ -332,6 +333,22 @@ describe('duration-balanced Node legs', () => {
     vi.stubEnv('SWIZZLE_PROOF_CHANGED', 'docs/README.md');
     vi.stubEnv('SWIZZLE_PROOF_ALL', '1');
     expect([...(await idleSwizzleSlices(files))]).toEqual([]);
+  });
+
+  it('reads the record a workflow names in VITEST_DURATIONS_FILE, and the main record otherwise', () => {
+    expect(durationsFile()).toBe(DURATIONS);
+    vi.stubEnv(
+      'VITEST_DURATIONS_FILE',
+      'scripts/vitest-node-durations.min-node.json',
+    );
+    expect(durationsFile()).toBe(
+      path.join(path.dirname(DURATIONS), 'vitest-node-durations.min-node.json'),
+    );
+    const other = readDurations();
+    expect(Object.keys(other).length).toBeGreaterThan(100);
+    expect(other).not.toEqual(readDurations(DURATIONS));
+    vi.unstubAllEnvs();
+    expect(durationsFile()).toBe(DURATIONS);
   });
 
   it('reads no swizzle-proof scope when no slice is in the run', async () => {
