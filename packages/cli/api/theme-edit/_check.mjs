@@ -14,6 +14,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {partForWord} from './_part-words.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {cssUnescape} from '../../foundation/text/css-escape.mjs';
 import {baseInstalled, baseThemeFile, installLine} from './_project.mjs';
 import {
   withFallbacks,
@@ -35,7 +36,6 @@ import {
 } from './_css.mjs';
 import {calcVars, coreFallback, multipliedTokens} from './_parts.mjs';
 import {
-  MODE_WORDS,
   AUTO_SPREAD,
   COLOR_PROP_PARTS,
   COLOR_PROPS,
@@ -63,6 +63,7 @@ import {
   WRAPPED_PARTS,
   CARD_LIKE,
   isSystemFamily,
+  fontStack,
 } from './_tables.mjs';
 import {
   COLOR_NAMES,
@@ -79,7 +80,7 @@ import {
   PALETTE_DIALS,
   PALETTE_TOKENS,
   VIBRANCY_DEFAULT,
-  isGraySeed,
+  vibrancyMoves,
   paletteToken,
   seedOf,
 } from './_palette.mjs';
@@ -88,10 +89,10 @@ import {
   kebab,
   nearest,
   negates,
-  partDefault,
   partsOf,
   refuse,
   lengthPx,
+  cornersPlain,
   radiusAt,
   radiusTokenOf,
   cornerParts,
@@ -103,13 +104,14 @@ import {
   baseTopTokens,
   baseComponent,
   baseComponentReads,
-  baseRuleHas,
   partRuleTokens,
   cssFamily,
   familySpaces,
   baseTextPx,
   fontsourcePackageOf,
   dialWordOf,
+  paddedParts,
+  onBuiltInSteps,
 } from './_settings.mjs';
 import {isColorToken} from './_compiler.mjs';
 import {
@@ -123,6 +125,8 @@ import {
   withoutDebris,
   typoOf,
   typoNear,
+  modeWord,
+  documentTypoWords,
   PROPERTY_WORDS,
   WEIGHT_WORDS,
   TAILWIND_RADIUS,
@@ -132,6 +136,7 @@ import {
   withoutCopyDebris,
   commaNumbers,
   weightSetting,
+  baseWord,
 } from './_normal.mjs';
 
 export {
@@ -997,6 +1002,8 @@ const GENERIC_FAMILIES = [
   'ui-monospace',
   'ui-rounded',
 ];
+documentTypoWords(GENERIC_FAMILIES);
+documentTypoWords([...Object.keys(FONTS), ...Object.keys(OPEN_FONTS)]);
 
 /** The theme-wide dial or token for a CSS property typed with no part. */
 const WHOLE_THEME_EQUIVALENT = /** @type {Record<string, string>} */ ({
@@ -1012,25 +1019,36 @@ const WHOLE_THEME_EQUIVALENT = /** @type {Record<string, string>} */ ({
 const NUMBERISH = /^[+-]?(\d+\.?\d*|\.\d+)(px|rem|em|pt|%)?$/i;
 
 /**
- * What is wrong with a typed family list that names a weight, a size or a
- * quoted generic where a family goes, or null. Each family of the list is
- * read on its own: a number or a size (`600`, `18px`) is no family; a
- * weight after a family's name (`Inter 600`, `Inter extra-bold`, in any
- * form the weight table reads) is that family and a weight; a generic in
- * quotes (`'sans-serif'`) is a family named so, not the generic. `families`
- * is the list meant (empty when no family is left), `rung` the headings
- * weight nearest a weight given, `size` whether a size was given.
- * A weight word ending a family's name is part of the name unless the
- * whole name is no family the editor knows and the name without the word
- * is (see knownFamily: `Arial Black`, `Archivo Black` and `Segoe UI
- * Semibold` are families; `Inter ExtraBold` is Inter and a weight); a
- * weight number never is.
+ * What is wrong with a typed family list, or null. Each family of the list
+ * is read on its own, from its end:
+ * - a size (`18px`, `Inter 16px`) is no family; a number is a weight only
+ *   as a whole hundred (100 to 1000), and any other bare number
+ *   (`Lato, 16`) is neither a weight nor a family;
+ * - a weight (`600`, `ExtraBold`, `extra bold`, any form the weight table
+ *   reads) or a style (`Italic`, `Oblique`) after a family's name is that
+ *   family and the weight or style; a weight or style WORD is part of the
+ *   name unless the whole name is no family the editor knows and the name
+ *   without it is (knownFamily: `Arial Black` and `Segoe UI Semibold` are
+ *   families; `Inter ExtraBold` and `Inter Italic` are Inter and a word);
+ * - a generic in quotes (`'sans-serif'`) is a family named so, and a
+ *   family the editor does not know that is a typo of a generic
+ *   (`sansserif`, `serf`, `system ui`) is that generic;
+ * - with `presets` (the font dial), a lone family that is a typo of a
+ *   preset (`sytem`, `robto`) is that preset.
+ * Only weight, style and size words (`16px bold`, `italic bold`) are a font
+ * shorthand, read where the font dial reads one: null. `families` is the
+ * list meant (empty when no family is left), `rung` the headings weight
+ * nearest a weight given, `textSize` the text-size a size reads as, and
+ * `style` a style given.
  * @param {string} value
  * @param {any} ctx
- * @returns {{why: string, families: string, rung: string | null, size: boolean, textSize: number | null} | null}
+ * @param {boolean} [presets] whether a preset name is read (the font dial)
+ * @returns {{why: string, families: string, asTyped: string | null, rung: string | null, size: boolean, textSize: number | null, style: string | null} | null}
  */
-function fontListProblem(value, ctx) {
-  const pieces = familyPieces(pastedFont(value) ?? value);
+function fontListProblem(value, ctx, presets = false) {
+  // Copy debris (a trailing `;`, `!important`, a comment) is read away
+  // first, as it is for any value.
+  const pieces = familyPieces(withoutCopyDebris(pastedFont(value) ?? value));
   if (!pieces) return null;
   const weightOf = (/** @type {string} */ w) => {
     const k = w.toLowerCase().replace(/[\s_-]+/g, '');
@@ -1043,82 +1061,173 @@ function fontListProblem(value, ctx) {
           ? Number(WEIGHT_WORDS[k])
           : null;
   };
+  const STYLE = /^(italic|oblique)$/i;
+  const bare = (/** @type {string} */ w) =>
+    w.toLowerCase().replace(/[\s_-]+/g, '');
+  /** The generic a family the editor does not know is a typo of. */
+  const genericOf = (/** @type {string} */ name) => {
+    // Written with no dash or a space (sansserif, system ui): that generic.
+    const exact = GENERIC_FAMILIES.find(g => bare(g) === bare(name));
+    if (exact) return exact;
+    const hits = GENERIC_FAMILIES.filter(g => typoNear(name.toLowerCase(), g));
+    return hits.length === 1 ? hits[0] : null;
+  };
+
   /** @type {string[]} */
   const kept = [];
+  /**
+   * Each family read as a misspelling, as typed in quotes: quotes keep a
+   * family the editor does not know as written (Inder, Monaspace).
+   * @type {Map<number, string>}
+   */
+  const asTyped = new Map();
   /** @type {number | null} */
   let weight = null;
+  let number = false;
   let size = false;
   /** @type {string | null} */
   let sizeTyped = null;
+  /** @type {string | null} */
+  let style = null;
   let quotedGeneric = false;
+  let misspelled = false;
   for (const p of pieces) {
     const name = p.name.trim();
     if (!name) continue;
-    if (p.quoted && GENERIC_FAMILIES.includes(name.toLowerCase())) {
-      quotedGeneric = true;
-      kept.push(name.toLowerCase());
+    if (p.quoted) {
+      if (GENERIC_FAMILIES.includes(name.toLowerCase())) {
+        quotedGeneric = true;
+        kept.push(name.toLowerCase());
+      } else kept.push(/[^a-z0-9-]/i.test(name) ? JSON.stringify(name) : name);
       continue;
     }
     // A number or size alone is read where the setting reads one (a
     // size for text-size, a weight for headings); in a list of several it
     // is a family that is not one.
-    if (!p.quoted && NUMBERISH.test(name)) {
+    if (NUMBERISH.test(name)) {
       if (pieces.length < 2) return null;
       if (/[a-z%]$/i.test(name)) {
         size = true;
         sizeTyped ??= name;
-      } else weight ??= Number(name);
+      } else if (weightOf(name) != null) weight ??= weightOf(name);
+      else number = true;
       continue;
     }
-    // A weight (and a style) after the family's name: the words before it.
+    // A preset named by its key on the font dial (dm-sans, mono) is that
+    // preset.
+    const PRESETS = [...Object.keys(FONTS), ...Object.keys(OPEN_FONTS)];
+    if (presets && PRESETS.includes(name.toLowerCase())) {
+      kept.push(name);
+      continue;
+    }
+    // A family the editor knows is that family, whatever its last word
+    // (Arial Black, Source Serif 4).
+    if (knownFamily(ctx, name)) {
+      kept.push(name);
+      continue;
+    }
+    // Weight, style, size and number words after the name, read from the
+    // end; a weight of two words (extra bold) first.
     const words = name.split(/\s+/);
     let end = words.length;
-    if (!p.quoted && /^(italic|oblique)$/i.test(words[end - 1] ?? '')) end -= 1;
-    // A weight of two words (extra bold) or one (600, ExtraBold).
-    const two = end >= 3 ? weightOf(words.slice(end - 2, end).join('')) : null;
-    const one = end >= 2 ? weightOf(words[end - 1]) : null;
-    const at =
-      !p.quoted && two != null
-        ? end - 2
-        : !p.quoted && one != null
-          ? end - 1
-          : -1;
-    // Only weight and style words before it (`bold bold`, `italic bold`),
-    // or a size among them (`16px bold`): a font shorthand, read where the
-    // font dial reads one, not a list.
+    /** @type {Array<{kind: string, text: string, value?: number}>} */
+    const tail = [];
+    while (end > 0) {
+      // A known family before the words read so far keeps its own last
+      // word (Arial Black 900 is Arial Black and 900).
+      if (end < words.length && knownFamily(ctx, words.slice(0, end).join(' ')))
+        break;
+      const two =
+        end >= 2 ? weightOf(words.slice(end - 2, end).join('')) : null;
+      const w = words[end - 1];
+      if (two != null && end >= 3) {
+        tail.unshift({
+          kind: 'weight',
+          text: words.slice(end - 2, end).join(' '),
+          value: two,
+        });
+        end -= 2;
+      } else if (STYLE.test(w)) {
+        tail.unshift({kind: 'style', text: w.toLowerCase()});
+        end -= 1;
+      } else if (weightOf(w) != null) {
+        tail.unshift({
+          kind: 'weight',
+          text: w,
+          value: /** @type {number} */ (weightOf(w)),
+        });
+        end -= 1;
+      } else if (NUMBERISH.test(w) && /[a-z%]$/i.test(w)) {
+        tail.unshift({kind: 'size', text: w});
+        end -= 1;
+        // A bare number that is no weight is part of the name (Source Sans
+        // 3); only a separate list item is a number that is no family.
+      } else break;
+    }
+    const base = words.slice(0, end).join(' ');
+    // Only those words: alone, a font shorthand (read where the font dial
+    // reads one); in a list of several, an item that is no family.
+    if (!base) {
+      if (pieces.length < 2) return null;
+      for (const t of tail) {
+        if (t.kind === 'weight') weight ??= t.value ?? null;
+        else if (t.kind === 'style') style ??= t.text;
+        else if (t.kind === 'size') {
+          size = true;
+          sizeTyped ??= t.text;
+        }
+      }
+      continue;
+    }
+    if (!tail.length) {
+      // A family the editor does not know that is a typo of a generic, or
+      // (on the font dial, alone) of a preset: that name.
+      const generic = genericOf(name);
+      const preset =
+        presets && pieces.length === 1 && !generic
+          ? (() => {
+              const hits = PRESETS.filter(k => typoNear(bare(name), bare(k)));
+              return hits.length === 1 ? hits[0] : null;
+            })()
+          : null;
+      if (generic || preset) {
+        misspelled = true;
+        kept.push(/** @type {string} */ (generic ?? preset));
+        asTyped.set(kept.length - 1, JSON.stringify(name));
+      } else kept.push(name);
+      continue;
+    }
+    // Words only (no number or size): part of the name unless the whole
+    // name is unknown and the name without them is known.
     if (
-      at > 0 &&
-      (words
-        .slice(0, at)
-        .every(
-          w =>
-            weightOf(w) != null ||
-            /^(italic|oblique|normal|small-caps)$/i.test(w),
-        ) ||
-        words.slice(0, at).some(w => NUMBERISH.test(w)))
-    )
-      return null;
-    // A weight word that is part of the family's name: the family as typed.
-    const base = at > 0 ? words.slice(0, at).join(' ') : '';
-    const named = words.slice(0, end).join(' ');
-    if (
-      at > 0 &&
-      !/^\d+$/.test(words[at]) &&
-      !(!knownFamily(ctx, named) && knownFamily(ctx, base))
+      tail.every(
+        t =>
+          t.kind === 'style' || (t.kind === 'weight' && !/^\d+$/.test(t.text)),
+      ) &&
+      !(!knownFamily(ctx, name) && knownFamily(ctx, base))
     ) {
       kept.push(name);
       continue;
     }
-    if (at > 0) {
-      weight ??= two ?? one;
-      kept.push(words.slice(0, at).join(' '));
-      continue;
+    for (const t of tail) {
+      if (t.kind === 'weight') weight ??= t.value ?? null;
+      else if (t.kind === 'style') style ??= t.text;
+      else if (t.kind === 'size') {
+        size = true;
+        sizeTyped ??= t.text;
+      } else number = true;
     }
-    kept.push(
-      p.quoted && /[^a-z0-9-]/i.test(name) ? JSON.stringify(name) : name,
-    );
+    kept.push(base);
   }
-  if (weight == null && !size && !quotedGeneric) return null;
+  if (
+    weight == null &&
+    !size &&
+    !style &&
+    !number &&
+    !quotedGeneric &&
+    !misspelled
+  )
+    return null;
   const rung =
     weight != null
       ? Object.entries(HEADING_WEIGHTS).reduce((a, b) =>
@@ -1133,11 +1242,21 @@ function fontListProblem(value, ctx) {
         ? 'holds a weight where a family goes, so the browser reads it as a family named that and falls back'
         : size
           ? 'holds a size where a family goes, so the browser reads it as a family named that and falls back'
-          : 'quotes a generic family, which makes it a family named that, so there is no generic to fall back to',
+          : style
+            ? 'holds a style where a family goes, so the browser reads it as a family named that and falls back'
+            : number
+              ? 'holds a number where a family goes (a weight is a whole hundred, a size has a unit), so the browser reads it as a family named that and falls back'
+              : quotedGeneric
+                ? 'quotes a generic family, which makes it a family named that, so there is no generic to fall back to'
+                : 'is near a generic family or font the editor knows; a family the editor does not know is kept as written when it is quoted',
     families: kept.join(', '),
+    asTyped: misspelled
+      ? kept.map((k, i) => asTyped.get(i) ?? k).join(', ')
+      : null,
     rung,
     size,
     textSize: sizeTyped ? textSizePx(sizeTyped) : null,
+    style,
   };
 }
 
@@ -1942,6 +2061,15 @@ function propertyProblem(prop, value) {
       // Below the property's range (a negative width) is no size of the
       // other sign: the mirrored value is never offered.
       (takes(joined) && joined !== v ? joined : null) ??
+      // A comma between two bare numbers that the grammar pairs with a
+      // slash (`aspect-ratio 16,9`, `grid-row 2,4`) separates them: the
+      // pair, never a decimal (16.9).
+      (() => {
+        const pair = /^\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*$/.exec(v);
+        return pair && takes(`${pair[1]} / ${pair[2]}`)
+          ? `${pair[1]} / ${pair[2]}`
+          : null;
+      })() ??
       // A comma between digits is a decimal point (1,5rem is 1.5rem), never
       // a split into layers.
       (takes(commaNumbers(v, weightSetting(prop))) &&
@@ -2294,6 +2422,37 @@ function oneModeOfTheme(data) {
 }
 
 /**
+ * What a text property CSS inherits, set on a part, also reaches: the parts
+ * inside it that set no such property of their own, said in one line; null
+ * for any other property or when none does.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {{on?: string, only?: boolean, thing?: string}} s
+ * @param {string} prop kebab-case
+ * @returns {string | null}
+ */
+export function inheritedReach(ctx, s, prop) {
+  if (
+    !/^(font-(size|weight|style|family|variant)|text-(transform|align)|letter-spacing|line-height|white-space|word-spacing)$/.test(
+      prop,
+    )
+  )
+    return null;
+  const reached = [
+    ...new Set(
+      partsOf(ctx, /** @type {any} */ (s)).flatMap(t =>
+        /** @type {string[]} */ (ctx.C.MAP[t]?.contains ?? []).filter(
+          inner =>
+            ctx.project.target.has(inner) && !ctx.C.MAP[inner]?.own?.[prop],
+        ),
+      ),
+    ),
+  ];
+  return reached.length
+    ? `${prop} is inherited, so it also reaches ${reached.slice(0, 4).join(', ')}${reached.length > 4 ? ' and more' : ''} inside ${s.on}, which set no ${prop} of their own`
+    : null;
+}
+
+/**
  * The states `set` takes on a part: the ones its doc lists and the ones
  * every part takes, less any a change in it is refused for while the same
  * change without it passes (a state that never applies there). `how` lists
@@ -2322,6 +2481,24 @@ export function settableStates(ctx, slug, data, part) {
   return [...new Set([...t.states, ...COMMON_STATES])].filter(
     state => !plain || takes(state),
   );
+}
+
+/**
+ * The colors a part's color prop may show when none is given: its default
+ * as its doc gives it; with none (Text's depends on its type), each value
+ * of the prop whose text token the part's own color reads, in the order
+ * the prop lists them. Empty with no color prop.
+ * @param {{type?: string, default?: string | null} | undefined} prop
+ * @param {Record<string, unknown> | undefined} reads the tokens the part's color reads (its part data)
+ * @returns {string[]}
+ */
+function colorPropDefaults(prop, reads) {
+  if (!prop) return [];
+  const own = /^'([\w-]+)'$/.exec(String(prop.default ?? '').trim())?.[1];
+  if (own) return [own];
+  return [...String(prop.type ?? '').matchAll(/'([\w-]+)'/g)]
+    .map(m => m[1])
+    .filter(v => Object.hasOwn(reads ?? {}, `--color-text-${v}`));
 }
 
 /**
@@ -2392,13 +2569,13 @@ export function checkSetting(
     thing.startsWith('--font-family');
   const listProblem =
     !unset && typeof value === 'string' && fontish
-      ? fontListProblem(value, ctx)
+      ? fontListProblem(value, ctx, thing === 'font')
       : null;
   if (listProblem) {
     const on = flags.on ? ` --on ${flags.on}` : '';
     refuse(
       E.ERR_THEME_BAD_VALUE,
-      `"${String(value).trim()}" ${listProblem.why}. ${thing} takes the families${listProblem.families ? ` (${listProblem.families})` : ''}; ${listProblem.size ? 'a size is set with text-size or a --font-size-* token' : 'a weight is set with headings, font-weight or a --font-weight-* token'}.`,
+      `"${String(value).trim()}" ${listProblem.why}. ${thing} takes the families${listProblem.families ? ` (${listProblem.families})` : ''}${listProblem.size ? '; a size is set with text-size or a --font-size-* token' : listProblem.rung ? '; a weight is set with headings, font-weight or a --font-weight-* token' : listProblem.style ? '; a style is set with font-style on a part' : ''}.`,
       {
         run: [
           ...(listProblem.families
@@ -2406,11 +2583,20 @@ export function checkSetting(
                 `${P} set ${slug} ${thing} ${quoteCommandArgument(listProblem.families)}${on}`,
               ]
             : []),
+          // The family as typed, kept as written by its quotes.
+          ...(listProblem.asTyped
+            ? [
+                `${P} set ${slug} ${thing} ${quoteCommandArgument(listProblem.asTyped)}${on}`,
+              ]
+            : []),
           ...(thing === 'font' && listProblem.rung
             ? [`${P} set ${slug} headings ${listProblem.rung}`]
             : []),
           ...(thing === 'font' && listProblem.textSize != null
             ? [`${P} set ${slug} text-size ${listProblem.textSize}`]
+            : []),
+          ...(thing === 'font-family' && flags.on && listProblem.style
+            ? [`${P} set ${slug} font-style ${listProblem.style}${on}`]
             : []),
           ...(listProblem.families
             ? []
@@ -2433,6 +2619,21 @@ export function checkSetting(
         E.ERR_THEME_BAD_VALUE,
         `"${value}" names a family that exists nowhere: ${fixed.why}.`,
         {run: [setLine(slug, thing, fixed.value, flags, false)]},
+      );
+    // A font dial word that names no family (mono, system, rounded): a
+    // part's font-family takes the stack it stands for, never the word.
+    const word = value.trim().toLowerCase();
+    const stack = thing === 'font-family' ? fontStack(word) : null;
+    if (
+      stack &&
+      FONTS[word] &&
+      FONTS[word][0].toLowerCase() !== word &&
+      !isSystemFamily(word)
+    )
+      refuse(
+        E.ERR_THEME_BAD_VALUE,
+        `"${value.trim()}" is a font dial word, not a family: no font is named that. font-family takes the families it stands for (${stack}).`,
+        {run: [setLine(slug, thing, stack, flags, false)]},
       );
   }
   // A light and a dark color on a part's color property (`background`,
@@ -2565,7 +2766,7 @@ export function checkSetting(
             ],
           },
         );
-      const mode = MODE_WORDS[label.word];
+      const mode = modeWord(label.word);
       const colorful =
         PALETTE_DIALS.includes(thing) ||
         (thing.startsWith('--') && isColorToken(thing)) ||
@@ -2690,7 +2891,7 @@ export function checkSetting(
       if (
         flagWord &&
         (flagWord === 'mode'
-          ? Boolean(MODE_WORDS[rest.trim().toLowerCase()])
+          ? Boolean(modeWord(rest))
           : !otherSettingLabel(thing, value))
       ) {
         const r = rest.trim().toLowerCase();
@@ -2717,7 +2918,7 @@ export function checkSetting(
             },
           );
         }
-        const m = flagWord === 'mode' ? MODE_WORDS[r] : null;
+        const m = flagWord === 'mode' ? modeWord(r) : null;
         const when =
           flagWord === 'when'
             ? label.word === 'when' || label.word === 'prop'
@@ -3053,18 +3254,10 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
       .trim()
       .toLowerCase();
     if (mode !== 'light' && mode !== 'dark') {
-      // A word for one of the two (night, day) is that one; never the
-      // nearest spelling, which can be the other (night → light).
-      const meant = {
-        night: 'dark',
-        nighttime: 'dark',
-        dim: 'dark',
-        black: 'dark',
-        day: 'light',
-        daytime: 'light',
-        bright: 'light',
-        white: 'light',
-      }[mode];
+      // A word that names one of the two (dark-only, darkmode, night) is
+      // that one, by the one mode reader; never the nearest spelling, which
+      // can be the other (night → light).
+      const meant = modeWord(mode);
       const near = meant ? [meant] : nearest(mode, ['light', 'dark']);
       // The line for that one mode: for a dial, the one `--mode dark` itself
       // offers (the color token for that mode), never the both-modes dial.
@@ -3160,7 +3353,19 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
         (x.when ?? null) === (s.when ?? null) &&
         (x.state ?? null) === (s.state ?? null),
     );
-  if (s.mode && data.mode !== 'both' && !unset && !sameModeEntry) {
+  // A one-mode theme still has the other mode where Core draws it (a toast,
+  // a lightbox): a value for that mode is written for those regions.
+  const otherModeOfOneMode =
+    s.mode != null &&
+    oneModeOfTheme(data) != null &&
+    oneModeOfTheme(data) !== s.mode;
+  if (
+    s.mode &&
+    data.mode !== 'both' &&
+    !unset &&
+    !sameModeEntry &&
+    !otherModeOfOneMode
+  ) {
     // What takes no --mode in any theme (a size, a font, a keyword) is
     // refused for that, with the command that drops --mode: a theme with
     // both modes would refuse it too, so its mode is no way out.
@@ -3171,14 +3376,9 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
     }
     refuse(
       E.ERR_THEME_NO_MODE,
-      `This theme is ${data.mode}; --mode is for themes with both modes.`,
+      `This theme is ${data.mode}, so its own mode needs no --mode.`,
       {
         run: [
-          // For the mode the theme does not show, both modes first; the
-          // same setting for the theme's own mode keeps where it applies.
-          ...((data.mode === 'light-only' ? 'light' : 'dark') !== s.mode
-            ? [`${P} set ${slug} mode both`]
-            : []),
           `${P} set ${slug} ${thing} ${quoteCommandArgument(v)}${onFlag}${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}`,
         ],
       },
@@ -4159,12 +4359,11 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
         // A rung in any case, a size in px written any way: the plain form.
         const lower = v.toLowerCase();
         // Any CSS number in px (2e1px, +4px), the shared length parse; a
-        // rem is that many 16px, saved in px.
-        const pxLen = /\d(px|rem)$/.test(lower) ? lengthPx(lower) : null;
-        if (CORNERS.some(([n]) => n === lower)) s.value = lower;
-        else if (pxLen != null && pxLen >= 0) {
-          s.value =
-            pxLen >= 1000 ? 'pill' : `${Math.round(pxLen * 10000) / 10000}px`;
+        // rem is that many 16px, saved in px (the one reading, cornersPlain,
+        // which the settings reader gives a saved value too).
+        const plain = cornersPlain(v);
+        if (plain) {
+          s.value = plain;
           if (/rem$/.test(lower))
             s.note = `corners ${v.trim()} is saved as ${s.value}`;
         }
@@ -4540,8 +4739,12 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
       const colors = data.settings.filter(
         x => x.source === 'dial' && PALETTE_DIALS.includes(x.thing),
       );
-      // With no color to saturate, no vibrancy value is suggested.
-      const canApply = colors.some(x => !isGraySeed(seedOf(x.value)));
+      // With no color to saturate, no vibrancy value is suggested. A color
+      // counts when vibrancy changes the shades made from it at all (a warm
+      // gray has a little hue to take out or add; a pure gray has none).
+      const canApply = colors.some(x =>
+        vibrancyMoves(x.thing, seedOf(x.value), 0, 100),
+      );
       if (!step && canApply && (!/^\d{1,3}$/.test(v) || Number(v) > 100)) {
         // The value meant: a step in other letters (MORE), or the number
         // read as CSS reads it (70%, 7e1), kept in range.
@@ -4578,7 +4781,7 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
         refuse(
           E.ERR_THEME_NO_EFFECT,
           colors.length
-            ? 'vibrancy sets how saturated the generated colors are, and every color this theme sets is a gray, so it would change nothing. Set a color first.'
+            ? `vibrancy sets how saturated the generated colors are, and every color this theme sets (${colors.map(x => `${x.thing} ${x.value}`).join(', ')}) comes out the same at every vibrancy: a gray with no hue to change, so it would change nothing. Set a color first.`
             : (() => {
                 // Colors set as tokens or on parts are values of their own:
                 // vibrancy saturates only what the color dials make.
@@ -4626,7 +4829,9 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
               )
           : family
             ? [
-                `${P} set ${slug} font-family ${quoteCommandArgument(v)} --on ${s.on}`,
+                // A font dial word (mono, system, inter) names no family:
+                // the part takes the stack it stands for.
+                `${P} set ${slug} font-family ${quoteCommandArgument(fontStack(v) ?? v)} --on ${s.on}`,
               ]
             : [example];
         refuse(
@@ -4792,6 +4997,26 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
           {run: [`${P} set ${slug} font inter`]},
         );
     } else if (thing === 'base') {
+      // A built-in base this project has not installed: install it, then
+      // the same set.
+      // A theme that builds on a base keeps it by changing nothing: no
+      // base is offered only to a theme on none.
+      if (LIKE.includes(v) && !unset && !baseInstalled(ctx.project, v))
+        throw new AstryxError(
+          `The ${v} theme is not installed, so ${slug} cannot build on it. Install @astryxdesign/theme-${v}, then set the base again${data.like ? `; ${slug} stays on ${data.like} until then` : ', or build on no theme'}. Nothing was changed.`,
+          [
+            ...onBuiltInSteps(ctx.project.cwd, v, `${P} set ${slug} base ${v}`),
+            ...(data.like
+              ? []
+              : [
+                  {
+                    name: `${P} set ${slug} base none`,
+                    reason: 'build on no theme',
+                  },
+                ]),
+          ],
+          E.ERR_UNKNOWN_THEME,
+        );
       if (s.on)
         refuse(
           E.ERR_THEME_BAD_VALUE,
@@ -4800,12 +5025,13 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
         );
       if (![...LIKE, 'none'].includes(v)) {
         // `NEUTRAL`, `base=neutral`, `None`: the base meant.
-        const meant = v
-          .toLowerCase()
-          .replace(/^base\s*[=:]\s*/, '')
-          .trim()
-          .replace(/^@astryxdesign\/theme-/, '')
-          .replace(/^theme-/, '');
+        // Read from the value as typed: its letters' case marks an export
+        // name (neutralTheme).
+        const meant = baseWord(
+          String(value ?? v)
+            .trim()
+            .replace(/^base\s*[=:]\s*/i, ''),
+        );
         // Only a base this project has installed is suggested; a theme
         // made here is never a base.
         const bases = [
@@ -5082,7 +5308,13 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
     }
     return s;
   }
-  const prop = kebab(thing);
+  // A property in camel case, or with `_` or spaces for its dashes
+  // (backgroundColor, font_size, "border radius"), is that property: one
+  // reading, so each form gets the same answer.
+  const spelled = kebab(thing.trim())
+    .replace(/[_\s]+/g, '-')
+    .replace(/-+/g, '-');
+  const prop = cssProperties().has(spelled) ? spelled : kebab(thing);
   // A token typed without its leading dashes (color-accent,
   // text-body-size): the token, when no CSS property has that name.
   if (
@@ -5137,30 +5369,28 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
     s.source = 'property';
     s.thing = prop;
     if (unset) return s;
-    // A length property (padding, a corner radius, a gap) that reads a
-    // design token of another kind (a color, a font, a duration) gets
+    // A property that reads a design token of a kind it does not take (a
+    // color property reading a size, a length reading a color) gets
     // nothing the browser keeps: refused like the token form.
-    if (matchValue(prop, '1px') && !matchValue(prop, 'red'))
-      for (const m of v.matchAll(/var\(\s*(--[a-z0-9-]+)/gi)) {
-        const kind = ctx.C.isToken(m[1]) ? ctx.C.typeOf(m[1]) : null;
-        if (kind && !['size', 'number', 'other'].includes(kind)) {
-          const like = /radius/.test(prop)
-            ? 'var(--radius-container)'
-            : /^(padding|margin|gap|row-gap|column-gap|inset)/.test(prop)
-              ? 'var(--spacing-4)'
-              : exampleOf('size', prop);
-          refuse(
-            E.ERR_THEME_BAD_VALUE,
-            `${prop} takes a length; ${m[1]} is a ${kind}, so the browser would drop it.`,
-            {
-              run: [
-                `${P} set ${slug} ${prop} ${quoteCommandArgument(v.replace(new RegExp(`var\\(\\s*${m[1]}\\s*(,[^)]*)?\\)`, 'i'), like))} --on ${quoteCommandArgument(String(s.on))}${s.state ? ` --state ${s.state}` : ''}${s.when ? ` --when ${quoteCommandArgument(s.when)}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}`,
-                `${HOW} --list tokens ${/radius/.test(prop) ? 'radius' : 'spacing'}`,
-              ],
-            },
-          );
-        }
-      }
+    const mismatch = tokenKindMismatch(ctx, prop, v);
+    if (mismatch) {
+      const length = mismatch.takes === 'a length';
+      const like = /radius/.test(prop)
+        ? 'var(--radius-container)'
+        : /^(padding|margin|gap|row-gap|column-gap|inset)/.test(prop)
+          ? 'var(--spacing-4)'
+          : null;
+      refuse(E.ERR_THEME_BAD_VALUE, `${mismatch.message}.`, {
+        run: [
+          ...(length && like
+            ? [
+                `${P} set ${slug} ${prop} ${quoteCommandArgument(v.replace(new RegExp(`var\\(\\s*${mismatch.token}\\s*(,[^)]*)?\\)`, 'i'), like))} --on ${quoteCommandArgument(String(s.on))}${s.state ? ` --state ${s.state}` : ''}${s.when ? ` --when ${quoteCommandArgument(s.when)}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}`,
+              ]
+            : []),
+          `${HOW} --list tokens ${length ? (/radius/.test(prop) ? 'radius' : 'spacing') : mismatch.takes === 'a color' ? 'color' : ''}`.trimEnd(),
+        ],
+      });
+    }
     // initial and unset leave a part's padding variables without a value:
     // the part takes Core's own default, which the result names.
     if (
@@ -5311,6 +5541,27 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
           },
         );
     }
+    // Padding on a part Core renders as a box CSS draws no padding on (a
+    // table row): the parts inside it with padding of their own take it.
+    if (
+      !unset &&
+      /^padding(-|$)/.test(prop) &&
+      !s.state &&
+      partsOf(ctx, s).length === 1
+    ) {
+      const part = partsOf(ctx, s)[0];
+      const inner = paddedParts(ctx, part).filter(t => t !== part);
+      if (inner.length)
+        refuse(
+          E.ERR_THEME_NO_EFFECT,
+          `${part} is drawn as a table row, row group or column, which CSS draws no padding on; its space is the padding of ${inner.join(' and ')}, so set ${prop} on ${inner.length > 1 ? 'those parts' : 'that part'}.`,
+          {
+            run: inner.map(t =>
+              setLine(slug, prop, v, {...s, on: t, only: undefined}),
+            ),
+          },
+        );
+    }
     // A text property on a part whose text is drawn by elements inside it
     // that set that property themselves from a token (a top nav heading's
     // title span) never reaches that text: the token, on the part, does.
@@ -5350,24 +5601,9 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
     // A text property CSS inherits reaches the parts inside the part that
     // do not set it themselves (a side nav section's items): the result
     // says which.
-    if (
-      !unset &&
-      /^(font-(size|weight|style|family|variant)|text-(transform|align)|letter-spacing|line-height|white-space|word-spacing)$/.test(
-        prop,
-      )
-    ) {
-      const reached = [
-        ...new Set(
-          partsOf(ctx, s).flatMap(t =>
-            /** @type {string[]} */ (ctx.C.MAP[t]?.contains ?? []).filter(
-              inner =>
-                ctx.project.target.has(inner) && !ctx.C.MAP[inner]?.own?.[prop],
-            ),
-          ),
-        ),
-      ];
-      if (reached.length)
-        s.note = `${prop} is inherited, so it also reaches ${reached.slice(0, 4).join(', ')}${reached.length > 4 ? ' and more' : ''} inside ${s.on}, which set no ${prop} of their own`;
+    if (!unset) {
+      const reach = inheritedReach(ctx, s, prop);
+      if (reach) s.note = reach;
     }
     // Text, headings and links take their color from the color prop.
     const textParts = COLOR_PROP_PARTS;
@@ -5390,18 +5626,27 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
           v && isColorValue(v) && isFixedColor(v) && !/\bvar\(/i.test(v)
             ? v
             : (nearestColorName(v) ?? '#1f2937');
+        // The tokens the part's color prop reads: the one named, else the
+        // prop's default as its doc gives it (a link's accent), else each
+        // color whose token the part reads (Text's depends on its type),
+        // set on the part alone.
+        const colors = named
+          ? [named]
+          : colorPropDefaults(
+              partComponentDocs(ctx, /** @type {string} */ (s.on))
+                .map(d => d.doc.props?.color)
+                .find(Boolean),
+              ctx.C.MAP[/** @type {string} */ (s.on)]?.own?.color?.tokens,
+            );
+        const tail = `${s.on ? ` --on ${s.on}` : ''}${s.mode ? ` --mode ${s.mode}` : ''}`;
         refuse(
           E.ERR_THEME_NO_EFFECT,
-          `${s.on} takes its color from the color prop, which Core sets after part styles, so a color set on ${s.on} never shows. Set the text color token instead.`,
+          `${s.on} takes its color from the color prop, which Core sets after part styles, so a color set on ${s.on} never shows. Set the token its color prop reads (${colors.map(c => `${c}: --color-text-${c}`).join('; ')}) on ${s.on} instead.`,
           {
-            run: [
-              `${P} set ${slug} --color-text-${named ?? 'primary'} ${quoteCommandArgument(color)}${s.mode ? ` --mode ${s.mode}` : ''}`,
-              ...(named
-                ? []
-                : [
-                    `${P} set ${slug} --color-text-secondary ${quoteCommandArgument(color)}${s.mode ? ` --mode ${s.mode}` : ''}`,
-                  ]),
-            ],
+            run: colors.map(
+              c =>
+                `${P} set ${slug} --color-text-${c} ${quoteCommandArgument(color)}${tail}`,
+            ),
           },
         );
       }
@@ -5541,7 +5786,9 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
       }
       refuse(
         E.ERR_THEME_NO_MODE,
-        `--mode works on plain colors; ${prop} ${prop === 'box-shadow' || prop === 'border' ? 'mixes a color with sizes' : 'is not a color'}, so it cannot differ between light and dark.`,
+        prop === 'box-shadow' || prop === 'border'
+          ? `--mode takes a plain color; ${prop} mixes a color with sizes, so --mode cannot hold it. Its color can still differ between light and dark: write it in the value as light-dark(<light>, <dark>).`
+          : `--mode works on plain colors; ${prop} is not a color, so it cannot differ between light and dark.`,
         {
           run: alt
             ? [
@@ -5551,61 +5798,6 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
             : [
                 `${P} set ${slug} ${prop} ${quoteCommandArgument(v)} --on ${s.on}${whenFlag}   # both modes`,
               ],
-        },
-      );
-    }
-    // In a state, the other mode keeps the state's own value there (or a
-    // value set for both modes); with none to keep, the setting would
-    // change that mode too. Without a state, the other mode keeps the
-    // part's plain color.
-    /** Whether a part keeps a value of its own in the other mode. */
-    const keepsOther = (/** @type {string} */ t) =>
-      Boolean(partDefault(ctx, t, camel(prop), s.when, s.state)) ||
-      // The base theme's own value there (in the state, else at rest) is
-      // what the other mode keeps.
-      [`:${s.state}`, null].some(st =>
-        baseRuleHas(
-          ctx.project.cwd,
-          data.like,
-          t,
-          s.when ?? 'base',
-          st,
-          camel(prop),
-        ),
-      );
-    const cannotKeep =
-      s.mode && s.state ? partsOf(ctx, s).filter(t => !keepsOther(t)) : [];
-    if (
-      cannotKeep.length &&
-      !data.settings.some(
-        x =>
-          x.thing === prop &&
-          x.on === s.on &&
-          x.when === s.when &&
-          x.state === s.state &&
-          x.mode !== s.mode,
-      )
-    ) {
-      const flagsTail = `${s.when ? ` --when ${s.when}` : ''}${s.state ? ` --state ${s.state}` : ''}`;
-      // The part named keeps its own when only other members of its group
-      // cannot: --only writes it alone, its mode kept.
-      const onlyThis =
-        s.on &&
-        !cannotKeep.includes(s.on) &&
-        familyOf(s.on) &&
-        AUTO_SPREAD.includes(/** @type {string} */ (familyOf(s.on)));
-      refuse(
-        E.ERR_THEME_NO_MODE,
-        `${cannotKeep.slice(0, 3).join(', ')}${cannotKeep.length > 3 ? ` and ${cannotKeep.length - 3} more` : ''} ${cannotKeep.length > 1 ? 'have' : 'has'} no ${prop}${s.state ? ` when ${s.state}` : ''}${s.when ? ` for ${s.when}` : ''} of ${cannotKeep.length > 1 ? 'their' : 'its'} own for the ${s.mode === 'light' ? 'dark' : 'light'} mode to keep, so a ${s.mode}-only value would change it too.${onlyThis ? ` ${s.on} has one: set it alone with --only.` : ' Set it for both modes.'}`,
-        {
-          run: [
-            ...(onlyThis
-              ? [
-                  `${P} set ${slug} ${prop} ${quoteCommandArgument(v)} --on ${s.on} --only${flagsTail} --mode ${s.mode}`,
-                ]
-              : []),
-            `${P} set ${slug} ${prop} ${quoteCommandArgument(v)} --on ${s.on}${flagsTail}`,
-          ],
         },
       );
     }
@@ -5625,7 +5817,10 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
         run: [
           unset
             ? `${P} undo ${slug} ${meant}${onFlag}`
-            : `${P} set ${slug} ${meant} ${quoteCommandArgument(v || exampleOf(groupOfPropType(meant), meant))}${onFlag || ' --on card'}`,
+            : // The scope typed, never a part nobody named: with no --on,
+              // set's own answer for the property (its whole-theme dial or
+              // token) is folded in when the line is vetted.
+              `${P} set ${slug} ${meant} ${quoteCommandArgument(v || exampleOf(groupOfPropType(meant), meant))}${onFlag}`,
         ],
       },
     );
@@ -5796,6 +5991,68 @@ export function normalValue(thing, value) {
 export {familySpaces};
 
 /**
+ * The first design token a property's value reads through var() whose kind
+ * the property does not take, or null: the value with the var() replaced by
+ * a value of the token's kind (the example each kind's refusals give) is
+ * one the property's grammar does not take, so the browser drops it.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} prop the property, as CSS names it
+ * @param {string} v
+ * @returns {{token: string, kind: string, takes: string, message: string} | null}
+ */
+function tokenKindMismatch(ctx, prop, v) {
+  for (const m of v.matchAll(/var\(\s*(--[a-z0-9-]+)\s*(?:,[^()]*)?\)/gi)) {
+    const token = m[1];
+    if (!ctx.C.isToken(token)) continue;
+    const kind = ctx.C.typeOf(token);
+    if (kind === 'other') continue;
+    const sample = v.replace(m[0], exampleOf(kind, token));
+    if (matchValue(prop, sample)) continue;
+    const takes =
+      matchValue(prop, '1px') && !matchValue(prop, 'red')
+        ? 'a length'
+        : matchValue(prop, 'red') && !matchValue(prop, '1px')
+          ? 'a color'
+          : null;
+    return {
+      token,
+      kind,
+      takes: takes ?? `no ${kind}`,
+      message: takes
+        ? `${prop} takes ${takes}; ${token} is a ${kind}, so the browser would drop it`
+        : `${prop} takes no ${kind}; ${token} is a ${kind}, so the browser would drop it`,
+    };
+  }
+  return null;
+}
+
+/**
+ * Why a part's CSS property value is refused, as `set` refuses it, or
+ * null: a var() that reads nothing, a color property's value that is no
+ * color, or a value the property's grammar does not take.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} prop the property, as CSS names it
+ * @param {string} value
+ * @param {Record<string, unknown>} TOKENS
+ * @param {ReadonlySet<string>} [reads] custom properties the theme sets where the value is read
+ * @returns {string | null}
+ */
+export function propertyValueProblem(ctx, prop, value, TOKENS, reads) {
+  const v = value.trim();
+  const ref = unknownVarRef(v, TOKENS, prop, reads);
+  if (ref) return ref.message;
+  const mismatch = tokenKindMismatch(ctx, prop, v);
+  if (mismatch) return mismatch.message;
+  if (CSS_WIDE.includes(v.toLowerCase())) return null;
+  if (COLOR_PROPS.test(prop))
+    return /\bvar\(/i.test(v) || isColorValue(v)
+      ? null
+      : `${prop} takes a color; "${v}" is not one.`;
+  const grammar = propertyProblem(prop, v);
+  return grammar ? `${prop} takes ${grammar.takes}; "${v}" is not one.` : null;
+}
+
+/**
  * The first var() in a value that names no design token and would read
  * nothing (no fallback), or one a letter or two off a token, else null.
  * Dials take their own words, so a dial's var() with no near token passes.
@@ -5859,20 +6116,21 @@ export function unknownVarRef(v, TOKENS, thing, reads) {
  * @returns {string | null}
  */
 export function fontFileReason(value) {
-  const hit = String(value)
-    .split(',')
-    .map(f => f.trim().replace(/^["']|["']$/g, ''))
-    .find(
-      f =>
-        /^url\(/i.test(f) ||
-        /:\/\//.test(f) ||
-        /[\\/]/.test(f) ||
-        /\.(woff2?|ttf|otf|eot)$/i.test(f),
-    );
-  const colon = String(value)
-    .split(',')
-    .map(f => f.trim().replace(/^["']|["']$/g, ''))
-    .find(f => f.includes(':'));
+  // Each family as CSS reads it: an escape (`Gill\ Sans`, `\5FAE`) is part
+  // of the name, never a path separator.
+  // The families as the one family-list reader splits them (a quoted name
+  // with a comma is one family).
+  const families = (familiesOf(value) ?? String(value).split(',')).map(f =>
+    cssUnescape(f.trim().replace(/^["']|["']$/g, '')),
+  );
+  const hit = families.find(
+    f =>
+      /^url\(/i.test(f) ||
+      /:\/\//.test(f) ||
+      /[\\/]/.test(f) ||
+      /\.(woff2?|ttf|otf|eot)$/i.test(f),
+  );
+  const colon = families.find(f => f.includes(':'));
   if (!hit && colon)
     return `"${colon}" holds a colon, so it is a pasted declaration or a link, not a font family name. Give the family alone, such as Inter, sans-serif.`;
   return hit

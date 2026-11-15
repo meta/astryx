@@ -9,7 +9,14 @@
  * @position packages/cli/api/theme-edit — pure helpers, no environment access
  */
 
-import {DIALS, wordTable} from './_tables.mjs';
+import {
+  DIALS,
+  FONTS,
+  MODE_WORDS,
+  OPEN_FONTS,
+  fontStack,
+  wordTable,
+} from './_tables.mjs';
 import {colorProblem, hex, parseColor} from './_color.mjs';
 import {sameKindValues} from './_css.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
@@ -249,11 +256,18 @@ export function normalizeEntry(thing, value) {
   if (quotedThing) {
     t = quotedThing[2].trim();
     pasted = true;
-    // Its value in JSON's double quotes is the value (`"#e11d48"`); a font
-    // list keeps its own quotes.
-    if (typeof v === 'string' && !/font/i.test(t)) {
-      const jv = /^\s*"([^"]*)"\s*,?\s*$/.exec(v);
-      if (jv) v = jv[1];
+    // Its value in JSON's double quotes is the string they hold
+    // (`"#e11d48"`, `"Inter, serif"`): the quotes are JSON's, for a font
+    // too; a family that needs its own quotes is written inside the string
+    // (`"\"Open Sans\", serif"`).
+    if (typeof v === 'string') {
+      const jv = /^\s*("(?:[^"\\]|\\.)*")\s*,?\s*$/.exec(v);
+      if (jv)
+        try {
+          v = String(JSON.parse(jv[1]));
+        } catch {
+          // Not a JSON string: read as typed.
+        }
     }
   }
   // Dash-like characters where a token's two dashes go (an em or en dash,
@@ -572,6 +586,55 @@ export function withoutCopyDebris(v) {
     .trim();
 }
 
+/** Number words, longest phrase first. */
+export const NUMBER_WORDS = wordTable(
+  /** @type {Record<string, number>} */ ({
+    zero: 0,
+    one: 1,
+    two: 2,
+    three: 3,
+    four: 4,
+    five: 5,
+    six: 6,
+    seven: 7,
+    eight: 8,
+    nine: 9,
+    ten: 10,
+    eleven: 11,
+    twelve: 12,
+    thirteen: 13,
+    fourteen: 14,
+    fifteen: 15,
+    sixteen: 16,
+    seventeen: 17,
+    eighteen: 18,
+    nineteen: 19,
+    twenty: 20,
+    thirty: 30,
+    forty: 40,
+    fifty: 50,
+    sixty: 60,
+    seventy: 70,
+    eighty: 80,
+    ninety: 90,
+    hundred: 100,
+  }),
+);
+
+/**
+ * A whole number as typed: digits with any white space at the ends and a
+ * zero fraction (`" 3"`, `"3.0"`), or a number word (`"three"`); else null.
+ * @param {unknown} text
+ * @returns {number | null}
+ */
+export function wholeNumberOf(text) {
+  const t = String(text ?? '')
+    .trim()
+    .toLowerCase();
+  if (/^[+-]?\d+(?:\.0+)?$/.test(t)) return Number(t);
+  return Object.hasOwn(NUMBER_WORDS, t) ? NUMBER_WORDS[t] : null;
+}
+
 /**
  * Words with a documented reading on a CSS property: the exact value each
  * one means. A repair may offer these for the word typed.
@@ -757,7 +820,9 @@ export function commaNumbers(text, thousands = false) {
   let out = '';
   let plain = '';
   const flush = () => {
-    out += plain.replace(/(\d+),(\d+)(?![\d.,])/g, (_, a, b) =>
+    // (A number starts a word: the digits of a hex color or of a word
+    // before a comma are no number.)
+    out += plain.replace(/(?<![\w#.])(\d+),(\d+)(?![\d.,])/g, (_, a, b) =>
       thousands && b.length === 3 && !/^0+$/.test(a) ? `${a}${b}` : `${a}.${b}`,
     );
     plain = '';
@@ -781,6 +846,64 @@ export function commaNumbers(text, thousands = false) {
  */
 export const weightSetting = thing =>
   /^(font-weight|headings)$|^--font-weight/.test(String(thing).toLowerCase());
+
+/**
+ * The one mode a word names, or null: light or dark, written as a mode
+ * value names one (`dark-only`), with the word mode (`darkmode`, `dark
+ * mode`, `mode dark`), or as a word for it (MODE_WORDS: night, day). The
+ * one mode reader: the `--mode` flag, a mode label in a value, a saved
+ * entry's mode and the settings file's mode all read it.
+ * @param {unknown} text
+ * @returns {'light' | 'dark' | null}
+ */
+export function modeWord(text) {
+  const w = String(text ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, '-');
+  const m = /^(?:(light|dark)(?:-?only|-?mode)?|mode-?(light|dark))$/.exec(w);
+  if (m) return /** @type {'light' | 'dark'} */ (m[1] ?? m[2]);
+  return MODE_WORDS[w] ?? null;
+}
+
+/**
+ * A base as written in any of its names: its package (`@astryxdesign/
+ * theme-neutral`, `theme-neutral`), its export (`neutralTheme`), or with
+ * the word theme (`neutral-theme`, `neutral theme`), in any case. The one
+ * reading `set`, `new` and the settings file share; the word as read (a
+ * base name or not).
+ * @param {unknown} v
+ * @returns {string}
+ */
+export function baseWord(v) {
+  return String(v ?? '')
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+    .toLowerCase()
+    .replace(/[\s_]+/g, '-')
+    .replace(/^(@astryxdesign\/)?theme-|-theme$/g, '');
+}
+
+/**
+ * The one reading of a yes/no word, for a flag given a value (`--only=on`)
+ * and a saved `only`: the documented spellings of yes and no, or a typo of
+ * one of them (`ture`); null for any other word, which is neither.
+ * @param {unknown} word
+ * @returns {boolean | null}
+ */
+export function booleanWord(word) {
+  if (typeof word === 'boolean') return word;
+  const w = String(word ?? '')
+    .trim()
+    .toLowerCase();
+  const YES = ['true', 'yes', 'y', 'on', '1'];
+  const NO = ['false', 'no', 'n', 'off', '0'];
+  if (YES.includes(w)) return true;
+  if (NO.includes(w)) return false;
+  const near = [...YES, ...NO].filter(x => x.length > 3 && typoNear(w, x));
+  const read = [...new Set(near.map(x => YES.includes(x)))];
+  return read.length === 1 ? read[0] : null;
+}
 
 /** The CSS functions a value is written in, whose names carry no value. */
 const FORM =
@@ -953,6 +1076,22 @@ export function documentNumericTable(
 const RANGES = [];
 
 /**
+ * The documented words a typed word may be a typo of, item by item in a
+ * list (the CSS generic families, the font presets), registered where each
+ * list is defined.
+ * @type {Set<string>}
+ */
+const TYPO_WORDS = new Set();
+
+/**
+ * Register documented words a typed list item may be a typo of.
+ * @param {Iterable<string>} words
+ */
+export function documentTypoWords(words) {
+  for (const w of words) TYPO_WORDS.add(String(w).toLowerCase());
+}
+
+/**
  * Register a setting's documented range with the repair allowlist.
  * @param {string[]} things as for documentNumericTable
  * @param {number} min
@@ -1044,6 +1183,39 @@ export function readsTyped({
   )
     return true;
   if (numbersEqual(o, t)) return true;
+  // Two bare numbers typed with a comma between, offered as the slash pair
+  // a grammar takes (`16,9` is `16 / 9`): the comma separated them.
+  {
+    const pair = /^\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*$/.exec(
+      String(typed).replace(/^(["'])(.*)\1$/, '$2'),
+    );
+    if (pair && o.replace(/\s+/g, '') === `${pair[1]}/${pair[2]}`) return true;
+  }
+  // (5) A typo of a documented word in a list, item by item (`Inter,
+  // san-serif` is `Inter, sans-serif`; `sytem` is the system font).
+  {
+    const ti = t.split(',').map(x => x.trim());
+    const oi = o.split(',').map(x => x.trim());
+    const bare = (/** @type {string} */ x) => x.replace(/[\s_-]+/g, '');
+    const same = (/** @type {string} */ a, /** @type {string} */ b) => {
+      const A = tokensOf(a);
+      const B = tokensOf(b);
+      return A.length === B.length && A.every((w, i) => sameToken(w, B[i]));
+    };
+    if (
+      ti.length === oi.length &&
+      oi.some((x, i) => !same(x, ti[i])) &&
+      oi.every(
+        (x, i) =>
+          same(x, ti[i]) ||
+          (TYPO_WORDS.has(x) &&
+            (bare(x) === bare(ti[i]) ||
+              typoNear(ti[i], x) ||
+              typoNear(bare(ti[i]), bare(x)))),
+      )
+    )
+      return true;
+  }
   const color = parseColor(t);
   if (
     /^#[0-9a-f]{3,8}$/.test(o) &&
@@ -1063,7 +1235,15 @@ export function readsTyped({
     if (o === light && DIALS[key] && !key.startsWith('--')) return true;
   }
   // A base named by its package (@astryxdesign/theme-butter is butter).
-  if (key === 'base' && t.replace(/^(@astryxdesign\/)?theme-/, '') === o)
+  if (
+    key === 'base' &&
+    [
+      t,
+      String(typed)
+        .trim()
+        .replace(/^(["'])(.*)\1$/, '$2'),
+    ].some(x => baseWord(x) === o)
+  )
     return true;
   // (2) A documented reading of the whole value.
   const whole = [t, t.replace(/\s+/g, '-'), t.replace(/[\s-]+/g, '')];
@@ -1105,11 +1285,20 @@ export function readsTyped({
     /(^|[\s-])(not|no|non|without|never|less)([\s-]|$)|^un|-none$/.test(t)
   )
     return true;
-  // (3) A saved value of the line's own setting, never the one typed.
+  // (3) A saved value of the line's own setting, never the one typed: as
+  // saved, or under the readings a typed value has (`blod` saved for
+  // headings is bold, as set reads it).
   if (
     key &&
     key !== typedKey &&
-    saved?.get(key)?.some(v => typedReading(v) === o)
+    saved
+      ?.get(key)
+      ?.some(
+        v =>
+          typedReading(v) === o ||
+          readsTyped({offered: o, typed: v, thing: key, typedThing: key}) ===
+            true,
+      )
   )
     return true;
   // (4) A documented fallback; a step on a dial with a scale.
@@ -1259,30 +1448,6 @@ export function coversTyped(reads, typed, thing = '') {
   return [...typedCount].every(([w, n]) => (carried.get(w) ?? 0) >= n);
 }
 
-/**
- * Whether a repair may offer `offered` as the whole typed value (the gate,
- * with no setting named).
- * @param {string} offered
- * @param {string} typed
- */
-export const offersTyped = (offered, typed) =>
-  readsTyped({offered, typed}) === true;
-
-/**
- * Whether the values a refusal offers for one setting carry what was typed
- * (see readsTyped and coversTyped).
- * @param {string[]} offered
- * @param {string} typed
- */
-export function offersAllTyped(offered, typed) {
-  const reads = offered.map(o => readsTyped({offered: o, typed}));
-  if (reads.includes(false)) return false;
-  return reads.every(r => r === true) || coversTyped(reads, typed);
-}
-
-/** The gate's word for the whole typed value (tests and old callers). */
-export const carriesTyped = offersTyped;
-
 documentReadings([
   ['more', 'less'],
   ['less', 'more'],
@@ -1292,6 +1457,13 @@ documentReadings(Object.values(PROPERTY_WORDS).flatMap(m => Object.entries(m)));
 documentReadings(Object.entries(WEIGHT_WORDS));
 documentReadings(Object.entries(WEIGHT_WORDS).map(([w, n]) => [n, w]));
 documentReadings(Object.entries(DENSITY_WORDS));
+// A font dial word as a part's font-family is the stack it stands for.
+documentReadings(
+  [...Object.keys(FONTS), ...Object.keys(OPEN_FONTS)].map(w => [
+    w,
+    /** @type {string} */ (fontStack(w)),
+  ]),
+);
 
 /**
  * Whether a repair line may offer `offered` as the whole typed value (see

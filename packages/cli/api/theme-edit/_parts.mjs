@@ -29,9 +29,10 @@ import {
   RenderError,
 } from '../../foundation/render/render-page.mjs';
 import {SAMPLE_PAGE, elementNames, pageSource} from './_catalog.mjs';
+import {removeOnStop} from '../../foundation/fs/stop-cleanup.mjs';
 
 /** Bump when the shape of the cached part data changes. */
-const PART_DATA_VERSION = 9;
+const PART_DATA_VERSION = 12;
 
 /**
  * Flags that change what a component does or whether it shows, not how it
@@ -52,12 +53,16 @@ const LIFECYCLE_FLAGS = new Set([
  * @property {Record<string, string[]>} inside - tokens read by unnamed elements inside the part -> properties
  * @property {Record<string, string[]>} attrs - data attributes seen on the part
  * @property {string[]} contains - parts rendered inside it
+ * @property {string[]} [tags] - the elements it is rendered as (`tr` for a table row)
+ * @property {string[]} [innerCorners] - the radius tokens of the corners Core draws by place on the parts directly inside it (a button group's end buttons)
  * @property {Record<string, Record<string, string>>} [inline] - state ('' for always) -> property -> the token Core paints it with as an inline style, which no theme rule can replace
  */
 
 /**
  * @typedef {{target: string | null, tokens: string[], raw: string | null}} PaintSide
- * @typedef {{text: string, fg: PaintSide, bg: PaintSide, sample: string}} TextPair
+ * @typedef {{text: string, fg: PaintSide, bg: PaintSide, sample: string, over?: PaintSide}} TextPair
+ *   `over`: the region the part sits in (a header), whose background shows
+ *   through a see-through background of the part's own, else the page
  * @typedef {{version: number, coreKey: string, map: Record<string, PartRecord>, pairs: TextPair[], rendered: number, items: number}} PartData
  */
 
@@ -399,14 +404,9 @@ export async function renderGenerated(project, file, source, extra = []) {
       );
     })();
   fs.mkdirSync(dir, {recursive: true});
-  // Stopped by a signal, the render folder still goes.
-  const cleanup = () => fs.rmSync(dir, {recursive: true, force: true});
-  const onSignal = (/** @type {NodeJS.Signals} */ sig) => {
-    cleanup();
-    process.kill(process.pid, sig);
-  };
-  process.once('SIGINT', onSignal);
-  process.once('SIGTERM', onSignal);
+  // Stopped by a signal (the terminal closing too), the render folder
+  // still goes.
+  const untrack = removeOnStop(dir);
   const entry = path.join(dir, file);
   // Demo images point at the docs site's own folder (`/template-assets/…`),
   // which a page opened from disk cannot reach: the inline placeholder
@@ -462,8 +462,7 @@ export async function renderGenerated(project, file, source, extra = []) {
       fs.rmSync(f, {force: true});
     // Another render may still use it: a folder with a file in it stays.
     removeEmptyFolder(madeThemes ? themes : dir, {deep: true});
-    process.removeListener('SIGINT', onSignal);
-    process.removeListener('SIGTERM', onSignal);
+    untrack();
   }
 }
 
@@ -663,7 +662,7 @@ async function buildPartData(project) {
     // No stylesheet: every part reads nothing.
   }
   const tokens = new Set(Object.keys(project.core.tokenDefaults ?? {}));
-  const result = walkMarkup(markup, declarations(css), tokens);
+  const result = walkMarkup(markup, declarations(css), tokens, project.target);
   addInlineStatePaint(project, result.map);
   addIndicatorRings(project, result.map);
   return {
@@ -859,10 +858,11 @@ function resolvePrivate(v, env, tokens, depth = 0) {
  * @param {string} html
  * @param {ReturnType<typeof declarations>} decls
  * @param {Set<string>} tokens
+ * @param {Map<string, {props: string[], states: string[]}>} [targets] the theming targets by key: the visual props and runtime states each declares are the data attributes read as its conditions
  * @returns {{map: Record<string, PartRecord>, pairs: TextPair[]}}
  */
-export function walkMarkup(html, decls, tokens) {
-  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>}>} */
+export function walkMarkup(html, decls, tokens, targets = new Map()) {
+  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, tags: Set<string>, innerCorners: Set<string>}>} */
   const map = {};
   /** @type {Array<{env: Record<string, string>, target: string | null, fg: PaintSide | null, bg: PaintSide | null}>} */
   const stack = [{env: {}, target: null, fg: null, bg: null}];
@@ -893,25 +893,35 @@ export function walkMarkup(html, decls, tokens) {
     const cls = (/class="([^"]*)"/.exec(attrs)?.[1] ?? '')
       .split(/\s+/)
       .filter(Boolean);
+    const parent = stack[stack.length - 1];
+    // The theming targets the element carries (else the one it sits in).
+    const keys = cls
+      .filter(c => c.startsWith('astryx-') && !c.startsWith('astryx-theme'))
+      .map(c => c.slice(7));
+    const declaredBy = (keys.length ? keys : [parent.target])
+      .map(k => (k ? targets.get(k) : undefined))
+      .filter(t => t != null);
+    const props = new Set(declaredBy.flatMap(t => t.props));
+    const states = new Set(declaredBy.flatMap(t => t.states));
+    // A data attribute the element's target declares (a visual prop or a
+    // runtime state, written by `themeProps` as `data-<name>`) is a
+    // condition of what the part reads.
     const dataAttrs = Object.fromEntries(
-      [
-        ...attrs.matchAll(
-          /data-(variant|status|size|selected|state|elevation|tone|color|level|weight|checked)="([^"]*)"/g,
-        ),
-      ].map(x => [x[1], x[2]]),
+      [...attrs.matchAll(/\bdata-([a-z][\w-]*)="([^"]*)"/g)]
+        .filter(x => props.has(x[1]) || states.has(x[1]))
+        .map(x => [x[1], x[2]]),
     );
     // The place another component puts a part in (the current page's
     // button in a pagination, a pressed toggle) is a condition of what that
     // component styles it with there, never the part's look at rest. A part
-    // that marks the place with a theme state of its own (a selected tab)
+    // that marks the place with a runtime state of its own (a selected tab)
     // is conditioned by that state already.
-    const ownState = ['selected', 'checked', 'state'].some(k => k in dataAttrs);
+    const ownState = Object.keys(dataAttrs).some(k => states.has(k));
     const context = ownState
       ? []
-      : [...attrs.matchAll(/\baria-(current|pressed)="([^"]*)"/g)]
+      : [...attrs.matchAll(/\b(aria-(?:current|pressed))="([^"]*)"/g)]
           .filter(x => x[2] !== 'false')
           .map(x => `${x[1]}=${x[2]}`);
-    const parent = stack[stack.length - 1];
     const env = {...parent.env};
     const own = cls.flatMap(c => decls.get(c) ?? []);
     for (const d of own)
@@ -931,6 +941,8 @@ export function walkMarkup(html, decls, tokens) {
         inside: {},
         attrs: {},
         contains: new Set(),
+        tags: new Set(),
+        innerCorners: new Set(),
       });
       if (ownsTarget)
         for (const [k, v] of Object.entries(dataAttrs))
@@ -941,16 +953,9 @@ export function walkMarkup(html, decls, tokens) {
       ].join(',');
       for (const d of own) {
         if (d.prop.startsWith('--')) continue;
-        // An inherited background reads what its parent paints.
-        const inherited =
-          ownsTarget &&
-          d.prop === 'background-color' &&
-          /^inherit$/i.test(d.value.trim())
-            ? parent.bg?.tokens
-            : null;
-        const toks = inherited
-          ? new Set(inherited)
-          : expand(d.value, env, tokens);
+        // (An inherited background paints nothing of its own: it reads no
+        // token, and what shows is its parent's.)
+        const toks = expand(d.value, env, tokens);
         const cond = [cond0, d.cond].filter(Boolean).join(' ');
         if (ownsTarget) {
           const P = (T.own[d.prop] ??= {tokens: {}, values: new Set()});
@@ -987,6 +992,18 @@ export function walkMarkup(html, decls, tokens) {
     for (const t of ownsTarget ? named.map(c => c.slice(7)) : [])
       for (const anc of stack)
         if (anc.target && anc.target !== t) map[anc.target].contains.add(t);
+    if (ownsTarget) {
+      for (const t of named) map[t.slice(7)].tags.add(tag.toLowerCase());
+      // Corners Core draws on a part by its place among its siblings (a
+      // button group's first and last buttons): the radius token they read
+      // is the enclosing part's corners.
+      if (parent.target && !named.includes(`astryx-${parent.target}`))
+        for (const d of own)
+          if (/^border-(start|end)-(start|end)-radius$/.test(d.prop))
+            for (const tok of expand(d.value, env, tokens))
+              if (/^--radius-/.test(tok))
+                map[parent.target].innerCorners.add(tok);
+    }
     if (!selfClose && !VOID.has(tag.toLowerCase()))
       stack.push({env, target, fg, bg});
   }
@@ -1016,6 +1033,8 @@ export function walkMarkup(html, decls, tokens) {
         Object.entries(v.attrs).map(([k, s]) => [k, [...s]]),
       ),
       contains: [...v.contains],
+      tags: [...v.tags],
+      innerCorners: [...v.innerCorners],
     };
   }
   return {map: out, pairs: [...pairs.values()]};

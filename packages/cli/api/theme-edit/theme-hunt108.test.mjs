@@ -282,11 +282,13 @@ describe('asks it used to drop', () => {
       ).toEqual([
         "set q box-shadow '0 4px 12px light-dark(transparent, #00000080)' --on popover",
       ]);
-      // A card draws a selection ring and an elevation in its shadow, in
-      // both modes: a one-mode shadow there would wipe them.
+      // A card shows no shadow at rest (its selection ring is a state of
+      // its own): the light half is transparent too.
       expect(
         (await answer('card shadow 0 4px 12px #00000080 in dark mode')).first,
-      ).toEqual([]);
+      ).toEqual([
+        "set q box-shadow '0 4px 12px light-dark(transparent, #00000080)' --on card",
+      ]);
     },
     T,
   );

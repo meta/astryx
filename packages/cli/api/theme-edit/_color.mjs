@@ -1057,7 +1057,12 @@ export function isSafeValue(v) {
     )
   )
     return false;
+  // A CSS escape (`Gill\ Sans`, `\5FAE`) is one character of a name, as
+  // CSS reads it, never a boundary; a backslash that escapes nothing (at
+  // the end, or before a line break) could join the next declaration, so
+  // it stays and is refused.
   const outside = v
+    .replace(/\\(?:[0-9a-fA-F]{1,6}[ \t]?|[^\n\r\f0-9a-fA-F])/g, 'x')
     .replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, '""')
     .replace(/url\(data:[^\s"'()\\]*\)/gi, 'url()');
   if (/[;{}\\<>]/.test(outside)) return false;

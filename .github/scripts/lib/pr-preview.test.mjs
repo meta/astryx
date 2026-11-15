@@ -981,7 +981,7 @@ describe('PR comment preview reconciliation', () => {
       });
       expect(args).toContain('--jobs');
       expect(result.body).toContain(
-        'Not run on this PR: add `ci:run-rtl` to run it.',
+        'Not run on this PR: add `ci:run-rtl` for RTL.',
       );
     });
   });

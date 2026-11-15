@@ -128,7 +128,7 @@ describe('the measured check sees every variant, state and mode', () => {
       const {first} = await answer('all buttons blue except the danger one');
       expect(
         first.some(c =>
-          /^set q background \S+ --on button --when variant:destructive$/.test(
+          /^set q background-color \S+ --on button --when variant:destructive$/.test(
             c,
           ),
         ),
@@ -309,7 +309,7 @@ describe('parts named once for two removals, the page, steps', () => {
         'no shadow and a red background on buttons',
         [
           'set q box-shadow none --on button',
-          "set q background '#dc2626' --on button",
+          "set q background-color '#dc2626' --on button",
         ],
       ],
       [
@@ -417,7 +417,9 @@ describe('see-through, shadows, blur and colors past another', () => {
       const {first} = await answer(
         'make the button background slightly lighter than #000000',
       );
-      expect(first[0]).toMatch(/^set q background '#[0-9a-f]{6}' --on button/);
+      expect(first[0]).toMatch(
+        /^set q background-color '#[0-9a-f]{6}' --on button/,
+      );
       expect(first[0]).not.toMatch(/#000000/);
     },
     T,

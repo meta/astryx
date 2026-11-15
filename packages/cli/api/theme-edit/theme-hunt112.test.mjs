@@ -11,8 +11,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {spawnSync} from 'node:child_process';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
@@ -22,13 +21,18 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
+import {runCli} from '../../test-utils/run-cli.mjs';
+
+// The renders are stood in for: these tests are about settings, files and
+// messages, not the rendered pages.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    await importOriginal(),
+  ),
+);
 
 /** @type {string} */
 let cwd;
-const BIN = path.resolve(
-  import.meta.dirname,
-  '../../clients/cli/bin/astryx.mjs',
-);
 
 beforeAll(() => {
   cwd = makeLinkedFixture('astryx-theme-hunt112-', FIXTURE_PACKAGES);
@@ -42,13 +46,12 @@ afterAll(() => {
 /** @param {string} rel */
 const read = rel => fs.readFileSync(path.join(cwd, rel), 'utf8');
 /** @param {string[]} args @param {string} [at] */
-const cli = (args, at = cwd) =>
-  spawnSync(process.execPath, [BIN, ...args], {cwd: at, encoding: 'utf8'});
-const compile = (/** @type {string[]} */ ...args) =>
-  cli(['experimental', 'theme', 'compile', ...args]);
-const compileJson = (/** @type {string[]} */ ...args) =>
+const cli = async (args, at = cwd) => await runCli([...args], at);
+const compile = async (/** @type {string[]} */ ...args) =>
+  await cli(['experimental', 'theme', 'compile', ...args]);
+const compileJson = async (/** @type {string[]} */ ...args) =>
   JSON.parse(
-    cli(['--json', 'experimental', 'theme', 'compile', ...args]).stdout,
+    (await cli(['--json', 'experimental', 'theme', 'compile', ...args])).stdout,
   );
 /** @param {string} slug @param {string} body @param {string} [imports] */
 const writeSource = (slug, body, imports) =>
@@ -92,7 +95,7 @@ describe('the theme a build loads is judged, not its text', () => {
       "const other = defineTheme({name: 'other', tokens: {}});\nexport const x1Theme = defineTheme({extends: x1Settings, name: 'x1', extends: other} as any);",
     ]) {
       writeSource('x1', body);
-      const r = compile('themes/x1/x1.theme.ts');
+      const r = await compile('themes/x1/x1.theme.ts');
       expect(r.status).not.toBe(0);
       expect(r.stdout + r.stderr).toContain('no longer extends x1Settings');
       await expect(
@@ -108,14 +111,14 @@ describe('the theme a build loads is judged, not its text', () => {
       'x2',
       "const base = {extends: x2Settings, name: 'x2'} as const;\nexport const x2Theme = defineTheme({...base, tokens: {'--radius-element': '3px'}});",
     );
-    expect(compile('themes/x2/x2.theme.ts').status).toBe(0);
+    expect((await compile('themes/x2/x2.theme.ts')).status).toBe(0);
     await themeEditSet('x2', 'corners', 'pill', {cwd});
     writeSource(
       'x2',
       "export const x2Theme = defineTheme({extends: S.x2Settings, name: 'x2'});",
       "import * as S from './x2.settings';",
     );
-    expect(compile('themes/x2/x2.theme.ts').status).toBe(0);
+    expect((await compile('themes/x2/x2.theme.ts')).status).toBe(0);
   }, 240_000);
 
   it('with a helper theme read first, the refusal names the export a build reads and how to make it read the theme', async () => {
@@ -124,7 +127,7 @@ describe('the theme a build loads is judged, not its text', () => {
       'x5',
       "export const a = defineTheme({extends: x5Settings, name: 'y'});\nexport const x5Theme = defineTheme({extends: x5Settings, name: 'x5'});",
     );
-    const r = compile('themes/x5/x5.theme.ts');
+    const r = await compile('themes/x5/x5.theme.ts');
     expect(r.status).not.toBe(0);
     expect(r.stdout + r.stderr).toContain('reads its export a');
     expect(r.stdout + r.stderr).toContain('export default x5Theme');
@@ -142,14 +145,15 @@ describe('--out names the default output only as the same file', () => {
       ...(caseSensitive ? ['themes/x3/X3.css', 'themes/x3/x3.CSS'] : []),
       'themes/x3/x3.css/',
     ]) {
-      const r = compile('themes/x3/x3.theme.ts', '--out', out);
+      const r = await compile('themes/x3/x3.theme.ts', '--out', out);
       expect(r.status, out).not.toBe(0);
       expect(r.stdout + r.stderr, out).toContain("in x3's own folder");
     }
     expect(read('themes/x3/x3.css')).toBe(css);
     expect(read('themes/x3/x3.js')).toBe(js);
     expect(
-      compile('themes/x3/x3.theme.ts', '--out', 'themes/x3/x3.css').status,
+      (await compile('themes/x3/x3.theme.ts', '--out', 'themes/x3/x3.css'))
+        .status,
     ).toBe(0);
   }, 240_000);
 });
@@ -164,7 +168,7 @@ describe('fonts follow every family the build writes', () => {
     expect(missing.data.notes.join(' ')).toContain('@fontsource/lora');
     const remove = installFont('lora', 'Lora');
     try {
-      expect(compile('themes/x6/x6.theme.ts').status).toBe(0);
+      expect((await compile('themes/x6/x6.theme.ts')).status).toBe(0);
       expect(read('src/themes/x6/x6.fonts.css')).toContain(
         '@fontsource/lora/index.css',
       );
@@ -176,11 +180,11 @@ describe('fonts follow every family the build writes', () => {
   it("compile names an editor theme's font package, in text and JSON", async () => {
     await themeEditNew('x10', {cwd});
     await themeEditSet('x10', 'font', 'geist', {cwd});
-    const json = compileJson('themes/x10/x10.theme.ts');
+    const json = await compileJson('themes/x10/x10.theme.ts');
     const notice = JSON.stringify(json.data.notices);
     expect(notice).toContain('@fontsource/geist-sans');
     expect(notice).not.toContain('astryx docs');
-    const full = compile('themes/x10/x10.theme.ts', '--detail', 'full');
+    const full = await compile('themes/x10/x10.theme.ts', '--detail', 'full');
     expect(full.stdout).toContain('@fontsource/geist-sans');
     expect(full.stdout).not.toContain('fonts.googleapis.com');
   }, 240_000);
@@ -192,22 +196,25 @@ describe('every suggested compile passes the same checks', () => {
     const sub = path.join(cwd, 'src');
     fs.mkdirSync(sub, {recursive: true});
     const env = JSON.parse(
-      cli(
-        [
-          '--json',
-          'experimental',
-          'theme',
-          'compile',
-          '..\\themes\\xg\\xg.theme.ts',
-        ],
-        sub,
+      (
+        await cli(
+          [
+            '--json',
+            'experimental',
+            'theme',
+            'compile',
+            '..\\themes\\xg\\xg.theme.ts',
+          ],
+          sub,
+        )
       ).stdout,
     );
     const way = env.suggestions[0].name;
     expect(way).toMatch(/^cd \.\. && .*compile themes\/xg\/xg\.theme\.ts$/);
     const command = way.replace(/^cd \.\. && /, '');
     expect(
-      cli(command.slice(command.indexOf('experimental')).split(' ')).status,
+      (await cli(command.slice(command.indexOf('experimental')).split(' ')))
+        .status,
     ).toBe(0);
   }, 240_000);
 });
@@ -224,9 +231,9 @@ describe('the app copy and the app module', () => {
       "export const x12Theme = defineTheme({extends: x12Settings, name: 'x12', icons: myIcons});",
       "import {x12Settings} from './x12.settings';\nimport myIcons from './icons.mjs';",
     );
-    compile('themes/x12/x12.theme.ts');
+    await compile('themes/x12/x12.theme.ts');
     expect(read('src/themes/x12/x12.js')).not.toContain('./icons.mjs');
-    const check = compileJson('themes/x12/x12.theme.ts', '--check');
+    const check = await compileJson('themes/x12/x12.theme.ts', '--check');
     expect(check.data.upToDate).toBe(false);
     expect(check.data.appCopyStale).toContain('imports ./icons.mjs');
   }, 240_000);
@@ -234,7 +241,7 @@ describe('the app copy and the app module', () => {
   it("compile's JSON says what the copy write did: the files of a first write, and what kept it back", async () => {
     await themeEditNew('x13', {cwd});
     fs.rmSync(path.join(cwd, 'src/themes/x13'), {recursive: true, force: true});
-    const first = compileJson('themes/x13/x13.theme.ts');
+    const first = await compileJson('themes/x13/x13.theme.ts');
     expect(first.data.appCopy.wrote).toContain('src/themes/x13/x13.css');
     const copy = path.join(cwd, 'src/themes/x13');
     writeSource(
@@ -243,7 +250,7 @@ describe('the app copy and the app module', () => {
     );
     fs.chmodSync(copy, 0o555);
     try {
-      const kept = compileJson('themes/x13/x13.theme.ts');
+      const kept = await compileJson('themes/x13/x13.theme.ts');
       if (process.getuid?.() !== 0)
         expect(kept.data.appCopyStale).toContain('not writable');
     } finally {
@@ -254,7 +261,7 @@ describe('the app copy and the app module', () => {
   it('after theme add, a change of mode names theme add, which writes the app module again', async () => {
     await themeEditNew('x9', {cwd});
     await themeEditSet('x9', 'mode', 'light-only', {cwd});
-    expect(cli(['theme', 'add', 'x9']).status).toBe(0);
+    expect((await cli(['theme', 'add', 'x9'])).status).toBe(0);
     const r = await themeEditSet('x9', 'mode', 'both', {cwd});
     const note = r.data.notes.join(' ');
     expect(note).toContain('`theme add x9`');
@@ -270,11 +277,13 @@ describe('the app copy and the app module', () => {
       'dir',
     );
     try {
-      expect(compile('ln/x14dir/x14.theme.ts').status).toBe(0);
+      expect((await compile('ln/x14dir/x14.theme.ts')).status).toBe(0);
       expect(read('themes/x14/x14.css')).toContain(
         'Source: themes/x14/x14.theme.ts',
       );
-      expect(compile('themes/x14/x14.theme.ts', '--check').status).toBe(0);
+      expect((await compile('themes/x14/x14.theme.ts', '--check')).status).toBe(
+        0,
+      );
     } finally {
       fs.rmSync(path.join(cwd, 'ln'), {recursive: true, force: true});
     }
