@@ -649,7 +649,7 @@ describe('generateOnMediaCSS scheme-dependent replays', () => {
     }
   });
 
-  it('keeps a reference to a token the theme leaves unset', () => {
+  it("refers to the theme root's alias of a token the theme leaves unset", () => {
     const coreMixed = defineTheme({
       name: 'media-scheme-replay-core-mix',
       tokens: {
@@ -658,13 +658,35 @@ describe('generateOnMediaCSS scheme-dependent replays', () => {
           'color-mix(in srgb, var(--color-text-secondary) 50%, var(--color-background-muted))',
       },
     });
-    expect(
-      mediaDeclarations(generateOnMediaCSS(coreMixed), 'dark')[
-        '--color-border'
-      ],
-    ).toBe(
-      'color-mix(in srgb, var(--color-text-secondary) 50%, var(--color-background-muted))',
+    const css = generateOnMediaCSS(coreMixed);
+    // The theme root resolves the alias, as it resolves the token for every
+    // other descendant, so a value set between the root and the surface does
+    // not reach the surface.
+    expect(css).toContain(
+      '--_theme-root-color-background-muted: var(--color-background-muted);',
     );
+    for (const surface of ['dark', 'light'] as const) {
+      const declared = mediaDeclarations(css, surface);
+      expect(declared['--color-border']).toBe(
+        'color-mix(in srgb, var(--color-text-secondary) 50%, var(--_theme-root-color-background-muted))',
+      );
+      expect(declared).not.toHaveProperty(
+        '--_theme-root-color-background-muted',
+      );
+    }
+  });
+
+  it('declares no root alias for a theme whose surface values refer only to its own tokens', () => {
+    const own = defineTheme({
+      name: 'media-scheme-replay-own-mix',
+      tokens: {
+        '--color-text-secondary': ['#555555', '#aaaaaa'],
+        '--color-background-muted': '#00ff00',
+        '--color-border':
+          'color-mix(in srgb, var(--color-text-secondary) 50%, var(--color-background-muted))',
+      },
+    });
+    expect(generateOnMediaCSS(own)).not.toContain('--_theme-root-');
   });
 
   it('restates an adaptation value over the base replay under its query', () => {
