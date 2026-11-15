@@ -31,10 +31,13 @@ let made = 0;
  * A package with templates, a `files` field and a template that loads an
  * image beside it, so the check asks npm what the package packs.
  * @param {Record<string, unknown>} [pkgFields]
+ * @param {string} [dir]
  * @returns {string} the package folder
  */
-function makePackage(pkgFields = {}) {
-  const dir = path.join(work, `npm-packed-${made++}`);
+function makePackage(
+  pkgFields = {},
+  dir = path.join(work, `npm-packed-${made++}`),
+) {
   /** @type {Record<string, string>} */
   const files = {
     'package.json': JSON.stringify({
@@ -262,6 +265,22 @@ describe("npm's list, kept for a package's check of itself", () => {
         },
       ],
       [
+        'a file in a node_modules below the root',
+        () => {
+          const inner = path.join(dir, 'templates', 'node_modules', 'inner');
+          fs.mkdirSync(inner, {recursive: true});
+          fs.writeFileSync(path.join(inner, 'a.js'), 'x');
+        },
+      ],
+      [
+        'another file in that node_modules',
+        () =>
+          fs.writeFileSync(
+            path.join(dir, 'templates', 'node_modules', 'inner', 'b.js'),
+            'x',
+          ),
+      ],
+      [
         "the package's .npmrc",
         () => fs.writeFileSync(path.join(dir, '.npmrc'), 'fund=false\n'),
       ],
@@ -280,6 +299,42 @@ describe("npm's list, kept for a package's check of itself", () => {
       readBack(ino);
     }
   }, 300_000);
+
+  it('is asked again when an ignore file above a workspace member changes', () => {
+    fs.writeFileSync(userNpmrc(), '');
+    const root = path.join(work, `npm-packed-workspace-${made++}`);
+    fs.mkdirSync(path.join(root, 'packages'), {recursive: true});
+    fs.writeFileSync(
+      path.join(root, 'package.json'),
+      JSON.stringify({name: 'acme', private: true, workspaces: ['packages/*']}),
+    );
+    // No files field, so npm applies the ignore files above the package; an
+    // ignore file of its own makes the check ask npm.
+    const dir = makePackage(
+      {files: undefined},
+      path.join(root, 'packages', 'kit'),
+    );
+    fs.writeFileSync(path.join(dir, '.npmignore'), '*.log\n');
+    const tmp = keptTmp('npm-packed-workspace');
+    const same = () => {
+      expect(check(tmp, dir)).toEqual(check(freshTmp(), dir));
+      const list = keptList(tmp);
+      expect(list?.paths.slice().sort()).toEqual(npmList(dir));
+      return list?.ino;
+    };
+    settle();
+    const first = same();
+    expect(npmList(dir)).toContain('templates/img/hero.png');
+    // The workspace root's ignore file.
+    fs.writeFileSync(path.join(root, '.gitignore'), '*.png\n');
+    settle();
+    const second = same();
+    expect(second).not.toBe(first);
+    // An ignore file in a folder between the root and the package.
+    fs.writeFileSync(path.join(root, 'packages', '.npmignore'), '*.tsx\n');
+    settle();
+    expect(same()).not.toBe(second);
+  }, 180_000);
 
   it('is not kept for a tree with a link in it, nor for a package that bundles dependencies', () => {
     fs.writeFileSync(userNpmrc(), '');

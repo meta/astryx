@@ -47,7 +47,8 @@ const OWN_FILE = fileURLToPath(import.meta.url);
  * new copy over a file keeps it, and an entry added, removed or renamed
  * changes it. A folder that cannot be read has no entries.
  * @param {string} root
- * @param {(name: string) => boolean} skip
+ * @param {(name: string, rel: string) => boolean} skip a folder's name and
+ *   the path of the folder that holds it from the root (`''` for the root)
  * @param {Array<[string, string]>} stamps
  * @returns {TreeFolder[]}
  */
@@ -73,7 +74,7 @@ function walkTree(root, skip, stamps) {
     }));
     folders.push({rel, entries});
     for (const entry of entries) {
-      if (entry.isDir && !skip(entry.name)) {
+      if (entry.isDir && !skip(entry.name, rel)) {
         visit(rel === '' ? entry.name : path.join(rel, entry.name));
       }
     }
@@ -117,7 +118,7 @@ export function hasNameLine(lines, name) {
 
 /**
  * What a kept tree summary is kept under, and what makes it.
- * @typedef {{kind: string, roots: Array<string | {root: string, skip?: (name: string) => boolean}>, code: string[], skip?: (name: string) => boolean, key?: unknown[], recorded?: boolean, accept?: (value: any) => boolean, keep?: (value: any) => boolean}} TreeSummaryOptions
+ * @typedef {{kind: string, roots: Array<string | {root: string, skip?: (name: string, rel: string) => boolean}>, code: string[], skip?: (name: string, rel: string) => boolean, key?: unknown[], recorded?: boolean, accept?: (value: any) => boolean, keep?: (value: any) => boolean}} TreeSummaryOptions
  *   `roots`: each a folder, or a folder with the folder names its own walk
  *   does not enter; `code`: the files whose code makes the summary; `skip`:
  *   folder names the walk of a root without its own does not enter (both are

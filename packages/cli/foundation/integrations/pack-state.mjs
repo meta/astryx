@@ -51,7 +51,8 @@ export function npmPackedPaths(base) {
 /**
  * npm's list for the package in `folder`, kept between runs (kept-tree.mjs):
  * the stored list while no folder npm walks has changed, nor package.json,
- * an ignore file in any folder, or an npmrc file npm reads. Which files npm
+ * an ignore file in any folder of the package or above it, a package.json
+ * above it, or an npmrc file npm reads. Which files npm
  * packs depends on those and on the files' names and types, never on what
  * the files hold, so an edit inside a file keeps the list. It is kept only
  * for the npm entry file this check starts, by that npm's version and the
@@ -79,8 +80,11 @@ function keptNpmAnswer(folder) {
       kind: 'npm-packed-paths',
       roots: [folder],
       code: [OWN_FILE],
-      // npm packs neither; a bundled dependency is never kept (below).
-      skip: name => name === '.git' || name === 'node_modules',
+      // npm packs no .git folder, and no node_modules at the package's
+      // root (one deeper is packed); a bundled dependency is never kept
+      // (below).
+      skip: (name, rel) =>
+        name === '.git' || (rel === '' && name === 'node_modules'),
       key: [version, process.versions.node.split('.')[0], npmEnvironment()],
       recorded: true,
       keep: value => 'paths' in value && value.keep,
@@ -103,6 +107,7 @@ function keptNpmAnswer(folder) {
         // npm says why.
       }
       readNpmrcFiles(folder, npm);
+      readFilesAbove(folder);
       const result = askNpm(folder, npm);
       if ('error' in result) return result;
       const bundles = [pkg?.bundleDependencies, pkg?.bundledDependencies].some(
@@ -149,6 +154,28 @@ function npmEnvironment() {
     .filter(([name]) => name.toLowerCase().startsWith('npm_config_'))
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
   return createHash('sha256').update(JSON.stringify(settings)).digest('hex');
+}
+
+/**
+ * Read the files above the package in `folder` that npm may apply to it, so a
+ * kept list holds their stamps, present or not: in each folder above it, the
+ * package.json that can make that folder a workspace root, and the ignore
+ * files npm applies to a workspace's members from its root and each folder
+ * between.
+ * @param {string} folder
+ */
+function readFilesAbove(folder) {
+  for (let dir = path.dirname(folder); ; dir = path.dirname(dir)) {
+    for (const name of ['package.json', ...IGNORE_FILES]) {
+      const file = path.join(dir, name);
+      try {
+        if (fs.existsSync(file)) fs.readFileSync(file);
+      } catch {
+        // Unreadable: npm cannot read it either.
+      }
+    }
+    if (path.dirname(dir) === dir) break;
+  }
 }
 
 /**
