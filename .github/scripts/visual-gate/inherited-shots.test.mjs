@@ -31,15 +31,8 @@ const report = (shots, changed) => ({
   },
 });
 
-/** This run's verdict and manifest: two changed shots, tested on BASE. */
-const mine = () => {
-  const {verdict, manifest} = report({[KEY]: H('a'), [OTHER]: H('b')}, [
-    KEY,
-    OTHER,
-  ]);
-  verdict.context = {baseSha: BASE};
-  return {verdict, manifest};
-};
+/** This run's verdict and manifest: two changed shots, rendered at HEAD. */
+const mine = () => report({[KEY]: H('a'), [OTHER]: H('b')}, [KEY, OTHER]);
 
 /**
  * Fake GitHub reads that count every call. `pulls` maps a head commit to its
@@ -90,12 +83,12 @@ describe('inherited visual changes', () => {
     ]).toEqual([[KEY, H('a')]]);
   });
 
-  it('says a shot came from main when a merged pull request showed the same image and its merge commit is in the tested base', async () => {
+  it('says a shot came from main when a merged pull request showed the same image and its merge commit is in this head', async () => {
     const gh = fakeGitHub({
       reports: [one],
       contents: {1: report({[KEY]: H('a')}, [KEY])},
       pulls: {[S('1')]: merged(S('c'))},
-      ancestry: [`${S('c')}>${BASE}`],
+      ancestry: [`${S('c')}>${HEAD}`],
     });
     const {verdict, manifest} = mine();
     await markInherited({
@@ -114,12 +107,32 @@ describe('inherited visual changes', () => {
     expect(verdict.inheritedChecked).toBe(1);
   });
 
+  it('does not count a pull request merged after this head forked, whose change the rendered tree does not hold', async () => {
+    // Its merge commit is in main's later history (the recorded base), not in
+    // this head, so this head's same image is its own change.
+    const gh = fakeGitHub({
+      reports: [one],
+      contents: {1: report({[KEY]: H('a')}, [KEY])},
+      pulls: {[S('1')]: merged(S('c'))},
+      ancestry: [`${S('c')}>${BASE}`],
+    });
+    const {verdict, manifest} = mine();
+    await markInherited({
+      verdict,
+      manifest,
+      headRef: 'this',
+      headSha: HEAD,
+      ...gh,
+    });
+    expect(verdict.changes[0].inherited).toEqual({found: true});
+  });
+
   it('does not count a stacked or superseding branch whose head contains this one', async () => {
     const gh = fakeGitHub({
       reports: [one],
       contents: {1: report({[KEY]: H('a')}, [KEY])},
       pulls: {[S('1')]: merged(S('c'))},
-      ancestry: [`${S('c')}>${BASE}`, `${HEAD}>${S('1')}`],
+      ancestry: [`${S('c')}>${HEAD}`, `${HEAD}>${S('1')}`],
     });
     const {verdict, manifest} = mine();
     await markInherited({
@@ -138,7 +151,7 @@ describe('inherited visual changes', () => {
       reports: [one],
       contents: {1: report({[KEY]: H('a')}, [KEY])},
       pulls: {[S('1')]: {number: 9, mergedAt: null, mergeSha: S('c')}},
-      ancestry: [`${S('c')}>${BASE}`],
+      ancestry: [`${S('c')}>${HEAD}`],
     });
     const {verdict, manifest} = mine();
     await markInherited({
@@ -152,7 +165,7 @@ describe('inherited visual changes', () => {
     expect(gh.calls.compare).toBe(0);
   });
 
-  it('does not count a pull request merged after the base this run tested', async () => {
+  it('does not count a merged pull request whose merge commit this head does not contain', async () => {
     const gh = fakeGitHub({
       reports: [one],
       contents: {1: report({[KEY]: H('a')}, [KEY])},
@@ -257,7 +270,7 @@ describe('inherited visual changes', () => {
     );
   });
 
-  it('records a failed artifact list, and a report without a base commit, the same way', async () => {
+  it('records a failed artifact list the same way', async () => {
     const list = mine();
     await markInherited({
       ...list,
@@ -269,17 +282,6 @@ describe('inherited visual changes', () => {
       },
     });
     expect(list.verdict.inheritedLookupFailed).toBe('HTTP 403');
-    const noBase = mine();
-    delete noBase.verdict.context;
-    await markInherited({
-      ...noBase,
-      headRef: 'this',
-      headSha: HEAD,
-      ...fakeGitHub({reports: []}),
-    });
-    expect(noBase.verdict.inheritedLookupFailed).toBe(
-      'the report records no base commit',
-    );
   });
 
   it('treats a head it cannot compare as containing this one, so it never proves the shot', async () => {
@@ -287,7 +289,7 @@ describe('inherited visual changes', () => {
       reports: [one],
       contents: {1: report({[KEY]: H('a')}, [KEY])},
       pulls: {[S('1')]: merged(S('c'))},
-      ancestry: [`${S('c')}>${BASE}`],
+      ancestry: [`${S('c')}>${HEAD}`],
     });
     const contains = async (ancestor, descendant) =>
       ancestor === HEAD ? null : gh.contains(ancestor, descendant);
@@ -309,7 +311,7 @@ describe('inherited visual changes', () => {
       reports: [two, one],
       contents: {1: report({[KEY]: H('a')}, [KEY])},
       pulls: {[S('1')]: merged(S('c'))},
-      ancestry: [`${S('c')}>${BASE}`],
+      ancestry: [`${S('c')}>${HEAD}`],
     });
     const first = mine();
     await markInherited({
@@ -345,7 +347,7 @@ describe('inherited visual changes', () => {
 
   it('makes no call when nothing changed', async () => {
     const gh = fakeGitHub({reports: []});
-    const verdict = {changes: [], context: {baseSha: BASE}};
+    const verdict = {changes: []};
     await markInherited({
       verdict,
       manifest: {shots: {}},

@@ -2,17 +2,11 @@
 
 /**
  * @file Marks a pull request's changed visual shots that came from `main`.
- * @input This run's verdict (the re-encoded report's `verdict.json`, whose
- *   `context.baseSha` is the base commit the run tested), its raw
- *   `manifest.json` (each shot's sha256), this pull request's head commit,
- *   and other pull requests' `visual-pr-report` artifacts through the API.
- * @output Each changed shot gets `inherited`: `{from: 'main'}` when a merged
- *   pull request's run showed the same shot changed with the same image and
- *   its merge commit is in the tested base; `{found: true}` when a report read
- *   shows the same image but that is not proven; else `{found: false}`.
- *   `inheritedChecked` counts the reports read. A failed lookup marks nothing
- *   and sets `inheritedLookupFailed`, which the comment and the step summary
- *   show, so a broken lookup is never silent.
+ * @input This run's verdict and raw manifest (each shot's sha256), this pull
+ *   request's head commit, which the run renders, and other pull requests'
+ *   `visual-pr-report` artifacts through the API.
+ * @output Each changed shot's `inherited` mark, the count of reports read, or
+ *   the reason the lookup failed (see `markInherited`).
  * @position The pull-request comment job, after `publish-pr-report.mjs`. The
  *   label is report text only: no check, status or baseline reads it.
  */
@@ -69,8 +63,9 @@ export function changedImages({verdict, manifest}) {
  *
  * A shot came from `main` only when the record proves it: a merged pull
  * request's run showed the same shot changed with the same image, its merge
- * commit is in the base this run tested, and its head does not contain this
- * pull request's head. A stack's later entry or a superseding branch shows
+ * commit is in this head (the run renders a Storybook built at this head
+ * against this head's baseline), and its head does not contain this pull
+ * request's head. A stack's later entry or a superseding branch shows
  * this pull request's own change, and an unmerged pull request proves
  * nothing, so neither counts. A shot a report read shows with the same image,
  * unproven, says so; a shot no report read shows says it was not found. Both
@@ -106,9 +101,6 @@ export async function markInherited({
   const mine = changedImages({verdict, manifest});
   if (mine.size === 0) return verdict;
   try {
-    const baseSha = verdict.context?.baseSha;
-    if (typeof baseSha !== 'string' || !SHA.test(baseSha))
-      throw new Error('the report records no base commit');
     if (typeof headSha !== 'string' || !SHA.test(headSha))
       throw new Error('no head commit given');
     await lookUp({
@@ -116,7 +108,6 @@ export async function markInherited({
       mine,
       headRef,
       headSha,
-      baseSha,
       listReports,
       readReport,
       pullFor,
@@ -137,7 +128,6 @@ async function lookUp({
   mine,
   headRef,
   headSha,
-  baseSha,
   listReports,
   readReport,
   pullFor,
@@ -184,7 +174,7 @@ async function lookUp({
     let result = false;
     if (pull?.mergedAt && pull.mergeSha && SHA.test(pull.mergeSha)) {
       calls += 1;
-      if ((await contains(pull.mergeSha, baseSha)) === true) {
+      if ((await contains(pull.mergeSha, headSha)) === true) {
         calls += 1;
         // A head that contains this one carries this pull request's change;
         // one that cannot be compared counts as containing it.
