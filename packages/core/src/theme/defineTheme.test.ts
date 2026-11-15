@@ -2028,10 +2028,12 @@ describe('defineTheme extends', () => {
 });
 
 describe('local tokens left undefined', () => {
-  it('a localTokens field that holds undefined is not set', () => {
-    const theme = defineTheme({name: 'no-local', localTokens: undefined});
-    expect(theme).not.toHaveProperty('localTokens');
-    expect(theme).not.toHaveProperty('__localTokenLineage');
+  it('refuses a localTokens field that holds undefined, by name', () => {
+    expect(() =>
+      defineTheme({name: 'no-local', localTokens: undefined}),
+    ).toThrow(
+      'defineTheme("no-local"): localTokens is undefined: omit the field or pass an object.',
+    );
   });
 
   it('a local token that holds undefined is not set', () => {
@@ -2047,27 +2049,21 @@ describe('local tokens left undefined', () => {
     expect(generateThemeTestCSS(theme)).not.toContain('--brand-2');
   });
 
-  it.each([
-    ['a localTokens field that holds undefined', undefined],
-    ['a local token that holds undefined', {'--brand': undefined}],
-  ])(
-    'with %s, an adaptation rule that writes that local token still fails with its name',
-    (_, localTokens) => {
-      expect(() =>
-        defineTheme({
-          name: 'lost-local',
-          // @ts-expect-error an undefined value, as a failed import gives
-          localTokens,
-          adaptations: {
-            rules: [
-              {
-                when: {pointer: 'coarse'},
-                value: {localTokens: {'--brand': 'blue'}},
-              },
-            ],
-          },
-        }),
-      ).toThrow(/localTokens\["--brand"\] cannot enroll a theme-local token/);
-    },
-  );
+  it('an adaptation rule that writes a local token left undefined fails with its name', () => {
+    expect(() =>
+      defineTheme({
+        name: 'lost-local',
+        // @ts-expect-error an undefined value, as a failed import gives
+        localTokens: {'--brand': undefined},
+        adaptations: {
+          rules: [
+            {
+              when: {pointer: 'coarse'},
+              value: {localTokens: {'--brand': 'blue'}},
+            },
+          ],
+        },
+      }),
+    ).toThrow(/localTokens\["--brand"\] cannot enroll a theme-local token/);
+  });
 });

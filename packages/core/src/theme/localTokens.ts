@@ -262,8 +262,14 @@ export function resolveLocalTokenContract(
   tokens: Record<string, string>,
   portableTokens: Readonly<Record<string, string>>,
 ): ResolvedLocalTokenContract | undefined {
-  // A key that holds undefined is not set, as everywhere in a theme.
-  const directlyEnrolled = input.localTokens !== undefined;
+  // A root field left undefined is almost always a failed import, so it is
+  // refused by name rather than read as no local tokens.
+  if (hasOwn(input, 'localTokens') && input.localTokens === undefined) {
+    throw new Error(
+      `defineTheme("${input.name}"): localTokens is undefined: omit the field or pass an object.`,
+    );
+  }
+  const directlyEnrolled = hasOwn(input, 'localTokens');
   const inherited = base?.__localTokenLineage !== undefined;
 
   if (!directlyEnrolled && !inherited) {
@@ -281,7 +287,6 @@ export function resolveLocalTokenContract(
   if (
     directlyEnrolled &&
     (declarations === null ||
-      declarations === undefined ||
       typeof declarations !== 'object' ||
       Array.isArray(declarations))
   ) {
