@@ -395,7 +395,7 @@ function resolvedPath(file) {
 /**
  * Whether a recorded path is still in the state recorded for it, by the kind
  * of state that was recorded.
- * @param {string} file - The recorded key: a path, or a real-path lookup's.
+ * @param {string} file - The recorded path.
  * @param {string} state
  * @param {Map<string, string> | null} [folders] - Folders this check has
  *   resolved (realPathState): one map per check, never kept longer.

@@ -387,7 +387,7 @@ describe('an exact run', () => {
     }
   });
 
-  it('checks a path both looked up and read by both', () => {
+  it('checks a path both looked up and read by its stamp', () => {
     const {file} = scratch();
     const seen = exact(() => {
       fs.realpathSync(file);
