@@ -223,6 +223,15 @@ describe('an unknown subcommand followed by an option', () => {
     },
     T,
   );
+
+  it(
+    'in a stable group keeps its unknown-option error',
+    async () => {
+      const r = await cli(['theme', 'bogus', '--foo']);
+      expect(r.code).toBe('ERR_INVALID_OPTION');
+    },
+    T,
+  );
 });
 
 describe('a list value with one item misspelled', () => {

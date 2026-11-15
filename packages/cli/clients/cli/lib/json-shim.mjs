@@ -688,18 +688,21 @@ export function handleCommanderError(err) {
     code: commanderCodeToErrorCode(code, message),
   });
 
-  // A group given a word it does not have, then an option (`experimental
-  // theme preview path --theme t`): the word is what is wrong, named as
-  // when no option follows it, with the group's subcommands closest first.
+  // A group of the experimental theme commands given a word it does not
+  // have, then an option (`experimental theme preview path --theme t`): the
+  // word is what is wrong, named as when no option follows it, with the
+  // group's subcommands closest first. Stable groups keep their error.
   const group = /** @type {any} */ (err)?.[REJECTED_COMMAND];
+  const chain = [];
+  for (let node = group; node?.parent; node = node.parent)
+    chain.unshift(node.name());
   const word =
-    code === 'commander.unknownOption' && group?.commands?.length
+    code === 'commander.unknownOption' &&
+    group?.commands?.length &&
+    chain.slice(0, 2).join(' ') === 'experimental theme'
       ? unknownGroupWord(group)
       : null;
   if (word) {
-    const chain = [];
-    for (let node = group; node?.parent; node = node.parent)
-      chain.unshift(node.name());
     return finishParseError(err, UNKNOWN_SUBCOMMAND, message, exitCode, {
       message: `unknown subcommand '${chain.join(' ')} ${word}'`,
       suggestions: unknownSubcommandSuggestions(
