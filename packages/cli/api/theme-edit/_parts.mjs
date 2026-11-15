@@ -37,7 +37,7 @@ import {
 import {removeOnStop} from '../../foundation/fs/stop-cleanup.mjs';
 
 /** Bump when the shape of the cached part data, or which parts it reaches, changes. */
-const PART_DATA_VERSION = 16;
+const PART_DATA_VERSION = 17;
 
 /**
  * Flags that change what a component does or whether it shows, not how it
@@ -60,6 +60,7 @@ const LIFECYCLE_FLAGS = new Set([
  * @property {string[]} contains - parts rendered inside it
  * @property {string[]} [tags] - the elements it is rendered as (`tr` for a table row)
  * @property {string[]} [innerCorners] - the radius tokens of the corners Core draws by place on the parts directly inside it (a button group's end buttons)
+ * @property {boolean} [media] - Core's media surface sits inside it (a toast's inverted surface), setting the text tokens of what it holds from --color-on-dark and --color-on-light
  * @property {Record<string, Record<string, string>>} [inline] - state ('' for always) -> property -> the token Core paints it with as an inline style, which no theme rule can replace
  */
 
@@ -1011,7 +1012,7 @@ function resolvePrivate(v, env, tokens, depth = 0) {
  * @returns {{map: Record<string, PartRecord>, pairs: TextPair[]}}
  */
 export function walkMarkup(html, decls, tokens, targets = new Map()) {
-  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, tags: Set<string>, innerCorners: Set<string>}>} */
+  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, tags: Set<string>, innerCorners: Set<string>, media: boolean}>} */
   const map = {};
   /** @type {Array<{env: Record<string, string>, target: string | null, fg: PaintSide | null, bg: PaintSide | null}>} */
   const stack = [{env: {}, target: null, fg: null, bg: null}];
@@ -1092,10 +1093,20 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         contains: new Set(),
         tags: new Set(),
         innerCorners: new Set(),
+        media: false,
       });
       if (ownsTarget)
         for (const [k, v] of Object.entries(dataAttrs))
           (T.attrs[k] ??= new Set()).add(v);
+      // Core's media surface inside the part (a toast's inverted surface):
+      // it sets the text tokens of what it holds from the on-dark color
+      // where it is dark and the on-light color where it is light (Core's
+      // onMediaTokens), so the part's text reads one of them in each mode.
+      else if (/\bdata-astryx-media="/.test(attrs)) {
+        T.media = true;
+        for (const t of ['--color-on-dark', '--color-on-light'])
+          if (tokens.has(t)) (T.inside[t] ??= new Set()).add('color');
+      }
       const cond0 = [
         ...Object.entries(dataAttrs).map(([k, v]) => `${k}=${v}`),
         ...context,
@@ -1184,6 +1195,7 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
       contains: [...v.contains],
       tags: [...v.tags],
       innerCorners: [...v.innerCorners],
+      ...(v.media ? {media: true} : {}),
     };
   }
   return {map: out, pairs: [...pairs.values()]};

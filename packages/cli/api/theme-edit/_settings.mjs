@@ -5120,31 +5120,35 @@ export function compileTheme(ctx, data, base) {
   };
   /**
    * A resting shadow on a part that draws rings in its box-shadow in some
-   * states (an input's hover and focus rings): in each such state, as Core
-   * writes it (its status included), the theme's shadow with that ring
-   * after it, so the ring still shows (`<shadow>, <ring>`). A state the
-   * theme sets a shadow of its own keeps that.
+   * states (an input's hover and focus rings): for each set of the part's
+   * renders Core styles apart (its plain look, each status), in each state
+   * Core rings any of them in, the theme's shadow with what Core draws for
+   * that set in that state after it (`<shadow>, <ring>`), so every ring
+   * still shows and a status that draws none while focused gets the shadow
+   * alone. A shadow of none leaves the rings alone in their states. States
+   * are written hover first, so a focus rule after it wins while both hold,
+   * as Core's own order does. A state the theme sets a shadow of its own
+   * (for the whole part, or that set) keeps that.
    * @param {Setting} s @param {string} target @param {string} v
    */
   const withRingStates = (s, target, v) => {
-    if (/^\s*none\s*$/i.test(String(v))) return;
+    const none = /^\s*none\s*$/i.test(String(v));
     const tg = ctx.project.target.get(target);
     const at = ctx.C.MAP[target]?.at?.['box-shadow'] ?? {};
-    for (const [k, ring] of Object.entries(at)) {
+    const seen = ctx.C.MAP[target]?.attrs ?? {};
+    const ORDER = ['hover', 'active', 'focus', 'focus-visible', 'focus-within'];
+    /** @type {Map<string, {when: string | undefined, rest: string | null, states: Map<string, string>}>} */
+    const sets = new Map();
+    /** @type {Set<string>} */
+    const ringed = new Set();
+    for (const [k, value] of Object.entries(at)) {
       const [attrs, ...rest] = k.split(' ');
-      // The state as set names it: one pseudo-class (Core's guard against
-      // another state, `:hover:not(:focus-within)`, is the order the rules
-      // come in, hover before focus).
-      const state = /^:(hover|focus-within|focus-visible|focus|active)\b/.exec(
-        rest.join(' '),
-      )?.[1];
-      if (!state || /^\s*none\s*$/i.test(String(ring))) continue;
+      const cond = rest.join(' ');
       // The part's visual props that tell its renders apart (a status, a
       // file input's mode), as set names them with --when; a prop the part
       // was drawn with one value of (its default size) says nothing. A
       // rule under any other attribute (disabled, read-only) is left as
       // Core draws it.
-      const seen = ctx.C.MAP[target]?.attrs ?? {};
       const pairs = attrs
         .split(',')
         .filter(Boolean)
@@ -5160,20 +5164,61 @@ export function compileTheme(ctx, data, base) {
             .map(([key, val]) => `${key}:${val}`)
             .filter(w => w !== s.when),
         ].join('+') || undefined;
-      if (
-        data.settings.some(
-          y =>
-            y.source === 'property' &&
-            kebab(y.thing) === 'box-shadow' &&
-            y.state === state &&
-            (y.when ?? undefined) === when &&
-            partsOf(ctx, y).includes(target),
-        )
-      )
+      const set = sets.get(when ?? '') ?? {
+        when,
+        rest: null,
+        states: new Map(),
+      };
+      sets.set(when ?? '', set);
+      if (!cond) {
+        set.rest = String(value);
         continue;
-      const rb = block({...s, state, when}, target);
-      rb.boxShadow = `${v}, ${ring}`;
+      }
+      const state = ORDER.find(x => new RegExp(`^:${x}(?![\\w-])`).test(cond));
+      if (!state) continue;
+      set.states.set(state, String(value));
+      if (!/^\s*none\s*$/i.test(String(value))) ringed.add(state);
     }
+    if (!ringed.size) return;
+    /** Whether the theme sets a shadow of its own for a state of a set. @param {string} state @param {string | undefined} when */
+    const ownState = (state, when) =>
+      data.settings.some(
+        y =>
+          y.source === 'property' &&
+          kebab(y.thing) === 'box-shadow' &&
+          y.state === state &&
+          (y.when == null || (y.when ?? undefined) === when) &&
+          partsOf(ctx, y).includes(target),
+      );
+    for (const set of sets.values())
+      for (const state of ORDER.filter(x => ringed.has(x))) {
+        if (ownState(state, set.when)) continue;
+        // What Core draws for the set in the state: its own rule there,
+        // else the set's resting value (a status that draws none, which
+        // Core keeps in every state but its own ring's), else the plain
+        // set's ring.
+        const core =
+          set.states.get(state) ??
+          (set.when !== (s.when ?? undefined) ? set.rest : null) ??
+          sets.get(s.when ?? '')?.states.get(state) ??
+          null;
+        if (core == null) continue;
+        const coreNone = /^\s*none\s*$/i.test(core);
+        // With no shadow of the theme's, only a ring to put back, and a
+        // set that draws none there kept so (the plain set's ring, written
+        // for the whole part, would reach it).
+        const plainRing = sets.get(s.when ?? '')?.states.get(state);
+        if (
+          none &&
+          coreNone &&
+          (set.when === (s.when ?? undefined) ||
+            !plainRing ||
+            /^\s*none\s*$/i.test(plainRing))
+        )
+          continue;
+        const rb = block({...s, state, when: set.when}, target);
+        rb.boxShadow = none ? core : coreNone ? v : `${v}, ${core}`;
+      }
   };
   // Palette stops go first, so an exact token setting always wins over them.
   const pal = keepShades(

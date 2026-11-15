@@ -89,6 +89,12 @@ export const OVERRIDES = [
   // A checkbox is the box itself; the checks group (checkbox and radio)
   // goes by its own name.
   [/\b(checkbox(es)?|check ?marks?)\b/, {on: 'checkbox-indicator'}],
+  // A switch's or toggle's thumb, knob or handle: the thumb, never the
+  // track.
+  [
+    /\b(?:toggle|switch)(?:e?s)?(?:'s)?\s+(?:thumbs?|knobs?|handles?)\b/,
+    {on: 'switch-thumb'},
+  ],
   // "switch off", "switch the buttons to" are the verb, not the part.
   [
     /\b(toggles?|switch(?:e?s)?(?! (off|on|to|the|out|it|them|over|back|from)\b))\b/,

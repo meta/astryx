@@ -382,15 +382,17 @@ describe('round 3', () => {
   }, 120_000);
 
   it('names parts inside the part a token is set on', async () => {
+    // (A toast's text sits on Core's media surface, which sets its own text
+    // tokens: a banner holds a button that reads the token.)
     const r = await themeEditSet('s', '--color-text-primary', '#ffffff', {
       cwd,
-      on: 'toast',
+      on: 'banner',
     });
-    expect(r.data.notes.join(' ')).toContain('on button inside toast');
+    expect(r.data.notes.join(' ')).toContain('on button inside banner');
     await themeEditUndo('s', {
       cwd,
       thing: '--color-text-primary',
-      on: 'toast',
+      on: 'banner',
     });
   }, 120_000);
 

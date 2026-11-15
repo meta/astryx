@@ -66,8 +66,9 @@ describe('hunt61: scope, state and amount', () => {
         /^set q --focus-outline-width 1px --on button$/,
       ],
       [
+        // (Inputs draw no outline: their focus ring is the box-shadow ring.)
         'focus ring color red on inputs only',
-        /^set q --focus-outline-color '#dc2626' --on inputs$/,
+        /^set q box-shadow 'inset 0 0 0 2px #dc2626' --on inputs --state focus-within$/,
       ],
       [
         'remove the focus ring on cards',

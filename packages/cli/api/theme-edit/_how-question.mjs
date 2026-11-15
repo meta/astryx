@@ -5801,7 +5801,8 @@ export function draftAnswer(ctx, env, question) {
       );
     const aspects = [
       ...c0.aspects,
-      ...(/\bshadows?\b/.test(c0.text) ? ['shadow'] : []),
+      // (A ring may be drawn in the box-shadow, as an input's focus ring.)
+      ...(/\b(shadows?|rings?)\b/.test(c0.text) ? ['shadow'] : []),
       ...(/\b(corners?|radius)\b/.test(c0.text) ? ['corners'] : []),
       ...(/\bborders?\b/.test(c0.text) ? ['border'] : []),
       ...(/\b(padding|gap|spacing)\b/.test(c0.text) ? ['spacing'] : []),
@@ -9796,6 +9797,52 @@ export function draftAnswer(ctx, env, question) {
           text: `the focus ring shows keyboard users where they are; it can be made subtle but not removed${scoped}`,
           options: [[set('--focus-outline-width', '1px', sc)]],
         };
+      // A part that draws no outline and shows focus with a ring in its
+      // box-shadow (an input): that ring, in the color asked, while
+      // focused; never the outline tokens it does not read.
+      const ringPart = scope ? one(scope) : null;
+      const ringNow = ringPart
+        ? Object.entries(C.MAP[ringPart]?.at?.['box-shadow'] ?? {}).find(
+            ([k, x]) =>
+              /\s:focus-within(?![\w-])/.test(k) &&
+              !/\bstatus=/.test(k) &&
+              !/^\s*none\s*$/.test(String(x)),
+          )?.[1]
+        : null;
+      const noOutline =
+        ringPart &&
+        Object.values(C.MAP[ringPart]?.at?.outline ?? {}).length > 0 &&
+        Object.values(C.MAP[ringPart]?.at?.outline ?? {}).every(x =>
+          /^\s*none\b/.test(String(x)),
+        );
+      if (color && scope && ringNow && noOutline) {
+        // The ring's own layer, in the color asked (its width kept); for
+        // one mode, that mode's half of light-dark(), the other keeping the
+        // ring's color now.
+        const m = /^(\s*inset\s+0\s+0\s+0\s+\d*\.?\d+px)\s+(.+)$/.exec(
+          String(ringNow),
+        );
+        const now = m ? m[2].trim() : null;
+        const paint = !c.mode
+          ? color
+          : c.mode === 'dark'
+            ? `light-dark(${now ?? 'transparent'}, ${color})`
+            : `light-dark(${color}, ${now ?? 'transparent'})`;
+        const d = {
+          text: `the focus ring on ${scope}: ${scope} draws no outline and shows focus with a ring in its box-shadow (now ${ringNow}), so that ring in ${color} while focused${c.mode ? ` in ${c.mode} mode` : ''}`,
+          options: [
+            [
+              set(
+                'box-shadow',
+                `${m ? m[1].trim() : 'inset 0 0 0 2px'} ${paint}`,
+                {on: scope, state: 'focus-within'},
+              ),
+            ],
+          ],
+          ...(c.mode ? {modeInValue: true} : {}),
+        };
+        return d;
+      }
       return color
         ? {
             text: `the focus ring's color${scoped}: --focus-outline-color`,
@@ -11102,6 +11149,18 @@ export function draftAnswer(ctx, env, question) {
           return null;
         }
         if (/\brings?\b/.test(c.text)) {
+          // A part that draws no outline in any rule (an input, whose ring
+          // is in its box-shadow) has no outline for a ring color to go to:
+          // the focus ring answer gives the ring it draws.
+          const outlines = on
+            ? Object.values(C.MAP[one(on)]?.at?.outline ?? {})
+            : [];
+          if (
+            outlines.length &&
+            outlines.every(x => /^\s*none\b/.test(String(x))) &&
+            !c.neg
+          )
+            return null;
           const color = colorFor(c, 'fill');
           const w = c.lengths[0];
           const fl = {...f, state: f.state ?? 'focus-visible'};
@@ -12637,6 +12696,19 @@ export function draftAnswer(ctx, env, question) {
           }
         }
         if (!color) return null;
+        // A part whose text sits on Core's media surface inside it (a
+        // toast's inverted surface): that surface sets its text from the
+        // on-dark and on-light colors, so those go on the part.
+        if (C.MAP[one(on)]?.media && !f.state && !f.when)
+          return {
+            text: `the text color${where}: --color-on-dark and --color-on-light on ${on} (its text sits on Core's media surface, which takes the on-dark color where that surface is dark and the on-light color where it is light)`,
+            options: [
+              ['--color-on-dark', '--color-on-light'].map(tok =>
+                set(tok, color, {on, ...modeOf(c)}),
+              ),
+            ],
+            sequence: true,
+          };
         // A title block (a dialog's): its title and subtitle set their own
         // color from the text tokens, so the tokens go on the block.
         if (/-title-block$/.test(one(on)) && !f.state && !f.when) {

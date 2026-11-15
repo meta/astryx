@@ -123,6 +123,11 @@ export const CORNERS = [
   ['pill', 9999],
 ];
 /**
+ * The step `corners more` and `less` take between round and pill: half as
+ * round again as round, so one step more from round is not a pill.
+ */
+export const ROUND_TO_PILL_STEP = `${(CORNERS.find(([n]) => n === 'round')?.[1] ?? 16) * 1.5}px`;
+/**
  * The density words, the one table every reading of room uses: words for
  * more room (roomy), for less (dense), and complaints that there is too
  * little (crowded). An ask names the density it wants; after "too" the
@@ -443,7 +448,7 @@ export const DIALS = wordTable({
       CORNERS.map(
         ([n, v]) => `${n} (${v === 9999 ? 'fully round' : `${v}px`})`,
       ).join(', ') +
-      ", or a size like 6px. Whole theme: sets the 4 corner tokens in the base theme's proportions (containers and pages at most as round as at pill; inner corners at most as round as at round). With --on <part or group>: that part's border-radius. Corners are a size, so they are the same in light and dark.",
+      `, or a size like 6px. more and less step through the rungs, with one step between round and pill (${ROUND_TO_PILL_STEP}). Whole theme: sets the 4 corner tokens in the base theme's proportions (containers and pages at most as round as at pill; inner corners at most as round as at round). With --on <part or group>: that part's border-radius. Corners are a size, so they are the same in light and dark.`,
     values: 'square|small|medium|large|round|pill|more|less|<size like 6px>',
     examples: [
       'set my corners pill',

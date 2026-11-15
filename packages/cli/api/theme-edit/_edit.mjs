@@ -5432,14 +5432,14 @@ async function changeOnce(
             .filter(c => c.flags)
             .map(
               c =>
-                `${P} set ${slug} background-color ${quoteCommandArgument(String(s.value))} --on ${t} ${c.flags}`,
+                `${P} set ${slug} background-color ${quoteCommandArgument(String(s.value))} --on ${t} ${c.flags}${s.mode ? ` --mode ${s.mode}` : ''}`,
             ),
         ),
       ];
       notes.push(
-        `${t}'s fill now covers the fill Core gives it ${named.length > 1 ? 'in each of' : 'in'} ${named.join(', ')}, so ${named.length > 1 ? 'those no longer differ' : 'that no longer shows'}${
+        `${s.mode ? `in ${s.mode} mode, ` : ''}${t}'s fill now covers the fill Core gives it ${named.length > 1 ? 'in each of' : 'in'} ${named.join(', ')}, so ${named.length > 1 ? 'those no longer differ' : 'that no longer shows'}${
           rest
-            ? `; to change only its fill at rest: ${P} set ${slug} ${rest} ${quoteCommandArgument(String(s.value))} --on ${t}`
+            ? `; to change only its fill at rest: ${P} set ${slug} ${rest} ${quoteCommandArgument(String(s.value))} --on ${t}${s.mode ? ` --mode ${s.mode}` : ''}`
             : ''
         }${lines.length ? `; to fill only one of them: ${lines.slice(0, 3).join('; ')}` : ''}`,
       );
@@ -5478,7 +5478,7 @@ async function changeOnce(
       ];
       if (lost.length)
         notes.push(
-          `the fill set on ${x.on} (${x.value}) covers ${lost.join(', ')}, so ${s.thing} does not reach ${x.on} there`,
+          `${x.mode ? `in ${x.mode} mode, ` : ''}the fill set on ${x.on} (${x.value}) covers ${lost.join(', ')}, so ${s.thing} does not reach ${x.on} there${x.mode ? ` (it does in ${x.mode === 'light' ? 'dark' : 'light'} mode)` : ''}`,
         );
     }
   }

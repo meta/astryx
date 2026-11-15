@@ -42,6 +42,7 @@ import {
   COLOR_PROPS,
   COMMON_STATES,
   CORNERS,
+  ROUND_TO_PILL_STEP,
   DIALS,
   FAMILIES,
   FONT_ROLES,
@@ -2698,6 +2699,92 @@ export function dividerParts(C) {
 }
 
 /**
+ * Refuses an outline's color, width or offset on a part whose outline Core
+ * draws as none in every rule (an input, which shows focus with a ring in
+ * its box-shadow), when the theme sets no outline style for it either.
+ * The line offered draws the ring the part does show, in the state asked.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {any} data
+ * @param {import('./_settings.mjs').Setting} s
+ * @param {string} prop
+ * @param {string} v
+ */
+function noOutlineRefusal(ctx, slug, data, s, prop, v) {
+  const parts = partsOf(ctx, s);
+  /** @param {string} t */
+  const drawsNone = t => {
+    const at = ctx.C.MAP[t]?.at ?? {};
+    const styles = [
+      ...Object.values(at.outline ?? {}),
+      ...Object.values(at['outline-style'] ?? {}),
+    ].map(String);
+    // (A part Core sets no outline on draws none too, except where it is
+    // the focused element itself, which the browser may outline.)
+    return styles.length
+      ? styles.every(x => /^\s*none\b/.test(x) || /^\s*0(px)?\s*$/.test(x))
+      : !/^focus(-visible)?$/.test(String(s.state ?? ''));
+  };
+  const styled = (/** @type {string} */ t) =>
+    (data?.settings ?? []).some(
+      (/** @type {any} */ y) =>
+        /^outline(-style)?$/.test(String(y.thing)) &&
+        !/^\s*none\b/.test(String(y.value)) &&
+        partsOf(ctx, y).includes(t),
+    );
+  if (!parts.length || !parts.every(t => drawsNone(t) && !styled(t))) return;
+  const part = parts[0];
+  const state = s.state ?? 'focus-within';
+  const ring = Object.entries(ctx.C.MAP[part]?.at?.['box-shadow'] ?? {}).some(
+    ([k, x]) =>
+      new RegExp(`:${state}(?![\\w-])`).test(k) &&
+      !/^\s*none\s*$/.test(String(x)),
+  );
+  refuse(
+    E.ERR_THEME_NO_EFFECT,
+    `${s.on ?? part} draws no outline (Core sets its outline to none${ring ? `; it shows ${state === 'hover' ? 'hover' : 'focus'} with a ring in its box-shadow` : ''}), so ${prop} never shows there.`,
+    {
+      run:
+        ring && prop === 'outline-color'
+          ? [
+              `${P} set ${slug} box-shadow ${quoteCommandArgument(`inset 0 0 0 2px ${v}`)} --on ${s.on ?? part} --state ${state}${s.mode ? ` --mode ${s.mode}` : ''}`,
+            ]
+          : [`${HOW} ${s.on ?? part}`],
+    },
+  );
+}
+
+/**
+ * Refuses a text color for a part whose text sits on Core's media surface
+ * inside it (a toast's inverted surface): that surface sets the text color
+ * of what it holds from --color-on-dark where it is dark and
+ * --color-on-light where it is light, so the part's own text color never
+ * shows. The lines that do reach it set those on the part.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').Setting} s
+ * @param {string} v
+ */
+function mediaTextRefusal(ctx, slug, s, v) {
+  const parts = partsOf(ctx, s);
+  const held = parts.filter(
+    t => ctx.C.MAP[t]?.media && !ctx.C.MAP[t]?.own?.color,
+  );
+  if (!parts.length || held.length !== parts.length) return;
+  const part = held[0];
+  refuse(
+    E.ERR_THEME_NO_EFFECT,
+    `${part}'s text sits on Core's media surface inside it (its inverted surface), which sets the text color from --color-on-dark where that surface is dark and --color-on-light where it is light, so a text color on ${part} never reaches it; set those on ${part} instead.`,
+    {
+      run: ['--color-on-dark', '--color-on-light'].map(
+        tok =>
+          `${P} set ${slug} ${tok} ${quoteCommandArgument(v)} --on ${part}`,
+      ),
+    },
+  );
+}
+
+/**
  * What a text property CSS inherits, set on a part, also reaches: the parts
  * inside it that set no such property of their own, said in one line; null
  * for any other property or when none does.
@@ -4733,11 +4820,10 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
                   (basePartRadiusPx(ctx, base, part, s.when) ??
                   tokenPx(base, token) ??
                   radiusAt(base, 'medium', token));
-        // A step between round and pill (half as round again as round), so
-        // one step more from round is not a pill.
-        const roundPx = CORNERS.find(([n]) => n === 'round')?.[1] ?? 16;
+        // The step between round and pill, so one step more from round is
+        // not a pill.
         const ladder = CORNERS.flatMap(([n]) =>
-          n === 'pill' ? [`${roundPx * 1.5}px`, n] : [n],
+          n === 'pill' ? [ROUND_TO_PILL_STEP, n] : [n],
         );
         // A size on a part is that radius as written (as the part's own
         // setting reads); a rung, or a size for the whole theme, is the
@@ -5688,6 +5774,15 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
           ],
         },
       );
+    // The main or supporting text color on a part whose text sits on
+    // Core's media surface inside it never reaches that text.
+    if (
+      !unset &&
+      s.on &&
+      !s.state &&
+      /^--color-text-(primary|secondary)$/.test(thing)
+    )
+      mediaTextRefusal(ctx, slug, s, v);
     s.source = 'token';
     if (unset) return s;
     if (step)
@@ -6077,6 +6172,16 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
           },
         );
     }
+    // A text color on a part whose text sits on Core's media surface inside
+    // it (a toast's inverted surface) never reaches that text: the surface
+    // sets it from the on-dark and on-light colors, which the part takes.
+    if (!unset && !s.state && prop === 'color')
+      mediaTextRefusal(ctx, slug, s, v);
+    // An outline's color, width or offset on a part that draws no outline
+    // (Core's outline: none, an input's) never shows while no outline
+    // style is set for it.
+    if (!unset && /^outline-(color|width|offset)$/.test(prop))
+      noOutlineRefusal(ctx, slug, data, s, prop, v);
     // A text property on a part whose text is drawn by elements inside it
     // that set that property themselves from a token (a top nav heading's
     // title span) never reaches that text: the token, on the part, does.
