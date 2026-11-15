@@ -91,6 +91,7 @@ import {
   sharedWeakSet,
 } from '../utils/sharedRealm';
 import {paintedBackground} from './inertClone';
+import {LIST_LAYOUT} from './listLayoutKey';
 import {
   inertCopy,
   isCopyable,
@@ -1068,10 +1069,6 @@ export function glideOf(element: Element): Animation | null {
 
 // A registered key, so a swizzled copy of this module reads a package handle.
 const AREA = sharedKey('animated-layout/area', 1);
-// The layout calls a List makes. A handle from `useAnimatedLayout` carries
-// them, so a List given no handle loads none of this module.
-// List/listLayoutUpdates reads the same key.
-const LIST_LAYOUT = sharedKey('animated-layout/list-layout', 1);
 
 /** @internal The layout calls a List reaches through its handle. */
 export interface ListLayoutCalls {
