@@ -3558,6 +3558,74 @@ describe('swipe', () => {
       expect(screen.queryByRole('button', {name: 'Read'})).toBeNull();
     });
 
+    it('keep a row open through a condition whose branches set one place’s id as a name and as a string literal of the same value, and so does the codemod’s output: one id at the place with none', async () => {
+      const READ_ID = 'read';
+      // The codemod's output for this condition: the ids the branches set
+      // stay, and the place with none takes one id in both.
+      const migrated = {
+        unread: createSwipe({
+          leading: [{id: READ_ID, label: 'Read', onActivate: vi.fn()}],
+          trailing: [{id: 'trailing-0', label: 'Delete', onActivate: vi.fn()}],
+        }),
+        read: createSwipe({
+          leading: [{id: 'read', label: 'Read', onActivate: vi.fn()}],
+          trailing: [{id: 'trailing-0', label: 'Archive', onActivate: vi.fn()}],
+        }),
+      };
+      function Row({isUnread, form}: {isUnread: boolean; form: string}) {
+        return form === 'deprecated' ? (
+          <Item
+            label="Conversation"
+            onClick={vi.fn()}
+            data-testid="row"
+            swipeActions={
+              isUnread
+                ? {
+                    leading: [
+                      {id: READ_ID, label: 'Read', onActivate: vi.fn()},
+                    ],
+                    trailing: [{label: 'Delete', onActivate: vi.fn()}],
+                  }
+                : {
+                    leading: [{id: 'read', label: 'Read', onActivate: vi.fn()}],
+                    trailing: [{label: 'Archive', onActivate: vi.fn()}],
+                  }
+            }
+          />
+        ) : (
+          <Item
+            label="Conversation"
+            onClick={vi.fn()}
+            data-testid="row"
+            swipe={isUnread ? migrated.unread : migrated.read}
+          />
+        );
+      }
+      for (const form of ['deprecated', 'migrated']) {
+        const {rerender, unmount} = render(<Row isUnread form={form} />);
+        const row = screen.getByTestId('row');
+        layOut(row);
+        const f = finger(row);
+        f.down(200);
+        f.move(185);
+        f.move(170);
+        f.move(150);
+        f.move(130);
+        f.rest();
+        f.up();
+        await settled();
+        expect(xOf(row), form).toBe(-72);
+        rerender(<Row isUnread={false} form={form} />);
+        await settled();
+        expect(xOf(row), `${form}: open after the flip`).toBe(-72);
+        expect(
+          screen.getByRole('button', {name: 'Archive'}),
+        ).toBeInTheDocument();
+        expect(screen.queryByRole('button', {name: 'Delete'})).toBeNull();
+        unmount();
+      }
+    });
+
     it('still rest a row open and fire a tapped entry, as released', async () => {
       const onActivate = vi.fn();
       const {row} = renderDeprecatedRow({

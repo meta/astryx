@@ -17,8 +17,9 @@
  * with a TODO. Each entry
  * with no `id` takes one from its static label, then its handler's name, then
  * its side and place with a TODO. A conditional's two branches key their
- * swipes alike exactly where the deprecated props did. Where those keys match,
- * the entries at each place share one id. Where no ids can keep them so, as
+ * swipes alike exactly where the deprecated props did. An id a branch sets
+ * stays, so only the places with no id decide. Where the keys could match,
+ * those places share one id. Where no ids are sure to keep the keys so, as
  * with one entry against none on a side, the props stay, with a TODO. Rows
  * with the same options in one place share one definition. A
  * `swipeBehavior={B}` joins the options; a static `'reveal'`, the default, is
@@ -81,9 +82,11 @@ const BRANCH_NAME_COMMENT =
 const BRANCH_KEY_COMMENT =
   ' TODO(astryx upgrade): swipeActions and swipeBehavior are deprecated ' +
   '(DEP-0017). A row keys its actions by their ids, and an open row closes ' +
-  "when the key changes. No ids on these actions can keep this condition's " +
-  'two keys equal, or apart, as they are now. So it was left unchanged: ' +
-  'migrate it by hand (AST-057 DEC-10). ';
+  'when the key changes. Here an action with no id faces no action, an ' +
+  'empty id, or an id that is not a string literal in the other branch. No ' +
+  "ids can be sure to keep this condition's two keys equal, or apart, as " +
+  'they are now. So it was left unchanged: migrate it by hand (AST-057 ' +
+  'DEC-10). ';
 const PLACE_COMMENT =
   ' TODO(astryx upgrade): define this swipe once, at module scope or in ' +
   'useMemo, and read the row from the itemKey that onActivate receives ' +
@@ -458,76 +461,123 @@ function sideEntries(sides, name) {
 }
 
 /**
- * The key a row compares when its swipe changes, as `idsKeyOf` in
- * `SwipeActionsLayer.tsx` builds it. Item renders that layer for the
- * deprecated props too, with their `leading` and `trailing`, or `[]`. Each
- * entry gives its `id`, or '' with none, and each side joins them. A static
- * id gives its string, and any other id its source. `assigned` gives the
- * ids a plan writes (`planIds`).
- * @param {any} j @param {Array<[string, any[]]>} sides
- * @param {Map<any, string>} [assigned]
+ * What a row's key reads from an entry: `none` with no `id`, the text of a
+ * string literal, or `unknown` for any other value. A nullish `id` stays as
+ * written and keys as ''.
+ * @param {any} entry
+ * @returns {{kind: 'none'}
+ *   | {kind: 'literal', text: string}
+ *   | {kind: 'unknown'}}
  */
-function swipeKey(j, sides, assigned = new Map()) {
-  const idText = (/** @type {any} */ entry) => {
-    const planned = assigned.get(entry);
-    if (planned != null) {
-      return planned;
-    }
-    const id = idPropertyOf(entry);
-    if (id == null || isNullish(id.value)) {
-      return '';
-    }
-    return staticString(id.value) ?? `\u0002${j(id.value).toSource()}`;
-  };
-  const side = (/** @type {string} */ name) =>
-    sideEntries(sides, name).map(idText).join('\u0000');
-  return `${side('leading')}\u0001${side('trailing')}`;
+function keyedId(entry) {
+  const id = idPropertyOf(entry);
+  if (id == null) {
+    return {kind: 'none'};
+  }
+  if (isNullish(id.value)) {
+    return {kind: 'literal', text: ''};
+  }
+  const text = staticString(id.value);
+  return text == null ? {kind: 'unknown'} : {kind: 'literal', text};
 }
 
 /**
- * The ids a conditional's two branches share, by entry. Empty when their
- * deprecated keys differ (`swipeKey`): each branch keeps its own ids. Where
- * the keys match and each side has as many entries in both, each place whose
- * entries have no `id` gets one id in both. It is their label's when the
- * labels give the same one, else their handler's, else their side and place.
- * Null when the keys match but a side's counts differ. Then one entry with no
- * `id` keys like an empty side, and no entry with an id can.
- * @param {any} j @param {Array<{sides: Array<[string, any[]]>}>} objects
- * @returns {Map<any, {id: string, positional: boolean}> | null}
+ * The string literal ids of both branches.
+ * @param {Array<{sides: Array<[string, any[]]>}>} objects
  */
-function sharedIds(j, objects) {
-  /** @type {Map<any, {id: string, positional: boolean}>} */
-  const shared = new Map();
-  if (objects.length !== 2) {
-    return shared;
-  }
-  const [first, second] = objects;
-  if (swipeKey(j, first.sides) !== swipeKey(j, second.sides)) {
-    return shared;
-  }
-  const sideNames = [
-    ...new Set(objects.flatMap(({sides}) => sides.map(([name]) => name))),
-  ];
-  const counts = (/** @type {string} */ side) =>
-    objects.map(({sides}) => sideEntries(sides, side).length);
-  if (sideNames.some(side => new Set(counts(side)).size > 1)) {
-    return null;
-  }
-  const taken = new Set();
+function literalIds(objects) {
+  const ids = new Set();
   for (const {sides} of objects) {
     for (const [, entries] of sides) {
       for (const entry of entries) {
-        const id = idPropertyOf(entry);
-        const text = id == null ? null : staticString(id.value);
-        if (text != null) {
-          taken.add(text);
+        const id = keyedId(entry);
+        if (id.kind === 'literal') {
+          ids.add(id.text);
         }
       }
     }
   }
-  for (const side of sideNames) {
+  return ids;
+}
+
+/**
+ * How a conditional's two branches take ids, so that a row keys their swipes
+ * alike exactly where it keyed the deprecated props alike. Item renders the
+ * same layer for those props, whose `idsKeyOf` joins each side's ids, an
+ * entry with none as ''. An id a branch sets stays as written, so a place
+ * where both branches set one compares as before, whatever the values. Only
+ * the places with no id decide. The keys differ for sure when two string
+ * literals at one place differ, or an entry with no id faces a string
+ * literal. So does a side with one entry more in one branch, unless the
+ * other side is empty and that entry has no id. Then `apart`: each branch
+ * takes its own ids, and none matches a string literal in the other.
+ * Otherwise `shared`: each place with no id in both branches takes one id in
+ * both. Null when the keys could match and an entry with no id faces no
+ * entry, '' or an id that is not a string literal. No ids are sure to keep
+ * the keys as they were then.
+ * @param {Array<{sides: Array<[string, any[]]>}>} objects
+ * @returns {'apart' | 'shared' | null}
+ */
+function branchIds(objects) {
+  const [first, second] = objects;
+  let apart = false;
+  let unsure = false;
+  for (const side of ['leading', 'trailing']) {
+    const entries = sideEntries(first.sides, side);
     const others = sideEntries(second.sides, side);
-    sideEntries(first.sides, side).forEach((entry, index) => {
+    if (entries.length !== others.length) {
+      const lone =
+        entries.length + others.length === 1
+          ? keyedId([...entries, ...others][0])
+          : null;
+      if (lone == null || (lone.kind === 'literal' && lone.text !== '')) {
+        apart = true;
+      } else if (lone.kind === 'none') {
+        unsure = true;
+      }
+      continue;
+    }
+    entries.forEach((entry, index) => {
+      const id = keyedId(entry);
+      const other = keyedId(others[index]);
+      if (id.kind !== 'none' && other.kind !== 'none') {
+        apart ||=
+          id.kind === 'literal' &&
+          other.kind === 'literal' &&
+          id.text !== other.text;
+        return;
+      }
+      const facing = id.kind === 'none' ? other : id;
+      if (facing.kind === 'literal' && facing.text !== '') {
+        apart = true;
+      } else if (facing.kind !== 'none') {
+        unsure = true;
+      }
+    });
+  }
+  return apart ? 'apart' : unsure ? null : 'shared';
+}
+
+/**
+ * The ids a conditional's two branches share at each place with no id in
+ * both (`branchIds`). It is their label's when the labels give the same one,
+ * else their handler's, else their side and place.
+ * @param {Array<{sides: Array<[string, any[]]>}>} objects
+ * @param {Set<string>} reserved
+ * @returns {Map<any, {id: string, positional: boolean}>}
+ */
+function sharedIds(objects, reserved) {
+  /** @type {Map<any, {id: string, positional: boolean}>} */
+  const shared = new Map();
+  const [first, second] = objects;
+  const taken = new Set(reserved);
+  for (const side of ['leading', 'trailing']) {
+    const entries = sideEntries(first.sides, side);
+    const others = sideEntries(second.sides, side);
+    if (entries.length !== others.length) {
+      continue;
+    }
+    entries.forEach((entry, index) => {
       const other = others[index];
       if (idPropertyOf(entry) != null || idPropertyOf(other) != null) {
         return;
@@ -565,13 +615,15 @@ function sharedIds(j, objects) {
  * handler, then from its side and place. `createSwipe` needs an `id` on every
  * action, and the ids stay unique in the swipe. An entry in `shared` takes
  * the id its conditional's branches share (`sharedIds`); `branchPositional`
- * says one of those is its side and place. It writes nothing (`applyIds`).
+ * says one of those is its side and place. No id it plans is in
+ * `reserved`. It writes nothing (`applyIds`).
  * @param {Array<[string, any[]]>} sides
  * @param {Map<any, {id: string, positional: boolean}>} [shared]
+ * @param {Set<string>} [reserved]
  * @returns {IdPlan}
  */
-function planIds(sides, shared = new Map()) {
-  const taken = new Set();
+function planIds(sides, shared = new Map(), reserved = new Set()) {
+  const taken = new Set(reserved);
   for (const [, entries] of sides) {
     for (const entry of entries) {
       const id = idPropertyOf(entry);
@@ -644,25 +696,20 @@ function entryIds(j, sides) {
 }
 
 /**
- * The ids each branch of a conditional takes, planned before any is written.
- * A row then keys the two swipes alike exactly where the deprecated props did
- * (`swipeKey`). Null when no ids can do that. One case is a side with one
- * entry with no `id` against none. Another is branches whose own ids would
- * key alike where the deprecated props did not.
- * @param {any} j @param {Array<{sides: Array<[string, any[]]>}>} objects
+ * The ids each branch of a conditional takes (`branchIds`), planned before
+ * any is written. No planned id matches a string literal id in either
+ * branch. Null when the props must stay.
+ * @param {Array<{sides: Array<[string, any[]]>}>} objects
  * @returns {IdPlan[] | null}
  */
-function branchPlans(j, objects) {
-  const shared = sharedIds(j, objects);
-  if (shared == null) {
+function branchPlans(objects) {
+  const way = branchIds(objects);
+  if (way == null) {
     return null;
   }
-  const plans = objects.map(({sides}) => planIds(sides, shared));
-  const before = objects.map(({sides}) => swipeKey(j, sides));
-  const after = objects.map(({sides}, index) =>
-    swipeKey(j, sides, new Map(plans[index].assigned)),
-  );
-  return (before[0] === before[1]) === (after[0] === after[1]) ? plans : null;
+  const reserved = literalIds(objects);
+  const shared = way === 'shared' ? sharedIds(objects, reserved) : new Map();
+  return objects.map(({sides}) => planIds(sides, shared, reserved));
 }
 
 /**
@@ -2014,7 +2061,7 @@ export default function transformer(file, api) {
       }
       // A condition's swipes key alike exactly where the deprecated props
       // did, or the props stay (`branchPlans`).
-      const plans = objects.length === 2 ? branchPlans(j, objects) : undefined;
+      const plans = objects.length === 2 ? branchPlans(objects) : undefined;
       if (plans === null) {
         hasChanges = addComment(j, actions, BRANCH_KEY_COMMENT) || hasChanges;
         return;
