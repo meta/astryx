@@ -152,10 +152,12 @@ async function readCombobox(combobox: Locator) {
       );
       return Math.round(((hi + 0.05) / (lo + 0.05)) * 100) / 100;
     };
-    const rect = el.getBoundingClientRect();
     const controls = el.getAttribute('aria-controls');
     const controlled = controls ? document.getElementById(controls) : null;
     const root = el.closest('.astryx-multi-selector');
+    // A press anywhere on the control box opens the list, so the box is the
+    // target; the trigger button inside it is only the text row.
+    const rect = (root ?? el).getBoundingClientRect();
     const textNode = Array.from(el.querySelectorAll('span, div')).find(
       node =>
         node.children.length === 0 && (node.textContent ?? '').trim() !== '',
@@ -259,7 +261,9 @@ async function readPanel(combobox: Locator) {
       null;
     const active = activeId ? document.getElementById(activeId) : null;
     const popupRect = popup?.getBoundingClientRect();
-    const triggerRect = el.getBoundingClientRect();
+    const triggerRect = (
+      el.closest('.astryx-multi-selector') ?? el
+    ).getBoundingClientRect();
     const activeStyle = active ? getComputedStyle(active) : null;
     return {
       expanded: el.getAttribute('aria-expanded'),
@@ -359,7 +363,7 @@ for (const mode of ['light', 'dark'] as const) {
       key: `default-${mode}-${direction}`,
       group: 'default',
       story: 'core-multiselector--default',
-      ready: '#storybook-root [role="combobox"]',
+      ready: '#storybook-root button[role="combobox"]',
       mode,
       direction,
       viewport: DESKTOP,
@@ -372,12 +376,15 @@ for (const mode of ['light', 'dark'] as const) {
         checkAxe(check, result);
         await frame('rest', {rest, axe: result});
 
+        const control = page.locator('.astryx-multi-selector', {
+          has: combobox,
+        });
         await page.mouse.move(0, 0);
         await settle(page);
-        const restShot = await combobox.screenshot({animations: 'disabled'});
+        const restShot = await control.screenshot({animations: 'disabled'});
         await combobox.hover();
         await settle(page);
-        const hoverShot = await combobox.screenshot({animations: 'disabled'});
+        const hoverShot = await control.screenshot({animations: 'disabled'});
         check(!hoverShot.equals(restShot), 'hover paints like rest');
         await frame('hover', {});
 
@@ -464,7 +471,7 @@ for (const mode of ['light', 'dark'] as const) {
     key: `sizes-${mode}-ltr`,
     group: 'statics',
     story: 'core-multiselector--sizes',
-    ready: '#storybook-root [role="combobox"]',
+    ready: '#storybook-root button[role="combobox"]',
     mode,
     direction: 'ltr',
     viewport: DESKTOP,
@@ -501,7 +508,7 @@ for (const mode of ['light', 'dark'] as const) {
       key: `${story}-${mode}-ltr`,
       group: 'statics',
       story: `core-multiselector--${story}`,
-      ready: '#storybook-root [role="combobox"]',
+      ready: '#storybook-root button[role="combobox"]',
       mode,
       direction: 'ltr',
       viewport: DESKTOP,
@@ -539,7 +546,7 @@ for (const mode of ['light', 'dark'] as const) {
     key: `status-${mode}-ltr`,
     group: 'statics',
     story: 'core-multiselector--status',
-    ready: '#storybook-root [role="combobox"]',
+    ready: '#storybook-root button[role="combobox"]',
     mode,
     direction: 'ltr',
     viewport: DESKTOP,
@@ -575,7 +582,7 @@ for (const mode of ['light', 'dark'] as const) {
     key: `read-only-${mode}-ltr`,
     group: 'statics',
     story: 'core-multiselector--read-only',
-    ready: '#storybook-root [role="combobox"]',
+    ready: '#storybook-root button[role="combobox"]',
     mode,
     direction: 'ltr',
     viewport: DESKTOP,
@@ -612,7 +619,7 @@ for (const mode of ['light', 'dark'] as const) {
     key: `disabled-${mode}-ltr`,
     group: 'statics',
     story: 'core-multiselector--disabled-with-message',
-    ready: '#storybook-root [role="combobox"]',
+    ready: '#storybook-root button[role="combobox"]',
     mode,
     direction: 'ltr',
     viewport: DESKTOP,
@@ -623,12 +630,15 @@ for (const mode of ['light', 'dark'] as const) {
       check(c.tabIndex === 0, `tabIndex ${c.tabIndex}`);
       check(c.rootDisabled === 'disabled', `data-disabled ${c.rootDisabled}`);
       check(c.cursor === 'default', `cursor ${c.cursor}`);
+      const control = page.locator('.astryx-multi-selector', {
+        has: combobox,
+      });
       await page.mouse.move(0, 0);
       await settle(page);
-      const restShot = await combobox.screenshot({animations: 'disabled'});
+      const restShot = await control.screenshot({animations: 'disabled'});
       await combobox.hover({force: true});
       await settle(page);
-      const hoverShot = await combobox.screenshot({animations: 'disabled'});
+      const hoverShot = await control.screenshot({animations: 'disabled'});
       // The tooltip opens beside the trigger, outside this element shot.
       check(hoverShot.equals(restShot), 'disabled trigger paints a hover');
       await combobox.click({force: true});
@@ -674,7 +684,7 @@ for (const mode of ['light', 'dark'] as const) {
     key: `empty-loading-${mode}-ltr`,
     group: 'statics',
     story: 'core-multiselector--empty-states',
-    ready: '#storybook-root [role="combobox"]',
+    ready: '#storybook-root button[role="combobox"]',
     mode,
     direction: 'ltr',
     viewport: DESKTOP,
@@ -715,7 +725,7 @@ for (const direction of ['ltr', 'rtl'] as const) {
     key: `search-light-${direction}`,
     group: 'search',
     story: 'core-multiselector--searchable',
-    ready: '#storybook-root [role="combobox"]',
+    ready: '#storybook-root button[role="combobox"]',
     mode: 'light',
     direction,
     viewport: DESKTOP,
@@ -767,7 +777,7 @@ for (const mode of ['light', 'dark'] as const) {
     key: `sheet-${mode}-ltr`,
     group: 'sheet',
     story: 'core-multiselector--bottom-sheet-presentation',
-    ready: '#storybook-root [role="combobox"]',
+    ready: '#storybook-root button[role="combobox"]',
     mode,
     direction: 'ltr',
     viewport: PHONE,
@@ -814,33 +824,44 @@ cases.push({
   key: 'narrow-light-ltr',
   group: 'sheet',
   story: 'core-multiselector--default',
-  ready: '#storybook-root [role="combobox"]',
+  ready: '#storybook-root button[role="combobox"]',
   mode: 'light',
   direction: 'ltr',
   viewport: NARROW,
   run: async (page, check, frame) => {
+    // The story frame fixes a 300 px column inside Storybook's centered
+    // padding, so the page scroll is the fixture's. The field must fill that
+    // column without overflowing it, and its popup must match its box.
     const scroll = await page.evaluate(() => ({
       scrollWidth: document.documentElement.scrollWidth,
       clientWidth: document.documentElement.clientWidth,
     }));
-    check(
-      scroll.scrollWidth <= scroll.clientWidth,
-      `horizontal scroll at 320px: ${JSON.stringify(scroll)}`,
-    );
     const combobox = page.getByRole('combobox', {name: 'Columns'});
     const c = await readCombobox(combobox);
     checkRest(check, 'Columns', c);
-    check(c.box.right <= NARROW.width, `trigger right edge ${c.box.right}`);
+    const column = await combobox.evaluate(el => {
+      const field = el.closest('.astryx-field') ?? el;
+      const parent = field.parentElement ?? field;
+      return {
+        field: field.getBoundingClientRect().width,
+        parent: parent.getBoundingClientRect().width,
+      };
+    });
+    check(
+      column.field <= column.parent + EDGE_TOLERANCE_PX,
+      `field ${column.field}px overflows its ${column.parent}px column`,
+    );
     await combobox.click();
     await expect(combobox).toHaveAttribute('aria-expanded', 'true');
     await settle(page);
     const open = await readPanel(combobox);
     check(
       open.popup != null &&
-        open.popup.right <= NARROW.width + EDGE_TOLERANCE_PX,
-      `popup right edge ${open.popup?.right}`,
+        open.popup.right - open.popup.left <=
+          open.trigger.right - open.trigger.left + EDGE_TOLERANCE_PX,
+      `popup ${JSON.stringify(open.popup)} is wider than the control ${JSON.stringify(open.trigger)}`,
     );
-    await frame('open', {scroll, c, open});
+    await frame('open', {scroll, column, c, open});
     await page.keyboard.press('Escape');
   },
 });
