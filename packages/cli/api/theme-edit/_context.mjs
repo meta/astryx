@@ -48,6 +48,7 @@ import {MAX_ASSET_BYTES} from '../../foundation/render/assets.mjs';
 import {typoNear} from './_normal.mjs';
 import {
   fontOf,
+  ownTokenEntries,
   builtFontFamilies,
   builtFontWeights,
   fontPackages,
@@ -77,9 +78,14 @@ import {
 } from './_preview.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
+  customPropertyValues,
   fontKey,
   importedFontFamilies,
 } from '../../foundation/fonts/font-stylesheet.mjs';
+import {
+  hasGenericFamily,
+  namedFontFamilies,
+} from '../theme/build/font-warning.mjs';
 
 const E = ERROR_CODES;
 
@@ -812,6 +818,66 @@ export function fontNotes(ctx, data) {
   for (const family of familiesNothingLoads(ctx, data, packages)) {
     if (dialFamilies.has(fontKey(family))) continue;
     notes.push(unloadedNote(family));
+  }
+  notes.push(...loneFamilyNotes(ctx, data));
+  return notes;
+}
+
+/** What each font role's family token sets, for a note. */
+const ROLE_TEXT = /** @type {Record<string, string>} */ ({
+  body: 'body text uses',
+  heading: 'headings use',
+  code: 'code uses',
+});
+
+/**
+ * A note for each font role the theme's build gives one family and no
+ * fallback at all (`--font-family-heading: Lora`, as Core builds a heading
+ * family given no fallbacks of its own, or an exact token set so): text in
+ * it has no font while that one loads, or if it is missing. The way to a
+ * list is named where the family came from: the setting, run with a list
+ * (the family's own open-font fallbacks, else the font dial's), or the
+ * theme's own source.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @returns {string[]}
+ */
+export function loneFamilyNotes(ctx, data) {
+  /** @type {string} */
+  let css;
+  try {
+    css = fs.readFileSync(themeFiles(ctx.project.cwd, data.name).css, 'utf8');
+  } catch {
+    return [];
+  }
+  /** @type {string[]} */
+  const notes = [];
+  const own = customPropertyValues(css);
+  for (const role of Object.keys(ROLE_TEXT)) {
+    const token = `--font-family-${role}`;
+    const value = own.get(token)?.at(-1);
+    if (!value || /var\(/i.test(value) || hasGenericFamily(value)) continue;
+    const named = namedFontFamilies(value);
+    if (named.length !== 1) continue;
+    const family = named[0].replace(/^["']|["']$/g, '');
+    const fallbacks =
+      Object.values(OPEN_FONTS).find(f => fontKey(f.family) === fontKey(family))
+        ?.fallbacks ?? fontOf(family).fallbacks;
+    const list = `${value.trim()}, ${fallbacks}`;
+    const setting = data.settings.find(
+      s => s.source === 'token' && s.thing === token && !s.on && !s.when,
+    );
+    const typography = ownTokenEntries(ctx.project.cwd, data.name).some(
+      e => e.kind === 'typography' && e.key === `${role}.family`,
+    );
+    const fix = setting
+      ? `give a list: ${P} set ${data.name} ${token} ${quoteCommandArgument(list)}`
+      : typography
+        ? `give typography.${role} its fallbacks in themes/${data.name}/${data.name}.theme.ts (such as fallbacks: '${fallbacks}')`
+        : `give ${token} a list in themes/${data.name}/${data.name}.theme.ts (such as '${list}')`;
+    notes.push(
+      `${ROLE_TEXT[role]} only ${family}, with no fallback while it loads or if it is missing; to fall back, ${fix}`,
+    );
   }
   return notes;
 }

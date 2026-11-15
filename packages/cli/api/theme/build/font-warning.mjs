@@ -309,6 +309,19 @@ export function namedFontFamilies(value) {
 }
 
 /**
+ * Whether a CSS font-family value ends in a generic family (`serif`,
+ * `sans-serif`, `system-ui`, ...): the family the browser shows when none
+ * of the named ones is there.
+ * @param {string} value
+ * @returns {boolean}
+ */
+export function hasGenericFamily(value) {
+  return splitFamilies(value).some(family =>
+    GENERIC_KEYWORDS.has(family.toLowerCase()),
+  );
+}
+
+/**
  * The family list of a CSS `font` shorthand: what follows its size (and
  * line height), as the shorthand's grammar puts it last. A system font
  * keyword (`caption`, `menu`, ...) or a value with no size names none.

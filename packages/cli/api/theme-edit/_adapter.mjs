@@ -52,7 +52,12 @@ import * as preview from './_preview-app.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {findPackageRoot} from '../../foundation/fs/paths.mjs';
-import {baseWeightNotes, context, coreApp} from './_context.mjs';
+import {
+  baseWeightNotes,
+  context,
+  coreApp,
+  loneFamilyNotes,
+} from './_context.mjs';
 import {APP_COPY_MARK} from './_marks.mjs';
 import {irregularFileKind} from '../../foundation/fs/regular-file.mjs';
 import {
@@ -1820,6 +1825,8 @@ export async function editorBuildExtra(file, cwd, opts) {
         ...edit.ownPhoneNotes(root, slug, data),
         // A weight the base theme's font stylesheet does not load.
         ...baseWeightNotes(await context(root), data),
+        // A font role built as one family with no fallback.
+        ...loneFamilyNotes(await context(root), data),
       ];
     } catch {
       notices = [];
