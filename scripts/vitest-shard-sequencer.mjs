@@ -16,26 +16,25 @@
  *   time so far, so the slowest files each take a leg of their own and the
  *   slowest single file sets the floor (spec:AST-030 FR22). Within a leg it
  *   starts the slowest recorded file first, so that file never waits behind
- *   others. A file with no recorded time counts as the median
- *   (scripts/lib/duration-split.mjs). The numbers only steer balance; which
- *   files run never depends on them. Other projects keep Vitest's split and
- *   order.
+ *   others. Each file costs what the Node leg planner
+ *   (scripts/vitest-node-legs.mjs) books for it, so the legs it planned are
+ *   the legs that run; a file with no recorded time counts as the ninetieth
+ *   percentile (scripts/lib/duration-split.mjs). The numbers only steer
+ *   balance; which files run never depends on them. Other projects keep
+ *   Vitest's split and order.
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {BaseSequencer} from 'vitest/node';
-import {costOf, slowestFirst, splitByDuration} from './lib/duration-split.mjs';
+import {slowestFirst, splitByDuration} from './lib/duration-split.mjs';
+import {DURATIONS, nodeFileCost, readDurations} from './vitest-node-legs.mjs';
+
+export {DURATIONS, readDurations};
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-export const DURATIONS = path.join(ROOT, 'scripts/vitest-node-durations.json');
 const PROJECT = 'node';
-// Seconds of import and transform per Node test file, as the legs report.
-export const PER_FILE_SECONDS = 0.4;
-// Seconds of summed file time a leg finishes per second of its run: test files
-// run side by side (measured on main's six Node legs: 2.1 to 2.5).
-export const LEG_PARALLELISM = 2.3;
 
 /**
  * Splits files into `count` legs by recorded seconds.
@@ -48,72 +47,11 @@ export function partitionByDuration(
   files,
   count,
   seconds,
-  {legOneSeconds = 0, idle = new Set()} = {},
+  {idle = new Set()} = {},
 ) {
-  const recorded = costOf(files, seconds);
   // A file that runs no test in this run (the swizzle-proof slices when the
   // change reaches no component) costs only its import.
-  const cost = file => (idle.has(file) ? 0 : recorded(file));
-  // Every file also costs its import and transform, which its recorded time
-  // leaves out; without it the hundreds of files recorded at 0 s would all go
-  // to one leg.
-  return splitByDuration(
-    files,
-    count,
-    file => cost(file) + PER_FILE_SECONDS,
-    // The first leg's own steps take that much of its run, in file time.
-    count > 1 ? [legOneSeconds * LEG_PARALLELISM] : [],
-  );
-}
-
-/**
- * Seconds of the steps only the first leg runs (the record's legOneSteps), or
- * 0 when the record has none.
- */
-export function readLegOneSeconds(file = DURATIONS) {
-  try {
-    const steps = JSON.parse(fs.readFileSync(file, 'utf8')).legOneSteps ?? {};
-    return Object.values(steps).reduce((sum, s) => sum + (Number(s) || 0), 0);
-  } catch {
-    return 0;
-  }
-}
-
-/**
- * Seconds per step of the first Node leg, from a job log as `gh run view
- * --log` prints it (job, step and a timestamp per line), for the step names
- * given.
- * @param {string} text
- * @param {string[]} names
- * @returns {Record<string, number>}
- */
-export function recordLegOneSteps(text, names) {
-  const wanted = new Set(names);
-  /** @type {Map<string, [number, number]>} */
-  const spans = new Map();
-  for (const line of text.split('\n')) {
-    const [job, step, rest] = line.split('\t');
-    if (!/^test-node \(1\//.test(job ?? '') || !wanted.has(step)) continue;
-    const at = Date.parse((rest ?? '').split(' ')[0]);
-    if (!Number.isFinite(at)) continue;
-    const span = spans.get(step) ?? [at, at];
-    spans.set(step, [Math.min(span[0], at), Math.max(span[1], at)]);
-  }
-  return Object.fromEntries(
-    [...spans].map(([step, [from, to]]) => [
-      step,
-      Math.round((to - from) / 1000),
-    ]),
-  );
-}
-
-/** Recorded seconds per file, or none when the file cannot be read. */
-export function readDurations(file = DURATIONS) {
-  try {
-    return JSON.parse(fs.readFileSync(file, 'utf8')).seconds ?? {};
-  } catch {
-    return {};
-  }
+  return splitByDuration(files, count, nodeFileCost(files, seconds, {idle}));
 }
 
 /**
@@ -161,7 +99,7 @@ const SWIZZLE_PROOF = /(^|\/)swizzle-proof\.\d+\.test\.mjs$/;
 
 /**
  * The swizzle-proof slices among `files` that prove nothing in this run: every
- * slice reads the same scope first (packages/cli/test/swizzle-proof/proof.mjs
+ * slice reads the same scope first (packages/cli/test/swizzle-proof/scope.mjs
  * runScope), and in the scope `none` it runs no target. Their recorded time is
  * the time they take when a change reaches them, so without this the legs that
  * hold them would finish early while the other legs carry the rest.
@@ -172,7 +110,7 @@ export async function idleSwizzleSlices(files) {
   const slices = files.filter(file => SWIZZLE_PROOF.test(file));
   if (slices.length === 0) return new Set();
   const {runScope} = await import(
-    pathToFileURL(path.join(ROOT, 'packages/cli/test/swizzle-proof/proof.mjs'))
+    pathToFileURL(path.join(ROOT, 'packages/cli/test/swizzle-proof/scope.mjs'))
       .href
   );
   const {scope} = runScope({all: process.env.SWIZZLE_PROOF_ALL === '1'});
@@ -220,12 +158,9 @@ export default class DurationShardSequencer extends BaseSequencer {
     const relative = spec => this.relative(spec);
     const node = specs.filter(spec => spec.project.name === PROJECT);
     const others = specs.filter(spec => spec.project.name !== PROJECT);
-    const legOneSeconds =
-      process.env.VITEST_LEG_ONE_RESERVE === '1' ? readLegOneSeconds() : 0;
     const files = node.map(relative);
     const mine = new Set(
       partitionByDuration(files, count, readDurations(), {
-        legOneSeconds,
         idle: await idleSwizzleSlices(files),
       })[index - 1],
     );
@@ -252,7 +187,7 @@ export default class DurationShardSequencer extends BaseSequencer {
     // One spec per file is the rule; anything else keeps Vitest's order.
     if (byPath.size !== node.length) return sorted;
     const files = [...byPath.keys()];
-    const order = slowestFirst(files, costOf(files, readDurations()));
+    const order = slowestFirst(files, nodeFileCost(files, readDurations()));
     const result = [...sorted];
     order.forEach((file, i) => {
       result[slots[i]] = byPath.get(file);
@@ -282,14 +217,6 @@ if (
   const current = fs.existsSync(DURATIONS)
     ? JSON.parse(fs.readFileSync(DURATIONS, 'utf8'))
     : {};
-  // The first leg's own steps, from the same logs; a step the logs do not
-  // show keeps its earlier time.
-  const legOneSteps = {...(current.legOneSteps ?? {})};
-  for (const log of logs)
-    Object.assign(
-      legOneSteps,
-      recordLegOneSteps(fs.readFileSync(log, 'utf8'), Object.keys(legOneSteps)),
-    );
   fs.writeFileSync(
     DURATIONS,
     `${JSON.stringify(
@@ -297,7 +224,6 @@ if (
         ...current,
         source: 'recorded Node leg logs',
         seconds: mergeRecord(current.seconds ?? {}, seconds),
-        legOneSteps,
       },
       null,
       2,
