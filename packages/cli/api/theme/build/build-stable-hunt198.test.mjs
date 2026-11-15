@@ -164,7 +164,13 @@ describe('N11: a family member’s registry imported without its extension', () 
       ),
     );
     expect(err).toBeUndefined();
-    expect(read('fam/ocean-family.js')).toContain('./icons');
+    // The family module imports the registry compiled from icons.ts.
+    expect(read('fam/ocean-family.js')).toContain(
+      './ocean-family.modules/icons.ts.js',
+    );
+    expect(read('fam/ocean-family.modules/icons.ts.js')).toContain(
+      "close: 'x'",
+    );
   });
 });
 
