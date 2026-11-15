@@ -105,7 +105,10 @@ import {
   quoteCommandArgument,
 } from '../../foundation/env/package-manager.mjs';
 import {sha256} from '../../foundation/render/source-block.mjs';
-import {isOtherLanguageStylesheet} from '../../foundation/fs/stylesheet-file.mjs';
+import {
+  isBundlerFile,
+  isOtherLanguageStylesheet,
+} from '../../foundation/fs/stylesheet-file.mjs';
 import {findNodeModulesPackage} from '../../foundation/fs/paths.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
 
@@ -1542,6 +1545,48 @@ const CLI_PACKAGE = path.resolve(
   '../..',
 );
 const STARTER = path.join(CLI_PACKAGE, 'assets', 'preview-app');
+
+/**
+ * Pictures the new app's type check reads: Next declares them for every app
+ * (its image types), by their lower-case extension.
+ */
+const NEXT_TYPED_PICTURES = [
+  'svg',
+  'png',
+  'jpg',
+  'jpeg',
+  'gif',
+  'webp',
+  'avif',
+  'ico',
+  'bmp',
+];
+
+/**
+ * The ends of the module names the new app's type check reads, as
+ * TypeScript matches them: its own declarations (css.d.ts) and the pictures
+ * Next declares. A name with a query, a hash or another case ends in none
+ * of them.
+ * @type {string[] | null}
+ */
+let newAppTyped = null;
+
+/**
+ * Whether the new app's type check reads an import of a file only its
+ * bundler loads (a stylesheet or an asset).
+ * @param {string} specifier
+ */
+function typedByNewApp(specifier) {
+  newAppTyped ??= [
+    ...[
+      ...fs
+        .readFileSync(path.join(STARTER, 'css.d.ts'), 'utf8')
+        .matchAll(/declare module '\*([^']*)'/g),
+    ].map(m => m[1]),
+    ...NEXT_TYPED_PICTURES.map(x => `.${x}`),
+  ];
+  return newAppTyped.some(end => specifier.endsWith(end));
+}
 
 /**
  * `file` when it is inside `root`, also through links; else a refusal.
@@ -5171,6 +5216,8 @@ async function previewApp(dir, options, held) {
     const imported = new Set();
     /** Stylesheets of another language the theme sources import (a Sass file), which the new app cannot build or type. @type {string[]} */
     const otherStyles = [];
+    /** Other files only a bundler loads that the theme sources import by a name the new app's type check does not read (`./brand.css?inline`, a font). @type {string[]} */
+    const untyped = [];
     const outside = themeCopy.flatMap(c => {
       const rel = path.relative(to.dir, c.rel);
       if (!/\.(mjs|cjs|js|mts|cts|ts|tsx|jsx)$/.test(rel)) return [];
@@ -5183,6 +5230,8 @@ async function previewApp(dir, options, held) {
         if (pkg && !isBuiltin(spec)) imported.add(pkg);
         if (isOtherLanguageStylesheet(spec))
           otherStyles.push(`${shown(cwd, file)} imports '${spec}'`);
+        else if (isBundlerFile(spec) && !typedByNewApp(spec))
+          untyped.push(`${shown(cwd, file)} imports '${spec}'`);
       }
       // Each import at the file it loads, resolved as the theme build
       // resolves it (`./helpers` is helpers.ts), so a link it loads is
@@ -5265,6 +5314,18 @@ async function previewApp(dir, options, held) {
         `${slug} cannot be copied into a new app: ${otherStyles.slice(0, 3).join('; ')}, a stylesheet in another language than CSS, which the new app does not build, so its build would stop there.`,
         {
           fix: `make it a .css file (and import that), or take the import out of the theme, then run the command again`,
+          run: [appCommand(dir, slug)],
+        },
+      );
+    // A stylesheet or an asset the new app builds, named in a way its type
+    // check reads no declaration for (a query, a hash, an upper-case
+    // extension, a font file): its build would stop there.
+    if (untyped.length)
+      refuse(
+        E.ERR_INVALID_ARGUMENT,
+        `${slug} cannot be copied into a new app: ${untyped.slice(0, 3).join('; ')}, a file whose name the new app's type check has no declaration for (it reads .css files and pictures, by their plain lower-case name), so its build would stop there.`,
+        {
+          fix: `import the file by its plain name with a lower-case extension (a .css file, a picture), load a font from a stylesheet's @font-face url(), or take the import out of the theme, then run the command again`,
           run: [appCommand(dir, slug)],
         },
       );

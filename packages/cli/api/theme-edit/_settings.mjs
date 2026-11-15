@@ -10846,8 +10846,9 @@ async function track(dir, wrote, fn) {
  * created goes, and a file it replaced or removed gets the bytes it had.
  * A file someone else changed since this command wrote it is left as it is
  * and named. Writes are whole (a new file renamed into place), and one
- * failure does not stop the rest.
- * @param {Map<string, Buffer>} was the bytes before, for each file written
+ * failure does not stop the rest. A file put back gets its times back too,
+ * and so does each folder of the snapshot, so a watcher sees no change.
+ * @param {DirSnapshot} was the files and folders before
  * @param {Map<string, string | null>} wrote
  * @returns {{failed: string[], skipped: string[]}}
  */
@@ -10870,30 +10871,72 @@ function restoreWritten(was, wrote) {
         skipped.push(path.basename(p));
         continue;
       }
-      const old = was.get(p);
+      const old = was.files.get(p);
       if (old) {
         // A folder the change removed (tokens/ once its palette went) comes
         // back with the file.
         fs.mkdirSync(path.dirname(p), {recursive: true});
-        writeWhole(p, old);
+        writeWhole(p, old.bytes);
+        fs.utimesSync(p, old.atime / 1000, old.mtime / 1000);
       } else fs.rmSync(p, {force: true});
     } catch {
       failed.push(path.basename(p));
     }
   }
+  // A file written again with the bytes it had (an output the build
+  // writes on its own) gets its time back too, and so does each folder: a
+  // file made and removed again, or renamed into place, changes its time.
+  if (wrote.size) {
+    for (const [p, old] of was.files)
+      try {
+        if (wrote.has(p)) continue;
+        const st = fs.lstatSync(p, {throwIfNoEntry: false});
+        if (
+          st?.isFile() &&
+          st.mtimeMs !== old.mtime &&
+          fs.readFileSync(p).equals(old.bytes)
+        )
+          fs.utimesSync(p, old.atime / 1000, old.mtime / 1000);
+      } catch {
+        failed.push(path.basename(p));
+      }
+    for (const [dir, t] of was.folders)
+      try {
+        fs.utimesSync(dir, t.atime / 1000, t.mtime / 1000);
+      } catch {
+        // A folder the change removed and nothing brought back.
+      }
+  }
   return {failed, skipped};
 }
 
 /**
- * The bytes of every regular file under `dir`, for putting back what a
- * failed change wrote.
+ * @typedef {object} DirSnapshot
+ * @property {Map<string, {bytes: Buffer, atime: number, mtime: number}>} files
+ *   each regular file, with its bytes and times (ms)
+ * @property {Map<string, {atime: number, mtime: number}>} folders the folder
+ *   and each folder those files are in, with its times (ms)
+ */
+
+/**
+ * The bytes and times of every regular file under `dir`, and the times of
+ * its folders, for putting back what a failed change wrote.
  * @param {string} dir
- * @returns {Map<string, Buffer>}
+ * @returns {DirSnapshot}
  */
 function snapshotDir(dir) {
-  /** @type {Map<string, Buffer>} */
-  const out = new Map();
-  for (const p of hashDir(dir).keys()) out.set(p, fs.readFileSync(p));
+  /** @type {DirSnapshot} */
+  const out = {files: new Map(), folders: new Map()};
+  /** @param {string} p */
+  const times = p => {
+    const st = fs.statSync(p);
+    return {atime: st.atimeMs, mtime: st.mtimeMs};
+  };
+  for (const p of ownFiles(dir)) {
+    out.files.set(p, {bytes: fs.readFileSync(p), ...times(p)});
+    out.folders.set(path.dirname(p), times(path.dirname(p)));
+  }
+  if (fs.existsSync(dir)) out.folders.set(dir, times(dir));
   return out;
 }
 

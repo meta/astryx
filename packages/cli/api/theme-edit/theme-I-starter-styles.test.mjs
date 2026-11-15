@@ -102,7 +102,7 @@ describe('a stylesheet in another language', () => {
 
 describe('a refused starter from a stale theme', () => {
   it(
-    'leaves every file of the theme as it was',
+    'leaves every file of the theme as it was, times included',
     async () => {
       const dir = path.join(cwd, 'themes/t');
       const source = path.join(dir, 't.theme.ts');
@@ -114,18 +114,27 @@ describe('a refused starter from a stale theme', () => {
             .map(String)
             .filter(f => fs.statSync(path.join(dir, f)).isFile())
             .sort()
-            .map(f => [f, fs.readFileSync(path.join(dir, f), 'base64')]),
+            .map(f => [
+              f,
+              {
+                bytes: fs.readFileSync(path.join(dir, f), 'base64'),
+                // A watcher sees a new time as a change.
+                mtime: Math.round(fs.statSync(path.join(dir, f)).mtimeMs),
+              },
+            ]),
         );
       fs.writeFileSync(path.join(dir, 'extra.scss'), '');
       // A hand edit the build has not seen: the starter builds first.
       fs.writeFileSync(source, `import './extra.scss';\n${original}`);
       try {
         const before = snapshot();
+        const folderTime = Math.round(fs.statSync(dir).mtimeMs);
         const e = await refusal(() =>
           themeEditPreviewApp('q', {cwd, theme: 't'}),
         );
         expect(e.message).toContain('Nothing was changed');
         expect(snapshot()).toEqual(before);
+        expect(Math.round(fs.statSync(dir).mtimeMs)).toBe(folderTime);
         expect(fs.existsSync(path.join(cwd, 'q'))).toBe(false);
       } finally {
         fs.writeFileSync(source, original);

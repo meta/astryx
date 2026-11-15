@@ -24,7 +24,7 @@
  * to the authoring parser (which seals its own zod schema).
  */
 
-import {STYLESHEET_FILE} from './stylesheet-file.mjs';
+import {ASSET_FILE, STYLESHEET_FILE} from './stylesheet-file.mjs';
 import * as path from 'node:path';
 import {AsyncLocalStorage, createHook} from 'node:async_hooks';
 import nodeModule, {createRequire} from 'node:module';
@@ -182,14 +182,6 @@ let stylesheetHooks = null;
 function isStylesheetUrl(url) {
   return url.startsWith('file:') && STYLESHEET_FILE.test(new URL(url).pathname);
 }
-
-/**
- * Files an app's bundler emits and gives a module its URL for (an icon's
- * .svg, a picture, a font): a theme module may import one, and Node cannot
- * load it.
- */
-const ASSET_FILE =
-  /\.(?:svg|png|jpe?g|gif|webp|avif|ico|bmp|woff2?|ttf|otf|eot)$/i;
 
 /** @param {string} url */
 function isAssetUrl(url) {
