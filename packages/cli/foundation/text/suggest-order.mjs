@@ -62,6 +62,67 @@ export function nameWords(text) {
 }
 
 /**
+ * The one name a typed name means, read whole. Two tiers, in order:
+ * 1. Exact words: the typed name and a name have the same words after
+ *    folding (nameWords: any case, separator, singular or plural), so
+ *    `DataTable`, `data_table` and `data tables` all mean `data-table`.
+ * 2. One near name: when no name has the exact words, the only name whose
+ *    folded words are within `maxDistance` edits (1 by default; an adjacent
+ *    swap is one edit), when both are `minLength` letters or more (6 by
+ *    default).
+ * Null when no name, or more than one in the same tier, matches.
+ * @param {string} typed
+ * @param {string[]} names
+ * @param {{maxDistance?: number, minLength?: number}} [options]
+ * @returns {string | null}
+ */
+export function matchWholeName(
+  typed,
+  names,
+  {maxDistance = 1, minLength = 6} = {},
+) {
+  const folded = foldedName(typed);
+  if (!folded) return null;
+  let exact = null;
+  let near = null;
+  let nearCount = 0;
+  for (const n of names) {
+    const f = foldedName(n);
+    if (f === folded) {
+      if (exact) return null;
+      exact = n;
+    } else if (
+      folded.length >= minLength &&
+      f.length >= minLength &&
+      Math.abs(f.length - folded.length) <= maxDistance &&
+      levenshteinDistance(folded, f, maxDistance, {swaps: true}) <= maxDistance
+    ) {
+      near = n;
+      nearCount++;
+    }
+  }
+  if (exact) return exact;
+  return nearCount === 1 ? near : null;
+}
+
+/** @type {Map<string, string>} */
+const folds = new Map();
+
+/**
+ * A name's words joined: one form for every case and separator.
+ * @param {string} text
+ * @returns {string}
+ */
+function foldedName(text) {
+  let f = folds.get(text);
+  if (f === undefined) {
+    f = nameWords(text).join('');
+    folds.set(text, f);
+  }
+  return f;
+}
+
+/**
  * How closely one candidate name matches what the caller typed; higher is
  * closer. Tiers, best first: the same words; every typed word present; some
  * typed word present; none. Within a tier, more of the typed words and more of
