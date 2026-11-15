@@ -122,7 +122,13 @@
  * added theme and deleted the module at `modulePath`: `themes` is empty,
  * `default` is `''`, and the app root must drop the module's wiring.
  * `change.themeModes` is present then when that wiring imported `themeModes`.
- * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean, wireModes?: true, moduleRemoved?: true, themeModes?: true}, notes?: string[]}} data
+ * `appProvider` is present on the first add when an installed package names
+ * the provider that wires its themes (its manifest's `themeProvider`): each
+ * such provider (`<export> from <module>`), and `wire`, two sentences that
+ * say the app may already get its theme from it and how an outer and an
+ * inner Theme apply.
+ * The add reads no app source; doctor checks where the app renders it.
+ * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean, wireModes?: true, moduleRemoved?: true, themeModes?: true}, notes?: string[], appProvider?: {wiredBy: string[], wire: string}}} data
  */
 
 /**

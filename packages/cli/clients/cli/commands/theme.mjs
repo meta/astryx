@@ -874,7 +874,9 @@ function printThemeApp(result) {
   // such theme's mode in `themeModes`, and the wiring passes the selected
   // theme's (none for a two-mode theme, which follows the system).
   const modes = result.data.themes.some(t => t.mode);
+  const appProvider = result.data.appProvider;
   emit(
+    ...(appProvider ? [text(appProvider.wire)] : []),
     text('Wire the generated module once in the app root:'),
     code(
       "import {Theme} from '@astryxdesign/core/theme';\n" +

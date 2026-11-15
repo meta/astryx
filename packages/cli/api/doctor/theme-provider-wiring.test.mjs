@@ -12,6 +12,7 @@ import * as path from 'node:path';
 import {checkThemes, themeImportWiring} from './theme-checks.mjs';
 import {runChecks} from './doctor.mjs';
 import {themeListAvailable} from '../theme/list/list.mjs';
+import {themeAdd} from '../theme/add/add.mjs';
 import {CLI_VERSION} from '../../test-utils/release-fixtures.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 
@@ -305,5 +306,36 @@ describe('a theme its integration wires with its own provider', () => {
     const json = await themeListAvailable({cwd: dir, package: '@acme/ui'});
     expect(json.data[0]).not.toHaveProperty('renderedIn');
     expect(json.meta?.appTheme).toBeUndefined();
+  });
+});
+
+describe('theme add with an installed package that names its provider', () => {
+  it('says how its Theme and the provider nest, without reading the app', async () => {
+    const dir = app();
+    const text = (
+      await runCli(['theme', 'add', 'brand', '--package', '@acme/ui'], dir)
+    ).stdout;
+    expect(text).toMatch(
+      /This app may already get its theme from AcmeThemeProvider \(declared by @acme\/ui\)\. The outermost Theme sets the page's theme and mode, and an inner Theme covers only what it wraps; `.* doctor` checks where the app renders it\./,
+    );
+
+    // In JSON, on the first add only.
+    const again = app();
+    const r = await themeAdd('brand', {cwd: again, package: '@acme/ui'});
+    expect(r.data.appProvider).toMatchObject({
+      wiredBy: ['AcmeThemeProvider from @acme/ui/theme'],
+    });
+    const second = await themeAdd('brand', {cwd: again, package: '@acme/ui'});
+    expect(second.data.appProvider).toBeUndefined();
+  });
+
+  it('says nothing when no installed package names a provider', async () => {
+    const dir = app();
+    write(
+      path.join(dir, 'node_modules/@acme/ui/astryx.integration.mjs'),
+      "export default {themes: './themes'};\n",
+    );
+    const r = await themeAdd('brand', {cwd: dir, package: '@acme/ui'});
+    expect(r.data.appProvider).toBeUndefined();
   });
 });
