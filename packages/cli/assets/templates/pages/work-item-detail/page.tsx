@@ -522,13 +522,25 @@ function SubtasksSection({
   onSetDone: (id: number, isDone: boolean) => void;
 }) {
   const doneCount = subtasks.filter(task => task.isDone).length;
+  const showToast = useToast();
 
   return (
     <Section padding={SECTION_PADDING}>
       <VStack gap={4}>
         <SectionHeader
           title="Subtasks"
-          action={<Button label="Add subtask" />}
+          action={
+            <Button
+              label="Add subtask"
+              onClick={() =>
+                // Demo only: replace this toast with the call that adds a subtask.
+                showToast({
+                  body: 'Demo: a new subtask would be added here',
+                  uniqueID: 'add-subtask',
+                })
+              }
+            />
+          }
         />
         <HStack gap={3} vAlign="center">
           <Text type="supporting" color="secondary">

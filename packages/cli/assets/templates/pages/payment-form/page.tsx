@@ -511,7 +511,13 @@ export default function PaymentFormPage() {
                               label="PayPal"
                               variant="primary"
                               size="lg"
-                              onClick={() => {}}
+                              onClick={() =>
+                                // Demo only: replace this toast with the call that starts PayPal.
+                                showToast({
+                                  body: 'Demo: PayPal checkout would start here',
+                                  uniqueID: 'paypal',
+                                })
+                              }
                               style={paypalButton}>
                               <img
                                 src="https://www.paypalobjects.com/webstatic/mktg/Logo/pp-logo-100px.png"
@@ -735,7 +741,13 @@ export default function PaymentFormPage() {
                             label="Apply"
                             variant="secondary"
                             size="lg"
-                            onClick={() => {}}
+                            onClick={() =>
+                              // Demo only: replace this toast with the call that applies the promo code.
+                              showToast({
+                                body: 'Demo: the promo code would be applied here',
+                                uniqueID: 'apply-promo',
+                              })
+                            }
                           />
                         </HStack>
                       </VStack>

@@ -902,14 +902,26 @@ export default function FormWizardVerticalPage() {
                               variant="secondary"
                               size="sm"
                               isDisabled={!hasCover}
-                              onClick={() => {}}
+                              onClick={() =>
+                                // Demo only: replace this toast with the call that opens the crop tool.
+                                showToast({
+                                  body: 'Demo: the cover crop would open here',
+                                  uniqueID: 'crop-cover',
+                                })
+                              }
                             />
                             <Button
                               label="Preview on device"
                               variant="ghost"
                               size="sm"
                               isDisabled={!hasCover}
-                              onClick={() => {}}
+                              onClick={() =>
+                                // Demo only: replace this toast with the call that opens the device preview.
+                                showToast({
+                                  body: 'Demo: the device preview would open here',
+                                  uniqueID: 'preview-device',
+                                })
+                              }
                             />
                             {hasCover && (
                               <Button
