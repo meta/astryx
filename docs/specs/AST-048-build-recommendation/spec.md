@@ -68,9 +68,10 @@ own ranking and output, and template owners own what each template is.
   narrowed to components or hooks names no start, and neither does a project
   that offers no page template.
 - **FR2 — A shell when nothing leads.** When no template has the evidence to
-  lead, the start MUST be the neutral app shell, or a blank page template when
-  the project has no shell. The start never falls back to "compose from
-  components".
+  lead, the start MUST be the app shell, or a blank page template when the
+  project has no shell. The app shell is the ready, shown Shell-family
+  template the request describes when one leads, and otherwise the default
+  shell. The start never falls back to "compose from components".
 - **FR3 — A part starts where it lives.** A request for a part of a page (a
   control, a state, a widget, a section) MUST start from the page template the
   request places that part in, when the request gives that page, and from the
