@@ -63,6 +63,12 @@
  * @property {boolean} [added] whether the app module records this theme
  * @property {boolean} [default] whether this is the app's default theme
  * @property {'bundled'|'package'|'local'} [source] where the theme source comes from
+ * @property {string} [owner] what `theme add` records and the app imports the
+ *   built theme from: the package (a bundled theme's own, such as
+ *   `@astryxdesign/theme-neutral`) or the local themes root
+ * @property {boolean} [installed] whether the app can import it now: its
+ *   owner package is installed, or it is a local theme; `theme add` refuses a
+ *   theme whose package is not installed
  */
 
 /**

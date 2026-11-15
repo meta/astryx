@@ -15,6 +15,7 @@ import * as path from 'node:path';
 import {createRequire} from 'node:module';
 import {
   findCarriedCoreDir,
+  findInstalledPackage,
   findPackageRoot,
   projectWritePath,
   requireCoreDir,
@@ -73,6 +74,21 @@ export {BUNDLED_THEME_PACKAGE, THEMES_DIR};
  */
 export function themeRecordOwner(theme) {
   return themeImportPackage(theme);
+}
+
+/**
+ * Whether the app can import a theme now, by the rule `theme add` applies: a
+ * local theme or an installed integration's theme is in the project, and a
+ * bundled theme's own package (the one the generated module imports, such
+ * as `@astryxdesign/theme-neutral`) must be installed.
+ * @param {import('../../foundation/discovery/theme-discovery.mjs').DiscoveredTheme} theme
+ * @param {string} projectDir
+ */
+export function themeOwnerInstalled(theme, projectDir) {
+  return (
+    /** @type {any} */ ((theme).packageDir ??
+      findInstalledPackage(projectDir, themeImportPackage(theme))) != null
+  );
 }
 
 /**
