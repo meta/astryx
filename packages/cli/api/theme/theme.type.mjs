@@ -66,6 +66,12 @@
  * @property {{export: string, from: string}} [wiredBy] the provider component
  *   the owning integration wires its themes with (its manifest's
  *   `themeProvider`): an app renders `export`, imported from `from`
+ * @property {string} [owner] what `theme add` records and the app imports the
+ *   built theme from: the package (a bundled theme's own, such as
+ *   `@astryxdesign/theme-neutral`) or the local themes root
+ * @property {boolean} [installed] whether its owner is installed: the owner
+ *   package is installed, or it is a local theme (in the project); `theme add`
+ *   refuses a theme whose owner package is not installed
  */
 
 /**

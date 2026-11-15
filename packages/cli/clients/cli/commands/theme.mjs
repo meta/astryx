@@ -742,6 +742,8 @@ function printThemeList(
           'maintained',
           'package',
           'source',
+          'owner',
+          'installed',
           'wiredBy',
           'added',
           'default',
@@ -749,6 +751,7 @@ function printThemeList(
         layout: 'stacked',
         format: {
           maintained: (/** @type {boolean} */ value) => (value ? 'yes' : 'no'),
+          installed: (/** @type {boolean} */ value) => (value ? 'yes' : 'no'),
           added: (/** @type {boolean} */ value) => (value ? 'yes' : 'no'),
           default: (/** @type {boolean} */ value) => (value ? 'yes' : 'no'),
         },
