@@ -47,20 +47,23 @@ function note(runs, file, probed = file, kind = 'read') {
   const key = kind === 'realpath' ? REAL_PATH + probed : probed;
   for (const seen of runs) {
     if (exactRuns.has(seen)) {
-      const had = seen.get(key);
-      if (had === undefined) {
+      if (!seen.has(key)) {
         seen.set(key, (probedState ??= exactState(probed, kind)));
-      } else if (
-        (had === PRESENT && (kind === 'read' || kind === 'stat')) ||
-        (kind === 'read' && had.startsWith('dir:'))
-      ) {
+      } else if (kind === 'read' || kind === 'stat') {
         // A path first only checked for, or a folder first only probed, now
         // statted, read or listed: what the later call returned counts, so
         // it is checked by that from here on.
-        seen.set(key, (probedState ??= exactState(probed, kind)));
+        keepState(
+          seen,
+          key,
+          () => (probedState ??= exactState(probed, kind)),
+          kind === 'read',
+        );
       }
-    } else if (!seen.has(file)) {
-      seen.set(file, (state ??= stateOf(file)));
+    } else {
+      // A state another record handed in, such as a kept entry's `present`,
+      // gives way to what this read returned.
+      keepState(seen, file, () => (state ??= stateOf(file)), true);
     }
   }
 }

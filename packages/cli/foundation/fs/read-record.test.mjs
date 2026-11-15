@@ -14,6 +14,7 @@ import {
   keepState,
   recordContentRead,
   recordReads,
+  recordStates,
   reusedWhileUnchanged,
   unchangedSince,
 } from './read-record.mjs';
@@ -315,6 +316,20 @@ describe('an exact run', () => {
     );
     fs.writeFileSync(file, 'two, longer');
     expect(unchangedSince(seen)).toBe(false);
+  });
+
+  it('takes the stamp a loader reads over an existence check another record handed in', () => {
+    const {file} = scratch();
+    /** @type {Map<string, string>} */
+    const loader = new Map();
+    // A loader's own record, as a process that reuses its value keeps it:
+    // a kept entry read back inside it hands in that the file is there.
+    recordReads(loader, () => {
+      recordStates([[file, 'present']]);
+      fs.readFileSync(file, 'utf8');
+    });
+    fs.writeFileSync(file, 'two, longer');
+    expect(unchangedSince(loader)).toBe(false);
   });
 
   it('asks for a state only when the rule could keep it', () => {
