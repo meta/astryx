@@ -949,6 +949,66 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
         inherited.dark === v.dark
       )
         continue;
+      // A border color on a look that draws no border (no width there, as
+      // a date input's own box, whose field draws the line) shows nothing.
+      if (!o && /^border(?:-(?:top|right|bottom|left))?-color$/.test(prop0)) {
+        const when0 = k.split('|')[0];
+        const width =
+          b.get(`${when0}||border-width`) ?? b.get('base||border-width');
+        if (
+          !width ||
+          (lineStrength('border-width', width.light) === 0 &&
+            lineStrength('border-width', width.dark) === 0)
+        )
+          continue;
+      }
+      // A border shorthand written back on a kept look is held to the
+      // longhands it showed before: its width and color, in each mode.
+      if (!o && /^border(?:-(?:top|right|bottom|left))?$/.test(prop0)) {
+        const when0 = k.split('|')[0];
+        // (Read under that condition in any look of the part: Core writes
+        // it with the variant and size beside it.)
+        const cond = when0.replace(':', '=');
+        const underCond = (/** @type {string} */ x) =>
+          [...a.entries()].find(([k2]) => {
+            const [w2, st2, p2] = k2.split('|');
+            return (
+              !st2 &&
+              p2 === x &&
+              w2.replace(/:/g, '=').split(/[\s,]/).includes(cond)
+            );
+          })?.[1];
+        const long = (/** @type {string} */ x) =>
+          a.get(`${when0}||${prop0}-${x}`) ??
+          a.get(`${when0}||border-${x}`) ??
+          underCond(`${prop0}-${x}`) ??
+          underCond(`border-${x}`) ??
+          a.get(`base||${prop0}-${x}`) ??
+          a.get(`base||border-${x}`);
+        const w0 = long('width');
+        const c0 = long('color');
+        const same = (/** @type {'light' | 'dark'} */ m) => {
+          const parts = splitTop(v[m], ' ').filter(Boolean);
+          const w = parts.find(x =>
+            /^-?\d*\.?\d+(?:px|rem|em)?$|^(?:thin|medium|thick)$/.test(x),
+          );
+          const c = parts
+            .filter(
+              x =>
+                x !== w &&
+                !/^(?:solid|dashed|dotted|double|none|hidden)$/.test(x),
+            )
+            .join(' ');
+          return (
+            w0 != null &&
+            c0 != null &&
+            lineStrength('border-width', w ?? '') ===
+              lineStrength('border-width', w0[m]) &&
+            c === c0[m]
+          );
+        };
+        if (same('light') && same('dark')) continue;
+      }
       if (!o)
         return `it would change ${part} (${k.split('|').filter(Boolean).join(' ')}), which the question keeps as it is`;
       if (
