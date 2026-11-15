@@ -4824,25 +4824,13 @@ async function themeBuildInternal(
   if (options.out) {
     // A leading ~ reaches the build only when the shell did not expand it
     // (quoted, or from a script or a config): it names a folder called ~
-    // in the project, never the home folder.
+    // in the project, never the home folder. The build writes there, as it
+    // always has, and says so.
     if (/^~(?:[\\/]|$)/.test(options.out)) {
       const rest = options.out.replace(/^~[\\/]*/, '');
-      throw new AstryxError(
-        `--out ${options.out} starts with "~", which is not your home folder here: a shell expands ~ only when it is not quoted, so the build would write a folder named ~ in the project. Name the path from the project${rest ? ` (${rest})` : ''}, or give the home folder in full (${path.join(os.homedir(), rest)}). Nothing was written.`,
-        rest
-          ? [
-              {
-                name: buildSuggestion(
-                  path.relative(cwd, filePath),
-                  {iconsSpecifier: options.iconsSpecifier, out: rest},
-                  cwd,
-                ),
-                reason: 'write it in the project',
-              },
-            ]
-          : undefined,
-        ERROR_CODES.ERR_INVALID_ARGUMENT,
-      );
+      const w = `--out ${options.out} starts with "~", which is not your home folder here: a shell expands ~ only when it is not quoted, so the build writes in a folder named ~ in the project (${path.join(cwd, '~', rest)}). To write in the home folder, give it in full (${path.join(os.homedir(), rest)}).`;
+      warningMessages.push(w);
+      logger.warn(`Warning: ${w}`);
     }
     outPath = path.resolve(cwd, options.out);
     // A folder, or a path that ends in a separator, names where the outputs

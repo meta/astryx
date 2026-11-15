@@ -12,6 +12,7 @@
  */
 
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
@@ -372,7 +373,7 @@ describe.skipIf(!posix)('a named pipe where a file goes', () => {
 
 describe('--out', () => {
   it(
-    'names a stylesheet for .css alone, and refuses a ~ the shell did not expand',
+    'names a stylesheet for .css alone, and warns a ~ the shell did not expand while it writes in the project as before',
     () => {
       plain("tokens: {'--color-accent': 'red'}");
       const r = compile('plain/p.ts', ['--out', 'out/.css']);
@@ -380,12 +381,23 @@ describe('--out', () => {
         'give it a name such as out/p.css',
       );
       fs.rmSync(path.join(cwd, 'out'), {recursive: true, force: true});
-      const t = compile('plain/p.ts', ['--out', '~/x.css']);
-      expect(t.status).toBe(1);
-      expect(t.env.error).toContain(
-        'starts with "~", which is not your home folder here',
-      );
-      expect(fs.existsSync(path.join(cwd, '~'))).toBe(false);
+      for (const args of [
+        ['experimental', 'theme', 'compile', 'plain/p.ts', '--out', '~/x.css'],
+        ['theme', 'build', 'plain/p.ts', '--out', '~/x.css'],
+      ]) {
+        const t = json(args);
+        expect(t.status, args[0]).toBe(0);
+        const warnings = JSON.stringify(t.env.data.warnings);
+        expect(warnings, args[0]).toContain(
+          'starts with \\"~\\", which is not your home folder here',
+        );
+        expect(warnings, args[0]).toContain(path.join(cwd, '~', 'x.css'));
+        expect(warnings, args[0]).toContain(
+          `give it in full (${path.join(os.homedir(), 'x.css')})`,
+        );
+        expect(fs.existsSync(path.join(cwd, '~', 'x.css')), args[0]).toBe(true);
+        fs.rmSync(path.join(cwd, '~'), {recursive: true, force: true});
+      }
     },
     T,
   );
