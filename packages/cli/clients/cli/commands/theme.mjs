@@ -54,7 +54,11 @@ import {
   list,
 } from '../formatters/index.mjs';
 import {logger} from '../../../api/logger.mjs';
-import {cliError, themeGroupUnknownSubcommand} from '../lib/cli-error.mjs';
+import {
+  cliError,
+  failAfterOutput,
+  themeGroupUnknownSubcommand,
+} from '../lib/cli-error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {Project} from '../../../foundation/config/project.mjs';
 import {warnOnIntegrationIssues} from '../../../foundation/integrations/integration-warnings.mjs';
@@ -1583,7 +1587,7 @@ function registerThemeCommands(theme, program, docs, words) {
             ).data.upToDate
           )
         ) {
-          process.exitCode = 1;
+          failAfterOutput(ERROR_CODES.ERR_THEME_STALE);
         }
         return NO_RESULT_SET;
       } catch (e) {
@@ -1837,7 +1841,7 @@ function registerThemeCommands(theme, program, docs, words) {
 
     // Stale --check output is a failure after its receipt has been emitted.
     if (options.check && stale) {
-      process.exitCode = 1;
+      failAfterOutput(ERROR_CODES.ERR_THEME_STALE);
     }
 
     // Compiling a theme writes CSS; `--check` compares what is on disk. Both

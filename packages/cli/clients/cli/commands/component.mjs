@@ -22,7 +22,7 @@ import {resolveTheme} from '../lib/resolve-theme.mjs';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
 import {jsonOut} from '../../../foundation/response/json.mjs';
 import {emit, section, text, list, record, records, code} from '../formatters/index.mjs';
-import {cliError} from '../lib/cli-error.mjs';
+import {cliError, failAfterOutput} from '../lib/cli-error.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {resultSet} from '../../../foundation/debug/index.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
@@ -266,11 +266,11 @@ export function registerComponent(program) {
       }
 
       const answered = summarize(result);
-      if (
-        result.type === 'component.batch' &&
-        result.data.results.some(row => row.status !== 'found')
-      ) {
-        process.exitCode = 1;
+      if (result.type === 'component.batch') {
+        const unresolved = result.data.results.find(
+          row => row.status !== 'found',
+        );
+        if (unresolved) failAfterOutput(unresolved.code);
       }
       if (json) {
         jsonOut(result);

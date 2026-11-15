@@ -17,7 +17,8 @@
 import {init} from '../../../api/init/init.mjs';
 import {logger} from '../../../api/logger.mjs';
 import {jsonOut} from '../../../foundation/response/json.mjs';
-import {cliError} from '../lib/cli-error.mjs';
+import {cliError, failAfterOutput} from '../lib/cli-error.mjs';
+import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {NO_RESULT_SET} from '../../../foundation/debug/index.mjs';
 import {doc as initCommand} from './init.doc.mjs';
@@ -41,7 +42,7 @@ export function registerInit(program) {
         // continued; reflect it in the exit code (historical soft-error policy).
         // The receipt still reports it as `data.docsError` either way.
         if (receipt.type === 'init.run' && receipt.data.docsError?.kind === 'path-safety') {
-          process.exitCode = 1;
+          failAfterOutput(ERROR_CODES.ERR_PATH_TRAVERSAL);
         }
         if (json) jsonOut(receipt);
       } catch (err) {
