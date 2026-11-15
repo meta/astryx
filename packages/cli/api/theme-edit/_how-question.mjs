@@ -3969,9 +3969,9 @@ export function draftAnswer(ctx, env, question) {
     // (The way word stays, so what is changed stays: "dividers twice as
     // thin" is their line, half of now.)
     .replace(
-      /\b(?:twice|two times) as (small|thin|narrow|short|tight)\b/gi,
+      /\b(?:twice|two times) as (small|thin|narrow|short|tight|soft|faint|subtle)\b/gi,
       (_m, w) =>
-        `50% of now ${{small: 'smaller', thin: 'thinner', narrow: 'narrower', short: 'shorter', tight: 'tighter'}[String(w).toLowerCase()]}`,
+        `50% of now ${{small: 'smaller', thin: 'thinner', narrow: 'narrower', short: 'shorter', tight: 'tighter', soft: 'softer', faint: 'fainter', subtle: 'subtler'}[String(w).toLowerCase()]}`,
     )
     .replace(
       /\b(two|three|four|five|2|3|4|5) (thirds|quarters|fourths|fifths)\b(?:\s+of)?/gi,
@@ -5593,6 +5593,28 @@ export function draftAnswer(ctx, env, question) {
   // part, so it is never inside one) is that element, the part inside the
   // place that takes the state.
   for (const c of clauses) {
+    // "the menus' separators", "the menu's separators": the owner named
+    // first is the place, as "separators in menus" says it.
+    const poss = /\b([a-z]+?)(?:'s|s'|’s|s’)\s/.exec(c.text);
+    if (poss && c.parts.length >= 2) {
+      const owner = c.parts.find(x =>
+        lex.parts.some(([re, y]) => {
+          if (y.on !== x.on) return false;
+          const m = re.exec(c.text);
+          return m != null && m.index === poss.index;
+        }),
+      );
+      const rest = c.parts.filter(x => x !== owner);
+      if (owner && rest.length && rest.every(y => C.MAP[y.on])) {
+        c.parts = rest;
+        c.container = owner.on;
+        placeNotes.push({
+          c,
+          text: `the editor themes ${rest.map(x => x.on).join(', ')} everywhere: it cannot keep ${owner.on} apart, so this applies to every ${rest.map(x => x.on).join(', ')} (${owner.on} is not changed)`,
+        });
+        continue;
+      }
+    }
     const inPlaceText = c.text.replace(/\s+(?:on|when) \w+$/, '');
     // ("Of" names a place only for an element of it: "twice the padding
     // of buttons" compares with them.)
