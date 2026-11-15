@@ -212,6 +212,48 @@ describe('regenerating the record from a run log', () => {
   });
 });
 
+describe('regenerating from a log with no Node leg time', () => {
+  it('fails, as the recorder does, and leaves the record as it was', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'node-record-empty-'));
+    try {
+      const record = path.join(dir, 'durations.json');
+      const before = JSON.stringify({$comment: 'kept', seconds: {}});
+      fs.writeFileSync(record, before);
+      const logFile = path.join(dir, 'main-run.log');
+      fs.writeFileSync(
+        logFile,
+        `build\tRun tests\t2026-01-01T00:00:00.0000000Z  ✓  node  ${nodeFiles[0]} (3 tests) 9.0s`,
+      );
+      let failure;
+      try {
+        execFileSync(
+          process.execPath,
+          [
+            '.github/scripts/node-record-refresh.mjs',
+            'regenerate',
+            '--log',
+            logFile,
+          ],
+          {
+            cwd: ROOT,
+            env: {...process.env, VITEST_DURATIONS_FILE: record},
+            stdio: 'pipe',
+          },
+        );
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure?.status).toBe(1);
+      expect(String(failure?.stderr)).toContain(
+        'No Node test file times found in that log.',
+      );
+      expect(fs.readFileSync(record, 'utf8')).toBe(before);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+});
+
 describe("each leg's slowdown taken out of the regenerated times", () => {
   // Leg 1 holds files 0, 6, 12, …; leg 2 holds files 1, 7, 13, ….
   const inLeg = leg => nodeFiles.filter((_, i) => i % 6 === leg - 1);

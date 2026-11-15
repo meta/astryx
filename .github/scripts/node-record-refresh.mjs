@@ -304,13 +304,24 @@ function main(args) {
       fs.readFileSync(/** @type {string} */ (option('--log')), 'utf8'),
       current,
     );
+    // A log with no Node leg time is not a run to record from: fail, as the
+    // recorder does, so a refresh that is due never ends green without one.
+    if (legs.every(({files}) => files === 0)) {
+      console.error('No Node test file times found in that log.');
+      return 1;
+    }
     record.seconds = mergeRecord(current, seconds, each =>
       fs.existsSync(path.join(ROOT, each)),
     );
     fs.writeFileSync(file, `${JSON.stringify(record, null, 2)}\n`);
-    const added = Object.keys(seconds).filter(each => !(each in current));
+    // What the merge actually changed: it keeps a swizzle-proof slice's
+    // largest time, so a lower one is not a change.
+    const changed = Object.keys(record.seconds).filter(
+      each => record.seconds[each] !== current[each],
+    );
+    const added = changed.filter(each => !(each in current));
     console.log(
-      `Recorded ${added.length} new Node test files and re-timed ${Object.keys(seconds).length - added.length}; leg slowdowns ${legs.map(({factor}) => factor.toFixed(2)).join(', ')}.`,
+      `Recorded ${added.length} new Node test files and re-timed ${changed.length - added.length}; leg slowdowns ${legs.map(({factor}) => factor.toFixed(2)).join(', ')}.`,
     );
     return 0;
   }
