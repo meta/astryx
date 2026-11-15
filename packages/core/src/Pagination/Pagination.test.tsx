@@ -2571,14 +2571,27 @@ describe('Pagination', () => {
       it('keeps focus while the page arrives later than the click', async () => {
         const user = userEvent.setup();
         // A router sets the page after the click, so `onChange` keeps none.
-        const {rerender} = render(<LinksBesideButton />);
+        // Its change action settles later, and the optimistic page shows
+        // until then.
+        let settle = () => {};
+        const changeAction = async () => {
+          await new Promise<void>(resolve => {
+            settle = resolve;
+          });
+        };
+        const {rerender} = render(
+          <LinksBesideButton changeAction={changeAction} />,
+        );
         screen.getByRole('link', {name: 'Go to next page'}).focus();
         await user.keyboard('{Enter}');
+        await act(async () => {
+          settle();
+        });
         // The page did not arrive: Next shows page 2 again, as a link.
         expect(
           screen.getByRole('link', {name: 'Go to next page'}),
         ).toHaveFocus();
-        rerender(<LinksBesideButton page={3} />);
+        rerender(<LinksBesideButton changeAction={changeAction} page={3} />);
         expect(
           screen.getByRole('button', {name: 'Go to next page'}),
         ).toHaveFocus();
