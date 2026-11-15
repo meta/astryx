@@ -7,7 +7,8 @@
  * and reason; a block the request writes out by its exact name keeps its slot,
  * as does a block an integration ships; a block the weights were never fitted
  * with is still ranked from its own docs, also by its words the weights do
- * not know; and ties keep build's order.
+ * not know; and ties keep build's order. One test reads the shipped weights
+ * through the picker's loader: they count a doc-fitted block as known.
  */
 
 import {describe, expect, it} from 'vitest';
