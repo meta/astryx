@@ -353,7 +353,7 @@ describe('build kit — every page starts from a template', () => {
     expect(r.type).toBe('build.kit');
     if (r.type !== 'build.kit') return;
     expect(r.data.directMatch).toBe(true);
-    expect(r.data.pages[0].name).toBe('incident-console');
+    expect(r.data.pages.map(p => p.name)).not.toContain('incident-console');
     expect(r.data.start?.name).not.toBe('incident-console');
     expect(r.data.start?.reason).toMatch(/`incident-console` matches but is not ready yet/);
   });
@@ -583,6 +583,20 @@ describe('build kit — every page starts from a template', () => {
       if (r.type !== 'build.kit') throw new Error(r.type);
       expect(r.data.start?.name).toBe(name);
     }
+  });
+
+  it('names only page templates it could start from among search matches', async () => {
+    const {loadTemplates} = await import('./_adapter.mjs');
+    const ready = new Set((await loadTemplates(REPO)).pages.map(t => t.name));
+    const all = await search('incident console table page', {cwd: REPO});
+    const matched = all.data.results.filter(
+      r => r.domain === 'template' && r.kind !== 'block',
+    );
+    expect(matched.some(r => !ready.has(r.name))).toBe(true);
+    const r = await build('incident console table page', {cwd: REPO});
+    if (r.type !== 'build.kit') throw new Error(r.type);
+    expect(r.data.pages.length).toBeGreaterThan(0);
+    for (const page of r.data.pages) expect(ready.has(page.name)).toBe(true);
   });
 
   it('starts a template named in any case or with a neighbour-letter swap where its own words start', async () => {
