@@ -1253,9 +1253,12 @@ function registerThemeCommands(theme, program, docs, words) {
         : (words.missingSource?.(entry.file, process.cwd()) ?? null);
       // A file another command generates, gone from a folder whose other
       // files carry that command's mark: that command writes it again; a
-      // blank theme template is no way back.
+      // blank theme template is no way back. A theme source that exists
+      // near the name given is what it meant instead.
       const by =
-        rewrite || looksGlobby ? null : generatedSourceCommand(entry.filePath);
+        rewrite || looksGlobby || guesses.length > 0
+          ? null
+          : generatedSourceCommand(entry.filePath);
       if (by)
         return await refuse(
           `File not found: ${entry.filePath}. It is a generated file: the files beside it are written by ${by}, so rebuild it with the command that made it.`,

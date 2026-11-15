@@ -140,6 +140,10 @@ import {
 } from './_check.mjs';
 import {MODAL, isColorToken} from './_compiler.mjs';
 import {fontShorthandFamilyList} from '../theme/build/font-warning.mjs';
+import {
+  partCustomPropertyProblem,
+  pseudoKeyProblem,
+} from '../theme/build/style-keys.mjs';
 import {colorProblem, hex, parseColor} from './_color.mjs';
 import {
   PALETTE_DIALS,
@@ -2672,6 +2676,9 @@ async function ownTokenProblems(ctx, slug, data) {
    * @returns {string | null}
    */
   const judge = (token, value, file, reads) => {
+    // A null token keeps its meaning: the build writes it as it is and
+    // warns at its line.
+    if (value === null) return null;
     const custom = !(token in known);
     if (Array.isArray(value)) {
       if (value.length !== 2 || value.some(h => typeof h !== 'string'))
@@ -2881,6 +2888,46 @@ async function ownTokenProblems(ctx, slug, data) {
         );
       }
     /**
+     * The variable Core sets on a component's own element that `k` names,
+     * or, with `near`, the one it is a typo of. The element's own value
+     * shadows one set anywhere else (the page, another part), so that
+     * value never reaches the part.
+     * @param {string} k @param {boolean} near
+     */
+    const shadowedPartVar = (k, near) => {
+      const shadowed = (ctx.project.vars ?? []).filter(x =>
+        coreElementVars(ctx).has(x.name),
+      );
+      if (!near) return shadowed.find(x => x.name === k);
+      const closest = nearest(
+        k,
+        shadowed.map(y => y.name),
+      )[0];
+      return (
+        shadowed.find(x => x.name === k) ??
+        shadowed.find(x => x.name === closest)
+      );
+    };
+    /**
+     * Refuse a part variable set where its element's own value shadows it.
+     * @param {string[]} at @param {string} k @param {unknown} v
+     * @param {{name: string, component: string}} partVar
+     * @param {string} where where the value is set, as the refusal says it
+     */
+    const refuseShadowed = (at, k, v, partVar, where) => {
+      const key =
+        [...ctx.project.target.values()].find(
+          t => t.component === partVar.component,
+        )?.key ?? partVar.component.toLowerCase();
+      const typo = partVar.name !== k;
+      refuse(
+        at,
+        k,
+        `${typo ? `"${k}" is not a design token; did you mean ${partVar.name}? ` : ''}${partVar.name} is a variable ${partVar.component} sets on its own element, so a value ${where} never reaches it: set it on the part, components: {${key}: {base: {'${partVar.name}': ${JSON.stringify(asWritten(v) || '…')}}}}`,
+        asWritten(v),
+      );
+    };
+    /**
      * A custom property and its value, wherever a block sets one. An
      * undefined value is not set: the build writes nothing for it.
      * @param {string[]} at @param {string} k @param {unknown} v @param {Set<string>} here
@@ -2900,35 +2947,10 @@ async function ownTokenProblems(ctx, slug, data) {
             `"${k}" is not a design token, so the build writes a custom property nothing reads; did you mean ${near}? A custom property of the theme's own goes in localTokens`,
             asWritten(v),
           );
-        // A part's variable that Core sets on the part's own element: the
-        // element's value shadows the one it inherits from the page. A
-        // name one typo from one is that variable misspelled.
-        const shadowed = (ctx.project.vars ?? []).filter(x =>
-          coreElementVars(ctx).has(x.name),
-        );
-        const partVar =
-          shadowed.find(x => x.name === k) ??
-          shadowed.find(
-            x =>
-              x.name ===
-              nearest(
-                k,
-                shadowed.map(y => y.name),
-              )[0],
-          );
-        if (partVar) {
-          const key =
-            [...ctx.project.target.values()].find(
-              t => t.component === partVar.component,
-            )?.key ?? partVar.component.toLowerCase();
-          const typo = partVar.name !== k;
-          return refuse(
-            at,
-            k,
-            `${typo ? `"${k}" is not a design token; did you mean ${partVar.name}? ` : ''}${partVar.name} is a variable ${partVar.component} sets on its own element, so a value in the page's tokens never reaches it: set it on the part, components: {${key}: {base: {'${partVar.name}': ${JSON.stringify(asWritten(v) || '…')}}}}`,
-            asWritten(v),
-          );
-        }
+        // A name one typo from a part variable is that variable misspelled.
+        const partVar = shadowedPartVar(k, true);
+        if (partVar)
+          return refuseShadowed(at, k, v, partVar, "in the page's tokens");
       }
       if (k.startsWith('--_'))
         return refuse(
@@ -2947,13 +2969,23 @@ async function ownTokenProblems(ctx, slug, data) {
       // The exported theme's own tokens are named by token alone.
       const top = path.length === 0 && map === 'tokens';
       const at = top && !prefix ? [] : [...path, map];
-      for (const [k, v] of Object.entries(m))
+      for (const [k, v] of Object.entries(m)) {
+        // The theme's own names go in localTokens, so only a part
+        // variable's exact name there is that variable.
+        const partVar =
+          map === 'localTokens' && v !== undefined
+            ? shadowedPartVar(k, false)
+            : undefined;
+        if (partVar) {
+          refuseShadowed(at, k, v, partVar, "in the page's localTokens");
+          continue;
+        }
         token(at, k, v, reads, map === 'tokens');
+      }
     }
     /** A part's style block. @param {any} node @param {string[]} at @param {Set<string>} outer @param {number} depth */
     const part = (node, at, outer, depth) => {
       if (!node || typeof node !== 'object' || depth > 12) return;
-      const here = new Set([...outer, ...varsIn(node)]);
       const named = at[at.lastIndexOf('components') + 1];
       const component = named ? (targetKey(named) ?? undefined) : undefined;
       const target = component ? ctx.project.target.get(component) : undefined;
@@ -2961,11 +2993,49 @@ async function ownTokenProblems(ctx, slug, data) {
       const partVars = target
         ? (ctx.project.vars ?? []).filter(x => x.component === target.component)
         : [];
+      // A var() on the part reads what the theme sets around it, and the
+      // variables Core sets on the part's own element.
+      const here = new Set([
+        ...outer,
+        ...varsIn(node),
+        ...partVars
+          .filter(x => coreElementVars(ctx).has(x.name))
+          .map(x => x.name),
+      ]);
       for (const [k, v] of Object.entries(node)) {
         // A style key's own value is judged with the part's entries.
         if (depth === 0 && (!v || typeof v !== 'object')) continue;
+        // A key the build cannot write as it is: a custom property whose
+        // name it renames, a pseudo key that is no single selector.
+        const unwritable =
+          depth === 0
+            ? null
+            : k.startsWith('--')
+              ? v === undefined
+                ? null
+                : partCustomPropertyProblem(k)
+              : k.startsWith(':') && v && typeof v === 'object'
+                ? pseudoKeyProblem(k)
+                : null;
+        if (unwritable) {
+          refuse(
+            at,
+            k,
+            unwritable,
+            k.startsWith('--') ? asWritten(v) : '',
+            k.startsWith('--') ? undefined : whereKey(at.join('.'), k),
+          );
+          continue;
+        }
         if (k.startsWith('--') && component && v !== undefined) {
           const own = partVars.find(x => x.name === k);
+          // Another component's variable that Core sets on that
+          // component's own element: shadowed there, so it never applies.
+          const other = own ? undefined : shadowedPartVar(k, false);
+          if (other && other.component !== target?.component) {
+            refuseShadowed(at, k, v, other, `on ${named}`);
+            continue;
+          }
           // A variable named for the part, one typo from a variable the
           // part reads, that nothing in the theme reads: that variable
           // misspelled. Any other is the theme's own helper.
@@ -3055,12 +3125,11 @@ async function ownTokenProblems(ctx, slug, data) {
         // An undefined property is not set: the build writes nothing for it.
         if (v === undefined) continue;
         const loc = where(at.join('.'), k);
-        // Null under a key that is no property (a pseudo-class, an
-        // at-rule, a variant) is a block left empty, not a property.
-        if (v === null && !cssProperties().has(prop)) {
-          refuse(at, k, nullBlock(k, 'properties'));
+        // A null property keeps its meaning (the build writes it as it
+        // is), and a null pseudo-class or at-rule builds no block: the
+        // build warns either at its line.
+        if (v === null && (cssProperties().has(prop) || /^[:@]/.test(k)))
           continue;
-        }
         if (!cssProperties().has(prop)) {
           const near = nearest(k, camelNames())[0];
           refuse(

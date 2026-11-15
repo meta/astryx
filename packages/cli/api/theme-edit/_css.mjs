@@ -10,8 +10,14 @@
 
 import {createRequire} from 'node:module';
 import {wordTable} from './_tables.mjs';
+import {cssTree, cssTreeRequire} from '../../foundation/runtime/css-tree.mjs';
 
 const require = createRequire(import.meta.url);
+
+// Resolved when this module loads, before a command stats any file, as
+// css-tree is (foundation/runtime/css-tree.mjs).
+const SYNTAX_PATCHES =
+  require.resolve('@csstools/css-syntax-patches-for-csstree');
 
 /**
  * Properties browsers ship that MDN does not list yet (Chrome experiments).
@@ -35,17 +41,13 @@ const NOT_IN_MDN_YET = [
   'window-drag',
 ];
 
-/** @type {any} */
-let tree = null;
 /** css-tree, loaded once. */
-const csstree = () => (tree ??= require('css-tree'));
+const csstree = cssTree;
 
 /** The MDN property data css-tree reads, at the version css-tree pins. */
 const mdnProperties = () =>
   /** @type {Record<string, {status?: string, initial?: string | string[]}>} */ (
-    createRequire(require.resolve('css-tree/package.json'))(
-      'mdn-data/css/properties.json',
-    )
+    cssTreeRequire('mdn-data/css/properties.json')
   );
 
 /** @type {ReadonlySet<string> | null} */
@@ -80,8 +82,7 @@ export function cssProperties() {
  * ranges MDN's data leaves out (`line-height` takes `<number [0,∞]>`).
  * @returns {{properties: Record<string, string>, types: Record<string, string>, atrules: Record<string, unknown>}}
  */
-const syntaxPatches = () =>
-  require('@csstools/css-syntax-patches-for-csstree').next;
+const syntaxPatches = () => require(SYNTAX_PATCHES).next;
 
 /** @type {any} */
 let patched = null;

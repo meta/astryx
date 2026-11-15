@@ -102,16 +102,12 @@ describe('every token and part property the source gives is judged', () => {
   it("refuses a theme's own token or a part property that is no text", async () => {
     await withOwn(
       'ct',
-      "  tokens: {'--my-brand': null as any, '--my-size': 4 as any},",
+      "  tokens: {'--my-brand': true as any, '--my-size': 4 as any},",
     );
-    await refused('ct', /--my-brand the value null, which is not text/);
+    await refused('ct', /--my-brand the value true, which is not text/);
     await withOwn(
       'pp',
       '  components: {button: {base: {borderRadius: null, padding: 4}}} as any,',
-    );
-    await refused(
-      'pp',
-      /components\.button\.base border-radius \(line \d+\): .*value null, which is not text/,
     );
     await refused(
       'pp',

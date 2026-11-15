@@ -169,11 +169,15 @@ describe('an editor theme that gives null under a style key', () => {
         'base holds null, which the build cannot read as a block: give it properties, such as base: {color: …}, or remove it',
       );
       expect(r.env.error).not.toContain('base: {base');
+      // A null pseudo-class or at-rule builds no block: warned at its
+      // line, as a plain theme's is.
       for (const key of [':hover', '@dark']) {
         own('n3', `components: {button: {base: {'${key}': null}}} as any`);
         const k = compileOwn('n3');
-        expect(k.env.error).toContain(`${key} holds null`);
-        expect(k.env.error).not.toContain('is not a CSS property');
+        expect(k.status, key).toBe(0);
+        expect(JSON.stringify(k.env.data.warnings), key).toContain(
+          `${key} holds null, so the build writes no block for it`,
+        );
       }
     },
     T,

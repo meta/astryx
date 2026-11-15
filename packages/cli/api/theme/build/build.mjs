@@ -109,6 +109,8 @@ import {
 import {interceptCore} from './core-interception.mjs';
 import {irregularFileKind} from '../../../foundation/fs/regular-file.mjs';
 import {keyPathLine, nullThemeValues} from './null-values.mjs';
+import {styleKeyProblems} from './style-keys.mjs';
+import {levenshteinDistance} from '../../../foundation/text/levenshtein.mjs';
 import {
   installCommandFor,
   parsedSpecifiers,
@@ -1106,9 +1108,11 @@ export function themeSourceFiles(filePath) {
 
 /**
  * Theme sources a missing build input probably meant, relative to `cwd`: the
- * same path with `/` for `\`; or, for a bare theme name, the theme sources in
- * `themes/<name>/` and `src/themes/<name>/` of the project, and `<name>` with a
- * theme source extension. A build output is never offered.
+ * same path with `/` for `\`; for a bare theme name, the theme sources in
+ * `themes/<name>/` and `src/themes/<name>/` of the project; the input with a
+ * theme source extension; and, for a path, a theme source in the same folder
+ * whose name is one edit from the one given (`t.them.ts`, `T.theme.ts`). A
+ * build output is never offered.
  * @param {string} file the input as given
  * @param {string} cwd
  * @returns {string[]} at most three paths
@@ -1124,19 +1128,30 @@ export function themeSourceGuesses(file, cwd) {
     const forward = path.resolve(cwd, file.replace(/\\/g, '/'));
     return isSource(forward) ? [shown(forward)] : [];
   }
-  if (/[/.]/.test(file)) return [];
-  const root = findPackageRoot(cwd) ?? cwd;
-  const guesses = [
-    path.join(root, 'themes', file),
-    path.join(root, 'src', 'themes', file),
-  ].flatMap(folder =>
-    themeFilesIn(folder).map(name => shown(path.join(folder, name))),
-  );
+  /** @type {string[]} */
+  const guesses = [];
+  if (!/[/.]/.test(file)) {
+    const root = findPackageRoot(cwd) ?? cwd;
+    for (const folder of [
+      path.join(root, 'themes', file),
+      path.join(root, 'src', 'themes', file),
+    ])
+      for (const name of themeFilesIn(folder))
+        guesses.push(shown(path.join(folder, name)));
+  }
   for (const extension of THEME_SOURCE_EXTENSIONS) {
     const candidate = path.resolve(cwd, file + extension);
     if (isSource(candidate)) guesses.push(shown(candidate));
   }
-  return guesses.slice(0, 3);
+  if (/[/.]/.test(file)) {
+    const given = path.resolve(cwd, file);
+    const folder = path.dirname(given);
+    const base = path.basename(given);
+    for (const name of themeFilesIn(folder))
+      if (levenshteinDistance(name, base, 1, {swaps: true}) <= 1)
+        guesses.push(shown(path.join(folder, name)));
+  }
+  return [...new Set(guesses)].slice(0, 3);
 }
 
 /**
@@ -4456,6 +4471,16 @@ async function themeBuildInternal(
     );
   }
 
+  // A part key Core cannot build as written: a pseudo key that is no single
+  // selector makes the browser drop other rules or style other elements,
+  // and a custom property with capitals is set under another name than
+  // var() reads. A theme that built before still builds the same: each is
+  // warned at its line, with the form that works.
+  const badKeys = styleKeyProblems(themeDef).map(k => ({
+    ...k,
+    line: keyPathLine(themeSource, k.path),
+  }));
+
   // Validate component overrides
   const warnings = await validateComponentOverrides(themeDef);
   const warningMessages = [];
@@ -4464,6 +4489,7 @@ async function themeBuildInternal(
   for (const w of [
     ...warnings,
     ...nulls.filter(n => !n.unbuildable).map(nullLine),
+    ...badKeys.map(nullLine),
   ]) {
     warningMessages.push(w);
     logger.warn(`  [warn] ${source}${w}`);

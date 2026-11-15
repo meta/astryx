@@ -2215,6 +2215,35 @@ function reexportTarget(st, dir) {
 }
 
 /**
+ * Add the names a declaration destructures from an object (`const {toks} =
+ * all`) to a file's bindings, each as the property read it is
+ * (`all.toks`), so a value given by such a name is read where it is
+ * written.
+ * @param {any} declarator
+ * @param {Map<string, any>} into
+ */
+function addDestructuredReads(declarator, into) {
+  if (declarator?.id?.type !== 'ObjectPattern' || !declarator.init) return;
+  for (const p of declarator.id.properties) {
+    if (p.type !== 'ObjectProperty' || p.computed) continue;
+    const key =
+      p.key?.type === 'Identifier'
+        ? p.key.name
+        : p.key?.type === 'StringLiteral'
+          ? p.key.value
+          : null;
+    if (key && p.value?.type === 'Identifier')
+      into.set(p.value.name, {
+        type: 'MemberExpression',
+        computed: false,
+        object: declarator.init,
+        property: {type: 'Identifier', name: key},
+        loc: p.loc,
+      });
+  }
+}
+
+/**
  * The value a module beside a theme exports by a name (`default` for its
  * default export), read in the file that holds it: an exported
  * declaration, a name in an `export {...}` list (an import the file
@@ -2258,8 +2287,10 @@ function exportedValue(file, name, hops = 0) {
           });
     }
     const d = top.type === 'ExportNamedDeclaration' ? top.declaration : top;
+    if (d?.type === 'FunctionDeclaration' && d.id) local.set(d.id.name, d);
     for (const v of d?.declarations ?? [])
       if (v.id?.type === 'Identifier') local.set(v.id.name, v.init);
+      else addDestructuredReads(v, local);
   }
   /** @param {any} n @param {number} [k] @returns {any} */
   const unwrap = (n, k = 0) => {
@@ -2300,6 +2331,11 @@ function exportedValue(file, name, hops = 0) {
       continue;
     }
     if (top.type !== 'ExportNamedDeclaration') continue;
+    if (
+      top.declaration?.type === 'FunctionDeclaration' &&
+      top.declaration.id?.name === name
+    )
+      return found(top.declaration);
     for (const v of top.declaration?.declarations ?? [])
       if (v.id?.type === 'Identifier' && v.id.name === name)
         return found(v.init);
@@ -2372,6 +2408,8 @@ function ownPageTokens(
     if (!node || typeof node !== 'object') return;
     if (node.type === 'VariableDeclarator' && node.id?.type === 'Identifier')
       consts.set(node.id.name, node.init);
+    else if (node.type === 'VariableDeclarator')
+      addDestructuredReads(node, consts);
     if (
       node.type === 'CallExpression' &&
       node.callee?.type === 'Identifier' &&
@@ -2510,32 +2548,72 @@ function ownPageTokens(
     return null;
   };
   /**
-   * Where a value given by a name imported from a file beside the theme is
-   * written (`'--color-accent': brand`, `s.brand`): that file and the line
-   * of its value. Empty for any other value, or one read in another file.
+   * The value a node of the theme file reads from a file beside it, read in
+   * the file that holds it: an imported name, a property read off one
+   * (`all.toks`, `s.toks` of a namespace import, `const {toks} = all`), or
+   * what an imported function returns (`make()`). Null when the value is
+   * not read from another file.
+   * @param {any} node
+   * @param {number} [depth]
+   * @returns {{obj: any, code: string, file: string, unwrap: (n: any) => any} | null}
+   */
+  const importedValue = (node, depth = 0) => {
+    if (depth > 12) return null;
+    const n = unwrap(node);
+    if (n?.type === 'Identifier') return imported(n.name);
+    if (n?.type === 'MemberExpression') {
+      const key = n.computed ? textOf(unwrap(n.property)) : keyOf(n.property);
+      if (key == null) return null;
+      if (n.object?.type === 'Identifier') {
+        const namespaced = imported(n.object.name, key);
+        if (namespaced?.member) return namespaced;
+      }
+      const base = importedValue(n.object, depth + 1);
+      const prop =
+        base?.obj?.type === 'ObjectExpression'
+          ? base.obj.properties.findLast(
+              (/** @type {any} */ p) =>
+                p.type === 'ObjectProperty' &&
+                !p.computed &&
+                keyOf(p.key) === key,
+            )
+          : null;
+      return base && prop ? {...base, obj: base.unwrap(prop.value)} : null;
+    }
+    if (n?.type === 'CallExpression') {
+      const fn = importedValue(n.callee, depth + 1);
+      const f = fn?.obj;
+      const body = [
+        'ArrowFunctionExpression',
+        'FunctionExpression',
+        'FunctionDeclaration',
+      ].includes(f?.type)
+        ? f.body
+        : null;
+      const returned =
+        body?.type === 'BlockStatement'
+          ? body.body.findLast(
+              (/** @type {any} */ st) => st.type === 'ReturnStatement',
+            )?.argument
+          : body;
+      return fn && returned ? {...fn, obj: fn.unwrap(returned)} : null;
+    }
+    return null;
+  };
+  /**
+   * Where a value read from a file beside the theme is written
+   * (`'--color-accent': brand`, `s.brand`, `all.brand`): that file and the
+   * line of its value. Empty for any other value, or one read in another
+   * file.
    * @param {any} node
    * @param {string | null} file the file the node is in (null for the source)
    * @returns {{file?: string, line?: number}}
    */
   const importedValueAt = (node, file) => {
     if (file != null) return {};
-    const n = unwrap(node);
-    const from =
-      n?.type === 'Identifier'
-        ? imported(n.name)
-        : n?.type === 'MemberExpression' &&
-            !n.computed &&
-            n.object?.type === 'Identifier'
-          ? imported(n.object.name, n.property?.name)
-          : null;
+    const from = importedValue(node);
     const line = from?.obj?.loc?.start?.line;
-    if (
-      !from ||
-      line == null ||
-      (n.type === 'MemberExpression' && !from.member)
-    )
-      return {};
-    return {file: from.file, line};
+    return from && line != null ? {file: from.file, line} : {};
   };
   // A theme the exported one extends that a file beside it defines
   // (`import {mid} from './mid'`): its call and each token its literal
@@ -2668,33 +2746,24 @@ function ownPageTokens(
         line: p.loc?.start?.line ?? null,
       });
       /**
-       * A value as a block: a name imported from a file beside the theme
-       * (`components: parts`) or a member of one (`parts.button`) is read
-       * in that file, so its keys and lines are its own.
+       * A value as a block: one read from a file beside the theme
+       * (`components: parts`, `parts.button`) is read in that file, so its
+       * keys and lines are its own.
        * @param {any} node
        * @param {{file: string | null, unwrap: (n: any) => any}} src the file the node is in (null for the source)
        * @returns {{obj: any, src: {file: string | null, unwrap: (n: any) => any}}}
        */
       const blockOf = (node, src) => {
+        const from = src.file == null ? importedValue(node) : null;
+        if (from) return {obj: from.obj, src: from};
         let obj = src.unwrap(node);
-        const member =
-          obj?.type === 'MemberExpression' && !obj.computed ? obj : null;
-        const name = member ? member.object : obj;
-        let read = member;
-        if (name?.type === 'Identifier' && src.file == null) {
-          const from = imported(name.name, member?.property?.name);
-          if (from) {
-            src = from;
-            obj = from.obj;
-            // A namespace import's member is the value itself.
-            if (from.member) read = null;
-          } else if (member) obj = src.unwrap(member.object);
-        } else if (member) obj = src.unwrap(member.object);
-        if (read) {
-          const readKey = read.property?.name;
+        // A member of a block the file itself binds (`parts.button`).
+        if (obj?.type === 'MemberExpression' && !obj.computed) {
+          const readKey = obj.property?.name;
+          const base = src.unwrap(obj.object);
           const prop =
-            obj?.type === 'ObjectExpression'
-              ? obj.properties.find(
+            base?.type === 'ObjectExpression'
+              ? base.properties.find(
                   (/** @type {any} */ p) =>
                     p.type === 'ObjectProperty' && keyOf(p.key) === readKey,
                 )
@@ -2768,30 +2837,44 @@ function ownPageTokens(
       keyOf(p.key) === 'typography',
   );
   if (detail && typo) {
-    /** @param {any} node @param {string[]} at */
-    const walk = (node, at) => {
-      const obj = unwrap(node);
+    /**
+     * A block of typography fields. One read from a file beside the theme
+     * (`typography: brandType`) is read in that file, so its lines are its
+     * own.
+     * @param {any} node
+     * @param {string[]} at
+     * @param {{file: string | null, unwrap: (n: any) => any}} [inFile] the file the node is in (null for the source)
+     */
+    const walk = (node, at, inFile = {file: null, unwrap}) => {
+      const from = inFile.file == null ? importedValue(node) : null;
+      const src = from ?? inFile;
+      const obj = from ? from.obj : src.unwrap(node);
+      const file = src.file ? {file: src.file} : {};
       if (obj?.type !== 'ObjectExpression') return;
       for (const p of obj.properties) {
         if (p.type !== 'ObjectProperty' || p.computed) continue;
         const k = keyOf(p.key);
         if (!k) continue;
-        const v = unwrap(p.value);
+        const inner = src.file == null ? importedValue(p.value) : null;
+        const v = inner ? inner.obj : src.unwrap(p.value);
         if (v?.type === 'ObjectExpression') {
           detail.push({
             token: null,
             key: [...at, k].join('.'),
             kind: 'typography',
             line: p.loc?.start?.line ?? null,
+            ...file,
             block: true,
           });
-          walk(v, [...at, k]);
+          walk(p.value, [...at, k], src);
         } else
           detail.push({
             token: null,
             key: [...at, k].join('.'),
             kind: 'typography',
             line: p.loc?.start?.line ?? null,
+            ...file,
+            ...importedValueAt(p.value, src.file),
             expression:
               textOf(v) == null &&
               v?.type !== 'NumericLiteral' &&
@@ -2824,22 +2907,9 @@ function ownPageTokens(
    */
   const collect = (node, depth, at = {code, file: null, unwrap}) => {
     const obj = at.unwrap(node);
-    // A name imported from a file beside the theme: read in that file, so
-    // its values and lines are its own; the build still judges the result.
-    const namespaced =
-      obj?.type === 'MemberExpression' &&
-      !obj.computed &&
-      obj.object?.type === 'Identifier'
-        ? imported(obj.object.name, obj.property?.name)
-        : null;
-    const from =
-      at.file != null
-        ? null
-        : obj?.type === 'Identifier'
-          ? imported(obj.name)
-          : namespaced?.member
-            ? namespaced
-            : null;
+    // A value read from a file beside the theme: read in that file, so its
+    // values and lines are its own; the build still judges the result.
+    const from = at.file != null ? null : importedValue(obj);
     if (from) {
       unresolved = true;
       collect(from.obj, depth + 1, from);
@@ -7467,8 +7537,10 @@ export async function resolvedTokens(ctx, slug) {
   } finally {
     fs.rmSync(copy, {force: true});
   }
-  const t = Object.values(mod).find(
-    v => v && typeof v === 'object' && typeof v.name === 'string',
+  const t = withoutNullTokens(
+    Object.values(mod).find(
+      v => v && typeof v === 'object' && typeof v.name === 'string',
+    ),
   );
   const {core} = ctx.project;
   // A token value an own theme source gives as a number (8 for 8px)
@@ -7518,6 +7590,51 @@ export async function resolvedTokens(ctx, slug) {
           (parts[target] ??= {})[k] = v;
   Object.defineProperty(out, 'parts', {value: parts, enumerable: false});
   return out;
+}
+
+/**
+ * A built theme without its null tokens. The build writes a null token as
+ * it is, a value no browser reads, and warns it at its line; Core cannot
+ * resolve one, so the editor's checks read the theme without it. A theme
+ * with none is returned as it is.
+ * @param {any} theme
+ * @returns {any}
+ */
+function withoutNullTokens(theme) {
+  const MAPS = ['tokens', 'localTokens'];
+  const SURFACES = ['onDark', 'onLight', '__onDark', '__onLight'];
+  /** @param {any} map */
+  const hasNull = map =>
+    !!map && typeof map === 'object' && Object.values(map).includes(null);
+  /** @param {any} block @returns {boolean} */
+  const nulls = block =>
+    !!block &&
+    typeof block === 'object' &&
+    (MAPS.some(m => hasNull(block[m])) ||
+      SURFACES.some(f => block[f] !== block && nulls(block[f])));
+  if (!nulls(theme)) return theme;
+  /** @param {any} block @returns {any} */
+  const strip = block => {
+    if (!block || typeof block !== 'object') return block;
+    const fields = Object.getOwnPropertyDescriptors(block);
+    for (const [f, d] of Object.entries(fields)) {
+      if (!('value' in d)) continue;
+      if (MAPS.includes(f) && hasNull(d.value))
+        fields[f] = {
+          ...d,
+          value: Object.fromEntries(
+            Object.entries(d.value).filter(([, v]) => v !== null),
+          ),
+        };
+      else if (SURFACES.includes(f) && nulls(d.value))
+        fields[f] = {...d, value: strip(d.value)};
+    }
+    return Object.defineProperties(
+      Object.create(Object.getPrototypeOf(block)),
+      fields,
+    );
+  };
+  return strip(theme);
 }
 
 /**

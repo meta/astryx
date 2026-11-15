@@ -122,6 +122,7 @@ const RUNTIME_DEPS = [
   '@babel/parser',
   '@babel/plugin-transform-typescript',
   'commander',
+  'css-tree',
   'globals',
   'ignore',
   'jiti',

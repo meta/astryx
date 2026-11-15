@@ -72,11 +72,12 @@ const refusedEverywhere = async (slug, what) => {
 };
 
 describe('the own-token check judges every value the source gives', () => {
-  it('refuses null and a boolean as no text', async () => {
+  it('builds a null token as it is with a warning, and refuses a boolean as no text', async () => {
     await withOwn('nu', "  tokens: {'--radius-element': null as any},");
-    await refusedEverywhere(
-      'nu',
-      /--radius-element the value null, which is not text/,
+    const nu = await compile('nu');
+    expect(nu.status).toBe(0);
+    expect(nu.stdout + nu.stderr).toContain(
+      '--radius-element holds null, which the build writes as it is',
     );
     await withOwn('bo', "  tokens: {'--radius-element': true as any},");
     await refusedEverywhere(
@@ -106,13 +107,15 @@ describe('the own-token check judges every value the source gives', () => {
   }, 240_000);
 
   it('judges the tokens a part and onDark set', async () => {
+    // A null keeps its meaning: built as it is, warned at its line.
     await withOwn(
       'pn',
       "  components: {button: {base: {'--radius-element': null}}} as any,",
     );
-    await refusedEverywhere(
-      'pn',
-      /components\.button\.base --radius-element \(line \d+\): .*value null, which is not text/,
+    const pn = await compile('pn');
+    expect(pn.status).toBe(0);
+    expect(pn.stdout + pn.stderr).toContain(
+      '--radius-element holds null, which the build writes as it is',
     );
     await withOwn(
       'pr',
