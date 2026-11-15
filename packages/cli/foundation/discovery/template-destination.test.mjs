@@ -18,6 +18,12 @@ afterEach(() => {
 /** @param {string} rel */
 const mkdir = rel => fs.mkdirSync(path.join(dir, rel), {recursive: true});
 
+/** @param {string} rel */
+const write = rel => {
+  mkdir(path.dirname(rel));
+  fs.writeFileSync(path.join(dir, rel), 'export default function Page() {}\n');
+};
+
 /** @param {Record<string, unknown>} pkg */
 const writePackage = pkg =>
   fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify(pkg));
@@ -53,14 +59,51 @@ describe('templateDestination', () => {
     expect(templateDestination(dir, 'page', 'login')).toBe('app/login');
   });
 
-  it('puts a page in src/pages in a project with no App Router', () => {
+  it('puts a page in src/pages in a project that is not a Next app', () => {
     expect(templateDestination(dir, 'page', 'dashboard')).toBe(
       'src/pages/dashboard',
     );
+  });
+
+  it('writes a Pages Router page as the file Next serves at its URL', () => {
     nextApp();
     mkdir('pages');
-    expect(templateDestination(dir, 'page', 'dashboard')).toBe(
-      'src/pages/dashboard',
+    expect(templateDestination(dir, 'page', 'login')).toBe('pages/login.tsx');
+    write('pages/login/index.tsx');
+    expect(templateDestination(dir, 'page', 'login')).toBe('pages/login-2.tsx');
+  });
+
+  it('uses src/pages only when the root has neither app/ nor pages/, as Next does', () => {
+    nextApp();
+    mkdir('src/pages');
+    expect(templateDestination(dir, 'page', 'login')).toBe(
+      'src/pages/login.tsx',
+    );
+    mkdir('pages');
+    mkdir('src/app');
+    expect(templateDestination(dir, 'page', 'login')).toBe('pages/login.tsx');
+  });
+
+  it('passes over a URL a page in a route group already serves', () => {
+    nextApp();
+    write('app/layout.tsx');
+    write('app/(auth)/login/page.tsx');
+    expect(templateDestination(dir, 'page', 'login')).toBe('app/login-2');
+  });
+
+  it('passes over a URL a Pages Router file serves beside the App Router', () => {
+    nextApp();
+    mkdir('app');
+    write('pages/login.tsx');
+    expect(templateDestination(dir, 'page', 'login')).toBe('app/login-2');
+  });
+
+  it('puts a page under the root layout when the routes folder has none of its own', () => {
+    nextApp();
+    write('app/(shop)/layout.tsx');
+    write('app/(marketing)/layout.tsx');
+    expect(templateDestination(dir, 'page', 'login')).toBe(
+      'app/(marketing)/login',
     );
   });
 
@@ -86,6 +129,14 @@ describe('templateDestination', () => {
     mkdir('app');
     expect(templateDestination(dir, 'block', 'ButtonShowcase')).toBe(
       'app/components/ButtonShowcase',
+    );
+  });
+
+  it('puts a block in components/ in a Next app with only a root pages/ folder', () => {
+    nextApp();
+    mkdir('pages');
+    expect(templateDestination(dir, 'block', 'ButtonShowcase')).toBe(
+      'components/ButtonShowcase',
     );
   });
 

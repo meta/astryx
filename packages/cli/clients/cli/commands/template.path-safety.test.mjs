@@ -110,6 +110,30 @@ describe('template path safety', () => {
     }
   });
 
+  it('names the page file in a Next app with only the Pages Router, and the named command writes it', async () => {
+    const cwd = path.join(tmpDir, 'project');
+    fs.mkdirSync(path.join(cwd, 'pages'), {recursive: true});
+    fs.writeFileSync(
+      path.join(cwd, 'package.json'),
+      JSON.stringify({dependencies: {next: '^16.0.0'}}),
+    );
+
+    const err = await templateApi('blank', {
+      targetPath: path.join(tmpDir, 'scratch'),
+      cwd,
+    }).catch(e => e);
+    expect(err.suggestions[0].name).toBe(
+      'astryx template blank pages/blank.tsx',
+    );
+
+    const written = await templateApi('blank', {
+      targetPath: 'pages/blank.tsx',
+      cwd,
+    });
+    expect(written.data.outputDir).toBe('pages');
+    expect(written.data.fileName).toBe('blank.tsx');
+  });
+
   it('names a fresh folder when the app already has one for that id', async () => {
     const cwd = path.join(tmpDir, 'project');
     fs.mkdirSync(path.join(cwd, 'app', 'blank'), {recursive: true});

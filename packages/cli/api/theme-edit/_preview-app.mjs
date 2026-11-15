@@ -25,6 +25,12 @@ import {fileURLToPath} from 'node:url';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {
+  nestedRootLayouts,
+  nextAppAt,
+  sameUrlPage,
+  urlSegments,
+} from '../../foundation/discovery/next-routes.mjs';
+import {
   assertWithin,
   PathSafetyError,
 } from '../../foundation/fs/path-safety.mjs';
@@ -595,21 +601,6 @@ function appsOver(cwd, dir) {
 }
 
 /**
- * Whether a folder is a Next app: its package.json depends on `next`.
- * @param {string} dir
- */
-function nextAppAt(dir) {
-  try {
-    const pkg = JSON.parse(
-      fs.readFileSync(path.join(dir, 'package.json'), 'utf8'),
-    );
-    return ['dependencies', 'devDependencies'].some(k => pkg?.[k]?.next);
-  } catch {
-    return false;
-  }
-}
-
-/**
  * {@link reservedFolder} for one app folder.
  * @param {string} cwd the app folder
  * @param {string} dir
@@ -811,116 +802,6 @@ function unroutedSegment(app, dir) {
   return seg
     ? `Next does not serve the folder ${seg} at a URL of its own (_private folders are never routed, @slot and [param] folders are not plain URL segments)`
     : null;
-}
-
-/**
- * The URL a folder of the routes folder is served at, with route groups
- * dropped, as path segments.
- * @param {string} app
- * @param {string} dir
- */
-const urlSegments = (app, dir) =>
-  path
-    .relative(app, dir)
-    .split(path.sep)
-    .filter(seg => seg && !/^\(.*\)$/.test(seg));
-
-/** An optional catch-all route folder, `[[...slug]]`: it also serves its parent folder's URL (a required `[...slug]` does not). */
-const CATCH_ALL = /^\[\[\.\.\.[^\]]+\]\]$/;
-
-/** A file Next serves a URL from: a page or a route handler. */
-const ROUTE_FILE = /^(page\.(tsx|ts|jsx|js|mdx)|route\.(tsx|ts|jsx|js))$/;
-
-/**
- * A page or route handler of the app that Next serves at the same URL as
- * `dir`, or null: beside the preview, Next refuses to build (a route and a
- * page), or the preview takes that URL from it.
- * @param {string} cwd
- * @param {string} app the routes folder
- * @param {string} dir
- */
-function sameUrlPage(cwd, app, dir) {
-  const url = urlSegments(app, dir).join('/');
-  /** @param {string} folder @returns {string | null} */
-  const walk = folder => {
-    /** @type {fs.Dirent[]} */
-    let entries;
-    try {
-      entries = fs.readdirSync(folder, {withFileTypes: true});
-    } catch {
-      return null;
-    }
-    for (const e of entries) {
-      const full = path.join(folder, e.name);
-      if (e.isDirectory()) {
-        if (/^[_@]/.test(e.name) || e.name === 'node_modules' || full === dir)
-          continue;
-        const hit = walk(full);
-        if (hit) return hit;
-      } else if (ROUTE_FILE.test(e.name) && servesUrl(folder)) return full;
-    }
-    return null;
-  };
-  /** A folder served at the URL, or at the URLs under it through a catch-all. @param {string} folder */
-  const servesUrl = folder => {
-    const segs = urlSegments(app, folder);
-    return (
-      segs.join('/') === url ||
-      (CATCH_ALL.test(segs.at(-1) ?? '') && segs.slice(0, -1).join('/') === url)
-    );
-  };
-  // The preview's own folder: a route handler, a page other than the
-  // page.tsx the preview writes, or a catch-all route in it.
-  try {
-    for (const e of fs.readdirSync(dir, {withFileTypes: true})) {
-      if (!e.isDirectory()) {
-        if (ROUTE_FILE.test(e.name) && e.name !== 'page.tsx')
-          return path.join(dir, e.name);
-      } else if (CATCH_ALL.test(e.name))
-        for (const name of fs.readdirSync(path.join(dir, e.name)))
-          if (ROUTE_FILE.test(name)) return path.join(dir, e.name, name);
-    }
-  } catch {
-    // No folder yet.
-  }
-  const inApp = walk(app);
-  if (inApp) return inApp;
-  for (const pages of [path.join(cwd, 'pages'), path.join(cwd, 'src', 'pages')])
-    for (const ext of ['tsx', 'ts', 'jsx', 'js']) {
-      for (const f of [`${url}.${ext}`, `${url}/index.${ext}`]) {
-        const full = path.join(pages, f);
-        if (url && fs.existsSync(full)) return full;
-      }
-    }
-  return null;
-}
-
-/**
- * The folders that hold a root layout when the routes folder has none of
- * its own: each route group with a layout (`(shop)/`, `(marketing)/`), or
- * a `[locale]/` in an app with the locale in every URL. Empty when the
- * routes folder has its own root layout.
- * @param {string} app
- * @returns {string[]}
- */
-function nestedRootLayouts(app) {
-  const LAYOUT = /^layout\.(tsx|ts|jsx|js)$/;
-  if (fs.readdirSync(app).some(f => LAYOUT.test(f))) return [];
-  /** @type {string[]} */
-  const out = [];
-  /** A folder with a layout counts; a route group without one is looked into. @param {string} dir @param {boolean} top */
-  const look = (dir, top) => {
-    for (const e of fs.readdirSync(dir, {withFileTypes: true})) {
-      if (!e.isDirectory()) continue;
-      const sub = path.join(dir, e.name);
-      const group = /^\(.+\)$/.test(e.name);
-      if (!top && !group) continue;
-      if (fs.readdirSync(sub).some(f => LAYOUT.test(f))) out.push(sub);
-      else if (group) look(sub, false);
-    }
-  };
-  look(app, true);
-  return out.sort();
 }
 
 /**
@@ -1560,15 +1441,7 @@ export function appWiring(ctx, slug, data) {
  * @returns {string | null}
  */
 function nextRoutesOf(dir) {
-  try {
-    const pkg = JSON.parse(
-      fs.readFileSync(path.join(dir, 'package.json'), 'utf8'),
-    );
-    if (!['dependencies', 'devDependencies'].some(k => pkg?.[k]?.next))
-      return null;
-  } catch {
-    return null;
-  }
+  if (!nextAppAt(dir)) return null;
   return (
     [path.join(dir, 'app'), path.join(dir, 'src', 'app')].find(
       r =>

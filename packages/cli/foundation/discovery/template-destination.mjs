@@ -2,32 +2,41 @@
 
 /**
  * @file Where a scaffolded template goes when the caller names no place:
- * the folder that a printed `astryx template <name> <path>` command uses.
+ * the path that a printed `astryx template <name> <path>` command uses.
  *
  * @input  the project folder, the template type, and the template id.
- * @output a project-relative POSIX folder that does not exist yet.
+ * @output a project-relative POSIX path that does not exist yet.
  * @position foundation/discovery — read by the template copy's refusal and
  *   by build's scaffold commands, so every printed command names one place.
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {
+  nestedRootLayouts,
+  nextAppAt,
+  nextRouteFolders,
+  pagesRouterPage,
+  sameUrlPage,
+} from './next-routes.mjs';
 
 /**
- * The project-relative folder to scaffold a template into.
+ * The project-relative path to scaffold a template into, read from the
+ * project the way its framework reads it.
  *
- * In a Next app with an App Router folder, a page goes in that folder
- * (`app/<id>` or `src/app/<id>`), so it is a route and Next builds it. Next
- * refuses to build a `pages/` folder that is not beside the `app/` folder, so
- * such an app never gets `src/pages/`. A block goes to `app/components/<id>`
- * in a Next app whose routes are in `app/`: that app often has no `src/`
- * folder, and its build and style compiler cover the folders it has, while
- * Next reads no route from a block's file name. Every other project gets
- * `src/pages/<id>` for a page and `src/components/<id>` for a block.
+ * In a Next app (its package.json depends on `next`), a page goes where Next
+ * serves it: in the App Router folder (`app/<id>`, or `src/app/<id>`), inside
+ * the route group that holds the root layout when that folder has none of
+ * its own; else, in an app with only the Pages Router, to the page file
+ * `pages/<id>.tsx` (or `src/pages/<id>.tsx`). A block goes beside the routes:
+ * `app/components/<id>` with a root `app/` folder, `components/<id>` with a
+ * root `pages/` folder only, else `src/components/<id>`. Every other project
+ * gets `src/pages/<id>` for a page and `src/components/<id>` for a block.
  *
- * When that path already exists (a route or a folder the app has), it is
- * `<id>-2`, `<id>-3` and so on, the first one that does not exist, so the
- * command runs as printed and never writes into a folder the app owns.
+ * When that path exists, or another page already serves its URL (a page in
+ * a route group, a Pages Router file), the id becomes `<id>-2`, `<id>-3` and
+ * so on, the first one that is free, so the command runs as printed, the
+ * app still builds, and nothing the app owns is written into.
  *
  * @param {string} projectDir the folder the command runs in
  * @param {'page' | 'block'} type
@@ -35,57 +44,61 @@ import * as path from 'node:path';
  * @returns {string}
  */
 export function templateDestination(projectDir, type, id) {
-  const router = appRouterFolder(projectDir);
-  const parent =
-    type === 'block'
-      ? router === 'app'
+  const routes = nextAppAt(projectDir)
+    ? nextRouteFolders(projectDir)
+    : {app: null, pages: null};
+  if (type === 'block') {
+    const parent =
+      routes.app === 'app'
         ? 'app/components'
-        : 'src/components'
-      : (router ?? 'src/pages');
-  let folder = `${parent}/${id}`;
-  for (let n = 2; fs.existsSync(path.join(projectDir, folder)); n++) {
-    folder = `${parent}/${id}-${n}`;
+        : routes.pages === 'pages' && !routes.app
+          ? 'components'
+          : 'src/components';
+    return firstFree(projectDir, id, n => `${parent}/${n}`);
   }
-  return folder;
-}
-
-/**
- * The App Router folder of a Next app (`app`, else `src/app`, as Next looks
- * for it), or null when the project is not a Next app or has neither.
- * @param {string} projectDir
- * @returns {'app' | 'src/app' | null}
- */
-function appRouterFolder(projectDir) {
-  if (!dependsOnNext(projectDir)) return null;
-  if (isDirectory(path.join(projectDir, 'app'))) return 'app';
-  if (isDirectory(path.join(projectDir, 'src', 'app'))) return 'src/app';
-  return null;
-}
-
-/**
- * Whether the project's package.json depends on `next`.
- * @param {string} projectDir
- * @returns {boolean}
- */
-function dependsOnNext(projectDir) {
-  try {
-    const pkg = JSON.parse(
-      fs.readFileSync(path.join(projectDir, 'package.json'), 'utf8'),
+  if (routes.app) {
+    const app = path.join(projectDir, routes.app);
+    const rootLayout = nestedRootLayouts(app)[0];
+    const parent = rootLayout
+      ? path.relative(projectDir, rootLayout).split(path.sep).join('/')
+      : routes.app;
+    return firstFree(
+      projectDir,
+      id,
+      n => `${parent}/${n}`,
+      folder => sameUrlPage(projectDir, app, path.join(projectDir, folder)),
     );
-    return ['dependencies', 'devDependencies'].some(key => pkg?.[key]?.next);
-  } catch {
-    return false;
   }
+  if (routes.pages) {
+    const pages = routes.pages;
+    return firstFree(
+      projectDir,
+      id,
+      n => `${pages}/${n}.tsx`,
+      file => pagesRouterPage(projectDir, file.slice(pages.length + 1, -4)),
+    );
+  }
+  return firstFree(projectDir, id, n => `src/pages/${n}`);
 }
 
 /**
- * @param {string} dir
- * @returns {boolean}
+ * The first of `id`, `id-2`, `id-3` and so on whose path does not exist and
+ * whose URL no other page serves.
+ * @param {string} projectDir
+ * @param {string} id
+ * @param {(name: string) => string} at the path for a name
+ * @param {(rel: string) => string | null} [servedBy] the page that already
+ *   serves that path's URL, or null
+ * @returns {string}
  */
-function isDirectory(dir) {
-  try {
-    return fs.statSync(dir).isDirectory();
-  } catch {
-    return false;
+function firstFree(projectDir, id, at, servedBy = () => null) {
+  let rel = at(id);
+  for (
+    let n = 2;
+    fs.existsSync(path.join(projectDir, rel)) || servedBy(rel);
+    n++
+  ) {
+    rel = at(`${id}-${n}`);
   }
+  return rel;
 }
