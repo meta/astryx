@@ -184,6 +184,11 @@ export class GestureArena {
   private latestTime = Number.NEGATIVE_INFINITY;
   /** The latest input that reached the page late: its own time, and when. */
   private lateInput: {time: number; arrivedAt: number} | null = null;
+  /**
+   * When the latest wait for queued input ended with none still coming late.
+   * A deadline that came due during that wait is not late on its own.
+   */
+  private quietSince = Number.NEGATIVE_INFINITY;
   private depth = 0;
   /** Open `deferResolution` calls: what their stops unblock waits. */
   private deferDepth = 0;
@@ -1246,9 +1251,11 @@ export class GestureArena {
       this.realTimer = null;
       this.realTimerDeadline = Number.POSITIVE_INFINITY;
       const now = this.clock.now();
+      // A deadline that came due during a quiet wait is late only past it.
+      const lateBy = now - Math.max(dueAt, this.quietSince);
       if (
         after !== 'yield' &&
-        (now - dueAt > LATE_TIMER_MS || this.hasLateInputBefore(earliest, now))
+        (lateBy > LATE_TIMER_MS || this.hasLateInputBefore(earliest, now))
       ) {
         // Behind a blocked page, input from before the deadline can still be
         // queued, and a touch move can reach the page a frame after other
@@ -1261,6 +1268,9 @@ export class GestureArena {
           LATE_INPUT_WAIT_MS,
         );
         return;
+      }
+      if (after === 'wait') {
+        this.quietSince = now;
       }
       if (after === 'deadline' && now > earliest) {
         // Late: a long task held the main thread past the deadline, and
