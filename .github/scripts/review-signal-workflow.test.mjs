@@ -798,11 +798,28 @@ describe('the advisory design label at a head an owner already cleared', () => {
   const THEME = [
     {filename: 'packages/themes/acme/src/tokens.ts', status: 'modified'},
   ];
-  const push = sha => ({event: 'committed', sha});
-  const removed = login => ({
+  const at = minute => `2026-11-14T17:${String(minute).padStart(2, '0')}:00Z`;
+  const arrived = minute => [
+    {
+      context: 'review-required',
+      state: 'pending',
+      description: 'Waiting on code review',
+      creator: {login: 'github-actions[bot]'},
+      created_at: at(minute),
+    },
+    {
+      context: 'spec-owner-approval',
+      state: 'success',
+      description: 'Mirrors review-required · spec ok',
+      creator: {login: 'github-actions[bot]'},
+      created_at: at(minute),
+    },
+  ];
+  const removed = (login, minute) => ({
     event: 'unlabeled',
     actor: {login},
     label: {name: 'needs:design-review'},
+    created_at: at(minute),
   });
   const designAdded = mutations =>
     mutations.addLabels.mock.calls.some(([input]) =>
@@ -817,7 +834,8 @@ describe('the advisory design label at a head an owner already cleared', () => {
   it('does not add it back when a design owner removed it at this head, and says so', async () => {
     const {mutations, core} = await runSignal({
       files: THEME,
-      timeline: [push('0'.repeat(40)), push(HEAD), removed('designer')],
+      specStatuses: arrived(20),
+      timeline: [removed('designer', 30)],
     });
     expect(designAdded(mutations)).toBe(false);
     expect(core.info).toHaveBeenCalledWith(
@@ -827,10 +845,14 @@ describe('the advisory design label at a head an owner already cleared', () => {
     );
   });
 
-  it('adds it again after a push that follows the removal', async () => {
+  it('adds it again on a head that arrived after the removal', async () => {
     const {mutations} = await runSignal({
       files: THEME,
-      timeline: [push('0'.repeat(40)), removed('designer'), push(HEAD)],
+      specStatuses: arrived(19),
+      timeline: [
+        {event: 'committed', committer: {date: at(5)}},
+        removed('designer', 14),
+      ],
     });
     expect(designAdded(mutations)).toBe(true);
   });
@@ -838,7 +860,8 @@ describe('the advisory design label at a head an owner already cleared', () => {
   it('adds it when someone who is not an owner removed it', async () => {
     const {mutations} = await runSignal({
       files: THEME,
-      timeline: [push(HEAD), removed('contributor')],
+      specStatuses: arrived(20),
+      timeline: [removed('contributor', 30)],
     });
     expect(designAdded(mutations)).toBe(true);
   });
@@ -846,12 +869,13 @@ describe('the advisory design label at a head an owner already cleared', () => {
   it('adds it, with a warning, when the timeline cannot be read', async () => {
     const {mutations, core} = await runSignal({
       files: THEME,
+      specStatuses: arrived(20),
       timeline: new Error('HTTP 502'),
     });
     expect(designAdded(mutations)).toBe(true);
     expect(core.warning).toHaveBeenCalledWith(
       expect.stringContaining(
-        'Could not read the timeline; needs:design-review is added: HTTP 502',
+        "Could not read the timeline or the head's statuses; needs:design-review is added: HTTP 502",
       ),
     );
   });

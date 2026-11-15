@@ -667,10 +667,10 @@ jobs:
             const toAdd = [];
             if (codeGated && !current.includes(CODE)) toAdd.push(CODE);
             if (designGated && !current.includes(DESIGN)) {
-              // An owner who removed the advisory design label at this exact
-              // head has seen it: a later event at the same head (ready for
-              // review, a reopen) does not add it back. A push after the
-              // removal, or a timeline that cannot be read, adds it as before.
+              // An owner who removed the advisory design label after this exact
+              // head arrived has seen it: a later event at the same head (ready
+              // for review, a reopen) does not add it back. A newer head, or a
+              // timeline or status list that cannot be read, adds it as before.
               let removedAtHead = false;
               let removedBy = null;
               try {
@@ -678,15 +678,19 @@ jobs:
                   github.rest.issues.listEventsForTimeline,
                   {owner, repo, issue_number: pr.number, per_page: 100},
                 );
+                const headStatuses = await github.paginate(
+                  github.rest.repos.listCommitStatusesForRef,
+                  {owner, repo, ref: pr.head.sha, per_page: 100},
+                );
                 ({removedAtHead, by: removedBy} =
                   reviewDecision.ownerRemovedLabelAtHead({
                     events,
+                    headStatuses,
                     label: DESIGN,
-                    headSha: pr.head.sha,
                     owners: [...engOwners, ...designOwners],
                   }));
               } catch (e) {
-                core.warning(`Could not read the timeline; ${DESIGN} is added: ${e.message}`);
+                core.warning(`Could not read the timeline or the head's statuses; ${DESIGN} is added: ${e.message}`);
               }
               if (removedAtHead) {
                 const why = `#${pr.number}: ${DESIGN} not added back: @${removedBy} removed it at this head (${pr.head.sha.slice(0, 8)}).`;

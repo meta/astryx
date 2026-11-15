@@ -123,41 +123,41 @@ function resolveReviewApprovals({
 
 /**
  * Whether an owner removed an advisory label at the current head: the newest
- * event in the pull request's timeline that changes the head (a push or a
- * force push) comes before the newest removal of `label` by an engineering or
- * design owner, and that push is the current head. The timeline lists events
- * in the order they happened, a push at the time it was pushed. Then the
- * owner has seen this head, and the label is not added back to it.
+ * removal of `label` by an engineering or design owner comes after the head
+ * reached the pull request. A pushed commit carries its committer date, not
+ * its push time, so the head's arrival is the earliest trusted
+ * `review-required` status on it, which review-signal writes for every new
+ * head. With no such status the head's arrival is unknown, and the removal
+ * does not count. Then the owner has seen this head, and the label is not
+ * added back to it.
  * @param {object} options
- * @param {Array<{event?: string, actor?: {login?: string}, label?: {name?: string}, sha?: string, commit_id?: string}>} options.events
- *   the timeline, oldest first
+ * @param {Array<{event?: string, actor?: {login?: string}, label?: {name?: string}, created_at?: string}>} options.events
+ *   the pull request's timeline
+ * @param {Array<{context?: string, creator?: {login?: string}, created_at?: string}>} options.headStatuses
+ *   the commit statuses on the current head
  * @param {string} options.label
- * @param {string} options.headSha
  * @param {string[]} options.owners lowercase logins
  * @returns {{removedAtHead: boolean, by: string | null}}
  */
-function ownerRemovedLabelAtHead({events, label, headSha, owners}) {
-  let lastPush = -1;
-  let pushedSha = null;
-  let removal = -1;
+function ownerRemovedLabelAtHead({events, headStatuses, label, owners}) {
+  const arrivals = trustedStatuses(headStatuses, REVIEW_GATE_CONTEXT)
+    .map(status => Date.parse(status.created_at ?? ''))
+    .filter(Number.isFinite);
+  if (arrivals.length === 0) return {removedAtHead: false, by: null};
+  const arrived = Math.min(...arrivals);
+  let removedAt = -Infinity;
   let by = null;
-  events.forEach((event, index) => {
-    if (event.event === 'committed') {
-      lastPush = index;
-      pushedSha = event.sha ?? null;
-    } else if (event.event === 'head_ref_force_pushed') {
-      lastPush = index;
-      pushedSha = event.commit_id ?? null;
-    } else if (event.event === 'unlabeled' && event.label?.name === label) {
-      const login = event.actor?.login?.toLowerCase();
-      if (login && owners.includes(login)) {
-        removal = index;
-        by = login;
-      }
+  for (const event of events) {
+    if (event.event !== 'unlabeled' || event.label?.name !== label) continue;
+    const login = event.actor?.login?.toLowerCase();
+    const at = Date.parse(event.created_at ?? '');
+    if (!login || !owners.includes(login) || !Number.isFinite(at)) continue;
+    if (at > removedAt) {
+      removedAt = at;
+      by = login;
     }
-  });
-  const removedAtHead =
-    removal > lastPush && lastPush >= 0 && pushedSha === headSha;
+  }
+  const removedAtHead = removedAt > arrived;
   return {removedAtHead, by: removedAtHead ? by : null};
 }
 
