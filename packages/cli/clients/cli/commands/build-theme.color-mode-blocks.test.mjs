@@ -74,7 +74,7 @@ describe('theme build with color-mode blocks', () => {
       /@media \(prefers-color-scheme: dark\) \{\s*:is\(\.astryx-button\[data-variant="ghost"\]\):where\(:scope:not\(\[data-theme="light"\], \[data-theme="dark"\]\) \*\)/,
     );
     expect(css).toMatch(
-      /:is\(\.astryx-button\[data-variant="ghost"\]\):where\(:scope \[data-astryx-media="dark"\] \*\) \{\s*background-color: #ff00ff;/,
+      /:is\(\.astryx-button\[data-variant="ghost"\]\):where\(:scope \[data-astryx-media="dark"\] \*:not\(:scope \[data-astryx-media="dark"\] \[data-astryx-media="light"\] \*\)[^{]*\) \{\s*background-color: #ff00ff;/,
     );
     expect(css).toContain(
       `${ghost}:where(:scope[data-theme="dark"] *)${OUTSIDE_SURFACES}:hover`,

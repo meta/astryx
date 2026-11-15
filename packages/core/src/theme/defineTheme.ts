@@ -191,11 +191,10 @@ export type TokenValue = string | [light: string, dark: string];
  * The `@light` and `@dark` keys hold a style block (properties and
  * pseudo-class overrides) that applies only where the element's color mode is
  * that mode: the mode `Theme` resolves from its own `mode`, the system
- * preference, or a `MediaTheme` surface. Inside media surfaces it applies as
- * the `onDark` and `onLight` overrides do: inside any surface of its mode, so
- * where surfaces of both modes enclose an element (a light `MediaTheme` inside
- * a dark one) both blocks apply and the light block wins a property both set.
- * Where no enclosing mode matches, the block writes nothing, so every other
+ * preference, or a `MediaTheme` surface. Inside media surfaces the nearest
+ * surface decides, so a light `MediaTheme` inside a dark one takes only the
+ * light block, for up to five surfaces of alternating modes nested one in
+ * another. Where no enclosing mode matches, the block writes nothing, so every other
  * rule applies there as it would without it. Use it
  * for a value that is not a color, or to leave the other mode untouched; a
  * color that differs per mode can also be one `light-dark()` value.
@@ -302,7 +301,9 @@ export interface DefineThemeInput<
    * Unified typography configuration — fonts, scale, and weights.
    *
    * Scale controls sizing; roles (body, heading, code) declare
-   * fonts, fallbacks, and weights. Heading inherits from body if omitted.
+   * fonts, fallbacks, and weights. A heading with no `family` takes the
+   * body's whole font list; with its own `family`, only its own
+   * `fallbacks`. `fallbacks` with no `family` build nothing.
    *
    * Font loading is the consumer's responsibility — add a <link> or
    * @import for your fonts before rendering the theme.

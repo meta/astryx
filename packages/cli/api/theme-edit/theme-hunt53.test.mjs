@@ -122,15 +122,22 @@ describe('#11453: links in the theme folder', () => {
     const r = await themeEditSet('t', 'corners', 'round', {cwd});
     expect(r.data.setting.value).toBe('round');
     fs.rmSync(path.join(dir, 'notes.md'));
+    // A link at a picture's name refuses nothing: a picture is never
+    // written over a file that is not the editor's, so it is only skipped.
     fs.symlinkSync('/nonexistent/p.png', path.join(dir, 'preview.png'));
+    await themeEditSet('t', 'corners', 'square', {cwd});
+    fs.rmSync(path.join(dir, 'preview.png'));
+    // A link at a page the editor writes is named.
+    fs.rmSync(path.join(dir, 'sheet.html'), {force: true});
+    fs.symlinkSync('/nonexistent/s.html', path.join(dir, 'sheet.html'));
     const err = await refusal(() =>
-      themeEditSet('t', 'corners', 'square', {cwd}),
+      themeEditSet('t', 'corners', 'pill', {cwd}),
     );
     expect(err.message).toContain(
-      'themes/t/preview.png is a link to /nonexistent/p.png',
+      'themes/t/sheet.html is a link to /nonexistent/s.html',
     );
-    expect(err.run).toEqual(['ls -l themes/t/preview.png']);
-    fs.rmSync(path.join(dir, 'preview.png'));
+    expect(err.run).toEqual(['ls -l themes/t/sheet.html']);
+    fs.rmSync(path.join(dir, 'sheet.html'));
   }, 120_000);
 });
 

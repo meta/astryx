@@ -90,7 +90,10 @@ describe('hunt26: suggestions are checked', () => {
     const {loadTheme} = await import('./_settings.mjs');
     const ctx = await context(cwd);
     const out = vetSuggestions(e, ctx, 'b', loadTheme(cwd, 'b', {}));
+    // A refused line is followed through its own refusal's repair (a bare
+    // number takes its unit), and offered as the line that works.
     expect(bare(out.suggestions.map(s => s.name))).toEqual([
+      'set b corners 1.25px',
       'set b corners pill',
       'how corners',
     ]);
@@ -142,7 +145,7 @@ describe('hunt26: the cases', () => {
     const ok = await refusal(() =>
       themeEditSet('b', 'color', 'red', {cwd, on: 'text'}),
     );
-    expect(bare(ok.run)[0]).toBe('set b --color-text-primary red');
+    expect(bare(ok.run)[0]).toBe('set b --color-text-primary red --on text');
   }, 240_000);
 
   it('N19: headings --on heading offers the dial and the asked weight or tracking', async () => {
