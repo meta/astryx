@@ -40,6 +40,9 @@ const STORY = 'core-contextmenu--default';
 // A finger keeps today's long press under `presentation="popover"`.
 const POPOVER_STORY = 'core-contextmenu--touch-long-press-popover';
 
+/** The touch layer's own chunk, which loads after the page's first paint. */
+const TOUCH_LAYER_CHUNK = /\/ContextMenuTouchLayer-[\w-]+\.js(?:\?.*)?$/;
+
 async function touchCdp(page: Page): Promise<CDPSession> {
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Emulation.setTouchEmulationEnabled', {
@@ -106,6 +109,24 @@ const nextFrame = async (page: Page) =>
   );
 
 /**
+ * Waits for the touch layer: its chunk's response, the module itself, then two
+ * frames for the layer to mount. A finger that lands sooner starts its hold
+ * only at that mount, so the menu would open on the load's time.
+ */
+async function waitForTouchLayer(
+  page: Page,
+  chunk: ReturnType<Page['waitForResponse']>,
+): Promise<void> {
+  const url = (await chunk).url();
+  await page.evaluate(async layerUrl => {
+    await import(layerUrl);
+    await new Promise<void>(resolve => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
+  }, url);
+}
+
+/**
  * Holds a finger on the trigger until the menu opens, lifts it, waits one
  * frame, then taps outside. Returns the input recorded from the lift on: the
  * outside tap's `touchstart` is the later event that bounds the lift's click.
@@ -115,9 +136,18 @@ async function holdLiftThenTapOutside(
   story: string,
   label?: string,
 ): Promise<InputEntry[]> {
-  await page.goto(`${storybook.origin}/iframe.html?id=${story}&viewMode=story`);
-  // Touch emulation makes the primary pointer coarse.
+  // Touch emulation makes the primary pointer coarse from the first paint.
   const cdp = await touchCdp(page);
+  // The popover story keeps today's long press, so its touch layer never
+  // loads.
+  const touchLayer =
+    story === STORY
+      ? page.waitForResponse(response => TOUCH_LAYER_CHUNK.test(response.url()))
+      : null;
+  await page.goto(`${storybook.origin}/iframe.html?id=${story}&viewMode=story`);
+  if (touchLayer != null) {
+    await waitForTouchLayer(page, touchLayer);
+  }
   const center = await triggerCenter(page, label);
   await cdp.send('Input.dispatchTouchEvent', {
     type: 'touchStart',
