@@ -6208,6 +6208,13 @@ export async function themeEditShow(theme, options = {}) {
         res,
         await baseResolved(ctx.project, data.like),
       ),
+      missed: await missedParts(
+        ctx,
+        theme,
+        data,
+        res,
+        await baseResolved(ctx.project, data.like),
+      ),
       problems,
       // Every problem the theme has now, its text, border and color
       // contrast, each with the command that fixes it when one does.
@@ -6719,10 +6726,18 @@ function unreachedParts(ctx, data, res, base) {
   const set = new Set(
     data.settings.filter(s => s.on).flatMap(s => partsOf(ctx, s)),
   );
-  /** The color tokens a part paints a property with. @param {any[]} reads @param {(prop: string) => boolean} prop */
+  /** The color tokens a part paints a property with: never the shared
+   * hover and pressed tints (--color-overlay-*), which lie over whatever
+   * fill a part has and no setting moves, so they are no fill of its own.
+   * @param {any[]} reads @param {(prop: string) => boolean} prop */
   const painting = (reads, prop) =>
     reads
-      .filter(r => /^--color-/.test(r.token) && r.props.some(prop))
+      .filter(
+        r =>
+          /^--color-/.test(r.token) &&
+          !/^--color-overlay-/.test(r.token) &&
+          r.props.some(prop),
+      )
       .map(r => r.token);
   const unreached = Object.keys(ctx.C.MAP).filter(part => {
     if (set.has(part)) return false;
@@ -6751,6 +6766,192 @@ function unreachedParts(ctx, data, res, base) {
     .map((part, i) => ({part, i, r: rank(part)}))
     .sort((a, b) => a.r - b.r || a.i - b.i)
     .map(x => x.part);
+}
+
+/**
+ * The parts the theme's own changes should have reached and did not, most
+ * flagged first, each with why and the one line that reaches it (its state
+ * named): with the accent changed, a part or state that paints an inverted
+ * surface (a toast, a tooltip), a disabled part drawn as the accent at
+ * reduced opacity (a button), a selected state still on the base's fill (a
+ * nav item), a status fill (an info banner); with the corners changed, a
+ * pill still fully round; with the border width changed, a surface still
+ * borderless. Each line is checked as set checks it; one set refuses names
+ * `how` instead. None for a theme with no settings.
+ * @param {any} ctx
+ * @param {string} slug
+ * @param {import('./_settings.mjs').ThemeData} data
+ * @param {Record<string, Record<string, string>>} res
+ * @param {Record<string, any>} base
+ * @returns {Promise<Array<{part: string, state?: string, why: string, line: string}>>}
+ */
+async function missedParts(ctx, slug, data, res, base) {
+  if (!data.settings.length) return [];
+  const C = ctx.C;
+  const modes = Object.keys(res).filter(m => m === 'light' || m === 'dark');
+  /** @param {string} token */
+  const changed = token =>
+    modes.some(m => String(res[m]?.[token]) !== String(base[m]?.[token]));
+  const tokens = Object.keys(res[modes[0]] ?? {});
+  const any = (/** @type {RegExp} */ re) =>
+    tokens.some(t => re.test(t) && changed(t));
+  const accent = any(/^--color-(accent|on-accent|text-accent)/);
+  const corners = any(/^--radius-(?!full$)/);
+  const borders = any(/^--border-width/);
+  const has = (/** @type {string} */ p) => ctx.project.target.has(p);
+  /** A setting on the part (and state) already. @param {string} p @param {string} [state] */
+  const set = (p, state) =>
+    data.settings.some(
+      x =>
+        x.on &&
+        partsOf(ctx, x).includes(p) &&
+        (state == null || x.state === state),
+    );
+  /** @type {Array<{kind: number, part: string, state?: string, why: string, thing: string, value: string}>} */
+  const found = [];
+  /** The fills of a part (never the shared hover and pressed tints). @param {string} p @param {(prop: string) => boolean} prop */
+  const fills = (p, prop = x => /^background/.test(x)) =>
+    (C.partReads(p, null) ?? []).filter(
+      (/** @type {any} */ r) =>
+        /^--color-/.test(r.token) &&
+        !/^--color-overlay-/.test(r.token) &&
+        r.props.some(prop),
+    );
+  if (accent)
+    for (const p of Object.keys(C.MAP).filter(has)) {
+      const reads = fills(p);
+      const rest = reads.filter((/** @type {any} */ r) => r.when.includes(''));
+      const restToken = rest.find(
+        (/** @type {any} */ r) => !changed(r.token),
+      )?.token;
+      if (
+        !set(p) &&
+        restToken &&
+        !rest.some((/** @type {any} */ r) => changed(r.token))
+      ) {
+        if (/inverted|--color-text-primary$/.test(restToken))
+          found.push({
+            kind: 0,
+            part: p,
+            why: `still the base's inverted surface (${restToken})`,
+            thing: 'background-color',
+            value: 'var(--color-background-popover)',
+          });
+        else if (/-(info|success|warning|error)(-|$)/.test(restToken))
+          found.push({
+            kind: 3,
+            part: p,
+            why: `still the base's status color (${restToken})`,
+            thing: 'background-color',
+            value: 'var(--color-accent-muted)',
+          });
+      }
+      // A disabled part drawn as its fill at reduced opacity: with the
+      // accent changed, a translucent block of the new accent.
+      const name = ctx.project.target.get(p)?.component;
+      const disables = Boolean(
+        name && ctx.project.components[name]?.props?.isDisabled,
+      );
+      const dims = (C.MAP[p]?.own?.opacity?.values ?? []).some(
+        (/** @type {unknown} */ v) => Number(v) > 0 && Number(v) < 1,
+      );
+      if (
+        disables &&
+        dims &&
+        reads.some((/** @type {any} */ r) => /accent/.test(r.token)) &&
+        !set(p, 'disabled')
+      )
+        found.push({
+          kind: 1,
+          part: p,
+          state: 'disabled',
+          why: 'disabled, it is drawn as the accent at reduced opacity, a translucent block of the new accent',
+          thing: 'background-color',
+          value: 'var(--color-neutral)',
+        });
+      // A state of the part that keeps the base's fill (a selected item).
+      const states = (ctx.project.target.get(p)?.states ?? []).filter(
+        (/** @type {string} */ st) => !COMMON_STATES.includes(st),
+      );
+      for (const st of states) {
+        // A tint the state lays over any fill (an overlay token) follows
+        // the fill; only a fill of its own is kept from the base.
+        const inState = reads.filter(
+          (/** @type {any} */ r) =>
+            !/^--color-overlay-/.test(r.token) &&
+            r.when.some(
+              (/** @type {string} */ w) =>
+                new RegExp(`(^|[\\s,])${st}=`).test(w) && !/:/.test(w),
+            ),
+        );
+        if (
+          inState.length &&
+          !inState.some((/** @type {any} */ r) => changed(r.token)) &&
+          !set(p, st)
+        )
+          found.push({
+            kind: 2,
+            part: p,
+            state: st,
+            why: `${st}, it keeps the base's fill (${inState[0].token})`,
+            thing: 'background-color',
+            value: 'var(--color-accent-muted)',
+          });
+      }
+    }
+  if (corners)
+    for (const p of pillParts(C).filter(x => has(x) && !set(x)))
+      found.push({
+        kind: 4,
+        part: p,
+        why: 'still a full pill: it reads --radius-full, which the corners leave as they are',
+        thing: 'border-radius',
+        value: 'var(--radius-element)',
+      });
+  if (borders)
+    for (const p of borderlessSurfaces(C).filter(x => has(x) && !set(x)))
+      found.push({
+        kind: 5,
+        part: p,
+        why: 'still borderless: the border width reaches no border it does not draw',
+        thing: 'border',
+        value: 'var(--border-width) solid var(--color-border)',
+      });
+  // One of each kind first, in the order the kinds are missed most (an
+  // inverted surface, a disabled part, a selected state, a status fill,
+  // pills, borderless surfaces), then the next of each: six lines reach six
+  // kinds of miss, never six of one.
+  /** @type {Map<number, typeof found>} */
+  const byKind = new Map();
+  for (const x of found) byKind.set(x.kind, [...(byKind.get(x.kind) ?? []), x]);
+  const kinds = [...byKind.keys()].sort((a, b) => a - b);
+  /** @type {typeof found} */
+  const ordered = [];
+  for (let round = 0; ordered.length < found.length; round++)
+    for (const k of kinds) {
+      const x = byKind.get(k)?.[round];
+      if (x) ordered.push(x);
+    }
+  /** @type {Array<{part: string, state?: string, why: string, line: string}>} */
+  const out = [];
+  for (const x of ordered) {
+    const typed = `${P} set ${slug} ${x.thing} ${quoteCommandArgument(x.value)} --on ${x.part}${x.state ? ` --state ${x.state}` : ''}`;
+    const followed = await followChangeLine(
+      'set',
+      slug,
+      typed,
+      ctx.project.cwd,
+    );
+    out.push({
+      part: x.part,
+      ...(x.state ? {state: x.state} : {}),
+      why: x.why,
+      line: followed.why
+        ? `${P} how ${quoteCommandArgument(`${x.part}${x.state ? ` ${x.state}` : ''} ${x.thing === 'border' ? 'border' : x.thing === 'border-radius' ? 'corners' : 'background'}`)}`
+        : followed.line,
+    });
+  }
+  return out;
 }
 
 /**

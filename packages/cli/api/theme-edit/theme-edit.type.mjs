@@ -136,6 +136,7 @@
  * @property {Array<ThemeEditSetting & {parts: string[], masked?: string}>} data.settings - Each setting with the parts it styles; `masked` says what a later or stronger setting hides of it.
  * @property {Record<string, Record<string, string | null> | string | null>} data.resolved - Key tokens: colors and shadows per mode; sizes, numbers and fonts, which are the same in both modes, as one value.
  * @property {string[]} data.partValues - Each corners or spacing setting on a part or group, with what its parts get and the whole-theme value beside it.
+ * @property {Array<{part: string, state?: string, why: string, line: string}>} data.missed - The parts the theme's own changes should have reached and did not, most flagged first, each with why and the one line that reaches it: with the accent changed, an inverted surface (a toast), a disabled part drawn as the accent at reduced opacity, a selected state on the base's fill, a status fill; with the corners changed, a pill; with the border width changed, a borderless surface.
  * @property {string[]} data.unreached - The parts with a fill of their own the theme leaves on its base's look, most visible first: no setting is on them, and their fill or text color is still the base's (empty for a theme with no settings).
  * @property {number | null} data.vibrancy - How saturated the generated colors are (0 to 100); null when the theme sets no color.
  * @property {ThemeEditColor[]} data.colors - Each color the theme sets, with the shade each token uses.

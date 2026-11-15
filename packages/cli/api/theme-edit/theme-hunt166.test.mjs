@@ -3,8 +3,9 @@
 /**
  * @file show's `unreached`: a part counts as reached only when its fill and
  * its text color changed from the base (or a setting is on it); the most
- * visible parts come first, the text lists ten and how many more, and the
- * JSON lists them all.
+ * visible parts come first; the text counts them (the parts the theme's own
+ * changes missed are named, with their lines, under missed), and the JSON
+ * lists them all.
  */
 
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
@@ -58,7 +59,7 @@ describe('unreached', () => {
     expect(r.unreached).not.toContain('banner');
   }, 240_000);
 
-  it('the text names ten and how many more; the JSON names them all', async () => {
+  it('the text counts them; the JSON names them all', async () => {
     const text = (
       await runCli(['experimental', 'theme', 'editor', 'show', 't'], {cwd})
     ).stdout;
@@ -72,8 +73,9 @@ describe('unreached', () => {
       ).stdout,
     ).data.unreached;
     expect(json.length).toBeGreaterThan(10);
-    expect(line).toContain(`and ${json.length - 10} more (show --json)`);
-    expect(line.split(',').length).toBeLessThan(13);
+    expect(line).toMatch(
+      /^unreached: +\d+ more parts keep the base's fill or text color \(show --json\)$/,
+    );
     const set = (
       await runCli(
         ['experimental', 'theme', 'editor', 'set', 't', 'corners', 'pill'],

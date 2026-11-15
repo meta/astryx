@@ -636,6 +636,7 @@ function showBlocks(d) {
     colorNotes,
     colorFiles,
     unreached,
+    missed = [],
     // Every problem is in the open problems at the end, with its fix.
     problems: _problems,
     openProblems = [],
@@ -655,15 +656,37 @@ function showBlocks(d) {
       ? [section('settings:'), records(settings.map(s => flatRecord(s)))]
       : []),
     ...others,
-    // The parts the look leaves as the base has them, on one line: the
-    // most visible ten, and how many more (the JSON lists them all).
-    ...(unreached?.length
+    // What the theme's own changes did not reach (six at most), each with
+    // the line that reaches it; the other parts on the base's look are
+    // counted, and listed in the JSON.
+    ...(missed.length
       ? [
-          record({
-            unreached: `${unreached.slice(0, 10).join(', ')}${unreached.length > 10 ? `, and ${unreached.length - 10} more (show --json)` : ''} (their fill or text color is still the base's, and no setting is on them)`,
-          }),
+          section(
+            "missed (parts the theme's own changes did not reach; each line reaches one):",
+          ),
+          // Each part and why, then the line that reaches it.
+          missed
+            .slice(0, 6)
+            .map(
+              m =>
+                `- ${m.part}${m.state ? ` (${m.state})` : ''}: ${m.why}\n  line: ${cmd(m.line)}`,
+            )
+            .join('\n'),
         ]
       : []),
+    ...(() => {
+      const shown = new Set(missed.slice(0, 6).map(m => m.part));
+      const more =
+        (unreached ?? []).filter(p => !shown.has(p)).length +
+        missed.slice(6).filter(m => !(unreached ?? []).includes(m.part)).length;
+      return more
+        ? [
+            record({
+              unreached: `${more} more parts keep the base's fill or text color (show --json)`,
+            }),
+          ]
+        : [];
+    })(),
     ...(colors.length
       ? [
           section('colors:'),
