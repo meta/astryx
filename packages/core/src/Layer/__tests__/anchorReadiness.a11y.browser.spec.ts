@@ -235,7 +235,7 @@ test('a click in a closed dialog shown in flow opens the Popover with its field 
 }) => {
   // iOS raises its keyboard only for a focus made while the tap is handled. A
   // frame callback asked for during the click runs before any frame the layer
-  // asks for, so it reads the state that the click itself left.
+  // asks for. So it reads the state that the click itself left.
   await openStory(
     page,
     'core-layer-dismissal--layers-in-closed-in-flow-dialog',
