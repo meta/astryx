@@ -552,9 +552,11 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   A link between docs names its target by doc identity and is resolved on
   every read; Doctor warns on one that names no doc.
 - **INV38 — A printed command runs as printed, and a value can take a
-  placeholder's place.** A command that the CLI prints, or carries as a string
-  in its JSON (such as `astryx build`'s `start.command`), runs as printed. The
-  one exception is an argument shown as a `<placeholder>`, which the CLI prints
+  placeholder's place.** A command that the CLI prints runs as printed. A
+  command that it carries as a string in its JSON (such as `astryx build`'s
+  `start.command`) runs once the caller puts its own invocation in place of the
+  `astryx` prefix, or in front of a bare subcommand. In both, the one other
+  exception is an argument shown as a `<placeholder>`, which the CLI prints
   only where it knows no value. When a release knows the value, it prints the
   value in the placeholder's place, and that is a compatible `[fix]`
   (`spec:AST-017` FR54): the field stays a string and the command does the same

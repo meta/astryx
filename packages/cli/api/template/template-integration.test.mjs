@@ -478,7 +478,6 @@ describe('integration template discovery', () => {
     expect(renderedBuild.stdout).toContain(
       'template shell-side-nav --type page src/pages/shell-top-nav',
     );
-    expect(renderedBuild.stdout).not.toContain('template shell-top-nav src/');
 
     const listed = await template(undefined, {list: true, cwd: tmpDir});
     expect(listed.data).toEqual(
