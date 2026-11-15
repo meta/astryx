@@ -32,6 +32,7 @@ import * as stylex from '@stylexjs/stylex';
 import {BaseTypeahead, type BaseTypeaheadHandle} from './BaseTypeahead';
 import {CommittedChoicesKeyContext} from './committedChoicesKey';
 import {Typeahead} from './Typeahead';
+import {TypeaheadItem} from './TypeaheadItem';
 import {Tokenizer} from '../Tokenizer';
 import {InternationalizationProvider} from '../i18n';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
@@ -1711,5 +1712,95 @@ describe('BaseTypeahead pending work after a dismissal', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('a disabled TypeaheadItem result', () => {
+  const people: SearchSource<SearchableItem> = {
+    search: () => [
+      {id: 'ana', label: 'Ana'},
+      {id: 'ben', label: 'Ben'},
+      {id: 'cy', label: 'Cy'},
+    ],
+    bootstrap: () => [],
+  };
+  function People({
+    disabledId,
+    onChange,
+  }: {
+    disabledId: string | null;
+    onChange: (item: SearchableItem | null) => void;
+  }) {
+    return (
+      <Typeahead
+        label="Add people"
+        searchSource={people}
+        value={null}
+        onChange={onChange}
+        debounceMs={0}
+        renderItem={item => (
+          <TypeaheadItem item={item} isDisabled={item.id === disabledId} />
+        )}
+      />
+    );
+  }
+
+  it('is announced as disabled, and Enter, click and tap pick nothing and keep the list open', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<People disabledId="ben" onChange={onChange} />);
+    await user.type(screen.getByRole('combobox'), 'a');
+    const ben = await screen.findByRole('option', {name: 'Ben', hidden: true});
+    expect(ben).toHaveAttribute('aria-disabled', 'true');
+    expect(
+      screen.getByRole('option', {name: 'Ana', hidden: true}),
+    ).not.toHaveAttribute('aria-disabled');
+
+    await user.click(ben);
+    fireEvent.pointerDown(ben, {pointerType: 'touch'});
+    fireEvent.click(ben);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole('combobox')).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+
+    // Arrow keys still reach it; Enter on it picks nothing.
+    const combobox = screen.getByRole('combobox');
+    for (
+      let step = 0;
+      step < 3 && combobox.getAttribute('aria-activedescendant') !== ben.id;
+      step++
+    ) {
+      await user.keyboard('{ArrowDown}');
+    }
+    expect(combobox).toHaveAttribute('aria-activedescendant', ben.id);
+    await user.keyboard('{Enter}');
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole('combobox')).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+
+    // The next result is still reached and picked.
+    await user.keyboard('{ArrowDown}{Enter}');
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0]).toMatchObject({id: 'cy'});
+  });
+
+  it('is picked again once it is no longer disabled', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const {rerender} = render(<People disabledId="ben" onChange={onChange} />);
+    await user.type(screen.getByRole('combobox'), 'a');
+    const ben = await screen.findByRole('option', {name: 'Ben', hidden: true});
+    expect(ben).toHaveAttribute('aria-disabled', 'true');
+    rerender(<People disabledId={null} onChange={onChange} />);
+    expect(
+      screen.getByRole('option', {name: 'Ben', hidden: true}),
+    ).not.toHaveAttribute('aria-disabled');
+    await user.click(screen.getByRole('option', {name: 'Ben', hidden: true}));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0]).toMatchObject({id: 'ben'});
   });
 });

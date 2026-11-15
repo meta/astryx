@@ -581,6 +581,14 @@ function preventOptionFocus(event: React.MouseEvent) {
   event.preventDefault();
 }
 
+/**
+ * Whether a result option is disabled. A disabled TypeaheadItem marks its
+ * option, so a pick reads the mark when it happens.
+ */
+function isOptionDisabled(option: Element | null): boolean {
+  return option?.getAttribute('aria-disabled') === 'true';
+}
+
 function isBelowMinQueryLength(query: string, minQueryLength: number): boolean {
   const length = characterCount(query);
   return length > 0 && length < minQueryLength;
@@ -1684,6 +1692,17 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       const pickedIndex = displayedResults.findIndex(
         other => other.id === item.id,
       );
+      // A disabled TypeaheadItem marks its option; read it when the pick
+      // happens.
+      if (
+        isOptionDisabled(
+          dropdownRef.current?.ownerDocument.getElementById(
+            `${listboxId}-option-${encodeURIComponent(item.id)}`,
+          ) ?? null,
+        )
+      ) {
+        return;
+      }
       const nextIndex =
         pickedIndex + 1 < displayedResults.length
           ? pickedIndex + 1
@@ -1764,6 +1783,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       searchSource,
       setLoading,
       replaceResults,
+      listboxId,
     ],
   );
 
@@ -2315,7 +2335,16 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
                 role="option"
                 aria-selected={isSelected}
                 tabIndex={-1}
-                onMouseDown={canKeepFocusList ? preventOptionFocus : undefined}
+                onMouseDown={event => {
+                  // A press on a disabled option keeps focus in the input,
+                  // so the list stays open.
+                  if (
+                    canKeepFocusList ||
+                    isOptionDisabled(event.currentTarget)
+                  ) {
+                    preventOptionFocus(event);
+                  }
+                }}
                 onClick={() => handleSelect(item)}
                 // Highlight follows pointer movement, not pointer
                 // presence: a menu that opens or reflows under a resting
