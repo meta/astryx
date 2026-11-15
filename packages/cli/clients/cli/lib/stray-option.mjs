@@ -126,7 +126,12 @@ function meant(given, options, subcommands, similar) {
       (value == null || !option.argChoices.includes(value))
     )
       return null;
-    if (!attached) return {words: [long], usesValue: false};
+    // An option that needs a value is named only with the value the call
+    // gave after the stray word.
+    if (!attached)
+      return option.required && value == null
+        ? null
+        : {words: [long], usesValue: false};
     return takesValue(option)
       ? {words: [`${long}=${value}`], usesValue: true}
       : null;
@@ -376,9 +381,14 @@ export function runParses(program, words) {
       );
       if (!option) return false;
       const next = words[i + 1];
-      // An option that needs a value takes the next word, whatever it is;
-      // with no word left it has none.
-      if (option.required && !word.includes('=') && next == null) return false;
+      // An option that needs a value has none when no word follows it, or
+      // when an option does: the program reads its own options first.
+      if (
+        option.required &&
+        !word.includes('=') &&
+        (next == null || (next.startsWith('-') && next !== '-'))
+      )
+        return false;
       if (
         takesValue(option) &&
         !word.includes('=') &&

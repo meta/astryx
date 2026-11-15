@@ -268,6 +268,7 @@ describe('runParses: an option that needs a value', () => {
       true,
     );
     expect(runParses(root, ['component', '--category=forms'])).toBe(true);
+    expect(runParses(root, ['component', '--category', '--json'])).toBe(false);
   });
 
   it('offers no near name that would need a value the call did not give', () => {
@@ -284,6 +285,19 @@ describe('runParses: an option that needs a value', () => {
     ).toEqual([]);
     expect(
       runs(answer(upgrade, '--frm', ['upgrade', '--frm'], '--from')),
+    ).toEqual([]);
+    expect(
+      runs(answer(upgrade, '--frm', ['upgrade', '--frm', '--json'], '--from')),
+    ).toEqual([]);
+    expect(
+      runs(
+        answer(
+          component,
+          '--categry',
+          ['component', 'Table', '--categry', '--json'],
+          '--category',
+        ),
+      ),
     ).toEqual([]);
     expect(
       runs(answer(upgrade, '--frm', ['upgrade', '--frm', '0.6.8'], '--from')),

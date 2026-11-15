@@ -31,6 +31,7 @@ import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {AstryxError} from '../error.mjs';
 import {logger} from '../logger.mjs';
+import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 
 /**
  * @typedef {import('./upgrade.type.mjs').UpgradeOptions} UpgradeOptions
@@ -77,7 +78,7 @@ export async function upgrade(options = {}, {cwd = process.cwd()} = {}) {
           ...(options.from
             ? [
                 {
-                  name: `astryx upgrade --from ${options.from}`,
+                  name: `astryx upgrade --from ${quoteCommandArgument(String(options.from))}`,
                   reason: 'show what a migration from that version changes',
                 },
               ]
