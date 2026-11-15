@@ -67,7 +67,7 @@ import {dispatchLayerEscapeKeyDown} from '../Layer/layerStack';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {composeEventHandlers} from '../utils';
 import {mergeRefs} from '../utils/mergeRefs';
-import {useModalOutlet} from '../Layer/modalOutlet';
+import {useModalOutletWithoutRef} from '../Layer/modalOutlet';
 import {BottomSheetHostContext} from './BottomSheetHostContext';
 import {
   BOTTOM_SHEET_STACK_DEFAULT_VIEW,
@@ -358,6 +358,7 @@ export function BottomSheetSwitcher({
   const stackViewRef = useRef(stackView);
   stackViewRef.current = stackView;
   const scrimWriteRef = useRef<BottomSheetScrimWrite>({frame: null});
+  // Releases the pending scrim write frame on unmount.
   useEffect(() => () => cancelScrimWrite(scrimWriteRef.current), []);
   // What the flow's place in the stack was when it left the registry: its
   // depth and the open sheet beneath it. React runs the registration
@@ -539,7 +540,10 @@ export function BottomSheetSwitcher({
   // `hostSheet` across a handoff, and the fading retained dialog is never the
   // outlet. A closing flow stops supplying at once. Passive: it runs after the
   // layout effects that present the step dialogs.
-  useModalOutlet(
+  // The flow has no element for the outlet's ref. Its wrapper's ref is the
+  // sheet stack's tree-order anchor, which the stack reads in the closing
+  // commit, and the element of its host step changes on a handoff.
+  useModalOutletWithoutRef(
     hostDialogRef,
     isModal && isFlowOpen,
     stackView.isTop || !stackView.isStacked,
@@ -564,6 +568,9 @@ export function BottomSheetSwitcher({
     presentationCounterRef.current += 1;
     presentationOrderRef.current.set(sheetId, presentationCounterRef.current);
   }, []);
+  // Syncs document focus with the flow's visibility. When the flow hides, focus
+  // goes to the opener, to the sheet now on top, or to the target of the
+  // registry.
   useLayoutEffect(() => {
     if (isFlowVisible) {
       if (!hasScrim) {
@@ -694,6 +701,7 @@ export function BottomSheetSwitcher({
       unregister();
     };
   }, [hasScrim, isFlowVisible, onBeforeSheetPresent]);
+  // Syncs the open state of this flow in the sheet stack registry.
   useLayoutEffect(() => {
     if (isFlowVisible && hasScrim) {
       setBottomSheetOpen(stackKeyRef.current, isFlowOpen);

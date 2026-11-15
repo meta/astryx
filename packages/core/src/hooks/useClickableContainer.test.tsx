@@ -15,6 +15,13 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {useRef} from 'react';
 import {fireEvent, render, screen} from '@testing-library/react';
 import {useClickableContainer} from './useClickableContainer';
+import {pressBoxProps} from '../privateAttributes/pressBox.stylex';
+
+const {cancelPress} = vi.hoisted(() => ({cancelPress: vi.fn()}));
+vi.mock('../utils/pressFeedback', async importOriginal => ({
+  ...(await importOriginal<typeof import('../utils/pressFeedback')>()),
+  cancelPress,
+}));
 
 // The scheme the rule exists to stop (kept in consts so the JSX below stays
 // lint-clean — the tests are ABOUT these URLs never navigating).
@@ -232,5 +239,77 @@ describe('useClickableContainer navigation — blocked href keeps the rest', () 
     fireEvent.click(screen.getByTestId('card'));
     expect(onClick).toHaveBeenCalledTimes(1);
     expect(open).not.toHaveBeenCalled();
+  });
+});
+
+describe('onPointerDown', () => {
+  function Harness({
+    disabled = false,
+    ownsBox = false,
+  }: {
+    disabled?: boolean;
+    ownsBox?: boolean;
+  }) {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const {onClick, onPointerDown} = useClickableContainer({
+      containerRef,
+      onClick: () => {},
+      disabled,
+    });
+    return (
+      <div
+        data-testid="container"
+        data-astryx-pressable=""
+        ref={containerRef}
+        onClick={onClick}
+        onPointerDown={onPointerDown}>
+        {ownsBox ? <span {...pressBoxProps} /> : null}
+        <span>Surface</span>
+        <button type="button">Nested</button>
+      </div>
+    );
+  }
+
+  afterEach(() => {
+    cancelPress.mockClear();
+  });
+
+  it('cancels the press on the container for a finger press that starts on a nested control', () => {
+    render(<Harness />);
+    fireEvent.pointerDown(screen.getByRole('button', {name: 'Nested'}), {
+      pointerType: 'touch',
+    });
+    expect(cancelPress).toHaveBeenCalledWith(screen.getByTestId('container'));
+  });
+
+  it('leaves a mouse or pen press to its own paint on a container that owns no control’s box', () => {
+    render(<Harness />);
+    const nested = screen.getByRole('button', {name: 'Nested'});
+    fireEvent.pointerDown(nested, {pointerType: 'mouse'});
+    fireEvent.pointerDown(nested, {pointerType: 'pen'});
+    expect(cancelPress).not.toHaveBeenCalled();
+  });
+
+  it('cancels a mouse or pen press on a nested control of a container that owns a control’s box, and leaves one on the surface alone', () => {
+    render(<Harness ownsBox />);
+    const nested = screen.getByRole('button', {name: 'Nested'});
+    fireEvent.pointerDown(nested, {pointerType: 'mouse'});
+    fireEvent.pointerDown(nested, {pointerType: 'pen'});
+    expect(cancelPress).toHaveBeenCalledTimes(2);
+    expect(cancelPress).toHaveBeenCalledWith(screen.getByTestId('container'));
+    cancelPress.mockClear();
+    fireEvent.pointerDown(screen.getByText('Surface'), {pointerType: 'mouse'});
+    expect(cancelPress).not.toHaveBeenCalled();
+  });
+
+  it('leaves a finger press on the surface, or in a disabled container, alone', () => {
+    const {unmount} = render(<Harness />);
+    fireEvent.pointerDown(screen.getByText('Surface'), {pointerType: 'touch'});
+    unmount();
+    render(<Harness disabled />);
+    fireEvent.pointerDown(screen.getByRole('button', {name: 'Nested'}), {
+      pointerType: 'touch',
+    });
+    expect(cancelPress).not.toHaveBeenCalled();
   });
 });

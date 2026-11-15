@@ -2,21 +2,25 @@
 
 /**
  * @file actionGroupTracker.ts
- * @input The tracked elements, the action selector and hit expansion, and the
- *   press paint and fade clocks
+ * @input The tracked elements, the action selector and hit expansion, the
+ *   group's axis, and the press paint and the press controller's fade clock
  * @output createActionGroupTracker, ActionGroupTracker,
- *   ActionGroupTrackerOptions, ActionGroupTarget
+ *   ActionGroupTrackerOptions, ActionGroupTarget and measureActions (the
+ *   actions the tracker tracks, measured). Also onCenterLine (where a finger
+ *   counts in a one-axis group) and DISABLED_SELECTOR (the actions it skips)
  * @position Internal core tracker for a held finger that slides across a
  *   group of actions. Gesture recognizers drive it.
  *
  * SYNC: When modified, update actionGroupTracker.test.ts
  */
 
-import {PRESSED_ATTRIBUTE} from '../utils/pressFeedback';
-import {PRESS_FADE_MS} from '../utils/pressGesture';
+import {clickAndReport, clickForLift} from '../utils/browserClickWait';
+import {armClickGuard} from '../utils/clickGuard';
+import {subscribeInput} from '../utils/inputStream';
+import {PRESSED_ATTRIBUTE, pressFadeMs} from '../utils/pressFeedback';
 
 /** An action that is not enabled takes no highlight and does not run. */
-const DISABLED = ':disabled, [aria-disabled="true"]';
+export const DISABLED_SELECTOR = ':disabled, [aria-disabled="true"]';
 
 /** A target the tracker measured: its element and viewport rect, px. */
 export interface ActionGroupTarget {
@@ -27,18 +31,57 @@ export interface ActionGroupTarget {
   readonly bottom: number;
 }
 
+/**
+ * The actions under `roots` that `itemSelector` selects, that are enabled and
+ * that `isItem` keeps, in document order. Each box is read once.
+ */
+export function measureActions(
+  roots: Iterable<Element | null | undefined>,
+  itemSelector: string,
+  isItem?: (element: HTMLElement) => boolean,
+): ActionGroupTarget[] {
+  const targets: ActionGroupTarget[] = [];
+  for (const root of roots) {
+    if (root == null) {
+      continue;
+    }
+    for (const element of root.querySelectorAll<HTMLElement>(itemSelector)) {
+      if (element.matches(DISABLED_SELECTOR) || isItem?.(element) === false) {
+        continue;
+      }
+      const {left, top, right, bottom} = element.getBoundingClientRect();
+      targets.push({element, left, top, right, bottom});
+    }
+  }
+  return targets;
+}
+
 export interface ActionGroupTrackerOptions {
   /** The elements whose actions are tracked, read when a press begins. */
   roots: () => Iterable<Element | null | undefined>;
   /** Selects the actions inside the roots. */
   itemSelector: string;
+  /** Keeps only the actions this accepts among those `itemSelector` selects. */
+  isItem?: (element: HTMLElement) => boolean;
   /** How far outside an action the finger keeps it highlighted, px. */
   highlightExpansion: number;
   /**
    * Paint the highlighted action with the press attribute (`on`, then
-   * `fading` at the lift). @default true
+   * `fading` at the lift). A function decides per action, read at each write.
+   * @default true
    */
-  paintsHighlight?: boolean;
+  paintsHighlight?: boolean | ((item: HTMLElement) => boolean);
+  /**
+   * The axis of a one-row or one-column group. The finger then counts on the
+   * group's center line, clamped to its ends. A drift off the group keeps
+   * choosing along the axis, and Escape cancels the press.
+   */
+  tracksAlong?: 'x' | 'y';
+  /**
+   * The tracker cancelled the press itself (Escape): the owner takes back
+   * what it shows for the press. Not called for the owner's own `cancel()`.
+   */
+  onCancel?: () => void;
   /**
    * Called whenever the highlighted action changes (null: none), with the
    * one it replaces.
@@ -55,7 +98,8 @@ export interface ActionGroupTrackerOptions {
    * target past the group's ends commits the lift there wherever the finger
    * lifts.
    * @default the target whose rect, grown by `highlightExpansion`, holds the
-   *   point; none between or outside them
+   *   point, the one the press landed on where several do; none between or
+   *   outside them
    */
   resolveTarget?: (
     x: number,
@@ -70,9 +114,9 @@ export interface ActionGroupTrackerOptions {
    */
   onActivated?: (item: HTMLElement, cancelled: boolean) => void;
   /**
-   * After the lift ran an action, take the browser's own click for that
-   * touch (left to it by a recognizer that did not claim the touch), so the
-   * action runs once. @default false
+   * After the lift ran an action, the shared click guard takes the browser's
+   * own click for that touch, so the action runs once. A recognizer that did
+   * not claim the touch leaves that click to the browser. @default false
    */
   swallowsNativeClick?: boolean;
 }
@@ -81,8 +125,13 @@ export interface ActionGroupTracker {
   /**
    * A press began at viewport (x, y): read the actions' rects once and
    * highlight the one under it. An inert press is taken but tracks nothing.
+   * `landed` is the node the press landed on.
    */
-  begin(x: number, y: number, options?: {inert?: boolean}): void;
+  begin(
+    x: number,
+    y: number,
+    options?: {inert?: boolean; landed?: Node | null},
+  ): void;
   /** The finger moved to viewport (x, y). */
   move(x: number, y: number): void;
   /**
@@ -118,6 +167,60 @@ export interface ActionGroupTracker {
   dispose(): void;
 }
 
+/** A one-axis group's box, px, and the window whose keys can cancel. */
+interface GroupBand {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  readonly view: Window | null;
+}
+
+/** The box around every root, read once; null when no root is rendered. */
+function measureBand(
+  roots: Iterable<Element | null | undefined>,
+): GroupBand | null {
+  let band: GroupBand | null = null;
+  for (const root of roots) {
+    if (root == null) {
+      continue;
+    }
+    const rect = root.getBoundingClientRect();
+    if (band == null) {
+      band = {
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+        view: root.ownerDocument.defaultView,
+      };
+    } else {
+      band.left = Math.min(band.left, rect.left);
+      band.top = Math.min(band.top, rect.top);
+      band.right = Math.max(band.right, rect.right);
+      band.bottom = Math.max(band.bottom, rect.bottom);
+    }
+  }
+  return band;
+}
+
+/**
+ * Where a finger counts in a one-axis group: on the group's center line
+ * across the axis, and clamped to its ends along it.
+ */
+export function onCenterLine(
+  band: Pick<GroupBand, 'left' | 'top' | 'right' | 'bottom'>,
+  axis: 'x' | 'y',
+  x: number,
+  y: number,
+): [number, number] {
+  const clamp = (value: number, low: number, high: number) =>
+    Math.min(Math.max(value, low), high);
+  return axis === 'x'
+    ? [clamp(x, band.left, band.right), (band.top + band.bottom) / 2]
+    : [(band.left + band.right) / 2, clamp(y, band.top, band.bottom)];
+}
+
 interface TrackedAction {
   readonly element: HTMLElement;
   left: number;
@@ -127,60 +230,13 @@ interface TrackedAction {
 }
 
 /**
- * Swallow the browser's own click for a touch that the lift already acted
- * on. The listeners exist only from that lift until the click, the next
- * press, or the next key. An activation with `detail === 0` (a key or
- * assistive technology) always passes, and the swallower keeps waiting
- * (`AST-094`).
- */
-function swallowNextClick(view: Window): void {
-  const disarm = () => {
-    view.removeEventListener('click', onClick, true);
-    view.removeEventListener('pointerdown', disarm, true);
-    view.removeEventListener('keydown', disarm, true);
-  };
-  const onClick = (event: MouseEvent) => {
-    if (!event.isTrusted || event.detail === 0) {
-      return;
-    }
-    disarm();
-    event.preventDefault();
-    event.stopImmediatePropagation();
-  };
-  view.addEventListener('click', onClick, true);
-  view.addEventListener('pointerdown', disarm, true);
-  view.addEventListener('keydown', disarm, true);
-}
-
-/**
- * Click `element` (its own `click()`, so its activation behavior and every
- * handler run as for any click) and report whether a handler cancelled it.
- * The event is read from a capture listener that exists only for the call.
- */
-function clickAndReport(element: HTMLElement): boolean {
-  const view = element.ownerDocument.defaultView;
-  let clicked: Event | null = null;
-  const grab = (event: Event) => {
-    if (clicked == null && event.target === element) {
-      clicked = event;
-    }
-  };
-  view?.addEventListener('click', grab, true);
-  try {
-    element.click();
-  } finally {
-    view?.removeEventListener('click', grab, true);
-  }
-  return (clicked as Event | null)?.defaultPrevented === true;
-}
-
-/**
  * Create a tracker. `getOptions` is read on every call, so a hook can pass
  * the latest props without recreating it.
  *
  * The tracker treats a group of actions as one control, as UIKit does:
  * - The action under the finger highlights. Between or outside the actions,
- *   nothing highlights.
+ *   nothing highlights. A one-axis group (`tracksAlong`) reads the finger on
+ *   its center line instead, so a drift off the group keeps its action.
  * - The lift runs the action under the finger, and its highlight fades.
  * - An inert press is taken but paints and runs nothing.
  *
@@ -196,14 +252,21 @@ export function createActionGroupTracker(
   let actions: TrackedAction[] = [];
   let highlighted: HTMLElement | null = null;
   let beganOn: HTMLElement | null = null;
+  let landedOn: Node | null = null;
   let isTracking = false;
   let isInert = false;
   // The finger's last position: `remeasure` resolves it again.
   let lastX = 0;
   let lastY = 0;
   const fades = new Map<Element, ReturnType<typeof setTimeout>>();
+  // A one-axis group's box, read at the begin: the finger counts inside it.
+  let band: GroupBand | null = null;
+  let stopEscape: (() => void) | null = null;
 
-  const paints = () => getOptions().paintsHighlight !== false;
+  const paints = (element: HTMLElement) => {
+    const option = getOptions().paintsHighlight;
+    return typeof option === 'function' ? option(element) : option !== false;
+  };
 
   const clearFade = (element: Element) => {
     const fade = fades.get(element);
@@ -213,25 +276,27 @@ export function createActionGroupTracker(
     }
   };
   const paint = (element: HTMLElement) => {
-    if (!paints()) {
+    if (!paints(element)) {
       return;
     }
     clearFade(element);
     element.setAttribute(PRESSED_ATTRIBUTE, 'on');
   };
   const cut = (element: HTMLElement) => {
-    if (!paints()) {
+    if (!paints(element)) {
       return;
     }
     clearFade(element);
     element.removeAttribute(PRESSED_ATTRIBUTE);
   };
   const release = (element: HTMLElement) => {
-    if (!paints()) {
+    if (!paints(element)) {
       return;
     }
     clearFade(element);
     element.setAttribute(PRESSED_ATTRIBUTE, 'fading');
+    // The stylesheet's release follows the theme's tempo, so the fade ends on
+    // the press controller's clock.
     fades.set(
       element,
       setTimeout(() => {
@@ -239,7 +304,7 @@ export function createActionGroupTracker(
         if (element.getAttribute(PRESSED_ATTRIBUTE) === 'fading') {
           element.removeAttribute(PRESSED_ATTRIBUTE);
         }
-      }, PRESS_FADE_MS),
+      }, pressFadeMs(element)),
     );
   };
 
@@ -259,34 +324,26 @@ export function createActionGroupTracker(
   };
 
   const measure = (): TrackedAction[] => {
-    const {roots, itemSelector} = getOptions();
-    const next: TrackedAction[] = [];
-    for (const root of roots()) {
-      if (root == null) {
-        continue;
-      }
-      for (const element of root.querySelectorAll<HTMLElement>(itemSelector)) {
-        if (element.matches(DISABLED)) {
-          continue;
-        }
-        const rect = element.getBoundingClientRect();
-        next.push({
-          element,
-          left: rect.left,
-          top: rect.top,
-          right: rect.right,
-          bottom: rect.bottom,
-        });
-      }
-    }
-    return next;
+    const {roots, itemSelector, isItem} = getOptions();
+    return measureActions(roots(), itemSelector, isItem);
   };
 
-  const actionAt = (x: number, y: number): HTMLElement | null => {
-    const {resolveTarget, highlightExpansion: margin} = getOptions();
+  const actionAt = (fingerX: number, fingerY: number): HTMLElement | null => {
+    const {
+      resolveTarget,
+      highlightExpansion: margin,
+      tracksAlong,
+    } = getOptions();
+    const [x, y] =
+      band == null || tracksAlong == null
+        ? [fingerX, fingerY]
+        : onCenterLine(band, tracksAlong, fingerX, fingerY);
     if (resolveTarget != null) {
       return actions.length === 0 ? null : resolveTarget(x, y, actions);
     }
+    // Rects that share an edge, or that have no layout (a test renderer), can
+    // both hold the point: the one the press landed on wins.
+    let first: HTMLElement | null = null;
     for (const action of actions) {
       if (
         x >= action.left - margin &&
@@ -294,22 +351,61 @@ export function createActionGroupTracker(
         y >= action.top - margin &&
         y <= action.bottom + margin
       ) {
-        return action.element;
+        if (landedOn != null && action.element.contains(landedOn)) {
+          return action.element;
+        }
+        first ??= action.element;
       }
     }
-    return null;
+    return first;
   };
 
   const reset = () => {
     actions = [];
     highlighted = null;
     beganOn = null;
+    landedOn = null;
     isTracking = false;
     isInert = false;
+    band = null;
+    stopEscape?.();
+    stopEscape = null;
+  };
+
+  const cancel = () => {
+    const current = highlighted;
+    const wasTracking = isTracking;
+    reset();
+    if (current != null) {
+      cut(current);
+      if (wasTracking) {
+        getOptions().onHighlightChange?.(null, current);
+      }
+    }
+  };
+
+  // Escape takes back a press in a one-axis group, where no slide-off can.
+  const listenForEscape = (view: Window | null) => {
+    if (view == null) {
+      return;
+    }
+    // The key is handled, so a dialog around the group stays open.
+    stopEscape = subscribeInput(
+      view,
+      'keydown',
+      event => {
+        if (event.key === 'Escape' && isTracking) {
+          event.preventDefault();
+          cancel();
+          getOptions().onCancel?.();
+        }
+      },
+      {cancels: true},
+    );
   };
 
   return {
-    begin(x, y, {inert = false} = {}) {
+    begin(x, y, {inert = false, landed = null} = {}) {
       // A press can begin while another is tracked, when a second recognizer
       // takes over the finger (a trigger's held press, then the menu's): the
       // action the first one lit loses its paint.
@@ -317,11 +413,19 @@ export function createActionGroupTracker(
       if (previous != null) {
         cut(previous);
       }
+      stopEscape?.();
+      stopEscape = null;
       // An inert press tracks no action: nothing to paint, nothing to run.
       actions = inert ? [] : measure();
+      const {roots, tracksAlong} = getOptions();
+      band = inert || tracksAlong == null ? null : measureBand(roots());
+      if (band != null) {
+        listenForEscape(band.view);
+      }
       highlighted = null;
       isTracking = true;
       isInert = inert;
+      landedOn = landed;
       lastX = x;
       lastY = y;
       getOptions().onMove?.(x, y);
@@ -352,39 +456,31 @@ export function createActionGroupTracker(
         return null;
       }
       release(lifted);
-      if (lifted.matches(DISABLED)) {
+      if (lifted.matches(DISABLED_SELECTOR)) {
         return null;
       }
       const {onActivate, onActivated, swallowsNativeClick} = getOptions();
       if (onActivate != null) {
         onActivate(lifted);
+        if (swallowsNativeClick === true) {
+          armClickGuard(lifted.ownerDocument);
+        }
       } else {
-        const cancelled = clickAndReport(lifted);
+        const cancelled =
+          swallowsNativeClick === true
+            ? clickForLift(lifted)
+            : clickAndReport(lifted);
         onActivated?.(lifted, cancelled);
-      }
-      const view = lifted.ownerDocument.defaultView;
-      if (swallowsNativeClick === true && view != null) {
-        swallowNextClick(view);
       }
       return lifted;
     },
-    cancel() {
-      const current = highlighted;
-      const wasTracking = isTracking;
-      reset();
-      if (current != null) {
-        cut(current);
-        if (wasTracking) {
-          getOptions().onHighlightChange?.(null, current);
-        }
-      }
-    },
+    cancel,
     offsetBy(dx, dy) {
-      for (const action of actions) {
-        action.left += dx;
-        action.right += dx;
-        action.top += dy;
-        action.bottom += dy;
+      for (const box of band == null ? actions : [...actions, band]) {
+        box.left += dx;
+        box.right += dx;
+        box.top += dy;
+        box.bottom += dy;
       }
     },
     remeasure() {
@@ -392,6 +488,9 @@ export function createActionGroupTracker(
         return;
       }
       actions = measure();
+      if (band != null) {
+        band = measureBand(getOptions().roots()) ?? band;
+      }
       highlight(actionAt(lastX, lastY));
     },
     get highlighted() {

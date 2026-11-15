@@ -1,12 +1,16 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {
   AlertDialog,
   useImperativeAlertDialog,
 } from '@astryxdesign/core/AlertDialog';
 import {Button} from '@astryxdesign/core/Button';
+import {Stack} from '@astryxdesign/core/Stack';
+import {Text} from '@astryxdesign/core/Text';
+import {useToast} from '@astryxdesign/core/Toast';
+import type {ToastDismissFn} from '@astryxdesign/core/Toast';
 
 const meta: Meta<typeof AlertDialog> = {
   title: 'Core/AlertDialog',
@@ -224,5 +228,54 @@ export const Inline: Story = {
     actionLabel: 'Delete',
     onOpenChange: () => {},
     onAction: () => {},
+  },
+};
+
+/**
+ * An action that raises a toast. Under a finger the alert fades out above the
+ * toast. The toast stays live meanwhile: its Undo button takes a tap during
+ * the fade, and assistive technology reads it.
+ */
+export const AlertOverAToast: Story = {
+  render: function AlertOverAToastStory() {
+    const [isOpen, setIsOpen] = useState(false);
+    const [undoCount, setUndoCount] = useState(0);
+    const toast = useToast();
+    // The story's one toast. A new delete replaces it, and leaving the story
+    // dismisses it.
+    const dismissRef = useRef<ToastDismissFn | null>(null);
+    useEffect(() => () => dismissRef.current?.(), []);
+    return (
+      <Stack gap={2}>
+        <Button
+          label="Delete item"
+          variant="destructive"
+          onClick={() => setIsOpen(true)}
+        />
+        <Text>{`Undo taps: ${undoCount}`}</Text>
+        <AlertDialog
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          title="Delete item?"
+          description="This action cannot be undone. The item and all its data will be permanently removed."
+          actionLabel="Delete"
+          onAction={() => {
+            dismissRef.current = toast({
+              body: 'Item deleted.',
+              uniqueID: 'alert-over-a-toast',
+              isAutoHide: false,
+              endContent: (
+                <Button
+                  label="Undo"
+                  variant="secondary"
+                  onClick={() => setUndoCount(count => count + 1)}
+                />
+              ),
+            });
+            setIsOpen(false);
+          }}
+        />
+      </Stack>
+    );
   },
 };

@@ -452,7 +452,7 @@ export function useTriggerMenu(
   });
   const {show: showPopover, hide: hidePopover} = popover;
 
-  // Cleanup on unmount
+  // Releases the search timer and the anchor span on unmount.
   useEffect(() => {
     return () => {
       if (searchTimeoutRef.current) {

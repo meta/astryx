@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "id": "newsletter-signup",
+  "source": "io-1",
+  "title": "Newsletter signup validation",
+  "prompt": "Build a newsletter signup form with an \"Email\" field and a \"Subscribe\" button. When someone submits with an empty or invalid email address, show the error \"Enter a valid email address\" next to the field, mark the field as invalid, and connect the error to the field so screen readers announce it with the field. When the email address is valid, replace the form with the message \"Thanks for subscribing!\". Do not make network requests."
+}

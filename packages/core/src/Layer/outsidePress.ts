@@ -4,24 +4,67 @@
 
 /**
  * @file outsidePress.ts
- * @input Listens for pointerdown, pointerup and pointercancel on a document
- * @output Exports watchOutsidePress and useOutsidePress, which owns one watch
- *   for a component: start on show, stop on hide, stop on unmount; and the
- *   inside tests a text field's owner runs: isPressInsideOwnedLayer for a
- *   press, isFocusInsideOwnedLayer for a blur
- * @position Internal to Layer; the outside-press dismissal for a manual
- *   popover whose owner decides what counts as inside (a combobox's field
- *   and its list). Not exported from the package.
- *
- * A press closes the layer only when it starts and ends outside, as native
- * light dismiss does: a pointerdown outside is remembered, the pointerup that
- * follows closes the layer if it is outside too, and a pointercancel (the
- * browser took the gesture for a scroll or a pinch) forgets it. Inside is
- * judged on the event's composed path, so a field or list inside an open
- * shadow root, which the document sees as its shadow host, is still inside.
+ * @input Pointer presses on a document and on the shadow roots around a
+ *   given root; with closesOnPan or onPan, pan moves from core's input stream
+ * @output watchOutsidePress, and useOutsidePress, one watch per component.
+ *   noteOutsideDismissal and outsideDismissalCount keep a per-document count
+ *   of layers that an outside press or focus move closed. The inside tests
+ *   are isPressInsideOwnedLayer and isFocusInsideOwnedLayer
+ * @position Internal to Layer: the outside-press dismissal for a manual
+ *   popover whose owner decides what counts as inside. Not exported.
  */
 
 import {useCallback, useEffect, useMemo, useRef} from 'react';
+import {UIKIT_PAN} from '../motion/uikit/gestures';
+import {shadowHostOf, shadowRootsOutward} from '../utils/flatTree';
+import {subscribeInput} from '../utils/inputStream';
+import {isElement, isNode} from '../utils/nodeType';
+import {touchActionAllowsPan} from '../utils/scrollView';
+import {sharedWeakMap} from '../utils/sharedRealm';
+
+export interface OutsidePressOptions {
+  /** The pointer types the watch follows; every type when omitted. */
+  readonly pointerTypes?: ReadonlyArray<string>;
+  /**
+   * A press outside also closes the layer as it begins to pan, or when the
+   * browser takes it. While one press outside is followed, other pointers are
+   * ignored. A new primary pointer starts a new press.
+   */
+  readonly closesOnPan?: boolean;
+  /**
+   * Called as a press outside begins a pan that the browser could take as a
+   * scroll: `touch-action` from the press's target up leaves the pan's axis
+   * to the browser. A pan on a control that takes the touch itself (a
+   * resize handle, a swiped row) is not reported. The watch then judges that
+   * press no more, and it calls `onOutside` for no press: an owner whose
+   * layer the browser light-dismisses learns only of pans. Ignored with
+   * `closesOnPan`.
+   */
+  readonly onPan?: () => void;
+  /**
+   * The shadow root the layer renders in. The document sees a press inside a
+   * closed root as a press on its host. So each root from this one out to the
+   * document judges presses too, and an inner root's judgment stands.
+   */
+  readonly root?: Node | null;
+}
+
+// A modal host's backdrop press reads this. A press that closed a layer above
+// the host is that layer's, so the host stays open.
+const outsideDismissals = sharedWeakMap<Document, number>(
+  'layer/outside-press/outside-dismissals',
+  1,
+);
+
+/** Records that a layer in `doc` is closing because a press or focus went outside it. */
+export function noteOutsideDismissal(doc: Document): void {
+  outsideDismissals.set(doc, (outsideDismissals.get(doc) ?? 0) + 1);
+}
+
+/** How many layers an outside press has closed in `doc` so far. */
+export function outsideDismissalCount(doc: Document): number {
+  return outsideDismissals.get(doc) ?? 0;
+}
 
 /**
  * Watch the owner's document for a press outside, until the returned function
@@ -30,38 +73,170 @@ import {useCallback, useEffect, useMemo, useRef} from 'react';
  * @param owner - The element that owns the layer (the field); its document is
  *   watched.
  * @param isInside - Whether a press with this composed path is inside.
- * @param onOutside - Called once for each press that starts and ends outside.
+ * @param onOutside - Called once for each press that starts and ends outside,
+ *   as native light dismiss does. With `closesOnPan`, also when that press
+ *   pans or is cancelled.
  * @returns Stops watching.
  */
 export function watchOutsidePress(
   owner: Element,
   isInside: (path: ReadonlyArray<EventTarget>) => boolean,
   onOutside: () => void,
+  {
+    pointerTypes,
+    closesOnPan = false,
+    onPan,
+    root = null,
+  }: OutsidePressOptions = {},
 ): () => void {
   const doc = owner.ownerDocument;
+  const reportPan = closesOnPan ? undefined : onPan;
+  const followsPans = closesOnPan || reportPan != null;
+  const shadows = root == null ? [] : shadowRootsOutward(root);
   let startedOutside = false;
+  let panStart: {id: number; x: number; y: number} | null = null;
+  const follows = (event: PointerEvent) =>
+    pointerTypes == null || pointerTypes.includes(event.pointerType);
+  const close = () => {
+    startedOutside = false;
+    panStart = null;
+    noteOutsideDismissal(doc);
+    onOutside();
+  };
 
   // Capture phase, so a press whose target stops propagation is still seen.
+  // An inner root's listener runs after the outer ones', so its judgment
+  // stands.
   const handleDown = (event: PointerEvent) => {
+    if (!follows(event)) {
+      return;
+    }
+    if (
+      closesOnPan &&
+      panStart != null &&
+      panStart.id !== event.pointerId &&
+      !event.isPrimary
+    ) {
+      return;
+    }
     startedOutside = !isInside(event.composedPath());
+    if (followsPans) {
+      panStart = startedOutside
+        ? {id: event.pointerId, x: event.clientX, y: event.clientY}
+        : null;
+    }
   };
-  const handleUp = (event: PointerEvent) => {
+  const handleMove = (event: PointerEvent) => {
+    if (
+      panStart?.id === event.pointerId &&
+      Math.max(
+        Math.abs(event.clientX - panStart.x),
+        Math.abs(event.clientY - panStart.y),
+      ) >= UIKIT_PAN.hysteresis.value
+    ) {
+      if (reportPan != null) {
+        const axis =
+          Math.abs(event.clientX - panStart.x) >=
+          Math.abs(event.clientY - panStart.y)
+            ? 'x'
+            : 'y';
+        const target = event.composedPath()[0];
+        startedOutside = false;
+        panStart = null;
+        if (isElement(target) && touchActionAllowsPan(target, axis)) {
+          reportPan();
+        }
+        return;
+      }
+      close();
+    }
+  };
+  const judgeUp = (event: PointerEvent) => {
+    if (
+      reportPan != null ||
+      !follows(event) ||
+      (closesOnPan && panStart?.id !== event.pointerId)
+    ) {
+      return;
+    }
     const wasOutside = startedOutside;
     startedOutside = false;
+    panStart = null;
     if (wasOutside && !isInside(event.composedPath())) {
+      noteOutsideDismissal(doc);
       onOutside();
     }
   };
-  const handleCancel = () => {
-    startedOutside = false;
+  // The document and each root see a lift inside a deeper closed root as a
+  // lift on that root's host. So each of them judges, in the capture phase,
+  // only a lift whose path does not hold the host below it. The innermost root
+  // judges every lift it sees. A host judges a lift on itself, which no root
+  // sees.
+  let judgedLift: Event | null = null;
+  const judgeUpUnlessBelow =
+    (hostBelow: Element | null) => (event: PointerEvent) => {
+      if (
+        event === judgedLift ||
+        (hostBelow != null && event.composedPath().includes(hostBelow))
+      ) {
+        return;
+      }
+      judgedLift = event;
+      judgeUp(event);
+    };
+  const handleUp = judgeUpUnlessBelow(shadows.at(-1)?.host ?? null);
+  const liftJudges = shadows.map(({root: shadow, host}, index) => ({
+    shadow,
+    host,
+    handleRootUp: judgeUpUnlessBelow(
+      index === 0 ? null : shadows[index - 1].host,
+    ) as EventListener,
+    handleHostUp: judgeUpUnlessBelow(null) as EventListener,
+  }));
+  const handleCancel = (event: PointerEvent) => {
+    if (!follows(event)) {
+      return;
+    }
+    if (closesOnPan && panStart?.id === event.pointerId) {
+      close();
+    } else if (!closesOnPan) {
+      startedOutside = false;
+      panStart = null;
+    }
   };
 
-  doc.addEventListener('pointerdown', handleDown, true);
+  const judges: EventTarget[] = [
+    doc,
+    ...shadows.map(({root: shadow}) => shadow),
+  ];
+  for (const target of judges) {
+    target.addEventListener('pointerdown', handleDown as EventListener, true);
+  }
+  const view = doc.defaultView;
+  const stopMoves =
+    followsPans && view != null
+      ? subscribeInput(view, 'pointermove', handleMove)
+      : null;
   doc.addEventListener('pointerup', handleUp, true);
+  for (const {shadow, host, handleRootUp, handleHostUp} of liftJudges) {
+    shadow.addEventListener('pointerup', handleRootUp, true);
+    host.addEventListener('pointerup', handleHostUp);
+  }
   doc.addEventListener('pointercancel', handleCancel, true);
   return () => {
-    doc.removeEventListener('pointerdown', handleDown, true);
+    for (const target of judges) {
+      target.removeEventListener(
+        'pointerdown',
+        handleDown as EventListener,
+        true,
+      );
+    }
+    stopMoves?.();
     doc.removeEventListener('pointerup', handleUp, true);
+    for (const {shadow, host, handleRootUp, handleHostUp} of liftJudges) {
+      shadow.removeEventListener('pointerup', handleRootUp, true);
+      host.removeEventListener('pointerup', handleHostUp);
+    }
     doc.removeEventListener('pointercancel', handleCancel, true);
   };
 }
@@ -72,6 +247,7 @@ export interface OutsidePressWatch {
     owner: Element,
     isInside: (path: ReadonlyArray<EventTarget>) => boolean,
     onOutside: () => void,
+    options?: OutsidePressOptions,
   ) => void;
   /** Stop watching; does nothing when no watch is running. */
   stop: () => void;
@@ -90,33 +266,15 @@ export function useOutsidePress(): OutsidePressWatch {
     stopRef.current = null;
   }, []);
   const start = useCallback<OutsidePressWatch['start']>(
-    (owner, isInside, onOutside) => {
+    (owner, isInside, onOutside, options) => {
       stopRef.current?.();
-      stopRef.current = watchOutsidePress(owner, isInside, onOutside);
+      stopRef.current = watchOutsidePress(owner, isInside, onOutside, options);
     },
     [],
   );
+  // Stops the outside-press listeners on unmount.
   useEffect(() => stop, [stop]);
   return useMemo(() => ({start, stop}), [start, stop]);
-}
-
-// Node, Element and ShadowRoot are checked by nodeType, not instanceof: a
-// node from a same-origin iframe or a Picture-in-Picture window belongs to
-// another realm, where instanceof against this window's classes is false.
-function isNode(target: unknown): target is Node {
-  return (
-    typeof target === 'object' &&
-    target !== null &&
-    typeof (target as {nodeType?: unknown}).nodeType === 'number'
-  );
-}
-
-function isElement(node: Node): node is Element {
-  return node.nodeType === 1;
-}
-
-function isShadowRoot(node: Node): node is ShadowRoot {
-  return node.nodeType === 11 && 'host' in node;
 }
 
 /** Whether `node` is the layer with this id, or inside it across shadow roots. */
@@ -124,8 +282,7 @@ function isWithinLayer(node: Node, layerId: string): boolean {
   for (
     let current: Node | null = node;
     current != null;
-    current =
-      current.parentNode ?? (isShadowRoot(current) ? current.host : null)
+    current = current.parentNode ?? shadowHostOf(current)
   ) {
     if (isElement(current) && current.id === layerId) {
       return true;

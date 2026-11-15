@@ -9,6 +9,7 @@ import {InMemoryConfigCache} from './config-cache.mjs';
 import {getCliInvocation} from '../env/package-manager.mjs';
 import * as componentDiscovery from '../discovery/component-discovery.mjs';
 import {discoverCoreTemplates} from '../discovery/template-adapter.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 let originalCwd;
@@ -200,7 +201,7 @@ function scaffoldLocalPackage({name = '@acme/local'} = {}) {
 
 beforeEach(() => {
   originalCwd = process.cwd();
-  tmpDir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-project-test-'));
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-project-test-'));
   process.chdir(tmpDir);
 });
 

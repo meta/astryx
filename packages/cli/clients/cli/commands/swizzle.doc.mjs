@@ -16,8 +16,17 @@ export const doc = {
   summary: 'Copy component source for customization',
   description:
     "Ejects a component's source from the resolved @astryxdesign/core (or its owning " +
-    'integration) into your project for deep customization, rewriting imports that ' +
-    'escape the component directory. With no name it lists the swizzlable components. ' +
+    'integration) into your project for deep customization. Every import in the copy ' +
+    'names a file the copy holds or a path the package exports: names the package ' +
+    'exports come from the package, and every internal module the component needs ' +
+    "is copied beside it in the package's folder layout. " +
+    'Tests, stories and docs are not copied. It lists the npm packages the copy imports, ' +
+    'with the ranges the owner package declares, to install if your project lacks them. ' +
+    'An output folder swizzle owns (one the copy ' +
+    'creates, an empty one, or one it marked before) gets an astryx-swizzle.json marker naming ' +
+    "each package its copies came from, so @astryxdesign/build's Babel, PostCSS and Vite " +
+    'integrations, and withAstryx() under webpack, compile the copy below your theme. ' +
+    'With no name it lists the swizzlable components. ' +
     'An integration component that replaces a Core component is what that Core name ' +
     'copies; --package @astryxdesign/core copies the original. --list lists Core ' +
     'components, including one an integration replaces.',
@@ -46,7 +55,7 @@ export const doc = {
       flag: '-f, --overwrite',
       param: 'options.overwrite',
       description:
-        'Replace existing files. Without it, existing files fail the command with ERR_FILE_EXISTS and nothing is written',
+        "Replace the component's existing files. Without it, existing files fail the command with ERR_FILE_EXISTS and nothing is written. A helper an earlier swizzle wrote is reused when it is the same and is never replaced by a copy that carries it: a different one stays, and this copy writes its own under a version-suffixed name. Swizzling the component whose folder holds that helper counts it as one of that component's own files. A changed private attribute owner module, or a style module it imports, fails the command without --overwrite and is replaced with it",
     },
   ],
   examples: [

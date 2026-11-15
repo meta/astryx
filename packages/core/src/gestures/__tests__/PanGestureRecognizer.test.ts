@@ -84,6 +84,27 @@ describe('PanGestureRecognizer', () => {
     expect(pan.totalTranslation()).toEqual({x: 50, y: 20});
   });
 
+  it('reads each press’s begin threshold from its first touch', () => {
+    const h = createHarness();
+    const pan = new PanGestureRecognizer({
+      name: 'pan',
+      allowedPointerTypes: ['touch', 'mouse'],
+      hysteresis: touch => (touch.pointerType === 'mouse' ? 0 : 10),
+    });
+    h.finger(1)
+      .down(100, 100, 0, {recognizers: [pan], pointerType: 'mouse'})
+      .move(101, 100, 16);
+    expect(pan.state).toBe('began');
+    h.finger(1).up(32);
+    // The next press is a finger's: 5 px is under its threshold.
+    h.finger(2)
+      .down(100, 100, 100, {recognizers: [pan]})
+      .move(105, 100, 116);
+    expect(pan.state).toBe('possible');
+    h.finger(2).move(111, 100, 132);
+    expect(pan.state).toBe('began');
+  });
+
   it('applies the hysteresis per axis, as UIKit does', () => {
     const h = createHarness();
     const pan = new PanGestureRecognizer({name: 'pan'});

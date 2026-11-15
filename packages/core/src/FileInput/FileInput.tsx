@@ -412,9 +412,10 @@ export interface FileInputProps extends Omit<
    * - 'tooltip': no message box; the status icon becomes a focusable info-tip button that reveals the message on hover, keyboard focus, or tap
    *
    * Dropzone mode does not support 'attached': its tall surface cannot carry an
-   * overlapping message. Use 'detached' or 'tooltip' there. From the next minor
-   * release, a dropzone resolves 'attached' to 'detached' and defaults to it.
-   * @default 'attached'
+   * overlapping message, so a dropzone defaults to 'detached'. An explicit
+   * 'attached' keeps its released rendering until the next minor release,
+   * which resolves it to 'detached'.
+   * @default 'attached' in input mode; 'detached' in dropzone mode
    */
   statusVariant?: FieldStatusPlacement;
   /**
@@ -473,7 +474,7 @@ export function FileInput({
   isRequired = false,
   isLoading = false,
   status: statusProp,
-  statusVariant = 'attached',
+  statusVariant: statusVariantProp,
   description,
   placeholder,
   mode = 'input',
@@ -552,6 +553,11 @@ export function FileInput({
     (validationError
       ? {type: 'error' as const, message: validationError}
       : undefined);
+
+  // A dropzone's tall surface cannot carry an attached message, so an unset
+  // placement is detached there.
+  const statusVariant =
+    statusVariantProp ?? (mode === 'dropzone' ? 'detached' : 'attached');
 
   const {statusIcon, describedBy: statusTooltipDescribedBy} =
     useInputStatusIcon({
@@ -754,7 +760,14 @@ export function FileInput({
     (e: DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      if (!isSelectionDisabled && mode === 'dropzone') {
+      if (isSelectionDisabled) {
+        // A cancelled dragover with the default effect makes the zone a drop
+        // target.
+        // The 'none' effect shows the no-drop cursor and stops the drop.
+        if (e.dataTransfer) {
+          e.dataTransfer.dropEffect = 'none';
+        }
+      } else if (mode === 'dropzone') {
         setIsDragOver(true);
       }
     },
@@ -765,7 +778,14 @@ export function FileInput({
     (e: DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      if (!isSelectionDisabled && mode === 'dropzone') {
+      if (isSelectionDisabled) {
+        // A cancelled dragover with the default effect makes the zone a drop
+        // target.
+        // The 'none' effect shows the no-drop cursor and stops the drop.
+        if (e.dataTransfer) {
+          e.dataTransfer.dropEffect = 'none';
+        }
+      } else if (mode === 'dropzone') {
         setIsDragOver(true);
       }
     },

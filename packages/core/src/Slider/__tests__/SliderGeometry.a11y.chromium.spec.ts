@@ -7,7 +7,7 @@
  * @position Slider geometry proof. jsdom computes neither container units nor translate, so placement is checked here
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -440,6 +440,67 @@ test('padding on the control keeps the thumb on the track, the fill and the mark
   expect(Math.abs((lastMark ?? 0) - g.thumbs[0].center)).toBeLessThanOrEqual(
     TOLERANCE,
   );
+});
+
+/**
+ * The mark labels of the With marks story end inside the slider row, at the
+ * page's normal line height and at `line-height: 3`.
+ */
+async function expectMarkLabelsInsideRow(page: Page): Promise<void> {
+  await mount(page, 'core-slider--with-marks', 'ltr', 'ltr');
+  for (const lineHeight of ['normal', '3']) {
+    await page.evaluate(value => {
+      document.body.style.lineHeight = value;
+    }, lineHeight);
+    await page.evaluate(
+      async () =>
+        new Promise(resolve => requestAnimationFrame(() => resolve(null))),
+    );
+    const overflow = await page.evaluate(() => {
+      const labels = [
+        ...document.querySelectorAll<HTMLElement>(
+          '[data-testid="slider-mark-label"]',
+        ),
+      ];
+      const row = labels[0]?.closest<HTMLElement>('.astryx-slider');
+      if (row == null) {
+        return null;
+      }
+      const bottom = row.getBoundingClientRect().bottom;
+      return Math.max(
+        ...labels.map(label => label.getBoundingClientRect().bottom - bottom),
+      );
+    });
+    expect(overflow).not.toBeNull();
+    expect(overflow as number).toBeLessThanOrEqual(TOLERANCE);
+  }
+}
+
+test('a horizontal slider keeps room for its mark labels, whatever line height surrounds it', async ({
+  page,
+}) => {
+  await expectMarkLabelsInsideRow(page);
+});
+
+// A coarse pointer makes the track 24px tall, so the room below it differs.
+test.describe('under a coarse pointer', () => {
+  test.use({
+    hasTouch: true,
+    isMobile: true,
+    viewport: {width: 390, height: 844},
+  });
+
+  test('a horizontal slider keeps room for its mark labels, whatever line height surrounds it', async ({
+    page,
+  }) => {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=core-slider--with-marks&viewMode=story`,
+    );
+    expect(
+      await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+    ).toBe(true);
+    await expectMarkLabelsInsideRow(page);
+  });
 });
 
 // Desktop keeps the pointer model: no touch targets, and the control's own

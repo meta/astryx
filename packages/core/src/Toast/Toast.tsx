@@ -34,14 +34,18 @@ import {
 } from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
 import {INTERACTIVE_SELECTORS} from '../hooks/useClickableContainer';
+import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
+import type {AnnounceFn} from '../hooks/useAnnounce';
 import {useTheme} from '../theme';
 import {MediaTheme} from '../theme/MediaTheme';
+import {pickMediaMode} from '../hooks/useAutoMediaMode';
+import {parseColor} from '../utils/color';
 import type {
   ToastType,
   ToastDismissReason,
   ToastContentRenderFn,
 } from './types';
-import {themeProps} from '../utils/themeProps';
+import {pickDataAttributes, themeProps} from '../utils/themeProps';
 import {useToastGesture, type ToastGestureDirection} from './useToastGesture';
 import {
   registerEnglishFallback,
@@ -52,6 +56,9 @@ import english from '../i18n/generated-english/Toast/Toast.generated';
 registerEnglishFallback(english);
 
 const SWIPE_INTERACTIVE_TARGET_SELECTOR = `${INTERACTIVE_SELECTORS},[tabindex],[contenteditable]:not([contenteditable="false"])`;
+
+const TOAST_ANNOUNCEMENT_EXCLUDED_SELECTOR =
+  'button, input, select, textarea, a[href], [role="button"], [role="link"], [tabindex], [contenteditable]:not([contenteditable="false"]), svg, [role="img"]';
 
 function isInteractiveTarget(
   target: EventTarget | null,
@@ -92,6 +99,10 @@ const styles = stylex.create({
       '@media (prefers-reduced-motion: reduce)': '0.01ms',
     },
     transitionTimingFunction: easeVars['--ease-standard'],
+  },
+  // A card enters from its edge only when it first renders. A move between
+  // modal outlets renders it again, and it must not enter again.
+  entering: {
     '@starting-style': {
       opacity: 0,
       transform: `translateY(var(--_toast-slide-y, ${TOAST_EDGE_DRIFT}))`,
@@ -154,6 +165,25 @@ export interface ToastProps {
 
 interface ToastSurfaceProps extends ToastProps {
   gestureDirection: ToastGestureDirection;
+  /** The viewport's modal-aware announcement channel. */
+  announce?: AnnounceFn;
+  /** Read the body after render when its text comes from a child component. */
+  isRenderedBodyAnnouncement?: boolean;
+  /**
+   * Changes when a uniqueID overwrite updates this card in place: the new
+   * toast's auto-hide timer starts over.
+   */
+  timerKey?: string;
+  /**
+   * False when the viewport announces the toast: the card then carries no
+   * live region of its own, so an update in place is announced once.
+   */
+  isLiveRegion?: boolean;
+  /**
+   * True once the toast's row has started to open. The card then has no
+   * starting style, so a move between modal outlets starts no transition.
+   */
+  hasEntryStarted?: boolean;
 }
 
 /**
@@ -193,8 +223,16 @@ export function ToastSurface({
   onDismiss,
   renderContent,
   gestureDirection,
+  timerKey,
+  isLiveRegion = true,
+  announce,
+  isRenderedBodyAnnouncement = false,
+  hasEntryStarted = false,
+  ...rest
 }: ToastSurfaceProps) {
   const t = useComponentTranslator();
+  const isError = type === 'error';
+  const bodyRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Every condition that holds the auto-hide timer (pointer over the card,
   // focus inside it, a touch or pen gesture, the window blurred) is tracked on
@@ -226,34 +264,28 @@ export function ToastSurface({
     }, remainingRef.current);
   }, [isAutoHide]);
 
-  const pauseTimer = useCallback(
-    (source: PauseSource) => {
-      if (!isAutoHide) {
-        return;
-      }
-      const sources = pauseSourcesRef.current;
-      const wasRunning = sources.size === 0;
-      sources.add(source);
-      if (!wasRunning) {
-        return;
-      }
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
-      if (startTimeRef.current != null) {
-        const elapsed = Date.now() - startTimeRef.current;
-        remainingRef.current = Math.max(remainingRef.current - elapsed, 1000);
-      }
-    },
-    [isAutoHide],
-  );
+  // Pointer, focus and gesture holds are tracked whatever isAutoHide is: an
+  // overwrite can turn a toast that does not auto-hide into one that does
+  // while a hold is in place. The window hold leaves with its listeners.
+  const pauseTimer = useCallback((source: PauseSource) => {
+    const sources = pauseSourcesRef.current;
+    const wasRunning = sources.size === 0;
+    sources.add(source);
+    if (!wasRunning) {
+      return;
+    }
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    if (startTimeRef.current != null) {
+      const elapsed = Date.now() - startTimeRef.current;
+      remainingRef.current = Math.max(remainingRef.current - elapsed, 1000);
+    }
+  }, []);
 
   const resumeTimer = useCallback(
     (source: PauseSource) => {
-      if (!isAutoHide) {
-        return;
-      }
       const sources = pauseSourcesRef.current;
       if (!sources.delete(source)) {
         return;
@@ -271,20 +303,31 @@ export function ToastSurface({
       }
       startTimer();
     },
-    [isAutoHide, startTimer],
+    [startTimer],
   );
 
   useEffect(() => {
     remainingRef.current = autoHideDuration;
+    // An update in place can remove the focused control, which fires no blur:
+    // a focus hold whose focus has left the card is stale.
+    const root = cardRootRef.current?.current;
+    if (
+      pauseSourcesRef.current.has('focus') &&
+      root != null &&
+      !root.contains(root.ownerDocument.activeElement)
+    ) {
+      pauseSourcesRef.current.delete('focus');
+    }
     startTimer();
     return () => {
       if (timerRef.current) {
         clearTimeout(timerRef.current);
       }
     };
-    // startTimer's identity is stable per isAutoHide, so this runs on mount
-    // and on a genuine duration change — not on unrelated viewport renders.
-  }, [autoHideDuration, startTimer]);
+    // startTimer's identity is stable per isAutoHide, so this runs on mount,
+    // on a genuine duration change and on an overwrite (timerKey), not on
+    // unrelated viewport renders.
+  }, [autoHideDuration, startTimer, timerKey]);
 
   // Pause the auto-hide timer while the window is not focused, so a toast
   // doesn't silently expire while the user is in another window or tab.
@@ -292,13 +335,21 @@ export function ToastSurface({
     if (!isAutoHide) {
       return;
     }
+    const pauseSources = pauseSourcesRef.current;
     const pauseForWindow = () => pauseTimer('window');
     const resumeForWindow = () => resumeTimer('window');
     window.addEventListener('blur', pauseForWindow);
     window.addEventListener('focus', resumeForWindow);
+    // A toast raised while the window is already blurred gets no blur event,
+    // so it starts held, and the window's next focus resumes it.
+    if (!document.hasFocus()) {
+      pauseForWindow();
+    }
     return () => {
       window.removeEventListener('blur', pauseForWindow);
       window.removeEventListener('focus', resumeForWindow);
+      // With the listeners gone, no focus event would clear the window hold.
+      pauseSources.delete('window');
     };
   }, [isAutoHide, pauseTimer, resumeTimer]);
 
@@ -349,23 +400,61 @@ export function ToastSurface({
   });
   cardRootRef.current = rootRef;
 
+  // The viewport announces a plain-text body when it dispatches the toast.
+  // This reads a component body or a custom layout after commit. A body is
+  // read whole, links included. A custom layout leaves out its controls.
+  useAnnounceRenderedText(
+    renderContent != null ? rootRef : bodyRef,
+    !isLiveRegion && (renderContent != null || isRenderedBodyAnnouncement),
+    timerKey ?? '',
+    {
+      politeness: isError ? 'assertive' : 'polite',
+      announce,
+      exclude:
+        renderContent != null
+          ? TOAST_ANNOUNCEMENT_EXCLUDED_SELECTOR
+          : undefined,
+    },
+  );
+
   const handleDismiss = useCallback(() => {
     onDismiss('manual');
   }, [onDismiss]);
 
-  const isError = type === 'error';
-  // The surface is *usually* dark in light mode and light in dark mode, but a
-  // theme can define --color-background-inverted as anything — so the mode is
-  // measured, not assumed. This is only the pre-measurement fallback.
-  const {mode} = useTheme();
-  const fallbackMediaMode = isError || mode === 'light' ? 'dark' : 'light';
+  // Before the measurement, take the side from the theme's resolved surface by
+  // the measurement's rule. If the surface is translucent, or parseColor cannot
+  // read it or an on-color, use the mode.
+  const {mode, tokens} = useTheme();
+  const surface = parseColor(
+    tokens[
+      isError
+        ? '--color-background-error-inverted'
+        : '--color-background-inverted'
+    ] ?? '',
+  );
+  const fromTokens =
+    surface !== null && surface.a >= 1
+      ? pickMediaMode(
+          surface,
+          null,
+          parseColor(tokens['--color-on-dark'] ?? ''),
+          parseColor(tokens['--color-on-light'] ?? ''),
+        )
+      : null;
+  const fallbackMediaMode =
+    fromTokens === 'dark' || fromTokens === 'light'
+      ? fromTokens
+      : isError || mode === 'light'
+        ? 'dark'
+        : 'light';
 
   return (
     <div
+      {...pickDataAttributes(rest)}
       ref={rootRef}
-      role={isError ? 'alert' : 'status'}
-      aria-live={isError ? 'assertive' : 'polite'}
-      aria-atomic="true"
+      role={isLiveRegion ? (isError ? 'alert' : 'status') : undefined}
+      aria-live={isLiveRegion ? (isError ? 'assertive' : 'polite') : undefined}
+      aria-atomic={isLiveRegion ? 'true' : undefined}
       onMouseEnter={pauseForPointer}
       onMouseLeave={resumeForPointer}
       onFocusCapture={pauseForFocus}
@@ -375,6 +464,7 @@ export function ToastSurface({
         themeProps('toast', {type}),
         stylex.props(
           styles.root,
+          !hasEntryStarted && styles.entering,
           isError ? styles.variantError : styles.variantDefault,
           isExiting && styles.exiting,
         ),
@@ -391,7 +481,9 @@ export function ToastSurface({
           })
         ) : (
           <div {...stylex.props(styles.inner)}>
-            <div {...stylex.props(styles.content)}>{body}</div>
+            <div ref={bodyRef} {...stylex.props(styles.content)}>
+              {body}
+            </div>
 
             <div {...stylex.props(styles.endContent)}>
               {endContent}

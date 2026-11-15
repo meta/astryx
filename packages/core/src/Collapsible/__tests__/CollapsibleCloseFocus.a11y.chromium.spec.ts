@@ -13,7 +13,7 @@
  * SYNC: When modified, update the AR4 Verification row in Collapsible.spec.md.
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,

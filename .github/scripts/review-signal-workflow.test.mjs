@@ -9,9 +9,14 @@
 
 import {Buffer} from 'node:buffer';
 import fs from 'node:fs';
+import {createRequire} from 'node:module';
 import path from 'node:path';
 import {describe, expect, it, vi} from 'vitest';
 import YAML from 'yaml';
+
+const {TRAINER_WAITING_TEXT} = createRequire(import.meta.url)(
+  './review-signal-decision.cjs',
+);
 
 // The raw file host is offline here, so jobs read their helpers through the API.
 vi.stubGlobal('fetch', async () => {
@@ -47,6 +52,7 @@ async function runSignal({
   commenter = 'engineer',
   engOwners = '@engineer',
   commentBody = `/approve-spec ${HEAD}`,
+  author = {login: 'contributor', type: 'User'},
   // The spec-owner job's decision for a PR that changes no spec record.
   specStatuses = [
     {
@@ -59,7 +65,7 @@ async function runSignal({
 } = {}) {
   const pr = {
     number: 42,
-    user: {login: 'contributor', type: 'User'},
+    user: author,
     base: {sha: baseSha, ref: 'main'},
     head: {sha: HEAD, ref: 'feature'},
     changed_files: 1,
@@ -518,6 +524,78 @@ describe('review-signal appearance-only contract', () => {
   });
 });
 
+describe('a pull request the review app opens waits for a trainer pass (spec:AST-030 FR15)', () => {
+  const APP = 'review-app[bot]';
+  const bot = {login: APP, type: 'Bot'};
+  const review = (login, state, commitId = HEAD) => ({
+    user: {login, type: 'User'},
+    state,
+    commit_id: commitId,
+  });
+  const gate = async options => {
+    const {mutations, github} = await runSignal({
+      eventName: 'pull_request_target',
+      author: bot,
+      reviewApp: APP,
+      ...options,
+    });
+    const calls = mutations.createCommitStatus.mock.calls.map(
+      ([input]) => input,
+    );
+    expect(calls.every(call => call.context === 'review-required')).toBe(true);
+    return {last: calls.at(-1), github};
+  };
+
+  it('keeps review-required pending with no trainer pass at the head', async () => {
+    const {last} = await gate({reviews: []});
+    expect(last).toMatchObject({
+      state: 'pending',
+      description: TRAINER_WAITING_TEXT,
+    });
+  });
+
+  it("keeps it pending when the trainer's approval is for an older head, or was withdrawn", async () => {
+    expect(
+      (await gate({reviews: [review('engineer', 'APPROVED', OLD_BASE)]})).last
+        .state,
+    ).toBe('pending');
+    expect(
+      (
+        await gate({
+          reviews: [
+            review('engineer', 'APPROVED'),
+            review('engineer', 'CHANGES_REQUESTED'),
+          ],
+        })
+      ).last.state,
+    ).toBe('pending');
+  });
+
+  it('keeps it pending when only someone who is not an engineering owner approves', async () => {
+    expect(
+      (await gate({reviews: [review('someone', 'APPROVED')]})).last.state,
+    ).toBe('pending');
+  });
+
+  it('passes once an engineering owner approves the exact head', async () => {
+    const {last} = await gate({reviews: [review('engineer', 'APPROVED')]});
+    expect(last.state).toBe('success');
+    // review-clear's own text, so it re-gates a later withdrawal.
+    expect(last.description).toContain('Cleared by code-owner approval.');
+  });
+
+  it('still exempts other bots, and every bot when no review app is set', async () => {
+    const other = await gate({
+      author: {login: 'dependabot[bot]', type: 'Bot'},
+    });
+    expect(other.last.state).toBe('success');
+    expect(other.last.description).toContain('exempt from code review');
+    const unset = await gate({reviewApp: ''});
+    expect(unset.last.state).toBe('success');
+    expect(unset.last.description).toContain('exempt from code review');
+  });
+});
+
 describe('review-signal review-app approval for write-access authors', () => {
   const APP = 'review-app[bot]';
   const appReview = (state, commitId = HEAD) => ({
@@ -620,5 +698,93 @@ describe('review-signal review-app approval for write-access authors', () => {
     expect(gateStatus(mutations)).toEqual([
       expect.objectContaining({state: 'pending'}),
     ]);
+  });
+});
+
+describe("a fork's held review run blocks nothing the owner command and a dispatch do not repeat (spec:AST-030 FR15)", () => {
+  // GitHub can hold a fork's pull_request_review run for approval, and its
+  // approve endpoint refuses that run. So every review-signal writer of the
+  // gate also runs on the owner command and on a dispatch, which GitHub does
+  // not hold, and review-clear's writer, which runs after a review run, is
+  // repeated by them.
+  const writers = Object.entries(parsed.jobs).filter(
+    ([, job]) => job.permissions?.statuses === 'write',
+  );
+
+  it('has gate writers, and each runs on the owner command and on a dispatch', () => {
+    expect(writers.map(([name]) => name).sort()).toEqual([
+      'flag',
+      'spec-owner',
+    ]);
+    expect(parsed.on.issue_comment).toBeDefined();
+    expect(parsed.on.workflow_dispatch.inputs.pr).toBeDefined();
+    for (const [, job] of writers) {
+      const condition = job.if.replace(/\s+/g, ' ');
+      expect(condition).toContain(
+        "startsWith(github.event.comment.body, '/approve-spec')",
+      );
+      // Neither writer requires a review event to run.
+      expect(condition).not.toMatch(
+        /^github\.event_name == 'pull_request_review'/,
+      );
+    }
+    expect(parsed.jobs.flag.if).toContain(
+      "github.event_name == 'workflow_dispatch'",
+    );
+    // spec-owner runs on a dispatch that names a pull request.
+    expect(parsed.jobs['spec-owner'].if).toContain(
+      "(github.event_name != 'workflow_dispatch' || github.event.inputs.pr != '')",
+    );
+  });
+
+  it("skips a fork's review event in every writer, so a held run blocks no write", () => {
+    const flag = parsed.jobs.flag.if.replace(/\s+/g, ' ');
+    expect(flag).not.toContain("'pull_request_review'");
+    expect(parsed.jobs['spec-owner'].if.replace(/\s+/g, ' ')).toContain(
+      "(github.event_name != 'pull_request_review' || github.event.pull_request.head.repo.full_name == github.repository)",
+    );
+  });
+
+  it('gives the review-event job no token, so nothing waits on its run but the code-half reconcile the command repeats', () => {
+    const reviewJobs = Object.entries(parsed.jobs).filter(([, job]) =>
+      String(job.if ?? '').includes(
+        "github.event_name == 'pull_request_review'",
+      ),
+    );
+    expect(reviewJobs.map(([name]) => name)).toEqual(['review-anchor']);
+    expect(parsed.jobs['review-anchor'].permissions).toEqual({});
+  });
+
+  it("pins review-clear's writer, the only one that waits on a review run, to that run's completion", () => {
+    const clear = YAML.parse(
+      fs.readFileSync(
+        path.join(root, '.github/workflows/review-clear.yml'),
+        'utf8',
+      ),
+    );
+    expect(clear.on).toEqual({
+      workflow_run: {workflows: ['Review signal'], types: ['completed']},
+    });
+    const clearWriters = Object.entries(clear.jobs).filter(
+      ([, job]) => job.permissions?.statuses === 'write',
+    );
+    expect(clearWriters.map(([name]) => name)).toEqual(['clear']);
+    // It reconciles only after a review event's run, which the owner command
+    // (flag on issue_comment) and a dispatch (flag on workflow_dispatch) repeat
+    // from the same reviews.
+    expect(clear.jobs.clear.if).toBe(
+      "github.event.workflow_run.event == 'pull_request_review'",
+    );
+  });
+
+  it('tells owners that only the review-clear reconcile waits on a held review run, and names the dispatch fallback', () => {
+    // One line per sentence, whatever the guide's wrapping.
+    const gate = fs
+      .readFileSync(path.join(root, '.github/REVIEW_GATE.md'), 'utf8')
+      .replace(/\s+/g, ' ');
+    expect(gate).toContain(
+      'Only the review-clear reconcile waits on the held review run',
+    );
+    expect(gate).toContain('run the "Review signal" workflow by hand');
   });
 });

@@ -1,7 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-'use client';
-
 /**
  * @file index.ts
  * @input Tooltip component and hook
@@ -15,7 +13,6 @@
 export {useTooltip} from './useTooltip';
 export type {
   TooltipFocusTrigger,
-  TooltipTriggerBehavior,
   TooltipTouchTrigger,
   TooltipOptions,
   TooltipReturn,

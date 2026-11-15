@@ -15,4 +15,20 @@ export const icon: NativeAdditions = {
   baseTarget: 'root',
   // A shared icon name (AST-082 FR17); an SVG component stays web-only.
   slots: {icon: 'icon'},
+  // The semantic colors every platform draws; the palette colors stay on the
+  // web.
+  projections: {
+    color: {
+      primary: 'primary',
+      secondary: 'secondary',
+      tertiary: 'tertiary',
+      disabled: 'disabled',
+      accent: 'accent',
+      info: 'info',
+      success: 'success',
+      error: 'error',
+      warning: 'warning',
+      inherit: 'inherit',
+    },
+  },
 };

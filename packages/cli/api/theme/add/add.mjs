@@ -9,6 +9,7 @@
  */
 
 import {addThemeToApp} from '../_adapter.mjs';
+import {withAppProvider} from '../_app-provider.mjs';
 import {AstryxError} from '../../error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 
@@ -36,5 +37,6 @@ export async function themeAdd(slug, options = {}) {
       ERROR_CODES.ERR_THEME_INVALID,
     );
   }
-  return addThemeToApp(slug, options);
+  const result = await addThemeToApp(slug, options);
+  return withAppProvider(result, options.cwd ?? process.cwd());
 }

@@ -5,7 +5,8 @@
  * @input The motion tables (motion/uikit and each component's own table)
  * @output registerMotionTable, motionRoleOf, motionRoleIn, listMotionRoles,
  *   motionRoleVariable, and the CSS form of a role's value
- *   (formatMotionRoleValue, parseMotionRoleValue)
+ *   (formatMotionRoleValue, parseMotionRoleValue), and parseCssEasing for a
+ *   CSS transition's easing
  * @position Motion foundation, internal to core: read by the code that
  *   resolves a role when a motion starts. No public API writes a role: touch
  *   motion stays internal until the public motion-token set is decided.
@@ -158,6 +159,35 @@ export function registerMotionTable(
   walk(table as Record<string, unknown>, id);
 }
 
+/**
+ * Registers `leaf` as the spring role `id` (a table path such as
+ * `springs.settle`) and returns it, so a table row can register itself. A row
+ * that calls it under a pure annotation drops out of a bundle that does not
+ * use it, call included. Registering the same leaf under the same id again
+ * does nothing.
+ */
+export function registerSpringRole<T extends SpringDescription>(
+  id: string,
+  leaf: T,
+): T {
+  if (!isMotionRoleId(id)) {
+    throw new Error(
+      `motion role "${id}" must be a dotted table path such as "springs.settle"`,
+    );
+  }
+  if (roleOfLeaf.get(leaf)?.id !== id) {
+    const role: MotionRole = {
+      id,
+      kind: 'spring',
+      variable: motionRoleVariable(id),
+      value: leaf,
+    };
+    rolesById.set(id, role);
+    roleOfLeaf.set(leaf, role);
+  }
+  return leaf;
+}
+
 /** The role a spring or curve leaf of a registered table plays, if any. */
 export function motionRoleOf(leaf: unknown): MotionRole | undefined {
   return leaf !== null && typeof leaf === 'object'
@@ -259,4 +289,22 @@ export function parseMotionRoleValue(
   return points[0] >= 0 && points[0] <= 1 && points[2] >= 0 && points[2] <= 1
     ? points
     : null;
+}
+
+/** The CSS easing keywords, as the control points CSS gives them. */
+const EASING_KEYWORDS: Readonly<Record<string, MotionCurvePoints>> = {
+  linear: [0, 0, 1, 1],
+  ease: [0.25, 0.1, 0.25, 1],
+  'ease-in': [0.42, 0, 1, 1],
+  'ease-out': [0, 0, 0.58, 1],
+  'ease-in-out': [0.42, 0, 0.58, 1],
+};
+
+/**
+ * Reads a CSS easing, a keyword or a `cubic-bezier()`, as a curve role's value
+ * is read. Returns null for any other easing, such as `steps()`.
+ */
+export function parseCssEasing(text: string): MotionCurvePoints | null {
+  const value = text.trim();
+  return EASING_KEYWORDS[value] ?? parseMotionRoleValue('curve', value);
 }

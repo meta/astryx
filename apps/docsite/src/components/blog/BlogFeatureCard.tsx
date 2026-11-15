@@ -2,10 +2,9 @@
 
 /**
  * @file BlogFeatureCard.tsx
- * Showcase-only feature card for BlogShowcase's equal-height split. Unlike the
- * shared BlogCard (whose Link-wrapped body can't fill the card), this is a plain
- * flex column that fills its stretched grid cell, with the cover growing to
- * absorb extra height so the title + byline stay tight at the bottom.
+ * Showcase-only feature card for BlogShowcase's equal-height split. Generated
+ * covers absorb extra height so the title + byline stay tight at the bottom.
+ * Custom artwork keeps its 16:9 frame and remains fully visible.
  *
  * @input  a blog post; hideDescription
  * @output a full-height feature card for the home "Stay in the know" split
@@ -40,15 +39,11 @@ const styles = stylex.create({
     backgroundColor: 'var(--color-background-muted)',
     border: '1px solid var(--color-border)',
     overflow: 'hidden',
-    // Absorb the card's extra height when stretched taller than 16:9 so the
-    // title/byline stay tight; the image (objectFit:cover) crops to fit.
+    // Generated art fills the split's extra height; custom artwork must not crop.
     flexGrow: 1,
   },
-  coverImg: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-    display: 'block',
+  artworkCover: {
+    flexGrow: 0,
   },
   excerpt: {
     display: '-webkit-box',
@@ -85,11 +80,7 @@ export function BlogFeatureCard({
   const releaseVersion = parseReleaseVersion(post.title);
 
   const coverContent = post.coverImage ? (
-    <img
-      src={post.coverImage}
-      alt={post.coverAlt ?? ''}
-      {...stylex.props(styles.coverImg)}
-    />
+    <img src={post.coverImage} alt={post.coverAlt ?? ''} />
   ) : releaseVersion ? (
     <ReleaseCoverArt
       version={releaseVersion}
@@ -107,7 +98,14 @@ export function BlogFeatureCard({
     <div
       className={`${cardProps.className ?? ''} ${css.card}`}
       style={cardProps.style}>
-      <AspectRatio ratio={16 / 9} xstyle={styles.cover} className={css.cover}>
+      <AspectRatio
+        ratio={16 / 9}
+        fit={post.coverImage ? 'contain' : undefined}
+        xstyle={[
+          styles.cover,
+          post.coverImage ? styles.artworkCover : styles.cover,
+        ]}
+        className={css.cover}>
         {coverContent}
       </AspectRatio>
       <VStack gap={3}>

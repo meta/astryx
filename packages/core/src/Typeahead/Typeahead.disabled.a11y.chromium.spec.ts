@@ -9,7 +9,7 @@
  *   text-entry search fields
  */
 
-import {expect, test} from '@playwright/test';
+import {expect, test} from '@astryxdesign/a11y-spec/playwright';
 import {
   serveStorybook,
   DEFAULT_STORYBOOK_DIR,

@@ -33,7 +33,11 @@ affects_consumer_docs:
 
 ```json
 {
-  "paths": ["packages/core/src/hooks/**"]
+  "paths": [
+    "packages/core/src/hooks/**",
+    "packages/core/src/dragToSnapPoints/createDragToSnapPoints.ts",
+    "packages/core/src/gestures/createPanGesture.ts"
+  ]
 }
 ```
 
@@ -108,7 +112,8 @@ animator2.destroy();
   `{state, translation, velocity}` as a drag on the element begins, changes,
   ends, or is cancelled. `axis` limits the drag to `'x'` or `'y'`. A finger,
   a mouse, and a pen all drive it (`spec:AST-094` FR43). It never
-  hands out a recognizer object, and it recognizes no press or long press.
+  hands out a recognizer object, and it recognizes no press or long press. A
+  cancelled pan reports `velocity` {0, 0}, so nothing flings on cancel.
 - **FR2 — `useDragToSnapPoints` settles an element on snap points.**
   `useDragToSnapPoints(ref, {axis, snapPoints, flickThreshold?, onSettle})`
   lets a drag move the element along `axis`, under
@@ -150,7 +155,8 @@ animator2.destroy();
   curve is not offered. `animate` on a channel it does not know, any call
   before `ref` attaches, and any call after `destroy` do nothing and resolve at
   once. A later `animate`, `decay`, `set`, or `stop` on a channel resolves that
-  channel's earlier promise where it stopped.
+  channel's earlier promise where it stopped. A remount starts from the
+  element's resting values; no animator values are kept after an unmount.
 - **FR4 — One hook per job.** `usePanGesture` does not do presses or long
   presses, which `useLongPress` owns. `useAnimator` animates one element, and
   `useAnimatedLayout` animates an area (`spec:AST-105`). A component's own
@@ -169,7 +175,10 @@ onSettle}) → {settleTo(index), destroy}`, and `createAnimator(element) →
   its factory and has no behavior of its own. `destroy` removes every
   listener the factory added, and importing a factory does no DOM work, so it
   is safe on the server. No internal factory shares a public factory's name
-  (`architecture:react-component-runtime` INV13).
+  (`architecture:react-component-runtime` INV13). `createPanGesture`'s
+  `destroy()` during a drag reports `cancelled` once; `usePanGesture`'s
+  unmount reports nothing (no callback after unmount). `decay` on `opacity`
+  stops at 0 or 1.
 - **FR7 — Core and Lab use the public layer.** Wherever a public gesture or
   motion API covers a component's job (the factories and hooks here,
   `createReorderable`, and `useAnimatedLayout`), Core and Lab components MUST
@@ -177,7 +186,18 @@ onSettle}) → {settleTo(index), destroy}`, and `createAnimator(element) →
   only for a job the public layer does not expose; those jobs are listed as
   known public-API gaps in `architecture:react-component-runtime` INV13.
   `createReorderable`'s plain-element attach path (`spec:AST-103`) covers
-  collections that are not List.
+  collections that are not List. The internals beneath the public pan and
+  snap-point drag are `createPan`, in `createPanGesture.ts`, and
+  `createSnapDrag`, in `createDragToSnapPoints.ts`. No package entry exports
+  them. `createPan` takes the recognizer's own options: which pointers and
+  scrolls start the drag, its claim distance and a gate on its begin. Its
+  reports add the claim's travel and what drives the drag. `createPanGesture`
+  has none of these: it starts on every pointer and no scroll.
+  `createSnapDrag` takes a model of where a drag draws its element and where
+  a release lands. It also takes the pan's own options and draws into a
+  custom property when given one. `createDragToSnapPoints` has neither: it
+  follows the finger one for one, draws `translate`, and lands each release
+  by Core's one release policy.
 
 - **FR8 — A headless context menu.** `createContextMenu(element, {items | render, label?, isDisabled?,
 onOpenChange?, presentation?}) → {open(at?), close(), destroy()}`
@@ -271,6 +291,19 @@ factory that attaches to the element itself, with a thin hook, and
 `<ContextMenu>` is built on the same factory.
 
 Rejected: a context menu reachable only through the `<ContextMenu>` wrapper.
+
+### DEC-4 — Edge behaviors of the public animator and pan gesture
+
+**Reference:** `spec:AST-107/DEC-4`
+**Decider:** `cixzhang`, `2026-11-02`
+
+A cancelled pan reports zero velocity; the factory's destroy() mid-drag
+reports cancelled once and the hook's unmount reports nothing; an opacity
+decay is clamped to 0–1; a remount starts from resting values.
+
+Rejected: reporting the last velocity on cancel; callbacks after unmount;
+unclamped opacity; keeping values across an unmount (a new keyed element
+could inherit an off-screen position while still taking keyboard focus).
 
 ## Open questions
 

@@ -17,7 +17,7 @@
  * - /packages/cli/assets/templates/blocks/components/Toolbar/ (showcase blocks)
  */
 
-import {useCallback, type ReactNode} from 'react';
+import {useCallback, useState, type ReactNode} from 'react';
 import type {BaseProps} from '../BaseProps';
 import type {SectionVariant} from '../Section/Section';
 import type {SpacingStep} from '../utils/types';
@@ -26,11 +26,13 @@ import * as stylex from '@stylexjs/stylex';
 import {spacingVars, sizeVars} from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
 import {Section} from '../Section/Section';
-import {useListFocus} from '../hooks/useListFocus';
+import {oneTabStopAmong, useInternalListFocus} from '../hooks/useListFocus';
 import {useKeyboardHint} from '../hooks/useKeyboardHint';
 import {SizeProvider} from '../SizeContext/SizeContext';
 import {edgeCompSlot} from '../Layout/edgeCompensation.stylex';
 import {themeProps} from '../utils/themeProps';
+import {observeResize} from '../utils/sharedResizeObserver';
+import {useAttachment} from '../hooks/useAttachment';
 
 /**
  * Map SpacingStep values to spacingVars keys.
@@ -56,11 +58,19 @@ const styles = stylex.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  // Three-slot layout (with centerContent): CSS grid 1fr auto 1fr
-  baseGrid: {
-    display: 'grid',
-    gridTemplateColumns: '1fr auto 1fr',
+  // Three-lane layout. The side lanes share the width the center leaves
+  // equally, so the center stays at the middle while each fits its half. When
+  // the lanes do not fit, the row wraps. The end lane moves to a following
+  // line. The center lane moves too when it does not fit beside the start lane.
+  baseThreeLane: {
+    display: 'flex',
+    flexWrap: 'wrap',
     alignItems: 'center',
+  },
+  // Lanes stay side by side in a vertical toolbar too; only the cross-axis
+  // alignment follows the orientation.
+  verticalThreeLane: {
+    alignItems: 'stretch',
   },
   // Vertical orientation
   vertical: {
@@ -72,15 +82,29 @@ const styles = stylex.create({
     display: 'flex',
     alignItems: 'center',
   },
-  // `minWidth: 0` lets the `auto` track shrink below the content's width, so a
-  // wide center never widens the toolbar. The slot deliberately does not clip
-  // (`overflow`): clipping would cut off the box-shadow and focus ring of its
-  // outermost children, which paint outside their own box.
+  // The center basis is its minimum width, so the row wraps before its text
+  // overlaps a side lane. Alone on a line narrower than its content, the lane
+  // shrinks, so a TabList scrolls. The slot does not clip, because clipping
+  // cuts off the focus ring and shadow of its outer children.
   centerSlot: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    flexGrow: 1000,
+    flexShrink: 1,
+    flexBasis: 'min-content',
     minWidth: 0,
+    maxWidth: 'max-content',
+  },
+  // The side lanes share the width the center leaves. A lane keeps its
+  // controls on one line, so the row wraps first. Only a lane wider than the
+  // toolbar wraps its own controls.
+  sideLane: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexWrap: 'wrap',
+    // `fit-content` is the lane's full row, capped at the toolbar's width.
+    minWidth: stylex.firstThatWorks('fit-content', '-webkit-fit-content'),
   },
   endSlot: {
     display: 'flex',
@@ -104,9 +128,25 @@ const sizeStyles = stylex.create({
 });
 
 // Dynamic styles for configurable gap and tab indicator offset
+// Edge compensation's marker (edgeCompensation.stylex.ts), restated here:
+// StyleX resolves a style's keys within its own file.
+const FIRST_EDGE_COMP = ':has(> [data-astryx-edge-comp]:first-child)';
+const LAST_EDGE_COMP = ':has(> [data-astryx-edge-comp]:last-child)';
+
 const dynamicStyles = stylex.create({
   gap: (gapValue: string) => ({
     gap: gapValue,
+  }),
+  // Edge compensation pulls a side lane out by a negative margin, which flex
+  // counts toward the lane's share of the row. This basis gives that width
+  // back, so the lane's share excludes it and the center stays at the middle.
+  sideLaneBasis: (amount: string) => ({
+    flexBasis: {
+      default: '0px',
+      [FIRST_EDGE_COMP]: amount,
+      [LAST_EDGE_COMP]: amount,
+      [`${FIRST_EDGE_COMP}${LAST_EDGE_COMP}`]: `calc(2 * ${amount})`,
+    },
   }),
   tabIndicatorBottom: (offset: string) => ({
     '--_tab-indicator-bottom': offset,
@@ -123,6 +163,23 @@ const defaultBlockPaddingForSize: Record<ElementSize, SpacingStep> = {
   md: 2,
   lg: 2,
 };
+
+/**
+ * Whether a three-lane row has wrapped: its lanes no longer share one
+ * vertical band.
+ */
+function lanesHaveWrapped(row: Element): boolean {
+  // An empty lane is a box with no height, so it shares every line.
+  const boxes = [...row.children]
+    .slice(0, 3)
+    .map(lane => lane.getBoundingClientRect())
+    .filter(box => box.height > 0);
+  return (
+    boxes.length > 1 &&
+    Math.max(...boxes.map(box => box.top)) >=
+      Math.min(...boxes.map(box => box.bottom))
+  );
+}
 
 const blockPaddingVarForSize: Record<ElementSize, string> = {
   sm: spacingVars['--spacing-2'],
@@ -152,7 +209,9 @@ export interface ToolbarProps extends BaseProps<HTMLDivElement> {
   startContent?: ReactNode;
   /**
    * Content centered between start and end.
-   * When provided, switches layout to CSS grid (1fr auto 1fr).
+   * When provided, switches to the three-lane layout: the center sits at the
+   * toolbar's middle while each side lane fits in half of the width it leaves,
+   * and the row wraps when the lanes do not fit.
    */
   centerContent?: ReactNode;
   /**
@@ -202,10 +261,15 @@ export interface ToolbarProps extends BaseProps<HTMLDivElement> {
   dividers?: ('top' | 'bottom' | 'start' | 'end')[];
 }
 
+// `a[href]` catches a Button rendered with `href`.
+const TOOLBAR_ITEMS = 'button, input, a[href], [tabindex]';
+const TOOLBAR_BOUNDARY = '[role="toolbar"], [popover]';
+const toolbarTabStop = oneTabStopAmong(TOOLBAR_ITEMS, TOOLBAR_BOUNDARY);
+
 /**
  * General-purpose toolbar with start, center, and end content slots.
  *
- * Built on Section, provides flex/grid layout with roving tabindex
+ * Built on Section, provides a flex layout with roving tabindex
  * keyboard navigation via useListFocus. Cascades `size` to child components
  * (Button, TextInput, TabList, Selector) via SizeContext, and applies
  * edge compensation so ghost buttons align flush at container edges.
@@ -247,14 +311,32 @@ export function Toolbar({
 
   const gapVar = spacingVars[spacingStepToVar[gap]] as string;
 
-  const {listRef, handleKeyDown, handleFocus} = useListFocus<HTMLDivElement>({
-    // `a[href]` catches a Button rendered with `href`.
-    itemSelector: 'button, input, a[href], [tabindex]',
-    boundarySelector: '[role="toolbar"], [popover]',
-    orientation,
-    hasRovingTabIndex: true,
-    hasCaretGuard: true,
-  });
+  const {listRef, handleKeyDown, handleFocus} =
+    useInternalListFocus<HTMLDivElement>({
+      itemSelector: TOOLBAR_ITEMS,
+      boundarySelector: TOOLBAR_BOUNDARY,
+      orientation,
+      hasRovingTabIndex: true,
+      hasCaretGuard: true,
+      // A read-only toolbar of disabled controls stays one Tab stop.
+      tabStopOrder: toolbarTabStop,
+    });
+
+  // A bottom divider drops a tab's indicator onto its rail through the block
+  // padding. That is right only while the lanes share one line, so a wrapped
+  // row keeps the indicator on its tab. The row reports a wrap after layout,
+  // in a resize observation.
+  const watchesWrap = hasCenterContent && hasBottomDivider;
+  const [isWrapped, setIsWrapped] = useState(false);
+  useAttachment(
+    listRef,
+    row =>
+      watchesWrap
+        ? observeResize(row, () => setIsWrapped(lanesHaveWrapped(row)))
+        : () => {},
+    watchesWrap,
+  );
+  const dropsIndicatorOnRail = hasBottomDivider && !(watchesWrap && isWrapped);
 
   const {
     hintElement,
@@ -319,8 +401,9 @@ export function Toolbar({
           {...mergeProps(
             themeProps('toolbar', {size}),
             stylex.props(
-              hasCenterContent ? styles.baseGrid : styles.baseFlex,
-              orientation === 'vertical' && styles.vertical,
+              hasCenterContent ? styles.baseThreeLane : styles.baseFlex,
+              orientation === 'vertical' &&
+                (hasCenterContent ? styles.verticalThreeLane : styles.vertical),
               sizeStyles.base,
               dynamicStyles.gap(gapVar),
               // Only drop the tab indicator through the toolbar's block padding
@@ -328,7 +411,7 @@ export function Toolbar({
               // Without a divider, leave `--_tab-indicator-bottom` unset so a
               // nested TabList's indicator keeps its own default (hugging the
               // tab) instead of floating down into the toolbar's padding.
-              hasBottomDivider &&
+              dropsIndicatorOnRail &&
                 dynamicStyles.tabIndicatorBottom(
                   `calc(-1 * (${blockPaddingVarForSize[size]} + 1px))`,
                 ),
@@ -336,11 +419,13 @@ export function Toolbar({
           )}
           {...props}>
           {hasCenterContent ? (
-            // Three-slot grid layout
+            // Three-slot layout
             <>
               <div
                 {...stylex.props(
                   styles.startSlot,
+                  styles.sideLane,
+                  dynamicStyles.sideLaneBasis(edgeCompInsetForSize[size]),
                   edgeCompSlot.inset(edgeCompInsetForSize[size]),
                   dynamicStyles.gap(gapVar),
                 )}>
@@ -353,6 +438,8 @@ export function Toolbar({
               <div
                 {...stylex.props(
                   styles.endSlot,
+                  styles.sideLane,
+                  dynamicStyles.sideLaneBasis(edgeCompInsetForSize[size]),
                   edgeCompSlot.inset(edgeCompInsetForSize[size]),
                   dynamicStyles.gap(gapVar),
                 )}>

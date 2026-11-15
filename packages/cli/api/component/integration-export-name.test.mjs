@@ -20,6 +20,7 @@ import {Project} from '../../foundation/config/project.mjs';
 import {collectDocInputs} from '../../foundation/doc-compiler/inputs.mjs';
 import {COMPONENT_REPLACES_CLI} from '../../foundation/integrations/cli-requirement.mjs';
 import {scopeIntegrationMember} from './_adapter.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 const SLOW = 30_000;
 
@@ -58,9 +59,7 @@ function writeComponent(file, name, source, description, extra = {}) {
 }
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(
-    path.join(process.cwd(), '.astryx-export-name-test-'),
-  );
+  tmpDir = fs.mkdtempSync(path.join(REPO_ROOT, '.astryx-export-name-test-'));
   fs.writeFileSync(
     path.join(tmpDir, 'package.json'),
     JSON.stringify({name: 'consumer', version: '1.0.0'}),
@@ -590,7 +589,7 @@ describe('a component doc that names another export of its file', () => {
   });
 
   it(
-    'indexes a .doc.ts family member as a member when Node cannot load the doc',
+    'indexes an installed .doc.ts family and its member, as a .doc.mjs family is',
     () => {
       const fam = path.join(pkgDir, 'src', 'fam');
       fs.mkdirSync(fam, {recursive: true});
@@ -606,7 +605,8 @@ describe('a component doc that names another export of its file', () => {
         path.join(fam, 'AcmeFamTs.tsx'),
         'export function AcmeFamTs() { return null; }\nexport function AcmeFamItem() { return null; }\n',
       );
-      // The real CLI under Node, which does not strip types in node_modules.
+      // The real CLI under Node, which does not strip types in node_modules:
+      // the doc loads through jiti, so the member is found as in a .doc.mjs.
       const run = spawnSync(
         process.execPath,
         [
@@ -622,6 +622,7 @@ describe('a component doc that names another export of its file', () => {
       );
       expect(hits.map((/** @type {any} */ hit) => hit.name)).toEqual([
         'AcmeFamTs',
+        'AcmeFamItem',
       ]);
     },
     SLOW,

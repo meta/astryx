@@ -296,6 +296,9 @@ describe('useAnnounce({hasReplace}) inside an Astryx modal (spec:AST-086 FR14)',
     render(<ExitingSheet />);
     const sheet = document.querySelector<HTMLDialogElement>('dialog')!;
     await nextFrame();
+    // Focus is outside the sheet, so it goes inert from the close
+    // (component:BottomSheet FR9).
+    act(() => (document.activeElement as HTMLElement | null)?.blur());
     fireEvent.click(screen.getByRole('button', {name: 'Done'}));
     // Open but inert and aria-hidden through its exit: the words are held
     // for the real close (reach the controls by element).
@@ -374,6 +377,9 @@ describe('useAnnounce({hasReplace}) inside an Astryx modal (spec:AST-086 FR14)',
     await nextFrame();
     // Written, and the sheet starts its exit before the words are exposed.
     fireEvent.click(screen.getByRole('button', {name: 'Count'}));
+    // Focus is outside the sheet, so it goes inert from the close
+    // (component:BottomSheet FR9).
+    act(() => (document.activeElement as HTMLElement | null)?.blur());
     fireEvent.click(screen.getByRole('button', {name: 'Done'}));
     expect(sheet).toHaveAttribute('inert');
     // The sheet's provider sees the exit and hands the words off.

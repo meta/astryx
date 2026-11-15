@@ -13,6 +13,10 @@ import {describe, it, expect, vi} from 'vitest';
 import {fireEvent, render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {hasPressedArm} from '../__tests__/pressState';
+import type {ReactNode} from 'react';
+import {InteractiveRoleContext} from '../InteractiveRoleContext/InteractiveRoleContext';
+import {LayerContentBoundary} from '../Layer/layerScopedContext';
+import {Text} from '../Text/Text';
 import {Link} from './Link';
 import {LinkProvider} from './LinkProvider';
 
@@ -482,5 +486,356 @@ describe('pressed state', () => {
       </Link>,
     );
     expect(hasPressedArm(screen.getByText('Docs').closest('a')!)).toBe(false);
+  });
+});
+
+// =============================================================================
+// Display: inside a clamped Text the anchor joins the text's line boxes, so
+// the clamp can truncate it. Everywhere else it keeps its inline-flex box.
+// Link never reads its children to decide (Link AV1).
+// =============================================================================
+
+/**
+ * Extracts class-name tokens from a CSS selector (e.g. the selectorText of
+ * a CSSStyleRule), so callers can match against an element's classList by
+ * exact token rather than by substring. Handles compound selectors
+ * (`.a.b:hover`) and comma-separated selector lists (`.a, .b`).
+ */
+function classTokensFromSelector(selectorText: string): string[] {
+  const tokens: string[] = [];
+  const classRegex = /\.([-_a-zA-Z0-9]+)/g;
+  let match: RegExpExecArray | null;
+  while ((match = classRegex.exec(selectorText)) !== null) {
+    tokens.push(match[1]);
+  }
+  return tokens;
+}
+
+/**
+ * Recursively collects every CSSStyleRule from a rule list, descending into
+ * grouping rules (e.g. `@media`) so declarations nested in a condition are
+ * not missed.
+ */
+function collectStyleRules(rules: CSSRuleList, out: CSSStyleRule[]): void {
+  for (const rule of Array.from(rules)) {
+    if (rule instanceof CSSStyleRule) {
+      out.push(rule);
+    } else if ('cssRules' in rule && rule.cssRules) {
+      collectStyleRules((rule as CSSGroupingRule).cssRules, out);
+    }
+  }
+}
+
+/**
+ * Returns the `display` value of every injected CSS rule that targets `el`,
+ * matched via the CSSOM (real selector tokens + real class list) rather than
+ * substring checks on raw selector/body text — a hashed atomic class like
+ * `x1a` can be a substring of an unrelated class like `x1a2b3c4`, so
+ * string-based matching can both false-positive and false-negative.
+ */
+function displayDeclarationsFor(el: Element): string[] {
+  const classes = new Set(Array.from(el.classList));
+  const styleRules: CSSStyleRule[] = [];
+  for (const sheet of Array.from(document.styleSheets)) {
+    let rules: CSSRuleList;
+    try {
+      rules = sheet.cssRules;
+    } catch {
+      continue;
+    }
+    collectStyleRules(rules, styleRules);
+  }
+
+  const declarations: string[] = [];
+  for (const rule of styleRules) {
+    const matchesElement = classTokensFromSelector(rule.selectorText).some(
+      token => classes.has(token),
+    );
+    if (!matchesElement) {
+      continue;
+    }
+    const display = rule.style.getPropertyValue('display');
+    if (display) {
+      declarations.push(display.trim());
+    }
+  }
+  return declarations;
+}
+
+describe('Link display', () => {
+  const inClamp = (link: ReactNode) => (
+    <Text maxLines={2} hasTruncateTooltip={false}>
+      Lead text {link} tail text
+    </Text>
+  );
+
+  it('keeps its inline-flex box outside a clamped Text', () => {
+    const {container} = render(<Link href="/docs">Documentation</Link>);
+    expect(displayDeclarationsFor(container.querySelector('a')!)).toContain(
+      'inline-flex',
+    );
+  });
+
+  it('keeps its inline-flex box inside a Text that does not clamp', () => {
+    const {container} = render(
+      <Text>
+        <Link href="/docs">Documentation</Link>
+      </Text>,
+    );
+    expect(displayDeclarationsFor(container.querySelector('a')!)).toContain(
+      'inline-flex',
+    );
+  });
+
+  it('is inline inside a clamped Text, so the clamp can truncate it', () => {
+    const {container} = render(
+      inClamp(<Link href="/docs">Documentation</Link>),
+    );
+    const anchor = container.querySelector('a')!;
+    expect(displayDeclarationsFor(anchor)).toContain('inline');
+  });
+
+  it('decides from the clamp, not the children: composed content is inline too', () => {
+    const {container} = render(
+      inClamp(
+        <Link href="/docs">
+          <strong>Docs</strong> home
+        </Link>,
+      ),
+    );
+    expect(displayDeclarationsFor(container.querySelector('a')!)).toContain(
+      'inline',
+    );
+  });
+
+  it('is inline inside a clamped Text for the external-link form', () => {
+    const {container} = render(
+      inClamp(
+        <Link href="https://example.com" isExternalLink>
+          External docs
+        </Link>,
+      ),
+    );
+    expect(displayDeclarationsFor(container.querySelector('a')!)).toContain(
+      'inline',
+    );
+  });
+
+  it('keeps its own box inside a clamped Text when it sets display or maxLines', () => {
+    const {container} = render(
+      inClamp(
+        <>
+          <Link href="/block" display="block">
+            Block
+          </Link>
+          <Link href="/self" maxLines={1}>
+            Self clamped
+          </Link>
+        </>,
+      ),
+    );
+    for (const anchor of Array.from(container.querySelectorAll('a'))) {
+      expect(displayDeclarationsFor(anchor)).not.toContain('inline');
+    }
+  });
+
+  it('keeps the button form as an inline-flex box inside a clamped Text', () => {
+    const {container} = render(
+      inClamp(
+        <Link onClick={() => {}} role="button">
+          Action
+        </Link>,
+      ),
+    );
+    expect(
+      displayDeclarationsFor(container.querySelector('button')!),
+    ).not.toContain('inline');
+  });
+
+  it('keeps its own box in a layer opened inside a clamped Text', () => {
+    const {container} = render(
+      inClamp(
+        <LayerContentBoundary>
+          <Link href="/docs">In a layer</Link>
+        </LayerContentBoundary>,
+      ),
+    );
+    expect(displayDeclarationsFor(container.querySelector('a')!)).not.toContain(
+      'inline',
+    );
+  });
+});
+
+describe('Link label color', () => {
+  it('lets the label inherit the root color, so a theme styles Link through the link target', () => {
+    for (const color of ['accent', 'primary', 'secondary'] as const) {
+      const {container, unmount} = render(
+        <Link href="/docs" color={color}>
+          Docs
+        </Link>,
+      );
+      const anchor = container.querySelector('a')!;
+      expect(anchor).toHaveAttribute('data-color', color);
+      const label = anchor.querySelector('.astryx-text')!;
+      expect(label).toHaveAttribute('data-color', 'inherit');
+      unmount();
+    }
+  });
+});
+
+describe('Link disabled exposure', () => {
+  it('keeps aria-disabled and the link role when a caller passes its own', () => {
+    const callerProps = {'aria-disabled': false, role: 'button'} as const;
+    render(
+      <Link href="/billing" isDisabled {...callerProps}>
+        Billing
+      </Link>,
+    );
+    const link = screen.getByText('Billing').closest('a') as HTMLElement;
+    expect(link).toHaveAttribute('aria-disabled', 'true');
+    expect(link).toHaveAttribute('role', 'link');
+    expect(link).toHaveAttribute('tabindex', '0');
+  });
+
+  it('keeps aria-disabled and the button role on the button form when a caller passes its own', () => {
+    const callerProps = {'aria-disabled': false, role: 'link'} as const;
+    render(
+      <Link onClick={() => {}} isDisabled {...callerProps}>
+        Retry
+      </Link>,
+    );
+    const button = screen.getByText('Retry').closest('button') as HTMLElement;
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).not.toHaveAttribute('role');
+  });
+
+  it('passes keys other than Enter and Space to the caller onKeyDown', () => {
+    const onKeyDown = vi.fn();
+    render(
+      <Link href="/billing" isDisabled onKeyDown={onKeyDown}>
+        Billing
+      </Link>,
+    );
+    const link = screen.getByRole('link', {name: 'Billing'});
+    fireEvent.keyDown(link, {key: 'Enter'});
+    fireEvent.keyDown(link, {key: ' '});
+    expect(onKeyDown).not.toHaveBeenCalled();
+    fireEvent.keyDown(link, {key: 'Escape'});
+    expect(onKeyDown).toHaveBeenCalledTimes(1);
+    expect(onKeyDown.mock.calls[0][0].key).toBe('Escape');
+  });
+});
+
+describe('Link inherited interactive role', () => {
+  it('renders a button inside a button-role owner', () => {
+    render(
+      <InteractiveRoleContext value="button">
+        <Link>Open menu</Link>
+      </InteractiveRoleContext>,
+    );
+    const button = screen.getByRole('button', {name: 'Open menu'});
+    expect(button.tagName).toBe('BUTTON');
+    expect(button).toHaveAttribute('type', 'button');
+  });
+
+  it('renders the link component inside a link-role owner', () => {
+    render(
+      <InteractiveRoleContext value="link">
+        <Link as={CustomLink}>Profile</Link>
+      </InteractiveRoleContext>,
+    );
+    expect(screen.getByText('Profile').closest('a')).toHaveAttribute(
+      'data-custom-link',
+    );
+  });
+
+  it('renders the disabled anchor for a disabled Link inside a link-role owner', () => {
+    render(
+      <InteractiveRoleContext value="link">
+        <Link href="/profile" as={CustomLink} isDisabled>
+          Profile
+        </Link>
+      </InteractiveRoleContext>,
+    );
+    const link = screen.getByRole('link', {name: 'Profile'});
+    expect(link).not.toHaveAttribute('data-custom-link');
+    expect(link).not.toHaveAttribute('href');
+    expect(link).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('renders a disabled button for a disabled Link with href inside a button-role owner', () => {
+    render(
+      <InteractiveRoleContext value="button">
+        <Link href="/profile" isDisabled>
+          Profile
+        </Link>
+      </InteractiveRoleContext>,
+    );
+    const button = screen.getByRole('button', {name: 'Profile'});
+    expect(button.tagName).toBe('BUTTON');
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+  });
+});
+
+describe('Link names and native attributes', () => {
+  it('uses only the label as the name of an external link', () => {
+    render(
+      <Link href="https://example.com" isExternalLink label="Example site">
+        Example
+      </Link>,
+    );
+    expect(
+      screen.getByRole('link', {name: 'Example site'}),
+    ).toBeInTheDocument();
+  });
+
+  it('lets a caller aria-label replace the label', () => {
+    render(
+      <Link href="/docs" label="Documentation" aria-label="Product docs">
+        Docs
+      </Link>,
+    );
+    expect(screen.getByRole('link')).toHaveAttribute(
+      'aria-label',
+      'Product docs',
+    );
+  });
+
+  it('passes referrerPolicy and download to the anchor', () => {
+    render(
+      <Link
+        href="/report.csv"
+        download="report.csv"
+        referrerPolicy="no-referrer">
+        Report
+      </Link>,
+    );
+    const link = screen.getByRole('link', {name: 'Report'});
+    expect(link).toHaveAttribute('referrerpolicy', 'no-referrer');
+    expect(link).toHaveAttribute('download', 'report.csv');
+  });
+
+  it('adds caller className and style to the root and keeps the link target', () => {
+    render(
+      <Link href="/docs" className="caller-class" style={{marginInline: 4}}>
+        Docs
+      </Link>,
+    );
+    const link = screen.getByRole('link', {name: 'Docs'});
+    expect(link.className).toContain('astryx-link');
+    expect(link.className).toContain('caller-class');
+    expect(link.style.marginInline).toBe('4px');
+  });
+
+  it('describes the link with its tooltip text', () => {
+    render(
+      <Link href="/settings" tooltip="Configure settings">
+        Settings
+      </Link>,
+    );
+    const link = screen.getByRole('link', {name: 'Settings'});
+    const tooltip = screen.getByRole('tooltip', {hidden: true});
+    expect(tooltip).toHaveTextContent('Configure settings');
+    expect(link.getAttribute('aria-describedby')).toBe(tooltip.id);
   });
 });

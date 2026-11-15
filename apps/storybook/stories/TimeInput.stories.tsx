@@ -245,6 +245,23 @@ export const BottomSheetWithMinMax: Story = {
   },
 };
 
+/**
+ * The bottom-sheet wheels as iOS's date picker turns them: from 11:58 AM, one
+ * row down on the hour gives 12:58 PM and the AM/PM column turns with it.
+ */
+export const BottomSheetWheels: Story = {
+  render: args => {
+    const [value, setValue] = useState<ISOTimeString | undefined>(
+      '11:58' as ISOTimeString,
+    );
+    return <TimeInput {...args} value={value} onChange={setValue} />;
+  },
+  args: {
+    label: 'Alarm',
+    presentation: 'bottom-sheet',
+  },
+};
+
 export const WithIncrement: Story = {
   render: args => {
     const [value, setValue] = useState<ISOTimeString | undefined>(

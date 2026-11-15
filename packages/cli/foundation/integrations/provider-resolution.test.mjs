@@ -15,12 +15,13 @@ import {packageKey, resolveProviders} from './provider-resolution.mjs';
 import {markProviderConflicts} from './integrations.mjs';
 import {autolinkIntegrations} from './autolink.mjs';
 import {Project, providerLedgerOf} from '../config/project.mjs';
+import {REPO_ROOT} from '../../test-utils/repo-root.mjs';
 
 let tmpDir;
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(
-    path.join(process.cwd(), '.astryx-provider-resolution-'),
+    path.join(REPO_ROOT, '.astryx-provider-resolution-'),
   );
 });
 

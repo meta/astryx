@@ -33,8 +33,8 @@
  * ```
  *
  * Internal variables (`--layout-padding-inner-x`, `--container-padding-*`,
- * `--_section-padding-propagated`) are implementation details and must not be
- * referenced by themes. They also do not cross an overlay boundary — see
+ * `--container-corner-*`, `--_section-padding-propagated`) are implementation
+ * details and must not be referenced by themes. They also do not cross an overlay boundary — see
  * `overlayPaddingReset` in padding.stylex.ts.
  *
  * SYNC: When modified, update /packages/core/src/Layout/Layout.doc.mjs
@@ -102,6 +102,7 @@ const baseStyles = stylex.create({
  * CSS custom property cascade — no layer competition.
  */
 const SP4 = spacingVars['--spacing-4'];
+const SP6 = spacingVars['--spacing-6'];
 
 // Card padding chains: --astryx-* then the next specificity level, terminating
 // at --spacing-4. Built as chained const strings (no function calls) so StyleX
@@ -149,6 +150,11 @@ const bottomSheetInlineStart = `var(--astryx-bottom-sheet-padding-inline-start, 
 const bottomSheetInlineEnd = `var(--astryx-bottom-sheet-padding-inline-end, ${bottomSheetInline})`;
 const bottomSheetBlockStart = `var(--astryx-bottom-sheet-padding-block-start, ${bottomSheetShorthand})`;
 const bottomSheetBlockEnd = `var(--astryx-bottom-sheet-padding-block-end, ${bottomSheetShorthand})`;
+// The band under a bottom sheet's grab bar (--spacing-6) is not container
+// padding: the sheet publishes only the padding past it and applies the band
+// on top (BottomSheetPanel). The layout padding variables keep the plain
+// padding.
+const bottomSheetBlockStartClear = `max(calc(${bottomSheetBlockStart} - ${SP6}), 0px)`;
 
 // Drawer padding chains: --astryx-* then the next specificity level,
 // terminating at --spacing-4 like Dialog. Built as chained const strings (no
@@ -250,7 +256,7 @@ const bottomSheetDefaultPaddingStyles = stylex.create({
     '--container-padding-inline-end': bottomSheetInlineEnd,
   },
   containerPaddingBlockStart: {
-    '--container-padding-block-start': bottomSheetBlockStart,
+    '--container-padding-block-start': bottomSheetBlockStartClear,
   },
   containerPaddingBlockEnd: {
     '--container-padding-block-end': bottomSheetBlockEnd,

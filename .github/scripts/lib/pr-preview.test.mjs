@@ -574,6 +574,30 @@ describe('trusted PR preview identity', () => {
   });
 });
 
+describe('the comment job marks inherited visual changes', () => {
+  it('runs the marker between the trusted report and the comment, as report text only', () => {
+    const steps = PR_COMMENT_WORKFLOW.jobs.comment.steps;
+    const at = name => steps.findIndex(step => step.name === name);
+    const mark = steps[at('Mark inherited visual changes')];
+    expect(mark).toBeDefined();
+    expect(at('Prepare canonical visual report')).toBeLessThan(
+      at('Mark inherited visual changes'),
+    );
+    expect(at('Mark inherited visual changes')).toBeLessThan(
+      at('Generate and post PR comment'),
+    );
+    // A failure leaves the report as it was; it never fails the comment.
+    expect(mark['continue-on-error']).toBe(true);
+    expect(mark.if).toBe(
+      "steps.identity.outputs.valid == 'true' && steps.visual.outcome == 'success'",
+    );
+    expect(mark.run).toContain('--verdict trusted-visual/verdict.json');
+    expect(mark.run).toContain('--manifest visual-pr-report/manifest.json');
+    expect(mark.run).toContain('--head-sha "$HEAD_SHA"');
+    expect(PR_COMMENT_WORKFLOW.jobs.comment.permissions.actions).toBe('read');
+  });
+});
+
 describe('PR Comment keeps its outcome off main', () => {
   // workflow_run attaches these jobs to main's latest commit, so a failing step
   // here would turn main red for a pull request's problem.
@@ -981,7 +1005,7 @@ describe('PR comment preview reconciliation', () => {
       });
       expect(args).toContain('--jobs');
       expect(result.body).toContain(
-        'Not run on this PR: add `ci:run-rtl` to run it.',
+        'Not run on this PR: add `ci:run-rtl` for RTL.',
       );
     });
   });
@@ -1544,18 +1568,19 @@ describe('CI impact in the report', () => {
 
   it('reaches the comment for a pull request that changes CI, with the merge base as before', async () => {
     let seen;
+    let impactText;
     const {github} = await reconcile({
       extendGithub: ciChange,
       execute: (_node, args) => {
         seen = args;
         const file = args[args.indexOf('--ci-impact') + 1];
-        return `## PR Analysis Report\n${fs.readFileSync(file, 'utf8')}`;
+        impactText = fs.readFileSync(file, 'utf8');
+        return `## PR Analysis Report\n${impactText}`;
       },
     });
     expect(seen).toContain('--ci-impact');
-    const impact = JSON.parse(
-      fs.readFileSync(seen[seen.indexOf('--ci-impact') + 1], 'utf8'),
-    );
+    // The input folder is removed once the report renders.
+    const impact = JSON.parse(impactText);
     expect(impact.flags).toContain('extra moves onto a non-standard runner');
     expect(github.rest.repos.getContent).toHaveBeenCalledWith(
       expect.objectContaining({ref: 'c'.repeat(40)}),
@@ -1563,7 +1588,7 @@ describe('CI impact in the report', () => {
   });
 
   it('names a composite-action-only change as not measured', async () => {
-    let seen;
+    let impactText;
     await reconcile({
       extendGithub: github => {
         ciChange(github);
@@ -1572,16 +1597,47 @@ describe('CI impact in the report', () => {
         }));
       },
       execute: (_node, args) => {
-        seen = args;
+        impactText = fs.readFileSync(
+          args[args.indexOf('--ci-impact') + 1],
+          'utf8',
+        );
         return '## PR Analysis Report\n';
       },
     });
-    const impact = JSON.parse(
-      fs.readFileSync(seen[seen.indexOf('--ci-impact') + 1], 'utf8'),
-    );
+    // The input folder is removed once the report renders.
+    const impact = JSON.parse(impactText);
     expect(impact.unmeasuredFiles).toEqual([
       '.github/actions/setup/action.yml',
     ]);
+  });
+
+  it("removes the generator's input folder after the report renders", async () => {
+    let folder;
+    await reconcile({
+      extendGithub: ciChange,
+      execute: (_node, args) => {
+        folder = path.dirname(args[args.indexOf('--ci-impact') + 1]);
+        expect(fs.existsSync(folder)).toBe(true);
+        return '## PR Analysis Report\n';
+      },
+    });
+    expect(folder).toMatch(/pr-report-/);
+    expect(fs.existsSync(folder)).toBe(false);
+  });
+
+  it("removes the generator's input folder when the generator fails", async () => {
+    let folder;
+    const {result} = await reconcile({
+      extendGithub: ciChange,
+      createIfMissing: true,
+      execute: (_node, args) => {
+        folder = path.dirname(args[args.indexOf('--ci-impact') + 1]);
+        throw new Error('malformed analysis');
+      },
+    });
+    expect(result.body).toContain('trusted analysis is unavailable');
+    expect(folder).toMatch(/pr-report-/);
+    expect(fs.existsSync(folder)).toBe(false);
   });
 
   it('passes no impact for a pull request that does not change CI', async () => {

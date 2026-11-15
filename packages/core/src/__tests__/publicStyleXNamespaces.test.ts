@@ -30,6 +30,8 @@ import * as selectorPresentation from '@astryxdesign/core/Selector/selectorPrese
 import * as stack from '@astryxdesign/core/Stack/stack.stylex';
 import * as stackItem from '@astryxdesign/core/Stack/stackItem.stylex';
 import * as text from '@astryxdesign/core/Text/text.stylex';
+import * as indicatorPress from '@astryxdesign/core/internal/indicatorPress.stylex';
+import * as touchHitArea from '@astryxdesign/core/internal/touchHitArea.stylex';
 import * as dataTokens from '@astryxdesign/core/theme/dataTokens.stylex';
 import * as tokens from '@astryxdesign/core/theme/tokens.stylex';
 import * as focusOutline from '@astryxdesign/core/utils/focusOutline.stylex';
@@ -72,8 +74,9 @@ type XstyleNamespaces = {
 /**
  * The style namespaces that go through `stylex.props`, not `xstyle`. A style
  * that sets only custom properties shares no property with the `xstyle` type,
- * and `displayStyles` sets `overflowWrap` to a `var()`, which StyleX's
- * `overflowWrap` type does not list.
+ * `displayStyles` sets `overflowWrap` to a `var()`, which StyleX's
+ * `overflowWrap` type does not list, and `touchHitAreaStyles` styles only a
+ * pseudo-element.
  */
 type PropsOnlyNamespaces = {
   containerPaddingBlockEndVarStyles: typeof padding.containerPaddingBlockEndVarStyles;
@@ -86,6 +89,7 @@ type PropsOnlyNamespaces = {
   overlayPaddingReset: typeof padding.overlayPaddingReset;
   sectionPaddingPropagationStyles: typeof padding.sectionPaddingPropagationStyles;
   displayStyles: typeof text.displayStyles;
+  touchHitAreaStyles: typeof touchHitArea.touchHitAreaStyles;
   focusOutlineStylesPublishedVars: Pick<
     typeof focusOutline.focusOutlineStyles,
     'publishFocusVisibleVars'
@@ -136,7 +140,7 @@ type StylexPropsArgument = stylex.StyleXArray<
 type NoKeys<Namespaces> = {[Name in keyof Namespaces]: never};
 
 /**
- * The public `.stylex` subpaths, each with the exports that `stylex.create`
+ * The exported `.stylex` subpaths, each with the exports that `stylex.create`
  * made. A subpath with no style namespace exports only variables, constants,
  * a marker or style builders.
  */
@@ -188,6 +192,8 @@ const styleNamespacesBySubpath = {
     'weightStyles',
     'wordBreakStyles',
   ],
+  './internal/indicatorPress.stylex': [],
+  './internal/touchHitArea.stylex': ['touchHitAreaStyles'],
   './theme/dataTokens.stylex': [],
   './theme/tokens.stylex': [],
   './utils/focusOutline.stylex': ['focusOutlineStyles'],
@@ -211,6 +217,8 @@ const modulesBySubpath: Readonly<
   './Stack/stack.stylex': stack,
   './Stack/stackItem.stylex': stackItem,
   './Text/text.stylex': text,
+  './internal/indicatorPress.stylex': indicatorPress,
+  './internal/touchHitArea.stylex': touchHitArea,
   './theme/dataTokens.stylex': dataTokens,
   './theme/tokens.stylex': tokens,
   './utils/focusOutline.stylex': focusOutline,

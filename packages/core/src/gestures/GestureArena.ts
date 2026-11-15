@@ -513,6 +513,11 @@ export class GestureArena {
     }
   }
 
+  /** @internal A recognizer takes its touches from the view, unclaimed. */
+  cancelTouchesInViewOf(recognizer: GestureRecognizer): void {
+    this.cancelViewTouchesOf(recognizer);
+  }
+
   /**
    * Runs `body`, code outside input that stops recognizers (an Effect that
    * turns one off or detaches it), without resolving what those stops
@@ -629,7 +634,9 @@ export class GestureArena {
     }
     this.claim(recognizer);
     // A watcher takes nothing from the view either: the press and the click
-    // under it stay (spec:AST-094 FR11, FR19; FR15 exempts watchers).
+    // under it stay (spec:AST-094 FR11, FR19; FR15 exempts watchers). Only
+    // `cancelTouchesInView` takes them, as a pager's catch on a release's settle
+    // does.
     if (recognizer.claimsTouches && recognizer.cancelsTouchesInView) {
       this.cancelViewTouchesOf(recognizer);
     }

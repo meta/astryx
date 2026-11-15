@@ -92,15 +92,17 @@ export default function PowerSearchSearchWithTable() {
   const filteredBooks = applyFilters(filters, books);
 
   return (
-    <VStack gap={4} width="100%" style={{maxWidth: 500}}>
-      <PowerSearch
-        config={config}
-        filters={filters}
-        onChange={newFilters => setFilters([...newFilters])}
-        placeholder="Filter books by title, author, year, genre..."
-        resultCount={filteredBooks.length}
-      />
-      <Table data={filteredBooks} columns={columns} idKey="id" hasHover />
-    </VStack>
+    <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 500px)'}}>
+      <VStack gap={4}>
+        <PowerSearch
+          config={config}
+          filters={filters}
+          onChange={newFilters => setFilters([...newFilters])}
+          placeholder="Filter books by title, author, year, genre..."
+          resultCount={filteredBooks.length}
+        />
+        <Table data={filteredBooks} columns={columns} idKey="id" hasHover />
+      </VStack>
+    </div>
   );
 }

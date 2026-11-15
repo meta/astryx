@@ -169,10 +169,9 @@ export class RichTextExtensionNode extends DecoratorNode<unknown> {
     return {span: importExtensionElement, div: importExtensionElement};
   }
 
-  // A registered node class must be constructible with no arguments: Lexical
-  // builds one of each to read its properties, and the Yjs binding does the
-  // same when it creates a collaborative binding. `factsFrom` supplies the
-  // same empty values it gives a node whose stored facts are damaged.
+  // The Yjs binding and `$create` call the constructor with no arguments.
+  // The binding reads each class's default properties from that node.
+  // With no facts, the node gets the values that damaged stored facts get.
   constructor(
     facts: RichTextExtensionNodeFacts = factsFrom({}),
     format = 0,

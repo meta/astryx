@@ -17,6 +17,7 @@ import {describe, it, expect} from 'vitest';
 import {docs as chatDocs} from '../../../../packages/core/src/Chat/Chat.doc.mjs';
 import {docs as drawerDocs} from '../../../../packages/core/src/Drawer/Drawer.doc.mjs';
 import {docs as drawerHeaderDocs} from '../../../../packages/core/src/Drawer/DrawerHeader.doc.mjs';
+import {docs as bottomSheetSwitcherDocs} from '../../../../packages/core/src/BottomSheet/BottomSheetSwitcher.doc.mjs';
 import docsiteConfig from '../../astryx.config.mjs';
 import {
   DEMO_CONTENT_MODULE,
@@ -39,7 +40,10 @@ import {showcaseRegistry} from '../generated/showcaseRegistry';
 import {externalComponentPreviews} from '../generated/componentPreviewRegistry';
 import {eagerShowcases} from '../components/eagerShowcases';
 import {TEMPLATE_COMPONENTS} from '../components/templateComponents';
-import {exampleRegistry} from '../generated/exampleRegistry';
+import {
+  exampleRegistry,
+  setupExampleRegistry,
+} from '../generated/exampleRegistry';
 import {normalizeComponentCategory} from '../lib/componentCategories';
 import {decompressCode} from '../lib/compress';
 import {buildPlaygroundHref} from '../components/playgroundLink';
@@ -284,7 +288,12 @@ describe('componentRegistry', () => {
       'ChartTooltip',
     ]);
     expect(components['@astryxdesign/richtext'].map(comp => comp.name)).toEqual(
-      ['RichTextEditor'],
+      [
+        'RichTextEditor',
+        'RichTextEditorAutoLinkPlugin',
+        'RichTextEditorToolbar',
+        'RichTextView',
+      ],
     );
     expect(components['@astryxdesign/vega'].map(comp => comp.name)).toEqual([
       'VegaChart',
@@ -720,6 +729,24 @@ describe('componentRegistry', () => {
     expect(toolCalls).toBeDefined();
     // It's standalone (has its own doc.mjs), not a sub-component
     expect(toolCalls!.parentDoc).toBeNull();
+  });
+
+  it('projects a doc deprecation, naming a documented current replacement', () => {
+    const all = Object.values(components).flat();
+    const byName = new Map(all.map(entry => [entry.name, entry]));
+    const switcher = byName.get(bottomSheetSwitcherDocs.name);
+    expect(bottomSheetSwitcherDocs.deprecated).toBeDefined();
+    expect(switcher?.deprecated).toMatchObject(
+      bottomSheetSwitcherDocs.deprecated!,
+    );
+    for (const entry of all.filter(e => e.deprecated)) {
+      const replacement = byName.get(entry.deprecated!.replacement);
+      expect(replacement, entry.name).toBeDefined();
+      expect(replacement!.deprecated, entry.name).toBeNull();
+      expect(entry.deprecated!.replacementDisplayName).toBe(
+        replacement!.displayName,
+      );
+    }
   });
 
   it('simple components have null parentDoc', () => {
@@ -1271,6 +1298,18 @@ describe('exampleRegistry', () => {
     }
   });
 
+  it('never gives a setup example a live preview', () => {
+    for (const [component, setup] of Object.entries(setupExampleRegistry)) {
+      const live = new Set(
+        (exampleRegistry[component] ?? []).map(entry => entry.name),
+      );
+      for (const example of setup) {
+        expect(typeof example.code).toBe('string');
+        expect(live.has(example.label)).toBe(false);
+      }
+    }
+  });
+
   it('has examples for known components', () => {
     expect(exampleRegistry['Button']).toBeDefined();
     expect(exampleRegistry['Table']).toBeDefined();
@@ -1470,7 +1509,10 @@ describe('DropdownMenu adaptive-presentation example', () => {
     );
 
     expect(presentation?.type).toBe("'popover' | 'bottom-sheet' | 'adaptive'");
-    expect(presentation?.default).toBe("'popover'");
+    // Unset by default: the menu is anchored, with the touch modes under a
+    // finger. 'popover' pins the pointer behavior.
+    expect(presentation?.default).toBeUndefined();
+    expect(presentation?.description).toContain("Pass 'popover'");
 
     const defaults = dropdownMenu?.playground?.defaults as
       Record<string, unknown> | undefined;

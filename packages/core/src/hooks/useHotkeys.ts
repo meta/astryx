@@ -23,7 +23,7 @@ import {isImeKeyEvent} from '../utils/ime';
  */
 export interface Hotkey {
   /**
-   * Key combo, e.g. 'mod+k', 'shift+/', 'c', 'escape'.
+   * Key combo, e.g. 'mod+k', '?', 'c', 'escape'.
    * 'mod' = ⌘ on macOS, Ctrl elsewhere.
    *
    * Format: '+'-separated modifiers (mod, ctrl, meta, shift, alt) followed
@@ -157,6 +157,8 @@ export function useHotkeys(hotkeys: Hotkey[]): void {
     hotkeysRef.current = hotkeys;
   });
 
+  // Syncs a window keydown listener with this mount. The listener runs the
+  // first hotkey that matches.
   useEffect(() => {
     const isApple = isApplePlatform();
 

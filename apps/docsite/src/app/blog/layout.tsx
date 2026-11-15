@@ -8,6 +8,7 @@
 
 import {AppShell} from '@astryxdesign/core/AppShell';
 import {SharedTopNav} from '../../components/SharedTopNav';
+import {HeaderHeightSeed} from '../../components/HeaderHeightSeed';
 import {DocsBanner} from '../../components/InternalDocsPrompt';
 import {SiteFooter} from '../../components/SiteFooter';
 import {getCopyrightYear} from '../../lib/copyrightYear';
@@ -25,7 +26,12 @@ export default async function BlogLayout({
       height="auto"
       mobileNav={false}
       banner={<DocsBanner />}
-      topNav={<SharedTopNav />}>
+      topNav={
+        <>
+          <SharedTopNav />
+          <HeaderHeightSeed />
+        </>
+      }>
       {children}
       <SiteFooter year={year} />
     </AppShell>

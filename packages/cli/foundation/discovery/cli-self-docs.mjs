@@ -18,6 +18,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {CLI_ROOT} from '../fs/paths.mjs';
+import {CLI_SELF_DOC_DIRS, skipCliSelfDocFolder} from './name-roots.mjs';
+import {listDirEntries} from '../fs/listing-cache.mjs';
 import {readDocView} from '../doc-compiler/read.mjs';
 import {AUTHORING_SELF_DOCS, selfDocSection} from './authoring-self-docs.mjs';
 import {
@@ -26,14 +28,6 @@ import {
 } from './docs-output-budget.mjs';
 import {routeSegment} from './docs-section-key.mjs';
 import {formatCliCommand} from '../env/package-manager.mjs';
-
-/** The directories, relative to the CLI root, that hold the CLI's own docs. */
-export const CLI_SELF_DOC_DIRS = [
-  'clients/cli/commands',
-  'api',
-  'authoring',
-  'foundation',
-];
 
 /** The doc kinds that declare a namespace. */
 const NAMESPACED_KINDS = new Set(['command', 'function', 'schema', 'enum']);
@@ -66,14 +60,8 @@ export function discoverCliSelfDocSources(root = CLI_ROOT) {
   /** @param {string} dir */
   const walk = dir => {
     if (!fs.existsSync(dir)) return;
-    for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
-      if (
-        entry.name === 'node_modules' ||
-        entry.name.startsWith('__') ||
-        entry.name.startsWith('.')
-      ) {
-        continue;
-      }
+    for (const entry of listDirEntries(dir)) {
+      if (skipCliSelfDocFolder(entry.name)) continue;
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) walk(full);
       else if (entry.name.endsWith('.doc.mjs')) {

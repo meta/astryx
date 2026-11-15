@@ -509,21 +509,30 @@ export function cliBinResolves(targetDir = process.cwd()) {
  *
  * With `installed`, the line follows a step that installs the project's own
  * CLI (an update notice, the hint that matches a project's CLI to its Core),
- * so the guess is that CLI: `<run-prefix> astryx`. A declared `cliCommand`
- * and a host's door still come first.
+ * so the guess is that CLI: `<run-prefix> astryx`. With `release`, the line
+ * runs in another project's folder than the run's, so the guess names that
+ * project's release instead of the one that answered: its own CLI when it
+ * installs one and the bin resolves there, otherwise the package runner
+ * pinned to that release. A declared `cliCommand` and a host's door still
+ * come first.
  *
  * @param {string} [targetDir] the project the printed command runs in;
  *   defaults to the working directory
- * @param {{installed?: boolean}} [options]
+ * @param {{installed?: boolean, release?: {version: string, own: boolean} | null}} [options]
  * @returns {string}
  */
-export function getCliInvocation(targetDir, {installed = false} = {}) {
+export function getCliInvocation(
+  targetDir,
+  {installed = false, release = null} = {},
+) {
   const declared = declaredCliCommand(targetDir);
   if (declared.command) return declared.command;
   const guess = () =>
-    installed
+    installed || (release?.own && cliBinResolves(targetDir))
       ? `${getRunPrefix(targetDir)} ${CLI_BIN}`
-      : guessCliInvocation(targetDir);
+      : release
+        ? `${getDlxPrefix(targetDir)} ${CLI_PACKAGE}@${release.version}`
+        : guessCliInvocation(targetDir);
   if (declared.conflict) return guess();
   return cliDoor() ?? guess();
 }

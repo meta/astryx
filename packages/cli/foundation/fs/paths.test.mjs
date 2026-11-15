@@ -4,7 +4,7 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import {findAstryxProject, findCoreDir, findProjectCoreDir, findProjectRoot, listComponents, discoverExternalPackages, existsCaseExact, findInstalledPackage, findNodeModulesPackage, findPackageRoot, findProjectPackageOf, findWorkspaceRoot} from './paths.mjs';
+import {findAstryxProject, findCoreDir, findProjectCoreDir, findProjectRoot, listComponents, discoverExternalPackages, existsCaseExact, findInstalledPackage, findNodeModulesPackage, findPackageRoot, findProjectPackageOf, findWorkspaceRoot, isInside} from './paths.mjs';
 import {CLI_ROOT} from './paths.mjs';
 import {linkThisCliAsProjectCli} from '../../test-utils/release-fixtures.mjs';
 
@@ -681,9 +681,23 @@ describe('discoverExternalPackages', () => {
 });
 
 describe('listComponents', () => {
-  it('returns sorted component directory names, skipping hooks/theme/utils', () => {
+  it('returns sorted component directory names, skipping infrastructure dirs', () => {
     const srcDir = path.join(tmpDir, 'src');
-    for (const dir of ['Button', 'Avatar', 'hooks', 'theme', 'utils', 'Zebra']) {
+    // Infrastructure directories (`hooks`, `theme`, `utils`, `i18n`, `motion`,
+    // `gestures`, `__tests__`) must never be offered to `swizzle`: a copy of
+    // them cannot compile in a consumer project.
+    for (const dir of [
+      'Button',
+      'Avatar',
+      '__tests__',
+      'gestures',
+      'hooks',
+      'i18n',
+      'motion',
+      'theme',
+      'utils',
+      'Zebra',
+    ]) {
       fs.mkdirSync(path.join(srcDir, dir), {recursive: true});
     }
 
@@ -721,5 +735,17 @@ describe('existsCaseExact', () => {
 
   it('refuses a target outside the root', () => {
     expect(existsCaseExact(os.tmpdir(), tmpDir)).toBe(false);
+  });
+});
+
+describe('isInside', () => {
+  it('reads a name that begins with two dots as a name, and .. as the folder above', () => {
+    const parent = path.resolve('/work/site');
+    expect(isInside(path.join(parent, 'app/page.tsx'), parent)).toBe(true);
+    expect(isInside(path.join(parent, '..x/page.tsx'), parent)).toBe(true);
+    expect(isInside(path.join(parent, '...'), parent)).toBe(true);
+    expect(isInside(parent, parent)).toBe(false);
+    expect(isInside(path.dirname(parent), parent)).toBe(false);
+    expect(isInside(path.resolve('/work/other/page.tsx'), parent)).toBe(false);
   });
 });

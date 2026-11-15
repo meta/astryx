@@ -14,7 +14,6 @@ import {fileURLToPath} from 'node:url';
 import {
   animationStoryboard,
   armHold,
-  busyWindowProof,
   compareCurve,
   countBetween,
   curveOf,
@@ -23,24 +22,33 @@ import {
   markElement,
   merge,
   path,
+  pooledBusyProof,
   releaseAnimations,
   sampleCurve,
+  startBusyControl,
   startScreencast,
   timeline,
   toTouchEvents,
   touchDriver,
   traceRendering,
+  trackControl,
   trackMarker,
   waitForRest,
   webInputDriver,
   withFinger,
   writeEvidence,
   type ArmedHold,
+  type BusyRun,
   type HeldAnimation,
   type TouchDriver,
   type TouchScript,
 } from '@astryxdesign/interaction-harness';
-import {expect, test, type Locator, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {build} from 'esbuild';
 import type * as PagerBundle from './pagerBundle';
 
@@ -90,6 +98,10 @@ async function serve(
   page: Page,
   {rtl = false, startIndex = 1, tall = false} = {},
 ): Promise<void> {
+  // WebKit starts an animation inside a frame, and stamps that frame at or
+  // after the start. Chromium starts it on the compositor after a commit.
+  const stampsStartFrame =
+    page.context().browser()?.browserType().name() === 'webkit';
   const pages = Array.from(
     {length: COUNT},
     (_, i) =>
@@ -115,13 +127,16 @@ async function serve(
   window.moves = [];
   // For a failure's load report. It records the frames the page draws from
   // each touch, wheel or goTo, until 2 s after the last one. It also records
-  // when each settle ends, and the time of each touch and wheel event.
+  // when each frame's callbacks ran, when each settle ends, and the time of
+  // each touch and wheel event.
   window.frameTimes = [];
+  window.frameCallbacks = [];
   window.settleTimes = [];
   let framesUntil = 0;
   let framing = false;
   const frame = time => {
     window.frameTimes.push(time);
+    window.frameCallbacks.push(performance.now());
     if (performance.now() < framesUntil) {
       requestAnimationFrame(frame);
     } else {
@@ -160,13 +175,42 @@ async function serve(
     window.liftPositions.push(track ? parseFloat(getComputedStyle(track).translate) || 0 : 0);
     return velocity;
   };
+  // When each motion on the track was made, for the report check below.
+  window.trackMotions = [];
+  const trackElement = document.getElementById('track');
+  const animateTrack = trackElement.animate;
+  trackElement.animate = function (...args) {
+    window.trackMotions.push(performance.now());
+    return animateTrack.apply(this, args);
+  };
   window.pager = Pager.createPager({
     count: ${COUNT},
     defaultIndex: ${startIndex},
-    // Notes whether the settle was already running on its curve when the
-    // page was reported.
-    onIndexChange: (i, reason) => window.pagerLog.push('index:' + i + ':' + reason +
-      (document.getAnimations().some(a => a.playState === 'running' && a.startTime != null && a.currentTime > 20) ? ':moving' : '')),
+    // Notes whether the settle had run for two of the page's frames when the
+    // page was reported. The browser must also have told its start. The
+    // frames are counted after the one that the pager counts from. In
+    // Chromium, that is the frame that commits the settle: the first one whose
+    // callbacks run after the settle is made. On a loaded runner, Chromium can
+    // date its own start a frame later. WebKit starts the settle inside a
+    // frame and stamps that frame at or after the start. So in WebKit the
+    // count starts at that frame. The frames are the ones the load report
+    // records.
+    onIndexChange: (i, reason) => {
+      const now = document.timeline.currentTime;
+      const frames = [...new Set([...window.frameTimes, now])];
+      const made = window.trackMotions.at(-1);
+      const committed = made == null ? null : window.frameTimes[window.frameCallbacks.findIndex(t => t > made)];
+      const moving = document.getAnimations().some(a => {
+        if (a.playState !== 'running' || a.startTime == null) {
+          return false;
+        }
+        const past = ${stampsStartFrame}
+          ? frames.filter(t => t <= now && t >= a.startTime).length - 1
+          : committed == null ? 0 : frames.filter(t => t <= now && t > committed).length;
+        return past >= 2;
+      });
+      window.pagerLog.push('index:' + i + ':' + reason + (moving ? ':moving' : ''));
+    },
     onSettle: (i, previous) => {
       window.settleTimes.push(performance.now());
       window.pagerLog.push('settle:' + i + ':' + previous);
@@ -349,31 +393,45 @@ test.afterEach(async ({page}, testInfo) => {
  * the input, so it holds the motion at its first frame. A long input can
  * outlast the hold's own 5 s. The driver paces its events on the wall clock,
  * and on a loaded runner they play much longer than scripted. Then the hold
- * is armed again for what is left of 5 s from the input's end.
+ * is armed again for what is left of 5 s from the input's end. `property` is
+ * the track's judged motion: `translate`, or `opacity` for a cross-fade.
  */
 async function playHeld(
   page: Page,
   track: Locator,
   driver: TouchDriver,
   script: TouchScript,
+  property: 'translate' | 'opacity' = 'translate',
 ): Promise<ArmedHold> {
-  const first = await armHold(page, track);
+  const judges = {target: track, property};
+  const first = await armHold(page, track, {judges});
   const caught = first.held().then(
     held => ({held}),
-    () => null,
+    (error: unknown) => ({error}),
   );
   await driver.play(script);
   const inputEnd = Date.now();
   return {
     held: async () => {
       const outcome = await caught;
-      if (outcome != null) {
+      if ('held' in outcome) {
         return outcome.held;
       }
+      // Only a hold that ran out of time is armed again. A hold that took
+      // the wrong motion fails with its own error.
+      const timedOut = (error: unknown) =>
+        String(error).includes('no animation under the scope ran');
+      if (!timedOut(outcome.error)) {
+        throw outcome.error;
+      }
       const again = await armHold(page, track, {
+        judges,
         timeout: Math.max(0, inputEnd + 5_000 - Date.now()),
       });
-      return again.held().catch(() => {
+      return again.held().catch((error: unknown) => {
+        if (!timedOut(error)) {
+          throw error;
+        }
         throw new Error(
           'no motion under the track started within 5 s of the input ending',
         );
@@ -382,9 +440,19 @@ async function playHeld(
   };
 }
 
-/** Calls `goTo(index)` with the motion it starts held at its first frame. */
-const goToHeld = async (page: Page, track: Locator, index: number) => {
-  const hold = await armHold(page, track);
+/**
+ * Calls `goTo(index)` with the motion it starts held at its first frame.
+ * `property` is the track's judged motion, as for `playHeld`.
+ */
+const goToHeld = async (
+  page: Page,
+  track: Locator,
+  index: number,
+  property: 'translate' | 'opacity' = 'translate',
+) => {
+  const hold = await armHold(page, track, {
+    judges: {target: track, property},
+  });
   await page.evaluate(next => {
     window.armFrames();
     window.pager.goTo(next);
@@ -644,6 +712,31 @@ test('callbacks: the new page once the settle is moving, the settle when the tra
   await waitForRest(track);
   await page.waitForTimeout(50);
   expect(await log(page)).toEqual(['index:2:drag:moving', 'settle:2:1']);
+});
+
+test('a flick pages on when a page pointerup listener holds its touchend: the lift is read where the moves were', async ({
+  page,
+}) => {
+  const {driver} = await open(page);
+  // A busy app's pointerup listener: WebKit stamps the touchend after it.
+  await page.evaluate(() => {
+    addEventListener('pointerup', () => {
+      const end = performance.now() + 50;
+      while (performance.now() < end) {
+        // The listener's own work.
+      }
+    });
+  });
+  await driver.play(
+    flick(
+      {x: 320, y: 200},
+      {velocity: {x: -1500, y: 0}, durationMs: 80, hz: 120},
+    ),
+    {pacing: 'spacing'},
+  );
+  await expect
+    .poll(async () => page.evaluate(() => window.pager.index))
+    .toBe(2);
 });
 
 test('a flick pages exactly one page, and the settle starts from the release velocity', async ({
@@ -914,7 +1007,7 @@ test('under Reduce Motion the settle and goTo do not travel: an opacity cross-fa
     {x: 320, y: 200},
     {velocity: {x: -1500, y: 0}, durationMs: 80},
   );
-  const hold = await playHeld(page, track, driver, throwScript);
+  const hold = await playHeld(page, track, driver, throwScript, 'opacity');
   crossFadesOnly(await hold.held());
   await releaseAnimations(page);
   await expect
@@ -922,7 +1015,7 @@ test('under Reduce Motion the settle and goTo do not travel: an opacity cross-fa
     .toBe(false);
   expect(await page.evaluate(() => window.pager.index)).toBe(2);
   // goTo cross-fades too.
-  crossFadesOnly(await goToHeld(page, track, 4));
+  crossFadesOnly(await goToHeld(page, track, 4, 'opacity'));
   await releaseAnimations(page);
   await expect
     .poll(async () => page.evaluate(() => window.pager.isSettling))
@@ -1058,66 +1151,109 @@ test('a settle keeps advancing every frame through an 800 ms main-thread block',
   await open(page, {startIndex: 0});
   const marker = page.locator('.page').nth(1);
   await markElement(marker, {inset: 8});
-  const cast = await startScreencast(page);
-  // Let the screencast deliver a few frames before anything moves.
-  await page.waitForTimeout(300);
-  // A goTo of one page (0.3 s at any distance), and an 800 ms block that the
-  // page schedules 90 ms in. WebKit hands a new animation to its compositor
-  // two or three rendering updates after it starts (animator.ts, known
-  // limits). A harness round trip would eat most of the motion.
-  const started = await page.evaluate(() => {
-    window.pager.goTo(1);
-    setTimeout(() => {
-      const from = performance.timeOrigin + performance.now();
-      const end = performance.now() + 800;
-      let spins = 0;
-      while (performance.now() < end) {
-        spins += 1;
-      }
-      (window as unknown as {busy: unknown}).busy = {
-        from,
-        to: performance.timeOrigin + performance.now(),
-        spins,
-      };
-    }, 90);
-    return performance.timeOrigin + performance.now();
-  });
-  await page.waitForTimeout(1200);
-  const busy = await page.evaluate(
-    () =>
-      (window as unknown as {busy: {from: number; to: number; spins: number}})
-        .busy,
-  );
-  const tracked = await trackMarker(page, await cast.stop());
-  // Judge the part of the block that the motion spans. The motion ends about
-  // 0.3 s after the call, or a frame later when it starts at the next commit.
-  const spanned = {...busy, to: Math.min(busy.to, started + 300)};
-  test.info().annotations.push({
-    type: 'marker x per frame (ms from the call)',
-    description: JSON.stringify(
-      tracked.map(f => [Math.round(f.t - started), f.box?.x ?? null]),
-    ),
-  });
-  expect(spanned.to - spanned.from).toBeGreaterThan(150);
-  const proof = busyWindowProof(tracked, spanned, {
+  // The harness's busy-window control: a box the compositor moves along the
+  // top edge, in the same screencast. Each settle is judged against what the
+  // compositor presented in its block, not against a frame rate. Under a CPU
+  // quota the compositor presents fewer frames in a block, the control's too.
+  const control = await startBusyControl(page);
+  // The motion lasts 0.3 s, so one block leaves few frames to judge. The
+  // proof pools two runs and judges them as one longer window.
+  const runs: BusyRun[] = [];
+  for (let run = 1; run <= 2; run += 1) {
+    await page.evaluate(() => window.pager.goTo(0, {animated: false}));
+    const cast = await startScreencast(page);
+    // Let the screencast deliver a few frames before anything moves.
+    await page.waitForTimeout(300);
+    // A goTo of one page (0.3 s at any distance), and an 800 ms block that the
+    // page schedules 90 ms in. WebKit hands a new animation to its compositor
+    // two or three rendering updates after it starts (animator.ts, known
+    // limits). A harness round trip would eat most of the motion.
+    const started = await page.evaluate(() => {
+      window.pager.goTo(1);
+      setTimeout(() => {
+        const from = performance.timeOrigin + performance.now();
+        const end = performance.now() + 800;
+        let spins = 0;
+        while (performance.now() < end) {
+          spins += 1;
+        }
+        (window as unknown as {busy: unknown}).busy = {
+          from,
+          to: performance.timeOrigin + performance.now(),
+          spins,
+        };
+      }, 90);
+      return performance.timeOrigin + performance.now();
+    });
+    await page.waitForTimeout(1200);
+    const busy = await page.evaluate(
+      () =>
+        (window as unknown as {busy: {from: number; to: number; spins: number}})
+          .busy,
+    );
+    // The control keeps the compositor presenting, so the cast holds a frame
+    // for every refresh. Only those around the motion are decoded, and the
+    // last one the block presented, for the landing.
+    const castFrames = await cast.stop();
+    const landing = castFrames.filter(f => f.t < busy.to).at(-1);
+    const frames = castFrames.filter(f => f.t <= started + 450);
+    const tracked = await trackMarker(
+      page,
+      landing == null || landing.t <= started + 450
+        ? frames
+        : [...frames, landing],
+    );
+    // Judge the part of the block that the motion spans. The motion ends about
+    // 0.3 s after the call, or a frame later when it starts at the next commit.
+    const spanned = {...busy, to: Math.min(busy.to, started + 300)};
+    test.info().annotations.push({
+      type: `run ${run}: marker x per frame (ms from the call)`,
+      description: JSON.stringify(
+        tracked.map(f => [Math.round(f.t - started), f.box?.x ?? null]),
+      ),
+    });
+    expect(spanned.to - spanned.from).toBeGreaterThan(150);
+    runs.push({
+      tracked,
+      control: await trackControl(page, frames),
+      window: spanned,
+    });
+    // And it lands while the thread is still blocked. The last frame before
+    // the block ended shows where the settle stands then: page 1's marker sits
+    // at its inset from the viewport's left edge.
+    const blocked = tracked.filter(f => f.box != null && f.t < busy.to);
+    const last = blocked[blocked.length - 1];
+    expect(last.t).toBeGreaterThan(spanned.from);
+    expect(Math.abs((last.box?.x ?? 0) - 8)).toBeLessThan(1.5);
+  }
+  await control.remove();
+  // The settle ends with page 1's marker at its inset. The proof is told so:
+  // the last decoded frame is the block's last, which a frozen settle holds.
+  // One presented frame cannot show the settle moving, so a run whose control
+  // moved on fewer than two frames is too little to judge. Both runs count.
+  const proof = pooledBusyProof(runs, {
     axis: 'x',
     settledWithin: 1,
+    settledAt: 8,
+    minRunFrames: 2,
+    minJudgedRuns: 2,
   });
   test.info().annotations.push({
     type: 'busy window',
-    description: JSON.stringify({...proof, window: undefined}),
+    description: proof.summary,
   });
-  expect(proof.frames).toBeGreaterThanOrEqual(proof.expectedFrames - 2);
-  expect(proof.changed).toBeGreaterThanOrEqual(proof.frames - 3);
-  // And it lands while the thread is still blocked. The last frame that the
-  // page presented before the block ended shows the end state. There, page
-  // 1's marker sits at its inset from the viewport's left edge. A page at rest
-  // presents no new frame, so the landing is that last frame, whenever the
-  // screencast delivered it.
-  const blocked = tracked.filter(f => f.box != null && f.t < busy.to);
-  const last = blocked[blocked.length - 1];
-  expect(last.t).toBeGreaterThan(spanned.from);
-  expect(Math.abs((last.box?.x ?? 0) - 8)).toBeLessThan(1.5);
+  // The settle moves on every frame the control moves on, and in each run it
+  // stalls no longer than the control.
+  expect(proof.verdict.failures, proof.summary).toEqual([]);
+  // Each run's own block has to show the settle at a new position.
+  proof.runs.forEach((run, i) => {
+    const read = run?.control;
+    const settleFrames = (read?.movedWith ?? 0) - (read?.belowStep ?? 0);
+    expect(
+      settleFrames,
+      `run ${i + 1}: the settle showed a new position on ${settleFrames} frames in its block. ${run?.summary ?? proof.late[i]?.message}`,
+    ).toBeGreaterThanOrEqual(1);
+  });
 });
 
 test('no Layout or Paint while it settles', async ({page, browserName}) => {

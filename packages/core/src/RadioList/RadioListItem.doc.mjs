@@ -8,7 +8,7 @@ export const docs = {
   displayName: 'Radio List Item',
   isHiddenFromOverview: true,
   description:
-    'Individual radio item with label, description, and content slots.',
+    'Individual radio item with label, description, and content slots. Under a coarse pointer an enabled option’s target grows toward 44 px through an invisible hit area. It never shrinks below the row and stops at half the gap to a closer neighbour; the row keeps its size. That hit area is the row’s `::after`, so decorate a row with a child.',
   // RadioListItem requires RadioList context; wrap it so the preview doesn't throw.
   playground: {
     defaults: {value: 'option-1', label: 'Option'},
@@ -97,7 +97,8 @@ export const docsZh = {
   name: 'RadioListItem',
   isHiddenFromOverview: true,
   displayName: 'Radio List Item',
-  description: '单个单选选项，包含标签、描述和内容插槽。',
+  description:
+    '单个单选选项，包含标签、描述和内容插槽。在粗指针（触摸）下，已启用选项的目标通过不可见的点击区域向 44 px 扩展。它不小于所在行，与相邻控件较近时止于间距的一半；行尺寸不变。该点击区域是行的 `::after`，因此请用子元素装饰行。',
   props: [
     {
       name: 'label',

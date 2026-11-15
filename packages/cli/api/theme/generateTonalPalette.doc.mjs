@@ -29,7 +29,7 @@ export const doc = {
       name: 'input',
       type: 'TonalPaletteGenerationInput',
       description:
-        'Families and seeds plus optional modes, shared stops, anchors, vibrancy from 0 to 100 (default 50), and neutral profile.',
+        'Families and seeds plus optional modes, shared stops, anchors, vibrancy from 0 to 100 (default 50), neutral profile, and a dark chroma taper that mutes the dark edge of chromatic families.',
       required: true,
     },
   ],
@@ -43,7 +43,7 @@ export const doc = {
   throws: [
     {
       code: 'Error',
-      when: 'the request, family, seed, stop layout, mode, or anchor is invalid',
+      when: 'the request, family, seed, stop layout, mode, anchor, or dark chroma taper is invalid',
     },
   ],
   examples: [

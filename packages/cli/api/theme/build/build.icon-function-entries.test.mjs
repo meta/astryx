@@ -20,19 +20,44 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import ts from 'typescript';
 import {themeBuild, themeBuildFamily} from './build.mjs';
+import {
+  makeLinkedFixture,
+  removeLinkedFixture,
+} from '../../../test-utils/linked-fixture.mjs';
+
+/**
+ * The temp folder's entries, the fixture's own package.json aside: that
+ * file is the one the linked fixture writes (it lists Core, nothing else),
+ * checked unchanged, so a build that wrote any package.json still fails.
+ * @param {string} dir
+ * @returns {string[]}
+ */
+function ownEntries(dir) {
+  const pkg = path.join(dir, 'package.json');
+  if (fs.existsSync(pkg))
+    expect(JSON.parse(fs.readFileSync(pkg, 'utf8'))).toEqual({
+      private: true,
+      type: 'module',
+      dependencies: {'@astryxdesign/core': '*'},
+    });
+  return fs.readdirSync(dir).filter(f => f !== 'package.json');
+}
 
 const SIZES = ['xsm', 'sm', 'md', 'lg'];
 
 let tmpDir;
 beforeEach(() => {
-  // Under the CLI package, so core, React, and TypeScript resolve both in the
-  // theme loader and in the native artifact checks.
-  tmpDir = fs.mkdtempSync(
-    path.resolve(import.meta.dirname, '../../..', '.tmp-icon-functions-'),
-  );
+  // Core, React and TypeScript resolve both in the theme loader and in the
+  // native artifact checks.
+  tmpDir = makeLinkedFixture('astryx-icon-functions-', [
+    '@astryxdesign',
+    'react',
+    'react-dom',
+    'typescript',
+  ]);
 });
 afterEach(() => {
-  fs.rmSync(tmpDir, {recursive: true, force: true});
+  removeLinkedFixture(tmpDir);
 });
 
 /** @param {string} file @param {string} source */
@@ -494,6 +519,6 @@ export default defineTheme({name: 'inline-functions', tokens: {}, ${iconsField}}
     await expect(
       themeBuild('inline.mjs', {}, {cwd: tmpDir}),
     ).rejects.toMatchObject({code: 'ERR_THEME_INVALID'});
-    expect(fs.readdirSync(tmpDir).sort()).toEqual(['icons.mjs', 'inline.mjs']);
+    expect(ownEntries(tmpDir).sort()).toEqual(['icons.mjs', 'inline.mjs']);
   });
 });

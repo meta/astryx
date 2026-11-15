@@ -34,8 +34,12 @@ independent auto passes: **D1 (icon-mirror)**, **D5 (positional-mirror)**, and
 > package produces a report whose requested package/filter, duplicate-free exact
 > D1/D5/D6 identities, and nonzero planned/completed scans match. When trusted
 > policy requires full scope, every manifest must be runnable with an empty
-> filter and all five package reports must arrive. A planned scan ending in ERROR
-> is incomplete. Missing or malformed analysis/index/manifest input, a noncanonical owner, stale output, a missing or unexpected report, and
+> filter and all five package reports must arrive. A D1 or D5/D6 scan that
+> throws (ERROR: a navigation or page timeout, a crash; no verdict) runs once
+> more on a fresh page; a judged verdict is never retried. The report, its job
+> summary and one `rtl-audit-retries: <n> [story ids]` log line list each retried
+> story with its first ERROR. A planned scan still ending in ERROR after its
+> retry is incomplete. Missing or malformed analysis/index/manifest input, a noncanonical owner, stale output, a missing or unexpected report, and
 > an all-skipped required matrix all fail closed. An RTL-harness-only PR labelled `ci:run-rtl` runs the fixed
 > `Chart,ChartLegend` routing smoke scope so package discovery and curated aliases
 > cannot skip their own check; without the label, `main`'s `release-check` covers
@@ -192,8 +196,8 @@ spike this guard removed the single false positive.
 its parent's width** is skipped: a full-bleed strip spans the _entire_ parent,
 so it occupies both halves and has **no left/right side** to land on the wrong
 one. This catches `useResizable`'s **vertical** grab zone (`ResizeHandle`'s
-`hitAreaOffsetY`): a full-width strip anchored `insetInlineStart:0;
-insetInlineEnd:0` with a purely-visual centering `translate(-50%,…)`, so its
+`hitAreaCenteredY`): a full-width strip anchored `insetInlineStart:0;
+insetInlineEnd:0` and centred on the block axis only, so its
 geometric _center_ sits at the parent origin (relCenterX≈0) **identically in LTR
 and RTL**. The mirror assertion would otherwise compute `expected = parentW − 0
 = parentW` and fire a spurious `Δ = parentW`. The degenerate-parent guard misses

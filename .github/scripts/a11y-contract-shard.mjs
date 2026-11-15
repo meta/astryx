@@ -23,7 +23,8 @@
  *   longest file no longer sets the release check's wall-clock. A leg still
  *   runs its part of a file in declaration order on one worker. A file is
  *   never cut when its titles cannot be named exactly in a test list, or when
- *   it runs serially.
+ *   it runs serially. A file marked `@a11y-isolated` owns a whole leg, so its
+ *   timing samples do not include contention from sibling workers and builds.
  */
 
 import {execFileSync} from 'node:child_process';
@@ -154,6 +155,36 @@ export function partitionTests(tests, count, recorded, readSource = () => '') {
     const file = perFile[test.file];
     return file > 0 ? file / byFile.get(test.file).length : median;
   };
+  // Timing proofs must not compete with other workers or their fixture builds.
+  const isolated = [...byFile.keys()].filter(file =>
+    /^\/\/ @a11y-isolated\s*$/m.test(readSource(file)),
+  );
+  if (isolated.length > 0) {
+    const isolatedFiles = new Set(isolated);
+    const shared = tests.filter(test => !isolatedFiles.has(test.file));
+    const sharedCount = count - isolated.length;
+    if (sharedCount < 0 || (shared.length > 0 && sharedCount === 0)) {
+      throw new Error('Not enough contract shards to isolate timing proofs.');
+    }
+    const legs =
+      sharedCount > 0
+        ? partitionTests(shared, sharedCount, recorded, readSource)
+        : [];
+    return [
+      ...legs,
+      ...isolated.map(file => [
+        {
+          file,
+          part: 1,
+          parts: 1,
+          tests: byFile.get(file),
+          seconds: byFile
+            .get(file)
+            .reduce((sum, test) => sum + seconds(test), 0),
+        },
+      ]),
+    ];
+  }
   const total = tests.reduce((sum, test) => sum + seconds(test), 0);
   // One leg's fair share of one worker's time.
   const share = total / (count * WORKERS);

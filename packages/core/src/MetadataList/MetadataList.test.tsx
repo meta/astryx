@@ -89,6 +89,31 @@ describe('MetadataList', () => {
     expect(screen.queryByText('B')).not.toBeInTheDocument();
   });
 
+  it('exposes the toggle state and the list it controls, and keeps focus on it', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MetadataList maxNumOfItems={1}>
+        <MetadataListItem label="A">1</MetadataListItem>
+        <MetadataListItem label="B">2</MetadataListItem>
+      </MetadataList>,
+    );
+
+    const toggle = screen.getByRole('button', {name: 'Show more'});
+    const list = screen.getByRole('term').closest('dl') as HTMLElement;
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(toggle).toHaveAttribute('aria-controls', list.id);
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(toggle).toHaveAccessibleName('Show less');
+    expect(toggle).toHaveFocus();
+
+    await user.keyboard('{Enter}');
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(toggle).toHaveFocus();
+  });
+
   it('localizes the show more / show less labels through the i18n catalog', async () => {
     const user = userEvent.setup();
 
@@ -200,6 +225,40 @@ describe('MetadataList', () => {
         .getByRole('term')
         .closest('.astryx-metadata-list-item');
       expect(item).toContainElement(screen.getByRole('definition'));
+    });
+
+    it('defaults to top labels for columns="multi"', () => {
+      render(
+        <MetadataList columns="multi">
+          <MetadataListItem label="A">1</MetadataListItem>
+        </MetadataList>,
+      );
+
+      const item = screen
+        .getByRole('term')
+        .closest('.astryx-metadata-list-item');
+      expect(item).toContainElement(screen.getByRole('definition'));
+    });
+
+    it('keeps start labels for a column count below 1', () => {
+      render(
+        <MetadataList columns={0}>
+          <MetadataListItem label="A">1</MetadataListItem>
+        </MetadataList>,
+      );
+
+      // With start labels the term itself carries the item target.
+      expect(screen.getByRole('term')).toHaveClass('astryx-metadata-list-item');
+    });
+
+    it('gives one label and value pair per row for a start-label width on columns="multi"', () => {
+      const {container} = render(
+        <MetadataList columns="multi" label={{position: 'start', width: 140}}>
+          <MetadataListItem label="A">1</MetadataListItem>
+        </MetadataList>,
+      );
+
+      expect(gridTemplateOf(container)).toContain('140px minmax(0, 1fr)');
     });
 
     it('ignores numeric columns in horizontal orientation', () => {
@@ -353,6 +412,24 @@ describe('MetadataList pass-through props', () => {
     expect(rootEl).toHaveAttribute('aria-label', 'Record details');
     expect(rootEl).toHaveAttribute('id', 'record-meta');
     expect(rootEl).toHaveAttribute('data-source', 'crm');
+  });
+
+  it('forwards ref, className and style to the root element', () => {
+    const ref = {current: null as HTMLDivElement | null};
+    render(
+      <MetadataList
+        ref={ref}
+        className="facts"
+        style={{maxWidth: '480px'}}
+        data-testid="list">
+        <MetadataListItem label="Owner">Alice</MetadataListItem>
+      </MetadataList>,
+    );
+    const rootEl = screen.getByTestId('list');
+    expect(ref.current).toBe(rootEl);
+    expect(rootEl).toHaveClass('facts');
+    expect(rootEl).toHaveClass('astryx-metadata-list');
+    expect(rootEl.style.maxWidth).toBe('480px');
   });
 
   it('forwards event handlers to the root element', () => {
