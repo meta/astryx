@@ -3696,45 +3696,31 @@ async function rankedPages(
     list.slice(0, 3).map(n => `${PREVIEW} add --template ${n}${flags}`);
   /** @param {string[]} ids */
   const showableOf = ids => showablePages(cwd, appRoot ?? cwd, ids, 3);
-  // No page relates when the ranking fell back to a frame with no direct
-  // match, and no page the search found matches three words of the request
-  // or two fifths of them.
-  const termsMatched = (/** @type {any} */ r) => {
-    const m = /^matches (\d+)\/(\d+)/.exec(String(r.reason ?? ''));
-    if (!m) return 0;
-    const [hit, of] = [Number(m[1]), Number(m[2])];
-    return hit >= 3 || hit / of >= 0.4 ? hit : 0;
-  };
   // A page the description names in a phrase (a blog post, an issue
   // tracker) always relates.
   const named = APP_PAGES.some(([re]) => re.test(words.toLowerCase()));
+  // So does a page build's ranking names by its name or a keyword when
+  // build itself starts from the app shell ("checkout"). Otherwise a page is
+  // added only when build is sure of its start: never from the app shell.
   const unrelated =
     !named &&
     !exact &&
     !ranked.some(n => !frames.has(n)) &&
-    (!pages.length ||
-      (start &&
-        start.basis === 'fallback' &&
-        frames.has(start.name) &&
-        !kit.data.directMatch &&
-        !found.some(
-          (/** @type {any} */ r) => !frames.has(r.name) && termsMatched(r) >= 2,
-        )));
+    (!pages.length || !start || start.basis === 'fallback');
   if (unrelated) {
-    // With no page close, a few pages this app can show, and the list.
-    const offered = await showableOf(
-      pages.length
-        ? pages
-        : [
-            ...['dashboard', 'settings', 'login'],
-            ...listed.map(t => t.id),
-          ].filter(
-            (id, i, all) =>
-              all.indexOf(id) === i &&
-              listed.some(t => t.id === id) &&
-              !frames.has(id),
-          ),
+    // The pages build ranks nearest that this app can show; with none, a
+    // few pages it can show. The list of every page comes last.
+    const fallbacks = [
+      ...['dashboard', 'settings', 'login'],
+      ...listed.map(t => t.id),
+    ].filter(
+      (id, i, all) =>
+        all.indexOf(id) === i &&
+        listed.some(t => t.id === id) &&
+        !frames.has(id),
     );
+    const nearest = pages.length ? await showableOf(pages) : [];
+    const offered = nearest.length ? nearest : await showableOf(fallbacks);
     refuse(
       E.ERR_NOT_FOUND,
       cut
