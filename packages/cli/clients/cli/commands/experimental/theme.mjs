@@ -1909,6 +1909,14 @@ export function registerExperimentalTheme(group, program) {
         // A pasted JSON object of settings goes to the editor whole, which
         // gives one set line per entry.
         if (!value.length && /^\s*\{/.test(thing)) value = [''];
+        // Several pasted lines in one argument, each a declaration or the
+        // editor's own printed or change line, go to the editor whole: its
+        // entry reader reads each line.
+        if (!value.length) {
+          const lines = thing.split(/\r?\n/).filter(l => l.trim());
+          if (lines.length > 1 && lines.every(l => /[:=]|->|\u2192/.test(l)))
+            value = [''];
+        }
         if (!value.length) {
           // Any thing, a token or a dial, with `:` or `=` (`accent: red`,
           // `--color-accent=#e11d48`).

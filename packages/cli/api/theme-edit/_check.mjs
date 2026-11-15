@@ -2567,7 +2567,7 @@ documentReadings(
   Object.values(DIAL_WORDS).flatMap(words => Object.entries(words)),
 );
 /** State words a value may be labeled with. */
-const STATE_WORDS = [
+export const STATE_WORDS = [
   'hover',
   'active',
   'focus',

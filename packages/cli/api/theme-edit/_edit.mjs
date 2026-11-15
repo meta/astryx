@@ -35,6 +35,7 @@ import {
   withoutCopyDebris,
   baseWord,
   typoNear,
+  stateSpelling,
 } from './_normal.mjs';
 import {
   AUTO_SPREAD,
@@ -154,6 +155,7 @@ import {
   propertyValueProblem,
   storedProblems,
   unknownVarRef,
+  STATE_WORDS,
 } from './_check.mjs';
 import {MODAL, isColorToken} from './_compiler.mjs';
 import {fontShorthandFamilyList} from '../theme/build/font-warning.mjs';
@@ -1918,6 +1920,37 @@ function modeWiringNotes(cwd, slug, before, after) {
 }
 
 /**
+ * The scope a pasted line's label names (normalizeEntry's `label`): the
+ * part it names exactly (the project's part names, as --on reads them:
+ * `(card)`) or the one part it is a typo of (`(crad)`, which set's part
+ * reader repairs with its line); a state (`(hover)`); a mode for a word
+ * one typo from one (`(drak)`); else the part it names, as set checks it.
+ * @param {{label?: string}} scope
+ * @param {string} cwd
+ * @returns {Promise<{on?: string, mode?: string, state?: string}>}
+ */
+async function labelRead(scope, cwd) {
+  if (!scope.label) return {};
+  const word = scope.label.trim().toLowerCase().replace(/\s+/g, '-');
+  const target = await openProject(cwd)
+    .then(p => p.target)
+    .catch(() => null);
+  if (target?.has(word) || FAMILIES[word]) return {on: word};
+  const parts = [...(target?.keys() ?? []), ...Object.keys(FAMILIES)];
+  if (parts.filter(n => typoNear(word, n)).length === 1)
+    return {on: scope.label.trim()};
+  // A state (`(hover)`) is that state.
+  const state = stateSpelling(scope.label);
+  if (STATE_WORDS.includes(state)) return {state};
+  // A word one typo from a mode is that mode (`(drak)`), for the mode
+  // reader's typo rule; any other word names no mode, and is read as the
+  // part it names, which set checks (never dropped for a both-modes line).
+  if (['light', 'dark'].some(m => typoNear(word, m)))
+    return {mode: scope.label};
+  return {on: scope.label.trim()};
+}
+
+/**
  * Change one thing in a theme: checked, built, previewed.
  * @experimental
  * @param {string} theme
@@ -2287,12 +2320,16 @@ async function withSavedRepair(e, slug, cwd) {
   for (const [k, v] of Object.entries(read.scope)) scoped[k] ??= v;
   // A scope saved empty (`"mode": ""`) names no scope; one that is not
   // text (`"when": 5`, `"on": {}`) is damage, never read as a flag.
+  /** Whether a damaged scope key (not text) was left out. */
+  let droppedScope = false;
   for (const k of ['on', 'when', 'state', 'mode'])
     if (
       scoped[k] != null &&
       (typeof scoped[k] !== 'string' || !scoped[k].trim())
-    )
+    ) {
+      droppedScope ||= typeof scoped[k] !== 'string';
       delete scoped[k];
+    }
   const line = `${P} set ${slug} ${setArgs({...scoped, thing}, saved)}`;
   // The lines set offers for the value, as for a typed one: each checked
   // as set checks it, and offered only when they carry the saved value
@@ -2303,6 +2340,15 @@ async function withSavedRepair(e, slug, cwd) {
   const without = entryDamage(bad) ? {...bad, removing: true} : bad;
   const loaded = await loadedForCheck(cwd, slug, without);
   if (!loaded) return e;
+  // With a damaged scope left out, a line on the scope another saved entry
+  // holds would replace that entry: only the undo is offered.
+  if (
+    droppedScope &&
+    loaded.data.settings.some(
+      x => keyOf(x) === keyOf({...scoped, thing, value: saved}),
+    )
+  )
+    return e;
   /** @type {string[]} */
   let lines;
   try {
@@ -4431,6 +4477,65 @@ async function change(sub, slug, thing, value, options) {
   // A pasted object of one entry is that entry, as read below: its repair
   // carries the entry's value, and how names its setting.
   let oneEntry = false;
+  // Several lines pasted as one argument (declarations, the editor's own
+  // printed or change lines): each line read by the one entry reader, one
+  // line each, with the scope typed.
+  const pastedLines =
+    typeof thing === 'string' &&
+    objectText == null &&
+    (value == null || value === '')
+      ? thing
+          .split(/\r?\n/)
+          .map(l => l.trim().replace(/;$/, '').trim())
+          .filter(Boolean)
+      : [];
+  if (
+    pastedLines.length > 1 &&
+    pastedLines.every(l => {
+      const read = normalizeEntry(l, undefined);
+      return read.pasted && String(read.value ?? '').trim() !== '';
+    })
+  ) {
+    const cwd = options.cwd ?? process.cwd();
+    /** @type {Array<[string, string, string, ScopeFlags]>} */
+    const lines = [];
+    for (const l of pastedLines.slice(0, 6)) {
+      const read = normalizeEntry(l, undefined);
+      const own = {...(read.scope ?? {})};
+      Object.assign(own, await labelRead(own, cwd));
+      delete own.label;
+      /** @type {any} */
+      const entry = {
+        ...own,
+        ...Object.fromEntries(
+          /** @type {const} */ (['on', 'when', 'state', 'mode', 'only'])
+            .filter(k => options[k])
+            .map(k => [k, options[k]]),
+        ),
+        thing: String(read.thing),
+        value: String(read.value ?? ''),
+      };
+      lines.push([
+        `${P} ${sub} ${slug} ${sub === 'set' ? setArgs(entry, entry.value) : undoArgs(entry)}`,
+        entry.value,
+        entry.thing,
+        entry,
+      ]);
+    }
+    refuse(
+      E.ERR_INVALID_ARGUMENT,
+      `This holds ${pastedLines.length} settings, one a line; ${sub} changes one at a time.`,
+      {run: await workingLines(sub, slug, lines, cwd, String(thing), '')},
+    );
+  }
+  // A pasted object or list with nothing in it (`{,}`, `[ ]`) names no
+  // setting.
+  if (objectText != null && /^\s*[[{][\s,;]*[\]}]\s*$/.test(objectText))
+    refuse(
+      E.ERR_MISSING_ARGUMENT,
+      `The pasted ${objectText.trim().startsWith('[') ? 'list' : 'object'} holds no setting: name the thing to change.`,
+      {run: [`${P} how --list dials`, `${P} ${sub} --help`]},
+    );
   if (objectText != null) {
     // The scope keys an entry may carry, as set's flags name them.
     const SCOPE = /** @type {const} */ ([
@@ -4656,8 +4761,8 @@ async function change(sub, slug, thing, value, options) {
     }
   }
   // An undo of a setting and its value in one argument (`'accent red'`),
-  // as set takes it: the first word names a saved setting and no other
-  // word does (several are a list of settings, read below).
+  // as set takes it: the first word names a setting and no other word
+  // names a saved one (several are a list of settings, read below).
   if (
     sub === 'undo' &&
     objectText == null &&
@@ -4673,9 +4778,19 @@ async function change(sub, slug, thing, value, options) {
         (/** @type {any} */ x) => String(x?.thing ?? '').toLowerCase(),
       ),
     );
+    // The first word names a setting as set reads one: a saved setting, a
+    // dial, a token or a property, or the one saved setting it is a typo
+    // of (`cornres pill`). Whether the theme holds it is undo's to say.
+    const first = pair ? pair[1].toLowerCase() : '';
+    const firstNames =
+      names.has(first) ||
+      Boolean(DIALS[first]) ||
+      first.startsWith('--') ||
+      cssProperties().has(first) ||
+      [...names].filter(n => typoNear(first, n)).length === 1;
     if (
       pair &&
-      names.has(pair[1].toLowerCase()) &&
+      firstNames &&
       !pair[2].split(/\s+/).some(w => names.has(w.toLowerCase()))
     ) {
       thing = pair[1];
@@ -4755,15 +4870,8 @@ async function change(sub, slug, thing, value, options) {
       // A label that names no mode word is the part it names exactly (the
       // project's part names, as --on reads them: `(card)`), else a mode
       // for the mode reader's typo rule (`(drak)`).
-      if (s.label) {
-        const word = s.label.trim().toLowerCase().replace(/\s+/g, '-');
-        const target = await openProject(options.cwd ?? process.cwd())
-          .then(p => p.target)
-          .catch(() => null);
-        if (target?.has(word) || FAMILIES[word]) s.on = word;
-        else s.mode = s.label;
-        delete s.label;
-      }
+      Object.assign(s, await labelRead(s, options.cwd ?? process.cwd()));
+      delete s.label;
       options = {
         ...options,
         ...(s.on && !options.on ? {on: s.on} : {}),
@@ -5126,9 +5234,19 @@ async function changeOnce(
     // the rest is its value (`accent red`), read as set reads it.
     const named = listed.filter(l => l.entries.length).length;
     if (!named || (pieces.length > 1 && named < 2)) return;
-    const none = listed.filter(l => !l.entries.length).map(l => l.w);
+    // A word that is the value a listed setting holds (`corners pill
+    // accent`) is that setting's value, never a setting the theme lacks.
+    const held = new Set(
+      listed.flatMap(l =>
+        l.entries.map(x => String(x.value ?? '').toLowerCase()),
+      ),
+    );
+    const none = listed
+      .filter(l => !l.entries.length && !held.has(l.w))
+      .map(l => l.w);
+    const count = named + none.length;
     throw new AstryxError(
-      `"${text}" names ${pieces.length === 1 ? `${pieces[0]} more than once` : `${pieces.length} settings`}; undo removes one setting at a time${none.length ? ` (${slug} sets no ${none.join(' or ')})` : ''}. Nothing was changed.`,
+      `"${text}" names ${pieces.length === 1 ? `${pieces[0]} more than once` : `${count} settings`}; undo removes one setting at a time${none.length ? ` (${slug} sets no ${none.join(' or ')})` : ''}. Nothing was changed.`,
       [...new Set(listed.flatMap(l => l.entries))].map(x => ({
         name: `${P} undo ${slug} ${undoArgs(x)}`,
         reason: `removes ${describe({...x, value: '?'}).replace(' = ?', '')}`,
