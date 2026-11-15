@@ -81,8 +81,8 @@ own ranking and output, and template owners own what each template is.
   no template scaffolds it. A request that adds something to a place that
   names no page, only the app or product as a whole, changes no page the
   builder has: build reads what it adds as if the request gave no place. One
-  exception: when the start would be the app shell, search matched no template
-  directly, and build's fixed shell-start decision reads the request as a
+  exception: when the start would be the app shell, search matched no ready
+  template directly, and build's fixed shell-start decision reads the request as a
   whole page (DEC-10), the start is the best-ranked page template even when
   the request reads as a part. A request with an edit phrase keeps the app
   shell, and the lift never restores a page the page pick turned down because
@@ -91,7 +91,9 @@ own ranking and output, and template owners own what each template is.
   start or an alternative. When the request names one that search matches
   directly, the start's reason MUST say it is not ready yet and name the
   template build started from instead. A not-ready template the request does
-  not name MUST NOT appear anywhere in build's response.
+  not name MUST NOT appear anywhere in build's response, and a not-ready
+  template MUST NOT change which template build starts from: it is never
+  search's direct match for build, and it never holds back the shell lift.
 - **FR5 — The start is exact and runnable.** The start and every alternative
   MUST carry the scaffold command that selects exactly that template in the
   project where build ran. A template an integration provides in place of a
@@ -411,7 +413,7 @@ builder who installs afterwards.
 
 Build's kind call reads some whole-page requests as parts, which leaves them on
 the empty app shell. When the start would be the app shell and search matched
-no template directly, a fixed decision over build's own ranking scores and a
+no ready template directly, a fixed decision over build's own ranking scores and a
 fixed word table reads the whole request; when its whole-page probability is
 at least 0.30, the start is the best-ranked page template, unless that is the
 page the page pick turned down under DEC-12. This is not DEC-2's best weak match:
@@ -448,7 +450,7 @@ template.
 **Reference:** `spec:AST-048/DEC-12`
 **Decider:** recorded by the spec approval on the pull request that ships it.
 
-When the page ranker proposes no page and search matched no template directly,
+When the page ranker proposes no page and search matched no ready template directly,
 a page chosen by build's word tables (DEC-11) becomes the start only if the
 request names at least one content word of that template's own descriptor: its
 display name, category, keywords, description or components. Otherwise the
