@@ -290,6 +290,7 @@ export async function howTheme(ctx, cwd, name) {
  * @property {'more' | 'less'} [saturation] the colors asked more or less saturated ("more colorful", "more muted")
  * @property {boolean} [literal] a mode is named with lighter or darker: borders and the shared text color move as written
  * @property {'more' | 'less' | null} [shadowDir] the way a shadow's strength moves ("darker shadows": more)
+ * @property {boolean} [fainter] the question makes something fainter, less visible or more see-through ("less visible", "half as visible", "more transparent"): no border, outline, ring or shadow gets stronger anywhere
  */
 
 /** A camelCase property as CSS writes it. @param {string} k */
@@ -410,6 +411,244 @@ function shadowStrength(v) {
       (sum, layer) => sum + colorsIn(layer).reduce((n, c) => n + alphaOf(c), 0),
       0,
     );
+}
+
+/** The line properties the way of a line is measured on. */
+const LINE_PROPS =
+  /^(?:border(?:-(?:top|right|bottom|left))?-width|outline-width|box-shadow)$/;
+
+/**
+ * A line's strength as it renders: a width in px, or a shadow's summed
+ * alpha.
+ * @param {string} prop
+ * @param {string} v resolved value
+ */
+function lineStrength(prop, v) {
+  const x = String(v ?? '').trim();
+  if (!x || /^(?:none|hidden|0|0px|initial|unset)$/.test(x)) return 0;
+  if (prop === 'box-shadow') return shadowStrength(x);
+  if (/\b(?:none|hidden)\b/.test(x)) return 0;
+  const kw = /\b(thin|medium|thick)\b/.exec(x)?.[1];
+  if (kw) return {thin: 1, medium: 3, thick: 5}[kw] ?? 1;
+  const m = /(-?\d*\.?\d+)(px|rem|em)?/.exec(x);
+  if (!m) return 0;
+  return Number(m[1]) * (m[2] === 'rem' || m[2] === 'em' ? 16 : 1);
+}
+
+/**
+ * The value a compiled theme gives one look of a part (a render Core
+ * draws, `variant=default,size=md :focus-within`): its most specific rule
+ * that matches, in that state, with the custom properties those rules set.
+ * @param {any} compiled
+ * @param {string} part
+ * @param {string} render
+ * @param {string} prop
+ * @returns {{value: string | undefined, tokens: Record<string, string>}}
+ */
+function ruleValue(compiled, part, render, prop) {
+  const rules = /** @type {Record<string, any>} */ (
+    compiled?.components?.[part] ?? {}
+  );
+  const [head, ...rest] = String(render).split(' ');
+  const attrs =
+    head.startsWith(':') || head === 'always' ? [] : head.split(',');
+  const state = (head.startsWith(':') ? [head, ...rest] : rest).join(' ');
+  const matching = Object.keys(rules)
+    .filter(
+      w =>
+        w === 'base' ||
+        w.split(',').every(kv => attrs.includes(kv.replace(':', '='))),
+    )
+    .sort(
+      (x, y) =>
+        (x === 'base' ? 0 : x.split(',').length) -
+        (y === 'base' ? 0 : y.split(',').length),
+    );
+  const camel = (/** @type {string} */ k) =>
+    k.replace(/-([a-z])/g, (_m, c) => c.toUpperCase());
+  /** @type {Record<string, string>} */
+  const tokens = {};
+  /** @type {string | undefined} */
+  let value;
+  const side = /^border-(top|right|bottom|left)-width$/.exec(prop)?.[1];
+  for (const w of matching) {
+    const layers = [rules[w], ...(state ? [rules[w]?.[state]] : [])];
+    for (const r of layers) {
+      if (!r || typeof r !== 'object') continue;
+      for (const [k, v] of Object.entries(r))
+        if (k.startsWith('--') && typeof v === 'string') tokens[k] = v;
+      const own =
+        r[camel(prop)] ??
+        (side ? (r[camel(`border-${side}`)] ?? r.borderWidth) : undefined) ??
+        (/^border(?:-[a-z]+)?-width$/.test(prop) ? r.border : undefined) ??
+        (prop === 'outline-width' ? r.outline : undefined);
+      if (typeof own === 'string' || typeof own === 'number')
+        value = String(own);
+    }
+  }
+  return {value, tokens};
+}
+
+/**
+ * Why a step moves a line against the way asked, or null: every look Core
+ * draws of each part the steps reach (a token step reaches every part that
+ * reads the token), before and after, in each mode.
+ * @param {any} C
+ * @param {any} was
+ * @param {any} now
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} tw
+ * @param {{light: Record<string, string>, dark: Record<string, string>}} tn
+ * @param {Step[]} steps
+ * @param {MeasureIntent} intent
+ * @param {'light' | 'dark' | null} visible
+ * @returns {string | null}
+ */
+function lineWay(C, was, now, tw, tn, steps, intent, visible) {
+  const fainter = Boolean(intent.fainter) || intent.zero;
+  // (A dial set to a named look, "the buttons dial, outline", draws that
+  // look's lines: a line it adds is the look asked.)
+  const namedLook = steps.some(
+    st =>
+      !st.on &&
+      !/^--/.test(String(st.thing)) &&
+      !/^(?:more|less)$/.test(String(st.value ?? '')),
+  );
+  const changedTokens = new Set(
+    [...new Set([...Object.keys(tw.light), ...Object.keys(tn.light)])].filter(
+      t => tw.light[t] !== tn.light[t] || tw.dark[t] !== tn.dark[t],
+    ),
+  );
+  /** @type {Set<string>} */
+  const parts = new Set(
+    steps
+      .map(st => st.on)
+      .filter(Boolean)
+      .flatMap(x => FAMILIES[String(x)] ?? [String(x)]),
+  );
+  if (changedTokens.size)
+    for (const [part, info] of Object.entries(C.MAP ?? {}))
+      for (const [prop, byRender] of Object.entries(
+        /** @type {any} */ (info)?.at ?? {},
+      ))
+        if (
+          LINE_PROPS.test(prop) &&
+          Object.values(/** @type {Record<string, string>} */ (byRender)).some(
+            v =>
+              [...String(v).matchAll(/var\(\s*(--[a-z0-9-]+)/g)].some(m =>
+                changedTokens.has(m[1]),
+              ),
+          )
+        )
+          parts.add(part);
+  for (const part of parts) {
+    const at = /** @type {Record<string, Record<string, string>>} */ (
+      C.MAP?.[part]?.at ?? {}
+    );
+    // Every look Core draws of the part; a part that draws no line at all
+    // has one plain look with none.
+    const renders = new Set(
+      Object.values(at)
+        .flatMap(x => Object.keys(x ?? {}))
+        .filter(r => !/::/.test(r)),
+    );
+    if (!renders.size) renders.add('always');
+    const props = new Set([
+      ...Object.keys(at).filter(p => LINE_PROPS.test(p)),
+      'border-top-width',
+      'box-shadow',
+    ]);
+    for (const prop of props)
+      for (const render of renders) {
+        // (A look in a state Core writes nothing new for shows its plain
+        // look's value: a popover's shadow while focused.)
+        const head = render.startsWith(':') ? 'always' : render.split(' ')[0];
+        const coreOf = (/** @type {string} */ pr) =>
+          at[pr]?.[render] ?? at[pr]?.[head] ?? at[pr]?.always;
+        const core =
+          coreOf(prop) ??
+          (prop === 'border-top-width' ? coreOf('border-width') : undefined);
+        const a = ruleValue(was, part, render, prop);
+        const b = ruleValue(now, part, render, prop);
+        const rawA = a.value ?? core ?? '0';
+        const rawB = b.value ?? core ?? '0';
+        if (
+          rawA === rawB &&
+          JSON.stringify(a.tokens) === JSON.stringify(b.tokens) &&
+          !/var\(/.test(rawA)
+        )
+          continue;
+        // (A border whose style is none or hidden draws nothing, whatever
+        // its width.)
+        const styled = (/** @type {any} */ c, /** @type {string} */ raw) => {
+          if (prop === 'box-shadow' || prop.startsWith('outline')) return true;
+          const side =
+            /^border-(top|right|bottom|left)-width$/.exec(prop)?.[1] ?? '';
+          const st =
+            ruleValue(
+              c,
+              part,
+              render,
+              side ? `border-${side}-style` : 'border-style',
+            ).value ??
+            /\b(?:solid|dashed|dotted|double|groove|ridge|inset|outset|none|hidden)\b/.exec(
+              raw,
+            )?.[0] ??
+            coreOf(side ? `border-${side}-style` : 'border-style') ??
+            coreOf('border-style');
+          // (A border with no style is none: CSS's initial style.)
+          if (/^(?:none|hidden)$/.test(String(st ?? 'none').trim()))
+            return false;
+          // (A transparent border draws nothing either.)
+          const colorProp = side ? `border-${side}-color` : 'border-color';
+          const col =
+            ruleValue(c, part, render, colorProp).value ??
+            coreOf(colorProp) ??
+            coreOf('border-color') ??
+            '';
+          return !/^\s*transparent\s*$/.test(
+            resolveIn(String(col), {...tw.light}, 'light'),
+          );
+        };
+        const drawnA = styled(was, rawA);
+        const drawnB = styled(now, rawB);
+        for (const mode of /** @type {const} */ (['light', 'dark'])) {
+          if (visible && mode !== visible) continue;
+          const x = !drawnA
+            ? 0
+            : lineStrength(
+                prop,
+                resolveIn(rawA, {...tw[mode], ...a.tokens}, mode),
+              );
+          const y = !drawnB
+            ? 0
+            : lineStrength(
+                prop,
+                resolveIn(rawB, {...tn[mode], ...b.tokens}, mode),
+              );
+          const look = render === 'always' ? '' : ` (${render})`;
+          const what =
+            prop === 'box-shadow' ? 'shadow' : prop.replace(/-width$/, '');
+          // (A removal keeps what an except pins in a state, and a group's
+          // state look that drew nothing may take a fainter line: only the
+          // looks at rest are held to an added line; a stronger one is
+          // held everywhere.)
+          const atRest = !/(?:^|\s):/.test(render);
+          if (fainter && y > x + 1e-6 && (atRest || (intent.fainter && x > 0)))
+            return `it would ${x ? 'strengthen' : 'add'} a ${what} on ${part}${look} in ${mode} mode, which the question makes fainter`;
+          // (A shadow asked stronger may be new on a look that drew none.)
+          if (
+            !fainter &&
+            !namedLook &&
+            prop !== 'box-shadow' &&
+            x === 0 &&
+            y > 0 &&
+            b.value !== undefined
+          )
+            return `it would add a ${what} on ${part}${look} in ${mode} mode, where Core draws none`;
+        }
+      }
+  }
+  return null;
 }
 
 /**
@@ -668,6 +907,20 @@ function measureFit(ctx, base, was, now, intent, steps, visible = null) {
       if (o.light !== v.light || o.dark !== v.dark)
         return `it would change ${part} (${k.split('|').filter(Boolean).join(' ')}), which the question keeps as it is`;
     }
+  }
+  // The way of a line, in every look Core draws: an ask that makes
+  // something fainter, or removes it, never adds or strengthens a border,
+  // outline, ring or shadow anywhere; a way asked of a line or a shadow
+  // never adds one to a look that drew none (a card variant with no
+  // border, a table row whose cells draw the dividers).
+  const lineAsk =
+    Boolean(intent.fainter) ||
+    intent.zero ||
+    (Boolean(intent.dir) &&
+      intent.families.some(f => f === 'border' || f === 'shadow'));
+  if (lineAsk) {
+    const why = lineWay(C, was, now, tw, tn, steps, intent, visible);
+    if (why) return why;
   }
   const typed = new Set(intent.typed.map(x => x.toLowerCase()));
   // A shadow ask is answered only by a shadow that looks different: an

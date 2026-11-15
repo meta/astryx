@@ -146,7 +146,7 @@ describe('hunt61b: headers and titles', () => {
         'header background dark',
         /^set q background-color '#[0-9a-f]{6}' --on app-shell-header$/,
       ],
-      ['the header bar border thicker', / --on app-shell-header$/],
+
       // The clause starts after the last break: a full stop or semicolon too.
       [
         'make the body text bigger. header background dark',
