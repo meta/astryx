@@ -16,6 +16,7 @@
  *   kept between runs while nothing it depends on has changed.
  */
 
+import {AsyncLocalStorage} from 'node:async_hooks';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -25,13 +26,33 @@ import {fileURLToPath} from 'node:url';
 import {npmCommand} from '../release/cache.mjs';
 import {oncePerListing} from '../fs/listing-cache.mjs';
 import {keptTreeSummary} from '../fs/kept-tree.mjs';
-import {makeGatherCacheDir} from '../fs/gather-cache.mjs';
+import {gatherCacheDir, makeGatherCacheDir} from '../fs/gather-cache.mjs';
+import {withoutRecording} from '../fs/read-record.mjs';
 
 /** The module's own file: its code decides what a kept list holds. */
 const OWN_FILE = fileURLToPath(import.meta.url);
 
 /** The files whose text decides which of a folder's files npm packs. */
 const IGNORE_FILES = new Set(['.npmignore', '.gitignore']);
+
+/**
+ * Set inside `integration check`'s check of a package ({@link asPackageCheck}).
+ * @type {AsyncLocalStorage<true>}
+ */
+const packageCheck = new AsyncLocalStorage();
+
+/**
+ * Run `fn` as `integration check`'s check of the package: inside it, npm's
+ * list may make the per-user catalogs folder to be kept in. Elsewhere, as in
+ * doctor's `integration validate`, which only diagnoses, the list is kept only
+ * where that folder already exists.
+ * @template T
+ * @param {() => T} fn
+ * @returns {T}
+ */
+export function asPackageCheck(fn) {
+  return packageCheck.run(true, fn);
+}
 
 /**
  * The paths npm packs for the package in `base`, read from
@@ -58,7 +79,9 @@ export function npmPackedPaths(base) {
  * for the npm entry file this check starts, by that npm's version and the
  * major version of the Node that runs it, and only as a list: an error, a
  * package that bundles dependencies (npm then walks their folders too), or a
- * tree with a link in it is asked every time.
+ * tree with a link in it is asked every time. It is kept only where the
+ * per-user catalogs folder exists, or inside `integration check`, which may
+ * make it ({@link asPackageCheck}).
  * @param {string} folder
  * @returns {{paths: Set<string>} | {error: string}}
  */
@@ -70,10 +93,12 @@ function keptNpmAnswer(folder) {
     return {error: 'npm was not found'};
   }
   const version = npmVersion(npm);
-  if (version == null) return askNpm(folder, npm);
-  // A package's check of itself may make the per-user folder its list is
-  // kept in, as a lookup's not-found path does for its name index.
-  makeGatherCacheDir();
+  const kept =
+    version != null &&
+    (packageCheck.getStore()
+      ? makeGatherCacheDir()
+      : withoutRecording(gatherCacheDir) != null);
+  if (!kept) return askNpm(folder, npm);
   /** @type {{paths: string[], keep: boolean} | {error: string}} */
   const answer = keptTreeSummary(
     {

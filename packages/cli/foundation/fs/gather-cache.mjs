@@ -309,10 +309,8 @@ export async function recordRunFor(argv, fn) {
   }
   // The first recorded run on a machine (search, build, component, template,
   // theme, discover or docs) makes the folder and keeps its gathers at once.
-  // Once the per-user cache folder exists doctor uses it; its run never makes
-  // it, so a doctor alone changes nothing on the machine (nor its own cache
-  // row). A package's check of itself, `doctor integration validate` too, may
-  // make it to keep npm's list (pack-state.mjs).
+  // Once the per-user cache folder exists doctor uses it; it never makes it,
+  // so a doctor alone changes nothing on the machine (nor its own cache row).
   if (command !== 'doctor') makeGatherCacheDir();
   // A folder the cache would refuse (not the user's own, open to others, a
   // link) leaves the run exactly as without the cache: no hook is installed.

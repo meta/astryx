@@ -336,6 +336,35 @@ describe("npm's list, kept for a package's check of itself", () => {
     expect(same()).not.toBe(second);
   }, 180_000);
 
+  it("is kept by doctor's validate only where the folder exists, which integration check makes", () => {
+    fs.writeFileSync(userNpmrc(), '');
+    const dir = makePackage();
+    /** @param {string} tmp */
+    const validate = tmp => {
+      const result = run(['doctor', 'integration', 'validate'], {
+        tmp,
+        cwd: dir,
+        env: {npm_config_userconfig: userNpmrc()},
+      });
+      return {status: result.status, stdout: result.stdout};
+    };
+    settle();
+    // A home no run has used: doctor makes no folder, and answers as a fresh
+    // run does.
+    const home = freshTmp();
+    const answer = validate(home);
+    expect(answer.status).not.toBeNull();
+    expect(fs.existsSync(path.join(home, CACHE_NAME))).toBe(false);
+    expect(answer).toEqual(validate(freshTmp()));
+    // integration check makes the folder and keeps the list there.
+    check(home, dir);
+    const kept = keptList(home);
+    expect(kept?.paths.slice().sort()).toEqual(npmList(dir));
+    // With the folder there, doctor reads the list back.
+    expect(validate(home)).toEqual(answer);
+    expect(keptList(home)?.ino).toBe(kept?.ino);
+  }, 180_000);
+
   it('is not kept for a tree with a link in it, nor for a package that bundles dependencies', () => {
     fs.writeFileSync(userNpmrc(), '');
     const linked = makePackage();

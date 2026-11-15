@@ -65,7 +65,7 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
     );
     // The row names the other checks that can make the folder.
     expect(plain).toContain(
-      "A lookup command's not-found path may also create the folder, for its name index, and so may an integration package's check of itself, for npm's list.",
+      "A lookup command's not-found path may also create the folder, for its name index, and so may an integration package's `integration check` of itself, for npm's list.",
     );
     // The CLI's build id stands for its own files' contents.
     expect(plain).toContain(
