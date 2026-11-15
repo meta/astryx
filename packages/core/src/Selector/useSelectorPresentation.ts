@@ -121,19 +121,21 @@ export function useSelectorPresentation({
     const isPressInList = isLastPressInListRef.current;
     stopPressWatchRef.current?.();
     stopPressWatchRef.current = null;
-    // A light dismiss by a press on another Tab stop has already moved focus
+    // A light dismiss by a press on another control has already moved focus
     // there. Taking it back would send the next key to this closed Selector.
-    // Escape, a press inside the list, or a press that lands on no Tab stop
-    // returns focus to the trigger.
+    // Escape, a press inside the list, or a press on nothing focusable returns
+    // focus to the trigger. So does a press on a container around the list
+    // that is no Tab stop, such as one with `tabIndex={-1}`.
     const active = document.activeElement;
+    const list = popoverContentRef.current?.current ?? null;
     const focusLandedElsewhere =
       !isFocusReturnAlways &&
       !isPressInList &&
       active instanceof HTMLElement &&
       active !== document.body &&
       active !== trigger &&
-      popoverContentRef.current?.current?.contains(active) !== true &&
-      active.tabIndex >= 0;
+      list?.contains(active) !== true &&
+      (active.tabIndex >= 0 || !active.contains(list));
     if (focusLandedElsewhere) {
       return;
     }
