@@ -144,3 +144,30 @@ export function customPropertyValues(css) {
   }
   return out;
 }
+
+/**
+ * The custom properties a stylesheet's text sets on elements: in a rule
+ * whose selector is not the document root (`:root`, `html`, `*`). An
+ * element that sets one shadows the value it would inherit from the page.
+ * @param {string} css
+ * @returns {Set<string>}
+ */
+export function elementCustomProperties(css) {
+  /** @type {Set<string>} */
+  const out = new Set();
+  const root = /(?:^|[\s,(>+~]):root\b|(?:^|[\s,(>+~])html\b|^\s*\*\s*$/;
+  try {
+    postcss()
+      .parse(css)
+      .walkDecls(/^--/, decl => {
+        const rule = /** @type {any} */ (decl.parent);
+        if (rule?.type !== 'rule') return;
+        const selectors = String(rule.selector).split(',');
+        if (selectors.some((/** @type {string} */ x) => !root.test(x)))
+          out.add(decl.prop);
+      });
+  } catch {
+    // A stylesheet that does not parse sets nothing known here.
+  }
+  return out;
+}

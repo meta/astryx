@@ -56,6 +56,8 @@ import {resolveProviders} from './provider-resolution.mjs';
  * @property {string} [codemods]
  * @property {string} [docs]
  * @property {string} [themes]
+ * @property {{export: string, from: string}} [themeProvider] the manifest's
+ *   provider component that wires every theme under `themes`
  * @property {string} [iconSets] the manifest's `experimental.iconSets` root
  * @property {string} [issuesUrl]
  * @property {{light: string, dark?: string}} [logo] the manifest's logo
@@ -501,6 +503,7 @@ export async function loadLocalIntegration(packageDir, {fresh = false} = {}) {
     codemods: resolveRoot(manifest.codemods),
     docs: resolveRoot(manifest.docs),
     themes: resolveRoot(manifest.themes),
+    themeProvider: manifest.themeProvider,
     iconSets: resolveRoot(manifest.experimental?.iconSets),
     issuesUrl: manifest.issuesUrl,
     logo: manifest.logo,
@@ -630,6 +633,7 @@ export async function loadIntegrations(
       codemods: resolveRoot(manifest.codemods),
       docs: resolveRoot(manifest.docs),
       themes: resolveRoot(manifest.themes),
+      themeProvider: manifest.themeProvider,
       iconSets: resolveRoot(manifest.experimental?.iconSets),
       issuesUrl: manifest.issuesUrl,
       logo: manifest.logo,

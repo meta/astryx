@@ -1,8 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file The `template` subject's adapter for icon mapping (AST-084 FR9):
- * reads the project's icon sets through the `Project` seam.
+ * @file The `template` subject's adapter for icon mapping (AST-084 FR9),
+ * which reads the project's icon sets through the `Project` seam, and for the
+ * not-found hint that names another lookup command.
  *
  * @position api/template — adapter read by the template dispatcher
  */
@@ -32,5 +33,41 @@ export async function loadTemplateIconSets(cwd) {
         reason: `The project could not be read, so no icon set applies: ${error instanceof Error ? error.message : String(error)}`,
       },
     };
+  }
+}
+
+/**
+ * The unknown-template suggestions with the command that reads a component,
+ * hook or docs topic matching that name (exact, folded or last segment) in
+ * them, the list keeping its length, in the place
+ * foundation/suggest/other-command.mjs gives it. The suggestions stay as they
+ * are when no such entry exists or the check fails. The hint's modules load
+ * only on this path.
+ * @param {string} name
+ * @param {import('../../foundation/response/base').Suggestion[]} suggestions
+ * @param {string} cwd
+ * @param {(suggestion: import('../../foundation/response/base').Suggestion) => Array<string | undefined>} namesOf
+ *   the names the template matcher ranked a suggestion by: its id and its
+ *   human name
+ * @returns {Promise<import('../../foundation/response/base').Suggestion[] | undefined>}
+ */
+export async function withOtherCommandHint(name, suggestions, cwd, namesOf) {
+  try {
+    const [{findOtherCommand, withOtherCommand}, {docsRoutesLazily}] =
+      await Promise.all([
+        import('../../foundation/suggest/other-command.mjs'),
+        import('../docs/_entry-names-lazily.mjs'),
+      ]);
+    const hint = await findOtherCommand(name, {
+      from: 'template',
+      cwd,
+      docsRoutes: docsRoutesLazily,
+    });
+    return withOtherCommand(suggestions, hint, name, {
+      from: 'template',
+      namesOf,
+    });
+  } catch {
+    return suggestions;
   }
 }
