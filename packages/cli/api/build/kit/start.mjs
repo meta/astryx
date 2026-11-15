@@ -11,7 +11,7 @@ import {loadWeights} from '../_adapter.mjs';
 import {asksForNewPage} from './kind.mjs';
 import {pickAlternatives, pickStart} from './rank.mjs';
 import {hasEditPhrase, shellCallScore} from './shellcall.mjs';
-import {isAppShell} from './words.mjs';
+import {isAppShell, readNames} from './words.mjs';
 import {
   blendOrder,
   blendSummary,
@@ -178,7 +178,7 @@ export function chooseStart(ranked, kind, pages, directMatch, catalog, idea) {
     weighedPage &&
     !directMatch &&
     !proposed &&
-    !sharesOwnWord(weighedPage, idea, catalog)
+    !sharesOwnWord(weighedPage, readNames(idea, catalog), catalog)
       ? weighedPage
       : null;
   const weighed = unsupported ? null : weighedPage;

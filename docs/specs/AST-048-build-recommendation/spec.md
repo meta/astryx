@@ -445,7 +445,7 @@ template.
 ### DEC-12 — The page pick needs a shared word when the ranker leads nothing
 
 **Reference:** `spec:AST-048/DEC-12`
-**Status:** recorded under the code-first rule; describes the shipped rule.
+**Decider:** recorded by the spec approval on the pull request that ships it.
 
 When the page ranker proposes no page and search matched no template directly,
 a page chosen by build's word tables (DEC-11) becomes the start only if the
