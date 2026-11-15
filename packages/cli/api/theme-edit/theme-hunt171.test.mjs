@@ -178,6 +178,53 @@ describe('a value question that names no part', () => {
   );
 });
 
+describe('a bound on a whole-theme ask', () => {
+  it.each([
+    [
+      'make padding bigger but at most 2px',
+      /base spacing step .* already past 2px/,
+    ],
+    [
+      'make the corners square but at least 8px',
+      /square corners are 0px, outside the 8px/,
+    ],
+    [
+      'make corners pill but at most 20px',
+      /pill corners are 9999px, outside the 20px/,
+    ],
+  ])(
+    '%s: writes nothing',
+    async (ask, why) => {
+      const rs = await how('ne', ask);
+      expect(writes(rs)).toEqual([]);
+      expect(rs.map(r => r.text).join('\n')).toMatch(why);
+    },
+    120_000,
+  );
+});
+
+describe('a typed shadow color', () => {
+  it('sets every shared shadow in it, offsets kept', async () => {
+    const rs = await how('ne', 'make shadows use 20% black');
+    expect(rs[0].text).toMatch(
+      /^the shared shadows in color-mix\(in srgb, black 20%, transparent\)/,
+    );
+    const w = writes(rs);
+    expect(w.length).toBeGreaterThanOrEqual(2);
+    for (const c of w)
+      expect(c).toMatch(
+        /^set ne --shadow-[a-z]+ '0 \d+px \d+px color-mix\(in srgb, black 20%, transparent\)/,
+      );
+    expect(rs.map(r => r.text).join('\n')).not.toMatch(/but not "shadows"/);
+  }, 120_000);
+
+  it('on a part, with no line that it read nothing', async () => {
+    const rs = await how('ne', 'make card shadows 20% black');
+    expect(writes(rs)).toHaveLength(1);
+    expect(rs.map(r => r.text).join('\n')).not.toMatch(/but not "shadows"/);
+  }, 120_000);
+});
+
 describe('"more colorful" on a pale hand-tuned accent', () => {
   it('raises the vibrancy, judged by how colorful the accents look', async () => {
     const w = writes(await how('bdo', 'make it more colorful'));

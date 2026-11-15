@@ -1199,6 +1199,25 @@ export function shadowAlphaScaled(value, k, mode = null) {
 }
 
 /**
+ * A shadow with each layer in one color, offsets and blur kept: an inset
+ * ring layer keeps its own color (it is no shadow cast by the part).
+ * @param {string} value
+ * @param {string} color
+ */
+function shadowInColor(value, color) {
+  return splitTop(value, ',')
+    .map(layer =>
+      /\binset\b/.test(layer)
+        ? layer.trim()
+        : layer
+            .trim()
+            .replace(/light-dark\([^()]*(?:\([^()]*\)[^()]*)*\)/g, color)
+            .replace(COLOR_IN_VALUE, color),
+    )
+    .join(', ');
+}
+
+/**
  * A shadow with each of its colors at one alpha, layers, offsets and blur
  * kept: a see-through layer (a ring Core keeps transparent) stays so.
  * @param {string} value
@@ -2299,8 +2318,14 @@ function clausesOf(q, partWords) {
         if (parts[i].on === 'badge' && !/\b(badges?|chips?|tags?)\b/.test(text))
           parts.splice(i, 1);
     // "Space Grotesk headings": a font's name is a font, never its words.
+    // A color written as a function is a value, never words to read:
+    // "transparent" inside color-mix() asks for no see-through fill.
     const aspects0 = aspectsOf(
       text
+        .replace(
+          /\b(?:color-mix|rgba?|hsla?|hwb|lab|lch|oklab|oklch)\((?:[^()]|\([^()]*\))*\)/g,
+          ' ',
+        )
         .replace(new RegExp(`\\b(${FONT_NAMES})\\b`, 'g'), ' font ')
         .replace(/\bspace (mono|grotesk|grotesque)\b/g, ' font '),
     );
@@ -6905,6 +6930,28 @@ export function draftAnswer(ctx, env, question) {
     {
       const r = dialRung(c.text);
       const scoped = r && (r.dial === 'corners' || r.dial === 'spacing');
+      // "corners square but at least 8px": a corner rung is a length (the
+      // corners table); one outside the bound is not written.
+      const rungBound = r?.dial === 'corners' ? boundOf(c.text) : null;
+      const rungPx = CORNERS.find(([n]) => n === r?.value)?.[1];
+      if (
+        r &&
+        rungBound &&
+        rungBound.unit === 'px' &&
+        typeof rungPx === 'number' &&
+        (rungBound.up
+          ? rungPx < rungBound.limit ||
+            (rungBound.strict && rungPx === rungBound.limit)
+          : rungPx > rungBound.limit ||
+            (rungBound.strict && rungPx === rungBound.limit))
+      ) {
+        seenAspect('corners');
+        push({
+          text: `${r.value} corners are ${rungPx}px, outside the ${rungBound.limit}px the bound allows (${rungBound.said}), so nothing is written; for the corners nearest it, give the length ("corners ${rungBound.limit}px")`,
+          options: [],
+        });
+        continue;
+      }
       if (r && (scoped || !c.parts.length)) {
         seenAspect(
           r.dial === 'corners'
@@ -7423,8 +7470,9 @@ export function draftAnswer(ctx, env, question) {
                     ? 'border-width'
                     : null;
       // A whole-theme size with a way beside its bound (the corners dial,
-      // the base text size, the body line height): already past the bound
-      // the way asked, nothing is written, never a move the other way.
+      // the spacing dial, the base text size, the body line height):
+      // already past the bound the way asked, nothing is written, never a
+      // move the other way.
       if (bound && !c.parts.length && !/\b\w+ steps?\b/.test(c.text)) {
         const way = ownWay(c.text);
         const leading = /\b(line[- ]?height|leading)\b/.test(c.text);
@@ -7436,7 +7484,11 @@ export function draftAnswer(ctx, env, question) {
               ? '--font-size-base'
               : prop === 'border-width'
                 ? '--border-width'
-                : null;
+                : prop === 'padding'
+                  ? // (The spacing dial scales every step; its base step is
+                    // the one it is read by.)
+                    '--spacing-4'
+                  : null;
         const now = tok ? String(current(tok) ?? '') : '';
         const m = /^(\d*\.?\d+)(px|rem)?$/.exec(now);
         const n = m ? Number(m[1]) * (m[2] === 'rem' ? 16 : 1) : null;
@@ -7454,7 +7506,9 @@ export function draftAnswer(ctx, env, question) {
               ? 'the corners'
               : prop === 'border-width'
                 ? 'the shared border width'
-                : 'the base text size';
+                : prop === 'padding'
+                  ? 'the base spacing step (--spacing-4, which the spacing dial scales with every other)'
+                  : 'the base text size';
           push({
             text: `${what} ${prop === 'border-radius' && !leading ? 'are' : 'is'} ${now} now, already ${n === bound.limit ? 'at' : way === 'more' ? 'past' : 'below'} ${bound.limit}${bound.unit}, so ${way === 'more' ? 'growing' : 'shrinking'} ${prop === 'border-radius' && !leading ? 'them' : 'it'} ${bound.said} leaves nothing to change`,
             options: [],
@@ -10586,6 +10640,25 @@ export function draftAnswer(ctx, env, question) {
               text: 'raised panels: a soft shadow, no border (the surfaces dial)',
               options: [[set('surfaces', 'raised')]],
             };
+          // "shadows in 20% black": each shared shadow's layers in the
+          // typed color, offsets and blur kept.
+          const typed = !c.neg ? c.colors[0] : undefined;
+          if (typed) {
+            const steps = ['--shadow-low', '--shadow-med', '--shadow-high']
+              .filter(t => t in TOKENS)
+              .map(t => {
+                const now = current(t);
+                if (!now || now === 'none') return null;
+                const v = shadowInColor(now, typed);
+                return v !== now ? set(t, v) : null;
+              })
+              .filter(st => st != null);
+            return {
+              text: `the shared shadows in ${typed}: each keeps its layers' offsets and blur (an inset ring keeps its own color)`,
+              options: steps.length ? [/** @type {Step[]} */ (steps)] : [],
+              sequence: true,
+            };
+          }
           // Each shared shadow from its own layers: the alpha of its colors
           // scaled (bigger: its blur), in both modes or only the one named
           // (only that half of each light-dark() color), the rest kept.
@@ -10800,9 +10873,7 @@ export function draftAnswer(ctx, env, question) {
             : typedColor
               ? offsets.length >= 2
                 ? `${offsets.join(' ')} ${typedColor}`
-                : // (An inset ring layer keeps its own color: it is no
-                  // shadow cast by the part.)
-                  splitTop(
+                : shadowInColor(
                     String(
                       current(
                         /** @type {string} */ (
@@ -10810,20 +10881,8 @@ export function draftAnswer(ctx, env, question) {
                         ),
                       ),
                     ),
-                    ',',
+                    typedColor,
                   )
-                    .map(layer =>
-                      /\binset\b/.test(layer)
-                        ? layer.trim()
-                        : layer
-                            .trim()
-                            .replace(
-                              /light-dark\([^()]*(?:\([^()]*\)[^()]*)*\)/g,
-                              typedColor,
-                            )
-                            .replace(COLOR_IN_VALUE, typedColor),
-                    )
-                    .join(', ')
               : shared;
         // Already at the end of the shadow steps the way asked (a popover
         // at --shadow-high asked for a bigger one): its own blur steps that
