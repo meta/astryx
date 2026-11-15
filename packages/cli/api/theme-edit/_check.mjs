@@ -34,6 +34,7 @@ import {
   propertyGrammar,
   takesPercentage,
   sameKindValues,
+  unitsJoined,
 } from './_css.mjs';
 import {calcVars, coreFallback, multipliedTokens} from './_parts.mjs';
 import {
@@ -2205,7 +2206,7 @@ function propertyProblem(prop, value) {
   // number in a list too), when the property takes that.
   // Each bare number token gets px (a mixed list `4 8px`, `8 / 4`, an
   // exponent `1e1`), a unit split off by a space (`4 px`) joins its number.
-  const joined = v.replace(/(\d)\s+(px|rem|em|%)\b/gi, '$1$2');
+  const joined = unitsJoined(v);
   const withPx = /\d/.test(joined)
     ? joined.replace(
         /(^|[\s/(,])([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)(?=$|[\s/),])/gi,
@@ -2268,10 +2269,11 @@ function propertyProblem(prop, value) {
       })() ??
       // A comma between digits is a decimal point (1,5rem is 1.5rem), never
       // a split into layers.
-      (takes(commaNumbers(v, thousandsSetting(prop))) &&
-      commaNumbers(v, thousandsSetting(prop)) !== v
-        ? commaNumbers(v, thousandsSetting(prop))
-        : null) ??
+      // (A unit split off by a space joins it there too: `1,5 rem`.)
+      (() => {
+        const decimal = unitsJoined(commaNumbers(v, thousandsSetting(prop)));
+        return takes(decimal) && decimal !== v ? decimal : null;
+      })() ??
       // Several values of one kind on a property that takes one
       // (padding-top with four lengths): the first as typed, with px only
       // when the property takes no bare number. Never one value of a
@@ -4124,19 +4126,53 @@ function checkOne(ctx, slug, data, thing, value, flags, unset, reads) {
           '--when takes <prop>:<value>, such as variant:primary.',
           {run: [`${HOW} ${s.on}`]},
         );
-      const conditions = Object.keys(C.variantValues(s.on));
+      const variants = C.variantValues(s.on);
+      const conditions = Object.keys(variants);
+      // A prop or value one typo from the census's one (the one typo
+      // limit; one reading only): the same command with --when put right.
+      /** @param {string} w @param {string[]} list */
+      const typoIn = (w, list) => {
+        const hits = list.filter(x => typoOf(w, x));
+        return hits.length === 1 ? hits[0] : null;
+      };
+      const propMeant = [...t.props, ...conditions].includes(p)
+        ? p
+        : typoIn(p, [...new Set([...t.props, ...conditions])]);
+      const valsMeant = propMeant ? (variants[propMeant] ?? []) : [];
+      const valMeant =
+        !valsMeant.length || valsMeant.includes(wv)
+          ? wv
+          : typoIn(wv, valsMeant);
+      const whenRun =
+        propMeant && valMeant
+          ? [
+              setLine(
+                slug,
+                thing,
+                v,
+                {...s, when: `${propMeant}:${valMeant}`},
+                unset,
+              ),
+            ]
+          : [];
       if (!t.props.includes(p) && !conditions.includes(p))
         refuse(
           E.ERR_THEME_UNKNOWN_VARIANT,
           `${s.on} has no prop "${p}". It has: ${t.props.join(', ') || 'none'}.`,
-          {didYouMean: nearest(p, t.props), run: [`${HOW} ${s.on}`]},
+          {
+            didYouMean: nearest(p, t.props),
+            run: [...whenRun, `${HOW} ${s.on}`],
+          },
         );
-      const vals = C.variantValues(s.on)[p] ?? [];
+      const vals = variants[p] ?? [];
       if (vals.length && !vals.includes(wv))
         refuse(
           E.ERR_THEME_UNKNOWN_VARIANT,
           `${s.on} has no ${p} "${wv}". ${p} is one of: ${vals.join(', ')}.`,
-          {didYouMean: nearest(wv, vals), run: [`${HOW} ${s.on}`]},
+          {
+            didYouMean: nearest(wv, vals),
+            run: [...whenRun, `${HOW} ${s.on}`],
+          },
         );
     }
     const states = [...t.states, ...COMMON_STATES];

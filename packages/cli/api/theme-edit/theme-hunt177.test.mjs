@@ -161,17 +161,24 @@ describe('saved entries', () => {
   it(
     'reads a saved mode by the typed --mode reader beside the undo',
     async () => {
-      for (const [mode, line] of [
-        ['both', 'set t --color-accent red'],
-        ['', 'set t --color-accent red'],
-        ['darkk', 'set t --color-accent red --mode dark'],
-      ]) {
+      saveSettings([
+        {thing: '--color-accent', value: 'red', source: 'token', mode: 'darkk'},
+      ]);
+      const shown = lines(await refusal(() => themeEditShow('t', {cwd})));
+      expect(shown[0]).toBe('undo t --color-accent');
+      expect(shown).toContain('set t --color-accent red --mode dark');
+      // A mode that names both modes or none is no mode, as --mode both is
+      // read typed: the setting loads for both modes.
+      for (const mode of ['both', '']) {
         saveSettings([
           {thing: '--color-accent', value: 'red', source: 'token', mode},
         ]);
-        const shown = lines(await refusal(() => themeEditShow('t', {cwd})));
-        expect(shown[0], mode).toBe('undo t --color-accent');
-        expect(shown, mode).toContain(line);
+        const r = await themeEditShow('t', {cwd});
+        const read = r.data.settings.find(
+          (/** @type {any} */ x) => x.thing === '--color-accent',
+        );
+        expect(read, mode).toMatchObject({value: 'red', source: 'token'});
+        expect(read.mode, mode).toBeUndefined();
       }
       saveSettings([]);
     },

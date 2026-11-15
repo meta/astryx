@@ -18,7 +18,7 @@ import {
   wordTable,
 } from './_tables.mjs';
 import {colorProblem, hex, parseColor} from './_color.mjs';
-import {sameKindValues, takesWholeNumbersOnly} from './_css.mjs';
+import {sameKindValues, takesWholeNumbersOnly, unitsJoined} from './_css.mjs';
 import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 
 /**
@@ -841,12 +841,16 @@ export function typedReading(typed, {thousands = false} = {}) {
     .replace(/,\s*$/, '')
     .trim();
   t = commaNumbers(
-    t
-      .replace(/(\d)([oO]+)(?![a-z])/g, (_, d, os) => d + '0'.repeat(os.length))
-      // A dot after a number's digits (`18.`, `16.px`) is no part of it, and
-      // a unit split off by a space (`20 px`) is its number's.
-      .replace(/(\d)\.(?=[a-z%]|\s|$)/gi, '$1')
-      .replace(/(\d)\s+(px|rem|em|pt|%)(?![a-z])/gi, '$1$2'),
+    // A dot after a number's digits (`18.`, `16.px`) is no part of it, and
+    // a unit split off by a space (`20 px`, `200 ms`) is its number's.
+    unitsJoined(
+      t
+        .replace(
+          /(\d)([oO]+)(?![a-z])/g,
+          (_, d, os) => d + '0'.repeat(os.length),
+        )
+        .replace(/(\d)\.(?=[a-z%]|\s|$)/gi, '$1'),
+    ),
     thousands,
   )
     .replace(/\b0x([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})\b/gi, '#$1')

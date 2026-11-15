@@ -431,6 +431,20 @@ const UNIT_TYPES = /** @type {Record<string, string>} */ (
     }).flatMap(([type, units]) => units.map(u => [u, type])),
   )
 );
+/**
+ * A value with each unit split off its number by a space joined to it
+ * (`50 %`, `200 ms`, `8 PX`), for every unit CSS reads (the table above, and
+ * `%`); two numbers (`12 16px`) and a word that is no unit stay apart.
+ * @param {string} value
+ */
+export function unitsJoined(value) {
+  return String(value).replace(
+    /(\d)\s+(%|[a-z]+)(?=$|[\s,/)])/gi,
+    (all, digit, unit) =>
+      unit === '%' || UNIT_TYPES[unit.toLowerCase()] ? `${digit}${unit}` : all,
+  );
+}
+
 /** A value of each type, to match where a math function stands. */
 const TYPE_SAMPLES = wordTable(
   /** @type {Record<string, string>} */ ({

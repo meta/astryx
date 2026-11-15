@@ -61,6 +61,7 @@ import {
   describe,
   entryDamage,
   entryNotes,
+  printedEntry,
   keyOf,
   loadTheme,
   maskedSettings,
@@ -547,9 +548,27 @@ async function vetNewLines(e, cwd, typed, like) {
       out.push(x);
       continue;
     }
+    // The typed values the line's flags carry together, by the setting
+    // typed: each flag reads the value whole, or carries a part of it and
+    // the flags beside it the rest (`Inter 600` is --font Inter with
+    // --headings semibold), as set's lines for that value do.
+    /** @type {Set<string>} */
+    const coveredTyped = new Set();
+    for (const k of typedKeys)
+      for (const t of typedValues(k)) {
+        const reads = line.flags
+          .filter(([fk]) => fk === k || !typedKeys.includes(fk))
+          .map(([fk, fv]) =>
+            readsTyped({offered: fv, typed: t, thing: fk, typedThing: k}),
+          );
+        if (reads.every(r => r !== false) && coversTyped(reads, t, k))
+          coveredTyped.add(`${k}\n${t}`);
+      }
     // A line that adds a setting nobody typed (a mode read from a color's
-    // words) is another command, never offered.
-    if (line.flags.some(([k]) => !typedKeys.includes(k))) continue;
+    // words) is another command, never offered; one that carries a part of
+    // a value typed beside the typed setting's own part is that value.
+    const extra = line.flags.some(([k]) => !typedKeys.includes(k));
+    if (extra && !coveredTyped.size) continue;
     /** The flags no reading of this line makes work, each with its text. @type {Array<[string, string]>} */
     const untyped = [];
     /** @type {string[]} */
@@ -564,6 +583,7 @@ async function vetNewLines(e, cwd, typed, like) {
       const ok =
         !was.length ||
         was.includes(f[1]) ||
+        was.some(t => coveredTyped.has(`${f[0]}\n${t}`)) ||
         was.some(t =>
           allowedLine({
             offered: f[1],
@@ -1417,6 +1437,68 @@ function asNewRefusal(e, slug, settings, like, png = false, at = null) {
         name: `${P} new ${slug}${newFlags(like, {...settings, [thing]: values}, png)}`,
         reason: 'do this instead',
       };
+  }
+  // A value that holds several settings (`Inter 600`: a family and a
+  // weight) gets one set line per dial, each carrying its part: new takes
+  // the dials together, so they are one new line, offered when the parts
+  // cover the whole value typed (the gate set's lines pass).
+  const refused = at ? settings[at.thing] : undefined;
+  const typedValue =
+    at && refused != null
+      ? String(Array.isArray(refused) ? refused[at.index] : refused)
+      : null;
+  /** @type {Array<{i: number, thing: string, value: string, read: true | number[] | {oneOf: number[]} | false}>} */
+  const parts = [];
+  if (at && typedValue != null)
+    (e.suggestions ?? []).forEach((s, i) => {
+      if (!s.name.startsWith(setPrefix) || mapped[i] == null) return;
+      const words = splitCommand(s.name.slice(setPrefix.length)) ?? [];
+      if (words.length !== 2 || !DIALS[words[0]] || words[0] === 'base') return;
+      parts.push({
+        i,
+        thing: words[0],
+        value: words[1],
+        read: readsTyped({
+          offered: words[1],
+          typed: typedValue,
+          thing: words[0],
+          typedThing: at.thing,
+        }),
+      });
+    });
+  const own = parts.find(p => p.thing === at?.thing && Array.isArray(p.read));
+  const others = parts.filter(
+    p => p.thing !== at?.thing && p.read && p.read !== true,
+  );
+  if (
+    at &&
+    own &&
+    others.length &&
+    new Set(others.map(p => p.thing)).size === others.length &&
+    coversTyped(
+      [own, ...others].map(p => p.read),
+      /** @type {string} */ (typedValue),
+      at.thing,
+    )
+  ) {
+    const given = settings[at.thing];
+    const values = Array.isArray(given) ? [...given] : null;
+    /** @type {Record<string, string | string[] | undefined>} */
+    const together = {
+      ...settings,
+      [at.thing]: values
+        ? firstPerAxis(values.map((v, i) => (i === at.index ? own.value : v)))
+        : own.value,
+    };
+    for (const p of others) {
+      const had = together[p.thing];
+      together[p.thing] = had == null ? p.value : [...[had].flat(), p.value];
+    }
+    for (const p of [own, ...others]) mapped[p.i] = null;
+    mapped[own.i] = {
+      name: `${P} new ${slug}${newFlags(like, together, png)}`,
+      reason: 'do this instead',
+    };
   }
   e.suggestions = mapped.filter(x => x != null);
   if (after.length)
@@ -4078,17 +4160,7 @@ async function change(sub, slug, thing, value, options) {
     }
     // An entry that names its thing under `setting`, as the editor's own
     // results print it, is that entry.
-    if (
-      obj &&
-      typeof obj === 'object' &&
-      !Array.isArray(obj) &&
-      !('thing' in obj) &&
-      typeof obj.setting === 'string' &&
-      'value' in obj
-    ) {
-      const {setting, ...others} = obj;
-      obj = {thing: setting, ...others};
-    }
+    obj = printedEntry(obj);
     // The fields the editor adds to an entry in its own results (show's
     // parts, set's note) are no part of the setting.
     if (obj && typeof obj === 'object' && typeof obj.thing === 'string')
@@ -4530,22 +4602,20 @@ async function changeOnce(
   /** @type {import('./_settings.mjs').Ctx} */ (ctx).base = base;
   seen.ctx = ctx;
   seen.data = structuredClone(data);
-  // The saved entry an undo names exactly as written (thing and scope, in
-  // their own letters), when the editor would read it as another setting
-  // or refuse it: that entry is removed, never a valid neighbor the
-  // cleaned name also matches.
-  const exactIdx =
-    sub === 'undo'
-      ? data.settings.findIndex(
-          x =>
-            x.thing === typedThing &&
-            (x.on ?? null) === (flags.on ?? null) &&
-            (x.when ?? null) === (flags.when ?? null) &&
-            (x.state ?? null) === (flags.state ?? null) &&
-            (x.mode ?? null) === (flags.mode ?? null) &&
-            Boolean(x.only) === Boolean(flags.only),
-        )
-      : -1;
+  // The saved entry the command names exactly as written (thing and
+  // scope, in their own letters, the one its load skipped), when the editor
+  // would read it as another setting or refuse it: undo removes that
+  // entry, never a valid neighbor the cleaned name also matches, and set
+  // writes its setting in that entry's place, so the damaged one is gone.
+  const exactIdx = data.settings.findIndex(
+    x =>
+      x.thing === target.thing &&
+      (x.on ?? null) === (flags.on ?? null) &&
+      (x.when ?? null) === (flags.when ?? null) &&
+      (x.state ?? null) === (flags.state ?? null) &&
+      (x.mode ?? null) === (flags.mode ?? null) &&
+      Boolean(x.only) === Boolean(flags.only),
+  );
   // An entry of this name whose mode or source means nothing is the one an
   // undo removes: only that entry, never a valid one beside it.
   const damagedIdx =
@@ -4643,7 +4713,7 @@ async function changeOnce(
   let s;
   try {
     s =
-      rawIdx >= 0
+      sub === 'undo' && rawIdx >= 0
         ? data.settings[rawIdx]
         : checkSetting(ctx, slug, data, thing, value, flags, sub === 'undo');
   } catch (e) {
@@ -4755,6 +4825,48 @@ async function changeOnce(
       throw e;
     }
     s = stored;
+  }
+  let k = keyOf(s);
+  let prevIdx =
+    rawIdx >= 0
+      ? rawIdx
+      : // A setting listed twice by hand: the last entry is the one the
+        // build reads, so it is the one this command changes.
+        data.settings.map(x => keyOf(x)).lastIndexOf(k);
+  /** @type {string | null} */
+  let vibrancyGone = null;
+  let prev = prevIdx >= 0 ? data.settings[prevIdx] : null;
+  /** The other entries of a setting listed twice by hand that this command replaces or removes. @type {import('./_settings.mjs').Setting[]} */
+  let alsoReplaced = [];
+  if (sub === 'undo' && !prev && !s.mode) {
+    // An undo with no --mode of a setting saved for one mode only: that
+    // entry, named with its mode (before its value is checked, so a value
+    // it does not hold is refused); saved for each mode, one undo each.
+    const modal = data.settings.filter(
+      x =>
+        x.thing === s.thing &&
+        x.mode &&
+        (x.on ?? null) === (s.on ?? null) &&
+        (x.when ?? null) === (s.when ?? null) &&
+        (x.state ?? null) === (s.state ?? null) &&
+        Boolean(x.only) === Boolean(s.only),
+    );
+    if (modal.length === 1) {
+      s.mode = modal[0].mode;
+      k = keyOf(s);
+      prevIdx = data.settings.indexOf(modal[0]);
+      prev = modal[0];
+    } else if (modal.length > 1)
+      refuse(
+        E.ERR_THEME_NOT_SET,
+        `${slug} sets ${describe({...s, value: '?'})
+          .replace(' = ?', '')
+          .replace(
+            / \(whole theme\)$/,
+            '',
+          )} for each mode on its own (${modal.map(x => `${x.mode}: ${x.value}`).join('; ')}), so undo needs the one to remove: name its --mode.`,
+        {run: modal.map(x => `${P} undo ${slug} ${undoArgs(x)}`)},
+      );
   }
   // undo <thing> <value> removes the setting only when that is its value.
   if (sub === 'undo' && value != null && value !== '') {
@@ -4967,47 +5079,6 @@ async function changeOnce(
         ...p,
       },
     };
-  }
-  let k = keyOf(s);
-  let prevIdx =
-    rawIdx >= 0
-      ? rawIdx
-      : // A setting listed twice by hand: the last entry is the one the
-        // build reads, so it is the one this command changes.
-        data.settings.map(x => keyOf(x)).lastIndexOf(k);
-  /** @type {string | null} */
-  let vibrancyGone = null;
-  let prev = prevIdx >= 0 ? data.settings[prevIdx] : null;
-  /** The other entries of a setting listed twice by hand that this command replaces or removes. @type {import('./_settings.mjs').Setting[]} */
-  let alsoReplaced = [];
-  if (sub === 'undo' && !prev && !s.mode) {
-    // An undo with no --mode of a setting saved for one mode only: that
-    // entry, named with its mode; saved for each mode, one undo each.
-    const modal = data.settings.filter(
-      x =>
-        x.thing === s.thing &&
-        x.mode &&
-        (x.on ?? null) === (s.on ?? null) &&
-        (x.when ?? null) === (s.when ?? null) &&
-        (x.state ?? null) === (s.state ?? null) &&
-        Boolean(x.only) === Boolean(s.only),
-    );
-    if (modal.length === 1) {
-      s.mode = modal[0].mode;
-      k = keyOf(s);
-      prevIdx = data.settings.indexOf(modal[0]);
-      prev = modal[0];
-    } else if (modal.length > 1)
-      refuse(
-        E.ERR_THEME_NOT_SET,
-        `${slug} sets ${describe({...s, value: '?'})
-          .replace(' = ?', '')
-          .replace(
-            / \(whole theme\)$/,
-            '',
-          )} for each mode on its own (${modal.map(x => `${x.mode}: ${x.value}`).join('; ')}), so undo needs the one to remove: name its --mode.`,
-        {run: modal.map(x => `${P} undo ${slug} ${undoArgs(x)}`)},
-      );
   }
   if (sub === 'undo') {
     if (!prev) {

@@ -15,7 +15,12 @@ import {irregularFileKind} from '../../foundation/fs/regular-file.mjs';
 import {parse as parseModule} from '@babel/parser';
 import {createHash} from 'node:crypto';
 import * as fs from 'node:fs';
-import {coversProperty, cssNumber, longhandsOf} from './_css.mjs';
+import {
+  coversProperty,
+  cssNumber,
+  cssProperties,
+  longhandsOf,
+} from './_css.mjs';
 import postcss from 'postcss';
 import {createRequire} from 'node:module';
 import * as path from 'node:path';
@@ -1587,6 +1592,28 @@ export function dialWordOf(thing, value) {
 }
 
 /**
+ * An entry that names its thing under `setting`, as the editor's own
+ * results print it (`{"setting": "accent", "value": "red"}`), as the entry
+ * it is; anything else as it is. The one reader for a typed entry and a
+ * saved one.
+ * @param {any} entry
+ * @returns {any}
+ */
+export function printedEntry(entry) {
+  if (
+    !entry ||
+    typeof entry !== 'object' ||
+    Array.isArray(entry) ||
+    'thing' in entry ||
+    typeof entry.setting !== 'string' ||
+    !('value' in entry)
+  )
+    return entry;
+  const {setting, ...others} = entry;
+  return {thing: setting, ...others};
+}
+
+/**
  * Read each entry saved in a form set reads when typed (`{"corners":
  * "pill"}`, `"corners pill"`, `"corners: pill"`) as that setting, its thing
  * and value read as set reads them, with a note; the next change saves it
@@ -1596,7 +1623,14 @@ export function dialWordOf(thing, value) {
  */
 function readTypedEntries(data, notes) {
   if (!Array.isArray(data?.settings)) return;
-  data.settings = data.settings.map((/** @type {any} */ s) => {
+  data.settings = data.settings.map((/** @type {any} */ saved) => {
+    // An entry that names its thing under `setting`, as the editor's own
+    // results print it, is that entry (the reader set uses for one typed).
+    const s = printedEntry(saved);
+    if (s !== saved)
+      notes.push(
+        `${JSON.stringify(saved)} names its thing under "setting", read as ${s.thing}`,
+      );
     const keys =
       s && typeof s === 'object' && !Array.isArray(s) ? Object.keys(s) : [];
     const pair =
@@ -1655,6 +1689,41 @@ function readEntryWords(data) {
   readTypedEntries(data, notes);
   for (const s of Array.isArray(data?.settings) ? data.settings : []) {
     if (!s || typeof s !== 'object' || typeof s.thing !== 'string') continue;
+    // A setting and its value saved the other way round (`"thing": "red",
+    // "value": "accent"`): the thing names no setting and the value does,
+    // as set reads `set t red accent` (the one thing reader).
+    {
+      /** The kind of setting a name is, or null. @param {string} x */
+      const kindOf = x =>
+        DIALS[x]
+          ? 'dial'
+          : x.startsWith('--')
+            ? 'token'
+            : s.on && cssProperties().has(x)
+              ? 'property'
+              : null;
+      const asSaved = String(
+        normalizeEntry(s.thing, String(s.value ?? '')).thing ?? '',
+      );
+      const swapped =
+        typeof s.value === 'string'
+          ? normalizeEntry(s.value, s.thing)
+          : {thing: null, value: null};
+      const kind = swapped.thing ? kindOf(String(swapped.thing)) : null;
+      if (
+        !kindOf(asSaved) &&
+        kind &&
+        swapped.value != null &&
+        String(swapped.value) !== '' &&
+        [undefined, null, '', kind].includes(s.source)
+      ) {
+        notes.push(
+          `${s.thing} = ${s.value} was saved the other way round, read as ${swapped.thing} = ${swapped.value}`,
+        );
+        s.thing = String(swapped.thing);
+        s.value = String(swapped.value);
+      }
+    }
     // A dial name saved in a typed form (`text size`, `Text Size`) is that
     // dial, as set reads the name typed (the one thing reader).
     if (
@@ -1698,6 +1767,24 @@ function readEntryWords(data) {
         notes.push(`${s.thing} was saved as "${s.thing}", read as ${read}`);
         s.thing = read;
       }
+    }
+    // A mode that names both modes or none (`"both"`, `""`) is no mode, as
+    // set reads `--mode both` (the setting for both modes), unless the theme
+    // holds that setting for both modes already.
+    if (
+      typeof s.mode === 'string' &&
+      /^(both|)$/i.test(s.mode.trim()) &&
+      !data.settings.some(
+        (/** @type {any} */ x) =>
+          x !== s &&
+          x?.thing === s.thing &&
+          keyOf(x) === keyOf({...s, mode: undefined}),
+      )
+    ) {
+      notes.push(
+        `${s.thing} was saved with mode ${JSON.stringify(s.mode)}, read as both modes`,
+      );
+      delete s.mode;
     }
     if (typeof s.mode === 'string' && s.mode !== 'light' && s.mode !== 'dark') {
       const read = modeWord(s.mode);
