@@ -10,6 +10,12 @@ export const doc = {
     'Pairs useLongPress with a pointer contextmenu handler and an explicit Actions button on a document card, opening a contextual action panel positioned at the touch or cursor point.',
   isReady: true,
   aspectRatio: 16 / 9,
-  componentsUsed: ['Badge', 'Button', 'Card', 'Layout', 'Text'],
+  keywords: [
+    'context menu',
+    'press and hold',
+    'touch',
+    'right click',
+    'actions',
+  ],
+  componentsUsed: ['Badge', 'Button', 'Card', 'Heading', 'Layout', 'Text'],
 };
-

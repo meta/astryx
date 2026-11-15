@@ -107,6 +107,24 @@ describe('useLongPressHookUsage example', () => {
     ).toContain('Opened by long press at (120, 64)');
   });
 
+  it('opens under the finger on a card shorter than the panel', () => {
+    renderExample();
+    const surface = getSurface();
+    // The coarse-pointer card is 144px tall, less than the panel.
+    vi.spyOn(surface, 'getBoundingClientRect').mockReturnValue(
+      DOMRect.fromRect({x: 0, y: 0, width: 360, height: 144}),
+    );
+
+    dispatchTouch(surface, 'touchstart', [{clientX: 120, clientY: 100}]);
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+
+    const menu = container.querySelector<HTMLElement>('[role="group"]');
+    expect(menu?.style.left).toBe('120px');
+    expect(menu?.style.top).toBe('100px');
+  });
+
   it('cancels the pending long press on early lift or movement beyond 10px', () => {
     renderExample();
     const surface = getSurface();

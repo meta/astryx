@@ -19,8 +19,7 @@ interface MenuPosition {
 }
 
 const MENU_OFFSET_Y = 8;
-const MENU_ESTIMATED_WIDTH = 180;
-const MENU_ESTIMATED_HEIGHT = 140;
+const MENU_WIDTH = 180;
 
 export default function UseLongPressHookUsage() {
   const surfaceRef = useRef<HTMLDivElement>(null);
@@ -35,20 +34,12 @@ export default function UseLongPressHookUsage() {
     const rect = surfaceRef.current?.getBoundingClientRect();
     const rawX = rect ? point.x - rect.left : point.x;
     const rawY = rect ? point.y - rect.top : point.y;
-    const x =
-      rect && rect.width > MENU_ESTIMATED_WIDTH
-        ? Math.min(
-            Math.max(8, Math.round(rawX)),
-            Math.round(rect.width - MENU_ESTIMATED_WIDTH),
-          )
-        : Math.max(0, Math.round(rawX));
-    const y =
-      rect && rect.height > MENU_ESTIMATED_HEIGHT
-        ? Math.min(
-            Math.max(8, Math.round(rawY)),
-            Math.round(rect.height - MENU_ESTIMATED_HEIGHT),
-          )
-        : Math.max(0, Math.round(rawY));
+    // The panel opens at the reported point; only its width is kept inside
+    // the card, so it never opens past the card's end.
+    const maxX =
+      rect && rect.width > MENU_WIDTH ? rect.width - MENU_WIDTH : Infinity;
+    const x = Math.min(Math.max(0, Math.round(rawX)), maxX);
+    const y = Math.max(0, Math.round(rawY));
     setMenu({x, y, source});
   };
 
@@ -140,34 +131,34 @@ export default function UseLongPressHookUsage() {
         </Card>
 
         {menu && (
-          <div
+          <Card
             role="group"
             aria-label="Document actions"
+            padding={2}
+            width={MENU_WIDTH}
             style={{
               position: 'absolute',
               left: menu.x,
               top: menu.y,
               zIndex: 1,
             }}>
-            <Card padding={2} width={180}>
-              <VStack gap={1}>
-                <Text type="supporting" color="secondary">
-                  Opened by {menu.source} at ({menu.x}, {menu.y})
-                </Text>
-                <Button
-                  label="Copy link"
-                  variant="ghost"
-                  onClick={() => runAction('copy')}
-                />
-                <Button
-                  label={isPinned ? 'Unpin' : 'Pin draft'}
-                  variant="ghost"
-                  onClick={() => runAction('pin')}
-                />
-                <Button label="Dismiss" variant="ghost" onClick={closeMenu} />
-              </VStack>
-            </Card>
-          </div>
+            <VStack gap={1}>
+              <Text type="supporting" color="secondary">
+                Opened by {menu.source} at ({menu.x}, {menu.y})
+              </Text>
+              <Button
+                label="Copy link"
+                variant="ghost"
+                onClick={() => runAction('copy')}
+              />
+              <Button
+                label={isPinned ? 'Unpin' : 'Pin draft'}
+                variant="ghost"
+                onClick={() => runAction('pin')}
+              />
+              <Button label="Dismiss" variant="ghost" onClick={closeMenu} />
+            </VStack>
+          </Card>
         )}
       </div>
       <Text type="supporting" color="secondary">
