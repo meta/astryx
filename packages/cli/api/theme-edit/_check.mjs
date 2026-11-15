@@ -2988,11 +2988,19 @@ export function borderlessSurfaces(C) {
         ),
     ),
   ]);
+  // (A line on some sides only, a grouped button's join with the one before
+  // it, is no box of the part's own.)
   return [...candidates].filter(
     pt =>
       !(C.partReads(pt, 'border') ?? []).some(
-        (/** @type {{token: string}} */ r) =>
-          r.token === '--border-width' || /^--color-border/.test(r.token),
+        (/** @type {{token: string, props?: string[]}} */ r) =>
+          (r.token === '--border-width' || /^--color-border/.test(r.token)) &&
+          (r.props ?? ['border']).some(
+            p =>
+              !/^border-(top|bottom|left|right|(inline|block)(-(start|end))?)-/.test(
+                p,
+              ),
+          ),
       ),
   );
 }

@@ -234,9 +234,10 @@ const QUESTIONS = [
     },
   ],
   [
+    // (Every focus ring: the inputs draw theirs in their box-shadow.)
     'change the focus ring color to orange',
     {
-      top: /^set q --focus-outline-color '#f97316'$/,
+      top: /^set q --focus-outline-color '#f97316' && set q box-shadow 'inset 0 0 0 2px #f97316' --on inputs --state focus-within/,
       adds: /--focus-outline-color=#f97316/,
     },
   ],
@@ -371,10 +372,12 @@ const QUESTIONS = [
     {top: /^set q border none --on button$/, adds: /button\.base\.border=none/},
   ],
   [
+    // (The dialog draws no border now: a width alone shows nothing, so the
+    // whole line.)
     '2px border on the dialog',
     {
-      top: /^set q border-width 2px --on dialog$/,
-      adds: /dialog\.base\.borderWidth=2px/,
+      top: /^set q border '2px solid var\(--color-border\)' --on dialog$/,
+      adds: /dialog\.base\.border=2px solid var\(--color-border\)/,
     },
   ],
   [
@@ -1944,8 +1947,11 @@ const QUESTIONS_F = [
   ['buttons are not rounded enough', {top: /^set q corners more --on button$/}],
   [
     'nothing should be rounded except avatars',
-    // The avatar keeps the corner token it reads, so its own corners stay.
-    {top: /^set q corners square && set q --radius-full 9999px --on avatar$/},
+    // The avatar keeps every corner token it reads (each shape it draws),
+    // so its own corners stay.
+    {
+      top: /^set q corners square && set q --radius-full 9999px --on avatar( && set q --radius-[a-z]+ \S+ --on avatar)*$/,
+    },
   ],
   [
     'the shadows are too strong',
@@ -4264,13 +4270,20 @@ describe('how answers final-14 fixes', () => {
 
 describe('how lookups', () => {
   it('names the same states for a state a part lacks as set and how <part> do', async () => {
+    // "checked rows" are the rows selected: how reads the selection word
+    // as the row's one selection state; set, given the state a row lacks,
+    // names the states how <part> lists.
     const {data} = await themeEditHow('checked rows in the table tinted blue', {
       cwd,
       theme: 'q',
     });
-    const said = /its states: ([^)]*)\)/.exec(
-      (data.results ?? []).map((/** @type {any} */ r) => r.text).join('\n'),
-    )?.[1];
+    expect(
+      (data.results ?? []).some((/** @type {any} */ r) =>
+        r.commands.some((/** @type {string} */ c) =>
+          / --on table-row --state selected\b/.test(c),
+        ),
+      ),
+    ).toBe(true);
     const part = (await themeEditHow('table-row', {cwd, theme: 'q'})).data;
     const r = await refusal(() =>
       themeEditSet('q', 'background', '#dbeafe', {
@@ -4279,8 +4292,7 @@ describe('how lookups', () => {
         state: 'checked',
       }),
     );
-    expect(said).toBe(part.states.join(', '));
-    expect(r.message).toContain(`States: ${said}.`);
+    expect(r.message).toContain(`States: ${part.states.join(', ')}.`);
   });
 
   it('maps what a part reads under to the flags set takes, or says why none does', async () => {

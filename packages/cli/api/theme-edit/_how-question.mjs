@@ -1829,92 +1829,112 @@ export function partLexicon(ctx) {
       ]);
     }
   }
-  // (After the phrases above, so a longer one, "dialog header title",
-  // reads first.)
-  // A part's own piece said after a word that names the part ("the empty
-  // state icon", "the popover arrow", "sheet titles", "the alert title"):
-  // the catalog part for it, else the part with the piece named missing.
-  // A piece that is a part of its own the part holds ("button icons")
-  // keeps its own reading.
-  const overrideWords = [
-    ...new Set(
-      OVERRIDES.flatMap(([re]) =>
-        [...re.source.matchAll(/[a-z]{3,}/g)].map(x => singular(x[0])),
-      ),
-    ),
+  // A part's own piece said after a name of the part ("the empty state
+  // icon", "the popover arrow", "sheet titles", "the alert title", "the
+  // select chevron"): the catalog part for it, else the part with the piece
+  // named missing. The names are the lexicon's own (each part's catalog
+  // name, and every phrase entry below), so a piece follows whatever names
+  // the part, in the lexicon's order. A piece that is a part of its own the
+  // part holds ("button icons") keeps its own reading.
+  const PIECES = [
+    'icon',
+    'arrow',
+    'description',
+    'title',
+    'chevron',
+    'caret',
+    'segment',
   ];
-  for (const key of keys) {
-    const names = [
-      key.replace(/-/g, ' '),
-      ...overrideWords.filter(
-        w => OVERRIDES.find(([re]) => re.test(` ${w} `))?.[1].on === key,
-      ),
-    ];
-    for (const word of new Set(names))
-      for (const piece of ['icon', 'arrow', 'description', 'title']) {
-        if (piece === 'title' && !key.includes('-') && word === key) continue;
-        const real =
-          piece === 'title' && keys.has(`${key}-header-title-block`)
-            ? `${key}-header-title-block`
-            : keys.has(`${key}-${piece}`)
-              ? `${key}-${piece}`
+  /**
+   * The piece entries for a part said by a pattern.
+   * @param {string} source the pattern naming the part
+   * @param {string} key
+   * @param {string} said how the answer names it
+   * @returns {Array<[RegExp, PartRef]>}
+   */
+  const piecesOf = (source, key, said) => {
+    /** @type {Array<[RegExp, PartRef]>} */
+    const out = [];
+    const inside = ctx.C.MAP[key]?.contains ?? [];
+    for (const piece of PIECES) {
+      // A select's chevron or caret is the indicator icon it holds
+      // (selector-indicator-icon); a field's segment, the one segment
+      // part it holds.
+      const held =
+        piece === 'chevron' || piece === 'caret'
+          ? inside.filter(k =>
+              new RegExp(`^${key}-(indicator|toggle|chevron)(-icon)?$`).test(k),
+            )
+          : piece === 'segment'
+            ? inside.filter(k => k.startsWith(`${key}-`) && /-segment$/.test(k))
+            : [];
+      const real =
+        piece === 'title' && keys.has(`${key}-header-title-block`)
+          ? `${key}-header-title-block`
+          : keys.has(`${key}-${piece}`)
+            ? `${key}-${piece}`
+            : held.length === 1
+              ? held[0]
               : null;
-        if (
-          !real &&
-          keys.has(piece) &&
-          (ctx.C.MAP[key]?.contains ?? []).includes(piece)
-        )
-          continue;
-        const phrase = `${word} ${piece}`;
-        if (OVERRIDES.some(([re]) => re.exec(phrase)?.[0] === phrase)) continue;
-        subParts.push([
-          new RegExp(
-            `\\b${word.replace(/ /g, '[\\s-]?')}(?:e?s)?(?:'s)?[\\s-]${piece}s?\\b`,
-          ),
-          real ? {on: real} : {on: key, missing: `${word} ${piece}`},
-        ]);
-      }
-  }
+      if (!real && keys.has(piece) && inside.includes(piece)) continue;
+      // Several such parts inside (a date and a time segment): each is
+      // named by its own name, so none is missing.
+      if (!real && held.length > 1) continue;
+      out.push([
+        new RegExp(`(?:${source})(?:'s)?[\\s-]${piece}s?\\b`),
+        real ? {on: real} : {on: key, missing: `${said} ${piece}`},
+      ]);
+    }
+    return out;
+  };
+  /** @type {Array<[RegExp, PartRef]>} */
+  const phrases = [
+    // A catalog name of two or more words said in full ("toggle
+    // buttons", "code block header", "hover card") is that part.
+    ...derived.filter(
+      ([, x]) =>
+        x.on.includes('-') &&
+        // A phrase an override already reads whole ("progress bar",
+        // "table header") keeps the override's part.
+        !OVERRIDES.some(([re]) => {
+          const phrase = x.on.replace(/-/g, ' ');
+          return re.exec(phrase)?.[0] === phrase;
+        }),
+    ),
+    /** @type {[RegExp, PartRef]} */ ([
+      /\bselect(?:ion)?[\s-]?(?:box|menu|field|dropdown)(?:e?s)?\b/,
+      {on: 'selector'},
+    ]),
+    // "inline code", "block quote": those parts, read whole (so their
+    // first word is never a padding side).
+    /** @type {[RegExp, PartRef]} */ ([/\binline[\s-]code\b/, {on: 'code'}]),
+    /** @type {[RegExp, PartRef]} */ ([
+      /\bblock[\s-]?quotes?\b/,
+      {on: 'blockquote'},
+    ]),
+    // "date pickers": Core's date input.
+    /** @type {[RegExp, PartRef]} */ ([
+      /\bdate ?pickers?\b/,
+      {on: 'date-input'},
+    ]),
+    ...OVERRIDES,
+    ...derived,
+    ...groups,
+    // "smaller labels on form fields": a field's label.
+    /** @type {[RegExp, PartRef]} */ ([
+      /(?<!\b(?:button|tab|badge|chip|nav|menu|link|checkbox|switch|radio)s? )\b(field |form |input )?labels?\b/,
+      {on: 'field-label'},
+    ]),
+  ];
+  // The pieces each name says come before the names themselves (a piece
+  // after a name is read whole), in the lexicon's order: a longer phrase
+  // entry ("date pickers") before a word in it ("pickers"). The answer
+  // names the part by its catalog name.
+  const pieceEntries = phrases
+    .filter(([, p]) => !p.missing && keys.has(p.on))
+    .flatMap(([re, p]) => piecesOf(re.source, p.on, p.on.replace(/-/g, ' ')));
   const lex = {
-    parts: [
-      ...subParts,
-      // A catalog name of two or more words said in full ("toggle
-      // buttons", "code block header", "hover card") is that part.
-      ...derived.filter(
-        ([, x]) =>
-          x.on.includes('-') &&
-          // A phrase an override already reads whole ("progress bar",
-          // "table header") keeps the override's part.
-          !OVERRIDES.some(([re]) => {
-            const phrase = x.on.replace(/-/g, ' ');
-            return re.exec(phrase)?.[0] === phrase;
-          }),
-      ),
-      /** @type {[RegExp, PartRef]} */ ([
-        /\bselect(?:ion)?[\s-]?(?:box|menu|field|dropdown)(?:e?s)?\b/,
-        {on: 'selector'},
-      ]),
-      // "inline code", "block quote": those parts, read whole (so their
-      // first word is never a padding side).
-      /** @type {[RegExp, PartRef]} */ ([/\binline[\s-]code\b/, {on: 'code'}]),
-      /** @type {[RegExp, PartRef]} */ ([
-        /\bblock[\s-]?quotes?\b/,
-        {on: 'blockquote'},
-      ]),
-      // "date pickers": Core's date input.
-      /** @type {[RegExp, PartRef]} */ ([
-        /\bdate ?pickers?\b/,
-        {on: 'date-input'},
-      ]),
-      ...OVERRIDES,
-      ...derived,
-      ...groups,
-      // "smaller labels on form fields": a field's label.
-      /** @type {[RegExp, PartRef]} */ ([
-        /(?<!\b(?:button|tab|badge|chip|nav|menu|link|checkbox|switch|radio)s? )\b(field |form |input )?labels?\b/,
-        {on: 'field-label'},
-      ]),
-    ],
+    parts: [...subParts, ...pieceEntries, ...phrases],
     vocab,
   };
   lexicons.set(project, lex);
@@ -1947,6 +1967,7 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
   [/\b(opened|expanded)\b/, 'open'],
   // Words for states a part may not have: the answer says so.
   [/\bread-?only\b/, 'readonly'],
+  [/\bindeterminate\b/, 'indeterminate'],
   [
     /\bloading\b(?! (bars?|placeholders?|skeletons?|spinners?|states?|indicators?))/,
     'loading',
@@ -6021,7 +6042,18 @@ export function draftAnswer(ctx, env, question) {
     if (word === 'focus')
       return focusStateOf(/** @type {any} */ ({C}), one(on)) ?? 'focus-visible';
     if (word === 'invalid') return null;
-    return states.includes(word) ? word : null;
+    if (states.includes(word)) return word;
+    // A selection said in another word ("toggle buttons red when
+    // selected"): the one selection state the part has (a toggle
+    // button's pressed).
+    const SELECTION = ['selected', 'pressed', 'checked', 'current'];
+    if (SELECTION.includes(word)) {
+      const own = states.filter(s =>
+        SELECTION.includes(s.replace(/^is(?=[A-Z])/, '').toLowerCase()),
+      );
+      if (own.length === 1) return own[0];
+    }
+    return null;
   };
   /** @param {Clause} c @param {{on: string, when?: string, level?: string}} p */
   const flagsFor = (c, p) => {
@@ -6047,7 +6079,15 @@ export function draftAnswer(ctx, env, question) {
       f.when = 'status:error';
     else if (c.state) {
       const st = stateFor(p.on, c.state);
+      // A value Core marks a state with (a checkbox's
+      // checked="indeterminate"): that value, by --when.
+      const attrs = C.MAP[one(p.on)]?.attrs ?? {};
+      const byValue = Object.entries(attrs).find(
+        ([k, vals]) =>
+          statesOf(p.on).includes(k) && vals.includes(String(c.state)),
+      )?.[0];
       if (st) f.state = st;
+      else if (byValue && !f.when) f.when = `${byValue}:${c.state}`;
       else f.noState = c.state;
     }
     return f;
@@ -6196,9 +6236,21 @@ export function draftAnswer(ctx, env, question) {
       )
         return st;
       const mode = c.mode;
+      // (A mix or a color token is a color too: an input's hover ring.)
       const hasColor = (/** @type {string} */ x) =>
         new RegExp(COLOR_IN_VALUE.source, 'i').test(x) ||
-        /light-dark\(/.test(x);
+        /light-dark\(|color-mix\(|var\(\s*--color-/.test(x);
+      /** The span of a color-mix() or a color token in a layer, parens balanced. @param {string} layer */
+      const colorCall = layer => {
+        const at = layer.search(/color-mix\(|var\(\s*--color-/);
+        if (at < 0) return null;
+        let depth = 0;
+        for (let i = layer.indexOf('(', at); i < layer.length; i++) {
+          if (layer[i] === '(') depth++;
+          else if (layer[i] === ')' && --depth === 0) return [at, i + 1];
+        }
+        return null;
+      };
       /** @param {string} col the color, kept in the other mode */
       const otherOnly = col =>
         mode === 'dark'
@@ -6215,12 +6267,16 @@ export function draftAnswer(ctx, env, question) {
        * @param {(c: string) => string} wrap
        * @param {'light' | 'dark'} half the mode whose color a pair keeps
        */
-      const recolor = (layer, wrap, half) =>
-        /light-dark\(/.test(layer)
-          ? layer.replace(PAIR, (_m, l, d) =>
-              wrap(half === 'light' ? l.trim() : d.trim()),
-            )
-          : layer.replace(COLOR_IN_VALUE, col => wrap(col));
+      const recolor = (layer, wrap, half) => {
+        if (/light-dark\(/.test(layer))
+          return layer.replace(PAIR, (_m, l, d) =>
+            wrap(half === 'light' ? l.trim() : d.trim()),
+          );
+        const span = colorCall(layer);
+        if (span)
+          return `${layer.slice(0, span[0])}${wrap(layer.slice(span[0], span[1]))}${layer.slice(span[1])}`;
+        return layer.replace(COLOR_IN_VALUE, col => wrap(col));
+      };
       // A part the editor never saw drawn: what it shows in the other
       // mode is unknown, so it cannot be kept.
       if (!C.MAP[one(st.on)]) {
@@ -6247,8 +6303,19 @@ export function draftAnswer(ctx, env, question) {
               : [x];
           })
           .filter(x => x && !/^none$/i.test(x) && !/^var\(\s*--_/.test(x));
+      // In a state (hover): the ring Core draws there for the part's plain
+      // render, which the other mode keeps.
+      const stateNow = st.state
+        ? Object.entries(C.MAP[one(st.on)]?.at?.['box-shadow'] ?? {}).find(
+            ([k, x]) =>
+              new RegExp(`\\s:${st.state}(?![\\w-])`).test(k) &&
+              !/\bstatus=/.test(k) &&
+              !/^\s*none\s*$/.test(String(x)),
+          )?.[1]
+        : null;
       const nowLayers = layersOf(
-        partValue(st.on, 'box-shadow') ??
+        (st.state ? stateNow : null) ??
+          partValue(st.on, 'box-shadow') ??
           (read ? `var(${read.token})` : 'none'),
       );
       // (A removal asks for no layer of its own.)
@@ -6272,9 +6339,15 @@ export function draftAnswer(ctx, env, question) {
         shadowWhy = `${one(st.on)} draws no shadow of its own at rest to ${asked.length ? 'soften' : 'take out'} in ${mode} mode; a shadow it shows comes from Core (an elevated card's elevation is a shared shadow), so "${asked.length ? 'softer' : 'no'} shadows in ${mode} mode" changes the shared shadows in ${mode} mode, for every part that uses them`;
         return st;
       }
+      // A ring Core draws in the state (an input's hover ring) is no
+      // shadow being replaced: it stays in both modes, beside the new one.
+      const keepRing = (/** @type {string} */ x) =>
+        Boolean(stateNow) && /^\s*inset\s+0\s+0\s+0\s/.test(x);
       const v = [
         ...nowLayers.map(x =>
-          recolor(x, otherOnly, mode === 'dark' ? 'light' : 'dark'),
+          keepRing(x)
+            ? x
+            : recolor(x, otherOnly, mode === 'dark' ? 'light' : 'dark'),
         ),
         ...asked.map(x => recolor(x, thisOnly, mode)),
       ].join(', ');
@@ -6863,7 +6936,9 @@ export function draftAnswer(ctx, env, question) {
       d.lookup = `${HOW} ${missing.on}`;
     } else if (
       missing &&
-      /\b(icon|arrow|description|label)$/.test(String(missing.missing)) &&
+      /\b(icon|arrow|description|label|chevron|caret|segment)$/.test(
+        String(missing.missing),
+      ) &&
       options.flat().some(st => st.verb === 'set')
     ) {
       // A piece of the part Core draws with no part of its own (a
@@ -6886,6 +6961,24 @@ export function draftAnswer(ctx, env, question) {
               t => C.MAP[t]?.attrs?.[st.state ?? ''] ?? [],
             ),
           );
+          // One of those values said, not the state ("indeterminate
+          // checkboxes"): that value alone, never every box in the state.
+          const text = clauseNow?.text ?? q;
+          const said = [...values].filter(
+            v => v !== st.state && new RegExp(`\\b${v}\\b`, 'i').test(text),
+          );
+          if (
+            said.length &&
+            !st.when &&
+            !new RegExp(`\\b${st.state}\\b`, 'i').test(text)
+          ) {
+            o.splice(o.indexOf(st), 1, {
+              ...st,
+              state: undefined,
+              when: `${st.state}:${said[0]}`,
+            });
+            continue;
+          }
           for (const value of values)
             if (value !== st.state && !st.when)
               o.push({...st, state: undefined, when: `${st.state}:${value}`});
@@ -7448,7 +7541,7 @@ export function draftAnswer(ctx, env, question) {
                 inGroupOf(st.on)
               )
                 crossed = st;
-              return [k];
+              return [k].flat();
             }
             /** @param {string | undefined} when */
             const inWhen = when => {
@@ -9542,6 +9635,8 @@ export function draftAnswer(ctx, env, question) {
     }
     // Placeholder, caret and selection colors.
     if (
+      // (A select's caret is its indicator icon, read as that part.)
+      !c.parts.some(x => /-(indicator|toggle)-icon$/.test(x.on)) &&
       /\b(placeholders?|caret|cursor colou?r|colou?r (of )?the cursor|selection|selected text highlight|text highlight)\b/.test(
         c.text,
       ) &&
@@ -10359,8 +10454,17 @@ export function draftAnswer(ctx, env, question) {
       // from it (a button group's square inner joins), where a radius
       // written on the part would override them.
       if (!st.on && !partValue(p.on, 'border-radius') && !baseOwn && read) {
-        const now = current(read.token);
-        if (now) return set(read.token, now, flags);
+        // Every corner token the part reads in a render of its own (an
+        // avatar's round and rounded shapes), each pinned at its value.
+        const tokens = p.when
+          ? [read.token]
+          : [...new Set([read.token, ...reads.map(r => r.token)])];
+        const pins = tokens
+          .map(t => [t, current(t)])
+          .filter(([, now]) => now)
+          .map(([t, now]) => set(t, String(now), flags));
+        if (pins.length === 1) return pins[0];
+        if (pins.length > 1) return /** @type {any} */ (pins);
       }
       return set(
         'border-radius',
@@ -10782,7 +10886,15 @@ export function draftAnswer(ctx, env, question) {
       // its renders Core draws no ring for while focused (a status field)
       // keeps none there, so the ring reaches only what rings now.
       {
-        const ringPart = scope ? one(scope) : null;
+        // "make all focus rings red": the inputs' rings too, beside the
+        // outline every other part draws.
+        const allRings =
+          !scope &&
+          !c.neg &&
+          !!colorFor(c, 'fill') &&
+          !/^\s*(how|what|which|where|why|is|are|does|do)\b/i.test(q);
+        const scopeR = scope ?? (allRings ? 'inputs' : null);
+        const ringPart = scopeR ? one(scopeR) : null;
         const shadows = ringPart
           ? (C.MAP[ringPart]?.at?.['box-shadow'] ?? {})
           : {};
@@ -10801,7 +10913,7 @@ export function draftAnswer(ctx, env, question) {
             )
           : null;
         if (
-          scope &&
+          scopeR &&
           m &&
           outlines.length &&
           outlines.every(x => /^\s*none\b/.test(String(x)))
@@ -10815,13 +10927,13 @@ export function draftAnswer(ctx, env, question) {
             /\?\s*$/.test(q)
           )
             return {
-              text: `${scope} shows focus with a ring in its box-shadow while focused (${ringNow}); it draws no outline`,
+              text: `${scopeR} shows focus with a ring in its box-shadow while focused (${ringNow}); it draws no outline`,
               options: [],
-              lookup: `${HOW} ${scope}`,
+              lookup: `${HOW} ${scopeR}`,
             };
           // A status said with the part ("error inputs"): that status's
           // fields only, from what Core draws for them while focused.
-          const statusWhen = c.parts.find(x => x.on === scope)?.when;
+          const statusWhen = c.parts.find(x => x.on === scopeR)?.when;
           const status = /^status:([\w-]+)$/.exec(
             String(statusWhen ?? ''),
           )?.[1];
@@ -10842,7 +10954,9 @@ export function draftAnswer(ctx, env, question) {
               ? (ra[2] === 'more') === (ra[3] !== 'opaque')
                 ? Number(ra[1])
                 : 0
-              : /\b(more transparent|less opaque|fainter)\b/.test(x.text)
+              : /\b(more transparent|less opaque|fainter|less visible|half as visible|subtler)\b/.test(
+                    x.text,
+                  )
                 ? 50
                 : 0;
             const px = x.lengths[0]
@@ -10883,17 +10997,17 @@ export function draftAnswer(ctx, env, question) {
           const remove = c.neg || /\b(remove|hide|get rid of)\b/.test(c.text);
           if (remove && status && /^\s*none\s*$/.test(String(statusNow)))
             return {
-              text: `${status} fields on ${scope} draw no focus ring now: Core shows none for them while focused, so there is nothing to remove`,
+              text: `${status} fields on ${scopeR} draw no focus ring now: Core shows none for them while focused, so there is nothing to remove`,
               options: [],
-              lookup: `${HOW} ${scope}`,
+              lookup: `${HOW} ${scopeR}`,
             };
           if (remove)
             return {
-              text: `no focus ring on ${scope}${status ? ` (${status} fields)` : ''}: ${scope} draws no outline and shows focus with a ring in its box-shadow (now ${status ? statusNow : ringNow}), so that box-shadow none while focused. Keyboard users then cannot see where they are, so keep a visible focus style another way`,
+              text: `no focus ring on ${scopeR}${status ? ` (${status} fields)` : ''}: ${scopeR} draws no outline and shows focus with a ring in its box-shadow (now ${status ? statusNow : ringNow}), so that box-shadow none while focused. Keyboard users then cannot see where they are, so keep a visible focus style another way`,
               options: [
                 [
                   set('box-shadow', 'none', {
-                    on: scope,
+                    on: scopeR,
                     ...(statusWhen ? {when: statusWhen} : {}),
                     state: 'focus-within',
                   }),
@@ -10968,24 +11082,31 @@ export function draftAnswer(ctx, env, question) {
               .filter(Boolean)
               .join(' and ');
             return {
-              text: `the focus ring on ${scope}${status ? ` (${status} fields)` : ''}: ${scope} draws no outline and shows focus with a ring in its box-shadow (now ${status ? statusNow : ringNow}), so that ring ${said} while focused${mine.strength ? '; "strength" read as the width of the ring' : ''}${c.mode ? ` in ${c.mode} mode${partner ? ` and as asked in ${partner.mode} mode` : ', the other mode kept'}` : ''}${statuses.length ? `; ${statuses.join(', ')} fields draw no ring while focused and keep none` : ''}`,
+              text: `${allRings ? 'every focus ring: --focus-outline-color for the parts that draw an outline, and ' : ''}the focus ring on ${scopeR}${status ? ` (${status} fields)` : ''}: ${scopeR} draws no outline and shows focus with a ring in its box-shadow (now ${status ? statusNow : ringNow}), so that ring ${said} while focused${mine.strength ? '; "strength" read as the width of the ring' : ''}${c.mode ? ` in ${c.mode} mode${partner ? ` and as asked in ${partner.mode} mode` : ', the other mode kept'}` : ''}${statuses.length ? `; ${statuses.join(', ')} fields draw no ring while focused and keep none` : ''}`,
               options: [
                 [
+                  ...(allRings && mine.color
+                    ? [
+                        set('--focus-outline-color', mine.color, {
+                          ...modeOf(c),
+                        }),
+                      ]
+                    : []),
                   set('box-shadow', value, {
-                    on: scope,
+                    on: scopeR,
                     ...(statusWhen ? {when: statusWhen} : {}),
                     state: 'focus-within',
                   }),
                   ...statuses.map(st =>
                     set('box-shadow', 'none', {
-                      on: scope,
+                      on: scopeR,
                       when: `status:${st}`,
                       state: 'focus-within',
                     }),
                   ),
                 ],
               ],
-              sequence: statuses.length > 0,
+              sequence: statuses.length > 0 || allRings,
               ...(c.mode ? {modeInValue: true} : {}),
             };
           }
@@ -12811,8 +12932,39 @@ export function draftAnswer(ctx, env, question) {
             : null);
         const side = /\b(top|bottom|left|right)\b/.exec(c.text)?.[1];
         const prop = side ? `border-${side}` : 'border';
-        const own = C.MAP[one(on)]?.own ?? {};
-        const hasBorder = 'border-style' in own || 'border-width' in own;
+        // A border the part draws at rest: a width other than 0 and a style
+        // other than none (a button's 0px border is no line).
+        // (Every side's, and only the variant asked when one is.)
+        const wantWhen = f.when ? String(f.when).replace(':', '=') : null;
+        // (A side the part draws only between siblings, a grouped button's
+        // join, cleared on the first or last child, is no line of its own.)
+        const join = (/** @type {Record<string, unknown>} */ rules) =>
+          Object.entries(rules).some(
+            ([sel, v]) =>
+              /:(first|last|nth-last|nth)-child/.test(sel) &&
+              /^(0(px)?|none)$/.test(String(v).trim()),
+          );
+        const restOf = (/** @type {RegExp} */ k) =>
+          Object.entries(C.MAP[one(on)]?.at ?? {})
+            .filter(
+              ([prop, rules]) =>
+                k.test(prop) &&
+                !join(/** @type {Record<string, unknown>} */ (rules)),
+            )
+            .flatMap(([, rules]) =>
+              Object.entries(/** @type {Record<string, unknown>} */ (rules)),
+            )
+            .filter(
+              ([sel]) =>
+                !/:/.test(sel) &&
+                (!wantWhen || sel.split(',').includes(wantWhen)),
+            )
+            .map(([, v]) => String(v).trim());
+        const widths = restOf(/^border(-[a-z-]+)?-width$/);
+        const styles = restOf(/^border(-[a-z-]+)?-style$/);
+        const hasBorder =
+          widths.some(v => !/^0(px)?$/.test(v)) &&
+          (!styles.length || styles.some(v => v !== 'none'));
         // A part with no border of its own whose lines are drawn by the
         // parts inside it (a table row's dividers are its cells' borders):
         // the color those borders read, on this part, so they take it.
@@ -12857,17 +13009,21 @@ export function draftAnswer(ctx, env, question) {
           ]);
           return {text: `the border${where}`, options: opts};
         }
+        // One mode on a part that draws no line now: the line in that mode
+        // alone, see-through in the other, so the other stays as it is.
+        const lineColor = color ?? 'var(--color-border)';
+        const oneMode =
+          c.mode === 'dark'
+            ? `light-dark(transparent, ${lineColor})`
+            : c.mode === 'light'
+              ? `light-dark(${lineColor}, transparent)`
+              : lineColor;
         return {
-          text: `a border${where}: ${prop}`,
+          text: `a border${where}: ${prop}${c.mode ? `, in ${c.mode} mode only (${on} draws no border now)` : ''}`,
           options: [
-            [
-              set(
-                prop,
-                `${width ?? '1px'} ${style ?? 'solid'} ${color ?? 'var(--color-border)'}`,
-                f,
-              ),
-            ],
+            [set(prop, `${width ?? '1px'} ${style ?? 'solid'} ${oneMode}`, f)],
           ],
+          ...(c.mode ? {modeInValue: true} : {}),
         };
       }
       case 'spacing': {

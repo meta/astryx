@@ -348,7 +348,8 @@ describe("a part's piece Core has no part for", () => {
       expect.stringMatching(/^set p --text-label-size [\d.]+rem --on banner$/),
     ]);
     expect(alert.text).toMatch(
-      /Core has no alert title part of its own, so this is for the whole banner/,
+      // (Named by Core's part: an alert is the banner.)
+      /Core has no banner title part of its own, so this is for the whole banner/,
     );
   }, 240_000);
 });

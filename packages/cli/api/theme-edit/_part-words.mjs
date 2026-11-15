@@ -36,7 +36,11 @@ export const OVERRIDES = [
     {on: 'tab-indicator'},
   ],
   [/\b(status dots?)\b/, {on: 'status-dot'}],
-  [/\b(progress( bar)?( fill)?|loading bar)\b/, {on: 'progress-bar-fill'}],
+  // (Its indicator too: "the progress indicator".)
+  [
+    /\b(progress( bar)?( fill| indicators?)?|loading bar)\b/,
+    {on: 'progress-bar-fill'},
+  ],
   [
     /\b((side ?nav|sidebar)( nav(igation)?)? (links?|items?))\b/,
     {on: 'side-nav-item'},
@@ -66,6 +70,8 @@ export const OVERRIDES = [
     {on: 'app-shell-header'},
   ],
   [/\b(page|app background|whole background|body background)\b/, {on: 'page'}],
+  // A radio's dot is its own part (the mark a checked radio shows).
+  [/\bradio( button)?s?'?\s+dots?\b/, {on: 'radio-indicator-dot'}],
   [/\b(radio( buttons?)?|radios)\b/, {on: 'radio-indicator'}],
   [/\b(primary|main) buttons?\b/, {on: 'button', when: 'variant:primary'}],
   [/\bsecondary buttons?\b/, {on: 'button', when: 'variant:secondary'}],

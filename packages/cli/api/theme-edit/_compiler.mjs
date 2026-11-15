@@ -108,6 +108,45 @@ export function makeCompiler(project, parts) {
     return null;
   }
 
+  /** @type {Map<string, boolean>} */
+  const paintsMemo = new Map();
+  /**
+   * Whether a visual prop changes a color the part paints: two of its
+   * rules that differ only in that prop's value give a color property
+   * different values.
+   * @param {string} target @param {string} prop
+   */
+  function paintsBy(target, prop) {
+    const id = `${target}|${prop}`;
+    const known = paintsMemo.get(id);
+    if (known != null) return known;
+    let found = false;
+    for (const [p, rules] of Object.entries(MAP[target]?.at ?? {})) {
+      if (!/(^|-)color$|^background(-color)?$|^fill$|^stroke$/.test(p))
+        continue;
+      /** @type {Map<string, Set<string>>} */
+      const byRest = new Map();
+      for (const [key, value] of Object.entries(rules)) {
+        const [attrs, ...css] = key.split(' ');
+        const list = attrs.includes('=') ? attrs.split(',') : [];
+        if (!list.some(kv => kv.startsWith(`${prop}=`))) continue;
+        const rest = [
+          ...list.filter(kv => !kv.startsWith(`${prop}=`)),
+          ...css,
+        ].join(' ');
+        const seen = byRest.get(rest) ?? new Set();
+        seen.add(String(value));
+        byRest.set(rest, seen);
+      }
+      if ([...byRest.values()].some(v => v.size > 1)) {
+        found = true;
+        break;
+      }
+    }
+    paintsMemo.set(id, found);
+    return found;
+  }
+
   /** A condition, kept to what a person can act on. @param {string} target @param {string} cond */
   function shortCond(target, cond) {
     if (cond === 'always') return '';
@@ -125,10 +164,11 @@ export function makeCompiler(project, parts) {
         // part in (the part data's aria context conditions); none is the
         // part at rest.
         if (!t?.props.includes(k) || t.states.includes(k)) return true;
-        return (
-          ['variant', 'status', 'tone', 'color'].includes(k) &&
-          (attrs[k]?.length ?? 0) > 1
-        );
+        // A look prop drawn in more than one value that changes a color
+        // the part paints (a variant, a status, a toast's type) tells its
+        // renders apart; one that changes only a size or a weight (a
+        // heading's level) is read as the part, as a size the render used.
+        return (attrs[k]?.length ?? 0) > 1 && paintsBy(target, k);
       },
     );
     const cssPart = (attrPart.includes('=') ? css : [attrPart, ...css])

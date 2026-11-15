@@ -406,8 +406,10 @@ describe('round 3', () => {
       ).data
     );
     const b = border.results.map((/** @type {any} */ x) => x.commands).flat();
+    // (A secondary button draws no border now: a width alone shows
+    // nothing, so the whole line.)
     expect(b.join('\n')).toContain(
-      'set s border-width 1px --on button --when variant:secondary',
+      "set s border '1px solid var(--color-border)' --on button --when variant:secondary",
     );
     expect(b.join('\n')).toContain("color 'var(--color-text-accent)'");
     const fill = /** @type {any} */ (
@@ -532,10 +534,12 @@ describe('round 4', () => {
   }, 240_000);
 
   it('says which tokens a token feeds instead of claiming it changes nothing', async () => {
+    // (A success field status reads it now that the part data draws every
+    // type, so it changes that, and no note claims otherwise.)
     const r = await themeEditSet('s', '--color-success-muted', '#dcfce7', {
       cwd,
     });
-    expect(r.data.notes.join(' ')).toContain('--color-syntax-added');
+    expect(r.data.notes.join(' ')).not.toMatch(/changes nothing/);
     await themeEditUndo('s', {cwd, thing: '--color-success-muted'});
   }, 120_000);
 

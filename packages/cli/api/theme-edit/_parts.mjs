@@ -37,7 +37,7 @@ import {
 import {removeOnStop} from '../../foundation/fs/stop-cleanup.mjs';
 
 /** Bump when the shape of the cached part data, or which parts it reaches, changes. */
-const PART_DATA_VERSION = 17;
+const PART_DATA_VERSION = 18;
 
 /**
  * Flags that change what a component does or whether it shows, not how it
@@ -257,7 +257,16 @@ export function catalogVariants(project, name, cap, opts = {}) {
   const base = info.opens ? opened(demo) : demo;
   const values = info.targets[0]?.values ?? {};
   const variants = [{label: '', props: base}];
-  for (const p of ['variant', 'status', 'color'])
+  // Every prop that changes the look, one sample per value (a variant, a
+  // status, a toast's type, an avatar's shape); a size is read at the one
+  // size drawn.
+  // (A number scale, a heading's level, is drawn below.)
+  for (const p of Object.keys(values).filter(
+    k =>
+      !/^(size|density|elevation)$/.test(k) &&
+      info.props?.[k] &&
+      !/^\s*\d+(\s*\|\s*\d+)*\s*$/.test(info.props[k].type ?? ''),
+  ))
     for (const v of values[p] ?? [])
       variants.push({
         label: v,
@@ -321,7 +330,7 @@ export function catalogItems(project) {
   /** @type {import('./_catalog.mjs').CatalogItem[]} */
   const items = [];
   for (const name of Object.keys(project.components))
-    for (const v of catalogVariants(project, name, 16))
+    for (const v of catalogVariants(project, name, 24))
       items.push({
         name,
         label: v.label,
@@ -939,6 +948,30 @@ export function multipliedTokens(project) {
 }
 
 /**
+ * The stylesheet without its forced-colors blocks: what Core draws for a
+ * high-contrast system mode (a button's 1px ButtonText border) is no look
+ * a theme gives, so the part data never reads it as the part's.
+ * @param {string} css
+ */
+function withoutForcedColors(css) {
+  let out = '';
+  let i = 0;
+  const re = /@media\s*\(\s*forced-colors\s*:\s*active\s*\)\s*\{/g;
+  for (let m = re.exec(css); m; m = re.exec(css)) {
+    out += css.slice(i, m.index);
+    let depth = 1;
+    let j = m.index + m[0].length;
+    for (; j < css.length && depth; j++) {
+      if (css[j] === '{') depth++;
+      else if (css[j] === '}') depth--;
+    }
+    i = j;
+    re.lastIndex = j;
+  }
+  return out + css.slice(i);
+}
+
+/**
  * Atomic class -> its declarations, with the condition (pseudo-class,
  * attribute) each one applies under.
  * @param {string} css
@@ -947,7 +980,7 @@ export function multipliedTokens(project) {
 export function declarations(css) {
   /** @type {Map<string, Array<{prop: string, value: string, cond: string}>>} */
   const decls = new Map();
-  for (const m of css.matchAll(
+  for (const m of withoutForcedColors(css).matchAll(
     /\.(x[a-z0-9]+)((?:\.x[a-z0-9]+|[:[][^{]*)?)\{([^{}]*)\}/g,
   )) {
     const [, cls, rest, body] = m;
