@@ -84,9 +84,7 @@ function load(): void {
     },
     (error: unknown) => {
       pendingLoad = null;
-      // No window has a load scheduled now. The next touch on a trigger, or
-      // the next trigger that mounts, asks again.
-      scheduledViews = new WeakSet();
+      // The next touch on a trigger asks again.
       publish({layer: null, hasFailed: true});
       warnOnce(
         'ContextMenu:touch-layer-load',

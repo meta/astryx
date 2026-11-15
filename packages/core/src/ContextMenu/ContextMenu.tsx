@@ -970,7 +970,7 @@ export function ContextMenu({
     (event: React.PointerEvent<HTMLElement>) => {
       if (event.pointerType === 'touch' && event.isPrimary) {
         touchPointerIdRef.current = event.pointerId;
-        // A finger whose pointerdown follows its touchstart, as in WebKit.
+        // A finger whose pointerdown follows its touchstart.
         const late = lateTouchRef.current;
         if (late != null && late.pointerId == null) {
           lateTouchRef.current = {...late, pointerId: event.pointerId};

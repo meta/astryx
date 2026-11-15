@@ -202,6 +202,26 @@ describe('ContextMenu under a finger when its touch layer fails to load', () => 
     press.up();
   });
 
+  it('starts no load when a trigger mounts after a failed load, until a touch asks', async () => {
+    renderMenu();
+    await settleLoad();
+    const attempts = layerImport.attempts;
+    // A second menu mounts after the failure. Mounting is no intent.
+    render(
+      <ContextMenu items={[{label: 'Item 2'}]} data-testid="ctx-2">
+        <div>Long-press me too</div>
+      </ContextMenu>,
+    );
+    await settleLoad();
+    expect(layerImport.attempts).toBe(attempts);
+    // A touch on it is the intent that asks again.
+    const press = finger(screen.getByTestId('ctx-2'));
+    press.down();
+    await settleLoad();
+    press.up();
+    expect(layerImport.attempts).toBe(attempts + 1);
+  });
+
   // Last: once the layer has loaded, the page keeps it.
   it('loads the layer again at the next touch, and a later finger gets the hold', async () => {
     const trigger = renderMenu();
