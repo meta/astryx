@@ -421,7 +421,8 @@ const keptTreeInputs = reusedWhileUnchanged(() =>
 
 /**
  * The CLI's own tree files, read from the files themselves, never from the
- * kept copy: doctor checks what the files say.
+ * kept copy: doctor checks what the files say, and the hint's routes
+ * ({@link routeTree}) are kept with stamps of their own.
  */
 const readTreeInputs = reusedWhileUnchanged(() => loadTreeInputs());
 
@@ -460,7 +461,11 @@ export async function integrationRouteTree(integrations) {
  */
 async function routeTree(catalog) {
   const added = catalog.treeInputs;
-  const cli = await keptTreeInputs();
+  // Not the kept copy: a kept gather holds the stamps of everything the run
+  // that stored it read, and a kept summary around this tree (the hint's
+  // name index) would take all of them. The CLI's build id covers its own
+  // files.
+  const cli = await readTreeInputs();
   return buildDocsTree({
     namespaces: [...cli.namespaces, ...added.flatMap(each => each.namespaces)],
     docs: [...cli.docs, ...added.flatMap(each => each.guides)],

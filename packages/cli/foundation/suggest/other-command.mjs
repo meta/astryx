@@ -34,7 +34,6 @@ import {
 } from '../discovery/entry-name-files.mjs';
 import {BUILTIN_DOCS_DIR, rootNamespaceName} from '../discovery/name-roots.mjs';
 import {hasNameLine, keptTreeSummary} from '../fs/kept-tree.mjs';
-import {carriesEveryTypedWord} from '../text/suggest-order.mjs';
 import {findCoreDir} from '../fs/paths.mjs';
 import {mayHaveIntegrations} from '../integrations/may-have-integrations.mjs';
 import {
@@ -129,30 +128,6 @@ function nameTier(command, name, typed) {
     if (last.toLowerCase() === lower || folds(last)) return MATCH_TIER.segment;
   }
   return MATCH_TIER.none;
-}
-
-/**
- * The best tier at which any of `names`, the names one suggestion of
- * `command` answers to, matches `typed` ({@link MATCH_TIER}).
- * @param {LookupCommand} command
- * @param {Array<string | undefined>} names
- * @param {string} typed
- * @returns {number}
- */
-export function suggestionTier(command, names, typed) {
-  /** @type {number} */
-  let best = MATCH_TIER.none;
-  for (const name of names) {
-    if (!name) continue;
-    const tier = nameTier(command, name, typed);
-    best = Math.min(
-      best,
-      tier === MATCH_TIER.none && carriesEveryTypedWord(typed, name)
-        ? MATCH_TIER.words
-        : tier,
-    );
-  }
-  return best;
 }
 
 /**
@@ -264,9 +239,16 @@ export function withOtherCommand(
 ) {
   if (!found) return suggestions;
   if (alone || !suggestions || suggestions.length === 0) return [found.hint];
+  // The hint's tier is exact, folded or segment, so only a suggestion with a
+  // name that matches by the name alone (nameTier) can go before it: word
+  // cover is never needed here.
   let at = 0;
   suggestions.forEach((suggestion, index) => {
-    if (suggestionTier(from, namesOf(suggestion), typed) <= found.tier) {
+    if (
+      namesOf(suggestion).some(
+        name => name && nameTier(from, name, typed) <= found.tier,
+      )
+    ) {
       at = index + 1;
     }
   });
