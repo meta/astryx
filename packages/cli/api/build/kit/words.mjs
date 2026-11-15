@@ -43,6 +43,14 @@ const OVERLAY_FRAMES = new Set([
  */
 export const SHELL_FAMILY = 'Shell';
 
+/**
+ * Whether a ranked template can be the app shell: a template of the Shell
+ * family that is not kept off the gallery. A hidden template is no starter.
+ * @param {{family: string, hidden?: boolean} | null | undefined} page
+ */
+export const isAppShell = page =>
+  page?.family === SHELL_FAMILY && page.hidden !== true;
+
 /** A container phrase: "in a modal", "inside the side panel". */
 export const CONTAINER_PHRASE =
   /\b(?:in|inside|within)\s+(?:a|an|the)\s+([a-z-]+)(?:\s+([a-z-]+))?/gi;
@@ -252,7 +260,7 @@ export const SYNONYMS_OF = (() => {
 /**
  * @typedef {import('../_adapter.mjs').PageTemplate} PageTemplate
  * @typedef {import('../_adapter.mjs').ComponentWords} ComponentWords
- * @typedef {{name: string, score: number, hits: number, familyNamed: boolean, headNamed: boolean, containerMatched: boolean, family: string, base: boolean, matched: Set<string>, typical: number}} RankedPage
+ * @typedef {{name: string, score: number, hits: number, familyNamed: boolean, headNamed: boolean, containerMatched: boolean, family: string, base: boolean, matched: Set<string>, typical: number, hidden: boolean}} RankedPage
  * @typedef {'page' | 'part' | 'edit'} IdeaKind
  */
 
