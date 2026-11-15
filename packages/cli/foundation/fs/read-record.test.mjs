@@ -9,6 +9,7 @@ import {afterAll, beforeAll, describe, it, expect} from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import {pathToFileURL} from 'node:url';
 import {
   recordContentRead,
   recordReads,
@@ -49,6 +50,30 @@ describe('recordReads', () => {
     });
     expect([...seen.keys()]).toEqual(expect.arrayContaining([file, dir]));
     expect(unchangedSince(seen)).toBe(true);
+  });
+
+  it('records a promise read in nested operations and sees an edit', async () => {
+    const {file} = scratch();
+    /** @type {Map<string, string>} */
+    const outer = new Map();
+    /** @type {Map<string, string>} */
+    const inner = new Map();
+    const url = pathToFileURL(file);
+    expect(
+      await recordReads(outer, () =>
+        recordReads(inner, () => fs.promises.readFile(url, 'utf8')),
+      ),
+    ).toBe('one');
+    expect([...inner.keys()]).toEqual([file]);
+    expect([...outer.keys()]).toEqual([file]);
+    expect(unchangedSince(outer)).toBe(true);
+    fs.writeFileSync(file, 'two, longer');
+    expect(unchangedSince(outer)).toBe(false);
+    /** @type {Map<string, string>} */
+    const outside = new Map();
+    recordReads(outside, () => {});
+    expect(await fs.promises.readFile(url, 'utf8')).toBe('two, longer');
+    expect(outside.size).toBe(0);
   });
 
   it('sees an edit made after the operation', () => {
