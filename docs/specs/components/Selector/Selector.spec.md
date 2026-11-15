@@ -424,7 +424,7 @@ pointer-sized anchored list unless the caller opts in.
 ### DEC-2 — The option list exists only while open
 
 **Reference:** `component:Selector/DEC-2`
-**Decider:** `cixzhang`, `2026-11-02`
+**Decider:** pending owner confirmation
 
 A closed Selector holds no option list, and each open builds it again (PR3).
 A page with many Selectors loads with only their triggers, and memory holds
