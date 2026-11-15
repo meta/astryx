@@ -30,6 +30,7 @@ import {
 import type {InteractionModalityTracking} from '../utils/interactionModality';
 import {useFocusReturnVisibility} from '../hooks/useFocusReturnVisibility';
 import {useOutsidePress} from '../Layer/outsidePress';
+import {containsAlongFlatTree} from '../utils/flatTree';
 import {isShadowRoot} from '../utils/nodeType';
 import {
   createPresentationHold,
@@ -129,9 +130,16 @@ export function useSelectorPresentation({
     // that is no Tab stop, such as one with `tabIndex={-1}`.
     const active = document.activeElement;
     const list = popoverContentRef.current?.current ?? null;
+    // The press inside the list explains focus only while that focus still
+    // holds the list. A later key can move focus to another field.
+    const isFocusFromPressInList =
+      isPressInList &&
+      active != null &&
+      list != null &&
+      containsAlongFlatTree(active, list);
     const focusLandedElsewhere =
       !isFocusReturnAlways &&
-      !isPressInList &&
+      !isFocusFromPressInList &&
       active instanceof HTMLElement &&
       active !== document.body &&
       active !== trigger &&
