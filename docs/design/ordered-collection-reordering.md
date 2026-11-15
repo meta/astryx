@@ -63,20 +63,20 @@ placement and file-drop targets require separate design specifications.
 | ------------------ | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | reorder handle     | Starts and retains ownership of the interaction | Belongs to one item and remains distinguishable from item activation                                                                                                                                                                                                     |
 | stationary source  | Preserves the item's origin during active drag  | Remains in place until commit and shares temporary treatment with the preview (insertion-line feedback; under shift feedback the surrounding items open the gap, no stationary source shows, and the insertion line shows only where `spec:AST-103` FR9 keeps it, DEC-2) |
-| moving preview     | Follows pointer movement                        | Duplicates the source identity without adding raised-card elevation                                                                                                                                                                                                      |
+| moving preview     | Follows pointer movement                        | Duplicates the source identity without adding raised-card elevation (insertion-line feedback; under shift feedback no preview shows and the dragged item itself follows the pointer, `spec:AST-103` FR5)                                                                 |
 | insertion cue      | Marks the candidate ordered position            | Appears between items on the collection's ordering axis (insertion-line feedback; under shift feedback the surrounding items open the gap, no stationary source shows, and the insertion line shows only where `spec:AST-103` FR9 keeps it, DEC-2)                       |
 | surrounding items  | Provide stable spatial context                  | Do not shift until the reorder is committed (insertion-line feedback; under shift feedback the surrounding items open the gap, no stationary source shows, and the insertion line shows only where `spec:AST-103` FR9 keeps it, DEC-2)                                   |
 | settled collection | Shows the resulting order                       | Returns every item to its normal state after completion                                                                                                                                                                                                                  |
 
 ## State representation
 
-| State              | Required representation                                                                                                                                                                                              | Allowed variation                                                |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| rest               | The handle is discoverable without overpowering item content                                                                                                                                                         | Handle placement may follow the collection family                |
-| dragging           | Under insertion-line feedback, source and moving preview use the same temporary reduced-emphasis treatment; under shift feedback, the dragged item follows the pointer and the surrounding items slide aside (DEC-2) | Pointer preview may move freely on both axes                     |
-| candidate position | Under insertion-line feedback, a clear accent insertion line marks where the item will land; under shift feedback, the opened gap marks it (DEC-2)                                                                   | Line length and inset may follow row geometry                    |
-| dropped            | Items settle into the committed order and temporary drag treatment clears                                                                                                                                            | Settling motion may use the system's fast movement language      |
-| cancelled          | Original order and normal contrast return immediately                                                                                                                                                                | Cancellation may be immediate even when normal motion is enabled |
+| State              | Required representation                                                                                                                                                                                                                                                                                                                                                               | Allowed variation                                                |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| rest               | The handle is discoverable without overpowering item content                                                                                                                                                                                                                                                                                                                          | Handle placement may follow the collection family                |
+| dragging           | Under insertion-line feedback, source and moving preview use the same temporary reduced-emphasis treatment; under shift feedback, the dragged item follows the pointer and the surrounding items slide aside, except where `spec:AST-103` FR9 keeps the insertion line: a candidate in another tree parent, and under Reduce Motion with a primary pointer that is not coarse (DEC-2) | Pointer preview may move freely on both axes                     |
+| candidate position | Under insertion-line feedback, a clear accent insertion line marks where the item will land; under shift feedback, the opened gap marks it, except where `spec:AST-103` FR9 keeps the insertion line: a candidate in another tree parent, and under Reduce Motion with a primary pointer that is not coarse (DEC-2)                                                                   | Line length and inset may follow row geometry                    |
+| dropped            | Items settle into the committed order and temporary drag treatment clears                                                                                                                                                                                                                                                                                                             | Settling motion may use the system's fast movement language      |
+| cancelled          | Original order and normal contrast return immediately                                                                                                                                                                                                                                                                                                                                 | Cancellation may be immediate even when normal motion is enabled |
 
 ## Responsive and input behavior
 
@@ -85,8 +85,7 @@ placement and file-drop targets require separate design specifications.
   axis.
 - **DR7 — Keyboard and pointer share the candidate cue.** Keyboard reordering
   MUST expose the same candidate-position representation as pointer reordering:
-  the insertion line under insertion-line feedback, the opened gap under shift
-  feedback.
+  the insertion line under insertion-line feedback, and the opened gap under shift feedback, except where `spec:AST-103` FR9 keeps the insertion line: a candidate in another tree parent, and under Reduce Motion with a primary pointer that is not coarse.
 - **DR8 — Reduced motion updates directly.** When motion is reduced, the final
   order MUST update without animated travel, and under shift feedback the
   neighbours do not travel during the drag: an in-place cross-fade marks the
@@ -142,13 +141,11 @@ Rejected: neighbors sliding aside during the drag.
 ### DEC-2 — Shift feedback is opt-in
 
 **Reference:** `design:ordered-collection-reordering/DEC-2`
-**Decider:** pending owner confirmation
+**Decider:** `cixzhang`, `2026-10-28`
 
 A collection can opt into neighbours sliding aside during the drag
 (`spec:AST-103` FR9), while DEC-1's insertion line stays the default. Shift
-feedback answers DEC-1's accuracy concern with midpoint hysteresis: the
-candidate position changes only once the dragged item passes a neighbour's
-midpoint, so the neighbours do not move under a pointer resting near a
+feedback answers DEC-1's accuracy concern with midpoint hysteresis: the candidate position changes only once the dragged item's center passes the center of the slot it would land in, where its center would sit after landing there (in a list of equal rows, a neighbour's midpoint), so the neighbours do not move under a pointer resting near a
 boundary.
 
 Rejected: shift feedback without hysteresis.

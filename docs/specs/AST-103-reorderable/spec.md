@@ -232,8 +232,7 @@ const {detach} = reorderable.attach(listElement, {
   - while the item is in reorder mode, the candidate cue a drag shows marks
     the item's place, moving with each move
     (`design:ordered-collection-reordering` DR7): under `'insertion-line'`
-    the accent insertion line; under `'shift'` no line, and each move slides
-    the item and the neighbours it passes into their new places (FR9);
+    the accent insertion line; under `'shift'` no line, and each move slides the item and the neighbours it passes into their new places (FR9); under `'shift'` with Reduce Motion, the cue a drag shows there: the insertion line with a primary pointer that is not coarse, and an in-place cross-fade under a coarse primary pointer (FR9);
   - while the item is in reorder mode, a hint anchored to it shows the moves
     for its axis and a Done control, with the same layer, anchoring, and
     theme roles as Core's keyboard hint, and stays until the mode ends; each
@@ -318,11 +317,7 @@ const {detach} = reorderable.attach(listElement, {
   motion, as a compositor translate of the rows already rendered
   (`spec:AST-094` FR5) with no added element and no insertion line; the
   dragged item rides the pointer and, on the drop, settles into the open gap
-  with no layout jump. The midpoint rule picks the candidate: it moves from
-  the current candidate to another slot only once the dragged item's center
-  passes that slot's center, measured along the line between the two slot
-  centers, and when several slots qualify the nearest wins. In a list this is
-  a neighbour's midpoint; the same rule covers a grid and the slots
+  with no layout jump. The midpoint rule picks the candidate: it moves from the current candidate to another slot only once the dragged item's center passes that slot's center, measured along the line between the two slot centers, and when several slots qualify the nearest wins. A slot's center is where the dragged item's center sits when the item lands in that slot, from the sizes measured at pickup, so it does not change as the gap moves. In a list of equal rows this is a neighbour's midpoint; the same rule covers a grid and the slots
   `positions()` supplies, such as a fanned hand. A pointer resting near a
   boundary therefore does not make the neighbours flicker. With `positions()`,
   the other items glide to their next slots. Each keyboard arrow move in reorder mode commits
@@ -451,7 +446,7 @@ Rejected: a translator-function option, and one flat option per string.
 ### DEC-7 — A collection can opt into shift feedback
 
 **Reference:** `spec:AST-103/DEC-7`
-**Decider:** pending owner confirmation
+**Decider:** `cixzhang`, `2026-10-28`
 
 Some collections, such as a hand of playing cards, read better when the items
 shift during the drag, as iOS does. `feedbackBehavior: 'shift'` opts into that while
