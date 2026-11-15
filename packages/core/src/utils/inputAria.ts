@@ -28,10 +28,7 @@ export interface InputARIA {
 type AriaID = string | null | undefined | false;
 
 /**
- * Resolves an input's invalid state from the two status types the input can
- * see: its own and the surrounding InputGroup's. An error of either marks the
- * input invalid; warning, success, and no status never do, matching each
- * input's own error-only mapping.
+ * Warning and success never mark an input invalid.
  */
 function isInputInvalid(
   statusType?: InputStatusType,
