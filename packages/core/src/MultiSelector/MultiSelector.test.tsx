@@ -3994,6 +3994,29 @@ describe('MultiSelector light dismiss focus', () => {
 
     expect(trigger).toHaveFocus();
   });
+
+  it('returns focus to the trigger after a keyboard pick and Escape from the search field inside the list', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <MultiSelector
+        label="Fruits"
+        options={OPTIONS}
+        value={[]}
+        onChange={onChange}
+        hasSearch
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: 'Fruits'});
+    await user.click(trigger);
+    const search = screen.getByRole('combobox', {hidden: true});
+    await waitFor(() => expect(search).toHaveFocus());
+    await user.keyboard('{ArrowDown}{Enter}');
+    expect(onChange).toHaveBeenCalled();
+    await user.keyboard('{Escape}');
+
+    expect(trigger).toHaveFocus();
+  });
 });
 
 describe('MultiSelector trigger render prop', () => {

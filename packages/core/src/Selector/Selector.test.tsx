@@ -4719,6 +4719,28 @@ describe('Selector light dismiss focus (spec:Popover AR4)', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
     expect(trigger).toHaveFocus();
   });
+
+  it('returns focus to the trigger after a keyboard pick from the search field inside the list', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <Selector
+        label="Fruit"
+        options={OPTIONS}
+        onChange={onChange}
+        hasSearch
+      />,
+    );
+    await user.tab();
+    const trigger = document.activeElement as HTMLElement;
+    await user.keyboard('c');
+    const search = screen.getByPlaceholderText('Search…');
+    await waitFor(() => expect(search).toHaveFocus());
+    await user.keyboard('{ArrowDown}{Enter}');
+
+    expect(onChange).toHaveBeenCalledWith('Cherry');
+    expect(trigger).toHaveFocus();
+  });
 });
 
 describe('Selector option-row theme target', () => {
