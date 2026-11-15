@@ -231,7 +231,9 @@ export function graphemeLength(text) {
 /** Pick the header width for one CLDR locale: abbreviated when all seven fit. */
 export function selectWeekdayHeaderNames(locale) {
   const abbreviated = readStandaloneWeekdays(locale, 'abbreviated');
-  return abbreviated.every(name => graphemeLength(name) <= MAX_ABBREVIATED_LENGTH)
+  return abbreviated.every(
+    name => graphemeLength(name) <= MAX_ABBREVIATED_LENGTH,
+  )
     ? abbreviated
     : readStandaloneWeekdays(locale, 'short');
 }
@@ -253,7 +255,28 @@ export async function renderGeneratedFile() {
   return format(source, {...prettierConfig, filepath: OUTPUT_FILE});
 }
 
+/**
+ * The shipped locales this Node has no locale data for. A Node built with
+ * small ICU has English only, and on such a build `Intl.Segmenter` can crash
+ * the process instead of throwing, so this runs before any segmenting.
+ * @param {string[]} [locales]
+ * @returns {string[]}
+ */
+export function localesWithoutData(locales = getShippedLocales()) {
+  return locales.filter(
+    locale => Intl.DateTimeFormat.supportedLocalesOf([locale]).length === 0,
+  );
+}
+
 async function main() {
+  const missing = localesWithoutData();
+  if (missing.length > 0) {
+    console.error(
+      `✗ This Node has no locale data for ${missing.length} of the shipped locales (${missing.slice(0, 3).join(', ')}, …). generate-cldr-weekdays needs a Node build with full ICU data, such as the official Node binary of the version .nvmrc names.`,
+    );
+    process.exitCode = 1;
+    return;
+  }
   const check = process.argv.slice(2).includes('--check');
   const expected = await renderGeneratedFile();
   const localeCount = Object.keys(generateWeekdayData()).length;
