@@ -89,6 +89,7 @@ import {
   checkAppThemes,
   checkThemes,
   themeImportWiring,
+  withProviderWiring,
 } from './theme-checks.mjs';
 import {
   availableLine,
@@ -2565,7 +2566,10 @@ export async function runChecks(options = {}) {
         () => themeImportWiring(cwd),
         THEME_WIRING_CODEC,
       );
-      checks.push(checkThemes(cwd, appThemeChecks, wiring), ...appThemeChecks);
+      checks.push(
+        checkThemes(cwd, appThemeChecks, wiring),
+        ...withProviderWiring(appThemeChecks, wiring),
+      );
       checks.push(await checkConfig(ctx));
     }
   }
