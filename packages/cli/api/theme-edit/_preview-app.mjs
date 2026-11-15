@@ -5230,7 +5230,12 @@ async function previewApp(dir, options, held) {
         if (pkg && !isBuiltin(spec)) imported.add(pkg);
         if (isOtherLanguageStylesheet(spec))
           otherStyles.push(`${shown(cwd, file)} imports '${spec}'`);
-        else if (isBundlerFile(spec) && !typedByNewApp(spec))
+        else if (
+          // TypeScript reads a query or a hash as part of the module's
+          // name, whatever the module is (`./x.ts?raw`).
+          (isBundlerFile(spec) || /^[^#][^?#]*[?#]/.test(spec)) &&
+          !typedByNewApp(spec)
+        )
           untyped.push(`${shown(cwd, file)} imports '${spec}'`);
       }
       // Each import at the file it loads, resolved as the theme build
@@ -5323,9 +5328,9 @@ async function previewApp(dir, options, held) {
     if (untyped.length)
       refuse(
         E.ERR_INVALID_ARGUMENT,
-        `${slug} cannot be copied into a new app: ${untyped.slice(0, 3).join('; ')}, a file whose name the new app's type check has no declaration for (it reads .css files and pictures, by their plain lower-case name), so its build would stop there.`,
+        `${slug} cannot be copied into a new app: ${untyped.slice(0, 3).join('; ')}, a file whose name the new app's type check has no declaration for (a query or a hash is part of the name it reads, and it reads .css files and pictures by their plain lower-case name), so its build would stop there.`,
         {
-          fix: `import the file by its plain name with a lower-case extension (a .css file, a picture), load a font from a stylesheet's @font-face url(), or take the import out of the theme, then run the command again`,
+          fix: `import the file by its plain name, with no query or hash and a lower-case extension, load a font from a stylesheet's @font-face url(), or take the import out of the theme, then run the command again`,
           run: [appCommand(dir, slug)],
         },
       );
