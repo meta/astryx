@@ -43,29 +43,45 @@ export async function themeAdd(slug, options = {}) {
   // result says how Themes nest and never says to replace a provider, which
   // may do more than theming.
   const {themes} = await listAvailableThemeState(options.cwd ?? process.cwd());
-  /** Each provider once, with the package that declares it. @type {Map<string, {provider: {export: string, from: string}, owner: string}>} */
+  /** Each provider once, with the package that declares it. @type {Map<string, {provider: {export: string, from: string, themeProp?: string}, owner: string}>} */
   const byProvider = new Map();
   for (const theme of themes)
     if (theme.provider)
       byProvider.set(`${theme.provider.export}\0${theme.provider.from}`, {
-        provider: {export: theme.provider.export, from: theme.provider.from},
+        provider: {
+          export: theme.provider.export,
+          from: theme.provider.from,
+          ...(theme.provider.themeProp
+            ? {themeProp: theme.provider.themeProp}
+            : {}),
+        },
         owner: String(theme.package ?? theme.provider.from),
       });
   if (byProvider.size === 0) return result;
   const found = [...byProvider.values()];
-  const named = found
-    .map(
-      x =>
-        `${x.provider.export} (from ${x.provider.from}, declared by ${x.owner})`,
-    )
-    .join(' or ');
+  // A provider that takes a theme object: the one change that passes the
+  // added theme (as the wiring below imports it) to it. One that does not:
+  // what replacing it would cost, and what a Theme inside it covers.
+  const taking = found.find(x => x.provider.themeProp);
+  const line = taking
+    ? `<${taking.provider.export} ${taking.provider.themeProp}={themes[defaultThemeSlug]}>`
+    : null;
+  const sentences = found.map(({provider, owner}) => {
+    const from = `This app may already get its theme from ${provider.export} (from ${provider.from}, declared by ${owner}).`;
+    return provider.themeProp
+      ? `${from} Pass this theme to it: <${provider.export} ${provider.themeProp}={themes[defaultThemeSlug]}>.`
+      : `${from} Replacing ${provider.export} applies this theme everywhere but also drops anything else it sets up; a Theme inside it themes only what it wraps.`;
+  });
   return {
     ...result,
     data: {
       ...result.data,
       appProvider: {
         wiredBy: found.map(x => x.provider),
-        wire: `This app may already get its theme from ${named}. The outermost Theme sets the page's theme and mode, and an inner Theme covers only what it wraps.`,
+        wire: sentences.join(' '),
+        ...(taking && line
+          ? {themeProp: String(taking.provider.themeProp), line}
+          : {}),
       },
     },
   };

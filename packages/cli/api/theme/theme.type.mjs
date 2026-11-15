@@ -125,10 +125,13 @@
  * `appProvider` is present on the first add when an installed package names
  * the provider that wires its themes (its manifest's `themeProvider`): each
  * such provider (`wiredBy`, each `{export, from}` as `theme list` names
- * it), and `wire`, two sentences that say the app may already get its theme
- * from it and how an outer and an inner Theme apply. The add reads no app
- * source.
- * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean, wireModes?: true, moduleRemoved?: true, themeModes?: true}, notes?: string[], appProvider?: {wiredBy: Array<{export: string, from: string}>, wire: string}}} data
+ * it, with `themeProp` when the provider takes a theme object), and `wire`,
+ * what the text prints: the app may already get its theme from it, then the
+ * one change that passes the added theme to it, or what replacing it costs
+ * and what a Theme inside it covers. `themeProp` and `line` (that change,
+ * as JSX) are present when a provider takes a theme object. The add reads
+ * no app source.
+ * @property {{themes: ThemeAppEntry[], default: string, modulePath: string, change: {action: 'add'|'remove'|'use', slug: string, changed: boolean, firstAdd: boolean, wireModes?: true, moduleRemoved?: true, themeModes?: true}, notes?: string[], appProvider?: {wiredBy: Array<{export: string, from: string, themeProp?: string}>, wire: string, themeProp?: string, line?: string}}} data
  */
 
 /**

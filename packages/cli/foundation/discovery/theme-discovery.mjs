@@ -59,7 +59,7 @@ export const THEME_DOC_SUFFIX = '.doc.mjs';
  * @property {string} sourceDir absolute directory holding this theme's files
  * @property {boolean} bundled
  * @property {string} docPath absolute descriptor path
- * @property {{export: string, from: string}} [provider] the component the
+ * @property {{export: string, from: string, themeProp?: string}} [provider] the component the
  *   owning integration's manifest names as the one that wires its themes
  */
 

@@ -47,6 +47,8 @@ export interface AstryxIntegration {
   themeProvider?: {
     export: string;
     from: string;
+    /** The provider's prop that takes a theme object, when it takes one. */
+    themeProp?: string;
   };
   /** Experimental contribution roots (spec:AST-017 FR27).
    *  @experimental Their shape may change or be removed in a patch release. */

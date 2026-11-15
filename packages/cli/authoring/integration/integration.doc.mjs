@@ -63,10 +63,11 @@ export const doc = {
     },
     {
       name: 'themeProvider',
-      type: '{ export: string; from: string }',
+      type: '{ export: string; from: string; themeProp?: string }',
       description:
-        "The one provider component that wires every theme under `themes` into an app, when your package wires its themes itself rather than through Astryx's Theme. `export` is the component's named export and `from` the module an app imports it from. `{@command doctor}` counts a theme as wired when the app renders that component, and `{@command theme list}` names it beside each of your themes. Each theme's stylesheet stays the one your package exports for it. A CLI older than this field ignores it with a warning and keeps the rest of the manifest.",
-      example: "{export: 'AcmeThemeProvider', from: '@acme/ui/theme'}",
+        "The one provider component that wires every theme under `themes` into an app, when your package wires its themes itself rather than through Astryx's Theme. `export` is the component's named export and `from` the module an app imports it from. `themeProp`, when the provider takes a theme object, names that prop: `{@command theme add}` then shows the one change that passes the added theme to it. `{@command doctor}` counts a theme as wired when the app renders that component, and `{@command theme list}` names it beside each of your themes. Each theme's stylesheet stays the one your package exports for it. A CLI older than this field ignores it with a warning and keeps the rest of the manifest.",
+      example:
+        "{export: 'AcmeThemeProvider', from: '@acme/ui/theme', themeProp: 'theme'}",
     },
     {
       name: 'experimental',

@@ -56,7 +56,7 @@ import {resolveProviders} from './provider-resolution.mjs';
  * @property {string} [codemods]
  * @property {string} [docs]
  * @property {string} [themes]
- * @property {{export: string, from: string}} [themeProvider] the manifest's
+ * @property {{export: string, from: string, themeProp?: string}} [themeProvider] the manifest's
  *   provider component that wires every theme under `themes`
  * @property {string} [iconSets] the manifest's `experimental.iconSets` root
  * @property {string} [issuesUrl]
@@ -109,7 +109,6 @@ import {resolveProviders} from './provider-resolution.mjs';
  * @property {string} [__discoverError] isolated discover-source validation error.
  */
 
-
 /**
  * Normalize a package-owned provider ID without rejecting legacy unnamed local
  * packages at this compatibility boundary.
@@ -154,7 +153,6 @@ export function markProviderConflicts(integrations) {
   ).integrations;
 }
 
-
 /**
  * Parse the optional named gap-report handler without making it part of the
  * default manifest schema. A malformed handler is isolated from every other
@@ -189,7 +187,9 @@ function parseGapReportHandlerExport(value, label) {
 function parseDiscoverSourceExport(value, label) {
   if (value === undefined) return {};
   try {
-    return {source: parseDiscoverSource(value, `${label} named export "discover"`)};
+    return {
+      source: parseDiscoverSource(value, `${label} named export "discover"`),
+    };
   } catch (error) {
     return {error: error instanceof Error ? error.message : String(error)};
   }
@@ -220,7 +220,8 @@ export async function loadManifest(
 ) {
   const mod = await importUserModule(file, {fresh});
   const raw = mod?.default;
-  if (raw === undefined) throw new Error(noDefaultExportMessage(file, label, mod));
+  if (raw === undefined)
+    throw new Error(noDefaultExportMessage(file, label, mod));
   const baseManifest = parseIntegrationBase(raw, label);
   const gapReport = parseGapReportHandlerExport(mod?.gapReport, label);
   const discover = parseDiscoverSourceExport(mod?.discover, label);

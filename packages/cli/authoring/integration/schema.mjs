@@ -105,6 +105,13 @@ export const integrationBaseSchema = z.object({
           'themeProvider.export must name a component export',
         ),
       from: z.string().min(1, 'themeProvider.from must not be blank'),
+      themeProp: z
+        .string()
+        .regex(
+          /^[A-Za-z_$][\w$]*$/u,
+          'themeProvider.themeProp must name a prop',
+        )
+        .optional(),
     })
     .optional(),
   // Experimental roots (spec:AST-017 FR27). An unknown key inside is

@@ -102,6 +102,32 @@ describe('parseIntegration (load boundary)', () => {
     ).toEqual([]);
   });
 
+  it("reads themeProvider's themeProp, and refuses one that names no prop", () => {
+    expect(
+      parseIntegration({
+        themes: './themes',
+        themeProvider: {
+          export: 'AcmeThemeProvider',
+          from: '@acme/ui/theme',
+          themeProp: 'theme',
+        },
+      }).themeProvider,
+    ).toEqual({
+      export: 'AcmeThemeProvider',
+      from: '@acme/ui/theme',
+      themeProp: 'theme',
+    });
+    expect(() =>
+      parseIntegration({
+        themeProvider: {
+          export: 'AcmeThemeProvider',
+          from: '@acme/ui/theme',
+          themeProp: 'the theme',
+        },
+      }),
+    ).toThrow(/themeProp must name a prop/);
+  });
+
   it('still rejects a known key of the wrong type', () => {
     // The relaxation is about keys this CLI has never heard of. A key it DOES
     // know, holding the wrong type, is a real authoring mistake.

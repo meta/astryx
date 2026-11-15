@@ -316,7 +316,7 @@ describe('theme add with an installed package that names its provider', () => {
       await runCli(['theme', 'add', 'brand', '--package', '@acme/ui'], dir)
     ).stdout;
     expect(text).toMatch(
-      /This app may already get its theme from AcmeThemeProvider \(from @acme\/ui\/theme, declared by @acme\/ui\)\. The outermost Theme sets the page's theme and mode, and an inner Theme covers only what it wraps\./,
+      /This app may already get its theme from AcmeThemeProvider \(from @acme\/ui\/theme, declared by @acme\/ui\)\. Replacing AcmeThemeProvider applies this theme everywhere but also drops anything else it sets up; a Theme inside it themes only what it wraps\./,
     );
 
     // In JSON, on the first add only.
@@ -328,6 +328,33 @@ describe('theme add with an installed package that names its provider', () => {
     expect(r.data.appProvider.wire).not.toContain('doctor');
     const second = await themeAdd('brand', {cwd: again, package: '@acme/ui'});
     expect(second.data.appProvider).toBeUndefined();
+  });
+
+  it('with the themeProp the manifest names, gives the one change that passes the theme', async () => {
+    const dir = app();
+    write(
+      path.join(dir, 'node_modules/@acme/ui/astryx.integration.mjs'),
+      `export default {themes: './themes', themeProvider: ${JSON.stringify({...PROVIDER, themeProp: 'theme'})}};\n`,
+    );
+    const text = (
+      await runCli(['theme', 'add', 'brand', '--package', '@acme/ui'], dir)
+    ).stdout;
+    expect(text).toContain(
+      'This app may already get its theme from AcmeThemeProvider (from @acme/ui/theme, declared by @acme/ui). Pass this theme to it: <AcmeThemeProvider theme={themes[defaultThemeSlug]}>.',
+    );
+    expect(text).not.toContain('Replacing');
+
+    const again = app();
+    write(
+      path.join(again, 'node_modules/@acme/ui/astryx.integration.mjs'),
+      `export default {themes: './themes', themeProvider: ${JSON.stringify({...PROVIDER, themeProp: 'theme'})}};\n`,
+    );
+    const r = await themeAdd('brand', {cwd: again, package: '@acme/ui'});
+    expect(r.data.appProvider).toMatchObject({
+      wiredBy: [{...PROVIDER, themeProp: 'theme'}],
+      themeProp: 'theme',
+      line: '<AcmeThemeProvider theme={themes[defaultThemeSlug]}>',
+    });
   });
 
   it('says nothing when no installed package names a provider', async () => {

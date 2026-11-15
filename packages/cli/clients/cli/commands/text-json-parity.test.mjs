@@ -616,6 +616,18 @@ const CASES = [
     },
   },
   {
+    // The same, when the provider takes the theme through a prop: the one
+    // change that passes it, in text and JSON.
+    name: 'theme add',
+    args: ['theme', 'add', 'brand', '--package', '@acme/ui'],
+    cwd: '__TMP__',
+    setup: dir => providerApp(dir, 'theme'),
+    beforeEachRun: cwd => {
+      fs.rmSync(cwd, {recursive: true, force: true});
+      providerApp(cwd, 'theme');
+    },
+  },
+  {
     name: 'theme remove',
     args: ['theme', 'remove', 'does-not-exist'],
     errorExpected: true,
@@ -937,10 +949,12 @@ const CASES = [
 
 /**
  * An app whose installed package, `@acme/ui`, names the provider that wires
- * its one theme, `brand`.
+ * its one theme, `brand`, and, with `themeProp`, the prop it takes a theme
+ * object through.
  * @param {string} dir
+ * @param {string} [themeProp]
  */
-function providerApp(dir) {
+function providerApp(dir, themeProp) {
   /** @param {string} rel @param {string} content */
   const put = (rel, content) => {
     const file = path.join(dir, rel);
@@ -971,7 +985,7 @@ function providerApp(dir) {
   );
   put(
     'node_modules/@acme/ui/astryx.integration.mjs',
-    "export default {themes: './themes', themeProvider: {export: 'AcmeThemeProvider', from: '@acme/ui/theme'}};\n",
+    `export default {themes: './themes', themeProvider: ${JSON.stringify({export: 'AcmeThemeProvider', from: '@acme/ui/theme', ...(themeProp ? {themeProp} : {})})}};\n`,
   );
   put(
     'node_modules/@acme/ui/dist/theme.js',
