@@ -89,11 +89,14 @@ describe('a hand-edited setting', () => {
         fs.writeFileSync(file, JSON.stringify(data));
         const err = await refusal(() => themeEditShow('t', {cwd}));
         expect(err.code).toBe('ERR_THEME_INVALID');
-        expect(
-          err.suggestions.filter((/** @type {any} */ x) =>
-            / set t /.test(x.name),
-          ),
-        ).toEqual([]);
+        // No stock value: a set line only sets the value it holds, as set
+        // reads it (corners pill is the dial).
+        for (const x of err.suggestions.filter((/** @type {any} */ x) =>
+          / set t /.test(x.name),
+        ))
+          expect(x.name).toMatch(
+            new RegExp(` set t ${entry.thing} ${entry.value}$`),
+          );
       }
     } finally {
       fs.writeFileSync(file, before);
@@ -181,7 +184,9 @@ describe('corrected new commands keep every option', () => {
         '--mode',
         'dark-only',
       ],
-      / new brand --like neutral (--accent '#e11d48' --mode dark-only|--mode dark-only --accent '#e11d48')$/,
+      // Neutral in any case is neutral, which this app has not installed:
+      // the same new on no base is the new offered.
+      / new brand (--accent '#e11d48' --mode dark-only|--mode dark-only --accent '#e11d48')$/,
     ],
     [
       [
@@ -194,8 +199,9 @@ describe('corrected new commands keep every option', () => {
         '--mode',
         'dark-only',
       ],
-      // The nearest base is guessed only among installed ones (none here).
-      / new y (?!.*--like)/,
+      // A typo of a built-in base is that base, installed or not: its
+      // install comes first, then this line.
+      / new y --like neutral --accent red --mode dark-only$/,
     ],
     [
       ['new', 'z', '--accent', '#ggg', '--mode', 'light-only', '--png'],

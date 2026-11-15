@@ -11,8 +11,20 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditNew, themeEditSet, themeEditShow} from './theme-edit.mjs';
-import {carriesTyped, offersTyped} from './_edit.mjs';
-import {offersAllTyped} from './_normal.mjs';
+import {allowedLine, coversTyped, readsTyped} from './_normal.mjs';
+
+/** The gate for a whole typed value with no setting named. @param {string} offered @param {string} typed */
+const offersTyped = (offered, typed) => allowedLine({offered, typed});
+
+/**
+ * Whether the values a refusal offers for one setting carry what was typed.
+ * @param {string[]} offered @param {string} typed
+ */
+const offersAllTyped = (offered, typed) => {
+  const reads = offered.map(o => readsTyped({offered: o, typed}));
+  if (reads.includes(false)) return false;
+  return reads.every(r => r === true) || coversTyped(reads, typed);
+};
 import {escapesMeant} from './_normal.mjs';
 import {
   makeLinkedFixture,
@@ -131,6 +143,10 @@ describe('a repair carries the value typed, never a stock value', () => {
       } catch (e) {
         err = e;
       }
+      // The set lines for the setting carry the value typed, together (a
+      // light and a dark half take a line each, as the gate allows).
+      /** @type {string[]} */
+      const values = [];
       for (const s of err?.suggestions ?? []) {
         const m = new RegExp(
           ` set ${slug} (?:'([^']+)'|(\\S+)) (?:'((?:[^']|'\\\\'')*)'|(\\S+))`,
@@ -140,8 +156,10 @@ describe('a repair carries the value typed, never a stock value', () => {
           (m[1] ?? m[2]).replace(/^-+/, '') !== thing.replace(/^-+/, '')
         )
           continue;
-        expect(offersTyped(m[3] ?? m[4], value), s.name).toBe(true);
+        values.push(m[3] ?? m[4]);
       }
+      if (values.length)
+        expect(offersAllTyped(values, value), values.join(' | ')).toBe(true);
     },
     240_000,
   );
@@ -188,7 +206,6 @@ describe('the stock values a repair never puts in', () => {
     ['Georgia, serif', 'Georgia serif', true],
   ])('%j for %j: %s', (offered, typed, ok) => {
     expect(offersTyped(offered, typed)).toBe(ok);
-    expect(carriesTyped(offered, typed)).toBe(ok);
   });
 });
 

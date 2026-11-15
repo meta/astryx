@@ -6,7 +6,7 @@ import * as path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {validateIntegration} from './validate-integration.mjs';
 import {integrationCheck} from './check/check.mjs';
-import {outsideFiles} from '../../foundation/integrations/validate-contributions.mjs';
+import {outsideFiles} from '../../foundation/integrations/pack-state.mjs';
 import {spawnSync} from 'node:child_process';
 import {npmCommand} from '../../foundation/release/cache.mjs';
 import {warmIntegrationChecks} from '../../test-utils/warm-integration-checks.mjs';

@@ -59,6 +59,7 @@
  */
 
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import {createRequire, isBuiltin} from 'node:module';
 import {fileURLToPath, pathToFileURL} from 'node:url';
@@ -90,7 +91,7 @@ import {validatePrivateVars} from '../../../foundation/config/theme-private-vars
 import {AstryxError} from '../../error.mjs';
 import {applyWrites} from '../../integration/add-helpers.mjs';
 import {logger} from '../../logger.mjs';
-import {loadComponentDoc} from '../../../foundation/discovery/component-loader.mjs';
+import {coreComponentDocs} from '../../../foundation/discovery/core-component-docs.mjs';
 import {THEME_SOURCE_EXTENSIONS} from '../../../foundation/discovery/theme-module-extensions.mjs';
 import {
   createJiti,
@@ -106,6 +107,8 @@ import {
   formatFontLoadingHelp,
 } from './font-warning.mjs';
 import {interceptCore} from './core-interception.mjs';
+import {irregularFileKind} from '../../../foundation/fs/regular-file.mjs';
+import {keyPathLine, nullThemeValues} from './null-values.mjs';
 import {
   installCommandFor,
   parsedSpecifiers,
@@ -329,7 +332,9 @@ function importTarget(dir, subpath) {
 /** @param {string} file @returns {string} its real path, or itself */
 function realOrSelf(file) {
   try {
-    return fs.realpathSync(file);
+    // The native form spells a path as the disk does (its own case on a
+    // case-insensitive disk), so two spellings of one file compare equal.
+    return fs.realpathSync.native(file);
   } catch {
     return file;
   }
@@ -338,8 +343,8 @@ function realOrSelf(file) {
 /**
  * `target` spelled through real directories: the deepest ancestor that exists
  * is resolved through its symlinks, and the missing rest is appended as given.
- * The build confines its outputs by it, and the theme editor's compile guard
- * reads paths through it too, so both read a path the same way.
+ * The build groups and locates its outputs by it, and the theme editor's
+ * compile guard reads paths through it too, so both read a path the same way.
  * @param {string} target absolute path
  * @returns {string}
  */
@@ -793,9 +798,9 @@ const FAMILY_REMEDY =
 /**
  * Refuse an output outside `root`: every write is confined, whether `out` names
  * the path or it defaults to the theme file's directory (architecture:cli-surface
- * INV10). Both sides are compared by real location, so an absolute path that
- * reaches the working directory through a symlink is inside it, and a symlink
- * inside it that leads elsewhere is not.
+ * INV10). assertWithin reads the absolute path, so a path that reaches the
+ * working directory through a symlink is inside it, and a symlink inside it
+ * that leads elsewhere is not.
  * @param {string} dest absolute output path
  * @param {string} root the directory writes stay inside: the working directory
  * @param {string} remedy what to do instead; ends the error message
@@ -803,7 +808,7 @@ const FAMILY_REMEDY =
  */
 function confineOutput(dest, root, remedy, shown = dest) {
   try {
-    assertWithin(realLocation(dest), realOrSelf(path.resolve(root)), {
+    assertWithin(dest, root, {
       allowAbsolute: true,
       label: 'output path',
     });
@@ -1008,8 +1013,9 @@ export function generatedSourceCommand(file) {
     : missingGeneratedCommand(file);
 }
 
-/** @param {string} file @returns {string} the start of a file, or '' when it cannot be read */
+/** @param {string} file @returns {string} the start of a file, or '' when it cannot be read (no regular file is opened) */
 function fileHead(file) {
+  if (irregularFileKind(file)) return '';
   try {
     const fd = fs.openSync(file, 'r');
     try {
@@ -1206,7 +1212,14 @@ function assertThemeSourceFile(filePath, cwd, mode = {}) {
  * `familyInterception` make the build a family member's plan.
  * `colorModes` is the one color mode a calling command knows the theme has
  * (the theme editor, from its settings), written into the built module.
- * @typedef {{prepareFamily?: boolean, familyLoader?: any, familyInterception?: any, writeRoot?: string, claimedOutputs?: Map<string, string>, deferredWrites?: Array<Array<{dest: string, content: string}>>, commandWords?: {group: string, build: string}, colorModes?: ['light'] | ['dark'] | null}} ThemeBuildHandOff
+ * @typedef {{prepareFamily?: boolean, familyLoader?: any, familyInterception?: any, writeRoot?: string, claimedOutputs?: Map<string, string>, deferredWrites?: Array<Array<{dest: string, content: string}>>, commandWords?: {group: string, build: string}, colorModes?: ['light'] | ['dark'] | null, fontHelp?: FontHelp | null, loadedFonts?: ((family: string) => boolean) | null, install?: string | null}} ThemeBuildHandOff
+ */
+
+/**
+ * How a caller that loads a theme's fonts itself (the editor's app copy)
+ * says to load a family: the notice per family and the recipe in place of
+ * the generic one.
+ * @typedef {{notice: (family: string) => string, recipe: (families: string[]) => string}} FontHelp
  */
 
 /**
@@ -1336,11 +1349,12 @@ export function buildSuggestion(source, mode, cwd, words, shape = {}) {
  * @param {Array<{dest: string}>} writes
  * @param {string} filePath the theme source
  * @param {string} cwd
- * @param {{claimed?: Map<string, string>, rerun?: (out: string | null) => string, refuseUnmarked?: boolean, elsewhere?: string, onEditorFolder?: (warning: string) => void}} [options]
+ * @param {{claimed?: Map<string, string>, rerun?: (out: string | null) => string, refuseUnmarked?: boolean, elsewhere?: string, onEditorFolder?: (warning: string) => void, onWarning?: (message: string) => void}} [options]
  *   `claimed`: outputs written earlier in this run, by the source that wrote
  *   them; `rerun`: this build's command with another --out, or without one;
  *   `elsewhere`: the option that moves the outputs; `onEditorFolder`: takes
- *   the editor-folder warning instead of the logger (a watcher prints it once)
+ *   the editor-folder warning instead of the logger (a watcher prints it
+ *   once); `onWarning`: each warning's message too, for the result
  */
 function assertOutputsReplaceable(
   writes,
@@ -1352,6 +1366,7 @@ function assertOutputsReplaceable(
     refuseUnmarked = false,
     elsewhere = '--out',
     onEditorFolder,
+    onWarning,
   } = {},
 ) {
   const rel = (/** @type {string} */ file) => path.relative(cwd, file);
@@ -1433,7 +1448,7 @@ function assertOutputsReplaceable(
       // It is printed after every output passes, so it names a replacement
       // that happens.
       if (warnedOtherSource) continue;
-      warnedOtherSource = `Warning: ${rel(write.dest)} was built from ${otherSource}; this build of ${rel(filePath)} replaces it.`;
+      warnedOtherSource = `${rel(write.dest)} was built from ${otherSource}; this build of ${rel(filePath)} replaces it.`;
     } else if (otherSource) {
       throw new AstryxError(
         `${rel(write.dest)} is the build output of another theme source, ${otherSource}, so this build does not replace it. Pick another ${elsewhere}.`,
@@ -1470,12 +1485,16 @@ function assertOutputsReplaceable(
   }
   // Warned only once nothing refuses the build, so it names a write that
   // happens.
-  if (warnedOtherSource) logger.warn(warnedOtherSource);
+  if (warnedOtherSource) {
+    logger.warn(`Warning: ${warnedOtherSource}`);
+    onWarning?.(warnedOtherSource);
+  }
   if (editorFolder) {
     const dir = path.dirname(writes[0].dest);
-    const warning = `Warning: ${rel(dir) || '.'} is a folder the theme editor made, and ${rel(filePath)} is outside it; the build writes there anyway. Build beside the source, or pick another ${elsewhere}, to keep the editor's folder to its own theme.`;
-    if (onEditorFolder) onEditorFolder(warning);
-    else logger.warn(warning);
+    const message = `${rel(dir) || '.'} is a folder the theme editor made, and ${rel(filePath)} is outside it; the build writes there anyway. Build beside the source, or pick another ${elsewhere}, to keep the editor's folder to its own theme.`;
+    if (onEditorFolder) onEditorFolder(`Warning: ${message}`);
+    else logger.warn(`Warning: ${message}`);
+    onWarning?.(message);
   }
 }
 
@@ -1567,7 +1586,31 @@ function writeBuildOutputs(writes) {
       })),
     );
   } catch (error) {
-    const message = `Failed to write theme outputs: ${/** @type {Error} */ (error).message}`;
+    const e = /** @type {NodeJS.ErrnoException} */ (error);
+    // A place the outputs cannot be written: name it and its fix (the
+    // writes go through temporary files beside each output, whose names
+    // help nobody).
+    if (e.code === 'EACCES' || e.code === 'EPERM' || e.code === 'EROFS') {
+      const failed = e.path ? path.resolve(e.path) : null;
+      const output = writes.find(w => path.resolve(w.dest) === failed);
+      const place = output
+        ? output.dest
+        : failed
+          ? path.dirname(failed)
+          : path.dirname(writes[0].dest);
+      const shownPlace = path.relative(process.cwd(), place) || place;
+      throw new AstryxError(
+        `Could not write the theme's outputs: ${shownPlace} is not writable (${e.code}). Give yourself write permission on it (chmod u+w ${shellWord(shownPlace)}), then build again. Nothing was changed.`,
+        [
+          {
+            name: `ls -ld ${shellWord(shownPlace)}`,
+            reason: 'see its permissions',
+          },
+        ],
+        ERROR_CODES.ERR_WRITE_FAILED,
+      );
+    }
+    const message = `Failed to write theme outputs: ${e.message}`;
     throw new AstryxError(message, undefined, ERROR_CODES.ERR_WRITE_FAILED);
   }
 }
@@ -1658,27 +1701,10 @@ async function loadKnownValuesIndex() {
   const coreSrc = coreRoot ? path.join(coreRoot, 'src') : null;
   if (!coreSrc || !fs.existsSync(coreSrc)) return {};
 
-  /** @type {any[]} */
-  const docs = [];
-  /** @param {string} dir */
-  async function scan(dir) {
-    for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        if (entry.name !== 'node_modules' && entry.name !== '__tests__') {
-          await scan(full);
-        }
-        continue;
-      }
-      if (!entry.name.endsWith('.doc.mjs')) continue;
-      try {
-        docs.push(await loadComponentDoc(full));
-      } catch {
-        // One malformed or optional doc must not erase validation for the rest.
-      }
-    }
-  }
-  await scan(coreSrc);
+  // One malformed or optional doc must not erase validation for the rest.
+  const docs = (await coreComponentDocs(coreSrc)).flatMap(read =>
+    'error' in read ? [] : [read.doc],
+  );
 
   /** @param {string} value */
   const targetName = value =>
@@ -1902,55 +1928,34 @@ async function resolveAugmentationTargetCandidates(componentName) {
     matches.push({moduleName, interfacePrefix});
   }
 
-  /** @param {string} dir */
-  async function scan(dir) {
-    const entries = fs.readdirSync(dir, {withFileTypes: true});
-    for (const entry of entries) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        if (entry.name === 'node_modules' || entry.name === '__tests__')
-          continue;
-        await scan(full);
-        continue;
-      }
-      if (!entry.name.endsWith('.doc.mjs')) continue;
+  for (const read of await coreComponentDocs(coreSrc)) {
+    if ('error' in read) continue;
+    const {file, doc} = read;
+    const matchesTarget = (doc?.theming?.targets || []).some(
+      (/** @type {any} */ target) =>
+        typeof target?.className === 'string' &&
+        target.className.replace(/^astryx-/, '') === componentName,
+    );
+    if (!matchesTarget) continue;
 
-      /** @type {any} */
-      let doc;
-      try {
-        doc = await loadComponentDoc(full);
-      } catch {
-        continue;
-      }
+    const moduleName =
+      typeof doc?.name === 'string' && doc.name
+        ? doc.name
+        : path.basename(path.dirname(file));
 
-      const matchesTarget = (doc?.theming?.targets || []).some(
-        (/** @type {any} */ target) =>
-          typeof target?.className === 'string' &&
-          target.className.replace(/^astryx-/, '') === componentName,
-      );
-      if (!matchesTarget) continue;
-
-      const moduleName =
-        typeof doc?.name === 'string' && doc.name
-          ? doc.name
-          : path.basename(path.dirname(full));
-
-      // Try the exact rendered token first for documented subtargets such as
-      // avatar-status-dot → AvatarStatusDotVariantMap, then the owning public
-      // component name (for example, ProgressBar for progress-bar-fill).
-      addCandidate(moduleName, toPascalCase(componentName));
-      addCandidate(moduleName, moduleName);
-      if (Array.isArray(doc?.components)) {
-        for (const comp of doc.components) {
-          if (typeof comp?.name === 'string') {
-            addCandidate(moduleName, comp.name);
-          }
+    // Try the exact rendered token first for documented subtargets such as
+    // avatar-status-dot → AvatarStatusDotVariantMap, then the owning public
+    // component name (for example, ProgressBar for progress-bar-fill).
+    addCandidate(moduleName, toPascalCase(componentName));
+    addCandidate(moduleName, moduleName);
+    if (Array.isArray(doc?.components)) {
+      for (const comp of doc.components) {
+        if (typeof comp?.name === 'string') {
+          addCandidate(moduleName, comp.name);
         }
       }
     }
   }
-
-  await scan(coreSrc);
   // A target documented by a parent component may also have its own public
   // subpath and augmentation interface (Heading is documented under Text but
   // owns @astryxdesign/core/Heading). Keep the direct-name candidate after
@@ -2763,7 +2768,7 @@ function isSyncLoaderLimitation(error) {
  * @returns {Promise<{theme: any, exportName: string, degraded: {topLevelAwait: boolean, commonJs: boolean}, colorModes: ["light"] | ["dark"] | null}>}
  */
 // prettier-ignore
-async function importThemeModule(filePath, interception, /** @type {any} */ loader = undefined) {
+async function importThemeModule(filePath, interception, /** @type {any} */ loader = undefined, /** @type {string | undefined} */ pick = undefined) {
   const jiti =
     loader ??
     createJiti(import.meta.url, {
@@ -2830,6 +2835,12 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
   );
   const hasDefault = isModule && Object.hasOwn(mod, 'default');
   const defaultExport = hasDefault ? mod.default : undefined;
+  // A caller that already knows which export a build reads (from a load
+  // as the build loads it) reads that one.
+  if (pick !== undefined && isModule && Object.hasOwn(mod, pick)) {
+    if (isThemeObject(mod[pick]))
+      return {theme: mod[pick], exportName: pick, degraded, colorModes};
+  }
   if (isThemeObject(defaultExport)) {
     return {theme: defaultExport, exportName: 'default', degraded, colorModes};
   }
@@ -2872,6 +2883,42 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
     }
   }
 
+  // A theme object (tokens of its own) whose name is missing or no text is
+  // that theme without its name, not a module without a theme.
+  const unnamed = isModule
+    ? [
+        ...(hasDefault ? [['default', defaultExport]] : []),
+        ...Object.entries(mod).filter(
+          ([k]) => k !== 'default' && k !== 'module.exports',
+        ),
+      ].find(
+        ([, v]) =>
+          v &&
+          typeof v === 'object' &&
+          v.tokens &&
+          typeof v.tokens === 'object' &&
+          typeof v.name !== 'string',
+      )
+    : undefined;
+  if (unnamed) {
+    const [exportName, value] = unnamed;
+    let text = '';
+    try {
+      text = fs.readFileSync(filePath, 'utf8');
+    } catch {
+      // The line is left out.
+    }
+    const call = /\bdefineTheme\s*\(/.exec(text);
+    const line =
+      keyPathLine(text, ['name']) ??
+      (call ? text.slice(0, call.index).split('\n').length : null);
+    const stem = path
+      .basename(filePath)
+      .replace(/(?:\.theme)?\.[cm]?[jt]sx?$/, '');
+    throw new ThemeNameError(
+      `${exportName === 'default' ? 'The default export' : `The export ${exportName}`} is a theme with no name${value.name === undefined ? '' : ` (its name is ${value.name === null ? 'null' : `a ${typeof value.name}`}, not text)`}${line ? ` (line ${line})` : ''}, and the build names the theme's files after it. Give defineTheme a name, such as name: '${stem}'.`,
+    );
+  }
   throw new ThemeShapeError(
     `Could not find a defineTheme() result in ${filePath}.`,
   );
@@ -2940,9 +2987,9 @@ function isThemeObject(value) {
  * @returns {Promise<{theme: any, exportName?: string, degraded: {topLevelAwait: boolean, commonJs: boolean}, colorModes?: ['light'] | ['dark'] | null}>}
  */
 // prettier-ignore
-async function extractThemeDefinition(filePath, interception, /** @type {any} */ loader = undefined) {
+async function extractThemeDefinition(filePath, interception, /** @type {any} */ loader = undefined, /** @type {string | undefined} */ pick = undefined) {
   try {
-    return await importThemeModule(filePath, interception, loader);
+    return await importThemeModule(filePath, interception, loader, pick);
   } catch (jitiError) {
     const je = /** @type {Error} */ (jitiError);
     throw new Error(
@@ -2970,18 +3017,109 @@ function standaloneInterception(filePath) {
  * build selects, the same loader and interception) and name the export the
  * build reads. Callers that must agree with the build on which theme a
  * module defines read it here, never from the module's text.
+ *
+ * With `base`, also whether the theme extends that module's export, by
+ * identity, anywhere up its `extends` chain (`extendsBase`): the module is
+ * loaded once, and the theme module's imports of it (by any of
+ * `base.specifiers`) are handed that one load, so the answer is about the
+ * very object, not one that only looks like it.
  * @param {string} file
- * @param {{cwd?: string}} [ctx]
- * @returns {Promise<{theme: any, exportName: string}>}
+ * @param {{cwd?: string, base?: {file: string, exportName: string, specifiers: string[]}}} [ctx]
+ * @returns {Promise<{theme: any, exportName: string, extendsBase?: boolean}>}
  */
-export async function loadThemeExport(file, {cwd = process.cwd()} = {}) {
+export async function loadThemeExport(file, {cwd = process.cwd(), base} = {}) {
   const filePath = path.resolve(cwd, file);
   await selectCore(cwd, {projectOnly: false});
-  const {theme, exportName} = await extractThemeDefinition(
+  const {theme, exportName = 'default'} = await extractThemeDefinition(
     filePath,
     standaloneInterception(filePath),
   );
-  return {theme, exportName: exportName ?? 'default'};
+  if (!base) return {theme, exportName};
+  const recorder = interceptCore(_coreThemeModule, _coreRootModule);
+  const shared = (
+    await extractThemeDefinition(
+      path.resolve(cwd, base.file),
+      recorder,
+      undefined,
+      base.exportName,
+    )
+  ).theme;
+  const withBase = {
+    ...recorder,
+    modules: {
+      ...recorder.modules,
+      ...Object.fromEntries(
+        base.specifiers.map(s => [s, {[base.exportName]: shared}]),
+      ),
+    },
+  };
+  const again = await extractThemeDefinition(
+    filePath,
+    withBase,
+    undefined,
+    exportName,
+  );
+  let extendsBase = false;
+  for (
+    let at = recorder.parentOf(again.theme), depth = 0;
+    at && depth < 64;
+    at = recorder.parentOf(at), depth++
+  )
+    if (at === shared) {
+      extendsBase = true;
+      break;
+    }
+  return {theme, exportName, extendsBase};
+}
+
+/**
+ * The input a theme module gives `defineTheme()` for the theme a build of
+ * it reads, evaluated as the build evaluates the module (an import, an
+ * expression, a spread or a computed key is its value), with the theme Core
+ * made of it. When Core refuses the input, the input the module gave for
+ * the named theme (else its last) and Core's error; null when the module
+ * does not load at all.
+ * `chain` holds the inputs of the themes it extends, nearest first, as far
+ * as each was made by a `defineTheme()` call this load saw.
+ * @param {string} file
+ * @param {{cwd?: string, name?: string}} [ctx]
+ * @returns {Promise<{input: any, theme: any, error: Error | null, chain: any[]} | null>}
+ */
+export async function loadThemeInput(file, {cwd = process.cwd(), name} = {}) {
+  const filePath = path.resolve(cwd, file);
+  await selectCore(cwd, {projectOnly: false});
+  const interception = interceptCore(_coreThemeModule, _coreRootModule);
+  /** @param {any} input */
+  const chainOf = input => {
+    const chain = [];
+    /** @type {Set<any>} */
+    const seen = new Set([input]);
+    let parent = interception.inputOf(input?.extends);
+    while (parent && typeof parent === 'object' && !seen.has(parent)) {
+      seen.add(parent);
+      chain.push(parent);
+      parent = interception.inputOf(parent.extends);
+    }
+    return chain;
+  };
+  try {
+    const {theme} = await extractThemeDefinition(filePath, interception);
+    const input = interception.inputOf(theme) ?? null;
+    return {input, theme, error: null, chain: chainOf(input)};
+  } catch (e) {
+    const given = interception.inputs;
+    const input =
+      given.filter(x => x && typeof x === 'object' && x.name === name).at(-1) ??
+      given.at(-1);
+    return input
+      ? {
+          input,
+          theme: null,
+          error: /** @type {Error} */ (e),
+          chain: chainOf(input),
+        }
+      : null;
+  }
 }
 
 /**
@@ -3013,6 +3151,7 @@ function themeLoadReason(error) {
   const message = error.message;
   if (error instanceof ThemeShapeError)
     return `${message}\n${THEME_EXPORT_FIX}`;
+  if (error instanceof ThemeNameError) return message;
   if (
     error instanceof TypeError &&
     /^Cannot read properties of (?:null|undefined)/.test(message) &&
@@ -3025,11 +3164,25 @@ function themeLoadReason(error) {
     // Node's "Require stack" names absolute paths; the package is the fact.
     return `Cannot find module '${missing}'.\nThe theme imports ${missing}, which is not installed. Install it, then build again.`;
   }
-  return `${message}\nMake sure all imports in the theme file are resolvable.`;
+  const alias = unresolvedAlias(error);
+  if (alias)
+    return `Cannot find module '${alias}'.\nThe theme imports ${alias}, which names no package: a path alias (tsconfig paths, a bundler alias) or a # subpath import with no "imports" entry, which the theme loader does not map. Import it by a path relative to the theme file (such as '../lib/c'), then build again.`;
+  // A module that did not resolve: the import hint. Any other failure (the
+  // theme's own code, or Core refusing its input) is told as it is.
+  const unresolved =
+    /^(?:ERR_MODULE_NOT_FOUND|MODULE_NOT_FOUND)$/.test(
+      String(/** @type {any} */ (error).code ?? ''),
+    ) || /Cannot (?:find|resolve) (?:module|package)/.test(message);
+  return unresolved
+    ? `${message}\nMake sure all imports in the theme file are resolvable.`
+    : message;
 }
 
 /** A theme module that loaded but exports no theme object. */
 class ThemeShapeError extends Error {}
+
+/** A theme module whose theme object has no name. */
+class ThemeNameError extends Error {}
 
 /**
  * The command that moves a failed theme load forward: the install for a
@@ -3080,11 +3233,46 @@ function themeLoadSuggestions(error, shown, cwd, mode = {}) {
  */
 export function missingThemePackage(error) {
   const message = error instanceof Error ? error.message : String(error);
-  return (
-    /Cannot find (?:module|package) '((?:@[^/']+\/)?[^/'.][^/']*)/.exec(
-      message,
-    )?.[1] ?? null
-  );
+  const specifier = /Cannot find (?:module|package) '([^']+)'/.exec(
+    message,
+  )?.[1];
+  return specifier ? (packageNameOf(specifier) ?? null) : null;
+}
+
+/**
+ * The package an import specifier names, or undefined when it names none:
+ * a relative or absolute path, a `#` subpath import, or a path alias such
+ * as `@/lib/c` or `~/lib/c`, which a bundler or tsconfig maps and the
+ * theme loader does not. A package name is `name` or `@scope/name`, of
+ * the characters npm takes, never starting with `.` or `_`.
+ * @param {string} specifier
+ * @returns {string | undefined}
+ */
+export function packageNameOf(specifier) {
+  const m =
+    /^((?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*)(?:\/|$)/i.exec(
+      specifier,
+    );
+  return m ? m[1] : undefined;
+}
+
+/**
+ * The import a theme load failed on that names no package (a path alias,
+ * a `#` subpath import with no entry), or null.
+ * @param {unknown} error
+ * @returns {string | null}
+ */
+function unresolvedAlias(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  const specifier = /Cannot find (?:module|package) '([^']+)'/.exec(
+    message,
+  )?.[1];
+  return specifier &&
+    !/^\.{0,2}\//.test(specifier) &&
+    !path.isAbsolute(specifier) &&
+    !packageNameOf(specifier)
+    ? specifier
+    : null;
 }
 
 /**
@@ -3693,9 +3881,46 @@ export function validateComponentOverridesAgainstRegistry(
  */
 async function validateComponentOverrides(themeDef) {
   const knownComponents = await getKnownComponents();
-  return knownComponents == null
-    ? []
-    : validateComponentOverridesAgainstRegistry(themeDef, knownComponents);
+  if (knownComponents == null) return [];
+  const warnings = validateComponentOverridesAgainstRegistry(
+    themeDef,
+    knownComponents,
+  );
+  // Style keys no element can carry: a pseudo-class or pseudo-element
+  // written as a style key (`':hover'` builds `[data-="hover"]`), and a
+  // value a closed prop never takes (Button's size has no `xxl`, and no
+  // theme can add one). Either builds a selector nothing matches.
+  const layers = [
+    ...getThemeComponentLayers(themeDef).map(l => l.components),
+    ...adaptationRuleValues(themeDef)
+      .map((/** @type {any} */ v) => v?.components)
+      .filter(isRecord),
+  ];
+  for (const components of layers)
+    for (const [component, rules] of Object.entries(components)) {
+      const knownProps = knownComponents.propsByKey[component];
+      if (!knownProps || !isRecord(rules)) continue;
+      for (const key of Object.keys(rules))
+        for (const {prop, value} of componentValuePairs(key)) {
+          if (!prop) {
+            warnings.push(
+              `Style key "${key}" on component "${component}" is no prop or state: a pseudo-class or pseudo-element goes inside a style key, such as base: {'${key}': {…}}. As written it builds a selector nothing matches.`,
+            );
+            continue;
+          }
+          if (!knownProps.includes(prop)) continue;
+          const values = (await getKnownValues(component))[prop] ?? [];
+          if (
+            values.length > 0 &&
+            (await classifyComponentValue(component, prop, value)) ===
+              'unresolved'
+          )
+            warnings.push(
+              `Style key "${key}" on component "${component}": ${prop} takes ${values.join(', ')}, and a theme cannot add a value to it, so "${value}" builds a selector nothing matches.`,
+            );
+        }
+    }
+  return [...new Set(warnings)];
 }
 
 const BUILTIN_HEADING_TYPES = new Set(['display-1', 'display-2', 'display-3']);
@@ -4203,12 +4428,43 @@ async function themeBuildInternal(
   /** @type {import('./icon-imports.mjs').IconImports | null} */
   let componentIconInfo = null;
 
+  // A null part or style key: Core throws on it, so it is refused before
+  // anything is written, at the line that gives it. A null value keeps its
+  // meaning (Core writes it as it is), so it is warned at its line.
+  const shownSource = path.relative(cwd, filePath) || filePath;
+  const nulls = nullThemeValues(themeDef).map(n => ({
+    ...n,
+    line: keyPathLine(themeSource, n.path),
+  }));
+  /** @param {{path: string[], why: string, line: number | null}} n */
+  const nullLine = n =>
+    `${n.path.join('.')}${n.line != null ? ` (line ${n.line})` : ''}: ${n.why}`;
+  const unbuildable = nulls.filter(n => n.unbuildable);
+  if (unbuildable.length > 0) {
+    const first = unbuildable.find(n => n.line != null);
+    throw new AstryxError(
+      `${shownSource} gives null where the build reads a block: ${unbuildable.map(nullLine).join('; ')}. Nothing was written.`,
+      first
+        ? [
+            {
+              name: `sed -n ${first.line}p ${quoteCommandArgument(shownSource)}`,
+              reason: 'see the line that gives it',
+            },
+          ]
+        : undefined,
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
+  }
+
   // Validate component overrides
   const warnings = await validateComponentOverrides(themeDef);
   const warningMessages = [];
   /** Advisories about a correct theme — see the `notices` note on the receipt. */
   const noticeMessages = [];
-  for (const w of warnings) {
+  for (const w of [
+    ...warnings,
+    ...nulls.filter(n => !n.unbuildable).map(nullLine),
+  ]) {
     warningMessages.push(w);
     logger.warn(`  [warn] ${source}${w}`);
   }
@@ -4566,6 +4822,16 @@ async function themeBuildInternal(
   const writeRoot = handOff.writeRoot ?? cwd;
   let outPath;
   if (options.out) {
+    // A leading ~ reaches the build only when the shell did not expand it
+    // (quoted, or from a script or a config): it names a folder called ~
+    // in the project, never the home folder. The build writes there, as it
+    // always has, and says so.
+    if (/^~(?:[\\/]|$)/.test(options.out)) {
+      const rest = options.out.replace(/^~[\\/]*/, '');
+      const w = `--out ${options.out} starts with "~", which is not your home folder here: a shell expands ~ only when it is not quoted, so the build writes in a folder named ~ in the project (${path.join(cwd, '~', rest)}). To write in the home folder, give it in full (${path.join(os.homedir(), rest)}).`;
+      warningMessages.push(w);
+      logger.warn(`Warning: ${w}`);
+    }
     outPath = path.resolve(cwd, options.out);
     // A folder, or a path that ends in a separator, names where the outputs
     // go: write `<folder>/<name>.css`, never a file named like the folder.
@@ -4574,15 +4840,23 @@ async function themeBuildInternal(
     }
     // The stylesheet is CSS whatever its name; a name that does not end in
     // .css still builds, and the module's import names the file as written.
-    if (path.extname(outPath).toLowerCase() !== '.css') {
-      const stem = path.basename(outPath).replace(/(?:\.d)?\.[^.]+$/, '');
+    // The name's extension is what follows its last dot, a leading one too:
+    // `.css` is a name with no stem, which writes hidden files.
+    const file = path.basename(outPath);
+    const dot = file.lastIndexOf('.');
+    const ext = dot < 0 ? '' : file.slice(dot).toLowerCase();
+    const stem = (dot < 0 ? file : file.slice(0, dot)).replace(/\.d$/, '');
+    if (ext !== '.css' || !stem) {
       const fixed = path
-        .join(path.dirname(options.out), `${stem}.css`)
+        .join(path.dirname(options.out), `${stem || baseName}.css`)
         .split(path.sep)
         .join('/');
-      logger.warn(
-        `Warning: --out names the stylesheet, which is CSS; give it a .css name such as ${fixed}.`,
-      );
+      // The result's warnings say it too, as text does.
+      const w = stem
+        ? `--out names the stylesheet, which is CSS; give it a .css name such as ${fixed}.`
+        : `--out names a stylesheet with no name before .css, which writes hidden files; give it a name such as ${fixed}.`;
+      warningMessages.push(w);
+      logger.warn(`Warning: ${w}`);
     }
     // A build keeps the explicit output inside the write root, relative or
     // absolute. Check mode writes nothing, so it refuses only a relative path
@@ -4672,14 +4946,17 @@ async function themeBuildInternal(
       ? `export declare const colorModes: readonly [${JSON.stringify(colorModes[0])}];\n`
       : '');
 
+  // A family the caller knows the app loads (a font stylesheet it writes
+  // for the theme) is not named as unloaded.
   const unloadedFonts = [
     ...new Set([
       ...collectUnloadedFonts(resolvedTheme),
       ...adaptationRuleValues(resolvedTheme).flatMap(
-        (/** @type {any} */ value) => collectUnloadedFonts(value),
+        (/** @type {any} */ value) =>
+          collectUnloadedFonts(value, resolvedTheme),
       ),
     ]),
-  ];
+  ].filter(family => !handOff.loadedFonts?.(family));
 
   if (handOff.prepareFamily) {
     return {
@@ -4711,6 +4988,18 @@ async function themeBuildInternal(
     writes.push({dest: variantDtsPath, content: variantContent});
   }
 
+  // A named pipe, a device or a socket where an output goes is never read
+  // or replaced: an open of one can wait for good. A check refuses it too.
+  for (const write of writes) {
+    const kind = irregularFileKind(write.dest);
+    if (kind && kind !== 'a folder')
+      throw new AstryxError(
+        `${path.relative(cwd, write.dest) || write.dest} is ${kind}, not a file, so the build neither reads nor replaces it: remove it, then build again. Nothing was written.`,
+        undefined,
+        ERROR_CODES.ERR_FILE_EXISTS,
+      );
+  }
+
   // Every output a build writes stays inside cwd, including the defaults
   // beside the theme file. Check mode writes nothing, so it compares outputs
   // outside cwd read-only.
@@ -4732,6 +5021,8 @@ async function themeBuildInternal(
       rerun,
       refuseUnmarked: Boolean(options.out),
       onEditorFolder: editorFolderListener ?? undefined,
+      // The result's warnings carry what text prints.
+      onWarning: message => warningMessages.push(message),
     });
   }
 
@@ -4822,12 +5113,19 @@ async function themeBuildInternal(
   // permanently in violation of its own "compiles with no warnings" guard).
   // Adaptation rules are resolved theme writes in their own right, so a family
   // named only inside one needs the same notice as one named at the root.
+  // The result names the recipe's command bare, as every machine-read
+  // command is; the printed note starts it the way this project runs the CLI.
+  /** @param {string} family @param {string} recipe */
+  const fontNotice = (family, recipe) =>
+    handOff.fontHelp?.notice(family) ??
+    `Font "${family}" is named by this theme but not loaded; add a <link> or @font-face in your app (recipe: ${recipe})`;
   /** @type {string[]} */
   const fontNotices = [];
   for (const family of unloadedFonts) {
-    const msg = `Font "${family}" is named by this theme but not loaded; add a <link> or @font-face in your app (recipe: astryx docs typography)`;
-    noticeMessages.push(msg);
-    fontNotices.push(msg);
+    noticeMessages.push(fontNotice(family, 'astryx docs typography'));
+    fontNotices.push(
+      fontNotice(family, formatCliCommand('docs typography', cwd)),
+    );
   }
 
   /** @type {ThemeBuildTrailer} */
@@ -4838,6 +5136,8 @@ async function themeBuildInternal(
     cssImport,
     unloadedFonts,
     fontNotices,
+    fontHelp: handOff.fontHelp ?? null,
+    install: handOff.install ?? null,
   };
   // A batch or compact report prints this once for the whole run instead.
   if (report.trailers) report.trailers.push(trailer);
@@ -4874,7 +5174,11 @@ async function themeBuildInternal(
  * @property {string} jsImport Import specifier of the built JS module.
  * @property {string} cssImport Import specifier of the built CSS.
  * @property {string[]} unloadedFonts Font families the theme names but does not load.
- * @property {string[]} fontNotices One notice per unloaded font family.
+ * @property {string[]} fontNotices One notice per unloaded font family, as printed.
+ * @property {FontHelp | null} [fontHelp] How the caller loads fonts, when it does.
+ * @property {string | null} [install] How the app takes the theme, when the
+ *   caller wires it another way than importing these outputs (the editor's
+ *   app copy).
  */
 
 /**
@@ -4882,7 +5186,9 @@ async function themeBuildInternal(
  * @param {ThemeBuildTrailer} trailer
  */
 function printBuildTrailer(trailer) {
-  logger.log(`
+  if (trailer.install) logger.log(`\n${trailer.install}\n`);
+  else
+    logger.log(`
 Install in your app (paths are relative to a file in src/; adjust if yours lives elsewhere):
 
   import { Theme } from '@astryxdesign/core/theme';
@@ -4905,7 +5211,13 @@ Or with a <link> tag:
 `);
   for (const msg of trailer.fontNotices) logger.log(`  note: ${msg}`);
   if (trailer.unloadedFonts.length > 0) {
-    logger.log(formatFontLoadingHelp(trailer.themeName, trailer.unloadedFonts));
+    logger.log(
+      formatFontLoadingHelp(
+        trailer.themeName,
+        trailer.unloadedFonts,
+        trailer.fontHelp?.recipe,
+      ),
+    );
   }
 }
 
@@ -4917,8 +5229,13 @@ Or with a <link> tag:
  */
 export function printBatchTrailer(trailers) {
   if (trailers.length === 0) return;
-  const [first] = trailers;
-  logger.log(`
+  // A theme the caller wires another way says how, once each.
+  for (const trailer of trailers)
+    if (trailer.install) logger.log(`\n${trailer.install}\n`);
+  const imported = trailers.filter(trailer => !trailer.install);
+  const [first] = imported;
+  if (first)
+    logger.log(`
 Install in your app (paths are relative to a file in src/; adjust if yours lives elsewhere):
 
   import { Theme } from '@astryxdesign/core/theme';
@@ -4939,16 +5256,19 @@ Or with a <link> tag:
     <App />
   </Theme>
 `);
-  if (trailers.length > 1) {
+  if (imported.length > 1) {
     logger.log('Each built theme imports the same way:');
-    for (const trailer of trailers) {
+    for (const trailer of imported) {
       logger.log(
         `  import { ${trailer.exportName} } from '${trailer.jsImport}'; import '${trailer.cssImport}';`,
       );
     }
   }
   const fonts = groupUnloadedFonts(trailers);
-  if (fonts.length > 0) logger.log(formatBatchFontLoadingHelp(fonts));
+  // One caller's recipe serves the batch only when every theme takes it.
+  const help = trailers.every(t => t.fontHelp) ? trailers[0].fontHelp : null;
+  if (fonts.length > 0)
+    logger.log(formatBatchFontLoadingHelp(fonts, help?.recipe));
 }
 
 /**
@@ -5503,11 +5823,18 @@ Or load the same stylesheet natively:
   const unloadedFonts = [
     ...new Set(members.flatMap(member => member.unloadedFonts)),
   ];
-  const notices = unloadedFonts.map(
-    family =>
-      `Font "${family}" is named by this theme family but not loaded; add a <link> or @font-face in your app (recipe: astryx docs typography)`,
+  /** @param {string} family @param {string} recipe */
+  const familyNotice = (family, recipe) =>
+    `Font "${family}" is named by this theme family but not loaded; add a <link> or @font-face in your app (recipe: ${recipe})`;
+  // The result names the command bare; the printed note as this project
+  // runs the CLI.
+  const notices = unloadedFonts.map(family =>
+    familyNotice(family, 'astryx docs typography'),
   );
-  for (const notice of notices) logger.log(`  note: ${notice}`);
+  for (const family of unloadedFonts)
+    logger.log(
+      `  note: ${familyNotice(family, formatCliCommand('docs typography', cwd))}`,
+    );
   return {
     type: 'theme.build',
     data: {

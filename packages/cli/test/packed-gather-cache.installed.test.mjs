@@ -29,6 +29,7 @@ import {
   hasModuleHooks,
   readKept,
   writeKept,
+  docsTreeEntries,
 } from '../test-utils/packed-gather-cache-fixture.mjs';
 
 usePackedCli();
@@ -157,6 +158,44 @@ if (process.env.AS_PNP) process.versions.pnp = '3';
         expect(run(ask, {tmp, cwd: project})).toEqual(fresh);
       } finally {
         fs.rmSync(other.dir, {recursive: true, force: true});
+      }
+    },
+    120_000,
+  );
+
+  it.skipIf(!hasModuleHooks)(
+    "keeps the CLI's own docs tree, and is not used after an edit to one of its tree docs",
+    async () => {
+      const tmp = keptTmp('docs-tree');
+      const ask = ['docs', 'authoring/building-blocks/components'];
+      const first = run(ask, {tmp});
+      expect(first.status, first.stderr).toBe(0);
+      expect(docsTreeEntries(tmp).size).toBe(1);
+      expectWarmHit(tmp, [ask]);
+      // As patch-package or a hand edit leaves it: same build id, other text.
+      const file = path.join(
+        packed,
+        'assets',
+        'docs',
+        'tree',
+        'components.doc.mjs',
+      );
+      const source = fs.readFileSync(file, 'utf8');
+      const edited = source.replace(
+        'Add components to an integration,',
+        'Add components to an integration package,',
+      );
+      expect(edited).not.toBe(source);
+      try {
+        fs.writeFileSync(file, edited);
+        const [kept, fresh] = await Promise.all([
+          runAsync(ask, {tmp}),
+          runAsync(ask, {tmp: freshTmp()}),
+        ]);
+        expect(fresh.stdout).not.toBe(first.stdout);
+        expect(kept).toEqual(fresh);
+      } finally {
+        fs.writeFileSync(file, source);
       }
     },
     120_000,

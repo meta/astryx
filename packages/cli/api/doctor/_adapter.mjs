@@ -46,7 +46,10 @@ export {
   iconUseCommand,
   unlistedIconSets,
 } from '../../foundation/discovery/icon-set-discovery.mjs';
-import {elementPropOrigins} from '../../foundation/discovery/module-exports.mjs';
+import {
+  elementPropOrigins,
+  rendersElement,
+} from '../../foundation/discovery/module-exports.mjs';
 import {cssImports} from '../../foundation/render/embedded-imports.mjs';
 import {satisfiesRange} from '../../foundation/env/semver.mjs';
 import * as path from 'node:path';
@@ -71,6 +74,10 @@ import {
   findInstalledPackage,
 } from '../../foundation/fs/paths.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
+import {
+  filesOnDisk,
+  shippedImportFindings,
+} from '../../foundation/integrations/shipped-imports.mjs';
 export {
   isLocalThemeOwner,
   planThemeAppWrite,
@@ -302,6 +309,38 @@ export function resolveDoctorThemeImports(theme, options) {
   return resolveThemeImports(theme, options);
 }
 
+/**
+ * A finding for each relative import of a package theme's built module and
+ * stylesheets that names no file its package ships (see
+ * `shippedImportFindings`). A local theme is no package: none.
+ * @param {import('../../foundation/config/theme-state.mjs').ResolvedAppTheme} theme
+ * @returns {import('../../foundation/integrations/shipped-imports.mjs').ShippedImportFinding[]}
+ */
+export function themeShippedImportFindings(theme) {
+  if (theme.source === 'local') return [];
+  const moduleFile = realDoctorFile(theme.moduleFile);
+  if (!moduleFile) return [];
+  // The package that ships the module: the nearest package.json with a name
+  // (a build folder may hold one that only sets "type").
+  let packageDir = path.dirname(moduleFile);
+  for (;;) {
+    const name = readPackageJson(path.join(packageDir, 'package.json'))?.name;
+    if (typeof name === 'string' && name !== '') break;
+    const parent = path.dirname(packageDir);
+    if (parent === packageDir) return [];
+    packageDir = parent;
+  }
+  // The app's bundler builds from the package's files where they are,
+  // installed or linked, so those files are what it ships here; doctor never
+  // asks npm.
+  return shippedImportFindings(packageDir, {
+    files: filesOnDisk(packageDir),
+    entries: [theme.moduleFile, theme.stylesheetFile, theme.fontStylesheetFile]
+      .filter(file => typeof file === 'string')
+      .map(file => realDoctorFile(file) ?? file),
+  }).findings;
+}
+
 /** @param {string} projectDir */
 export function discoverDoctorUnmigratedCopies(projectDir) {
   return discoverUnmigratedThemeCopies(projectDir);
@@ -328,6 +367,16 @@ export function realDoctorFile(file) {
  */
 export function doctorElementPropOrigins(file, element) {
   return elementPropOrigins(file, element);
+}
+
+/**
+ * Whether a module renders an element imported by name from a module (see
+ * `rendersElement`).
+ * @param {string} file
+ * @param {Parameters<typeof rendersElement>[1]} element
+ */
+export function doctorRendersElement(file, element) {
+  return rendersElement(file, element);
 }
 
 /**

@@ -1341,7 +1341,11 @@ export async function integrationPackCheck(options = {}) {
   const pkgVersion = typeof pkg.version === 'string' ? pkg.version : null;
 
   // ── Phase 1: structure validation ──
-  const localResult = await validateLocalIntegration(cwd);
+  // The relative imports of the shipped modules are checked once, in the
+  // packed tree below, which holds exactly what npm packs: no npm listing.
+  const localResult = await validateLocalIntegration(cwd, {
+    shippedImports: false,
+  });
   /** @type {Issue[]} */
   const issues = [
     ...localResult.issues,
@@ -1665,6 +1669,17 @@ export async function integrationPackCheck(options = {}) {
       {iconSets: true},
     );
 
+    // Each relative import of a packed module that names no packed file:
+    // validate lists it as a note, and it is a warning here, as the other
+    // listed findings of the local tree are.
+    for (const issue of packedResult.listed ?? []) {
+      if (issue.code !== 'relative_import_not_shipped') continue;
+      issues.push({
+        code: `packed_${issue.code}`,
+        severity: 'warning',
+        message: `Packed: ${issue.message}`,
+      });
+    }
     for (const issue of packedResult.issues) {
       issues.push({
         code: `packed_${issue.code}`,

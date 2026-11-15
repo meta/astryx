@@ -274,8 +274,28 @@ describe('asks it used to drop', () => {
     T,
   );
   it(
-    'a shadow typed for one mode goes into light-dark()',
+    'a shadow typed for one mode goes into light-dark() on a part with no shadow',
     async () => {
+      // A popover's shared shadow is read from it drawn open: the light
+      // half keeps its layers.
+      const pop = await answer(
+        'popover shadow 0 4px 12px #00000080 in dark mode',
+      );
+      expect(pop.first.join('\n')).toMatch(
+        /light-dark\(rgba\(0, 0, 0, 0\.1\), transparent\).*0 4px 12px light-dark\(transparent, #00000080\)' --on popover$/,
+      );
+      // (What a context menu shows in the other mode is unknown here: Core
+      // draws it only once a press opens it, so a one-mode shadow that would
+      // blank it is refused with that reason.)
+      const menu = await answer(
+        'context-menu shadow 0 4px 12px #00000080 in dark mode',
+      );
+      expect(menu.first).toEqual([]);
+      expect(menu.text).toMatch(
+        /what context-menu shows in light mode is unknown/,
+      );
+      // A card shows no shadow at rest (its selection ring is a state of
+      // its own): the light half is transparent too.
       expect(
         (await answer('card shadow 0 4px 12px #00000080 in dark mode')).first,
       ).toEqual([
@@ -287,8 +307,8 @@ describe('asks it used to drop', () => {
   it(
     'a shadow on a part that shows none it can read is a change',
     async () => {
-      expect((await answer('popover shadow bigger')).first).toEqual([
-        "set q box-shadow 'var(--shadow-high)' --on popover",
+      expect((await answer('context-menu shadow bigger')).first).toEqual([
+        "set q box-shadow 'var(--shadow-high)' --on context-menu",
       ]);
     },
     T,
