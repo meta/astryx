@@ -115,6 +115,39 @@ export const CORNERS = [
   ['round', 16],
   ['pill', 9999],
 ];
+/**
+ * The density words, the one table every reading of room uses: words for
+ * more room (roomy), for less (dense), and complaints that there is too
+ * little (crowded). An ask names the density it wants; after "too" the
+ * word names the density there is, so the change goes the other way.
+ */
+export const DENSITY = /** @type {const} */ ({
+  roomy: [
+    'airy',
+    'airier',
+    'spacious',
+    'roomy',
+    'roomier',
+    'loose',
+    'looser',
+    'relaxed',
+    'comfortable',
+    'sparse',
+    'generous',
+    'spread out',
+  ],
+  dense: ['dense', 'denser', 'compact', 'tight', 'tighter', 'condensed'],
+  crowded: ['cramped', 'crowded', 'packed'],
+});
+
+/**
+ * The density words of the kinds given, as one alternation for a regular
+ * expression.
+ * @param {...keyof typeof DENSITY} kinds
+ */
+export const densityWords = (...kinds) =>
+  kinds.flatMap(k => DENSITY[k]).join('|');
+
 /** @type {Array<[string, number]>} */
 export const SPACING = [
   ['tight', 0.75],
@@ -196,17 +229,45 @@ const ONE_SYSTEM_FAMILIES = new Map(
       'lucida grande',
       'gill sans',
       'snell roundhand',
+      'pingfang sc',
+      'pingfang tc',
+      'pingfang hk',
+      'hiragino sans',
+      'hiragino sans gb',
+      'hiragino kaku gothic pron',
+      'hiragino mincho pron',
+      'apple sd gothic neo',
     ],
     Windows: [
       'segoe ui',
       'segoe ui emoji',
       'segoe ui symbol',
+      'segoe ui light',
+      'segoe ui semilight',
+      'segoe ui semibold',
+      'segoe ui black',
       'consolas',
       'cambria',
       'calibri',
       'lucida console',
       'brush script mt',
       'old english text mt',
+      'microsoft yahei',
+      'microsoft yahei ui',
+      'microsoft jhenghei',
+      'microsoft jhenghei ui',
+      'simsun',
+      'simhei',
+      'nsimsun',
+      'meiryo',
+      'yu gothic',
+      'yu mincho',
+      'ms gothic',
+      'ms mincho',
+      'malgun gothic',
+      '微软雅黑',
+      '宋体',
+      '黑体',
     ],
     'Android and ChromeOS': ['roboto'],
     Linux: [
@@ -299,6 +360,25 @@ export const OPEN_FONTS = wordTable(
     ]),
   ),
 );
+
+/**
+ * The CSS font-family stack a font dial word stands for (a preset such as
+ * mono, or an open font such as inter): its family, quoted when it holds a
+ * space, then its fallbacks. Null for any other word. A part's font-family
+ * takes this stack, never the word itself, which names no family.
+ * @param {string} word
+ * @returns {string | null}
+ */
+export function fontStack(word) {
+  const w = String(word).trim().toLowerCase();
+  const [family, fallbacks] = FONTS[w]
+    ? FONTS[w]
+    : OPEN_FONTS[w]
+      ? [OPEN_FONTS[w].family.replace(/"/g, ''), OPEN_FONTS[w].fallbacks]
+      : [null, null];
+  if (!family) return null;
+  return `${/\s/.test(family) ? `"${family}"` : family}, ${fallbacks}`;
+}
 
 /**
  * Brand fonts no package loads, and the closest open font, for the warning
@@ -436,8 +516,7 @@ export const DIALS = wordTable({
       'set my spacing more',
       'set my spacing roomy --on card',
     ],
-    words:
-      'spacing space room roomy airy dense density compact tight padding gap gaps margin breathing cramped spread spacious',
+    words: `spacing space room density padding gap gaps margin breathing spread ${densityWords('roomy', 'dense', 'crowded').replace(/\|/g, ' ')}`,
   },
   accent: {
     help: 'The main brand color: primary buttons, links, selection and the focus ring. From the one color the editor generates its shades, light and dark, and points the accent tokens at them: --color-accent, --color-on-accent, --color-text-accent, --color-icon-accent, --color-accent-muted and --focus-outline-color. The fill keeps the exact color you gave in light, and in dark too when text on it reads at 4.5:1 and it stands out from the dark page at 3:1; otherwise dark mode uses shade 70, where the official themes put a dark fill, or the shade nearest it that passes both, and the result says so. Text on the fill is the neutral color\'s white or near-black (pure white or black without a neutral color), whichever reads on it. The fill never moves: when no text reads on it, or a pale fill does not stand out from the light page, the result says so. Other tokens move to a nearby shade when they must read: text at 4.5:1, the focus ring at 3:1. `how colors` explains it; the Colors preview page (`preview add`) shows every shade. For an exact color, set the token itself (set my --color-accent "#7c3aed"): an exact token always wins over the generated colors.',
@@ -607,6 +686,14 @@ export const GROUPS = wordTable(
       'margin',
       'margin-block',
       'margin-inline',
+      'margin-top',
+      'margin-bottom',
+      'margin-left',
+      'margin-right',
+      'margin-block-start',
+      'margin-block-end',
+      'margin-inline-start',
+      'margin-inline-end',
     ],
     font: [
       'font-family',
@@ -718,9 +805,11 @@ export const THING_HINTS = wordTable({
     const w = v.trim().toLowerCase();
     const rung = SPACING.some(([n]) => n === w)
       ? w
-      : /^(airy|loose|relaxed|comfortable|open|sparse|generous)$/.test(w)
+      : new RegExp(`^(?:${densityWords('roomy')})$`).test(w)
         ? 'roomy'
-        : /^(dense|cramped|condensed|packed|small|less)$/.test(w)
+        : new RegExp(
+              `^(?:${densityWords('dense', 'crowded')}|small|less)$`,
+            ).test(w)
           ? 'compact'
           : null;
     return [
@@ -764,6 +853,98 @@ export const WRAPPED_PARTS = /** @type {Record<string, {box: string}>} */ ({
   'chat-composer': {box: 'the rounded composer body'},
 });
 
+/**
+ * The pseudo-classes of CSS Selectors (Level 4 and 5, and the HTML, media,
+ * view-transition, scroll-marker and interest states browsers ship), by
+ * name: the names a part's `:name` block is read against, so one a typo
+ * away from a name here is named as that typo.
+ */
+export const CSS_PSEUDO_CLASSES = new Set([
+  'active',
+  'active-view-transition',
+  'active-view-transition-type',
+  'any-link',
+  'autofill',
+  'blank',
+  'buffering',
+  'checked',
+  'closed',
+  'current',
+  'default',
+  'defined',
+  'dir',
+  'disabled',
+  'empty',
+  'enabled',
+  'first',
+  'first-child',
+  'first-of-type',
+  'focus',
+  'focus-visible',
+  'focus-within',
+  'fullscreen',
+  'future',
+  'has',
+  'has-slotted',
+  'heading',
+  'host',
+  'host-context',
+  'hover',
+  'in-range',
+  'indeterminate',
+  'interest-source',
+  'interest-target',
+  'invalid',
+  'is',
+  'lang',
+  'last-child',
+  'last-of-type',
+  'left',
+  'link',
+  'local-link',
+  'modal',
+  'muted',
+  'not',
+  'nth-child',
+  'nth-col',
+  'nth-last-child',
+  'nth-last-col',
+  'nth-last-of-type',
+  'nth-of-type',
+  'only-child',
+  'only-of-type',
+  'open',
+  'optional',
+  'out-of-range',
+  'past',
+  'paused',
+  'picture-in-picture',
+  'placeholder-shown',
+  'playing',
+  'popover-open',
+  'read-only',
+  'read-write',
+  'required',
+  'right',
+  'root',
+  'scope',
+  'seeking',
+  'stalled',
+  'state',
+  'target',
+  'target-after',
+  'target-before',
+  'target-current',
+  'target-within',
+  'user-invalid',
+  'user-valid',
+  'valid',
+  'visited',
+  'volume-locked',
+  'where',
+  'xr-overlay',
+]);
+
 /** States every part takes, beyond the ones its doc lists. */
 export const COMMON_STATES = [
   'hover',
@@ -773,6 +954,18 @@ export const COMMON_STATES = [
   'focus-within',
   'disabled',
 ];
+
+/**
+ * Words for a mode, and the mode each means, beside the mode's own name in
+ * its written forms (dark-only, darkmode, mode dark), which modeWord reads:
+ * the table of the one mode reader.
+ */
+export const MODE_WORDS = /** @type {Record<string, 'light' | 'dark'>} */ ({
+  day: 'light',
+  daytime: 'light',
+  night: 'dark',
+  nighttime: 'dark',
+});
 
 // These tables are looked up by words people type: with no prototype,
 // `constructor` or `__proto__` is never found in them.
@@ -790,5 +983,19 @@ for (const table of [
   DIRECT,
   THING_HINTS,
   DESIGN,
+  MODE_WORDS,
 ])
   Object.setPrototypeOf(table, null);
+
+/** The groups of the theme-building page (its sections), in order. */
+export const SHOWCASE_GROUPS = Object.freeze([
+  'actions',
+  'inputs',
+  'selection',
+  'navigation',
+  'feedback',
+  'data',
+  'containers',
+  'overlays',
+  'pages',
+]);

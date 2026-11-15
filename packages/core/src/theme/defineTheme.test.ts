@@ -1048,6 +1048,19 @@ describe('typography font family derivation', () => {
     );
   });
 
+  it('a heading family takes its own fallbacks only, and fallbacks with no family build nothing', () => {
+    const theme = defineTheme({
+      name: 'heading-family-only',
+      typography: {
+        body: {family: 'Inter', fallbacks: 'sans-serif'},
+        heading: {family: 'Lora'},
+        code: {fallbacks: 'monospace'},
+      },
+    });
+    expect(theme.tokens['--font-family-heading']).toBe('Lora');
+    expect(theme.tokens['--font-family-code']).toBeUndefined();
+  });
+
   it('explicit tokens override typography-derived font tokens', () => {
     const theme = defineTheme({
       name: 'token-wins',
