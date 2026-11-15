@@ -382,6 +382,31 @@ test('a finger that lifts before the touch layer loads makes a plain tap: one cl
   expect(await clicks()).toBe(1);
 });
 
+test('a finger that drifts past the tolerance before the touch layer loads gets no menu once it loads', async ({
+  page,
+}) => {
+  const releaseLayer = await holdTouchLayer(page);
+  const {driver, center} = await openTouchStory(page, undefined, {
+    waitsForTouchLayer: false,
+  });
+  const finger = await driver.press(center);
+  // Past the tolerance on one axis, then back to where it landed. Before the
+  // layer loads, Chromium sends this drift as a pointermove only.
+  await finger.move({
+    x: center.x + contextMenu.press.allowableMovement + 1,
+    y: center.y,
+  });
+  await finger.move(center);
+  const released = await releaseLayer();
+  await page.waitForFunction(
+    dueAt => performance.now() > dueAt,
+    released + menuDisplayMs + 300,
+  );
+  expect(await menuShownAt(page)).toBeNull();
+  await finger.lift();
+  await expect(page.getByRole('menu', {name: 'Photo actions'})).toBeHidden();
+});
+
 test('a right click opens the menu at once while the touch layer has not loaded', async ({
   page,
 }) => {
