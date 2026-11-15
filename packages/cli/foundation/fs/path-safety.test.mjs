@@ -355,10 +355,25 @@ describe('assertWithin allowAbsolute', () => {
 
 describe('tempFolderOf', () => {
   const tmpdir = process.env.TMPDIR;
+  const home = process.env.HOME;
   afterEach(() => {
     if (tmpdir === undefined) delete process.env.TMPDIR;
     else process.env.TMPDIR = tmpdir;
+    if (home === undefined) delete process.env.HOME;
+    else process.env.HOME = home;
   });
+  /** @param {string} root @param {string} at */
+  const inside = (root, at) => {
+    const rel = path.relative(root, at);
+    return !rel.startsWith('..') && !path.isAbsolute(rel);
+  };
+  // In some containers the home folder is in /tmp, which then takes no
+  // scratch copy.
+  const tmpHoldsHome =
+    process.platform !== 'win32' &&
+    ['/tmp', fs.realpathSync('/tmp')].some(tmp =>
+      [os.homedir(), fs.realpathSync(os.homedir())].some(h => inside(tmp, h)),
+    );
 
   it('names the system temp folder that holds a path, and nothing for any other path', () => {
     expect(tempFolderOf(path.join(os.tmpdir(), 'a', 'b'))).toBe(
@@ -372,9 +387,9 @@ describe('tempFolderOf', () => {
   });
 
   it.skipIf(process.platform === 'win32')(
-    'takes /tmp on a POSIX system',
+    'takes /tmp on a POSIX system, unless /tmp holds the home folder',
     () => {
-      expect(tempFolderOf('/tmp/astryx/x')).toBe('/tmp');
+      expect(tempFolderOf('/tmp/astryx/x')).toBe(tmpHoldsHome ? null : '/tmp');
     },
   );
 
@@ -382,7 +397,7 @@ describe('tempFolderOf', () => {
     'lists the temp folder and /tmp once each',
     () => {
       process.env.TMPDIR = '/tmp';
-      expect(tempFolders()).toEqual(['/tmp']);
+      expect(tempFolders()).toEqual(tmpHoldsHome ? [] : ['/tmp']);
     },
   );
 
@@ -393,6 +408,22 @@ describe('tempFolderOf', () => {
       expect(tempFolders()).toContain(path.join(os.homedir(), 'tmp'));
       process.env.TMPDIR = path.dirname(os.homedir());
       expect(tempFolders()).not.toContain(path.dirname(os.homedir()));
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'compares real locations, so a link cannot open the home folder or the disk',
+    () => {
+      const users = path.join(tmpDir, 'users');
+      fs.mkdirSync(path.join(users, 'joe'), {recursive: true});
+      fs.symlinkSync(path.join(users, 'joe'), path.join(tmpDir, 'home'), 'dir');
+      process.env.HOME = path.join(tmpDir, 'home');
+      process.env.TMPDIR = users;
+      expect(tempFolders()).not.toContain(users);
+
+      fs.symlinkSync('/', path.join(tmpDir, 'root'), 'dir');
+      process.env.TMPDIR = path.join(tmpDir, 'root');
+      expect(tempFolders()).not.toContain(path.join(tmpDir, 'root'));
     },
   );
 

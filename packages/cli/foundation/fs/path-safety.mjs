@@ -138,25 +138,46 @@ export function assertWithin(targetPath, rootDir, options = {}) {
 
 /**
  * The system temp folders a scratch copy may go to: the folder `os.tmpdir()`
- * names, and `/tmp` on a POSIX system. A folder that is a disk's root or holds
- * the home folder is left out, so a misset `TMPDIR` cannot open the whole disk
- * or the home folder to scratch copies.
+ * names, and `/tmp` on a POSIX system, each as written. A folder that is a
+ * disk's root or holds the home folder is left out, so a misset `TMPDIR`
+ * cannot open the whole disk or the home folder to scratch copies. Both are
+ * compared as written and by their real locations, because a write follows
+ * links: a temp folder that links to `/`, or a home folder reached through a
+ * link, cannot get around the check. A folder whose real location cannot be
+ * read is left out.
  *
  * @returns {string[]}
  */
 export function tempFolders() {
-  const home = path.resolve(os.homedir());
-  return [
-    ...new Set(
-      [os.tmpdir(), ...(process.platform === 'win32' ? [] : ['/tmp'])].map(
-        folder => path.resolve(folder),
-      ),
-    ),
-  ].filter(
-    folder =>
-      folder !== path.parse(folder).root &&
-      relativeInside(folder, home) === null,
-  );
+  /** @param {string} at @returns {string[] | null} as written, then its real location */
+  const spellings = at => {
+    const written = path.resolve(at);
+    try {
+      return [written, canonicalPath(written)];
+    } catch {
+      return null;
+    }
+  };
+  const homes = spellings(os.homedir()) ?? [path.resolve(os.homedir())];
+  /** @type {Map<string, string>} each real location, with its first folder as written */
+  const kept = new Map();
+  for (const folder of [
+    os.tmpdir(),
+    ...(process.platform === 'win32' ? [] : ['/tmp']),
+  ]) {
+    const forms = spellings(folder);
+    if (
+      !forms ||
+      forms.some(
+        form =>
+          form === path.parse(form).root ||
+          homes.some(home => relativeInside(form, home) !== null),
+      )
+    )
+      continue;
+    if (!kept.has(forms[1])) kept.set(forms[1], forms[0]);
+  }
+  return [...kept.values()];
 }
 
 /**
