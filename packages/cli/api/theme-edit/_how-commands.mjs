@@ -46,6 +46,9 @@ export const EXAMPLE_THEME = 'my-theme';
  * @property {string} [state]
  * @property {string} [mode]
  * @property {boolean} [only] the one member of a group, not the group
+ * @property {boolean} [keeps] writes a look back as it shows it now (a
+ *   status Core draws its own way): an except of that look never leaves
+ *   it out, as it is what keeps the look
  */
 
 /**

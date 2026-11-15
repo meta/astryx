@@ -84,7 +84,7 @@ import {cssProperties, keywordsOf, matchValue, splitTop} from './_css.mjs';
  * steps run in order; most options are one step. `smallest`: the options
  * are one change in growing amounts, and the answer is the first the
  * measured check keeps.
- * @typedef {{text: string, options: Step[][], sequence?: boolean, lookup?: string, intent?: MeasureIntent, smallest?: boolean}} Draft
+ * @typedef {{text: string, options: Step[][], sequence?: boolean, lookup?: string, intent?: MeasureIntent, smallest?: boolean, modeInValue?: boolean}} Draft
  */
 
 /**
@@ -1689,7 +1689,7 @@ export function exactFactor(text) {
   if (again) return /third|3/.test(again[1]) ? 4 / 3 : 1.25;
   // "a quarter bigger", "a third smaller", "cut by a third", "reduce by half".
   const share =
-    /\b(a half|half|a third|a quarter|1\/2|1\/3|1\/4)\s+(bigger|larger|more|wider|taller|thicker|higher|smaller|less|tighter|narrower|thinner|shorter|lower)\b/.exec(
+    /\b(a half|half|a third|a quarter|1\/2|1\/3|1\/4)\s+(bigger|larger|more|wider|taller|thicker|higher|stronger|smaller|less|tighter|narrower|thinner|shorter|lower|fainter|weaker)\b/.exec(
       t,
     );
   if (share) {
@@ -2043,7 +2043,11 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
   [/\b(picked|chosen|choose|pick)\b/, 'selected'],
   [/\b(invalid|errors? state|has an error|with an error)\b/, 'invalid'],
   [/\bvisited\b/, 'visited'],
-  [/\bopened\b/, 'open'],
+  // ("The open select", "when open": a part shown open.)
+  [
+    /\bopened\b|\b(?:when|while|once|if) (?:it'?s |they'?re |it is |they are )?open\b|\bthe open\b/,
+    'open',
+  ],
   [/\bexpanded\b/, 'expanded'],
   // (A page or step shown as the one you are on: aria-current.)
   [/\bcurrent\b/, 'current'],
@@ -2077,6 +2081,7 @@ const STATE_WORDS = /** @type {Array<[RegExp, string]>} */ ([
  * @property {{prop: string, value: string, bad?: string} | null} named - a CSS property the clause names, with its value as typed
  * @property {string} [colorRef] - a part whose color the clause names as a value ("the sidebar the page color"): read, never changed
  * @property {boolean} [unknownSubject] - an elided clause whose subject is no part ("and the gizmo red")
+ * @property {string} [colorRefWhen] - the reference's own status or variant ("the error banner": status:error; "?:error" for a word whose axis the part's values give)
  * @property {string} [colorRefProp] - the paint of the reference named ("the card border color": border-color)
  * @property {string} [groundRef] - a part the clause measures against ("input borders 3:1 against the page"): read, never changed
  * @property {string} [groundWhen] - a word said before the ground ("on muted cards": muted): its variant when it has one by that name
@@ -2612,6 +2617,9 @@ function clausesOf(q, partWords) {
     /** @type {string | undefined} */
     let colorRefProp;
     /** @type {string | undefined} */
+    let colorRefWhen;
+    let refSaid = '';
+    /** @type {string | undefined} */
     let groundRef;
     if (parts.length > 1) {
       // Where the clause first names a part, by any of its words.
@@ -2636,7 +2644,9 @@ function clausesOf(q, partWords) {
             /^(?:'s)?\s+(?:(?:border|text|background|fill|line)\s+)?colou?r\b/.test(
               text.slice(where.end),
             )) ||
-            /\bcolou?r of\s+(?:the\s+|my\s+)?$/.test(
+            // (A status or variant word may stand before the part: "the
+            // color of the error banner", kept as the reference's own.)
+            /\bcolou?r of\s+(?:the\s+|my\s+)?(?:[a-z]+\s+)?$/.test(
               text.slice(0, where.index),
             ) ||
             (colorsIn(text).length > 0 &&
@@ -2647,6 +2657,21 @@ function clausesOf(q, partWords) {
       });
       if (ref) {
         colorRef = ref.on;
+        // (The reference's own words are never what the clause changes:
+        // "the cards the button color" asks nothing of a button's text.)
+        const where = /** @type {any} */ (at(ref));
+        refSaid = text.slice(where.index, where.end);
+        // (Its status or variant, as the clause names it: "the error
+        // banner", "the primary button".)
+        const before = /([a-z]+)\s+$/.exec(
+          text.slice(0, /** @type {any} */ (at(ref)).index),
+        )?.[1];
+        // (Its axis is read where the part's values are.)
+        colorRefWhen =
+          ref.when ??
+          (before && !/^(?:the|my|a|of|as)$/.test(before)
+            ? `?:${before === 'danger' ? 'error' : before}`
+            : undefined);
         const paint =
           /^(?:'s)?\s+(border|text|background|fill|line)\s+colou?r\b/.exec(
             text.slice(/** @type {any} */ (at(ref)).end),
@@ -2746,6 +2771,10 @@ function clausesOf(q, partWords) {
     // "transparent" inside color-mix() asks for no see-through fill.
     const aspects0 = aspectsOf(
       (groundSaid ? text.replace(groundSaid, ' ') : text)
+        .replace(
+          refSaid ? new RegExp(`\\b${refSaid}\\b(?=\\S*\\s+colou?r)`) : /$^/,
+          ' ',
+        )
         .replace(
           /\b(?:color-mix|rgba?|hsla?|hwb|lab|lch|oklab|oklch)\((?:[^()]|\([^()]*\))*\)/g,
           ' ',
@@ -2907,18 +2936,9 @@ function clausesOf(q, partWords) {
       }).find(s => s != null) ?? null;
     // A mode phrase names the mode ("dark mode", "in light"); a color word
     // ("dark gray") never does when a mode phrase is there.
-    // A mode named where a mode is said (a pasted label, `dark: cards
-    // #1c1c1e`; "in drak mode", "ligth theme"; the editor's own `(dark)`,
-    // `[dark only]`) is read by the one mode reader, typos that keep the
-    // letters included.
-    const labelMode =
-      [
-        /^\s*([a-z][a-z-]*)\s*:/.exec(text)?.[1],
-        /\b([a-z]+)[\s-]+(?:mode|theme)\b/.exec(text)?.[1],
-        /[([]\s*([a-z]+(?:[\s-]+(?:only|mode))?)\s*[)\]]/.exec(text)?.[1],
-      ]
-        .map(w => (w ? modeNear(w) : null))
-        .find(m => m != null) ?? null;
+    // A pasted label (`dark: cards #1c1c1e`, `drak: …`) names its mode by
+    // the one mode reader, typos that keep the letters included.
+    const labelMode = modeNear(/^\s*([a-z][a-z-]*)\s*:/.exec(text)?.[1] ?? '');
     const lightPhrase =
       labelMode === 'light' ||
       /\blight (mode|theme)\b|\bin light(?=\s*(?:[,;.!?]|$|and\b|only\b))/.test(
@@ -2950,6 +2970,7 @@ function clausesOf(q, partWords) {
       text,
       parts,
       ...(colorRef ? {colorRef} : {}),
+      ...(colorRefWhen ? {colorRefWhen} : {}),
       ...(colorRefProp ? {colorRefProp} : {}),
       ...(groundRef ? {groundRef} : {}),
       ...(groundWhen ? {groundWhen} : {}),
@@ -3342,7 +3363,18 @@ export function draftAnswer(ctx, env, question) {
   // One mode grammar: every way of naming a mode is read here as "dark
   // mode" or "light mode", so every later reader (the ask gate, the clause
   // reader, the mode-only clause) sees the same words.
+  // (A mode said with a typo that keeps its letters, "drak mode", "ligth
+  // theme", or in the editor's own label, "(drak)", "[dark only]", is that
+  // mode, by the one mode reader.)
   question = String(question)
+    .replace(/\b([a-z]+)[- ]?(mode|theme)\b/gi, (m, w, k) => {
+      const mode = modeNear(w);
+      return mode ? `${mode} ${k.toLowerCase()}` : m;
+    })
+    .replace(/[([]\s*([a-z]+(?:[\s-]+only)?)\s*[)\]]/gi, (m, w) => {
+      const mode = modeNear(w);
+      return mode ? ` in ${mode} mode ` : m;
+    })
     .replace(/\b(dark|light)[- ]?mode\b/gi, '$1 mode')
     .replace(
       /\b(?:at night|in the night|night ?(?:mode|theme)|night ?time)\b/gi,
@@ -3404,6 +3436,15 @@ export function draftAnswer(ctx, env, question) {
     question,
     /\b(weight|bold\w*)\b/i.test(question) || /\d,\d{3}\s?ms\b/i.test(question),
   );
+  // "darker by 20%", "transparent by 40%": a way by an amount is that
+  // amount of the way, as the one amount reader takes it ("20% darker",
+  // "40% more transparent").
+  question = question
+    .replace(
+      /\b(?:more\s+)?(transparent|translucent|see-through)\s+by\s+(\d{1,3}(?:\.\d+)?)\s?%/gi,
+      '$2% more $1',
+    )
+    .replace(/\b([a-z]{3,}er)\s+by\s+(\d{1,3}(?:\.\d+)?)\s?%/gi, '$2% $1');
   const {C} = ctx;
   const TARGET = ctx.project.target;
   const TOKENS = ctx.project.core.tokenDefaults;
@@ -5038,6 +5079,20 @@ export function draftAnswer(ctx, env, question) {
   const media = MEDIA_RE.test(q);
   if (media) q = q.replace(MEDIA_RE, ' ').replace(/\s+/g, ' ').trim();
   const clauses = clausesOf(q, lex.parts);
+  // "… make them rounder", "and make it bold": a pronoun names the parts
+  // the clause before named (a bound or a keep included), when the clause
+  // names none of its own.
+  for (let i = 1; i < clauses.length; i++)
+    if (
+      !clauses[i].parts.length &&
+      !clauses[i].except &&
+      clauses[i - 1].parts.length &&
+      // (Of an ask, a bound or a keep: a clause that names a part in a
+      // state only, "when hovering a card, lift it", carries its state.)
+      clauses[i - 1].aspects.length &&
+      /\b(?:them|it|they|those|these)\b/.test(clauses[i].text)
+    )
+      clauses[i].parts = clauses[i - 1].parts.map(x => ({...x}));
   // "never make buttons rounder than 12px; make everything rounder",
   // "never rounder than 8px; make the buttons and cards rounder", "the
   // cards bolder, but never rounder than 8px": a bound is a limit on the
@@ -5659,7 +5714,11 @@ export function draftAnswer(ctx, env, question) {
         continue;
       }
     }
-    const inPlaceText = c.text.replace(/\s+(?:on|when) \w+$/, '');
+    // (A trailing amount, "… on cards 30% lighter", is no part of the
+    // place.)
+    const inPlaceText = c.text
+      .replace(/\s+(?:on|when) \w+$/, '')
+      .replace(/\s+\d+(?:\.\d+)?\s?(?:%|px|rem|em)?(?:\s+[a-z]+)?$/, '');
     // ("Of" names a place only for an element of it: "twice the padding
     // of buttons" compares with them.)
     const ofOnly =
@@ -5738,7 +5797,9 @@ export function draftAnswer(ctx, env, question) {
     // part draws, on that part.
     if (
       /^on\b/.test(place[0]) &&
-      !c.parts.filter(y => !inPlace.includes(y)).every(y => C.MAP[y.on])
+      !c.parts
+        .filter(y => !inPlace.includes(y))
+        .every(y => C.MAP[y.on] || /^(?:page|body)$/.test(y.on))
     )
       continue;
     if (ofOnly) {
@@ -7468,34 +7529,68 @@ export function draftAnswer(ctx, env, question) {
           !colorsIn(String(st.value ?? '')).length
         )
           return [st];
-        const part = one(st.on);
-        const attrs = C.variantValues(part) ?? {};
+        // (Each member's look as it shows it now: a group's members may
+        // differ, a base theme's own rule on one and Core's on another.)
+        const group = FAMILIES[st.on];
+        const members = (group ?? [one(st.on)]).filter(m => C.MAP[m]);
+        /** @type {Map<string, {when?: string, state?: string, byMember: Map<string, string>}>} */
+        const looks = new Map();
+        for (const part of members) {
+          const attrs = C.variantValues(part) ?? {};
+          const baseRules = /** @type {any} */ (env.base).components?.[part];
+          for (const r of C.partReads(part, 'border') ?? []) {
+            if (!r.props.includes('border-color')) continue;
+            for (const w of r.when) {
+              const m =
+                /^(?:([a-z-]+)=([\w-]+))?\s*(?::(focus-within|focus-visible|hover|active))?$/.exec(
+                  w.trim(),
+                );
+              if (!m || (!m[1] && !m[3])) continue;
+              if (m[1] && !(attrs[m[1]] ?? []).includes(m[2])) continue;
+              // (The plain look, "variant=default", takes the new color;
+              // so does hover, which follows it. Statuses and focus keep
+              // theirs.)
+              if (m[2] === 'default' || m[3] === 'hover' || m[3] === 'active')
+                continue;
+              const state = m[3] ? stateFor(st.on, m[3]) : null;
+              if (m[3] && !state) continue;
+              // (What the look shows now: the base theme's own rule for
+              // it, or its plain rule over Core's, before Core's token.)
+              const baseOwn = m[3]
+                ? undefined
+                : (baseRules?.[`${m[1]}:${m[2]}`]?.borderColor ??
+                  baseRules?.base?.borderColor);
+              const when = m[1] ? `${m[1]}:${m[2]}` : undefined;
+              const key = `${when ?? ''}|${state ?? ''}`;
+              const look = looks.get(key) ?? {
+                ...(when ? {when} : {}),
+                ...(state ? {state} : {}),
+                byMember: new Map(),
+              };
+              if (!look.byMember.has(part))
+                look.byMember.set(part, baseOwn ?? `var(${r.token})`);
+              looks.set(key, look);
+            }
+          }
+        }
         /** @type {Step[]} */
         const pins = [];
-        for (const r of C.partReads(part, 'border') ?? []) {
-          if (!r.props.includes('border-color')) continue;
-          for (const w of r.when) {
-            const m =
-              /^(?:([a-z-]+)=([\w-]+))?\s*(?::(focus-within|focus-visible|hover|active))?$/.exec(
-                w.trim(),
-              );
-            if (!m || (!m[1] && !m[3])) continue;
-            if (m[1] && !(attrs[m[1]] ?? []).includes(m[2])) continue;
-            // (The plain look, "variant=default", takes the new color; so
-            // does hover, which follows it. Statuses and focus keep theirs.)
-            if (m[2] === 'default' || m[3] === 'hover' || m[3] === 'active')
-              continue;
-            const state = m[3] ? stateFor(st.on, m[3]) : null;
-            if (m[3] && !state) continue;
-            const pin = set('border-color', `var(${r.token})`, {
-              on: st.on,
-              ...(m[1] ? {when: `${m[1]}:${m[2]}`} : {}),
-              ...(state ? {state} : {}),
-              ...(st.mode ? {mode: st.mode} : {}),
-            });
-            if (!pins.some(x => x.when === pin.when && x.state === pin.state))
-              pins.push(pin);
-          }
+        for (const look of looks.values()) {
+          const values = [...new Set(look.byMember.values())];
+          const flags = (/** @type {string} */ on) => ({
+            on,
+            ...(look.when ? {when: look.when} : {}),
+            ...(look.state ? {state: look.state} : {}),
+            ...(st.mode ? {mode: st.mode} : {}),
+          });
+          if (values.length === 1)
+            pins.push(set('border-color', values[0], flags(st.on)));
+          else
+            for (const [m, v] of look.byMember)
+              pins.push({
+                ...set('border-color', v, flags(m)),
+                ...(m !== st.on ? {only: true} : {}),
+              });
         }
         kept += pins.length;
         return [st, ...pins];
@@ -7802,6 +7897,13 @@ export function draftAnswer(ctx, env, question) {
       ...(d.lookup ? {lookup: d.lookup} : {}),
       ...(d.intent ? {intent: d.intent} : {}),
       ...(d.smallest ? {smallest: true} : {}),
+      // (Whether its steps hold their mode in their values: an except that
+      // takes them up never modes them again.)
+      .../** @type {any} */ (
+        d.modeInValue || /** @type {any} */ (input).modeInValue
+          ? {modeInValue: true}
+          : {}
+      ),
     };
     drafts.push(pushed);
     if (clauseNow) draftClause.set(pushed, clauseNow);
@@ -7852,8 +7954,8 @@ export function draftAnswer(ctx, env, question) {
       }
     if (!named) return false;
     // (The nouns that name what to look at; a word that says the change,
-    // "bold", "red", is not one.)
-    rest = rest
+    // "bold", "red", is not one; nor is the mode it is looked at in.)
+    rest = noMode(rest)
       .replace(
         /\b(?:corners?|radius|radii|shadows?|padding|spacing|backgrounds?|bg|fills?|colou?rs?|text|fonts?|font sizes?|text sizes?|weights?|opacity|line height|leading)\b/g,
         ' ',
@@ -7945,7 +8047,7 @@ export function draftAnswer(ctx, env, question) {
           ? ['color']
           : []),
       ]) {
-        const v = partPropNow(c.colorRef, prop, true);
+        const v = refNow(c.colorRef, prop, c.colorRefWhen);
         if (v) return v;
       }
       return kind === 'text' || !C.MAP[one(c.colorRef)]
@@ -8398,6 +8500,8 @@ export function draftAnswer(ctx, env, question) {
         perLevel ? perLevel.filter(st => !levelOwn(st)) : prior.steps
       ).filter(
         st =>
+          // (A step that keeps the look as it shows it now stays.)
+          st.keeps ||
           !excepted.some(
             x =>
               x.when &&
@@ -9005,11 +9109,19 @@ export function draftAnswer(ctx, env, question) {
       // (Items kept each in its own mode: the except's first mode is not
       // the mode of the whole answer.)
       if (itemModes.size) c.mode = null;
+      // (Steps that hold their mode in their light-dark() halves already,
+      // as the answer they come from wrote them, are never moded again.)
+      const modeInValue = drafts.some(
+        dr =>
+          span.some(x => draftClause.get(dr) === x.clause) &&
+          /** @type {any} */ (dr).modeInValue,
+      );
       push({
         // (The whole ask the except belongs to, every clause of it.)
         text: `${[...new Set(span.map(x => x.clause.text))].join(', and ')}, except ${said.join('; ')}`,
         options: cannotKeep ? [] : [[...priorSteps, ...keeps]],
         sequence: true,
+        ...(modeInValue ? {modeInValue: true} : {}),
         // (A keep in one mode is pinned in that mode by construction; the
         // measure reads both modes of a part's rules alike.)
         intent: intentOf(
@@ -9917,8 +10029,12 @@ export function draftAnswer(ctx, env, question) {
             ? 'color'
             : first);
         // A part with no fill of its own shows the page color beneath it,
-        // as a direction answer steps it from.
-        const own = partPropNow(sourceOn, rp, true);
+        // as a direction answer steps it from. (A status or variant the
+        // clause names on it is the one read: "the success banner".)
+        const sourceWhen = c.parts.find(x => x.on === sourceOn)?.when;
+        const own = sourceWhen
+          ? refNow(sourceOn, rp, sourceWhen)
+          : partPropNow(sourceOn, rp, true);
         const showsPage =
           !own && rp === 'background-color' && Boolean(C.MAP[one(sourceOn)]);
         const value =
@@ -10127,6 +10243,19 @@ export function draftAnswer(ctx, env, question) {
           seenPart(sourceOn);
           // The subject's own variant and the clause's state stay.
           const sub = c.parts.find(x => x.on === subjectOn);
+          // (One that shows that value already, reading the same token,
+          // takes nothing: a token given itself would have no value.)
+          if (
+            !sub?.when &&
+            !c.state &&
+            partPropNow(subjectOn, prop, true) === value
+          ) {
+            push({
+              text: `${subjectOn} has ${prop} ${value} already, as ${sourceOn} does (${now ?? value} now), so nothing changes`,
+              options: [],
+            });
+            continue;
+          }
           const sflags = {
             on: subjectOn,
             ...(sub?.when ? {when: sub.when} : {}),
@@ -11317,6 +11446,34 @@ export function draftAnswer(ctx, env, question) {
     };
   }
   /**
+   * A part's color as it shows it in a status or variant ("the error
+   * banner", "the primary button"): the token it reads there, else its
+   * resting value. `when` may name only the value ("?:error"): its axis
+   * is the part's own.
+   * @param {string} part @param {string} prop @param {string} [when]
+   * @returns {string | null}
+   */
+  function refNow(part, prop, when) {
+    let w = when;
+    if (w?.startsWith('?:')) {
+      const value = w.slice(2);
+      const vals = C.variantValues(one(part)) ?? {};
+      const axis = Object.keys(vals).find(k => (vals[k] ?? []).includes(value));
+      w = axis ? `${axis}:${value}` : undefined;
+    }
+    if (w && /color/.test(prop)) {
+      const group =
+        prop === 'color'
+          ? 'text'
+          : prop === 'border-color'
+            ? 'border'
+            : 'background';
+      const token = restRead(C.partReads(one(part), group) ?? [], w);
+      if (token) return `var(${token})`;
+    }
+    return partPropNow(part, prop, true);
+  }
+  /**
    * A part's value of a property now: its own setting, else the token its
    * plain rule reads for it, written out.
    * @param {string} part
@@ -12384,13 +12541,14 @@ export function draftAnswer(ctx, env, question) {
                     ...(statusWhen ? {when: statusWhen} : {}),
                     state: 'focus-within',
                   }),
-                  ...statuses.map(st =>
-                    set('box-shadow', 'none', {
+                  ...statuses.map(st => ({
+                    ...set('box-shadow', 'none', {
                       on: scopeR,
                       when: `status:${st}`,
                       state: 'focus-within',
                     }),
-                  ),
+                    keeps: true,
+                  })),
                 ],
               ],
               sequence: statuses.length > 0 || allRings,
@@ -15462,9 +15620,14 @@ export function draftAnswer(ctx, env, question) {
         const fainterText =
           on &&
           /\b(?:text|labels?|writing|words)\b/.test(c.text) &&
-          /\b(?:more (?:transparent|translucent|see-through)|less opaque|less (?:visible|noticeable|prominent)|half as visible|fainter|subtler)\b/.test(
+          (/\b(?:more (?:transparent|translucent|see-through)|less opaque|less (?:visible|noticeable|prominent)|half as visible|fainter|subtler)\b/.test(
             c.text,
-          );
+          ) ||
+            // ("the card text 25% of its opacity": a share of the text's
+            // own alpha.)
+            /\b\d{1,3}\s?%\s+of\s+(?:its|their|the)\s+(?:opacity|alpha)\b/.test(
+              c.text,
+            ));
         // (The share said, "30% fainter", "half as visible", read by the
         // one amount reader; else 40%.)
         const fainterBy = exactFactor(c.text);
@@ -16491,6 +16654,36 @@ export function draftAnswer(ctx, env, question) {
                 sequence: steps.length > 1,
               };
           }
+          // "the secondary text on cards lighter": the secondary text token
+          // the parts inside it read, stepped and set on it, never the main
+          // text nor the whole theme.
+          {
+            const roleToks = textOfRole(c, innerTextTokens(C, one(on), true));
+            if (
+              /\bsecondary\b/.test(c.text) &&
+              roleToks.length === 1 &&
+              roleToks[0] === '--color-text-secondary'
+            ) {
+              const steps = perMode(
+                roleToks[0],
+                roleToks[0],
+                {on, ...(f.when ? {when: f.when} : {})},
+                (now, m) =>
+                  shiftKeepAlpha(
+                    now,
+                    lighter ? amount : -amount,
+                    current('--color-background-body', m),
+                  ),
+                c,
+              );
+              if (steps.length)
+                return {
+                  text: `${lighter ? 'lighter' : 'darker'} secondary text${where}: --color-text-secondary on ${on}, the token the parts inside it read${modesSaid(steps)}`,
+                  options: [steps],
+                  sequence: steps.length > 1,
+                };
+            }
+          }
           // A part that takes its color from a prop (a heading): the text
           // token on that part, as "red h1" sets it.
           const viaToken = !env.check([set('color', '#808080', f)]).ok;
@@ -17057,7 +17250,8 @@ export function draftAnswer(ctx, env, question) {
             };
           // In a state, the token the part fills with there (a table row's
           // hover overlay), stepped from its value in each mode and set on
-          // the part: Core reads it only in that state.
+          // the part in that state (Core may read it in another state too,
+          // a toggle's press: that one keeps it).
           // A part whose variants each fill differently keeps the per-part
           // step below: one token would not suit every variant.
           const stateRead =
@@ -17074,7 +17268,7 @@ export function draftAnswer(ctx, env, question) {
             const steps = perMode(
               stateRead,
               stateRead,
-              {...f, state: undefined},
+              f,
               (now, m) =>
                 shiftKeepAlpha(
                   now,
@@ -18098,11 +18292,15 @@ export function draftAnswer(ctx, env, question) {
         text,
       );
     if (!m) return null;
-    // An amount word is never a part ("more padding everywhere").
+    // An amount word is never a part ("more padding everywhere"), nor the
+    // verb that starts the ask ("remove the shadow from everything").
     if (
       /^(more|less|bigger|smaller|extra|some|no|much|little|lots|way|even|slightly)$/.test(
         m[1],
-      )
+      ) ||
+      new RegExp(
+        `^(?:${REMOVAL_VERBS}|make|set|give|turn|change|add|round|keep|use|put)$`,
+      ).test(m[1])
     )
       return null;
     const word = singular(m[1]);
@@ -18896,11 +19094,20 @@ export function draftAnswer(ctx, env, question) {
       if (asked === 'font-family') return current('--font-family-body') || null;
       return null;
     };
-    const vWord = named
-      ? (C.variantValues(one(named)).variant ?? []).find(v =>
-          new RegExp(`\\b${v}\\b`).test(qWords),
-        )
+    // (A value of any of the part's own axes but its size and status, which
+    // the status reader reads: "error toasts" by its type as "secondary
+    // buttons" by its variant.)
+    const vAxisWord = named
+      ? Object.entries(C.variantValues(one(named)) ?? {})
+          .filter(([axis]) => axis !== 'size' && axis !== 'status')
+          .sort(([x], [y]) => Number(y === 'variant') - Number(x === 'variant'))
+          .flatMap(([axis, vals]) =>
+            /** @type {string[]} */ (vals).map(v => ({axis, v})),
+          )
+          .find(({v}) => new RegExp(`\\b${v}\\b`).test(qWords))
       : undefined;
+    const vWord = vAxisWord?.v;
+    const vAxis = vAxisWord?.axis ?? 'variant';
     const qMode = /\bdark mode\b|\bin dark\b/.test(qWords)
       ? 'dark'
       : /\blight mode\b|\bin light\b/.test(qWords)
@@ -19158,11 +19365,24 @@ export function draftAnswer(ctx, env, question) {
     };
     const variantNow = () => {
       if (!named || (!vWord && !readMode)) return null;
-      const when = vWord ? `variant:${vWord}` : 'base';
+      const when = vWord ? `${vAxis}:${vWord}` : 'base';
       const camel = asked.replace(/-([a-z])/g, (_m, x) => x.toUpperCase());
       const own = /** @type {any} */ (env.base).components?.[one(named)]?.[
         when
       ]?.[camel];
+      // (A value the base writes as it is, a literal color, is what it
+      // shows: never a token's value in its place.)
+      if (own != null && !/^var\(/.test(String(own).trim())) {
+        const pair = /^light-dark\(\s*([^,]+?)\s*,\s*([^)]+?)\s*\)$/.exec(
+          String(own).trim(),
+        );
+        const shown = pair
+          ? qMode || readMode
+            ? pair[(qMode ?? readMode) === 'dark' ? 2 : 1]
+            : `${pair[1]} in light mode, ${pair[2]} in dark mode`
+          : String(own);
+        return `${shown}${qMode ? ` in ${qMode} mode` : ''}${vWord ? ` (${vWord})` : ''}`;
+      }
       const tok =
         /^var\(\s*(--[a-z0-9-]+)\s*\)$/.exec(String(own ?? ''))?.[1] ??
         Object.keys(GROUPS)
@@ -19172,7 +19392,7 @@ export function draftAnswer(ctx, env, question) {
               r.props.includes(asked) &&
               r.when.some(w =>
                 vWord
-                  ? w === `variant=${vWord}`
+                  ? w === `${vAxis}=${vWord}`
                   : w === '' || /^variant=(default|primary)$/.test(w),
               ),
           )?.token;
