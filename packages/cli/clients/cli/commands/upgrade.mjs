@@ -17,6 +17,7 @@ import {emit, section, records} from '../formatters/index.mjs';
 import {logger} from '../../../api/logger.mjs';
 import {AstryxError} from '../../../api/error.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
+import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
 import {upgrade as upgradeApi} from '../../../api/upgrade/upgrade.mjs';
 import {doc as upgradeCommand} from './upgrade.doc.mjs';
 import {doc as upgradeFn} from '../../../api/upgrade/upgrade.doc.mjs';
@@ -99,7 +100,7 @@ export function registerUpgrade(program) {
               // A failed migration still names the files it already changed.
               jsonError(
                 e.message,
-                undefined,
+                e.suggestions,
                 e.code,
                 /** @type {any} */ (e).receipt,
               );
@@ -107,6 +108,8 @@ export function registerUpgrade(program) {
               // The logger was silent only for --list; replay the error there.
               // Non-list failures were already printed by the API.
               if (isList) logger.error(e.message);
+              for (const s of e.suggestions ?? [])
+                logger.error(`  ${formatCliCommand(s.name)}  (${s.reason})`);
               process.exitCode = 1;
             }
             return NO_RESULT_SET;

@@ -53,7 +53,10 @@ import {
   setOutcome,
   recordHelp,
 } from '../../../foundation/debug/index.mjs';
-import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
+import {
+  formatCliCommand,
+  getCliInvocation,
+} from '../../../foundation/env/package-manager.mjs';
 
 /**
  * Fully-qualified name of a command relative to the root program, e.g.
@@ -218,12 +221,21 @@ function commanderCodeToErrorCode(commanderCode, message) {
 }
 
 /**
+ * Whether a command, by its words (`theme build`), answers `--json`. The
+ * answer to an option a command does not take offers `--json` only then.
+ * @type {(path: string) => boolean}
+ */
+let jsonSupported = () => true;
+
+/**
  * Install the shim on a Commander program. Idempotent — safe to call
  * once at program-construction time.
  *
  * @param {import('commander').Command} program
+ * @param {{jsonSupported?: (path: string) => boolean}} [options]
  */
-export function installJsonShim(program) {
+export function installJsonShim(program, options = {}) {
+  if (options.jsonSupported) jsonSupported = options.jsonSupported;
   // exitOverride() and configureOutput() do NOT auto-cascade to
   // subcommands that were registered BEFORE the shim runs (Commander
   // copies these settings from parent at command-creation time, not
@@ -315,7 +327,18 @@ function usageSuggestion(err, code) {
   )
     return editorMissingSuggestions(cmd);
   if (code !== 'commander.optionMissingArgument') return undefined;
-  return [{name: `${parts.join(' ')} ${cmd.usage()}`.trim(), reason: 'usage'}];
+  // The command's usage with the option in it, as it takes its value
+  // (`astryx theme build --out <path> <files...>`).
+  const flags = /option '([^']+)' argument missing/.exec(
+    /** @type {any} */ (err)?.message ?? '',
+  )?.[1];
+  const option = flags
+    ? /--[\w-]+(?:\s+[<[][^>\]]*[>\]])?/.exec(flags)?.[0]
+    : undefined;
+  const usage = option
+    ? cmd.usage().replace('[options]', `${option} [options]`)
+    : cmd.usage();
+  return [{name: `${parts.join(' ')} ${usage}`.trim(), reason: 'usage'}];
 }
 
 /**
@@ -631,21 +654,99 @@ export function handleCommanderError(err) {
     code: commanderCodeToErrorCode(code, message),
   });
 
+  // An option a command does not take: the editor's own reader reads its
+  // commands' options; every other command gets the generic answer.
+  const rejected = /** @type {any} */ (err)?.[REJECTED_COMMAND];
+  if (code === 'commander.unknownOption' && rejected)
+    return answerStrayOption(err, rejected, message, exitCode);
+
   // Real error paths. Strip Commander's "error: " prefix once: in the envelope
   // the key is already `error`, and in text mode the Astryx prefix replaces it.
-  // An option a theme command does not take is read by the editor's one
-  // option reader: the option meant, with the command that works.
+  // The editor's reader also reads an option given without its value and
+  // words a theme command does not take.
   const read =
-    code === 'commander.unknownOption' ||
     code === 'commander.optionMissingArgument' ||
     code === 'commander.excessArguments'
-      ? unknownOptionReader(/** @type {any} */ (err)?.[REJECTED_COMMAND], code)
+      ? unknownOptionReader(rejected, code)
       : undefined;
   // The reader checks the commands it offers as the command itself would
   // (which may take a moment): the answer is written once it has them.
   if (read instanceof Promise)
     return read.then(r => finishParseError(err, code, message, exitCode, r));
   return finishParseError(err, code, message, exitCode, read);
+}
+
+/**
+ * The answer to an option a command does not take, loaded only for this
+ * error. On the program itself, before a word that names no command
+ * (`astryx describe Table --format json`), the unknown command is the fault
+ * to report, and its answer names the command meant. Otherwise the editor's
+ * reader reads the option for its own commands, and every other command
+ * gets the options it takes and the run as meant (./stray-option.mjs).
+ * @param {unknown} err
+ * @param {any} rejected the command that refused the option
+ * @param {string} message Commander's message
+ * @param {number} exitCode
+ * @returns {Promise<boolean>}
+ */
+async function answerStrayOption(err, rejected, message, exitCode) {
+  const code = 'commander.unknownOption';
+  const words = process.argv.slice(2);
+  const stray = /unknown option '([^']+)'/.exec(message)?.[1] ?? '';
+  const {strayOptionAnswer, withoutStray} = await import('./stray-option.mjs');
+  if (!rejected.parent) {
+    const {findEntry, firstWord, unknownCommandAnswer} =
+      await import('./unknown-command.mjs');
+    // Only a word before the stray option is read as the command: after it,
+    // the word may be the option's value (`astryx --format text component
+    // Table`), and the unknown option stays the fault.
+    const at = words.indexOf(stray);
+    const first = firstWord(at < 0 ? words : words.slice(0, at), rejected);
+    const cleaned = withoutStray(words, stray, rejected.options);
+    if (
+      first &&
+      !rejected.commands.some((/** @type {any} */ c) => c.name() === first.word)
+    ) {
+      const answer = await unknownCommandAnswer(rejected, cleaned, {
+        findEntry,
+      });
+      setOutcome('parse-error', {
+        exitCode: exitCode || 1,
+        error: new Error(answer?.message ?? message),
+        code: ERROR_CODES.ERR_UNKNOWN_COMMAND,
+      });
+      return finishParseError(
+        err,
+        code,
+        message,
+        exitCode,
+        answer && {
+          message: answer.message,
+          // Only the runs: a near or listed command name is no run to print
+          // after `Run:`, so the program's help stands in for those.
+          suggestions: answer.suggestions.some(s =>
+            s.name.startsWith('astryx '),
+          )
+            ? answer.suggestions
+                .filter(s => s.name.startsWith('astryx '))
+                .map(s => ({name: formatCliCommand(s.name), reason: s.reason}))
+            : [{name: formatCliCommand('--help'), reason: 'every command'}],
+        },
+        ERROR_CODES.ERR_UNKNOWN_COMMAND,
+      );
+    }
+  }
+  const read = await unknownOptionReader(rejected, code);
+  return finishParseError(
+    err,
+    code,
+    message,
+    exitCode,
+    read ??
+      strayOptionAnswer(rejected, message.replace(/^error:\s*/i, ''), words, {
+        jsonSupported,
+      }),
+  );
 }
 
 /**
@@ -656,16 +757,19 @@ export function handleCommanderError(err) {
  * @param {string} code
  * @param {string} message
  * @param {number} exitCode
- * @param {{message: string, suggestions: Array<{name: string, reason: string}>} | undefined} read
+ * @param {{message: string, suggestions: Array<{name: string, reason: string}>} | undefined | null} read
+ * @param {string} [errorCode] the code the answer reports, when it is not
+ *   the one Commander's code maps to
  * @returns {boolean}
  */
-function finishParseError(err, code, message, exitCode, read) {
-  const suggestions = read?.suggestions ?? usageSuggestion(err, code);
+function finishParseError(err, code, message, exitCode, read, errorCode) {
+  const answer = read ?? undefined;
+  const suggestions = answer?.suggestions ?? usageSuggestion(err, code);
   // In the theme editor a missing argument names what was given: in
   // `set corners small` the first word is read as the theme, so "value" alone
   // would name the wrong thing.
-  const cleaned = read
-    ? read.message
+  const cleaned = answer
+    ? answer.message
     : code === 'commander.missingArgument' && suggestions?.length === 2
       ? editorMissingMessage(err, message)
       : message.replace(/^error:\s*/i, '');
@@ -673,7 +777,7 @@ function finishParseError(err, code, message, exitCode, read) {
     emitJsonError(
       cleaned,
       suggestions,
-      commanderCodeToErrorCode(code, cleaned),
+      errorCode ?? commanderCodeToErrorCode(code, cleaned),
     );
   } else {
     // Commander's own line was suppressed above, so a parse failure reads the
