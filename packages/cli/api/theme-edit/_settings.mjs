@@ -7792,6 +7792,22 @@ export async function contrastProblems(ctx, data, res) {
     return hit?.value ?? null;
   };
   /**
+   * A color as a mode draws it: a `light-dark()` pair gives its side, and
+   * a token of the theme, `var(--token)`, gives the value it has in that
+   * mode. Anything else is as written.
+   * @param {string | null | undefined} v @param {string} m
+   * @returns {string | null}
+   */
+  const inMode = (v, m) => {
+    if (v == null) return null;
+    const split = /^light-dark\((.*),\s*([^,]*)\)$/.exec(String(v).trim());
+    const side = split ? split[m === 'dark' ? 2 : 1].trim() : String(v).trim();
+    const ref = /^var\((--[\w-]+)\)$/.exec(side);
+    return ref
+      ? (res[/** @type {'light' | 'dark'} */ (m)][ref[1]] ?? side)
+      : side;
+  };
+  /**
    * Text on a lifted background (the accent tint, the neutral track) as
    * the part sets it for itself: the official themes lift secondary text
    * there, and so does a generated theme.
@@ -7802,10 +7818,7 @@ export async function contrastProblems(ctx, data, res) {
     if (!tok || !LIFT_GROUND_TOKENS.has(String(p.bg.tokens[0]))) return null;
     const own = /** @type {any} */ (res).parts?.[p.fg.target ?? p.text]?.[tok];
     if (typeof own !== 'string') return null;
-    const split = /^light-dark\((.*),\s*([^,]*)\)$/.exec(own.trim());
-    const v = split ? split[m === 'dark' ? 2 : 1].trim() : own;
-    const ref = /^var\((--[\w-]+)\)$/.exec(v);
-    return ref ? res[/** @type {'light' | 'dark'} */ (m)][ref[1]] : v;
+    return inMode(own, m);
   };
   /** @type {(p: TextPair, side: 'fg' | 'bg', m: string) => string | null} */
   const ofBase = (p, side, m) => {
@@ -7827,10 +7840,7 @@ export async function contrastProblems(ctx, data, res) {
           })
         : null);
     if (!own) return null;
-    const ref = /^var\((--[\w-]+)\)$/.exec(own.trim());
-    return ref
-      ? (res[/** @type {'light' | 'dark'} */ (m)][ref[1]] ?? null)
-      : own;
+    return inMode(own, m);
   };
   /**
    * The variant a pair's text is drawn in: its own, or the one variant of
@@ -7872,6 +7882,25 @@ export async function contrastProblems(ctx, data, res) {
     return hits.length === 1 ? `variant:${hits[0]}` : null;
   };
   /**
+   * The text tokens a pair's text reads in a mode. On Core's media surface
+   * inside its part (a toast's inverted surface) that is the on-dark color
+   * where the ground is dark and the on-light color where it is light, as
+   * Core's media surface sets them; else the tokens the census saw.
+   * @param {TextPair} p @param {string} m
+   * @param {(p: TextPair, side: 'fg' | 'bg', m: string) => string | null} read
+   * @returns {string[]}
+   */
+  const textTokens = (p, m, read) => {
+    const t = p.fg.target;
+    if (!t || !ctx.C.MAP[t]?.media || ctx.C.MAP[t]?.own?.color)
+      return p.fg.tokens;
+    const ground = parseColor(read(p, 'bg', m));
+    if (!ground) return p.fg.tokens;
+    return [
+      plainOn(ground) === '#ffffff' ? '--color-on-dark' : '--color-on-light',
+    ];
+  };
+  /**
    * The setting that draws a pair's text in a mode, by CSS's own order: a
    * `color` the text's part sets wins over a text token it sets, which
    * wins over that token set on the part the text sits on (every part
@@ -7896,35 +7925,36 @@ export async function contrastProblems(ctx, data, res) {
     const on = (x, t) => t != null && partsOf(ctx, x).includes(t);
     const own = p.fg.target;
     const around = p.bg.target !== own ? p.bg.target : null;
+    const tokens = textTokens(p, m, value);
     return (
       latest(
         x => x.source === 'property' && x.thing === 'color' && on(x, own),
       ) ??
       latest(
-        x =>
-          x.source === 'token' && p.fg.tokens.includes(x.thing) && on(x, own),
+        x => x.source === 'token' && tokens.includes(x.thing) && on(x, own),
       ) ??
       latest(
-        x =>
-          x.source === 'token' &&
-          p.fg.tokens.includes(x.thing) &&
-          on(x, around),
+        x => x.source === 'token' && tokens.includes(x.thing) && on(x, around),
       )
     );
   };
   /** @type {(p: TextPair, side: 'fg' | 'bg', m: string) => string | null} */
   const value = (p, side, m) => {
     const s = p[side];
+    const tokens = side === 'fg' ? textTokens(p, m, value) : s.tokens;
     return (
-      (side === 'fg'
-        ? (drawnBy(p, m)?.value ?? null)
-        : override(s, side, m, /** @type {any} */ (p).when)) ??
+      inMode(
+        side === 'fg'
+          ? drawnBy(p, m)?.value
+          : override(s, side, m, /** @type {any} */ (p).when),
+        m,
+      ) ??
       // The base theme's own part style (neutral's destructive button),
       // which Core's reads do not know.
       ofBase(p, side, m) ??
       (side === 'fg' ? onTint(p, m) : null) ??
-      (s.tokens.length
-        ? res[/** @type {'light' | 'dark'} */ (m)][s.tokens[0]]
+      (tokens.length
+        ? res[/** @type {'light' | 'dark'} */ (m)][tokens[0]]
         : s.raw)
     );
   };
@@ -7934,8 +7964,9 @@ export async function contrastProblems(ctx, data, res) {
     // unlifted base pair.
     if (onTint(p, m) != null) return null;
     const s = p[side];
-    return s.tokens.length
-      ? base[/** @type {'light' | 'dark'} */ (m)][s.tokens[0]]
+    const tokens = side === 'fg' ? textTokens(p, m, baseValue) : s.tokens;
+    return tokens.length
+      ? base[/** @type {'light' | 'dark'} */ (m)][tokens[0]]
       : s.raw;
   };
   // The census renders each part once, with its default props: text on a
@@ -8086,10 +8117,11 @@ export async function contrastProblems(ctx, data, res) {
             drawn.on && partsOf(ctx, drawn).includes(String(x.textPart));
           return `${P} set ${slug} ${drawn.thing} ${color}${drawn.on ? ` --on ${drawn.on}${drawn.only ? ' --only' : ''}` : ''}${when(drawn.when ?? (onText ? variant : null))}${modeFlag(x.mode)}`;
         }
-        if (x.fgToken)
+        const token = x.fgToken ? textTokens(pair, x.mode, value)[0] : null;
+        if (token)
           return x.bgPart && x.bgPart !== x.textPart
-            ? `${P} set ${slug} ${x.fgToken} ${color} --on ${x.bgPart}${when(x.when)}${modeFlag(x.mode)}`
-            : `${P} set ${slug} ${x.fgToken} ${color}${x.textPart ? ` --on ${x.textPart}` : ''}${when(variant)}${modeFlag(x.mode)}`;
+            ? `${P} set ${slug} ${token} ${color} --on ${x.bgPart}${when(x.when)}${modeFlag(x.mode)}`
+            : `${P} set ${slug} ${token} ${color}${x.textPart ? ` --on ${x.textPart}` : ''}${when(variant)}${modeFlag(x.mode)}`;
         return x.textPart
           ? `${P} set ${slug} color ${color} --on ${x.textPart}${when(x.when)}${modeFlag(x.mode)}`
           : null;

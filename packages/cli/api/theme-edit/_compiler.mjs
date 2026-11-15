@@ -578,9 +578,9 @@ export function makeCompiler(project, parts) {
         );
         if (was && ratio(was[0], was[1]) <= r + 0.05) continue;
         // Pairs alike in color are one problem only when they read the same
-        // token: text on another token is another fix, and shows as the
-        // tokens part ways.
-        const key = `${p.text}|${p.fg.tokens[0] ?? ''}|${fg}|${bg}|${beneath}|${m}`;
+        // token on the same part: text on another token or on another part
+        // is another fix, and shows as they part ways.
+        const key = `${p.text}|${p.fg.tokens[0] ?? ''}|${p.bg.target ?? ''}|${fg}|${bg}|${beneath}|${m}`;
         if (seen.has(key)) continue;
         seen.add(key);
         out.push({
