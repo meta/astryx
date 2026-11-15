@@ -415,12 +415,8 @@ export async function recordRun(fn, {armedThroughout = false} = {}) {
           if (hooks && url.startsWith('file:')) {
             try {
               const file = fileURLToPath(url);
-              // A module only checked for before is checked by its stamp
-              // from here on: the load reads its content.
-              const had = reads.get(file);
-              if (had === undefined || had === PRESENT) {
-                reads.set(file, fileStamp(file));
-              }
+              // The load reads the module's content: its stamp.
+              keepState(reads, file, () => fileStamp(file), true);
             } catch {
               // A URL with no file path holds nothing to check.
             }
@@ -479,10 +475,7 @@ function noteLookups(specifier, parentURL, reads) {
     for (;;) {
       if (path.basename(dir) !== 'node_modules') {
         const candidate = path.join(dir, 'node_modules', name);
-        const had = reads.get(candidate);
-        if (had === undefined || had === PRESENT) {
-          reads.set(candidate, lookupStamp(candidate));
-        }
+        keepState(reads, candidate, () => lookupStamp(candidate));
       }
       const up = path.dirname(dir);
       if (up === dir) break;

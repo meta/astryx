@@ -356,13 +356,25 @@ export function recordStates(states) {
  * one, except that a path only checked for takes any other state read later,
  * and a folder only probed takes a full stamp read later. What the later
  * call returned counts, as when a run reads a path it checked for (see
- * `note`).
+ * `note`). Every place that adds a state to a record goes through this rule.
  * @param {Map<string, string>} seen
  * @param {string} file
- * @param {string} state
+ * @param {string | (() => string)} state - The state, or what gives it, asked
+ *   only when the rule could keep it: a stat costs more than the check.
+ * @param {boolean} [full] - With `state` given by a function: whether it is a
+ *   full stamp, which a folder only probed takes too.
  */
-export function keepState(seen, file, state) {
+export function keepState(seen, file, state, full = false) {
   const had = seen.get(file);
+  if (typeof state === 'function') {
+    if (
+      had !== undefined &&
+      had !== PRESENT &&
+      !(full && had.startsWith('dir:'))
+    )
+      return;
+    state = state();
+  }
   if (
     had === undefined ||
     (had === PRESENT && state !== PRESENT) ||
@@ -412,11 +424,7 @@ export function reusedWhileUnchanged(load, isUnchanged = unchangedSince) {
     if (!fresh && last && isUnchanged(last.reads)) {
       const {reads: recorded, value} = last;
       return value.then(result => {
-        const runs = reads.getStore();
-        if (runs)
-          for (const [file, state] of recorded) {
-            for (const seen of runs) if (!seen.has(file)) seen.set(file, state);
-          }
+        recordStates(recorded);
         return result;
       });
     }

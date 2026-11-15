@@ -297,6 +297,53 @@ describe('an exact run', () => {
     expect(unchangedSince(seen)).toBe(false);
   });
 
+  it('checks a file a reused value read by its stamp, though the run first only checked for it', async () => {
+    const {file} = scratch();
+    const load = reusedWhileUnchanged(async () =>
+      fs.readFileSync(file, 'utf8'),
+    );
+    await load();
+    /** @type {Map<string, string>} */
+    const seen = new Map();
+    await recordReads(
+      seen,
+      async () => {
+        fs.existsSync(file);
+        await load();
+      },
+      {exact: true},
+    );
+    fs.writeFileSync(file, 'two, longer');
+    expect(unchangedSince(seen)).toBe(false);
+  });
+
+  it('asks for a state only when the rule could keep it', () => {
+    let asked = 0;
+    const state = () => {
+      asked += 1;
+      return '3:1:1:7';
+    };
+    /** @type {Map<string, string>} */
+    const seen = new Map([
+      ['/stamped', '1:1:1:1'],
+      ['/checked', 'present'],
+      ['/folder', 'dir:9'],
+    ]);
+    keepState(seen, '/stamped', state);
+    keepState(seen, '/folder', state);
+    expect(asked).toBe(0);
+    keepState(seen, '/checked', state);
+    keepState(seen, '/folder', state, true);
+    keepState(seen, '/new', state);
+    expect(asked).toBe(3);
+    expect(Object.fromEntries(seen)).toEqual({
+      '/stamped': '1:1:1:1',
+      '/checked': '3:1:1:7',
+      '/folder': '3:1:1:7',
+      '/new': '3:1:1:7',
+    });
+  });
+
   it('keeps a stamp read elsewhere over an existence check, and never the other way', () => {
     const {file} = scratch();
     const stamped = exact(() => fs.readFileSync(file, 'utf8'));
