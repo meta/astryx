@@ -8,6 +8,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {modeValue} from '../../test-utils/theme-edit-fixture.mjs';
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {
   themeEditHow,
@@ -103,17 +104,23 @@ describe('one-mode colors on parts whose variants have their own', () => {
       on: 'button',
       mode: 'light',
     });
-    expect(ruleOf('p2', '.astryx-button[data-variant="destructive"]')).toMatch(
-      /background-color: light-dark\(#eeeeee, var\(--color-error-muted\)\)/,
-    );
+    const at = (/** @type {string} */ sel, /** @type {string} */ prop) =>
+      ['light', 'dark'].map(m =>
+        modeValue(cssOf('p2'), sel, prop, /** @type {'light' | 'dark'} */ (m)),
+      );
+    expect(
+      at('.astryx-button[data-variant="destructive"]', 'background-color'),
+    ).toEqual(['#eeeeee', 'var(--color-error-muted)']);
     await themeEditSet('p2', 'border-color', '#ff0000', {
       cwd,
       on: 'card',
       mode: 'dark',
     });
-    expect(ruleOf('p2', '.astryx-card[data-variant="blue"]')).toMatch(
-      /border-color: light-dark\(var\(--color-border-blue\), #ff0000\)/,
-    );
+    // Light writes nothing: Core's own blue border stays.
+    expect(at('.astryx-card[data-variant="blue"]', 'border-color')).toEqual([
+      undefined,
+      '#ff0000',
+    ]);
   }, 240_000);
 
   it("keeps a hover set as background-color on butter's secondary button after a light-only background", async ctx => {
@@ -143,15 +150,20 @@ describe('one-mode colors on parts whose variants have their own', () => {
       on: 'button',
       mode: 'light',
     });
+    const css = cssOf('p4');
     for (const name of ['primary', 'secondary', 'ghost', 'destructive']) {
-      const rule = ruleOf('p4', `.astryx-button[data-variant="${name}"]`);
-      expect(rule, name).toMatch(
-        /background-color: light-dark\(#eeeeee, #ff0000\)/,
+      const sel = `.astryx-button[data-variant="${name}"]`;
+      expect(modeValue(css, sel, 'background-color', 'light'), name).toBe(
+        '#eeeeee',
       );
-      // Nothing after it in the rule puts the plain red back.
-      expect(rule.split('light-dark(#eeeeee, #ff0000)')[1], name).not.toMatch(
-        /background:/,
-      );
+      // Dark keeps the plain red: the variant's own rule holds it where the
+      // base theme styles the variant, else the part's rule does.
+      expect(
+        modeValue(css, sel, 'background', 'dark') ??
+          modeValue(css, sel, 'background-color', 'dark') ??
+          modeValue(css, '.astryx-button', 'background', 'dark'),
+        name,
+      ).toBe('#ff0000');
     }
   }, 240_000);
 });

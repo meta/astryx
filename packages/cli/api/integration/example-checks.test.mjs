@@ -367,6 +367,31 @@ describe('showcase_not_standalone', () => {
     );
   });
 
+  it('reads a Node built-in that only devDependencies install as server-only', async () => {
+    write({
+      'package.json': JSON.stringify({
+        name: '@acme/kit',
+        version: '1.0.0',
+        devDependencies: {events: '^3.3.0'},
+      }),
+      'templates/card.doc.mjs': blockDoc(
+        'card',
+        ", exampleFor: 'AcmeCard', isShowcase: true",
+      ),
+      'templates/card.tsx': [
+        "import {EventEmitter} from 'events';",
+        'export default function Card() {',
+        '  return new EventEmitter() && null;',
+        '}',
+        '',
+      ].join('\n'),
+    });
+
+    const notes = await notesOf(['showcase_not_standalone']);
+    expect(notes).toHaveLength(1);
+    expect(notes[0].message).toContain("imports 'events'");
+  });
+
   it('lists a block that shows components only through alsoShowcaseFor', async () => {
     write({
       'package.json': JSON.stringify({name: '@acme/kit', version: '1.0.0'}),

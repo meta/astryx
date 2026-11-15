@@ -48,7 +48,7 @@ describe('interaction proof routing', () => {
     expect(proofs.if).toMatch(/^\$\{\{ \(github\.event_name != 'pull_request'/);
     // Main's nightly full run starts them too (spec:AST-030 FR31).
     expect(ungated(proofs.if)).toBe(
-      "(github.event_name != 'workflow_dispatch' || inputs.operation == 'interaction-full' && github.ref == 'refs/heads/main') && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true'",
+      "(github.event_name != 'workflow_dispatch' || inputs.operation == 'interaction-full' && github.ref == 'refs/heads/main') && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.room.outputs.superseded != 'true' && needs.admission.outputs.full != 'true'",
     );
     // Admission too: the Storybook build starts beside it (spec:AST-030 FR16).
     expect(proofs.needs).toEqual([
