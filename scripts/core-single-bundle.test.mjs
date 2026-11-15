@@ -159,8 +159,10 @@ describe('Core in esbuild bundles', () => {
         metafile: true,
       });
       const {outputs} = result.metafile;
-      const entry = Object.keys(outputs).find(
-        file => outputs[file].entryPoint != null,
+      // The app's own entry: an output for a dynamic import() has an
+      // entryPoint too.
+      const entry = Object.keys(outputs).find(file =>
+        outputs[file].entryPoint?.endsWith('main.jsx'),
       );
       const startup = new Set([entry]);
       const queue = [entry];

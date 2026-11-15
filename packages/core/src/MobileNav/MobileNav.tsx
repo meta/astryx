@@ -62,8 +62,8 @@ import {
   easeVars,
   spacingVars,
 } from '../theme/tokens.stylex';
-import {Button} from '../Button';
-import {Icon} from '../Icon';
+import {Button} from '../Button/Button';
+import {Icon} from '../Icon/Icon';
 import {Heading} from '../Heading/Heading';
 import {
   MAX_CLOSE_DELAY_MS,
@@ -72,7 +72,8 @@ import {
 
 export {MAX_CLOSE_DELAY_MS};
 import {holdEntranceInput} from '../Layer/holdEntranceInput';
-import {mergeProps, composeEventHandlers} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
+import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
