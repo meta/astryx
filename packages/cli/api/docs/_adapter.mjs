@@ -43,6 +43,7 @@ import {
   loadTreeInputs,
 } from '../../foundation/doc-compiler/tree.mjs';
 import {sortDiagnostics} from '../../foundation/doc-compiler/diagnostics.mjs';
+import {indexView} from '../../foundation/doc-compiler/lenses.mjs';
 import {
   linkBlocks,
   linkFields,
@@ -1963,6 +1964,41 @@ export function packageDocNames(catalog, tree, owner) {
     if (ownsNode(node, owner)) names.add(node.route);
   }
   return [...names].sort();
+}
+
+/**
+ * For each name a package's docs open by ({@link packageDocNames}) whose topic
+ * or guide another package owns, the keys of the sections this package adds
+ * to it, in reading order: `astryx docs <name> <key>` opens one. A theme
+ * package documents itself by adding a section to `theme`, a topic the CLI or
+ * the app's base library owns, and a long one; the key lets a reader open the
+ * package's own section without reading the whole topic. The keys are the
+ * ones the topic's own read lists, from the same merged topic, so each opens.
+ * @param {DocsCatalog} catalog
+ * @param {DocsTree} tree
+ * @param {string} owner the package
+ * @returns {Promise<Record<string, string[]>>}
+ */
+export async function packageDocSections(catalog, tree, owner) {
+  /** @type {Record<string, string[]>} */
+  const sections = {};
+  for (const name of packageDocNames(catalog, tree, owner)) {
+    const found = nameOwner(tree, catalog, name);
+    const entry =
+      found?.kind === 'topic'
+        ? found.entry
+        : found?.kind === 'node' && found.node.kind === 'generic'
+          ? guideEntry(found.node)
+          : null;
+    if (entry == null || entry.package === owner) continue;
+    const node = await lowerTopic(catalog, entry);
+    const sectionPackage = sectionPackageOf(entry, node);
+    const keys = indexView(node)
+      .sections.map(each => each.id)
+      .filter(id => id != null && sectionPackage(id) === owner);
+    if (keys.length > 0) sections[name] = keys;
+  }
+  return sections;
 }
 
 /**

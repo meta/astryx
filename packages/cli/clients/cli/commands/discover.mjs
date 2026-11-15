@@ -133,6 +133,28 @@ function summarize(result) {
 }
 
 /**
+ * A package as the text views show it: a doc that adds sections to another
+ * package's topic names them beside the doc, so a reader can open its own
+ * section straight away (`docs theme install-and-apply`). The JSON keeps
+ * `docs` and `docSections` apart.
+ * @template {{docs?: string[], docSections?: Record<string, string[]>}} T
+ * @param {T} entry
+ * @returns {Omit<T, 'docSections'>}
+ */
+function withDocSections(entry) {
+  const {docSections, ...rest} = entry;
+  if (!docSections || !rest.docs) return rest;
+  return {
+    ...rest,
+    docs: rest.docs.map(name =>
+      docSections[name]
+        ? `${name} (sections: ${docSections[name].join(', ')})`
+        : name,
+    ),
+  };
+}
+
+/**
  * Record options that summarize each item list to its first names.
  * @param {boolean} full print every name instead
  * @returns {import('../formatters/index.mjs').RecordOptions}
@@ -355,7 +377,7 @@ export function registerDiscover(program) {
               blocks.push(section('Installed'));
               blocks.push(
                 result.data.length > 0
-                  ? records(result.data, listOpts)
+                  ? records(result.data.map(withDocSections), listOpts)
                   : text(
                       kind
                         ? `None of this project's integrations add ${kind}.`
@@ -425,7 +447,9 @@ export function registerDiscover(program) {
           case 'discover.detail': {
             const d = result.data;
             /** @type {import('../formatters/index.mjs').Block[]} */
-            const blocks = [record(d, {omit: ['versions', 'install']})];
+            const blocks = [
+              record(withDocSections(d), {omit: ['versions', 'install']}),
+            ];
             if (d.versions && d.versions.length > 0) {
               const shown = d.version;
               const lines = versionLines(d.versions, {

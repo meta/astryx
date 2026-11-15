@@ -170,6 +170,55 @@ describe('astryx discover: docs an installed integration adds', () => {
   );
 });
 
+describe('astryx discover: sections an integration adds to another doc', () => {
+  it(
+    'names the sections it adds, each a key astryx docs opens',
+    async () => {
+      const result = await runCli(['--json', 'discover'], {cwd: tmpDir});
+      const entry = JSON.parse(result.stdout).data.find(
+        (/** @type {{name: string}} */ each) => each.name === '@acme/kit',
+      );
+      // Only the docs another package owns: its own topics, namespace, guide
+      // and replacements have no entry.
+      expect(entry.docSections).toEqual({
+        theme: ['apply-the-acme-theme'],
+        'authoring/quick-start': ['acme-notes'],
+      });
+      for (const [name, keys] of Object.entries(entry.docSections)) {
+        for (const key of /** @type {string[]} */ (keys)) {
+          const read = await runCli(['--json', 'docs', name, key], {
+            cwd: tmpDir,
+          });
+          expect({name, key, status: read.status}).toEqual({
+            name,
+            key,
+            status: 0,
+          });
+          expect(JSON.parse(read.stdout).package).toBe('@acme/kit');
+        }
+      }
+    },
+    SLOW,
+  );
+
+  it(
+    'shows them beside the doc in text, and on the doc’s item page',
+    async () => {
+      const text = await runCli(['discover', '--installed'], {cwd: tmpDir});
+      expect(text.stdout).toContain('theme (sections: apply-the-acme-theme)');
+      const page = await runCli(['--json', 'discover', '@acme/kit/theme'], {
+        cwd: tmpDir,
+      });
+      expect(JSON.parse(page.stdout).data).toMatchObject({
+        kind: 'doc',
+        name: 'theme',
+        sections: ['apply-the-acme-theme'],
+      });
+    },
+    SLOW,
+  );
+});
+
 describe('astryx discover: an icon set beside docs', () => {
   it(
     'lists an icon set’s own icon definitions with the set, never as docs',
