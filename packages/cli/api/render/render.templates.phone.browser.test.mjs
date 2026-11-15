@@ -1,9 +1,11 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Every ready page template, rendered and shown in Chromium at a 390 px
- * phone screen with no JavaScript, fits the screen: the page has no
- * horizontal overflow. Pages copied from a template keep its layout, so an
+ * @file Every ready page template, rendered and shown in Chromium in a 390 px
+ * window with no JavaScript, fits the window: the page has no horizontal
+ * overflow. With no scripts the page keeps its desktop type and control
+ * sizes, so this measures layout at phone width, not a phone's larger touch
+ * text. Pages copied from a template keep its layout, so an
  * overflowing template makes overflowing pages. CI runs it in
  * node-browser-contracts' "Render template phone browser case" step.
  */
@@ -13,13 +15,14 @@ import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
-import {render} from './render.mjs';
-import {template} from '../template/template.mjs';
 import {
   makeLinkedFixture,
   removeLinkedFixture,
 } from '../../test-utils/linked-fixture.mjs';
-import {buildThemeOnce} from '../../test-utils/render-template-slices.mjs';
+import {
+  readyPageTemplates,
+  scaffoldAndRender,
+} from '../../test-utils/render-template-slices.mjs';
 
 // The case runs only in node-browser-contracts' "Render template phone
 // browser case" step, after the Chromium install; the Node shards list it as
@@ -27,7 +30,7 @@ import {buildThemeOnce} from '../../test-utils/render-template-slices.mjs';
 const BROWSER_STEP = process.env.ASTRYX_RENDER_TEMPLATE_PHONE_BROWSER === '1';
 const {chromium} = createRequire(import.meta.url)('playwright');
 
-/** A phone screen: the width a template must fit without sideways scroll. */
+/** A phone-width window: the width a template must fit without sideways scroll. */
 const PHONE = {width: 390, height: 844};
 
 /**
@@ -71,40 +74,10 @@ describe.runIf(BROWSER_STEP)(
         'react-dom',
         'recharts',
       ]);
-      const listed = /** @type {any} */ (
-        await template(undefined, {list: true, type: 'page', cwd: home})
-      );
-      ready = listed.data
-        .filter((/** @type {any} */ t) => t.isReady)
-        .map((/** @type {any} */ t) => t.id);
-      /** @type {Set<string>} */
-      const themes = new Set();
-      for (const id of ready) {
-        await template(id, {
-          targetPath: `templates/${id}`,
-          type: 'page',
-          cwd: home,
-        });
-        const source = fs.readFileSync(
-          path.join(home, 'templates', id, 'page.tsx'),
-          'utf8',
-        );
-        for (const m of source.matchAll(
-          /from '(@astryxdesign\/theme-[a-z0-9-]+)[/']/g,
-        ))
-          themes.add(m[1]);
-      }
-      for (const name of themes)
-        buildThemeOnce(
-          fs.realpathSync(path.join(home, '..', 'node_modules', name)),
-        );
-      for (let i = 0; i < ready.length; i += 4) {
-        await Promise.all(
-          ready
-            .slice(i, i + 4)
-            .map(id => render(`templates/${id}/page.tsx`, {cwd: home})),
-        );
-      }
+      ready = await readyPageTemplates(home);
+      const failed = await scaffoldAndRender(home, ready);
+      if (failed.length)
+        throw new Error(`Templates did not render:\n${failed.join('\n')}`);
       const executablePath = chromium.executablePath();
       if (!fs.existsSync(executablePath))
         throw new Error(
