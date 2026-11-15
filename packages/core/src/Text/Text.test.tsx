@@ -250,13 +250,25 @@ describe('Text', () => {
       expect(wrapOf(screen.getByText(`${token}/block`))).toBe(DEFAULT_WRAP);
     });
 
-    it('leaves single-line truncation clipping on one line', () => {
+    it('keeps single-line truncation on one line by default', () => {
       render(<Text maxLines={1}>{token}</Text>);
       const style = getComputedStyle(screen.getByText(token));
       expect(style.whiteSpace).toBe('nowrap');
       expect(style.textOverflow).toBe('ellipsis');
-      expect(style.wordBreak).toBe('break-all');
-      expect(style.overflowWrap).not.toBe('break-word');
+      expect(style.wordBreak).toBe('normal');
+      expect(style.overflowWrap).toBe('break-word');
+    });
+
+    it('preserves word boundaries when a caller allows the line to wrap', () => {
+      render(
+        <Text maxLines={1} style={{whiteSpace: 'normal'}}>
+          {token}
+        </Text>,
+      );
+      const style = getComputedStyle(screen.getByText(token));
+      expect(style.whiteSpace).toBe('normal');
+      expect(style.wordBreak).toBe('normal');
+      expect(style.overflowWrap).toBe('break-word');
     });
   });
 

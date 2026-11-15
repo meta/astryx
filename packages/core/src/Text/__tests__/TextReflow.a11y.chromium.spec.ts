@@ -114,9 +114,16 @@ test('single-line truncation still clips the token on one line at 320 px', async
       return {
         whiteSpace: computed.whiteSpace,
         textOverflow: computed.textOverflow,
+        wordBreak: computed.wordBreak,
+        overflowWrap: computed.overflowWrap,
       };
     });
-    expect(style, id).toEqual({whiteSpace: 'nowrap', textOverflow: 'ellipsis'});
+    expect(style, id).toEqual({
+      whiteSpace: 'nowrap',
+      textOverflow: 'ellipsis',
+      wordBreak: 'normal',
+      overflowWrap: 'break-word',
+    });
     expect(await lineCount(target), id).toBe(1);
     expect(
       await target.evaluate(
