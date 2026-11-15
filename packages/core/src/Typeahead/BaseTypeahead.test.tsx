@@ -101,11 +101,11 @@ describe('BaseTypeahead', () => {
       bootstrap: () => [],
     };
     render(
-      <Typeahead
-        label="Fruit"
+      <BaseTypeahead
         searchSource={source}
-        value={null}
+        value={{id: 'c', label: 'Avocado'}}
         onChange={() => {}}
+        aria-label="Fruit"
       />,
     );
     const field = screen.getByRole('combobox');
@@ -124,6 +124,11 @@ describe('BaseTypeahead', () => {
       row => row.getAttribute('data-highlighted') === 'highlighted',
     );
     expect(marked).toEqual([active]);
+    expect(
+      rows
+        .filter(row => row.getAttribute('data-selected') === 'selected')
+        .map(row => row.textContent),
+    ).toEqual(['Avocado']);
   });
 
   describe('picking a result', () => {
