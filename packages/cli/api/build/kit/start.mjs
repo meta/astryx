@@ -111,7 +111,18 @@ function liftFromShell(ranked, kind, catalog, idea) {
   ];
   const logit = x.reduce((s, v, i) => s + v * LIFT[i], 0);
   if (1 / (1 + Math.exp(-logit)) < LIFT_AT) return null;
+  if (!b.best || !sharesAWord(b.best, ranked)) return null;
   return catalog.find(t => t.name === b.best) ?? null;
+}
+
+/**
+ * Whether the ranker matched at least one of the idea's words for a page.
+ * @param {string} name
+ * @param {import('./rank.mjs').RankedPage[]} ranked
+ * @returns {boolean}
+ */
+function sharesAWord(name, ranked) {
+  return (ranked.find(r => r.name === name)?.hits ?? 0) > 0;
 }
 
 /**
@@ -155,13 +166,23 @@ export function chooseStart(ranked, kind, pages, directMatch, catalog, idea) {
   // scores, decide the start of a whole page, so it can differ from the
   // ranker's own pick, its head-noun family included. A part or an edit starts
   // where the ranker's placement rules put it (spec:AST-048/FR3).
-  const weighed =
+  const weighedPage =
     kind === 'page'
       ? weighStart(idea, ranked, proposed, catalog, {
           weights: loadWeights(),
           newPage: asksForNewPage(idea, catalog),
         })
       : undefined;
+  // When the ranker proposes no page, a page the idea shares no word with is
+  // no start: the idea keeps the app shell rather than open a page only the
+  // word weights lean to. The lift asks the same of its page.
+  const weighed =
+    weighedPage &&
+    !directMatch &&
+    !proposed &&
+    !sharesAWord(weighedPage, ranked)
+      ? null
+      : weighedPage;
   // A shell start keeps the shell the ranker named, if any, and never replaces
   // the template the ranker chose for a page search matched directly.
   const pick =
