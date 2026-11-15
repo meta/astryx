@@ -268,7 +268,10 @@ export function normalizeEntry(thing, value) {
   } else if (
     v == null ||
     v.trim() === '' ||
-    /^\s*[([][A-Za-z][^)\]]*[)\]]\s*[:=]/.test(v)
+    /^\s*[([][A-Za-z][^)\]]*[)\]]\s*[:=]/.test(v) ||
+    // A declaration whose value went on past a space (`font=Inter,` then
+    // `Arial`, an unquoted list split by the shell): the rest of its value.
+    /^[^\s:=]+\s*[:=]\s*\S/.test(t)
   ) {
     // A mode label after the thing (`--color-accent (dark mode): #7c3aed`)
     // goes with the scope, as on a change line, also when the words after

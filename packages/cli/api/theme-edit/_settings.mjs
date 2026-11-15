@@ -1695,25 +1695,48 @@ const ENTRY_FIELDS = [
 ];
 
 /**
+ * The entry field a key names: the key in other letters (`Thing`, `VALUE`,
+ * `On`) or spelled as its flag (`--on`), or null.
+ * @param {string} k
+ */
+function entryFieldOf(k) {
+  const name = k
+    .trim()
+    .toLowerCase()
+    .replace(/^[-\u2013\u2014]+/, '');
+  return ENTRY_FIELDS.find(f => f === name) ?? null;
+}
+
+/**
+ * The keys of an entry that write a field it already holds the editor's
+ * way (`Value` beside `value`), each with that field.
+ * @param {any} entry
+ * @returns {Array<{key: string, field: string}>}
+ */
+export function entryFieldTwins(entry) {
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return [];
+  return Object.keys(entry).flatMap(key => {
+    const field = entryFieldOf(key);
+    return field && field !== key && field in entry ? [{key, field}] : [];
+  });
+}
+
+/**
  * An entry with its own fields in other letters (`Thing`, `VALUE`, `On`)
- * or spelled as their flags (`--on`)
- * read as those fields, as setting names are read in any case; a field
- * already written the editor's way keeps its key. Anything else as it is.
- * The one reader for a typed entry and a saved one.
+ * or spelled as their flags (`--on`) read as those fields, as setting
+ * names are read in any case; a field written both ways keeps the editor's
+ * own, and the other spelling is dropped (entryFieldTwins names it).
+ * Anything else as it is. The one reader for a typed entry and a saved one.
  * @param {any} entry
  * @returns {any}
  */
 export function entryFieldNames(entry) {
   if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return entry;
   return Object.fromEntries(
-    Object.entries(entry).map(([k, x]) => {
-      // A field spelled as its flag (`"--on": "card"`) is that field.
-      const name = k
-        .trim()
-        .toLowerCase()
-        .replace(/^[-\u2013\u2014]+/, '');
-      const field = ENTRY_FIELDS.find(f => f === name);
-      return [field && !(field in entry) ? field : k, x];
+    Object.entries(entry).flatMap(([k, x]) => {
+      const field = entryFieldOf(k);
+      if (!field || field === k) return [[k, x]];
+      return field in entry ? [] : [[field, x]];
     }),
   );
 }
@@ -1755,7 +1778,20 @@ function readTypedEntries(data, notes) {
     // an entry that names its thing under `setting`, as the editor's own
     // results print it, is that entry (the readers set uses for one typed).
     const fields = entryFieldNames(saved);
-    if (JSON.stringify(fields) !== JSON.stringify(saved))
+    // A field written both ways is read the editor's way, and said; the
+    // next save writes the entry once.
+    const twins = entryFieldTwins(saved);
+    for (const {key, field} of twins)
+      notes.push(
+        `${typeof saved.thing === 'string' ? saved.thing : JSON.stringify(saved)} writes both "${field}" and "${key}"; "${field}" is read (${JSON.stringify(saved[field])}, not ${JSON.stringify(saved[key])})`,
+      );
+    const renamed = Object.keys(
+      saved && typeof saved === 'object' ? saved : {},
+    ).some(k => {
+      const field = entryFieldOf(k);
+      return field != null && field !== k && !(field in saved);
+    });
+    if (renamed)
       notes.push(
         `${JSON.stringify(saved)} writes its field names in other letters, read as ${JSON.stringify(fields)}`,
       );
