@@ -335,14 +335,24 @@ describe('N65: a saved value with quotes', () => {
 });
 
 describe('hunt64 (1): a saved dial value is offered cleaned', () => {
-  it.each([
-    'pill\u00A0',
-    ' pill',
-    'Pill',
-    'corners: pill',
-    '\u201Cpill\u201D',
-    '"pill"',
-  ])(
+  // A dial word saved in other letters or with spaces around it is that
+  // word (the one case rule), so it is read, not refused.
+  it.each([' pill', 'Pill', 'pill ', 'pill\u00A0'])(
+    '%j is read as pill',
+    async raw => {
+      await themeEditSet('b', 'corners', 'pill', {cwd});
+      const kept = fs.readFileSync(file(), 'utf8');
+      fs.writeFileSync(file(), kept.replace('"pill"', JSON.stringify(raw)));
+      try {
+        const r = await themeEditShow('b', {cwd});
+        expect(r.data.theme).toBe('b');
+      } finally {
+        fs.writeFileSync(file(), kept);
+      }
+    },
+    240_000,
+  );
+  it.each(['corners: pill', '\u201Cpill\u201D', '"pill"'])(
     '%j',
     async raw => {
       await themeEditSet('b', 'corners', 'pill', {cwd});

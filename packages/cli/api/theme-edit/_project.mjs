@@ -18,7 +18,11 @@ import {pathToFileURL} from 'node:url';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {loadComponentDoc} from '../../foundation/discovery/component-loader.mjs';
-import {collectThemingTargets} from '../../foundation/discovery/theming-targets.mjs';
+import {
+  collectThemingTargets,
+  collectThemingVars,
+} from '../../foundation/discovery/theming-targets.mjs';
+import {parse as parseModule} from '@babel/parser';
 import {resolveImportPath} from '../../foundation/discovery/component-discovery.mjs';
 import {detectPackageManager} from '../../foundation/env/package-manager.mjs';
 import {
@@ -42,19 +46,35 @@ import {
  * @property {import('../../foundation/discovery/theming-targets.mjs').ThemingTarget[]} targets
  * @property {Map<string, import('../../foundation/discovery/theming-targets.mjs').ThemingTarget>} target
  * @property {Record<string, ComponentInfo>} components
+ * @property {import('../../foundation/discovery/theming-targets.mjs').ThemingVar[]} vars - The public custom properties Core's components read.
+ * @property {InputFields | null} inputFields - The fields Core's theme input takes, read from its type declarations; null when they are not installed.
+ */
+
+/**
+ * The fields Core's `defineTheme()` input takes, read from the type
+ * declarations of the installed Core, so the editor names a misspelled
+ * field by the fields that Core has.
+ * @typedef {object} InputFields
+ * @property {string[]} theme - A theme input's fields (and a defined theme's, which a spread carries).
+ * @property {string[]} surface - An `onDark`/`onLight` block's fields.
+ * @property {string[]} typography - The typography block's fields.
+ * @property {string[]} role - A typography role's fields.
+ * @property {string[]} scale - The type scale's fields.
+ * @property {string[]} levels - The heading levels a role's `weights` takes.
  */
 
 /**
  * @typedef {object} ComponentInfo
  * @property {string} importPath
  * @property {string} category - The doc's category, such as Action or Overlay.
+ * @property {string} description - What the doc says the component is.
  * @property {unknown} defaults - Playground defaults, or null.
  * @property {{component: string, props: Record<string, unknown>} | null} wrapper - The parent the playground renders it in, or null.
  * @property {boolean} opens - An overlay its playground shows in place: the pages render it open.
  * @property {boolean} overlay - Its playground opens it over the whole page, so a page of components leaves it out.
  * @property {string | null} subComponentOf - The component it is a part of, or null.
  * @property {string[]} keywords - The doc's search keywords.
- * @property {Record<string, {type: string, required: boolean, slots: Array<{__element: string, props?: Record<string, unknown>, children?: unknown}>}>} props - Each prop's declared type, whether it is required, and the elements the doc suggests for it.
+ * @property {Record<string, {type: string, required: boolean, default: string | null, slots: Array<{__element: string, props?: Record<string, unknown>, children?: unknown}>}>} props - Each prop's declared type, whether it is required, its documented default (as the doc writes it), and the elements the doc suggests for it.
  * @property {Array<{className: string, states: string[], values: Record<string, string[]>}>} targets
  */
 
@@ -62,7 +82,7 @@ import {
 const projects = new Map();
 
 /** Bump when the shape of the cached component docs changes. */
-const DOCS_VERSION = 5;
+const DOCS_VERSION = 8;
 
 /**
  * The theme editor's cache folder for a project: the `.cache/astryx-theme`
@@ -111,9 +131,63 @@ export function installLine(cwd, packages) {
   return `${pm === 'npm' || pm === 'npx' ? 'npm install' : `${pm} add`} ${packages.join(' ')}`;
 }
 
+/**
+ * The project's package manager command that lists every installed copy of
+ * a package and what pulled each in.
+ * @param {string} cwd
+ * @param {string} pkg
+ */
+export function copiesLine(cwd, pkg) {
+  const pm = detectPackageManager(cwd);
+  return pm === 'npm' || pm === 'npx'
+    ? `npm ls ${pkg} --all`
+    : pm === 'bun'
+      ? `bun pm ls --all | grep ${pkg}@`
+      : `${pm} why ${pkg}`;
+}
+
 /** @param {string} type @returns {string[]} */
 export const literals = type =>
   [...String(type ?? '').matchAll(/'([^']+)'/g)].map(m => m[1]);
+
+/**
+ * The Core module a component's doc sits in, when that module exports the
+ * component under its name: a part re-exported under a name of its own
+ * (`DropdownMenuItem as ContextMenuItem` in ContextMenu) has no file named
+ * for it, so the name alone does not find its module. Null otherwise.
+ * @param {string} coreDir
+ * @param {string} docFile
+ * @param {string} name
+ * @returns {string | null}
+ */
+function moduleOfDoc(coreDir, docFile, name) {
+  const top = path
+    .relative(path.join(coreDir, 'src'), docFile)
+    .split(path.sep)[0];
+  if (!top || top.startsWith('..')) return null;
+  try {
+    const exportsMap = JSON.parse(
+      fs.readFileSync(path.join(coreDir, 'package.json'), 'utf8'),
+    ).exports;
+    if (!exportsMap || !Object.hasOwn(exportsMap, `./${top}`)) return null;
+    const index = ['index.ts', 'index.tsx']
+      .map(f => path.join(coreDir, 'src', top, f))
+      .find(f => fs.existsSync(f));
+    if (!index) return null;
+    const text = fs.readFileSync(index, 'utf8');
+    // Named in one of its export lists, as itself or as an alias.
+    const named = [...text.matchAll(/export\s*(?:type\s*)?\{([^}]*)\}/g)].some(
+      m =>
+        m[1]
+          .split(',')
+          .map(x => x.trim().replace(/^type\s+/, ''))
+          .some(x => x === name || new RegExp(`\\bas\\s+${name}$`).test(x)),
+    );
+    return named ? `@astryxdesign/core/${top}` : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Every component doc under Core's src folder: playground defaults and the
@@ -158,8 +232,12 @@ async function readComponents(coreDir) {
         ]),
       );
       out[doc.name] = {
-        importPath: resolveImportPath(coreDir, doc.name),
+        importPath:
+          resolveImportPath(coreDir, doc.name) === '@astryxdesign/core'
+            ? (moduleOfDoc(coreDir, full, doc.name) ?? '@astryxdesign/core')
+            : resolveImportPath(coreDir, doc.name),
         category: typeof doc.category === 'string' ? doc.category : '',
+        description: typeof doc.description === 'string' ? doc.description : '',
         defaults: pg?.defaults ?? null,
         wrapper:
           typeof pg?.wrapper?.component === 'string'
@@ -188,6 +266,7 @@ async function readComponents(coreDir) {
             {
               type: String(p.type ?? ''),
               required: p.required === true,
+              default: typeof p.default === 'string' ? p.default : null,
               slots: Array.isArray(p.slotElements) ? p.slotElements : [],
             },
           ]),
@@ -276,7 +355,7 @@ export async function openProject(cwd) {
   );
   // Reading every component doc takes a second; it is fixed per Core install.
   const docsFile = path.join(cacheDir, 'docs.json');
-  /** @type {{version: number, targets: ThemeProject['targets'], components: ThemeProject['components']} | null} */
+  /** @type {{version: number, targets: ThemeProject['targets'], components: ThemeProject['components'], vars: ThemeProject['vars']} | null} */
   let docs = null;
   try {
     const cached = JSON.parse(fs.readFileSync(docsFile, 'utf8'));
@@ -290,6 +369,7 @@ export async function openProject(cwd) {
     docs = await withListingCache(async () => ({
       version: DOCS_VERSION,
       targets: await collectThemingTargets(path.join(coreDir, 'src')),
+      vars: await collectThemingVars(path.join(coreDir, 'src')),
       components: await readComponents(coreDir),
     }));
     try {
@@ -299,7 +379,7 @@ export async function openProject(cwd) {
       // A read-only node_modules: read the docs again next time.
     }
   }
-  const {targets, components} = docs;
+  const {targets, components, vars} = docs;
   const project = {
     cwd: key,
     coreDir,
@@ -311,9 +391,80 @@ export async function openProject(cwd) {
     targets,
     target: new Map(targets.map(t => [t.key, t])),
     components,
+    vars,
+    inputFields: readInputFields(path.dirname(themeFile)),
   };
   projects.set(key, project);
   return project;
+}
+
+/**
+ * The fields Core's theme input takes, from the type declarations beside
+ * its theme module; null when a declaration file is missing or does not
+ * parse.
+ * @param {string} themeDir the folder of Core's built theme module
+ * @returns {InputFields | null}
+ */
+function readInputFields(themeDir) {
+  /** @type {Map<string, any>} */
+  const interfaces = new Map();
+  for (const file of ['defineTheme.d.ts', 'onMediaTokens.d.ts', 'types.d.ts']) {
+    /** @type {any} */
+    let ast;
+    try {
+      ast = parseModule(fs.readFileSync(path.join(themeDir, file), 'utf8'), {
+        sourceType: 'module',
+        plugins: [['typescript', {dts: true}]],
+      });
+    } catch {
+      return null;
+    }
+    for (const node of ast.program.body) {
+      const decl =
+        node.type === 'ExportNamedDeclaration' ? node.declaration : node;
+      if (decl?.type === 'TSInterfaceDeclaration')
+        interfaces.set(decl.id.name, decl.body.body);
+    }
+  }
+  /** @param {any[] | undefined} members */
+  const names = members =>
+    (members ?? [])
+      .filter(m => m.type === 'TSPropertySignature')
+      .map(m => m.key?.name ?? m.key?.value)
+      .filter(k => typeof k === 'string');
+  /** @param {string} iface @param {string} name */
+  const member = (iface, name) =>
+    (interfaces.get(iface) ?? []).find(
+      (/** @type {any} */ m) => (m.key?.name ?? m.key?.value) === name,
+    );
+  const theme = names(interfaces.get('DefineThemeInput'));
+  const surface = names(interfaces.get('OnMediaOverrides'));
+  const typography = names(interfaces.get('TypographyConfig'));
+  const role = names(interfaces.get('TypographyRole'));
+  if (!theme.length || !surface.length || !typography.length || !role.length)
+    return null;
+  const scaleType = member('TypographyConfig', 'scale')?.typeAnnotation
+    ?.typeAnnotation;
+  /** The numeric literals a type names (the levels of `Record<1 | 2, …>`). @param {any} node @returns {string[]} */
+  const numbers = node => {
+    if (!node || typeof node !== 'object') return [];
+    if (
+      node.type === 'TSLiteralType' &&
+      node.literal?.type === 'NumericLiteral'
+    )
+      return [String(node.literal.value)];
+    return Object.entries(node)
+      .filter(([k]) => k !== 'loc' && k !== 'start' && k !== 'end')
+      .flatMap(([, v]) => (Array.isArray(v) ? v.flatMap(numbers) : numbers(v)));
+  };
+  return {
+    theme: [...new Set([...theme, ...names(interfaces.get('DefinedTheme'))])],
+    surface,
+    typography,
+    role,
+    scale: scaleType?.type === 'TSTypeLiteral' ? names(scaleType.members) : [],
+    levels: numbers(member('TypographyRole', 'weights')?.typeAnnotation),
+  };
 }
 
 /**
@@ -368,6 +519,26 @@ function builtModule(pkg, name) {
     return fs.realpathSync(file).startsWith(root) ? file : null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Whether a package is installed for the app in `dir`, as the folder is
+ * now: Node keeps a path it resolved once for the life of the process, so
+ * the file it names is checked too (a package removed since, in a process
+ * that runs several commands, is not installed).
+ * @param {string} dir the app
+ * @param {string} pkg
+ */
+export function packageInstalled(dir, pkg) {
+  try {
+    return fs.existsSync(
+      createRequire(path.join(path.resolve(dir), 'noop.js')).resolve(
+        `${pkg}/package.json`,
+      ),
+    );
+  } catch {
+    return false;
   }
 }
 

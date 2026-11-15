@@ -72,10 +72,6 @@ const RUNNERS = {
       'require(mdn-data/css/properties.json)',
     ],
   },
-  'api/theme-edit/_playwright-picture.mjs': {
-    runs: 'the Playwright the project has installed, in its own process, to picture a preview only with --png',
-    sites: ['import(<computed>)'],
-  },
   'api/theme-edit/_preview.mjs': {
     runs: 'the picture process for a Playwright the project has installed, or a Chrome found on the machine, only with --png',
     sites: ['child_process.spawn'],
@@ -446,6 +442,14 @@ const RUNNERS = {
       'require(@stylexjs/babel-plugin)',
     ],
   },
+  'foundation/render/picture-chrome.mjs': {
+    runs: 'a Chrome found on the machine, over its DevTools pipe, to picture a preview only with --png',
+    sites: ['child_process.spawn'],
+  },
+  'foundation/render/picture-playwright.mjs': {
+    runs: 'the Playwright the project has installed, in its own process, to picture a preview only with --png',
+    sites: ['import(<computed>)'],
+  },
   'foundation/render/render-page.mjs': {
     runs: 'the render host process, so a page that never finishes can be stopped and a crash of Node ends only that process, and a one-line Intl.Segmenter check after a crash',
     sites: ['child_process.fork', 'child_process.spawnSync'],
@@ -484,9 +488,13 @@ const RUNNERS = {
     runs: "each installed integration's manifest",
     sites: ['importUserModule'],
   },
+  'foundation/integrations/pack-state.mjs': {
+    runs: "`npm pack --dry-run --json --ignore-scripts`, to read which files an integration's package holds when a `files` field or an ignore file can leave one out (no lifecycle script runs, nothing is written)",
+    sites: ['child_process.spawnSync'],
+  },
   'foundation/integrations/validate-contributions.mjs': {
-    runs: "`npm pack --dry-run --json --ignore-scripts`, to read which files an integration's package holds when a template loads an asset (no lifecycle script runs, nothing is written); and @babel/parser, loaded on first use, to read a contribution's source",
-    sites: ['child_process.spawnSync', 'require(@babel/parser)'],
+    runs: "@babel/parser, loaded on first use, to read a contribution's source",
+    sites: ['require(@babel/parser)'],
   },
   'foundation/release/cache.mjs': {
     runs: 'npm (under npm-guard.mjs), to install and look up CLI releases in the per-user cache; each installed release once, to check it starts and reports its version; and ps (tasklist on Windows), to confirm the process a stale lock records is node or npm before ending it',
@@ -513,6 +521,10 @@ const RUNNERS = {
       'require(postcss-selector-parser)',
     ],
   },
+  'foundation/suggest/name-index.mjs': {
+    runs: "docs discovery, to load each integration doc once and keep the name it declares in the not-found hint's name index, when no kept index answers",
+    sites: ['import(../discovery/docs-discovery.mjs)'],
+  },
   'host/index.mjs': {
     runs: "another release's host entry, from one of the host's package sets, when that release answers a hosted run",
     sites: ['import(<computed>)'],
@@ -527,6 +539,14 @@ const RUNNERS = {
   },
   'scripts/generate-component-list.mjs': {
     runs: "node, to work out Core's component list on a copy of exactly the files Core publishes (at `prepack`)",
+    sites: ['child_process.spawnSync'],
+  },
+  'scripts/generate-docs-routes.mjs': {
+    runs: "node, to build the CLI's own docs tree on a copy of exactly the files the package publishes and store its routes (at `prepack`)",
+    sites: ['child_process.spawnSync'],
+  },
+  'scripts/generate-search-catalog.mjs': {
+    runs: "node, to gather search's catalog in a project that installs exactly the files the CLI and Core publish, once per package manager and beside each one's lockfile (at `prepack`)",
     sites: ['child_process.spawnSync'],
   },
   'scripts/generate-self-audit.mjs': {
@@ -564,6 +584,8 @@ const LOADER_MODULES = {
     'discoverIntegrationDocs',
     'GRAPH_BLOCK_TYPES',
     'GRAPH_ONLY_FIELDS',
+    'integrationDocDeclaration',
+    'integrationDocsCatalog',
     'isGuideRoute',
     'mergeTopic',
     'mergeTopicReport',

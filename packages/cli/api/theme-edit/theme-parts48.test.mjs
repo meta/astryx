@@ -20,7 +20,7 @@ import {
 } from '../../test-utils/linked-fixture.mjs';
 import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
 import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
-import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
+import {modeValue, refusal} from '../../test-utils/theme-edit-fixture.mjs';
 
 vi.mock('./_preview.mjs', async importOriginal =>
   (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
@@ -64,8 +64,8 @@ const needBases = ctx => {
 
 const HOVER = ':hover:where(:not(:disabled,[aria-disabled="true"]))';
 
-describe('the other half of a one-mode color in a variant or a state', () => {
-  it("is the part's own color for a heading level", async ctx => {
+describe('the other mode of a one-mode color in a variant or a state', () => {
+  it("keeps the part's own color for a heading level", async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('o1', {cwd, like: 'y2k'});
     await themeEditSet('o1', 'color', '#ff0000', {cwd, on: 'heading'});
@@ -75,12 +75,21 @@ describe('the other half of a one-mode color in a variant or a state', () => {
       when: 'level:1',
       mode: 'dark',
     });
-    expect(ruleOf('o1', '.astryx-heading[data-level="1"]')).toMatch(
-      /--color-text-primary: light-dark\(#ff0000, #00ff00\)/,
+    // The level's dark block alone: in light the heading's own rule holds.
+    const css = cssOf('o1');
+    const level = '.astryx-heading[data-level="1"]';
+    expect(modeValue(css, level, '--color-text-primary', 'dark')).toBe(
+      '#00ff00',
     );
+    expect(modeValue(css, level, '--color-text-primary', 'light')).toBe(
+      undefined,
+    );
+    expect(
+      modeValue(css, '.astryx-heading', '--color-text-primary', 'light'),
+    ).toBe('#ff0000');
   }, 240_000);
 
-  it("is the theme's final value of a token, set after it", async ctx => {
+  it("keeps the theme's final value of a token, set after it", async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('o2', {cwd, like: 'butter'});
     await themeEditSet('o2', '--color-accent', '#ff00ff', {
@@ -90,12 +99,16 @@ describe('the other half of a one-mode color in a variant or a state', () => {
       mode: 'dark',
     });
     await themeEditSet('o2', 'accent', '#16a34a', {cwd});
-    expect(ruleOf('o2', `.astryx-button${HOVER}`)).toMatch(
-      /--color-accent: light-dark\(#16a34a, #ff00ff\)/,
-    );
+    const css = cssOf('o2');
+    expect(
+      modeValue(css, `.astryx-button${HOVER}`, '--color-accent', 'dark'),
+    ).toBe('#ff00ff');
+    expect(
+      modeValue(css, `.astryx-button${HOVER}`, '--color-accent', 'light'),
+    ).toBe(undefined);
   }, 240_000);
 
-  it("is the variant's resting color for a state, in either order", async ctx => {
+  it("keeps the variant's resting color for a state, in either order", async ctx => {
     if (needBases(ctx)) return;
     for (const [slug, order] of /** @type {const} */ ([
       ['o3', 'rest first'],
@@ -123,10 +136,19 @@ describe('the other half of a one-mode color in a variant or a state', () => {
         await hover();
         await rest();
       }
+      const css = cssOf(slug);
+      const sel = '.astryx-button[data-variant="primary"]';
       expect(
-        ruleOf(slug, `.astryx-button[data-variant="primary"]${HOVER}`),
+        modeValue(css, `${sel}${HOVER}`, 'background-color', 'dark'),
         order,
-      ).toMatch(/background-color: light-dark\(#0000ff, #ff0000\)/);
+      ).toBe('#ff0000');
+      expect(
+        modeValue(css, `${sel}${HOVER}`, 'background-color', 'light'),
+        order,
+      ).toBe(undefined);
+      expect(modeValue(css, sel, 'background-color', 'light'), order).toBe(
+        '#0000ff',
+      );
     }
   }, 240_000);
 });
@@ -144,12 +166,17 @@ describe('one-mode backgrounds and keywords', () => {
       on: 'divider',
       mode: 'dark',
     });
-    const rule = ruleOf('b1', '.astryx-divider');
-    expect(rule).toMatch(
-      /background-image: linear-gradient\(light-dark\(transparent, red\), light-dark\(transparent, blue\)\)/,
+    // The dark block takes the images and the color under them, apart.
+    const css = cssOf('b1');
+    expect(modeValue(css, '.astryx-divider', 'background-image', 'dark')).toBe(
+      'linear-gradient(red, blue)',
     );
-    expect(rule).toMatch(/background-color: light-dark\([^,]+, #f00\)/);
-    expect(rule).not.toMatch(/background-(image|position): [^;]*#f00/);
+    expect(modeValue(css, '.astryx-divider', 'background-color', 'dark')).toBe(
+      '#f00',
+    );
+    expect(modeValue(css, '.astryx-divider', 'background-image', 'light')).toBe(
+      undefined,
+    );
   }, 240_000);
 
   it('refuses a CSS-wide keyword with --mode', async ctx => {
@@ -166,7 +193,7 @@ describe('one-mode backgrounds and keywords', () => {
     expect(r.run[0]).toMatch(/background-color unset --on badge$/);
   }, 240_000);
 
-  it('says a one-mode part color overrides contextual rules in the other mode', async ctx => {
+  it('writes a one-mode part color in its mode block, with no note about the other mode', async ctx => {
     if (needBases(ctx)) return;
     await themeEditNew('b3', {cwd, like: 'neutral'});
     const r = await themeEditSet('b3', 'background-color', '#ff00ff', {
@@ -174,7 +201,12 @@ describe('one-mode backgrounds and keywords', () => {
       on: 'button',
       mode: 'dark',
     });
-    expect(r.data.notes.join(' ')).toMatch(/overrides what Core or the base/);
+    expect(r.data.notes.join(' ')).not.toMatch(
+      /overrides what Core or the base/,
+    );
+    expect(
+      modeValue(cssOf('b3'), '.astryx-button', 'background-color', 'light'),
+    ).toBe(undefined);
   }, 240_000);
 });
 

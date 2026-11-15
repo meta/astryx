@@ -85,9 +85,12 @@ function unnamedShown(message) {
  * @param {string} cwd
  */
 async function resolveIntegration(pkg, cwd) {
+  // The checks read the integration and its issues, never the notes the
+  // shipped-import check adds, so it is left out: it parses every module the
+  // package ships and may ask npm what it packs.
   const resolved = pkg
-    ? await validateInstalledIntegration(pkg, cwd)
-    : await validateLocalIntegration(cwd);
+    ? await validateInstalledIntegration(pkg, cwd, {shippedImports: false})
+    : await validateLocalIntegration(cwd, {shippedImports: false});
   const integration = resolved.found ? resolved.integration : undefined;
   if (!integration) return resolved;
   // A root that is not a readable folder is reported in the issues; the

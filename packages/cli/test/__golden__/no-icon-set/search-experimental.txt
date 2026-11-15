@@ -1,4 +1,4 @@
-Results for "experimental" (7)
+Results for "experimental" (12)
 name:        author-a-theme
 domain:      doc
 package:     @astryxdesign/cli
@@ -38,3 +38,33 @@ domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs theme --index
 parent:      pnpm exec astryx docs guides
+name:        theme
+section:     make-or-change
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs theme make-or-change
+parent:      pnpm exec astryx docs theme --index
+name:        theme
+section:     look-after-each-change
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs theme look-after-each-change
+parent:      pnpm exec astryx docs theme --index
+name:        theme
+section:     denser-or-roomier
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs theme denser-or-roomier
+parent:      pnpm exec astryx docs theme --index
+name:        theme
+section:     one-kind-of-part
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs theme one-kind-of-part
+parent:      pnpm exec astryx docs theme --index
+name:        theme
+section:     no-app-yet
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs theme no-app-yet
+parent:      pnpm exec astryx docs theme --index
