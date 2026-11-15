@@ -693,6 +693,33 @@ async function answer(subject, options, cwd) {
         d.options = [];
         d.text = `${d.text} (a question: nothing is changed; ask for the change to get its command)`;
       }
+  // A part show's missed list has (a tooltip still on the base's dark
+  // surface), asked about for its look (its fill or text, or nothing more
+  // said: "tooltips grey like the rest"): the missed steps lead.
+  if (
+    env.exists &&
+    !questionOnly(t) &&
+    h.parts.length &&
+    (!h.aspects.length ||
+      h.aspects.some(a => a === 'background' || a === 'text'))
+  ) {
+    const parts = h.parts.flatMap(p =>
+      FAMILIES[p] ? FAMILIES[p] : ctx.project.target.has(p) ? [p] : [],
+    );
+    const res = await resolvedTokens(ctx, env.slug).catch(() => null);
+    const mine = (res ? missedSteps(ctx, env.data, res, env.base) : []).filter(
+      x => parts.includes(x.part) && x.steps.length,
+    );
+    h.drafts.unshift(
+      .../** @type {any[]} */ (
+        mine.map(x => ({
+          text: `${x.part}${x.state ? ` (${x.state})` : ''}: ${x.why} (show's missed list)`,
+          options: [x.steps.map(st => ({verb: 'set', ...st}))],
+          ...(x.steps.length > 1 ? {sequence: true} : {}),
+        }))
+      ),
+    );
+  }
   const results = finish(env, h.drafts);
   const empty = !results.some(r => r.commands.length);
   return {

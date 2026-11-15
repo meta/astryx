@@ -68,9 +68,8 @@ describe('missed', () => {
       ),
     );
     expect(at('side-nav-item', ['selected'])).toBeLessThan(5);
-    expect(at('banner')).toBeLessThan(5);
-    // The first lines reach five kinds (disabled, selected, status, pills,
-    // borderless), never several of one.
+    // The first lines reach five kinds (disabled, selected, pills, soft
+    // shadows, borderless), never several of one.
     const kinds = list.slice(0, 5).map(m => m.why.split(/[:,(]/)[0].trim());
     expect(new Set(kinds).size).toBe(5);
   }, 240_000);

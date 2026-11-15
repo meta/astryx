@@ -10,9 +10,10 @@
  */
 
 import {COMMON_STATES} from './_tables.mjs';
-import {baseComponent, partsOf} from './_settings.mjs';
+import {baseComponent, modesOf, partsOf} from './_settings.mjs';
 import {borderlessSurfaces, pillParts} from './_check.mjs';
 import {parseColor, ratio} from './_color.mjs';
+import {blurScaled} from './_how-question.mjs';
 
 /**
  * @typedef {{thing: string, value: string, on?: string, when?: string, state?: string, mode?: string}} MissedStep
@@ -34,7 +35,9 @@ import {parseColor, ratio} from './_color.mjs';
 export function missedSteps(ctx, data, res, base) {
   if (!data.settings.length) return [];
   const C = ctx.C;
-  const modes = Object.keys(res).filter(m => m === 'light' || m === 'dark');
+  // The modes the theme draws (a dark-only theme's dark), each one res
+  // holds.
+  const modes = modesOf(data).filter(m => res[m]);
   /** @param {string} token */
   const changed = token =>
     modes.some(m => String(res[m]?.[token]) !== String(base[m]?.[token]));
@@ -93,6 +96,11 @@ export function missedSteps(ctx, data, res, base) {
   );
   // The status colors, by the word their tokens carry, and the dial that
   // generates each with the text that reads on it.
+  // Whether the theme's vibrancy differs from the base's: only then does a
+  // status dial build a color of its own.
+  const vibrancyMoved = data.settings.some(
+    x => x.source === 'dial' && x.thing === 'vibrancy',
+  );
   const STATUS = /** @type {Record<string, [string, string]>} */ ({
     info: ['info', '--color-info'],
     success: ['success', '--color-success'],
@@ -127,13 +135,89 @@ export function missedSteps(ctx, data, res, base) {
     // a reader looks for.)
     const textTokens = textTokensOf(p);
     const holdsText = Boolean(C.MAP[p]?.media) || textTokens.length > 0;
+    /**
+     * The text on the theme's surface in a mode: the theme's text color
+     * where it reads there (4.5:1), else the plain black or white that
+     * does (a theme whose surface stays light in dark mode).
+     * @param {string} m
+     */
+    const readableOn = m => {
+      const text = String(res[m]?.['--color-text-primary']);
+      const t = parseColor(text);
+      const g = parseColor(String(res[m]?.['--color-background-surface']));
+      if (!t || !g || ratio(t, g) >= 4.5) return text;
+      return ratio([0, 0, 0], g) >= ratio([255, 255, 255], g)
+        ? '#000000'
+        : '#ffffff';
+    };
+    /**
+     * The line that gives the part the theme's own surface in the modes
+     * named, with its text readable on it.
+     * @param {string[]} ms
+     */
+    const surfaceSteps = ms =>
+      inverted === '--color-background-inverted'
+        ? // The theme's inverted surface turns to its surface (as the color
+          // it is: a part may read the surface token for its text), and the
+          // text of each part drawn on it that reads a token (a tooltip's)
+          // turns to the text color; a toast picks its own text from the
+          // surface.
+          ms.flatMap(m => [
+            {
+              thing: '--color-background-inverted',
+              value: String(res[m]?.['--color-background-surface']),
+              mode: m,
+            },
+            ...onInverted.flatMap(q =>
+              textTokensOf(q).map(thing => ({
+                thing,
+                value: readableOn(m),
+                on: q,
+                mode: m,
+              })),
+            ),
+          ])
+        : // The surface and the text as the colors they are in that mode (a
+          // tooltip's text reads the surface token itself, so a token
+          // reference would turn the fill back): the fill, then each token
+          // the part's text reads, or its text color when it reads none.
+          ms.flatMap(m => [
+            {
+              thing: 'background-color',
+              value: String(res[m]?.['--color-background-surface']),
+              on: p,
+              mode: m,
+            },
+            ...(textTokens.length ? textTokens : ['color']).map(thing => ({
+              thing,
+              value: readableOn(m),
+              on: p,
+              mode: m,
+            })),
+          ]);
+    // The theme's own surfaces changed (its neutral, surface, card or page
+    // color), while the part still paints the base's inverted surface: it
+    // keeps the base's dark look beside the theme's (a Win98 theme's grey
+    // tooltips). Its line gives it the theme's surface in each mode.
+    const ownSurfaces = any(
+      /^--color-(neutral|background-(body|surface|card))$/,
+    );
+    // (Its inverted surface is the base's, or one a dial made from the
+    // neutral seed: no setting of the theme's chose it.)
+    const chosen = data.settings.some(
+      x => x.source === 'token' && x.thing === inverted && !x.on,
+    );
     if (
-      surfaces &&
-      restKept &&
       inverted &&
       holdsText &&
-      lost.length &&
-      !covers(p, FILL)
+      !covers(p, FILL) &&
+      (lost.length
+        ? surfaces && restKept
+        : ownSurfaces &&
+          !chosen &&
+          rest.every(
+            (/** @type {any} */ r) => r.token === inverted || !changed(r.token),
+          ))
     ) {
       const swap = lost.filter(m =>
         standsOut(res[m]?.['--color-background-surface'], m),
@@ -141,90 +225,58 @@ export function missedSteps(ctx, data, res, base) {
       found.push({
         kind: 0,
         part: p,
-        why: `still the base's inverted surface (${inverted}), which no longer stands out from the page in ${lost.join(' and ')}`,
+        why: lost.length
+          ? `still the base's inverted surface (${inverted}), which no longer stands out from the page in ${lost.join(' and ')}`
+          : `still the base's dark inverted surface (${inverted}); the theme's surfaces changed`,
         aspect: 'background',
-        // The inverted surface itself is the theme's own token: it turns to
-        // the light surface in that mode, and Core picks the text on it
-        // (a toast). A part drawn in the text color gets that surface with
-        // the text color on it.
-        steps:
-          swap.length !== lost.length
+        steps: lost.length
+          ? swap.length !== lost.length
             ? []
-            : inverted === '--color-background-inverted'
-              ? // The theme's inverted surface turns to its light surface
-                // (as the color it is: a part may read the surface token
-                // for its text), and the text of each part drawn on it
-                // that reads a token (a tooltip's) turns to the text
-                // color; a toast picks its own text from the surface.
-                lost.flatMap(m => [
-                  {
-                    thing: '--color-background-inverted',
-                    value: String(res[m]?.['--color-background-surface']),
-                    mode: m,
-                  },
-                  ...onInverted.flatMap(q =>
-                    textTokensOf(q).map(thing => ({
-                      thing,
-                      value: String(res[m]?.['--color-text-primary']),
-                      on: q,
-                      mode: m,
-                    })),
-                  ),
-                ])
-              : // The surface and the text as the colors they are in that
-                // mode (a tooltip's text reads the surface token itself, so
-                // a token reference would turn the fill back): the fill,
-                // then each token the part's text reads, or its text color
-                // when it reads none.
-                lost.flatMap(m => [
-                  {
-                    thing: 'background-color',
-                    value: String(res[m]?.['--color-background-surface']),
-                    on: p,
-                    mode: m,
-                  },
-                  ...(textTokens.length ? textTokens : ['color']).map(
-                    thing => ({
-                      thing,
-                      value: String(res[m]?.['--color-text-primary']),
-                      on: p,
-                      mode: m,
-                    }),
-                  ),
-                ]),
+            : surfaceSteps(lost)
+          : surfaceSteps(modes),
       });
     }
     if (!accent) continue;
-    // A status fill still the base's: the status color generated at the
-    // theme's vibrancy (its dial), with the text that reads on it.
-    const status = restKept
-      ? /** @type {string | undefined} */ (
-          rest
-            .map(
+    // A status fill still the base's (a banner's, a badge's status
+    // variants): the status color generated at the theme's vibrancy (its
+    // dial), with the text that reads on it. Only where that changes the
+    // color built: with the vibrancy at the base's, the dial gives the
+    // base's own color back, and the part is drawn as the base draws it.
+    const statusReads = reads.filter(
+      (/** @type {any} */ r) =>
+        /-(info|success|warning|error)(-|$)/.test(r.token) &&
+        !changed(r.token) &&
+        r.when.some(
+          (/** @type {string} */ w) => w === '' || /^variant=[\w-]+$/.test(w),
+        ),
+    );
+    const statuses = vibrancyMoved
+      ? [
+          ...new Set(
+            statusReads.map(
               (/** @type {any} */ r) =>
-                /-(info|success|warning|error)(-|$)/.exec(r.token)?.[1],
-            )
-            .find(Boolean)
+                /** @type {string} */ (
+                  /-(info|success|warning|error)(-|$)/.exec(r.token)?.[1]
+                ),
+            ),
+          ),
+        ].filter(
+          st =>
+            !data.settings.some(
+              x => x.source === 'dial' && x.thing === STATUS[st][0],
+            ),
         )
-      : undefined;
-    if (
-      status &&
-      !covers(p, FILL) &&
-      !data.settings.some(
-        x => x.source === 'dial' && x.thing === STATUS[status][0],
-      )
-    )
+      : [];
+    if (statuses.length && !covers(p, FILL))
       found.push({
         kind: 3,
         part: p,
-        why: `still the base's ${status} color (${rest[0].token}): the ${STATUS[status][0]} color is not generated`,
+        why: `still the base's ${statuses.join(', ')} color${statuses.length > 1 ? 's' : ''} (${statusReads[0].token}): not generated at the theme's vibrancy`,
         aspect: 'background',
-        steps: [
-          {
-            thing: STATUS[status][0],
-            value: String(base.light?.[STATUS[status][1]] ?? '#1f2937'),
-          },
-        ],
+        steps: statuses.map(st => ({
+          thing: STATUS[st][0],
+          value: String(base.light?.[STATUS[st][1]] ?? '#1f2937'),
+        })),
       });
     // A disabled part drawn as the accent at reduced opacity: with the
     // accent changed, a translucent block of the new accent. Only the
@@ -359,6 +411,46 @@ export function missedSteps(ctx, data, res, base) {
           {thing: 'border-radius', value: 'var(--radius-element)', on: p},
         ],
       });
+  // A square or outlined look (square corners, or a border width the
+  // theme set) beside a soft shadow the base draws (a popover's, a menu's,
+  // a dialog's): the shadow with no blur matches it.
+  const square = modes.every(m =>
+    /^0(px|rem)?$/.test(String(res[m]?.['--radius-element']).trim()),
+  );
+  if (square || borders)
+    for (const p of Object.keys(C.MAP).filter(has)) {
+      if (covers(p, /^(box-shadow|--shadow-[\w-]+)$/)) continue;
+      const read = (C.partReads(p, 'shadow') ?? []).find(
+        (/** @type {any} */ r) =>
+          /^--shadow-/.test(r.token) &&
+          r.when.includes('') &&
+          !changed(r.token),
+      );
+      if (!read) continue;
+      const hard = modes.map(m => ({
+        m,
+        v: blurScaled(String(res[m]?.[read.token] ?? ''), 0),
+        was: String(res[m]?.[read.token] ?? ''),
+      }));
+      // Only a shadow with a blur (a line that would change nothing is
+      // never offered).
+      if (hard.some(h => !h.v || h.v === h.was)) continue;
+      const same = hard.every(h => h.v === hard[0].v);
+      found.push({
+        kind: 6,
+        part: p,
+        why: `still a soft shadow (${read.token}) beside the theme's ${square ? 'square corners' : 'border'}`,
+        aspect: 'shadow',
+        steps: same
+          ? [{thing: 'box-shadow', value: String(hard[0].v), on: p}]
+          : hard.map(h => ({
+              thing: 'box-shadow',
+              value: String(h.v),
+              on: p,
+              mode: h.m,
+            })),
+      });
+    }
   if (borders)
     for (const p of borderlessSurfaces(C).filter(
       x =>
