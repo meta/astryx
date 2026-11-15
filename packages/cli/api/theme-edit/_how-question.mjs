@@ -1895,6 +1895,7 @@ export function partLexicon(ctx) {
     'chevron',
     'caret',
     'segment',
+    'fill',
   ];
   /**
    * The piece entries for a part said by a pattern.
@@ -1915,6 +1916,8 @@ export function partLexicon(ctx) {
       .map(k => k.slice(key.length + 1))
       .filter(rest => !keys.has(rest));
     for (const piece of [...new Set([...PIECES, ...named])]) {
+      // (A piece the part's own name says already: a progress bar fill.)
+      if (key.split('-').includes(piece)) continue;
       // A select's chevron, caret or arrow is the indicator icon it holds
       // (selector-indicator-icon); a field's segment, the one segment
       // part it holds.
@@ -1925,7 +1928,20 @@ export function partLexicon(ctx) {
             )
           : piece === 'segment'
             ? inside.filter(k => k.startsWith(`${key}-`) && /-segment$/.test(k))
-            : [];
+            : piece === 'fill'
+              ? // A fill drawn by an element inside a part (a slider's
+                // filled range, in its control): the part whose inner
+                // element paints a background from a color token.
+                [key, ...inside].filter(k =>
+                  Object.entries(ctx.C.MAP[k]?.inside ?? {}).some(
+                    ([t, props]) =>
+                      /^--color-/.test(t) &&
+                      /** @type {string[]} */ (props).includes(
+                        'background-color',
+                      ),
+                  ),
+                )
+              : [];
       const real =
         piece === 'title' && keys.has(`${key}-header-title-block`)
           ? `${key}-header-title-block`
@@ -16037,6 +16053,46 @@ export function draftAnswer(ctx, env, question) {
                   ...modeOf(c),
                 }),
               ],
+            ],
+          };
+        // A part whose own element paints no background while an element
+        // inside it does, from one color token (a slider control's filled
+        // range): that token, on the part.
+        const innerPart = on && !FAMILIES[on] && !f.state ? one(on) : null;
+        const innerOnly = innerPart
+          ? (() => {
+              const rec = C.MAP[innerPart];
+              const own = ['background-color', 'background'].some(
+                p => Object.keys(rec?.own?.[p]?.tokens ?? {}).length,
+              );
+              const toks = Object.entries(rec?.inside ?? {})
+                .filter(
+                  ([t, props]) =>
+                    /^--color-/.test(t) &&
+                    /** @type {string[]} */ (props).includes(
+                      'background-color',
+                    ),
+                )
+                .map(([t]) => t);
+              return !own && toks.length === 1 ? toks[0] : null;
+            })()
+          : null;
+        const innerColor = innerOnly ? colorFor(c, 'fill') : null;
+        if (innerPart && innerOnly && innerColor)
+          return {
+            text: `the fill${where}: an element inside ${innerPart} paints it from ${innerOnly}, so that token, on ${innerPart}${(() => {
+              const also = (C.MAP[innerPart]?.contains ?? []).filter(
+                (/** @type {string} */ k) =>
+                  Object.values(C.MAP[k]?.own ?? {}).some(
+                    (/** @type {any} */ x) => innerOnly in (x.tokens ?? {}),
+                  ),
+              );
+              return also.length
+                ? ` (it reaches ${also.join(', ')} inside too, which ${also.length > 1 ? 'read' : 'reads'} it)`
+                : '';
+            })()}`,
+            options: [
+              [set(innerOnly, innerColor, {on: innerPart, ...modeOf(c)})],
             ],
           };
         if (/\bstripe[sd]?\b|\bstriped\b|\bzebra\b/.test(c.text)) {

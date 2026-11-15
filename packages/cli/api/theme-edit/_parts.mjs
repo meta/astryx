@@ -37,7 +37,7 @@ import {
 import {removeOnStop} from '../../foundation/fs/stop-cleanup.mjs';
 
 /** Bump when the shape of the cached part data, or which parts it reaches, changes. */
-const PART_DATA_VERSION = 21;
+const PART_DATA_VERSION = 22;
 
 /**
  * Flags that change what a component does or whether it shows, not how it
@@ -113,6 +113,8 @@ function sampleOf(name, type) {
  * @param {unknown} selected
  */
 function slotItems(slot, selected) {
+  // (A group of many values, a checkbox list's, selects by a list.)
+  if (Array.isArray(selected)) selected = selected[0];
   return [1, 2, 3].map(i => {
     const props = {...(slot.props ?? {})};
     if (typeof props.label === 'string') props.label = `${props.label} ${i}`;
@@ -185,9 +187,31 @@ export function demoProps(project, name) {
       : undefined);
   if (!('children' in props) && kids) {
     if (slot?.__element && (kids.required || slot.__element.startsWith(name))) {
-      if (info.props.value && !('value' in props) && slot.props?.value != null)
-        props.value = `${String(slot.props.value)}-1`;
+      if (
+        info.props.value &&
+        !('value' in props) &&
+        slot.props?.value != null
+      ) {
+        // A group that holds many values (a checkbox list's `string[]`)
+        // takes them as a list.
+        const first = `${String(slot.props.value)}-1`;
+        props.value = /\[\]\s*$/.test(String(info.props.value.type ?? ''))
+          ? [first]
+          : first;
+      }
       props.children = slotItems(slot, props.value);
+      // The first item shows the icon its doc lets it take (a menu row's
+      // leading icon), so the paint Core gives an item's icon is read.
+      const iconProp = Object.entries(
+        project.components[slot.__element]?.props ?? {},
+      ).find(
+        ([p, d]) =>
+          /^(icon|startIcon|leadingIcon)$/.test(p) &&
+          /IconType|IconName/.test(String(/** @type {any} */ (d)?.type ?? '')),
+      )?.[0];
+      const first = /** @type {any} */ (props.children)[0];
+      if (iconProp && first && first.props?.[iconProp] == null)
+        first.props = {...first.props, [iconProp]: 'check'};
     }
   }
   return props;
@@ -1061,7 +1085,7 @@ function resolvePrivate(v, env, tokens, depth = 0) {
 export function walkMarkup(html, decls, tokens, targets = new Map()) {
   /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, tags: Set<string>, innerCorners: Set<string>, media: boolean, line?: Set<string>, lineAdded?: Array<[string, string, Set<string>, boolean?]>, held?: Record<string, Set<string>>}>} */
   const map = {};
-  /** @type {Array<{env: Record<string, string>, target: string | null, fg: PaintSide | null, bg: PaintSide | null, cond: string}>} */
+  /** @type {Array<{env: Record<string, string>, target: string | null, all?: string[], fg: PaintSide | null, bg: PaintSide | null, cond: string}>} */
   const stack = [{env: {}, target: null, fg: null, bg: null, cond: ''}];
   /** @type {Map<string, TextPair>} */
   const pairs = new Map();
@@ -1278,19 +1302,22 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
           addPair(target, fg, bg, attr('placeholder'));
       }
     }
+    // (Each part an element carries holds what is inside it: a checkbox
+    // list's root is a field too.)
     for (const t of ownsTarget ? named.map(c => c.slice(7)) : [])
       for (const anc of stack)
-        if (anc.target && anc.target !== t) {
-          map[anc.target].contains.add(t);
-          // What the parts inside it draw with there, at rest (a table
-          // row's cells' border color; a toast's ghost button declares
-          // none).
-          const A = map[anc.target];
-          for (const d of own)
-            if (!d.cond && !d.prop.startsWith('--'))
-              for (const tk of expand(d.value, env, tokens))
-                ((A.held ??= {})[tk] ??= new Set()).add(d.prop);
-        }
+        for (const at of anc.all ?? (anc.target ? [anc.target] : []))
+          if (at !== t) {
+            map[at].contains.add(t);
+            // What the parts inside it draw with there, at rest (a table
+            // row's cells' border color; a toast's ghost button declares
+            // none).
+            const A = map[at];
+            for (const d of own)
+              if (!d.cond && !d.prop.startsWith('--'))
+                for (const tk of expand(d.value, env, tokens))
+                  ((A.held ??= {})[tk] ??= new Set()).add(d.prop);
+          }
     if (ownsTarget) {
       for (const t of named) map[t.slice(7)].tags.add(tag.toLowerCase());
       // Corners Core draws on a part by its place among its siblings (a
@@ -1312,7 +1339,14 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         ].join(',')
       : parent.cond;
     if (!selfClose && !VOID.has(tag.toLowerCase()))
-      stack.push({env, target, fg, bg, cond: condHere});
+      stack.push({
+        env,
+        target,
+        all: ownsTarget ? named.map(c => c.slice(7)) : parent.all,
+        fg,
+        bg,
+        cond: condHere,
+      });
   }
   // A part that holds other parts (a layout, an outline, a slider's
   // control) is no bare line: what an empty element inside it painted

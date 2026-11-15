@@ -41,7 +41,6 @@ import {
   AUTO_SPREAD,
   COLOR_PROP_PARTS,
   COLOR_PROPS,
-  COMMON_STATES,
   CORNERS,
   ROUND_TO_PILL_STEP,
   DIALS,
@@ -122,6 +121,9 @@ import {
   paddedParts,
   onBuiltInSteps,
   setArgs,
+  ARIA_STATES,
+  partState,
+  partStates,
 } from './_settings.mjs';
 import {isColorToken} from './_compiler.mjs';
 import {
@@ -884,7 +886,11 @@ export function storedProblems(ctx, slug, data, skip = '') {
           ...(pair ? {fix: s.mode === 'dark' ? pair.dark : pair.light} : {}),
         };
       }
-      if (t && s.state && ![...t.states, ...COMMON_STATES].includes(s.state))
+      if (
+        t &&
+        s.state &&
+        !statesHold(partStates(ctx, /** @type {string} */ (s.on)), s.state)
+      )
         return scope(`"${s.state}" is not a state of ${s.on}`);
       if (t && s.when) {
         const [prop, value] = String(s.when).split(':');
@@ -3286,6 +3292,46 @@ function whenReading(when, props, variants) {
 }
 
 /**
+ * Whether every `+` piece of a state is one of the states.
+ * @param {string[]} states
+ * @param {string} state
+ * @returns {boolean}
+ */
+function statesHold(states, state) {
+  return String(state)
+    .split('+')
+    .every(p => states.includes(p));
+}
+
+/**
+ * Whether Core paints a part in every one of several states at once (a
+ * checked and disabled box): a condition the part data holds for it names
+ * each.
+ * @param {import('./_settings.mjs').Ctx} ctx
+ * @param {string} part
+ * @param {string[]} pieces
+ * @returns {boolean}
+ */
+function paintedTogether(ctx, part, pieces) {
+  const kebab = (/** @type {string} */ x) =>
+    x.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`);
+  const named = (/** @type {string} */ cond, /** @type {string} */ p) => {
+    const aria = ARIA_STATES[/** @type {keyof typeof ARIA_STATES} */ (p)];
+    if (aria) return cond.includes(`${aria.attr}=`);
+    return (
+      new RegExp(`(^|[\\s,])${kebab(p)}=`).test(cond) ||
+      new RegExp(`:${p}(?![\\w-])`).test(cond) ||
+      (p === 'disabled' && /disabled/.test(cond))
+    );
+  };
+  return Object.values(ctx.C.MAP[part]?.at ?? {}).some(byCond =>
+    Object.keys(/** @type {object} */ (byCond)).some(cond =>
+      pieces.every(p => named(cond, p)),
+    ),
+  );
+}
+
+/**
  * A state typed in another case or with dashes (`is-pressed` for
  * isPressed): the state of that name, or null.
  * @param {string} state
@@ -3356,9 +3402,7 @@ export function settableStates(ctx, slug, data, part) {
     }
   };
   const plain = takes(undefined);
-  return [...new Set([...t.states, ...COMMON_STATES])].filter(
-    state => !plain || takes(state),
-  );
+  return partStates(ctx, part).filter(state => !plain || takes(state));
 }
 
 /**
@@ -4593,11 +4637,11 @@ function checkOne(
           },
         );
     }
-    const states = [...t.states, ...COMMON_STATES];
+    const states = partStates(ctx, s.on);
     // A state the part lists in camelCase (toggle-button's isPressed) typed
-    // in any case or with dashes is that state.
-    if (s.state && !states.includes(s.state))
-      s.state = sameState(s.state, states) ?? s.state;
+    // in any case or with dashes is that state; one Core paints from an
+    // ARIA attribute (isPressed from aria-pressed), that ARIA state.
+    if (s.state) s.state = partState(ctx, s.on, s.state);
     // Several states in one --state (`hover,focus-visible`, `hover
     // focus-visible`): one line per state, the value quoted as typed.
     const typedStates = String(flags.state ?? '')
@@ -4620,7 +4664,25 @@ function checkOne(
         },
       );
     const meant = s.state ? stateMeant(s.state, states) : null;
-    if (s.state && !states.includes(s.state))
+    // Several states at once (`checked+disabled`): each the part's, and
+    // painted together by Core somewhere, else nothing would match.
+    if (
+      s.state &&
+      s.state.includes('+') &&
+      statesHold(states, s.state) &&
+      !paintedTogether(ctx, s.on, s.state.split('+'))
+    )
+      refuse(
+        E.ERR_THEME_UNKNOWN_STATE,
+        `Core never paints ${s.on} ${s.state.split('+').join(' and ')} at once, so a change there would match nothing. Name one state at a time.`,
+        {
+          run: s.state
+            .split('+')
+            .slice(0, 4)
+            .map(state => setLine(slug, thing, v, {...s, state}, unset)),
+        },
+      );
+    if (s.state && !statesHold(states, s.state))
       refuse(
         E.ERR_THEME_UNKNOWN_STATE,
         `"${s.state}" is not a state of ${s.on}. States: ${settableStates(ctx, slug, data, s.on).join(', ') || 'none'}.`,
@@ -4830,9 +4892,7 @@ function checkOne(
     for (const [m] of members)
       for (const [k, vals] of Object.entries(C.variantValues(m)))
         variants[k] = [...new Set([...(variants[k] ?? []), ...vals])];
-    const states = [
-      ...new Set([...members.flatMap(([, t]) => t.states), ...COMMON_STATES]),
-    ];
+    const states = [...new Set(members.flatMap(([m]) => partStates(ctx, m)))];
     if (s.when) {
       const [p, wv, ...more] = s.when.split(':');
       const fits = members.some(([m, t]) => {
@@ -4866,7 +4926,7 @@ function checkOne(
     const state = s.state;
     if (
       state &&
-      !members.some(([, t]) => [...t.states, ...COMMON_STATES].includes(state))
+      !members.some(([m]) => statesHold(partStates(ctx, m), state))
     ) {
       const meant = stateMeant(state, states);
       refuse(

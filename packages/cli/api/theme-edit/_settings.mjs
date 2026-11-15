@@ -3877,7 +3877,8 @@ export function ownSourceTokenValues(cwd, slug) {
 function scopeProblem(s) {
   if (s.on != null && !/^[a-z][a-z0-9-]*$/.test(s.on))
     return `${s.thing} is set on "${s.on}", which is not a part or group name`;
-  if (s.state != null && !/^[a-z][a-zA-Z-]*$/.test(s.state))
+  // (Several states at once are joined by +: `checked+disabled`.)
+  if (s.state != null && !/^[a-z][a-zA-Z-]*(\+[a-z][a-zA-Z-]*)*$/.test(s.state))
     return `${s.thing} has state "${s.state}", which is not a state name`;
   if (s.when != null && !/^[\w-]+:[\w.-]+$/.test(s.when))
     return `${s.thing} has --when "${s.when}", which is not prop:value`;
@@ -3925,8 +3926,40 @@ export function partsOf(ctx, s) {
   if (FAMILIES[s.on]) return FAMILIES[s.on].filter(has);
   const fam = familyOf(s.on);
   if (fam && AUTO_SPREAD.includes(fam) && !s.only)
-    return FAMILIES[fam].filter(has);
+    return FAMILIES[fam].filter(has).filter(m => drawnAlike(ctx, s, m));
   return [s.on];
+}
+
+/**
+ * Whether a group member draws a property as the member named does, at
+ * rest (the part data's values in each render, no state): a group styled
+ * alike spreads a setting only where its members are alike in Core. A
+ * radio is round where a checkbox has small corners, so a checkbox's
+ * corners stay the checkbox's. Unknown either way counts as alike.
+ * @param {Ctx} ctx
+ * @param {Pick<Setting, 'on' | 'thing'>} s
+ * @param {string} member
+ * @returns {boolean}
+ */
+function drawnAlike(ctx, s, member) {
+  if (member === s.on || !s.on) return true;
+  const thing = String(s.thing ?? '');
+  if (thing.startsWith('--')) return true;
+  const prop = thing === 'corners' ? 'border-radius' : kebab(thing);
+  /** @type {Record<string, any> | undefined} */
+  const MAP = /** @type {any} */ (ctx).C?.MAP;
+  /** @param {string} part */
+  const rest = part => {
+    const at = MAP?.[part]?.at?.[prop];
+    if (!at) return null;
+    const vals = Object.entries(at)
+      .filter(([cond]) => !/:/.test(cond))
+      .map(([, v]) => String(v).trim());
+    return vals.length ? [...new Set(vals)].sort().join(' | ') : null;
+  };
+  const a = rest(s.on);
+  const b = rest(member);
+  return a == null || b == null || a === b;
 }
 
 export {modesOf};
@@ -4587,15 +4620,14 @@ export function compileTheme(ctx, data, base) {
   /** @param {Setting} s @param {string} target @returns {Record<string, any>} */
   const block = (s, target) => {
     const t = (theme.components[target] ??= {});
-    let b = (t[s.when ?? 'base'] ??= {});
-    if (s.state) {
-      const tg = ctx.project.target.get(target);
-      if (tg?.states.includes(s.state) && s.when == null) b = t[s.state] ??= {};
-      else if (tg?.states.includes(s.state))
-        b = t[`${s.when}+${s.state}`] ??= {};
-      else b = b[stateKey(s.state, wrapsOneControl(ctx, target))] ??= {};
-    }
-    return b;
+    const {key, pseudo} = stateSlot(
+      ctx.project.target.get(target)?.states ?? [],
+      s.state,
+      s.when,
+      wrapsOneControl(ctx, target),
+    );
+    const b = (t[key] ??= {});
+    return pseudo ? (b[pseudo] ??= {}) : b;
   };
   /**
    * A setting's rule block for one color mode: the style key's `@light` or
@@ -4606,19 +4638,15 @@ export function compileTheme(ctx, data, base) {
    */
   const modeBlock = (s, target, mode) => {
     const t = (theme.components[target] ??= {});
-    const tg = ctx.project.target.get(target);
-    const state = s.state;
-    const ownState = !!state && !!tg?.states.includes(state);
-    const key =
-      state && ownState
-        ? s.when == null
-          ? state
-          : `${s.when}+${state}`
-        : (s.when ?? 'base');
+    const {key, pseudo} = stateSlot(
+      ctx.project.target.get(target)?.states ?? [],
+      s.state,
+      s.when,
+      wrapsOneControl(ctx, target),
+    );
     const rule = (t[key] ??= {});
     const mb = (rule[`@${mode}`] ??= {});
-    if (!state || ownState) return mb;
-    return (mb[stateKey(state, wrapsOneControl(ctx, target))] ??= {});
+    return pseudo ? (mb[pseudo] ??= {}) : mb;
   };
   /**
    * A padding on a part whose padding Core writes one variable per side
@@ -5284,9 +5312,15 @@ export function compileTheme(ctx, data, base) {
    */
   const narrowSelector = (target, s) => {
     const tg = ctx.project.target.get(target);
-    if (s.state && tg?.states.includes(s.state)) return null;
+    const slot = stateSlot(
+      tg?.states ?? [],
+      s.state,
+      s.when,
+      wrapsOneControl(ctx, target),
+    );
+    if (s.state && slot.key !== (s.when ?? 'base')) return null;
     const [k, v] = s.when ? String(s.when).split(':') : [];
-    return `.astryx-${target}${s.when ? `[data-${k}="${v}"]` : ''}${s.state ? stateKey(s.state, wrapsOneControl(ctx, target)) : ''}`;
+    return `.astryx-${target}${s.when ? `[data-${k}="${v}"]` : ''}${slot.pseudo ?? ''}`;
   };
 
   /**
@@ -5368,10 +5402,15 @@ export function compileTheme(ctx, data, base) {
     // (:where), so any variant, the own source's included, out-ranks it as
     // it out-ranks the plain rule.
     if (!s.state && !s.when) return [block(s, target), `:where(${dir})`];
-    if (!s.state || tg?.states.includes(s.state))
-      return [block(s, target), dir];
-    const parent = block({...s, state: undefined}, target);
-    return [parent, `${stateKey(s.state, wrapsOneControl(ctx, target))}${dir}`];
+    const slot = stateSlot(
+      tg?.states ?? [],
+      s.state,
+      s.when,
+      wrapsOneControl(ctx, target),
+    );
+    if (!slot.pseudo) return [block(s, target), dir];
+    const parent = ((theme.components[target] ??= {})[slot.key] ??= {});
+    return [parent, `${slot.pseudo}${dir}`];
   };
   /**
    * One half of a light-dark() pair (1 light, 2 dark), or the value itself.
@@ -9639,11 +9678,17 @@ export function baseComponent(base, ctx, target, prop, s) {
   let b = t[s.when ?? 'base'];
   if (s.state) {
     const states = ctx.project.target.get(target)?.states ?? [];
-    b = states.includes(s.state)
-      ? t[s.when == null ? s.state : `${s.when}+${s.state}`]
-      : (b?.[stateKey(s.state, wrapsOneControl(ctx, target))] ??
-        b?.[stateKey(s.state)] ??
-        b?.[`:${s.state}`]);
+    const slot = stateSlot(
+      states,
+      s.state,
+      s.when,
+      wrapsOneControl(ctx, target),
+    );
+    b = slot.pseudo
+      ? (t[slot.key]?.[slot.pseudo] ??
+        t[slot.key]?.[stateSlot(states, s.state, s.when).pseudo ?? ''] ??
+        t[slot.key]?.[`:${s.state}`])
+      : t[slot.key];
   }
   const v = b?.[prop];
   return typeof v === 'string' ? v : null;
@@ -9877,10 +9922,110 @@ export function clearNewMarker(dir) {
  * @returns {string}
  */
 export function stateKey(state, wrapsControl = false) {
+  const aria = ARIA_STATES[/** @type {keyof typeof ARIA_STATES} */ (state)];
+  if (aria) return `:is(${aria.selector})`;
   if (state !== 'disabled') return `:${state}`;
   return wrapsControl
     ? ':is(:disabled,[aria-disabled="true"],:has(:is(input,button,select,textarea):is(:disabled,[aria-disabled="true"])))'
     : ':is(:disabled,[aria-disabled="true"])';
+}
+
+/**
+ * The states Core paints from an ARIA attribute rather than a data
+ * attribute of its own (a pagination's current page, a pressed or open
+ * button): set names each as a state, and the build writes it as the
+ * attribute.
+ */
+export const ARIA_STATES = {
+  current: {
+    attr: 'aria-current',
+    selector: '[aria-current]:not([aria-current="false"])',
+  },
+  pressed: {attr: 'aria-pressed', selector: '[aria-pressed="true"]'},
+  expanded: {attr: 'aria-expanded', selector: '[aria-expanded="true"]'},
+};
+
+/**
+ * The ARIA states a part is painted in (any condition the part data holds
+ * for it names the attribute).
+ * @param {{MAP: Record<string, any>}} C
+ * @param {string} part
+ * @returns {string[]}
+ */
+export function ariaStates(C, part) {
+  /** @type {Set<string>} */
+  const found = new Set();
+  for (const byCond of Object.values(C.MAP[part]?.at ?? {}))
+    for (const cond of Object.keys(/** @type {object} */ (byCond)))
+      for (const [name, {attr}] of Object.entries(ARIA_STATES))
+        if (cond.includes(`${attr}=`)) found.add(name);
+  return [...found];
+}
+
+/**
+ * The states `set` takes on a part, before any is tested: its doc's, the
+ * ones every part takes, and the ARIA states the part data paints it in
+ * (less one its doc names as its own: a toggle button's isPressed is its
+ * pressed state).
+ * @param {Ctx} ctx
+ * @param {string} part
+ * @returns {string[]}
+ */
+export function partStates(ctx, part) {
+  const t = ctx.project.target.get(part);
+  if (!t) return [...COMMON_STATES];
+  const own = new Set(
+    t.states.map(st => st.replace(/^is(?=[A-Z])/, '').toLowerCase()),
+  );
+  return [
+    ...new Set([
+      ...t.states,
+      ...COMMON_STATES,
+      ...ariaStates(ctx.C, part).filter(a => !own.has(a)),
+    ]),
+  ];
+}
+
+/**
+ * A state as typed, each of its `+` pieces read as the part's own name for
+ * it (any case or dashes).
+ * @param {Ctx} ctx
+ * @param {string} part
+ * @param {string} state
+ * @returns {string}
+ */
+export function partState(ctx, part, state) {
+  const states = partStates(ctx, part);
+  const flat = (/** @type {string} */ x) =>
+    x.replace(/[-_\s]/g, '').toLowerCase();
+  return state
+    .split('+')
+    .map(p => states.find(x => flat(x) === flat(p)) ?? p)
+    .join('+');
+}
+
+/**
+ * Where a setting's state goes in the built theme: the style key (its
+ * variant and every state Core writes as a key of its own, `checked+disabled`)
+ * and the pseudo-class key under it for the rest, joined (`:hover`, an ARIA
+ * state's attribute), or null for none.
+ * @param {string[]} own the states Core writes as keys on the part
+ * @param {string | undefined} state
+ * @param {string | undefined} when
+ * @param {boolean} [wrapsControl]
+ * @returns {{key: string, pseudo: string | null}}
+ */
+export function stateSlot(own, state, when, wrapsControl = false) {
+  const pieces = state ? String(state).split('+') : [];
+  const keyed = pieces.filter(p => own.includes(p));
+  const pseudo = pieces
+    .filter(p => !own.includes(p))
+    .map(p => stateKey(p, wrapsControl))
+    .join('');
+  return {
+    key: [...(when == null ? [] : [when]), ...keyed].join('+') || 'base',
+    pseudo: pseudo || null,
+  };
 }
 
 /**

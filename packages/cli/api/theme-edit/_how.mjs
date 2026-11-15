@@ -18,7 +18,6 @@ import {
   AUTO_SPREAD,
   COLOR_PROPS,
   COMMON_PROPERTIES,
-  COMMON_STATES,
   DIALS,
   FAMILIES,
   GROUPS,
@@ -34,6 +33,8 @@ import {
   loadTheme,
   nearest,
   partComponentDocs,
+  partStates,
+  ARIA_STATES,
   refuse,
   resolvedTokens,
   themeSourceParseError,
@@ -1104,8 +1105,21 @@ export function condition(ctx, target, cond, settable) {
   if (!cond.trim()) return 'always';
   const t = ctx.project.target.get(target);
   const props = t?.props ?? [];
-  const states = settable ?? [...(t?.states ?? []), ...COMMON_STATES];
+  const states = settable ?? partStates(ctx, target);
   const values = ctx.C.variantValues(target);
+  // An attribute the part has no prop for and is drawn with the same value
+  // in every render (a toggle button is always a ghost button): the part
+  // itself, not a condition.
+  /** @type {Map<string, Set<string>>} */
+  const seen = new Map();
+  for (const byCond of Object.values(ctx.C.MAP[target]?.at ?? {}))
+    for (const c of Object.keys(/** @type {object} */ (byCond)))
+      for (const m of c.matchAll(/(?:^|[\s,])([a-z][\w-]*)=([^\s,]*)/gi))
+        (seen.get(m[1]) ?? seen.set(m[1], new Set()).get(m[1]))?.add(m[2]);
+  /** @type {Record<string, string>} */
+  const ariaOf = Object.fromEntries(
+    Object.entries(ARIA_STATES).map(([name, {attr}]) => [attr, name]),
+  );
   const words = cond.trim().split(/\s+/);
   const isAttr = (/** @type {string} */ w) => /^[a-z][\w-]*=[^\s]*$/i.test(w);
   const attrs = words.filter(isAttr).flatMap(w => w.split(','));
@@ -1116,9 +1130,24 @@ export function condition(ctx, target, cond, settable) {
   let why = null;
   for (const kv of attrs) {
     const [k, v] = kv.split('=');
+    // A state Core paints from an ARIA attribute: --state by its name.
+    if (ariaOf[k] && states.includes(ariaOf[k]) && v !== 'false')
+      flags.push(`--state ${ariaOf[k]}`);
+    else if (
+      !props.includes(k) &&
+      !states.includes(k) &&
+      !ariaOf[k] &&
+      seen.get(k)?.size === 1 &&
+      Object.values(ctx.C.MAP[target]?.at ?? {}).every(byCond =>
+        Object.keys(/** @type {object} */ (byCond)).every(
+          c => !c.trim() || new RegExp(`(^|[\\s,])${k}=`).test(c),
+        ),
+      )
+    )
+      continue;
     // A state written as its own name (`checked=checked`) set takes as
     // --state.
-    if ((v === k || v === 'true') && states.includes(k))
+    else if ((v === k || v === 'true') && states.includes(k))
       flags.push(`--state ${k}`);
     else if (props.includes(k) && (!values[k]?.length || values[k].includes(v)))
       flags.push(`--when ${k}:${v}`);
@@ -1129,13 +1158,34 @@ export function condition(ctx, target, cond, settable) {
   }
   if (css) {
     const m = /^:([a-z-]+)$/.exec(css);
+    // An ARIA state Core writes as a selector of its own (an open menu
+    // button's `:is([aria-expanded="true"][aria-haspopup]…)`).
+    const aria = /^(?::is\()?\[(aria-[a-z]+)="?([\w-]+)"?\]/.exec(css);
     if (m && states.includes(m[1])) flags.push(`--state ${m[1]}`);
+    else if (
+      aria &&
+      ariaOf[aria[1]] &&
+      states.includes(ariaOf[aria[1]]) &&
+      aria[2] !== 'false' &&
+      !/::|:(?!is\(|not\()/.test(css.replace(/^:is\(|\)$/g, ''))
+    )
+      flags.push(`--state ${ariaOf[aria[1]]}`);
     else why ??= `${css} is a CSS selector that set cannot name`;
   }
   if (flags.filter(f => f.startsWith('--when')).length > 1)
     why ??= 'set names one --when at a time';
-  if (flags.filter(f => f.startsWith('--state')).length > 1)
-    why ??= 'set names one --state at a time';
+  // Several states at once (a checked and disabled box): one --state with
+  // each, joined by +.
+  const stateFlags = flags.filter(f => f.startsWith('--state'));
+  if (stateFlags.length > 1) {
+    const joined = `--state ${stateFlags.map(f => f.slice(8)).join('+')}`;
+    flags.splice(
+      0,
+      flags.length,
+      ...flags.filter(f => !f.startsWith('--state')),
+      joined,
+    );
+  }
   return why ? `${cond.trim()} (not settable: ${why})` : flags.join(' ');
 }
 
