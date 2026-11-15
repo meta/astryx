@@ -97,7 +97,7 @@ export default function ErrorPage() {
           </VStack>
         ) : null}
 
-        <Collapsible trigger="Error details">
+        <Collapsible trigger="Error details" defaultIsOpen={false}>
           <VStack gap={3}>
             <MetadataList>
               <MetadataListItem label="Error">
