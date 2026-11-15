@@ -136,7 +136,8 @@ describe('astryx discover: an installed integration says what it is', () => {
       expect(entry.description).toBe('Acme guides for building.');
 
       const text = await runCli(['discover', '--installed'], {cwd: tmpDir});
-      expect(text.stdout).not.toMatch(/\u001b|\u0007/);
+      expect(text.stdout).not.toContain('\u001b');
+      expect(text.stdout).not.toContain('\u0007');
     },
     SLOW,
   );
