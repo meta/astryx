@@ -190,7 +190,7 @@ jobs:
       - name: Stop for a superseded head
         if: steps.head.outputs.superseded == 'true'
         run: |
-          echo "::error title=Superseded head::This run's head is no longer the pull request's head. The run for the current head reports the checks."
+          echo "::error title=Superseded head::A newer run of this pull request is for another head, so this run stops. The newest run reports the checks."
           exit 1
 
       # The one Node leg count (scripts/vitest-node-legs.mjs): test-node's

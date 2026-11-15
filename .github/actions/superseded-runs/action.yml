@@ -42,7 +42,7 @@ inputs:
 
 outputs:
   superseded:
-    description: "'true' when this run's head is no longer the pull request's head."
+    description: "'true' when this run is superseded: under 'head', its head is not the pull request's head; under 'newest-run' or 'cancel', the newest run of the pull request is for another head."
     value: ${{ steps.sweep.outputs.superseded }}
 
 runs:

@@ -310,12 +310,14 @@ describe('the superseded-runs action', () => {
   });
 
   it('leaves a pull request whose new run CI refused right after its sweep with that run alone, and a re-run of it recovers', async () => {
-    // Run 10's sweep cancelled run 2; then CI turned run 10 away.
-    const left = [
-      run(2, {status: 'completed'}),
-      run(10, {head_sha: NEW, status: 'completed', run_attempt: 1}),
-    ];
-    expect(left.filter(item => item.status !== 'completed')).toEqual([]);
+    // Run 10's sweep, at its start, cancels run 2 for the older head; then
+    // CI turns run 10 away, so the pull request is left with run 10 alone.
+    const first = await sweep({
+      context: pullRequestContext({head: NEW, runId: 10}),
+      runs: [run(2), run(10, {head_sha: NEW, run_attempt: 1})],
+    });
+    expect(first.cancelled).toEqual([2]);
+    expect(first.outputs.superseded).toBe('false');
     // The manual re-run of run 10 keeps its id: it is the newest run, for the
     // current head, so it goes on, waits for room and cancels nothing.
     const rerun = await sweep({

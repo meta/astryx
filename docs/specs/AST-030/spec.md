@@ -399,7 +399,8 @@ they are separately named.
   visual, accessibility and RTL owners a maintainer opts a pull request into
   with their `ci:run-*` labels are unaffected by these per-author limits. Every
   run of the CI and Main workflows, of any event, waits for room before its jobs
-  start, except the CI workflow's Storybook build, which starts as soon as there
+  start, except two CI workflow jobs. A pull-request run's `superseded-runs`
+  sweep starts with the run (below). The Storybook build starts as soon as there
   is room for it while every job that uses it waits for room for the run: it
   starts once the other active runs' estimated jobs plus its own most fit under
   about ninety, and a pull-request run also waits, for that wait's first
@@ -411,7 +412,8 @@ they are separately named.
   jobs of room every four minutes, inside its longest wait. A pull-request run
   that finds no room waits like the others, on its slim runner, until its
   longest wait (12 minutes); waiting runs count only what they run: their
-  waiting job and a Storybook build that found room. A pull-request run still without room at its
+  waiting job, a Storybook build that found room, and the `superseded-runs`
+  sweep while it runs. A pull-request run still without room at its
   longest wait looks once more and starts only if no other pull-request run
   started at its longest wait in the last ten minutes and no run that waited
   longer still waits; otherwise it stops with "CI is full: re-run all jobs or
@@ -423,15 +425,15 @@ they are separately named.
   (`.github/actions/ci-admission/count.mjs`), with no count of its own. The contributor class of FR29 is granted by the capacity tool before this admission; its runs are then admitted like any pull request run.
   A run for a head that is no longer its pull request's head passes no
   required context. The newest run of a pull request wins, in the order its
-  runs were created; a re-run keeps its run's place. As it starts, before it
-  waits for room, a pull-request run from this repository cancels each
+  runs were created; a re-run keeps its run's place. A run is superseded only
+  when the newest run of its pull request is for another head; a head read
+  alone never makes a run stop itself. As it starts, before it waits for room,
+  a pull-request run from this repository that is not superseded cancels each
   unfinished CI run of its pull request that was created before it for
   another head; it never cancels a newer run, and a fork's run cancels
-  nothing. A run is superseded only when the newest run of its pull request
-  is for another head; a head read alone never makes a run stop itself. A
-  superseded run stops before it waits and cancels itself. `build`, `test`
-  and `docsite-test` read the head again as they report, and fail with the
-  reason when it is no longer the run's head.
+  nothing. A superseded run stops before it waits and cancels only itself.
+  `build`, `test` and `docsite-test` read the head again as they report, and
+  fail with the reason when it is no longer the run's head.
 - **FR17 — A pull request runs CI when it is ready and a maintainer can vouch
   for it.** A draft pull request runs no CI, and marking it ready for review
   starts its pull-request run, which runs what the change reaches (FR13,
@@ -1091,15 +1093,18 @@ minutes.
 GitHub offers no repository-wide limit on concurrent jobs: a `concurrency` group
 serializes runs and does not count jobs. So every run of the CI and Main
 workflows waits at its start until the other active runs' estimated jobs plus
-its own fit under ninety. Small workflows that are not admitted (linting, review
+its own fit under ninety; only the CI workflow's Storybook build and a
+pull-request run's `superseded-runs` sweep start before that (FR16). Small
+workflows that are not admitted (linting, review
 bookkeeping, report publishing) always count at least eighteen jobs, so the room
 they can take stays free. Over a day's runs they peaked at twenty jobs at once,
 and rose by at most fourteen within two minutes in ninety-nine looks of a
 hundred (seventeen at most), so a margin over the jobs they run at a look would
 not hold the ceiling, and eighteen covers all but the rarest rises without
 lengthening every run's wait. Each CI or Main run counts its live jobs: a
-pull-request run still waiting counts the jobs it runs, the job that waits and a
-Storybook build that found room, so waiting runs hold each other back by no more
+pull-request run still waiting counts the jobs it runs, the job that waits, a
+Storybook build that found room and the `superseded-runs` sweep while it runs,
+so waiting runs hold each other back by no more
 than they use, and a run admitted in the last forty-five seconds, before its
 jobs appear, counts at least its planned most. A run GitHub still lists as
 active but has not updated in two hours holds no runner and counts nothing. A
