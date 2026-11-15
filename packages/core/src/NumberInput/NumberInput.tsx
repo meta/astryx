@@ -778,7 +778,6 @@ export function NumberInput({
   // it to tell the field's own separators, which a composed digit shifted,
   // from ones the person typed.
   const compositionStartTextRef = useRef<string | undefined>(undefined);
-  // The typed group character indexes of the draft at compositionstart.
   const compositionStartTypedGroupsRef = useRef<ReadonlyArray<number>>([]);
   // The draft text that holds group characters the person typed, with their
   // indexes, or null. Keyed by text so a draft the field rewrote (commit,
