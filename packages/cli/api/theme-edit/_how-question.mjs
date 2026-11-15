@@ -47,6 +47,7 @@ import {
 import {isColorToken} from './_compiler.mjs';
 import {
   radioCircle,
+  DIAL_RADII,
   cornerParts,
   focusStateOf,
   paddedParts,
@@ -54,6 +55,7 @@ import {
   lengthPx,
   partRuleTokens,
   positionalCornerToken,
+  radiusAt,
 } from './_settings.mjs';
 import {
   borderlessSurfaces,
@@ -865,11 +867,15 @@ export function restColorRead(reads, when, known = {}) {
   const status = /^status=(info|success|warning|error|danger)$/.exec(
     asked ?? '',
   )?.[1];
+  // (The role is a word of the token's name: --color-info-muted, the
+  // text on it --color-on-info-muted.)
   const role = token
-    ? /^--color-(info|success|warning|error)(-[a-z-]+)?$/.exec(token)
+    ? /^(--color-(?:[a-z]+-)*?)(info|success|warning|error)((?:-[a-z]+)*)$/.exec(
+        token,
+      )
     : null;
   if (status && role) {
-    const own = `--color-${status === 'danger' ? 'error' : status}${role[2] ?? ''}`;
+    const own = `${role[1]}${status === 'danger' ? 'error' : status}${role[3]}`;
     if (Object.hasOwn(known, own)) return own;
   }
   return token;
@@ -2510,7 +2516,12 @@ function clausesOf(q, partWords) {
     // "input borders 3:1 against the page", "the text 4.5:1 against the
     // page": the part after "against" is what is measured against, read
     // and never changed, whether or not a part is named before it (the text
-    // of the theme is the subject then).
+    // of the theme is the subject then). A contrast ratio is measured
+    // against what the part sits on, so after a ratio the part after "on"
+    // or "over" is that ground too ("button border 3:1 on the card").
+    const groundWord = /\b\d+(?:\.\d+)?\s*:\s*1\b/.test(text)
+      ? /\b(?:against|on|over)\s+(?:the\s+|my\s+|a\s+)?$/
+      : /\bagainst\s+(?:the\s+|my\s+)?$/;
     if (parts.length) {
       /** Where the clause names a part, by any of its words. @param {{on: string}} p */
       const firstAt = p =>
@@ -2525,10 +2536,8 @@ function clausesOf(q, partWords) {
         return (
           at != null &&
           at > 0 &&
-          /\S/.test(
-            text.slice(0, at).replace(/\bagainst\s+(?:the\s+|my\s+)?$/, ''),
-          ) &&
-          /\bagainst\s+(?:the\s+|my\s+)?$/.test(text.slice(0, at))
+          /\S/.test(text.slice(0, at).replace(groundWord, '')) &&
+          groundWord.test(text.slice(0, at))
         );
       });
       if (ground) {
@@ -7855,7 +7864,10 @@ export function draftAnswer(ctx, env, question) {
               ? 'spacing'
               : r.dial,
         );
-        const ons = scoped && c.parts.length ? c.parts : [null];
+        // (The page is no part a dial reaches: a dial on it is the whole
+        // theme's, "the page density compact".)
+        const dialParts = c.parts.filter(p => p.on !== 'page');
+        const ons = scoped && dialParts.length ? dialParts : [null];
         const steps = ons.map(p => {
           if (p) seenPart(p.on);
           return set(
@@ -8757,21 +8769,27 @@ export function draftAnswer(ctx, env, question) {
     // of that property now, written out; the other part is not changed.
     {
       const measure =
-        /\bas (round(?:ed)?|tall|high|bold|big|large) as\b|\bsame (corners?|radius|roundness|padding|height|font size|text size|weight) as\b|\b(?:match(?:es|ing)?|(?<!\b(?:i'?d|i|would|we'?d|you'?d)\s)like)\b[^.]*?\b(corners?|radius|padding|height)\b|\b(corners?|radius|padding|height)\b[^.]*?\b(?:bigger|larger|more|smaller|less|tighter|rounder|squarer) than\b|\b(rounder|squarer|sharper) than\b|\b(corners?|radius|padding|height)\b[^.]*?\b(?:(?:the )?same as|(?:equal|identical) to)\b/.exec(
+        /\bas (round(?:ed)?|tall|high|bold|big|large|dark|light|bright|pale) as\b|\bsame (corners?|radius|roundness|padding|height|font size|text size|weight) as\b|\b(?:match(?:es|ing)?|(?<!\b(?:i'?d|i|would|we'?d|you'?d)\s)like)\b[^.]*?\b(corners?|radius|padding|height)\b|\b(corners?|radius|padding|height)\b[^.]*?\b(?:bigger|larger|more|smaller|less|tighter|rounder|squarer) than\b|\b(rounder|squarer|sharper) than\b|\b(corners?|radius|padding|height)\b[^.]*?\b(?:(?:the )?same as|(?:equal|identical) to)\b/.exec(
           c.text,
         );
       const word = measure ? (measure.slice(1).find(Boolean) ?? '') : '';
-      const prop = /round|corner|radius|squarer|sharper/.test(word)
-        ? 'border-radius'
-        : /padding/.test(word)
-          ? 'padding'
-          : /tall|high|height/.test(word)
-            ? 'height'
-            : /bold|weight/.test(word)
-              ? 'font-weight'
-              : /big|large|size/.test(word)
-                ? 'font-size'
-                : null;
+      // ("as dark as dialogs": the other part's color, its text color when
+      // the text is named, else its fill.)
+      const prop = /^(dark|light|bright|pale)$/.test(word)
+        ? /\b(text|labels?|words?)\b/.test(c.text)
+          ? 'color'
+          : 'background-color'
+        : /round|corner|radius|squarer|sharper/.test(word)
+          ? 'border-radius'
+          : /padding/.test(word)
+            ? 'padding'
+            : /tall|high|height/.test(word)
+              ? 'height'
+              : /bold|weight/.test(word)
+                ? 'font-weight'
+                : /big|large|size/.test(word)
+                  ? 'font-size'
+                  : null;
       // The parts as the words name them (the comparison's own part may have
       // been taken out of the clause's parts already).
       const named = [
@@ -9976,6 +9994,17 @@ export function draftAnswer(ctx, env, question) {
    * @returns {string | null}
    */
   function partPropNow(part, prop, live = false) {
+    // The page is painted with the body tokens: its fill, the body
+    // background; its text, the main text color.
+    if (part === 'page') {
+      const token =
+        prop === 'background-color'
+          ? '--color-background-body'
+          : prop === 'color'
+            ? '--color-text-primary'
+            : null;
+      return token ? (live ? `var(${token})` : resolvedValue(token)) : null;
+    }
     const own = partValue(part, prop);
     if (own) return own;
     // A border width: the token the part's border reads for it, else the
@@ -12612,26 +12641,42 @@ export function draftAnswer(ctx, env, question) {
           // "outline buttons red": the outline look, with the main
           // button's outline and text in that color (never a border over
           // every filled button).
-          if (!f.when && !f.state)
-            return color
-              ? {
-                  text: `outline buttons in ${color}: the buttons dial, outline, and the main button's outline and text ${color}`,
-                  options: [
-                    [
-                      set('buttons', 'outline'),
-                      set('border-color', color, {
-                        ...f,
-                        when: 'variant:primary',
-                      }),
-                      set('color', color, {...f, when: 'variant:primary'}),
-                    ],
-                  ],
-                  sequence: true,
-                }
-              : {
-                  text: 'outline buttons: the buttons dial, outline (the main button an accent outline with accent text)',
-                  options: [[set('buttons', 'outline')]],
-                };
+          // "outline buttons thicker": the outline look, and the main
+          // button's outline a pixel wider (or thinner), never dropped.
+          const widthWay = /\b(thick(?:er)?|heavier|bolder|wider)\b/.test(
+            c.text,
+          )
+            ? 1
+            : /\b(thin(?:ner)?|lighter|narrower)\b/.test(c.text)
+              ? -1
+              : 0;
+          const bwPx =
+            lengthPx(String(current('--border-width') ?? '1px')) ?? 1;
+          if (!f.when && !f.state) {
+            const primary = {...f, when: 'variant:primary'};
+            const extra = [
+              ...(color
+                ? [
+                    set('border-color', color, primary),
+                    set('color', color, primary),
+                  ]
+                : []),
+              ...(widthWay
+                ? [
+                    set(
+                      'border-width',
+                      `${Math.max(1, bwPx + widthWay)}px`,
+                      primary,
+                    ),
+                  ]
+                : []),
+            ];
+            return {
+              text: `outline buttons${color ? ` in ${color}` : ''}: the buttons dial, outline (the main button an accent outline with accent text)${color ? `, and the main button's outline and text ${color}` : ''}${widthWay ? `, its outline ${Math.max(1, bwPx + widthWay)}px (${widthWay > 0 ? 'thicker' : 'thinner'})` : ''}`,
+              options: [[set('buttons', 'outline'), ...extra]],
+              ...(extra.length ? {sequence: true} : {}),
+            };
+          }
           const paint = color
             ? color
             : variant
@@ -14555,6 +14600,35 @@ export function draftAnswer(ctx, env, question) {
               text: `${c.neg ? 'no stripes' : 'the stripe color'} on ${stripeOn}: ${stripe}, which Core paints every other row with`,
               options: [[set(stripe, value, {on: stripeOn, ...modeOf(c)})]],
             };
+          // "striped rows lighter": the stripe token, from its own value
+          // in each mode.
+          const way = /\b(light(?:er|en)?|brighter|paler)\b/.test(
+            noMode(c.text),
+          )
+            ? 1
+            : /\b(dark(?:er|en)?|deeper)\b/.test(noMode(c.text))
+              ? -1
+              : 0;
+          if (stripeOn && stripe && way) {
+            const steps = perMode(
+              stripe,
+              stripe,
+              {on: stripeOn},
+              (now, m) =>
+                shiftKeepAlpha(
+                  now,
+                  way * colorAmount(c.text, 0.2),
+                  current('--color-background-body', m),
+                ),
+              c,
+            );
+            if (steps.length)
+              return {
+                text: `${way > 0 ? 'lighter' : 'darker'} stripes on ${stripeOn}: ${stripe}, which Core paints every other row with${modesSaid(steps)}`,
+                options: [steps],
+                sequence: steps.length > 1,
+              };
+          }
           return {
             text: 'striped rows need a style on every other row, and set has no condition for that; a row background colors every row',
             options: [],
@@ -16230,6 +16304,36 @@ export function draftAnswer(ctx, env, question) {
       }
     }
   }
+  // "corners never more than 8px": a length bound holds every radius the
+  // corners dial writes (a card's and the page's radii are larger than an
+  // element's): each one the dial would build past the bound is written
+  // at the bound after it, and the answer says so.
+  {
+    const lb = boundOf(question);
+    if (lb && lb.unit === 'px')
+      for (const d of result)
+        for (const o of d.options) {
+          const at = o.findIndex(
+            st => st.thing === 'corners' && !st.on && st.value != null,
+          );
+          if (at < 0) continue;
+          const value = String(o[at].value);
+          const over = DIAL_RADII.filter(t => {
+            const px = radiusAt(/** @type {any} */ (env.base), value, t);
+            return lb.up
+              ? lb.strict
+                ? px <= lb.limit
+                : px < lb.limit
+              : lb.strict
+                ? px >= lb.limit
+                : px > lb.limit;
+          });
+          if (!over.length) continue;
+          o.splice(at + 1, 0, ...over.map(t => set(t, `${lb.limit}px`)));
+          d.text = `${d.text} (${lb.said}: ${over.join(', ')}, which the dial would make ${lb.up ? 'smaller' : 'larger'}, held at ${lb.limit}px)`;
+          d.sequence = true;
+        }
+  }
   // A question about what a part has now ("how much padding do buttons
   // have", "how rounded are cards", "what color is the button"): its value
   // now, as show reads it; never a change.
@@ -16604,6 +16708,31 @@ export function draftAnswer(ctx, env, question) {
         ? `${v}${qMode ? ` in ${qMode} mode` : ''}${vWord ? ` (${vWord})` : ''}`
         : null;
     };
+    // A part that reads the property from several tokens (a heading's
+    // weight, one token per level): each token's value, as they differ,
+    // never one of them for all.
+    const perKeyNow = () => {
+      if (!named || vWord) return null;
+      // (Tokens read under one same condition: a variant's own token is
+      // the variant's, which the plain answer reads.)
+      /** @type {Map<string, Set<string>>} */
+      const byWhen = new Map();
+      for (const r of Object.keys(GROUPS).flatMap(
+        g => C.partReads(one(named), g) ?? [],
+      ))
+        if (r.props.includes(asked) && /^--/.test(r.token))
+          for (const w of r.when)
+            byWhen.set(w, (byWhen.get(w) ?? new Set()).add(r.token));
+      const tokens = [
+        ...([...byWhen.values()].find(t => t.size > 1) ?? []),
+      ].sort((x, y) => x.localeCompare(y, 'en', {numeric: true}));
+      if (tokens.length < 2) return null;
+      const vals = tokens
+        .map(t => [t, resolvedValue(t) || current(t, readMode ?? 'light')])
+        .filter(([, v]) => v);
+      if (new Set(vals.map(([, v]) => v)).size < 2) return null;
+      return vals.map(([t, v]) => `${v} (${t})`).join(', ');
+    };
     // The page is painted with the body tokens, as the change path reads
     // it (--color-background-body for its background, the main text token
     // for its text), in each mode it shows.
@@ -16782,6 +16911,7 @@ export function draftAnswer(ctx, env, question) {
             : null) ??
           stateNow() ??
           variantNow() ??
+          perKeyNow() ??
           partPropNow(named, asked) ??
           anyRead() ??
           insideNow())
