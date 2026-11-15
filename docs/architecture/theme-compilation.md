@@ -174,8 +174,9 @@ Platform-specific details stay inside that compiler.
   takes the theme's value of that token, and so does a reference to a theme
   token that does not depend on the scheme, so CSS that keeps `light-dark()`
   resolves as before. A reference to a token the theme does not declare refers
-  to the theme root's private alias of it (`--_theme-root-<name>`), which the
-  root resolves, so the surface reads the value every other descendant reads. When the theme does not declare a token the surface
+  to the theme root's private alias of it (`--_theme-root-<name>`), with the
+  reference's fallback, which the root resolves, so the surface reads the
+  value every other descendant reads. When the theme does not declare a token the surface
   declares itself, the surface does not re-declare a token that refers to it.
   A token that depends on the color scheme only through tokens the theme does
   not declare is not re-declared.

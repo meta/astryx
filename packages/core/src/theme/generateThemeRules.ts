@@ -1917,23 +1917,6 @@ function schemeDependence(
   return check;
 }
 
-/**
- * The value a re-declared root token takes on a media surface, or `null` when
- * the surface must not re-declare it. A reference to a token the surface
- * declares itself is replaced with the theme's value of that token. Without
- * lowering, the root resolves the reference and the surface inherits the
- * result, so the surface's own value never applies; the replacement keeps that
- * result. When the theme does not declare the referenced token, its value
- * comes from an ancestor this theme cannot see, so the token is not
- * re-declared. A reference to a theme token that does not depend on the
- * scheme is replaced with the theme's value too: the surface does not
- * re-declare that token, so after lowering the reference would resolve on the
- * surface and take a value set between the root and the surface. For the same
- * reason, a reference to a token the theme does not declare refers to the
- * root's private alias of it, which the theme root resolves. A reference to a
- * token that depends on the scheme stays as it is, and so does a reference in
- * a cycle.
- */
 const ROOT_ALIAS_PREFIX = '--_theme-root-';
 const ROOT_ALIAS_REFERENCE = /var\((--_theme-root-[^\s,()]+)/g;
 
@@ -1954,6 +1937,23 @@ function rootAliasEntries(blocks: ReadonlyArray<string>): [string, string][] {
     .map(alias => [alias, `var(--${alias.slice(ROOT_ALIAS_PREFIX.length)})`]);
 }
 
+/**
+ * The value a re-declared root token takes on a media surface, or `null` when
+ * the surface must not re-declare it. A reference to a token the surface
+ * declares itself is replaced with the theme's value of that token. Without
+ * lowering, the root resolves the reference and the surface inherits the
+ * result, so the surface's own value never applies; the replacement keeps that
+ * result. When the theme does not declare the referenced token, its value
+ * comes from an ancestor this theme cannot see, so the token is not
+ * re-declared. A reference to a theme token that does not depend on the
+ * scheme is replaced with the theme's value too: the surface does not
+ * re-declare that token, so after lowering the reference would resolve on the
+ * surface and take a value set between the root and the surface. For the same
+ * reason, a reference to a token the theme does not declare refers to the
+ * root's private alias of it, which the theme root resolves. A reference to a
+ * token that depends on the scheme stays as it is, and so does a reference in
+ * a cycle.
+ */
 function withRootValuesForSurfaceTokens(
   value: string,
   surfaceNames: ReadonlySet<string>,
@@ -1962,14 +1962,27 @@ function withRootValuesForSurfaceTokens(
 ): string | null {
   let isUnknown = false;
   const dependsOnScheme = schemeDependence(declaredValues);
-  const result = substituteVarReferences(value, reference => {
-    if (resolving.has(reference)) {
+  const result = substituteVarReferences(value, (reference, call) => {
+    if (resolving.has(reference) || reference.startsWith(ROOT_ALIAS_PREFIX)) {
       return null;
     }
     const declared = declaredValues[reference];
     if (!surfaceNames.has(reference)) {
       if (typeof declared !== 'string') {
-        return `var(${ROOT_ALIAS_PREFIX}${reference.slice(2)})`;
+        // The alias reference keeps the call's fallback: where the token is
+        // unset, the alias is invalid and the surface takes that fallback, as
+        // the root does. References in the fallback resolve the same way.
+        const at = call.indexOf(reference);
+        if (at === -1) {
+          return null;
+        }
+        const aliased = `${call.slice(0, at)}${ROOT_ALIAS_PREFIX}${reference.slice(2)}${call.slice(at + reference.length)}`;
+        return withRootValuesForSurfaceTokens(
+          aliased,
+          surfaceNames,
+          declaredValues,
+          new Set([...resolving, reference]),
+        );
       }
       return dependsOnScheme(reference) ||
         analyzeDeclarationValue(declared).important

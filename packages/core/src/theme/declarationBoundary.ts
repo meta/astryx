@@ -643,7 +643,7 @@ export function analyzeDeclarationValue(
  */
 export function substituteVarReferences(
   input: string,
-  replace: (reference: string) => string | null,
+  replace: (reference: string, call: string) => string | null,
 ): string {
   const {reason, value, varCalls} = analyzeDeclarationValue(input);
   if (reason !== null) {
@@ -655,7 +655,10 @@ export function substituteVarReferences(
     if (call.start < cursor) {
       continue;
     }
-    const replacement = replace(call.reference);
+    const replacement = replace(
+      call.reference,
+      value.slice(call.start, call.end),
+    );
     if (replacement === null) {
       continue;
     }
