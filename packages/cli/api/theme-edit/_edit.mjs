@@ -141,6 +141,7 @@ import {
   entryProblem,
   namesSetting,
   namesSettingAsTyped,
+  dialSettingsInText,
   skips,
   OPEN_SECTION,
 } from './_settings.mjs';
@@ -375,10 +376,16 @@ export async function themeEditNew(name, options = {}) {
       await newTheme(name, options)
     );
   } catch (e) {
+    // Settings typed where the name goes are typed settings too: the line
+    // that carries them is checked against them.
+    const fromName =
+      typeof name === 'string' && !slugOk(name)
+        ? dialSettingsInText(name)
+        : null;
     throw await vetNewLines(
       e,
       options.cwd ?? process.cwd(),
-      options.settings ?? {},
+      {...Object.fromEntries(fromName ?? []), ...(options.settings ?? {})},
       options.like,
     );
   }
@@ -757,7 +764,14 @@ async function newTheme(
         : undefined
       : LIKE.includes(like)
         ? like
-        : (nearest(like, LIKE)[0] ?? null);
+        : (nearest(like, LIKE)[0] ??
+          // Two bases in one value (`neutral,stone`, `neutral stone`): the
+          // first built-in one named, as for --like given twice.
+          String(options.like ?? like)
+            .split(/[\s,|;]+/)
+            .map(w => w.toLowerCase())
+            .find(w => LIKE.includes(w)) ??
+          null);
   // A dial value the dial does not take is left out of a suggested `new`
   // (a corrected name must not repeat it), and the refusal says so.
   /** @type {Array<[string, string]>} */
@@ -914,6 +928,24 @@ async function newTheme(
     const fixed =
       present ?? readings[0] ?? slugFor(path_ ? typedThemeName(typed) : typed);
     const exists = Boolean(present);
+    // Dial settings typed where the name goes (`'accent: red'`, `{"accent":
+    // "red"}`): a free name, with those settings as their options, checked
+    // as every new line is.
+    const typedSettings = exists ? null : dialSettingsInText(typed);
+    if (typedSettings) {
+      const free = usableNewName(cwd, 'my-theme');
+      const merged = {...settings, ...Object.fromEntries(typedSettings)};
+      const lines = await checkedNewLines(
+        `${P} new ${free}${newFlags(likeFixed ?? undefined, merged, png)}`,
+        free,
+        {...options, cwd, like: likeFixed ?? undefined, settings: merged},
+      );
+      refuse(
+        E.ERR_INVALID_ARGUMENT,
+        `"${String(name ?? '').slice(0, 80)}" holds settings, not a theme name (${NAME_RULE}).${dropped}`,
+        {run: lines.map(x => x.name)},
+      );
+    }
     refuse(
       E.ERR_INVALID_ARGUMENT,
       `"${String(name ?? '').slice(0, 80)}" is not a theme name (${NAME_RULE})${exists ? `; ${fixed} is a theme here already` : ''}.${dropped}`,
@@ -2668,16 +2700,26 @@ async function swappedOrder(e, sub, words, options) {
   )
     return e;
   const cwd = options.cwd ?? process.cwd();
-  const [first, ...rest] = words.map(w => (w == null ? '' : String(w)));
+  let [first, ...rest] = words.map(w => (w == null ? '' : String(w)));
   if (slugOk(first) && fs.existsSync(themeFiles(cwd, first).settings)) return e;
+  // The theme typed as an option (`--theme t`, `--theme=t`): the option word
+  // is no word of the command, and the words after the theme are read as
+  // the command reads them (a set's thing, then its value).
+  const asOption = /^--?theme(?:=(.*))?$/i.exec(first);
+  if (asOption) {
+    rest = asOption[1] ? [asOption[1], ...rest] : rest;
+    first = '';
+  }
   const at = rest.findIndex(
     w => slugOk(w) && fs.existsSync(themeFiles(cwd, w).settings),
   );
   if (at < 0) return e;
   const theme = rest[at];
-  const moved = [first, ...rest.filter((_, i) => i !== at)].filter(
-    w => w !== '',
-  );
+  let moved = [first, ...rest.filter((_, i) => i !== at)].filter(w => w !== '');
+  if (asOption && sub === 'set' && moved.length === 1 && /\s/.test(moved[0])) {
+    const [thing, ...value] = moved[0].trim().split(/\s+/);
+    moved = [thing, value.join(' ')];
+  }
   const flags = [
     ...(options.on ? ['--on', options.on] : []),
     ...(options.when ? ['--when', options.when] : []),
@@ -4434,7 +4476,13 @@ async function followChangeLine(sub, slug, line, cwd, skip) {
         sub === 'undo' ? now.replace(`${P} undo `, `${P} set `) : now,
         slug,
       );
-      if (!read) return null;
+      // A line set does not read (an option it does not take, an option
+      // with no value) fails when followed: never offered as working.
+      if (!read)
+        return new AstryxError(
+          'the line does not read as the command takes it',
+          [],
+        );
       try {
         const s = checkSetting(
           ctx,
@@ -5415,6 +5463,72 @@ async function changeOnce(
         // Card`, `cards`, `--mode drak`, `--state hovered`): the scope of
         // the line its refusal offers for this setting.
         /** @type {Record<string, string | undefined>} */
+        /**
+         * The typed scope as set's own check reads it for a thing: the
+         * scope of the setting it reads, or of the `set|undo <theme> …`
+         * line its refusal offers.
+         * @param {string} th
+         * @param {string} val
+         * @returns {Record<string, string | undefined>}
+         */
+        const scopeAsRead = (th, val) => {
+          /** @type {Record<string, string | undefined>} */
+          const read = {
+            on: flags.on,
+            when: flags.when,
+            state: flags.state,
+            mode: flags.mode,
+          };
+          if (!(flags.on || flags.when || flags.state || flags.mode))
+            return read;
+          /** @type {any[]} */
+          let offered;
+          try {
+            const got = checkSetting(
+              ctx,
+              slug,
+              structuredClone(data),
+              th,
+              val,
+              flags,
+              true,
+            );
+            return {
+              on: got.on,
+              when: got.when,
+              state: got.state,
+              mode: got.mode,
+            };
+          } catch (err) {
+            offered = /** @type {any} */ (err)?.suggestions ?? [];
+          }
+          for (const x of offered) {
+            const at = x.name.indexOf(' editor ');
+            const words =
+              at >= 0
+                ? splitCommand(x.name.slice(at + ' editor '.length))
+                : null;
+            if (
+              !words ||
+              !['set', 'undo'].includes(words[0]) ||
+              words[1] !== slug
+            )
+              continue;
+            for (const k of /** @type {const} */ ([
+              'on',
+              'when',
+              'state',
+              'mode',
+            ])) {
+              const n = words.indexOf(`--${k}`);
+              if (flags[k] != null && n > 0 && words[n + 1] != null)
+                read[k] = words[n + 1];
+            }
+            break;
+          }
+          return read;
+        };
+        /** @type {Record<string, string | undefined>} */
         const meant = {
           on: flags.on,
           when: flags.when,
@@ -5437,9 +5551,9 @@ async function changeOnce(
             'state',
             'mode',
           ])) {
-            const i = words.indexOf(`--${k}`);
-            if (flags[k] != null && i > 0 && words[i + 1] != null)
-              meant[k] = words[i + 1];
+            const n = words.indexOf(`--${k}`);
+            if (flags[k] != null && n > 0 && words[n + 1] != null)
+              meant[k] = words[n + 1];
           }
           break;
         }
@@ -5475,10 +5589,25 @@ async function changeOnce(
             })),
             e.code,
           );
-        const byValue =
+        const holding =
           matches.length || (value != null && value !== '')
             ? []
             : data.settings.filter(x => valueIs(x.value, typed));
+        // The one in the scope typed (read as set reads it for that
+        // setting) leads.
+        const inScope = (/** @type {any} */ x) => {
+          const m = scopeAsRead(x.thing, String(x.value));
+          return (
+            (x.on ?? null) === (m.on ?? null) &&
+            (x.when ?? null) === (m.when ?? null) &&
+            stateKeyOf(x.state) === stateKeyOf(m.state) &&
+            (x.mode ?? null) === (m.mode ?? null)
+          );
+        };
+        const byValue = [
+          ...holding.filter(inScope),
+          ...holding.filter(x => !inScope(x)),
+        ];
         if (byValue.length)
           throw new AstryxError(
             `"${thing}" is no setting; ${slug} holds it as the value of ${byValue.map(x => describe(x)).join(', ')}. Nothing was changed.`,
@@ -5514,7 +5643,14 @@ async function changeOnce(
                   },
                   {name: `${P} show ${slug}`, reason: 'see what it sets'},
                 ]
-              : [{name: `${P} show ${slug}`, reason: 'see what it sets'}],
+              : [
+                  // An undo the check itself offers for the word (`like`
+                  // is the base: `undo t base`) leads.
+                  ...(e.suggestions ?? []).filter(x =>
+                    new RegExp(`^${P} undo ${slug} base$`).test(x.name),
+                  ),
+                  {name: `${P} show ${slug}`, reason: 'see what it sets'},
+                ],
           e.code,
         );
       }
@@ -8213,7 +8349,11 @@ export async function themeEditUndo(theme, options = {}) {
       const settingName = namesSettingAsTyped(theme);
       // A list of themes (t,u) stays a look at each: one theme at a time.
       const shows = (e.suggestions ?? []).filter(x => showOf(x) != null);
-      const near = (shows.length === 1 && !settingName ? shows : []).find(x => {
+      // (A list where the theme goes, `Inter, Arial`, is no typo of one.)
+      const listed = /[,;|]/.test(String(theme ?? ''));
+      const near = (
+        shows.length === 1 && !settingName && !listed ? shows : []
+      ).find(x => {
         const n = showOf(x);
         return (
           n != null &&

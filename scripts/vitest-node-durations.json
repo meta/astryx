@@ -529,6 +529,7 @@
     "packages/cli/api/theme-edit/theme-font-known-words.test.mjs": 5.3,
     "packages/cli/api/theme-edit/theme-font-numbers-roles.test.mjs": 5.9,
     "packages/cli/api/theme-edit/theme-g2-final42.test.mjs": 20.0,
+    "packages/cli/api/theme-edit/theme-g2-final43.test.mjs": 20.0,
     "packages/cli/api/theme-edit/theme-how-c-chaos43.test.mjs": 17.4,
     "packages/cli/api/theme-edit/theme-how-c-final42.test.mjs": 6.0,
     "packages/cli/api/theme-edit/theme-how-c-final42b.test.mjs": 9.9,

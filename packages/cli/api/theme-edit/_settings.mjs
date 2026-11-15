@@ -592,6 +592,48 @@ export function namesSettingAsTyped(text) {
 }
 
 /**
+ * The dial settings text holds, in any form set reads them: a JSON object
+ * (`{"accent":"red"}`), `key=value` or `key: value` pairs apart at `;`
+ * (`corners: pill; accent: red`), or `dial value` items apart at `,`
+ * (`accent red, corners pill`); null when it holds none, or anything else.
+ * @param {unknown} text
+ * @returns {Array<[string, string]> | null}
+ */
+export function dialSettingsInText(text) {
+  const t = String(text ?? '').trim();
+  if (!t) return null;
+  const dial = (/** @type {string} */ k) => {
+    const w = k.trim().toLowerCase();
+    return Object.hasOwn(DIALS, w) ? w : null;
+  };
+  if (/^\{/.test(t))
+    try {
+      const entries = Object.entries(JSON.parse(t));
+      return entries.length && entries.every(([k]) => dial(k))
+        ? entries.map(([k, v]) => [/** @type {string} */ (dial(k)), String(v)])
+        : null;
+    } catch {
+      return null;
+    }
+  const pairs = t
+    .split(/\s*;\s*/)
+    .filter(Boolean)
+    .map(x => /^([a-z-]+)\s*[=:]\s*(.+)$/i.exec(x));
+  if (pairs.length && pairs.every(m => m && dial(m[1])))
+    return pairs.map(m => [
+      /** @type {string} */ (dial(/** @type {RegExpExecArray} */ (m)[1])),
+      /** @type {RegExpExecArray} */ (m)[2].trim(),
+    ]);
+  const items = t
+    .split(/\s*[,;]\s*/)
+    .map(x => x.trim().split(/\s+/))
+    .filter(x => x[0]);
+  return items.length && items.every(x => x.length > 1 && dial(x[0]))
+    ? items.map(x => [/** @type {string} */ (dial(x[0])), x.slice(1).join(' ')])
+    : null;
+}
+
+/**
  * The themes the editor made in the app (a settings file of its own), by
  * name, or with `changed` the one an editor command changed last first: the
  * undo history is written only by an editor command, so its time is the
@@ -943,6 +985,20 @@ export function loadTheme(
           .filter(d => slugOk(d) && fs.existsSync(themeFiles(cwd, d).settings))
           .sort()
       : [];
+    // A theme here with a setting pasted onto it (`t=accent`, `t: accent`):
+    // that theme, never a new one named after both.
+    const head = String(slug ?? '').split(/\s*[=:]\s*|\s+/)[0];
+    if (
+      !same &&
+      head !== String(slug ?? '').trim() &&
+      slugOk(head) &&
+      fs.existsSync(themeFiles(cwd, head).settings)
+    )
+      refuse(
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+        `"${String(slug ?? '').slice(0, 80)}" is not a theme name (${NAME_RULE}); ${head} is a theme here.`,
+        {didYouMean: [head], run: [`${P} show ${head}`]},
+      );
     // Settings typed where the theme goes (`corners, accent`,
     // `corners:pill`, `{"corners":"pill"}`): never a theme to make or a
     // list of themes; each theme here is offered to look at.
@@ -960,13 +1016,20 @@ export function loadTheme(
       const existing = words.filter(
         w => slugOk(w) && fs.existsSync(themeFiles(cwd, w).settings),
       );
+      // A list none of whose words is a theme here (a value, `Inter,
+      // Arial`) names no theme at all: a look at each theme here, never a
+      // new one named after a word of it.
       refuse(
         ERROR_CODES.ERR_INVALID_ARGUMENT,
-        `"${String(slug ?? '').slice(0, 80)}" names more than one theme; a command takes one theme at a time.`,
+        existing.length
+          ? `"${String(slug ?? '').slice(0, 80)}" names more than one theme; a command takes one theme at a time.`
+          : `"${String(slug ?? '').slice(0, 80)}" names no theme here; the theme comes first.`,
         {
           run: existing.length
             ? existing.map(w => `${P} show ${w}`)
-            : [`${P} new ${words[0]}`],
+            : have.length
+              ? have.slice(0, 3).map(h => `${P} show ${h}`)
+              : [`${P} new ${words[0]}`],
         },
       );
     }

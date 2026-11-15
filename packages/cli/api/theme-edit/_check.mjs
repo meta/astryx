@@ -7318,6 +7318,20 @@ function checkOne(
 
   // A dial by another name or case: Accent, gray, saturation, error.
   const lower = thing.toLowerCase();
+  // `like`, the word show prints for the base and new's --like: base.
+  if (!hint && lower === 'like')
+    return refuse(
+      E.ERR_THEME_UNKNOWN_THING,
+      `"${thing}" is not a dial, a token, or a CSS property. The base is set with base.`,
+      {
+        didYouMean: ['base'],
+        run: [
+          unset
+            ? `${P} undo ${slug} base`
+            : `${P} set ${slug} base ${quoteCommandArgument(v || 'none')}`,
+        ],
+      },
+    );
   const aliases = DIALS[lower] ? [lower] : (COLOR_DIAL_WORDS.get(lower) ?? []);
   if (!hint && aliases.length)
     return refuse(
