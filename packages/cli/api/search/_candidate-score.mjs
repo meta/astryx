@@ -379,27 +379,45 @@ export function scoreCandidate(
   // ── Keyword signals ─────────────────────────────────────────────
   const termJoined = joined(term);
   for (const {kw, text: kwText, lower: kwLower} of p.keywords) {
-    // Whether a hit on this keyword is only a mention, read only when asked.
-    const mention = () => mentions && mentionKeyword(candidate, kwLower);
     // A one-word keyword typed as separate words is the keyword: `number
     // field` is `numberfield`. Only a
     // lowercase keyword, one an author declares for a reader to type: a
     // capitalized one names another entry (a block's `componentsUsed`). A
     // doc's keywords include code terms, matched as written.
     if (kwLower === term) {
-      consider(90, `keyword "${kw}"`, false, mention());
+      consider(
+        90,
+        `keyword "${kw}"`,
+        false,
+        mentions && mentionKeyword(candidate, kwLower),
+      );
       continue;
     }
     if (joins && domain !== 'doc' && /\s/.test(term) && kwText === termJoined) {
-      consider(90, `keyword "${kw}"`, 'keyword', mention());
+      consider(
+        90,
+        `keyword "${kw}"`,
+        'keyword',
+        mentions && mentionKeyword(candidate, kwLower),
+      );
       continue;
     }
     if (sameTermWord(t, kwLower)) {
-      consider(88, `keyword "${kw}"`, false, mention());
+      consider(
+        88,
+        `keyword "${kw}"`,
+        false,
+        mentions && mentionKeyword(candidate, kwLower),
+      );
       continue;
     }
     if (startsATermWordOf(t, kw))
-      consider(70, `keyword "${kw}"`, false, mention());
+      consider(
+        70,
+        `keyword "${kw}"`,
+        false,
+        mentions && mentionKeyword(candidate, kwLower),
+      );
     if (fuzzy) {
       const dist = typoDistance(term, kwLower);
       if (dist != null && dist <= 2) {
@@ -407,7 +425,7 @@ export function scoreCandidate(
           dist === 1 ? 70 : 30,
           `keyword "${kw}" (distance ${dist})`,
           false,
-          mention(),
+          mentions && mentionKeyword(candidate, kwLower),
         );
       }
     }
@@ -458,12 +476,9 @@ export function scoreCandidate(
     }
   }
 
-  return best > 0
-    ? {
-        score: best,
-        reason,
-        ...(alias ? {alias} : {}),
-        ...(mentions && inText ? {inText: true} : {}),
-      }
-    : null;
+  if (best <= 0) return null;
+  /** @type {{score: number, reason: string, alias?: 'partial' | 'keyword', inText?: true}} */
+  const hit = {score: best, reason, ...(alias ? {alias} : {})};
+  if (mentions && inText) hit.inText = true;
+  return hit;
 }
