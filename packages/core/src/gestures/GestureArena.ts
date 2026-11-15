@@ -37,7 +37,8 @@
  * exactly touch-down + 500 ms even when the main thread was blocked and the
  * timer callback came late, and a test drives the whole machine with explicit
  * timestamps and no real time at all. A deadline whose timer runs late waits
- * while input from before it still reaches the page late.
+ * while input from before it still reaches the page late. A deadline among a
+ * coalesced move's samples runs between them.
  *
  * SYNC: When modified, update GestureRecognizer.ts and
  * __tests__/arena.test.ts.
@@ -374,6 +375,27 @@ export class GestureArena {
       return;
     }
     this.noteArrival(inputs[0].time);
+    // A coalesced move carries the samples since the previous one. A deadline
+    // among them runs between them: the samples stamped before it come first.
+    let rest = inputs;
+    for (
+      let deadline = this.deadlineAmong(rest);
+      deadline != null;
+      deadline = this.deadlineAmong(rest)
+    ) {
+      const before = samplesBefore(rest, deadline);
+      if (before.length > 0) {
+        this.deliverMoved(before);
+      }
+      this.advanceTime(deadline);
+      rest = samplesFrom(rest, deadline);
+    }
+    if (rest.length > 0) {
+      this.deliverMoved(rest);
+    }
+  }
+
+  private deliverMoved(inputs: ReadonlyArray<TouchInput>): void {
     this.run(inputs[0].time, () => {
       const changed = this.update(inputs, 'moved');
       if (changed.length === 0) {
@@ -1041,6 +1063,37 @@ export class GestureArena {
   }
 
   /**
+   * The earliest timer deadline among the new samples of `inputs`: after the
+   * earliest of them, and at or before the latest. Null when none falls there.
+   */
+  private deadlineAmong(inputs: ReadonlyArray<TouchInput>): number | null {
+    let earliest = Number.POSITIVE_INFINITY;
+    let latest = Number.NEGATIVE_INFINITY;
+    for (const input of inputs) {
+      const known =
+        this.records.get(input.id)?.touch.time ?? Number.NEGATIVE_INFINITY;
+      for (const sample of input.history ?? []) {
+        if (sample.time > known) {
+          earliest = Math.min(earliest, sample.time);
+        }
+      }
+      earliest = Math.min(earliest, input.time);
+      latest = Math.max(latest, input.time);
+    }
+    let found: number | null = null;
+    for (const timer of this.timers.values()) {
+      if (
+        timer.deadline > earliest &&
+        timer.deadline <= latest &&
+        (found == null || timer.deadline < found)
+      ) {
+        found = timer.deadline;
+      }
+    }
+    return found;
+  }
+
+  /**
    * Whether input from before `deadline` reached the page late within the
    * last `LATE_INPUT_WAIT_MS`, so more of it may still be queued.
    */
@@ -1226,6 +1279,44 @@ export class GestureArena {
       delay,
     );
   }
+}
+
+/** Each input cut to its samples stamped before `time`; inputs with none go. */
+function samplesBefore(
+  inputs: ReadonlyArray<TouchInput>,
+  time: number,
+): TouchInput[] {
+  const cut: TouchInput[] = [];
+  for (const input of inputs) {
+    const samples = [
+      ...(input.history ?? []),
+      {x: input.x, y: input.y, time: input.time},
+    ].filter(sample => sample.time < time);
+    const last = samples[samples.length - 1];
+    if (last != null) {
+      cut.push({
+        id: input.id,
+        x: last.x,
+        y: last.y,
+        time: last.time,
+        history: samples.slice(0, -1),
+      });
+    }
+  }
+  return cut;
+}
+
+/** Each input cut to its samples stamped at or after `time`; inputs with none go. */
+function samplesFrom(
+  inputs: ReadonlyArray<TouchInput>,
+  time: number,
+): TouchInput[] {
+  return inputs
+    .filter(input => input.time >= time)
+    .map(input => ({
+      ...input,
+      history: (input.history ?? []).filter(sample => sample.time >= time),
+    }));
 }
 
 function sharesTouches(a: GestureRecognizer, b: GestureRecognizer): boolean {
