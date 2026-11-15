@@ -73,8 +73,8 @@ const RUNNERS = {
     ],
   },
   'api/theme-edit/_preview.mjs': {
-    runs: 'a Playwright the project has installed, or a Chrome found on the machine, to picture a preview only with --png',
-    sites: ['child_process.spawn', 'import(<computed>)'],
+    runs: 'the picture process for a Playwright the project has installed, or a Chrome found on the machine, only with --png',
+    sites: ['child_process.spawn'],
   },
   'api/theme-edit/_project.mjs': {
     runs: "the project's installed Core theme module and a built-in theme it builds on, to check and resolve tokens",
@@ -361,6 +361,10 @@ const RUNNERS = {
     runs: 'git, sl or hg, to read whether the repository ignores an untracked agent file',
     sites: ['child_process.spawnSync'],
   },
+  'foundation/fonts/font-stylesheet.mjs': {
+    runs: 'postcss, the first time a font stylesheet is read, so commands that read none do not load it',
+    sites: ['require(postcss)'],
+  },
   'foundation/fs/gather-cache.mjs': {
     runs: 'nothing; a module hook that notes each module a search or build loads, with its state, and loads it unchanged',
     sites: ['module.registerHooks'],
@@ -437,6 +441,14 @@ const RUNNERS = {
       'module.register',
       'require(@stylexjs/babel-plugin)',
     ],
+  },
+  'foundation/render/picture-chrome.mjs': {
+    runs: 'a Chrome found on the machine, over its DevTools pipe, to picture a preview only with --png',
+    sites: ['child_process.spawn'],
+  },
+  'foundation/render/picture-playwright.mjs': {
+    runs: 'the Playwright the project has installed, in its own process, to picture a preview only with --png',
+    sites: ['import(<computed>)'],
   },
   'foundation/render/render-page.mjs': {
     runs: 'the render host process, so a page that never finishes can be stopped and a crash of Node ends only that process, and a one-line Intl.Segmenter check after a crash',
@@ -519,6 +531,10 @@ const RUNNERS = {
   },
   'scripts/generate-component-list.mjs': {
     runs: "node, to work out Core's component list on a copy of exactly the files Core publishes (at `prepack`)",
+    sites: ['child_process.spawnSync'],
+  },
+  'scripts/generate-search-catalog.mjs': {
+    runs: "node, to gather search's catalog in a project that installs exactly the files the CLI and Core publish, once per package manager and beside each one's lockfile (at `prepack`)",
     sites: ['child_process.spawnSync'],
   },
   'scripts/generate-self-audit.mjs': {

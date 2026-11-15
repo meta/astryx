@@ -17,7 +17,7 @@ import {
 } from '../../test-utils/linked-fixture.mjs';
 import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
 import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
-import {refusal} from '../../test-utils/theme-edit-fixture.mjs';
+import {modeValue, refusal} from '../../test-utils/theme-edit-fixture.mjs';
 
 vi.mock('./_preview.mjs', async importOriginal =>
   (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
@@ -77,11 +77,15 @@ describe('one-mode gradients', () => {
       on: 'card',
       mode: 'light',
     });
-    const card = ruleOf('g1', '.astryx-card');
-    expect(card).toMatch(
-      /background-image: linear-gradient\(light-dark\(red, transparent\), light-dark\(blue, transparent\)\)/,
+    const css = cssOf('g1');
+    expect(modeValue(css, '.astryx-card', 'background-image', 'light')).toBe(
+      'linear-gradient(red, blue)',
+    );
+    expect(modeValue(css, '.astryx-card', 'background-image', 'dark')).toBe(
+      undefined,
     );
     // No shorthand resets the card's color in either mode.
+    const card = ruleOf('g1', '.astryx-card');
     expect(card).not.toMatch(/\bbackground:/);
     expect(card).not.toMatch(/background-color/);
   }, 240_000);
@@ -104,9 +108,13 @@ describe('one-mode gradients', () => {
       on: 'card',
       mode: 'dark',
     });
-    const card = ruleOf('g2', '.astryx-card');
-    expect(card).toContain('light-dark(red, transparent)');
-    expect(card).toContain('light-dark(transparent, blue)');
+    const css = cssOf('g2');
+    expect(modeValue(css, '.astryx-card', 'background-image', 'light')).toBe(
+      'linear-gradient(transparent, red)',
+    );
+    expect(modeValue(css, '.astryx-card', 'background-image', 'dark')).toBe(
+      'linear-gradient(blue, green)',
+    );
   }, 240_000);
 
   it('refuses a light-dark() stop in a one-mode gradient', async ctx => {
@@ -153,9 +161,19 @@ describe('one-mode tokens and the background family', () => {
       mode: 'light',
     });
     expect(cssOf('t1')).not.toMatch(/currentcolor\)/);
-    expect(ruleOf('t1', '.astryx-card')).toMatch(
-      /--color-background-card: light-dark\(#ff0000, (?!currentcolor)[^)]+\)/,
-    );
+    // Light takes the token; dark writes nothing, so the token keeps the
+    // theme's own value there.
+    expect(
+      modeValue(
+        cssOf('t1'),
+        '.astryx-card',
+        '--color-background-card',
+        'light',
+      ),
+    ).toBe('#ff0000');
+    expect(
+      modeValue(cssOf('t1'), '.astryx-card', '--color-background-card', 'dark'),
+    ).toBe(undefined);
   }, 240_000);
 
   it("keeps the other mode's background-color when a one-mode background follows", async ctx => {
@@ -175,7 +193,14 @@ describe('one-mode tokens and the background family', () => {
       'light',
       'dark',
     ]);
-    expect(cssOf('t2')).toMatch(/light-dark\(#ff0000, #0000ff\)/);
+    const card = '.astryx-card[data-variant="muted"]';
+    expect(modeValue(cssOf('t2'), card, 'background-color', 'light')).toBe(
+      '#ff0000',
+    );
+    expect(
+      modeValue(cssOf('t2'), card, 'background-color', 'dark') ??
+        modeValue(cssOf('t2'), card, 'background', 'dark'),
+    ).toBe('#0000ff');
   }, 240_000);
 
   it("says a one-mode color under the part's own gradient does not show", async ctx => {
@@ -273,9 +298,13 @@ describe('the page background', () => {
       '.astryx-app-shell-header',
       '.astryx-app-shell-sidenav',
     ]) {
-      const rule = ruleOf('p3', sel);
-      expect(rule, sel).toMatch(/#f5f7fa/);
-      expect(rule, sel).toMatch(/#14171c/);
+      const css = cssOf('p3');
+      expect(modeValue(css, sel, 'background-image', 'light'), sel).toMatch(
+        /#f5f7fa/,
+      );
+      expect(modeValue(css, sel, 'background-image', 'dark'), sel).toMatch(
+        /#14171c/,
+      );
     }
   }, 240_000);
 

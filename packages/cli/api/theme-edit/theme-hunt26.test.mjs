@@ -90,7 +90,10 @@ describe('hunt26: suggestions are checked', () => {
     const {loadTheme} = await import('./_settings.mjs');
     const ctx = await context(cwd);
     const out = vetSuggestions(e, ctx, 'b', loadTheme(cwd, 'b', {}));
+    // A refused line is followed through its own refusal's repair (a bare
+    // number takes its unit), and offered as the line that works.
     expect(bare(out.suggestions.map(s => s.name))).toEqual([
+      'set b corners 1.25px',
       'set b corners pill',
       'how corners',
     ]);
@@ -135,13 +138,14 @@ describe('hunt26: the cases', () => {
         themeEditSet('b', 'color', v, {cwd, on: 'text'}),
       );
       expect(r.run.join('\n')).not.toContain(v);
-      expect(r.run[0]).toMatch(/ set b --color-text-primary /);
+      // Nothing readable as a color: no stock color, only how.
+      expect(r.run.join('\n')).not.toMatch(/ set b --color-text-primary /);
       await runsAll(r.run);
     }
     const ok = await refusal(() =>
       themeEditSet('b', 'color', 'red', {cwd, on: 'text'}),
     );
-    expect(bare(ok.run)[0]).toBe('set b --color-text-primary red');
+    expect(bare(ok.run)[0]).toBe('set b --color-text-primary red --on text');
   }, 240_000);
 
   it('N19: headings --on heading offers the dial and the asked weight or tracking', async () => {
@@ -199,10 +203,11 @@ describe('hunt26: the cases', () => {
   it("N22: a word dial given a number suggests that dial's own words", async () => {
     const ratio = await refusal(() => themeEditSet('b', 'type', '1.3', {cwd}));
     expect(bare(ratio.run)[0]).toBe('set b type editorial');
+    // A number no table of the dial reads gets how, never a stock word.
     for (const dial of ['type', 'surfaces', 'buttons']) {
       const r = await refusal(() => themeEditSet('b', dial, '16', {cwd}));
       expect(r.run.join('\n')).not.toMatch(/ corners /);
-      expect(r.run[0]).toMatch(new RegExp(` set b ${dial} [a-z]+$`));
+      expect(r.run.join('\n')).not.toMatch(new RegExp(` set b ${dial} `));
     }
     // A size with a unit on buttons is still the corners on the button.
     const px = await refusal(() => themeEditSet('b', 'buttons', '4px', {cwd}));
