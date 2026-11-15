@@ -207,6 +207,11 @@ export const doc = {
       value: 'ERR_WRITE_FAILED',
       description: 'Writing output files failed (and was rolled back).',
     },
+    {
+      value: 'ERR_READ_FAILED',
+      description:
+        'An input file cannot be read: no permission on it or on a folder on its path, a folder or other entry that is not a regular file, or another error from the file system.',
+    },
 
     // Theme build
     {
@@ -349,7 +354,13 @@ export const doc = {
       value: 'ERR_RENDER_SOURCE_DAMAGED',
       stability: 'experimental',
       description:
-        '`render --reverse` refused the received file, and nothing was written: its embedded source was removed (a file a render wrote, with no Astryx components left to rebuild from) or is damaged (not valid, or a file does not match its checksum), lists a path twice, carries a module, stylesheet or JSON file the page does not reach through its own imports, or an image, font or media file whose bytes are not one, or carries a file a render never embeds: a dotfile or dot-folder, anything under node_modules, a package manifest, lockfile or tool configuration, a file a test, story or benchmark runner would run, or any kind but a page module, stylesheet, JSON file or image. Raised only by the experimental render command.',
+        '`render --reverse` refused the received file, and nothing was written: its embedded source was removed (a file a render wrote, with no Astryx components left to rebuild from), is cut short (also a file a render wrote that ends before it), or is damaged (not valid, a file does not match its checksum, or it names a CLI version that is not a release version), the page holds merge conflict markers, lists a path twice, carries a module, stylesheet or JSON file the page does not reach through its own imports, or an image, font or media file whose bytes are not one, or carries a file a render never embeds: a dotfile or dot-folder, anything under node_modules, a package manifest, lockfile or tool configuration, a file a test, story or benchmark runner would run, or any kind but a module, stylesheet, JSON file or image. Raised only by the experimental render command.',
+    },
+    {
+      value: 'ERR_RENDER_NEWER_FORMAT',
+      stability: 'experimental',
+      description:
+        '`render --reverse` was given a file in a newer render format than this CLI reads. Nothing was written. The message names the version of the CLI that wrote the file, which reads it. Raised only by the experimental render command.',
     },
     {
       value: 'ERR_THEME_BAD_VALUE',

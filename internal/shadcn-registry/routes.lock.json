@@ -4122,6 +4122,11 @@
       "aliases": []
     },
     {
+      "name": "hook-create-swipe",
+      "path": "hooks/create-swipe",
+      "aliases": []
+    },
+    {
       "name": "hook-use-animated-layout",
       "path": "hooks/use-animated-layout",
       "aliases": []

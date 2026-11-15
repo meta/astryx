@@ -615,6 +615,16 @@ export function ContextMenu({
     [listNavKeyDown, closeMenu, typeahead, ownsEvent],
   );
 
+  // The box the cursor anchor's offsets are measured from: its containing
+  // block. That is the trigger, unless a caller's triggerXstyle leaves the
+  // trigger unpositioned so that another box holds the anchor.
+  const getAnchorBaseRect = useCallback((): DOMRect | undefined => {
+    const base = cursorAnchorRef.current?.offsetParent;
+    return (
+      base instanceof HTMLElement ? base : triggerRef.current
+    )?.getBoundingClientRect();
+  }, []);
+
   // Place the 1px cursor anchor at a point in the trigger's local
   // coordinate space and open the menu. Positioning the anchor inside the
   // trigger (rather than storing viewport coordinates on the menu itself) is
@@ -622,7 +632,7 @@ export function ContextMenu({
   // browser auto-flips it against the viewport edges via CSS anchor positioning.
   const openAtLocalPoint = useCallback(
     (localX: number, localY: number, focusEl: HTMLElement | null) => {
-      const rect = triggerRef.current?.getBoundingClientRect();
+      const rect = getAnchorBaseRect();
       const x = rect ? keepAnchorInside(localX, rect.width) : localX;
       const y = rect ? keepAnchorInside(localY, rect.height) : localY;
       positionRef.current = {x, y};
@@ -647,14 +657,7 @@ export function ContextMenu({
         layer.show();
       }
     },
-    [layer, updateOpenState, usesBottomSheet],
-  );
-
-  // The box the cursor anchor's offsets are measured from: the trigger, which
-  // is its containing block.
-  const getAnchorBaseRect = useCallback(
-    (): DOMRect | undefined => triggerRef.current?.getBoundingClientRect(),
-    [],
+    [getAnchorBaseRect, layer, updateOpenState, usesBottomSheet],
   );
 
   const handleContextMenu = useCallback(
@@ -672,9 +675,16 @@ export function ContextMenu({
         e.clientX === 0 && e.clientY === 0 && e.detail === 0;
       // Convert the viewport cursor point into the trigger's local space so
       // the anchor lives inside the (scrollable) trigger context.
-      const localX = isKeyboardInvoked || !rect ? 0 : e.clientX - rect.left;
-      const localY =
-        isKeyboardInvoked || !rect ? (rect?.height ?? 0) : e.clientY - rect.top;
+      const trigger = triggerRef.current?.getBoundingClientRect();
+      let localX = 0;
+      let localY = rect?.height ?? 0;
+      if (rect && isKeyboardInvoked && trigger) {
+        localX = trigger.left - rect.left;
+        localY = trigger.bottom - rect.top;
+      } else if (rect && !isKeyboardInvoked) {
+        localX = e.clientX - rect.left;
+        localY = e.clientY - rect.top;
+      }
       // A finger's long press reaches here as a pointer `contextmenu` where
       // the browser sends one (Chromium); its compatibility mousedown then
       // belongs to the opening press. A mouse or the keyboard opens without

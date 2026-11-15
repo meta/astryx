@@ -52,8 +52,11 @@ describe('hunt21', () => {
           "name: 'p',\n  tokens: {'--color-accent': ['rgb(0, 0, 0)', null]},",
         ),
     );
+    // The check judges the value the source gives defineTheme(): a pair
+    // whose half is null is no text, and the comma in the other half does
+    // not hide it.
     const r = await refusal(() => themeEditShow('p', {cwd}));
-    expect(r.message).toMatch(/not text/);
+    expect(r.message).toMatch(/--color-accent .*which is not text/);
   }, 240_000);
 
   it('F11-N2: require() and import-equals count as the source imports', () => {
@@ -92,9 +95,8 @@ describe('hunt21, R03-05-07 final 11', () => {
     const run = async (prop, value) =>
       (await refusal(() => themeEditSet('v', prop, value, {cwd, on: 'card'})))
         .run[0];
-    expect(await run('border-width', '-2')).toMatch(
-      / border-width 2px --on card$/,
-    );
+    // A minus sign is never read away: no line offers the positive size.
+    expect(await run('border-width', '-2')).toMatch(/ how border-width$/);
     expect(await run('padding', '4 8px')).toMatch(
       / padding '4px 8px' --on card$/,
     );
@@ -132,6 +134,24 @@ describe('hunt21, R03-05-07 final 11', () => {
 });
 
 describe('hunt21, chaos13', () => {
+  it('R13-A2: undo keeps its error code when themes is a link to a file, on every Node', async () => {
+    const app = makeLinkedFixture(
+      'astryx-theme-hunt21-link-',
+      FIXTURE_PACKAGES,
+    );
+    try {
+      fs.writeFileSync(path.join(app, 'themes-file'), 'hi\n');
+      fs.symlinkSync('themes-file', path.join(app, 'themes'));
+      const {themeEditUndo} = await import('./theme-edit.mjs');
+      const r = await refusal(() => themeEditUndo('g', {cwd: app}));
+      // The same refusal on Node 22.13, where the stat of a file under a
+      // themes link throws ENOTDIR, as on later Node, where it does not.
+      expect(r.code).toBe('ERR_THEME_INVALID');
+    } finally {
+      removeLinkedFixture(app);
+    }
+  }, 240_000);
+
   it('R13-A: themes as a file is refused by every command, naming the fix', async () => {
     const app = makeLinkedFixture(
       'astryx-theme-hunt21-file-',

@@ -44,8 +44,8 @@ import {persistedGather} from '../fs/gather-cache.mjs';
 import {hasNameLine, keptTreeSummary, nameLines} from '../fs/kept-tree.mjs';
 import {foldEntryName} from './entry-name-files.mjs';
 import {EXACT_CODEC} from '../fs/exact-codec.mjs';
-import {hostedRun} from '../runtime/package-root.mjs';
 import {babelParser} from '../runtime/lazy-dependencies.mjs';
+import {compareText} from '../text/compare-text.mjs';
 
 /** Identity used for core (built-in) templates in package-scoped listings. */
 const CORE_PACKAGE = CORE_PROVIDER_ID;
@@ -1618,7 +1618,7 @@ export function applyTemplateReplacements(templates, declarationErrors = []) {
   });
 
   return {
-    templates: effective.sort((a, b) => a.name.localeCompare(b.name)),
+    templates: effective.sort((a, b) => compareText(a.name, b.name)),
     errors,
   };
 }
@@ -1649,7 +1649,7 @@ async function discoverAllSources(cwd = process.cwd()) {
  */
 export async function discoverAllUnresolved(cwd = process.cwd()) {
   return (await discoverAllSources(cwd)).templates.sort((a, b) =>
-    a.name.localeCompare(b.name),
+    compareText(a.name, b.name),
   );
 }
 
@@ -1676,15 +1676,10 @@ async function resolveAllSources(cwd = process.cwd()) {
   // a later run with every one unchanged reads the records back.
   return /** @type {Awaited<ReturnType<typeof resolveAllSourcesNow>>} */ (
     await persistedGather(
-      // The folder, and the copy of the CLI that answers with the
-      // integrations a host approves: outside a project the integrations
-      // beside the answering copy load too.
-      [
-        'template-sources',
-        realDir(cwd),
-        CLI_ROOT,
-        hostedRun()?.integrations ?? [],
-      ],
+      // The folder, and the copy of the CLI that answers: outside a project
+      // the integrations beside the answering copy load too. A host's inputs
+      // are in every entry's key (gather-cache.mjs).
+      ['template-sources', realDir(cwd), CLI_ROOT],
       () => resolveAllSourcesNow(cwd),
       TEMPLATE_SOURCES_CODEC,
     )

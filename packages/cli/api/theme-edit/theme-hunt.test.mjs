@@ -30,7 +30,11 @@ import {
   FIXTURE_PACKAGES,
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
-import {projectFiles, refusal} from '../../test-utils/theme-edit-fixture.mjs';
+import {
+  modeValue,
+  projectFiles,
+  refusal,
+} from '../../test-utils/theme-edit-fixture.mjs';
 
 // The page renders cost seconds and these tests read settings, builds and
 // files: a stand-in renders unless a test asks for the real thing.
@@ -171,7 +175,8 @@ describe('new takes its flags as set does', () => {
       themeEditNew('v1', {cwd, settings: {vibrancy: '60'}}),
     );
     expect(r.code).toBe('ERR_THEME_NO_EFFECT');
-    expect(r.run[0]).toMatch(/new v1 --vibrancy 60 --accent '#7c3aed'$/);
+    // No stock color is put in for the vibrancy: the color is the user's.
+    expect(r.run.join(' ')).not.toMatch(/#7c3aed/);
   });
 
   it('refuses a font or text size that would not build', async () => {
@@ -278,7 +283,8 @@ describe('exact tokens', () => {
     const r = await refusal(() =>
       themeEditSet('h', '--color-accnt', 'red', {cwd}),
     );
-    expect(r.run[0]).toMatch(/how --list tokens accnt$/);
+    // No token holds "accnt": the whole list, never one that shows nothing.
+    expect(r.run[0]).toMatch(/how --list tokens$/);
   });
 
   it('accepts Core own shadows and a negative offset, and undo removes a shadow saved for one mode', async () => {
@@ -723,7 +729,7 @@ describe('hunt2: order and scope', () => {
     fs.rmSync(path.join(cwd, 'themes/o1'), {recursive: true, force: true});
   }, 240_000);
 
-  it('a setting for both modes replaces the one-mode ones; one mode on a part with variants is refused', async () => {
+  it('a setting for both modes replaces the one-mode ones; one mode on a part with variants goes to each variant', async () => {
     await themeEditNew('o2', {cwd});
     await themeEditSet('o2', '--color-background-surface', '#ff0000', {
       cwd,
@@ -741,17 +747,19 @@ describe('hunt2: order and scope', () => {
     expect(
       JSON.parse(read('themes/o2/o2.settings.json')).settings,
     ).toHaveLength(1);
+    await themeEditSet('o2', 'background-color', '#00ff00', {
+      cwd,
+      on: 'button',
+      mode: 'light',
+    });
     expect(
-      (
-        await refusal(() =>
-          themeEditSet('o2', 'background-color', '#00ff00', {
-            cwd,
-            on: 'button',
-            mode: 'light',
-          }),
-        )
-      ).code,
-    ).toBe('ERR_THEME_NO_MODE');
+      modeValue(
+        read('themes/o2/o2.css'),
+        '.astryx-button[data-variant="primary"]',
+        'background-color',
+        'light',
+      ),
+    ).toBe('#00ff00');
     fs.rmSync(path.join(cwd, 'themes/o2'), {recursive: true, force: true});
   }, 240_000);
 

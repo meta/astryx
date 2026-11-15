@@ -181,7 +181,9 @@ describe('corrected new commands keep every option', () => {
         '--mode',
         'dark-only',
       ],
-      / new brand --like neutral (--accent '#e11d48' --mode dark-only|--mode dark-only --accent '#e11d48')$/,
+      // Neutral in any case is neutral, which this app has not installed:
+      // the same new on no base is the new offered.
+      / new brand (--accent '#e11d48' --mode dark-only|--mode dark-only --accent '#e11d48')$/,
     ],
     [
       [
@@ -199,7 +201,8 @@ describe('corrected new commands keep every option', () => {
     ],
     [
       ['new', 'z', '--accent', '#ggg', '--mode', 'light-only', '--png'],
-      / new z .*--accent '#7c3aed'.* --png$/,
+      // Never a stock color the user did not type: the same new without it.
+      / new z --mode light-only --png$/,
     ],
   ])(
     '%j',
@@ -304,7 +307,9 @@ describe('corrected new commands keep every option (r78e)', () => {
         '--headings',
         'tight',
         '--headings',
-        'BOLD',
+        // A dial word in capitals is that word (no refusal), so the bad
+        // value here is a misspelt one in capitals.
+        'BOLDD',
         '--accent',
         'red',
       ],
