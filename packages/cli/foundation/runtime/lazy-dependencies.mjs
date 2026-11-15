@@ -71,11 +71,12 @@ export const selectorParser = () =>
   (selectors ??= require('postcss-selector-parser'));
 
 /**
- * postcss, for the modules on the API's import path that read a stylesheet
- * only now and then: doctor's theme checks, the codemods' parser, the reader
- * of a built theme's imports and the font stylesheet reader. Its ES module
- * entry hands on what its CommonJS one exports, so this is the one postcss
- * the modules that import it get.
+ * postcss, for the modules that read a stylesheet only now and then:
+ * doctor's theme checks and the codemods' parser, which the API's import
+ * path reaches, and the reader of a built theme's imports and the font
+ * stylesheet reader, which the theme commands load. Its ES module entry hands
+ * on what its CommonJS one exports, so this is the one postcss the modules
+ * that import it get.
  * @returns {typeof import('postcss').default}
  */
 export const postcss = () => (css ??= require('postcss'));
