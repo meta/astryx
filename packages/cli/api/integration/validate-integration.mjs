@@ -90,7 +90,8 @@ import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
 import {cliPeerVersionProblem} from '../../foundation/integrations/cli-peer-version.mjs';
 import {publicImportIssues} from '../../foundation/integrations/public-imports.mjs';
 import {
-  isInstalledPackage,
+  filesOnDisk,
+  shippedFiles,
   shippedImportFindings,
 } from '../../foundation/integrations/shipped-imports.mjs';
 import {runChoice} from '../../foundation/release/run-context.mjs';
@@ -133,6 +134,8 @@ export {validateLoadedIntegration, isListedIssue};
  *   Which definitions each icon set leaves unmapped (spec:AST-084 FR15).
  * @property {import('../../foundation/discovery/doc-stability.mjs').OlderCliNote[]} [olderCliNotes]
  * @property {import('./validate-integration.type.mjs').PublicImportsReport} [publicImports]
+ * @property {Array<{file: string, specifier: string, reason: string}>} [shippedImports]
+ *   the relative imports whose files npm could not be asked about
  *   what the public-import check could not judge
  * @property {import('../../foundation/discovery/template-icon-notes.mjs').TemplateIconUnchecked[]} [templateIconsUnchecked]
  *   the template icon imports the undeclared-icon check could not judge
@@ -545,17 +548,20 @@ async function validateAtPackageDir(
       ...publicImports.notes.map(note => ({...note, next: true})),
     );
   result.publicImports = publicImports.report;
-  // Each relative import of the modules the package ships, resolved against
-  // the files npm packs, as an app's bundler resolves it: a `next` note until
-  // the next minor release makes it an error. An installed package is
-  // checked with the contribution checks above, against its files on disk.
-  if (!isInstalledPackage(packageDir)) {
-    (result.listed ??= []).push(
-      ...shippedImportFindings(packageDir, {
-        manifestFile: loaded.__manifestFile,
-      }).map(finding => listed(finding.code, finding.message)),
-    );
-  }
+  // Each relative import of the modules the package ships, resolved as an
+  // app's bundler resolves it against the files the package ships: what npm
+  // packs for the package's own folder, and the files on disk for an
+  // installed or packed one, which are exactly what npm packed. Each one no
+  // shipped file answers is a `next` note until the next minor release makes
+  // it a warning (architecture:cli-surface INV35).
+  const shipped = shippedImportFindings(packageDir, {
+    files: own ? shippedFiles(packageDir) : filesOnDisk(packageDir),
+    manifestFile: loaded.__manifestFile,
+  });
+  (result.listed ??= []).push(
+    ...shipped.findings.map(finding => listed(finding.code, finding.message)),
+  );
+  if (shipped.unchecked.length > 0) result.shippedImports = shipped.unchecked;
   if (scanUnreachable) {
     issues.push(
       ...(await findUnreachableContributionIssues(
@@ -1017,6 +1023,17 @@ export async function validateIntegration(pkg, options = {}) {
       // What the public-import check could not judge: listed, never failed on.
       ...(result.found && result.publicImports
         ? {publicImports: result.publicImports}
+        : {}),
+      // Relative imports whose files npm could not be asked about, when
+      // there are any: listed, never failed on.
+      ...(result.found && result.shippedImports
+        ? {
+            shippedImports: {
+              status: 'checked',
+              findings: [],
+              unchecked: result.shippedImports,
+            },
+          }
         : {}),
       // Examples whose names could not be judged, when there are any.
       ...(exampleCode && exampleCode.unchecked.length > 0

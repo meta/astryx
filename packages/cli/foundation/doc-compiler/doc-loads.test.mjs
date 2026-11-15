@@ -488,9 +488,9 @@ const RUNNERS = {
     runs: "each installed integration's manifest",
     sites: ['importUserModule'],
   },
-  'foundation/integrations/shipped-imports.mjs': {
-    runs: "`npm pack --dry-run --json --ignore-scripts`, to read which files an integration's package holds (no lifecycle script runs, nothing is written); and postcss, loaded on first use, to read a shipped stylesheet's imports",
-    sites: ['child_process.spawnSync', 'require(postcss)'],
+  'foundation/integrations/pack-state.mjs': {
+    runs: "`npm pack --dry-run --json --ignore-scripts`, to read which files an integration's package holds when a `files` field or an ignore file can leave one out (no lifecycle script runs, nothing is written)",
+    sites: ['child_process.spawnSync'],
   },
   'foundation/integrations/validate-contributions.mjs': {
     runs: "@babel/parser, loaded on first use, to read a contribution's source",

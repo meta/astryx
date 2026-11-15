@@ -892,7 +892,7 @@ describe('app-theme doctor checks', () => {
     const checks = await checkAppThemes(dir);
     const result = check(checks, 'theme-owners');
 
-    // A warning until the next minor release makes it a failure.
+    // A warning: the module itself loads.
     expect(result).toMatchObject({id: 'theme-owners', status: 'warn'});
     expect(checks.some(item => item.status === 'fail')).toBe(false);
     expect(result.message).toContain(

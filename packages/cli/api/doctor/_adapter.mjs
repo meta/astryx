@@ -71,7 +71,10 @@ import {
   findInstalledPackage,
 } from '../../foundation/fs/paths.mjs';
 import {compareText} from '../../foundation/text/compare-text.mjs';
-import {shippedImportFindings} from '../../foundation/integrations/shipped-imports.mjs';
+import {
+  filesOnDisk,
+  shippedImportFindings,
+} from '../../foundation/integrations/shipped-imports.mjs';
 export {
   isLocalThemeOwner,
   planThemeAppWrite,
@@ -324,11 +327,15 @@ export function themeShippedImportFindings(theme) {
     if (parent === packageDir) return [];
     packageDir = parent;
   }
+  // The app's bundler builds from the package's files where they are,
+  // installed or linked, so those files are what it ships here; doctor never
+  // asks npm.
   return shippedImportFindings(packageDir, {
+    files: filesOnDisk(packageDir),
     entries: [theme.moduleFile, theme.stylesheetFile, theme.fontStylesheetFile]
       .filter(file => typeof file === 'string')
       .map(file => realDoctorFile(file) ?? file),
-  });
+  }).findings;
 }
 
 /** @param {string} projectDir */

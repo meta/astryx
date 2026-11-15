@@ -4,17 +4,19 @@
  * @file Whether every relative import of a package's shipped modules names a
  * file the package ships, resolved the way an app's bundler resolves it.
  *
- * @input A package directory and the files it ships: what
- *   `npm pack --dry-run` lists for a package's own folder, or the files on
- *   disk for an installed one (npm unpacked exactly those).
- * @output For each relative import no shipped file answers, the importing
- *   file, its line, the specifier, and whether the file exists outside the
- *   package's files (npm leaves it out) or nowhere.
+ * @input A package directory and the files it ships: for a package's own
+ *   folder, the files on disk that npm packs (pack-state.mjs); for an
+ *   installed package, the files on disk (npm unpacked exactly those).
+ * @output For each relative import no shipped file answers, a finding naming
+ *   the importing file, its line, the specifier, and whether the file exists
+ *   but is left out of the package or exists nowhere, with its fix; and each
+ *   import whose file npm could not be asked about, as not checked. Each
+ *   caller decides how much a finding weighs.
  * @position foundation/integrations, beside the other package checks; run
  *   by `astryx doctor integration validate` (and so `integration check`)
- *   through api/integration/validate-integration.mjs, by the project's
- *   integration issues (`astryx doctor`) for installed packages, and by
- *   doctor's added-theme check for the theme a package ships.
+ *   through api/integration/validate-integration.mjs, and by doctor's
+ *   added-theme check for the theme a package ships. Everyday commands never
+ *   run it.
  *
  * Loading a module in Node proves nothing about the package an app installs:
  * in the package's own folder every file is on disk, whether npm packs it or
@@ -26,75 +28,43 @@
  * The graph starts at what an app or the CLI loads from the package: every
  * `exports` target (wildcards filled in from the shipped files), `main`,
  * `module` and a string `browser`, the root `index.js` when none of those is
- * set, and the integration manifest; callers may add their own starts (a
+ * set, and the integration manifest; a caller may start it elsewhere (a
  * theme's built module and stylesheets). From a JavaScript or TypeScript
  * module it follows static imports and re-exports, `import()` and
- * `require()` with a literal specifier, and `import x = require()`; an
- * `import type`, an `export type`, and an import whose every binding is an
- * inline `type` are types only and are skipped, as a bundler drops them.
- * From a stylesheet it follows each `@import` and each relative `url()`; an
+ * `require()` with a literal specifier (moduleImports, in
+ * ../render/embedded-imports.mjs); an import or re-export that brings in
+ * types only is skipped, as a bundler drops it. From a stylesheet it follows
+ * each `@import` and each relative `url()` (cssReferences, beside it); an
  * `@import` that is not a `./` or `../` path may name a package, so it is
- * followed only when it names a shipped file, and never reported. Declaration files are never followed.
- *
- * A specifier resolves as bundlers resolve one: the exact file; with
- * `.js`/`.mjs`/`.cjs`/`.jsx`/`.ts`/`.tsx`/`.mts`/`.cts`/`.json` added; a
- * `.js`-family specifier to the TypeScript file of the same stem; a folder
- * through its `package.json` `module` or `main`, then its `index` with any
- * of those extensions. A stylesheet `@import` may also omit `.css` or name a
- * folder with an `index.css`. A `?query` or `#hash` suffix is not part of the
- * file.
+ * followed only when it names a shipped file, and never reported.
+ * Declaration files are never followed. A specifier resolves as a bundler
+ * resolves it (resolveLocalModule with `bundler`, in
+ * ../discovery/module-exports.mjs); a stylesheet `@import` may also omit
+ * `.css` or name a folder with an `index.css`.
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {spawnSync} from 'node:child_process';
-import {createRequire} from 'node:module';
-import {babelParse as parse} from '../runtime/lazy-dependencies.mjs';
-import {npmCommand} from '../release/cache.mjs';
+import {resolveLocalModule} from '../discovery/module-exports.mjs';
+import {cssReferences, moduleImports} from '../render/embedded-imports.mjs';
 import {allTargets, isRecord} from './exports-subpaths.mjs';
-
-const require = createRequire(import.meta.url);
-/** @type {typeof import('postcss') | undefined} */
-let postcssModule;
-/**
- * postcss, loaded on first use: only a package that ships a stylesheet needs
- * it, and every command that loads integrations reaches this module.
- * @returns {typeof import('postcss')}
- */
-const postcss = () => (postcssModule ??= require('postcss'));
-
-/** What a bundler adds to an extensionless specifier, in its order. */
-const MODULE_EXTENSIONS = [
-  '.js',
-  '.mjs',
-  '.cjs',
-  '.jsx',
-  '.ts',
-  '.tsx',
-  '.mts',
-  '.cts',
-  '.json',
-];
-
-/** The TypeScript files a `.js`-family specifier may name. */
-const TYPESCRIPT_FOR = /** @type {Record<string, string[]>} */ ({
-  '.js': ['.ts', '.tsx'],
-  '.jsx': ['.tsx'],
-  '.mjs': ['.mts'],
-  '.cjs': ['.cts'],
-});
+import {outsideFiles, packState} from './pack-state.mjs';
 
 const CODE_FILE = /\.(?:[cm]?[jt]sx?)$/u;
 const DECLARATION_FILE = /\.d\.[cm]?ts$/u;
-const STYLESHEET_FILE = /\.css$/u;
+const STYLESHEET_FILE = /\.css$/iu;
+const RELATIVE = /^\.\.?(?:\/|$)/u;
 /** A `url()` value that names no file of the package. */
 const NOT_A_FILE_URL = /^(?:[a-z][a-z0-9+.-]*:|\/|#|~|%23)/iu;
+/** What `main` may leave out, as Node and bundlers read it. */
+const ENTRY_EXTENSIONS = ['.js', '.mjs', '.cjs', '.json'];
 
 /**
  * @typedef {object} ShippedFiles
- * @property {(rel: string) => boolean} has whether the package ships the
- *   file at this POSIX path, relative to the package root
- * @property {'npm' | 'disk'} by where the list comes from
+ * @property {(rel: string) => true | false | {unknown: string}} state
+ *   whether the package ships the file at this POSIX path, relative to the
+ *   package root, or why that cannot be told
+ * @property {'npm' | 'disk'} by where the answer comes from
  */
 
 /**
@@ -105,73 +75,26 @@ const NOT_A_FILE_URL = /^(?:[a-z][a-z0-9+.-]*:|\/|#|~|%23)/iu;
  * @property {'not_packed' | 'missing' | 'outside'} problem `not_packed`: the
  *   file exists but the package does not ship it; `missing`: no such file;
  *   `outside`: the path leaves the package
- * @property {string} [target] the file it would name, relative to the
- *   package root, for `not_packed`
+ * @property {string} [target] the file it names, for `not_packed`
+ */
+
+/**
+ * @typedef {object} UncheckedImport
+ * @property {string} file the importing file, relative to the package root
+ * @property {string} specifier
+ * @property {string} reason
+ */
+
+/**
+ * @typedef {object} ShippedImportFinding
+ * @property {'relative_import_not_shipped'} code
+ * @property {string} message where, what, and the fix
+ * @property {string} file the importing file, relative to the package root
+ * @property {number} [line]
  */
 
 /** @param {string} file */
 const slash = file => file.split(path.sep).join('/');
-
-/**
- * The paths npm packs for the package in `base`, read from
- * `npm pack --dry-run --json --ignore-scripts` (nothing runs, nothing is
- * written), started the way the CLI starts npm everywhere else, or why npm
- * could not answer.
- * @param {string} base
- * @returns {{paths: Set<string>} | {error: string}}
- */
-export function npmPackedPaths(base) {
-  let npm;
-  try {
-    npm = npmCommand();
-  } catch {
-    return {error: 'npm was not found'};
-  }
-  const result = spawnSync(
-    npm.command,
-    [
-      ...npm.prefix,
-      'pack',
-      '--dry-run',
-      '--json',
-      '--ignore-scripts',
-      '--silent',
-    ],
-    {
-      cwd: base,
-      encoding: 'utf-8',
-      shell: false,
-      timeout: 60_000,
-      // One line per packed file: room for a very large package.
-      maxBuffer: 256 * 1024 * 1024,
-    },
-  );
-  if (result.error) return {error: `npm did not run (${result.error.message})`};
-  if (result.status !== 0) {
-    let code = '';
-    try {
-      code = JSON.parse(result.stdout)?.error?.code ?? '';
-    } catch {
-      // not JSON
-    }
-    return {
-      error: `npm pack failed${code ? ` (${code})` : ` with exit ${result.status}`}`,
-    };
-  }
-  try {
-    const [info] = JSON.parse(result.stdout);
-    if (Array.isArray(info?.files)) {
-      return {
-        paths: new Set(
-          info.files.map((/** @type {{path: string}} */ f) => f.path),
-        ),
-      };
-    }
-  } catch {
-    // fall through
-  }
-  return {error: 'npm pack printed no file list'};
-}
 
 /**
  * Whether the package in `packageDir` was installed by a package manager:
@@ -189,270 +112,151 @@ export function isInstalledPackage(packageDir) {
   return real.split(path.sep).includes('node_modules');
 }
 
+/** @param {string} packageDir @param {string} rel */
+function onDisk(packageDir, rel) {
+  if (rel.split('/').includes('node_modules')) return false;
+  try {
+    return fs.statSync(path.join(packageDir, rel)).isFile();
+  } catch {
+    return false;
+  }
+}
+
 /**
- * The files on disk under `packageDir`, as the files an installed package
- * ships. A path into a nested `node_modules` is another package's.
+ * The files on disk under `packageDir`, as the files a package ships: an
+ * installed package's, or a linked one's. A path into a nested
+ * `node_modules` is another package's.
  * @param {string} packageDir
  * @returns {ShippedFiles}
  */
 export function filesOnDisk(packageDir) {
-  return {
-    by: 'disk',
-    has: rel => {
-      if (rel.split('/').includes('node_modules')) return false;
-      try {
-        return fs.statSync(path.join(packageDir, rel)).isFile();
-      } catch {
-        return false;
-      }
-    },
-  };
+  return {by: 'disk', state: rel => onDisk(packageDir, rel)};
 }
 
 /**
- * The files the package in `packageDir` ships: the files on disk for an
- * installed package; for a package's own folder, what `npm pack --dry-run`
- * lists. When npm cannot answer, the files on disk stand in, so an import of
- * a file that exists nowhere is still found.
+ * The files the package in `packageDir` ships: an installed package's files
+ * on disk; for a package's own folder, the files on disk that npm packs. npm
+ * is asked only about a file that is on disk, only when a `files` field or
+ * an ignore file on its path can leave it out, and at most once for this
+ * list. When npm cannot answer, a file no `files` entry can reach is left
+ * out and any other cannot be told (pack-state.mjs).
  * @param {string} packageDir
  * @returns {ShippedFiles}
  */
 export function shippedFiles(packageDir) {
   if (isInstalledPackage(packageDir)) return filesOnDisk(packageDir);
-  const packed = npmPackedPaths(packageDir);
-  if ('error' in packed) return filesOnDisk(packageDir);
-  return {by: 'npm', has: rel => packed.paths.has(rel)};
+  /** @type {unknown} package.json `files` */
+  let declared;
+  try {
+    declared = JSON.parse(
+      fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8'),
+    )?.files;
+  } catch {
+    declared = undefined;
+  }
+  /** @type {{packed?: {paths: Set<string>} | {error: string}}} what npm packs, asked once */
+  const npm = {};
+  return {
+    by: 'npm',
+    state: rel => {
+      if (!onDisk(packageDir, rel)) return false;
+      const packed = packState(packageDir, rel, declared, npm);
+      if (packed.packed === 'unknown') {
+        return {
+          unknown: Array.isArray(declared)
+            ? `${packed.error}, and a \`files\` entry may reach ${rel}`
+            : `${packed.error}, and an ignore file may drop ${rel}`,
+        };
+      }
+      return packed.packed;
+    },
+  };
 }
 
 /**
- * The shipped file a relative specifier names from `fromRel`, or why none.
+ * The shipped file a relative reference names from `fromRel`, through
+ * resolveLocalModule as a bundler resolves it, or why none.
+ * @param {string} packageDir
  * @param {string} specifier
  * @param {string} fromRel importing file, POSIX, relative to the package root
  * @param {ShippedFiles} files
- * @param {{stylesheet?: boolean, read: (rel: string) => string | null}} options
- *   `stylesheet`: a stylesheet `@import`, which may omit `.css`; `read`
- *   reads a shipped file's text (a folder's package.json)
- * @returns {{file: string} | {problem: 'missing' | 'outside', base: string}}
+ * @param {boolean} stylesheet a stylesheet `@import`
+ * @returns {{file: string} | {problem: 'missing' | 'outside'}}
  */
-export function resolveShippedImport(specifier, fromRel, files, options) {
-  const bare = specifier.replace(/[?#].*$/su, '');
-  const base = path.posix.normalize(
-    path.posix.join(path.posix.dirname(fromRel), bare),
-  );
-  if (base === '..' || base.startsWith('../') || path.posix.isAbsolute(base)) {
-    return {problem: 'outside', base};
-  }
-  const candidates = [base];
-  const ext = path.posix.extname(base);
-  for (const typed of TYPESCRIPT_FOR[ext] ?? []) {
-    candidates.push(`${base.slice(0, -ext.length)}${typed}`);
-  }
-  if (options.stylesheet) {
-    candidates.push(`${base}.css`, `${base}/index.css`);
-  } else {
-    candidates.push(...MODULE_EXTENSIONS.map(each => `${base}${each}`));
-    const manifest = files.has(`${base}/package.json`)
-      ? options.read(`${base}/package.json`)
+function resolveShipped(packageDir, specifier, fromRel, files, stylesheet) {
+  const written = RELATIVE.test(specifier) ? specifier : `./${specifier}`;
+  /** @param {string} file */
+  const relOf = file => {
+    const rel = path.relative(packageDir, file);
+    return rel && !rel.startsWith('..') && !path.isAbsolute(rel)
+      ? slash(rel)
       : null;
-    if (manifest != null) {
-      try {
-        const pkg = JSON.parse(manifest);
-        for (const field of ['module', 'main']) {
-          if (typeof pkg[field] !== 'string') continue;
-          const entry = path.posix.normalize(path.posix.join(base, pkg[field]));
-          candidates.push(
-            entry,
-            ...MODULE_EXTENSIONS.map(each => `${entry}${each}`),
-          );
-        }
-      } catch {
-        // A package.json that does not parse names no entry.
-      }
-    }
-    candidates.push(...MODULE_EXTENSIONS.map(each => `${base}/index${each}`));
-  }
-  const found = candidates.find(candidate => files.has(candidate));
-  return found ? {file: found} : {problem: 'missing', base};
-}
-
-/** @param {string} file */
-function parsePlugins(file) {
-  const plugins = [
-    'decorators-legacy',
-    'importAttributes',
-    'exportDefaultFrom',
-  ];
-  if (/\.[cm]?ts$/u.test(file)) return ['typescript', ...plugins];
-  if (/\.tsx$/u.test(file)) return ['typescript', 'jsx', ...plugins];
-  return ['jsx', ...plugins];
-}
-
-/**
- * @param {any} node
- * @returns {string | null} a literal specifier
- */
-function literal(node) {
-  if (node?.type === 'StringLiteral') return node.value;
-  if (node?.type === 'TemplateLiteral' && node.expressions.length === 0) {
-    return node.quasis[0]?.value?.cooked ?? null;
-  }
-  return null;
-}
-
-/**
- * Whether an import or re-export brings in nothing at run time: `import
- * type`/`export type`, or named bindings that are each an inline `type`.
- * @param {any} node
- */
-function typesOnly(node) {
-  if (node.importKind === 'type' || node.exportKind === 'type') return true;
-  const specifiers = node.specifiers ?? [];
-  return (
-    specifiers.length > 0 &&
-    specifiers.every(
-      (/** @type {any} */ each) =>
-        each.importKind === 'type' || each.exportKind === 'type',
-    )
+  };
+  const found = resolveLocalModule(written, path.join(packageDir, fromRel), {
+    bundler: true,
+    ...(stylesheet ? {extensions: ['.css']} : {}),
+    isFile: file => {
+      const rel = relOf(file);
+      return rel != null && files.state(rel) !== false;
+    },
+  });
+  const rel = found ? relOf(found) : null;
+  if (rel) return {file: rel};
+  const base = path.posix.normalize(
+    path.posix.join(
+      path.posix.dirname(fromRel),
+      written.replace(/[?#].*$/su, ''),
+    ),
   );
+  return base === '..' || base.startsWith('../')
+    ? {problem: 'outside'}
+    : {problem: 'missing'};
 }
 
 /**
- * The relative specifiers a JavaScript or TypeScript module loads at run
- * time, each with its line; null when the module does not parse.
+ * The relative references one shipped file makes, each with its line; null
+ * when it cannot be read or parsed.
  * @param {string} text
  * @param {string} file
- * @returns {Array<{specifier: string, line?: number}> | null}
+ * @returns {Array<{specifier: string, line?: number, stylesheet: boolean, optional: boolean}> | null}
  */
-function moduleReferences(text, file) {
-  let ast;
-  try {
-    ast = parse(text, {
-      sourceType: 'unambiguous',
-      allowImportExportEverywhere: true,
-      allowReturnOutsideFunction: true,
-      allowAwaitOutsideFunction: true,
-      plugins: /** @type {any} */ (parsePlugins(file)),
-    });
-  } catch {
-    return null;
+function referencesOf(text, file) {
+  if (STYLESHEET_FILE.test(file)) {
+    const css = cssReferences(text);
+    if (!css) return null;
+    return [
+      ...css.imports
+        .filter(each => !NOT_A_FILE_URL.test(each.url))
+        .map(each => ({
+          specifier: each.url,
+          line: each.line,
+          stylesheet: true,
+          // A bare path may name a package as well as a file beside the
+          // stylesheet.
+          optional: !RELATIVE.test(each.url),
+        })),
+      ...css.urls
+        .filter(
+          each => !NOT_A_FILE_URL.test(each.url) && !/[\s$(]/u.test(each.url),
+        )
+        .map(each => ({
+          specifier: each.url,
+          line: each.line,
+          stylesheet: false,
+          optional: false,
+        })),
+    ];
   }
-  /** @type {Array<{specifier: string, line?: number}>} */
-  const found = [];
-  /** @param {string | null} specifier @param {any} node */
-  const add = (specifier, node) => {
-    if (specifier != null && /^\.\.?(?:\/|$)/u.test(specifier)) {
-      found.push({specifier, line: node.loc?.start?.line});
-    }
-  };
-  /** @param {any} node */
-  const visit = node => {
-    if (node == null || typeof node !== 'object') return;
-    if (Array.isArray(node)) {
-      for (const each of node) visit(each);
-      return;
-    }
-    switch (node.type) {
-      case 'ImportDeclaration':
-      case 'ExportNamedDeclaration':
-      case 'ExportAllDeclaration':
-        if (node.source && !typesOnly(node)) add(literal(node.source), node);
-        break;
-      case 'TSImportEqualsDeclaration':
-        if (
-          node.importKind !== 'type' &&
-          node.moduleReference?.type === 'TSExternalModuleReference'
-        ) {
-          add(literal(node.moduleReference.expression), node);
-        }
-        break;
-      case 'ImportExpression':
-        add(literal(node.source), node);
-        break;
-      case 'CallExpression':
-        if (
-          node.callee?.type === 'Import' ||
-          (node.callee?.type === 'Identifier' &&
-            node.callee.name === 'require' &&
-            node.arguments.length === 1)
-        ) {
-          add(literal(node.arguments[0]), node);
-        }
-        break;
-      default:
-        break;
-    }
-    for (const key of Object.keys(node)) {
-      if (
-        key === 'loc' ||
-        key === 'leadingComments' ||
-        key === 'trailingComments' ||
-        key === 'innerComments' ||
-        // Type positions load nothing at run time.
-        key === 'typeAnnotation' ||
-        key === 'returnType' ||
-        key === 'typeParameters'
-      ) {
-        continue;
-      }
-      const value = node[key];
-      if (value && typeof value === 'object') visit(value);
-    }
-  };
-  visit(ast.program);
-  return found;
-}
-
-/** @param {string} value */
-function unquote(value) {
-  const trimmed = value.trim();
-  return /^(['"]).*\1$/su.test(trimmed) ? trimmed.slice(1, -1) : trimmed;
-}
-
-/**
- * The file references a stylesheet makes: each `@import` (as a stylesheet
- * import; one that is not a `./` or `../` path is `optional`) and each
- * relative `url()`. Null when the stylesheet does not parse.
- * @param {string} text
- * @returns {Array<{specifier: string, line?: number, stylesheet: boolean, optional?: boolean}> | null}
- */
-function stylesheetReferences(text) {
-  let root;
-  try {
-    root = postcss().parse(text);
-  } catch {
-    return null;
-  }
-  /** @type {Array<{specifier: string, line?: number, stylesheet: boolean, optional?: boolean}>} */
-  const found = [];
-  root.walkAtRules('import', rule => {
-    const params = rule.params.trim();
-    const url = /^url\(\s*([^)]*?)\s*\)/iu.exec(params);
-    const quoted = /^(['"])(.*?)\1/su.exec(params);
-    const specifier = url ? unquote(url[1]) : quoted ? quoted[2] : null;
-    if (specifier == null || NOT_A_FILE_URL.test(specifier)) return;
-    found.push({
-      specifier,
-      line: rule.source?.start?.line,
-      stylesheet: true,
-      // A bare path may name a package as well as a file beside the
-      // stylesheet: it is followed when it names a shipped file, and never
-      // reported.
-      ...(/^\.\.?\//u.test(specifier) ? {} : {optional: true}),
-    });
-  });
-  root.walkDecls(decl => {
-    for (const match of decl.value.matchAll(/url\(\s*([^)]*?)\s*\)/giu)) {
-      const specifier = unquote(match[1]);
-      if (specifier === '' || NOT_A_FILE_URL.test(specifier)) continue;
-      if (/[\s$(]/u.test(specifier)) continue;
-      found.push({
-        specifier,
-        line: decl.source?.start?.line,
-        stylesheet: false,
-      });
-    }
-  });
-  return found;
+  const imports = moduleImports(text, file);
+  if (!imports) return null;
+  return imports
+    .filter(each => !each.typeOnly && RELATIVE.test(each.specifier))
+    .map(each => ({
+      specifier: each.specifier,
+      line: each.line,
+      stylesheet: false,
+      optional: false,
+    }));
 }
 
 /**
@@ -466,11 +270,8 @@ function stylesheetReferences(text) {
  * @returns {string[]}
  */
 export function packageEntryFiles(packageDir, pkg, files) {
-  /** @type {string[]} */
-  const targets = [];
-  if (pkg.exports != null) {
-    targets.push(...allTargets(pkg.exports));
-  }
+  /** @type {unknown[]} */
+  const targets = pkg.exports != null ? allTargets(pkg.exports) : [];
   for (const field of ['main', 'module', 'browser']) {
     if (typeof pkg[field] === 'string') targets.push(pkg[field]);
   }
@@ -483,8 +284,10 @@ export function packageEntryFiles(packageDir, pkg, files) {
     if (rel.startsWith('../') || DECLARATION_FILE.test(rel)) continue;
     if (!rel.includes('*')) {
       // `main` may leave out its extension.
-      const named = [rel, ...MODULE_EXTENSIONS.map(each => `${rel}${each}`)];
-      const found = named.find(each => files.has(each));
+      const found = [
+        rel,
+        ...ENTRY_EXTENSIONS.map(each => `${rel}${each}`),
+      ].find(each => files.state(each) !== false);
       if (found) entries.add(found);
       continue;
     }
@@ -525,69 +328,67 @@ function wildcardFiles(packageDir, pattern, files) {
         child.startsWith(head) &&
         child.endsWith(tail) &&
         child.length >= head.length + tail.length &&
-        files.has(child)
+        !DECLARATION_FILE.test(child) &&
+        files.state(child) !== false
       ) {
         found.push(child);
       }
     }
   };
   walk(folder);
-  return found.filter(file => !DECLARATION_FILE.test(file));
+  return found;
 }
 
 /**
  * Every relative reference in the graph from `entries` that names no file
- * the package ships, and the shipped files the check could not read.
+ * the package ships, and each whose file cannot be told shipped or not.
  * @param {string} packageDir
  * @param {ShippedFiles} files
  * @param {string[]} entries POSIX paths relative to the package root
- * @returns {{unshipped: UnshippedImport[], unread: string[]}}
+ * @returns {{unshipped: UnshippedImport[], unchecked: UncheckedImport[]}}
  */
 export function unshippedImports(packageDir, files, entries) {
-  /** @param {string} rel */
-  const read = rel => {
-    try {
-      return fs.readFileSync(path.join(packageDir, rel), 'utf8');
-    } catch {
-      return null;
-    }
-  };
   /** @type {UnshippedImport[]} */
   const unshipped = [];
-  /** @type {string[]} */
-  const unread = [];
+  /** @type {UncheckedImport[]} */
+  const unchecked = [];
+  const disk = filesOnDisk(packageDir);
   const seen = new Set();
   const queue = [...entries];
   while (queue.length > 0) {
     const file = /** @type {string} */ (queue.shift());
     if (seen.has(file)) continue;
     seen.add(file);
-    const stylesheet = STYLESHEET_FILE.test(file);
     if (DECLARATION_FILE.test(file)) continue;
-    if (!stylesheet && !CODE_FILE.test(file)) continue;
-    const text = read(file);
-    const references =
-      text == null
-        ? null
-        : stylesheet
-          ? stylesheetReferences(text)
-          : moduleReferences(text, file);
-    if (references == null) {
-      unread.push(file);
+    if (!STYLESHEET_FILE.test(file) && !CODE_FILE.test(file)) continue;
+    let text;
+    try {
+      text = fs.readFileSync(path.join(packageDir, file), 'utf8');
+    } catch {
       continue;
     }
-    for (const reference of references) {
-      const asStylesheet =
-        'stylesheet' in reference && reference.stylesheet === true;
-      const resolved = resolveShippedImport(reference.specifier, file, files, {
-        stylesheet: asStylesheet,
-        read,
-      });
+    // A file that does not parse fails the app's build on its own terms.
+    for (const reference of referencesOf(text, file) ?? []) {
+      const resolved = resolveShipped(
+        packageDir,
+        reference.specifier,
+        file,
+        files,
+        reference.stylesheet,
+      );
       if ('file' in resolved) {
+        const state = files.state(resolved.file);
+        if (typeof state === 'object') {
+          unchecked.push({
+            file,
+            specifier: reference.specifier,
+            reason: state.unknown,
+          });
+        }
         queue.push(resolved.file);
         continue;
       }
-      if ('optional' in reference && reference.optional === true) continue;
+      if (reference.optional) continue;
       /** @type {UnshippedImport} */
       const finding = {
         file,
@@ -596,39 +397,33 @@ export function unshippedImports(packageDir, files, entries) {
         problem: resolved.problem,
       };
       if (resolved.problem === 'missing' && files.by === 'npm') {
-        // The file a bundler would pick on disk, when npm leaves it out.
-        const onDisk = resolveShippedImport(
+        // The file a bundler would pick on disk, which the package leaves out.
+        const there = resolveShipped(
+          packageDir,
           reference.specifier,
           file,
-          filesOnDisk(packageDir),
-          {stylesheet: asStylesheet, read},
+          disk,
+          reference.stylesheet,
         );
-        if ('file' in onDisk) {
+        if ('file' in there) {
           finding.problem = 'not_packed';
-          finding.target = onDisk.file;
+          finding.target = there.file;
         }
       }
       unshipped.push(finding);
     }
   }
-  return {unshipped, unread};
+  return {unshipped, unchecked};
 }
-
-/**
- * @typedef {object} ShippedImportFinding
- * @property {'relative_import_not_shipped'} code
- * @property {string} message where, what, and the fix
- * @property {string} file the importing file, relative to the package root
- * @property {number} [line]
- */
 
 /**
  * The finding for one unshipped import, with its fix. Each caller gives it
  * the weight its command reports it at.
  * @param {UnshippedImport} each
+ * @param {unknown} declared package.json `files`
  * @returns {ShippedImportFinding}
  */
-export function unshippedImportFinding(each) {
+function unshippedImportFinding(each, declared) {
   const at = `${each.file}${each.line != null ? `:${each.line}` : ''}`;
   const why =
     each.problem === 'outside'
@@ -638,7 +433,9 @@ export function unshippedImportFinding(each) {
         : 'which is not a file in the package';
   const fix =
     each.problem === 'not_packed'
-      ? `add ${each.target} to package.json \`files\` (or remove the ignore line that drops it), and confirm with \`npm pack --dry-run\``
+      ? Array.isArray(declared) && outsideFiles(each.target ?? '', declared)
+        ? `add ${each.target} to package.json \`files\`, and confirm with \`npm pack --dry-run\``
+        : `make npm pack ${each.target} (a \`files\` entry or an ignore line drops it), and confirm with \`npm pack --dry-run\``
       : each.problem === 'outside'
         ? 'move the file into the package and import it from there'
         : 'add the file to the package, or correct the import';
@@ -653,14 +450,14 @@ export function unshippedImportFinding(each) {
 
 /**
  * A finding for every relative import of the package's shipped modules that
- * names no file it ships. The graph starts from `entries` when given, else
- * from the package's entries (`packageEntryFiles`) and its integration
- * manifest.
+ * names no file it ships, and each import it could not check. The graph
+ * starts from `entries` when given, else from the package's entries
+ * (`packageEntryFiles`) and its integration manifest.
  * @param {string} packageDir
  * @param {{files?: ShippedFiles, manifestFile?: string, entries?: string[]}} [options]
  *   `files`: the shipped files (default `shippedFiles(packageDir)`);
  *   `entries`: absolute files to start from instead
- * @returns {ShippedImportFinding[]}
+ * @returns {{findings: ShippedImportFinding[], unchecked: UncheckedImport[]}}
  */
 export function shippedImportFindings(packageDir, options = {}) {
   /** @type {Record<string, unknown>} */
@@ -669,18 +466,18 @@ export function shippedImportFindings(packageDir, options = {}) {
     const parsed = JSON.parse(
       fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8'),
     );
-    if (!isRecord(parsed)) return [];
+    if (!isRecord(parsed)) return {findings: [], unchecked: []};
     pkg = parsed;
   } catch {
     // package.json problems are reported by their own check.
-    return [];
+    return {findings: [], unchecked: []};
   }
   const files = options.files ?? shippedFiles(packageDir);
   /** @param {string} file */
   const shipped = file => {
-    const rel = path.relative(packageDir, file);
+    const rel = slash(path.relative(packageDir, file));
     if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return null;
-    return files.has(slash(rel)) ? slash(rel) : null;
+    return files.state(rel) !== false ? rel : null;
   };
   const entries = options.entries
     ? options.entries.map(shipped)
@@ -688,9 +485,13 @@ export function shippedImportFindings(packageDir, options = {}) {
         ...packageEntryFiles(packageDir, pkg, files),
         options.manifestFile ? shipped(options.manifestFile) : null,
       ];
-  return unshippedImports(
+  const {unshipped, unchecked} = unshippedImports(
     packageDir,
     files,
     entries.filter(each => each != null),
-  ).unshipped.map(unshippedImportFinding);
+  );
+  return {
+    findings: unshipped.map(each => unshippedImportFinding(each, pkg.files)),
+    unchecked,
+  };
 }

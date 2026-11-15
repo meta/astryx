@@ -56,11 +56,11 @@ import {
 } from './contribution-fixes.mjs';
 import {MANIFEST_BASENAMES} from './integrations.mjs';
 import {
-  filesOnDisk,
-  isInstalledPackage,
-  npmPackedPaths,
-  shippedImportFindings,
-} from './shipped-imports.mjs';
+  ignoreFilesFor,
+  negatedFilesEntry,
+  outsideFiles,
+  packState,
+} from './pack-state.mjs';
 import {discoverIntegrationCodemods} from '../../assets/codemods/integration-discovery.mjs';
 import {discoverIntegrationTemplatesForOne} from '../discovery/template-adapter.mjs';
 import * as componentDiscovery from '../discovery/component-discovery.mjs';
@@ -1060,115 +1060,6 @@ export async function blockComponentsCheck(integration) {
 const PATH_CATEGORY = /^[a-z0-9][\w.-]*(?:\/[\w.-]+)+$/u;
 
 /**
- * Every spelling a glob's `{a,b}` braces stand for, nested braces included.
- * @param {string} pattern
- * @returns {string[]}
- */
-function expandBraces(pattern) {
-  let depth = 0;
-  let open = -1;
-  for (let i = 0; i < pattern.length; i++) {
-    const ch = pattern[i];
-    if (ch === '\\') {
-      i++;
-    } else if (ch === '{') {
-      if (depth++ === 0) open = i;
-    } else if (ch === '}' && depth > 0 && --depth === 0) {
-      const body = pattern.slice(open + 1, i);
-      /** @type {string[]} */
-      const parts = [];
-      let level = 0;
-      let from = 0;
-      for (let j = 0; j < body.length; j++) {
-        if (body[j] === '{') level++;
-        else if (body[j] === '}') level--;
-        else if (body[j] === ',' && level === 0) {
-          parts.push(body.slice(from, j));
-          from = j + 1;
-        }
-      }
-      parts.push(body.slice(from));
-      if (parts.length < 2) continue;
-      const head = pattern.slice(0, open);
-      const tail = pattern.slice(i + 1);
-      return parts.flatMap(part => expandBraces(head + part + tail));
-    }
-  }
-  return [pattern];
-}
-
-/**
- * One brace-free glob as a regular expression source: `**`, `*`, `?` and
- * `[…]` classes (`[!…]` negated), as npm's `files` matching reads them.
- * @param {string} pattern
- */
-function globSource(pattern) {
-  let out = '';
-  for (let i = 0; i < pattern.length; i++) {
-    const ch = pattern[i];
-    if (ch === '*') {
-      if (pattern[i + 1] === '*') {
-        const slashAfter = pattern[i + 2] === '/';
-        const atStart = i === 0 || pattern[i - 1] === '/';
-        if (atStart && slashAfter) {
-          out += '(?:.*/)?';
-          i += 2;
-        } else if (atStart && i + 2 === pattern.length) {
-          out = out.replace(/\/$/u, '') + '(?:/.*)?';
-          i += 1;
-        } else {
-          out += '.*';
-          i += 1;
-        }
-      } else {
-        out += '[^/]*';
-      }
-    } else if (ch === '?') {
-      out += '[^/]';
-    } else if (ch === '[') {
-      const close = pattern.indexOf(']', i + 2);
-      if (close === -1) {
-        out += '\\[';
-      } else {
-        let body = pattern.slice(i + 1, close);
-        const negated = body.startsWith('!') || body.startsWith('^');
-        if (negated) body = body.slice(1);
-        out += `[${negated ? '^' : ''}${body.replace(/[\\\]]/gu, '\\$&')}]`;
-        i = close;
-      }
-    } else if (ch === '\\' && i + 1 < pattern.length) {
-      out += pattern[++i].replace(/[.+^${}()|[\]\\*?/]/gu, '\\$&');
-    } else {
-      out += ch.replace(/[.+^${}()|[\]\\]/gu, '\\$&');
-    }
-  }
-  return out;
-}
-
-/**
- * The ignore files npm reads for one path in a package with no `files`
- * field: in the root and each folder down to the path's own, `.npmignore`,
- * or `.gitignore` where that folder has none. Root first, each relative to
- * the package root.
- * @param {string} base
- * @param {string} rel POSIX, relative to the package root
- * @returns {string[]}
- */
-function ignoreFilesFor(base, rel) {
-  /** @type {string[]} */
-  const found = [];
-  const folders = rel.split('/').slice(0, -1);
-  for (let depth = 0; depth <= folders.length; depth++) {
-    const folder = folders.slice(0, depth).join('/');
-    const file = ['.npmignore', '.gitignore'].find(name =>
-      fs.existsSync(path.join(base, folder, name)),
-    );
-    if (file) found.push(folder ? `${folder}/${file}` : file);
-  }
-  return found;
-}
-
-/**
  * The note for an asset a package with no `files` field leaves out through
  * an ignore file, naming the line that drops it, never a `files` field,
  * which would leave out everything else. The deepest file with a matching
@@ -1206,62 +1097,6 @@ function ignoreFix(base, template, asset, nestedOnly = false) {
   }
   const file = files.at(-1) ?? '.npmignore';
   return `${template}: loads ${asset}, which npm leaves out of the package because an ignore file drops it, so the template breaks once installed. Fix: remove the line in ${file} (or another ignore file on its path) that matches ${asset}, and confirm with \`npm pack --dry-run\`.`;
-}
-
-/**
- * Whether no `files` entry can reach a path, read case-insensitively and
- * generously (`{a,b}` braces, globs, a no-slash entry at any depth, an entry
- * for the path or any folder above it), for when npm cannot say what it
- * packs: a path this misses is out of the package however npm reads the list.
- * @param {string} rel POSIX, relative to the package root
- * @param {unknown} files
- */
-export function outsideFiles(rel, files) {
-  if (!Array.isArray(files)) return false;
-  const parts = rel.split('/');
-  const paths = parts.map((_, i) => parts.slice(0, i + 1).join('/'));
-  return !files.some(entry => {
-    if (typeof entry !== 'string' || entry.startsWith('!')) return false;
-    const trimmed = entry
-      .replace(/^\.?\//u, '')
-      .replace(/\/+$/u, '')
-      .replace(/\/\*$/u, '/**');
-    return expandBraces(trimmed).some(spelling => {
-      const pattern = new RegExp(`^${globSource(spelling)}$`, 'iu');
-      return spelling.includes('/') || /^\.?\//u.test(entry)
-        ? paths.some(at => pattern.test(at))
-        : parts.some(name => pattern.test(name));
-    });
-  });
-}
-
-/**
- * The `!` entry of a `files` field that leaves out `rel` or a folder above
- * it, as written; null when none does.
- * @param {string} rel package-relative path
- * @param {unknown} files the `files` field
- * @returns {string | null}
- */
-export function negatedFilesEntry(rel, files) {
-  if (!Array.isArray(files)) return null;
-  const parts = rel.split('/');
-  const paths = parts.map((_, i) => parts.slice(0, i + 1).join('/'));
-  for (const entry of files) {
-    if (typeof entry !== 'string' || !entry.startsWith('!')) continue;
-    const trimmed = entry
-      .slice(1)
-      .replace(/^\.?\//u, '')
-      .replace(/\/+$/u, '')
-      .replace(/\/\*$/u, '/**');
-    const hit = expandBraces(trimmed).some(spelling => {
-      const pattern = new RegExp(`^${globSource(spelling)}$`, 'iu');
-      return spelling.includes('/') || /^!\.?\//u.test(entry)
-        ? paths.some(at => pattern.test(at))
-        : parts.some(name => pattern.test(name));
-    });
-    if (hit) return entry;
-  }
-  return null;
 }
 
 /**
@@ -1401,38 +1236,6 @@ function readModule(source, dependencies) {
   };
   visit(ast.program);
   return {server: found, assets};
-}
-
-/**
- * Whether npm packs one file (or, with `folder`, anything inside one
- * folder) of the package at `base`. `cache` holds what npm packs, asked at
- * most once per cache. With no `files` field and no ignore file on the
- * path, npm packs everything, so nothing is asked. Without npm's answer, a
- * path no `files` entry can reach is left out, and any other is unknown.
- * @param {string} base package root
- * @param {string} rel path relative to `base`, with forward slashes
- * @param {unknown} packedFiles package.json `files`
- * @param {{packed?: {paths: Set<string>} | {error: string}}} cache
- * @param {{folder?: boolean}} [options]
- * @returns {{packed: true} | {packed: false, by: 'npm' | 'files'} | {packed: 'unknown', error: string}}
- */
-function packState(base, rel, packedFiles, cache, {folder = false} = {}) {
-  if (!Array.isArray(packedFiles) && ignoreFilesFor(base, rel).length === 0) {
-    return {packed: true};
-  }
-  cache.packed ??= npmPackedPaths(base);
-  const packed = cache.packed;
-  if ('paths' in packed) {
-    if (packed.paths.has(rel)) return {packed: true};
-    if (folder && [...packed.paths].some(each => each.startsWith(`${rel}/`))) {
-      return {packed: true};
-    }
-    return {packed: false, by: 'npm'};
-  }
-  if (Array.isArray(packedFiles) && outsideFiles(rel, packedFiles)) {
-    return {packed: false, by: 'files'};
-  }
-  return {packed: 'unknown', error: packed.error};
 }
 
 /**
@@ -2317,32 +2120,6 @@ async function runContributionChecks(integration, issues) {
   await checkComponents(integration, issues);
   await checkDocs(integration, issues);
   await checkThemes(integration, issues);
-  checkShippedImports(integration, issues);
-}
-
-/**
- * An installed package's shipped modules, each relative import resolved
- * against its files on disk, which are the files npm unpacked. A package's
- * own folder is checked against what npm packs by validate
- * (api/integration/validate-integration.mjs), which asks npm; everyday
- * commands never start npm.
- * @param {LoadedIntegration} integration
- * @param {Issue[]} issues
- */
-function checkShippedImports(integration, issues) {
-  const packageDir = integration.__packageDir;
-  if (typeof packageDir !== 'string' || !isInstalledPackage(packageDir)) {
-    return;
-  }
-  // Listed until the next minor release, which makes each one an error: a
-  // new failure joins only in a minor release (architecture:cli-surface
-  // INV35).
-  for (const finding of shippedImportFindings(packageDir, {
-    files: filesOnDisk(packageDir),
-    manifestFile: integration.__manifestFile,
-  })) {
-    issues.push(issueListed(finding.code, finding.message));
-  }
 }
 
 /**

@@ -10,10 +10,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {filesOnDisk, shippedImportFindings} from './shipped-imports.mjs';
-import {
-  validateLoadedIntegration,
-  validateLoadedIntegrationListed,
-} from './validate-contributions.mjs';
+import {validateLoadedIntegrationListed} from './validate-contributions.mjs';
 import {validateIntegration} from '../../api/integration/validate-integration.mjs';
 import {integrationCheck} from '../../api/integration/check/check.mjs';
 
@@ -69,7 +66,7 @@ function packageAt(root, files, pkg = {}) {
 
 /** @param {string} root */
 const issuesOn = root =>
-  shippedImportFindings(root, {files: filesOnDisk(root)});
+  shippedImportFindings(root, {files: filesOnDisk(root)}).findings;
 
 describe('shippedImportFindings', () => {
   it('reports a relative import the package does not contain, naming the file and the import', () => {
@@ -216,7 +213,7 @@ describe('shippedImportFindings', () => {
 });
 
 describe('an installed package', () => {
-  it('is listed by the contribution checks against its files on disk, never as a project issue in this release', async () => {
+  it('is never walked by the contribution checks everyday commands run', async () => {
     const packageDir = path.join(dir, 'node_modules/@acme/kit');
     packageAt(packageDir, {
       'astryx.integration.mjs': 'export default {};\n',
@@ -228,13 +225,10 @@ describe('an installed package', () => {
       __manifestFile: path.join(packageDir, 'astryx.integration.mjs'),
     };
 
-    const {listed} = await validateLoadedIntegrationListed(loaded);
+    const {issues, listed} = await validateLoadedIntegrationListed(loaded);
 
     expect(
-      listed.filter(issue => issue.code === RELATIVE_IMPORT_NOT_SHIPPED),
-    ).toHaveLength(1);
-    expect(
-      (await validateLoadedIntegration(loaded)).filter(
+      [...issues, ...listed].filter(
         issue => issue.code === RELATIVE_IMPORT_NOT_SHIPPED,
       ),
     ).toEqual([]);

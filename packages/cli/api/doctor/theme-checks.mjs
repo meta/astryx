@@ -1082,8 +1082,8 @@ export async function checkAppThemes(cwd) {
       }
       // Loading the module in Node does not prove an app can build it: a
       // stylesheet loads as an empty module, so its imports are never read.
-      // A relative import that names no file the package ships is a warning
-      // until the next minor release makes it a failure.
+      // A relative import that names no file the package ships is a warning:
+      // the module itself loads.
       const unshipped = themeShippedImportFindings(resolvedTheme);
       if (unshipped.length > 0) {
         unshippedImports.push({
