@@ -640,7 +640,7 @@ describe('the runtime injection hint', () => {
     );
     const message = warn.mock.calls
       .map(args => String(args[0]))
-      .find(m => m.includes('runtime style injection'));
+      .find(m => m.includes(`"${name}" is using runtime style injection`));
     expect(message, name).toBeDefined();
     return String(message);
   };
