@@ -227,12 +227,18 @@ export function registerContextLossHandlers(
  * Browsers cap the number of live contexts (~16), so freeing on unmount rather
  * than waiting for GC prevents "too many active WebGL contexts" failures when
  * many charts mount/unmount over a session.
+ *
+ * Returns the extension: once lost, the context offers no extensions, and
+ * only the same extension's `restoreContext()` brings it back.
  */
-export function loseContext(gl: WebGLRenderingContext): void {
+export function loseContext(
+  gl: WebGLRenderingContext,
+): WEBGL_lose_context | null {
   const ext = gl.getExtension('WEBGL_lose_context');
   if (ext) {
     ext.loseContext();
   }
+  return ext;
 }
 
 /**

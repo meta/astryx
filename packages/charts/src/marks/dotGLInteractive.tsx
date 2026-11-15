@@ -135,6 +135,7 @@ function DotGLInteractiveCanvas({
 }) {
   const visCanvasRef = useRef<HTMLCanvasElement>(null);
   const pickCanvasRef = useRef<HTMLCanvasElement>(null);
+  const lostContextsRef = useRef<WEBGL_lose_context[]>([]);
   const [hoverIndex, setHoverIndex] = useState<number>(-1);
   const [mousePos, setMousePos] = useState<{x: number; y: number} | null>(null);
   // Bumped on context restore to force the render effect to rebuild + repaint.
@@ -409,9 +410,18 @@ function DotGLInteractiveCanvas({
     };
   }, []);
 
-  // Release both GL contexts and all their resources on unmount.
+  // Release both GL contexts and all their resources on unmount. React keeps
+  // these canvases when it runs the effects again on the same instance
+  // (StrictMode, a hidden and shown Activity), and a context lost on purpose
+  // stays lost. So a rerun restores the contexts this cleanup lost; their
+  // restored events then redraw through the handlers above.
   useEffect(() => {
+    for (const extension of lostContextsRef.current) {
+      extension.restoreContext();
+    }
+    lostContextsRef.current = [];
     return () => {
+      const lost: WEBGL_lose_context[] = [];
       const vis = visGLRef.current;
       if (vis) {
         const {gl, prog} = vis;
@@ -419,7 +429,10 @@ function DotGLInteractiveCanvas({
           gl.deleteBuffer(visBufRef.current);
         }
         gl.deleteProgram(prog);
-        loseContext(gl);
+        const extension = loseContext(gl);
+        if (extension) {
+          lost.push(extension);
+        }
       }
       const pick = pickGLRef.current;
       if (pick) {
@@ -433,13 +446,17 @@ function DotGLInteractiveCanvas({
         gl.deleteFramebuffer(fb);
         gl.deleteTexture(tex);
         gl.deleteProgram(prog);
-        loseContext(gl);
+        const extension = loseContext(gl);
+        if (extension) {
+          lost.push(extension);
+        }
       }
       visGLRef.current = null;
       visBufRef.current = null;
       pickGLRef.current = null;
       pickPosBufRef.current = null;
       pickColBufRef.current = null;
+      lostContextsRef.current = lost;
     };
   }, []);
 
