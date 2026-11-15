@@ -96,6 +96,8 @@ export const OVERRIDES = [
     {on: 'checkbox-indicator-check'},
   ],
   [/\b(checkbox(es)?)\b/, {on: 'checkbox-indicator'}],
+  // "indicators" alone: the check and radio indicators (the checks group).
+  [/\b(?:check(?:box)?\s+and\s+radio\s+)?indicators?\b/, {on: 'checks'}],
   // A switch's or toggle's thumb, knob or handle: the thumb, never the
   // track.
   [

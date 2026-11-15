@@ -1436,7 +1436,8 @@ function dialRung(text) {
 /** What keeps a thing as it is, after it ("cards as they are"). */
 const KEEP_TAIL = String.raw`(?:as (?:they are|it is|is|before)|alone|the same|unchanged|untouched)`;
 /** The thing a keep names ("the inputs"). */
-const KEEP_OBJECT = String.raw`(?:the\s+|my\s+|all\s+)?([a-z][a-z -]*?)`;
+// (A heading level, "h1", is an object too.)
+const KEEP_OBJECT = String.raw`(?:the\s+|my\s+|all\s+)?([a-z][a-z0-9 -]*?)`;
 /**
  * The one grammar of a keep: "keep the cards as they are", "leave inputs
  * alone", "don't touch the dialogs" (to the end of its clause). Its one
@@ -2172,6 +2173,51 @@ function namedLists(q, partWords, isVariant) {
           .replace(/^the\s+/, ''),
       )
       .filter(Boolean);
+    // "make cards and dialogs rounder and remove their shadows", "make
+    // buttons and cards rounder and inputs red": a list of parts with more
+    // than one ask after it, or another ask after its own. Each part takes the verb said
+    // before the list and every ask, so a step one part has nothing for
+    // (a card with no shadow) never drops the part's other asks.
+    if (
+      !on &&
+      items.length > 1 &&
+      items.every(w => partOf(w)) &&
+      !/\bexcept\b[^,;.]*$/i.test(before)
+    ) {
+      const lead =
+        /(?:^|[,;.]\s*|\b(?:and|but|then)\s+)((?:please\s+)?(?:make|set|give|turn|change)\s+(?:the\s+|all\s+|my\s+)?)$/i.exec(
+          before,
+        );
+      const rest = onesNamed.slice(at + String(list).length);
+      const stop = /[;.]|\bexcept\b/i.exec(rest);
+      const span = stop ? rest.slice(0, stop.index) : rest;
+      const pieces = span.split(/(\s*,?\s+(?:and|but|then|plus)\s+)/);
+      let tail = pieces[0] ?? '';
+      let asks = 1;
+      // (An ask about a part of its own after the list, "… and inputs
+      // red", ends the list's asks; the list is then split the same way.)
+      let followed = false;
+      for (let k = 1; k + 1 < pieces.length; k += 2) {
+        const next = pieces[k + 1];
+        const own =
+          !/^\s*(?:their|its|them|they|the same)\b/i.test(next) &&
+          partWords.some(([re]) => re.test(` ${next.toLowerCase()} `));
+        if (own) {
+          followed = true;
+          break;
+        }
+        tail += pieces[k] + next;
+        asks++;
+      }
+      if (lead && (asks > 1 || followed) && tail.trim()) {
+        const start = at - lead[1].length;
+        tailed +=
+          onesNamed.slice(from, start) +
+          items.map(w => `${lead[1]}${w}${tail}`).join(' and ');
+        from = at + String(list).length + tail.length;
+        continue;
+      }
+    }
     if (
       !on ||
       items.length < 2 ||
@@ -2980,13 +3026,23 @@ export function draftAnswer(ctx, env, question) {
         return m;
       // Items with no "from" of their own share the next item's ("the
       // borders and the shadows from cards").
+      // An item that is only "from <part>" ("…, from menus and from
+      // tooltips") takes the thing of the item before it.
       /** @type {string[]} */
       const groups = [];
       /** @type {string[]} */
       let run = [];
+      let thing = '';
       for (const x of pieces) {
+        const only = /^(?:from|on|off)\s+(.+)$/i.exec(x);
+        if (only && thing && !run.length) {
+          groups.push(`${thing} from ${only[1]}`);
+          continue;
+        }
         run.push(x);
-        if (/\s(?:from|on|off)\s+\S/i.test(x)) {
+        const own = /^(.+?)\s(?:from|on|off)\s+\S/i.exec(x);
+        if (own) {
+          thing = own[1];
           groups.push(run.join(' and '));
           run = [];
         }
@@ -3000,8 +3056,25 @@ export function draftAnswer(ctx, env, question) {
   // "fully rounded" is the roundest rung, as "fully round" is; "keeping
   // cards, …" and "keep the accent, …" said first are keeps.
   question = question
+    // "remove every shadow": every one of them, as "all shadows" says.
     .replace(
-      /\bneither\s+([a-z]+)\s+nor\s+([a-z]+)\b/gi,
+      /\b(remove|drop|delete|kill|get rid of|take off|no more)\s+every\s+([a-z]+?)s?\b/gi,
+      '$1 all $2s',
+    )
+    // "neither cards nor dialogs should have shadows", "neither buttons
+    // nor inputs should be rounded": the parts are the subject, and each
+    // takes the removal or the negated look.
+    .replace(
+      /\bneither\s+(?:the\s+)?([a-z][a-z -]*?)\s+nor\s+(?:the\s+)?([a-z][a-z -]*?)\s+(?:should|shall|will|must|can|may|need to|ought to)?\s*(?:have|has|get|show|be|are|is)\s+(?:any\s+|an?\s+)?([a-z]+)\b/gi,
+      (m, a, b, what) => {
+        const be = /\s(?:be|are|is)\s+(?:any\s+|an?\s+)?[a-z]+$/i.test(m);
+        return be
+          ? `make ${a} and ${b} un${what}`
+          : `remove ${what} from ${a} and ${b}`;
+      },
+    )
+    .replace(
+      /\bneither\s+(?:an?\s+|the\s+|any\s+)?([a-z]+)\s+nor\s+(?:an?\s+|the\s+|any\s+)?([a-z]+)\b/gi,
       (_m, a, b) => `un${a} and un${b}`,
     )
     .replace(/\b(fully|completely|totally)\s+rounded\b/gi, '$1 round')
@@ -3650,10 +3723,15 @@ export function draftAnswer(ctx, env, question) {
   );
   // "…, and #eeeeee in dark mode only": a segment that is only a value and
   // its mode, after an ask, carries that ask on into the other mode.
-  const modeValue = (/** @type {string} */ x) =>
-    /^\s*(?:and\s+)?(?:#[0-9a-f]{3,8}|(?:rgba?|hsla?|oklch)\([^)]*\))\s+(?:in|for)\s+(?:the\s+)?(?:dark|light)(?:\s+mode)?(?:\s+only)?\s*[.!]?\s*$/i.test(
-      x,
-    );
+  // ("…, in light mode darker": the mode said first, the same way.)
+  const modeValue = (/** @type {string} */ x) => {
+    const MODE = String.raw`(?:in|for)\s+(?:the\s+)?(?:dark|light)(?:\s+mode)?(?:\s+only)?`;
+    const VALUE = String.raw`(?:#[0-9a-f]{3,8}|(?:rgba?|hsla?|oklch)\([^)]*\)|(?:a\s+(?:bit|little)\s+|much\s+|slightly\s+)?(?:darker|lighter|brighter|dimmer|softer|stronger|bigger|smaller|rounder))`;
+    return new RegExp(
+      String.raw`^\s*(?:and\s+)?(?:${VALUE}\s+${MODE}|${MODE}\s*,?\s*${VALUE})\s*[.!]?\s*$`,
+      'i',
+    ).test(x);
+  };
   const blocked = (/** @type {string} */ x) =>
     (!modeValue(x) || x === segments[0]) &&
     (EXCLUDE.test(x) ||
@@ -3704,6 +3782,20 @@ export function draftAnswer(ctx, env, question) {
           (kept.length ? kept : pendingExcept).push(
             named ? `except ${named}` : `except on ${state}`,
           );
+        carry = '';
+        carryPart = '';
+        continue;
+      }
+      // ", except the small ones,": an except set off by commas is the
+      // except of the ask before it, never a clause of its own.
+      if (
+        gated.includes(x) &&
+        kept.length &&
+        /^\s*(?:(?:and|but)\s+)?(?:except|other than|apart from|besides)\b/i.test(
+          x,
+        )
+      ) {
+        kept[kept.length - 1] = `${kept[kept.length - 1]} ${x.trim()}`;
         carry = '';
         carryPart = '';
         continue;
@@ -4554,6 +4646,22 @@ export function draftAnswer(ctx, env, question) {
   for (let i = clauses.length - 1; i >= 1; i--) {
     const c = clauses[i];
     const prev = clauses[i - 1];
+    // (An ask on a thing that takes no color, "rounder", "bold": the
+    // color is an ask of its own, "rounder and red", "bold and red".)
+    if (
+      (prev.dir != null || prev.aspects.length > 0) &&
+      !prev.aspects.some(a =>
+        [
+          'border',
+          'text',
+          'background',
+          'outline',
+          'shadow',
+          'gradient',
+        ].includes(a),
+      )
+    )
+      continue;
     const rest = c.text
       .replace(/#[0-9a-f]+|\b(?:rgba?|hsla?|oklch)\([^)]*\)/g, ' ')
       .split(/\s+/)
@@ -4792,7 +4900,27 @@ export function draftAnswer(ctx, env, question) {
         ...(own ? {when: `variant:${own}`} : {}),
       }));
     }
-    if (!c.aspects.length && !ownParts) {
+    // (A color said after an ask on a thing that takes none, "rounder and
+    // red", "rounder and darker": its own aspect, read later from its
+    // words, never the corners.)
+    const colorAsk =
+      c.colors.length > 0 || /\b(darker|lighter|brighter|paler)\b/.test(c.text);
+    const shapeOnly =
+      prev.aspects.length > 0 &&
+      prev.aspects.every(a =>
+        [
+          'corners',
+          'spacing',
+          'size',
+          'weight',
+          'family',
+          'case',
+          'italic',
+        ].includes(a),
+      );
+    if (!c.aspects.length && !ownParts && colorAsk && shapeOnly) {
+      // left to fillAspect
+    } else if (!c.aspects.length && !ownParts) {
       const textish = prev.aspects.some(a =>
         ['text', 'case', 'fontsize', 'weight', 'family'].includes(a),
       );
@@ -5224,6 +5352,23 @@ export function draftAnswer(ctx, env, question) {
       }
   };
 
+  // "the text darker in dark mode and lighter in light mode on cards": the
+  // two halves of a mode pair are one subject, wherever its part and its
+  // aspect are said: each half takes the part and the aspect the other
+  // names.
+  for (let i = 1; i < clauses.length; i++) {
+    const [a, b] = [clauses[i - 1], clauses[i]];
+    if (a.except || b.except || !a.mode || !b.mode || a.mode === b.mode)
+      continue;
+    if (!a.parts.length !== !b.parts.length) {
+      const [from, to] = a.parts.length ? [a, b] : [b, a];
+      to.parts = from.parts.map(p => ({...p}));
+    }
+    if (!a.aspects.length !== !b.aspects.length) {
+      const [from, to] = a.aspects.length ? [a, b] : [b, a];
+      to.aspects = [...from.aspects];
+    }
+  }
   // "dialog heading text", "the drawer title": a heading or title said of
   // a part whose own anatomy has a title part is that part's title, never
   // every heading.
@@ -5270,10 +5415,19 @@ export function draftAnswer(ctx, env, question) {
           ['shadow', 'corners', 'border', 'spacing'].includes(a),
         )
       ) &&
-      (c.aspects.length || c.colors.length || c.lengths.length)
+      // (A second ask said with only its way or its color, "rounder and
+      // darker", "rounder and red", is about the same part.)
+      (c.aspects.length ||
+        c.colors.length ||
+        c.lengths.length ||
+        (prev === before &&
+          (c.dir != null || colorsIn(c.text).length > 0) &&
+          c.text.trim().split(/\s+/).length <= 3))
     ) {
       c.parts = before.parts.map(p => ({...p}));
       c.state ??= before.state;
+      // (Its own aspect from its own words: "red" and "darker" are a fill.)
+      if (!c.aspects.length) fillAspect();
     }
     // "the accent darker in dark mode and lighter in light mode": a clause
     // with only a direction (and a mode) after one that names a theme color
@@ -6831,8 +6985,22 @@ export function draftAnswer(ctx, env, question) {
                   }))
                 : [x],
         ),
+        // (A part-less except, "except the large ones", names that
+        // variant or size of every part of the ask that has it.)
         ...(!c.parts.length && when && priorOn
-          ? whens.map(w => ({on: /** @type {string} */ (priorOn), when: w}))
+          ? whens.flatMap(w => {
+              const [k, v] = w.split(':');
+              const having = ons.filter(on => {
+                /** @type {Record<string, string[]>} */
+                const values =
+                  C.variantValues(one(/** @type {string} */ (on))) ?? {};
+                return (values[k] ?? []).includes(v);
+              });
+              return (having.length ? having : [priorOn]).map(on => ({
+                on: /** @type {string} */ (on),
+                when: w,
+              }));
+            })
           : []),
         ...(!c.parts.length && !when && exceptState && priorOn
           ? exceptStates.map(st => ({
@@ -6867,7 +7035,7 @@ export function draftAnswer(ctx, env, question) {
         : undefined;
       const levelOwn = (/** @type {Step} */ st) =>
         keptLevels.some(l => st.thing.startsWith(`--text-heading-${l}-`));
-      const priorSteps = (
+      let priorSteps = (
         perLevel ? perLevel.filter(st => !levelOwn(st)) : prior.steps
       ).filter(
         st =>
@@ -6897,7 +7065,25 @@ export function draftAnswer(ctx, env, question) {
         seenPart(p.on);
         const name = `${p.on}${p.when ? ` (${p.when.replace(':', ' ')})` : ''}${p.state ? ` when ${p.state}` : ''}`;
         // A part the words do not tell apart from the part being changed.
-        if (!p.when && !p.state && p.on === priorOn) {
+        // One item of the list the change names ("cards, dialogs and
+        // popovers rounder except popovers"): left out of the change.
+        if (
+          !p.when &&
+          !p.state &&
+          prior.steps.some(st => st.on === p.on) &&
+          prior.steps.some(st => st.on && st.on !== p.on)
+        ) {
+          prior.steps = prior.steps.filter(st => st.on !== p.on);
+          priorSteps = priorSteps.filter(st => st.on !== p.on);
+          // (A step on a group it is in still reaches it: it is kept from
+          // that step as any kept part is.)
+          if (
+            !priorSteps.some(st => (FAMILIES[st.on ?? ''] ?? []).includes(p.on))
+          ) {
+            said.push(`${name} is left out of the change`);
+            continue;
+          }
+        } else if (!p.when && !p.state && p.on === priorOn) {
           said.push(
             `${name} is the part being changed, so it cannot be kept apart`,
           );
@@ -6921,14 +7107,72 @@ export function draftAnswer(ctx, env, question) {
         // A new fill brings a text color that reads on it: a kept variant
         // keeps its text color too; a heading level kept from a text color
         // keeps both text tokens (a heading color writes both).
+        // (Only a step on the kept part itself, or a group it is in.)
+        const inGroupOf = (/** @type {string | undefined} */ on) =>
+          Boolean(on) &&
+          (on === p.on || (FAMILIES[on ?? ''] ?? []).includes(p.on));
+        // A step on one axis of the part ("variant:secondary", or every
+        // button) and a keep on another ("size:lg"): the step reaches the
+        // kept ones, and one --when names one axis, so no pin holds them
+        // apart.
+        /** @type {Step | null} */
+        let crossed = null;
+        const axis = (/** @type {string | undefined} */ w) =>
+          String(w ?? '').split(':')[0];
         const keep = [
           // A kept state of the part: each step's own variant and mode, in
           // that state.
           ...priorSteps.flatMap(st => {
-            // A step on another variant does not reach the kept one.
-            if (p.when && st.when && st.when !== p.when && !p.state)
+            if (p.when && st.when && st.when !== p.when && !p.state) {
+              // A step on another variant does not reach the kept one.
+              if (axis(st.when) === axis(p.when)) return [UNTOUCHED];
+              if (inGroupOf(st.on)) crossed = st;
               return [UNTOUCHED];
-            if (!p.state || p.when) return [keepAsIs(st, p)];
+            }
+            // A whole part kept from a step on a group it is in, in one
+            // scope (a status, a state, a mode): the pin keeps that same
+            // scope, so each status and mode the step covers stays.
+            if (
+              !p.when &&
+              !p.state &&
+              st.on &&
+              st.on !== p.on &&
+              (st.when || st.state || st.mode) &&
+              (FAMILIES[st.on] ?? []).includes(p.on)
+            ) {
+              const k = keepAsIs(st, {
+                ...p,
+                ...(st.when ? {when: st.when} : {}),
+                ...(st.state ? {state: st.state} : {}),
+              });
+              if (!k || k === UNTOUCHED || k === BY_SCREEN) return [k];
+              const pin = /** @type {Step} */ (k);
+              return [
+                {
+                  ...pin,
+                  ...(st.when ? {when: st.when} : {}),
+                  ...(st.state ? {state: st.state} : {}),
+                  ...(st.mode && !/light-dark\(/.test(String(pin.value ?? ''))
+                    ? {mode: st.mode}
+                    : {}),
+                },
+              ];
+            }
+            if (!p.state || p.when) {
+              const k = keepAsIs(st, p);
+              if (
+                k == null &&
+                p.when &&
+                !p.state &&
+                !st.when &&
+                // (A variant owns its look, so a pin under it holds it; a
+                // size or level names no look of its own.)
+                !['level', 'variant'].includes(axis(p.when)) &&
+                inGroupOf(st.on)
+              )
+                crossed = st;
+              return [k];
+            }
             /** @param {string | undefined} when */
             const inWhen = when => {
               const k = keepAsIs(st, {...p, ...(when ? {when} : {})});
@@ -7113,6 +7357,14 @@ export function draftAnswer(ctx, env, question) {
               );
             }
           }
+        }
+        if (crossed) {
+          const cross = /** @type {Step} */ (crossed);
+          said.push(
+            `${name} cannot be kept apart: the change reaches it (${cross.when ? `--when ${cross.when}` : `every ${one(cross.on ?? p.on)}`}), and a pin under --when ${p.when} would reach every ${one(p.on)} of that ${axis(p.when)}`,
+          );
+          cannotKeep = true;
+          continue;
         }
         if (keep.some(k => k === BY_SCREEN)) {
           said.push(
@@ -9892,22 +10144,41 @@ export function draftAnswer(ctx, env, question) {
           : /^border/.test(st.thing)
             ? ['border-color']
             : ['background-color', 'background'];
+      // (The variant's or status's own read in that state first: an error
+      // input keeps its red when focused.)
+      const stateRead = (/** @type {string | null} */ need) =>
+        C.partReads(one(p.on), group).find(
+          r =>
+            r.when.some(
+              w =>
+                w.includes(`:${p.state}`) &&
+                !/::before/.test(w) &&
+                (!need || w.split(/[ ,]/).includes(need)),
+            ) &&
+            r.props.some(x => pinProps.includes(x)) &&
+            !/overlay|tint/.test(r.token),
+        );
       const inState = p.state
-        ? C.partReads(one(p.on), group).find(
-            r =>
-              r.when.some(
-                w => w.includes(`:${p.state}`) && !/::before/.test(w),
-              ) &&
-              r.props.some(x => pinProps.includes(x)) &&
-              !/overlay|tint/.test(r.token),
-          )
+        ? ((want ? stateRead(want) : null) ?? stateRead(null))
         : null;
+      // (Only a read of the property the pin writes: a border's width
+      // token is no color.)
+      const colorReads = C.partReads(one(p.on), group).filter(
+        r =>
+          !r.props?.length ||
+          r.props.some(
+            x =>
+              pinProps.includes(x) ||
+              x === st.thing ||
+              x === 'background-image',
+          ),
+      );
       const read =
         inState ??
-        C.partReads(one(p.on), group).find(r =>
+        colorReads.find(r =>
           want ? r.when.includes(want) : r.when.includes(''),
         ) ??
-        C.partReads(one(p.on), group).find(r =>
+        colorReads.find(r =>
           p.when
             ? r.when.includes(`--when ${p.when}`) ||
               r.when.some(w => w.includes(p.when?.replace(':', '=') ?? ''))
@@ -13465,6 +13736,14 @@ export function draftAnswer(ctx, env, question) {
                 options: [steps],
                 sequence: steps.length > 1,
               };
+            // (Already at the end of that way in the mode asked: said, with
+            // its color now, never "no match".)
+            const now = current(read, c.mode ?? undefined);
+            return {
+              text: `text${where} is already as ${lighter ? 'light' : 'dark'} as it goes${c.mode ? ` in ${c.mode} mode` : ''} (${read} is ${now || 'unset'} now); name a color, as in "${one(on)} text #555555${c.mode ? ` in ${c.mode} mode` : ''}"`,
+              options: [],
+              lookup: one(on),
+            };
           }
         }
         if (!color) return null;

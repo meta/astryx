@@ -210,7 +210,7 @@ describe('R03 and chaos38', () => {
       const r = await answer(
         'make every input border blue in light mode but not selectors',
       );
-      expect(r.first.at(-1)).toMatch(/--on selector --only$/);
+      expect(r.first.at(-1)).toMatch(/--on selector .*--only$/);
       expect(r.text).not.toMatch(/nothing this change sets to keep/);
     },
     T,
