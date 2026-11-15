@@ -701,6 +701,44 @@ export function segmenterWarning() {
   };
 }
 
+/** A CSS `url()`, its reference in the second group. */
+export const CSS_URL = /url\(\s*(['"]?)([^'")]+)\1\s*\)/;
+
+/**
+ * What a local file reference of a page or stylesheet names: nothing to
+ * inline (inline data, a fragment, a non-asset path), a remote file, a file
+ * that is not there, one that is not a regular file (a pipe, a device or a
+ * folder: never read), or the file to inline. One reader for the renderer
+ * and for callers that say what a page will not show.
+ * @param {string} ref as written in src, poster or url()
+ * @param {{dir: string, root: string}} at the folder it is relative to,
+ *   and the project root (for `/` paths, `public/` first)
+ * @returns {null | {kind: 'remote', ref: string} | {kind: 'missing', ref: string} | {kind: 'not-file', ref: string, file: string} | {kind: 'file', ref: string, file: string}}
+ */
+export function assetRef(ref, at) {
+  const clean = decodeAttr(ref).trim().split(/[?#]/)[0];
+  if (!clean) return null;
+  if (/^(data:|blob:|#|about:|mailto:|tel:|javascript:)/i.test(clean))
+    return null;
+  if (/^(https?:)?\/\//i.test(clean)) return {kind: 'remote', ref: clean};
+  if (!isAssetPath(clean)) return null;
+  const candidates = clean.startsWith('/')
+    ? [path.join(at.root, 'public', clean), path.join(at.root, clean)]
+    : [path.resolve(at.dir, clean)];
+  const found = candidates.find(c => fs.existsSync(c));
+  if (!found) return {kind: 'missing', ref: clean};
+  /** @type {fs.Stats | undefined} */
+  let st;
+  try {
+    st = fs.statSync(found);
+  } catch {
+    return {kind: 'missing', ref: clean};
+  }
+  return st.isFile()
+    ? {kind: 'file', ref: clean, file: found}
+    : {kind: 'not-file', ref: clean, file: found};
+}
+
 /**
  * Inline local images (src, srcset, poster and CSS url()) as data: URIs. A
  * link (`href`) loads nothing, so it is left alone.
@@ -711,11 +749,10 @@ export function segmenterWarning() {
 function inlineAssets(text, kind, ctx) {
   /** @param {string} ref */
   const resolveRef = ref => {
-    const clean = decodeAttr(ref).trim().split(/[?#]/)[0];
-    if (!clean) return null;
-    if (/^(data:|blob:|#|about:|mailto:|tel:|javascript:)/i.test(clean))
-      return null;
-    if (/^(https?:)?\/\//i.test(clean)) {
+    const named = assetRef(ref, ctx);
+    if (!named) return null;
+    const clean = named.ref;
+    if (named.kind === 'remote') {
       const key = `remote:${clean}`;
       if (!ctx.counted.has(key)) {
         ctx.counted.add(key);
@@ -726,22 +763,21 @@ function inlineAssets(text, kind, ctx) {
       }
       return null;
     }
-    if (!isAssetPath(clean)) return null;
-    const candidates = clean.startsWith('/')
-      ? [path.join(ctx.root, 'public', clean), path.join(ctx.root, clean)]
-      : [path.resolve(ctx.dir, clean)];
-    const found = candidates.find(c => fs.existsSync(c));
-    if (!found) {
+    if (named.kind === 'missing' || named.kind === 'not-file') {
       const key = `missing:${clean}`;
       if (!ctx.counted.has(key)) {
         ctx.counted.add(key);
         ctx.warnings.push({
           code: 'missing-asset',
-          message: `${clean} was not found next to the page, so it is left as is and will not show.`,
+          message:
+            named.kind === 'missing'
+              ? `${clean} was not found next to the page, so it is left as is and will not show.`
+              : `${clean} is not a regular file (a pipe, a device or a folder), so it is not read and will not show.`,
         });
       }
       return null;
     }
+    const found = named.file;
     ctx.counted.add(`file:${found}`);
     // A relative path names a file that is part of the page: carry it.
     if (!clean.startsWith('/')) ctx.localAssets.add(found);
@@ -749,7 +785,7 @@ function inlineAssets(text, kind, ctx) {
   };
   /** @param {string} value */
   const urls = value =>
-    value.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/g, (whole, q, ref) => {
+    value.replace(new RegExp(CSS_URL.source, 'g'), (whole, q, ref) => {
       const uri = resolveRef(ref);
       return uri ? `url("${uri}")` : whole;
     });

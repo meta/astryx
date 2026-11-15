@@ -67,6 +67,7 @@ import {
   themeTemplate,
 } from '../../../api/theme/template/template.mjs';
 import {findPackageRoot} from '../../../foundation/fs/paths.mjs';
+import {expandGlob} from '../../../foundation/fs/glob.mjs';
 import {
   themeListAvailable,
   themeListCopySources,
@@ -80,6 +81,7 @@ import {
   themePaletteGenerate,
 } from '../../../api/theme/palette/generate/generate.mjs';
 import {
+  GENERATED_MARKER,
   printBatchTrailer,
   printCompactTrailer,
   setEditorFolderListener,
@@ -268,6 +270,82 @@ function mergeResultData(data, extra) {
   if (Array.isArray(notices) && notices.length > 0) {
     data.notices = [...(data.notices ?? []), ...notices];
     for (const n of notices) logger.log(`[note] ${n}`);
+  }
+}
+
+/**
+ * The builds a quoted glob means: each theme source it matches, or for a
+ * family run the one family of them, in the caller's mode, each marked for
+ * the group's checks.
+ * @param {string} pattern
+ * @param {{out?: string, check?: boolean, iconsSpecifier?: string, family?: boolean, familyKey?: string}} options
+ * @param {ThemeCommandWords} words
+ */
+function globSuggestions(pattern, options, words) {
+  const sources = globSources(pattern);
+  const reason = `${sources.length > 1 ? 'theme sources' : 'a theme source'} ${pattern} matches (globs are expanded by your shell, not in quotes)`;
+  const mode = {
+    check: Boolean(options.check),
+    iconsSpecifier: options.iconsSpecifier,
+  };
+  if (options.family)
+    return sources.length
+      ? [
+          buildRun(
+            {
+              name: buildSuggestion(sources, options, process.cwd(), words, {
+                family: true,
+                ...(options.familyKey
+                  ? {familyKey: String(options.familyKey)}
+                  : {}),
+              }),
+              reason,
+            },
+            sources,
+            {...mode, family: true},
+          ),
+        ]
+      : [];
+  return sources.map(source =>
+    buildRun(
+      {name: buildSuggestion(source, options, process.cwd(), words), reason},
+      [source],
+      {...mode, family: false, out: options.out},
+    ),
+  );
+}
+
+/**
+ * The theme sources a glob pattern matches, read from the working folder:
+ * the files of a theme module's kind that no build wrote (an output names
+ * its source in its header) and that are no type stub.
+ * @param {string} pattern
+ * @returns {string[]}
+ */
+function globSources(pattern) {
+  return expandGlob(pattern, process.cwd())
+    .filter(
+      file =>
+        /\.(?:[cm]?[jt]sx?)$/.test(file) &&
+        !/\.d\.[cm]?ts$/.test(file) &&
+        !fileStartsWith(path.resolve(process.cwd(), file), GENERATED_MARKER),
+    )
+    .slice(0, 8);
+}
+
+/** @param {string} file @param {string} text */
+function fileStartsWith(file, text) {
+  try {
+    const fd = fs.openSync(file, 'r');
+    try {
+      const head = Buffer.alloc(600);
+      const n = fs.readSync(fd, head, 0, head.length, 0);
+      return head.subarray(0, n).toString('utf8').includes(text);
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return false;
   }
 }
 
@@ -1184,28 +1262,11 @@ function registerThemeCommands(theme, program, docs, words) {
         suggestions: rewrite
           ? [rewrite]
           : looksGlobby
-            ? [
-                {
-                  // The pattern stays unquoted: the shell expands it.
-                  // The caller's mode follows it, quoted, and a family
-                  // run stays one.
-                  name: buildSuggestion(
-                    entry.file,
-                    options,
-                    process.cwd(),
-                    words,
-                    {
-                      glob: true,
-                      family: Boolean(options.family),
-                      ...(options.family && options.familyKey
-                        ? {familyKey: String(options.familyKey)}
-                        : {}),
-                    },
-                  ),
-                  reason:
-                    'globs are expanded by your shell; pass the pattern unquoted, or list the files',
-                },
-              ]
+            ? // The pattern, expanded as the shell would: the theme
+              // sources it matches, each a build the checks then vet (an
+              // editor theme's own files give way to its source); a
+              // family run, the one family of them.
+              globSuggestions(entry.file, options, words)
             : guesses.length > 0
               ? guesses.map(guess =>
                   buildRun(

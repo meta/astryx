@@ -12,13 +12,17 @@
  */
 
 import {pathToFileURL} from 'node:url';
-import {LOCAL_URL} from './offline.mjs';
+import {LOCAL_URL, QUIET_BROWSER_ARGS} from './offline.mjs';
 
 const [entry, html, png, mode, executablePath] = process.argv.slice(2);
 try {
   const pw = await import(pathToFileURL(entry).href);
   const chromium = pw.chromium ?? pw.default?.chromium;
-  const browser = await chromium.launch(executablePath ? {executablePath} : {});
+  // The browser's own network off, as for the Chrome picture script.
+  const browser = await chromium.launch({
+    args: [...QUIET_BROWSER_ARGS],
+    ...(executablePath ? {executablePath} : {}),
+  });
   try {
     const page = await browser.newPage({
       viewport: {width: 1280, height: 900},
