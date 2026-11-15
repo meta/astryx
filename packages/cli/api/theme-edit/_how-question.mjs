@@ -5510,6 +5510,17 @@ export function draftAnswer(ctx, env, question) {
       c.unknownSubject = true;
       continue;
     }
+    // (Nor a clause whose subject is a role color or a dial, "and the
+    // accent darker": it is the whole theme's, never the part before.)
+    {
+      const subject =
+        /^(?:the\s+|my\s+|our\s+)?([a-z]+)/.exec(c.text)?.[1] ?? '';
+      if (
+        !c.parts.length &&
+        (ROLE_WORDS.test(subject) || Object.hasOwn(DIALS, subject))
+      )
+        continue;
+    }
     if (!c.parts.length) {
       const own = /\b(primary|secondary|ghost|destructive|muted)\b/.exec(
         c.text,
@@ -5593,15 +5604,48 @@ export function draftAnswer(ctx, env, question) {
   // part, so it is never inside one) is that element, the part inside the
   // place that takes the state.
   for (const c of clauses) {
+    // "the menu separators": a part's own divider that draws no line of
+    // its own is Core's divider inside that part, which the editor cannot
+    // keep apart: every divider, said.
+    {
+      const at = c.parts.findIndex(
+        x =>
+          /-divider$/.test(x.on) &&
+          x.on !== 'divider' &&
+          C.MAP.divider &&
+          !Object.keys(C.MAP[x.on]?.at ?? {}).some(k =>
+            /^(?:background(?:-color)?|border.*)$/.test(k),
+          ),
+      );
+      if (at >= 0) {
+        const holder = c.parts[at].on.replace(/-divider$/, '');
+        c.parts.splice(at, 1, {on: 'divider'});
+        if (C.MAP[holder] && !c.parts.some(x => x.on === holder)) {
+          c.container = holder;
+          placeNotes.push({
+            c,
+            text: `the editor themes divider everywhere: it cannot keep ${holder} apart, so this applies to every divider (${holder} is not changed)`,
+          });
+          continue;
+        }
+      }
+    }
     // "the menus' separators", "the menu's separators": the owner named
     // first is the place, as "separators in menus" says it.
     const poss = /\b([a-z]+?)(?:'s|s'|’s|s’)\s/.exec(c.text);
     if (poss && c.parts.length >= 2) {
+      // (The owner's words end at the possessive: "the dropdown menu's".)
+      const possEnd = poss.index + poss[1].length;
       const owner = c.parts.find(x =>
         lex.parts.some(([re, y]) => {
           if (y.on !== x.on) return false;
           const m = re.exec(c.text);
-          return m != null && m.index === poss.index;
+          return (
+            m != null &&
+            m.index <= poss.index &&
+            m.index + m[0].length >= possEnd - 1 &&
+            m.index + m[0].length <= possEnd + 1
+          );
         }),
       );
       const rest = c.parts.filter(x => x !== owner);
@@ -6645,6 +6689,43 @@ export function draftAnswer(ctx, env, question) {
           out.push(set(fill, v, {...f, when, ...(modal ? {mode: m} : {})}));
       }
     return out.length ? out : null;
+  };
+  /**
+   * A part's control heights moved by a length: each control height token
+   * it reads (--size-element-sm, -md, …) that many px, on the part; a
+   * member sized another way (a text area, by its rows) is untouched. Null
+   * when the part reads none. With `to`, the main size (md, else the one
+   * it reads) is that height and the others move by the same amount.
+   * @param {string} on
+   * @param {number} delta
+   * @param {number} [to]
+   * @returns {{steps: Step[], toks: string[]} | null}
+   */
+  const sizeSteps = (on, delta, to) => {
+    const toks = [
+      ...new Set(
+        [one(on), ...(FAMILIES[on] ?? [])].flatMap(m =>
+          (C.partReads(m, 'size') ?? [])
+            .filter(r => /^--size-/.test(r.token) && r.props.includes('height'))
+            .map(r => r.token),
+        ),
+      ),
+    ].sort();
+    if (!toks.length) return null;
+    const pxOf = (/** @type {string} */ t) =>
+      lengthPx(String(resolvedValue(t) || current(t) || ''));
+    const main = toks.find(t => /-md$/.test(t)) ?? toks[0];
+    const mainPx = pxOf(main);
+    const d = to != null && mainPx != null ? to - mainPx : delta;
+    const steps = toks
+      .map(t => {
+        const px = pxOf(t);
+        if (px == null) return null;
+        const next = Math.max(0, Math.round((px + d) * 100) / 100);
+        return next === px ? null : set(t, `${next}px`, {on});
+      })
+      .filter(st => st != null);
+    return {steps: /** @type {Step[]} */ (steps), toks};
   };
   /** How the mode of a set of per-mode steps reads in a sentence. @param {Step[]} steps */
   const modesSaid = steps =>
@@ -10582,6 +10663,21 @@ export function draftAnswer(ctx, env, question) {
             ? null
             : `${Math.max(0, Math.round((px + (down ? -n : n)) * 100) / 100)}px`;
         });
+        // A height by a length: each control height the part reads, on
+        // the part, so every size keeps its own and a text area its rows.
+        if (prop === 'height' && !pf.state && !pf.when) {
+          const sized = sizeSteps(on, down ? -n : n);
+          if (sized?.steps.length) {
+            const d = {
+              text: `${on} ${down ? 'shorter' : 'taller'} by ${n}px: each control height it reads (${sized.toks.join(', ')}) ${down ? 'down' : 'up'} by ${n}px, on ${on} only (a part sized by its content or rows keeps its height)`,
+              options: [sized.steps],
+              sequence: sized.steps.length > 1,
+            };
+            push(d);
+            recordTop(c, d.options[0] ?? []);
+            continue;
+          }
+        }
         if (prop && sides.length && sides.length <= 4 && moved.every(Boolean)) {
           const next = moved.join(' ');
           const d = {
@@ -14325,11 +14421,24 @@ export function draftAnswer(ctx, env, question) {
         // keeps the border color it reads.
         const bReads = C.partReads(one(on), 'border') ?? [];
         const bwRead = bReads.find(r => r.props.includes('border-width'));
-        const bcRead = bReads.find(
-          r =>
-            r.props.includes('border-color') &&
-            r.when.some(w => !w.includes(':')),
-        );
+        // (Under a status or variant asked, the color it reads there: an
+        // error input's border keeps --color-border-error.)
+        const fWhen = f.when ? String(f.when).replace(':', '=') : null;
+        const bcRead =
+          (fWhen
+            ? bReads.find(
+                r =>
+                  r.props.includes('border-color') &&
+                  r.when.some(
+                    w => !w.includes(':') && w.split(/[\s,]/).includes(fWhen),
+                  ),
+              )
+            : undefined) ??
+          bReads.find(
+            r =>
+              r.props.includes('border-color') &&
+              r.when.some(w => !w.includes(':')),
+          );
         const bwNowRaw =
           partValue(on, 'border-width') ??
           (bwRead
@@ -15863,10 +15972,22 @@ export function draftAnswer(ctx, env, question) {
           )
             ? c.lengths[0]
             : null);
+        // (A fixed height only where every member is sized by its control
+        // height: a text area's height is its rows, which one height
+        // would cut.)
+        const rowsSized = (FAMILIES[on] ?? [one(on)]).some(
+          m =>
+            !(C.partReads(m, 'size') ?? []).some(
+              r => /^--size-/.test(r.token) && r.props.includes('height'),
+            ),
+        );
         if (tall)
           return {
-            text: `the height${where}: min-height ${tall}`,
-            options: [[set('min-height', tall, f)], [set('height', tall, f)]],
+            text: `the height${where}: min-height ${tall}${rowsSized && FAMILIES[on] ? ` (never one fixed height: ${(FAMILIES[on] ?? []).filter(m => !(C.partReads(m, 'size') ?? []).some(r => /^--size-/.test(r.token))).join(', ')} take their height from their content or rows)` : ''}`,
+            options: [
+              [set('min-height', tall, f)],
+              ...(rowsSized && FAMILIES[on] ? [] : [[set('height', tall, f)]]),
+            ],
           };
         if (on === 'progress-bar-fill' || on === 'progress-bar-track')
           return {
