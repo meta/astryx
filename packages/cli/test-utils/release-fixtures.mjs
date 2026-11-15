@@ -18,7 +18,8 @@ import {scopedList} from './fixture-scope.mjs';
 const made = [];
 
 /**
- * A fresh temporary folder, removed by {@link cleanupFixtures}.
+ * A fresh temporary folder, removed by {@link cleanupFixtures}, or inside a
+ * fixture scope by the scope's own {@link removeFixtureDirs}.
  * @param {string} [label]
  * @returns {string}
  */

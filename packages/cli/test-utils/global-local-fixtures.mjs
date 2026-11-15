@@ -421,7 +421,8 @@ export function placeCli(dir, version, options = {}) {
 const pool = new Map();
 
 /**
- * Copies placed since the last {@link recyclePlacedCopies}.
+ * Copies placed outside a fixture scope since the last
+ * {@link recyclePlacedCopies}. A scope keeps its own list.
  * @type {{dir: string, key: string, record: Map<string, string>}[]}
  */
 const placed = [];
@@ -437,12 +438,17 @@ let pooledCount = 0;
  * So does every copy when `keep` is false: a step that is still running may
  * still use one.
  * `copies` names a fixture scope's own list; by default, the copies placed
- * outside any scope.
- * @param {{keep?: boolean, copies?: typeof placed}} [options]
+ * outside any scope. `besideOthers` says the test ran beside others, so a
+ * change to a shared file may be theirs.
+ * @param {{keep?: boolean, copies?: typeof placed, besideOthers?: boolean}} [options]
  * @throws {Error} when a test wrote into a file every copy shares. The pool is
  * then emptied, and the changed files are unpacked again from the tarball.
  */
-export function recyclePlacedCopies({keep = true, copies: list = placed} = {}) {
+export function recyclePlacedCopies({
+  keep = true,
+  copies: list = placed,
+  besideOthers = false,
+} = {}) {
   const copies = list.splice(0);
   if (packed && packedRecord) {
     const changed = changedPaths(
@@ -465,7 +471,7 @@ export function recyclePlacedCopies({keep = true, copies: list = placed} = {}) {
       restorePaths(packed, packedTarball, changed);
       packedRecord = treeRecord(packed, {contents: true});
       throw new Error(
-        `A test changed ${changed[0]}, which every placed CLI copy shares. Unlink a copy's file before you write it, as placeCli does for package.json.`,
+        `${besideOthers ? 'This test, or a test that ran beside it,' : 'A test'} changed ${changed[0]}, which every placed CLI copy shares. Unlink a copy's file before you write it, as placeCli does for package.json.`,
       );
     }
   }

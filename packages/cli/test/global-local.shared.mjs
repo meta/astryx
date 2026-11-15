@@ -41,7 +41,8 @@ export const ROOT =
 export const OFFLINE = 'http://127.0.0.1:9/';
 
 /**
- * Every private computer the running test made, settled before cleanup.
+ * Every private computer the running test made outside an {@link ownWorld},
+ * settled before cleanup. An ownWorld keeps its own list.
  * @type {ReturnType<typeof computer>[]}
  */
 export const computers = [];
@@ -56,7 +57,11 @@ async function tearDown(lists = {}) {
     (lists.computers ?? computers).splice(0),
   );
   try {
-    recyclePlacedCopies({keep: busy.length === 0, copies: lists.placed});
+    recyclePlacedCopies({
+      keep: busy.length === 0,
+      copies: lists.placed,
+      besideOthers: lists.placed !== undefined,
+    });
   } finally {
     if (lists.made) removeFixtureDirs(lists.made);
     else cleanupFixtures();
@@ -77,14 +82,14 @@ async function tearDown(lists = {}) {
  * @returns {() => Promise<void>}
  */
 export function ownWorld(fn) {
-  return async () => {
+  return async (/** @type {import('vitest').TestContext} */ context) => {
     /** @type {{made: string[], placed: any[], computers: ReturnType<typeof computer>[]}} */
     const lists = {made: [], placed: [], computers: []};
-    try {
-      await inFixtureScope(lists, fn);
-    } finally {
-      await tearDown(lists);
-    }
+    // A hook of its own, with the shared hook's limit: the wait for a stuck
+    // background step then fails with its own message, never the test's
+    // time limit.
+    context.onTestFinished(() => tearDown(lists), 90_000);
+    await inFixtureScope(lists, fn);
   };
 }
 
