@@ -516,7 +516,14 @@ async function answer(subject, options, cwd) {
     !/^--(on|when|state|mode|theme|list|at)$/.test(typedToken[1]) &&
     // "what does --color-accent do" is a lookup.
     !/^\s*(what|which|where|how|is|are|does|do|explain|why)\b/i.test(t) &&
-    !/^(do|does|mean|means|for|control|controls)\b/i.test(typedToken[2].trim())
+    !/^(do|does|mean|means|for|control|controls)\b/i.test(
+      typedToken[2].trim(),
+    ) &&
+    // "--color-accent darker", "--a and --b bigger": a way to move it (or
+    // more tokens), never a value: the question reader answers it.
+    !/^(?:and\s+--|(?:a bit |slightly )?(?:darker|lighter|bigger|larger|smaller|thicker|thinner|wider|narrower)$)/i.test(
+      typedToken[2].trim(),
+    )
   ) {
     const token = typedToken[1].toLowerCase();
     const mode = /\bin (light|dark) mode\b/i.exec(t)?.[1]?.toLowerCase();
