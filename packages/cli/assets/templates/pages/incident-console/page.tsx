@@ -537,7 +537,7 @@ export default function IncidentConsolePage() {
   const escalate = (incident: Incident) =>
     // Demo only: replace this toast with the call that performs the action.
     showToast({
-      body: `${incident.id} escalated to the next on-call tier`,
+      body: `Demo: escalating ${incident.id} to the next on-call tier would start here`,
       uniqueID: `escalate-${incident.id}`,
     });
 
