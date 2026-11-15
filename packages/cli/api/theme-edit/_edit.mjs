@@ -2663,11 +2663,11 @@ export async function editorStoredRefusal(root, slug) {
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {import('./_settings.mjs').ThemeData} data
- * @returns {Promise<Array<{token: string, key?: string, value: string, why: string, line: number | null, file?: string | null}>>}
+ * @returns {Promise<Array<{token: string, key?: string, value: string, why: string, run?: string[], line: number | null, file?: string | null}>>}
  */
 async function ownTokenProblems(ctx, slug, data) {
   const {cwd} = ctx.project;
-  /** @type {Array<{token: string, key?: string, value: string, why: string, line: number | null, file?: string | null}>} */
+  /** @type {Array<{token: string, key?: string, value: string, why: string, run?: string[], line: number | null, file?: string | null}>} */
   const out = [];
   const known = ctx.project.core.tokenDefaults;
   /**
@@ -3529,10 +3529,41 @@ async function ownTokenProblems(ctx, slug, data) {
         const e =
           typo.find(x => x.key === key || x.key.startsWith(`${key}.`)) ??
           typo[0];
+        // The weight alone, never a scale: one would also resize every
+        // text (the base's own sizes give way to the scale's). A heading
+        // weight is the headings dial, as set takes it (set's own repair of
+        // the value: 700 is bold); any other role's weight is its token.
+        const given = typeof r[field] === 'string' ? r[field] : null;
+        /** @type {string[]} */
+        let run = [];
+        if (role === 'heading' && field === 'weight' && given) {
+          try {
+            checkSetting(
+              ctx,
+              slug,
+              structuredClone(data),
+              'headings',
+              given,
+              {},
+              false,
+            );
+            run = [`${P} set ${slug} headings ${quoteCommandArgument(given)}`];
+          } catch (x) {
+            if (!(x instanceof AstryxError)) throw x;
+            run = (x.suggestions ?? [])
+              .map(y => y.name)
+              .filter(n => n.startsWith(`${P} set ${slug} headings `));
+          }
+        }
+        const tokens =
+          role === 'heading'
+            ? '--text-heading-1-weight … --text-heading-6-weight'
+            : `--text-${role}-weight`;
         out.push({
           token: `typography.${key}`,
-          value: typeof r[field] === 'string' ? r[field] : '',
-          why: `Core writes a role's weight only from a type scale, and this typography has none, so ${key} builds nothing: add scale: {base: 16, ratio: 1.2} beside it`,
+          value: given ?? '',
+          why: `Core writes a role's weight only from a type scale, and this typography has none, so ${key} builds nothing. Take it out and ${run.length ? 'run the line below, which changes only the heading weight' : `give the weight as the ${tokens} token${role === 'heading' ? 's' : ''} in tokens, which changes only that weight`}; a type scale would also resize all text`,
+          ...(run.length ? {run} : {}),
           ...(e ? atOf(e) : {line: null, file: null}),
         });
       }
@@ -3656,7 +3687,12 @@ function typographyProblem(key, value) {
     (field === 'weight' || key.split('.').includes('weights')) &&
     typeof value !== 'string'
   )
-    return `a typography weight is a CSS value in quotes, which Core writes as it is; ${describeValue(value)} is not text: write ${typeof value === 'number' ? `'${value}'` : "'600'"} (or a weight token, such as 'var(--font-weight-bold)')`;
+    return `a typography weight is a CSS value in quotes, which Core writes as it is; ${describeValue(value)} is not text: write ${
+      // A CSS weight is 1 to 1000: any other number is no example.
+      typeof value === 'number' && value >= 1 && value <= 1000
+        ? `'${value}'`
+        : "'600'"
+    } (or a weight token, such as 'var(--font-weight-bold)')`;
   if (field === 'family') {
     if (typeof value !== 'string')
       return 'a typography family is a family name in quotes, such as "Inter"';
@@ -3783,6 +3819,13 @@ async function ownTokenRefusal(ctx, slug, data) {
             name: `grep -n -- ${quoteCommandArgument(bad[0].key ?? bad[0].token)} ${quoteCommandArgument(file)}`,
             reason: 'see the line',
           },
+      // A line that does what a value meant, once that value is out.
+      ...bad.flatMap(b =>
+        (b.run ?? []).map(name => ({
+          name,
+          reason: `then this, once ${b.token} is taken out of ${b.file ?? own}`,
+        })),
+      ),
     ],
     ERROR_CODES.ERR_THEME_INVALID,
   );

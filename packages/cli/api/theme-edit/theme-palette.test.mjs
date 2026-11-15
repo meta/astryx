@@ -1918,7 +1918,8 @@ describe('colors final-3', () => {
 
   it('warns for a font one system ships, refuses var() in the font dial, and reads a preset by its package name', async () => {
     for (const [family, note] of [
-      ['Ubuntu', 'is not a system font'],
+      ['Acme Sans', 'is not a system font'],
+      ['Ubuntu', 'ships only on Linux'],
       ['Segoe UI', 'ships only on Windows'],
       ['Menlo', 'ships only on macOS'],
     ]) {
@@ -1999,12 +2000,13 @@ describe('colors10', () => {
   it('leaves the theme build its own font list, and names commands for a font step', async () => {
     const {collectUnloadedFonts} =
       await import('../theme/build/font-warning.mjs');
-    // As the build has always read it: Ubuntu warns, Roboto does not.
+    // As the build has always read it: a family no system ships warns,
+    // Roboto (and Ubuntu, a Linux interface font) does not.
     expect(
       collectUnloadedFonts({
-        tokens: {'--font-family-body': 'Ubuntu, Roboto, sans-serif'},
+        tokens: {'--font-family-body': 'Acme Sans, Ubuntu, Roboto, sans-serif'},
       }),
-    ).toEqual(['Ubuntu']);
+    ).toEqual(['Acme Sans']);
     const step = await refusal(() => themeEditSet('p', 'font', 'more', {cwd}));
     expect(step.code).toBe('ERR_THEME_BAD_VALUE');
     expect(step.run.length).toBeGreaterThan(0);

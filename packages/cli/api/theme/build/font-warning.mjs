@@ -204,14 +204,21 @@ export const SYSTEM_FONTS_BY_PLATFORM = {
     '黑体',
   ],
   'Android and ChromeOS': ['roboto', 'noto color emoji'],
+  // Noto is the interface font of Android and ChromeOS and the default of
+  // most Linux desktops (system stacks name Noto Sans for them).
+  'Android, ChromeOS and Linux': ['noto sans', 'noto serif', 'noto sans mono'],
   // Linux staples — the shipped themes' fallback stacks name these on
-  // purpose (e.g. neutral's code stack ends in Liberation Mono).
+  // purpose (e.g. neutral's code stack ends in Liberation Mono) — and the
+  // interface fonts of the GNOME and Ubuntu desktops.
   Linux: [
     'liberation mono',
     'liberation sans',
     'liberation serif',
     'dejavu sans',
     'dejavu sans mono',
+    'cantarell',
+    'ubuntu',
+    'ubuntu mono',
   ],
 };
 
@@ -357,6 +364,25 @@ export function fontShorthandWeight(value) {
     if (/^\d+(\.\d+)?$/.test(word) && n >= 1 && n <= 1000) return word;
   }
   return null;
+}
+
+/**
+ * The style a CSS `font` shorthand gives, as its grammar puts it before
+ * the size (`italic bold 1rem Inter`): italic or oblique, or null when it
+ * gives none (normal then).
+ * @param {string} value
+ * @returns {'italic' | 'oblique' | null}
+ */
+export function fontShorthandStyle(value) {
+  const text = String(value);
+  const family = fontShorthandFamilyList(text);
+  if (!family) return null;
+  const head = text.slice(0, text.length - family.length);
+  const word = head
+    .split(/\s+/)
+    .map(w => w.toLowerCase())
+    .find(w => w === 'italic' || w === 'oblique');
+  return /** @type {'italic' | 'oblique' | undefined} */ (word) ?? null;
 }
 
 /**

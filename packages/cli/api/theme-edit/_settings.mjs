@@ -42,6 +42,7 @@ import {
 import {
   expandFontVars,
   fontShorthandFamilyList,
+  fontShorthandStyle,
   fontShorthandWeight,
   namedFontFamilies,
 } from '../theme/build/font-warning.mjs';
@@ -7026,10 +7027,11 @@ export async function themeSourceProblem(cwd, slug) {
         }
       : notImported;
   }
-  // The theme extends the settings, but its own tokens may still replace
-  // theirs (a spread of defineTheme's result with a tokens field of its
-  // own): every token the settings set must reach the theme the build
-  // reads, or a change is saved and never built.
+  // The theme extends the settings, but a field of its own may still
+  // replace theirs (a spread of defineTheme's result with a tokens or
+  // components field of its own): everything the settings set (each token,
+  // each part's style) must reach the theme the build reads, or a change is
+  // saved and never built.
   /** @type {any} */
   let settingsTheme;
   try {
@@ -7039,16 +7041,53 @@ export async function themeSourceProblem(cwd, slug) {
   } catch {
     settingsTheme = null;
   }
-  const theirs = Object.entries(settingsTheme?.tokens ?? {}).filter(
-    ([, v]) => v != null,
-  );
-  const ours = loaded.theme?.tokens ?? {};
-  const lost = theirs.filter(([k]) => !Object.hasOwn(ours, k)).map(([k]) => k);
-  if (lost.length)
-    return {
-      problem: `${slug}.theme.ts replaces the tokens of ${settings}: ${lost.length} of the ${theirs.length} tokens the settings set (${lost.slice(0, 3).join(', ')}${lost.length > 3 ? ', …' : ''}) do not reach the theme it exports`,
-      fix: `Give your own tokens inside defineTheme({extends: ${settings}, name: '${slug}', tokens: {…}}) in themes/${slug}/${slug}.theme.ts, where they are added to the settings' tokens, instead of replacing the tokens of its result.`,
-    };
+  /** @param {unknown} v */
+  const isRecord = v => !!v && typeof v === 'object' && !Array.isArray(v);
+  /**
+   * The paths of every value set inside a field, each to a value that is
+   * no record.
+   * @param {any} v @param {string[]} at
+   * @returns {string[][]}
+   */
+  const leaves = (v, at) =>
+    isRecord(v)
+      ? Object.entries(v)
+          .filter(([, x]) => x != null)
+          .flatMap(([k, x]) => leaves(x, [...at, k]))
+      : [at];
+  /** Whether a path is set in a value. @param {any} root @param {string[]} p */
+  const reaches = (root, p) => {
+    let at = root;
+    for (const k of p) {
+      if (!isRecord(at) || !Object.hasOwn(at, k)) return false;
+      at = at[k];
+    }
+    return true;
+  };
+  // The fields defineTheme carries from `extends` into its result key by
+  // key (its seed): what the settings set there reaches the theme only if
+  // the result keeps each key. The axes are resolved again from the
+  // theme's own inputs, so a theme's own typography rightly replaces them.
+  for (const field of ['tokens', 'components']) {
+    const value = settingsTheme?.[field];
+    if (!isRecord(value)) continue;
+    // By its first key: a token, or a part whose style is lost.
+    const theirs = [...new Set(leaves(value, []).map(p => p[0]))].filter(
+      Boolean,
+    );
+    const lost = [
+      ...new Set(
+        leaves(value, [])
+          .filter(p => !reaches(loaded.theme?.[field], p))
+          .map(p => p[0]),
+      ),
+    ];
+    if (lost.length)
+      return {
+        problem: `${slug}.theme.ts replaces the ${field} of ${settings}: ${lost.length} of the ${theirs.length} ${field} the settings set (${lost.slice(0, 3).join(', ')}${lost.length > 3 ? ', …' : ''}) do not reach the theme it exports`,
+        fix: `Give your own ${field} inside defineTheme({extends: ${settings}, name: '${slug}', ${field}: {…}}) in themes/${slug}/${slug}.theme.ts, where they are added to the settings' ${field}, instead of replacing the ${field} of its result.`,
+      };
+  }
   return null;
 }
 
@@ -10450,6 +10489,37 @@ export function builtFontWeights(ctx, slug, family = null) {
       add(weightsOf(rule));
   }
   return [...weights].sort((a, b) => a - b);
+}
+
+/**
+ * Whether the theme's last build sets italic text anywhere: a
+ * `font-style` of italic or oblique, or a `font` shorthand's style, each
+ * var() read through the theme's own values. A font package then loads
+ * its italic faces beside the upright ones, or the browser draws a slanted
+ * copy. False before the theme has been built.
+ * @param {Ctx} ctx
+ * @param {string} slug
+ * @returns {boolean}
+ */
+export function builtItalic(ctx, slug) {
+  /** @type {string} */
+  let css;
+  try {
+    css = fs.readFileSync(themeFiles(ctx.project.cwd, slug).css, 'utf8');
+  } catch {
+    return false;
+  }
+  const own = customPropertyValues(css);
+  /** @param {string} name */
+  const lookup = name => own.get(name) ?? [];
+  return fontRules(css).some(rule =>
+    [
+      ...rule.styles.flatMap(v => expandFontVars(v, lookup)),
+      ...rule.fonts
+        .flatMap(v => expandFontVars(v, lookup))
+        .map(f => fontShorthandStyle(f) ?? ''),
+    ].some(v => /^\s*(italic|oblique)\b/i.test(v)),
+  );
 }
 
 /**

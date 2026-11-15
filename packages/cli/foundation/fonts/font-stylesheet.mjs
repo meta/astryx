@@ -125,30 +125,37 @@ export function declarationValues(css, property) {
 }
 
 /**
- * Each rule of a stylesheet's text that names a font or a weight: the
- * values of its `font-family` and `font` declarations, and of its
- * `font-weight` ones, in source order. What one rule sets goes together
- * (the weight a part gives the family it sets).
+ * Each rule of a stylesheet's text that names a font, a weight or a font
+ * style: the values of its `font-family` and `font` declarations, of its
+ * `font-weight` ones and of its `font-style` ones, in source order. What
+ * one rule sets goes together (the weight or the italic a part gives the
+ * family it sets).
  * @param {string} css
- * @returns {Array<{families: string[], fonts: string[], weights: string[]}>}
+ * @returns {Array<{families: string[], fonts: string[], weights: string[], styles: string[]}>}
  */
 export function fontRules(css) {
-  /** @type {Array<{families: string[], fonts: string[], weights: string[]}>} */
+  /** @type {Array<{families: string[], fonts: string[], weights: string[], styles: string[]}>} */
   const out = [];
   try {
     postcss()
       .parse(css)
       .walkRules(rule => {
-        /** @type {{families: string[], fonts: string[], weights: string[]}} */
-        const one = {families: [], fonts: [], weights: []};
+        /** @type {{families: string[], fonts: string[], weights: string[], styles: string[]}} */
+        const one = {families: [], fonts: [], weights: [], styles: []};
         rule.each(node => {
           if (node.type !== 'decl') return;
           const prop = node.prop.toLowerCase();
           if (prop === 'font-family') one.families.push(node.value);
           else if (prop === 'font') one.fonts.push(node.value);
           else if (prop === 'font-weight') one.weights.push(node.value);
+          else if (prop === 'font-style') one.styles.push(node.value);
         });
-        if (one.families.length || one.fonts.length || one.weights.length)
+        if (
+          one.families.length ||
+          one.fonts.length ||
+          one.weights.length ||
+          one.styles.length
+        )
           out.push(one);
       });
   } catch {

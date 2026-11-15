@@ -39,6 +39,7 @@ import {
   camel,
   folderIsEmpty,
   builtFontWeights,
+  builtItalic,
   fontPackages,
   modesOf,
   shown,
@@ -424,22 +425,43 @@ export function baseFontsSheet(ctx, data) {
  * fonts in every weight it uses: a variable package's one stylesheet
  * (every weight); for a package with a stylesheet per weight, as
  * Fontsource ships them, each weight the theme's build uses that the
- * package has; else its index stylesheet.
+ * package has; else its index stylesheet. When the theme sets italic text,
+ * each with its italic stylesheet the package has.
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} slug
  * @param {string} pkg
  * @returns {string[]}
  */
 export function fontPackageSheets(ctx, slug, pkg) {
-  const index = `${pkg}/index.css`;
+  /** Whether the package has a stylesheet. @param {string} sheet */
+  const has = sheet => {
+    try {
+      ctx.project.req.resolve(sheet);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  // Italic text loads the italic face of each sheet beside it, as
+  // Fontsource names them (`400-italic.css`, a variable package's
+  // `wght-italic.css`), where the package has it.
+  const italic = builtItalic(ctx, slug);
+  /** A sheet and, for italic text, its italic one. @param {string} upright @param {string} slanted */
+  const withItalic = (upright, slanted) => [
+    upright,
+    ...(italic && has(slanted) ? [slanted] : []),
+  ];
   const faces = fontPackageWeights(ctx, pkg);
-  if (!faces?.length) return [index];
+  if (!faces?.length)
+    return withItalic(`${pkg}/index.css`, `${pkg}/wght-italic.css`);
   // Each weight the theme uses loads the face CSS font matching shows for
   // it (550 shows the 600 face), once.
   const shown = new Set(
     (builtFontWeights(ctx, slug) ?? [400]).map(w => shownWeight(w, faces)),
   );
-  return faces.filter(w => shown.has(w)).map(w => `${pkg}/${w}.css`);
+  return faces
+    .filter(w => shown.has(w))
+    .flatMap(w => withItalic(`${pkg}/${w}.css`, `${pkg}/${w}-italic.css`));
 }
 
 /**
