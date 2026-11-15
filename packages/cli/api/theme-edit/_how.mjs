@@ -35,9 +35,11 @@ import {
   nearest,
   partComponentDocs,
   refuse,
+  resolvedTokens,
   themeSourceParseError,
   themeSourceProblem,
 } from './_settings.mjs';
+import {missedSteps} from './_missed.mjs';
 import {ASPECTS, settableStates} from './_check.mjs';
 import {MODAL} from './_compiler.mjs';
 import {PALETTE_DIALS, mappingRows, paletteFiles} from './_palette.mjs';
@@ -642,6 +644,45 @@ async function answer(subject, options, cwd) {
         ...tokenAnswer(ctx, env, token, token, unknown, themeFields),
         subject: t,
       };
+  }
+  // "<part> match the theme": the steps show's missed list has for that
+  // part (what the theme's own changes should have reached on it), checked
+  // as every answer is; a part they reached already is said so.
+  const matchAsk =
+    /\b(?:match(?:es|ing)?|fits?|follows?)\s+(?:the|my|this)\s+(?:theme|look)\b/i.exec(
+      t,
+    );
+  if (matchAsk && env.exists) {
+    const q = draftAnswer(ctx, env, t.replace(matchAsk[0], ' '));
+    const parts = q.parts.flatMap(p =>
+      FAMILIES[p] ? FAMILIES[p] : ctx.project.target.has(p) ? [p] : [],
+    );
+    if (parts.length) {
+      const res = await resolvedTokens(ctx, env.slug).catch(() => null);
+      const missed = res ? missedSteps(ctx, env.data, res, env.base) : [];
+      const mine = missed.filter(x => parts.includes(x.part));
+      const drafts = mine.length
+        ? mine.map(x => ({
+            text: `${x.part}${x.state ? ` (${x.state})` : ''}: ${x.why}`,
+            options: [x.steps.map(st => ({verb: 'set', ...st}))],
+            ...(x.steps.length > 1 ? {sequence: true} : {}),
+          }))
+        : [
+            {
+              text: `${[...new Set(parts)].join(', ')} ${parts.length > 1 ? 'follow' : 'follows'} ${env.slug}'s changes already: show's missed list has nothing for ${parts.length > 1 ? 'them' : 'it'}; to change ${parts.length > 1 ? 'them' : 'it'} anyway, ask for the change ("${parts[0]} background #f0f0f0")`,
+              options: [],
+              lookup: `${P} show ${env.slug}`,
+            },
+          ];
+      return {
+        kind: 'question',
+        subject: t,
+        understood: {parts: q.parts, aspects: q.aspects},
+        ...themeFields,
+        results: finish(env, /** @type {any} */ (drafts)),
+        ...unknown,
+      };
+    }
   }
   const h = draftAnswer(ctx, env, t);
   // The question guard: a question with no clause that asks for a change

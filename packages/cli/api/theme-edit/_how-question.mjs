@@ -1318,6 +1318,15 @@ function exampleOf(prop) {
 }
 
 /**
+ * A shadow with no blur at all, as hard-edged shadows are drawn: "hard",
+ * "no blur", "zero blur", "unblurred", "blurless", and a "flat shadow" (the
+ * flat style's offset shadow). Its offsets, spread and color stay; never
+ * no shadow.
+ */
+const ZERO_BLUR =
+  /\b(?:hard(?:-edged)?|no[- ]?blur|zero[- ]?blur|without (?:any )?blur|unblurred|blurless|flat(?=\s+(?:drop\s+|box\s+)?shadows?\b))\b/;
+
+/**
  * A bound on a color the words give ("but not darker than #1e3a8a", "never
  * lighter than white"), or null: the way it holds (darker: the color may be
  * no darker than the bound) and the bound as written.
@@ -2541,12 +2550,18 @@ function clausesOf(q, partWords) {
         return (
           where != null &&
           where.index > first &&
-          // "the page color", "the page's colour"; "the color of the page".
+          // "the page color", "the page's colour"; "the color of the page";
+          // and a color named like another part's, "grey like the
+          // dialogs", "the same grey as the page".
           ((/\b(?:the|my|a)\s+$/.test(text.slice(0, where.index)) &&
             /^(?:'s)?\s+colou?r\b/.test(text.slice(where.end))) ||
             /\bcolou?r of\s+(?:the\s+|my\s+)?$/.test(
               text.slice(0, where.index),
-            ))
+            ) ||
+            (colorsIn(text).length > 0 &&
+              /\b(?:like|(?:the\s+)?same(?:\s+[a-z]+)?\s+as)\s+(?:the\s+|my\s+)?$/.test(
+                text.slice(0, where.index),
+              )))
         );
       });
       if (ref) {
@@ -7199,8 +7214,30 @@ export function draftAnswer(ctx, env, question) {
       );
     return !rest.trim();
   };
-  /** A color for the clause, for a fill or a text color. @param {Clause} c @param {'fill' | 'text'} kind */
-  const colorFor = (c, kind) => {
+  /** A color for the clause, for a fill, a text or a border color. @param {Clause} c @param {'fill' | 'text' | 'border'} use */
+  const colorFor = (c, use) => {
+    // (A border's color is read as a fill's, but takes its own palette
+    // token.)
+    const kind = use === 'border' ? 'fill' : use;
+    // "grey like the dialogs", "the same grey as the page": the part named
+    // as the reference gives the color, read from it, never changed.
+    if (c.colorRef)
+      return c.colorRef === 'page'
+        ? kind === 'text'
+          ? 'var(--color-text-primary)'
+          : 'var(--color-background-body)'
+        : (partPropNow(
+            c.colorRef,
+            kind === 'text'
+              ? 'color'
+              : use === 'border'
+                ? 'border-color'
+                : 'background-color',
+            true,
+          ) ??
+            (kind === 'text' || !C.MAP[one(c.colorRef)]
+              ? null
+              : 'var(--color-background-body)'));
     // "fails contrast on white", "labels on the accent color white": what
     // the text sits on (after "on") is never the text's own color.
     const ownText =
@@ -7258,13 +7295,6 @@ export function draftAnswer(ctx, env, question) {
         ? `var(${fill})`
         : `var(${TOKENS[ink] !== undefined ? ink : fill})`;
     }
-    // "the sidebar the page color": the color the named part shows (the
-    // page's for one with no fill of its own).
-    if (kind === 'fill' && c.colorRef)
-      return c.colorRef === 'page'
-        ? 'var(--color-background-body)'
-        : (partPropNow(c.colorRef, 'background-color', true) ??
-            (C.MAP[one(c.colorRef)] ? 'var(--color-background-body)' : null));
     if (kind === 'text' && c.colors.length) return null;
     if (kind === 'text' && !c.colors.length) {
       if (/\bdark (text|labels?|writing|words)\b/.test(c.text))
@@ -9239,7 +9269,10 @@ export function draftAnswer(ctx, env, question) {
       c.parts = c.parts.filter(p => !after(p));
     }
     // "focus ring the same color as the danger color": a role's token.
-    const role = same ? ROLE_DIALS.find(([re]) => re.test(same[0])) : null;
+    // (A part named as the reference, "the same grey as the page", gives
+    // the color itself: the word is no role then.)
+    const role =
+      same && !c.colorRef ? ROLE_DIALS.find(([re]) => re.test(same[0])) : null;
     if (same && role && c.parts.length === 1) {
       const target = c.parts[0];
       const d =
@@ -12390,8 +12423,9 @@ export function draftAnswer(ctx, env, question) {
             (c.dir === 'less' ||
               /\b(soft|subtle|light|gentle)\b/.test(noMode(c.text))));
         const strong = !soft && way === 'more';
+        const zeroBlur = ZERO_BLUR.test(c.text);
         if (!on) {
-          if (c.neg || /\bflat\b/.test(c.text))
+          if (!zeroBlur && (c.neg || /\bflat\b/.test(c.text)))
             return {
               text: /\bflat\b/.test(c.text)
                 ? 'flat panels: no border, no shadow, a tinted fill (the surfaces dial); or only the shadows off'
@@ -12414,16 +12448,17 @@ export function draftAnswer(ctx, env, question) {
           // spread and colors kept (as on a part); a blur is the same in
           // both modes.
           // ("blurrier shadows": the blur ×1.5 the same way, never a
-          // stronger shadow.)
-          const blurMore = BLUR_MORE.test(c.text) && !BLUR_LESS.test(c.text);
-          if (BLUR_LESS.test(c.text) || blurMore) {
-            const word = blurMore ? 'blurrier' : 'sharper';
+          // stronger shadow; "hard shadows": no blur at all.)
+          const blurMore =
+            !zeroBlur && BLUR_MORE.test(c.text) && !BLUR_LESS.test(c.text);
+          if (zeroBlur || BLUR_LESS.test(c.text) || blurMore) {
+            const word = zeroBlur ? 'hard' : blurMore ? 'blurrier' : 'sharper';
             if (c.mode && modal)
               return {
                 text: `a shadow's blur is the same in both modes, so ${word} shadows in ${c.mode} mode only cannot be written; "${word} shadows" scales the blur in both`,
                 options: [],
               };
-            const k = blurMore ? 1.5 : 0.5;
+            const k = zeroBlur ? 0 : blurMore ? 1.5 : 0.5;
             const steps = ['--shadow-low', '--shadow-med', '--shadow-high']
               .filter(t => t in TOKENS)
               .map(t => {
@@ -12434,7 +12469,9 @@ export function draftAnswer(ctx, env, question) {
               })
               .filter(st => st != null);
             return {
-              text: `${word} shadows everywhere: each shared shadow with its blur ×${k}, offsets, spread and colors kept`,
+              text: zeroBlur
+                ? 'hard shadows everywhere: each shared shadow with no blur, offsets, spread and colors kept'
+                : `${word} shadows everywhere: each shared shadow with its blur ×${k}, offsets, spread and colors kept`,
               options: steps.length ? [/** @type {Step[]} */ (steps)] : [],
               sequence: true,
             };
@@ -12585,7 +12622,10 @@ export function draftAnswer(ctx, env, question) {
             };
         }
         // "flat cards": no shadow on them ("too flat" asks for one).
-        if (c.neg || (/\bflat\b/.test(c.text) && !/\btoo flat\b/.test(c.text)))
+        if (
+          !zeroBlur &&
+          (c.neg || (/\bflat\b/.test(c.text) && !/\btoo flat\b/.test(c.text)))
+        )
           return {
             text: `no shadow${where}`,
             options: [...undo(['box-shadow']), [set('box-shadow', 'none', f)]],
@@ -12595,15 +12635,18 @@ export function draftAnswer(ctx, env, question) {
         // and color stay.
         if (
           on &&
-          (BLUR_LESS.test(c.text) ||
+          (zeroBlur ||
+            BLUR_LESS.test(c.text) ||
             BLUR_MORE.test(c.text) ||
             /\bsofter\b/.test(noMode(c.text).replace(/\btoo \w+/g, ' ')))
         ) {
-          const sharpen = BLUR_LESS.test(c.text);
+          const sharpen = zeroBlur || BLUR_LESS.test(c.text);
           // (The shadow it shows in the state asked, as above.)
           const nowShadow =
             shadowNow && shadowNow !== 'none' ? shadowNow : null;
-          const factor = exactFactor(c.text) ?? (sharpen ? 0.5 : 2);
+          const factor = zeroBlur
+            ? 0
+            : (exactFactor(c.text) ?? (sharpen ? 0.5 : 2));
           const blurred = nowShadow ? blurScaled(nowShadow, factor) : null;
           // A shadow with no blur (a ring) is softened through its colors'
           // alpha instead.
@@ -12817,7 +12860,7 @@ export function draftAnswer(ctx, env, question) {
               text: 'Core has no scrollbar part, so the editor cannot change its width or color; scrollbar-width and scrollbar-color need your own CSS',
               options: [],
             };
-          const color = colorFor(c, 'fill');
+          const color = colorFor(c, 'border');
           if (c.neg)
             return {
               text: 'no borders: the shared border width to 0',
@@ -13036,7 +13079,7 @@ export function draftAnswer(ctx, env, question) {
             outlines.every(x => /^\s*none\b/.test(String(x)))
           )
             return null;
-          const color = colorFor(c, 'fill');
+          const color = colorFor(c, 'border');
           const w = c.lengths[0];
           const fl = {...f, state: f.state ?? 'focus-visible'};
           /** @type {Step[]} */
@@ -13075,7 +13118,7 @@ export function draftAnswer(ctx, env, question) {
               ...(outline ? [[set('outline', 'none', f)]] : []),
             ],
           };
-        const color = colorFor(c, 'fill');
+        const color = colorFor(c, 'border');
         // "outline buttons", "the danger buttons outline only": the outline
         // look, never a border added over the fill. All buttons: the
         // buttons dial's outline rung; one variant: its fill cleared, and
