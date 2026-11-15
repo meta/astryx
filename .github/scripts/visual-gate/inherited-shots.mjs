@@ -19,7 +19,7 @@ import {fileURLToPath} from 'node:url';
 
 /** GitHub API calls one comment may spend on this, at most. */
 export const MAX_CALLS = 20;
-/** Calls kept for proving candidates: three each (pull request, base, stack). */
+/** Calls kept for proving candidates: three each (pull request, head, stack). */
 const PROOF_CALLS = 9;
 const SHA256 = /^[0-9a-f]{64}$/;
 const SHA = /^[0-9a-f]{40}$/;

@@ -493,9 +493,9 @@ jobs:
             --run-id "$RUN_ID" \
             --run-attempt "$RUN_ATTEMPT"
 
-      # Marks a changed shot that a merged pull request in the tested base also
-      # changed, with the same image, as inherited from main (at most 20 API
-      # calls).
+      # Marks a changed shot that a merged pull request already in this head
+      # also changed, with the same image, as inherited from main (at most 20
+      # API calls).
       # Report text only: no check or status reads it.
       - name: Mark inherited visual changes
         id: inherited
