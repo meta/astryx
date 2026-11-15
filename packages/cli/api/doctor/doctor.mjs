@@ -2549,6 +2549,22 @@ export async function runChecks(options = {}) {
     iconPlaceholders,
   };
 
+  // The checks that read only files, each kept while every file it read is
+  // unchanged; the Core the project loads is part of what they read. They
+  // run first, though they print last: a kept check depends on every file
+  // its run read before it, and the wiring scan below reads the app's
+  // source, which the docs never read.
+  const where = {cwd, coreDir: coreDir ?? null};
+  const docsChecks = [
+    await keptFileCheck({name: 'cli-docs', ...where}, () => checkCliDocs(ctx)),
+    await keptFileCheck({name: 'docs-tree', ...where}, () =>
+      checkDocsTree(ctx),
+    ),
+    await keptFileCheck({name: 'docs-progressive', ...where}, () =>
+      checkDocsProgressiveDisclosure(ctx),
+    ),
+  ];
+
   /** @type {DoctorCheck[]} */
   const checks = [];
   // Run the theme checks and config check after the environment checks. The
@@ -2608,22 +2624,7 @@ export async function runChecks(options = {}) {
     );
   }
   checks.push(await checkAuthoringDocs(ctx));
-  // The checks that read only files, each kept while every file it read is
-  // unchanged; the Core the project loads is part of what they read.
-  const where = {cwd, coreDir: coreDir ?? null};
-  checks.push(
-    await keptFileCheck({name: 'cli-docs', ...where}, () => checkCliDocs(ctx)),
-  );
-  checks.push(
-    await keptFileCheck({name: 'docs-tree', ...where}, () =>
-      checkDocsTree(ctx),
-    ),
-  );
-  checks.push(
-    await keptFileCheck({name: 'docs-progressive', ...where}, () =>
-      checkDocsProgressiveDisclosure(ctx),
-    ),
-  );
+  checks.push(...docsChecks);
 
   const summary = {pass: 0, warn: 0, fail: 0, info: 0};
   for (const c of checks) summary[c.status] += 1;

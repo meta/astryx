@@ -485,6 +485,19 @@ describe.skipIf(process.platform !== 'linux')('a kept catalog', () => {
         expect(wired).not.toEqual(unwired);
         expect(wired).toEqual(themes(freshTmp()));
         expect(themes(tmp)).toEqual(wired);
+        // An edit to the app's source scans the wiring again, while the docs
+        // checks, which never read the app, are read back.
+        const docsKept = doctorEntries(tmp);
+        expect(docsKept.size).toBeGreaterThan(0);
+        const wiringFile = path.join(tmp, CACHE_NAME, wiringEntries()[0]);
+        const wiringKept = fs.statSync(wiringFile).ino;
+        fs.appendFileSync(
+          path.join(other.dir, 'app', 'providers.tsx'),
+          '// edited\n',
+        );
+        expect(themes(tmp)).toEqual(wired);
+        expect(fs.statSync(wiringFile).ino).not.toBe(wiringKept);
+        expect(doctorEntries(tmp)).toEqual(docsKept);
         // An edit to the theme module alone scans again, as a fresh run does.
         const keptEntry = path.join(tmp, CACHE_NAME, wiringEntries()[0]);
         const before = fs.statSync(keptEntry).ino;
