@@ -287,6 +287,51 @@ describe('an exact run', () => {
     expect(unchangedSince(seen)).toBe(false);
   });
 
+  it('sees a link re-pointed between two checks in one process, at the last part or on the way', () => {
+    const {dir} = scratch();
+    for (const where of ['last', 'folder']) {
+      const one = path.join(dir, `${where}-one`);
+      const two = path.join(dir, `${where}-two`);
+      fs.mkdirSync(one);
+      fs.mkdirSync(two);
+      fs.writeFileSync(path.join(one, 'file.txt'), 'same');
+      fs.writeFileSync(path.join(two, 'file.txt'), 'same');
+      const link = path.join(dir, `${where}-link`);
+      fs.symlinkSync(where === 'last' ? path.join(one, 'file.txt') : one, link);
+      const looked = where === 'last' ? link : path.join(link, 'file.txt');
+      const seen = exact(() => fs.realpathSync(looked));
+      expect(unchangedSince(seen)).toBe(true);
+      fs.rmSync(link);
+      fs.symlinkSync(where === 'last' ? path.join(two, 'file.txt') : two, link);
+      expect(unchangedSince(seen)).toBe(false);
+    }
+  });
+
+  it('sees a file one store links into two version folders move between them', () => {
+    const {dir} = scratch();
+    const store = path.join(dir, 'store.js');
+    fs.writeFileSync(store, 'module.exports = 1;\n');
+    for (const version of ['1.0.0', '1.0.1']) {
+      fs.mkdirSync(path.join(dir, version));
+      fs.linkSync(store, path.join(dir, version, 'index.js'));
+    }
+    const pkg = path.join(dir, 'pkg');
+    fs.symlinkSync(path.join(dir, '1.0.0'), pkg);
+    const seen = exact(() => fs.realpathSync(path.join(pkg, 'index.js')));
+    fs.rmSync(pkg);
+    fs.symlinkSync(path.join(dir, '1.0.1'), pkg);
+    expect(unchangedSince(seen)).toBe(false);
+  });
+
+  it('keeps a real-path lookup of a file replaced whole: its path did not change', () => {
+    const {dir, file} = scratch();
+    const seen = exact(() => fs.realpathSync(file));
+    const next = path.join(dir, 'next.txt');
+    fs.writeFileSync(next, 'two, longer');
+    fs.renameSync(next, file);
+    expect(unchangedSince(seen)).toBe(true);
+  });
+
   it('checks a path both looked up and read by both', () => {
     const {file} = scratch();
     const seen = exact(() => {

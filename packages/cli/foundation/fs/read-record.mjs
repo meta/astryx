@@ -161,6 +161,9 @@ let recording = false;
 /** fs.statSync as loaded, before installRecorder wraps it. */
 const statSyncRaw = fs.statSync;
 
+/** fs.lstatSync as loaded, before installRecorder wraps it. */
+const lstatSyncRaw = fs.lstatSync;
+
 /** fs.realpathSync as loaded, before installRecorder wraps it. */
 const realpathSyncRaw = fs.realpathSync;
 
@@ -264,18 +267,51 @@ function presenceState(file) {
 }
 
 /**
- * The path `file` resolves to, or absent: a real-path lookup's state.
+ * A real-path lookup's state: a stamp of where `file` resolves, which
+ * changes whenever the lookup could resolve it elsewhere, or absent. The
+ * program still receives what its own lookup returned; this state only shows
+ * a change, and it is worked out the same way when it is recorded and when it
+ * is checked.
  *
- * The program still receives what its own lookup returned; this state only
- * shows a change. The native lookup resolves the same links in a fraction of
- * the time, which counts when a check reads hundreds of these, and where it
- * differs it shows more changes, never fewer: at worst an extra miss. Where
- * it fails for a reason other than a missing path, the program's own lookup
- * gives the state, so the state cannot flip between the two.
+ * A path whose last part is a link, or the root, is resolved whole. Any other
+ * resolves through its folder, so the state is the folder's resolved path
+ * with the last part's name: one lstat per path, and one lookup per folder,
+ * which `folders` shares across the paths one check reads. A file replaced
+ * whole keeps the state, as it keeps its path; what a step read of its
+ * content has a stamp of its own.
+ * @param {string} file
+ * @param {Map<string, string> | null} [folders] - Folders already resolved in
+ *   this check, by path; never shared beyond one check.
+ * @returns {string}
+ */
+function realPathState(file, folders = null) {
+  /** @type {import('node:fs').Stats | undefined} */
+  let stat;
+  try {
+    stat = lstatSyncRaw(file, {throwIfNoEntry: false});
+  } catch {
+    return resolvedPath(file);
+  }
+  if (!stat) return '-';
+  const parent = path.dirname(file);
+  if (stat.isSymbolicLink() || parent === file) return resolvedPath(file);
+  let real = folders?.get(parent);
+  if (real === undefined) {
+    real = resolvedPath(parent);
+    folders?.set(parent, real);
+  }
+  return real === '-' ? '-' : path.join(real, path.basename(file));
+}
+
+/**
+ * The path `file` resolves to whole, or absent. The native lookup resolves
+ * the same links as the program's own in a fraction of the time; where it
+ * fails for a reason other than a missing path, the program's own lookup
+ * answers, so the state cannot flip between the two.
  * @param {string} file
  * @returns {string}
  */
-function realPathState(file) {
+function resolvedPath(file) {
   try {
     return realpathNative(file);
   } catch (error) {
@@ -294,11 +330,13 @@ function realPathState(file) {
  * of state that was recorded.
  * @param {string} file - The recorded key: a path, or a real-path lookup's.
  * @param {string} state
+ * @param {Map<string, string> | null} [folders] - Folders this check has
+ *   resolved (realPathState): one map per check, never kept longer.
  * @returns {boolean}
  */
-export function stillInState(file, state) {
+export function stillInState(file, state, folders = null) {
   if (file.startsWith(REAL_PATH)) {
-    return realPathState(file.slice(REAL_PATH.length)) === state;
+    return realPathState(file.slice(REAL_PATH.length), folders) === state;
   }
   if (state === PRESENT) return presenceState(file) === state;
   return (
@@ -312,8 +350,10 @@ export function stillInState(file, state) {
  * @returns {boolean}
  */
 export function unchangedSince(recorded) {
+  /** @type {Map<string, string>} */
+  const folders = new Map();
   for (const [file, state] of recorded) {
-    if (!stillInState(file, state)) return false;
+    if (!stillInState(file, state, folders)) return false;
   }
   return true;
 }

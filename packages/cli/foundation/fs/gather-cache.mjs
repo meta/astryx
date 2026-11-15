@@ -611,8 +611,12 @@ function staleReason(stamps, env) {
         : 'an environment variable it read changed';
     }
   }
+  /** @type {Map<string, string>} */
+  const folders = new Map();
   for (const [file, state] of stamps) {
-    if (!stillInState(file, state)) return 'a file or folder it read changed';
+    if (!stillInState(file, state, folders)) {
+      return 'a file or folder it read changed';
+    }
   }
   return null;
 }
