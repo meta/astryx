@@ -52,6 +52,26 @@ const ZONE_NAME = /^[A-Za-z][A-Za-z0-9_+-]*(?:\/[A-Za-z0-9_+-]+)*$/u;
  */
 
 /**
+ * The options among `args` that name ICU, each with its value: the part after
+ * `=`, or the next argument when the option holds no `=`.
+ * @param {string[]} args
+ * @returns {string[]}
+ */
+function icuOptions(args) {
+  /** @type {string[]} */
+  const options = [];
+  for (const [at, arg] of args.entries()) {
+    if (!arg.includes('icu')) continue;
+    options.push(arg);
+    const next = args[at + 1];
+    if (!arg.includes('=') && next !== undefined && !next.startsWith('-')) {
+      options.push(next);
+    }
+  }
+  return options;
+}
+
+/**
  * What a kept answer depends on besides the files it is stamped by, or null
  * where none is kept: off Linux, where ICU reads system settings; with a TZ
  * that is a path or a POSIX rule; and where the localtime file is not a link
@@ -81,10 +101,10 @@ export function intlKey({
     return null;
   }
   if (!link.includes('/zoneinfo/')) return null;
-  const icuFlags = [
+  const icuFlags = icuOptions([
     ...execArgv,
     ...(env.NODE_OPTIONS ?? '').split(/\s+/u),
-  ].filter(flag => flag.includes('icu'));
+  ]);
   return [
     platform,
     arch,

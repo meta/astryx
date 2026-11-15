@@ -216,6 +216,15 @@ describe('intlDefaults', () => {
     expect(
       intl.intlKey(host({NODE_OPTIONS: '--icu-data-dir=/elsewhere'})),
     ).not.toEqual(base);
+    // The folder an ICU option names with a space, not `=`.
+    expect(
+      intl.intlKey({...host(), execArgv: ['--icu-data-dir', '/elsewhere']}),
+    ).not.toEqual(
+      intl.intlKey({...host(), execArgv: ['--icu-data-dir', '/other']}),
+    );
+    expect(
+      intl.intlKey(host({NODE_OPTIONS: '--icu-data-dir /elsewhere'})),
+    ).not.toEqual(intl.intlKey(host({NODE_OPTIONS: '--icu-data-dir /other'})));
     expect(intl.intlKey({...host(), arch: 'other'})).not.toEqual(base);
   });
 
