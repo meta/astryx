@@ -350,9 +350,42 @@ export function docsTreeEntries(tmp) {
 }
 
 /**
+ * Whether a kept file holds what theme build checks a theme against in
+ * Core's component docs, not a catalog.
+ * @param {string} file
+ * @returns {boolean}
+ */
+export function themeFactsEntry(file) {
+  try {
+    const {key} = readKept(file);
+    return JSON.parse(key)[5] === 'core-theme-facts';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The kept theme build facts from Core's docs in a temp folder's cache folder.
+ * @param {string} tmp
+ * @returns {Map<string, number>} name to inode
+ */
+export function themeFactsEntries(tmp) {
+  const dir = path.join(tmp, CACHE_NAME);
+  /** @type {Map<string, number>} */
+  const out = new Map();
+  if (!fs.existsSync(dir)) return out;
+  for (const name of fs.readdirSync(dir)) {
+    const file = path.join(dir, name);
+    if (themeFactsEntry(file)) out.set(name, fs.statSync(file).ino);
+  }
+  return out;
+}
+
+/**
  * The kept catalogs in a temp folder's cache: each file's inode and time
  * (a value derived from a catalog, search's entry table, is not a catalog;
- * nor is the CLI's own docs tree, which every project shares).
+ * nor is the CLI's own docs tree, which every project shares, nor theme
+ * build's facts from Core's docs).
  * @param {string} tmp
  * @returns {Map<string, {ino: number, mtimeMs: number}>}
  */
@@ -367,7 +400,8 @@ export function entries(tmp) {
       derivedEntry(file) ||
       issuesEntry(file) ||
       templatesEntry(file) ||
-      docsTreeEntry(file)
+      docsTreeEntry(file) ||
+      themeFactsEntry(file)
     )
       continue;
     const {ino, mtimeMs} = fs.statSync(file);

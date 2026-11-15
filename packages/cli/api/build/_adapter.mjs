@@ -21,6 +21,7 @@
  */
 
 import fs from 'node:fs';
+import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 import {discoverTemplates} from '../template/template.mjs';
@@ -29,6 +30,8 @@ import {findCoreDir, requireCoreDir} from '../../foundation/fs/paths.mjs';
 import {persistedDerived} from '../../foundation/fs/gather-cache.mjs';
 import {analyzeTemplateNeeds} from '../../foundation/discovery/template-needs.mjs';
 import {extractComponents} from '../../foundation/discovery/template-adapter.mjs';
+import {templateDestination} from '../../foundation/discovery/template-destination.mjs';
+import {quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 import {isWordModel} from './kit/word-model.mjs';
 
 /**
@@ -50,6 +53,7 @@ export {withListingCache} from '../../foundation/fs/listing-cache.mjs';
  * @property {string[]} keywords The ideas the page serves, as its own descriptor names them; empty when it declares none.
  * @property {string} filePath Absolute path to the template source file on disk.
  * @property {string[]} components The components its page composes, read from its source on first use; empty when the source cannot be read.
+ * @property {boolean} hidden The template's own `isHiddenFromOverview`: kept off the gallery, so never taken as the app shell.
  */
 
 /**
@@ -113,6 +117,7 @@ export async function loadTemplates(cwd) {
           package: t.package ?? '@astryxdesign/core',
           category: t.category || '',
           keywords: t.keywords ?? [],
+          hidden: t.hidden === true,
           filePath: t.filePath,
           // The id `template()` resolves back to this entry: an active
           // replacement owns the Core id it names, so that id selects it.
@@ -339,6 +344,21 @@ export function templateSetupNotes(template, cwd) {
     // Best-effort: a read failure does not break the recommendation.
     return [];
   }
+}
+
+/**
+ * Where a page template goes in the project where build ran, quoted for a
+ * printed command: the path `astryx template` names for it from the
+ * project's layout (in a Next app, the App Router folder). Null when that
+ * folder has no package.json, so no project layout is known.
+ *
+ * @param {string} id the template's own id
+ * @param {string} cwd the folder build ran in
+ * @returns {string | null}
+ */
+export function pageDestination(id, cwd) {
+  if (!fs.existsSync(path.join(cwd, 'package.json'))) return null;
+  return quoteCommandArgument(templateDestination(cwd, 'page', id));
 }
 
 /**

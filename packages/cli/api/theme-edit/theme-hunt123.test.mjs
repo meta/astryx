@@ -12,7 +12,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
@@ -20,6 +20,14 @@ import {
 } from '../../test-utils/linked-fixture.mjs';
 import {FIXTURE_PACKAGES} from '../../test-utils/base-theme-fixture.mjs';
 import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
+
+// The assertions are about settings, builds, notes and lines, not rendered
+// pages: a render costs seconds, so the pages are written by the stand-in.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** @type {string} */
 let cwd;
@@ -241,14 +249,19 @@ describe('wrong writes that are no longer accepted', () => {
     'a swap swaps each mode',
     async test => {
       needsBases(test);
-      expect(
-        (await answer('swap the accent and danger colors', 'b')).first,
-      ).toEqual([
+      // (Every color of each role swaps, text and icons too.)
+      const {first} = await answer('swap the accent and danger colors', 'b');
+      expect(first.slice(0, 2)).toEqual([
         "set b accent '#821b00'",
         "set b danger '#225bff'",
-        "set b --color-accent '#ffc5b5' --mode dark",
-        "set b --color-error '#fdee8c' --mode dark",
       ]);
+      expect(first).toEqual(
+        expect.arrayContaining([
+          "set b --color-accent '#ffc5b5' --mode dark",
+          "set b --color-error '#fdee8c' --mode dark",
+          "set b --color-text-error '#fdee8c' --mode dark",
+        ]),
+      );
     },
     T,
   );
@@ -295,10 +308,13 @@ describe('asks it used to drop', () => {
       expect(
         (await answer('swap the accent and danger colors in dark mode', 'b'))
           .first,
-      ).toEqual([
-        "set b --color-accent '#ffc5b5' --mode dark",
-        "set b --color-error '#fdee8c' --mode dark",
-      ]);
+      ).toEqual(
+        expect.arrayContaining([
+          "set b --color-accent '#ffc5b5' --mode dark",
+          "set b --color-error '#fdee8c' --mode dark",
+          "set b --color-text-accent '#ffb09b' --mode dark",
+        ]),
+      );
     },
     T,
   );

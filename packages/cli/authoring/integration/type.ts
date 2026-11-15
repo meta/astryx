@@ -38,6 +38,20 @@ export interface AstryxIntegration {
    *  lower-kebab theme directory contains a source module and mandatory
    *  same-stem, strongly typed `.doc.mjs` descriptor. */
   themes?: string;
+  /** The one provider component that wires every theme under `themes` into
+   *  an app, when the package wires its themes itself rather than through
+   *  Astryx's `Theme`. `export` is the component's named export and `from`
+   *  the module specifier an app imports it from. Doctor counts a theme as
+   *  wired when the app renders that component; `theme list` names it. Each
+   *  theme's stylesheet stays the one its package exports for it. */
+  themeProvider?: {
+    export: string;
+    from: string;
+    /** The provider's prop that takes a theme object, when it takes one. */
+    themeProp?: string;
+    /** The provider's prop that takes a color mode; only with themeProp. */
+    modeProp?: string;
+  };
   /** Experimental contribution roots (spec:AST-017 FR27).
    *  @experimental Their shape may change or be removed in a patch release. */
   experimental?: {

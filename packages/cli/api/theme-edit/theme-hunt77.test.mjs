@@ -84,7 +84,9 @@ describe('pictures and the see line', () => {
   it('after undo, the see line names show --png, never the undo again', async () => {
     await themeEditSet('t', 'corners', 'pill', {cwd});
     const r = /** @type {any} */ (await themeEditUndo('t', {cwd}));
-    expect(r.data.see).toMatch(/editor show t --png takes pictures/);
+    expect(r.data.see).toMatch(
+      /editor show t --png writes themes\/t\/preview\.png/,
+    );
     expect(r.data.see).not.toMatch(/run it with --png/);
   }, 240_000);
 
@@ -186,7 +188,8 @@ describe('the in-app preview', () => {
       const stale = r.data.previewStale.join('\n');
       expect(stale).toContain(path.join(cwd, 'src/app/theme-preview'));
       expect(stale).not.toMatch(/(^|[\s(,])src\/app\//);
-      expect(r.data.see).toContain(path.join(cwd, 'themes/t/preview.html'));
+      // With pictures taken, see names them, by the same full path.
+      expect(r.data.see).toContain(path.join(cwd, 'themes/t/preview.png'));
     } finally {
       fs.chmodSync(dir, 0o755);
       fs.chmodSync(page, 0o644);

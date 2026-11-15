@@ -28,11 +28,16 @@ import {
   renderPage,
   RenderError,
 } from '../../foundation/render/render-page.mjs';
-import {SAMPLE_PAGE, elementNames, pageSource} from './_catalog.mjs';
+import {
+  SAMPLE_PAGE,
+  SAMPLE_SOURCE,
+  elementNames,
+  pageSource,
+} from './_catalog.mjs';
 import {removeOnStop} from '../../foundation/fs/stop-cleanup.mjs';
 
-/** Bump when the shape of the cached part data changes. */
-const PART_DATA_VERSION = 12;
+/** Bump when the shape of the cached part data, or which parts it reaches, changes. */
+const PART_DATA_VERSION = 19;
 
 /**
  * Flags that change what a component does or whether it shows, not how it
@@ -55,6 +60,7 @@ const LIFECYCLE_FLAGS = new Set([
  * @property {string[]} contains - parts rendered inside it
  * @property {string[]} [tags] - the elements it is rendered as (`tr` for a table row)
  * @property {string[]} [innerCorners] - the radius tokens of the corners Core draws by place on the parts directly inside it (a button group's end buttons)
+ * @property {boolean} [media] - Core's media surface sits inside it (a toast's inverted surface), setting the text tokens of what it holds from --color-on-dark and --color-on-light
  * @property {Record<string, Record<string, string>>} [inline] - state ('' for always) -> property -> the token Core paints it with as an inline style, which no theme rule can replace
  */
 
@@ -68,7 +74,8 @@ const LIFECYCLE_FLAGS = new Set([
 
 /**
  * A sample value for a required prop the doc declares, from its type: the
- * component's name for text, false for a flag, the first value of a union.
+ * component's name for text, false for a flag, the first value of a union,
+ * else null where the type allows it.
  * Undefined for a type with no plain sample, such as a function.
  * @param {string} name
  * @param {string} type
@@ -85,9 +92,14 @@ function sampleOf(name, type) {
   if (t === 'string' || /ReactNode$/.test(t)) return name;
   if (t === 'boolean') return false;
   if (t === 'number') return 1;
+  // A search source: the page's sample one, a few fixed items.
+  if (/^SearchSource\b/.test(t)) return SAMPLE_SOURCE;
   const words = literals(t);
   if (words.length) return words[0];
   if (/^\d+(\s*\|\s*\d+)*$/.test(t)) return Number(t.split('|')[0]);
+  // A value the type lets be null (a file input's chosen file): none
+  // chosen, when nothing plainer stands for it.
+  if (/(^|\|)\s*null\s*(\||$)/.test(type)) return null;
   return undefined;
 }
 
@@ -145,14 +157,30 @@ export function demoProps(project, name) {
     for (const [p, d] of Object.entries(info.props ?? {})) {
       if (!d.required || /^on[A-Z]/.test(p)) continue;
       if (p === 'children' && d.slots.length) continue;
-      const v = sampleOf(name, d.type);
+      // A value the type allows to be null (`T | null`, nothing chosen yet)
+      // with no plain sample is null.
+      const v =
+        sampleOf(name, d.type) ??
+        (/(^|\|)\s*null\s*($|\|)/.test(d.type) ? null : undefined);
       // A required prop with no plain sample, such as a render function:
       // the component cannot be shown from its doc alone.
       if (v === undefined) return null;
       props[p] = v;
     }
   const kids = info.props?.children;
-  const slot = kids?.slots?.[0];
+  // A part whose children are required and whose doc suggests none (a
+  // dropdown menu's submenu, whose children are its flyout's rows) gets
+  // three of its parent's item part (DropdownMenuItem), as a group gets its
+  // slot's: drawn open, an empty flyout shows nothing of the theme.
+  const parentItem =
+    kids?.required && !kids.slots?.length && info.subComponentOf
+      ? `${info.subComponentOf}Item`
+      : null;
+  const slot =
+    kids?.slots?.[0] ??
+    (parentItem && project.components[parentItem]?.props?.label
+      ? {__element: parentItem, props: {label: 'Item'}}
+      : undefined);
   if (!('children' in props) && kids) {
     if (slot?.__element && (kids.required || slot.__element.startsWith(name))) {
       if (info.props.value && !('value' in props) && slot.props?.value != null)
@@ -229,7 +257,16 @@ export function catalogVariants(project, name, cap, opts = {}) {
   const base = info.opens ? opened(demo) : demo;
   const values = info.targets[0]?.values ?? {};
   const variants = [{label: '', props: base}];
-  for (const p of ['variant', 'status', 'color'])
+  // Every prop that changes the look, one sample per value (a variant, a
+  // status, a toast's type, an avatar's shape); a size is read at the one
+  // size drawn.
+  // (A number scale, a heading's level, is drawn below.)
+  for (const p of Object.keys(values).filter(
+    k =>
+      !/^(size|density|elevation)$/.test(k) &&
+      info.props?.[k] &&
+      !/^\s*\d+(\s*\|\s*\d+)*\s*$/.test(info.props[k].type ?? ''),
+  ))
     for (const v of values[p] ?? [])
       variants.push({
         label: v,
@@ -293,7 +330,7 @@ export function catalogItems(project) {
   /** @type {import('./_catalog.mjs').CatalogItem[]} */
   const items = [];
   for (const name of Object.keys(project.components))
-    for (const v of catalogVariants(project, name, 16))
+    for (const v of catalogVariants(project, name, 24))
       items.push({
         name,
         label: v.label,
@@ -386,9 +423,17 @@ function sweepRenders(themes) {
  * @param {string} file name inside the render folder
  * @param {string} source
  * @param {Array<{name: string, from: string}>} [extra] files copied beside it
+ * @param {{openLayers?: boolean}} [opts] `openLayers`: the overlays it shows
+ *   or opens are drawn and added after its markup
  * @returns {Promise<{html: string, markup: string}>}
  */
-export async function renderGenerated(project, file, source, extra = []) {
+export async function renderGenerated(
+  project,
+  file,
+  source,
+  extra = [],
+  opts = {},
+) {
   const dir = renderDir(project);
   // A lookup in an app with no themes must not leave a themes/ folder.
   const themes = path.dirname(dir);
@@ -424,6 +469,7 @@ export async function renderGenerated(project, file, source, extra = []) {
     const page = await renderPage(entry, {
       title: file.replace(/\.[^.]+$/, ''),
       timeoutMs: EDITOR_RENDER_MS,
+      ...(opts.openLayers ? {openLayers: true} : {}),
     });
     // The page is the same whichever command rendered it: the folder's
     // per-process name never reaches the file.
@@ -432,6 +478,20 @@ export async function renderGenerated(project, file, source, extra = []) {
     const end = body.indexOf('<script type=');
     return {html, markup: end >= 0 ? body.slice(0, end) : body};
   } catch (e) {
+    // A theme file too large for a page to carry is the file's size, not
+    // React: it is named with its size and where it is.
+    if (e instanceof RenderError && e.code === 'ERR_RENDER_ASSET_TOO_LARGE') {
+      const d = /** @type {{file?: string, bytes?: number, limit?: number}} */ (
+        e.detail ?? {}
+      );
+      throw new AstryxError(
+        d.file && d.bytes && d.limit
+          ? `${path.relative(project.cwd, d.file).split(path.sep).join('/')} is ${(d.bytes / 1048576).toFixed(1)} MB, more than the ${d.limit / 1048576} MB a preview page carries per file: use a smaller copy of it (the app itself can keep the large one).`
+          : e.message,
+        [],
+        ERROR_CODES.ERR_RENDER_ASSET_TOO_LARGE,
+      );
+    }
     if (e instanceof RenderError) {
       const missing = e.code === 'ERR_RENDER_MISSING_DEPENDENCY';
       // A render stopped by its time limit on the editor's own page is the
@@ -647,10 +707,14 @@ function addInlineStatePaint(project, map) {
 async function buildPartData(project) {
   const {items, imports} = catalogItems(project);
   const all = [...items, {name: 'sample-page', label: '', tree: SAMPLE_PAGE}];
+  // Overlays (a tooltip, a menu's list) are drawn open too: the server
+  // markup holds none of them.
   const {markup} = await renderGenerated(
     project,
     'catalog.mjs',
     pageSource({items: all, imports, theme: null, layout: 'catalog'}),
+    [],
+    {openLayers: true},
   );
   let css = '';
   try {
@@ -662,7 +726,32 @@ async function buildPartData(project) {
     // No stylesheet: every part reads nothing.
   }
   const tokens = new Set(Object.keys(project.core.tokenDefaults ?? {}));
-  const result = walkMarkup(markup, declarations(css), tokens, project.target);
+  // The overlays drawn open add the parts the server markup cannot hold (a
+  // tooltip, a menu's items); a part the page shows already keeps what it
+  // reads there, never a look another component gives it inside an overlay
+  // (a dialog's round close button).
+  const at = markup.indexOf('<div data-astryx-open-layers=');
+  const decls = declarations(css);
+  const result = walkMarkup(
+    at < 0 ? markup : markup.slice(0, at),
+    decls,
+    tokens,
+    project.target,
+  );
+  if (at >= 0) {
+    const layers = walkMarkup(markup.slice(at), decls, tokens, project.target);
+    const added = Object.keys(layers.map).filter(k => !(k in result.map));
+    for (const k of added) result.map[k] = layers.map[k];
+    const seen = new Set(result.pairs.map(x => JSON.stringify(x)));
+    for (const x of layers.pairs)
+      if (
+        [x.text, x.fg.target, x.bg.target].some(t =>
+          added.includes(String(t)),
+        ) &&
+        !seen.has(JSON.stringify(x))
+      )
+        result.pairs.push(x);
+  }
   addInlineStatePaint(project, result.map);
   addIndicatorRings(project, result.map);
   return {
@@ -705,6 +794,88 @@ export function coreFallback(project, name) {
     }
   }
   return null;
+}
+
+/** @type {Map<string, string>} */
+const coreCssCache = new Map();
+
+/**
+ * Core's stylesheet text, read once; empty with no stylesheet.
+ * @param {any} project
+ * @returns {string}
+ */
+function coreCss(project) {
+  /** @type {string} */
+  let file;
+  try {
+    file = project.req.resolve('@astryxdesign/core/astryx.css');
+  } catch {
+    return '';
+  }
+  let css = coreCssCache.get(file);
+  if (css == null) {
+    try {
+      css = fs.readFileSync(file, 'utf8');
+    } catch {
+      css = '';
+    }
+    coreCssCache.set(file, css);
+  }
+  return css;
+}
+
+/**
+ * The properties a keyframes rule of Core's animates (a tooltip's entrance
+ * animates opacity and transform), and the transform functions it uses.
+ * Empty when Core has no such rule.
+ * @param {any} project
+ * @param {string} name
+ * @returns {{props: string[], transforms: string[]}}
+ */
+export function coreKeyframes(project, name) {
+  const css = coreCss(project);
+  const at = css.indexOf(`@keyframes ${name}{`);
+  if (at < 0) return {props: [], transforms: []};
+  let depth = 0;
+  let end = at;
+  for (let j = css.indexOf('{', at); j < css.length; j++) {
+    if (css[j] === '{') depth++;
+    else if (css[j] === '}' && --depth === 0) {
+      end = j;
+      break;
+    }
+  }
+  const body = css.slice(at, end);
+  return {
+    props: [
+      ...new Set([...body.matchAll(/[{;]\s*([a-z-]+)\s*:/g)].map(m => m[1])),
+    ].filter(p => p !== 'animation-timing-function'),
+    transforms: [
+      ...new Set([...body.matchAll(/\b([a-z]+[XYZ3d]*)\(/g)].map(m => m[1])),
+    ].filter(f => /^(?:translate|scale|rotate|skew)/.test(f)),
+  };
+}
+
+/**
+ * Every value Core's stylesheet gives a variable of its own (a card's
+ * `--_card-elevation` is a shared shadow at each elevation; its
+ * `--_card-ring` is a colored ring), deduplicated. Empty with no
+ * stylesheet.
+ * @param {any} project
+ * @param {string} name
+ * @returns {string[]}
+ */
+export function coreVarValues(project, name) {
+  const css = coreCss(project);
+  if (!css) return [];
+  const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return [
+    ...new Set(
+      [...css.matchAll(new RegExp(`${esc}\\s*:\\s*([^;}]+)`, 'g'))].map(m =>
+        m[1].trim(),
+      ),
+    ),
+  ];
 }
 
 /** @type {Map<string, Set<string>>} */
@@ -777,6 +948,30 @@ export function multipliedTokens(project) {
 }
 
 /**
+ * The stylesheet without its forced-colors blocks: what Core draws for a
+ * high-contrast system mode (a button's 1px ButtonText border) is no look
+ * a theme gives, so the part data never reads it as the part's.
+ * @param {string} css
+ */
+function withoutForcedColors(css) {
+  let out = '';
+  let i = 0;
+  const re = /@media\s*\(\s*forced-colors\s*:\s*active\s*\)\s*\{/g;
+  for (let m = re.exec(css); m; m = re.exec(css)) {
+    out += css.slice(i, m.index);
+    let depth = 1;
+    let j = m.index + m[0].length;
+    for (; j < css.length && depth; j++) {
+      if (css[j] === '{') depth++;
+      else if (css[j] === '}') depth--;
+    }
+    i = j;
+    re.lastIndex = j;
+  }
+  return out + css.slice(i);
+}
+
+/**
  * Atomic class -> its declarations, with the condition (pseudo-class,
  * attribute) each one applies under.
  * @param {string} css
@@ -785,7 +980,7 @@ export function multipliedTokens(project) {
 export function declarations(css) {
   /** @type {Map<string, Array<{prop: string, value: string, cond: string}>>} */
   const decls = new Map();
-  for (const m of css.matchAll(
+  for (const m of withoutForcedColors(css).matchAll(
     /\.(x[a-z0-9]+)((?:\.x[a-z0-9]+|[:[][^{]*)?)\{([^{}]*)\}/g,
   )) {
     const [, cls, rest, body] = m;
@@ -862,12 +1057,21 @@ function resolvePrivate(v, env, tokens, depth = 0) {
  * @returns {{map: Record<string, PartRecord>, pairs: TextPair[]}}
  */
 export function walkMarkup(html, decls, tokens, targets = new Map()) {
-  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, tags: Set<string>, innerCorners: Set<string>}>} */
+  /** @type {Record<string, {own: Record<string, {tokens: Record<string, Set<string>>, values: Set<string>}>, at: Record<string, Record<string, string>>, inside: Record<string, Set<string>>, attrs: Record<string, Set<string>>, contains: Set<string>, tags: Set<string>, innerCorners: Set<string>, media: boolean}>} */
   const map = {};
   /** @type {Array<{env: Record<string, string>, target: string | null, fg: PaintSide | null, bg: PaintSide | null}>} */
   const stack = [{env: {}, target: null, fg: null, bg: null}];
   /** @type {Map<string, TextPair>} */
   const pairs = new Map();
+  /**
+   * Text drawn by a part with its paint: one pair per part, text and
+   * ground.
+   * @param {string} target @param {PaintSide} fg @param {PaintSide} bg @param {string} sample
+   */
+  const addPair = (target, fg, bg, sample) => {
+    const k = `${target}|${fg.target}:${fg.tokens.join('+') || fg.raw}|${bg.target}:${bg.tokens.join('+') || bg.raw}`;
+    pairs.set(k, {text: target, fg, bg, sample: sample.slice(0, 30)});
+  };
   for (const m of html.matchAll(
     /([^<]+)|<(\/?)([a-zA-Z][a-zA-Z0-9-]*)([^>]*?)(\/?)>/g,
   )) {
@@ -875,15 +1079,8 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
     if (text !== undefined) {
       const top = stack[stack.length - 1];
       const t = text.trim();
-      if (t && top.target && top.fg && top.bg && !/^skip to/i.test(t)) {
-        const k = `${top.target}|${top.fg.target}:${top.fg.tokens.join('+') || top.fg.raw}|${top.bg.target}:${top.bg.tokens.join('+') || top.bg.raw}`;
-        pairs.set(k, {
-          text: top.target,
-          fg: top.fg,
-          bg: top.bg,
-          sample: t.slice(0, 30),
-        });
-      }
+      if (t && top.target && top.fg && top.bg && !/^skip to/i.test(t))
+        addPair(top.target, top.fg, top.bg, t);
       continue;
     }
     if (close) {
@@ -943,10 +1140,20 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         contains: new Set(),
         tags: new Set(),
         innerCorners: new Set(),
+        media: false,
       });
       if (ownsTarget)
         for (const [k, v] of Object.entries(dataAttrs))
           (T.attrs[k] ??= new Set()).add(v);
+      // Core's media surface inside the part (a toast's inverted surface):
+      // it sets the text tokens of what it holds from the on-dark color
+      // where it is dark and the on-light color where it is light (Core's
+      // onMediaTokens), so the part's text reads one of them in each mode.
+      else if (/\bdata-astryx-media="/.test(attrs)) {
+        T.media = true;
+        for (const t of ['--color-on-dark', '--color-on-light'])
+          if (tokens.has(t)) (T.inside[t] ??= new Set()).add('color');
+      }
       const cond0 = [
         ...Object.entries(dataAttrs).map(([k, v]) => `${k}=${v}`),
         ...context,
@@ -987,6 +1194,34 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
         const t = [...expand(d.value, env, tokens)];
         if (t.length || !/transparent|^\s*inherit\s*$/i.test(d.value))
           bg = {target, tokens: t, raw: t.length ? null : d.value};
+      }
+    }
+    // An input's text is its value, and its placeholder where it has none:
+    // attributes, not text nodes, drawn in the input's text color (the
+    // placeholder in its own ::placeholder color) on the ground it sits on.
+    if (tag.toLowerCase() === 'input' && target && fg && bg) {
+      const attr = (/** @type {string} */ n) =>
+        new RegExp(`\\b${n}="([^"]*)"`).exec(attrs)?.[1]?.trim() ?? '';
+      const type = attr('type') || 'text';
+      if (
+        !/^(checkbox|radio|hidden|range|color|file|submit|button|reset|image)$/.test(
+          type,
+        )
+      ) {
+        if (attr('value')) addPair(target, fg, bg, attr('value'));
+        const ph = own.find(
+          d => d.prop === 'color' && /placeholder/.test(d.cond ?? ''),
+        );
+        if (attr('placeholder') && ph) {
+          const t = [...expand(ph.value, env, tokens)];
+          addPair(
+            target,
+            {target, tokens: t, raw: t.length ? null : ph.value},
+            bg,
+            attr('placeholder'),
+          );
+        } else if (attr('placeholder') && !attr('value'))
+          addPair(target, fg, bg, attr('placeholder'));
       }
     }
     for (const t of ownsTarget ? named.map(c => c.slice(7)) : [])
@@ -1035,6 +1270,7 @@ export function walkMarkup(html, decls, tokens, targets = new Map()) {
       contains: [...v.contains],
       tags: [...v.tags],
       innerCorners: [...v.innerCorners],
+      ...(v.media ? {media: true} : {}),
     };
   }
   return {map: out, pairs: [...pairs.values()]};

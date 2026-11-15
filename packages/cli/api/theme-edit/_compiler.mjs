@@ -108,6 +108,45 @@ export function makeCompiler(project, parts) {
     return null;
   }
 
+  /** @type {Map<string, boolean>} */
+  const paintsMemo = new Map();
+  /**
+   * Whether a visual prop changes a color the part paints: two of its
+   * rules that differ only in that prop's value give a color property
+   * different values.
+   * @param {string} target @param {string} prop
+   */
+  function paintsBy(target, prop) {
+    const id = `${target}|${prop}`;
+    const known = paintsMemo.get(id);
+    if (known != null) return known;
+    let found = false;
+    for (const [p, rules] of Object.entries(MAP[target]?.at ?? {})) {
+      if (!/(^|-)color$|^background(-color)?$|^fill$|^stroke$/.test(p))
+        continue;
+      /** @type {Map<string, Set<string>>} */
+      const byRest = new Map();
+      for (const [key, value] of Object.entries(rules)) {
+        const [attrs, ...css] = key.split(' ');
+        const list = attrs.includes('=') ? attrs.split(',') : [];
+        if (!list.some(kv => kv.startsWith(`${prop}=`))) continue;
+        const rest = [
+          ...list.filter(kv => !kv.startsWith(`${prop}=`)),
+          ...css,
+        ].join(' ');
+        const seen = byRest.get(rest) ?? new Set();
+        seen.add(String(value));
+        byRest.set(rest, seen);
+      }
+      if ([...byRest.values()].some(v => v.size > 1)) {
+        found = true;
+        break;
+      }
+    }
+    paintsMemo.set(id, found);
+    return found;
+  }
+
   /** A condition, kept to what a person can act on. @param {string} target @param {string} cond */
   function shortCond(target, cond) {
     if (cond === 'always') return '';
@@ -125,10 +164,11 @@ export function makeCompiler(project, parts) {
         // part in (the part data's aria context conditions); none is the
         // part at rest.
         if (!t?.props.includes(k) || t.states.includes(k)) return true;
-        return (
-          ['variant', 'status', 'tone', 'color'].includes(k) &&
-          (attrs[k]?.length ?? 0) > 1
-        );
+        // A look prop drawn in more than one value that changes a color
+        // the part paints (a variant, a status, a toast's type) tells its
+        // renders apart; one that changes only a size or a weight (a
+        // heading's level) is read as the part, as a size the render used.
+        return (attrs[k]?.length ?? 0) > 1 && paintsBy(target, k);
       },
     );
     const cssPart = (attrPart.includes('=') ? css : [attrPart, ...css])
@@ -146,6 +186,32 @@ export function makeCompiler(project, parts) {
    * @returns {Read[]}
    */
   function partReads(target, group) {
+    // The part data never changes while the compiler lives, and the checks
+    // ask for the same part many times in one command: each answer is made
+    // once, and handed out frozen so no caller can change it for the next.
+    const key = `${target}\0${group ?? ''}`;
+    const known = readsOf.get(key);
+    if (known) return known;
+    const reads = freshReads(target, group);
+    for (const r of reads) {
+      Object.freeze(r.props);
+      Object.freeze(r.when);
+      Object.freeze(r);
+    }
+    Object.freeze(reads);
+    readsOf.set(key, reads);
+    return reads;
+  }
+  /** @type {Map<string, Read[]>} */
+  const readsOf = new Map();
+
+  /**
+   * {@link partReads}, made anew.
+   * @param {string} target
+   * @param {string | null} group
+   * @returns {Read[]}
+   */
+  function freshReads(target, group) {
     const own = MAP[target]?.own ?? {};
     /** @type {Map<string, {token: string, props: Set<string>, when: Set<string>}>} */
     const out = new Map();
@@ -501,12 +567,18 @@ export function makeCompiler(project, parts) {
       if (!under || !top) return null;
       return [compositeOver(top, alphaOf(fg), under), under];
     };
-    /** @type {Array<{part: string, mode: string, ratio: number, sample: string, fg: string, bgPart: string | null, bg: string, over: string | null}>} */
+    /** @type {Array<{part: string, mode: string, ratio: number, sample: string, fg: string, fgToken: string | null, textPart: string | null, when: string | null, bgPart: string | null, bg: string, ground: [number, number, number], over: string | null, pair: any}>} */
     const out = [];
     const seen = new Set();
     /** @type {Set<string>} */
     const unchecked = new Set();
+    // A census pair the caller measures again per variant (`replaces`) is
+    // measured only as those.
+    const replaced = new Set(
+      extra.map((/** @type {any} */ x) => x.replaces).filter(Boolean),
+    );
     for (const p of [...parts.pairs, ...extra]) {
+      if (replaced.has(p)) continue;
       if (
         p.fg.target !== p.bg.target &&
         p.bg.target &&
@@ -577,7 +649,10 @@ export function makeCompiler(project, parts) {
           baseBeneath,
         );
         if (was && ratio(was[0], was[1]) <= r + 0.05) continue;
-        const key = `${p.text}|${fg}|${bg}|${beneath}|${m}`;
+        // Pairs alike in color are one problem only when they read the same
+        // token on the same part: text on another token or on another part
+        // is another fix, and shows as they part ways.
+        const key = `${p.text}|${p.fg.tokens[0] ?? ''}|${p.bg.target ?? ''}|${fg}|${bg}|${beneath}|${m}`;
         if (seen.has(key)) continue;
         seen.add(key);
         out.push({
@@ -604,12 +679,19 @@ export function makeCompiler(project, parts) {
               : bg !== baseValue(p, 'bg', m)
                 ? String(bg)
                 : (p.bg.tokens[0] ?? String(bg)),
+          // What a fix needs: the token the text reads, the part that draws
+          // it, the variant it was measured in, and the opaque color the
+          // text sits on.
+          fgToken: p.fg.tokens[0] ?? null,
+          textPart: p.fg.target ?? null,
+          when: /** @type {any} */ (p).when ?? null,
+          ground: pair[1],
+          pair: p,
         });
       }
     }
     return {
-      problems: out.slice(0, 8),
-      more: Math.max(0, out.length - 8),
+      problems: out,
       unchecked: [...unchecked],
     };
   }

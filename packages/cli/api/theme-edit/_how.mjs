@@ -593,10 +593,17 @@ async function answer(subject, options, cwd) {
       return tokenAnswer(ctx, env, t, tok, unknown, themeFields);
     // "what does spacing more do": the dial's own lookup, its values and
     // what each does.
+    // ("in dark mode" names a mode to read, never the mode dial; a dial
+    // word that names a part's thing, "the focus ring of buttons", is the
+    // part's.)
     const dial = Object.keys(DIALS).find(d =>
-      new RegExp(`\\b${d}\\b`, 'i').test(t.replace(/--[a-z0-9-]+/gi, ' ')),
+      new RegExp(`\\b${d}\\b`, 'i').test(
+        t
+          .replace(/--[a-z0-9-]+/gi, ' ')
+          .replace(/\b(?:in|for)\s+(?:the\s+)?(?:dark|light)\s+mode\b/gi, ' '),
+      ),
     );
-    if (dial && !/\b(on|for)\s+(the\s+)?[a-z]+s?\b/i.test(t))
+    if (dial && !/\b(on|for|of)\s+(the\s+)?[a-z]+s?\b/i.test(t))
       return {...(await answer(dial, options, cwd)), subject: t};
     const q = draftAnswer(ctx, env, t);
     const groups = q.aspects.filter(a => Object.hasOwn(GROUPS, a));
@@ -637,6 +644,14 @@ async function answer(subject, options, cwd) {
       };
   }
   const h = draftAnswer(ctx, env, t);
+  // The question guard: a question with no clause that asks for a change
+  // never writes. Decided once, for the whole question.
+  if (questionOnly(t))
+    for (const d of h.drafts)
+      if (d.options.some(o => o.length)) {
+        d.options = [];
+        d.text = `${d.text} (a question: nothing is changed; ask for the change to get its command)`;
+      }
   const results = finish(env, h.drafts);
   const empty = !results.some(r => r.commands.length);
   return {
@@ -728,6 +743,45 @@ function insteadOf(env, d, refused) {
 }
 
 /**
+ * Whether a question only asks (how, what, which, is, does …) and has no
+ * clause that asks for a change: "how heavy is the text" asks; "how heavy
+ * are headings - set them bold", "what color is the page? make it white"
+ * and "can you make cards rounder?" ask for a change.
+ * @param {string} q
+ */
+export function questionOnly(q) {
+  const t = String(q).toLowerCase().trim();
+  // ("why not square buttons", "what about no borders": a suggestion is
+  // an ask.)
+  if (
+    !/^(?:how|what|what's|whats|which|is|are|does|do|did|why|where)\b/.test(
+      t,
+    ) ||
+    /^(?:why not|what about|how about|what if)\b/.test(t) ||
+    // ("why are my headings not bold": a complaint is an ask.)
+    /^why\b.*\b(?:not|n'?t)\b/.test(t)
+  )
+    return false;
+  // A verb that asks for a change anywhere after the question's first
+  // word ("whats the padding on cards make it 12").
+  if (
+    /\s(?:make|set|turn|give|change|add|remove|put|round|darken|lighten|increase|decrease|bump|apply)\s+(?:it|them|this|that|the|all|every|my|our|\w+s)\b/.test(
+      t,
+    )
+  )
+    return false;
+  if (/\b(?:can|could|would|will) (?:you|we|i)\b/.test(t)) return false;
+  // A clause after the question that does not ask again ("… underline
+  // them", "… - set them bold") is the change it asks for.
+  const QUESTION_LEAD =
+    /^(?:how|what|what's|whats|which|is|are|does|do|did|why|where|who|it|its|it's|they|the|a|an|my|our|or|and|i|im|i'm|that|this)\b/;
+  return !t
+    .split(/[?;!.]+|\s[-–—]+\s|,\s*/)
+    .slice(1)
+    .some(seg => seg.trim() && !QUESTION_LEAD.test(seg.trim()));
+}
+
+/**
  * Check each draft's commands and keep what passes; a draft whose commands
  * are all refused says why, and points to the lookup that helps.
  * @param {import('./_how-commands.mjs').HowTheme} env
@@ -762,12 +816,33 @@ function finish(env, drafts) {
       const intent = d.intent;
       /** @type {string[]} */
       const unmet = [];
-      d.options = d.options.filter(o => {
+      d.options = d.options.flatMap(o => {
         const why = env.measure(o, intent);
+        if (why) {
+          // A change written per mode that goes the wrong way in one mode
+          // only ("warning text darker": the dark half lighter is what
+          // darker means against a dark page): the other mode's half is
+          // kept, and the dropped half is named.
+          const modes = new Set(o.map(st => st.mode).filter(Boolean));
+          if (modes.size === 2 && o.every(st => st.mode))
+            for (const m of /** @type {const} */ (['light', 'dark'])) {
+              const half = o.filter(st => st.mode !== m);
+              if (env.measure(half, intent)) continue;
+              for (const st of o) (st.mode === m ? dropped : kept).add(key(st));
+              unmet.push(`${why}, so only the other mode is changed`);
+              return [half];
+            }
+        }
         for (const st of o) (why ? dropped : kept).add(key(st));
         if (why) unmet.push(why);
-        return !why;
+        return why ? [] : [o];
       });
+      // One change in growing amounts: the first kept is the answer, and
+      // the smaller amounts that fell short are no reason to tell.
+      if (d.smallest && d.options.length) {
+        d.options = d.options.slice(0, 1);
+        unmet.length = 0;
+      }
       unmetOf.set(d, unmet);
     }
   for (const d of drafts) {
@@ -893,7 +968,7 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
       C.partReads(key, g).map(r => ({
         token: r.token,
         props: r.props,
-        when: [...new Set(r.when.map(w => condition(ctx, key, w)))],
+        when: [...new Set(r.when.map(w => condition(ctx, key, w, states)))],
       })),
     ]),
   );
@@ -946,13 +1021,15 @@ function partAnswer(ctx, env, subject, key, unknown, themeFields) {
  * @param {import('./_settings.mjs').Ctx} ctx
  * @param {string} target
  * @param {string} cond
+ * @param {string[]} [settable] the states set takes on the part (the one
+ *   list its refusals and how name too), when known
  * @returns {string}
  */
-export function condition(ctx, target, cond) {
+export function condition(ctx, target, cond, settable) {
   if (!cond.trim()) return 'always';
   const t = ctx.project.target.get(target);
   const props = t?.props ?? [];
-  const states = [...(t?.states ?? []), ...COMMON_STATES];
+  const states = settable ?? [...(t?.states ?? []), ...COMMON_STATES];
   const values = ctx.C.variantValues(target);
   const words = cond.trim().split(/\s+/);
   const isAttr = (/** @type {string} */ w) => /^[a-z][\w-]*=[^\s]*$/i.test(w);
@@ -964,10 +1041,15 @@ export function condition(ctx, target, cond) {
   let why = null;
   for (const kv of attrs) {
     const [k, v] = kv.split('=');
-    if (k === 'selected' && states.includes('selected'))
-      flags.push('--state selected');
+    // A state written as its own name (`checked=checked`) set takes as
+    // --state.
+    if ((v === k || v === 'true') && states.includes(k))
+      flags.push(`--state ${k}`);
     else if (props.includes(k) && (!values[k]?.length || values[k].includes(v)))
       flags.push(`--when ${k}:${v}`);
+    // Another value of a state (a checkbox's `checked="indeterminate"`):
+    // set names it with --when.
+    else if (states.includes(k)) flags.push(`--when ${k}:${v}`);
     else why ??= `${target} has no ${k} prop or state that set can name`;
   }
   if (css) {

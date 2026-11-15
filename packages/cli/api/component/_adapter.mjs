@@ -43,6 +43,7 @@ import {
 import {Project} from '../../foundation/config/project.mjs';
 import {loadComponentDoc as loadValidatedComponentDoc} from '../../foundation/discovery/component-loader.mjs';
 import {resolveComponentReplacements} from '../../foundation/discovery/component-replacement.mjs';
+import {integrationComponentViews} from '../../foundation/discovery/integration-component-views.mjs';
 import {searchComponents} from '../../foundation/text/string-utils.mjs';
 import {
   rankComponentSuggestions,
@@ -450,11 +451,18 @@ export function resolveCoreSourcePath(coreDir, dirName) {
  * for a genuinely unknown name, and ERR_AMBIGUOUS_COMPONENT when multiple
  * packages provide the same name
  * (with candidate suggestions when close) or ERR_NO_DOC.
+ *
+ * The suggestions for an unknown name come from every component the bare
+ * lookup reads: Core's and each loaded integration's. Only a Core component
+ * resolves by a close match.
  * @param {string} dirName - bare component name (no `XDS` prefix)
- * @param {{coreDir: string, cwd: string, name: string}} ctx - `name` is the caller's original (prefixed) input, used in error text
+ * @param {{coreDir: string, cwd: string, name: string, loadedIntegrations?: import('../../foundation/integrations/integrations.mjs').LoadedIntegration[]}} ctx - `name` is the caller's original (prefixed) input, used in error text
  * @returns {Promise<ResolvedUnscopedDoc>}
  */
-export async function resolveUnscopedDoc(dirName, {coreDir, cwd, name}) {
+export async function resolveUnscopedDoc(
+  dirName,
+  {coreDir, cwd, name, loadedIntegrations = []},
+) {
   let readmePath = findComponentReadme(coreDir, dirName);
   let resolvedName = dirName;
   // Track the resolving owner so the detail payload can carry ownership info.
@@ -482,13 +490,25 @@ export async function resolveUnscopedDoc(dirName, {coreDir, cwd, name}) {
 
   if (!readmePath) {
     const components = discoverComponents(coreDir);
-    const results = await searchComponents(dirName, coreDir, components);
+    const integrationComponents = (
+      await Promise.all(loadedIntegrations.map(integrationComponentViews))
+    ).flat();
+    const results = await searchComponents(
+      dirName,
+      coreDir,
+      components,
+      integrationComponents,
+    );
+    const coreNames = new Set(Object.values(components).flat());
+    const coreResults = results.filter(r => coreNames.has(r.name));
 
     if (results.length > 0) {
-      const topScore = results[0].score;
-      const topTied = results.filter(r => r.score === topScore);
+      const topScore = coreResults[0]?.score ?? 0;
+      const topTied = coreResults.filter(r => r.score === topScore);
       const secondScore =
-        results.length > topTied.length ? results[topTied.length].score : 0;
+        coreResults.length > topTied.length
+          ? coreResults[topTied.length].score
+          : 0;
       const gap = topScore - secondScore;
 
       if (topScore >= 90 && topTied.length === 1 && gap >= 20) {
@@ -500,7 +520,7 @@ export async function resolveUnscopedDoc(dirName, {coreDir, cwd, name}) {
         // How many to suggest: the near-top results, at most five and at
         // least two. Which ones, and in what order, is the suggestion
         // ranking's call.
-        const threshold = Math.max(topScore - 20, 1);
+        const threshold = Math.max(results[0].score - 20, 1);
         const count = Math.max(
           results.filter(r => r.score >= threshold).slice(0, 5).length,
           Math.min(2, results.length),
@@ -508,7 +528,7 @@ export async function resolveUnscopedDoc(dirName, {coreDir, cwd, name}) {
         const candidates = rankComponentSuggestions(
           dirName,
           results,
-          Object.values(components).flat(),
+          [...coreNames, ...integrationComponents.map(c => c.name)],
           synonymMatches(dirName, searchCards()),
         ).slice(0, count);
         // Past the first two suggestions, only the ones about as close as
@@ -901,6 +921,113 @@ export async function withExampleBlockPointer(error, dirName, {coreDir, cwd}) {
   } catch {
     return error;
   }
+}
+
+/**
+ * When `error` is the unknown-component error for a name that matches a hook,
+ * template or docs topic (exact, folded or last segment, or a hook it nearly
+ * spells or whose keyword it is, as foundation/suggest/other-command.mjs
+ * ranks it), returns the same error with the command that reads that entry
+ * among its suggestions, in the place foundation/suggest/other-command.mjs
+ * gives it: a hook keyword hint stays behind a suggested component that
+ * declares the same keyword or synonym. Returns `error` unchanged otherwise,
+ * and when the check fails.
+ * @param {unknown} error
+ * @param {string} dirName
+ * @param {{coreDir: string, cwd: string, loadedIntegrations: import('../../foundation/integrations/integrations.mjs').LoadedIntegration[]}} context
+ * @returns {Promise<unknown>}
+ */
+export async function withOtherCommandHint(
+  error,
+  dirName,
+  {coreDir, cwd, loadedIntegrations},
+) {
+  if (
+    !(error instanceof AstryxError) ||
+    error.code !== ERROR_CODES.ERR_UNKNOWN_COMPONENT
+  ) {
+    return error;
+  }
+  try {
+    // The hint's modules load only on this path.
+    const [
+      {findOtherCommand, withOtherCommand, MATCH_TIER},
+      {docsRoutesLazily},
+    ] = await Promise.all([
+      import('../../foundation/suggest/other-command.mjs'),
+      import('../docs/_entry-names-lazily.mjs'),
+    ]);
+    const hint = await findOtherCommand(dirName, {
+      from: 'component',
+      cwd,
+      coreDir,
+      integrations: loadedIntegrations,
+      docsRoutes: docsRoutesLazily,
+    });
+    if (!hint) return error;
+    const declared =
+      hint.tier === MATCH_TIER.keyword
+        ? await declaredNames(
+            error.suggestions ?? [],
+            coreDir,
+            loadedIntegrations,
+          )
+        : new Map();
+    return new AstryxError(
+      error.message,
+      withOtherCommand(error.suggestions, hint, dirName, {
+        from: 'component',
+        keywordsOf: suggestion => declared.get(suggestion.name) ?? [],
+      }),
+      ERROR_CODES.ERR_UNKNOWN_COMPONENT,
+    );
+  } catch {
+    return error;
+  }
+}
+
+/**
+ * The keywords and synonyms each suggested component declares: a Core
+ * component's doc `keywords` and search card `synonyms`, or the `keywords` of
+ * an integration component's match view (the first integration that has the
+ * name, as the suggestions read it). A name Core has keeps Core's doc.
+ * @param {Array<{name: string}>} suggestions
+ * @param {string} coreDir
+ * @param {import('../../foundation/integrations/integrations.mjs').LoadedIntegration[]} loadedIntegrations
+ * @returns {Promise<Map<string, string[]>>}
+ */
+async function declaredNames(suggestions, coreDir, loadedIntegrations) {
+  const {readDocView} = await import('../../foundation/doc-compiler/read.mjs');
+  /** @type {Map<string, {keywords?: unknown} | null> | undefined} */
+  let integrationViews;
+  /** @type {Map<string, string[]>} */
+  const declared = new Map();
+  for (const {name} of suggestions) {
+    const docPath = findComponentReadme(coreDir, name);
+    if (!docPath && !integrationViews) {
+      integrationViews = new Map();
+      const views = await Promise.all(
+        loadedIntegrations.map(integrationComponentViews),
+      );
+      for (const {name: other, view} of views.flat()) {
+        if (!integrationViews.has(other)) integrationViews.set(other, view);
+      }
+    }
+    /** @type {{keywords?: unknown} | null} */
+    const doc = docPath
+      ? await readDocView(docPath, {
+          root: 'components',
+          loader: 'native',
+          exports: ['docs'],
+        }).catch(() => null)
+      : (integrationViews?.get(name) ?? null);
+    const keywords = Array.isArray(doc?.keywords) ? doc.keywords : [];
+    declared.set(name, [
+      ...keywords.filter(keyword => typeof keyword === 'string'),
+      ...(searchCards()[name]?.synonyms ?? []),
+    ]);
+  }
+  return declared;
 }
 
 /**

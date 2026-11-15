@@ -14,7 +14,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
 import {themeEditHow, themeEditNew, themeEditSet} from './theme-edit.mjs';
 import {
   makeLinkedFixture,
@@ -25,6 +25,14 @@ import {
   writeFixtureBaseTheme,
 } from '../../test-utils/base-theme-fixture.mjs';
 import {installRealBaseThemes} from '../../test-utils/real-base-themes.mjs';
+
+// The assertions are about settings, builds, notes and lines, not rendered
+// pages: a render costs seconds, so the pages are written by the stand-in.
+vi.mock('./_preview.mjs', async importOriginal =>
+  (await import('../../test-utils/theme-render-stub.mjs')).stubRenders(
+    /** @type {any} */ (await importOriginal()),
+  ),
+);
 
 /** @type {string} */
 let cwd;
@@ -276,12 +284,24 @@ describe('asks it used to drop', () => {
   it(
     'a shadow typed for one mode goes into light-dark() on a part with no shadow',
     async () => {
-      expect(
-        (await answer('popover shadow 0 4px 12px #00000080 in dark mode'))
-          .first,
-      ).toEqual([
-        "set q box-shadow '0 4px 12px light-dark(transparent, #00000080)' --on popover",
-      ]);
+      // A popover's shared shadow is read from it drawn open: the light
+      // half keeps its layers.
+      const pop = await answer(
+        'popover shadow 0 4px 12px #00000080 in dark mode',
+      );
+      expect(pop.first.join('\n')).toMatch(
+        /light-dark\(rgba\(0, 0, 0, 0\.1\), transparent\).*0 4px 12px light-dark\(transparent, #00000080\)' --on popover$/,
+      );
+      // (What a context menu shows in the other mode is unknown here: Core
+      // draws it only once a press opens it, so a one-mode shadow that would
+      // blank it is refused with that reason.)
+      const menu = await answer(
+        'context-menu shadow 0 4px 12px #00000080 in dark mode',
+      );
+      expect(menu.first).toEqual([]);
+      expect(menu.text).toMatch(
+        /what context-menu shows in light mode is unknown/,
+      );
       // A card shows no shadow at rest (its selection ring is a state of
       // its own): the light half is transparent too.
       expect(
@@ -295,8 +315,8 @@ describe('asks it used to drop', () => {
   it(
     'a shadow on a part that shows none it can read is a change',
     async () => {
-      expect((await answer('popover shadow bigger')).first).toEqual([
-        "set q box-shadow 'var(--shadow-high)' --on popover",
+      expect((await answer('context-menu shadow bigger')).first).toEqual([
+        "set q box-shadow 'var(--shadow-high)' --on context-menu",
       ]);
     },
     T,

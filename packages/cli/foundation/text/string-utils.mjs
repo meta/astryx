@@ -41,23 +41,38 @@ export function findClosestComponents(name, components, maxDistance = 3) {
  * Always returns results (top 5 minimum). Scores determine confidence:
  *   100  exact name match
  *    90  exact keyword match
- *    80  name Levenshtein distance 1
+ *    80  name edit distance 1 (a swap of two adjacent letters is one edit)
  *    70  keyword substring or Levenshtein distance 1
  *    60  substring match on component name (min 4 chars, 50%+ coverage)
  *    50  description or feature text contains the search term
- *    40  name Levenshtein distance 2
+ *    40  name edit distance 2
  *    30  keyword Levenshtein distance 2
- *    20  name Levenshtein distance 3
+ *    20  name edit distance 3
+ *
+ * A name typed as words is one edit from the name when its letters are
+ * (`top navv`, `top-navv` for `TopNav`), so a one-edit slip of a name ranks
+ * above every keyword match except an exact keyword.
  *
  * Each result: { name, score, reason }, plus `keywordAt` when a keyword set
  * the component's score: the position of the keyword that set it.
  *
+ * `others` are the components outside Core that the same lookup reads, such
+ * as an integration's. Each one is scored by the same signals, from the
+ * parts of its doc that {@link componentMatchView} keeps. A name Core already
+ * has keeps Core's doc.
+ *
  * @param {string} needle
  * @param {string} coreDir
  * @param {Record<string, string[]>} components
+ * @param {Array<{name: string, view: ComponentMatchView | null}>} [others]
  * @returns {Promise<{name: string, score: number, reason: string}[]>}
  */
-export async function searchComponents(needle, coreDir, components) {
+export async function searchComponents(
+  needle,
+  coreDir,
+  components,
+  others = [],
+) {
   const {readDocView} = await import('../doc-compiler/read.mjs');
   const {listDirEntries, oncePerListing, pathExists} = await import(
     '../fs/listing-cache.mjs'
@@ -65,7 +80,18 @@ export async function searchComponents(needle, coreDir, components) {
   const path = await import('node:path');
 
   const term = needle.toLowerCase();
-  const allNames = Object.values(components).flat();
+  // The typed name without the separators between its words.
+  const termJoined = term.replace(/[\s_./-]+/g, '');
+  const coreNames = Object.values(components).flat();
+  /** @type {Map<string, ComponentMatchView | null>} */
+  const otherViews = new Map();
+  const known = new Set(coreNames);
+  for (const other of others) {
+    if (known.has(other.name)) continue;
+    known.add(other.name);
+    otherViews.set(other.name, other.view);
+  }
+  const allNames = [...coreNames, ...otherViews.keys()];
   /** @type {Map<string, {name: string, score: number, reason: string}>} */
   const scored = new Map();
   /** Position of the keyword that set each component's score. */
@@ -104,8 +130,16 @@ export async function searchComponents(needle, coreDir, components) {
       }
     }
 
-    // Levenshtein on name
-    const dist = levenshteinDistance(term, compLower);
+    // Edit distance on name; two adjacent letters swapped are one slip. A
+    // name typed as words (`top navv` for TopNav) is one slip when its
+    // letters are; the same letters are the ranking's call (same words).
+    const letterDist = levenshteinDistance(term, compLower, 3, {swaps: true});
+    const dist =
+      letterDist > 1 &&
+      termJoined !== term &&
+      levenshteinDistance(termJoined, compLower, 1, {swaps: true}) === 1
+        ? 1
+        : letterDist;
     if (dist === 1) addMatch(comp, 80, 'similar name (distance ' + dist + ')');
     else if (dist === 2)
       addMatch(comp, 40, 'similar name (distance ' + dist + ')');
@@ -134,19 +168,27 @@ export async function searchComponents(needle, coreDir, components) {
     return null;
   }
   // Each search probes the same paths, so one operation finds each doc once.
-  for (const comp of allNames) {
+  /**
+   * The doc Pass 2 reads for `comp`: Core's, or the view `others` gives.
+   * @param {string} comp
+   * @returns {Promise<any>}
+   */
+  async function docOf(comp) {
+    if (otherViews.has(comp)) return otherViews.get(comp);
     const docPath = oncePerListing(`search-doc\0${srcDir}\0${comp}`, () =>
       docPathOf(comp),
     );
-    if (!docPath) continue;
-
+    if (!docPath) return null;
+    // Only the legacy `docs` export has ever been indexed here.
+    return readDocView(docPath, {
+      root: 'components',
+      loader: 'native',
+      exports: ['docs'],
+    });
+  }
+  for (const comp of allNames) {
     try {
-      // Only the legacy `docs` export has ever been indexed here.
-      const docs = await readDocView(docPath, {
-        root: 'components',
-        loader: 'native',
-        exports: ['docs'],
-      });
+      const docs = await docOf(comp);
       if (!docs) continue;
 
       // Keyword matching
@@ -252,6 +294,48 @@ export async function searchComponents(needle, coreDir, components) {
     .sort((a, b) => b.score - a.score || compareText(a.name, b.name));
 
   return results;
+}
+
+/**
+ * The parts of a component doc {@link searchComponents} scores: its keywords,
+ * its description, and its usage description and best practices.
+ * @typedef {{keywords?: unknown, description?: unknown, usage?: {description?: unknown, bestPractices?: Array<{description?: unknown}>}}} ComponentMatchView
+ */
+
+/**
+ * The {@link ComponentMatchView} of a loaded component doc, as plain data a
+ * caller can keep between runs.
+ * @param {any} docs
+ * @returns {ComponentMatchView | null}
+ */
+export function componentMatchView(docs) {
+  if (!docs || typeof docs !== 'object') return null;
+  const usage = docs.usage && typeof docs.usage === 'object' ? docs.usage : {};
+  const bestPractices = Array.isArray(usage.bestPractices)
+    ? usage.bestPractices.map((/** @type {any} */ bp) =>
+        definedFields({description: bp?.description}),
+      )
+    : undefined;
+  return definedFields({
+    keywords: docs.keywords,
+    description: docs.description,
+    usage: definedFields({description: usage.description, bestPractices}),
+  });
+}
+
+/**
+ * `fields` without the ones that are undefined, so the object reads back the
+ * same from JSON.
+ * @template {Record<string, unknown>} T
+ * @param {T} fields
+ * @returns {T}
+ */
+function definedFields(fields) {
+  return /** @type {T} */ (
+    Object.fromEntries(
+      Object.entries(fields).filter(([, value]) => value !== undefined),
+    )
+  );
 }
 
 /**

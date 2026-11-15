@@ -12,19 +12,34 @@
  */
 
 import {pathToFileURL} from 'node:url';
+import {LOCAL_URL, QUIET_BROWSER_ARGS} from './offline.mjs';
 
 const [entry, html, png, mode, executablePath] = process.argv.slice(2);
 try {
   const pw = await import(pathToFileURL(entry).href);
   const chromium = pw.chromium ?? pw.default?.chromium;
-  const browser = await chromium.launch(executablePath ? {executablePath} : {});
+  // The browser's own network off, as for the Chrome picture script.
+  const browser = await chromium.launch({
+    args: [...QUIET_BROWSER_ARGS],
+    ...(executablePath ? {executablePath} : {}),
+  });
   try {
     const page = await browser.newPage({
       viewport: {width: 1280, height: 900},
       colorScheme: mode === 'dark' ? 'dark' : 'light',
     });
+    // The page loads its own files only: a remote stylesheet, font or image
+    // fails at once instead of holding the load on a network.
+    await page.route(
+      (/** @type {URL} */ url) => !LOCAL_URL.test(url.href),
+      (/** @type {{abort: (why: string) => Promise<void>}} */ route) =>
+        route.abort('blockedbyclient'),
+    );
     await page.goto(pathToFileURL(html).href, {waitUntil: 'load'});
-    await page.screenshot({path: png, fullPage: true});
+    // An overlay drawn open plays its opening animation (a fade-in) as the
+    // page loads: the picture is taken with each animation that ends run
+    // to its end, so it shows the overlay as it looks open.
+    await page.screenshot({path: png, fullPage: true, animations: 'disabled'});
   } finally {
     await browser.close();
   }

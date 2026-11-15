@@ -20,6 +20,7 @@
  * @property {string} [issuesUrl]
  * @property {string[]} [__declaredKeys]
  * @property {string[]} [__unknownKeys]
+ * @property {Array<{field: string, why: string}>} [__ignoredFields]
  * @property {string} __spec
  * @property {string} __packageDir
  * @property {string} __manifestFile
@@ -39,7 +40,7 @@
  * "healthy" — the two are otherwise byte-identical.
  * @typedef {object} ValidateIntegrationResponse
  * @property {'integration.validate'} type
- * @property {{validated: boolean, name: string | null, version: string | null, issues: import('../../foundation/integrations/issue').AstryxIntegrationIssue[], notes?: Array<{code: string, message: string, next?: boolean}>, docTypes?: DocTypesReport, docNames?: DocNamesReport, blockComponents?: BlockComponentsReport, exampleAssets?: {status: 'checked', findings: [], unchecked: Array<{file: string, asset: string, reason: string}>}, publicImports?: PublicImportsReport, exampleCode?: {status: 'checked', findings: [], unchecked: Array<{file: string, example: string, reason: string}>}, templateIcons?: {status: 'checked', findings: [], unchecked: Array<{file: string, icon: string, module: string, reason: string}>}, iconSets?: IconSetCoverage[], olderCliNotes?: OlderCliNote[]}} data
+ * @property {{validated: boolean, name: string | null, version: string | null, issues: import('../../foundation/integrations/issue').AstryxIntegrationIssue[], notes?: Array<{code: string, message: string, next?: boolean}>, docTypes?: DocTypesReport, docNames?: DocNamesReport, blockComponents?: BlockComponentsReport, exampleAssets?: {status: 'checked', findings: [], unchecked: Array<{file: string, asset: string, reason: string}>}, publicImports?: PublicImportsReport, shippedImports?: {status: 'checked', findings: [], unchecked: Array<{file: string, specifier: string, reason: string}>}, exampleCode?: {status: 'checked', findings: [], unchecked: Array<{file: string, example: string, reason: string}>}, templateIcons?: {status: 'checked', findings: [], unchecked: Array<{file: string, icon: string, module: string, reason: string}>}, iconSets?: IconSetCoverage[], olderCliNotes?: OlderCliNote[]}} data
  *   `iconSets` is experimental: it may change or be removed in a patch
  *   release.
  *   `notes`: information beside the issues. A note fails nothing by default;
