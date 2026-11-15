@@ -12,7 +12,6 @@ export const doc = {
     'chat',
     'channels',
     'threads',
-    'inbox',
     'direct message',
     'conversation workspace',
   ],
