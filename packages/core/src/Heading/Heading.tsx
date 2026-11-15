@@ -322,9 +322,9 @@ export function Heading({
         )}
         {...ariaProps}
         {...props}
-        onPointerEnter={composeEventHandlers(
-          tooltipInterest.onPointerEnter,
-          props.onPointerEnter,
+        onPointerMove={composeEventHandlers(
+          tooltipInterest.onPointerMove,
+          props.onPointerMove,
         )}
         onPointerLeave={composeEventHandlers(
           tooltipInterest.onPointerLeave,

@@ -70,6 +70,12 @@ afterAll(() => {
   (HTMLElement.prototype as any).matches = originalMatches;
 });
 
+/** A hover-capable pointer must move after entering before hover can show. */
+function hover(element: HTMLElement, pointerType: 'mouse' | 'pen' = 'mouse') {
+  fireEvent.pointerEnter(element, {pointerType});
+  fireEvent.pointerMove(element, {pointerType});
+}
+
 describe('useTooltip identity', () => {
   it('keeps callback refs stable across unchanged rerenders', () => {
     const {result, rerender} = renderHook(() => useTooltip());
@@ -113,8 +119,27 @@ describe('Tooltip', () => {
     );
 
     const trigger = screen.getByRole('button', {name: 'Trigger'});
-    fireEvent.mouseEnter(trigger);
+    hover(trigger);
 
+    await waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledWith(true);
+    });
+  });
+
+  it('waits for pointer movement after a trigger appears under a resting pointer', async () => {
+    const onOpenChange = vi.fn();
+    render(
+      <Tooltip content="Tooltip text" onOpenChange={onOpenChange} delay={0}>
+        <button type="button">Trigger</button>
+      </Tooltip>,
+    );
+
+    const trigger = screen.getByRole('button', {name: 'Trigger'});
+    fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(onOpenChange).not.toHaveBeenCalledWith(true);
+
+    fireEvent.pointerMove(trigger, {pointerType: 'mouse'});
     await waitFor(() => {
       expect(onOpenChange).toHaveBeenCalledWith(true);
     });
@@ -249,7 +274,7 @@ describe('Tooltip', () => {
       );
 
       const trigger = screen.getByRole('button', {name: 'Trigger'});
-      fireEvent.mouseEnter(trigger);
+      hover(trigger);
       await waitFor(() => {
         expect(onOpenChange).toHaveBeenCalledWith(true);
       });
@@ -269,7 +294,7 @@ describe('Tooltip', () => {
       );
 
       const trigger = screen.getByRole('button', {name: 'Trigger'});
-      fireEvent.mouseEnter(trigger);
+      hover(trigger);
       await waitFor(() => {
         expect(onOpenChange).toHaveBeenCalledWith(true);
       });
@@ -290,7 +315,7 @@ describe('Tooltip', () => {
       );
 
       const trigger = screen.getByRole('button', {name: 'Trigger'});
-      fireEvent.mouseEnter(trigger);
+      hover(trigger);
       await waitFor(() => {
         expect(onOpenChange).toHaveBeenCalledWith(true);
       });
@@ -317,7 +342,7 @@ describe('Tooltip', () => {
       );
 
       const trigger = screen.getByRole('button', {name: 'Trigger'});
-      fireEvent.mouseEnter(trigger);
+      hover(trigger);
       await waitFor(() => {
         expect(onOpenChange).toHaveBeenCalledWith(true);
       });
@@ -666,8 +691,7 @@ describe('Tooltip', () => {
 
       const trigger = screen.getByText('Abbreviation');
       // A pen in range hovers like a mouse: its arrival starts the hover show.
-      fireEvent.pointerEnter(trigger, {pointerType: 'pen'});
-      fireEvent.mouseEnter(trigger);
+      hover(trigger, 'pen');
       fireEvent.pointerDown(trigger, {pointerType: 'pen'});
       // The pen stays down past the hover delay, then lifts.
       await new Promise(resolve => setTimeout(resolve, 50));
@@ -688,8 +712,7 @@ describe('Tooltip', () => {
       );
 
       const trigger = screen.getByText('Abbreviation');
-      fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
-      fireEvent.mouseEnter(trigger);
+      hover(trigger);
       expect(onOpenChange).not.toHaveBeenCalled();
       await waitFor(() => {
         expect(onOpenChange).toHaveBeenCalledWith(true);
@@ -826,8 +849,7 @@ describe('Tooltip', () => {
       expect(onOpenChange).not.toHaveBeenCalledWith(true);
 
       // A hybrid device: the same trigger, now under a mouse.
-      fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
-      fireEvent.mouseEnter(trigger);
+      hover(trigger);
 
       await waitFor(() => {
         expect(onOpenChange).toHaveBeenCalledWith(true);
@@ -846,8 +868,7 @@ describe('Tooltip', () => {
       // A stylus in detection range: pointerenter with nothing in contact, on
       // a device where `(hover: hover)` matches. Reading that as touch would
       // bail out of the hover path and leave the user no tooltip at all.
-      fireEvent.pointerEnter(trigger, {pointerType: 'pen', buttons: 0});
-      fireEvent.mouseEnter(trigger);
+      hover(trigger, 'pen');
 
       await waitFor(() => {
         expect(onOpenChange).toHaveBeenCalledWith(true);
@@ -864,7 +885,7 @@ describe('Tooltip', () => {
 
       const trigger = screen.getByText('Abbreviation');
       // Hovering first, as a real pen does — then contact, which is a tap.
-      fireEvent.pointerEnter(trigger, {pointerType: 'pen', buttons: 0});
+      hover(trigger, 'pen');
       fireEvent.pointerDown(trigger, {pointerType: 'pen'});
       fireEvent.pointerUp(trigger, {pointerType: 'pen'});
       fireEvent.click(trigger);
@@ -1020,7 +1041,7 @@ describe('Tooltip sibling mode (anchorRef)', () => {
 
     // Hovering the anchor opens the tooltip: the interaction listeners were
     // attached to the late anchor too.
-    fireEvent.mouseEnter(anchor);
+    hover(anchor);
     await waitFor(() => {
       expect(onOpenChange).toHaveBeenCalledWith(true);
     });
@@ -1231,8 +1252,7 @@ describe('Tooltip on every input (component:Tooltip FR5)', () => {
   describe('on an info-only trigger', () => {
     it('a mouse hover previews it', async () => {
       const {trigger, opened} = setup();
-      fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
-      fireEvent.mouseEnter(trigger);
+      hover(trigger);
       await waitFor(() => expect(opened()).toBe(true));
     });
 

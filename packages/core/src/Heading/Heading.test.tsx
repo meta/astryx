@@ -516,7 +516,9 @@ describe('the truncation tooltip mounts on the first interaction', () => {
       });
       expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
 
-      fireEvent.pointerEnter(screen.getByText(TITLE), {pointerType: 'mouse'});
+      const heading = screen.getByText(TITLE);
+      fireEvent.pointerEnter(heading, {pointerType: 'mouse'});
+      fireEvent.pointerMove(heading, {pointerType: 'mouse'});
       await waitFor(
         () => {
           expect(showPopover).toHaveBeenCalled();

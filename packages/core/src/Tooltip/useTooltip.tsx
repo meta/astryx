@@ -513,10 +513,10 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   }, []);
 
   // Event handlers
-  const handleMouseEnter = useCallback(() => {
-    // A tap synthesizes mouseenter. On touch the tap path owns the decision,
-    // so hover must not also fire — including the tap that just opened the
-    // tooltip, which would otherwise be double-handled.
+  const handlePointerMove = useCallback(() => {
+    // A pointerenter can be caused by layout moving the trigger under a
+    // stationary pointer. Only pointermove is evidence that the user entered
+    // the trigger, so that case must not start the hover timer.
     if (isTouchPointerRef.current) {
       return;
     }
@@ -682,7 +682,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   // The trigger's listeners call the committed handlers through this ref, so
   // the trigger ref callback keeps one identity.
   const handlersRef = useCommittedRef({
-    handleMouseEnter,
+    handlePointerMove,
     handleMouseLeave,
     handleFocusIn,
     handleFocusOut,
@@ -747,11 +747,13 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       }
       detachTriggerRef.current?.();
       const latest = () => handlersRef.current;
-      // `pointerenter` runs before the synthesized `mouseenter` a tap produces,
-      // which is what lets the hover path know it is looking at a finger.
+      // `pointerenter` records the pointer type before a touch can produce a
+      // synthesized mouse event. Hover itself waits for `pointermove`, so a
+      // layout change that places the trigger under a stationary pointer does
+      // not open the tooltip.
       const onPointerEnter = (e: PointerEvent) =>
         latest().handlePointerEnter(e);
-      const onMouseEnter = () => latest().handleMouseEnter();
+      const onPointerMove = () => latest().handlePointerMove();
       const onMouseLeave = (e: Event) => latest().handleMouseLeave(e);
       // Press-to-dismiss on a mouse; tap-to-open on a touch pointer.
       const onPointerDown = (e: PointerEvent) => latest().handlePointerDown(e);
@@ -770,7 +772,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       // A held tooltip's own focus-leave close, whatever `focusTrigger` is.
       const onHeldFocusOut = (e: FocusEvent) => latest().handleHeldFocusOut(e);
       el.addEventListener('pointerenter', onPointerEnter);
-      el.addEventListener('mouseenter', onMouseEnter);
+      el.addEventListener('pointermove', onPointerMove);
       el.addEventListener('mouseleave', onMouseLeave);
       el.addEventListener('pointerdown', onPointerDown);
       el.addEventListener('focusin', onFocusIn);
@@ -811,7 +813,9 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       }
       if (latest().isEnabled && latest().isOpen === undefined) {
         if (interest === 'hover') {
-          latest().handleMouseEnter();
+          // Lazy truncation tooltips record hover only from pointermove. The
+          // move may finish before this Tooltip attaches, so replay it here.
+          latest().handlePointerMove();
         } else if (interest === 'tap') {
           latest().answerTap(tapEvent);
         } else if (
@@ -830,7 +834,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
           detachTriggerRef.current = null;
         }
         el.removeEventListener('pointerenter', onPointerEnter);
-        el.removeEventListener('mouseenter', onMouseEnter);
+        el.removeEventListener('pointermove', onPointerMove);
         el.removeEventListener('mouseleave', onMouseLeave);
         el.removeEventListener('pointerdown', onPointerDown);
         el.removeEventListener('focusin', onFocusIn);
