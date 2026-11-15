@@ -56,7 +56,7 @@ describe('checkNewestRelease', () => {
       label: 'Newest release',
       status: 'info',
       message:
-        "Newest release unknown: no update check recorded here. Only a copy installed for the computer checks, daily in the background after a command; a project's copy changes only when it upgrades; a tool running its own copy picks its release.",
+        "Newest release unknown: no update check recorded here. Only a copy installed for the computer checks, daily in the background after a command; a project's copy changes only when the project upgrades it; a tool running its own copy picks its release.",
     });
   });
 
