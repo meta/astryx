@@ -36,10 +36,10 @@
  * timestamp runs first, at its own deadline. A long press therefore begins at
  * exactly touch-down + 500 ms even when the main thread was blocked and the
  * timer callback came late, and a test drives the whole machine with explicit
- * timestamps and no real time at all. While the latest contact is a finger or
- * a pen, a deadline whose timer runs late waits while input from before it
- * still reaches the page late. A deadline among a coalesced move's samples
- * runs between them.
+ * timestamps and no real time at all. A deadline whose timer runs late waits
+ * while input from before it still reaches the page late. That holds only
+ * while the latest contact is a finger or a pen. A deadline among a coalesced
+ * move's samples runs between them.
  *
  * SYNC: When modified, update GestureRecognizer.ts and
  * __tests__/arena.test.ts.
@@ -1102,7 +1102,7 @@ export class GestureArena {
     return clamped;
   }
 
-  /** Notes a finger's or pen's input that reaches the page late. */
+  /** Only a finger's or pen's late input keeps a late deadline waiting. */
   private noteArrival(time: number, isFingerOrPenInput: boolean): void {
     const arrivedAt = this.clock.now();
     if (isFingerOrPenInput && arrivedAt - time > LATE_INPUT_MS) {
@@ -1110,7 +1110,6 @@ export class GestureArena {
     }
   }
 
-  /** Whether the contact with this id is a finger or a pen. */
   private isFingerOrPenContact(id: number): boolean {
     return isFingerOrPen(this.records.get(id)?.touch.pointerType);
   }
@@ -1343,7 +1342,6 @@ export class GestureArena {
   }
 }
 
-/** Whether a contact of this kind is a finger or a pen. */
 function isFingerOrPen(pointerType: PointerKind | undefined): boolean {
   return pointerType === 'touch' || pointerType === 'pen';
 }

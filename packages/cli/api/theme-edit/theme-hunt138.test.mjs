@@ -343,8 +343,9 @@ describe('where a value is', () => {
     await withOwn('cw', "  localTokens: {brand: 'red'} as any,");
     const c = await compile('cw');
     expect(c.status).toBe(1);
+    // Core names the local token: the refusal names it at its line.
     expect(c.stdout + c.stderr).toMatch(
-      /local token "brand" must be a valid CSS custom-property name/,
+      /localTokens\.brand \(line \d+\): Core refuses the theme: .*must be a valid CSS custom-property name/,
     );
     expect(c.stdout + c.stderr).not.toMatch(
       /imports in the theme file are resolvable/,

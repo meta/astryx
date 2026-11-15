@@ -206,7 +206,7 @@ describe('theme command human output is plain ASCII', () => {
   });
 
   it('the suggestion for a quoted glob', async () => {
-    const result = await run(['build', 'themes/*.mjs']);
+    const result = await run(['build', '*.mjs']);
 
     expect(result.code).toBe(1);
     expect(result.stderr).toContain('globs are expanded by your shell');

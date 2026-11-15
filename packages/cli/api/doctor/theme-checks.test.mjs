@@ -881,6 +881,52 @@ describe('app-theme doctor checks', () => {
     expect(result.message).toContain('fonts.css');
   });
 
+  it("warns on theme-owners when the theme's stylesheet imports a file its package does not ship", async () => {
+    const {dir, packageDir} = await fixture([
+      {
+        slug: 'ocean',
+        css: '@import \'./ocean-base.css\';\n[data-astryx-theme="ocean"] { --color-text: black; background: url(./waves.svg); }\n',
+      },
+    ]);
+
+    const checks = await checkAppThemes(dir);
+    const result = check(checks, 'theme-owners');
+
+    // A warning: the module itself loads.
+    expect(result).toMatchObject({id: 'theme-owners', status: 'warn'});
+    expect(checks.some(item => item.status === 'fail')).toBe(false);
+    expect(result.message).toContain(
+      'Theme "ocean" from @acme/themes: its built module loads, but it or its stylesheet names a file the package does not ship',
+    );
+    expect(result.message).toContain(
+      'dist/ocean.css:1: imports "./ocean-base.css", which is not a file in the package',
+    );
+    expect(result.message).toContain('imports "./waves.svg"');
+    expect(result.message).not.toContain('every built module loads');
+
+    write(path.join(packageDir, 'dist/ocean-base.css'), ':root {}\n');
+    write(path.join(packageDir, 'dist/waves.svg'), '<svg/>\n');
+    expect(check(await checkAppThemes(dir), 'theme-owners').status).toBe(
+      'pass',
+    );
+  });
+
+  it('passes theme-owners when a built module imports a folder by its index file', async () => {
+    const {dir, packageDir} = await fixture();
+    write(
+      path.join(packageDir, 'dist/icons/index.js'),
+      'export const icons = {};\n',
+    );
+    write(
+      path.join(packageDir, 'dist/ocean.js'),
+      "import {icons} from './icons';\nexport const oceanTheme = {name: 'ocean', tokens: {}, icons};\n",
+    );
+
+    expect(check(await checkAppThemes(dir), 'theme-owners').status).toBe(
+      'pass',
+    );
+  });
+
   it('fails theme-owners for an ambiguous multi-theme record', async () => {
     const {dir, packageDir} = await fixture([{slug: 'ocean'}, {slug: 'reef'}]);
     const packageFile = path.join(packageDir, 'package.json');
@@ -1421,7 +1467,7 @@ describe('app-theme doctor checks', () => {
   });
 
   it('check 9 passes when a local @font-face proves the named family', async () => {
-    const {dir} = await fixture([
+    const {dir, packageDir} = await fixture([
       {
         slug: 'ocean',
         fontFamily: 'Ocean Sans',
@@ -1429,6 +1475,7 @@ describe('app-theme doctor checks', () => {
           '@font-face { font-family: "Ocean Sans"; src: url("./ocean.woff2"); }\n',
       },
     ]);
+    write(path.join(packageDir, 'dist/ocean.woff2'), 'font');
 
     expect(check(await checkAppThemes(dir), 'theme-fonts')).toMatchObject({
       status: 'pass',
@@ -1468,9 +1515,10 @@ describe('app-theme doctor checks', () => {
       ]);
       const faces =
         '@font-face { font-family: "Ocean Sans"; src: url("./ocean.woff2"); }\n';
-      if (!spec.startsWith('@'))
+      if (!spec.startsWith('@')) {
         write(path.join(packageDir, 'dist/ocean-faces.css'), faces);
-      else {
+        write(path.join(packageDir, 'dist/ocean.woff2'), 'font');
+      } else {
         write(
           path.join(dir, 'node_modules/@fontsource/ocean-sans/package.json'),
           JSON.stringify({name: '@fontsource/ocean-sans', version: '1.0.0'}),
@@ -1516,6 +1564,7 @@ describe('app-theme doctor checks', () => {
           ? `@import "./f${i + 1}.css";\n`
           : '@font-face { font-family: "Ocean Sans"; src: url("./o.woff2"); }\n',
       );
+    write(path.join(packageDir, 'dist/o.woff2'), 'font');
     expect(check(await checkAppThemes(dir), 'theme-fonts')).toMatchObject({
       status: 'warn',
       message: expect.stringContaining('could not follow'),

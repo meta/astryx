@@ -2039,3 +2039,44 @@ describe('defineTheme extends', () => {
     expect(child.tokens['--color-accent']).toBe('#111111');
   });
 });
+
+describe('local tokens left undefined', () => {
+  it('refuses a localTokens field that holds undefined, by name', () => {
+    expect(() =>
+      defineTheme({name: 'no-local', localTokens: undefined}),
+    ).toThrow(
+      'defineTheme("no-local"): localTokens is undefined: omit the field or pass an object.',
+    );
+  });
+
+  it('a local token that holds undefined is not set', () => {
+    const theme = defineTheme({
+      name: 'some-local',
+      localTokens: {
+        '--brand': 'red',
+        // @ts-expect-error an undefined value, as a conditional spread or an unset environment value gives
+        '--brand-2': undefined,
+      },
+    });
+    expect(theme.localTokens).toEqual({'--brand': 'red'});
+    expect(generateThemeTestCSS(theme)).not.toContain('--brand-2');
+  });
+
+  it('an adaptation rule that writes a local token left undefined fails with its name', () => {
+    expect(() =>
+      defineTheme({
+        name: 'lost-local',
+        // @ts-expect-error an undefined value, as a failed import gives
+        localTokens: {'--brand': undefined},
+        adaptations: {
+          rules: [
+            {
+              when: {pointer: 'coarse'},
+              value: {localTokens: {'--brand': 'blue'}},
+            },
+          ],
+        },
+      }),
+    ).toThrow(/localTokens\["--brand"\] cannot enroll a theme-local token/);
+  });
+});

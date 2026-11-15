@@ -89,11 +89,14 @@ describe('a hand-edited setting', () => {
         fs.writeFileSync(file, JSON.stringify(data));
         const err = await refusal(() => themeEditShow('t', {cwd}));
         expect(err.code).toBe('ERR_THEME_INVALID');
-        expect(
-          err.suggestions.filter((/** @type {any} */ x) =>
-            / set t /.test(x.name),
-          ),
-        ).toEqual([]);
+        // No stock value: a set line only sets the value it holds, as set
+        // reads it (corners pill is the dial).
+        for (const x of err.suggestions.filter((/** @type {any} */ x) =>
+          / set t /.test(x.name),
+        ))
+          expect(x.name).toMatch(
+            new RegExp(` set t ${entry.thing} ${entry.value}$`),
+          );
       }
     } finally {
       fs.writeFileSync(file, before);
