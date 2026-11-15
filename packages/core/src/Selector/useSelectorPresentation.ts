@@ -108,10 +108,8 @@ export function useSelectorPresentation({
     prepareFocusReturn,
     resetFocusReturn,
   } = useFocusReturnVisibility(triggerModality);
-  // Whether the last press while the list is open landed inside the list. A
-  // press inside the list, such as a pick, moves focus to the list's nearest
-  // focusable container, such as a dialog's content box. That focus is no
-  // choice of the person.
+  // A press inside the list, such as a pick, can focus a container around it,
+  // such as a dialog's content box. The person did not choose that focus.
   const isLastPressInListRef = useRef(false);
   const stopPressWatchRef = useRef<(() => void) | null>(null);
 
@@ -149,9 +147,11 @@ export function useSelectorPresentation({
     stopPressWatchRef.current?.();
     const doc = triggerRef.current?.ownerDocument ?? document;
     const onPress = (event: PointerEvent) => {
+      // A press inside an open shadow root targets the root's host here. The
+      // composed path still holds the list.
+      const list = popoverContentRef.current?.current;
       isLastPressInListRef.current =
-        popoverContentRef.current?.current?.contains(event.target as Node) ===
-        true;
+        list != null && event.composedPath().includes(list);
     };
     doc.addEventListener('pointerdown', onPress, {
       capture: true,
